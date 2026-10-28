@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Real user data and local outputs: never commit
+data/
