@@ -51,11 +51,17 @@ def load(path):
     return [(k, v) for k, v in raw.items() if not k.startswith("_")]
 
 
+def nice(x, down):
+    """Nearest 1-2-5 step below (down) or above x."""
+    steps = [t * 10 ** e for e in range(-3, 4) for t in (1, 2, 5)]
+    return max(v for v in steps if v <= x) if down else min(v for v in steps if v >= x)
+
+
 def render(arms, title):
     pts = [(k, v) for k, v in arms if v.get("ndcg10") is not None and v.get("p95_s")]
     xs = [v["p95_s"] for _, v in pts] + [TARGET_S]
     ys = [v["ndcg10"] for _, v in pts] or [0.5]
-    x0, x1 = 10 ** math.floor(math.log10(min(xs) * 0.8)), 10 ** math.ceil(math.log10(max(xs) * 1.25))
+    x0, x1 = nice(min(xs) * 0.8, down=True), nice(max(xs) * 1.25, down=False)
     y0 = max(0.0, math.floor((min(ys) - 0.03) * 20) / 20)
     y1 = min(1.0, math.ceil((max(ys) + 0.03) * 20) / 20)
     pw, ph = W - ML - MR, H - MT - MB
@@ -67,8 +73,7 @@ def render(arms, title):
         return MT + (1 - (y - y0) / (y1 - y0 or 1)) * ph
 
     s = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{html.escape(title)}">', '<g class="grid">']
-    xt = [t * 10 ** e for e in range(int(math.log10(x0)), int(math.log10(x1)) + 1) for t in (1, 2, 5)
-          if x0 <= t * 10 ** e <= x1]
+    xt = [t * 10 ** e for e in range(-3, 4) for t in (1, 2, 5) if x0 - 1e-9 <= t * 10 ** e <= x1 + 1e-9]
     for t in xt:
         s.append(f'<line x1="{sx(t):.1f}" x2="{sx(t):.1f}" y1="{MT}" y2="{MT + ph}"/>')
     n_y = int(round((y1 - y0) / 0.05))
