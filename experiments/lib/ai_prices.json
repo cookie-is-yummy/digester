@@ -64,7 +64,8 @@
    "cached_input_per_m": 0.025,
    "output_per_m": 0.4,
    "batch_input_per_m": 0.05,
-   "batch_output_per_m": 0.2
+   "batch_output_per_m": 0.2,
+   "unavailable": "404 model_not_found on 2026-10-30 (chat completions: 'has been deprecated'), although still listed in /v1/models"
   },
   "gpt-4.1-mini": {
    "provider": "openai",

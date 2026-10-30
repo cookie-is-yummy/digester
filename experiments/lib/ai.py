@@ -91,9 +91,13 @@ def openai_chat_json(model, system, user, max_tokens=400, purpose="", prompt_ver
     r = _post("https://api.openai.com/v1/chat/completions", body, _oa())
     u = r["usage"]
     cost = u["prompt_tokens"] / 1e6 * p["input_per_m"] + u["completion_tokens"] / 1e6 * p["output_per_m"]
-    _log({"provider": "openai", "model": model, "purpose": purpose, "prompt_version": prompt_version, "n": 1,
-          "in_tokens": u["prompt_tokens"], "out_tokens": u["completion_tokens"], "cost_usd": cost,
-          "seconds": round(time.time() - t, 2)})
+    row = {"provider": "openai", "model": model, "purpose": purpose, "prompt_version": prompt_version, "n": 1,
+           "in_tokens": u["prompt_tokens"], "out_tokens": u["completion_tokens"], "cost_usd": cost,
+           "seconds": round(time.time() - t, 2)}
+    cached = (u.get("prompt_tokens_details") or {}).get("cached_tokens")
+    if cached is not None:  # optional: prompt-cache hits (cost_usd above stays at the uncached list price)
+        row["cached_tokens"] = cached
+    _log(row)
     return json.loads(r["choices"][0]["message"]["content"]), u
 
 

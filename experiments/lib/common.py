@@ -33,7 +33,7 @@ def info_class(item):
     """'ok' = enough topical signal; 'low' = too little text; 'non_english' = mostly non-Latin script."""
     text = strip_tags(item.get("caption", ""))
     latin, other = letters(text)
-    tags = [h.lower() for h in item["platform_data"]["hashtags"]]
+    tags = [h.lower() for h in (item["platform_data"].get("hashtags") or [])]
     topical = [t for t in tags if t not in GENERIC and letters(t)[0] >= 3]
     if other > latin and other >= 10:
         return "non_english"

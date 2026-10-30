@@ -1,0 +1,27 @@
+[
+  {
+    "header": "YouTube",
+    "title": "Searched for synthetic sourdough shaping",
+    "titleUrl": "https://www.youtube.com/results?search_query=synthetic+sourdough+shaping",
+    "time": "2025-03-04T18:18:00.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube search history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Has buscado synthetic paella \u0026 rice",
+    "titleUrl": "https://www.youtube.com/results?search_query=synthetic+paella+%26+rice",
+    "time": "2025-03-03T11:58:00.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube search history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Searched for Synthetic Ad Keyword",
+    "titleUrl": "https://www.youtube.com/results?search_query=synthetic+ad+keyword",
+    "time": "2025-03-03T11:00:00.000Z",
+    "products": ["YouTube"],
+    "details": [{"name": "From Google Ads"}],
+    "activityControls": ["YouTube search history"]
+  }
+]
