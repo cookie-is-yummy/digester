@@ -1,0 +1,1840 @@
+{
+ "round": "r8",
+ "date": "2026-10-30",
+ "split": "dev",
+ "labels": "r8 (claude-evaluator-r8 merged; backup evalset.pre_r8.jsonl)",
+ "pool": {
+  "items": 57,
+  "grades_2_1_0": [
+   4,
+   11,
+   42
+  ],
+  "sheet_extra": false
+ },
+ "pre_pool_r7": {
+  "B2": 0.549,
+  "e17_qrv2_b2": 0.545,
+  "e18_mltplan_b2": 0.559,
+  "e19_gatekind_b2": 0.537,
+  "e20_hyde_b2": 0.568,
+  "unjudged10": {
+   "e17_qrv2_b2": [
+    0.087,
+    0.1,
+    0.069
+   ],
+   "e18_mltplan_b2": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "e19_gatekind_b2": [
+    0.031,
+    0.031,
+    0.05
+   ],
+   "e20_hyde_b2": [
+    0.019,
+    0.019,
+    0.025
+   ]
+  }
+ },
+ "results": {
+  "B2_vs_honest": {
+   "name": "B2_vs_honest",
+   "split": "dev",
+   "pairs": [
+    [
+     "e9b_full_r1.json",
+     "e1_rewrite_r1.json"
+    ],
+    [
+     "e9b_full_r2.json",
+     "e1_rewrite_r2.json"
+    ],
+    [
+     "e9b_full_r3.json",
+     "e1_rewrite_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.548,
+    "p10": 0.677,
+    "mrr": 0.855,
+    "r100": 0.518,
+    "success5": 0.958,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.554,
+     0.558,
+     0.532
+    ],
+    "ndcg10_ci95": [
+     0.428,
+     0.664
+    ],
+    "ndcg10_range": [
+     0.532,
+     0.558
+    ],
+    "r100_per_repeat": [
+     0.519,
+     0.51,
+     0.525
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.043,
+     "more_like_this": 0.692,
+     "name": 0.597,
+     "people": 0.882,
+     "place": 0.376,
+     "said_shown": 0.717,
+     "topic": 0.528,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.471,
+     "name": 0.639,
+     "people": 0.449,
+     "place": 0.197,
+     "said_shown": 0.667,
+     "topic": 0.593,
+     "vibe": 0.264
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.371,
+    "single_mrr": 0.506,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.489,
+    "p10": 0.617,
+    "mrr": 0.821,
+    "r100": 0.508,
+    "success5": 0.896,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.494,
+     0.505,
+     0.469
+    ],
+    "ndcg10_ci95": [
+     0.384,
+     0.6
+    ],
+    "ndcg10_range": [
+     0.469,
+     0.505
+    ],
+    "r100_per_repeat": [
+     0.505,
+     0.512,
+     0.508
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.058,
+     "more_like_this": 0.645,
+     "name": 0.556,
+     "people": 0.62,
+     "place": 0.513,
+     "said_shown": 0.662,
+     "topic": 0.433,
+     "vibe": 0.21
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.468,
+     "name": 0.629,
+     "people": 0.41,
+     "place": 0.183,
+     "said_shown": 0.75,
+     "topic": 0.548,
+     "vibe": 0.259
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.333,
+    "single_mrr": 0.47,
+    "single_r100": 0.667,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.059,
+    "ci95": [
+     0.016,
+     0.108
+    ],
+    "wins": 13,
+    "losses": 3,
+    "ties": 0
+   },
+   "delta_ndcg10_per_repeat": [
+    0.06,
+    0.052,
+    0.064
+   ],
+   "delta_r100": {
+    "delta": 0.01,
+    "ci95": [
+     -0.015,
+     0.038
+    ],
+    "wins": 7,
+    "losses": 6,
+    "ties": 3
+   },
+   "delta_r100_per_repeat": [
+    0.014,
+    -0.001,
+    0.016
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": 0.061,
+     "wlt": [
+      11,
+      2,
+      0
+     ],
+     "delta_r100": 0.011
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.047,
+     "wlt": [
+      2,
+      1,
+      0
+     ],
+     "delta_r100": 0.003
+    }
+   }
+  },
+  "e17_qrv2_b2_vs_B2": {
+   "name": "e17_qrv2_b2_vs_B2",
+   "split": "dev",
+   "pairs": [
+    [
+     "e17_qrv2_b2_r1.json",
+     "e9b_full_r1.json"
+    ],
+    [
+     "e17_qrv2_b2_r2.json",
+     "e9b_full_r2.json"
+    ],
+    [
+     "e17_qrv2_b2_r3.json",
+     "e9b_full_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.556,
+    "p10": 0.648,
+    "mrr": 0.856,
+    "r100": 0.499,
+    "success5": 0.917,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.568,
+     0.552,
+     0.547
+    ],
+    "ndcg10_ci95": [
+     0.432,
+     0.673
+    ],
+    "ndcg10_range": [
+     0.547,
+     0.568
+    ],
+    "r100_per_repeat": [
+     0.501,
+     0.494,
+     0.501
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.0,
+     "more_like_this": 0.692,
+     "name": 0.632,
+     "people": 0.861,
+     "place": 0.208,
+     "said_shown": 0.717,
+     "topic": 0.557,
+     "vibe": 0.349
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.471,
+     "name": 0.639,
+     "people": 0.468,
+     "place": 0.144,
+     "said_shown": 0.5,
+     "topic": 0.565,
+     "vibe": 0.216
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.374,
+    "single_mrr": 0.502,
+    "single_r100": 0.583,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.548,
+    "p10": 0.677,
+    "mrr": 0.855,
+    "r100": 0.518,
+    "success5": 0.958,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.554,
+     0.558,
+     0.532
+    ],
+    "ndcg10_ci95": [
+     0.428,
+     0.664
+    ],
+    "ndcg10_range": [
+     0.532,
+     0.558
+    ],
+    "r100_per_repeat": [
+     0.519,
+     0.51,
+     0.525
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.043,
+     "more_like_this": 0.692,
+     "name": 0.597,
+     "people": 0.882,
+     "place": 0.376,
+     "said_shown": 0.717,
+     "topic": 0.528,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.471,
+     "name": 0.639,
+     "people": 0.449,
+     "place": 0.197,
+     "said_shown": 0.667,
+     "topic": 0.593,
+     "vibe": 0.264
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.371,
+    "single_mrr": 0.506,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.007,
+    "ci95": [
+     -0.025,
+     0.039
+    ],
+    "wins": 7,
+    "losses": 4,
+    "ties": 5
+   },
+   "delta_ndcg10_per_repeat": [
+    0.014,
+    -0.006,
+    0.015
+   ],
+   "delta_r100": {
+    "delta": -0.019,
+    "ci95": [
+     -0.047,
+     0.006
+    ],
+    "wins": 4,
+    "losses": 8,
+    "ties": 4
+   },
+   "delta_r100_per_repeat": [
+    -0.018,
+    -0.016,
+    -0.023
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": 0.009,
+     "wlt": [
+      7,
+      4,
+      2
+     ],
+     "delta_r100": -0.024
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.0,
+     "wlt": [
+      0,
+      0,
+      3
+     ],
+     "delta_r100": 0.0
+    }
+   }
+  },
+  "e17_qrv2_b2_vs_honest": {
+   "name": "e17_qrv2_b2_vs_honest",
+   "split": "dev",
+   "pairs": [
+    [
+     "e17_qrv2_b2_r1.json",
+     "e1_rewrite_r1.json"
+    ],
+    [
+     "e17_qrv2_b2_r2.json",
+     "e1_rewrite_r2.json"
+    ],
+    [
+     "e17_qrv2_b2_r3.json",
+     "e1_rewrite_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.556,
+    "p10": 0.648,
+    "mrr": 0.856,
+    "r100": 0.499,
+    "success5": 0.917,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.568,
+     0.552,
+     0.547
+    ],
+    "ndcg10_ci95": [
+     0.432,
+     0.673
+    ],
+    "ndcg10_range": [
+     0.547,
+     0.568
+    ],
+    "r100_per_repeat": [
+     0.501,
+     0.494,
+     0.501
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.0,
+     "more_like_this": 0.692,
+     "name": 0.632,
+     "people": 0.861,
+     "place": 0.208,
+     "said_shown": 0.717,
+     "topic": 0.557,
+     "vibe": 0.349
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.471,
+     "name": 0.639,
+     "people": 0.468,
+     "place": 0.144,
+     "said_shown": 0.5,
+     "topic": 0.565,
+     "vibe": 0.216
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.374,
+    "single_mrr": 0.502,
+    "single_r100": 0.583,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.489,
+    "p10": 0.617,
+    "mrr": 0.821,
+    "r100": 0.508,
+    "success5": 0.896,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.494,
+     0.505,
+     0.469
+    ],
+    "ndcg10_ci95": [
+     0.384,
+     0.6
+    ],
+    "ndcg10_range": [
+     0.469,
+     0.505
+    ],
+    "r100_per_repeat": [
+     0.505,
+     0.512,
+     0.508
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.058,
+     "more_like_this": 0.645,
+     "name": 0.556,
+     "people": 0.62,
+     "place": 0.513,
+     "said_shown": 0.662,
+     "topic": 0.433,
+     "vibe": 0.21
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.468,
+     "name": 0.629,
+     "people": 0.41,
+     "place": 0.183,
+     "said_shown": 0.75,
+     "topic": 0.548,
+     "vibe": 0.259
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.333,
+    "single_mrr": 0.47,
+    "single_r100": 0.667,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.066,
+    "ci95": [
+     0.002,
+     0.131
+    ],
+    "wins": 13,
+    "losses": 3,
+    "ties": 0
+   },
+   "delta_ndcg10_per_repeat": [
+    0.074,
+    0.046,
+    0.078
+   ],
+   "delta_r100": {
+    "delta": -0.009,
+    "ci95": [
+     -0.053,
+     0.033
+    ],
+    "wins": 6,
+    "losses": 7,
+    "ties": 3
+   },
+   "delta_r100_per_repeat": [
+    -0.004,
+    -0.018,
+    -0.007
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": 0.071,
+     "wlt": [
+      11,
+      2,
+      0
+     ],
+     "delta_r100": -0.012
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.047,
+     "wlt": [
+      2,
+      1,
+      0
+     ],
+     "delta_r100": 0.003
+    }
+   }
+  },
+  "e18_mltplan_b2_vs_B2": {
+   "name": "e18_mltplan_b2_vs_B2",
+   "split": "dev",
+   "pairs": [
+    [
+     "e18_mltplan_b2_r1.json",
+     "e9b_full_r1.json"
+    ],
+    [
+     "e18_mltplan_b2_r2.json",
+     "e9b_full_r2.json"
+    ],
+    [
+     "e18_mltplan_b2_r3.json",
+     "e9b_full_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.557,
+    "p10": 0.69,
+    "mrr": 0.855,
+    "r100": 0.529,
+    "success5": 0.958,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.564,
+     0.567,
+     0.542
+    ],
+    "ndcg10_ci95": [
+     0.436,
+     0.675
+    ],
+    "ndcg10_range": [
+     0.542,
+     0.567
+    ],
+    "r100_per_repeat": [
+     0.53,
+     0.521,
+     0.535
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.043,
+     "more_like_this": 0.741,
+     "name": 0.597,
+     "people": 0.882,
+     "place": 0.376,
+     "said_shown": 0.717,
+     "topic": 0.528,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.527,
+     "name": 0.639,
+     "people": 0.449,
+     "place": 0.197,
+     "said_shown": 0.667,
+     "topic": 0.593,
+     "vibe": 0.264
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.371,
+    "single_mrr": 0.506,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.548,
+    "p10": 0.677,
+    "mrr": 0.855,
+    "r100": 0.518,
+    "success5": 0.958,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.554,
+     0.558,
+     0.532
+    ],
+    "ndcg10_ci95": [
+     0.428,
+     0.664
+    ],
+    "ndcg10_range": [
+     0.532,
+     0.558
+    ],
+    "r100_per_repeat": [
+     0.519,
+     0.51,
+     0.525
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.043,
+     "more_like_this": 0.692,
+     "name": 0.597,
+     "people": 0.882,
+     "place": 0.376,
+     "said_shown": 0.717,
+     "topic": 0.528,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.471,
+     "name": 0.639,
+     "people": 0.449,
+     "place": 0.197,
+     "said_shown": 0.667,
+     "topic": 0.593,
+     "vibe": 0.264
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.371,
+    "single_mrr": 0.506,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.009,
+    "ci95": [
+     0.0,
+     0.023
+    ],
+    "wins": 3,
+    "losses": 0,
+    "ties": 13
+   },
+   "delta_ndcg10_per_repeat": [
+    0.009,
+    0.009,
+    0.009
+   ],
+   "delta_r100": {
+    "delta": 0.011,
+    "ci95": [
+     0.0,
+     0.025
+    ],
+    "wins": 3,
+    "losses": 0,
+    "ties": 13
+   },
+   "delta_r100_per_repeat": [
+    0.011,
+    0.011,
+    0.011
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": 0.0,
+     "wlt": [
+      0,
+      0,
+      13
+     ],
+     "delta_r100": 0.0
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.049,
+     "wlt": [
+      3,
+      0,
+      0
+     ],
+     "delta_r100": 0.056
+    }
+   }
+  },
+  "e18_mltplan_b2_vs_honest": {
+   "name": "e18_mltplan_b2_vs_honest",
+   "split": "dev",
+   "pairs": [
+    [
+     "e18_mltplan_b2_r1.json",
+     "e1_rewrite_r1.json"
+    ],
+    [
+     "e18_mltplan_b2_r2.json",
+     "e1_rewrite_r2.json"
+    ],
+    [
+     "e18_mltplan_b2_r3.json",
+     "e1_rewrite_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.557,
+    "p10": 0.69,
+    "mrr": 0.855,
+    "r100": 0.529,
+    "success5": 0.958,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.564,
+     0.567,
+     0.542
+    ],
+    "ndcg10_ci95": [
+     0.436,
+     0.675
+    ],
+    "ndcg10_range": [
+     0.542,
+     0.567
+    ],
+    "r100_per_repeat": [
+     0.53,
+     0.521,
+     0.535
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.043,
+     "more_like_this": 0.741,
+     "name": 0.597,
+     "people": 0.882,
+     "place": 0.376,
+     "said_shown": 0.717,
+     "topic": 0.528,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.527,
+     "name": 0.639,
+     "people": 0.449,
+     "place": 0.197,
+     "said_shown": 0.667,
+     "topic": 0.593,
+     "vibe": 0.264
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.371,
+    "single_mrr": 0.506,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.489,
+    "p10": 0.617,
+    "mrr": 0.821,
+    "r100": 0.508,
+    "success5": 0.896,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.494,
+     0.505,
+     0.469
+    ],
+    "ndcg10_ci95": [
+     0.384,
+     0.6
+    ],
+    "ndcg10_range": [
+     0.469,
+     0.505
+    ],
+    "r100_per_repeat": [
+     0.505,
+     0.512,
+     0.508
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.058,
+     "more_like_this": 0.645,
+     "name": 0.556,
+     "people": 0.62,
+     "place": 0.513,
+     "said_shown": 0.662,
+     "topic": 0.433,
+     "vibe": 0.21
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.468,
+     "name": 0.629,
+     "people": 0.41,
+     "place": 0.183,
+     "said_shown": 0.75,
+     "topic": 0.548,
+     "vibe": 0.259
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.333,
+    "single_mrr": 0.47,
+    "single_r100": 0.667,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.068,
+    "ci95": [
+     0.027,
+     0.116
+    ],
+    "wins": 13,
+    "losses": 2,
+    "ties": 1
+   },
+   "delta_ndcg10_per_repeat": [
+    0.069,
+    0.062,
+    0.073
+   ],
+   "delta_r100": {
+    "delta": 0.02,
+    "ci95": [
+     -0.007,
+     0.048
+    ],
+    "wins": 9,
+    "losses": 5,
+    "ties": 2
+   },
+   "delta_r100_per_repeat": [
+    0.024,
+    0.009,
+    0.027
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": 0.061,
+     "wlt": [
+      11,
+      2,
+      0
+     ],
+     "delta_r100": 0.011
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.096,
+     "wlt": [
+      2,
+      0,
+      1
+     ],
+     "delta_r100": 0.059
+    }
+   }
+  },
+  "e19_gatekind_b2_vs_B2": {
+   "name": "e19_gatekind_b2_vs_B2",
+   "split": "dev",
+   "pairs": [
+    [
+     "e19_gatekind_b2_r1.json",
+     "e9b_full_r1.json"
+    ],
+    [
+     "e19_gatekind_b2_r2.json",
+     "e9b_full_r2.json"
+    ],
+    [
+     "e19_gatekind_b2_r3.json",
+     "e9b_full_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.54,
+    "p10": 0.681,
+    "mrr": 0.833,
+    "r100": 0.53,
+    "success5": 0.938,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.551,
+     0.547,
+     0.523
+    ],
+    "ndcg10_ci95": [
+     0.423,
+     0.653
+    ],
+    "ndcg10_range": [
+     0.523,
+     0.551
+    ],
+    "r100_per_repeat": [
+     0.53,
+     0.521,
+     0.538
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.039,
+     "more_like_this": 0.698,
+     "name": 0.595,
+     "people": 0.697,
+     "place": 0.426,
+     "said_shown": 0.717,
+     "topic": 0.529,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.471,
+     "name": 0.634,
+     "people": 0.436,
+     "place": 0.201,
+     "said_shown": 0.917,
+     "topic": 0.59,
+     "vibe": 0.241
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.37,
+    "single_mrr": 0.5,
+    "single_r100": 0.694,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.548,
+    "p10": 0.677,
+    "mrr": 0.855,
+    "r100": 0.518,
+    "success5": 0.958,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.554,
+     0.558,
+     0.532
+    ],
+    "ndcg10_ci95": [
+     0.428,
+     0.664
+    ],
+    "ndcg10_range": [
+     0.532,
+     0.558
+    ],
+    "r100_per_repeat": [
+     0.519,
+     0.51,
+     0.525
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.043,
+     "more_like_this": 0.692,
+     "name": 0.597,
+     "people": 0.882,
+     "place": 0.376,
+     "said_shown": 0.717,
+     "topic": 0.528,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.471,
+     "name": 0.639,
+     "people": 0.449,
+     "place": 0.197,
+     "said_shown": 0.667,
+     "topic": 0.593,
+     "vibe": 0.264
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.371,
+    "single_mrr": 0.506,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": -0.008,
+    "ci95": [
+     -0.035,
+     0.01
+    ],
+    "wins": 4,
+    "losses": 4,
+    "ties": 8
+   },
+   "delta_ndcg10_per_repeat": [
+    -0.003,
+    -0.01,
+    -0.009
+   ],
+   "delta_r100": {
+    "delta": 0.012,
+    "ci95": [
+     -0.007,
+     0.046
+    ],
+    "wins": 2,
+    "losses": 4,
+    "ties": 10
+   },
+   "delta_r100_per_repeat": [
+    0.011,
+    0.011,
+    0.013
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": -0.011,
+     "wlt": [
+      3,
+      4,
+      6
+     ],
+     "delta_r100": 0.015
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.006,
+     "wlt": [
+      1,
+      0,
+      2
+     ],
+     "delta_r100": 0.0
+    }
+   }
+  },
+  "e19_gatekind_b2_vs_honest": {
+   "name": "e19_gatekind_b2_vs_honest",
+   "split": "dev",
+   "pairs": [
+    [
+     "e19_gatekind_b2_r1.json",
+     "e1_rewrite_r1.json"
+    ],
+    [
+     "e19_gatekind_b2_r2.json",
+     "e1_rewrite_r2.json"
+    ],
+    [
+     "e19_gatekind_b2_r3.json",
+     "e1_rewrite_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.54,
+    "p10": 0.681,
+    "mrr": 0.833,
+    "r100": 0.53,
+    "success5": 0.938,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.551,
+     0.547,
+     0.523
+    ],
+    "ndcg10_ci95": [
+     0.423,
+     0.653
+    ],
+    "ndcg10_range": [
+     0.523,
+     0.551
+    ],
+    "r100_per_repeat": [
+     0.53,
+     0.521,
+     0.538
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.039,
+     "more_like_this": 0.698,
+     "name": 0.595,
+     "people": 0.697,
+     "place": 0.426,
+     "said_shown": 0.717,
+     "topic": 0.529,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.471,
+     "name": 0.634,
+     "people": 0.436,
+     "place": 0.201,
+     "said_shown": 0.917,
+     "topic": 0.59,
+     "vibe": 0.241
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.37,
+    "single_mrr": 0.5,
+    "single_r100": 0.694,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.489,
+    "p10": 0.617,
+    "mrr": 0.821,
+    "r100": 0.508,
+    "success5": 0.896,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.494,
+     0.505,
+     0.469
+    ],
+    "ndcg10_ci95": [
+     0.384,
+     0.6
+    ],
+    "ndcg10_range": [
+     0.469,
+     0.505
+    ],
+    "r100_per_repeat": [
+     0.505,
+     0.512,
+     0.508
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.058,
+     "more_like_this": 0.645,
+     "name": 0.556,
+     "people": 0.62,
+     "place": 0.513,
+     "said_shown": 0.662,
+     "topic": 0.433,
+     "vibe": 0.21
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.468,
+     "name": 0.629,
+     "people": 0.41,
+     "place": 0.183,
+     "said_shown": 0.75,
+     "topic": 0.548,
+     "vibe": 0.259
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.333,
+    "single_mrr": 0.47,
+    "single_r100": 0.667,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.051,
+    "ci95": [
+     0.017,
+     0.088
+    ],
+    "wins": 13,
+    "losses": 3,
+    "ties": 0
+   },
+   "delta_ndcg10_per_repeat": [
+    0.057,
+    0.042,
+    0.054
+   ],
+   "delta_r100": {
+    "delta": 0.022,
+    "ci95": [
+     -0.006,
+     0.056
+    ],
+    "wins": 8,
+    "losses": 5,
+    "ties": 3
+   },
+   "delta_r100_per_repeat": [
+    0.025,
+    0.01,
+    0.03
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": 0.051,
+     "wlt": [
+      11,
+      2,
+      0
+     ],
+     "delta_r100": 0.026
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.053,
+     "wlt": [
+      2,
+      1,
+      0
+     ],
+     "delta_r100": 0.003
+    }
+   }
+  },
+  "e20_hyde_b2_vs_B2": {
+   "name": "e20_hyde_b2_vs_B2",
+   "split": "dev",
+   "pairs": [
+    [
+     "e20_hyde_b2_r1.json",
+     "e9b_full_r1.json"
+    ],
+    [
+     "e20_hyde_b2_r2.json",
+     "e9b_full_r2.json"
+    ],
+    [
+     "e20_hyde_b2_r3.json",
+     "e9b_full_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.57,
+    "p10": 0.679,
+    "mrr": 0.867,
+    "r100": 0.524,
+    "success5": 0.938,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.574,
+     0.563,
+     0.572
+    ],
+    "ndcg10_ci95": [
+     0.444,
+     0.687
+    ],
+    "ndcg10_range": [
+     0.563,
+     0.574
+    ],
+    "r100_per_repeat": [
+     0.517,
+     0.533,
+     0.521
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.0,
+     "more_like_this": 0.692,
+     "name": 0.629,
+     "people": 0.887,
+     "place": 0.426,
+     "said_shown": 0.717,
+     "topic": 0.564,
+     "vibe": 0.306
+    },
+    "r100_by_kind": {
+     "audio": 0.333,
+     "more_like_this": 0.471,
+     "name": 0.627,
+     "people": 0.449,
+     "place": 0.203,
+     "said_shown": 0.75,
+     "topic": 0.61,
+     "vibe": 0.301
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.372,
+    "single_mrr": 0.511,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.548,
+    "p10": 0.677,
+    "mrr": 0.855,
+    "r100": 0.518,
+    "success5": 0.958,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.554,
+     0.558,
+     0.532
+    ],
+    "ndcg10_ci95": [
+     0.428,
+     0.664
+    ],
+    "ndcg10_range": [
+     0.532,
+     0.558
+    ],
+    "r100_per_repeat": [
+     0.519,
+     0.51,
+     0.525
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.043,
+     "more_like_this": 0.692,
+     "name": 0.597,
+     "people": 0.882,
+     "place": 0.376,
+     "said_shown": 0.717,
+     "topic": 0.528,
+     "vibe": 0.247
+    },
+    "r100_by_kind": {
+     "audio": 0.417,
+     "more_like_this": 0.471,
+     "name": 0.639,
+     "people": 0.449,
+     "place": 0.197,
+     "said_shown": 0.667,
+     "topic": 0.593,
+     "vibe": 0.264
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.371,
+    "single_mrr": 0.506,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.022,
+    "ci95": [
+     0.008,
+     0.037
+    ],
+    "wins": 10,
+    "losses": 1,
+    "ties": 5
+   },
+   "delta_ndcg10_per_repeat": [
+    0.02,
+    0.006,
+    0.04
+   ],
+   "delta_r100": {
+    "delta": 0.006,
+    "ci95": [
+     -0.013,
+     0.025
+    ],
+    "wins": 5,
+    "losses": 3,
+    "ties": 8
+   },
+   "delta_r100_per_repeat": [
+    -0.002,
+    0.022,
+    -0.003
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": 0.027,
+     "wlt": [
+      10,
+      1,
+      2
+     ],
+     "delta_r100": 0.007
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.0,
+     "wlt": [
+      0,
+      0,
+      3
+     ],
+     "delta_r100": 0.0
+    }
+   }
+  },
+  "e20_hyde_b2_vs_honest": {
+   "name": "e20_hyde_b2_vs_honest",
+   "split": "dev",
+   "pairs": [
+    [
+     "e20_hyde_b2_r1.json",
+     "e1_rewrite_r1.json"
+    ],
+    [
+     "e20_hyde_b2_r2.json",
+     "e1_rewrite_r2.json"
+    ],
+    [
+     "e20_hyde_b2_r3.json",
+     "e1_rewrite_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.57,
+    "p10": 0.679,
+    "mrr": 0.867,
+    "r100": 0.524,
+    "success5": 0.938,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.574,
+     0.563,
+     0.572
+    ],
+    "ndcg10_ci95": [
+     0.444,
+     0.687
+    ],
+    "ndcg10_range": [
+     0.563,
+     0.574
+    ],
+    "r100_per_repeat": [
+     0.517,
+     0.533,
+     0.521
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.0,
+     "more_like_this": 0.692,
+     "name": 0.629,
+     "people": 0.887,
+     "place": 0.426,
+     "said_shown": 0.717,
+     "topic": 0.564,
+     "vibe": 0.306
+    },
+    "r100_by_kind": {
+     "audio": 0.333,
+     "more_like_this": 0.471,
+     "name": 0.627,
+     "people": 0.449,
+     "place": 0.203,
+     "said_shown": 0.75,
+     "topic": 0.61,
+     "vibe": 0.301
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.372,
+    "single_mrr": 0.511,
+    "single_r100": 0.611,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "base": {
+    "ndcg10": 0.489,
+    "p10": 0.617,
+    "mrr": 0.821,
+    "r100": 0.508,
+    "success5": 0.896,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.494,
+     0.505,
+     0.469
+    ],
+    "ndcg10_ci95": [
+     0.384,
+     0.6
+    ],
+    "ndcg10_range": [
+     0.469,
+     0.505
+    ],
+    "r100_per_repeat": [
+     0.505,
+     0.512,
+     0.508
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.058,
+     "more_like_this": 0.645,
+     "name": 0.556,
+     "people": 0.62,
+     "place": 0.513,
+     "said_shown": 0.662,
+     "topic": 0.433,
+     "vibe": 0.21
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.468,
+     "name": 0.629,
+     "people": 0.41,
+     "place": 0.183,
+     "said_shown": 0.75,
+     "topic": 0.548,
+     "vibe": 0.259
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.333,
+    "single_mrr": 0.47,
+    "single_r100": 0.667,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.08,
+    "ci95": [
+     0.036,
+     0.133
+    ],
+    "wins": 13,
+    "losses": 3,
+    "ties": 0
+   },
+   "delta_ndcg10_per_repeat": [
+    0.08,
+    0.058,
+    0.103
+   ],
+   "delta_r100": {
+    "delta": 0.015,
+    "ci95": [
+     -0.018,
+     0.049
+    ],
+    "wins": 8,
+    "losses": 4,
+    "ties": 4
+   },
+   "delta_r100_per_repeat": [
+    0.012,
+    0.021,
+    0.013
+   ],
+   "subsets": {
+    "typed": {
+     "n": 13,
+     "delta_ndcg10": 0.088,
+     "wlt": [
+      11,
+      2,
+      0
+     ],
+     "delta_r100": 0.018
+    },
+    "more_like_this": {
+     "n": 3,
+     "delta_ndcg10": 0.047,
+     "wlt": [
+      2,
+      1,
+      0
+     ],
+     "delta_r100": 0.003
+    }
+   }
+  }
+ },
+ "cost_latency": {
+  "B2": {
+   "query_p50_s": [
+    0.29,
+    0.268,
+    0.225
+   ],
+   "rewrite_p50_s": [
+    2.322,
+    2.335,
+    2.362
+   ],
+   "rewrite_cost_per_1k_searches_usd": 0.118
+  },
+  "e17_qrv2_b2": {
+   "query_p50_s": [
+    0.24,
+    0.253,
+    0.28
+   ],
+   "rewrite_p50_s": [
+    2.583,
+    2.622,
+    2.702
+   ],
+   "rewrite_cost_per_1k_searches_usd": 0.137
+  },
+  "e18_mltplan_b2": {
+   "query_p50_s": [
+    0.32,
+    0.23,
+    0.261
+   ],
+   "mlt_query_p50_s": [
+    0.494,
+    0.462,
+    0.357
+   ],
+   "mlt_plan_p50_s": 1.103,
+   "mlt_plan_cost_per_1k_mlt_searches_usd": 0.265
+  },
+  "e19_gatekind_b2": {
+   "query_p50_s": [
+    0.25,
+    0.208,
+    0.279
+   ],
+   "extra_cost_usd": 0,
+   "gate_items_added": 2021
+  },
+  "e20_hyde_b2": {
+   "query_p50_s": [
+    0.262,
+    0.273,
+    0.532
+   ],
+   "extra_cost_usd_now": 0,
+   "production_note": "experimenter: ~+$0.05/1k searches for caption tokens; qr-v1 already emits the 3 hypothetical captions and run cost_usd equals B2"
+  }
+ },
+ "verdicts": {
+  "17": "no",
+  "18": "no by the letter (overall \u0394 +0.009; MLT-only +0.049, 3/0/0, n=3)",
+  "19": "no",
+  "20": "adopt (clause 2: \u0394 +0.022, CI [+0.008,+0.037], W/L 10/1, $0 marginal with qr-v1 captions already generated); near miss by the letter if the +$0.05/1k production caption cost counts"
+ }
+}
