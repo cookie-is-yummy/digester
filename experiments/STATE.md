@@ -1,6 +1,6 @@
 # State
 
-- **Phase:** 6 done — converged and handed over. Draft pull request into `main` is open (see the PR on `experiments/search-loop`).
+- **Phase:** 6 done — converged and handed over. Draft pull request into `main`: https://github.com/cookie-is-yummy/digester/pull/2 (squash-merge).
 - **Finalist:** **B3** = real gpt-5-nano query rewrite (qr-v1) + bge-small dense (gate, PRF) + BM25 + RRF, **plus** tier-1 text enrichment of every non-friend item (gemini-3.1-flash-lite, prompt te-v1c, Batch) indexed as its own BM25 list and its own bge-small vector list, **plus** HyDE (the rewrite's 3 invented captions as one extra query vector). Code: `methods/stack.py --opt hyde=1` (with `e9_enrich_search.py`, `pipeline.py`).
 - **Labels:** round t1 is current (r0 + 567 dev judgments over rounds r1–r10 + 88 test judgments in t1). Backups `data/evals/labels/evalset.pre_*.jsonl`.
 - **Test-split scorings used: 2 of 3.** One left.
