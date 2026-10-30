@@ -95,3 +95,15 @@ Lessons: (1) with an LLM rewrite in place, classic feedback and fusion tweaks ar
 ## Spend
 
 OpenAI **$0.09** (rewrites, rerank, pilot); Gemini **$6.70** (enrichment pilot, sample, full corpus, prompt v2, Gemini Embedding 2 indexes). Ledger list-price estimates; not reconciled with the billing pages (no access from the loop).
+
+## Round 2 (`experiments/BRIEF-2.md`)
+
+Same rules: fresh blind evaluators, preregistration, pooled judging (r11 +110 dev, t2 +29 test judgments). Spend **$0.15** (OpenAI $0.096, Gemini $0.058). The last test scoring is used.
+
+- **Q1 · Do the gap flags predict misses?** Weakly. The per-item `unknown` facet predicts that a right answer is missed at AUC **0.60**, below the old caption-richness score (0.67); empty fields and "hedges" do worse. Against Muse, the flags fire on 92–98% of real gaps for shown, place, people and audio, but only ~55% for said and kind, so the gap rule should be "unknown OR empty". **52% of misses rank beyond 1,000** and only 12% in the top 200, so on-demand enrichment of a weak search's nearest candidates can reach at most ~12% of misses. No item-level gate picked misses better than chance; a proposed media gate is in `experiments/results/r2-q1-gap-flags.md` (image for everything ~$0.30 / 1k items Batch; audio for music/how-to reels with a gap; full video for saved/self-shared reels).
+- **Q2 · A library-aware rewrite.** A library profile (collections, top creators, hashtags, topics) in the prompt changed little (+0.006) but is cheaper with prompt caching ($0.089 vs $0.118 / 1k searches). "Look first" (rewrite after seeing the raw search's top 20) won on dev (**+0.024**, 7/3/6; place and vibe up) but **lost on the held-out test (−0.038)** and tied B3 over all 22 searches (+0.007). Not adopted. gpt-5-mini added nothing.
+- **Q3 · Speed.** Only an **instant path** (no rewrite) meets p95 ≤ 0.5 s (0.12 / 0.17 s); it scores ~0.07 below the finalist over all 22 searches. Every LLM rewrite sits at 2.1–3.1 s p95 because a bare provider call already takes ~0.9 s from here; faster or shorter models saved ≤ 0.5 s at 3–5× the cost with no quality gain; routing lookups past the rewrite fired on 2 of 13 searches; a cache helps p95 only at ~96% hit rate. **Recommendation: two-stage search** (instant screen, then the refined B3 list ~2 s later; ~3–4 of 10 results change). See `experiments/results/r2-q3-speed.md`.
+- **Q4 · How far to trust the AI judge:** a 60-line blind sheet for Derrick (40 AI-judged, 20 Muse-labelled); results pending his grades.
+- **Q5 · YouTube readiness:** prototype Takeout importer, official-API enricher and eval format with a `moment` kind, on synthetic fixtures (`experiments/youtube/`, 34 tests). Contract gaps proposed as A-004.
+
+**Finalist unchanged: B3.** A-003 is updated with the two-stage flow, background (not on-demand) enrichment, and the gap-flag findings.

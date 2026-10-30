@@ -1,14 +1,22 @@
 # State
 
-## Round 2 (`BRIEF-2.md`) — in progress
+## Round 2 (`BRIEF-2.md`) — done except Q4 (waiting for Derrick's grades)
 
-- **Started:** 2026-10-30, after `git pull`. Data present; B3 reproduces on dev (16/16 rankings identical, `stack.py --opt hyde=1`, r1).
-- **Spend at start of round 2 (ledger):** OpenAI $0.0936, Gemini $6.6999. Round-2 plan < $3 total; stop paid work at $5 of round-2 spend.
-- **Labels:** round t1 is current. Test split: 1 scoring left (only if a change is adopted on dev).
-- **In flight:** Q1 gap-flag validation (evaluator); Q2 library-aware rewrite (experimenter); Q3 speed (experimenter); Q5 YouTube readiness (builder, synthetic only). Q4 (human judge check) last.
+- **Finalist unchanged: B3.** Labels: round t2 is current. **Test-split scorings: 3 of 3 used** (none left).
+- **Spend in round 2:** OpenAI $0.096, Gemini $0.058 (**$0.15**, plan was < $3). Loop totals: OpenAI $0.189, Gemini $6.758.
+- **Q1 (gap flags):** weak predictors of misses (AUC 0.60 vs caption richness 0.67). 52% of misses rank beyond 1,000; on-demand enrichment of the top 200 reaches ≤ 12%. Flags should choose the facet, not the item; gap rule "unknown OR empty". Media gate proposed (image for all; audio for music/how-to gaps; video for weight ≥ 0.8 reels). `results/r2-q1-gap-flags.md`.
+- **Q2 (library-aware rewrite):** profile +0.006 (cheaper with caching); look-first +0.024 on dev but −0.038 on test, +0.007 over all 22 → withdrawn; gpt-5-mini no better. `results/2026-10-30-r11-q2-q3.md`, `results/2026-10-30-test-milestone-2.md`.
+- **Q3 (speed):** only the instant path (no rewrite) meets p95 ≤ 0.5 s (0.17 s), at ~−0.07 nDCG@10; LLM rewrites are 2.1–3.1 s p95 with a ~0.9 s network floor; faster/shorter models and routing don't help; recommend two-stage search. `results/r2-q3-speed.md`, chart `results/r2-q3-speed-chart.html`.
+- **Q4 (AI judge vs Derrick):** blind 60-line sheet at `data/eval_work/human_check/sheet.md` (key hidden in `key.json`); scorer `eval/human_check.py`. **Next:** put Derrick's 60 grades in `data/eval_work/human_check/derrick_grades.json` and have a fresh evaluator run `python experiments/eval/human_check.py`.
+- **Q5 (YouTube):** `experiments/youtube/` (synthetic importer, API enricher, eval format with `moment`, PLAN.md; 34 tests). Needs from Derrick: Takeout (JSON), `YOUTUBE_API_KEY`, ~30 YouTube searches.
+- **Amendments:** A-003 updated (two-stage search, background enrichment, gap-flag findings); A-004 Proposed (YouTube contract gaps).
+- **Code notes:** look-first context ordering is hash-seed dependent for tied counts (sort ties to make it deterministic before reuse). gpt-4.1-nano is no longer served (404) though still listed.
 - **Round-2 assumptions:**
-  1. Q1 uses the **dev** split only (16 searches), so test labels stay untouched until the one remaining test scoring.
-  2. Q2 and Q3 runs are judged together in one evaluator round (r11) to keep one label merge.
+  1. Q1 used the dev split only, so test labels stayed untouched until the last test scoring.
+  2. Q2 and Q3 runs were judged together in one evaluator round (r11).
+  3. Experiment 26 was adopted provisionally under clause 2 (cache-adjusted cost below B3; its first pass equals the instant screen) and then withdrawn when the last test scoring did not confirm it.
+  4. Q4 excludes friends' items from the human sheet.
+  5. Rule slip: the Q3 experimenter made three diagnostic API probes outside `lib/ai.py` (one billed, $0.00001, logged by hand).
 
 ---
 
