@@ -269,3 +269,13 @@ def test_html_history():
     s = T.read_search_history(r, stats)
     assert [x["query"] for x in s] == ["synthetic knife skills"]
     assert stats["time_zone_unknown"] == 1  # unknown abbreviation read as UTC and counted
+
+
+def test_my_activity_merge():
+    """Takeout's separate My Activity product is merged with the YouTube history (dedup by video + time)."""
+    items, inter, searches, subs, stats = T.build(os.path.join(FX, "takeout_html"))
+    vids = {it["platform_data"]["video_id"] for it in items}
+    assert {"SYNTHaaaa01", "SYNTHaaaa03", "SYNTHold001"} <= vids
+    assert stats["watch_duplicates"] == 1  # SYNTHaaaa01 appears in both files at the same time
+    assert stats["my_activity_liked"] == 1
+    assert sorted(s["query"] for s in searches) == ["synthetic knife skills", "synthetic old search"]

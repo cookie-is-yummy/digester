@@ -16,7 +16,7 @@ Read first:
 ## Setup
 
 1. **Unzip the files.**
-   - Unzip the Takeout into `data/youtube/raw/`.
+   - Unzip the Takeout into `data/youtube/raw/`, including any "My Activity" export. The importer merges `My Activity/YouTube/MyActivity.*` with the YouTube history and removes duplicates.
    - Run `python experiments/youtube/takeout_import.py data/youtube/raw --out data/youtube/corpus`; check the stats match the inventory note.
    - Put Derrick's search files in `data/youtube/evals/`: queries → `queries.jsonl`; answers → `labels/answers.jsonl` (evaluator only).
    - Convert both to the shapes in `eval_format.md` (an evaluator does the answer side).

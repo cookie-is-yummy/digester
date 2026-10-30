@@ -203,6 +203,40 @@ def read_activity(root, name, stats):
     return []
 
 
+def find_my_activity(takeout_dir):
+    """Takeout's separate "My Activity" product: My Activity/YouTube/MyActivity.(json|html). It can hold YouTube
+    history the "YouTube and YouTube Music" product leaves out, so both are read and merged (dedup by video+time)."""
+    for d, _, files in os.walk(takeout_dir):
+        if os.path.basename(d).lower() == "youtube" and "activity" in os.path.basename(os.path.dirname(d)).lower():
+            for ext in (".json", ".html"):
+                hit = [f for f in files if f.lower() == "myactivity" + ext]
+                if hit:
+                    return os.path.join(d, hit[0])
+    return None
+
+
+def my_activity_records(takeout_dir, kind, stats):
+    """kind 'watch' | 'search'. Splits My Activity's mixed YouTube records by their URL / title verb."""
+    path = find_my_activity(takeout_dir) if takeout_dir else None
+    if not path:
+        return []
+    key = "_my_activity_cache"
+    if key not in stats:
+        recs = read_json_list(path) if path.endswith(".json") else read_activity_html(path, stats)
+        stats[key] = recs
+        stats["my_activity_records"] = len(recs)
+        stats["my_activity_liked"] = sum(1 for r in recs if (r.get("title") or "").startswith("Liked "))
+    out = []
+    for r in stats[key]:
+        url, title = r.get("titleUrl"), (r.get("title") or "")
+        is_search = bool(search_query_from_url(url)) or title.startswith("Searched for ")
+        is_watch = title.startswith("Watched ") or (video_id_from_url(url) is not None and not title.startswith("Liked "))
+        if (kind == "search" and is_search) or (kind == "watch" and is_watch and not is_search):
+            out.append(r)
+    stats[f"my_activity_{kind}"] = len(out)
+    return out
+
+
 def read_json_list(path):
     if not os.path.exists(path):
         return []
@@ -233,10 +267,10 @@ def read_csv_blocks(path):
 
 
 # ---------------- readers ----------------
-def read_watch_history(root, stats):
+def read_watch_history(root, stats, takeout_dir=None):
     """-> list of (video_id, at, title or None, channel_id, channel_title, url)."""
     seen, out = set(), []
-    for rec in read_activity(root, "watch-history", stats):
+    for rec in read_activity(root, "watch-history", stats) + my_activity_records(takeout_dir, "watch", stats):
         stats["watch_records"] += 1
         if is_ad(rec):
             stats["watch_skipped_ads"] += 1
@@ -264,9 +298,10 @@ def read_watch_history(root, stats):
     return out
 
 
-def read_search_history(root, stats):
+def read_search_history(root, stats, takeout_dir=None):
     out = []
-    for rec in read_activity(root, "search-history", stats):
+    seen = set()
+    for rec in read_activity(root, "search-history", stats) + my_activity_records(takeout_dir, "search", stats):
         stats["search_records"] += 1
         if is_ad(rec):
             stats["search_skipped_ads"] += 1
@@ -280,6 +315,10 @@ def read_search_history(root, stats):
             continue
         at = parse_time(rec.get("time"))
         sid = "srch_" + hashlib.sha1(f"{at}|{q}".encode()).hexdigest()[:12]
+        if sid in seen:
+            stats["search_duplicates"] = stats.get("search_duplicates", 0) + 1
+            continue
+        seen.add(sid)
         out.append({"id": sid, "platform": PLATFORM, "query": q, "at": at, "source": "youtube_takeout"})
     return out
 
@@ -343,8 +382,9 @@ def build(takeout_dir):
                             "watch_duplicates", "watch_title_missing", "search_records", "search_skipped_ads",
                             "search_skipped_no_query", "playlist_rows", "playlist_rows_bad_id"]}
     root = find_root(takeout_dir)
-    watches = read_watch_history(root, stats)
-    searches = read_search_history(root, stats)
+    watches = read_watch_history(root, stats, takeout_dir)
+    searches = read_search_history(root, stats, takeout_dir)
+    stats.pop("_my_activity_cache", None)
     subs = read_subscriptions(root, stats)
     plists = read_playlists(root, stats)
     followed = {s["channel_id"] for s in subs}

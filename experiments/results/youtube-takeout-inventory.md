@@ -22,7 +22,7 @@
 | – ads ("From Google Ads") | 4,184 | skipped |
 | – community posts / channel views | 3,065 | not videos; skipped |
 | – removed (no URL) | 78 | can't be keyed |
-| Video watches kept | 25,973 | **covers only 15 Nov 2025 → 30 Oct 2026** (likely an auto-delete setting); single watches are a weak signal (0.1) |
+| Video watches kept | 25,973 | **covers only 15 Nov 2025 → 30 Oct 2026.** It starts abruptly, with ~2,400 watches in the second half of that November, though Derrick has history back to 2018. Possible causes: a cut-off in this export, another account, or history living in Takeout's separate "My Activity" product. The importer merges `My Activity/YouTube/MyActivity.(json\|html)` when present. Single watches are a weak signal (0.1) |
 | – watched video now unavailable (URL shown as title) | 3,579 (14%) | the API can't recover these either |
 | Watch later | 5,000 | YouTube's cap, so the user has hit it; dates from 2014; IDs only. Main "save" signal (0.8). Only 64 also in watch history |
 | Named playlists | 30, 259 videos | the user's own collections, like Instagram collections; only 12 also in watch history |
