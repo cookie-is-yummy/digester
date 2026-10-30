@@ -1,5 +1,19 @@
 # State
 
+## Round 2 (`BRIEF-2.md`) — in progress
+
+- **Started:** 2026-10-30, after `git pull`. Data present; B3 reproduces on dev (16/16 rankings identical, `stack.py --opt hyde=1`, r1).
+- **Spend at start of round 2 (ledger):** OpenAI $0.0936, Gemini $6.6999. Round-2 plan < $3 total; stop paid work at $5 of round-2 spend.
+- **Labels:** round t1 is current. Test split: 1 scoring left (only if a change is adopted on dev).
+- **In flight:** Q1 gap-flag validation (evaluator); Q2 library-aware rewrite (experimenter); Q3 speed (experimenter); Q5 YouTube readiness (builder, synthetic only). Q4 (human judge check) last.
+- **Round-2 assumptions:**
+  1. Q1 uses the **dev** split only (16 searches), so test labels stay untouched until the one remaining test scoring.
+  2. Q2 and Q3 runs are judged together in one evaluator round (r11) to keep one label merge.
+
+---
+
+# Round 1 (closed)
+
 - **Phase:** 6 done — converged and handed over. Draft pull request into `main`: https://github.com/cookie-is-yummy/digester/pull/2 (squash-merge).
 - **Finalist:** **B3** = real gpt-5-nano query rewrite (qr-v1) + bge-small dense (gate, PRF) + BM25 + RRF, **plus** tier-1 text enrichment of every non-friend item (gemini-3.1-flash-lite, prompt te-v1c, Batch) indexed as its own BM25 list and its own bge-small vector list, **plus** HyDE (the rewrite's 3 invented captions as one extra query vector). Code: `methods/stack.py --opt hyde=1` (with `e9_enrich_search.py`, `pipeline.py`).
 - **Labels:** round t1 is current (r0 + 567 dev judgments over rounds r1–r10 + 88 test judgments in t1). Backups `data/evals/labels/evalset.pre_*.jsonl`.
