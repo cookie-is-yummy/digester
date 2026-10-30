@@ -44,6 +44,18 @@ Find everything Muse could find in a person's saved and shared media: what's **s
 
 **You may not fetch Instagram pages or Instagram CDN media.** No scraping and no third-party scrapers; A-002 is not accepted. Experiments needing images or audio for Instagram must say so, and stop at a design plus a cost estimate. Media experiments are allowed on YouTube through the official API (`YOUTUBE_API_KEY`, if set), or on any media the founders attach.
 
+## The Muse export (if attached)
+
+The founders may attach a Muse export: what Muse built its answers from. For each item that is likely the caption plus Muse's own video description ("MU"), and possibly more.
+
+1. **Unzip it to `data/evals/labels/muse_export/`.** It is evaluator-side by default, because the answers in the eval set were found by matching words in this MU text.
+2. **First step, done by an evaluator agent:** write `experiments/results/muse-export-inventory.md`. Cover the files and fields, the item count, how many match our corpus by shortcode, and whether it holds any media (thumbnails, frames, audio) or comments. Report counts and field names only, no content.
+3. **Allowed uses:**
+   - **Ceiling.** Append MU text to the search text and re-score. This gives an upper bound on what a perfect description pass could add, per search kind. It is inflated because the labels came from MU, so report it as a ceiling and never adopt it as a method.
+   - **Reference.** The evaluator compares our own description pass against MU on a 200-item sample. Measure how many facets each covers (shown, said, audio, place, vibe…), and how often ours misses something MU has. Builders get only these aggregate rates.
+   - **Media.** If the export contains media files, they may be used for image and audio experiments on those items, through `lib/ai.py`.
+4. **Not allowed:** MU text as an input to any method that could be adopted, or to the query rewrite; builders reading MU text.
+
 ## Where things stand (30 Oct 2026, reproduced by the harness)
 
 **Best method:**
@@ -101,16 +113,25 @@ Run as an orchestrator that spawns subagents:
 
 ## Budget and keys
 
-- Keys come from the environment only: `OPENAI_API_KEY`, and optionally `GEMINI_API_KEY` and `YOUTUBE_API_KEY`. Never print, log, commit or echo them. If one is missing, skip the experiments that need it and note it.
-- **Every** paid call goes through `experiments/lib/ai.py`. It logs to `data/ai_runs.jsonl` and refuses calls past `$DIGESTER_AI_BUDGET_USD` (default $4.00).
-- Before the first paid call, check current prices on the provider's pricing pages and fill in `lib/ai_prices.json` with the date.
-- Spend in this order:
-  1. Small, label-independent samples first: the union of the baseline's top 200 for every dev query, plus 2,000 random items.
-  2. The full corpus only for a finalist.
-  3. Use the Batch API when you can wait.
-- Use the cheapest model that works; test a smaller one before a larger one.
-- Stop paid work when less than $0.50 remains; finish with free experiments and write-ups.
-- Local and free: bge-small, other small open embedders through fastembed or sentence-transformers on CPU, BM25 variants, and fusion settings.
+- Keys come from the environment only: `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `YOUTUBE_API_KEY` if set. Never print, log, commit or echo them. If one is missing, skip the experiments that need it and note it.
+- **Every** paid call goes through `experiments/lib/ai.py`. It logs to `data/ai_runs.jsonl` and enforces a separate cap per provider:
+  - `DIGESTER_OPENAI_BUDGET_USD` (founders set $18 of $20 credit);
+  - `DIGESTER_GEMINI_BUDGET_USD` (founders set $18 of $20).
+- Ledger costs are list-price estimates. Compare them with the billing pages when you can; if the gap is above 10%, lower your own pace.
+- Before the first paid call, check current prices and model IDs on the providers' pricing and model pages. Fill in `lib/ai_prices.json` with the date. This includes Gemini Embedding 2's exact model ID and price.
+- **How to spend.** Treat each $18 as the budget for the whole loop, not for one experiment.
+  1. Pilot every paid method on 200 items first, to check output quality and the real cost per item.
+  2. Then run a label-independent sample: the union of the baseline's top 200 for every dev query, plus 2,000 random items.
+  3. Run the full corpus (about 21k items) only for finalists, at most about 3 full passes per provider.
+  4. Use Batch APIs when you can wait; both providers discount them.
+  5. Use the cheapest model that works; test a smaller one before a larger one.
+  6. Compare providers on the same task where it matters: quality, cost per 1,000 items and latency.
+  7. Stop paid work for a provider when less than $1.00 of its cap remains.
+- **What Gemini is for here.**
+  - Text passes, as an alternative to OpenAI.
+  - Gemini Embedding 2 for text, and multimodal once media exists.
+  - Images and audio only for media we may legitimately use: attachments from the founders, YouTube thumbnails through the official API, and media files inside the Muse export if it contains any. Never media fetched from Instagram.
+- **Free and local:** bge-small, other small open embedders through fastembed or sentence-transformers on CPU, BM25 variants, and fusion settings.
 
 ## Phases
 
@@ -122,6 +143,8 @@ Run as an orchestrator that spawns subagents:
    - Install dependencies.
    - Run the baseline and score it with a fresh evaluator. It must match the numbers above (±0.01). If not, stop and report.
    - Fill in `ai_prices.json`.
+   - Make one tiny paid call per provider through `lib/ai.py` to confirm the keys, network and ledger work.
+   - If the Muse export is attached: have the evaluator write the inventory, then run the MU **ceiling** (see "The Muse export"). The ceiling per search kind shows which facets are worth paying to fill, and that sets the order of phases 3–5.
 2. **Benchmark the current system.** Measure:
    - Quality by search kind.
    - Indexing time per 1,000 items (CPU, and GPU if available).
