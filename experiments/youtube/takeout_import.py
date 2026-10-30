@@ -284,7 +284,7 @@ def read_watch_history(root, stats, takeout_dir=None):
             stats["watch_skipped_not_video"] += 1  # community posts, channels, stories
             continue
         at = parse_time(rec.get("time"))
-        key = (vid, at)
+        key = (vid, (at or "")[:19])  # JSON times carry milliseconds, HTML only seconds: compare to the second
         if key in seen:
             stats["watch_duplicates"] += 1
             continue
@@ -385,6 +385,8 @@ def build(takeout_dir):
     watches = read_watch_history(root, stats, takeout_dir)
     searches = read_search_history(root, stats, takeout_dir)
     stats.pop("_my_activity_cache", None)
+    wt = sorted(a for _, a, *_ in watches if a)
+    stats["watch_first_at"], stats["watch_last_at"] = (wt[0], wt[-1]) if wt else (None, None)  # coverage, to show users
     subs = read_subscriptions(root, stats)
     plists = read_playlists(root, stats)
     followed = {s["channel_id"] for s in subs}

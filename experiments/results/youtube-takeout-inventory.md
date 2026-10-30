@@ -33,6 +33,15 @@
 
 Importer speed: 2.2 s wall, ~13.6k items/s.
 
+## Second export, JSON (same day, same account)
+
+- **Its watch history is shorter: 13,700 records, 23 Apr → 30 Oct 2026.** All 10,336 of its video watches are already in the HTML export, which goes back to 15 Nov 2025. Search history, playlists and subscriptions are identical.
+- **Both exports cut off at a different point** although the user reports history back to 2018. So Takeout's YouTube watch history looks **truncated by the export itself**, not missing from the account. This is not confirmed: check myactivity.google.com, and try the separate "My Activity" product.
+- **Product implications:**
+  - Don't promise users their full watch history from Takeout. Show the coverage dates (`watch_first_at` / `watch_last_at` in import stats).
+  - Lean on saves (Watch later, playlists), which come complete.
+- **Importer:** JSON times carry milliseconds and HTML times only seconds, so watches are now deduplicated to the second when exports are merged.
+
 ## What this means
 
 - **Text depends entirely on the YouTube Data API.** The strongest signals (5,259 saved videos) have no text at all in Takeout. `videos.list` for 30,669 IDs is ~614 quota units (free quota 10,000/day).
