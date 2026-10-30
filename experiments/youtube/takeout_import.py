@@ -26,7 +26,10 @@ Formats handled (see PLAN.md for sources):
   playlists/<title>.csv                                     - legacy two-block CSV (playlist header block, blank
       line, then "Video Id, Time Added"); unverified, from older exports
   subscriptions/subscriptions.csv                           - "Channel ID, Channel URL, Channel Title" (any case)
-  watch-history.html only                                   - not parsed: re-export choosing JSON (docs/04)
+  history/watch-history.html, history/search-history.html  - the default HTML export (verified on a real Takeout,
+      30 Oct 2026): each record becomes the same dict as a JSON record via read_activity(). Times are local with
+      a zone abbreviation ("Oct 30, 2026, 9:12:39 AM EDT", narrow no-break space before AM/PM); known abbreviations
+      are converted to UTC, unknown ones are read as UTC and counted (time_zone_unknown).
 
 What Takeout lacks (why api_enrich.py exists): no description, tags, chapters, duration, thumbnail or publish date;
 no watch progress (how much was watched); playlist CSVs carry only the video ID (no title or channel); removed
@@ -42,13 +45,14 @@ usage:
 import argparse
 import csv
 import hashlib
+import html
 import io
 import json
 import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 PLATFORM = "youtube"
@@ -142,6 +146,63 @@ def find_root(path):
     return best[1]
 
 
+TZ_OFFSETS = {"UTC": 0, "GMT": 0, "EST": -5, "EDT": -4, "CST": -6, "CDT": -5, "MST": -7, "MDT": -6, "PST": -8,
+              "PDT": -7, "AKST": -9, "AKDT": -8, "HST": -10, "BST": 1, "CET": 1, "CEST": 2, "EET": 2, "EEST": 3,
+              "IST": 5.5, "SGT": 8, "HKT": 8, "JST": 9, "KST": 9, "AEST": 10, "AEDT": 11, "NZST": 12, "NZDT": 13}
+HTML_CELL = re.compile(r'class="outer-cell')
+HTML_BODY = re.compile(r'mdl-typography--body-1">(.*?)</div>', re.S)
+HTML_LINK = re.compile(r'<a href="([^"]+)">(.*?)</a>', re.S)
+HTML_TIME = re.compile(r"<br>([A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}:\d{2} [AP]M) ([A-Z]{2,5})<br>")
+
+
+def html_time(body, stats):
+    """'Oct 30, 2026, 9:12:39 AM EDT' -> ISO UTC string."""
+    m = HTML_TIME.search(body.replace("\u202f", " ").replace("\xa0", " "))
+    if not m:
+        return None
+    dt = datetime.strptime(m.group(1), "%b %d, %Y, %I:%M:%S %p")
+    off = TZ_OFFSETS.get(m.group(2))
+    if off is None:
+        stats["time_zone_unknown"] = stats.get("time_zone_unknown", 0) + 1
+        off = 0
+    return (dt - timedelta(hours=off)).replace(tzinfo=timezone.utc).isoformat()
+
+
+def read_activity_html(path, stats):
+    """My Activity HTML -> list of dicts shaped like the JSON records (title, titleUrl, subtitles, time, details)."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    out = []
+    for cell in HTML_CELL.split(text)[1:]:
+        m = HTML_BODY.search(cell)
+        if not m:
+            continue
+        body = m.group(1)
+        links = [(u, html.unescape(t)) for u, t in HTML_LINK.findall(body)]
+        verb = html.unescape(body.split("<", 1)[0]).replace("\xa0", " ").strip()
+        rec = {"title": (verb + " " + links[0][1]) if links else verb,
+               "time": html_time(body, stats),
+               "details": [{"name": "From Google Ads"}] if "From Google Ads" in cell else []}
+        if links:
+            rec["titleUrl"] = links[0][0]
+        if len(links) > 1:
+            rec["subtitles"] = [{"name": links[1][1], "url": links[1][0]}]
+        out.append(rec)
+    return out
+
+
+def read_activity(root, name, stats):
+    """history/<name>.json if present, else history/<name>.html."""
+    j = os.path.join(root, "history", name + ".json")
+    if os.path.exists(j):
+        return read_json_list(j)
+    h = os.path.join(root, "history", name + ".html")
+    if os.path.exists(h):
+        stats["history_format"] = "html"
+        return read_activity_html(h, stats)
+    return []
+
+
 def read_json_list(path):
     if not os.path.exists(path):
         return []
@@ -174,11 +235,8 @@ def read_csv_blocks(path):
 # ---------------- readers ----------------
 def read_watch_history(root, stats):
     """-> list of (video_id, at, title or None, channel_id, channel_title, url)."""
-    path = os.path.join(root, "history", "watch-history.json")
-    if not os.path.exists(path) and os.path.exists(os.path.join(root, "history", "watch-history.html")):
-        raise SystemExit("only watch-history.html found: re-export YouTube history from Takeout choosing JSON")
     seen, out = set(), []
-    for rec in read_json_list(path):
+    for rec in read_activity(root, "watch-history", stats):
         stats["watch_records"] += 1
         if is_ad(rec):
             stats["watch_skipped_ads"] += 1
@@ -208,7 +266,7 @@ def read_watch_history(root, stats):
 
 def read_search_history(root, stats):
     out = []
-    for rec in read_json_list(os.path.join(root, "history", "search-history.json")):
+    for rec in read_activity(root, "search-history", stats):
         stats["search_records"] += 1
         if is_ad(rec):
             stats["search_skipped_ads"] += 1

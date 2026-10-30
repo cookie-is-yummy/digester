@@ -245,3 +245,27 @@ def test_eval_example_shapes():
             for spans in a["moments"].values():
                 for s in spans:
                     assert 0 <= s["start_s"] < s["end_s"] and s["grade"] in (1, 2)
+
+
+# ---------------- HTML history (the default Takeout format; layout verified on a real export, 30 Oct 2026) ----------------
+def test_html_history():
+    root = os.path.join(FX, "takeout_html")
+    stats = {k: 0 for k in ["watch_records", "watch_skipped_ads", "watch_removed_no_url", "watch_skipped_not_video",
+                            "watch_duplicates", "watch_title_missing", "search_records", "search_skipped_ads",
+                            "search_skipped_no_query"]}
+    r = T.find_root(root)
+    w = T.read_watch_history(r, stats)
+    assert stats["history_format"] == "html"
+    assert stats["watch_records"] == 5 and stats["watch_skipped_ads"] == 1
+    assert stats["watch_skipped_not_video"] == 1 and stats["watch_removed_no_url"] == 1
+    vids = {x[0]: x for x in w}
+    assert set(vids) == {"SYNTHaaaa01", "SYNTHaaaa03"}
+    vid, at, title, cid, cname, url = vids["SYNTHaaaa01"]
+    assert title == "Synthetic: knife skills & basics" and cname == "Synthetic Kitchen"
+    assert cid == "UCsynthetic000000000001"
+    assert at == "2026-10-30T13:12:39+00:00"  # 9:12:39 AM EDT -> UTC
+    assert vids["SYNTHaaaa03"][2] is None  # unavailable: the URL is shown as the title
+    assert vids["SYNTHaaaa03"][1] == "2026-01-03T04:05:00+00:00"  # 11:05 PM EST -> next day UTC
+    s = T.read_search_history(r, stats)
+    assert [x["query"] for x in s] == ["synthetic knife skills"]
+    assert stats["time_zone_unknown"] == 1  # unknown abbreviation read as UTC and counted
