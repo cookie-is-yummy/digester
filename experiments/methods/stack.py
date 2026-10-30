@@ -19,6 +19,7 @@ Options (--opt name=value; one experiment = one option):
                              (query = phrase 1, phrases 2.., keywords; examples excluded) and its fused list joins
                              the B2 MLT lists as one more RRF list
   The rewrite set (exp 17: qr-v2) is chosen with --parses.
+  The enrichment index (exp 23: te-v2bh hybrid) is chosen with --enrich (default te-v1c, i.e. B2/B3).
 
 usage: python experiments/methods/stack.py --parses data/runs/rewrites/qr-v1_gpt-5-nano_r1.json \
          [--opt hyde=1] --out data/runs/x.json [--verify data/runs/e9b_full_r1.json]
@@ -135,13 +136,16 @@ class Stack:
 
 
 def main():
+    global ENRICH
     ap = argparse.ArgumentParser()
     ap.add_argument("--parses", required=True)
     ap.add_argument("--opt", action="append", default=[])
     ap.add_argument("--split", default="dev")
+    ap.add_argument("--enrich", default=ENRICH, help="enrichment index name (text_<name>.json, emb_<name>/)")
     ap.add_argument("--out")
     ap.add_argument("--verify", help="run file to compare with (all rankings identical, 1000 deep)")
     a = ap.parse_args()
+    ENRICH = a.enrich
     o = parse_opts(a.opt)
     t0 = time.time()
     C = Corpus("bge_full")
