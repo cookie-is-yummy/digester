@@ -2,13 +2,13 @@
 
 *30 Oct 2026 · processor · proposes [Amendment A-003](../amendments.md) · loop record: `experiments/LOG.md`, `experiments/STATE.md`, `experiments/results/`*
 
-**In one line:** an honest search over captions scores dev nDCG@10 **0.49**. One cheap LLM text pass per item, indexed as its **own** keyword field and vector, adds **+0.06**. Turning the rewrite's invented captions into an extra query vector (HyDE) adds **+0.02** more, to **0.57**: +0.08 [+0.04, +0.13] in total, at ~$0.18 per 1,000 items once and ~$0.12 per 1,000 searches. Everything else we tried (17 more ideas) didn't clear the bar. The remaining gap is media: what is **said, shown and played** needs audio and frames we can't fetch for Instagram.
+**In one line:** an honest search over captions scores dev nDCG@10 **0.49**. One cheap LLM text pass per item, indexed as its **own** keyword field and vector, adds **+0.06**. Turning the rewrite's invented captions into an extra query vector (HyDE) adds **+0.02** more, to **0.57**: +0.08 [+0.04, +0.13] on dev, **+0.065 [+0.03, +0.10] over all 22 searches**, at ~$0.18 per 1,000 items once and ~$0.12 per 1,000 searches. On the 6 held-out test searches alone the gain is smaller and not significant (+0.023 [−0.01, +0.05]; recall@100 +0.06 [+0.01, +0.11]), and HyDE's share is not confirmed there. Everything else we tried (17 more ideas) didn't clear the bar. The remaining gap is media: what is **said, shown and played** needs audio and frames we can't fetch for Instagram.
 
 ## The test
 
 - **Corpus:** one founder's Instagram export, 21,293 items (20,202 with any text). No media, comments or song names.
 - **Searches:** 22 real searches (16 dev, 6 test). Answers were found by Muse matching words in captions and its own video descriptions ("MU"), then reviewed.
-- **Protocol** (`experiments/BRIEF.md`): every method was built by one agent and scored by a **fresh evaluator agent** that never saw the method. Each round, the evaluator blind-judged the unjudged top-10 results of every run (612 new judgments over 12 rounds, 10 dev and 1 test), so new methods were not penalised for surfacing unlabelled items. One variable per experiment, preregistered. **Adopt** only if Δ nDCG@10 ≥ 0.03 with the paired 95% CI above 0, or ≥ 0.02 with more wins than losses and no extra cost.
+- **Protocol** (`experiments/BRIEF.md`): every method was built by one agent and scored by a **fresh evaluator agent** that never saw the method. Each round, the evaluator blind-judged the unjudged top-10 results of every run (655 new judgments over 11 rounds: 10 on dev, 1 on test), so new methods were not penalised for surfacing unlabelled items. One variable per experiment, preregistered. **Adopt** only if Δ nDCG@10 ≥ 0.03 with the paired 95% CI above 0, or ≥ 0.02 with more wins than losses and no extra cost.
 - **Rewrite noise:** the LLM rewrite varies between calls (mean per-search range 0.13), so every experiment ran on three cached rewrite sets and Δ is averaged per search over the three before bootstrapping.
 - **Limits:** one person; 16 dev searches (8 kinds, five of them a single search); differences under ~0.02 are noise.
 
@@ -27,7 +27,20 @@
 | **+ tier-1 enrichment** (B2): gemini-3.1-flash-lite writes summary, facets, unknown facets and likely searches per item; BM25 over that text and bge-small over it join the RRF as two extra lists | 0.548 | **+0.059 [+0.016, +0.108], 13/3/0** | 0.52 | $0.18 / 1k items (Batch); +0.05 s |
 | **+ HyDE** (B3, **finalist**): the rewrite's 3 invented captions → one extra query vector, 0.3·query + 0.7·mean(captions), in both dense lists | **0.570** | **+0.022 [+0.008, +0.037], 10/1/5** vs B2; **+0.080 [+0.036, +0.133], 13/3/0** vs honest base | 0.53 | $0 extra (captions come from the same rewrite call); +0.1 s |
 
-**Test split (6 searches, scored once for the finalists):** TEST_RESULTS
+**Test split (6 held-out searches: 5 typed + 1 more-like-this; scored once for all finalists after blind judging of 88 pooled items; test scoring 2 of the 3 allowed):**
+
+| System | nDCG@10 [CI] | R@100 | P@10 | MRR |
+| --- | --- | --- | --- | --- |
+| **B3 (finalist)** | **0.565** [0.39, 0.78] | **0.475** | 0.750 | 0.972 |
+| B2 (no HyDE) | 0.556 | 0.473 | 0.739 | 0.963 |
+| Honest base | 0.543 | 0.415 | 0.739 | 1.000 |
+| Hand (leaked) rewrite baseline | 0.590 | 0.420 | 0.800 | 1.000 |
+
+- B3 vs honest base: **+0.023 [−0.010, +0.053]**, 4/1/1, positive in all three repeats; R@100 **+0.060 [+0.007, +0.107]**.
+- B3 vs B2 (HyDE alone): +0.009 [−0.027, +0.054], 2/3/1. **Not confirmed on test.**
+- B3 vs the leaked hand baseline: −0.025 [−0.17, +0.08]; almost all of it is the one place search (0.31 vs 0.65), where the leaked rewrite knew the answer. B3 has the better recall (+0.055 R@100).
+- **All 22 searches (dev + test, same labels):** B3 0.569 vs honest base 0.504: **+0.065 [+0.028, +0.103], 17/4/1**; R@100 +0.033 [+0.001, +0.062]. The honest base is 0.073 below the leaked baseline; B3 closes that gap to −0.008 [−0.09, +0.07].
+- Reading: the enrichment gain holds up in direction and in recall; with n = 6 the test can't confirm its size. HyDE should be treated as a free, optional extra, not a proven gain.
 
 **By kind (dev, r10 labels, honest base → B3):**
 

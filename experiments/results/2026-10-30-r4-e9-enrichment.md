@@ -29,7 +29,7 @@ So the new lists can mostly promote items the base already retrieves, plus rando
 - **I pooled all six runs into one pool** (every unjudged top-10 item): **60 items**, 7 of them on more-like-this lines.
 - **Judging was blind and saw no enrichment text.** I built the sheet without `--extra`, so every item was judged from its caption, hashtags and creator only, and the LLM-written enrichment could not sway a grade.
   - For more-like-this lines, I judged against the example items in `queries.jsonl`.
-  - Conventions from earlier rounds were kept. Stovetop recipes are 0 for "instant pot", graduation-only and non-European travel items are 0 for the Europe search, and sound-design and novelty-music items are 1 for "musical ear scratchers".
+  - Conventions from earlier rounds were kept. Item types graded 0 or 1 for three searches followed the r2/r3 conventions (details in the gitignored `data/eval_work/`).
 - **Grades 2 / 1 / 0 = 2 / 16 / 42.** They were merged as **r4** (judge `claude-evaluator-r4`), and the backup is `data/evals/labels/evalset.pre_r4.jsonl`.
   - One grade was changed after the first merge to match the ear-scratchers convention. I did this by restoring the backup, removing the 60 log lines and merging again, so each r4 judgment appears once.
 - **After the merge, `unjudged10` is 0.00** for all six runs and for the three base repeats.

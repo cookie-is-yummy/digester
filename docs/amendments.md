@@ -80,7 +80,8 @@ The brief asks to find what Muse finds, faster and cheaper, and to run later pro
 Measured with a fresh, blind evaluator per round on 16 dev searches over one 21k-item history (`research/2026-10-30-search-loop.md`):
 - Honest caption-only search with a real AI rewrite: nDCG@10 0.49.
 - + text pass indexed separately: **+0.059 [+0.016, +0.108]**, 13 searches better, 3 worse.
-- + HyDE: **+0.022 [+0.008, +0.037]**, 10/1. Total **0.57, +0.080 [+0.036, +0.133]**. TEST_LINE
+- + HyDE: **+0.022 [+0.008, +0.037]**, 10/1. Total **0.57, +0.080 [+0.036, +0.133]**.
+- Held-out test (6 searches): **+0.023 [−0.010, +0.053]**, 4/1/1, recall@100 **+0.060 [+0.007, +0.107]**; HyDE alone not confirmed (+0.009, 2/3/1). All 22 searches: **+0.065 [+0.028, +0.103]**, 17/4/1.
 - Appending descriptions to the caption instead of indexing them separately *hurt* vibe and people searches in the Muse ceiling test.
 - Cost: **$0.18 per 1,000 items** with Gemini Flash-Lite Batch ($3.7 for a 21k history; ~15.8k items done in ~5 minutes), ~1.1 KB per item, +0.05 s per search. HyDE costs nothing extra (same rewrite call), +0.1 s.
 - "Too expensive" in the 18 Oct decision assumed transcripts and video; a text pass is ~100× cheaper than a video description pass.
@@ -93,7 +94,7 @@ Measured with a fresh, blind evaluator per round on 16 dev searches over one 21k
 - **Evidence limits:** one person, 16 dev + 6 test searches; place searches got worse (one search); labels were partly grown by one judge per round.
 
 **Agent's assessment**
-Agree. It is the only change in 24 experiments that clearly cleared the bar, it is cheap and fully batchable, and it fits the derived-data rules (rebuildable, versioned by prompt and model). Recommend accepting 1–3 now, with collection names kept per user, and revisiting when media arrives (the same separate-field pattern should carry a media description pass).
+Agree. It is the only change in 24 experiments that clearly cleared the bar, it is cheap and fully batchable, and it fits the derived-data rules (rebuildable, versioned by prompt and model). Recommend accepting 1, 2 and 4 now, with collection names kept per user; accept 3 (HyDE) as an optional extra, since it is free but was not confirmed on the test split; and revisiting when media arrives (the same separate-field pattern should carry a media description pass).
 
 **Affected**
 Docs: 03-data-contract (ItemCard, Embedding), 05-processor (Stage 1, Stage 2, Query API › search), 07-privacy-and-safety (collection names to the LLM), 10-decisions (18 Oct row) · Code: none in `scrolldigest/` yet (prototype in `experiments/methods/`) · Contract change: yes · Needs both founders: yes

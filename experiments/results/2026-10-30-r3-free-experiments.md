@@ -171,10 +171,4 @@ It is the strongest result of the round. Being a single run, it removes the base
 
 ## Judging notes
 
-- **"musical ear scratchers".** I kept the r2 convention, matched against existing grades for this search:
-  - Harmony, a-cappella and catchy-music items: 2.
-  - Sound-design and novelty-music items: 1.
-- **"urban photography tips and inspiration".** Urban-sketching and cityscape-painting tips got 1, consistent with existing grade-1 sketching-tips items.
-- **"marketing reels I sent to friends or saved".** A clothing brand's own skit ads got 1: they are marketing examples, not commentary about marketing.
-- **"europe tourist reels…".** Graded on the European travel topic only. Non-European travel got 0, and graduation-only items got 0.
-- **"instant pot recipes".** Stovetop or one-pan recipes got 0. An air-fryer appliance recipe got 1.
+- For five ambiguous searches the judge kept the grading conventions of earlier rounds (matched against existing grades). The per-search conventions are kept in the gitignored `data/eval_work/` because they tie search texts to answers.

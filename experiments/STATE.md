@@ -1,37 +1,54 @@
 # State
 
-- **Phase:** 5 (experiment). Phases 1–4 done: baseline reproduced, benchmark written, flaws ranked (`results/flaws-ranked.md`), research notes in `research/`.
-- **Budget (caps from env; ledger `data/ai_runs.jsonl`):**
-  - OpenAI: cap $18; spent ~$0.00001 in this loop (key check).
-  - Gemini: cap $18; spent ~$0.00005 (key check).
-  - Earlier work spent about $0.04 on OpenAI embeddings.
-- **Done:**
-  - Data zips unzipped at the repo root (`data/`, gitignored); Muse export at `data/evals/labels/muse_export/caption-mu/` (25 text files, one per Muse report).
-  - `.venv` (Python 3.12, uv) with numpy, scipy, scikit-learn, fastembed, wordninja.
-  - Baseline run file `data/runs/baseline.json` built (27 s wall incl. model download).
-  - `lib/ai_prices.json` filled in from both pricing pages, verified 2026-10-30.
-  - Key checks through `lib/ai.py`: OpenAI chat (gpt-5-nano) + embeddings, Gemini generateContent (gemini-3.1-flash-lite) + gemini-embedding-2. Ledger works.
-  - Evaluator round 1: repro matches (dev 0.508, all 0.486); Muse inventory; MU ceiling (mostly presence leakage: +0.156 from presence alone); baseline 0.585 on r1 labels.
-  - Experiment 1 (evaluator round 2): real gpt-5-nano rewrite 0.496 (mean of 3 repeats, r2 labels) vs hand rewrite 0.578 vs none 0.411. The real rewrite is now the **honest base**.
-  - Phase 2 benchmark: `results/benchmark-baseline.md`.
-  - Experiments 2–8 (round r3): none adopted. Best: rewrite union +0.028 (CI spans 0, 3× rewrite cost).
-  - Experiment 9 (round r4/r5): tier-1 enrichment (gemini-3.1-flash-lite, prompt te-v1c) as a separate BM25 field + vector, on a 4,979-item sample: **+0.059 [+0.019, +0.103]**, 13/2/1 — adopted provisionally.
-  - Reference vs MU (200 items): ours misses ≥1 MU facet on 94% of items; text-reachable facets 70%; conflicts 9%.
-  - Experiments 13–16 (round r5): none adopted. Near misses: qr-v2 rewrite +0.025; MLT plan +0.109 on the MLT kind (+0.020 overall).
-  - Experiments 10–12 (round r6): not adopted. EmbeddingGemma +0.043 (CI spans 0), Gemini Embedding 2 +0.069 [−0.004, +0.136], ColBERT +0.020.
-  - **Experiment 9b (round r7): adopted.** Full-corpus enrichment (20,829 items, Gemini Batch, $2.86) → dev nDCG@10 **0.549**, +0.059 [+0.016, +0.108], 13/3/0. This is **base B2**.
-- **In flight:** experiments 17–20 on B2 (qr-v2 rewrite, MLT plan, info gate with enrichment, HyDE) — `methods/stack.py`.
-- **Next:** evaluate 17–20 (round r8); maybe EmbeddingGemma on B2; then phase 6 (test split: 2 scorings left; write-up; amendment; draft PR).
-- **Labels:** round r7 is current. Test-split scorings used: 1 of 3.
-- **Budget (ledger):** OpenAI ~$0.08 of $18; Gemini ~$5.14 of $18.
+- **Phase:** 6 done — converged and handed over. Draft pull request into `main` is open (see the PR on `experiments/search-loop`).
+- **Finalist:** **B3** = real gpt-5-nano query rewrite (qr-v1) + bge-small dense (gate, PRF) + BM25 + RRF, **plus** tier-1 text enrichment of every non-friend item (gemini-3.1-flash-lite, prompt te-v1c, Batch) indexed as its own BM25 list and its own bge-small vector list, **plus** HyDE (the rewrite's 3 invented captions as one extra query vector). Code: `methods/stack.py --opt hyde=1` (with `e9_enrich_search.py`, `pipeline.py`).
+- **Labels:** round t1 is current (r0 + 567 dev judgments over rounds r1–r10 + 88 test judgments in t1). Backups `data/evals/labels/evalset.pre_*.jsonl`.
+- **Test-split scorings used: 2 of 3.** One left.
+- **Budget (ledger `data/ai_runs.jsonl`, list-price estimates):** OpenAI **$0.09** of $18; Gemini **$6.70** of $18. Not reconciled with the billing pages (no access from the loop).
 
-## Assumptions (open)
+## Summary for the founders
 
-1. **No `YOUTUBE_API_KEY`** in the environment, so no YouTube media experiments; YouTube/podcast/article fit is assessed by design and cost estimate only.
-2. **`gemini-2.5-flash-lite` is unavailable** to this key ("no longer available to new users", 404). The cheapest Gemini text model used is `gemini-3.1-flash-lite` ($0.25 / $1.50 per M).
-3. **Gemini Embedding 2's model ID is `gemini-embedding-2`** (GA; `gemini-embedding-2-preview` also listed), $0.20/M text input standard, $0.10 batch.
-4. **The "all 22" repro scoring counts as test-split scoring #1 of 3**, to be conservative (the brief asks to match the all-22 number in phase 1; it includes the 6 test queries).
-5. **The MU ceiling and the Muse parser are evaluator-side code** (`experiments/eval/muse*.py`): they read MU text, so builders never run or read them.
-6. **One experimenter may run a small batch of independent one-variable experiments** (each preregistered as its own LOG row, each with its own runs), to avoid several agents editing the same pipeline file at once. Evaluation stays per experiment.
-7. **Experiments run on all three cached rewrite sets** and report the mean paired Δ against the same-repeat base, because the LLM rewrite varies a lot between calls. In production the rewrite would be cached per query.
-8. **Rule slip, recorded:** one Gemini diagnostic call was made with curl outside `lib/ai.py` while diagnosing the 404 (~20 tokens, <$0.0001). It was logged by hand in the ledger. All later paid calls go through `lib/ai.py`.
+**Top three findings**
+
+1. **One cheap text pass per item, indexed separately, is the only clear win.** A Gemini Flash-Lite pass writes a summary, facet slots, unknown facets and likely searches for every item; searched as its own keyword field and vector, it adds **+0.059 [+0.016, +0.108]** dev nDCG@10 (13/3/0) for **$0.18 per 1,000 items** in Batch (~$3.7 for a 21k history). With HyDE the finalist reaches 0.570 vs 0.489 for the honest base on dev; on the 6 held-out test searches it is +0.023 [−0.010, +0.053] (recall@100 +0.060 [+0.007, +0.107]); over all 22 searches **+0.065 [+0.028, +0.103]**.
+2. **The previous numbers were inflated twice.** The hand-simulated rewrite had seen the answers (real rewrite: 0.49 vs 0.58), and Muse's descriptions leak labels by *which* items they cover (presence alone: +0.16). Every result in this loop was scored by a fresh blind evaluator with pooled judging.
+3. **Text has hit its ceiling; the rest needs media.** 17 other ideas — feedback, fusion tweaks, priors, creator expansion, rewrite variants, three embedder swaps, ColBERT, two LLM rerankers, a second enrichment prompt — gained under 0.02 or cost too much latency. Recall@100 stayed ~0.51–0.53 with every text method. Text enrichment misses 96% of audio, 60% of place and 50% of speech that Muse had.
+
+**Recommendation:** adopt A-003 items 1, 2 and 4 (enrich every item with one text pass, index it separately, keep bge-small); add HyDE as a free option. Keep the LLM rerank only as an opt-in "precise" mode (+0.013–0.016, +3 s). Spend the next money on a permitted media route (A-002), starting with thumbnails/keyframes for shown/vibe/more-like-this and audio fingerprints for songs, indexed the same separate-field way.
+
+**What the founders need to decide or provide**
+
+- Accept / reject **A-003** (contract change: ItemCard gains facet slots, unknown facets and likely searches for every item; a second embedding row per item; the 18 Oct "on-demand only" decision changes). Both founders.
+- Whether the user's **collection names** may go to the LLM (kept per user, out of the shared cache), or be dropped.
+- **Media:** a decision on A-002, or media files for a sample; a `YOUTUBE_API_KEY` to test YouTube thumbnails.
+- **More-like-this:** an LLM "what makes these alike" plan gained on every dev MLT search (+0.05–0.11) but not on the single test one; more MLT searches are needed to decide.
+- **More searches:** 16 dev searches with 5 single-search kinds can't resolve gains under ~0.02; a second person's searches and more audio/place/vibe searches would.
+- Check the **Gemma licence** if EmbeddingGemma (local, multilingual) is ever reconsidered.
+
+## Done (in order)
+
+- Phase 1: data unzipped; baseline reproduced exactly (dev 0.508, all 0.486); prices verified (`lib/ai_prices.json`, 30 Oct); key checks; Muse inventory and ceiling (`results/muse-*.md`).
+- Phase 2: `results/benchmark-baseline.md`.
+- Phase 3: `results/flaws-ranked.md`. Phase 4: five research notes in `research/`.
+- Phase 5: experiments 1–24 (+9b), rounds r1–r10; every row in `LOG.md`.
+- Phase 6: test milestone (`results/2026-10-30-test-milestone.md`), write-up `docs/research/2026-10-30-search-loop.md`, Proposed amendment A-003 in `docs/amendments.md`.
+
+## If resuming
+
+- Data needed: `data/` from the zips plus `data/enrich/` (te-v1c full-corpus enrichment, ~20k rows) and `data/runs/rewrites/` (cached rewrites). Without them, rebuild with `methods/enrich_batch.py` (~$2.9) and `methods/llm_rewrite.py` (~$0.002).
+- Next experiments worth running only with new inputs: media description pass on permitted media; more MLT searches; a second user's eval set.
+
+## Assumptions
+
+1. **No `YOUTUBE_API_KEY`**, so no YouTube media experiments; YouTube/podcast/article fit is by design and cost estimate only.
+2. **`gemini-2.5-flash-lite` is unavailable** to this key (404); the cheapest Gemini text model used is `gemini-3.1-flash-lite`.
+3. **Gemini Embedding 2's model ID is `gemini-embedding-2`** ($0.20/M text standard, $0.10 batch). It doesn't accept `task_type`; text prefixes were used.
+4. **The phase-1 "all 22" repro counts as test scoring #1 of 3.** The T1 milestone (score, pool/judge, re-score once, all finalists together) counts as #2.
+5. **MU ceiling and Muse parser are evaluator-side code** (`eval/muse*.py`, `eval/reference_compare.py`); builders never ran or read them.
+6. **One experimenter may run a small batch of independent one-variable experiments**, each preregistered as its own LOG row.
+7. **Experiments run on all three cached rewrite sets** and report the mean paired Δ against the same-repeat base. In production the rewrite would be cached per query.
+8. **Evaluators pooled and judged every round**, even when `unjudged10` was below 0.15, so methods surfacing new items were never penalised by missing labels.
+9. **HyDE adopted under clause 2 ("no extra cost")** because its captions come from the rewrite call the base already makes; it adds ~0.1 s of local embedding. Not confirmed on test.
+10. **Friends' posts** (`owner_relation == "mutual"`, 463 items) were never sent to any LLM; they stay rankable from their caption only.
+11. **Collection names** (the user's own data) were sent with each item to the enrichment LLM; flagged as a product decision in A-003.
+12. **Rule slips, recorded:** one Gemini diagnostic curl call bypassed `lib/ai.py` (~$0.00004, logged by hand); evaluator round 1 had read MU text before judging the r1 pool; one experimenter printed one item code to its console (not written anywhere); one experimenter's `grep` of LOG.md showed two dev-score rows (aggregate, dev only); two evaluator notes quoted five search texts next to grading conventions — redacted in the final commit, but still in earlier commits on this branch, so squash-merge.
