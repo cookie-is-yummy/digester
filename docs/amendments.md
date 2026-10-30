@@ -57,6 +57,47 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-003 · Enrich every item with one cheap text pass, index it separately, and add HyDE to search
+- **Date:** 2026-10-30
+- **Requested by:** the search loop (`experiments/BRIEF.md`), for the founders
+- **Status:** Proposed
+- **Conflicts with:**
+  - `10-decisions.md` › 18 Oct: "Tiered, on-demand enrichment with a shared cache for public content · Enriching everything is too expensive."
+  - `05-processor.md` › Stage 1 tiers: tier 1 = "Embedding, filter, info gate, simple facets"; LLM summaries only for "High value … or on demand".
+  - `03-data-contract.md` › ItemCard: "`summary` … 1–2 lines (LLM; full-depth items only)"; › Embedding: one `item_embeddings` row per item, text = "`caption[:600]` + … hashtags".
+  - `05-processor.md` › Stage 2 Index ("Keyword index: Postgres full-text search over caption, hashtags, transcript summary, facets") and › Query API `search` ("Hybrid: vectors + keywords + facet filters, reranked").
+
+**What is requested**
+1. **Tier 1 becomes an LLM text pass for every item** (except friends' posts): from caption, hashtags, creator, media kind and the user's collection names, a cheap model writes a one-line summary, facet slots (kind, topics, shown, said, place, people, vibe, use), the facets it can't know (`unknown`) and 3–5 likely searches. Run in Batch for history imports; per item for new captures.
+2. **Index it separately:** its own keyword field/index and its **own vector** (same model as the caption vector), each fused into search by rank fusion as extra lists. Never concatenated into the caption text.
+3. **Search adds HyDE:** the AI rewrite also writes three short invented captions for a matching post; their mean vector, mixed 0.3 query / 0.7 captions, joins the query phrases in both dense lists.
+4. Keep bge-small as the one embedding model (A-001); the swap experiments did not justify a change.
+
+**Why the requester wants it**
+The brief asks to find what Muse finds, faster and cheaper, and to run later processing on the desktop. Captions alone top out: 37% of right answers share no word with the search.
+
+**Why it is better than the current approach**
+Measured with a fresh, blind evaluator per round on 16 dev searches over one 21k-item history (`research/2026-10-30-search-loop.md`):
+- Honest caption-only search with a real AI rewrite: nDCG@10 0.49.
+- + text pass indexed separately: **+0.059 [+0.016, +0.108]**, 13 searches better, 3 worse.
+- + HyDE: **+0.022 [+0.008, +0.037]**, 10/1. Total **0.57, +0.080 [+0.036, +0.133]**. TEST_LINE
+- Appending descriptions to the caption instead of indexing them separately *hurt* vibe and people searches in the Muse ceiling test.
+- Cost: **$0.18 per 1,000 items** with Gemini Flash-Lite Batch ($3.7 for a 21k history; ~15.8k items done in ~5 minutes), ~1.1 KB per item, +0.05 s per search. HyDE costs nothing extra (same rewrite call), +0.1 s.
+- "Too expensive" in the 18 Oct decision assumed transcripts and video; a text pass is ~100× cheaper than a video description pass.
+
+**Costs and risks**
+- **Contract change:** ItemCard gains `facet_slots`, `unknown_facets`, `likely_searches`, `prompt_version`, `ai_run_id` for every item; `item_embeddings` gains a `view` (caption | enrichment), so two rows per item.
+- **Privacy:** the user's collection names go to the LLM with the item. They must stay out of the shared content cache (cache the caption-only part per content, add collection names per user, or drop them). Friends' posts are never sent (463 items here). Queries already go to a cloud LLM for the rewrite.
+- **Hallucination:** a reference check against Muse on 200 items found our text pass contradicts Muse on 9% of items, mostly the item kind; it misses 96% of audio, 60% of place and 50% of speech, which needs media.
+- **Local fit:** the pass and the rewrite need a cloud LLM (or the user's agent over MCP); a local 1–4B model would take days of CPU for a backfill. Search itself stays local (bge-small + keyword index).
+- **Evidence limits:** one person, 16 dev + 6 test searches; place searches got worse (one search); labels were partly grown by one judge per round.
+
+**Agent's assessment**
+Agree. It is the only change in 24 experiments that clearly cleared the bar, it is cheap and fully batchable, and it fits the derived-data rules (rebuildable, versioned by prompt and model). Recommend accepting 1–3 now, with collection names kept per user, and revisiting when media arrives (the same separate-field pattern should carry a media description pass).
+
+**Affected**
+Docs: 03-data-contract (ItemCard, Embedding), 05-processor (Stage 1, Stage 2, Query API › search), 07-privacy-and-safety (collection names to the LLM), 10-decisions (18 Oct row) · Code: none in `scrolldigest/` yet (prototype in `experiments/methods/`) · Contract change: yes · Needs both founders: yes
+
 ### A-002 · Getting thumbnails, keyframes and audio for each reel
 - **Date:** 2026-10-30
 - **Requested by:** Derrick
