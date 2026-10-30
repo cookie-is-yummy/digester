@@ -24,7 +24,12 @@ usage:
   python experiments/methods/rewrite_lib.py pilot --model gpt-5-mini   # only if the nano pilot rule fires
   python experiments/methods/rewrite_lib.py run --arm p1 --exp 25 --repeats 1 2 3 [--model gpt-5-nano]
   python experiments/methods/rewrite_lib.py stats --runs e25_qrp1 e26_qrl1   # label-free stats vs B3
-Dev searches only. Prints aggregate numbers only (no query text, no items, no profile contents).
+  # test split (same code and settings; rewrites go to qr-l1_<model>_test_r{k}.json, B3 check vs test_b3_r{k}):
+  python experiments/methods/rewrite_lib.py run --arm l1 --exp 26 --split test --run-name test_b4_qrl1
+  # reproduction without calls: reuse the cached parses of an earlier run, write to --out-dir, compare rankings
+  python experiments/methods/rewrite_lib.py run --arm l1 --exp 26 --cached --out-dir /tmp/x [--split dev]
+Defaults are the dev split, as in round 2. Prints aggregate numbers only (no query text, no items, no profile
+contents).
 """
 import argparse
 import collections
@@ -126,6 +131,27 @@ def render_look(ctx):
             f"topics: {fmt(ctx['topics'])}\nkinds: {fmt(ctx['kinds'])}\n</library_matches>")
 
 
+def same_mod_ties(new, old):
+    """'identical' | 'tie_order' | 'different'. Hashtag/topic sets iterate in hash order (PYTHONHASHSEED), so
+    terms with equal counts can come out in another order, and at the cut-off (most_common(n)) another of the
+    tied terms can make the list. 'tie_order' = same n_items, same count sequence per list, and the same terms
+    above each list's lowest count (all terms when the list is not cut)."""
+    if new == old:
+        return "identical"
+    if new["n_items"] != old["n_items"]:
+        return "different"
+    caps = {"hashtags": 25, "creators": 12, "topics": 25, "kinds": 5}
+    for key, cap in caps.items():
+        a, b = [tuple(x) for x in new[key]], [tuple(x) for x in old[key]]
+        if [n for _, n in a] != [n for _, n in b]:
+            return "different"
+        lo = a[-1][1] if a else 0
+        keep = (lambda t: True) if len(a) < cap else (lambda t: t[1] > lo)
+        if {t for t in a if keep(t)} != {t for t in b if keep(t)}:
+            return "different"
+    return "tie_order"
+
+
 # ---------------- calls ----------------
 def build_messages(system, query, prefix=""):
     msgs = [{"role": "system", "content": system}]
@@ -215,6 +241,9 @@ class Env:
         return fused, time.time() - t
 
 
+B3_REF = {"dev": "e20_hyde_b2_r{k}.json", "test": "test_b3_r{k}.json"}  # stack.py hyde=1 on qr-v1 nano r{k}
+
+
 def qrv1(k):
     return json.load(open(os.path.join(RW_DIR, f"qr-v1_gpt-5-nano_r{k}.json")))
 
@@ -271,14 +300,22 @@ def run(a):
         system, prof = profile_system()
     else:
         system, prof = qr.SYSTEM + "\n" + LOOK_RULES, None
-    qs = load_queries("dev")
+    qs = load_queries(a.split)
+    sfx = "" if a.split == "dev" else f"_{a.split}"
+    name = a.run_name or (f"e{a.exp}_{tag}" + ("" if model == "gpt-5-nano"
+                                              else "_" + model.replace("gpt-", "").replace(".", "")))
+    out_dir = a.out_dir or os.path.join(DATA, "runs")
+    rw_dir = os.path.join(a.out_dir, "rewrites") if a.out_dir else RW_DIR
     for k in a.repeats:
         base = qrv1(k)
         # sanity: this runner with the cached qr-v1 parse must reproduce B3 exactly
-        ref = json.load(open(os.path.join(DATA, "runs", f"e20_hyde_b2_r{k}.json")))["queries"]
+        ref = json.load(open(os.path.join(DATA, "runs", B3_REF[a.split].format(k=k))))["queries"]
         same = sum(env.S.run(q, None if q["examples"] else base[q["id"]])[:1000] == ref[q["id"]] for q in qs)
         print(f"r{k}: B3 reproduced {same}/{len(qs)}")
         assert same == len(qs)
+        cached, ctx_check = None, collections.Counter()
+        if a.cached:  # reuse an earlier run's parses: no calls; the context is recomputed and compared
+            cached = json.load(open(os.path.join(RW_DIR, f"{pv}_{model}{sfx}_r{k}.json")))
         t0 = time.time()
         parses, per_q, ctxs, out = {}, {}, {}, {}
         for q in qs:
@@ -286,8 +323,11 @@ def run(a):
                 out[q["id"]] = env.S.run(q, None)[:1000]
                 continue
             # interleaved qr-v1 control call (timing and caching only; never used for ranking)
-            _, cu, csec = call(a.control_model, qr.messages_for(q["query"]), "qr-v1")
-            ctrl = usage_row(a.control_model, cu, csec)
+            if cached is None:
+                _, cu, csec = call(a.control_model, qr.messages_for(q["query"]), "qr-v1")
+                ctrl = usage_row(a.control_model, cu, csec)
+            else:
+                ctrl = cached["_meta"]["per_query"][q["id"]]["control_qr_v1"]
             row = {}
             prefix = ""
             if arm == "l1":
@@ -298,8 +338,18 @@ def run(a):
                 row.update({"first_pass_s": round(fs, 3), "context_s": round(time.time() - t, 4),
                             "context_chars": len(prefix)})
                 ctxs[q["id"]] = ctx
-            raw, u, sec = call(model, build_messages(system, q["query"], prefix), pv)
-            p = qr.post_validate(raw)
+                if cached is not None:
+                    ctx_check[same_mod_ties(json.loads(json.dumps(ctx)), cached["_context"][q["id"]])] += 1
+            if cached is None:
+                raw, u, sec = call(model, build_messages(system, q["query"], prefix), pv)
+                p = qr.post_validate(raw)
+            else:
+                p = cached[q["id"]]
+                c0 = cached["_meta"]["per_query"][q["id"]]
+                u = {"prompt_tokens": c0["in_tokens"], "completion_tokens": c0["out_tokens"],
+                     "prompt_tokens_details": {"cached_tokens": c0["cached_tokens"]},
+                     "completion_tokens_details": {"reasoning_tokens": c0["reasoning_tokens"]}}
+                sec = c0["seconds"]
             parses[q["id"]] = p
             fused, ss = env.search(q, p)
             out[q["id"]] = fused[:1000]
@@ -324,7 +374,7 @@ def run(a):
                     f"{pre}rewrite_p95_s": pct([r["seconds"] for r in rs], 95)}
         meta = {"base": "B3 = stack.py hyde=1 on B2 (te-v1c enrichment); only the rewrite changes",
                 "arm": arm, "prompt_version": pv, "model": model, "reasoning_effort": "minimal", "repeat": k,
-                "rewrite": f"{pv}_{model}_r{k}.json", "enrich": ENRICH, "rewrite_n": len(rows),
+                "rewrite": f"{pv}_{model}{sfx}_r{k}.json", "enrich": ENRICH, "rewrite_n": len(rows),
                 "cost_usd": round(sum(r["cost_usd"] for r in rows), 6),
                 "cost_usd_cache_adj": round(sum(r["cost_usd_cache_adj"] for r in rows), 6),
                 **agg(rows),
@@ -335,6 +385,17 @@ def run(a):
                 "control_qr_v1": {**agg(ctl), "model": a.control_model,
                                   "note": "interleaved qr-v1 call per search (B3's rewrite), timing only"},
                 "wall_s": round(wall, 1)}
+        if a.split != "dev":
+            meta["split"] = a.split
+        if cached is not None:
+            meta["cached_parses"] = True
+            print(f"r{k}: look context vs cached: {ctx_check['identical']} identical, "
+                  f"{ctx_check['tie_order']} same up to tie order among equal counts, {ctx_check['different']} different")
+            assert ctx_check["different"] == 0
+            prev = json.load(open(os.path.join(DATA, "runs", f"{name}_r{k}.json")))["queries"]
+            same = sum(out[i] == prev.get(i) for i in out)
+            print(f"r{k}: rankings vs data/runs/{name}_r{k}.json: {same}/{len(out)} identical (1000 deep)")
+            meta["reproduces"] = f"{name}_r{k}.json {same}/{len(out)}"
         if arm == "l1":
             meta.update({"first_pass_p50_s": pct([r["first_pass_s"] for r in rows], 50),
                          "first_pass_p95_s": pct([r["first_pass_s"] for r in rows], 95),
@@ -345,7 +406,8 @@ def run(a):
             meta.update({"profile_version": prof["version"], "profile_est_tokens": prof["est_tokens"],
                          "added_in_tokens_vs_control_mean": round(float(np.mean(
                              [r["in_tokens"] - r["control_qr_v1"]["in_tokens"] for r in rows])), 1)})
-        rw = {"_note": f"Library-aware rewrite {pv} ({model}, minimal reasoning), run r{k}, dev typed searches only. "
+        rw = {"_note": f"Library-aware rewrite {pv} ({model}, minimal reasoning), run r{k}, {a.split} typed searches "
+                       "only. "
                        "Written by experiments/methods/rewrite_lib.py.",
               "_meta": {**{k2: meta[k2] for k2 in ("model", "prompt_version", "reasoning_effort", "repeat")},
                         "n": len(parses), "cost_usd": meta["cost_usd"], "rewrite_p50_s": meta["rewrite_p50_s"],
@@ -353,10 +415,11 @@ def run(a):
               **parses}
         if ctxs:
             rw["_context"] = ctxs
-        rpath = os.path.join(RW_DIR, f"{pv}_{model}_r{k}.json")
+        os.makedirs(rw_dir, exist_ok=True)
+        rpath = os.path.join(rw_dir, f"{pv}_{model}{sfx}_r{k}.json")
+        assert not (a.cached and os.path.abspath(rpath).startswith(os.path.abspath(RW_DIR))), "--cached needs --out-dir"
         json.dump(rw, open(rpath, "w"), ensure_ascii=False, indent=1)
-        name = f"e{a.exp}_{tag}" + ("" if model == "gpt-5-nano" else "_" + model.replace("gpt-", "").replace(".", ""))
-        path = os.path.join(DATA, "runs", f"{name}_r{k}.json")
+        path = os.path.join(out_dir, f"{name}_r{k}.json")
         json.dump({"method": f"rewrite_lib:{pv}_{model}_r{k}+stack_b2:hyde=1+{ENRICH}", "embedding": env.C.emb_name,
                    "meta": meta, "queries": out}, open(path, "w"))
         print(f"wrote {path} and {rpath}: {len(qs)} queries ({len(rows)} rewritten), wall {wall:.1f} s, "
@@ -420,6 +483,10 @@ def main():
     r.add_argument("--model", default="gpt-5-nano")
     r.add_argument("--repeats", type=int, nargs="+", default=[1, 2, 3])
     r.add_argument("--control-model", default="gpt-5-nano", help="model of the interleaved qr-v1 control call")
+    r.add_argument("--split", choices=["dev", "test"], default="dev")
+    r.add_argument("--run-name", help="run file stem (default e{exp}_{tag}[_{model}])")
+    r.add_argument("--cached", action="store_true", help="reuse the cached parses of the split's rewrite file")
+    r.add_argument("--out-dir", help="write the run and rewrite files here instead of data/runs (needed with --cached)")
     s = sub.add_parser("stats")
     s.add_argument("--runs", nargs="+", required=True)
     s.add_argument("--out")
