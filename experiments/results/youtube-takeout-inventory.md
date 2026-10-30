@@ -42,6 +42,35 @@ Importer speed: 2.2 s wall, ~13.6k items/s.
   - Lean on saves (Watch later, playlists), which come complete.
 - **Importer:** JSON times carry milliseconds and HTML times only seconds, so watches are now deduplicated to the second when exports are merged.
 
+## Third export: the "My Activity" product, YouTube only (this is the complete one)
+
+`My Activity/YouTube/MyActivity.html` (139 MB): **139,492 records back to 2014.**
+
+| Record verb | Count |
+| --- | --- |
+| Watched | 122,539 (8,270 ads) |
+| Liked | 5,428 |
+| Viewed (posts) | 4,905 |
+| Searched | 2,737 |
+| Voted | 2,355 |
+| Subscribed | 843 |
+| Dismissed | 278 |
+| Disliked | 63 |
+
+Non-ad video watches by year: 2020 8.7k · 2021 10.2k · 2022 5.1k · 2023 32.1k · 2024 14.0k · 2025 24.0k · 2026 20.2k. Earlier years hold only searches and a handful of likes and watches.
+
+**Merged import** (the YouTube product + My Activity, deduplicated to the second):
+- **115,615 videos;** 116,433 watches, 5,703 playlist entries, **5,031 likes** (the YouTube product had none).
+- 24,150 of the YouTube product's watches were duplicates of My Activity records, so My Activity covers the YouTube product's history almost entirely.
+- Processing depth:
+  - `count_only` 105,501 (watched only);
+  - `light` 4,901 (liked);
+  - `full` 5,213 (playlists and Watch later).
+- **10,114 items have a like or playlist signal;** 4,588 of them have no title in Takeout.
+- Wall time 17 s.
+
+**For users: export "My Activity" (YouTube) as well as "YouTube and YouTube Music".** The YouTube product's history is cut short; My Activity has the full history and likes. The YouTube product is still needed for playlists and subscriptions.
+
 ## What this means
 
 - **Text depends entirely on the YouTube Data API.** The strongest signals (5,259 saved videos) have no text at all in Takeout. `videos.list` for 30,669 IDs is ~614 quota units (free quota 10,000/day).

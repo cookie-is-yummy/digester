@@ -62,7 +62,7 @@ DEPTH_ORDER = ["count_only", "light", "full"]
 CAPTURE_PLAYLIST_TITLES = {"scroll digest"}  # the product's own capture playlist (docs/04 "Ongoing capture")
 LIKE_PLAYLIST_TITLES = {"liked videos", "likes"}
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
-ENGLISH_PREFIXES = ("Watched ", "Searched for ")
+ENGLISH_PREFIXES = ("Watched ", "Searched for ", "Liked ")
 
 
 # ---------------- small parsers ----------------
@@ -141,6 +141,8 @@ def find_root(path):
         hits = {"history", "playlists", "subscriptions"} & set(subdirs)
         if hits and (best is None or len(hits) > best[0]):
             best = (len(hits), d)
+    if best is None and find_my_activity(path):
+        return path  # only the "My Activity" product was exported
     if best is None:
         raise SystemExit(f"no YouTube Takeout folder (history/, playlists/ or subscriptions/) under {path}")
     return best[1]
@@ -216,7 +218,7 @@ def find_my_activity(takeout_dir):
 
 
 def my_activity_records(takeout_dir, kind, stats):
-    """kind 'watch' | 'search'. Splits My Activity's mixed YouTube records by their URL / title verb."""
+    """kind 'watch' | 'search' | 'like'. Splits My Activity's mixed YouTube records by their URL / title verb."""
     path = find_my_activity(takeout_dir) if takeout_dir else None
     if not path:
         return []
@@ -231,7 +233,9 @@ def my_activity_records(takeout_dir, kind, stats):
         url, title = r.get("titleUrl"), (r.get("title") or "")
         is_search = bool(search_query_from_url(url)) or title.startswith("Searched for ")
         is_watch = title.startswith("Watched ") or (video_id_from_url(url) is not None and not title.startswith("Liked "))
-        if (kind == "search" and is_search) or (kind == "watch" and is_watch and not is_search):
+        is_like = title.startswith("Liked ") and video_id_from_url(url) is not None
+        if (kind == "search" and is_search) or (kind == "watch" and is_watch and not is_search) or \
+                (kind == "like" and is_like):
             out.append(r)
     stats[f"my_activity_{kind}"] = len(out)
     return out
@@ -384,6 +388,16 @@ def build(takeout_dir):
     root = find_root(takeout_dir)
     watches = read_watch_history(root, stats, takeout_dir)
     searches = read_search_history(root, stats, takeout_dir)
+    likes = []  # (video_id, at, title, channel_id, channel_title) from My Activity "Liked ..." records
+    for r in my_activity_records(takeout_dir, "like", stats):
+        if is_ad(r):
+            continue
+        sub = (r.get("subtitles") or [{}])[0]
+        t = strip_prefix(r.get("title") or "").strip()
+        vid = video_id_from_url(r.get("titleUrl"))
+        likes.append((vid, parse_time(r.get("time")), None if (not t or t == r.get("titleUrl")) else t,
+                      channel_id_from_url(sub.get("url")), sub.get("name")))
+    stats["likes"] = len(likes)
     stats.pop("_my_activity_cache", None)
     wt = sorted(a for _, a, *_ in watches if a)
     stats["watch_first_at"], stats["watch_last_at"] = (wt[0], wt[-1]) if wt else (None, None)  # coverage, to show users
@@ -403,6 +417,13 @@ def build(takeout_dir):
         v = get(vid, url)
         v["inter"].append({"kind": "watch", "at": at})
         if title and (v["title_at"] is None or (at or "") >= v["title_at"]):  # latest title wins
+            v["title"], v["title_at"] = title, at or ""
+        v["channel_id"] = v["channel_id"] or cid
+        v["channel_title"] = v["channel_title"] or ctitle
+    for vid, at, title, cid, ctitle in likes:
+        v = get(vid)
+        v["inter"].append({"kind": "like", "at": at})
+        if title and v["title"] is None:
             v["title"], v["title_at"] = title, at or ""
         v["channel_id"] = v["channel_id"] or cid
         v["channel_title"] = v["channel_title"] or ctitle

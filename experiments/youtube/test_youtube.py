@@ -277,5 +277,7 @@ def test_my_activity_merge():
     vids = {it["platform_data"]["video_id"] for it in items}
     assert {"SYNTHaaaa01", "SYNTHaaaa03", "SYNTHold001"} <= vids
     assert stats["watch_duplicates"] == 1  # SYNTHaaaa01 appears in both files at the same time
-    assert stats["my_activity_liked"] == 1
+    assert stats["my_activity_liked"] == 1 and stats["likes"] == 1
+    old = next(it for it in items if it["platform_data"]["video_id"] == "SYNTHold001")
+    assert old["interaction_kinds"] == ["like", "watch"] and old["caption"] == "Synthetic: an older video"
     assert sorted(s["query"] for s in searches) == ["synthetic knife skills", "synthetic old search"]

@@ -22,7 +22,11 @@ Read first:
    - Convert both to the shapes in `eval_format.md` (an evaluator does the answer side).
    - Split the searches into dev (about two thirds) and test (about one third, covering every kind) **before** any run. Test may be scored at most 3 times.
 2. **YouTube API terms.** Before storing API data, read the YouTube API Services Terms and Developer Policies. Covered: how long API data may be stored and refreshed; whether it may be sent to another provider's model; whether thumbnails may be analysed. Write `experiments/research/youtube-api-terms.md`. If a use isn't clearly allowed, don't do it; record it as a question for the founders.
-3. **Tier 0.** Run `api_enrich.py` on all items: title, description, chapters, tags, duration, category, topicDetails, thumbnail URLs.
+3. **Scope.** The merged import has ~115.6k videos, but only ~10.1k carry a like or playlist signal; the other ~105k are single watches (`count_only`).
+   - **Tier 0 (API) for all** (~2,300 quota units).
+   - **Tier 1+ only for items at `light`/`full` depth plus videos watched 3+ times.** Count them first. A text pass over all 115k would cost ~$21, which is exactly the spend the gate exists to avoid.
+   - The eval still searches the whole library.
+4. **Tier 0.** Run `api_enrich.py` on all items: title, description, chapters, tags, duration, category, topicDetails, thumbnail URLs.
    - Log quota used.
    - Mark unavailable videos.
    - Shorts are videos ≤ 3 min that are vertical, where that can be known. Record how you decided.
