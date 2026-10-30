@@ -26,5 +26,10 @@
   "ndcg10": 0.568,
   "p95_s": 3.057,
   "note": "2/13 typed searches skip the rewrite"
+ },
+ "26 look-first (B4)": {
+  "ndcg10": 0.594,
+  "p95_s": 2.78,
+  "note": "qr-l1 gpt-5-nano; its first pass is the instant screen"
  }
 }
