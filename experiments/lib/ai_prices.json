@@ -1,7 +1,144 @@
 {
-  "_note": "USD per million tokens. VERIFY against the provider's pricing page before the first paid run, then set verified_on. Batch API is usually half price; log batch jobs with ai.log_batch using the batch price.",
-  "verified_on": null,
-  "models": {
-    "text-embedding-3-small": {"input_per_m": 0.02, "source": "used 30 Oct 2026: 2.2M tokens ~ $0.04"}
+ "_note": "USD per million tokens, standard (non-batch) list prices. Batch API is half price; log batch jobs with ai.log_batch using the batch_* price. Verified on 2026-10-30 from https://ai.google.dev/gemini-api/docs/pricing and https://developers.openai.com/api/docs/pricing; model IDs confirmed against each provider's /models list the same day. Gemini 3.6/3.8 Flash prices rise on 2027-01-01.",
+ "verified_on": "2026-10-30",
+ "models": {
+  "text-embedding-3-small": {
+   "provider": "openai",
+   "input_per_m": 0.02
+  },
+  "text-embedding-3-large": {
+   "provider": "openai",
+   "input_per_m": 0.13
+  },
+  "gpt-5-nano": {
+   "provider": "openai",
+   "input_per_m": 0.05,
+   "cached_input_per_m": 0.005,
+   "output_per_m": 0.4,
+   "batch_input_per_m": 0.025,
+   "batch_output_per_m": 0.2
+  },
+  "gpt-5-mini": {
+   "provider": "openai",
+   "input_per_m": 0.25,
+   "cached_input_per_m": 0.025,
+   "output_per_m": 2.0,
+   "batch_input_per_m": 0.125,
+   "batch_output_per_m": 1.0
+  },
+  "gpt-5.4-nano": {
+   "provider": "openai",
+   "input_per_m": 0.2,
+   "cached_input_per_m": 0.02,
+   "output_per_m": 1.25,
+   "batch_input_per_m": 0.1,
+   "batch_output_per_m": 0.625
+  },
+  "gpt-5.4-mini": {
+   "provider": "openai",
+   "input_per_m": 0.75,
+   "cached_input_per_m": 0.075,
+   "output_per_m": 4.5,
+   "batch_input_per_m": 0.375,
+   "batch_output_per_m": 2.25
+  },
+  "gpt-6-luna": {
+   "provider": "openai",
+   "input_per_m": 0.1,
+   "cached_input_per_m": 0.01,
+   "output_per_m": 0.5,
+   "batch_input_per_m": 0.05,
+   "batch_output_per_m": 0.25
+  },
+  "gpt-5.6-luna": {
+   "provider": "openai",
+   "input_per_m": 0.2,
+   "cached_input_per_m": 0.02,
+   "output_per_m": 1.2,
+   "batch_input_per_m": 0.1,
+   "batch_output_per_m": 0.6
+  },
+  "gpt-4.1-nano": {
+   "provider": "openai",
+   "input_per_m": 0.1,
+   "cached_input_per_m": 0.025,
+   "output_per_m": 0.4,
+   "batch_input_per_m": 0.05,
+   "batch_output_per_m": 0.2
+  },
+  "gpt-4.1-mini": {
+   "provider": "openai",
+   "input_per_m": 0.4,
+   "cached_input_per_m": 0.1,
+   "output_per_m": 1.6,
+   "batch_input_per_m": 0.2,
+   "batch_output_per_m": 0.8
+  },
+  "gpt-4o-mini": {
+   "provider": "openai",
+   "input_per_m": 0.15,
+   "cached_input_per_m": 0.075,
+   "output_per_m": 0.6,
+   "batch_input_per_m": 0.075,
+   "batch_output_per_m": 0.3
+  },
+  "gemini-2.5-flash-lite": {
+   "provider": "gemini",
+   "media_input_per_m": 0.1,
+   "audio_input_per_m": 0.3,
+   "output_per_m": 0.4,
+   "batch_input_per_m": 0.05,
+   "batch_output_per_m": 0.2,
+   "unavailable": "404 on 2026-10-30: 'no longer available to new users'"
+  },
+  "gemini-3.1-flash-lite": {
+   "provider": "gemini",
+   "input_per_m": 0.25,
+   "media_input_per_m": 0.25,
+   "audio_input_per_m": 0.5,
+   "output_per_m": 1.5,
+   "batch_input_per_m": 0.125,
+   "batch_output_per_m": 0.75
+  },
+  "gemini-2.5-flash": {
+   "provider": "gemini",
+   "input_per_m": 0.3,
+   "media_input_per_m": 0.3,
+   "audio_input_per_m": 1.0,
+   "output_per_m": 2.5,
+   "batch_input_per_m": 0.15,
+   "batch_output_per_m": 1.25
+  },
+  "gemini-3-flash-preview": {
+   "provider": "gemini",
+   "input_per_m": 0.5,
+   "media_input_per_m": 0.5,
+   "audio_input_per_m": 1.0,
+   "output_per_m": 3.0,
+   "batch_input_per_m": 0.25,
+   "batch_output_per_m": 1.5
+  },
+  "gemini-3.5-flash-lite": {
+   "provider": "gemini",
+   "input_per_m": 0.3,
+   "media_input_per_m": 0.3,
+   "audio_input_per_m": 0.3,
+   "output_per_m": 2.5,
+   "batch_input_per_m": 0.15,
+   "batch_output_per_m": 1.25
+  },
+  "gemini-embedding-001": {
+   "provider": "gemini",
+   "input_per_m": 0.15,
+   "batch_input_per_m": 0.075
+  },
+  "gemini-embedding-2": {
+   "provider": "gemini",
+   "input_per_m": 0.2,
+   "image_input_per_m": 0.45,
+   "audio_input_per_m": 6.5,
+   "video_input_per_m": 12.0,
+   "batch_input_per_m": 0.1
   }
+ }
 }
