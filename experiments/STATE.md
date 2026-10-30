@@ -18,10 +18,12 @@
   - Experiment 9 (round r4/r5): tier-1 enrichment (gemini-3.1-flash-lite, prompt te-v1c) as a separate BM25 field + vector, on a 4,979-item sample: **+0.059 [+0.019, +0.103]**, 13/2/1 — adopted provisionally.
   - Reference vs MU (200 items): ours misses ≥1 MU facet on 94% of items; text-reachable facets 70%; conflicts 9%.
   - Experiments 13–16 (round r5): none adopted. Near misses: qr-v2 rewrite +0.025; MLT plan +0.109 on the MLT kind (+0.020 overall).
-- **In flight (resumed after a container restart):** experiment 9b (full-corpus enrichment via Gemini Batch API, then runs `e9b_full_*`); experiments 10–12 (EmbeddingGemma swap; Gemini Embedding 2 and ColBERT runs already written).
-- **Next:** evaluate 9b + 10–12 (round r6). If 9b holds, it becomes the base; then re-test qr-v2 and the MLT plan on top of it. Then phase 6: test split (scorings left: 2), write-up, amendment, draft PR.
-- **Labels:** round r5 is current. Test-split scorings used: 1 of 3.
-- **Budget:** see `data/ai_runs.jsonl`; at round r5: OpenAI ~$0.08, Gemini ~$2.3 (before the 9b batch).
+  - Experiments 10–12 (round r6): not adopted. EmbeddingGemma +0.043 (CI spans 0), Gemini Embedding 2 +0.069 [−0.004, +0.136], ColBERT +0.020.
+  - **Experiment 9b (round r7): adopted.** Full-corpus enrichment (20,829 items, Gemini Batch, $2.86) → dev nDCG@10 **0.549**, +0.059 [+0.016, +0.108], 13/3/0. This is **base B2**.
+- **In flight:** experiments 17–20 on B2 (qr-v2 rewrite, MLT plan, info gate with enrichment, HyDE) — `methods/stack.py`.
+- **Next:** evaluate 17–20 (round r8); maybe EmbeddingGemma on B2; then phase 6 (test split: 2 scorings left; write-up; amendment; draft PR).
+- **Labels:** round r7 is current. Test-split scorings used: 1 of 3.
+- **Budget (ledger):** OpenAI ~$0.08 of $18; Gemini ~$5.14 of $18.
 
 ## Assumptions (open)
 
