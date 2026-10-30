@@ -16,6 +16,10 @@ Options (--opt name=value; defaults reproduce the base):
   prior=0.0                 final score = RRF + prior * max(0, importance - prior_floor)
   creator=0|1               third RRF list (weight creator_weight): same-creator items of the fused top creator_seeds
   union_phrases=6, union_keywords=12   caps when several --parses files are given (round-robin union)
+  mlt_coll=0|1              more-like-this only: third RRF list of items sharing a collection with the examples
+                            (by cosine to the example centroid; items without a vector after, corpus order)
+  mlt_plan=<file>           more-like-this only: a plan file {qid: {phrases, keywords}} (methods/mlt_plan.py); the
+                            typed pipeline runs on it (query = phrase 1) and its fused list joins RRF as a third list
 
 usage: python experiments/methods/pipeline.py --parses data/runs/rewrites/qr-v1_gpt-5-nano_r1.json \
          [--parses more.json ...] [--opt hyde=1 ...] --out data/runs/x.json [--split dev]
@@ -41,6 +45,7 @@ DEFAULTS = {
     "prior": 0.0, "prior_floor": 0.3,
     "creator": 0, "creator_seeds": 10, "creator_min": 2, "creator_max": 30, "creator_weight": 0.5,
     "union_phrases": 6, "union_keywords": 12,
+    "mlt_coll": 0, "mlt_plan": "",
 }
 
 
@@ -163,7 +168,19 @@ class Search:
             cen /= np.linalg.norm(cen)
             d = rank(C.V @ cen, m & self.ok, ex)
             b = rank(C.bm25(" ".join(C.text(n, "full") for n in ex), "full"), m, ex)
-            return [C.code[n] for n in rrf(d, b)]
+            if not (o["mlt_coll"] or o["mlt_plan"]):
+                return [C.code[n] for n in rrf(d, b)]
+            lists = [[C.code[n] for n in d], [C.code[n] for n in b]]
+            if o["mlt_coll"]:
+                lists.append(self.same_collection(q, ex, cen, m))
+            if o["mlt_plan"]:
+                plan = self._plans().get(q["id"])
+                if plan and plan.get("phrases"):
+                    exc = set(q["examples"])
+                    q2 = {"id": q["id"], "query": plan["phrases"][0], "filters": q["filters"], "examples": []}
+                    p2 = {"phrases": plan["phrases"][1:], "keywords": plan.get("keywords") or []}
+                    lists.append([c for c in self.run(q2, p2) if c not in exc])
+            return order(rrf_scores(lists, k=o["rrf_k"]))
         mo = m & self.ok
         phrases = [q["query"]] + parse["phrases"]
         Qv = C.qvecs(phrases)
@@ -248,6 +265,37 @@ class Search:
                 sc[c] += o["prior"] * max(0.0, byc.get(c, 0.0) - o["prior_floor"])
         return order(sc)
 
+    def same_collection(self, q, ex, cen, m):
+        """Items sharing >=1 collection with the examples (examples excluded, filters applied, no info gate):
+        those with a vector by cosine to `cen`, then those without a vector in corpus (items.jsonl) order."""
+        C = self.C
+        excodes = set(q["examples"])
+        cols = set()
+        for iid in C.items:
+            it = C.items[iid]
+            if code_of(it) in excodes:
+                cols |= set(it["platform_data"].get("collections") or [])
+        if not cols:
+            return []
+        with_v, without_v = [], []
+        for iid, it in C.items.items():
+            c = code_of(it)
+            if c in excodes or not (cols & set(it["platform_data"].get("collections") or [])):
+                continue
+            n = C.by_code.get(c)
+            if n is None:
+                if self.item_ok_for(it, q["filters"]):
+                    without_v.append(c)
+            elif m[n]:
+                with_v.append((-float(C.V[n] @ cen), len(with_v), c))
+        return [c for _, _, c in sorted(with_v)] + without_v
+
+    def _plans(self):
+        if not hasattr(self, "_plan_cache"):
+            P = json.load(open(self.o["mlt_plan"]))
+            self._plan_cache = {k: v for k, v in P.items() if not k.startswith("_")}
+        return self._plan_cache
+
     def _imp_by_code(self):
         if not hasattr(self, "_imp"):
             self._imp = {code_of(it): float(it.get("importance") or 0.0) for it in self.C.items.values()}
@@ -297,7 +345,18 @@ def main():
         meta["query_plus_rewrite_p50_s"] = round(meta["query_p50_s"] + meta["rewrite_p50_s"], 3)
     else:
         meta["cost_usd"] = 0
-    tag = ",".join(f"{k}={v}" for k, v in sorted(changed.items())) or "default"
+    if o["mlt_coll"] or o["mlt_plan"]:
+        mlt_lat = [s for q, s in zip(qs, lat) if q["examples"]]
+        meta["mlt_query_p50_s"] = round(float(np.median(mlt_lat)), 3) if mlt_lat else None
+    if o["mlt_plan"]:
+        PM = json.load(open(o["mlt_plan"])).get("_meta", {})
+        pq = [PM.get("per_query", {}).get(q["id"]) for q in qs if q["examples"]]
+        pq = [v for v in pq if v]
+        meta.update({"mlt_plan_n": len(pq), "mlt_plan_cost_usd": round(sum(v["cost_usd"] for v in pq), 6),
+                     "mlt_plan_p50_s": round(float(np.median([v["seconds"] for v in pq])), 3) if pq else None,
+                     "mlt_plan_model": PM.get("model"), "mlt_plan_prompt_version": PM.get("prompt_version")})
+        meta["cost_usd"] = round(meta["cost_usd"] + meta["mlt_plan_cost_usd"], 6)
+    tag =",".join(f"{k}={v}" for k, v in sorted(changed.items())) or "default"
     method = a.name or f"pipeline:{tag}+{RWs[0].get('prompt_version')}_{RWs[0].get('model')}x{len(Ps)}"
     run = {"method": method, "embedding": C.emb_name, "meta": meta, "queries": out}
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
