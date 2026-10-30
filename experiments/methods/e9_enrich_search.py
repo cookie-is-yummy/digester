@@ -29,6 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
 sys.path.insert(0, HERE)
 from corpus import DATA, Corpus, code_of, fix_ws, load_queries, rank, rrf  # noqa: E402
+from enrich_items import FILLER  # noqa: E402
 
 FIELDS = ["topics", "shown", "said", "place", "people", "vibe", "use", "queries"]
 
@@ -38,8 +39,8 @@ def enrich_text(r):
     parts = [r.get("summary") or ""]
     if kind not in ("", "unknown", "other"):
         parts.append(kind.replace("_", " "))
-    for f in FIELDS:
-        parts.append(" · ".join(r.get(f) or []))
+    for f in FIELDS:  # re-apply the filler filter (rows validated before it existed)
+        parts.append(" · ".join(x for x in (r.get(f) or []) if not FILLER.search(x)))
     return fix_ws(" · ".join(p for p in parts if p))
 
 

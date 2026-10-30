@@ -86,6 +86,9 @@ SYSTEM_PACK = SYSTEM.replace(
     .replace("lang.\nkind:", "lang]}.\nkind:")
 
 
+COMPACT = "\nWrite the JSON compactly on one line, with no indentation or line breaks."
+
+
 def _arr(cap):
     return {"type": "array", "items": {"type": "string"}, "maxItems": cap}
 
@@ -125,24 +128,30 @@ def block(it, n=None):
 
 
 # ---------------- output validation ----------------
-BAD = re.compile(r"(https?://|www\.|\S+@\S+\.\w|@\w|ignore (all|previous|the)|instruction|system prompt)", re.I)
+BAD = re.compile(r"(https?://|www\.|[\w.+-]+@[\w-]+\.\w{2,}|ignore (all |the )?(previous|above|prior)|"
+                 r"system prompt|you are (an?|the) )", re.I)
+
+
+FILLER = re.compile(r"^(unknown|none|n/?a|not (specified|stated|mentioned|applicable)|unspecified)$|\bunknown\b|"
+                    r"not specified|^(country|region|country/region|worldwide)$|\bcontext$")
 
 
 def clean_str(s, maxlen):
-    s = " ".join(str(s).replace("#", " ").split()).strip().lower()
+    s = " ".join(re.sub(r"[#@]", " ", str(s)).split()).strip().lower()
     return s[:maxlen].rstrip()
 
 
 def validate(o):
-    """Returns (row_fields, ok, dropped_count). Drops strings with URLs, emails, @handles or
-    instruction-like text; truncates lists to their caps; lowercases."""
+    """Returns (row_fields, ok, dropped_count). Drops strings with URLs, emails or instruction-like text
+    (checked before cleaning); strips # and @; truncates lists to their caps; lowercases."""
     if not isinstance(o, dict):
         return {}, False, 0
     dropped, out = 0, {}
     missing = [k for k in KEYS if k not in o]
-    s = clean_str(o.get("summary", ""), 160)
+    s = str(o.get("summary", ""))
     if BAD.search(s):
         s, dropped = "", dropped + 1
+    s = clean_str(s, 160)
     out["summary"] = s
     k = str(o.get("kind", "unknown")).strip().lower()
     out["kind"] = k if k in KINDS else "other"
@@ -151,11 +160,11 @@ def validate(o):
         v = v if isinstance(v, list) else [v]
         keep = []
         for x in v:
-            x = clean_str(x, 60 if f != "queries" else 50)
-            if not x:
-                continue
-            if BAD.search(x):
+            if BAD.search(str(x)):
                 dropped += 1
+                continue
+            x = clean_str(x, 60 if f != "queries" else 50)
+            if not x or FILLER.search(x):
                 continue
             if x not in keep:
                 keep.append(x)
@@ -257,7 +266,8 @@ def run_group(group, items_by_code, model, pack, max_tokens, purpose, effort):
         for i, c in enumerate(group):
             x = objs[0] if pack <= 1 else by_n.get(i + 1)
             f, ok, dropped = validate(x)
-            rows.append({"code": c, "ok": ok, **f, "dropped": dropped, "err": None if ok else "invalid"})
+            rows.append({"code": c, "ok": ok, **f, "dropped": dropped, "err": None if ok else "invalid",
+                         "raw": x})
         share = len(group)
         for r in rows:
             r.update({"in_tokens": tin / share, "out_tokens": tout / share, "cost_usd": cost / share})
@@ -285,8 +295,13 @@ def main():
     ap.add_argument("--effort", default="minimal", help="OpenAI reasoning_effort ('' to omit)")
     ap.add_argument("--retry-failed", action="store_true")
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--compact", action="store_true", help="ask for single-line JSON (saves output tokens)")
     a = ap.parse_args()
-    PV = PROMPT_VERSION + (f"-pack{a.pack}" if a.pack > 1 else "")
+    PV = PROMPT_VERSION + (f"-pack{a.pack}" if a.pack > 1 else "") + ("c" if a.compact else "")
+    if a.compact:
+        global SYSTEM, SYSTEM_PACK
+        SYSTEM += COMPACT
+        SYSTEM_PACK += COMPACT
     provider = "gemini" if a.model.startswith("gemini") else "openai"
     if ai.budget(provider) - ai.spent(provider) < 1.0:
         raise SystemExit(f"stop: less than $1 of the {provider} cap left")
