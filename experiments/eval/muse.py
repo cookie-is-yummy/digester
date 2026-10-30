@@ -26,10 +26,10 @@ import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
-from corpus import DATA  # noqa: E402
+from corpus import DATA
 
 MUSE_DIR = os.path.join(DATA, "evals", "labels", "muse_export", "caption-mu")
-_SEP = re.compile(r"^={20,}\s*$", re.M)
+_SEP = re.compile(r"^={20,}\s*$", re.MULTILINE)
 _URL = re.compile(r"instagram\.com/(?:reel|p|tv)/([A-Za-z0-9_-]+)")
 CAP_MARK = "--- CAPTION ---"
 MU_MARK = "--- MU (video description) ---"
@@ -89,7 +89,7 @@ def load_records(muse_dir=MUSE_DIR, skip=()):
 
 def mu_description(mu):
     """Only the free-text video description: MU text up to its first '## ' / 'Cultural Context'-style subsection."""
-    cut = re.search(r"^(## |# |Cultural Context$|Humor Context$|Temporal Context$)", mu, re.M)
+    cut = re.search(r"^(## |# |Cultural Context$|Humor Context$|Temporal Context$)", mu, re.MULTILINE)
     return mu[:cut.start()].strip() if cut else mu.strip()
 
 

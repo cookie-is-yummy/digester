@@ -11,6 +11,8 @@ Reproduces experiments/methods/baseline.py (variant hybrid_prf, bge_full) exactl
   bm25      MU appended to the BM25 'full' text view only (dense unchanged)
   both      MU appended to BM25 and to the dense text: items with MU are re-embedded with bge-small
             ('full' view + MU, truncated) and treated as info-ok
+  fields    MU as separate fields: BM25 over MU text alone + bge-small over the MU-item vectors of `both`,
+            fused by RRF with the unchanged baseline rankings (4-way RRF; caption text and vectors untouched)
   presence  diagnostic only: the baseline ranking with every item that has MU moved ahead of those without
             (order otherwise kept). Measures how much the label set leaks through MU *presence* alone.
 Items in the corpus with no vector (no caption) that have MU get rows, so they become rankable.
@@ -33,8 +35,17 @@ from sklearn.preprocessing import normalize
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
 sys.path.insert(0, HERE)
-from corpus import DATA, Corpus, code_of, fix_ws, load_queries, rank, rrf, write_run  # noqa: E402
-from muse import load_records, mu_description  # noqa: E402
+from corpus import (
+    DATA,
+    Corpus,
+    code_of,
+    fix_ws,
+    load_queries,
+    rank,
+    rrf,
+    write_run,
+)
+from muse import load_records, mu_description
 
 EMB_DIR = os.path.join(DATA, "eval_work", "emb_mu")
 DENSE_MU_CHARS = 1500  # description chars appended to the 'full' view before embedding; the model cuts at 512 tokens
@@ -101,7 +112,7 @@ def add_rows(C, codes):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--variant", choices=["base", "bm25", "both", "presence"], required=True)
+    ap.add_argument("--variant", choices=["base", "bm25", "both", "fields", "presence"], required=True)
     ap.add_argument("--mu", choices=["full", "desc"], default="full")
     ap.add_argument("--split", default="dev")
     ap.add_argument("--out", required=True)
@@ -114,28 +125,41 @@ def main():
     bm25_extra = (mu_full if a.mu == "full" else mu_desc) if a.variant in ("bm25", "both") else None
     C = Corpus("bge_full", extra_text=bm25_extra)
     added = 0
-    if a.variant in ("bm25", "both"):
+    if a.variant in ("bm25", "both", "fields"):
         added = add_rows(C, mu_full)
-    if a.variant == "both":
+    Vmu = None
+    if a.variant in ("both", "fields"):
         vecs = mu_vectors(C, [c for c in mu_full if c in C.by_code], mu_desc)
-        for c, v in vecs.items():
-            n = C.by_code[c]
-            C.V[n] = v
-            C.info[n] = "ok"
+        if a.variant == "both":
+            for c, v in vecs.items():
+                n = C.by_code[c]
+                C.V[n] = v
+                C.info[n] = "ok"
+        else:
+            Vmu = np.zeros_like(C.V)
+            for c, v in vecs.items():
+                Vmu[C.by_code[c]] = v
+            mu_field = mu_full if a.mu == "full" else mu_desc
+            base_text = C.text
+
+            def text(n, view="full"):
+                return mu_field.get(C.code[n], "") if view == "mu" else base_text(n, view)
+            C.text = text
     print(f"rows {len(C.ids)} (+{added} without a caption vector), MU items in corpus "
           f"{sum(1 for c in mu_full if c in C.by_code)}", flush=True)
 
     P = json.load(open(os.path.join(DATA, "evals", "query_parses.json")))
     ok = C.info == "ok"
 
-    def dense(phrases, m, prf=True):
+    def dense(phrases, m, prf=True, V=None):
+        V = C.V if V is None else V
         Qv = C.qvecs(phrases)
-        s = (C.V @ Qv.T).max(axis=1)
+        s = (V @ Qv.T).max(axis=1)
         if prf:
             top = np.argsort(-np.where(m, s, -9))[:5]
-            q2 = Qv.mean(0) + C.V[top].mean(0)
+            q2 = Qv.mean(0) + V[top].mean(0)
             q2 /= np.linalg.norm(q2)
-            s = np.maximum(s, C.V @ q2)
+            s = np.maximum(s, V @ q2)
         return s
 
     out, lat = {}, []
@@ -149,12 +173,24 @@ def main():
             cen /= np.linalg.norm(cen)
             d = rank(C.V @ cen, m & ok, ex)
             b = rank(C.bm25(" ".join(C.text(n, "full") for n in ex), "full"), m, ex)
+            extra = []
+            if Vmu is not None:
+                exm = [n for n in ex if has_mu[n]]
+                if exm:
+                    cm = Vmu[exm].mean(0)
+                    cm /= np.linalg.norm(cm)
+                    extra = [rank(Vmu @ cm, m & has_mu, ex),
+                             rank(C.bm25(" ".join(C.text(n, "mu") for n in exm), "mu"), m & has_mu, ex)]
         else:
             p = P[q["id"]]
             phrases = [q["query"]] + p["phrases"]
             d = rank(dense(phrases, m & ok), m & ok)
             b = rank(C.bm25(" ".join([q["query"]] + p["keywords"]), "full"), m)
-        r = rrf(d, b)
+            extra = []
+            if Vmu is not None:
+                extra = [rank(dense(phrases, m & has_mu, V=Vmu), m & has_mu),
+                         rank(C.bm25(" ".join([q["query"]] + p["keywords"]), "mu"), m & has_mu)]
+        r = rrf(d, b, *extra)
         if a.variant == "presence":
             r = [n for n in r if has_mu[n]] + [n for n in r if not has_mu[n]]
         out[q["id"]] = r

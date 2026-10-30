@@ -1,0 +1,669 @@
+{
+ "what": "EVALUATOR-SIDE INFLATED CEILING. Labels were found by Muse matching words in this MU text; ~95% of labelled answers have MU vs ~5% of the corpus. Never adopt as a method.",
+ "split": "dev",
+ "n_queries": 16,
+ "labels": "evalset.jsonl before pooled round r1",
+ "script": "experiments/eval/muse_ceiling.py",
+ "variants": {
+  "base": {
+   "label": "(a) baseline (reference)",
+   "ndcg10": 0.508,
+   "p10": 0.581,
+   "success5": 0.938,
+   "mrr": 0.856,
+   "r100": 0.434,
+   "unjudged10": 0.194,
+   "ndcg10_ci95": [
+    0.379,
+    0.634
+   ],
+   "condensed_ndcg10_judged_only": 0.599,
+   "mu_item_share_top10": 0.562,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": 0.0,
+    "delta_ci95": [
+     0.0,
+     0.0
+    ],
+    "wins": 0,
+    "losses": 0,
+    "ties": 16
+   },
+   "by_kind": {
+    "audio": {
+     "n_queries": 1,
+     "ndcg10": 0.0,
+     "r100": 0.0,
+     "unjudged10": 0.3
+    },
+    "more_like_this": {
+     "n_queries": 3,
+     "ndcg10": 0.431,
+     "r100": 0.367,
+     "unjudged10": 0.4
+    },
+    "name": {
+     "n_queries": 3,
+     "ndcg10": 0.557,
+     "r100": 0.59,
+     "unjudged10": 0.033
+    },
+    "people": {
+     "n_queries": 1,
+     "ndcg10": 0.314,
+     "r100": 0.333,
+     "unjudged10": 0.5
+    },
+    "place": {
+     "n_queries": 1,
+     "ndcg10": 0.842,
+     "r100": 0.293,
+     "unjudged10": 0.0
+    },
+    "said_shown": {
+     "n_queries": 1,
+     "ndcg10": 0.765,
+     "r100": 0.667,
+     "unjudged10": 0.3
+    },
+    "topic": {
+     "n_queries": 5,
+     "ndcg10": 0.477,
+     "r100": 0.486,
+     "unjudged10": 0.14
+    },
+    "vibe": {
+     "n_queries": 1,
+     "ndcg10": 0.865,
+     "r100": 0.351,
+     "unjudged10": 0.0
+    }
+   }
+  },
+  "bm25": {
+   "label": "(b) MU appended to BM25 text only",
+   "ndcg10": 0.521,
+   "p10": 0.55,
+   "success5": 0.875,
+   "mrr": 0.857,
+   "r100": 0.557,
+   "unjudged10": 0.25,
+   "ndcg10_ci95": [
+    0.4,
+    0.644
+   ],
+   "condensed_ndcg10_judged_only": 0.624,
+   "mu_item_share_top10": 0.544,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": 0.013,
+    "delta_ci95": [
+     -0.031,
+     0.047
+    ],
+    "wins": 10,
+    "losses": 3,
+    "ties": 3
+   },
+   "by_kind": {
+    "audio": {
+     "n_queries": 1,
+     "ndcg10": 0.0,
+     "r100": 0.5,
+     "unjudged10": 0.4
+    },
+    "more_like_this": {
+     "n_queries": 3,
+     "ndcg10": 0.474,
+     "r100": 0.404,
+     "unjudged10": 0.433
+    },
+    "name": {
+     "n_queries": 3,
+     "ndcg10": 0.586,
+     "r100": 0.719,
+     "unjudged10": 0.033
+    },
+    "people": {
+     "n_queries": 1,
+     "ndcg10": 0.335,
+     "r100": 0.333,
+     "unjudged10": 0.5
+    },
+    "place": {
+     "n_queries": 1,
+     "ndcg10": 0.596,
+     "r100": 0.317,
+     "unjudged10": 0.2
+    },
+    "said_shown": {
+     "n_queries": 1,
+     "ndcg10": 0.765,
+     "r100": 0.667,
+     "unjudged10": 0.3
+    },
+    "topic": {
+     "n_queries": 5,
+     "ndcg10": 0.524,
+     "r100": 0.667,
+     "unjudged10": 0.22
+    },
+    "vibe": {
+     "n_queries": 1,
+     "ndcg10": 0.843,
+     "r100": 0.39,
+     "unjudged10": 0.1
+    }
+   }
+  },
+  "both": {
+   "label": "(c) MU appended to BM25 + dense",
+   "ndcg10": 0.551,
+   "p10": 0.544,
+   "success5": 0.875,
+   "mrr": 0.884,
+   "r100": 0.615,
+   "unjudged10": 0.244,
+   "ndcg10_ci95": [
+    0.41,
+    0.697
+   ],
+   "condensed_ndcg10_judged_only": 0.657,
+   "mu_item_share_top10": 0.519,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": 0.042,
+    "delta_ci95": [
+     -0.071,
+     0.152
+    ],
+    "wins": 10,
+    "losses": 5,
+    "ties": 1
+   },
+   "by_kind": {
+    "audio": {
+     "n_queries": 1,
+     "ndcg10": 0.0,
+     "r100": 0.5,
+     "unjudged10": 0.4
+    },
+    "more_like_this": {
+     "n_queries": 3,
+     "ndcg10": 0.62,
+     "r100": 0.453,
+     "unjudged10": 0.333
+    },
+    "name": {
+     "n_queries": 3,
+     "ndcg10": 0.629,
+     "r100": 0.77,
+     "unjudged10": 0.1
+    },
+    "people": {
+     "n_queries": 1,
+     "ndcg10": 0.147,
+     "r100": 0.385,
+     "unjudged10": 0.6
+    },
+    "place": {
+     "n_queries": 1,
+     "ndcg10": 0.583,
+     "r100": 0.299,
+     "unjudged10": 0.2
+    },
+    "said_shown": {
+     "n_queries": 1,
+     "ndcg10": 1.0,
+     "r100": 1.0,
+     "unjudged10": 0.2
+    },
+    "topic": {
+     "n_queries": 5,
+     "ndcg10": 0.589,
+     "r100": 0.729,
+     "unjudged10": 0.18
+    },
+    "vibe": {
+     "n_queries": 1,
+     "ndcg10": 0.389,
+     "r100": 0.338,
+     "unjudged10": 0.3
+    }
+   }
+  },
+  "bm25_desc": {
+   "label": "(b') as (b), MU description only",
+   "ndcg10": 0.5,
+   "p10": 0.556,
+   "success5": 0.938,
+   "mrr": 0.828,
+   "r100": 0.54,
+   "unjudged10": 0.237,
+   "ndcg10_ci95": [
+    0.379,
+    0.62
+   ],
+   "condensed_ndcg10_judged_only": 0.591,
+   "mu_item_share_top10": 0.531,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": -0.009,
+    "delta_ci95": [
+     -0.045,
+     0.032
+    ],
+    "wins": 3,
+    "losses": 8,
+    "ties": 5
+   },
+   "by_kind": {
+    "audio": {
+     "n_queries": 1,
+     "ndcg10": 0.0,
+     "r100": 0.5,
+     "unjudged10": 0.3
+    },
+    "more_like_this": {
+     "n_queries": 3,
+     "ndcg10": 0.476,
+     "r100": 0.44,
+     "unjudged10": 0.4
+    },
+    "name": {
+     "n_queries": 3,
+     "ndcg10": 0.607,
+     "r100": 0.691,
+     "unjudged10": 0.067
+    },
+    "people": {
+     "n_queries": 1,
+     "ndcg10": 0.27,
+     "r100": 0.282,
+     "unjudged10": 0.5
+    },
+    "place": {
+     "n_queries": 1,
+     "ndcg10": 0.681,
+     "r100": 0.293,
+     "unjudged10": 0.0
+    },
+    "said_shown": {
+     "n_queries": 1,
+     "ndcg10": 0.765,
+     "r100": 0.667,
+     "unjudged10": 0.3
+    },
+    "topic": {
+     "n_queries": 5,
+     "ndcg10": 0.449,
+     "r100": 0.649,
+     "unjudged10": 0.24
+    },
+    "vibe": {
+     "n_queries": 1,
+     "ndcg10": 0.787,
+     "r100": 0.26,
+     "unjudged10": 0.1
+    }
+   }
+  },
+  "both_desc": {
+   "label": "(c') as (c), MU description only",
+   "ndcg10": 0.522,
+   "p10": 0.544,
+   "success5": 0.875,
+   "mrr": 0.853,
+   "r100": 0.58,
+   "unjudged10": 0.237,
+   "ndcg10_ci95": [
+    0.388,
+    0.662
+   ],
+   "condensed_ndcg10_judged_only": 0.596,
+   "mu_item_share_top10": 0.506,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": 0.013,
+    "delta_ci95": [
+     -0.111,
+     0.121
+    ],
+    "wins": 7,
+    "losses": 8,
+    "ties": 1
+   },
+   "by_kind": {
+    "audio": {
+     "n_queries": 1,
+     "ndcg10": 0.0,
+     "r100": 0.5,
+     "unjudged10": 0.3
+    },
+    "more_like_this": {
+     "n_queries": 3,
+     "ndcg10": 0.586,
+     "r100": 0.483,
+     "unjudged10": 0.333
+    },
+    "name": {
+     "n_queries": 3,
+     "ndcg10": 0.664,
+     "r100": 0.717,
+     "unjudged10": 0.067
+    },
+    "people": {
+     "n_queries": 1,
+     "ndcg10": 0.183,
+     "r100": 0.308,
+     "unjudged10": 0.5
+    },
+    "place": {
+     "n_queries": 1,
+     "ndcg10": 0.545,
+     "r100": 0.274,
+     "unjudged10": 0.1
+    },
+    "said_shown": {
+     "n_queries": 1,
+     "ndcg10": 1.0,
+     "r100": 1.0,
+     "unjudged10": 0.2
+    },
+    "topic": {
+     "n_queries": 5,
+     "ndcg10": 0.525,
+     "r100": 0.678,
+     "unjudged10": 0.2
+    },
+    "vibe": {
+     "n_queries": 1,
+     "ndcg10": 0.243,
+     "r100": 0.208,
+     "unjudged10": 0.5
+    }
+   }
+  },
+  "fields_full": {
+   "label": "(d) MU as separate BM25 + dense fields, 4-way RRF",
+   "ndcg10": 0.711,
+   "p10": 0.706,
+   "success5": 1.0,
+   "mrr": 0.927,
+   "r100": 0.769,
+   "unjudged10": 0.225,
+   "ndcg10_ci95": [
+    0.626,
+    0.792
+   ],
+   "condensed_ndcg10_judged_only": 0.797,
+   "mu_item_share_top10": 0.994,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": 0.203,
+    "delta_ci95": [
+     0.106,
+     0.302
+    ],
+    "wins": 13,
+    "losses": 3,
+    "ties": 0
+   },
+   "by_kind": {
+    "audio": {
+     "n_queries": 1,
+     "ndcg10": 0.307,
+     "r100": 0.5,
+     "unjudged10": 0.9
+    },
+    "more_like_this": {
+     "n_queries": 3,
+     "ndcg10": 0.739,
+     "r100": 0.626,
+     "unjudged10": 0.133
+    },
+    "name": {
+     "n_queries": 3,
+     "ndcg10": 0.782,
+     "r100": 0.83,
+     "unjudged10": 0.167
+    },
+    "people": {
+     "n_queries": 1,
+     "ndcg10": 0.853,
+     "r100": 0.795,
+     "unjudged10": 0.0
+    },
+    "place": {
+     "n_queries": 1,
+     "ndcg10": 0.893,
+     "r100": 0.518,
+     "unjudged10": 0.0
+    },
+    "said_shown": {
+     "n_queries": 1,
+     "ndcg10": 0.636,
+     "r100": 1.0,
+     "unjudged10": 0.4
+    },
+    "topic": {
+     "n_queries": 5,
+     "ndcg10": 0.657,
+     "r100": 0.856,
+     "unjudged10": 0.28
+    },
+    "vibe": {
+     "n_queries": 1,
+     "ndcg10": 0.838,
+     "r100": 0.844,
+     "unjudged10": 0.0
+    }
+   }
+  },
+  "fields_desc": {
+   "label": "(d') as (d), MU description only",
+   "ndcg10": 0.685,
+   "p10": 0.681,
+   "success5": 1.0,
+   "mrr": 0.919,
+   "r100": 0.742,
+   "unjudged10": 0.25,
+   "ndcg10_ci95": [
+    0.589,
+    0.777
+   ],
+   "condensed_ndcg10_judged_only": 0.782,
+   "mu_item_share_top10": 0.994,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": 0.176,
+    "delta_ci95": [
+     0.078,
+     0.277
+    ],
+    "wins": 12,
+    "losses": 4,
+    "ties": 0
+   },
+   "by_kind": {
+    "audio": {
+     "n_queries": 1,
+     "ndcg10": 0.237,
+     "r100": 0.5,
+     "unjudged10": 0.9
+    },
+    "more_like_this": {
+     "n_queries": 3,
+     "ndcg10": 0.697,
+     "r100": 0.633,
+     "unjudged10": 0.2
+    },
+    "name": {
+     "n_queries": 3,
+     "ndcg10": 0.788,
+     "r100": 0.838,
+     "unjudged10": 0.167
+    },
+    "people": {
+     "n_queries": 1,
+     "ndcg10": 0.838,
+     "r100": 0.744,
+     "unjudged10": 0.0
+    },
+    "place": {
+     "n_queries": 1,
+     "ndcg10": 0.861,
+     "r100": 0.5,
+     "unjudged10": 0.0
+    },
+    "said_shown": {
+     "n_queries": 1,
+     "ndcg10": 0.636,
+     "r100": 1.0,
+     "unjudged10": 0.4
+    },
+    "topic": {
+     "n_queries": 5,
+     "ndcg10": 0.616,
+     "r100": 0.787,
+     "unjudged10": 0.32
+    },
+    "vibe": {
+     "n_queries": 1,
+     "ndcg10": 0.845,
+     "r100": 0.779,
+     "unjudged10": 0.0
+    }
+   }
+  },
+  "presence": {
+   "label": "(p) diagnostic: MU-presence oracle (no MU text)",
+   "ndcg10": 0.664,
+   "p10": 0.663,
+   "success5": 0.938,
+   "mrr": 0.909,
+   "r100": 0.637,
+   "unjudged10": 0.263,
+   "ndcg10_ci95": [
+    0.539,
+    0.773
+   ],
+   "condensed_ndcg10_judged_only": 0.786,
+   "mu_item_share_top10": 1.0,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": 0.156,
+    "delta_ci95": [
+     0.074,
+     0.241
+    ],
+    "wins": 11,
+    "losses": 1,
+    "ties": 4
+   },
+   "by_kind": {
+    "audio": {
+     "n_queries": 1,
+     "ndcg10": 0.0,
+     "r100": 0.5,
+     "unjudged10": 1.0
+    },
+    "more_like_this": {
+     "n_queries": 3,
+     "ndcg10": 0.705,
+     "r100": 0.569,
+     "unjudged10": 0.133
+    },
+    "name": {
+     "n_queries": 3,
+     "ndcg10": 0.736,
+     "r100": 0.816,
+     "unjudged10": 0.2
+    },
+    "people": {
+     "n_queries": 1,
+     "ndcg10": 0.737,
+     "r100": 0.487,
+     "unjudged10": 0.2
+    },
+    "place": {
+     "n_queries": 1,
+     "ndcg10": 0.905,
+     "r100": 0.537,
+     "unjudged10": 0.0
+    },
+    "said_shown": {
+     "n_queries": 1,
+     "ndcg10": 0.765,
+     "r100": 1.0,
+     "unjudged10": 0.4
+    },
+    "topic": {
+     "n_queries": 5,
+     "ndcg10": 0.598,
+     "r100": 0.594,
+     "unjudged10": 0.32
+    },
+    "vibe": {
+     "n_queries": 1,
+     "ndcg10": 0.907,
+     "r100": 0.545,
+     "unjudged10": 0.0
+    }
+   }
+  }
+ },
+ "relevant_share_with_mu_by_kind": {
+  "audio": 1.0,
+  "more_like_this": 1.0,
+  "name": 0.98,
+  "people": 0.821,
+  "place": 0.982,
+  "said_shown": 1.0,
+  "topic": 0.853,
+  "vibe": 0.948
+ },
+ "vs_presence_oracle_delta_ndcg10": {
+  "fields_full": [
+   0.047,
+   [
+    0.001,
+    0.1
+   ],
+   "9W/6L/1T"
+  ],
+  "fields_desc": [
+   0.021,
+   [
+    -0.022,
+    0.065
+   ],
+   "8W/7L/1T"
+  ],
+  "both": [
+   -0.114,
+   [
+    -0.25,
+    0.025
+   ],
+   "5W/10L/1T"
+  ],
+  "bm25": [
+   -0.143,
+   [
+    -0.23,
+    -0.058
+   ],
+   "2W/11L/3T"
+  ]
+ },
+ "dense_mu_embedding": {
+  "model": "BAAI/bge-small-en-v1.5 (fastembed)",
+  "items": 1105,
+  "wall_s": 466.9,
+  "items_per_s": 2.4,
+  "cpus": 4,
+  "text": "'full' view + first 1500 chars of MU description (model truncates at 512 tokens)"
+ }
+}
