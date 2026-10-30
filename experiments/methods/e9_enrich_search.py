@@ -11,6 +11,7 @@ Extra lists (each its own index, fused into the same RRF in content-code space):
 Items with enrichment but no caption vector (no-text items) are rankable through these lists.
 
 Build step (once per enrichment file): python e9_enrich_search.py --build --enrich te-v1_gpt-5-nano
+  (--full: every ok row, not only the label-independent sample; experiment 9b)
   -> $DIGESTER_DATA/enrich/text_<enrich>.json {code: text}  and  enrich/emb_<enrich>/ (ids.json, emb.npy f16)
 Run:  python e9_enrich_search.py --enrich te-v1_gpt-5-nano --arms both|bm25|dense|none --rep 1 --out runs/x.json
 """
@@ -61,7 +62,10 @@ def build(enrich, restrict_sample=True):
     from fastembed import TextEmbedding
     model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5", threads=4)
     t1 = time.time()
-    V = np.array(list(model.embed([texts[c] for c in codes], batch_size=64)), dtype=np.float32)
+    order = sorted(range(len(codes)), key=lambda i: len(texts[codes[i]]))  # length-sorted: less padding
+    Vs = np.array(list(model.embed([texts[codes[i]] for i in order], batch_size=64)), dtype=np.float32)
+    V = np.empty_like(Vs)
+    V[order] = Vs
     d = os.path.join(DATA, "enrich", f"emb_{enrich}")
     os.makedirs(d, exist_ok=True)
     np.save(os.path.join(d, "emb.npy"), V.astype(np.float16))
@@ -122,13 +126,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--enrich", default="te-v1_gpt-5-nano")
     ap.add_argument("--build", action="store_true")
+    ap.add_argument("--full", action="store_true", help="build over every ok row (exp 9b), not just the sample")
     ap.add_argument("--arms", default="both", choices=["both", "bm25", "dense", "none"])
     ap.add_argument("--rep", type=int, default=1)
     ap.add_argument("--split", default="dev")
     ap.add_argument("--out")
     a = ap.parse_args()
     if a.build:
-        build(a.enrich)
+        build(a.enrich, restrict_sample=not a.full)
         return
 
     t0 = time.time()
@@ -201,8 +206,13 @@ def main():
                      "enrich_cost_usd_items": round(sum(r.get("cost_usd", 0) for r in rows), 4),
                      "enrich_cost_per_1k_items_usd": round(1000 * float(np.mean([r.get("cost_usd", 0) for r in rows])), 4),
                      "no_caption_vector_items_in_top100_mean": round(float(np.mean(n_extra)), 2),
-                     "provisional": "enrichment covers the label-independent sample only (base top-200 per dev "
-                                    "query x3 rewrites + 2,000 random + MLT examples), not the full corpus"})
+                     "enrich_cost_usd_batch_rows": round(sum(r.get("cost_usd", 0) for r in rows if r.get("batch")), 4),
+                     "enrich_batch_rows": sum(1 for r in rows if r.get("batch"))})
+        if len(E.codes) < 10000:
+            meta["provisional"] = ("enrichment covers the label-independent sample only (base top-200 per dev "
+                                   "query x3 rewrites + 2,000 random + MLT examples), not the full corpus")
+        else:
+            meta["coverage"] = "full corpus: every non-friend item with a valid enrichment row (experiment 9b)"
     method = f"e9_enrich:{a.arms}+qr-v1_gpt-5-nano_r{a.rep}" + (f"+{a.enrich}" if E else "")
     run = {"method": method, "embedding": C.emb_name, "meta": meta, "queries": out}
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)

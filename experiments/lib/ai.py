@@ -159,3 +159,30 @@ def log_batch(provider, model, purpose, n, in_tokens, out_tokens, cost_usd, seco
     Check the budget yourself before submitting: spent(provider) + estimate <= budget(provider)."""
     _log({"provider": provider, "model": model, "purpose": purpose, "prompt_version": prompt_version, "n": n,
           "in_tokens": in_tokens, "out_tokens": out_tokens, "cost_usd": cost_usd, "seconds": seconds, "batch": True})
+
+
+# ---------------- Gemini Batch API ----------------
+def _get(url, headers):
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=300) as r:
+        return json.loads(r.read())
+
+
+def gemini_batch_create(model, requests, est_cost_usd, display_name=""):
+    """Submit one Batch API job with inline requests ([{"request": GenerateContentRequest, "metadata": {"key": ..}}]).
+    Refused unless spent("gemini") + est_cost_usd <= budget("gemini"). Nothing is logged here: when the job is
+    done, log its real usage with log_batch() at the batch_* prices. Returns the job name (batches/...)."""
+    if prices().get(model) is None:
+        raise RuntimeError(f"no verified price for {model}; add it to lib/ai_prices.json first")
+    if spent("gemini") + est_cost_usd > budget("gemini"):
+        raise RuntimeError(f"budget stop (gemini): spent ${spent('gemini'):.3f} + est ${est_cost_usd:.3f} "
+                           f"> ${budget('gemini'):.2f}")
+    body = {"batch": {"display_name": display_name or "batch",
+                      "input_config": {"requests": {"requests": requests}}}}
+    r = _post(f"{GEMINI}/models/{model}:batchGenerateContent", body, _gk())
+    return r["name"]
+
+
+def gemini_batch_get(name):
+    """Poll a Batch API job (batches/...). Returns the operation JSON (metadata.state, done, response)."""
+    return _get(f"{GEMINI}/{name}", _gk())
