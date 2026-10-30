@@ -102,10 +102,12 @@ def _gk():
     return {"x-goog-api-key": os.environ["GEMINI_API_KEY"]}
 
 
-def gemini_json(model, system, parts, max_tokens=400, purpose="", prompt_version="", est_media_tokens=0):
+def gemini_json(model, system, parts, max_tokens=400, purpose="", prompt_version="", est_media_tokens=0,
+                generation_config=None):
     """One generateContent call that returns JSON. `parts` is a list of str, or
     {"mime": "image/jpeg", "bytes": b"..."} for inline media (images, short audio).
     est_media_tokens: your estimate for the media (e.g. 258 per small image, 32/s audio) for the budget guard.
+    generation_config: optional extra generationConfig keys (e.g. thinkingConfig, responseSchema).
     Returns (parsed_json, usage)."""
     text_len = len(system) + sum(len(p) for p in parts if isinstance(p, str))
     pr = _guard("gemini", model, text_len / 3.5 + est_media_tokens, max_tokens)
@@ -117,7 +119,8 @@ def gemini_json(model, system, parts, max_tokens=400, purpose="", prompt_version
             body_parts.append({"inline_data": {"mime_type": p["mime"], "data": base64.b64encode(p["bytes"]).decode()}})
     body = {"system_instruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": body_parts}],
-            "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": max_tokens}}
+            "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": max_tokens,
+                                 **(generation_config or {})}}
     t = time.time()
     r = _post(f"{GEMINI}/models/{model}:generateContent", body, _gk())
     u = r.get("usageMetadata", {})
