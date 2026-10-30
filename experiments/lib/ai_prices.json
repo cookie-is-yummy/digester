@@ -1,0 +1,7 @@
+{
+  "_note": "USD per million tokens. VERIFY against the provider's pricing page before the first paid run, then set verified_on. Batch API is usually half price; log batch jobs with ai.log_batch using the batch price.",
+  "verified_on": null,
+  "models": {
+    "text-embedding-3-small": {"input_per_m": 0.02, "source": "used 30 Oct 2026: 2.2M tokens ~ $0.04"}
+  }
+}
