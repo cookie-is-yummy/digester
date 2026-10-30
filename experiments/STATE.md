@@ -14,9 +14,14 @@
   - Evaluator round 1: repro matches (dev 0.508, all 0.486); Muse inventory; MU ceiling (mostly presence leakage: +0.156 from presence alone); baseline 0.585 on r1 labels.
   - Experiment 1 (evaluator round 2): real gpt-5-nano rewrite 0.496 (mean of 3 repeats, r2 labels) vs hand rewrite 0.578 vs none 0.411. The real rewrite is now the **honest base**.
   - Phase 2 benchmark: `results/benchmark-baseline.md`.
-- **In flight:** experimenter A (free experiments 2–8: fused PRF, BM25 feedback, per-phrase fusion, HyDE, rewrite union, interaction prior, creator expansion); experimenter B (experiment 9: tier-1 enrichment pilot → sample → runs); researcher on local embedders.
-- **Next:** evaluator round 3 on experiments 2–8 and 9; embedder swap; LLM rerank; more-like-this; then converge (phase 6).
-- **Labels:** round r2 is current (r0 + 31 + 127 pooled judgments). Test-split scorings used: 1 of 3.
+  - Experiments 2–8 (round r3): none adopted. Best: rewrite union +0.028 (CI spans 0, 3× rewrite cost).
+  - Experiment 9 (round r4/r5): tier-1 enrichment (gemini-3.1-flash-lite, prompt te-v1c) as a separate BM25 field + vector, on a 4,979-item sample: **+0.059 [+0.019, +0.103]**, 13/2/1 — adopted provisionally.
+  - Reference vs MU (200 items): ours misses ≥1 MU facet on 94% of items; text-reachable facets 70%; conflicts 9%.
+  - Experiments 13–16 (round r5): none adopted. Near misses: qr-v2 rewrite +0.025; MLT plan +0.109 on the MLT kind (+0.020 overall).
+- **In flight (resumed after a container restart):** experiment 9b (full-corpus enrichment via Gemini Batch API, then runs `e9b_full_*`); experiments 10–12 (EmbeddingGemma swap; Gemini Embedding 2 and ColBERT runs already written).
+- **Next:** evaluate 9b + 10–12 (round r6). If 9b holds, it becomes the base; then re-test qr-v2 and the MLT plan on top of it. Then phase 6: test split (scorings left: 2), write-up, amendment, draft PR.
+- **Labels:** round r5 is current. Test-split scorings used: 1 of 3.
+- **Budget:** see `data/ai_runs.jsonl`; at round r5: OpenAI ~$0.08, Gemini ~$2.3 (before the 9b batch).
 
 ## Assumptions (open)
 
