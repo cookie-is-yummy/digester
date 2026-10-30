@@ -29,6 +29,7 @@ usage:
     python experiments/eval/reference_compare.py show 0 10
     python experiments/eval/reference_compare.py score
 """
+
 import json
 import os
 import random
@@ -38,9 +39,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
-from common import info_class  # noqa: E402
-from corpus import DATA, code_of  # noqa: E402
-from muse import load_records, mu_description  # noqa: E402
+from common import info_class
+from corpus import DATA, code_of
+from muse import load_records, mu_description
 
 ENRICH = os.path.join(DATA, "enrich", "te-v1c_gemini-3.1-flash-lite.jsonl")
 WORK = os.path.join(DATA, "eval_work", "refcmp")
@@ -49,7 +50,14 @@ THIN_EXTRA = os.path.join(WORK, "thin_extra.jsonl")
 JUDGED = os.path.join(WORK, "judged.jsonl")
 FACETS = ["kind", "topic", "shown", "said", "audio", "place", "people", "vibe"]
 MEDIA = {"shown", "said", "audio"}
-OUR_FIELD = {"topic": "topics", "shown": "shown", "said": "said", "place": "place", "people": "people", "vibe": "vibe"}
+OUR_FIELD = {
+    "topic": "topics",
+    "shown": "shown",
+    "said": "said",
+    "place": "place",
+    "people": "people",
+    "vibe": "vibe",
+}
 OUR_UNK = {"topic": "topics"}
 LISTS = ["topics", "shown", "said", "place", "people", "vibe", "use", "queries"]
 AUDIO_OURS = r"\b(music\w*|songs?|track|beat|lyrics|sounds?|audio|soundtrack|sing\w*|melod\w*|tune|asmr|music_dance|remix|album|band|rapper|dj)\b"
@@ -69,13 +77,22 @@ def mu_core(mu):
     d = mu_description(mu)
     if d:
         return d
-    m = re.search(r"^#+ (Social Context & Synthesis|Overall Synthesis)\s*$(.*?)(?=^#+ |\Z)", mu, re.M | re.S)
+    m = re.search(
+        r"^#+ (Social Context & Synthesis|Overall Synthesis)\s*$(.*?)(?=^#+ |\Z)",
+        mu,
+        re.MULTILINE | re.DOTALL,
+    )
     return m.group(2).strip() if m else ""
 
 
 def mu_rest(mu):
     """Full MU minus the suggested '## Searches' and '## Media Pivots' sections (for an upper-bound regex)."""
-    return re.sub(r"^#+ (Searches|Media Pivots)\s*$.*?(?=^#+ |\Z)", "", mu, flags=re.M | re.S)
+    return re.sub(
+        r"^#+ (Searches|Media Pivots)\s*$.*?(?=^#+ |\Z)",
+        "",
+        mu,
+        flags=re.MULTILINE | re.DOTALL,
+    )
 
 
 def has_mu(mu):
@@ -83,8 +100,11 @@ def has_mu(mu):
 
 
 def _audio_named(e):
-    txt = " ".join([e.get("summary") or "", e.get("kind") or ""] + [x for f in LISTS for x in (e.get(f) or [])])
-    return bool(re.search(AUDIO_OURS, txt, re.I))
+    txt = " ".join(
+        [e.get("summary") or "", e.get("kind") or ""]
+        + [x for f in LISTS for x in (e.get(f) or [])]
+    )
+    return bool(re.search(AUDIO_OURS, txt, re.IGNORECASE))
 
 
 def our_cover(e, facet):
@@ -124,15 +144,34 @@ def _load_all():
     for ln in open(os.path.join(DATA, "corpus", "items.jsonl"), encoding="utf-8"):
         it = json.loads(ln)
         items[code_of(it)] = it
-    inter = sorted(c for c in enr if c in recs and has_mu(recs[c]["mu"]) and mu_core(recs[c]["mu"]) and c in items)
+    inter = sorted(
+        c
+        for c in enr
+        if c in recs and has_mu(recs[c]["mu"]) and mu_core(recs[c]["mu"]) and c in items
+    )
     return enr, recs, items, inter
 
 
 def _row(i, c, e, r, it):
     return {
-        "i": i, "code": c, "info": info_class(it),
-        "ours": {k: e.get(k) for k in ["summary", "kind", "topics", "shown", "said", "place", "people",
-                                         "vibe", "use", "unknown"]},
+        "i": i,
+        "code": c,
+        "info": info_class(it),
+        "ours": {
+            k: e.get(k)
+            for k in [
+                "summary",
+                "kind",
+                "topics",
+                "shown",
+                "said",
+                "place",
+                "people",
+                "vibe",
+                "use",
+                "unknown",
+            ]
+        },
         "our_cover": {fa: our_cover(e, fa) for fa in FACETS},
         "our_cover_lenient": {fa: our_cover_lenient(e, fa) for fa in FACETS},
         "mu_regex": mu_regex(mu_core(r["mu"]), r["music"]),
@@ -143,39 +182,72 @@ def _row(i, c, e, r, it):
 def _write(path, rows):
     os.makedirs(WORK, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        f.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
 
 
 def load(path):
-    return [json.loads(ln) for ln in open(path, encoding="utf-8")] if os.path.exists(path) else []
+    return (
+        [json.loads(ln) for ln in open(path, encoding="utf-8")]
+        if os.path.exists(path)
+        else []
+    )
 
 
 def cmd_sample():
     enr, recs, items, inter = _load_all()
     samp = random.Random(5).sample(inter, 200)
     _write(SAMPLE, [_row(i, c, enr[c], recs[c], items[c]) for i, c in enumerate(samp)])
-    print(json.dumps({"enriched_ok": len(enr), "muse_items": len(recs),
-                      "enriched_and_in_muse": sum(1 for c in enr if c in recs),
-                      "intersection_with_mu_text": len(inter), "sample": len(samp)}))
+    print(
+        json.dumps(
+            {
+                "enriched_ok": len(enr),
+                "muse_items": len(recs),
+                "enriched_and_in_muse": sum(1 for c in enr if c in recs),
+                "intersection_with_mu_text": len(inter),
+                "sample": len(samp),
+            }
+        )
+    )
 
 
 def cmd_thin_extra():
     enr, recs, items, inter = _load_all()
     insamp = {s["code"] for s in load(SAMPLE)}
     extra = [c for c in inter if c not in insamp and info_class(items[c]) != "ok"]
-    _write(THIN_EXTRA, [_row(1000 + n, c, enr[c], recs[c], items[c]) for n, c in enumerate(extra)])
-    print(json.dumps({"thin_in_intersection": sum(1 for c in inter if info_class(items[c]) != "ok"),
-                      "thin_extra": len(extra)}))
+    _write(
+        THIN_EXTRA,
+        [_row(1000 + n, c, enr[c], recs[c], items[c]) for n, c in enumerate(extra)],
+    )
+    print(
+        json.dumps(
+            {
+                "thin_in_intersection": sum(
+                    1 for c in inter if info_class(items[c]) != "ok"
+                ),
+                "thin_extra": len(extra),
+            }
+        )
+    )
 
 
 def cmd_show(a, b, which="sample", width=1800):
     recs = load_records()
-    for s in load(THIN_EXTRA if which == "extra" else SAMPLE)[int(a):int(b)]:
+    for s in load(THIN_EXTRA if which == "extra" else SAMPLE)[int(a) : int(b)]:
         r, o = recs[s["code"]], s["ours"]
         print(f"=== #{s['i']} info={s['info']}")
-        print("OURS kind=%s | topics=%s | shown=%s | said=%s | place=%s | people=%s | vibe=%s | unknown=%s" % (
-            o["kind"], o["topics"], o["shown"], o["said"], o["place"], o["people"], o["vibe"], o["unknown"]))
+        print(
+            "OURS kind=%s | topics=%s | shown=%s | said=%s | place=%s | people=%s | vibe=%s | unknown=%s"
+            % (
+                o["kind"],
+                o["topics"],
+                o["shown"],
+                o["said"],
+                o["place"],
+                o["people"],
+                o["vibe"],
+                o["unknown"],
+            )
+        )
         print("OURS summary:", o["summary"])
         print("MUSIC:", bool(r["music"]))
         print("MU:", " ".join(mu_core(r["mu"]).split())[:width])
@@ -193,14 +265,26 @@ def block(rows, mu_key, cover="our_cover", judged=True):
         mc = sum(1 for s, j in rows if mu_key(s, j)[fa])
         miss = sum(1 for s, j in rows if mu_key(s, j)[fa] and not s[cover][fa])
         both = sum(1 for s, j in rows if mu_key(s, j)[fa] and s[cover][fa])
-        d = {"ours_cov": rate(oc, n), "mu_cov": rate(mc, n), "miss": rate(miss, n),
-             "miss_given_mu": rate(miss, mc), "n_both": both}
+        d = {
+            "ours_cov": rate(oc, n),
+            "mu_cov": rate(mc, n),
+            "miss": rate(miss, n),
+            "miss_given_mu": rate(miss, mc),
+            "n_both": both,
+        }
         if judged:
             conf = sum(1 for s, j in rows if fa in j.get("conflict", []))
             uns = sum(1 for s, j in rows if fa in j.get("unsupported", []))
-            d.update({"conflict": rate(conf, n), "conflict_given_both": rate(conf, both)})
+            d.update(
+                {"conflict": rate(conf, n), "conflict_given_both": rate(conf, both)}
+            )
             if fa in MEDIA:
-                d.update({"unsupported": rate(uns, n), "unsupported_given_ours": rate(uns, oc)})
+                d.update(
+                    {
+                        "unsupported": rate(uns, n),
+                        "unsupported_given_ours": rate(uns, oc),
+                    }
+                )
         out[fa] = d
 
     def missed(s, j, facets):
@@ -208,36 +292,69 @@ def block(rows, mu_key, cover="our_cover", judged=True):
 
     text_facets = [fa for fa in FACETS if fa not in MEDIA]
     out["any_miss"] = rate(sum(1 for s, j in rows if missed(s, j, FACETS)), n)
-    out["any_miss_excl_audio"] = rate(sum(1 for s, j in rows if missed(s, j, [f for f in FACETS if f != "audio"])), n)
-    out["any_miss_text_facets"] = rate(sum(1 for s, j in rows if missed(s, j, text_facets)), n)
-    out["mean_facets_missed"] = round(sum(len(missed(s, j, FACETS)) for s, j in rows) / n, 2) if n else None
-    out["mean_facets_mu"] = round(sum(sum(mu_key(s, j).values()) for s, j in rows) / n, 2) if n else None
-    out["mean_facets_ours"] = round(sum(sum(s[cover].values()) for s, j in rows) / n, 2) if n else None
+    out["any_miss_excl_audio"] = rate(
+        sum(1 for s, j in rows if missed(s, j, [f for f in FACETS if f != "audio"])), n
+    )
+    out["any_miss_text_facets"] = rate(
+        sum(1 for s, j in rows if missed(s, j, text_facets)), n
+    )
+    out["mean_facets_missed"] = (
+        round(sum(len(missed(s, j, FACETS)) for s, j in rows) / n, 2) if n else None
+    )
+    out["mean_facets_mu"] = (
+        round(sum(sum(mu_key(s, j).values()) for s, j in rows) / n, 2) if n else None
+    )
+    out["mean_facets_ours"] = (
+        round(sum(sum(s[cover].values()) for s, j in rows) / n, 2) if n else None
+    )
     if judged:
         out["any_conflict"] = rate(sum(1 for s, j in rows if j.get("conflict")), n)
-        out["any_unsupported"] = rate(sum(1 for s, j in rows if j.get("unsupported")), n)
+        out["any_unsupported"] = rate(
+            sum(1 for s, j in rows if j.get("unsupported")), n
+        )
     return out
 
 
 def cmd_score():
     samp, extra = load(SAMPLE), load(THIN_EXTRA)
     judged = {j["i"]: j for j in load(JUDGED)}
-    read_key = lambda s, j: {fa: fa in j["mu_cov"] for fa in FACETS}  # noqa: E731
-    res = {"n_sample": len(samp), "n_read_in_sample": sum(1 for s in samp if s["i"] in judged),
-           "sample_info_counts": {k: sum(1 for s in samp if s["info"] == k) for k in ("ok", "low", "non_english")}}
+    read_key = lambda s, j: {fa: fa in j["mu_cov"] for fa in FACETS}
+    res = {
+        "n_sample": len(samp),
+        "n_read_in_sample": sum(1 for s in samp if s["i"] in judged),
+        "sample_info_counts": {
+            k: sum(1 for s in samp if s["info"] == k)
+            for k in ("ok", "low", "non_english")
+        },
+    }
     read = [(s, judged[s["i"]]) for s in samp if s["i"] in judged]
     res["read"] = block(read, read_key)
     res["read_lenient"] = block(read, read_key, cover="our_cover_lenient")
-    res["regex_core_all200"] = block([(s, None) for s in samp], lambda s, j: s["mu_regex"], judged=False)
-    res["regex_full_all200"] = block([(s, None) for s in samp], lambda s, j: s["mu_regex_full"], judged=False)
+    res["regex_core_all200"] = block(
+        [(s, None) for s in samp], lambda s, j: s["mu_regex"], judged=False
+    )
+    res["regex_full_all200"] = block(
+        [(s, None) for s in samp], lambda s, j: s["mu_regex_full"], judged=False
+    )
     res["regex_vs_read_agreement"] = {
-        fa: rate(sum(1 for s, j in read if s["mu_regex"][fa] == (fa in j["mu_cov"])), len(read)) for fa in FACETS}
+        fa: rate(
+            sum(1 for s, j in read if s["mu_regex"][fa] == (fa in j["mu_cov"])),
+            len(read),
+        )
+        for fa in FACETS
+    }
     # gate split, read only: ok = read sample items with info ok; thin = every thin item of the intersection
     ok_rows = [(s, j) for s, j in read if s["info"] == "ok"]
-    thin_rows = [(s, judged[s["i"]]) for s in samp + extra if s["info"] != "ok" and s["i"] in judged]
+    thin_rows = [
+        (s, judged[s["i"]])
+        for s in samp + extra
+        if s["info"] != "ok" and s["i"] in judged
+    ]
     res["gate_ok_read"] = block(ok_rows, read_key)
     res["gate_thin_read_all_intersection"] = block(thin_rows, read_key)
-    res["n_thin_in_intersection"] = sum(1 for s in samp if s["info"] != "ok") + len(extra)
+    res["n_thin_in_intersection"] = sum(1 for s in samp if s["info"] != "ok") + len(
+        extra
+    )
     print(json.dumps(res, indent=1))
     json.dump(res, open(os.path.join(WORK, "score.json"), "w"), indent=1)
     return res
