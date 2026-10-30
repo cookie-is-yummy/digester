@@ -67,7 +67,9 @@ def doc_texts():
     return C.ids, [PREFIX_D + C.text(n, "full") for n in range(len(C.ids))]
 
 
-def build(name, embed_fn, model_id, chunk=500, extra_info=None):
+def build(name, embed_fn, model_id, chunk=500, extra_info=None, reverse=False):
+    """reverse=True: a helper worker that embeds chunks from the end while the main worker runs forward;
+    it stops at the first chunk that already exists and leaves assembly to the main worker."""
     out = os.path.join(EMB_DIR, name)
     cdir = os.path.join(out, "chunks")
     os.makedirs(cdir, exist_ok=True)
@@ -82,9 +84,12 @@ def build(name, embed_fn, model_id, chunk=500, extra_info=None):
     stats_p = os.path.join(cdir, "stats.jsonl")
     t0, done_now = time.time(), 0
     nchunks = (len(order) + chunk - 1) // chunk
-    for c in range(nchunks):
+    for c in (reversed(range(nchunks)) if reverse else range(nchunks)):
         p = os.path.join(cdir, f"chunk_{c:03d}.npy")
         if os.path.exists(p):
+            if reverse:
+                print(f"helper: met existing chunk {c}; stopping after {done_now} items", flush=True)
+                return
             continue
         sel = order[c * chunk:(c + 1) * chunk]
         t = time.time()
@@ -98,13 +103,15 @@ def build(name, embed_fn, model_id, chunk=500, extra_info=None):
         el = time.time() - t0
         print(f"chunk {c + 1}/{nchunks}: {done_now} items this session, {done_now / el:.1f} items/s, "
               f"wall {el:.0f} s, load {load_avg()}", flush=True)
+    if reverse:
+        return
     V = np.concatenate([np.load(os.path.join(cdir, f"chunk_{c:03d}.npy")) for c in range(nchunks)])
     full = np.zeros_like(V)
     full[np.array(order)] = V
     norms = np.linalg.norm(full, axis=1)
     np.save(os.path.join(out, "emb.npy"), full.astype(np.float16))
     json.dump(ids, open(os.path.join(out, "ids.json"), "w"))
-    st = [json.loads(l) for l in open(stats_p)]
+    st = list({s["chunk"]: s for s in map(json.loads, open(stats_p))}.values())  # one row per chunk
     secs = sum(s["seconds"] for s in st)
     info = {"model": model_id, "dims": int(full.shape[1]), "items": len(ids), "doc_prefix": PREFIX_D, "query_prefix": PREFIX_Q,
             "text_view": "full", "stored": "float16", "bytes_per_item": int(full.shape[1] * 2),
@@ -134,7 +141,7 @@ def model_size_gb(fragment):
 def cmd_build_gemma():
     threads = int(arg("--threads", 2))
     m = gemma_model(threads)
-    build("embgemma_full", lambda ts: list(m.embed(ts, batch_size=32)), GEMMA,
+    build("embgemma_full", lambda ts: list(m.embed(ts, batch_size=32)), GEMMA, reverse="--reverse" in sys.argv,
           extra_info={"runtime": "fastembed 0.9.1 ONNX fp32 (onnx-community/embeddinggemma-300m-ONNX)", "threads": threads,
                       "model_size_gb": model_size_gb("embeddinggemma"), "license": "Gemma Terms of Use"})
 
