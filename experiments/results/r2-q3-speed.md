@@ -20,12 +20,13 @@
 2. **(b) Two-stage works.** The instant screen (0.493) arrives in 0.12 / 0.17 s; the refined list (B3 0.570, or B4 0.594) arrives ~2 s later. On average 6.5 of the refined top 10 were already on the first screen, so about 3–4 results change when the refined list lands; the top result stays the same in about half the typed searches.
 3. **(d) Routing barely fires.** An LLM-free "is this a lookup?" check (creator handle, collection name, high-weight hashtag) routed 2 of 13 typed searches, with precision 1/2 and recall 1/3 against the name kind. It saves nothing at p95.
 4. **(e) A rewrite cache helps the median, not p95.** It brings p50 to instant speed only above ~50% hit rate and p95 under 0.5 s only above ~96%.
-5. **Look-first fits the two-stage flow for free.** B4's first pass is the same raw-query search as the instant screen, so in a two-stage UI it adds no latency: show the instant list, feed its top 20 to the rewriter, then swap in the refined list.
+5. **Look-first would fit the two-stage flow for free** (its first pass is the instant screen), but it did not hold up on test, so it is not recommended yet.
+6. **Held-out check (test, 6 searches):** instant 0.528 vs B3 0.565 (−0.037 [−0.10, +0.05]); over all 22 searches instant is −0.066 [−0.117, −0.023] below B3 and level with the honest caption-only base.
 
 ## Recommendation for the product flow
 
 - **Search returns in two steps:** instant list (≤ 0.2 s p95) → refined list (~2–3 s), with a subtle "refining" state and stable positions for items that stay. The `search` op in the query API should allow a `stage: instant | refined` response, or stream both.
-- Refined list = **B4** (look-first rewrite on gpt-5-nano) if A-003's amendment is accepted with it; otherwise B3.
+- Refined list = **B3**. The look-first rewrite (B4) won on dev (+0.024) but lost on the held-out test searches (−0.038 [−0.095, +0.010]) and tied B3 over all 22 (+0.007), so it was withdrawn.
 - Cache rewrites per user and query (cost and median), and run the rewrite with warm connections close to the provider. Measure p95 again from production infrastructure before choosing a faster model.
 - Interpret `05-processor.md`'s "search p95 ≤ 500 ms" as **time to first screen**; add a second target for the refined list (e.g. p95 ≤ 3 s).
 - Filters: the instant path can't parse "before May" or "that I sent to friends" without the LLM; the first screen needs rule-based filter parsing or filter chips.
