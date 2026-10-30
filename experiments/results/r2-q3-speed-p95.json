@@ -1,29 +1,29 @@
 {
- "_note": "Q3 chart input (round 2). p95_s = measured p95 per typed search in seconds, rewrite included where the arm has one. ndcg10 is filled by the evaluator (dev, mean of repeats). Render: python experiments/methods/speed_chart.py <this file>",
+ "_note": "Q3 chart input (round 2). p95_s = measured p95 per typed search in seconds, rewrite included where the arm has one. ndcg10 is filled by the evaluator (dev, mean of repeats). Render: python experiments/methods/speed_chart.py <this file> Filled by evaluator r11: dev nDCG@10 on r11 labels, mean of 3 repeats (30 is one deterministic run).",
  "B3": {
-  "ndcg10": null,
+  "ndcg10": 0.57,
   "p95_s": 3.054,
   "note": "gpt-5-nano qr-v1"
  },
  "30 instant": {
-  "ndcg10": null,
+  "ndcg10": 0.493,
   "p95_s": 0.166,
   "note": "no rewrite, no HyDE"
  },
  "31 flash-lite qr-v1": {
-  "ndcg10": null,
+  "ndcg10": 0.561,
   "p95_s": 2.249
  },
  "32 gpt-5.4-nano qr-v1": {
-  "ndcg10": null,
+  "ndcg10": 0.58,
   "p95_s": 2.573
  },
  "33 flash-lite qr-s1": {
-  "ndcg10": null,
+  "ndcg10": 0.559,
   "p95_s": 2.15
  },
  "34 routing": {
-  "ndcg10": null,
+  "ndcg10": 0.568,
   "p95_s": 3.057,
   "note": "2/13 typed searches skip the rewrite"
  }
