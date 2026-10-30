@@ -129,11 +129,11 @@ def build():
     for n, r in enumerate(rows, 1):
         it = items[r["code"]]
         cap = " ".join((it.get("caption") or "").split())[:160]
-        lines.append(f"{n}. {n:02d} | SEARCH: {search_text(queries[r['query']], items)} | ITEM: {cap} | "
+        lines.append(f"{n:02d} | SEARCH: {search_text(queries[r['query']], items)} | ITEM: {cap} | "
                      f"@{it['platform_data'].get('owner_handle', '')} | {link(r['code'], it)}")
         key.append({"n": n, "query": r["query"], "code": r["code"], "source": r["source"],
                     "grade": r["grade"], "judge": r["judge"]})
-    open(os.path.join(OUT, "sheet.md"), "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    open(os.path.join(OUT, "sheet.md"), "w", encoding="utf-8").write("\n\n".join(lines[:1] + lines[2:]) + "\n")
     json.dump(key, open(os.path.join(OUT, "key.json"), "w"), indent=1)
 
     def summary(sel, strata):
