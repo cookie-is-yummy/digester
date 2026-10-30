@@ -87,7 +87,7 @@ def build(name, embed_fn, model_id, chunk=500, extra_info=None, reverse=False):
     for c in (reversed(range(nchunks)) if reverse else range(nchunks)):
         p = os.path.join(cdir, f"chunk_{c:03d}.npy")
         if os.path.exists(p):
-            if reverse:
+            if reverse and done_now:  # skip the done tail, then stop where the forward worker has been
                 print(f"helper: met existing chunk {c}; stopping after {done_now} items", flush=True)
                 return
             continue

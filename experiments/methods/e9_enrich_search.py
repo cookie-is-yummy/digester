@@ -16,6 +16,7 @@ Build step (once per enrichment file): python e9_enrich_search.py --build --enri
 Run:  python e9_enrich_search.py --enrich te-v1_gpt-5-nano --arms both|bm25|dense|none --rep 1 --out runs/x.json
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -62,15 +63,32 @@ def build(enrich, restrict_sample=True):
     from fastembed import TextEmbedding
     model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5", threads=4)
     t1 = time.time()
-    order = sorted(range(len(codes)), key=lambda i: len(texts[codes[i]]))  # length-sorted: less padding
-    Vs = np.array(list(model.embed([texts[codes[i]] for i in order], batch_size=64)), dtype=np.float32)
+    order = sorted(range(len(codes)), key=lambda i: (len(texts[codes[i]]), codes[i]))  # length-sorted: less padding
+    d = os.path.join(DATA, "enrich", f"emb_{enrich}")
+    # resumable: chunks of the length-sorted order are saved under parts/, keyed by a hash of the texts
+    key = hashlib.sha256("\n".join(texts[codes[i]] for i in order).encode()).hexdigest()[:12]
+    pdir = os.path.join(d, f"parts_{key}")
+    os.makedirs(pdir, exist_ok=True)
+    CH, chunks, n_new = 1024, [], 0
+    for s0 in range(0, len(order), CH):
+        pf = os.path.join(pdir, f"{s0:06d}.npy")
+        if not os.path.exists(pf):
+            X = np.array(list(model.embed([texts[codes[i]] for i in order[s0:s0 + CH]], batch_size=64)),
+                         dtype=np.float32)
+            np.save(pf + ".tmp.npy", X)
+            os.replace(pf + ".tmp.npy", pf)
+            n_new += len(X)
+            el = time.time() - t1
+            print(f"  embedded {s0 + len(X)}/{len(order)} ({n_new / el:.1f} items/s new, {el:.0f}s)", flush=True)
+        chunks.append(np.load(pf))
+    Vs = np.concatenate(chunks)
     V = np.empty_like(Vs)
     V[order] = Vs
-    d = os.path.join(DATA, "enrich", f"emb_{enrich}")
-    os.makedirs(d, exist_ok=True)
     np.save(os.path.join(d, "emb.npy"), V.astype(np.float16))
     json.dump([items[c] for c in codes], open(os.path.join(d, "ids.json"), "w"))
     el = time.time() - t1
+    import shutil
+    shutil.rmtree(pdir)
     print(f"built {len(codes)} enrichment texts (mean {np.mean([len(t) for t in texts.values()]):.0f} chars); "
           f"embedded {len(codes)} items, {len(codes) / el:.1f} items/s, embed {el:.1f}s, wall {time.time() - t0:.1f}s")
 
