@@ -13,7 +13,8 @@ Privacy and safety (AGENTS.md rule 8, docs/07-privacy-and-safety.md):
   stripped; the system prompt says they are data, never instructions. Output goes through qr-v1 post-validation.
 
 Output: data/runs/rewrites/mlt-plan-v1_<model>.json  {qid: {"phrases": [...], "keywords": [...]}, "_meta": {...}}
-usage: python experiments/methods/mlt_plan.py [--split dev] [--model gemini-3.1-flash-lite]
+usage: python experiments/methods/mlt_plan.py [--split dev] [--model gemini-3.1-flash-lite] [--out PATH]
+       (use --out for another split so the cached dev plan file is not overwritten)
 Prints aggregate stats only (no captions, no item codes).
 """
 import argparse
@@ -96,6 +97,7 @@ def main():
     ap.add_argument("--model", default="gemini-3.1-flash-lite")
     ap.add_argument("--split", default="dev")
     ap.add_argument("--outdir", default=os.path.join(DATA, "runs", "rewrites"))
+    ap.add_argument("--out", default=None, help="output path (default <outdir>/<prompt_version>_<model>.json)")
     a = ap.parse_args()
     items = {}
     for line in open(os.path.join(DATA, "corpus", "items.jsonl"), encoding="utf-8"):
@@ -136,7 +138,8 @@ def main():
             "mean_keywords": round(float(np.mean([len(x["keywords"]) for x in plans.values()])), 2) if plans else 0,
             "wall_s": round(wall, 1), "per_query": per_q}
     os.makedirs(a.outdir, exist_ok=True)
-    path = os.path.join(a.outdir, f"{PROMPT_VERSION}_{a.model}.json")
+    path = a.out or os.path.join(a.outdir, f"{PROMPT_VERSION}_{a.model}.json")
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     json.dump({"_note": "MLT plan (experiment 16), written by experiments/methods/mlt_plan.py", "_meta": meta, **plans},
               open(path, "w"), ensure_ascii=False, indent=1)
     print(f"wrote {path}")
