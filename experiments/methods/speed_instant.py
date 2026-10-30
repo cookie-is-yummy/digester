@@ -73,7 +73,9 @@ def main():
               "instant_search": summary(lat_i), "instant_search_typed": summary(lat_i_typed),
               "b3_search_only": summary(lat_b), "b3_search_only_typed": summary(lat_b_typed),
               "b3_reproduces_e20": {f"r{k}": f"{v}/{len(qs)}" for k, v in same.items()},
-              "overlap_refined_vs_instant": overlap, "wall_s": round(wall, 1)}
+              "overlap_refined_vs_instant": overlap, "wall_s": round(wall, 1),
+              "samples_typed_s": {"instant": [round(x, 4) for x in lat_i_typed],
+                                  "b3_search": [round(x, 4) for x in lat_b_typed]}}
     meta = {"base": "B3 (stack.py hyde=1, te-v1c) with no rewrite: raw query only, no keywords, no HyDE",
             "rewrite": "none", "cost_usd": 0.0, "rewrite_p50_s": 0.0,
             "query_p50_s": timing["instant_search"]["p50_s"], "query_p95_s": timing["instant_search"]["p95_s"],
@@ -83,7 +85,7 @@ def main():
     write_run(os.path.join(RUNS, "e30_instant.json"), "stack_b2:hyde=1+norewrite+te-v1c", C.emb_name, meta, out)
     os.makedirs(os.path.join(RUNS, "speed"), exist_ok=True)
     json.dump(timing, open(os.path.join(RUNS, "speed", "instant_timing.json"), "w"), indent=1)
-    print(json.dumps(timing, indent=1))
+    print(json.dumps({k: v for k, v in timing.items() if k != 'samples_typed_s'}, indent=1))
     print(f"items processed {len(lat_i) * 2} searches, {len(lat_i) * 2 / wall:.2f} searches/s, wall {wall:.1f} s")
 
 

@@ -272,7 +272,6 @@ def run(a):
     else:
         system, prof = qr.SYSTEM + "\n" + LOOK_RULES, None
     qs = load_queries("dev")
-    typed = [q for q in qs if not q["examples"]]
     for k in a.repeats:
         base = qrv1(k)
         # sanity: this runner with the cached qr-v1 parse must reproduce B3 exactly
