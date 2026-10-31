@@ -33,6 +33,15 @@ Read first:
 
 ## Questions
 
+**Eval notes** (from building the answer set):
+- **33 searches.** Answers came from title/channel rules plus manual review by Claude, with corrections from Derrick. Treat them as seeds and pool-judge new top-10 items.
+- **More-like-this searches** may name an example outside the library (`examples_outside_library`). Fetch its tier-0 data with `videos.list` like any other item.
+- **Moment search:** `yt_euler_spiral_moment` has video-level answers only, with no timestamp labelled yet.
+- **Behaviour searches:** `yt_rewatched` and `yt_saved_never_watched_long` are answered by interactions and durations, not text.
+- **Time-window search:** `yt_summer2020_gaming` is answered by watch dates.
+
+These test whether search uses activity and dates as well as text.
+
 **Q1 · Baseline on YouTube.** Run the Instagram finalist B3 on the YouTube corpus with tier-0 text only:
 - caption view = title + description (first ~600 chars) + chapters + tags + channel;
 - same rewrite, BM25, bge-small and fusion.
