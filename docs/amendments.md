@@ -85,6 +85,24 @@ The current contract has the `platform_data.youtube` fields but no place for API
 **Agent's assessment**
 Agree with 1–5; verify the formats on a real Takeout first.
 
+**Round 3 update (2026-10-31, real Takeout; `docs/research/2026-10-31-youtube-round.md`)**
+- **Formats verified on a real export:**
+  - watch history is HTML by default, with local times and zone abbreviations;
+  - playlist CSVs carry video IDs only;
+  - the YouTube product's watch history is truncated (11.5 months).
+- **"My Activity" (YouTube) holds the full history from 2014 plus likes.**
+  - Intake docs should ask users for both products.
+  - Store import coverage dates (`watch_first_at`, `watch_last_at`).
+  - Likes map to `like` (0.3).
+- **Item 3 (API fields in `enrichments`) is in doubt.** Developer Policies III.E.4 item 08 bars "new or derived data" from API data. Summaries and embeddings of descriptions, tags and chapters likely count (`experiments/research/youtube-api-terms.md`).
+  - Proposed instead: `items.caption` = Takeout title; API fields only for display and filtering (duration, availability), each with `refresh_by` = fetched + 30 days.
+  - A legal read decides whether refreshed API text may be keyword-indexed.
+  - Measured cost of not using API text: nothing overall, but real on moment and named-video searches.
+- **New: video-understanding enrichment** via the Gemini API's YouTube-URL input. It doesn't use YouTube API data and is allowed in our reading; it is a preview feature.
+  - Its output (description, spoken summary, timestamped segments, on-screen text) needs a home: `enrichments` with `source = video_url`, `segments[] {start_s, end_s, text}`.
+  - Gate it to saved videos with no text.
+- **New: intent filters on the `search` op.** These are structured filters the rewrite infers: `time_window`, `interaction` (liked / saved / never watched / rewatched), `min_duration_s`, `max_duration_s`, `shorts`. Each is applied to the user's own interactions.
+
 **Affected**
 Docs: 03-data-contract (InteractionKind, Item, Enrichment), 04-intake (YouTube), 08-evals-and-quality (moment kind) · Code: none in `scrolldigest/` (prototype in `experiments/youtube/`) · Contract change: yes · Needs both founders: yes
 

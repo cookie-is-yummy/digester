@@ -16,7 +16,7 @@ The project's design, written for the people and coding agents building it. Star
 | 09 | [Roadmap and ownership](09-roadmap-and-ownership.md) | Milestones, gates, who owns what, open questions |
 | 10 | [Decisions](10-decisions.md) | Decision log with reasons |
 | — | [Glossary](glossary.md) | Terms used everywhere |
-| — | [Research](research/) | Experiments and their results, e.g. [search storage (30 Oct)](research/2026-10-30-search-storage.md), [when an item needs enriching (30 Oct)](research/2026-10-30-enrichment-cascade.md) |
+| — | [Research](research/) | Experiments and their results, e.g. [search storage (30 Oct)](research/2026-10-30-search-storage.md), [when an item needs enriching (30 Oct)](research/2026-10-30-enrichment-cascade.md), [YouTube round (31 Oct)](research/2026-10-31-youtube-round.md) |
 | — | [Experiments](../experiments/README.md) | Prototype search/enrichment experiments on real data (data itself never in git), the eval harness and the autonomous loop brief |
 | — | [Amendments](amendments.md) | Requested changes that don't fit these docs: the reason, why it's better, and the decision |
 

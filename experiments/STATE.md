@@ -1,5 +1,16 @@
 # State
 
+## Round 3 (`BRIEF-3.md`, run as `RUN-3.md`): YouTube, done
+
+- **YouTube base: A0** (B3 recipe on Takeout titles and channels, OpenAI 3-small 512d). Dev 0.463, test 0.437. Nothing passed the adoption rule. **YouTube test scorings: 1 of 3 used.**
+- **Spend:** Gemini $6.76, OpenAI $0.47. Ledger: `data/yt/ai_runs.jsonl`.
+- **A1, the text pass:** −0.046. It does not transfer from Instagram because titles are already descriptive.
+- **A2, the Gemini video pass:** the gate beats random at equal spend by +0.018 (fails the rule). Its value is reach into untitled saved videos. No correct moment was found.
+- **A3, the intent filters (qi-v2):** +0.05, with about +0.6 on behaviour and time searches. **Next: run filters only on A0**, without guessed era windows.
+- **Literal vs intent:** 71% agreement on relevant-vs-not (κ 0.41).
+- **Reference arm (API text):** no measurable overall cost; it helps moment and name searches. **Delete `data/yt/ref/` by 2026-11-29.**
+- **Write-ups:** `docs/research/2026-10-31-youtube-round.md`, `results/r3-methods.md`, `results/r3-eval.md`, `research/youtube-api-terms.md`. A-004 updated.
+
 ## Round 2 (`BRIEF-2.md`) — done except Q4 (waiting for Derrick's grades)
 
 - **Finalist unchanged: B3.** Labels: round t2 is current. **Test-split scorings: 3 of 3 used** (none left).
