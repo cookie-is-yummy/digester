@@ -190,3 +190,74 @@ def gemini_batch_create(model, requests, est_cost_usd, display_name=""):
 def gemini_batch_get(name):
     """Poll a Batch API job (batches/...). Returns the operation JSON (metadata.state, done, response)."""
     return _get(f"{GEMINI}/{name}", _gk())
+
+
+# ---------------- Gemini: public YouTube video by URL (round 3) ----------------
+def gemini_modality_cost(model, usage, batch=False):
+    """Cost of one response from usageMetadata, priced per input modality (promptTokensDetails):
+    TEXT at input_per_m, VIDEO/IMAGE at media_input_per_m, AUDIO at audio_input_per_m; batch_* prices halve
+    every rate (the Batch API is half price for all modalities). Returns (cost_usd, {modality: tokens}, tin, tout)."""
+    pr = prices()[model]
+    half = 0.5 if batch else 1.0
+    det = {d.get("modality", "TEXT"): d.get("tokenCount", 0) for d in usage.get("promptTokensDetails") or []}
+    tin = usage.get("promptTokenCount", 0)
+    tout = usage.get("candidatesTokenCount", 0) + usage.get("thoughtsTokenCount", 0)
+    if not det:
+        det = {"TEXT": tin}
+    rate = {"TEXT": pr["input_per_m"], "VIDEO": pr.get("media_input_per_m", pr["input_per_m"]),
+            "IMAGE": pr.get("media_input_per_m", pr["input_per_m"]),
+            "AUDIO": pr.get("audio_input_per_m", pr["input_per_m"])}
+    cost = sum(n / 1e6 * rate.get(m, pr["input_per_m"]) for m, n in det.items()) + tout / 1e6 * pr["output_per_m"]
+    return cost * half, det, tin, tout
+
+
+def youtube_video_request(system, prompt, video_url, start_s=None, end_s=None, fps=None, media_resolution=None,
+                          max_tokens=1500, response_schema=None, thinking_budget=0):
+    """A GenerateContentRequest body for one public YouTube URL (Gemini's documented YouTube-URL input; no
+    download, nothing stored but the model's text output). Clipping/fps go in videoMetadata."""
+    vm = {}
+    if start_s is not None:
+        vm["start_offset"] = f"{int(start_s)}s"
+    if end_s is not None:
+        vm["end_offset"] = f"{int(end_s)}s"
+    if fps is not None:
+        vm["fps"] = fps
+    part = {"file_data": {"file_uri": video_url}}
+    if vm:
+        part["video_metadata"] = vm
+    gc = {"responseMimeType": "application/json", "maxOutputTokens": max_tokens}
+    if thinking_budget is not None:
+        gc["thinkingConfig"] = {"thinkingBudget": thinking_budget}
+    if response_schema:
+        gc["responseJsonSchema"] = response_schema
+    if media_resolution:
+        gc["mediaResolution"] = media_resolution
+    return {"system_instruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [part, {"text": prompt}]}],
+            "generationConfig": gc}
+
+
+def gemini_youtube_json(model, request, est_media_tokens, purpose="", prompt_version="", code=""):
+    """One synchronous generateContent call on a request from youtube_video_request(). Guarded by a worst-case
+    estimate (est_media_tokens at the audio rate + max output); logged per call with the modality breakdown.
+    Returns (parsed_json_or_None, usage, raw_text)."""
+    max_out = request["generationConfig"].get("maxOutputTokens", 1500)
+    p = prices().get(model)
+    if p is None:
+        raise RuntimeError(f"no verified price for {model}; add it to lib/ai_prices.json first")
+    est = est_media_tokens / 1e6 * p.get("audio_input_per_m", p["input_per_m"]) + max_out / 1e6 * p["output_per_m"]
+    if spent("gemini") + est > budget("gemini"):
+        raise RuntimeError(f"budget stop (gemini): spent ${spent('gemini'):.3f} + est ${est:.3f} > ${budget('gemini'):.2f}")
+    t = time.time()
+    r = _post(f"{GEMINI}/models/{model}:generateContent", request, _gk())
+    u = r.get("usageMetadata", {})
+    cost, det, tin, tout = gemini_modality_cost(model, u)
+    _log({"provider": "gemini", "model": model, "purpose": purpose, "prompt_version": prompt_version, "n": 1,
+          "in_tokens": tin, "out_tokens": tout, "in_by_modality": det, "cost_usd": cost,
+          "seconds": round(time.time() - t, 2)})
+    text = ""
+    try:
+        text = "".join(pp.get("text", "") for pp in r["candidates"][0]["content"]["parts"])
+        return json.loads(text), u, text
+    except Exception:  # noqa: BLE001 - blocked / truncated / no candidate
+        return None, u, text or json.dumps(r.get("candidates", [{}])[0].get("finishReason", "no candidate"))
