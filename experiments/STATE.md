@@ -2,6 +2,13 @@
 
 ## Round 4 (`BRIEF-4.md`): one library, two platforms, as a loop
 
+**Loop stopped (3 Nov):** E1 was withdrawn after the held-out milestone. Counting 4.1–4.3 as three rounds without a confirmed win, the stop rule fired.
+- **Finalist stays C0.**
+- **Confirmed:** the te pass helps Instagram-side searches; coverage-fair fusion is needed.
+- **Spend:** $3.88 of $15.
+- **Write-up:** `docs/research/2026-11-03-combined-loop.md`.
+- **Next free experiment:** te lists for Instagram plus untitled YouTube only.
+
 ### Milestone (held-out), 3 Nov 2026 (`results/r4-milestone.md`)
 
 - **Verdict: NOT CONFIRMED.** E1's dev gain over C0 (+0.056) does not hold on held-out searches.

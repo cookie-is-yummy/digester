@@ -148,6 +148,18 @@ Measured with a fresh, blind evaluator per round on 16 dev searches over one 21k
 - **Gap flags pick facets, not items.** The per-item `unknown` facets predict a search miss only weakly (AUC 0.60, below a caption-richness score's 0.67), and no item-level gate selected misses better than chance. Use the flags to choose *which* facet a selected item's next media rung should fill, with the rule "unknown OR empty". Proposed media gate (no spend yet): one image for everything (~$0.30 / 1k items, Batch); audio for music/dance/trend and how-to/talking-head reels with an audio or said gap (~25% of items); full video for reels with weight ≥ 0.8 (~15%). Details: `experiments/results/r2-q1-gap-flags.md`.
 - **Not adopted in round 2:** a library profile in the rewrite prompt (+0.006), a "look first" rewrite (+0.024 on dev, −0.038 on the held-out test, +0.007 over all 22), faster or shorter rewrite models (−0.011 to +0.010 at 3–5× the cost), and routing lookups past the rewrite (fires on 2 of 13 searches).
 
+**Round 3–4 update (2026-11-03; `docs/research/2026-10-31-youtube-round.md`, `docs/research/2026-11-03-combined-loop.md`)**
+- **The text pass is a per-platform decision, not a universal one.**
+  - It helps Instagram: +0.059 in round 1; +0.051 on Derrick's fresh held-out searches in round 4.
+  - It does not help YouTube, whose Takeout titles are already descriptive: −0.046 in round 3; −0.02 on held-out in round 4.
+  - Item 1 should read "every **Instagram** item", plus YouTube items with no title. It should not cover all YouTube items.
+- **Item 2 needs coverage-fair fusion.** Adding the text pass as extra RRF lists rewards items just for being in more lists. In one index with both platforms, that let enriched Instagram items take about half of YouTube searches' top 10.
+  - **Coverage-fair fusion:** an item outside a list gets its own-list score in that list's place. It removes most of the crowding (from 53% to 24% of YouTube's top 10) and was +0.059 over plain fusion on dev.
+  - Some crowding remains, so YouTube searches still lose a little on held-out.
+- **"Enrich only where the text is thin" needs care in how it's built.**
+  - Separate lists for thin items only gave those items two full votes and failed (−0.18).
+  - Routing under coverage-fair fusion worked on dev (+0.050 with te on about 60% of items) but was not confirmed on held-out.
+
 **Agent's assessment**
 Agree. It is the only change in 24 experiments that clearly cleared the bar, it is cheap and fully batchable, and it fits the derived-data rules (rebuildable, versioned by prompt and model). Recommend accepting 1, 2 and 4 now, with collection names kept per user; accept 3 (HyDE) as an optional extra, since it is free but was not confirmed on the test split; and revisiting when media arrives (the same separate-field pattern should carry a media description pass).
 
