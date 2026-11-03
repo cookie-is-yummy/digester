@@ -30,7 +30,12 @@ Set `DIGESTER_DATA=$PWD/data/all`. Built by `experiments/combined/build_root.py`
 - **`evals/split.json`:**
   - `dev` (44): all 22 Instagram searches (their test split is used up) plus YouTube dev.
   - `yt_holdout` (11): YouTube test, **2 scorings left**.
-  - `test`: **Derrick's fresh searches**, written before any round-4 result. Scored at most 3 times, by an evaluator only.
+  - `test`: **Derrick's 13 fresh searches** (`f01`–`f13`), written before any round-4 result. Scored at most 3 times, by an evaluator only.
+    - **Labels:** rule-found candidates, vetted by Derrick on 3 Nov. His notes are folded into `intent`.
+    - **Large searches:** for `f04`, `f05` and `f06` he vetted only a sample. The rest are listed under `unvetted_candidates`; treat them as **unjudged**, not relevant, and pool-judge them.
+    - **`judged_nonrelevant`:** items Derrick marked wrong.
+    - **`f01`:** has no confirmed exact answer, so it scores partial credit only.
+    - **No behaviour or time searches,** so the intent step can't be confirmed on test, only on dev and `yt_holdout`.
 - **Reusable outputs, free:**
   - `yt_enrich/`: YouTube te-v1c text pass over Takeout text, plus the reference API pass;
   - `yt_video/`: Gemini video pass, 1,168 videos, gated + random arms;
