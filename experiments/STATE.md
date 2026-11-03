@@ -2,6 +2,49 @@
 
 ## Round 4 (`BRIEF-4.md`): one library, two platforms, as a loop
 
+### Round 4.2 (evaluated 3 Nov 2026; `results/r4.2-eval.md`)
+
+- **Finalist: C0 (unchanged)**, 0.483 [0.401, 0.565] on dev under label round c4-r2 (ig 0.506, yt 0.459). Nothing passed the adoption rule. **Best rival: D1** (two near misses, D1 and D4).
+- **Labels:** c4-r2 = c4-r1 + 81 blind evaluator judgments (3/17/61) of every unjudged dev top-10 item from the 4.2 runs. Backup `evalset.pre_r4.2.jsonl`. `yt_holdout`: 2 scorings left. `test`: 3 left. Both untouched.
+- **D1, coverage-fair fusion of the te lists:** 0.520.
+  - vs C0: +0.037 [−0.002, +0.078], 29/8/7. The CI lower bound stays at −0.002 to −0.001 over 20 bootstrap seeds. Clause 2 fails on the te-pass cost.
+  - ig +0.073 [+0.026, +0.131], 17/1/4; yt +0.001.
+  - vs C1: +0.059 [+0.012, +0.110]; yt +0.107. The crowding is fixed.
+  - The YouTube topic/task/structure te loss from round 3 remains (−0.05 to −0.09).
+- **D4 = D1 + guarded intent:** 0.528.
+  - vs C0: +0.045 [−0.001, +0.095], 29/9/6. A near miss for the same reasons.
+  - vs D1: +0.008.
+  - A guard flaw costs about 0.01. Dropping one flag of an ORed multi-flag `require` *narrows* the pool, which cost one Instagram search −0.45.
+- **D3 (guarded qi-v3 on C0):** +0.004.
+  - yt +0.025, 3/0/19. The guards removed every C3 loss.
+  - ig −0.017, from the same flaw.
+  - The watch-rule deviation (≥ 50% coverage instead of "any watch event") has no measurable effect.
+- **D2 (te merged into thin items' own view):** +0.007 overall.
+  - yt +0.025; yt-only projection +0.042 [+0.008, +0.087].
+  - ig −0.010; ig-only projection −0.050. It gives up te on sufficient Instagram captions.
+- **D1p (te ranks rescaled):** significantly worse than D1, −0.026 [−0.044, −0.008]. It overcorrects.
+- **Spend, round 4 (ledger `data/all/ai_runs.jsonl`):** **$3.867** of $15.
+  - Gemini $3.776 ($1.72 left of its cap); OpenAI $0.092 ($9.41 left).
+  - Round 4.2: $0.016 building, $0 judging.
+- **Stop rule: rounds adopting nothing in a row = 2.** One more round without an adoption ends the loop; then comes the Finish step: finalist, 4.1 baseline and best rival on `test` and `yt_holdout`.
+
+**Agenda for round 4.3** (ranked by expected value per dollar; all $0 in API calls):
+
+1. **D4′ = D1 + D3 with guards that only widen.**
+   - If any flag of a multi-flag `require` fails its word check, drop the whole `require`.
+   - Extend the share lexicon to sending (send / sent / DM'd).
+   - Expected vs C0: +0.05 to +0.06; evaluator counterfactual +0.056 [+0.010, +0.105].
+   - It is the arm most likely to clear clause 1. The fix was motivated by one dev search, so the finish splits are the real check.
+2. **D1 with te eligibility limited to items whose own text is not a descriptive title** (caption-type or insufficient).
+   - Set from an adapter field in `platform_data` (AGENTS rule 4).
+   - It targets D1's YouTube topic/task/structure loss, while D2 shows te helps thin YouTube items.
+   - Expected vs D1: yt +0.02 to +0.05, ig 0.
+3. **Per-platform BM25 statistics** (idf and length normalisation per item group).
+   - It targets C0's −0.025 Instagram ordering loss (ig-only projection).
+   - Expected +0.00 to +0.02 on ig. Low expected value.
+
+Not recommended: Gemini spend (YouTube te parity ≈ $10 against $1.72 left) or an LLM judge. Keep the OpenAI budget for the finish.
+
 ### Round 4.1 (evaluated 3 Nov 2026; `results/r4.1-eval.md`)
 
 - **Finalist: C0**, the combined platform-blind baseline (A0/B3-without-enrichment recipe over all 136,908 items). It scores 0.483 [0.401, 0.565] on dev under label round c4-r1: ig 0.506, yt 0.459. Nothing passed the adoption rule.
