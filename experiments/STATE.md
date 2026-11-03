@@ -2,6 +2,42 @@
 
 ## Round 4 (`BRIEF-4.md`): one library, two platforms, as a loop
 
+### Round 4.3 (evaluated 3 Nov 2026; `results/r4.3-eval.md`)
+
+- **Finalist: E1 (new; adopted under clause 1)**, D1's coverage-fair te fusion + qi-v3 intent with guards that only widen. Dev 0.538 [0.460, 0.618] under label round c4-r3 (ig 0.579, yt 0.497).
+  - vs C0: **+0.056 [+0.010, +0.105], 30/8/6**; repeats +0.065 / +0.038 / +0.063.
+  - ig +0.073 [+0.026, +0.131]; yt +0.038 [−0.036, +0.119].
+  - **Robustness:** the lower bound is +0.009 to +0.012 over 20 seeds (20 of 20 above 0). It still passes without its best search. It fails once the 2 best are removed (one YouTube intent win, one Instagram te win).
+  - **Caveat:** the decisive guard fix was designed from one dev search (the only search E1 changes vs D4 on dev). The held-out splits must confirm it.
+- **Best rival: E3** (E2 + E1's guards): 0.532.
+  - vs C0: +0.050 [+0.012, +0.095], 25/9/10; lower bound +0.011 to +0.012 over 20 seeds.
+  - vs E1: −0.006 [−0.017, +0.009]. It needs te on only about 60% of items, but also needs a `platform_data.text_kind` contract field.
+- **E2** (te only for non-descriptive items) passes clause 1 only marginally: +0.034 [+0.001, +0.071]. It is fragile, failing without its best search.
+  - vs D1: −0.003, yt +0.000. Withholding te from descriptive titles frees top-10 slots that thin and Instagram items fill at lower precision. The round-3 YouTube te loss is slot competition, not te on titles in the top 10.
+- **E4** (per-group BM25) fails: +0.050 [−0.001, +0.105], 22/18/4.
+  - vs E3: ig +0.021, yt −0.021. Raw-score merging moves Instagram items into every search; within-platform ordering is unchanged.
+- **Clause 2** applies to no arm: all need the te pass (about $0.18 per 1k items).
+- **Labels:** c4-r3 = c4-r2 + 21 blind evaluator judgments (3/4/14), backup `evalset.pre_r4.3.jsonl`. Unjudged@10 is 0.00 for all runs. `yt_holdout`: 2 scorings left. `test`: 3 left. Both untouched.
+- **Spend, round 4:** **$3.867** of $15, unchanged.
+  - Gemini $3.776 ($1.72 left); OpenAI $0.092 ($9.41 left).
+  - Round 4.3: $0 building, $0 judging.
+- **Stop rule: rounds adopting nothing in a row = 0** (it was 2 before this round; E1 was adopted). The spend stop is far off. The loop may continue.
+- **Recommended candidates for the final held-out scoring** (`yt_holdout` once, Derrick's `test` once):
+  1. **E1**, the finalist;
+  2. **C0**, the round-4.1 baseline (`c0x` = `c0`);
+  3. **E3**, the best rival.
+  - The runs cover dev + `yt_holdout` only. **No `test` runs exist yet.** E1, E3 and C0 must be run on the 13 `test` searches first (fresh qr-v1 + qi-v3, ≈ $0.05 OpenAI), arranged by the orchestrator.
+
+**Agenda for round 4.4** (if the loop continues; $0 unless noted):
+
+1. **Get `test` runs for E1, E3 and C0** (≈ $0.05), so the Finish step can happen at any time.
+2. **Target the YouTube te loss as slot competition** (yt topic/task/structure −0.04 to −0.09 vs C0).
+   - Let te lists only rerank within the own lists' top N, or cap their RRF weight when the own lists agree.
+   - Expected yt +0.01 to +0.03, ig 0.
+3. **Per-group BM25 with rank- or quantile-based merging** instead of raw scores (E4 fixed). Low expected value, because E4's within-platform projections did not improve.
+
+Not recommended: more intent-guard tuning on dev (it has now been tuned on two dev searches), Gemini spend, or an LLM judge.
+
 ### Round 4.2 (evaluated 3 Nov 2026; `results/r4.2-eval.md`)
 
 - **Finalist: C0 (unchanged)**, 0.483 [0.401, 0.565] on dev under label round c4-r2 (ig 0.506, yt 0.459). Nothing passed the adoption rule. **Best rival: D1** (two near misses, D1 and D4).
