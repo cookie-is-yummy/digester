@@ -23,10 +23,10 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
 sys.path.insert(0, HERE)
-import ai  # noqa: E402
-import enrich_batch as EB  # noqa: E402
-import enrich_items as E  # noqa: E402
-from corpus import DATA, code_of  # noqa: E402
+import ai
+import enrich_batch as EB
+import enrich_items as E
+from corpus import DATA, code_of
 
 MODEL = "gemini-3.1-flash-lite"
 OUT = os.path.join(DATA, "enrich", f"te-v1c_ig_{MODEL}.jsonl")
@@ -45,6 +45,7 @@ def main():
     ap.add_argument("--est-out", type=int, default=160, help="output tokens per item for the submit estimate")
     ap.add_argument("--poll", type=int, default=30)
     ap.add_argument("--count-only", action="store_true")
+    ap.add_argument("--retry-failed", action="store_true", help="sync retry of items with no valid row")
     a = ap.parse_args()
     pr = ai.prices()[MODEL]
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
@@ -67,6 +68,35 @@ def main():
           f"done {len(done)}, pending {len(pending)}, to submit {len(todo)}; gemini spent ${ai.spent('gemini'):.4f}",
           flush=True)
     if a.count_only:
+        return
+    if a.retry_failed:  # one synchronous call per item whose rows are all invalid (same request body, standard price)
+        rows = [json.loads(l) for l in open(OUT)]
+        good = {r["code"] for r in rows if r["ok"]}
+        bad = sorted({r["code"] for r in rows} - good)
+        n_ok, t0 = 0, time.time()
+        with open(OUT, "a") as fo:
+            for c in bad:
+                req = EB.request_for(by_code[c])
+                try:
+                    o, u = ai.gemini_json(MODEL, req["system_instruction"]["parts"][0]["text"],
+                                          [req["contents"][0]["parts"][0]["text"]], max_tokens=EB.MAX_OUT,
+                                          purpose="ig_enrich_te-v1c_retry", prompt_version=EB.PV,
+                                          generation_config={k: v for k, v in req["generationConfig"].items()
+                                                             if k not in ("responseMimeType", "maxOutputTokens")})
+                    f, ok, dropped = E.validate(o)
+                    err = None if ok else "invalid"
+                except Exception as e:  # noqa: BLE001
+                    f, ok, dropped, err, u = {}, False, 0, f"retry: {type(e).__name__}", {}
+                tin = u.get("promptTokenCount", 0)
+                tout = u.get("candidatesTokenCount", 0) + u.get("thoughtsTokenCount", 0)
+                fo.write(json.dumps({"code": c, "ok": ok, **f, "dropped": dropped, "err": err, "in_tokens": tin,
+                                     "out_tokens": tout, "cost_usd": tin / 1e6 * pr["input_per_m"] +
+                                     tout / 1e6 * pr["output_per_m"], "prompt_version": EB.PV, "model": MODEL,
+                                     "retry": True,
+                                     "input_hash": hashlib.sha256(E.block(by_code[c]).encode()).hexdigest()[:16]})
+                         + "\n")
+                n_ok += ok
+        print(f"retried {len(bad)} items, ok {n_ok}, wall {time.time() - t0:.1f} s", flush=True)
         return
 
     for i in range(0, len(todo), a.chunk):

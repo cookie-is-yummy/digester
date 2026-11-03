@@ -27,13 +27,13 @@ from sklearn.preprocessing import normalize
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
 sys.path.insert(0, HERE)
-import yt_lib as Y  # noqa: E402
-from common import GENERIC, STOP, info_class, letters, strip_tags  # noqa: E402
-from corpus import DATA, fix_ws, rrf  # noqa: E402
+import yt_lib as Y
+from common import GENERIC, STOP, info_class, letters, strip_tags
+from corpus import DATA, fix_ws, rrf
 
 EMB = os.path.join(DATA, "corpus", "emb")
 HYDE_ALPHA = 0.7
-TE_IG = f"te-v1c_ig_gemini-3.1-flash-lite"
+TE_IG = "te-v1c_ig_gemini-3.1-flash-lite"
 TE_YT = "te-v1c_allowed_gemini-3.1-flash-lite"
 WATCH_LATER = "Watch later"
 

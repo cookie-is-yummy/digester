@@ -27,8 +27,8 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "lib"))
 sys.path.insert(0, HERE)
-import c4_lib as L  # noqa: E402
-from corpus import DATA, load_queries, write_run  # noqa: E402
+import c4_lib as L
+from corpus import DATA, load_queries, write_run
 
 OUT = os.path.join(DATA, "runs", "r4.1")
 PLATFORM = {"c0": "all", "c1": "all", "c2": "all", "c3": "all", "c0ig": "instagram", "c0yt": "youtube"}
@@ -73,7 +73,10 @@ def run_config(S, cfg, reps, intent_mod=None):
             t = time.time()
             fused = S.search(q, None if q["examples"] else P[q["id"]])
             if cfg == "c3" and not q["examples"]:
-                fused, info = intent_mod.apply(S, fused, PI[q["id"]]["intent"])
+                raw_i = PI[q["id"]]["intent"]
+                fused, info = intent_mod.apply(S, fused, intent_mod.guard_platform(raw_i, q["query"]))
+                info["platform_dropped_by_guard"] = bool(raw_i.get("platform")) and \
+                    not intent_mod.guard_platform(raw_i, q["query"]).get("platform")
                 intents[q["id"]] = info
             out[q["id"]] = fused[:1000]
             dt = time.time() - t
@@ -106,7 +109,9 @@ def run_config(S, cfg, reps, intent_mod=None):
                          "intent_cost_per_1k_searches_usd": round(1000 * float(np.mean([v["cost_usd"] for v in pi])), 4),
                          "intent_p50_s": round(float(np.median([v["seconds"] for v in pi])), 3),
                          "intent_per_search": intents,
-                         "searches_with_active_intent": sum(1 for v in intents.values() if v["intent"] != "none")})
+                         "searches_with_active_intent": sum(1 for v in intents.values() if v["intent"] != "none"),
+                         "platform_filters_dropped_by_guard": sum(v["platform_dropped_by_guard"]
+                                                                  for v in intents.values())})
         name = f"{cfg}_r{rep}"
         path = write_run(os.path.join(OUT, f"{name}.json"), f"c4:{cfg}+{meta['rewrite']}+hyde", L.CodeIds("oai512"),
                          out, meta)
@@ -139,7 +144,7 @@ def main():
             S.E = [L.EnrichIdx(L.te_sources(), set(S.pos), active)]
         S.build_s = base_build + (time.time() - t1)
         if cfg == "c3" and intent_mod is None:
-            import c4_intent as intent_mod  # noqa: F811
+            import c4_intent as intent_mod
             intent_mod.prepare(S)
         run_config(S, cfg, reps, intent_mod)
     print(f"total wall {time.time() - t0:.1f} s", flush=True)
