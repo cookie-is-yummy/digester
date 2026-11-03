@@ -532,5 +532,6 @@ def ledger():
     return jl(p) if os.path.exists(p) else []
 
 
-def load_parses(prefix, rep):
-    return json.load(open(os.path.join(DATA, "runs", "rewrites", f"{prefix}_gpt-5-nano_r{rep}.json")))
+def load_parses(prefix, rep, d=None):
+    d = d or os.path.join(DATA, "runs", "rewrites")
+    return json.load(open(os.path.join(d, f"{prefix}_gpt-5-nano_r{rep}.json")))

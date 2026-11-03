@@ -198,9 +198,11 @@ def main():
     ap.add_argument("--model", default="gpt-5-nano")
     ap.add_argument("--repeat", type=int, required=True)
     ap.add_argument("--outdir", default=os.path.join(DATA, "runs", "rewrites"))
+    ap.add_argument("--queries", default=None, help="alternative query file (same format as evals/queries.jsonl)")
     a = ap.parse_args()
 
-    queries = [q for q in load_queries() if not q["examples"]]
+    allq = load_queries() if a.queries is None else [json.loads(l) for l in open(a.queries) if l.strip()]
+    queries = [q for q in allq if not q["examples"]]
     t0 = time.time()
     parses, per_q = {}, {}
     for q in queries:

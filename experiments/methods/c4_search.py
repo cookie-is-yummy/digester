@@ -57,16 +57,23 @@ NONDESC = {"e2", "e3", "e4"}        # te rows rankable only for non-descriptive 
 GROUP_BM25 = {"e4"}
 
 
+# Alternative query file (e.g. the frozen test searches): set from the CLI; defaults keep the dev + yt_holdout runs.
+ALT = {"queries": None, "rewrites": None, "outdir": None, "suffix": "", "splits": None}
+
+
 def round_of(cfg):
     return "4.3" if cfg.startswith("e") else "4.2" if cfg.startswith("d") or cfg == "c0x" else "4.1"
 
 
 def out_dir(cfg):
-    return os.path.join(DATA, "runs", "r" + round_of(cfg))
+    return ALT["outdir"] or os.path.join(DATA, "runs", "r" + round_of(cfg))
 
 
 def queries_for(cfg):
-    qs = load_queries("dev") + load_queries("yt_holdout")
+    if ALT["queries"]:
+        qs = [json.loads(line) for line in open(ALT["queries"]) if line.strip()]
+    else:
+        qs = load_queries("dev") + load_queries("yt_holdout")
     if cfg == "c0ig":
         qs = [q for q in qs if q["id"].startswith("ig_")]
     elif cfg == "c0yt":
@@ -93,9 +100,9 @@ def run_config(S, cfg, reps, intent_mod=None):
         costs[r.get("purpose", "")] = costs.get(r.get("purpose", ""), 0) + r["cost_usd"]
     written = []
     for rep in reps:
-        P = L.load_parses("qr-v1", rep)
+        P = L.load_parses("qr-v1", rep, ALT["rewrites"])
         RW = P["_meta"]
-        PI = L.load_parses("qi-v3", rep) if cfg in INTENT else None
+        PI = L.load_parses("qi-v3", rep, ALT["rewrites"]) if cfg in INTENT else None
         out, lat, lat_typed, intents = {}, [], [], {}
         S.QV.get([s for q in qs if not q["examples"] for s in [q["query"]] + P[q["id"]]["phrases"] +
                   (P[q["id"]].get("hypothetical_captions") or [])])  # cache first: latency = local search only
@@ -125,7 +132,8 @@ def run_config(S, cfg, reps, intent_mod=None):
         pq = [RW["per_query"][k] for k in typed]
         meta = {"config": cfg, "round": round_of(cfg), "platform_subset": S.platform,
                 "rewrite": f"{RW['prompt_version']}_{RW['model']}_r{rep}", "hyde_alpha": L.HYDE_ALPHA,
-                "embedding": "text-embedding-3-small@512", "splits": ["dev", "yt_holdout"], "n_searches": len(qs),
+                "embedding": "text-embedding-3-small@512", "splits": ALT["splits"] or ["dev", "yt_holdout"],
+                "n_searches": len(qs),
                 **S.counts(), "index_build_s": round(S.build_s, 1),
                 "query_p50_s": round(float(np.median(lat)), 3), "query_p95_s": round(float(np.percentile(lat, 95)), 3),
                 "typed_query_p50_s": round(float(np.median(lat_typed)), 3),
@@ -161,12 +169,17 @@ def run_config(S, cfg, reps, intent_mod=None):
             if cfg in GUARDED:
                 meta["intent_guard"] = ("c4_intent.guard_v43 (LOG.md Y4.3-E1); unknown_watch=True, widen_only=True"
                                         if cfg in WIDEN else "c4_intent.guard_v42 (LOG.md Y4.2-D3); unknown_watch=True")
-                meta["intent_note"] = "cached round-4.1 qi-v3 outputs reused: no new intent calls this round"
+                meta["intent_note"] = ("cached round-4.1 qi-v3 outputs reused: no new intent calls this round"
+                                       if not ALT["rewrites"] else
+                                       f"qi-v3 outputs from {ALT['rewrites']} (same prompt, model and settings)")
                 meta["searches_with_any_field_dropped"] = sum(1 for v in intents.values() if v["dropped_by_guard"])
                 meta["searches_with_raw_intent"] = sum(1 for v in intents.values() if v["raw_intent"] != "none")
                 meta["watch_data_platforms"] = S.watch_platforms
                 meta["watch_coverage_by_platform"] = S.watch_coverage
-        name = f"{cfg}_r{rep}"
+        name = f"{cfg}{ALT['suffix']}_r{rep}"
+        if ALT["queries"]:
+            meta["queries_file"] = os.path.basename(ALT["queries"])
+            meta["rewrites_dir"] = ALT["rewrites"]
         if cfg in NONDESC:
             meta["descriptive_counts"] = S.desc_counts
         path = write_run(os.path.join(out_dir(cfg), f"{name}.json"), f"c4:{cfg}+{meta['rewrite']}+hyde", L.CodeIds("oai512"),
@@ -199,7 +212,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--configs", required=True)
     ap.add_argument("--reps", default="1,2,3")
+    ap.add_argument("--queries", default=None, help="alternative query file (same format as evals/queries.jsonl)")
+    ap.add_argument("--rewrites-dir", default=None, help="qr-v1 / qi-v3 cache dir (default runs/rewrites)")
+    ap.add_argument("--outdir", default=None, help="run file dir (default runs/r<round>)")
+    ap.add_argument("--suffix", default="", help="run name suffix, e.g. _test -> <cfg>_test_r<k>.json")
+    ap.add_argument("--splits", default=None, help="comma list recorded in meta.splits")
     a = ap.parse_args()
+    ALT.update({"queries": a.queries, "rewrites": a.rewrites_dir, "outdir": a.outdir, "suffix": a.suffix,
+                "splits": a.splits.split(",") if a.splits else None})
     reps = [int(x) for x in a.reps.split(",")]
     cfgs = a.configs.split(",")
     plats = {PLATFORM[c] for c in cfgs}

@@ -286,8 +286,9 @@ def guard_v43(intent, query, kind):
     return i, dropped
 
 
-def run_rewrite(repeat):
-    queries = [q for q in load_queries() if not q["examples"]]
+def run_rewrite(repeat, queries_file=None, outdir=None):
+    allq = load_queries() if queries_file is None else [json.loads(l) for l in open(queries_file) if l.strip()]
+    queries = [q for q in allq if not q["examples"]]
     parses, per_q = {}, {}
     t0 = time.time()
     for q in queries:
@@ -317,7 +318,7 @@ def run_rewrite(repeat):
             "rewrite_p50_s": round(float(np.median(secs)), 3), "rewrite_p95_s": round(float(np.percentile(secs, 95)), 3),
             "wall_s": round(wall, 1), "per_query": per_q}
     out = {"_note": f"{PROMPT_VERSION} intent rewrite r{repeat} (c4_intent.py)", "_meta": meta, **parses}
-    d = os.path.join(DATA, "runs", "rewrites")
+    d = outdir or os.path.join(DATA, "runs", "rewrites")
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, f"{PROMPT_VERSION}_{MODEL}_r{repeat}.json")
     json.dump(out, open(path, "w"), ensure_ascii=False, indent=1)
@@ -489,8 +490,10 @@ def apply(S, fused, i, depth=1000, unknown_watch=False, widen_only=False):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repeat", type=int, required=True)
+    ap.add_argument("--queries", default=None, help="alternative query file (same format as evals/queries.jsonl)")
+    ap.add_argument("--outdir", default=None, help="default: $DIGESTER_DATA/runs/rewrites")
     a = ap.parse_args()
-    run_rewrite(a.repeat)
+    run_rewrite(a.repeat, a.queries, a.outdir)
 
 
 if __name__ == "__main__":
