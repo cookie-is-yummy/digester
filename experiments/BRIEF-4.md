@@ -36,7 +36,10 @@ Set `DIGESTER_DATA=$PWD/data/all`. Built by `experiments/combined/build_root.py`
   - `yt_video/`: Gemini video pass, 1,168 videos, gated + random arms;
   - `yt_ref/`: research-only API text.
   - Instagram's te-v1c pass must be redone (~$3.7 Gemini Batch, `methods/enrich_batch.py`).
-- **Budget:** $15 for the whole loop. Caps in `lib/ai.py`: Gemini $10, OpenAI $5. The ledger is `data/all/ai_runs.jsonl`.
+- **Budget:** $15 for the whole loop. Caps in `lib/ai.py`: **Gemini $5.50, OpenAI $9.50**. The ledger is `data/all/ai_runs.jsonl`.
+  - The Gemini account has only about $6.5 of credit left (≈$13.5 spent in rounds 1–3 at list prices), so Gemini is the scarce provider.
+  - Prefer OpenAI for rewrites and judging.
+  - Spend Gemini on the Instagram te-v1c rebuild (~$3.7) and little else.
 
 ## Labels across platforms
 
