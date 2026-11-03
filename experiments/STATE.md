@@ -1,5 +1,35 @@
 # State
 
+## Held-out test2 (3 Nov 2026; `results/r5-test2.md`)
+
+- **Scoring 1 of 3 on `test2`** (Derrick's 10 fresh searches: 4 `yt`, 6 `both`). Frozen C0, E1, F0, F2 (`runs/final2/*_test2_r*`), scored once after pooling and blind judging.
+- **Scores:** C0 0.448, **E1 0.479**, F0 0.453, F2 0.457.
+- **E1 vs C0: +0.030 [−0.015, +0.076], 6/3/1.**
+  - both +0.054 [+0.008, +0.107], 5/0; yt −0.006, 1/3.
+  - Intent was active on 1 of 30 cells, so this is te fusion.
+  - Fragile: dropping the best 2 searches leaves +0.002, and the lower bound is < 0 on 20/20 seeds.
+  - **Verdict: CONFIRMED (narrow), te-fusion part only.** The YouTube side and the intent step stay unconfirmed. It does not meet adoption clause 1.
+- **F0 vs C0: +0.005 [−0.034, +0.051], 4/4/2.**
+  - both +0.040, 4/0; **yt −0.049 [−0.095, −0.016], 0/4.**
+  - Instagram crowding: 2.17 items per yt top 10 at 4% relevant (C0: 0.50).
+  - **Verdict: NOT CONFIRMED.** Same pattern as dev, with a larger yt loss.
+- **F2 vs C0: +0.008 [0.000, +0.022], 2/0/8.** Creator lookup fired on g04, g05 and g08 (8 of 30 cells). On the other 22 cells F2 equals C0.
+  - Creator searches: +0.027, 2/0.
+  - The two wins name the creator. First gold-2 rank, C0 → F2: g04 3/1/3 → 3/1/1; g08 3/7/3 → 3/6/4.
+  - On the one *described*-creator search (g05) every method scores 0, and F2 pushed the target creator's first item from rank 57–64 to 74–90.
+  - **Verdict: NOT CONFIRMED.** p95 is 5.4–7.6 s.
+- **Labels:** c4-t2 = c4-r5 + 159 blind evaluator test2 judgments (37/44/78), 59 of them surfaced `unvetted_candidates`.
+  - Derrick's gold was untouched. Backup `evalset.pre_test2.jsonl`.
+  - Seed unjudged@10 0.78–0.79 → 0.00.
+  - Seed-only Δ: E1 +0.004, F0 +0.009, F2 +0.004. Pooling moved E1 most.
+  - 32–36% of relevant top-10 items carry Derrick's grades.
+- **Remaining scorings: `test2` 2 left; `test` 2 left; `yt_holdout` 1 left.**
+- **Spend:** $0 judging. OpenAI $0.194 of $9.50; ledger $3.969.
+- **Finalist line:**
+  - C0 stays the finalist; no adoption.
+  - E1's te fusion is confirmed again for Instagram and mixed-platform searches (test, test2), not for YouTube searches (`yt_holdout`, both `yt` subsets).
+  - Next: fix the YouTube slot competition before a te arm can be adopted. Collect described-creator searches before more work on F2.
+
 ## Round 5 (`BRIEF-5.md`): understand the query in parts (evaluated 3 Nov 2026; `results/r5-eval.md`)
 
 - **Adopted: nothing. Finalist stays C0** (dev 0.482). No arm passes clause 1; clause 2 is closed to all (te pass or extra LLM calls).

@@ -52,7 +52,7 @@ def platforms():
 
 def load_labels(path, split):
     keep = None
-    if split in ("dev", "test", "yt_holdout"):
+    if split in ("dev", "test", "test2", "yt_holdout"):
         keep = set(json.load(open(os.path.join(DATA, "evals", "split.json")))[split])
     L = {}
     for line in open(path):
