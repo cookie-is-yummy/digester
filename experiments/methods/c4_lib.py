@@ -21,6 +21,11 @@ Round 4.2 (LOG.md Y4.2-*):
   fusion="fair_scaled" D1p: as D1, with each te-list term 1/(k + r * N_own / N_te) (te ranks put on corpus scale).
   merge_te=True        D2: items that are insufficient AND have a rankable te row get own view + te text as their
                        BM25 text and a fresh 3-small 512 d vector of that merged text; they are gated in. No te lists.
+
+Round 4.3 (LOG.md Y4.3-*):
+  descriptive(it)      E2: te rows rankable only for items that are NOT descriptive (own text kind 'title', >= 4
+                       content words, not non_english, not a placeholder title); fusion "fair" as D1.
+  use_group_bm25(True) E4: own BM25 list with idf and length normalisation per own-text-kind group.
 """
 import json
 import os
@@ -117,6 +122,59 @@ def insufficient(it):
     if info_class(it) == "non_english":
         return True
     return content_words(it) < MIN_CONTENT_WORDS  # (1) is the 0-word case of (3)
+
+
+# ---------------- round 4.3 E2: descriptive own text (LOG.md Y4.3-E2) ----------------
+def own_text_kind(it):
+    """Adapter-level text kind of the item's own caption field: 'title' (YouTube adapter: Takeout title) or
+    'caption' (Instagram adapter: post caption). In product code the adapter would set platform_data.text_kind."""
+    return "title" if it["platform"] == "youtube" else "caption"
+
+
+PLACEHOLDER_TITLES = {"private video", "deleted video", "video unavailable", "untitled", "untitled video", "youtube"}
+_URL = re.compile(r"^https?://\S+$", re.IGNORECASE)
+
+
+def placeholder_title(it):
+    t = fix_ws(it.get("caption") or "").strip()
+    return bool(_URL.match(t)) or t.lower() in PLACEHOLDER_TITLES
+
+
+def descriptive(it):
+    """A title (adapter-level) that is sufficient (>= 4 content words, not non_english) and not a placeholder."""
+    return own_text_kind(it) == "title" and not insufficient(it) and not placeholder_title(it)
+
+
+class GroupBM25:
+    """E4: one Y.BM25 per item group (own idf, mean length), scores merged into one list by score."""
+
+    def __init__(self, texts, group_of):
+        groups = {}
+        for c, t in texts.items():
+            groups.setdefault(group_of[c], {})[c] = t
+        self.parts = [Y.BM25(g) for _, g in sorted(groups.items())]
+        self.sizes = {k: len(g) for k, g in sorted(groups.items())}
+
+    def rank(self, query, exclude=(), keep=None, depth=1000):
+        keys, sc = [], []
+        for bm in self.parts:
+            s = bm.scores(query)
+            keys.extend(bm.keys)
+            sc.append(s)
+        s = np.concatenate(sc) if sc else np.zeros(0)
+        s[s <= 0] = -np.inf
+        ex = set(exclude)
+        out = []
+        for n in np.argsort(-s, kind="stable"):
+            if not np.isfinite(s[n]):
+                break
+            k = keys[n]
+            if k in ex or (keep is not None and not keep(k)):
+                continue
+            out.append(k)
+            if len(out) >= depth:
+                break
+        return out
 
 
 def insufficient_reason(it):
@@ -283,6 +341,7 @@ class Combined:
             texts.update(self.merged)
         self.text = texts
         self.bm = Y.BM25(texts)
+        self.bm_global, self.bm_group = self.bm, None
         ids, V = load_store(os.path.join(EMB, "oai512"))
         keep = [k for k, i in enumerate(ids) if i in self.id_pos]
         self.V = V[keep]
@@ -307,6 +366,13 @@ class Combined:
                 active = {c for it, c in zip(self.items, self.codes) if insufficient(it)}
             self.E.append(EnrichIdx(te_sources(), set(self.pos), active))
         self.build_s = time.time() - t0
+
+    def use_group_bm25(self, on):
+        """E4: own BM25 with per-group statistics (group = own_text_kind); off = the shared index."""
+        if on and self.bm_group is None:
+            gof = {c: own_text_kind(it) for it, c in zip(self.items, self.codes)}
+            self.bm_group = GroupBM25(self.text, gof)
+        self.bm = self.bm_group if on else self.bm_global
 
     def _swap_merged_vectors(self):
         """D2: replace (or add) the vector of every merged item by its merged-text vector; gate it in."""
@@ -372,6 +438,9 @@ class Combined:
         if self.merge_counts:
             out.update(self.merge_counts)
         out["fusion"] = self.fusion
+        out["own_bm25"] = "per_group" if self.bm is self.bm_group and self.bm_group is not None else "shared"
+        if out["own_bm25"] == "per_group":
+            out["own_bm25_group_sizes"] = self.bm_group.sizes
         return out
 
     def keep_fn(self, filters):

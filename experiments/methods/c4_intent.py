@@ -19,6 +19,10 @@ Round 4.2 D3 (LOG.md Y4.2-D3): guard_v42() keeps a field of the cached qi-v3 int
 carries the literal words for it (time words for windows, behaviour words for behaviour filters, a content-free
 search for topic_free); apply(..., unknown_watch=True) treats `watched` and watch counts as unknown, not false, on
 platforms that have no watch interactions in the corpus.
+
+Round 4.3 E1 (LOG.md Y4.3-E1): guard_v43() + apply(..., widen_only=True): a guard only ever widens the pool. A
+`require` with any unsaid flag is dropped whole; send/sent words say "shared"; an unknown `watched` in an OR set
+passes the item.
 """
 import argparse
 import copy
@@ -240,6 +244,48 @@ def guard_v42(intent, query, kind):
     return i, dropped
 
 
+# ---------------- round 4.3 E1: guards that only widen (fixed in LOG.md Y4.3-E1 before any E1 run) ----------------
+FLAG_RX_V43 = {**FLAG_RX, "shared": re.compile(r"\bshared\b|\b(send|sends|sent|sending)\b", re.IGNORECASE)}
+
+
+def guard_v43(intent, query, kind):
+    """E1: as guard_v42, but (a) a `require` with any unsaid flag is dropped whole (an OR set never narrows) and
+    (b) send / sends / sent / sending count as saying "shared". Returns (intent, dropped)."""
+    i = dict(guard_platform(intent, query))
+    dropped = []
+    if intent.get("platform") and not i.get("platform"):
+        dropped.append("platform")
+    q = query or ""
+    has_time = bool(TIME_RX.search(q))
+    if (i["after"] or i["before"]) and not has_time:
+        i["after"] = i["before"] = None
+        dropped.append("window")
+    said = {f for f, rx in FLAG_RX_V43.items() if rx.search(q)}
+    neg = bool(NEG_RX.search(q))
+    if i["require"] and not set(i["require"]) <= said:
+        dropped.append("require(all):" + "+".join(i["require"]))
+        i["require"] = []
+    exc = [x for x in i["exclude"] if x in said and neg]
+    if exc != i["exclude"]:
+        dropped.append("exclude:" + "+".join(x for x in i["exclude"] if x not in exc))
+    i["exclude"] = exc
+    if "watched" not in said:
+        for k in ("min_watch_count", "max_watch_count"):
+            if i[k] is not None:
+                i[k] = None
+                dropped.append(k)
+        if i["sort"] == "most_watched":
+            i["sort"] = "relevance"
+            dropped.append("sort:most_watched")
+    if i["sort"] in ("newest", "oldest") and not (has_time or ORDER_TIME_RX.search(q)):
+        dropped.append("sort:" + i["sort"])
+        i["sort"] = "relevance"
+    if i["topic_free"] and (set(kind or []) & {"topic", "vibe"} or content_left(q)):
+        i["topic_free"] = False
+        dropped.append("topic_free")
+    return i, dropped
+
+
 def run_rewrite(repeat):
     queries = [q for q in load_queries() if not q["examples"]]
     parses, per_q = {}, {}
@@ -340,11 +386,12 @@ def describe(i):
     return "; ".join(out) or "none"
 
 
-def pool_mask(S, i, unknown_watch=False):
-    """unknown_watch (D3): on platforms without watch data, `watched` and watch counts are unknown, not false."""
+def pool_mask(S, i, unknown_watch=False, widen_only=False):
+    """unknown_watch (D3): on platforms without watch data, `watched` and watch counts are unknown, not false.
+    widen_only (E1): there, an unknown `watched` in an OR set lets the item pass instead of reducing the set."""
     m = np.ones(len(S.items), bool)
     act = False
-    nw = S.nowatch if unknown_watch else np.zeros(len(S.items), bool)
+    nw = S.nowatch if unknown_watch or widen_only else np.zeros(len(S.items), bool)
     if i["platform"]:
         m &= S.plat == i["platform"]
         act = True
@@ -352,6 +399,8 @@ def pool_mask(S, i, unknown_watch=False):
         lo, hi = i["after"] or "0000", i["before"] or "9999"
         want = set(i["require"]) or None
         want_nw = (want - {"watched"}) or None if want else None
+        if widen_only and want and "watched" in want:
+            want_nw = None
         m &= np.array([any(lo <= a < hi and (w is None or f in w) for f, a in xs)
                        for xs, w in ((xs, want_nw if nw[n] else want) for n, xs in enumerate(S.inter))])
         act = True
@@ -360,6 +409,8 @@ def pool_mask(S, i, unknown_watch=False):
         has = np.any([S.flag[x] for x in req], axis=0)
         rest = req - {"watched"}
         has_nw = np.any([S.flag[x] for x in rest], axis=0) if rest else np.ones(len(S.items), bool)
+        if widen_only and "watched" in req:
+            has_nw = np.ones(len(S.items), bool)
         m &= np.where(nw, has_nw, has)
         act = True
     for x in i["exclude"]:
@@ -409,8 +460,8 @@ def behaviour_order(S, m, sort):
 MIN_POOL = 5
 
 
-def apply(S, fused, i, depth=1000, unknown_watch=False):
-    m, act = pool_mask(S, i, unknown_watch)
+def apply(S, fused, i, depth=1000, unknown_watch=False, widen_only=False):
+    m, act = pool_mask(S, i, unknown_watch, widen_only)
     info = {"intent": describe(i), "pool": int(m.sum()) if act else None, "mode": "unchanged"}
     if not act and i["sort"] == "relevance":
         return fused[:depth], info
