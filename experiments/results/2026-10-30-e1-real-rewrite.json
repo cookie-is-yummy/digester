@@ -1,0 +1,481 @@
+{
+ "experiment": "e1-real-rewrite",
+ "date": "2026-10-30",
+ "split": "dev",
+ "n_queries": 16,
+ "labels": {
+  "round": "r2",
+  "judge": "claude-evaluator-r2",
+  "pooled_unjudged_dev_top10": 127,
+  "grades": {
+   "2": 3,
+   "1": 32,
+   "0": 92
+  },
+  "backup": "data/evals/labels/evalset.pre_r2.jsonl",
+  "pooled_from": [
+   "baseline",
+   "e1_rewrite_r1",
+   "e1_rewrite_r2",
+   "e1_rewrite_r3",
+   "e1_norewrite"
+  ]
+ },
+ "runs": {
+  "baseline": {
+   "method": "baseline:hybrid_prf",
+   "ndcg10": 0.578,
+   "ndcg10_ci95": [
+    0.461,
+    0.697
+   ],
+   "p10": 0.706,
+   "mrr": 0.86,
+   "r100": 0.493,
+   "success5": 0.938,
+   "unjudged10": 0.0,
+   "ndcg10_by_kind": {
+    "audio": 0.0,
+    "more_like_this": 0.645,
+    "name": 0.557,
+    "people": 0.697,
+    "place": 0.842,
+    "said_shown": 0.717,
+    "topic": 0.505,
+    "vibe": 0.865
+   },
+   "meta": {
+    "wall_s": 23.5,
+    "query_p50_s": 0.103,
+    "cost_usd": 0
+   },
+   "r100_by_kind": {
+    "audio": 0.333,
+    "more_like_this": 0.416,
+    "name": 0.592,
+    "people": 0.422,
+    "place": 0.295,
+    "said_shown": 0.75,
+    "topic": 0.548,
+    "vibe": 0.315
+   },
+   "single_ndcg10": 0.311,
+   "single_r100": 0.583,
+   "single_mrr": 0.421,
+   "r1_labels": {
+    "ndcg10": 0.585,
+    "unjudged10": 0.0
+   }
+  },
+  "e1_rewrite_r1": {
+   "method": "baseline:hybrid_prf+qr-v1_gpt-5-nano",
+   "ndcg10": 0.503,
+   "ndcg10_ci95": [
+    0.403,
+    0.611
+   ],
+   "p10": 0.619,
+   "mrr": 0.801,
+   "r100": 0.467,
+   "success5": 0.938,
+   "unjudged10": 0.0,
+   "ndcg10_by_kind": {
+    "audio": 0.072,
+    "more_like_this": 0.645,
+    "name": 0.581,
+    "people": 0.344,
+    "place": 0.478,
+    "said_shown": 0.659,
+    "topic": 0.51,
+    "vibe": 0.26
+   },
+   "meta": {
+    "wall_s": 17.9,
+    "query_p50_s": 0.221,
+    "cost_usd": 0.001531,
+    "rewrite": "qr-v1_gpt-5-nano_r1.json",
+    "rewrite_n": 13,
+    "rewrite_p50_s": 2.322,
+    "prompt_version": "qr-v1",
+    "model": "gpt-5-nano",
+    "reasoning_effort": "minimal",
+    "query_plus_rewrite_p50_s": 2.543
+   },
+   "r100_by_kind": {
+    "audio": 0.333,
+    "more_like_this": 0.416,
+    "name": 0.598,
+    "people": 0.333,
+    "place": 0.175,
+    "said_shown": 0.75,
+    "topic": 0.518,
+    "vibe": 0.239
+   },
+   "single_ndcg10": 0.353,
+   "single_r100": 0.583,
+   "single_mrr": 0.437,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": -0.076,
+    "delta_ci95": [
+     -0.185,
+     0.007
+    ],
+    "wins": 5,
+    "losses": 7,
+    "ties": 4
+   },
+   "vs_norewrite": {
+    "base": "e1_norewrite.json",
+    "delta_ndcg10": 0.092,
+    "delta_ci95": [
+     0.033,
+     0.161
+    ],
+    "wins": 11,
+    "losses": 2,
+    "ties": 3
+   },
+   "r1_labels": {
+    "ndcg10": 0.476,
+    "unjudged10": 0.294,
+    "vs_baseline": {
+     "base": "baseline.json",
+     "delta_ndcg10": -0.109,
+     "delta_ci95": [
+      -0.238,
+      -0.015
+     ],
+     "wins": 1,
+     "losses": 9,
+     "ties": 6
+    },
+    "vs_norewrite": {
+     "base": "e1_norewrite.json",
+     "delta_ndcg10": 0.086,
+     "delta_ci95": [
+      0.032,
+      0.152
+     ],
+     "wins": 11,
+     "losses": 1,
+     "ties": 4
+    }
+   }
+  },
+  "e1_rewrite_r2": {
+   "method": "baseline:hybrid_prf+qr-v1_gpt-5-nano",
+   "ndcg10": 0.511,
+   "ndcg10_ci95": [
+    0.407,
+    0.619
+   ],
+   "p10": 0.619,
+   "mrr": 0.885,
+   "r100": 0.467,
+   "success5": 0.938,
+   "unjudged10": 0.0,
+   "ndcg10_by_kind": {
+    "audio": 0.117,
+    "more_like_this": 0.645,
+    "name": 0.6,
+    "people": 0.761,
+    "place": 0.45,
+    "said_shown": 0.567,
+    "topic": 0.472,
+    "vibe": 0.189
+   },
+   "meta": {
+    "wall_s": 17.8,
+    "query_p50_s": 0.237,
+    "cost_usd": 0.001549,
+    "rewrite": "qr-v1_gpt-5-nano_r2.json",
+    "rewrite_n": 13,
+    "rewrite_p50_s": 2.335,
+    "prompt_version": "qr-v1",
+    "model": "gpt-5-nano",
+    "reasoning_effort": "minimal",
+    "query_plus_rewrite_p50_s": 2.572
+   },
+   "r100_by_kind": {
+    "audio": 0.333,
+    "more_like_this": 0.416,
+    "name": 0.592,
+    "people": 0.356,
+    "place": 0.145,
+    "said_shown": 0.75,
+    "topic": 0.532,
+    "vibe": 0.196
+   },
+   "single_ndcg10": 0.352,
+   "single_r100": 0.583,
+   "single_mrr": 0.556,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": -0.067,
+    "delta_ci95": [
+     -0.18,
+     0.017
+    ],
+    "wins": 5,
+    "losses": 7,
+    "ties": 4
+   },
+   "vs_norewrite": {
+    "base": "e1_norewrite.json",
+    "delta_ndcg10": 0.101,
+    "delta_ci95": [
+     0.029,
+     0.182
+    ],
+    "wins": 8,
+    "losses": 4,
+    "ties": 4
+   },
+   "r1_labels": {
+    "ndcg10": 0.486,
+    "unjudged10": 0.25,
+    "vs_baseline": {
+     "base": "baseline.json",
+     "delta_ndcg10": -0.099,
+     "delta_ci95": [
+      -0.229,
+      -0.005
+     ],
+     "wins": 3,
+     "losses": 8,
+     "ties": 5
+    },
+    "vs_norewrite": {
+     "base": "e1_norewrite.json",
+     "delta_ndcg10": 0.096,
+     "delta_ci95": [
+      0.026,
+      0.18
+     ],
+     "wins": 8,
+     "losses": 4,
+     "ties": 4
+    }
+   }
+  },
+  "e1_rewrite_r3": {
+   "method": "baseline:hybrid_prf+qr-v1_gpt-5-nano",
+   "ndcg10": 0.473,
+   "ndcg10_ci95": [
+    0.345,
+    0.596
+   ],
+   "p10": 0.613,
+   "mrr": 0.773,
+   "r100": 0.468,
+   "success5": 0.812,
+   "unjudged10": 0.0,
+   "ndcg10_by_kind": {
+    "audio": 0.0,
+    "more_like_this": 0.645,
+    "name": 0.508,
+    "people": 0.756,
+    "place": 0.61,
+    "said_shown": 0.759,
+    "topic": 0.36,
+    "vibe": 0.181
+   },
+   "meta": {
+    "wall_s": 17.2,
+    "query_p50_s": 0.231,
+    "cost_usd": 0.001528,
+    "rewrite": "qr-v1_gpt-5-nano_r3.json",
+    "rewrite_n": 13,
+    "rewrite_p50_s": 2.362,
+    "prompt_version": "qr-v1",
+    "model": "gpt-5-nano",
+    "reasoning_effort": "minimal",
+    "query_plus_rewrite_p50_s": 2.593
+   },
+   "r100_by_kind": {
+    "audio": 0.333,
+    "more_like_this": 0.416,
+    "name": 0.6,
+    "people": 0.4,
+    "place": 0.175,
+    "said_shown": 0.75,
+    "topic": 0.506,
+    "vibe": 0.25
+   },
+   "single_ndcg10": 0.319,
+   "single_r100": 0.583,
+   "single_mrr": 0.398,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": -0.105,
+    "delta_ci95": [
+     -0.215,
+     -0.026
+    ],
+    "wins": 2,
+    "losses": 9,
+    "ties": 5
+   },
+   "vs_norewrite": {
+    "base": "e1_norewrite.json",
+    "delta_ndcg10": 0.062,
+    "delta_ci95": [
+     -0.015,
+     0.15
+    ],
+    "wins": 8,
+    "losses": 4,
+    "ties": 4
+   },
+   "r1_labels": {
+    "ndcg10": 0.453,
+    "unjudged10": 0.319,
+    "vs_baseline": {
+     "base": "baseline.json",
+     "delta_ndcg10": -0.132,
+     "delta_ci95": [
+      -0.264,
+      -0.039
+     ],
+     "wins": 1,
+     "losses": 9,
+     "ties": 6
+    },
+    "vs_norewrite": {
+     "base": "e1_norewrite.json",
+     "delta_ndcg10": 0.063,
+     "delta_ci95": [
+      -0.008,
+      0.151
+     ],
+     "wins": 7,
+     "losses": 5,
+     "ties": 4
+    }
+   }
+  },
+  "e1_norewrite": {
+   "method": "baseline:hybrid_prf+norewrite",
+   "ndcg10": 0.411,
+   "ndcg10_ci95": [
+    0.285,
+    0.558
+   ],
+   "p10": 0.519,
+   "mrr": 0.743,
+   "r100": 0.418,
+   "success5": 0.875,
+   "unjudged10": 0.0,
+   "ndcg10_by_kind": {
+    "audio": 0.0,
+    "more_like_this": 0.645,
+    "name": 0.533,
+    "people": 0.272,
+    "place": 0.465,
+    "said_shown": 0.277,
+    "topic": 0.367,
+    "vibe": 0.186
+   },
+   "meta": {
+    "wall_s": 14.9,
+    "query_p50_s": 0.1,
+    "cost_usd": 0,
+    "rewrite": "none"
+   },
+   "r100_by_kind": {
+    "audio": 0.333,
+    "more_like_this": 0.416,
+    "name": 0.57,
+    "people": 0.289,
+    "place": 0.127,
+    "said_shown": 0.75,
+    "topic": 0.412,
+    "vibe": 0.163
+   },
+   "single_ndcg10": 0.151,
+   "single_r100": 0.583,
+   "single_mrr": 0.212,
+   "vs_baseline": {
+    "base": "baseline.json",
+    "delta_ndcg10": -0.168,
+    "delta_ci95": [
+     -0.284,
+     -0.063
+    ],
+    "wins": 2,
+    "losses": 10,
+    "ties": 4
+   },
+   "r1_labels": {
+    "ndcg10": 0.389,
+    "unjudged10": 0.294,
+    "vs_baseline": {
+     "base": "baseline.json",
+     "delta_ndcg10": -0.195,
+     "delta_ci95": [
+      -0.325,
+      -0.084
+     ],
+     "wins": 1,
+     "losses": 11,
+     "ties": 4
+    }
+   }
+  }
+ },
+ "rewrite_repeats": {
+  "ndcg10_mean": 0.496,
+  "ndcg10_range": [
+   0.473,
+   0.511
+  ],
+  "delta_vs_baseline_each": [
+   -0.076,
+   -0.067,
+   -0.105
+  ],
+  "delta_vs_norewrite_each": [
+   0.092,
+   0.101,
+   0.062
+  ],
+  "mean_of_repeats_vs_baseline": {
+   "delta": -0.083,
+   "ci95": [
+    -0.186,
+    -0.009
+   ],
+   "wins": 2,
+   "losses": 10,
+   "ties": 4
+  },
+  "mean_of_repeats_vs_norewrite": {
+   "delta": 0.085,
+   "ci95": [
+    0.022,
+    0.152
+   ],
+   "wins": 11,
+   "losses": 2,
+   "ties": 3
+  },
+  "repeat_spread": {
+   "mean_per_query_range": 0.131,
+   "queries_with_range_gt_0.1": 8
+  },
+  "cost_usd_per_run_13_rewrites_each": [
+   0.001531,
+   0.001549,
+   0.001528
+  ],
+  "cost_usd_per_1000_queries_est": 0.118,
+  "rewrite_p50_s": 2.34,
+  "query_plus_rewrite_p50_s": 2.57,
+  "indexing_cost_per_1000_items": 0
+ },
+ "verdict": {
+  "real_vs_hand_rewrite": "not adopted by rule (delta negative); replaces hand rewrite as honest base (required by brief)",
+  "real_rewrite_vs_no_rewrite": "passes rule (mean +0.085, paired CI above 0; 2 of 3 repeats individually clear CI>0)"
+ }
+}

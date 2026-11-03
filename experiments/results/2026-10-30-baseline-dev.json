@@ -1,0 +1,42 @@
+{
+ "run": "bge_hybrid_prf.json",
+ "method": "baseline:hybrid_prf",
+ "split": "dev",
+ "n_queries": 16,
+ "ndcg10": 0.508,
+ "p10": 0.581,
+ "success5": 0.938,
+ "mrr": 0.856,
+ "r100": 0.434,
+ "unjudged10": 0.194,
+ "ndcg10_ci95": [
+  0.379,
+  0.634
+ ],
+ "ndcg10_by_kind": {
+  "audio": 0.0,
+  "more_like_this": 0.431,
+  "name": 0.557,
+  "people": 0.314,
+  "place": 0.842,
+  "said_shown": 0.765,
+  "topic": 0.477,
+  "vibe": 0.865
+ },
+ "meta": {
+  "wall_s": 14.1,
+  "query_p50_s": 0.088,
+  "cost_usd": 0
+ },
+ "vs": {
+  "base": "bge_hybrid.json",
+  "delta_ndcg10": 0.038,
+  "delta_ci95": [
+   0.009,
+   0.076
+  ],
+  "wins": 9,
+  "losses": 1,
+  "ties": 6
+ }
+}
