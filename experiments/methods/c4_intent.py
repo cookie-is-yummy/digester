@@ -14,6 +14,11 @@ has < 5 items; topic_free -> behaviour order; sort != relevance -> RRF(text orde
 otherwise text order in the pool, then the rest of the pool by interaction weight.
 
 `python c4_intent.py --repeat N` -> $DIGESTER_DATA/runs/rewrites/qi-v3_gpt-5-nano_rN.json. Prints aggregates only.
+
+Round 4.2 D3 (LOG.md Y4.2-D3): guard_v42() keeps a field of the cached qi-v3 intent only when the search text
+carries the literal words for it (time words for windows, behaviour words for behaviour filters, a content-free
+search for topic_free); apply(..., unknown_watch=True) treats `watched` and watch counts as unknown, not false, on
+platforms that have no watch interactions in the corpus.
 """
 import argparse
 import copy
@@ -162,6 +167,79 @@ def guard_platform(intent, query):
     return intent
 
 
+# ---------------- round 4.2 D3: code-side guards (fixed in LOG.md Y4.2-D3 before any D3 run) ----------------
+_MONTHS = "january|february|march|april|june|july|august|september|october|november|december"
+_SEASONS = "spring|summer|autumn|winter"
+_ANCHOR = "in|since|during|last|this|early|late|the"
+_UNIT = "week|weekend|month|year|night|semester|term|season"
+TIME_RX = re.compile(
+    r"\b(19|20)\d{2}s?\b"
+    rf"|\b({_MONTHS})\b"
+    rf"|\b({_SEASONS})\b"
+    rf"|\b({_ANCHOR}) (may|fall)\b|\b(may|fall) (19|20)\d{{2}}\b"
+    rf"|\blast (few |couple of |\d+ )?({_UNIT}|{_SEASONS}|fall|may|{_MONTHS}|days|weeks|months|years)s?\b"
+    r"|\b(\d+|a|an|one|two|three|four|five|six|few|couple of|several) (days?|weeks?|months?|years?) ago\b"
+    rf"|\bthis (past )?({_UNIT}|{_SEASONS}|fall)\b"
+    r"|\byesterday\b", re.IGNORECASE)
+FLAG_RX = {"liked": re.compile(r"\bliked\b", re.IGNORECASE),
+           "saved": re.compile(r"\bsaved\b", re.IGNORECASE),
+           "shared": re.compile(r"\bshared\b", re.IGNORECASE),
+           "watched": re.compile(r"\b(re-?)?watched\b|\bre-?watch(ing)?\b", re.IGNORECASE)}
+NEG_RX = re.compile(r"\bnever\b|\bnot\b|n't\b", re.IGNORECASE)
+ORDER_TIME_RX = re.compile(r"\b(newest|latest|oldest|earliest|recent|recently)\b", re.IGNORECASE)
+MEDIA = {"video", "videos", "reel", "reels", "post", "posts", "clip", "clips", "short", "shorts", "content", "stuff",
+         "youtube", "instagram", "insta", "ig", "yt", "times", "ones"}
+_TOK = re.compile(r"[^\W\d_]{3,}")
+
+
+def content_left(query):
+    """Content words left after removing time phrases, behaviour words, negations, STOP and media words."""
+    from common import STOP
+    t = TIME_RX.sub(" ", query or "")
+    for rx in FLAG_RX.values():
+        t = rx.sub(" ", t)
+    t = NEG_RX.sub(" ", t)
+    t = ORDER_TIME_RX.sub(" ", t)
+    return [w for w in _TOK.findall(t.lower()) if w not in STOP and w not in MEDIA]
+
+
+def guard_v42(intent, query, kind):
+    """D3: keep only intent fields backed by literal words in the search text. Returns (intent, dropped)."""
+    i = dict(guard_platform(intent, query))
+    dropped = []
+    if intent.get("platform") and not i.get("platform"):
+        dropped.append("platform")
+    q = query or ""
+    has_time = bool(TIME_RX.search(q))
+    if (i["after"] or i["before"]) and not has_time:
+        i["after"] = i["before"] = None
+        dropped.append("window")
+    said = {f for f, rx in FLAG_RX.items() if rx.search(q)}
+    neg = bool(NEG_RX.search(q))
+    req = [x for x in i["require"] if x in said]
+    if req != i["require"]:
+        dropped.append("require:" + "+".join(x for x in i["require"] if x not in req))
+    exc = [x for x in i["exclude"] if x in said and neg]
+    if exc != i["exclude"]:
+        dropped.append("exclude:" + "+".join(x for x in i["exclude"] if x not in exc))
+    i["require"], i["exclude"] = req, exc
+    if "watched" not in said:
+        for k in ("min_watch_count", "max_watch_count"):
+            if i[k] is not None:
+                i[k] = None
+                dropped.append(k)
+        if i["sort"] == "most_watched":
+            i["sort"] = "relevance"
+            dropped.append("sort:most_watched")
+    if i["sort"] in ("newest", "oldest") and not (has_time or ORDER_TIME_RX.search(q)):
+        dropped.append("sort:" + i["sort"])
+        i["sort"] = "relevance"
+    if i["topic_free"] and (set(kind or []) & {"topic", "vibe"} or content_left(q)):
+        i["topic_free"] = False
+        dropped.append("topic_free")
+    return i, dropped
+
+
 def run_rewrite(repeat):
     queries = [q for q in load_queries() if not q["examples"]]
     parses, per_q = {}, {}
@@ -207,6 +285,9 @@ KIND_FLAG = {"like": "liked", "save": "saved", "collection": "saved", "playlist"
              "share_friend": "shared", "watch": "watched"}
 
 
+WATCH_COVERAGE = 0.5
+
+
 def prepare(S):
     """Per-item behaviour arrays on a c4_lib.Combined index (its own items only)."""
     N = len(S.items)
@@ -225,6 +306,14 @@ def prepare(S):
     d = S.duration
     S.short = (d >= 0) & ((d <= 60) | ((d <= 180) & np.array(["#short" in t for t in low])))
     S.plat = np.array([it["platform"] for it in S.items])
+    # D3: a platform "has watch data" when at least half of its items carry a watch interaction (derived from the
+    # data). Amended before scoring: the preregistered "any watch interaction" test also counted Instagram, whose
+    # export has watch events on ~1% of items, so the guard could never fire (LOG.md Y4.2-D3, deviation note).
+    cov = {p: float(S.flag["watched"][S.plat == p].mean()) for p in sorted(set(S.plat.tolist()))}
+    watch_plats = [p for p, v in cov.items() if v >= WATCH_COVERAGE]
+    S.nowatch = ~np.isin(S.plat, watch_plats)
+    S.watch_platforms = watch_plats
+    S.watch_coverage = {p: round(v, 4) for p, v in cov.items()}
     S.last = np.array([max([a for _, a in xs] or [""]) for xs in S.inter])
     S.firsti = np.array([min([a for _, a in xs if a] or ["9999"]) for xs in S.inter])
 
@@ -251,28 +340,36 @@ def describe(i):
     return "; ".join(out) or "none"
 
 
-def pool_mask(S, i):
+def pool_mask(S, i, unknown_watch=False):
+    """unknown_watch (D3): on platforms without watch data, `watched` and watch counts are unknown, not false."""
     m = np.ones(len(S.items), bool)
     act = False
+    nw = S.nowatch if unknown_watch else np.zeros(len(S.items), bool)
     if i["platform"]:
         m &= S.plat == i["platform"]
         act = True
     if i["after"] or i["before"]:
         lo, hi = i["after"] or "0000", i["before"] or "9999"
         want = set(i["require"]) or None
-        m &= np.array([any(lo <= a < hi and (want is None or f in want) for f, a in xs) for xs in S.inter])
+        want_nw = (want - {"watched"}) or None if want else None
+        m &= np.array([any(lo <= a < hi and (w is None or f in w) for f, a in xs)
+                       for xs, w in ((xs, want_nw if nw[n] else want) for n, xs in enumerate(S.inter))])
         act = True
     if i["require"]:
-        m &= np.any([S.flag[x] for x in i["require"]], axis=0)
+        req = set(i["require"])
+        has = np.any([S.flag[x] for x in req], axis=0)
+        rest = req - {"watched"}
+        has_nw = np.any([S.flag[x] for x in rest], axis=0) if rest else np.ones(len(S.items), bool)
+        m &= np.where(nw, has_nw, has)
         act = True
     for x in i["exclude"]:
-        m &= ~S.flag[x]
+        m &= ~S.flag[x] | (nw if x == "watched" else False)
         act = True
     if i["min_watch_count"] is not None:
-        m &= S.watch_count >= i["min_watch_count"]
+        m &= (S.watch_count >= i["min_watch_count"]) | nw
         act = True
     if i["max_watch_count"] is not None:
-        m &= S.watch_count <= i["max_watch_count"]
+        m &= (S.watch_count <= i["max_watch_count"]) | nw
         act = True
     if i["min_duration_s"] is not None:
         m &= S.duration >= i["min_duration_s"]
@@ -312,8 +409,8 @@ def behaviour_order(S, m, sort):
 MIN_POOL = 5
 
 
-def apply(S, fused, i, depth=1000):
-    m, act = pool_mask(S, i)
+def apply(S, fused, i, depth=1000, unknown_watch=False):
+    m, act = pool_mask(S, i, unknown_watch)
     info = {"intent": describe(i), "pool": int(m.sum()) if act else None, "mode": "unchanged"}
     if not act and i["sort"] == "relevance":
         return fused[:depth], info

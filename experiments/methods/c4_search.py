@@ -9,11 +9,20 @@ Configs (one variable each; LOG.md rows Y4.1-*):
   c1    c0 + one combined te-v1c index (Instagram Y4.1-TE rows + YouTube round-3 allowed rows): te BM25 + te dense.
   c2    c1 with te rows rankable only for items whose own text is insufficient (c4_lib.insufficient).
   c3    c0 + qi-v3 intent, filters only (c4_intent.apply on c0's fused list; qr-v1 text plan unchanged).
+Round 4.2 (LOG.md Y4.2-*; written to runs/r4.2/):
+  d1    c1's lists with coverage-fair fusion (c4_lib.Combined.fuse, fusion="fair").
+  d1p   d1 with te-list ranks scaled to the corpus (fusion="fair_scaled").
+  d2    c0's lists; insufficient items with a te row get te text merged into their own view (merge_te=True).
+  d3    c0 + the cached qi-v3 intent under code-side guards (c4_intent.guard_v42, unknown_watch=True).
+  d4    d1 + d3's guarded intent (fixed in Y4.2-D4).
+  c0x   control, not a hypothesis: c0 re-run with the cached (float16) query vectors the d* runs use. The r4.1 c0
+        files were written with fresh float32 query vectors; top-100 sets match, order within them can differ.
 Searches: load_queries('dev') + load_queries('yt_holdout') (controls: their platform's searches only).
 Writes $DIGESTER_DATA/runs/r4.1/<config>_r<k>.json with lib/corpus.write_run; cost and latency in meta.
 Prints aggregate timing and counts only (no query text, no items).
 
 usage: python experiments/methods/c4_search.py --configs c0,c1,c2 [--reps 1,2,3]
+       python experiments/methods/c4_search.py --configs d1,d1p,d3,d4   then   --configs d2
        python experiments/methods/c4_search.py --configs c0ig
 """
 import argparse
@@ -30,9 +39,21 @@ sys.path.insert(0, HERE)
 import c4_lib as L
 from corpus import DATA, load_queries, write_run
 
-OUT = os.path.join(DATA, "runs", "r4.1")
-PLATFORM = {"c0": "all", "c1": "all", "c2": "all", "c3": "all", "c0ig": "instagram", "c0yt": "youtube"}
-ENRICH = {"c1": "te", "c2": "te"}
+PLATFORM = {"c0": "all", "c1": "all", "c2": "all", "c3": "all", "c0ig": "instagram", "c0yt": "youtube",
+            "d1": "all", "d1p": "all", "d2": "all", "d3": "all", "d4": "all", "c0x": "all"}
+ENRICH = {"c1": "te", "c2": "te", "d1": "te", "d1p": "te", "d4": "te"}
+FUSION = {"d1": "fair", "d1p": "fair_scaled", "d4": "fair"}
+MERGE = {"d2"}
+INTENT = {"c3", "d3", "d4"}
+GUARDED = {"d3", "d4"}
+
+
+def out_dir(cfg):
+    return os.path.join(DATA, "runs", "r4.2" if is42(cfg) else "r4.1")
+
+
+def is42(cfg):
+    return cfg.startswith("d") or cfg == "c0x"
 
 
 def queries_for(cfg):
@@ -65,7 +86,7 @@ def run_config(S, cfg, reps, intent_mod=None):
     for rep in reps:
         P = L.load_parses("qr-v1", rep)
         RW = P["_meta"]
-        PI = L.load_parses("qi-v3", rep) if cfg == "c3" else None
+        PI = L.load_parses("qi-v3", rep) if cfg in INTENT else None
         out, lat, lat_typed, intents = {}, [], [], {}
         S.QV.get([s for q in qs if not q["examples"] for s in [q["query"]] + P[q["id"]]["phrases"] +
                   (P[q["id"]].get("hypothetical_captions") or [])])  # cache first: latency = local search only
@@ -78,6 +99,13 @@ def run_config(S, cfg, reps, intent_mod=None):
                 info["platform_dropped_by_guard"] = bool(raw_i.get("platform")) and \
                     not intent_mod.guard_platform(raw_i, q["query"]).get("platform")
                 intents[q["id"]] = info
+            elif cfg in GUARDED and not q["examples"]:
+                raw_i = PI[q["id"]]["intent"]
+                gi, dropped = intent_mod.guard_v42(raw_i, q["query"], PI[q["id"]].get("kind"))
+                fused, info = intent_mod.apply(S, fused, gi, unknown_watch=True)
+                info.update({"raw_intent": intent_mod.describe(raw_i), "dropped_by_guard": dropped,
+                             "platform_dropped_by_guard": "platform" in dropped})
+                intents[q["id"]] = info
             out[q["id"]] = fused[:1000]
             dt = time.time() - t
             lat.append(dt)
@@ -85,7 +113,7 @@ def run_config(S, cfg, reps, intent_mod=None):
                 lat_typed.append(dt)
         typed = [q["id"] for q in qs if not q["examples"]]
         pq = [RW["per_query"][k] for k in typed]
-        meta = {"config": cfg, "round": "4.1", "platform_subset": S.platform,
+        meta = {"config": cfg, "round": "4.2" if is42(cfg) else "4.1", "platform_subset": S.platform,
                 "rewrite": f"{RW['prompt_version']}_{RW['model']}_r{rep}", "hyde_alpha": L.HYDE_ALPHA,
                 "embedding": "text-embedding-3-small@512", "splits": ["dev", "yt_holdout"], "n_searches": len(qs),
                 **S.counts(), "index_build_s": round(S.build_s, 1),
@@ -99,10 +127,15 @@ def run_config(S, cfg, reps, intent_mod=None):
         meta["typed_query_plus_rewrite_p50_s"] = round(meta["typed_query_p50_s"] + meta["rewrite_p50_s"], 3)
         if S.E:
             meta["enrichment"] = {"prompt": "te-v1c", "model": "gemini-3.1-flash-lite (Batch)",
-                                  "routed_by_sufficiency": cfg == "c2",
+                                  "routed_by_sufficiency": cfg == "c2", "fusion": S.fusion,
                                   "insufficient_rule": "no own text | info class non_english | < 4 content words"
                                   if cfg == "c2" else None, "cost": te_cost_per_1k()}
-        if cfg == "c3":
+        if cfg in MERGE:
+            meta["merge_te"] = {"rule": "insufficient (Y4.1-C2 rule) AND has a rankable te-v1c row: own view + te text "
+                                        "as BM25 text and a 3-small 512 d vector of it; gated in",
+                                "embedding_store": L.D2_STORE, "te_cost": te_cost_per_1k(),
+                                "merged_embed_cost_usd": round(costs.get("c4_d2_merged_embed", 0.0), 5)}
+        if cfg in INTENT:
             pi = [PI["_meta"]["per_query"][k] for k in typed]
             meta.update({"intent_prompt": f"qi-v3_gpt-5-nano_r{rep}",
                          "intent_call_cost_usd": round(sum(v["cost_usd"] for v in pi), 6),
@@ -112,8 +145,15 @@ def run_config(S, cfg, reps, intent_mod=None):
                          "searches_with_active_intent": sum(1 for v in intents.values() if v["intent"] != "none"),
                          "platform_filters_dropped_by_guard": sum(v["platform_dropped_by_guard"]
                                                                   for v in intents.values())})
+            if cfg in GUARDED:
+                meta["intent_guard"] = "c4_intent.guard_v42 (LOG.md Y4.2-D3); unknown_watch=True"
+                meta["intent_note"] = "cached round-4.1 qi-v3 outputs reused: no new intent calls this round"
+                meta["searches_with_any_field_dropped"] = sum(1 for v in intents.values() if v["dropped_by_guard"])
+                meta["searches_with_raw_intent"] = sum(1 for v in intents.values() if v["raw_intent"] != "none")
+                meta["watch_data_platforms"] = S.watch_platforms
+                meta["watch_coverage_by_platform"] = S.watch_coverage
         name = f"{cfg}_r{rep}"
-        path = write_run(os.path.join(OUT, f"{name}.json"), f"c4:{cfg}+{meta['rewrite']}+hyde", L.CodeIds("oai512"),
+        path = write_run(os.path.join(out_dir(cfg), f"{name}.json"), f"c4:{cfg}+{meta['rewrite']}+hyde", L.CodeIds("oai512"),
                          out, meta)
         written.append(path)
         print(f"wrote {os.path.basename(path)}: {len(out)} searches, query p50 {meta['query_p50_s']} s, "
@@ -130,9 +170,10 @@ def main():
     cfgs = a.configs.split(",")
     plats = {PLATFORM[c] for c in cfgs}
     assert len(plats) == 1, "one platform subset per invocation"
+    assert len({c in MERGE for c in cfgs}) == 1, "merged-view configs (d2) need their own invocation"
     t0 = time.time()
     items = L.jl(os.path.join(DATA, "corpus", "items.jsonl"))
-    S = L.Combined(plats.pop(), items=items)
+    S = L.Combined(plats.pop(), items=items, merge_te=cfgs[0] in MERGE)
     base_build = S.build_s
     print(f"index built in {base_build:.1f} s: {json.dumps(S.counts())}", flush=True)
     intent_mod = None
@@ -142,8 +183,9 @@ def main():
         if cfg in ENRICH:
             active = {c for it, c in zip(S.items, S.codes) if L.insufficient(it)} if cfg == "c2" else None
             S.E = [L.EnrichIdx(L.te_sources(), set(S.pos), active)]
+        S.fusion = FUSION.get(cfg, "rrf")
         S.build_s = base_build + (time.time() - t1)
-        if cfg == "c3" and intent_mod is None:
+        if cfg in INTENT and intent_mod is None:
             import c4_intent as intent_mod
             intent_mod.prepare(S)
         run_config(S, cfg, reps, intent_mod)

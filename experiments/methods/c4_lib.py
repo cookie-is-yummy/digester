@@ -14,6 +14,13 @@ one platform for the single-platform control runs (c0ig / c0yt) and by the inten
 
 Enrichment indexes (te-v1c): one combined index of Instagram rows (Y4.1-TE) and YouTube's round-3 allowed rows.
 `active` restricts which items' rows are rankable (C2, information sufficiency); query-side example rows are kept.
+
+Round 4.2 (LOG.md Y4.2-*):
+  fusion="fair"        D1: coverage-fair fusion. F(i) = RRF_O(i) + RRF_T(i) if i has a rankable te row, else
+                       RRF_O(i) * (1 + n_T / n_O): the item's own lists stand in for the te lists it cannot be in.
+  fusion="fair_scaled" D1p: as D1, with each te-list term 1/(k + r * N_own / N_te) (te ranks put on corpus scale).
+  merge_te=True        D2: items that are insufficient AND have a rankable te row get own view + te text as their
+                       BM25 text and a fresh 3-small 512 d vector of that merged text; they are gated in. No te lists.
 """
 import json
 import os
@@ -170,6 +177,7 @@ class EnrichIdx:
                     text[c], vec[c] = t[c], V[k]
         self.ex_text, self.ex_vec = text, vec
         self.codes = [c for c in text if c in corpus_codes and (active is None or c in active)]
+        self.codeset = set(self.codes)
         self.V = np.array([vec[c] for c in self.codes], dtype=np.float32).reshape(-1, Y.EMB_DIM)
         self.bm = Y.BM25({c: text[c] for c in self.codes}) if self.codes else None
 
@@ -196,11 +204,65 @@ def te_sources():
             (os.path.join(DATA, "yt_enrich", f"text_{TE_YT}.json"), os.path.join(EMB, f"emb_yt_{TE_YT}"))]
 
 
+# ---------------- D2: per-item sufficiency routing (LOG.md Y4.2-D2) ----------------
+D2_STORE = "d2_merged_te"
+
+
+def rj(p):
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def te_rows():
+    """{code: te text} for every te row that has both text and a vector (= EnrichIdx's rankable rows)."""
+    out = {}
+    for tpath, epath in te_sources():
+        t, ids = rj(tpath), rj(os.path.join(epath, "ids.json"))
+        for c in ids:
+            if c in t:
+                out[c] = t[c]
+    return out
+
+
+def merged_views(items, codes, texts):
+    """{code: own view + ' ' + te text} for insufficient items with a te row."""
+    te = te_rows()
+    out = {}
+    for it, c in zip(items, codes):
+        if c in te and insufficient(it):
+            out[c] = fix_ws((texts.get(c) or "") + " " + te[c])
+    return out
+
+
+def merged_vectors(merged):
+    """3-small 512 d vectors of the merged views, cached in corpus/emb/d2_merged_te (keyed by code + text)."""
+    path = os.path.join(EMB, D2_STORE)
+    ids, V = load_store(path)
+    meta_p = os.path.join(path, "texts.json")
+    seen = rj(meta_p) if os.path.exists(meta_p) else {}
+    have = {c: V[k] for k, c in enumerate(ids) if seen.get(c) == merged.get(c)}
+    miss = sorted(c for c in merged if c not in have)
+    if miss:
+        t0 = time.time()
+        Vn = normalize(Y.embed_texts([merged[c] for c in miss], "c4_d2_merged_embed", batch=500, workers=2))
+        have.update(zip(miss, Vn))
+        el = time.time() - t0
+        print(f"d2: embedded {len(miss)} merged views in {el:.1f} s ({len(miss) / max(el, 1e-9):.0f} items/s)",
+              flush=True)
+        keys = sorted(have)
+        save_store(path, keys, np.array([have[c] for c in keys]))
+        with open(meta_p, "w") as f:
+            json.dump({c: merged[c] for c in keys if c in merged}, f)
+    return {c: have[c].astype(np.float32) for c in merged}
+
+
 # ---------------- the combined index ----------------
 class Combined:
-    def __init__(self, platform="all", enrich=None, route=False, items=None):
+    def __init__(self, platform="all", enrich=None, route=False, items=None, merge_te=False):
         """platform: all | instagram | youtube (control runs). enrich: None or 'te' (combined te-v1c index).
-        route: C2, te rows rankable only for items whose own text is insufficient."""
+        route: C2, te rows rankable only for items whose own text is insufficient.
+        merge_te: D2, insufficient items with a te row get te text folded into their own view (text + vector)."""
+        self.fusion = "rrf"
         t0 = time.time()
         allitems = items if items is not None else jl(os.path.join(DATA, "corpus", "items.jsonl"))
         self.items = [it for it in allitems if platform == "all" or it["platform"] == platform]
@@ -215,6 +277,10 @@ class Combined:
             t = view_text(it)
             if t:
                 texts[c] = t
+        self.merged = {}
+        if merge_te:
+            self.merged = merged_views(self.items, self.codes, texts)
+            texts.update(self.merged)
         self.text = texts
         self.bm = Y.BM25(texts)
         ids, V = load_store(os.path.join(EMB, "oai512"))
@@ -224,6 +290,9 @@ class Combined:
         self.vcodes = [self.codes[n] for n in self.vpos]
         self.row_of = {c: k for k, c in enumerate(self.vcodes)}
         self.gate = np.array([gate_ok(self.items[n]) for n in self.vpos])
+        self.merge_counts = None
+        if merge_te:
+            self._swap_merged_vectors()
         self.QV = QueryVecs()
         self.outside = Y.outside_examples() if platform != "instagram" else {}
         self.ext_vec = {}
@@ -239,6 +308,55 @@ class Combined:
             self.E.append(EnrichIdx(te_sources(), set(self.pos), active))
         self.build_s = time.time() - t0
 
+    def _swap_merged_vectors(self):
+        """D2: replace (or add) the vector of every merged item by its merged-text vector; gate it in."""
+        mv = merged_vectors(self.merged)
+        old = {c for c in self.merged if c in self.row_of}
+        add = [c for c in self.merged if c not in self.row_of]
+        was_gated_out = sum(1 for c in old if not self.gate[self.row_of[c]])
+        for c in old:
+            k = self.row_of[c]
+            self.V[k] = mv[c]
+            self.gate[k] = True
+        if add:
+            self.V = np.vstack([self.V, np.array([mv[c] for c in add], np.float32)])
+            self.vpos = np.concatenate([self.vpos, [self.pos[c] for c in add]])
+            self.vcodes = self.vcodes + add
+            self.gate = np.concatenate([self.gate, np.ones(len(add), bool)])
+            self.row_of = {c: k for k, c in enumerate(self.vcodes)}
+        byp = {}
+        for c in self.merged:
+            p = self.items[self.pos[c]]["platform"]
+            byp[p] = byp.get(p, 0) + 1
+        self.merge_counts = {"merged_items": len(self.merged), "merged_by_platform": byp,
+                             "merged_vector_replaced": len(old), "merged_vector_added": len(add),
+                             "merged_newly_gated_in": was_gated_out + len(add)}
+
+    def fuse(self, own, te):
+        """C0/C1: plain RRF. D1/D1p: coverage-fair fusion (see module docstring, LOG.md Y4.2-D1/D1p)."""
+        if self.fusion == "rrf" or not te:
+            return rrf(*own, *te)
+        k, depth = 60, 1000
+        so, st = {}, {}
+        for lst in own:
+            for r, c in enumerate(lst[:depth]):
+                so[c] = so.get(c, 0.0) + 1.0 / (k + r + 1)
+        E = self.E[0]
+        scales = [1.0] * len(te)
+        if self.fusion == "fair_scaled":
+            scales = [len(self.text) / len(E.codes), float(self.gate.sum()) / len(E.codes)]
+        for lst, sc in zip(te, scales):
+            for r, c in enumerate(lst[:depth]):
+                st[c] = st.get(c, 0.0) + 1.0 / (k + (r + 1) * sc)
+        stand_in = 1.0 + len(te) / max(len(own), 1)
+        F = {}
+        for c, v in so.items():
+            F[c] = v + st.get(c, 0.0) if c in E.codeset else v * stand_in
+        for c, v in st.items():
+            if c not in F:
+                F[c] = v
+        return [c for c, _ in sorted(F.items(), key=lambda x: -x[1])]
+
     def counts(self):
         plat = [it["platform"] for it in self.items]
         out = {"items": len(self.items), "items_by_platform": {p: plat.count(p) for p in sorted(set(plat))},
@@ -251,6 +369,9 @@ class Combined:
                 byp[p] = byp.get(p, 0) + 1
             out["te_rows_rankable"] = len(E.codes)
             out["te_rows_rankable_by_platform"] = byp
+        if self.merge_counts:
+            out.update(self.merge_counts)
+        out["fusion"] = self.fusion
         return out
 
     def keep_fn(self, filters):
@@ -296,30 +417,31 @@ class Combined:
         q2 /= np.linalg.norm(q2)
         s = np.maximum(s, self.V @ q2)
         bq = " ".join([q["query"]] + parse["keywords"])
-        lists = [self._dense_rank(s, keep), self.bm.rank(bq, keep=keep)]
+        own = [self._dense_rank(s, keep), self.bm.rank(bq, keep=keep)]
+        te = []
         for E in self.E:
-            lists += [E.bm25(bq, keep), E.dense(Qv, keep)]
-        return rrf(*lists)
+            te += [E.bm25(bq, keep), E.dense(Qv, keep)]
+        return self.fuse(own, te)
 
     def mlt(self, q):
         keep = self.keep_fn(q.get("filters"))
         ex = q["examples"]
         vecs = [self.V[self.row_of[c]] for c in ex if c in self.row_of] + \
                [self.ext_vec[c] for c in ex if c not in self.row_of and c in self.ext_vec]
-        lists = []
+        own, te = [], []
         if vecs:
             cen = np.mean(vecs, 0)
             cen /= np.linalg.norm(cen)
-            lists.append(self._dense_rank(self.V @ cen, keep, ex))
+            own.append(self._dense_rank(self.V @ cen, keep, ex))
         etext = " ".join(self.text.get(c) or self.outside.get(c, "") for c in ex)
-        lists.append(self.bm.rank(etext, exclude=ex, keep=keep))
+        own.append(self.bm.rank(etext, exclude=ex, keep=keep))
         for E in self.E:
             exe = [c for c in ex if c in E.ex_text]
             if exe:
-                lists.append(E.bm25(" ".join(E.ex_text[c] for c in exe), keep, ex))
+                te.append(E.bm25(" ".join(E.ex_text[c] for c in exe), keep, ex))
                 ce = normalize(np.mean([E.ex_vec[c] for c in exe], 0, keepdims=True))
-                lists.append(E.dense(ce, keep, ex))
-        return rrf(*lists)
+                te.append(E.dense(ce, keep, ex))
+        return self.fuse(own, te)
 
     def search(self, q, parse):
         return self.mlt(q) if q["examples"] else self.typed(q, parse)
