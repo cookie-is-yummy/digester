@@ -1,5 +1,34 @@
 # State
 
+## Round 5 (`BRIEF-5.md`): understand the query in parts (evaluated 3 Nov 2026; `results/r5-eval.md`)
+
+- **Adopted: nothing. Finalist stays C0** (dev 0.482). No arm passes clause 1; clause 2 is closed to all (te pass or extra LLM calls).
+- **Round-5 dev leader: F0** (te lists for caption-type items only, coverage-fair fusion): 0.509.
+  - vs C0 **+0.027 [−0.004, +0.062], 20/14/10**. Lower bound < 0 on 20/20 seeds; top 5 searches = 99% of the net gain.
+  - **ig +0.067 [+0.020, +0.126], 15/3** (robust: lower bound > 0 on 20/20 seeds). This is the milestone's confirmed component again.
+  - yt −0.014, 5/11. Within-YouTube ordering = C0 exactly. The loss is more Instagram items in YouTube searches: 3.02 per top 10 at 0.37 relevant (C0 2.05, D1 2.39). vs D1 −0.011.
+- **F1** (typed-slot rewrite qs-v1): −0.007, 16/17. ig −0.032, 5/11; yt +0.019, 11/6 (topic/structure). Unstable over repeats (+0.014 / −0.011 / −0.023). No single slot explains it; it is the whole plan change. +0.7 s.
+- **F2** (creator search): fired on **one** dev search (2 of 132 cells), +0.15 there. Not judgeable on dev.
+- **F3** (facet boosts): −0.017, 6/7. One YouTube search where a stated count was read as format `list` gives −0.71; without it −0.001. Format boosts lose per active cell (−0.063).
+- **F4** (checker): −0.000, 6/8; reorders the top 20 with no effect. p95 6.3 s (+3.8 s).
+- **F5** (stack): +0.009 vs C0; **vs E1 −0.046 [−0.082, −0.010], 13/24/7**. The intent cells still win (+0.185 over 4 searches); F1 and F3 cost Instagram.
+- **Where each slot fired (dev cells):**
+  - format: F1 −0.011, F3 −0.063, F4 −0.005, all worse than where it did not fire;
+  - tone: F1 +0.021, F3 +0.012, F4 +0.020, positive but only 3 vibe searches (a lead, not a finding);
+  - creator lookup: 1 search.
+- **Labels:** c4-r5 = c4-m1 + 279 blind evaluator dev judgments (14/55/210), backup `evalset.pre_r5.jsonl`. Unjudged@10 0.00. Pooling moved F1 from −0.030 to −0.007 and F5 from −0.013 to +0.009; no verdict changed. `test` 2 scorings left, `yt_holdout` 1 left, `test2` unused; none touched.
+- **Spend:** round 5 $0.071 OpenAI (builder), judging $0. OpenAI total $0.174 of $9.50; ledger total $3.950.
+- **Candidates for held-out scoring (test2 first; it is the only split clean for F0):**
+  1. **C0** (finalist);
+  2. **F0** (round-5 leader);
+  3. optional **E1** (best dev overall, 0.538; tests the intent step if test2 has behaviour/time searches).
+  - No candidate has `test2` runs yet. Fresh qr-v1 (+ qi-v3 for E1) are needed (≈ $0.01, orchestrator).
+  - `test` is contaminated for round-5 ideas and for F0. Keep `yt_holdout`'s last scoring for the final.
+- **Next, if the loop continues:**
+  - stop Instagram te votes crowding YouTube searches under F0 (for example, te lists rerank only within the own lists' top N);
+  - build a creator-lookup search set before judging F2;
+  - try tone-only facets on vibe searches, with more vibe searches first.
+
 ## Round 4 (`BRIEF-4.md`): one library, two platforms, as a loop
 
 **Loop stopped (3 Nov):** E1 was withdrawn after the held-out milestone. Counting 4.1–4.3 as three rounds without a confirmed win, the stop rule fired.
