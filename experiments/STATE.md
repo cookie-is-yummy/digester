@@ -2,6 +2,34 @@
 
 ## Round 4 (`BRIEF-4.md`): one library, two platforms, as a loop
 
+### Milestone (held-out), 3 Nov 2026 (`results/r4-milestone.md`)
+
+- **Verdict: NOT CONFIRMED.** E1's dev gain over C0 (+0.056) does not hold on held-out searches.
+  - **`test`** (Derrick's 13 searches, scoring 1 of 3): E1 vs C0 **+0.030 [−0.005, +0.068], 7/5/1**. E1 0.510 vs C0 0.480. Dropping the best search leaves +0.018, and that search is the partial-credit-only `f01`.
+  - **`yt_holdout`** (11 searches, scoring 2 of 3): **−0.024 [−0.077, +0.012], 3/6/2**. E1 0.364 vs C0 0.388.
+  - **Both sets together** (24 searches): +0.005 [−0.027, +0.035], 10/11.
+  - E3 vs C0: test +0.024 (6/6), `yt_holdout` −0.023 (3/5). E1 vs E3 cannot be told apart (+0.003 over 24 searches).
+- **Per scope:**
+  - **The Instagram side holds:** test `ig` +0.051 [+0.012, +0.100], 3/0/1; `both` +0.053, 3/2.
+  - **The YouTube side fails:** test `yt` −0.021 (E3 −0.042 [−0.072, −0.013], 0/4); `yt_holdout` −0.024.
+- **Why dev and held-out differ:**
+  - Dev's `yt` gain was the intent step on behaviour and time searches. Held-out has no search where it acts: on test the guards dropped all 13 intents, and on `yt_holdout` only the behaviour search kept a filter, where all methods score 0. So held-out measures D1-style te fusion only.
+  - That fusion moves top-10 slots to Instagram items. This helps `ig` and `both` searches, where those items are 80–87% relevant. It hurts YouTube searches, where they are 34–42% relevant against 53–81% for the YouTube items they replace.
+  - E3's descriptive rule makes the YouTube crowding slightly worse.
+  - **The intent step is untested on held-out.**
+- **Labels:** c4-m1 = c4-r3 + 358 blind evaluator judgments, calibrated on Derrick's own marks first.
+  - test 243 (37/103/103), including 38 `unvetted_candidates`; `yt_holdout` 115 (13/19/83), 100 of them Instagram items.
+  - Derrick's gold grades were not touched. Backup `evalset.pre_milestone.jsonl`. Unjudged@10 is 0.00 everywhere.
+  - Pooling changed no direction: seed-only Δ was +0.022 on test and −0.026 on `yt_holdout`.
+  - Caveat: only about 26% of the relevant top-10 items on test carry Derrick's own grades.
+- **Remaining scorings: `test` 2 left; `yt_holdout` 1 left.**
+- **Spend:** milestone $0. Round 4 to date is **$3.879** (Gemini $3.776, OpenAI $0.103; the +$0.012 is the `test` runs).
+- **Finalist line:**
+  - E1 stays the dev finalist, but its held-out confirmation failed.
+  - The confirmed piece is te fusion for Instagram-side searches. For YouTube searches, C0 is at least as good.
+  - Next: fix te slot competition on YouTube searches (4.3 agenda item 2). Get held-out behaviour and time searches before claiming the intent step.
+  - BRIEF-4's Finish write-up and the A-003/A-004 updates are still open (orchestrator).
+
 ### Round 4.3 (evaluated 3 Nov 2026; `results/r4.3-eval.md`)
 
 - **Finalist: E1 (new; adopted under clause 1)**, D1's coverage-fair te fusion + qi-v3 intent with guards that only widen. Dev 0.538 [0.460, 0.618] under label round c4-r3 (ig 0.579, yt 0.497).

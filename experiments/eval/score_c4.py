@@ -11,6 +11,8 @@ Adapted from score_yt.py for the combined root (DIGESTER_DATA=data/all):
 - `--pool OUT.json` writes the union of unjudged in-library top-10 codes over all given runs and repeats
   ({search_id: [codes]}) for blind judging;
 - metrics: nDCG@10, R@10, R@50, MRR, P@10, success@5, R@100, capped recall, unjudged10, nonlib10.
+- milestone (round 4): the `test` split's label rows use `judged_nonrelevant` (Derrick's gold zeros) and may have
+  scope `both` (no own platform, so cross10 = 0); `unvetted_candidates` are left unjudged; a `both` subset is reported.
 
 usage:
   python experiments/eval/score_c4.py --rundir PATH --split dev --labels PATH --out OUT.json
@@ -32,7 +34,8 @@ from corpus import DATA  # noqa: E402
 METRICS = ["ndcg10", "r10", "r50", "mrr", "p10", "success5", "r100", "r10_cap", "r50_cap",
            "unjudged10", "nonlib10", "cross10", "cross_rel10", "cross_unj10"]
 REPEATS = (1, 2, 3)
-SCOPE_PLAT = {"ig": "instagram", "yt": "youtube"}
+SCOPE_PLAT = {"ig": "instagram", "yt": "youtube", "both": None}
+SCOPES = ("all", "ig", "yt", "both")
 
 _PLAT = None
 
@@ -57,7 +60,8 @@ def load_labels(path, split):
         if keep is None or q["id"] not in keep:
             continue
         rel = {c: int(g) for c, g in q["relevant"].items() if g > 0}
-        judged = set(q["relevant"]) | set(q.get("hard_negatives", [])) | set(q.get("judged_not_relevant", []))
+        judged = (set(q["relevant"]) | set(q.get("hard_negatives", [])) | set(q.get("judged_not_relevant", []))
+                  | set(q.get("judged_nonrelevant", [])))
         L[q["id"]] = {"rel": rel, "judged": judged, "kinds": q["kinds"], "scope": q["scope"]}
     return L
 
@@ -77,7 +81,7 @@ def score_one(ranked, lab):
     first = min((pos[c] for c in rel if c in pos), default=None)
     hits = lambda k: sum(1 for c in rel if pos.get(c, 1e9) < k)  # noqa: E731
     n = len(rel)
-    cross = [c for c in top if c in plat and plat[c] != own]
+    cross = [c for c in top if own and c in plat and plat[c] != own]
     return {
         "ndcg10": dcg / idcg if idcg else 0.0,
         "r10": hits(10) / n, "r50": hits(50) / n, "r100": hits(100) / n,
@@ -118,7 +122,7 @@ class Runs:
 
 
 def subsets(qs, L):
-    return {"all": qs, "ig": [q for q in qs if L[q]["scope"] == "ig"], "yt": [q for q in qs if L[q]["scope"] == "yt"]}
+    return {"all": qs, **{sc: [q for q in qs if L[q]["scope"] == sc] for sc in SCOPES[1:]}}
 
 
 def summ(reps, qs, L):
@@ -215,7 +219,7 @@ def main():
         print(f"pool: {sum(len(v) for v in pool.values())} items over {len(pool)} searches -> {a.pool}")
     for s, v in rep["runs"].items():
         line = [f"{s:8s}"]
-        for sc in ("all", "ig", "yt"):
+        for sc in SCOPES:
             x = v[sc]
             if x["n_searches"]:
                 line.append(f"{sc}[{x['n_searches']}] nDCG {x['ndcg10']:.3f} sp {x['ndcg10_spread']:.3f} "
@@ -224,7 +228,7 @@ def main():
         print(" | ".join(line))
     for c, v in rep["comparisons"].items():
         line = [f"{c:12s}"]
-        for sc in ("all", "ig", "yt"):
+        for sc in SCOPES:
             if v[sc]["n"]:
                 d = v[sc]["ndcg10"]
                 line.append(f"{sc} {d['delta']:+.3f} {d['ci95']} {d['wins']}/{d['losses']}/{d['ties']}")
