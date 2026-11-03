@@ -1,5 +1,51 @@
 # State
 
+## Round 4 (`BRIEF-4.md`): one library, two platforms, as a loop
+
+### Round 4.1 (evaluated 3 Nov 2026; `results/r4.1-eval.md`)
+
+- **Finalist: C0**, the combined platform-blind baseline (A0/B3-without-enrichment recipe over all 136,908 items). It scores 0.483 [0.401, 0.565] on dev under label round c4-r1: ig 0.506, yt 0.459. Nothing passed the adoption rule.
+- **Labels:** c4-r1 = +1,066 blind evaluator judgments of every unjudged dev top-10 item, cross-platform items included (77/242/747). Backup `evalset.pre_r4.1.jsonl`. `yt_holdout`: 2 scorings left. `test`: 3 left, both untouched.
+- **Interference is small:**
+  - ig −0.007 vs the Instagram-only control;
+  - yt −0.017 vs the YouTube-only control;
+  - MRR −0.04/−0.05.
+  - The other platform fills 46% of the ig top 10 and 20% of the yt top 10, with 54% and 38% relevant.
+  - Seed-only labels had badly overstated interference (−0.165 / −0.055), so pool every round.
+- **C1 (te lists everywhere):** −0.022 overall.
+  - ig +0.063 [−0.004, +0.143], a near miss.
+  - yt −0.106. About −0.095 of that is Instagram items crowding YouTube searches: te coverage is 98% of Instagram items vs 6% of YouTube items.
+  - The YouTube-internal te effect is about −0.03, as in round 3.
+- **C2 (te only for insufficient items):** −0.181. Restricting the te *lists* to thin items gives them two RRF votes on every search. This is a design flaw, not a verdict on routing.
+- **C3 (qi-v3 filters):** −0.013.
+  - It helps behaviour and named-window searches.
+  - It is cancelled by guessed calendar windows, topic-free ordering on vibe searches and spurious Instagram save/date filters.
+  - `require watched` silently drops Instagram.
+- **Spend, round 4 (ledger `data/all/ai_runs.jsonl`):** $3.852 of $15.
+  - Gemini $3.776 of its $5.50 cap, $1.72 left;
+  - OpenAI $0.076.
+  - Round-4.1 judging cost $0. Rounds adopting nothing in a row: 1.
+
+**Agenda for round 4.2** (ranked by expected value per dollar; all three reuse existing outputs):
+
+1. **Coverage-fair fusion of the te lists** (free; expected +0.02 to +0.04 overall vs C0).
+   - Let each item's RRF score count only the lists that *could* rank it: the mean over eligible lists, or own-text lists standing in for missing te lists.
+   - This is platform-blind and comes from an item property, not the platform.
+   - Projections say it keeps C1's ig gain (+0.05 to +0.08) and cuts the yt loss from −0.106 to about −0.03.
+   - Pair it with a yt-side guard for topic/task searches if the loss stays.
+2. **Item-level sufficiency routing (the cascade, rebuilt; free; expected +0.01 to +0.03 on top of 1).**
+   - Put an insufficient item's te text into *its own* BM25 view and blend its te vector into its own dense vector, instead of adding separate lists for a subset.
+   - Sufficient items stay text-only.
+   - This tests the routing idea C2 could not.
+3. **qi-v3 with code-side guards (≈ $0.03 for 3 repeats; expected +0.01 to +0.03, on yt behaviour/time searches only).**
+   - Keep a date window only if the search contains a calendar word (a year, month or season). Keep a behaviour filter only if it contains a behaviour word.
+   - Disable topic-free → behaviour-only ordering when the parse has topic phrases.
+   - Treat `watched` as "watched OR an Instagram interaction" so it no longer acts as a hidden platform filter.
+
+Not recommended yet:
+- YouTube te coverage parity: more Gemini spend, with only $1.72 left, and round 3 found te hurts titled YouTube items.
+- Per-platform BM25 normalisation: interference is only about −0.01 to −0.02.
+
 ## Round 3 (`BRIEF-3.md`, run as `RUN-3.md`): YouTube, done
 
 - **YouTube base: A0** (B3 recipe on Takeout titles and channels, OpenAI 3-small 512d). Dev 0.463, test 0.437. Nothing passed the adoption rule. **YouTube test scorings: 1 of 3 used.**
