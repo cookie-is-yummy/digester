@@ -8,7 +8,8 @@
   },
   "text-embedding-3-large": {
    "provider": "openai",
-   "input_per_m": 0.13
+   "input_per_m": 0.13,
+   "verified": "2026-11-07 https://developers.openai.com/api/docs/models/text-embedding-3-large ($0.13 per M; no batch price stated)"
   },
   "gpt-5-nano": {
    "provider": "openai",
@@ -40,7 +41,15 @@
    "cached_input_per_m": 0.075,
    "output_per_m": 4.5,
    "batch_input_per_m": 0.375,
-   "batch_output_per_m": 2.25
+   "batch_output_per_m": 2.25,
+   "verified": "2026-11-07 https://developers.openai.com/api/docs/models/gpt-5.4-mini ($0.75 / $0.075 cached / $4.50; reasoning.effort none (default), low, medium, high, xhigh)"
+  },
+  "gpt-5.5": {
+   "provider": "openai",
+   "input_per_m": 5.0,
+   "cached_input_per_m": 0.5,
+   "output_per_m": 30.0,
+   "verified": "2026-11-07 https://developers.openai.com/api/docs/models/gpt-5.5 ($5 / $0.50 cached / $30 per M; no batch price listed; prompts > 272K input tokens priced 2x input, 1.5x output; reasoning.effort none, low, medium (default), high, xhigh)"
   },
   "gpt-6-luna": {
    "provider": "openai",
