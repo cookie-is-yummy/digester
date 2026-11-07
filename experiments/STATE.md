@@ -1,5 +1,39 @@
 # State
 
+## Round 7 (`BRIEF-7.md`): cheap classifiers plus the combined package (evaluated 7 Nov 2026; `results/r7-eval.md`)
+
+- **Adopted: nothing. Finalist stays C0** (dev 0.481 on c4-r7). No arm passes clause 1 against C0 or H0.
+- **Levels:** C0 0.481, H0 (= G4, rebuilt) 0.504, H1 0.505, H2 0.504, H3 0.500, H4 0.507, **H5 0.510**, **H5b 0.516**.
+- **Per scope:** the Instagram side gains robustly; the YouTube side does not.
+  - vs C0: H5 ig **+0.057 [+0.012, +0.101]**, H5b ig **+0.087 [+0.034, +0.151]** (both 20/20 seeds, both > 0 without the best search).
+  - yt: H5 −0.000, H5b −0.018. vs H0: H5 yt −0.014, H5b yt −0.032.
+- **H5b vs C0 +0.034 [−0.012, +0.085], 24/15/5** (lower bound < 0 on 20/20 seeds). H5 vs C0 +0.028 [−0.012, +0.069], 24/14/6.
+- **vs H0 every part is ≈ 0 overall:** H1 +0.002, H2 +0.000, H3 −0.003, H4 +0.004, H5 +0.006, H5b +0.012. The bulk of the package's gain over C0 is 3-large (+0.022).
+- **Where parts fired (vs H0, dev cells):**
+  - helped: H1's guarded filters (3 searches, +0.150 per cell; one yt behaviour search), router calibration when the platform read is right (+0.031 [+0.005, +0.062], 18 searches), H4 (1 search, +0.24), H2 tone (3 searches, +0.015);
+  - hurt: H1 soft time (−0.032 per cell, 18 searches), calibration when the router reads the other app (**−0.071 [−0.155, −0.001]**, 7 searches; H5 −0.072, H5b −0.125), router-gated creator search (2 searches, −0.12);
+  - nothing: H2 format (0.000).
+- **Flagged weaknesses all show in the scores:**
+  - dev yt searches are read yt 8 / both 7 / ig 5;
+  - 20 of 26 soft-time cells come from guard-dropped windows (16 'new'), and they lose;
+  - H5b raises Instagram items per yt top 10 from 1.61 to 2.27, so H5b vs H5 is yt −0.018 in every repeat and ig +0.030 in every repeat.
+- **Labels:** c4-r7 = c4-t2b + 51 blind evaluator dev judgments (2/11/38) over 16 searches; backup `evalset.pre_r7.jsonl`. Unjudged@10 0.00. With this round's 1s set to 0, no verdict changes.
+- **Cost / latency vs C0:**
+  - H5 / H5b $0.294 per 1k as run (+$0.174; $0.062 / $0.051 per +0.01); about $0.131 if qs-v1 is merged into the rewrite call (estimate).
+  - +0.8 to +1.0 s at p50 and p95, all from the separate qs-v1 call.
+  - H1 / H3 cost as H0.
+  - Judging $0. OpenAI $2.882 of $9.50; ledger $6.657.
+- **Package for the last `test2` scoring: H5b** (better of H5 / H5b on dev, as preregistered), with **C0** and **H0** as references.
+  - No run isolates a pared-down package. The clearly harmful parts (misread calibration, soft time) are inside both packages.
+  - Risk: test2 is 4 `yt` + 6 `both` with no `ig` scope, so H5b's weakness is tested directly and its strength only through `both`. Expect a yt loss.
+  - Fallback if the orchestrator prefers it: H5.
+- **Remaining scorings:** `test2` 1 left, `test` 2 left, `yt_holdout` 1 left; none touched this round.
+- **Next, if the loop continues:**
+  - keep the guarded filters and 3-large;
+  - gate calibration on router confidence, or drop it for yt reads;
+  - drop soft time and the format boost;
+  - keep te lists away from yt searches.
+
 ## Held-out test2 (round 6) (7 Nov 2026; `results/r6-test2.md`)
 
 - **Scoring 2 of 3 on `test2`** (Derrick's 10 searches: 4 `yt`, 6 `both`). Frozen C0, G4 and G5 (`runs/final2/c0x_test2_r*`, `runs/final3/{g4,g5}_test2_r*`), scored once after pooling and blind judging.
