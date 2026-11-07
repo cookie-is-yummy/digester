@@ -1,5 +1,23 @@
 # State
 
+## Final held-out (round 7) (7 Nov 2026; `results/r7-final.md`)
+
+- **`test2` scoring 3 of 3 and `yt_holdout` scoring 3 of 3. Both sets are now used up.** `test` has 2 left (contaminated for round-5 ideas: qs-v1, creator search, te lists).
+- Frozen C0, H0 (= G4), H5 and **H5b (preregistered)**, scored once per set after pooling (test2 18 items, `yt_holdout` 58) and blind judging ($0). Labels c4-f7, backup `evalset.pre_final7.jsonl`; Derrick's marks and earlier grades untouched.
+- **Levels:** test2 C0 0.448, H0 0.501, H5 0.519, **H5b 0.538**; `yt_holdout` C0 0.388, H0 0.445, **H5 0.470**, H5b 0.450.
+- **vs C0 (21 searches pooled):** H5b **+0.075 [+0.026, +0.128], 15/4**; H5 **+0.076 [+0.022, +0.135], 15/4**; H0 **+0.055 [+0.013, +0.103], 15/4**. All lower bounds > 0 on 20/20 seeds, every repeat positive, and all hold without the creator-search cells.
+  - test2: H5b +0.089 [+0.022, +0.174] 8/1 (seed +0.052, CI > 0); H5 +0.070 7/2; H0 +0.053 (= round 6's G4).
+  - `yt_holdout`: H5 +0.081 8/2; H5b +0.061 7/3; **H0 +0.056 [+0.003, +0.119] 8/2** (seed +0.058, CI > 0): the first held-out YouTube confirmation of 3-large.
+- **vs H0 (21):** H5b +0.020 [−0.008, +0.047] 12/5, H5 +0.021 [−0.006, +0.051] 10/6; half of each sits in creator-search cells. test2 alone H5b +0.036 [+0.007, +0.069] 6/1, but `yt_holdout` +0.005 6/4 (seed −0.015). **Not confirmed.**
+- **te lists (H5b − H5):** test2 `both` +0.032, `yt_holdout` −0.020 (2/6; seed CI below 0); net −0.001, 7/7. The dev trade (help mixed / Instagram, hurt YouTube) is confirmed.
+- **Parts on held-out (vs H0):** calibration helps when the router reads the platform right (+0.05 to +0.06) and hurts when it reads a YouTube search as Instagram (−0.064 H5, −0.083 H5b; 0 of 4 test2 `yt`, 2 of 9 `yt_holdout` typed); soft time loses in H5 on test2 (−0.048, 0/2); the guarded filter won once (+0.21); creator search 2 wins, 2 ties, 1 small loss.
+- **Problems:** creator search depends on Python string hashing (9/30 test2 and 6/27 `yt_holdout` typed cells are one draw); test2's H0 vs C0 is round 6's number reused; no `ig`-scope held-out search; 76 new grades by one judge (≤ 8% of relevant top-10 items; no verdict changes with them set to 0).
+- **Recommendation (for the founders):**
+  1. **Adopt H0 (C0 + text-embedding-3-large 1,024 d) as the new processor.** Confirmed on dev (+0.022, 25/12) and on both held-out sets; +$0.011 per 1k searches, about +0.1 s.
+  2. **Do not adopt H5b.**
+  3. **Keep H5 as the package candidate, not adopted:** its gain over C0 is confirmed, its increment over H0 is not (+0.021 held-out, +0.006 dev), and it costs +$0.164 per 1k and +0.8 s unless qs-v1 is merged into the rewrite.
+- **Next, to settle the rest:** make creator search deterministic; build H5-lite (H0 + confidence-gated calibration + guarded filters + creator search / H4 profiles, qs-v1 merged; no soft time, no format boost, no te lists); score H0 vs H5-lite (H5 as reference) on a **fresh Derrick set of about 40–45 searches**, about a third each `ig` / `yt` / `both`, with 6–8 creator recalls, 5+ time / behaviour searches and YouTube searches that do not name the platform. `test` could give H0 vs C0 one more check.
+
 ## Round 7 (`BRIEF-7.md`): cheap classifiers plus the combined package (evaluated 7 Nov 2026; `results/r7-eval.md`)
 
 - **Adopted: nothing. Finalist stays C0** (dev 0.481 on c4-r7). No arm passes clause 1 against C0 or H0.
