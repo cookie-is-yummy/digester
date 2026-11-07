@@ -1,5 +1,32 @@
 # State
 
+## Held-out test2 (round 6) (7 Nov 2026; `results/r6-test2.md`)
+
+- **Scoring 2 of 3 on `test2`** (Derrick's 10 searches: 4 `yt`, 6 `both`). Frozen C0, G4 and G5 (`runs/final2/c0x_test2_r*`, `runs/final3/{g4,g5}_test2_r*`), scored once after pooling and blind judging.
+- **Scores:** C0 0.448, **G4 0.501**, G5 0.480.
+- **G4 vs C0: +0.053 [−0.001, +0.134], 7/2/1.**
+  - yt +0.109 (3/1); both +0.015 (4/1).
+  - Seed only (Derrick's labels): **+0.022, 7/2**, the same as the dev Δ.
+  - Concentrated: g06 is +0.38, 72% of the net. Drop the best 1 / 3 searches → +0.017 / +0.003. The lower bound is < 0 on 20/20 seeds (−0.001 to 0.000). All 9 repeat pairings are positive.
+  - Mechanism as on dev: fewer Instagram items in yt top 10s (0.50 → 0.33); Instagram items in `both` searches are fewer but more precise (3.22 @ 0.81 → 2.72 @ 0.96).
+  - Holds when this round's 1s are set to 0 (+0.033, 5/3) and when its 2s are set to 1 (+0.033, 6/3).
+  - **Verdict: CONFIRMED** in direction and wins; the size is not established. It misses clause 1 on test2 narrowly (lower bound −0.001).
+- **G5 vs C0: +0.032 [−0.026, +0.085], 5/4/1.**
+  - yt +0.053 (3/1); both +0.017 but 2/3. Seed only +0.009, 4/4.
+  - Its sign flips under the grade-sensitivity variants (1s → 0: −0.017; 2s → 1: −0.006).
+  - Its dev strength (ig side) does not reappear on the `both` searches.
+  - **Verdict: NOT CONFIRMED.**
+- **G5 vs G4: −0.021, 4/5/1** (seed only −0.014, 2/6), against −0.008 on dev. The mini rewrites add nothing on top of 3-large.
+- **Labels:** c4-t2b = c4-r6 + 73 blind evaluator test2 judgments (20/31/22), 35 of them surfaced `unvetted_candidates`.
+  - Derrick's gold and the earlier test2 grades are untouched. Backup `evalset.pre_test2b.jsonl`.
+  - Seed unjudged@10 vs c4-r6: C0 0.00, G4 0.19, G5 0.30 → 0.00. Pre-pool Δ was G4 +0.003, G5 −0.073.
+- **Remaining scorings: `test2` 1 left; `test` 2 left; `yt_holdout` 1 left.**
+- **Spend:** $0 judging. OpenAI $2.623 of $9.50; ledger $6.399.
+- **Finalist line:**
+  - No adoption from this scoring alone; C0 stays the finalist unless the orchestrator decides otherwise.
+  - G4 is the strongest held-out candidate so far, at +$0.011 per 1k searches. A Derrick spot-check of the g06 pooled items would firm up its size.
+  - Drop G5 and the rewrite-model line.
+
 ## Round 6: stronger rewrite models, larger embedding model (evaluated 7 Nov 2026; `results/r6-eval.md`)
 
 - **Adopted: nothing. Finalist stays C0** (dev 0.482). No arm passes clause 1. Clause 2 does not apply, because every arm costs more.
