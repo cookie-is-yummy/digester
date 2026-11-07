@@ -17,6 +17,8 @@ call (timing only, measured once per search and repeat and shared by every arm).
 
 usage: python experiments/methods/c7_search.py --configs h0chk,h1,h2,h3,h4,h5,h5b[,h6] [--reps 1,2,3]
        python experiments/methods/c7_search.py --stats     # fire counts per queries.jsonl kind, from the run files
+       other query file: --queries FILE --rewrites-dir DIR --outdir DIR --suffix _NAME --splits NAME
+                         --ref RUN_{rep}.json --h0-ref RUN_{rep}.json  (embedding timings cached per suffix)
 """
 import argparse
 import collections
@@ -42,7 +44,8 @@ CONFIGS = ["h0chk", "h0", "h1", "h2", "h3", "h4", "h5", "h5b", "h6"]
 PART = {"h1": {"h1"}, "h2": {"h2"}, "h3": {"h3"}, "h4": {"h4"}, "h5": {"h1", "h2", "h3", "h4"},
         "h5b": {"h1", "h2", "h3", "h4", "te"}, "h6": {"h1", "h2", "h3", "h4", "ce"}, "h0chk": set(), "h0": set()}
 USES_QS = {"h2", "h4", "h5", "h5b", "h6"}
-ALT = {"queries": None, "rewrites": None, "outdir": None, "suffix": "", "splits": None, "ref": "r7/h0_r{rep}.json"}
+ALT = {"queries": None, "rewrites": None, "outdir": None, "suffix": "", "splits": None, "ref": "r7/h0_r{rep}.json",
+       "h0_ref": "r6/g4_r{rep}.json"}
 CE_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 CE_TOP = 50
 
@@ -190,7 +193,7 @@ def search_one(env, cfg, q, parse, slots):
 
 def embed_timing(qs, plans, rep):
     """One live 3-large call per typed search with its strings; cached per repeat so every arm shares the same."""
-    p = os.path.join(DATA, "r7", f"embed_timing_r{rep}.json")
+    p = os.path.join(DATA, "r7", f"embed_timing{ALT['suffix']}_r{rep}.json")  # suffix keeps other query files apart
     if os.path.exists(p):
         return json.load(open(p))
     out = {}
@@ -297,12 +300,13 @@ def run_config(env, cfg, reps):
                 "cost_note": "ledger list prices, uncached input price; per 1k typed searches; classifiers, router "
                              "and cross-encoder run locally ($0)",
                 "new_spend_this_run_usd": round(new_spend, 6), "per_search": per}
-        ref_name = ("r6/g4_r{rep}.json" if cfg in ("h0chk", "h0") else ALT["ref"]).format(rep=rep)
+        ref_name = (ALT["h0_ref"] if cfg in ("h0chk", "h0") else ALT["ref"]).format(rep=rep)
         ref = json.load(open(os.path.join(DATA, "runs", ref_name)))
         meta["diagnostics"] = top10_diag(out, ref, plat)
         if ALT["queries"]:
             meta["queries_file"] = os.path.basename(ALT["queries"])
             meta["rewrites_dir"] = ALT["rewrites"]
+            meta["diagnostics_ref"] = ref_name
         outdir = ALT["outdir"] or (os.path.join(DATA, "tmp", "r7_checks") if cfg == "h0chk"
                                    else os.path.join(DATA, "runs", "r7"))
         path = write_run(os.path.join(outdir, f"{cfg}{ALT['suffix']}_r{rep}.json"), f"c7:{cfg}",
@@ -364,11 +368,12 @@ def main():
     ap.add_argument("--outdir", default=None)
     ap.add_argument("--suffix", default="")
     ap.add_argument("--splits", default=None)
-    ap.add_argument("--ref", default=ALT["ref"])
+    ap.add_argument("--ref", default=ALT["ref"], help="run under runs/ for top-10 diagnostics of h1-h6; {rep} = repeat")
+    ap.add_argument("--h0-ref", default=ALT["h0_ref"], help="run under runs/ for h0 / h0chk; {rep} = repeat")
     ap.add_argument("--stats", action="store_true")
     a = ap.parse_args()
     ALT.update({"queries": a.queries, "rewrites": a.rewrites_dir, "outdir": a.outdir, "suffix": a.suffix,
-                "splits": a.splits.split(",") if a.splits else None, "ref": a.ref})
+                "splits": a.splits.split(",") if a.splits else None, "ref": a.ref, "h0_ref": a.h0_ref})
     if a.stats:
         stats()
         return
