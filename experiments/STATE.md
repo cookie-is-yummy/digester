@@ -1,5 +1,31 @@
 # State
 
+## Round 6: stronger rewrite models, larger embedding model (evaluated 7 Nov 2026; `results/r6-eval.md`)
+
+- **Adopted: nothing. Finalist stays C0** (dev 0.482). No arm passes clause 1. Clause 2 does not apply, because every arm costs more.
+- **Round-6 dev leader: G4** (text-embedding-3-large 1,024 d, C0's nano rewrites): 0.505.
+  - vs C0 **+0.022 [−0.008, +0.051], 25/12/7**. The lower bound is < 0 on 20/20 seeds.
+  - ig +0.031 (lower bound −0.003 to −0.001); yt +0.014 (a few searches, one good repeat); more-like-this +0.042; MRR +0.050.
+  - It lets fewer Instagram items into YouTube searches (2.05 → 1.59 per top 10, more of them relevant).
+  - Cost +$0.011 per 1k searches ($0.005 per +0.01), plus $0.52 once for the library; +0.1 s.
+- **G5** (3-large + gpt-5.4-mini): +0.014, 23/15. **ig +0.038 [+0.008, +0.068], robust** (20/20 seeds, and still > 0 without the best search). yt −0.009. vs G4 −0.008, at 11× G4's cost.
+- **The embedding model is what helps; the rewrite model is not.**
+  - G5 vs G1 is +0.027 [+0.004, +0.049], robust.
+  - G1 (mini) −0.012; G2 (gpt-5.5) +0.005 at $11.34 per 1k (≈ 95× C0) and +2.4 s p50; G3 (escalation, 55%) −0.012.
+  - G3's hard rule picks searches where mini loses (−0.024), and leaves to nano the ones where gpt-5.5 would gain (+0.020).
+- **Spread:** stronger rewrites cut per-search nDCG variation between repeats by about a third (SD 0.060 → 0.041 mini, 0.039 gpt-5.5; G5 0.034), but the aggregate spread does not fall. The extra stability brought no quality.
+- **Labels:** c4-r6 = c4-t2 + 290 blind evaluator dev judgments (18/57/215) over 40 searches; backup `evalset.pre_r6.jsonl`. Unjudged@10 is 0.00.
+  - Pooling moved G4 +0.009 → +0.022 and G5 −0.008 → +0.014.
+  - With this round's 1s set to 0, no verdict changes.
+- **Spend:** round 6 $2.385 OpenAI (builder), judging $0. OpenAI $2.578 of $9.50; ledger $6.354.
+- **Remaining scorings:** `test2` 2 left, `test` 2 left, `yt_holdout` 1 left; none touched this round.
+- **Candidates for one test2 scoring:**
+  1. **C0** (finalist);
+  2. **G4** (dev leader, near-zero cost);
+  3. optional **G5**: its robust part is ig scope, which test2 lacks except via `both`.
+  - G4 needs 3-large vectors of C0's test2 strings (≈ $0.001); G5 also needs mini parses (≈ $0.02). The orchestrator arranges both.
+- **Next, if the loop continues:** a 3-large te / fusion arm (E1/F0 on 3-large vectors) is the natural test; drop the rewrite-model line.
+
 ## Held-out test2 (3 Nov 2026; `results/r5-test2.md`)
 
 - **Scoring 1 of 3 on `test2`** (Derrick's 10 fresh searches: 4 `yt`, 6 `both`). Frozen C0, E1, F0, F2 (`runs/final2/*_test2_r*`), scored once after pooling and blind judging.
