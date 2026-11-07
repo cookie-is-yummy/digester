@@ -9,6 +9,7 @@ Prints aggregates only (no query text).
 
 usage: python experiments/methods/c6_rewrite.py pilot --models gpt-5.4-mini,gpt-5.5
        python experiments/methods/c6_rewrite.py run --model gpt-5.4-mini [--repeats 1,2,3]
+           [--queries FILE --outdir DIR --splits NAME]
 """
 import argparse
 import json
@@ -30,8 +31,17 @@ PILOT = ["lofi beats for studying late at night", "that guy who builds tiny hous
          "should I learn piano or guitar next", "how to knit a sweater as a beginner"]
 
 
+# Alternative query file (e.g. frozen held-out searches): set from the CLI; defaults keep the dev + yt_holdout runs.
+ALT = {"queries": None, "outdir": None, "splits": None}
+
+
 def typed_queries():
-    return [q for q in load_queries("dev") + load_queries("yt_holdout") if not q["examples"]]
+    if ALT["queries"]:
+        with open(ALT["queries"]) as f:
+            qs = [json.loads(line) for line in f if line.strip()]
+    else:
+        qs = load_queries("dev") + load_queries("yt_holdout")
+    return [q for q in qs if not q["examples"]]
 
 
 def pilot(models):
@@ -73,10 +83,13 @@ def run(model, reps):
                 "cost_usd": sum(v["cost_usd"] for v in per_q.values()),
                 "rewrite_p50_s": round(float(np.median(secs)), 3),
                 "rewrite_p95_s": round(float(np.percentile(secs, 95)), 3), "wall_s": round(wall, 1),
-                "new_calls": new, "splits": ["dev", "yt_holdout"], "per_query": per_q}
+                "new_calls": new, "splits": ALT["splits"] or ["dev", "yt_holdout"], "per_query": per_q}
+        if ALT["queries"]:
+            meta["queries_file"] = os.path.basename(ALT["queries"])
         out = {"_note": f"qr-v1 rewrite (prompt unchanged) on {model}, reasoning {G.REASONING[model]}, run r{k}. "
                         "Written by experiments/methods/c6_rewrite.py (round 6).", "_meta": meta, **parses}
-        path = os.path.join(RW_DIR, f"{G.PROMPT_VERSION}_{model}_r{k}.json")
+        os.makedirs(ALT["outdir"] or RW_DIR, exist_ok=True)
+        path = os.path.join(ALT["outdir"] or RW_DIR, f"{G.PROMPT_VERSION}_{model}_r{k}.json")
         json.dump(out, open(path, "w"), ensure_ascii=False, indent=1)
         print(f"wrote {os.path.basename(path)}: {len(parses)} searches, {new} new calls, wall {wall:.1f} s "
               f"({len(parses) / max(wall, 1e-9):.2f} items/s), cost ${meta['cost_usd']:.4f}, p50 {meta['rewrite_p50_s']} s, "
@@ -93,7 +106,12 @@ def main():
     r = sub.add_parser("run")
     r.add_argument("--model", required=True)
     r.add_argument("--repeats", default="1,2,3")
+    r.add_argument("--queries", default=None, help="alternative query file (same format as evals/queries.jsonl)")
+    r.add_argument("--outdir", default=None, help="rewrite file dir (default runs/rewrites)")
+    r.add_argument("--splits", default=None, help="comma list recorded in meta.splits")
     a = ap.parse_args()
+    if a.cmd == "run":
+        ALT.update({"queries": a.queries, "outdir": a.outdir, "splits": a.splits.split(",") if a.splits else None})
     if a.cmd == "pilot":
         pilot(a.models.split(","))
     else:

@@ -15,6 +15,7 @@ seconds) + one live query-embedding call for all of that search's strings (timin
 Writes $DIGESTER_DATA/runs/r6/<cfg>_r<k>.json (lib/corpus.write_run). Prints aggregates only (no query text, no items).
 
 usage: python experiments/methods/c6_search.py --configs c0chk,g1,g2,g3,g4,g5 [--reps 1,2,3] [--no-timing]
+           [--queries FILE --rewrites-dir DIR --outdir DIR --suffix _NAME --splits NAME --ref RUN_{rep}.json]
        python experiments/methods/c6_search.py --variability
 """
 import argparse
@@ -41,11 +42,22 @@ LARGE = {"g4", "g5"}
 CONFIGS = list(PARSE)
 
 
+# Alternative query file (e.g. frozen held-out searches): set from the CLI; defaults keep the dev + yt_holdout runs.
+# ref: C0 run (under runs/, "{rep}" = repeat) for the c0chk comparison and the top-10 diagnostics.
+ALT = {"queries": None, "rewrites": None, "outdir": None, "suffix": "", "splits": None, "ref": "r4.2/c0x_r{rep}.json"}
+
+
+def rw_dir():
+    return ALT["rewrites"] or RW_DIR
+
+
 def rw(model, rep):
-    return json.load(open(os.path.join(RW_DIR, f"qr-v1_{model}_r{rep}.json")))
+    return json.load(open(os.path.join(rw_dir(), f"qr-v1_{model}_r{rep}.json")))
 
 
 def queries():
+    if ALT["queries"]:
+        return [json.loads(line) for line in open(ALT["queries"]) if line.strip()]
     return load_queries("dev") + load_queries("yt_holdout")
 
 
@@ -108,7 +120,7 @@ def run_config(S, cfg, reps, timing, item_emb):
     written = []
     large = cfg in LARGE
     for rep in reps:
-        P = {m: rw(m, rep) for m in {NANO, MINI, FLAG} if os.path.exists(os.path.join(RW_DIR, f"qr-v1_{m}_r{rep}.json"))}
+        P = {m: rw(m, rep) for m in {NANO, MINI, FLAG} if os.path.exists(os.path.join(rw_dir(), f"qr-v1_{m}_r{rep}.json"))}
         plans = {q["id"]: plan_for(cfg, q, rep, P) for q in qs if not q["examples"]}
         S.QV.get([s for q in qs if not q["examples"] for s in strings(q, plans[q["id"]][0])])  # cache first
         out, per = {}, {}
@@ -146,7 +158,8 @@ def run_config(S, cfg, reps, timing, item_emb):
         n = len(lat_total)
         new_spend = sum(r["cost_usd"] for r in L.ledger()[spent0:])
         models = sorted({m for v in plans.values() for m, _ in v[1]})
-        meta = {"config": cfg, "round": "6", "repeat": rep, "splits": ["dev", "yt_holdout"], "n_searches": len(qs),
+        meta = {"config": cfg, "round": "6", "repeat": rep, "splits": ALT["splits"] or ["dev", "yt_holdout"],
+                "n_searches": len(qs),
                 "n_typed": n, "plan": "qr-v1 (prompt unchanged)",
                 "rewrite_models": {m: G.REASONING[m] for m in models},
                 "rewrites": [f"qr-v1_{m}_r{rep}" for m in models],
@@ -178,14 +191,20 @@ def run_config(S, cfg, reps, timing, item_emb):
                                       "typed_total_p50_s": pct(lat_routed, 50), "typed_total_p95_s": pct(lat_routed, 95),
                                       "rewrite_cost_per_1k_searches_usd": round(1000 * cost_rw_routed / max(n, 1), 4),
                                       "cost_per_1k_searches_usd": round(1000 * (cost_rw_routed + cost_emb) / max(n, 1), 4)}
-        ref = json.load(open(os.path.join(DATA, "runs", "r4.2", f"c0x_r{rep}.json")))
+        ref_name = ALT["ref"].format(rep=rep)
+        ref = json.load(open(os.path.join(DATA, "runs", ref_name)))
         meta["diagnostics"] = top10_diag(out, ref)
-        outdir = os.path.join(DATA, "tmp", "r6_checks") if cfg == "c0chk" else os.path.join(DATA, "runs", "r6")
-        path = write_run(os.path.join(outdir, f"{cfg}_r{rep}.json"), f"c6:{cfg}+qr-v1:{'+'.join(models)}",
-                         L.CodeIds(meta["embedding"]), out, meta)
+        if ALT["queries"]:
+            meta["queries_file"] = os.path.basename(ALT["queries"])
+            meta["rewrites_dir"] = rw_dir()
+            meta["diagnostics_ref"] = ref_name
+        outdir = ALT["outdir"] or (os.path.join(DATA, "tmp", "r6_checks") if cfg == "c0chk"
+                                   else os.path.join(DATA, "runs", "r6"))
+        path = write_run(os.path.join(outdir, f"{cfg}{ALT['suffix']}_r{rep}.json"),
+                         f"c6:{cfg}+qr-v1:{'+'.join(models)}", L.CodeIds(meta["embedding"]), out, meta)
         if cfg == "c0chk":
             same = sum(out[k] == ref["queries"][k][:1000] for k in out)
-            print(f"c0chk r{rep}: {same} of {len(out)} rankings identical to r4.2/c0x_r{rep} (1,000 deep)", flush=True)
+            print(f"c0chk r{rep}: {same} of {len(out)} rankings identical to {ref_name} (1,000 deep)", flush=True)
         written.append(path)
         print(f"wrote {os.path.basename(path)}: local p50 {meta['typed_local_p50_s']} s; total p50 "
               f"{meta['typed_total_p50_s']} / p95 {meta['typed_total_p95_s']} s; cost/1k ${meta['cost_per_1k_searches_usd']}; "
@@ -240,7 +259,15 @@ def main():
     ap.add_argument("--reps", default="1,2,3")
     ap.add_argument("--no-timing", action="store_true")
     ap.add_argument("--variability", action="store_true")
+    ap.add_argument("--queries", default=None, help="alternative query file (same format as evals/queries.jsonl)")
+    ap.add_argument("--rewrites-dir", default=None, help="qr-v1 parse dir (default runs/rewrites)")
+    ap.add_argument("--outdir", default=None, help="run file dir (default runs/r6, tmp/r6_checks for c0chk)")
+    ap.add_argument("--suffix", default="", help="run name suffix, e.g. _test2 -> <cfg>_test2_r<k>.json")
+    ap.add_argument("--splits", default=None, help="comma list recorded in meta.splits")
+    ap.add_argument("--ref", default=ALT["ref"], help="C0 run under runs/ for c0chk and diagnostics; {rep} = repeat")
     a = ap.parse_args()
+    ALT.update({"queries": a.queries, "rewrites": a.rewrites_dir, "outdir": a.outdir, "suffix": a.suffix,
+                "splits": a.splits.split(",") if a.splits else None, "ref": a.ref})
     if a.variability:
         variability()
         return
