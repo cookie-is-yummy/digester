@@ -1,4 +1,4 @@
-# Brief, round 8: a processor for each platform, run as a loop
+# Brief, round 8: audit the validation, re-evaluate the architecture, then a loop on per-platform processing
 
 The roles, preregistration, adoption rule, `lib/ai.py` ledger and privacy rules are the same as in `BRIEF.md` and `BRIEF-4.md`. Work unattended.
 
@@ -36,13 +36,51 @@ All held-out sets so far are used up or biased. Two new sets replace them:
   - Spot-check 30 by eye for searches that copy the caption word for word, and rewrite those.
 - `dev` (44 searches) stays for kind coverage. `test` is biased for round-5+ ideas; `test2` and `yt_holdout` are used up.
 
+## Phase A (first, before any new method round): audit the validation system
+
+Every verdict so far rests on this system, so check it before building more on it. Use a fresh agent that has built nothing. It may read labels, because it is an evaluator-side role. Questions:
+
+1. **Who graded what?**
+   - Most grades come from evaluator agents of the same model family as the builders. Measure agreement with Derrick on the items he graded: grade-level agreement and κ.
+   - Re-judge a blind sample of 150 pooled items twice (same rubric, fresh agent) to measure self-consistency.
+   - Get a **second judge from a different model family** on the same 150 (cheap model via `ai.py`).
+2. **Power.**
+   - Given the observed per-search variance, what Δ can 10, 21, 44 or 381 searches detect at 80% power?
+   - Were past "near misses" and "confirmed" verdicts within noise?
+3. **Rules and their reuse.**
+   - Does the adoption rule (Δ ≥ 0.03, CI > 0) suit that noise level?
+   - Should it correct for many arms per round (multiple comparisons)?
+   - Did test-set reuse and the diagnosis on test failures bias anything?
+4. **Pooling bias.**
+   - Do arms that surface many unjudged items gain or lose from being judged by the same agent?
+   - Is depth-10 pooling enough?
+5. **Leakage paths.** Builders saw dev query texts, and prompts were written after seeing outputs. Look for others (e.g. rewrite caches shared across splits).
+6. **Known-item labels.** Hand-check 40 search→watch pairs for autoplay or noise. Say whether MRR and success@10 are the right metrics.
+
+**Output:** `experiments/results/validation-audit.md`, with findings, numbers and a ranked list of fixes. Apply the fixes that are clearly right to `experiments/eval/PROTOCOL.md`, marked "changed in round 8, see audit". Record anything contestable as a Proposed entry in `docs/amendments.md` for Derrick. Later rounds use the improved protocol.
+
+## Phase B (second, and revisited each round): re-evaluate the architecture
+
+Step back from tweaks and ask whether the current shape is right: rewrite → dense + BM25 → RRF, with add-ons.
+
+- **Deliver** `docs/research/<date>-architecture-review.md`. It compares the current design with 3–5 alternatives on quality evidence, cost per 1,000 searches, latency, CPU-only feasibility and fit with the privacy design. The privacy design is a shared content store plus a private per-user vault with a revocable key; see the processor doc's section 8 and `docs/07-privacy-and-safety.md`.
+- **Candidates to consider (not limited to these):**
+  - per-platform indexes and pipelines behind one query planner;
+  - a creator-level index searched alongside items;
+  - learned sparse retrieval (SPLADE-style) or multi-vector late interaction (ColBERT-style), if they run on CPU;
+  - an LLM listwise reranker on the top 20 as a "refine" stage;
+  - an agentic planner that chooses tools (search, filter, creator lookup, time window), which matters because users' own agents will call us over MCP;
+  - learning from usage (click feedback).
+- **Prototype the best 1–2** as loop rounds below, and re-rank the options after each round's results.
+- **Architecture changes go to `docs/amendments.md` as Proposed** (AGENTS.md: both founders accept boundary changes); never merge them silently.
+
 ## The loop
 
-Rounds 8.1, 8.2, … run as in `BRIEF-4.md`: a fresh experimenter, then a fresh evaluator, then commit and push.
+Rounds 8.1, 8.2, … run as in `BRIEF-4.md`: a fresh experimenter, then a fresh evaluator, then commit and push. Each round's agenda draws from the platform list below **and** from the architecture review's top options, ranked by expected value per dollar.
 
 **Stop rule:** spend reaches the cap, or 3 rounds in a row adopt nothing. At the end, score the finalist, H0 and the best rival once on `known_test` and `ig_known_test`.
 
-## Agenda: platform-specific processing (ordered by expected value per dollar)
+## Agenda, part 1: platform-specific processing (ordered by expected value per dollar)
 
 1. **Fix creator search determinism** (sort ties, no hash order). Re-run H5 to get a stable baseline. Free.
 2. **Platform-aware fusion.** Each platform's own lists are used only for its own items, and coverage-fair fusion stays.
@@ -58,4 +96,4 @@ Rounds 8.1, 8.2, … run as in `BRIEF-4.md`: a fresh experimenter, then a fresh 
 
 ## Budget
 
-Rebuilding the vectors is about $1. Each round should stay under $2 unless the brief for that round says otherwise.
+Rebuilding the vectors is about $1. Phase A (second judge) is about $0.5. Each round should stay under $2 unless the brief for that round says otherwise.
