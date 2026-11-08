@@ -19,6 +19,7 @@ import random
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from corpus import DATA  # noqa: E402
 
 LAB = os.path.join(DATA, "evals", "labels")
@@ -224,7 +225,188 @@ def main():
     ap.add_argument("cmd")
     ap.add_argument("--model", default="gpt-5-mini")
     a, rest = ap.parse_known_args()
-    {"sheet": cmd_sheet, "llm": cmd_llm}[a.cmd](a)
+    {"sheet": cmd_sheet, "llm": cmd_llm, "power": cmd_power, "pooling": cmd_pooling,
+     "depth": cmd_depth}[a.cmd](a)
+
+
+
+# ---------------- power, pooling, depth (aggregates) ----------------
+def _sc():
+    import score_c4 as S  # same folder
+    return S
+
+
+def per_search(run_dir, stem, labels_path, split, metric="ndcg10", qs=None):
+    """{q: [m_r1, m_r2, m_r3]} on the given labels."""
+    S = _sc()
+    L = S.load_labels(labels_path, split)
+    out = {}
+    for k in (1, 2, 3):
+        run = json.load(open(os.path.join(run_dir, f"{stem}_r{k}.json")))["queries"]
+        for q, lab in L.items():
+            if lab["rel"] and q in run and (qs is None or q in qs):
+                out.setdefault(q, []).append(S.score_one(run[q], lab)[metric])
+    return {q: v for q, v in out.items() if len(v) == 3}
+
+
+def mde(sd, n, power=0.8, alpha=0.05):
+    from scipy import stats
+    df = max(n - 1, 1)
+    return (stats.t.ppf(1 - alpha / 2, df) + stats.t.ppf(power, df)) * sd / n ** 0.5
+
+
+def cmd_power(a):
+    import numpy as np
+    R = os.path.join(DATA, "runs")
+    cur = os.path.join(LAB, "evalset.jsonl")
+    comps = {  # name: (dir, run, dir, base, split)
+        "dev d1-c0": ("r4.2", "d1", "r4.2", "c0x", "dev"), "dev d4-c0": ("r4.2", "d4", "r4.2", "c0x", "dev"),
+        "dev d2-c0": ("r4.2", "d2", "r4.2", "c0x", "dev"), "dev d1p-c0": ("r4.2", "d1p", "r4.2", "c0x", "dev"),
+        "dev h0-c0": ("r7", "h0", "r4.2", "c0x", "dev"), "dev h5-c0": ("r7", "h5", "r4.2", "c0x", "dev"),
+        "dev h5b-c0": ("r7", "h5b", "r4.2", "c0x", "dev"), "dev h5-h0": ("r7", "h5", "r7", "h0", "dev"),
+        "dev h3-h0": ("r7", "h3", "r7", "h0", "dev"), "dev h1-h0": ("r7", "h1", "r7", "h0", "dev"),
+        "yth h0-c0": ("r7", "h0", "r4.2", "c0x", "yt_holdout"), "yth h5-c0": ("r7", "h5", "r4.2", "c0x", "yt_holdout"),
+        "yth d1-c0": ("r4.2", "d1", "r4.2", "c0x", "yt_holdout"),
+        "t2 h0-c0": ("final4", "h0_test2", "final2", "c0x_test2", "test2"),
+        "t2 h5-c0": ("final4", "h5_test2", "final2", "c0x_test2", "test2"),
+        "t2 h5b-c0": ("final4", "h5b_test2", "final2", "c0x_test2", "test2"),
+        "t2 e1-c0": ("final2", "e1_test2", "final2", "c0x_test2", "test2"),
+        "t2 f0-c0": ("final2", "f0_test2", "final2", "c0x_test2", "test2"),
+    }
+    res = {"comparisons": {}}
+    for name, (dr, r, db, b, split) in comps.items():
+        for metric in ("ndcg10", "mrr"):
+            try:
+                A_ = per_search(os.path.join(R, dr), r, cur, split, metric)
+                B_ = per_search(os.path.join(R, db), b, cur, split, metric)
+            except FileNotFoundError as e:
+                print("skip", name, e)
+                break
+            qs = sorted(set(A_) & set(B_))
+            d = np.array([np.mean(A_[q]) - np.mean(B_[q]) for q in qs])
+            # repeat-level: per-search SD of the repeat-paired deltas around their mean (rewrite noise)
+            dr_ = np.array([[A_[q][k] - B_[q][k] for k in range(3)] for q in qs])
+            within = float(np.sqrt(np.mean(np.var(dr_, axis=1, ddof=1))))
+            res["comparisons"].setdefault(name, {})[metric] = {
+                "n": len(qs), "delta": round(float(d.mean()), 4), "sd_d": round(float(d.std(ddof=1)), 4),
+                "share_changed": round(float(np.mean(np.abs(d) > 0.005)), 3),
+                "sd_within_repeats": round(within, 4)}
+    # A/A: base repeat k vs repeat k' (rewrite noise only)
+    for split in ("dev", "yt_holdout"):
+        B_ = per_search(os.path.join(R, "r4.2"), "c0x", cur, split)
+        H_ = per_search(os.path.join(R, "r7"), "h0", cur, split)
+        for nm, X in (("c0", B_), ("h0", H_)):
+            qs = sorted(X)
+            d = np.array([X[q][0] - X[q][1] for q in qs])
+            res.setdefault("aa", {})[f"{split} {nm} r1-r2"] = {"n": len(qs), "delta": round(float(d.mean()), 4),
+                                                               "sd_d": round(float(d.std(ddof=1)), 4),
+                                                               "sd_d_of_3rep_mean_est": round(float(d.std(ddof=1) / np.sqrt(2) / np.sqrt(3) * np.sqrt(2)), 4)}
+    # MDE table from the observed sd_d of comparisons between real arms (median, and the 75th percentile)
+    sds = {sp: [v["ndcg10"]["sd_d"] for k, v in res["comparisons"].items() if k.startswith(sp)]
+           for sp in ("dev", "yth", "t2")}
+    allsd = [x for v in sds.values() for x in v]
+    res["sd_d_summary"] = {sp: {"min": min(v), "median": float(np.median(v)), "max": max(v)} for sp, v in sds.items()}
+    table = {}
+    for label, sd in (("small arm (sd 0.05)", 0.05), ("median arm (sd %.3f)" % float(np.median(allsd)), float(np.median(allsd))),
+                      ("large arm (sd 0.15)", 0.15)):
+        table[label] = {str(n): round(mde(sd, n), 3) for n in (10, 21, 44, 150, 381)}
+    res["mde_ndcg10"] = table
+    json.dump(res, open(os.path.join(OUT, "power.json"), "w"), indent=1)
+    print(json.dumps(res, indent=1))
+
+
+def cmd_pooling(a):
+    """Seed (pre-round labels) vs pooled (post-round labels) delta, per arm, with its pre-pool unjudged10."""
+    import numpy as np
+    S = _sc()
+    R = os.path.join(DATA, "runs")
+    P = lambda n: os.path.join(LAB, n)  # noqa: E731
+    cases = [  # (round, split, pre, post, [(dir, arm, dir, base)])
+        ("r4.2", "dev", "evalset.pre_r4.2.jsonl", "evalset.pre_r4.3.jsonl",
+         [("r4.2", x, "r4.2", "c0x") for x in ("d1", "d1p", "d2", "d3", "d4")]),
+        ("r7", "dev", "evalset.pre_r7.jsonl", "evalset.pre_final7.jsonl",
+         [("r7", x, "r4.2", "c0x") for x in ("h0", "h1", "h2", "h3", "h4", "h5", "h5b")]),
+        ("final7 yth", "yt_holdout", "evalset.pre_final7.jsonl", "evalset.jsonl",
+         [("r7", x, "r4.2", "c0x") for x in ("h0", "h5", "h5b")]),
+        ("test2 r5", "test2", "evalset.pre_test2.jsonl", "evalset.pre_test2b.jsonl",
+         [("final2", x + "_test2", "final2", "c0x_test2") for x in ("e1", "f0", "f2")]),
+        ("final7 t2", "test2", "evalset.pre_final7.jsonl", "evalset.jsonl",
+         [("final4", x + "_test2", "final2", "c0x_test2") for x in ("h0", "h5", "h5b")]),
+    ]
+    out = []
+    for rnd, split, pre, post, arms in cases:
+        Lpre = S.load_labels(P(pre), split)
+        for dr, arm, db, base in arms:
+            row = {"round": rnd, "split": split, "arm": arm}
+            for tag, lp in (("seed", P(pre)), ("pooled", P(post))):
+                A_ = per_search(os.path.join(R, dr), arm, lp, split)
+                B_ = per_search(os.path.join(R, db), base, lp, split)
+                qs = sorted(set(A_) & set(B_))
+                row[f"delta_{tag}"] = round(float(np.mean([np.mean(A_[q]) - np.mean(B_[q]) for q in qs])), 4)
+                row["n"] = len(qs)
+            U = {}
+            for d_, s_ in ((dr, arm), (db, base)):
+                v = per_search(os.path.join(R, d_), s_, P(pre), split, "unjudged10")
+                U[s_] = round(float(np.mean([np.mean(x) for x in v.values()])), 3)
+            row["unj10_arm_pre"], row["unj10_base_pre"] = U[arm], U[base]
+            row["shift"] = round(row["delta_pooled"] - row["delta_seed"], 4)
+            out.append(row)
+            print(row)
+    xs = np.array([r["unj10_arm_pre"] - r["unj10_base_pre"] for r in out])
+    ys = np.array([r["shift"] for r in out])
+    slope = float(np.polyfit(xs, ys, 1)[0]) if len(out) > 2 else None
+    res = {"rows": out, "corr_unjudged_gap_vs_shift": round(float(np.corrcoef(xs, ys)[0, 1]), 3),
+           "slope_shift_per_unit_unjudged_gap": round(slope, 3)}
+    json.dump(res, open(os.path.join(OUT, "pooling.json"), "w"), indent=1)
+    print({k: v for k, v in res.items() if k != "rows"})
+
+
+def cmd_depth(a):
+    """How much of ranks 11-20 / 11-100 is unjudged on current labels, and how far nDCG@20 / R@100 could move."""
+    import math
+    import numpy as np
+    S = _sc()
+    R = os.path.join(DATA, "runs")
+    plat = S.platforms()
+    res = {}
+    for split, runs in (("dev", [("r4.2", "c0x"), ("r4.2", "d4"), ("r7", "h0"), ("r7", "h5b")]),
+                        ("yt_holdout", [("r4.2", "c0x"), ("r7", "h0"), ("r7", "h5")]),
+                        ("test2", [("final2", "c0x_test2"), ("final4", "h0_test2"), ("final4", "h5b_test2")])):
+        L = S.load_labels(os.path.join(LAB, "evalset.jsonl"), split)
+        for dr, stem in runs:
+            agg = collections.defaultdict(list)
+            for k in (1, 2, 3):
+                run = json.load(open(os.path.join(R, dr, f"{stem}_r{k}.json")))["queries"]
+                for q, lab in L.items():
+                    if not lab["rel"] or q not in run:
+                        continue
+                    rk = [c for c in run[q] if c in plat]
+                    rel, judged = lab["rel"], lab["judged"]
+                    unj = lambda lo, hi: sum(1 for c in rk[lo:hi] if c not in judged) / max(len(rk[lo:hi]), 1)  # noqa
+                    agg["unj_1_10"].append(unj(0, 10))
+                    agg["unj_11_20"].append(unj(10, 20))
+                    agg["unj_21_100"].append(unj(20, 100))
+                    j1120 = [c for c in rk[10:20] if c in judged]
+                    prec = (sum(1 for c in j1120 if c in rel) / len(j1120)) if j1120 else 0.0
+                    agg["prec_judged_11_20"].append(prec)
+
+                    def ndcg20(fill):
+                        g = [rel.get(c, fill if c not in judged else 0) for c in rk[:20]]
+                        dcg = sum((2 ** x - 1) / math.log2(i + 2) for i, x in enumerate(g))
+                        extra = [fill] * sum(1 for c in rk[:20] if c not in judged) if fill else []
+                        ideal = sorted(list(rel.values()) + extra, reverse=True)[:20]
+                        idcg = sum((2 ** x - 1) / math.log2(i + 2) for i, x in enumerate(ideal))
+                        return dcg / idcg if idcg else 0.0
+                    agg["ndcg20_unj0"].append(ndcg20(0))
+                    agg["ndcg20_unj1"].append(ndcg20(1))
+                    n = len(rel)
+                    h = sum(1 for c in rk[:100] if c in rel)
+                    u = sum(1 for c in rk[:100] if c not in judged)
+                    agg["r100"].append(h / n)
+                    agg["r100_if_unjudged_rel_at_prec"].append((h + u * prec) / (n + u * prec))
+            res[f"{split} {stem}"] = {k: round(float(np.mean(v)), 3) for k, v in agg.items()}
+            print(split, stem, res[f"{split} {stem}"])
+    json.dump(res, open(os.path.join(OUT, "depth.json"), "w"), indent=1)
 
 
 if __name__ == "__main__":
