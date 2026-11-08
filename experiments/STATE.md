@@ -2,7 +2,8 @@
 
 ## Round 8 (`BRIEF-8.md`) — in progress (started 8 Nov 2026)
 
-- **Setup:** data rebuilt from the split zip into `data/all/`. `corpus/emb/oai512` (3-small 512 d) and `oai3l_1024` (3-large) are being re-embedded: the id order was reconstructed (Instagram = round-1 store order, 20,202; YouTube = titled items in file order, 100,967; total 121,169 = the original count). Then `r7/h0_r1` must reproduce exactly.
+- **Setup:** data rebuilt from the split zip into `data/all/`. `corpus/emb/oai512` (3-small, $0.08) and `oai3l_1024` (3-large, $0.52) re-embedded with the id order reconstructed (Instagram = round-1 store order, 20,202; YouTube = titled items in file order, 100,967; total 121,169 = the original count).
+- **H0 does not reproduce bit-exactly:** 0 of 55 rankings identical 1,000 deep, but mean top-10 overlap with `r7/h0_r*` is 0.998–1.000 (9–11 of 55 searches differ somewhere in the top 10). Fresh embeddings of the same texts differ at float level. **Round-8 base = `runs/r8_base/h0r8_r{1,2,3}` (H0 on the rebuilt vectors).** The first evaluator scores old vs rebuilt H0 on dev to size the drift. C0 (`r4.2/c0x`) is likewise only approximately reproducible on the rebuilt 3-small store.
 - **Budget:** Derrick: $16 OpenAI and $13 Gemini left. Ledger `data/all/ai_runs.jsonl` at start: OpenAI $2.882, Gemini $3.776. Caps: OpenAI $18.0 (env), Gemini **$16.0** (exported per command). Each round < $2.
 - **In flight:** `ig_known` build (evaluator, setup); phase A validation audit (fresh auditor); phase B architecture review (researcher).
 - **Next:** reproduce H0; phase A fixes into PROTOCOL.md; architecture review → loop rounds 8.1, 8.2, … (stop: cap or 3 rounds in a row with no adoption); final scoring on `known_test` and `ig_known_test`.
