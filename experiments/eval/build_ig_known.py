@@ -10,7 +10,7 @@ Instagram has no search history in the export, so known-item searches are made f
      regenerated with a stricter note, and anything still flagged is listed for a hand rewrite;
   4. label = that item (grade 2); split 150 / 150 stratified (seed 8).
 
-Stages (all outputs under $DIGESTER_DATA/evals/ig_known_build/, gitignored):
+Stages (all outputs under $DIGESTER_DATA/eval_work/ig_known_build/, gitignored, evaluator-only):
   python experiments/eval/build_ig_known.py sample
   python experiments/eval/build_ig_known.py generate [--limit N]
   python experiments/eval/build_ig_known.py check            # overlap stats + regenerate flagged
@@ -35,7 +35,7 @@ from common import info_class  # noqa: E402
 
 DATA = ai.DATA
 EV = os.path.join(DATA, "evals")
-OUT = os.path.join(EV, "ig_known_build")
+OUT = os.path.join(DATA, "eval_work", "ig_known_build")  # evaluator-only (round 8: test texts must not sit method-side)
 SEED = 8
 N = 300
 MODEL = "gemini-3.5-flash-lite"

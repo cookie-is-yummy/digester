@@ -224,6 +224,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd")
     ap.add_argument("--model", default="gpt-5-mini")
+    ap.add_argument("--sims", type=int, default=100)
     a, rest = ap.parse_known_args()
     globals()["cmd_" + a.cmd](a)
 
@@ -644,6 +645,99 @@ def cmd_agree(a):
     print(json.dumps({k: res[k] for k in ("ai_pooled", "derrick", "ai_pooled_population_weighted", "lean_by_richness",
                                           "mean_grade_by_richness", "confusion_derrick_rows_vs_judge_cols",
                                           "confusion_orig_rows_vs_judge_cols")}, indent=0))
+
+
+
+def cmd_robust(a):
+    """Re-draw every AI-judged grade (rounds 4-7) from P(fresh judge grade | original grade), measured on the
+    150 pooled sheet lines (j1 and j2 stacked), and recompute key verdicts. Seed labels and Derrick's grades fixed."""
+    import numpy as np
+    S = _sc()
+    key = json.load(open(os.path.join(OUT, "sheet150.txt.key.json")))
+    g1, g2 = json.load(open(os.path.join(OUT, "grades_j1.json"))), json.load(open(os.path.join(OUT, "grades_j2.json")))
+    T = np.zeros((3, 3))
+    for r in key:
+        if r["src"] == "ai":
+            T[r["orig"], g1[r["i"]]] += 1
+            T[r["orig"], g2[r["i"]]] += 1
+    T = T / T.sum(1, keepdims=True)
+    rows = [json.loads(l) for l in open(os.path.join(LAB, "evalset.jsonl"))]
+    J = {}
+    for j in (json.loads(l) for l in open(os.path.join(LAB, "judgments_log.jsonl"))):
+        J[(j["query"], j["code"])] = j["grade"]
+    sp = json.load(open(os.path.join(DATA, "evals", "split.json")))
+    plat = S.platforms()
+    R = os.path.join(DATA, "runs")
+    comps = {"dev h0-c0": ("dev", "r7", "h0", "r4.2", "c0x"), "dev h5b-c0": ("dev", "r7", "h5b", "r4.2", "c0x"),
+             "dev h5-h0": ("dev", "r7", "h5", "r7", "h0"), "dev d4-c0": ("dev", "r4.2", "d4", "r4.2", "c0x"),
+             "yth h0-c0": ("yt_holdout", "r7", "h0", "r4.2", "c0x"), "yth h5-c0": ("yt_holdout", "r7", "h5", "r4.2", "c0x"),
+             "yth h5-h0": ("yt_holdout", "r7", "h5", "r7", "h0"),
+             "t2 h0-c0": ("test2", "final4", "h0_test2", "final2", "c0x_test2"),
+             "t2 h5b-c0": ("test2", "final4", "h5b_test2", "final2", "c0x_test2"),
+             "t2 h5b-h0": ("test2", "final4", "h5b_test2", "final4", "h0_test2"),
+             "t2 e1-c0": ("test2", "final2", "e1_test2", "final2", "c0x_test2")}
+    runs = {}
+    for _, (_, d1, r1, d2, r2) in comps.items():
+        for d, r in ((d1, r1), (d2, r2)):
+            if (d, r) not in runs:
+                runs[(d, r)] = [json.load(open(os.path.join(R, d, f"{r}_r{k}.json")))["queries"] for k in (1, 2, 3)]
+
+    def labels_from(rows, split, draw=None):
+        keep = set(sp[split])
+        L = {}
+        for q in rows:
+            if q["id"] not in keep:
+                continue
+            rel = {c: int(g) for c, g in q["relevant"].items() if g > 0}
+            judged = (set(q["relevant"]) | set(q.get("hard_negatives", [])) | set(q.get("judged_not_relevant", []))
+                      | set(q.get("judged_nonrelevant", [])))
+            if draw is not None:
+                for c in judged:
+                    if (q["id"], c) in J:
+                        g = draw[(q["id"], c)]
+                        if g > 0:
+                            rel[c] = g
+                        else:
+                            rel.pop(c, None)
+            L[q["id"]] = {"rel": rel, "judged": judged, "kinds": q["kinds"], "scope": q["scope"]}
+        return L
+
+    def deltas(Ls):
+        out = {}
+        for name, (split, d1, r1, d2, r2) in comps.items():
+            L = Ls[split]
+            A_, B_ = runs[(d1, r1)], runs[(d2, r2)]
+            ds = []
+            for q, lab in L.items():
+                if not lab["rel"] or q not in A_[0] or q not in B_[0]:
+                    continue
+                ds.append(np.mean([S.score_one(A_[k][q], lab)["ndcg10"] - S.score_one(B_[k][q], lab)["ndcg10"]
+                                   for k in range(3)]))
+            ds = np.array(ds)
+            se = ds.std(ddof=1) / np.sqrt(len(ds))
+            out[name] = (float(ds.mean()), float(ds.mean() - 1.96 * se))
+        return out
+    splits = ("dev", "yt_holdout", "test2")
+    base = deltas({s: labels_from(rows, s) for s in splits})
+    rng = np.random.default_rng(8)
+    sims = collections.defaultdict(list)
+    keys = list(J)
+    for _ in range(a.sims):
+        draw = {k: int(rng.choice(3, p=T[J[k]])) for k in keys}
+        dd = deltas({s: labels_from(rows, s, draw) for s in splits})
+        for n, v in dd.items():
+            sims[n].append(v)
+    res = {"transition_orig_to_fresh": [[round(x, 3) for x in row] for row in T.tolist()], "sims": a.sims, "comparisons": {}}
+    for n, v in sims.items():
+        d = np.array([x[0] for x in v])
+        lo = np.array([x[1] for x in v])
+        res["comparisons"][n] = {"delta_current": round(base[n][0], 4), "lo95_current_t": round(base[n][1], 4),
+                                 "delta_sim_mean": round(float(d.mean()), 4),
+                                 "delta_sim_p05_p95": [round(float(np.percentile(d, 5)), 4), round(float(np.percentile(d, 95)), 4)],
+                                 "share_sims_lo95_gt0": round(float((lo > 0).mean()), 3),
+                                 "share_sims_delta_ge_0.03": round(float((d >= 0.03).mean()), 3)}
+        print(n, res["comparisons"][n])
+    json.dump(res, open(os.path.join(OUT, "robust.json"), "w"), indent=1)
 
 
 if __name__ == "__main__":
