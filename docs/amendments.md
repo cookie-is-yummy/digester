@@ -57,6 +57,35 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-006 · Search as one index with a deterministic query planner, per-platform list sets and a tool surface for agents
+- **Date:** 2026-11-08
+- **Requested by:** the search loop, round 8 phase B (`docs/research/2026-11-08-architecture-review.md`), for the founders
+- **Status:** Proposed (items 1–4 only after their round-8 experiments pass on `known_test_clean` / `ig_known_test`)
+- **Conflicts with:** `05-processor.md` › Query API `search` ("Hybrid: vectors + keywords + facet filters, reranked") and › Performance targets; A-003's universal rewrite + HyDE.
+
+**What is requested**
+1. A code (no-LLM) query planner choosing a keyword, descriptive or structured path by query shape and the user's vault priors (platform split, creators).
+2. te lists only for caption-type or untitled items, with coverage-fair fusion.
+3. A creator index in the shared content store; era and affinity per user in the vault.
+4. An optional second-stage refine (LLM listwise on the top 20).
+5. MCP `search` accepting `mode` and structured filters, skipping our rewrite when the caller (the user's agent) supplies them.
+6. A written privacy section (shared store vs private vault, key revocation) in `05-processor.md`, which is missing today.
+
+**Why the requester wants it**
+The founders asked for the cost- and performance-optimal architecture. The rewrite is ~92% of per-search cost and ~1.8 s of 2.0 s p50, never tested on short keyword searches, and redundant when the user's own agent writes the query.
+
+**Why it is better than the current approach**
+Evidence in sections 1–4 of the review: only item representation (3-large, te on Instagram) has held up on held-out; query-side add-ons are ~0 or negative there; one pipeline for both platforms costs YouTube searches.
+
+**Costs and risks**
+Unproven until the round-8 experiments pass; a planner adds a routing error mode (the round-7 router read the platform right only 55% of the time); creator profiles touch privacy (no shared profiles for mutual-follow creators).
+
+**Agent's assessment**
+Agree in direction; accept only the parts that pass held-out tests.
+
+**Affected**
+Docs: 05-processor (Query API, Performance targets, new privacy section), 07-privacy-and-safety, A-003 · Code: prototype only · Contract change: yes (creator index; `search` params) · Needs both founders: yes
+
 ### A-005 · Make search verdicts match the noise: screen on dev, confirm on large held-out sets, two judges and a human anchor
 - **Date:** 2026-11-08
 - **Requested by:** the search loop, round 8 phase A (validation audit; `experiments/BRIEF-8.md`), for Derrick

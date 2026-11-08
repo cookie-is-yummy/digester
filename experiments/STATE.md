@@ -5,8 +5,10 @@
 - **Setup:** data rebuilt from the split zip into `data/all/`. `corpus/emb/oai512` (3-small, $0.08) and `oai3l_1024` (3-large, $0.52) re-embedded with the id order reconstructed (Instagram = round-1 store order, 20,202; YouTube = titled items in file order, 100,967; total 121,169 = the original count).
 - **H0 does not reproduce bit-exactly:** 0 of 55 rankings identical 1,000 deep, but mean top-10 overlap with `r7/h0_r*` is 0.998–1.000 (9–11 of 55 searches differ somewhere in the top 10). Fresh embeddings of the same texts differ at float level. **Round-8 base = `runs/r8_base/h0r8_r{1,2,3}` (H0 on the rebuilt vectors).** The first evaluator scores old vs rebuilt H0 on dev to size the drift. C0 (`r4.2/c0x`) is likewise only approximately reproducible on the rebuilt 3-small store.
 - **Budget:** Derrick: $16 OpenAI and $13 Gemini left. Ledger `data/all/ai_runs.jsonl` at start: OpenAI $2.882, Gemini $3.776. Caps: OpenAI $18.0 (env), Gemini **$16.0** (exported per command). Each round < $2.
-- **In flight:** `ig_known` build (evaluator, setup); phase A validation audit (fresh auditor); phase B architecture review (researcher).
-- **Next:** reproduce H0; phase A fixes into PROTOCOL.md; architecture review → loop rounds 8.1, 8.2, … (stop: cap or 3 rounds in a row with no adoption); final scoring on `known_test` and `ig_known_test`.
+- **Setup done:** `ig_known_dev` / `ig_known_test` built by an evaluator (150 / 150 synthetic half-remembered searches for saved/collected Instagram items, gemini-3.5-flash-lite, $0.08; `results/r8-ig-known-build.md`).
+- **Phase A done** (`results/validation-audit.md`, $0.05): judges agree with each other at κ 0.66 but with Derrick at only κ 0.39–0.49 (slightly stricter, esp. on thin items). Median per-search SD of Δ 0.117 → detectable Δ at 80% power: 0.116 (10 searches), 0.075 (21), 0.050 (44), 0.017 (381). Most past near misses and single held-out verdicts were within noise; no round-4–7 pass survives Holm/BH. known_dev targets are clean in 62.5% of hand-checked pairs; use MRR / success@10 on the grade-2 target only (`mrr2`, `s10_2`); `known_test_clean` (216, session-disjoint) is the primary held-out YouTube set. PROTOCOL.md updated (pool always; MDE, Holm, grade-sensitivity, pooled share in every report; held-out hygiene). **A-005 Proposed** (dev = screen; confirm on large held-out sets; two judges; Derrick calibration sheet).
+- **Phase B done** (`docs/research/2026-11-08-architecture-review.md`): the LLM rewrite is ~92% of cost and ~1.8 s of 2.0 s p50 and has never been tested on short keyword searches; ranked options: (1) code query planner with a no-rewrite keyword path, (2) deterministic creator index, (3) LLM refine of the top 20, (4) learned fusion, (5) MCP tool surface, (6) local sparse/late-interaction/quantization for desktop. **A-006 Proposed.**
+- **Round 8.1 in flight:** experimenter building H0r8 on `known_dev` / `ig_known_dev`, and arms H5d (deterministic creator search), I (instant path, no rewrite), R (LLM-free shape router).
 
 ## Final held-out (round 7) (7 Nov 2026; `results/r7-final.md`)
 
@@ -67,7 +69,7 @@
 - **G4 vs C0: +0.053 [−0.001, +0.134], 7/2/1.**
   - yt +0.109 (3/1); both +0.015 (4/1).
   - Seed only (Derrick's labels): **+0.022, 7/2**, the same as the dev Δ.
-  - Concentrated: g06 is +0.38, 72% of the net. Drop the best 1 / 3 searches → +0.017 / +0.003. The lower bound is < 0 on 20/20 seeds (−0.001 to 0.000). All 9 repeat pairings are positive.
+  - Concentrated: one `yt` topic/structure search is +0.38, 72% of the net. Drop the best 1 / 3 searches → +0.017 / +0.003. The lower bound is < 0 on 20/20 seeds (−0.001 to 0.000). All 9 repeat pairings are positive.
   - Mechanism as on dev: fewer Instagram items in yt top 10s (0.50 → 0.33); Instagram items in `both` searches are fewer but more precise (3.22 @ 0.81 → 2.72 @ 0.96).
   - Holds when this round's 1s are set to 0 (+0.033, 5/3) and when its 2s are set to 1 (+0.033, 6/3).
   - **Verdict: CONFIRMED** in direction and wins; the size is not established. It misses clause 1 on test2 narrowly (lower bound −0.001).
@@ -84,7 +86,7 @@
 - **Spend:** $0 judging. OpenAI $2.623 of $9.50; ledger $6.399.
 - **Finalist line:**
   - No adoption from this scoring alone; C0 stays the finalist unless the orchestrator decides otherwise.
-  - G4 is the strongest held-out candidate so far, at +$0.011 per 1k searches. A Derrick spot-check of the g06 pooled items would firm up its size.
+  - G4 is the strongest held-out candidate so far, at +$0.011 per 1k searches. A Derrick spot-check of the pooled items on its best search would firm up its size.
   - Drop G5 and the rewrite-model line.
 
 ## Round 6: stronger rewrite models, larger embedding model (evaluated 7 Nov 2026; `results/r6-eval.md`)
@@ -126,10 +128,10 @@
   - both +0.040, 4/0; **yt −0.049 [−0.095, −0.016], 0/4.**
   - Instagram crowding: 2.17 items per yt top 10 at 4% relevant (C0: 0.50).
   - **Verdict: NOT CONFIRMED.** Same pattern as dev, with a larger yt loss.
-- **F2 vs C0: +0.008 [0.000, +0.022], 2/0/8.** Creator lookup fired on g04, g05 and g08 (8 of 30 cells). On the other 22 cells F2 equals C0.
+- **F2 vs C0: +0.008 [0.000, +0.022], 2/0/8.** Creator lookup fired on 3 searches (8 of 30 cells). On the other 22 cells F2 equals C0.
   - Creator searches: +0.027, 2/0.
-  - The two wins name the creator. First gold-2 rank, C0 → F2: g04 3/1/3 → 3/1/1; g08 3/7/3 → 3/6/4.
-  - On the one *described*-creator search (g05) every method scores 0, and F2 pushed the target creator's first item from rank 57–64 to 74–90.
+  - The two wins name the creator; F2 moved the first gold-2 item up by 0–2 ranks.
+  - On the one *described*-creator search every method scores 0, and F2 pushed the target creator further down the list.
   - **Verdict: NOT CONFIRMED.** p95 is 5.4–7.6 s.
 - **Labels:** c4-t2 = c4-r5 + 159 blind evaluator test2 judgments (37/44/78), 59 of them surfaced `unvetted_candidates`.
   - Derrick's gold was untouched. Backup `evalset.pre_test2.jsonl`.

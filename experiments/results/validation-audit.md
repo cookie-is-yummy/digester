@@ -191,7 +191,7 @@ The per-search paired Δ (mean over 3 repeats) was rebuilt for 18 past compariso
   - test2 and `yt_holdout` were each scored 3 times.
   - test2's per-search failures were diagnosed in `STATE.md`, results notes and `docs/research/` before H5 / H5b and this brief's agenda were written: creator search on named vs described creators, one search carrying 72% of G4's gain, router misreads.
   - H5b − H0 is +0.036 on test2 but +0.005 on `yt_holdout`. That fits optimism on the diagnosed set.
-  - One test2 search is paraphrased together with answer details in a committed doc (`docs/research/2026-11-03-query-understanding.md`, the creator-search bullet). **Recommend redaction.**
+  - One test2 search was paraphrased together with answer details in a committed doc (`docs/research/2026-11-03-query-understanding.md`). It is now redacted to a kind-level description, as are the per-search held-out details in `STATE.md`.
   - `test` keeps 2 scorings but is contaminated for round-5+ ideas.
   - Both test2 and `yt_holdout` are used up; nothing further should be concluded from them.
 
@@ -261,4 +261,4 @@ The per-search paired Δ (mean over 3 repeats) was rebuilt for 18 past compariso
 | 9 | Derrick grades a 60–80-item blind calibration sheet per new held-out set, weighted to thin items | The only human anchor; κ 0.39–0.43 | **Proposed** (A-005) |
 | 10 | Known-item label repair: accept a query-matching video watched ≤ 2 min before the logged search; hand-verify a 100-search subset | 17% possible mis-targeted labels | **Proposed** (A-005): cleaning by word overlap would favour lexical arms |
 | 11 | `ig_known`: add a slice generated without te text, or report te arms with this caveat | Query words are 3× more lexically matched than real searches | **Proposed** (A-005) |
-| 12 | Redact the test2 paraphrase in `docs/research/2026-11-03-query-understanding.md` | Committed query text with answer details | Recommended to the orchestrator |
+| 12 | Redact the test2 paraphrase in `docs/research/2026-11-03-query-understanding.md`, and per-search held-out details in `STATE.md` | Committed query text with answer details | **Applied** (round-8 follow-up) |
