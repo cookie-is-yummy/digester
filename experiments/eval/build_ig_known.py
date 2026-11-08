@@ -2,8 +2,9 @@
 
 Instagram has no search history in the export, so known-item searches are made from saved posts:
   1. sample 300 saved or collected Instagram items (seed 8), stratified by collection (sqrt-proportional,
-     saved-not-collected included) and, inside each collection, by info class; friends' items
-     (owner_relation == "mutual") and items with neither caption nor te summary are excluded;
+     saved-not-collected included) and by info class (raked to pool proportions); excluded: friends' items
+     (owner_relation == "mutual"), items with neither caption nor te summary, and items with neither caption
+     nor creator (their te summary only restates the collection name);
   2. a model no builder uses (gemini-3.5-flash-lite) writes one half-remembered search per item;
   3. an automatic overlap check flags searches that copy the caption (or te summary); flagged ones are
      regenerated with a stricter note, and anything still flagged is listed for a hand rewrite;
@@ -113,6 +114,10 @@ def cmd_sample(_a):
         if it["platform_data"].get("owner_relation") == "mutual":
             continue
         if not (it.get("caption") or "").strip() and code_of(it) not in te:
+            continue
+        # no caption and no creator: the te summary was made from the collection name alone (post gone from
+        # the export), so nothing tells it apart from its collection siblings; not a findable known item
+        if not (it.get("caption") or "").strip() and not it["platform_data"].get("owner_handle"):
             continue
         pool.append(it)
     sizes = collections.Counter(c for it in pool for c in (it["platform_data"].get("collections") or []))

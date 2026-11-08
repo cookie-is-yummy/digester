@@ -225,8 +225,7 @@ def main():
     ap.add_argument("cmd")
     ap.add_argument("--model", default="gpt-5-mini")
     a, rest = ap.parse_known_args()
-    {"sheet": cmd_sheet, "llm": cmd_llm, "power": cmd_power, "pooling": cmd_pooling,
-     "depth": cmd_depth}[a.cmd](a)
+    globals()["cmd_" + a.cmd](a)
 
 
 
@@ -407,6 +406,244 @@ def cmd_depth(a):
             res[f"{split} {stem}"] = {k: round(float(np.mean(v)), 3) for k, v in agg.items()}
             print(split, stem, res[f"{split} {stem}"])
     json.dump(res, open(os.path.join(OUT, "depth.json"), "w"), indent=1)
+
+
+
+# ---------------- leakage scan (counts only) ----------------
+def _norm(s):
+    return " ".join((s or "").lower().split())
+
+
+def cmd_leakage(a):
+    import glob
+    import re
+    labels = {json.loads(l)["id"]: json.loads(l) for l in open(os.path.join(LAB, "evalset.jsonl"))}
+    sp = json.load(open(os.path.join(DATA, "evals", "split.json")))
+    sets = {k: {_norm(labels[i]["query"]) for i in sp[k] if i in labels and len(_norm(labels[i]["query"])) >= 6}
+            for k in ("dev", "yt_holdout", "test", "test2", "known_dev", "known_test")}
+    # method-side locations (everything outside labels/ and eval_work/; corpus items/interactions skipped)
+    locs = {
+        "evals/qcache": glob.glob(os.path.join(DATA, "evals", "qcache", "*")),
+        "evals/queries.jsonl": [os.path.join(DATA, "evals", "queries.jsonl")],
+        "corpus/emb/*_queries ids": glob.glob(os.path.join(DATA, "corpus", "emb", "*queries*", "ids.json")),
+        "corpus/emb/r7_synth ids": glob.glob(os.path.join(DATA, "corpus", "emb", "r7_synth*", "ids.json")),
+        "cache/r5-r7 (LLM caches)": glob.glob(os.path.join(DATA, "cache", "*", "*")),
+        "runs/rewrites (dev)": glob.glob(os.path.join(DATA, "runs", "rewrites", "*.json")),
+        "runs/rewrites/test": glob.glob(os.path.join(DATA, "runs", "rewrites", "test", "*")),
+        "runs/rewrites/test2": glob.glob(os.path.join(DATA, "runs", "rewrites", "test2", "*")),
+        "r7/synth_searches": glob.glob(os.path.join(DATA, "r7", "synth*")),
+        "runs (meta of run files)": glob.glob(os.path.join(DATA, "runs", "*", "*_r1.json")),
+        "experiments/methods/*.py": glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "methods", "*.py")),
+        "experiments/*.md + results + research (git)": glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "*.md"))
+        + glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results", "*"))
+        + glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "research", "*")),
+        "docs/**": glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "**", "*.md"), recursive=True),
+    }
+    res = {"n_queries": {k: len(v) for k, v in sets.items()}, "exact_hits": {}, "ngram5_hits": {}}
+
+    def text_of(p):
+        try:
+            raw = open(p, encoding="utf-8", errors="ignore").read()
+        except (IsADirectoryError, UnicodeDecodeError):
+            return ""
+        if p.endswith(".json"):
+            try:
+                raw = json.dumps(json.loads(raw), ensure_ascii=False)
+            except Exception:  # noqa: BLE001
+                pass
+        return _norm(raw.replace("\\n", " "))
+
+    def ngrams(s, n=5):
+        w = re.findall(r"\w+", s)
+        return {" ".join(w[i:i + n]) for i in range(len(w) - n + 1)}
+    def strings_of(p):
+        """All string values (and keys) of a JSON / JSONL file, normalised; prose files give None."""
+        out = set()
+
+        def walk(x):
+            if isinstance(x, str):
+                out.add(_norm(x))
+            elif isinstance(x, dict):
+                for k, v in x.items():
+                    out.add(_norm(k))
+                    walk(v)
+            elif isinstance(x, list):
+                for v in x:
+                    walk(v)
+        try:
+            raw = open(p, encoding="utf-8", errors="ignore").read()
+        except IsADirectoryError:
+            return out
+        try:
+            walk(json.loads(raw))
+        except Exception:  # noqa: BLE001
+            for line in raw.splitlines():
+                try:
+                    walk(json.loads(line))
+                except Exception:  # noqa: BLE001
+                    pass
+        return out
+    for loc, paths in locs.items():
+        files = [p for p in paths if os.path.isfile(p)]
+        if loc.startswith(("experiments", "docs")):
+            blob = " \n ".join(text_of(p) for p in files)
+            # prose: whole query as a substring, only for queries of >= 3 words and >= 15 characters
+            res["exact_hits"][loc] = {k: sum(1 for q in v if len(q) >= 15 and len(q.split()) >= 3 and q in blob)
+                                      for k, v in sets.items()}
+            g = ngrams(blob)
+            res["ngram5_hits"][loc] = {k: sum(1 for q in v if ngrams(q) & g) for k, v in sets.items()}
+        else:
+            vals = set()
+            for p in files:
+                vals |= strings_of(p)
+            # structured: the query string is itself a key or value (exact, normalised)
+            res["exact_hits"][loc] = {k: len(v & vals) for k, v in sets.items()}
+        print(loc, res["exact_hits"][loc], res["ngram5_hits"].get(loc, ""))
+    # cross-split duplicates
+    names = list(sets)
+    res["cross_split_duplicates"] = {f"{x}&{y}": len(sets[x] & sets[y]) for i, x in enumerate(names) for y in names[i + 1:]
+                                     if sets[x] & sets[y]}
+    print("cross-split duplicates", res["cross_split_duplicates"])
+    json.dump(res, open(os.path.join(OUT, "leakage.json"), "w"), indent=1)
+
+
+
+# ---------------- agreement (aggregates) ----------------
+def kappa(a, b, levels=(0, 1, 2), weights=None):
+    """Cohen's kappa; weights None = unweighted, 'linear' or 'quadratic'."""
+    import numpy as np
+    k = len(levels)
+    idx = {v: i for i, v in enumerate(levels)}
+    M = np.zeros((k, k))
+    for x, y in zip(a, b):
+        M[idx[x], idx[y]] += 1
+    n = M.sum()
+    if n == 0:
+        return None
+    P = M / n
+    E = np.outer(P.sum(1), P.sum(0))
+    i, j = np.indices((k, k))
+    if weights is None:
+        W = (i != j).astype(float)
+    elif weights == "linear":
+        W = np.abs(i - j) / (k - 1)
+    else:
+        W = ((i - j) / (k - 1)) ** 2
+    de = (W * E).sum()
+    return round(float(1 - (W * P).sum() / de), 3) if de else None
+
+
+def agree_stats(a, b):
+    import numpy as np
+    a, b = list(a), list(b)
+    if not a:
+        return {"n": 0}
+    rb = lambda xs: [int(x >= 1) for x in xs]  # noqa: E731
+    r2 = lambda xs: [int(x == 2) for x in xs]  # noqa: E731
+    return {"n": len(a), "exact": round(float(np.mean([x == y for x, y in zip(a, b)])), 3),
+            "kappa_rel_vs_not": kappa(rb(a), rb(b), (0, 1)),
+            "agree_rel_vs_not": round(float(np.mean([x == y for x, y in zip(rb(a), rb(b))])), 3),
+            "kappa_2_vs_rest": kappa(r2(a), r2(b), (0, 1)),
+            "kappa3_linear": kappa(a, b, weights="linear"), "kappa3_quadratic": kappa(a, b, weights="quadratic"),
+            "mean_a": round(float(np.mean(a)), 3), "mean_b": round(float(np.mean(b)), 3),
+            "b_higher": int(sum(1 for x, y in zip(a, b) if y > x)), "b_lower": int(sum(1 for x, y in zip(a, b) if y < x))}
+
+
+def confusion(a, b):
+    M = [[0] * 3 for _ in range(3)]
+    for x, y in zip(a, b):
+        M[x][y] += 1
+    return M
+
+
+def cmd_agree(a):
+    import numpy as np
+    from common import info_class
+    key = json.load(open(os.path.join(OUT, "sheet150.txt.key.json")))
+    G = {n: json.load(open(os.path.join(OUT, f))) for n, f in
+         (("j1", "grades_j1.json"), ("j2", "grades_j2.json"), ("gpt5mini", "grades_llm.json"),
+          ("gemini35fl", "grades_llm_gemini-3_5-flash-lite.json")) if os.path.exists(os.path.join(OUT, f))}
+    for n, g in G.items():
+        assert len(g) == len(key) and all(x in (0, 1, 2) for x in g), n
+    items = items_by_code({r["code"] for r in key})
+    for r in key:
+        it = items[r["code"]]
+        L = len(" ".join((it.get("caption") or "").split()))
+        r["len"] = L
+        r["info"] = info_class(it)
+        r["plat"] = it["platform"]
+    lens = sorted(r["len"] for r in key)
+    t1, t2 = lens[len(lens) // 3], lens[2 * len(lens) // 3]
+    for r in key:
+        r["rich"] = "short" if r["len"] < t1 else "mid" if r["len"] < t2 else "long"
+    # majority of the two fresh Claude judges (ties -> lower)
+    G["fresh_mean"] = [None] * len(key)
+    res = {"n_lines": len(key), "judges": list(G), "len_terciles_chars": [t1, t2]}
+
+    def sub(pred):
+        return [r for r in key if pred(r)]
+
+    def pair(rows, x, y):
+        gx = [r["orig"] if x == "orig" else G[x][r["i"]] for r in rows]
+        gy = [r["orig"] if y == "orig" else G[y][r["i"]] for r in rows]
+        return agree_stats(gx, gy)
+    ai = sub(lambda r: r["src"] == "ai")
+    der = sub(lambda r: r["src"] == "derrick")
+    J = [j for j in ("j1", "j2", "gpt5mini", "gemini35fl") if j in G]
+    res["ai_pooled"] = {f"{x}~{y}": pair(ai, x, y) for x, y in
+                        [("j1", "j2"), ("orig", "j1"), ("orig", "j2")] + [("orig", j) for j in J[2:]]
+                        + [(c, j) for c in ("j1", "j2") for j in J[2:]] + ([("gpt5mini", "gemini35fl")] if len(J) == 4 else [])}
+    res["derrick"] = {f"derrick~{j}": pair(der, "orig", j) for j in J}
+    res["derrick"]["j1~j2"] = pair(der, "j1", "j2")
+    res["confusion_derrick_rows_vs_judge_cols"] = {j: confusion([r["orig"] for r in der], [G[j][r["i"]] for r in der]) for j in J}
+    res["confusion_orig_rows_vs_judge_cols"] = {j: confusion([r["orig"] for r in ai], [G[j][r["i"]] for r in ai]) for j in J}
+    # by round / scope / platform / richness
+    for dim in ("round", "scope", "plat", "rich", "info"):
+        vals = sorted({r[dim] for r in ai})
+        res.setdefault("ai_by_" + dim, {})
+        for v in vals:
+            rows = [r for r in ai if r[dim] == v]
+            res["ai_by_" + dim][v] = {"n": len(rows), **{f"orig~{j}": {k: pair(rows, "orig", j)[k] for k in
+                                                                         ("exact", "kappa_rel_vs_not", "kappa3_linear", "b_higher", "b_lower")}
+                                                         for j in J}, "j1~j2_exact": pair(rows, "j1", "j2")["exact"]}
+        vals = sorted({r[dim] for r in der})
+        res.setdefault("derrick_by_" + dim, {})
+        for v in vals:
+            rows = [r for r in der if r[dim] == v]
+            res["derrick_by_" + dim][v] = {"n": len(rows), **{f"derrick~{j}": {k: pair(rows, "orig", j)[k] for k in
+                                                                                ("exact", "kappa_rel_vs_not", "mean_a", "mean_b", "b_higher", "b_lower")}
+                                                                for j in J}}
+    # population-weighted (undo the grade stratification) agreement orig~fresh on the AI-pooled lines
+    J_ = [json.loads(l) for l in open(os.path.join(LAB, "judgments_log.jsonl"))]
+    pop = collections.Counter((GROUP[j["judge"]], j["grade"]) for j in J_)
+    samp = collections.Counter((r["round"], r["orig"]) for r in ai)
+    w = {k: pop[k] / samp[k] for k in samp}
+    for j in J:
+        ws = np.array([w[(r["round"], r["orig"])] for r in ai])
+        eq = np.array([r["orig"] == G[j][r["i"]] for r in ai], float)
+        rel = np.array([(r["orig"] >= 1) == (G[j][r["i"]] >= 1) for r in ai], float)
+        res.setdefault("ai_pooled_population_weighted", {})[f"orig~{j}"] = {
+            "exact": round(float((ws * eq).sum() / ws.sum()), 3), "agree_rel_vs_not": round(float((ws * rel).sum() / ws.sum()), 3)}
+    # text-richness lean: mean (judge - reference) by richness, on Derrick lines (reference = Derrick) and on AI lines
+    for ref_name, rows in (("derrick", der), ("orig_ai", ai)):
+        for j in J + ["orig"]:
+            if ref_name == "derrick" or j != "orig":
+                pass
+        res.setdefault("lean_by_richness", {})[ref_name] = {
+            rch: {j: round(float(np.mean([G[j][r["i"]] - r["orig"] for r in rows if r["rich"] == rch])), 3) for j in J}
+            for rch in ("short", "mid", "long")}
+    # original AI grade minus fresh-judge mean, by richness: does the round-4-7 judge lean to text-rich items?
+    res["lean_by_richness"]["orig_minus_fresh_mean"] = {
+        rch: round(float(np.mean([r["orig"] - (G["j1"][r["i"]] + G["j2"][r["i"]]) / 2 for r in ai if r["rich"] == rch])), 3)
+        for rch in ("short", "mid", "long")}
+    res["mean_grade_by_richness"] = {src: {rch: {j: round(float(np.mean([G[j][r["i"]] for r in rows if r["rich"] == rch])), 3)
+                                                 for j in J + ["orig"] if j != "orig"} | {"reference": round(float(np.mean([r["orig"] for r in rows if r["rich"] == rch])), 3),
+                                                                                         "n": sum(1 for r in rows if r["rich"] == rch)}
+                                           for rch in ("short", "mid", "long")} for src, rows in (("derrick", der), ("ai", ai))}
+    json.dump(res, open(os.path.join(OUT, "agree.json"), "w"), indent=1)
+    print(json.dumps({k: res[k] for k in ("ai_pooled", "derrick", "ai_pooled_population_weighted", "lean_by_richness",
+                                          "mean_grade_by_richness", "confusion_derrick_rows_vs_judge_cols",
+                                          "confusion_orig_rows_vs_judge_cols")}, indent=0))
 
 
 if __name__ == "__main__":
