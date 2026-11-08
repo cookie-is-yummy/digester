@@ -1,5 +1,12 @@
 # State
 
+## Round 8 (`BRIEF-8.md`) — in progress (started 8 Nov 2026)
+
+- **Setup:** data rebuilt from the split zip into `data/all/`. `corpus/emb/oai512` (3-small 512 d) and `oai3l_1024` (3-large) are being re-embedded: the id order was reconstructed (Instagram = round-1 store order, 20,202; YouTube = titled items in file order, 100,967; total 121,169 = the original count). Then `r7/h0_r1` must reproduce exactly.
+- **Budget:** Derrick: $16 OpenAI and $13 Gemini left. Ledger `data/all/ai_runs.jsonl` at start: OpenAI $2.882, Gemini $3.776. Caps: OpenAI $18.0 (env), Gemini **$16.0** (exported per command). Each round < $2.
+- **In flight:** `ig_known` build (evaluator, setup); phase A validation audit (fresh auditor); phase B architecture review (researcher).
+- **Next:** reproduce H0; phase A fixes into PROTOCOL.md; architecture review → loop rounds 8.1, 8.2, … (stop: cap or 3 rounds in a row with no adoption); final scoring on `known_test` and `ig_known_test`.
+
 ## Final held-out (round 7) (7 Nov 2026; `results/r7-final.md`)
 
 - **`test2` scoring 3 of 3 and `yt_holdout` scoring 3 of 3. Both sets are now used up.** `test` has 2 left (contaminated for round-5 ideas: qs-v1, creator search, te lists).
