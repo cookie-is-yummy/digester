@@ -11,6 +11,8 @@ Adapted from score_yt.py for the combined root (DIGESTER_DATA=data/all):
 - `--pool OUT.json` writes the union of unjudged in-library top-10 codes over all given runs and repeats
   ({search_id: [codes]}) for blind judging;
 - metrics: nDCG@10, R@10, R@50, MRR, P@10, success@5, R@100, capped recall, unjudged10, nonlib10.
+- round 8 (see results/validation-audit.md): any split in split.json (plus `known_test_clean`) is honoured; known-item
+  metrics `mrr2` / `s10_2` use only the grade-2 target; `success10` = any relevant item in the top 10.
 - milestone (round 4): the `test` split's label rows use `judged_nonrelevant` (Derrick's gold zeros) and may have
   scope `both` (no own platform, so cross10 = 0); `unvetted_candidates` are left unjudged; a `both` subset is reported.
 
@@ -32,7 +34,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from corpus import DATA  # noqa: E402
 
 METRICS = ["ndcg10", "r10", "r50", "mrr", "p10", "success5", "r100", "r10_cap", "r50_cap",
-           "unjudged10", "nonlib10", "cross10", "cross_rel10", "cross_unj10"]
+           "unjudged10", "nonlib10", "cross10", "cross_rel10", "cross_unj10",
+           "mrr2", "success10", "s10_2"]  # changed in round 8, see audit: grade-2-only known-item metrics
 REPEATS = (1, 2, 3)
 SCOPE_PLAT = {"ig": "instagram", "yt": "youtube", "both": None}
 SCOPES = ("all", "ig", "yt", "both")
@@ -52,8 +55,15 @@ def platforms():
 
 def load_labels(path, split):
     keep = None
-    if split in ("dev", "test", "test2", "yt_holdout"):
-        keep = set(json.load(open(os.path.join(DATA, "evals", "split.json")))[split])
+    # changed in round 8, see audit: any split named in split.json is honoured (known_dev, ig_known_dev, ...);
+    # before, an unknown split name silently scored every search the run contains.
+    splits = json.load(open(os.path.join(DATA, "evals", "split.json")))
+    if split == "known_test_clean":  # session-disjoint known_test subset (evaluator-only id list)
+        keep = set(json.load(open(os.path.join(os.path.dirname(path), "known_test_clean_ids.json")))["ids"])
+    elif split in splits and split != "_note":
+        keep = set(splits[split])
+    elif split != "all":
+        raise SystemExit(f"unknown split {split!r}; use one in split.json, known_test_clean or all")
     L = {}
     for line in open(path):
         q = json.loads(line)
@@ -79,6 +89,7 @@ def score_one(ranked, lab):
     for i, c in enumerate(ranked):
         pos.setdefault(c, i)
     first = min((pos[c] for c in rel if c in pos), default=None)
+    first2 = min((pos[c] for c, g in rel.items() if g >= 2 and c in pos), default=None)
     hits = lambda k: sum(1 for c in rel if pos.get(c, 1e9) < k)  # noqa: E731
     n = len(rel)
     cross = [c for c in top if own and c in plat and plat[c] != own]
@@ -94,6 +105,11 @@ def score_one(ranked, lab):
         "cross10": len(cross) / 10,
         "cross_rel10": float(sum(1 for c in cross if c in rel)),
         "cross_unj10": float(sum(1 for c in cross if c not in judged)),
+        # changed in round 8, see audit: known-item metrics count only the grade-2 target (the first video watched);
+        # `mrr` above also counts grade-1 later videos, which are mostly autoplay / unrelated watches.
+        "mrr2": 1.0 / (first2 + 1) if first2 is not None else 0.0,
+        "success10": float(any(c in rel for c in top)),
+        "s10_2": float(first2 is not None and first2 < 10),
     }
 
 
@@ -155,7 +171,7 @@ def cmp_one(run_reps, base_reps, qs, L):
     res = {"n": len(qs)}
     if not qs:
         return res
-    for m in ("ndcg10", "r10", "r50", "mrr"):
+    for m in ("ndcg10", "r10", "r50", "mrr", "mrr2", "s10_2"):
         d = np.array([np.mean([run_reps[k][q][m] - base_reps[k][q][m] for k in range(len(REPEATS))]) for q in qs])
         res[m] = {"delta": round(float(d.mean()), 3), "ci95": boot(d), "wins": int((d > 0.005).sum()),
                   "losses": int((d < -0.005).sum()), "ties": int((abs(d) <= 0.005).sum()),
@@ -176,7 +192,7 @@ def compare(run_reps, base_reps, L):
 
 def per_search(reps):
     return {q: {m: round(float(np.mean([r[q][m] for r in reps])), 4)
-                for m in ("ndcg10", "r10", "r50", "mrr", "unjudged10", "cross10", "cross_rel10")}
+                for m in ("ndcg10", "r10", "r50", "mrr", "mrr2", "s10_2", "unjudged10", "cross10", "cross_rel10")}
             for q in sorted(reps[0])}
 
 

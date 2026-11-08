@@ -57,6 +57,56 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-005 · Make search verdicts match the noise: screen on dev, confirm on large held-out sets, two judges and a human anchor
+- **Date:** 2026-11-08
+- **Requested by:** the search loop, round 8 phase A (validation audit; `experiments/BRIEF-8.md`), for Derrick
+- **Status:** Proposed
+- **Conflicts with:** `experiments/BRIEF.md` › Rules: "Adopt a change only if dev nDCG@10 gains ≥ 0.03 with the paired 95% CI above 0, or ≥ 0.02 with more wins than losses and no extra cost". Also `experiments/BRIEF-8.md` › Searches, on how `known_*` and `ig_known` are built and scored. `docs/08-evals-and-quality.md` has no requirement on judge agreement.
+
+**What is requested**
+1. **Dev becomes a screen.** An arm advances if it passes the current rule *and* survives Holm across the round's arms (one-sided paired test, α 0.025).
+   - **Adoption** needs a preregistered confirmation on large held-out sets: `known_test_clean` (216), `ig_known_test` (150) and a fresh Derrick set of 40–45. Each comparison states its minimum detectable Δ beforehand.
+   - Clause 2 (no-cost arms) also needs CI > 0.
+2. **Two independent judges per pooled item.** Fresh Claude agents grade independently and a third adjudicates disagreements. Score with the adjudicated grade and report the single-judge result next to it. A non-Claude model may be a third vote but never the sole judge.
+3. **A human anchor per held-out set.** Derrick grades a blind 60–80-item calibration sheet drawn from the pooled items (weighted to thin, low-text items). Each held-out report states AI–Derrick κ.
+4. **Known-item label repair, kept separate from scoring.**
+   - Hand-verify a 100-search subset of `known_test_clean` (Derrick or a blind judge).
+   - Accept as target a query-matching video watched ≤ 2 minutes before the logged search time.
+   - Do **not** clean labels by word overlap.
+5. **`ig_known`.** Add a slice of searches generated without the te summary (caption + creator only), or report te-arm gains on `ig_known` with the lexical-match caveat.
+
+**Why the requester wants it**
+The audit (`experiments/results/validation-audit.md`) found:
+- **Power.** The median per-search SD of Δ nDCG@10 is 0.12, so the minimum detectable Δ at 80% power is 0.05 on 44 dev searches, 0.075 on 21 and 0.12 on 10. Every dev near miss and every single held-out result so far sits below its MDE.
+- **The rule.** Clause 1 detects a true +0.03 only 38% of the time. Clause 2 passes a zero-effect arm 13% of the time.
+- **Multiplicity.** Of 30 primary dev comparisons in rounds 4.1–7, 3 passed (near-identical variants in one round). None survives Holm or Benjamini–Hochberg. The one adoption (E1) failed held-out.
+- **Judges.** Single-judge pooled grades agree with a fresh judge at κ 0.54–0.66 and with Derrick at only κ 0.39–0.43, with a suggestive under-crediting of low-text items. Before the audit no Derrick–AI overlap existed, so this had never been measured.
+- **Known-item labels.** 12.5% are clear noise and up to 27.5% are noise or doubtful. Grade-1 "later" videos are mostly autoplay or unrelated. The known split leaked across sessions; that part is already fixed in the protocol.
+
+**Why it is better than the current approach**
+- Most past verdicts (adopt / near miss / not confirmed) were decided by noise of the same size as the effects.
+- Large known-item sets give MDEs of about 0.02–0.05 in MRR at no judging cost. That is enough to see +0.03 effects that 10–21 graded searches cannot.
+- Two judges plus adjudication cut single-judge noise. In the audit, a median of three judges raised κ with Derrick from about 0.41 to 0.49.
+- A small human sheet is the only way to know whether the AI judge drifts from what the user means.
+
+**Costs and risks**
+- **Fewer adoptions.** Dev wins of +0.03–0.05 will often be "screen passed, not confirmed" until the large sets confirm them.
+- **Contamination.** Every held-out scoring uses up a set's clean status, so known-item sets must be refreshed (more My Activity years, more saved posts) and `ig_known` rebuilt.
+- **Two judges** double the agent judging time; it is $0 in API calls with agent judges. A gpt-5-mini third vote costs about $0.12 per 1,000 items.
+- **Derrick's time:** about 30–45 minutes per held-out set.
+- **Known-item MRR** rewards finding one video, not good lists. Keep a graded nDCG set (dev + fresh Derrick set) for list quality and kinds.
+- **Label repair** by hand can itself bias toward what the checker finds obvious, so it stays a reported subset and does not replace the auto labels.
+
+**Agent's assessment**
+Agree with all five.
+- Items 1 and 3 matter most: without them the loop keeps adopting or rejecting on noise.
+- Item 2 is cheap.
+- Items 4 and 5 are refinements.
+- The protocol-level fixes that are not contestable (grade-2-only known-item metrics, the session-disjoint `known_test` subset, MDE / Holm / grade-sensitivity reporting, pool-everything, held-out cache hygiene) are already applied in `experiments/eval/PROTOCOL.md`, marked "changed in round 8, see audit".
+
+**Affected**
+Docs: `experiments/BRIEF.md` (adoption rule), `experiments/eval/PROTOCOL.md`, `docs/08-evals-and-quality.md` (judge-agreement line) · Code: `experiments/eval/score_c4.py`, `judge.py` (two-judge merge) · Contract change: no · Needs both founders: no (Derrick as requester / eval owner)
+
 ### A-004 · YouTube items, interactions and search history in the data contract
 - **Date:** 2026-10-30
 - **Requested by:** the search loop, round 2 (`experiments/BRIEF-2.md` › Q5), for the founders

@@ -48,7 +48,15 @@ def sheet(pool_path, sheet_path, extra_path=None):
         cap = " ".join((it.get("caption") or "").split())[:400]
         tags = " ".join("#" + t for t in (pd.get("hashtags") or [])[:10])
         ex = (" | ENRICHMENT: " + " ".join(extra[c].split())[:400]) if c in extra else ""
-        lines.append(f"{i:04d} | SEARCH: {labels[q]['query']} | ITEM: {cap} {tags} | by @{pd.get('owner_handle', '')}{ex}")
+        lab = labels[q]
+        # changed in round 8, see audit: show the person's clarification and, for more-like-this, the example items
+        srch = lab["query"] or ("(more like this) EXAMPLES: " + " || ".join(
+            " ".join((items.get(e, {}).get("caption") or "").split())[:200] for e in lab.get("examples", [])[:3]))
+        if lab.get("intent"):
+            srch += " | MEANING: " + " ".join(lab["intent"].split())[:400]
+        app = "[youtube] " if it.get("platform") == "youtube" else "[instagram] " if it else ""
+        who = pd.get("owner_handle", "") or pd.get("owner_name", "")
+        lines.append(f"{i:04d} | SEARCH: {srch} | ITEM: {app}{cap} {tags} | by @{who}{ex}")
         key.append({"i": i, "query": q, "code": c})
     open(sheet_path, "w").write("\n".join(lines))
     json.dump(key, open(sheet_path + ".key.json", "w"))
