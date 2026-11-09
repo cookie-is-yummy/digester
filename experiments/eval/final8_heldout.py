@@ -233,7 +233,11 @@ def _timed(texts, model, dim, purpose):
             t = time.time()
             ai.openai_embed(texts, model=model, dimensions=dim, purpose=purpose)
             sec = time.time() - t
-            return {"seconds": round(sec, 3), "cost_usd": L.ledger()[n0:][-1]["cost_usd"], "attempts": att + 1}
+            # Take the cost from this call's own ledger row (same purpose and model), not the last row written:
+            # other jobs (e.g. refine passes) may append rows concurrently. Fixed after the round-8 final scoring,
+            # where the race misattributed 40 timing entries (results/r8-final.md, verifier note).
+            mine = [r for r in L.ledger()[n0:] if r.get("purpose") == purpose and r.get("model") == model]
+            return {"seconds": round(sec, 3), "cost_usd": mine[-1]["cost_usd"] if mine else None, "attempts": att + 1}
         except Exception as e:  # noqa: BLE001 - transient network errors: retry, keep only the successful call's time
             if "budget stop" in str(e) or att == 5:
                 raise

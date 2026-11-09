@@ -2,6 +2,23 @@
 
 ## Round 8 (`BRIEF-8.md`) — in progress (started 8 Nov 2026)
 
+**Round 8 final held-out** (9 Nov 2026; `results/r8-final.md`; fresh evaluator, $0)
+- **`known_test` scoring 1 of 3 and `ig_known_test` 1 of 3.** H0r8, B8.5 = Q8 and B8.8 = FM were scored once per set, all together. There was no pooling (known-item sets) and the labels are unchanged. Run integrity checks pass: FM differs from Q8 only by reordering the refined top 20, and 0 refines failed.
+- **`known_test_clean` (216, primary) shows no difference** in mrr2: H0r8 0.299, Q8 0.301, FM 0.309.
+  - FM − H0r8 +0.010 [−0.019, +0.040]; Q8 − H0r8 +0.003 [−0.026, +0.031]; FM − Q8 +0.008 [−0.001, +0.018] (Holm 0.16).
+  - All are within noise (MDE 0.040 / 0.041 / 0.013), and none loses.
+- **Full `known_test` (381):** FM − H0r8 +0.024 [+0.005, +0.044] and FM − Q8 +0.009 [+0.002, +0.017], both Holm 0.022; Q8 − H0r8 +0.016 (Holm 0.06). The extra over the clean set comes from the 165 non-clean searches, which are session-correlated with `known_dev` (Q8 − H0r8 there is +0.033), so read it as leak-tilted.
+- **`ig_known_test` (150):** Q8 − H0r8 **+0.110 [+0.057, +0.162]**, 93/25 (Holm 1e-4; dev +0.130). FM − H0r8 +0.135. FM − Q8 **+0.026 [+0.006, +0.049]**, 8/1 (Holm 0.011; dev +0.040), which is below the 0.03 gain bar and the MDE (0.031).
+- **Confirmed:** the package's Instagram gain (about 85% of the dev size). FM's Instagram increment, in direction and family-wise (about 64% of the dev size), again on searches the prior misreads as YouTube (36: +0.103). The instant path's YouTube non-inferiority.
+- **Not confirmed:** the dev-side small YouTube loss (`known_dev` −0.007 does not replicate; held-out is flat to slightly positive). The claim that mini ≈ nano on YouTube: refined `known_test` searches gain +0.077 (43), but this is not significant on the clean set. The dev nDCG@10 claims were not tested (no graded topic held-out set was scored).
+- **te bias is unresolved, not refuted.** `ig_known_test` shares the generator and its bias.
+  - Q8's gain on searches with no te-only word is +0.088 [+0.023, +0.152] (86), against +0.139 on those with one. The no-shared-word group is +0.049, within noise (22).
+  - FM's increment leans on te-word searches (+0.043 vs +0.012).
+  - Settling it needs real human Instagram searches.
+- **Cost (corrected):** H0r8 / Q8 / FM are $0.128 / $0.029 / $0.067 per 1k typed on `known_test` and $0.130 / $0.102 / $0.153 on `ig_known_test`. Over all 531 held-out typed searches: $0.127 / $0.049 (−61%) / $0.092 (+86% vs Q8). First screen p50 is 0.58 s (`known_test`) and 2.05 s (`ig_known_test`), against 1.97 s for H0r8. Refined screen p50: 3.50 s (Q8), 3.77 s (FM).
+- **Bug found (cost only, rankings unaffected):** `final8_heldout._timed` records the last ledger row written since its call started, and the 3-large timing pass overlapped the refine passes. So 24 repeat-3 timing entries carry a refine row's cost, and the runner report's `ig_known_test` means ($0.146 / $0.112 / $0.163) are overstated by $0.010–0.016.
+- **Evaluator's read:** Q8 is confirmed as the round-8 result. FM is a defensible but marginal upgrade: +0.026 synthetic Instagram and +0.008 YouTube for +$0.043 per 1k typed. Confirm it on real Instagram searches before relying on it. Scorings left: `known_test` 2, `ig_known_test` 2. There is no LOG row for this scoring yet.
+
 - **Setup:** data rebuilt from the split zip into `data/all/`. `corpus/emb/oai512` (3-small, $0.08) and `oai3l_1024` (3-large, $0.52) re-embedded with the id order reconstructed (Instagram = round-1 store order, 20,202; YouTube = titled items in file order, 100,967; total 121,169 = the original count).
 - **H0 does not reproduce bit-exactly:** 0 of 55 rankings identical 1,000 deep, but mean top-10 overlap with `r7/h0_r*` is 0.998–1.000 (9–11 of 55 searches differ somewhere in the top 10). Fresh embeddings of the same texts differ at float level. **Round-8 base = `runs/r8_base/h0r8_r{1,2,3}` (H0 on the rebuilt vectors).** The first evaluator scores old vs rebuilt H0 on dev to size the drift. C0 (`r4.2/c0x`) is likewise only approximately reproducible on the rebuilt 3-small store.
 - **Budget:** Derrick: $16 OpenAI and $13 Gemini left. Ledger `data/all/ai_runs.jsonl` at start: OpenAI $2.882, Gemini $3.776. Caps: OpenAI $18.0 (env), Gemini **$16.0** (exported per command). Each round < $2.

@@ -83,6 +83,46 @@ Unproven until the round-8 experiments pass; a planner adds a routing error mode
 **Agent's assessment**
 Agree in direction; accept only the parts that pass held-out tests.
 
+**Round 8 evidence per item (2026-11-09; `docs/research/2026-11-08-round8.md`, `experiments/results/r8-final.md`; status unchanged, still Proposed)**
+
+How the evidence was gathered:
+- Held-out = one scoring each of `known_test_clean` (216 real YouTube searches, primary), full `known_test` (381) and `ig_known_test` (150 LLM-written Instagram searches).
+- Three pipelines were scored: H0r8 (old base), B8.5 = Q8 (items 1, 2 and 4 together, plus int8 vectors) and FM (Q8 with a gpt-5-mini refine).
+- The items were **not scored separately on held-out**, so any held-out support below belongs to the package.
+
+Per item:
+1. **Planner and keyword path. Held-out support: yes (cost); quality level.**
+   - On real YouTube, Q8 − H0r8 is +0.003 [−0.026, +0.031] mrr2. On the 189 instant-routed searches it is +0.010 [−0.020, +0.039].
+   - Not established on `s10_2`: CI [−0.042, +0.042] on the instant-routed searches.
+   - Cost is −61% per 1k typed searches ($0.049 vs $0.127). First screen p50 is 0.58 s vs 1.97 s on keyword searches.
+   - Instagram instant-routed searches (50) are flat on mrr2, with `s10_2` −0.060 [−0.14, +0.013].
+   - The vault platform prior (prior-p1) is part of the package's Instagram gain. It was not tested alone on held-out.
+   - Wider routing (route-r2) failed on dev.
+2. **te lists for caption-type items only (Instagram only). Held-out support: in direction, on a biased set.**
+   - The package gains +0.110 [+0.057, +0.162] mrr2 on `ig_known_test` (Holm 1e-4), about 85% of the dev size. No YouTube loss appeared.
+   - The set shares the generator's te bias. Searches with no te-only word gain +0.088 [+0.023, +0.152].
+   - Needs real human Instagram searches before acceptance.
+3. **Creator index. Held-out support: none; not tested on held-out.**
+   - On dev, a creator list lost on both known-item sets (CI: `known_dev` −0.019 [−0.033, −0.006], `ig_known_dev` −0.022 [−0.040, −0.005]; H5d −0.018 on `known_dev`), by displacing singleton-creator targets.
+   - Only the determinism fix (sorted ties) has earned its place.
+   - Recommend deferring this item.
+4. **Second-stage refine. Held-out support: none for the refine's own effect.**
+   - The nano refine gated to YouTube-read rewrite searches rests on dev nDCG alone (TFY +0.038 [+0.010, +0.071], Holm 0.021, below its MDE of 0.045). No graded held-out set was scored.
+   - On held-out refined YouTube searches the package is −0.038 (23, clean) and −0.018 (43, full) against H0r8, within noise.
+   - The gpt-5-mini upgrade (FM) gains +0.026 [+0.006, +0.049] on `ig_known_test` (Holm 0.011, below the 0.03 bar and its MDE of 0.031) and +0.008 [−0.001, +0.018] on clean YouTube (Holm 0.16). It costs +$0.043 per 1k (+86%).
+   - The refine costs total p95 +1.3 s (nano) to +1.5 s (mini).
+   - Keep it optional and off the critical path.
+5. **MCP `search` with `mode` and filters. Held-out support: n/a** (not evaluable offline). The case rests on the instant path's held-out result: when the caller supplies the query, skipping our rewrite costs no measured quality on keyword searches.
+6. **Privacy section in `05-processor.md`. Held-out support: n/a** (documentation). Still missing, and still needed before items 1–4 ship.
+
+**Related but outside the six items:** int8 item vectors (1,024 B per item, −75% RAM) were non-inferior on dev and are inside Q8's held-out result. Item vectors are part of the contract, so they belong here or in A-003. They need an int8 kernel on desktop.
+
+**Updated assessment:**
+- Accept 1 and 2 in direction now, with 2 conditional on a real Instagram search set.
+- Defer 3.
+- Make 4 optional. The recommended B8.5 keeps the gated nano refine on dev evidence alone; whether it stays on by default is a founder call. FM (mini) should not be the default until real Instagram searches confirm it.
+- 5 and 6 are unchanged.
+
 **Affected**
 Docs: 05-processor (Query API, Performance targets, new privacy section), 07-privacy-and-safety, A-003 · Code: prototype only · Contract change: yes (creator index; `search` params) · Needs both founders: yes
 
