@@ -430,7 +430,7 @@ class Engine:
         else:
             creator = name or handle
         text = " ".join((it.get("caption") or "").split())
-        return {"rank": rank, "platform": it["platform"], "creator": creator.strip(" ·") or None,
+        return {"rank": rank, "id": c, "platform": it["platform"], "creator": creator.strip(" ·") or None,
                 "text": text[:260] + ("…" if len(text) > 260 else ""), "summary": (self.summary.get(c) or "")[:200],
                 "date": (it.get("first_seen_at") or "")[:10] or None, "how": how, "url": it.get("source_url"),
                 "media": pd.get("media_kind")}

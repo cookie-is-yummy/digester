@@ -343,3 +343,29 @@ def test_display_filter_hides_friends(packed, tmp_path):
     finally:
         s.close()
         shutil.rmtree(lib, ignore_errors=True)
+
+
+def test_grades_and_tasks_stay_in_the_library(server, packed):
+    _, lib, _ = packed
+    code, r = server.post("/api/search", {"query": "sourdough", "processors": ["q8", "h0"]})
+    assert code == 200 and all(x.get("id") for x in r["q8"]["results"])
+    top = {p: [x["id"] for x in r[p]["results"][:10]] for p in ("q8", "h0")}
+    it = r["q8"]["results"][0]
+    assert server.post("/api/feedback", {"kind": "run", "query": "Sourdough ", "mode": "grading", "task": "t1",
+                                         "lists": {**top, "bogus": ["x"]}})[0] == 200
+    for g in (1, 3):  # the latest grade for a (search, item) pair wins
+        assert server.post("/api/feedback", {"kind": "grade", "query": "sourdough", "item": it["id"],
+                                             "url": it["url"], "platform": it["platform"], "grade": g})[0] == 200
+    assert server.post("/api/feedback", {"kind": "grade", "query": "sourdough", "item": it["id"], "grade": 7})[0] == 400
+    assert server.post("/api/feedback", {"kind": "grade", "query": "sourdough", "item": "x", "grade": 2},
+                       token=False)[0] == 403
+    code, a = server.post("/api/tasks_add", {"tasks": ["office tour", {"query": "Office  tour"}, {
+        "id": "igr99", "query": "sourdough", "note": "any good post", "processors": ["q8", "zz"]}]})
+    assert code == 200 and a["added"] == 2 and a["tasks"][1]["processors"] == ["q8"]
+    code, fb = server.post("/api/feedback_get", {})
+    assert code == 200 and [g["grade"] for g in fb["grades"]] == [3]
+    assert {x["processor"] for x in fb["runs"]} == {"q8", "h0"} and len(fb["tasks"]) == 2
+    tid = fb["tasks"][0]["id"]
+    assert len(server.post("/api/tasks_remove", {"id": tid})[1]["tasks"]) == 1
+    assert os.path.isfile(os.path.join(lib, "feedback", "grades.jsonl"))
+    assert os.path.isfile(os.path.join(lib, "feedback", "tasks.json"))

@@ -38,7 +38,19 @@ VAR = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}
 PRIVACY = ("Everything stays on this computer: your exports, the library folders, the cost ledger and the cache of "
            "past searches. Only text is sent out: the search you type and item captions / titles go to OpenAI "
            "(embeddings, rewrite, refine) and, if you run the te pass, Instagram captions go to Gemini. "
-           "Friends' posts are removed on import and never shown. DM message text is never read or stored.")
+           "Friends' posts are removed on import and never shown. DM message text is never read or stored. "
+           "Grades you give are saved in the library folder and leave it only if you download them.")
+
+
+FB_DIR = "feedback"
+
+
+def _clean(x, n):
+    return " ".join(str(x or "").split())[:n]
+
+
+def _qkey(q):
+    return " ".join(str(q or "").lower().split())
 
 
 class Keys:
@@ -289,6 +301,103 @@ class App:
             p.terminate()
         return {"ok": True}
 
+    # ---------- grades (feedback buttons and the grading sheet) ----------
+    # Everything here is written to <library>/feedback/ on this computer only: grades.jsonl (append-only; the
+    # latest line for a (search, item) pair wins) and tasks.json (searches queued for grading). Nothing is sent
+    # anywhere; the page's "Download grades" button is the only way out.
+    def _fb_lib(self):
+        w = self.worker
+        if not w:
+            raise ValueError("Choose a library first.")
+        d = os.path.join(w.lib, FB_DIR)
+        os.makedirs(d, exist_ok=True)
+        return w.lib, d
+
+    def feedback_add(self, body):
+        _, d = self._fb_lib()
+        kind = body.get("kind")
+        q = _clean(body.get("query"), 500)
+        if not q:
+            raise ValueError("missing search")
+        rec = {"kind": kind, "ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "who": _clean(body.get("who"), 60),
+               "mode": "grading" if body.get("mode") == "grading" else "search", "task": _clean(body.get("task"), 80),
+               "query": q}
+        if kind == "grade":
+            g = body.get("grade")
+            if g not in (0, 1, 2, 3, None):
+                raise ValueError("grade must be 0-3 or null")
+            item = _clean(body.get("item"), 200)
+            if not item:
+                raise ValueError("missing item")
+            url = _clean(body.get("url"), 300)
+            rec.update(item=item, url=url if url.startswith("http") else "",
+                       platform=_clean(body.get("platform"), 20), grade=g)
+        elif kind == "run":
+            lists = body.get("lists") or {}
+            if not isinstance(lists, dict):
+                raise ValueError("bad lists")
+            rec["lists"] = {p: [_clean(x, 200) for x in (v or [])[:20]] for p, v in lists.items()
+                            if p in ("q8", "h0", "fm") and isinstance(v, list)}
+            rec["fallback"] = bool(body.get("fallback"))
+        else:
+            raise ValueError("unknown kind")
+        with self.lock:
+            with open(os.path.join(d, "grades.jsonl"), "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        return {"ok": True}
+
+    def feedback_get(self):
+        lib, d = self._fb_lib()
+        grades, runs = {}, {}
+        try:
+            with open(os.path.join(d, "grades.jsonl"), encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        r = json.loads(line)
+                    except ValueError:
+                        continue
+                    key = _qkey(r.get("query"))
+                    if r.get("kind") == "grade":
+                        grades[key + "\t" + r.get("item", "")] = r
+                    elif r.get("kind") == "run":
+                        for p, v in (r.get("lists") or {}).items():
+                            runs[key + "\t" + p] = {"query": r["query"], "processor": p, "top": v, "ts": r["ts"],
+                                                    "mode": r.get("mode"), "task": r.get("task"),
+                                                    "fallback": r.get("fallback", False)}
+        except OSError:
+            pass
+        tasks = LIB.read_json(os.path.join(d, "tasks.json"), []) or []
+        return {"library": LIB.status(lib)["name"], "grades": [g for g in grades.values() if g.get("grade") is not None],
+                "runs": list(runs.values()), "tasks": tasks}
+
+    def tasks_add(self, body):
+        _, d = self._fb_lib()
+        path = os.path.join(d, "tasks.json")
+        with self.lock:
+            tasks = LIB.read_json(path, []) or []
+            seen = {_qkey(t["query"]) for t in tasks}
+            added = 0
+            for t in (body.get("tasks") or [])[:500]:
+                t = t if isinstance(t, dict) else {"query": t}
+                q = _clean(t.get("query"), 500)
+                if not q or _qkey(q) in seen:
+                    continue
+                procs = [p for p in t.get("processors") or ["q8", "h0"] if p in ("q8", "h0", "fm")][:3] or ["q8"]
+                tasks.append({"id": _clean(t.get("id"), 80) or "u-" + secrets.token_hex(4), "query": q,
+                              "note": _clean(t.get("note"), 400), "processors": procs})
+                seen.add(_qkey(q))
+                added += 1
+            LIB.write_json(path, tasks)
+        return {"added": added, "tasks": tasks}
+
+    def tasks_remove(self, body):
+        _, d = self._fb_lib()
+        path = os.path.join(d, "tasks.json")
+        with self.lock:
+            tasks = [t for t in LIB.read_json(path, []) or [] if t.get("id") != body.get("id")]
+            LIB.write_json(path, tasks)
+        return {"tasks": tasks}
+
     def _lib(self, lib):
         lib = os.path.abspath(str(lib or ""))
         if lib not in self.libraries():
@@ -348,6 +457,14 @@ def make_handler(app, token, port):
                 if path == "/api/search":
                     code, out = app.search(body)
                     return self._send(code, out)
+                if path == "/api/feedback":
+                    return self._send(200, app.feedback_add(body))
+                if path == "/api/feedback_get":
+                    return self._send(200, app.feedback_get())
+                if path == "/api/tasks_add":
+                    return self._send(200, app.tasks_add(body))
+                if path == "/api/tasks_remove":
+                    return self._send(200, app.tasks_remove(body))
                 if path == "/api/upload_path":
                     p = os.path.abspath(os.path.expanduser(str(body.get("path") or "").strip().strip('"')))
                     if not os.path.isfile(p):

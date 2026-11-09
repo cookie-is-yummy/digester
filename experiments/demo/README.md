@@ -54,6 +54,33 @@ Your browser opens at `http://127.0.0.1:8765/`. Loading Derrick's library takes 
 
 **Spending cap.** Each library has its own cost ledger (`ai_runs.jsonl`). By default, spending stops at $4 per provider per library. To change the cap, set `DIGESTER_OPENAI_BUDGET_USD` before starting the app.
 
+## Grading results
+
+Grades are how we find out whether the search is actually good. The AI judges we use in testing agree with a person only moderately, so your grades are what count.
+
+**Two ways to grade:**
+- **While you search.** Every result has four buttons:
+  - **Wrong**;
+  - **Related**: same area, but not what you wanted;
+  - **Good**: a fine answer;
+  - **Exactly what I meant**.
+
+  Clicking a chosen grade again clears it.
+- **The grading sheet.** Click **Grade results** at the top. It runs each queued search with the processors it lists (by default Q8 and H0), mixes their top 5 results together and shuffles them, so you can't tell which processor found what. Grade every result, then click **Next search**.
+  - **Add searches** with one search per line. Use things you would really search for.
+  - **Load a task file** if someone sent you one (a `.json` file of searches).
+  - Grading needs an OpenAI key. Without one, a search runs as a keyword fallback, which is not the real processor, so the sheet won't let you grade it.
+
+**Your scorecard** is at the bottom of the grading sheet. It counts every search whose whole top 5 you have graded for a processor, and shows:
+- how often at least one result in the top 5 is good;
+- how often 4 of the 5 are good;
+- the share of the top 5 that is good;
+- how often the exact thing you meant is in the top 5.
+
+**Download grades** saves a `.json` file with your grades, the searches and the result lists they were given for. It holds no captions. Send it to Derrick and he will pass it to the search loop.
+
+Grades and queued searches are saved in the library's `feedback/` folder on your computer. They leave it only when you download them.
+
 ### With and without a key
 
 | | No OpenAI key | With an OpenAI key |
@@ -85,6 +112,7 @@ Your browser opens at `http://127.0.0.1:8765/`. Loading Derrick's library takes 
   - **To Gemini:** Instagram captions, and only if you run the te pass.
 - **Friends' posts** (accounts you follow that also follow you) are removed when a library is imported and never shown.
 - **DM message text** is never read or stored. Only posts you shared in DMs are used.
+- **Grades** you give are saved in the library folder (`feedback/`) and leave it only if you download them. They hold your search text and item IDs, not captions.
 - **API keys** typed into the page are kept in memory only. They are never written to disk or logged.
 
 ## If something goes wrong
