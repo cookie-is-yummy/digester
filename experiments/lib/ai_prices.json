@@ -94,12 +94,14 @@
   },
   "gemini-2.5-flash-lite": {
    "provider": "gemini",
+   "input_per_m": 0.1,
    "media_input_per_m": 0.1,
    "audio_input_per_m": 0.3,
    "output_per_m": 0.4,
    "batch_input_per_m": 0.05,
    "batch_output_per_m": 0.2,
-   "unavailable": "404 on 2026-10-30: 'no longer available to new users'"
+   "unavailable": "404 on 2026-10-30 and again on 2026-11-09: 'no longer available to new users'",
+   "verified": "2026-11-09 https://aistudio.google.com/docs/pricing (redirect from ai.google.dev/gemini-api/docs/pricing): $0.10 text/image/video, $0.30 audio, $0.40 output, standard paid tier; no page date shown"
   },
   "gemini-3.1-flash-lite": {
    "provider": "gemini",
@@ -108,7 +110,8 @@
    "audio_input_per_m": 0.5,
    "output_per_m": 1.5,
    "batch_input_per_m": 0.125,
-   "batch_output_per_m": 0.75
+   "batch_output_per_m": 0.75,
+   "verified": "2026-11-09 https://aistudio.google.com/docs/pricing: unchanged ($0.25 text/image/video, $0.50 audio, $1.50 output); YouTube URL input documented as Preview, 'available at no charge' (budgeted at list price anyway)"
   },
   "gemini-2.5-flash": {
    "provider": "gemini",
