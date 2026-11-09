@@ -316,10 +316,12 @@ def merged_vectors(merged):
 
 # ---------------- the combined index ----------------
 class Combined:
-    def __init__(self, platform="all", enrich=None, route=False, items=None, merge_te=False):
+    def __init__(self, platform="all", enrich=None, route=False, items=None, merge_te=False, vectors=None):
         """platform: all | instagram | youtube (control runs). enrich: None or 'te' (combined te-v1c index).
         route: C2, te rows rankable only for items whose own text is insufficient.
-        merge_te: D2, insufficient items with a te row get te text folded into their own view (text + vector)."""
+        merge_te: D2, insufficient items with a te row get te text folded into their own view (text + vector).
+        vectors: optional (ids, V) used instead of corpus/emb/oai512 (the demo app passes the int8 store's id order
+        and replaces V afterwards); None = the original behaviour."""
         self.fusion = "rrf"
         t0 = time.time()
         allitems = items if items is not None else jl(os.path.join(DATA, "corpus", "items.jsonl"))
@@ -342,7 +344,7 @@ class Combined:
         self.text = texts
         self.bm = Y.BM25(texts)
         self.bm_global, self.bm_group = self.bm, None
-        ids, V = load_store(os.path.join(EMB, "oai512"))
+        ids, V = vectors if vectors is not None else load_store(os.path.join(EMB, "oai512"))
         keep = [k for k, i in enumerate(ids) if i in self.id_pos]
         self.V = V[keep]
         self.vpos = np.array([self.id_pos[ids[k]] for k in keep])

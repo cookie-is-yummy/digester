@@ -1,0 +1,25 @@
+{
+ "participants": [
+  {
+   "name": "Test Owner"
+  }
+ ],
+ "thread_path": "inbox/selfnotes_1001",
+ "messages": [
+  {
+   "sender_name": "Test Owner",
+   "timestamp_ms": 1760500000000,
+   "content": "SYNTHETIC-DM-TEXT-SELF note to self",
+   "share": {
+    "link": "https://www.instagram.com/reel/SYNTHreel007/",
+    "share_text": "Synthetic tiny house build timelapse #tinyhouse",
+    "original_content_owner": "synthetic_builder"
+   }
+  },
+  {
+   "sender_name": "Test Owner",
+   "timestamp_ms": 1760500100000,
+   "content": "SYNTHETIC-DM-TEXT-SELF second note"
+  }
+ ]
+}

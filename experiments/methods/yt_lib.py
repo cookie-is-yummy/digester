@@ -119,8 +119,10 @@ def load_queries():
 
 def outside_examples():
     """{code: text in the allowed-view format} for more-like-this examples outside the library (from the given
-    'Channel - Title' string)."""
+    'Channel - Title' string). A data root with no eval queries (e.g. a demo library) has none."""
     out = {}
+    if not os.path.exists(os.path.join(DATA, "evals", "queries.jsonl")):
+        return out
     for q in load_queries():
         for e in q.get("examples_outside_library") or []:
             t = e.get("title") or ""

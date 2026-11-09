@@ -57,15 +57,21 @@ pct = S82.pct
 
 
 class Env:
-    def __init__(self):
+    def __init__(self, S=None):
+        """S: optional prebuilt index whose S.V is already the int8 store (the demo app loads a stored int8 matrix);
+        None = the original build (float 3-large store quantised here)."""
         t0 = time.time()
-        items = L.jl(os.path.join(DATA, "corpus", "items.jsonl"))
-        self.S = L.Combined("all", items=items)
-        G.swap_to_3l(self.S)
-        S = self.S
-        t1 = time.time()
-        S.V = X.QMat(S.V)
-        self.quant_s = round(time.time() - t1, 1)
+        if S is None:
+            items = L.jl(os.path.join(DATA, "corpus", "items.jsonl"))
+            self.S = L.Combined("all", items=items)
+            G.swap_to_3l(self.S)
+            S = self.S
+            t1 = time.time()
+            S.V = X.QMat(S.V)
+            self.quant_s = round(time.time() - t1, 1)
+        else:
+            self.S = S
+            self.quant_s = 0.0
         self.h0_build_s = time.time() - t0
         I.prepare(S)
         t1 = time.time()

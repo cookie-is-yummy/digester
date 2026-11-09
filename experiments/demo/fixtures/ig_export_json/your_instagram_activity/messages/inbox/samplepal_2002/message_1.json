@@ -1,0 +1,38 @@
+{
+ "participants": [
+  {
+   "name": "Test Owner"
+  },
+  {
+   "name": "Sample Pal"
+  }
+ ],
+ "thread_path": "inbox/samplepal_2002",
+ "messages": [
+  {
+   "sender_name": "Test Owner",
+   "timestamp_ms": 1760600000000,
+   "content": "SYNTHETIC-DM-TEXT-FRIEND look at this",
+   "share": {
+    "link": "https://www.instagram.com/p/SYNTHpost002/",
+    "share_text": "Synthetic standing desk setup with cable tray #desksetup",
+    "original_content_owner": "synthetic_desks"
+   }
+  },
+  {
+   "sender_name": "Sample Pal",
+   "timestamp_ms": 1760600100000,
+   "content": "SYNTHETIC-DM-TEXT-FRIEND reply",
+   "share": {
+    "link": "https://www.instagram.com/reel/SYNTHreel008/",
+    "share_text": "Synthetic received reel",
+    "original_content_owner": "someone_else"
+   }
+  },
+  {
+   "sender_name": "Test Owner",
+   "timestamp_ms": 1760600200000,
+   "content": "SYNTHETIC-DM-TEXT-FRIEND ok"
+  }
+ ]
+}

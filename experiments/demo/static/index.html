@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scroll Digest search demo</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6b72; --faint: #9a9aa2; --line: #e4e2dc;
+  --accent: #3a5bd9; --accent-soft: #e8edfc; --warn-bg: #fff6df; --warn-ink: #7a5600; --err-bg: #fdecec;
+  --err-ink: #9b1c1c; --ok: #1f7a4d; --ig: #c13584; --ig-soft: #fbe9f3; --yt: #d93025; --yt-soft: #fde9e7;
+  --chip: #f0efeb; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141416; --panel: #1d1d21; --ink: #ececf0; --muted: #a2a2ab; --faint: #75757e; --line: #2e2e34;
+    --accent: #8ea6ff; --accent-soft: #252c46; --warn-bg: #3a3017; --warn-ink: #f2d28a; --err-bg: #3d1f1f;
+    --err-ink: #ffb4b4; --ok: #6fd3a0; --ig: #f07bbf; --ig-soft: #3a2131; --yt: #ff7b72; --yt-soft: #3b2220;
+    --chip: #2a2a30; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+a { color: var(--accent); }
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+.bar { max-width: 1440px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 14px; }
+.brand { font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.brand small { font-weight: 450; color: var(--muted); margin-left: 6px; }
+.grow { flex: 1; }
+select, input[type=text], input[type=password], input[type=number] {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 12px; cursor: pointer;
+  white-space: nowrap; }
+.btn:hover { border-color: var(--faint); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:disabled { opacity: .5; cursor: default; }
+.btn.small { padding: 4px 9px; font-size: 13px; }
+.pill { font-size: 12.5px; padding: 3px 9px; border-radius: 999px; background: var(--chip); color: var(--muted);
+  white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn-ink); background: var(--warn-bg); }
+.pill.err { color: var(--err-ink); background: var(--err-bg); }
+main { max-width: 1440px; margin: 0 auto; padding: 18px 20px 60px; }
+.privacy { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+.privacy b { color: var(--ink); font-weight: 600; }
+.searchbox { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+  box-shadow: var(--shadow); }
+.qrow { display: flex; gap: 10px; }
+.qrow input { flex: 1; font-size: 17px; padding: 11px 14px; border-radius: 10px; }
+.qrow .btn.primary { padding: 0 22px; font-size: 16px; }
+.opts { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 12px; font-size: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.muted { color: var(--muted); } .faint { color: var(--faint); }
+label.check { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.notice { margin-top: 12px; padding: 9px 12px; border-radius: 9px; font-size: 13.5px; background: var(--warn-bg);
+  color: var(--warn-ink); }
+.notice.err { background: var(--err-bg); color: var(--err-ink); }
+.notice.info { background: var(--accent-soft); color: var(--ink); }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; margin-top: 18px; align-items: start; }
+.layout.compare { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.col h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.col h2 .pill { font-weight: 500; }
+.results { display: flex; flex-direction: column; gap: 8px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 11px 13px;
+  display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; }
+.rank { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 13px; padding-top: 2px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.badge { font-size: 11.5px; font-weight: 650; padding: 2px 7px; border-radius: 6px; letter-spacing: .02em; }
+.badge.instagram { color: var(--ig); background: var(--ig-soft); } .badge.youtube { color: var(--yt); background: var(--yt-soft); }
+.creator { color: var(--ink); font-weight: 560; overflow-wrap: anywhere; }
+.text { grid-column: 2; margin-top: 4px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden; }
+.text.empty { color: var(--faint); font-style: italic; }
+.summary { grid-column: 2; font-size: 13px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+.summary::before { content: "te summary · "; color: var(--faint); }
+.foot { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 7px; }
+.chip { font-size: 12px; background: var(--chip); border-radius: 6px; padding: 2px 7px; color: var(--muted); }
+.open { margin-left: auto; font-size: 13px; text-decoration: none; white-space: nowrap; }
+.why { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 10px;
+  position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow: auto; }
+.compare .why { position: static; max-height: none; border: 0; padding: 0 2px 6px; }
+.whybox { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin-bottom: 10px; }
+.whybox > summary { cursor: pointer; font-size: 13.5px; color: var(--muted); }
+.why h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; }
+.why .row { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; padding: 2px 0; }
+.why .row span:last-child { text-align: right; overflow-wrap: anywhere; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; overflow-wrap: anywhere; }
+.meter { position: relative; height: 8px; border-radius: 4px; margin: 6px 0 4px;
+  background: linear-gradient(90deg, var(--yt-soft), var(--ig-soft)); }
+.meter i { position: absolute; top: -3px; width: 3px; height: 14px; border-radius: 2px; background: var(--ink); }
+.meter-l { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--faint); }
+.lat { display: grid; grid-template-columns: 92px 1fr 58px; gap: 6px; align-items: center; font-size: 13px; }
+.lat .b { height: 7px; background: var(--accent); border-radius: 4px; min-width: 2px; opacity: .75; }
+.lat .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.note { font-size: 13px; background: var(--warn-bg); color: var(--warn-ink); padding: 6px 9px; border-radius: 8px; margin-top: 6px; }
+.empty-state { text-align: center; color: var(--muted); padding: 50px 10px; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* drawers */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 20; display: none; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--panel); z-index: 21;
+  border-left: 1px solid var(--line); padding: 18px 22px 40px; overflow: auto; display: none; }
+.open-d .scrim, .open-d .drawer.on { display: block; }
+.drawer h2 { margin: 0 0 4px; font-size: 19px; } .drawer .x { float: right; }
+.field { margin: 14px 0; } .field > label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 5px; }
+.field .hint { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.field input[type=text], .field input[type=password] { width: 100%; }
+.inline { display: flex; gap: 8px; }
+.lib { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.lib .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lib .name { font-weight: 600; }
+.progress { height: 7px; background: var(--chip); border-radius: 4px; overflow: hidden; margin: 8px 0 4px; }
+.progress i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s; }
+.est { font-size: 13.5px; border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+.est .opt { display: block; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin: 7px 0; cursor: pointer; }
+.est .opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.files { font-size: 13px; margin-top: 6px; } .files div { display: flex; gap: 8px; justify-content: space-between; padding: 2px 0; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+@media (max-width: 980px) { .layout, .layout.compare { grid-template-columns: minmax(0, 1fr); } .why { position: static; max-height: none; } }
+@media (max-width: 640px) { .bar { flex-wrap: wrap; } .brand small { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">Scroll Digest <small>search demo · round 8</small></div>
+    <select id="libsel" title="Library" aria-label="Library"></select>
+    <span id="engine" class="pill">…</span>
+    <div class="grow"></div>
+    <span id="keypill" class="pill"></span>
+    <button class="btn" id="btn-keys">API keys</button>
+    <button class="btn" id="btn-libs">Libraries &amp; uploads</button>
+  </div>
+</header>
+<main>
+  <p class="privacy" id="privacy"></p>
+  <section class="searchbox">
+    <form class="qrow" id="qform">
+      <input id="q" type="text" placeholder="Search your saved, liked and watched posts…" autocomplete="off" autofocus>
+      <button class="btn primary" id="go" type="submit">Search</button>
+    </form>
+    <div class="opts">
+      <span class="muted">Processor</span>
+      <span class="seg" id="seg-a"></span>
+      <label class="check"><input type="checkbox" id="cmp"> Compare with</label>
+      <span class="seg" id="seg-b" style="display:none"></span>
+      <span class="grow"></span>
+      <span class="faint" id="procdesc"></span>
+    </div>
+    <div id="keynotice"></div>
+  </section>
+  <div id="out"><div class="empty-state" id="empty">Pick a library and type a search.</div></div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="d-keys">
+  <button class="btn small x" data-close>Close</button>
+  <h2>API keys</h2>
+  <p class="muted">Keys are kept in this program's memory for this session only. They are never written to disk or logged.
+    You can also set <code>OPENAI_API_KEY</code> and <code>GEMINI_API_KEY</code> before starting the app.</p>
+  <div class="field"><label for="k-openai">OpenAI key</label>
+    <div class="inline"><input type="password" id="k-openai" autocomplete="off" placeholder="sk-…"><button class="btn" id="save-openai">Save</button><button class="btn" id="clr-openai">Clear</button></div>
+    <div class="hint" id="h-openai"></div>
+    <div class="hint">Needed for searching (query embeddings, the rewrite, the refine) and for preparing a new library.</div></div>
+  <div class="field"><label for="k-gemini">Gemini key</label>
+    <div class="inline"><input type="password" id="k-gemini" autocomplete="off" placeholder="AI…"><button class="btn" id="save-gemini">Save</button><button class="btn" id="clr-gemini">Clear</button></div>
+    <div class="hint" id="h-gemini"></div>
+    <div class="hint">Only needed for the optional Instagram te pass when preparing a new library.</div></div>
+</aside>
+<aside class="drawer" id="d-libs">
+  <button class="btn small x" data-close>Close</button>
+  <h2>Libraries</h2>
+  <p class="muted" id="rootnote"></p>
+  <div id="liblist"></div>
+  <hr>
+  <h2>Add a library from your exports</h2>
+  <p class="muted">Your files stay on this computer. Instagram: the export in <b>JSON</b> format. YouTube: one or more Google Takeout zips (YouTube and YouTube Music, and/or My Activity).</p>
+  <div class="field"><label for="libname">Library name</label><input type="text" id="libname" placeholder="e.g. Eason"></div>
+  <div class="field"><label>Instagram export zip</label>
+    <input type="file" id="f-ig" accept=".zip" multiple>
+    <div class="hint">or the path to the zip on this computer:</div>
+    <div class="inline"><input type="text" id="p-ig" placeholder="/Users/you/Downloads/instagram-….zip"><button class="btn" data-addpath="ig">Add</button></div></div>
+  <div class="field"><label>Google Takeout zip(s)</label>
+    <input type="file" id="f-yt" accept=".zip" multiple>
+    <div class="hint">or a path:</div>
+    <div class="inline"><input type="text" id="p-yt" placeholder="C:\Users\you\Downloads\takeout-…-001.zip"><button class="btn" data-addpath="yt">Add</button></div></div>
+  <div class="files" id="files"></div>
+  <div class="field"><label for="own">Your other Instagram account names (optional)</label><input type="text" id="own" placeholder="comma separated display names">
+    <div class="hint">Used to tell posts you sent to yourself from posts you sent to someone. Message text is never read.</div></div>
+  <button class="btn primary" id="doimport">Import</button>
+  <div id="jobs"></div>
+</aside>
+
+<script>
+const TOKEN = "__DEMO_TOKEN__";
+const PROCS = {
+  q8: {name: "Q8 (recommended)", short: "Q8", desc: "planner + platform prior + Instagram te lists + nano refine on rewrite searches read as YouTube; int8 vectors"},
+  h0: {name: "H0", short: "H0", desc: "rewrite every search (gpt-5-nano), dense + BM25, no te, no prior, no refine"},
+  fm: {name: "Q8 + mini refine (FM)", short: "FM", desc: "Q8 with the gpt-5-mini refine instead of nano"},
+};
+let S = null, A = "q8", B = "h0", compare = false, busy = false, lastPoll = 0, estimates = {}, teChoice = {}, capVal = {};
+const $ = (id) => document.getElementById(id);
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json", "X-Demo-Token": TOKEN}, body: JSON.stringify(body)});
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+const fmt$ = (x) => x == null ? "–" : (x === 0 ? "$0" : x < 0.0001 ? "<$0.0001" : "$" + x.toFixed(x < 0.01 ? 5 : 4));
+const fmtS = (x) => x == null ? "–" : (x < 1 ? Math.round(x * 1000) + " ms" : x.toFixed(2) + " s");
+
+// ---------- processor selectors ----------
+function seg(host, cur, onpick, exclude) {
+  host.textContent = "";
+  for (const [k, p] of Object.entries(PROCS)) {
+    if (k === exclude) continue;
+    const b = el("button", k === cur ? "on" : "", p.name); b.type = "button";
+    b.onclick = () => onpick(k); host.append(b);
+  }
+}
+function drawSegs() {
+  if (compare && B === A) B = Object.keys(PROCS).find((k) => k !== A);
+  seg($("seg-a"), A, (k) => { A = k; drawSegs(); });
+  seg($("seg-b"), B, (k) => { B = k; drawSegs(); }, A);
+  $("seg-b").style.display = compare ? "" : "none";
+  $("procdesc").textContent = compare ? "" : PROCS[A].desc;
+}
+$("cmp").onchange = (e) => { compare = e.target.checked; drawSegs(); };
+
+// ---------- state ----------
+async function refresh() {
+  try { S = await api("/api/state"); } catch (e) { $("engine").textContent = "server not reachable"; $("engine").className = "pill err"; return; }
+  lastPoll = Date.now();
+  $("privacy").innerHTML = ""; const b = el("b", null, "Privacy. "); $("privacy").append(b, document.createTextNode(S.privacy));
+  const sel = $("libsel"); const cur = sel.value; sel.textContent = "";
+  for (const l of S.libraries) {
+    const o = el("option", null, l.name + (l.state === "ready" ? "" : " (" + l.state.replace("_", " ") + ")"));
+    o.value = l.path; o.disabled = l.state !== "ready"; if (l.active) o.selected = true; sel.append(o);
+  }
+  if (!S.libraries.length) sel.append(el("option", null, "no library yet"));
+  const e = S.engine, pill = $("engine");
+  if (e.state === "ready") { pill.className = "pill ok"; pill.textContent = "ready · " + (e.info?.counts?.items ?? 0).toLocaleString() + " items"; }
+  else if (e.state === "loading") { pill.className = "pill warn"; pill.innerHTML = ""; pill.append(el("span", "spinner"), document.createTextNode(" loading library… " + e.elapsed_s + " s")); }
+  else if (e.state === "none") { pill.className = "pill"; pill.textContent = "no library loaded"; }
+  else { pill.className = "pill err"; pill.textContent = "engine " + e.state + (e.message ? ": " + e.message : ""); }
+  const k = S.keys; const kp = $("keypill");
+  kp.textContent = "OpenAI " + (k.openai ? "✓" : "–") + " · Gemini " + (k.gemini ? "✓" : "–");
+  kp.className = "pill " + (k.openai ? "ok" : "warn");
+  for (const p of ["openai", "gemini"]) $("h-" + p).textContent = k[p] ? "Set (" + k[p] + ")." : "Not set.";
+  const kn = $("keynotice"); kn.textContent = "";
+  if (!k.openai) kn.append(el("div", "notice", "No OpenAI key: a new search runs as a keyword-only fallback (BM25), because its query embedding, rewrite and refine need a key. Searches already made in this library still run the real processor from cache. Add a key under API keys."));
+  if (e.state === "ready" && e.info && !e.info.te_available) kn.append(el("div", "notice info", "This library has no te pass: Instagram search will be weaker."));
+  $("go").disabled = e.state !== "ready" || busy;
+  drawLibs();
+}
+$("libsel").onchange = async (ev) => { try { await api("/api/select", {path: ev.target.value}); } catch (e) { alert(e.message); } refresh(); };
+setInterval(() => {
+  const active = S && (S.engine.state === "loading" || S.libraries.some((l) => l.state === "preparing") || S.jobs.some((j) => j.state === "running"));
+  if (active || Date.now() - lastPoll > 10000) refresh();
+}, 2000);
+
+// ---------- search ----------
+$("qform").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const q = $("q").value.trim(); if (!q || busy) return;
+  busy = true; $("go").disabled = true;
+  const procs = compare ? [A, B] : [A];
+  const out = $("out"); out.textContent = "";
+  out.append(el("div", "empty-state", "")); out.firstChild.append(el("span", "spinner"), document.createTextNode("  searching with " + procs.map((p) => PROCS[p].short).join(" and ") + "…"));
+  try { render(await api("/api/search", {query: q, processors: procs}), procs); }
+  catch (e) { out.textContent = ""; out.append(el("div", "notice err", e.message)); }
+  busy = false; refresh();
+};
+
+function render(res, procs) {
+  const out = $("out"); out.textContent = "";
+  const lay = el("div", "layout" + (procs.length > 1 ? " compare" : ""));
+  if (procs.length > 1) {
+    const a = res[procs[0]].results.map((r) => r.url), b = new Set(res[procs[1]].results.slice(0, 10).map((r) => r.url));
+    const shared = a.slice(0, 10).filter((u) => b.has(u)).length;
+    out.append(el("div", "notice info", `Top 10 overlap between ${PROCS[procs[0]].short} and ${PROCS[procs[1]].short}: ${shared} of 10.`));
+    for (const p of procs) {
+      const c = el("section", "col"), d = el("details", "whybox"), w = res[p].why;
+      d.append(el("summary", null, "Why: " + whySummary(w)), whyPanel(w, true));
+      c.append(head(res[p], p), d, list(res[p])); lay.append(c);
+    }
+  } else {
+    const p = procs[0], c = el("section", "col"); c.append(head(res[p], p), list(res[p]));
+    lay.append(c, whyPanel(res[p].why, false));
+  }
+  out.append(lay);
+}
+function whySummary(w) {
+  const parts = [w.path === "instant" ? "instant" : (w.rewrite?.used ? "rewritten" : "rewrite skipped")];
+  if (w.prior) parts.push("reads " + (w.prior.fixed ? "one platform" : w.prior.reads));
+  if (w.refine?.model) parts.push(w.refine.gated ? (w.refine.ran ? "refined" : "refine skipped") : "no refine");
+  return parts.join(" · ");
+}
+function head(r, p) {
+  const h = el("h2", null, PROCS[p].name);
+  const w = r.why;
+  h.append(el("span", "pill", w.path === "instant" ? "instant path" : "rewrite path"));
+  if (w.mode === "keyword_fallback") h.append(el("span", "pill warn", "keyword fallback"));
+  else if (w.path === "rewrite" && !(w.rewrite && w.rewrite.used)) h.append(el("span", "pill warn", "rewrite skipped"));
+  if (w.refine && w.refine.ran) h.append(el("span", "pill ok", "refined"));
+  h.append(el("span", "faint", fmtS(w.latency?.total_s) + " · " + fmt$(w.cost?.usd)));
+  return h;
+}
+function list(r) {
+  const box = el("div", "results");
+  if (!r.results.length) box.append(el("div", "empty-state", "No results."));
+  for (const it of r.results) {
+    const c = el("article", "card");
+    c.append(el("div", "rank", it.rank));
+    const m = el("div", "meta");
+    m.append(el("span", "badge " + it.platform, it.platform === "instagram" ? "Instagram" : "YouTube"));
+    if (it.creator) m.append(el("span", "creator", it.creator));
+    if (it.date) m.append(el("span", null, it.date));
+    if (it.media && it.media !== "video") m.append(el("span", "faint", it.media));
+    c.append(m);
+    c.append(it.text ? el("div", "text", it.text) : el("div", "text empty", "no caption or title in the export"));
+    if (it.summary && (!it.text || it.text.length < 40)) c.append(el("div", "summary", it.summary));
+    const f = el("div", "foot");
+    for (const h of it.how) f.append(el("span", "chip", h));
+    if (it.url && /^https?:\/\//.test(it.url)) { const a = el("a", "open", "Open ↗"); a.href = it.url; a.target = "_blank"; a.rel = "noopener noreferrer"; f.append(a); }
+    c.append(f); box.append(c);
+  }
+  return box;
+}
+function row(k, v) { const d = el("div", "row"); d.append(el("span", "muted", k), el("span", null, v)); return d; }
+function whyPanel(w, compact) {
+  const p = el("aside", "why");
+  const sec = (t) => p.append(el("h3", null, t));
+  sec("Path");
+  const r = w.route || {};
+  p.append(row("taken", w.path === "instant" ? "instant (raw query, no LLM)" : "rewrite (qr-v1, gpt-5-nano)"));
+  if (w.processor.startsWith("H0")) p.append(row("why", "H0 rewrites every search"));
+  else p.append(row("why", w.path === "instant" ? ("planner: " + (r.reason || "short") + ", " + r.n_tokens + " tokens") : ("planner: " + (r.markers?.length ? r.markers.join(", ") : "longer than 4 tokens"))));
+  sec("Rewrite");
+  const rw = w.rewrite || {};
+  if (rw.used) {
+    p.append(row("source", rw.cached ? "cached" + (rw.call_seconds ? " (the call took " + fmtS(rw.call_seconds) + ")" : "") : "live call"));
+    const t1 = el("div", "tags"); (rw.phrases || []).forEach((x) => t1.append(el("span", "tag", x)));
+    p.append(el("div", "muted", "phrases")); p.append(t1);
+    const t2 = el("div", "tags"); (rw.keywords || []).forEach((x) => t2.append(el("span", "tag", x)));
+    p.append(el("div", "muted", "keywords")); p.append(t2);
+    if (!compact && rw.captions?.length) { const d = el("details"); d.append(el("summary", "muted", "imagined captions (HyDE)")); rw.captions.forEach((x) => d.append(el("div", "tag", x))); p.append(d); }
+  } else p.append(row("status", rw.skipped || "not used"));
+  if (w.prior) {
+    sec("Platform prior");
+    const pr = w.prior;
+    if (pr.fixed) p.append(row("read", "single-platform library (prior not used)"));
+    else {
+      const mtr = el("div", "meter"); const i = el("i"); i.style.left = `calc(${(pr.q_ig * 100).toFixed(1)}% - 1px)`; mtr.append(i);
+      const lab = el("div", "meter-l"); lab.append(el("span", null, "YouTube"), el("span", null, "Instagram"));
+      p.append(row("reads", pr.reads + " (q_ig " + pr.q_ig.toFixed(2) + ")"), mtr, lab);
+      p.append(row("text guess", (pr.q_text != null ? pr.q_text.toFixed(2) : "–") + " (logit " + pr.e_t + ")"));
+      p.append(row("top-20 share", pr.n_ig_top + " of 20 Instagram (" + pr.e_k + ")"));
+      p.append(row("creators named", pr.n_creators ? pr.n_creators + " (" + pr.e_c + ")" : "none"));
+      p.append(row("weights", "IG ×" + pr.mult_ig + " · YT ×" + pr.mult_yt));
+    }
+  }
+  if (w.te) {
+    sec("te lists (Instagram)");
+    p.append(row("used", !w.te.available ? "no (library has no te pass)" : w.te.used ? "yes" : "no"));
+    if (w.te.available) p.append(row("te items in top 10", String(w.te.in_top10)));
+  }
+  sec("Refine");
+  const rf = w.refine || {};
+  if (!rf.model) p.append(row("status", "not part of H0"));
+  else if (!rf.gated) p.append(row("ran", "no: gate not met (" + rf.gate + ")"));
+  else {
+    p.append(row("ran", rf.ran ? "yes (" + rf.model + ")" : "no: " + (rf.skipped || "failed")));
+    if (rf.ran) { p.append(row("moved", rf.moved + " of top " + rf.sent)); p.append(row("source", rf.cached ? "cached" : "live call")); }
+  }
+  sec("Latency");
+  const L = w.latency || {}, stages = [["route", L.route_s], ["rewrite", L.rewrite_s], ["embed", L.embed_s], ["local search", L.local_s], ["refine", L.refine_s]];
+  const max = Math.max(0.05, ...stages.map((s) => s[1] || 0));
+  const g = el("div", "lat");
+  for (const [k, v] of stages) { if (v == null) continue; g.append(el("span", "muted", k)); const bar = el("div"); const b = el("div", "b"); b.style.width = Math.max(1, (v / max) * 100) + "%"; bar.append(b); g.append(bar, el("span", "v", fmtS(v))); }
+  p.append(g);
+  p.append(row("first screen", fmtS(L.first_screen_s)));
+  if (L.refine_s != null) p.append(row("refined screen", fmtS(L.total_s)));
+  if (w.embed_cached) p.append(el("div", "faint", "query vectors were cached (searched before)"));
+  sec("Cost of this search");
+  p.append(row("total", fmt$(w.cost?.usd)));
+  for (const c of w.cost?.calls || []) p.append(row(c.model + " · " + (c.purpose || "").replace(/^demo_/, "").replaceAll("_", " "), fmt$(c.cost_usd)));
+  if (!(w.cost?.calls || []).length) p.append(el("div", "faint", "no paid call was made (cached or no key)"));
+  for (const n of w.notes || []) p.append(el("div", "note", n));
+  return p;
+}
+
+// ---------- drawers ----------
+function openDrawer(id) { document.body.classList.add("open-d"); document.querySelectorAll(".drawer").forEach((d) => d.classList.toggle("on", d.id === id)); }
+function closeDrawer() { document.body.classList.remove("open-d"); }
+$("btn-keys").onclick = () => openDrawer("d-keys");
+$("btn-libs").onclick = () => openDrawer("d-libs");
+$("scrim").onclick = closeDrawer;
+document.querySelectorAll("[data-close]").forEach((b) => (b.onclick = closeDrawer));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+for (const p of ["openai", "gemini"]) {
+  $("save-" + p).onclick = async () => { const v = $("k-" + p).value.trim(); if (!v) return; await api("/api/keys", {[p]: v}); $("k-" + p).value = ""; refresh(); };
+  $("clr-" + p).onclick = async () => { await api("/api/keys", {[p]: ""}); refresh(); };
+}
+
+function drawLibs() {
+  if (!S) return;
+  $("rootnote").textContent = "Folder: " + S.root;
+  const box = $("liblist"); box.textContent = "";
+  for (const l of S.libraries) {
+    const d = el("div", "lib"), top = el("div", "top");
+    top.append(el("span", "name", l.name));
+    const cls = {ready: "ok", preparing: "warn", prepare_failed: "err", needs_prepare: "warn"}[l.state] || "";
+    top.append(el("span", "pill " + cls, l.state.replace("_", " ")));
+    const c = l.counts || {};
+    top.append(el("span", "faint", (c.items || 0).toLocaleString() + " items · " + (c.instagram || 0).toLocaleString() + " IG · " + (c.youtube || 0).toLocaleString() + " YT"));
+    top.append(el("span", "grow"));
+    if (l.state === "ready" && !l.active) { const b = el("button", "btn small", "Use"); b.onclick = async () => { await api("/api/select", {path: l.path}); closeDrawer(); refresh(); }; top.append(b); }
+    if (l.active) top.append(el("span", "pill ok", "in use"));
+    d.append(top);
+    if (l.state === "ready" && !l.has_te) d.append(el("div", "faint", "te pass skipped: Instagram search is weaker."));
+    const j = l.job || {};
+    if (l.state === "preparing") {
+      const pg = el("div", "progress"), i = el("i"); i.style.width = (j.total ? (100 * j.done / j.total) : 3) + "%"; pg.append(i);
+      d.append(pg, el("div", "muted", (j.step || "") + (j.total ? ` · ${j.done.toLocaleString()} / ${j.total.toLocaleString()}` : "") + ` · spent ${fmt$(j.cost_usd)} · ${Math.round(j.elapsed_s || 0)} s` + (j.message ? " · " + j.message : "")));
+      const st = el("button", "btn small", "Stop (resumable)"); st.onclick = () => api("/api/prepare_stop", {path: l.path}).then(refresh); d.append(st);
+    } else if (l.state === "needs_prepare" || l.state === "prepare_failed") {
+      if (l.state === "prepare_failed") d.append(el("div", "notice err", "Prepare stopped: " + (j.message || "error") + ". Running it again resumes."));
+      d.append(prepareBox(l));
+    }
+    box.append(d);
+  }
+  const fl = $("files"); fl.textContent = "";
+  for (const u of S.uploads) {
+    const r = el("div"); r.append(el("span", null, (u.kind === "ig" ? "Instagram · " : "Takeout · ") + u.name), el("span", "faint", (u.bytes / 1e6).toFixed(1) + " MB"));
+    const x = el("button", "btn small", "remove"); x.onclick = () => api("/api/discard_upload", {id: u.id}).then(refresh); r.append(x); fl.append(r);
+  }
+  const jb = $("jobs"); jb.textContent = "";
+  for (const j of S.jobs) {
+    const n = el("div", "notice " + (j.state === "error" ? "err" : "info"), "Import “" + j.name + "”: " + j.message + (j.counts ? ` (${j.counts.items.toLocaleString()} items)` : ""));
+    jb.append(n); for (const w of j.warnings || []) jb.append(el("div", "notice", w));
+  }
+}
+function prepareBox(l) {
+  const wrap = el("div", "est");
+  const e = estimates[l.path];
+  if (!e) {
+    const b = el("button", "btn", "Prepare… (estimate cost first)");
+    b.onclick = async () => { b.disabled = true; b.textContent = "estimating…"; try { estimates[l.path] = await api("/api/estimate", {path: l.path}); } catch (err) { alert(err.message); } drawLibs(); };
+    wrap.append(b); return wrap;
+  }
+  wrap.append(el("div", null, `${e.items_with_text.toLocaleString()} of ${e.items.toLocaleString()} items have text to embed.`));
+  wrap.append(el("div", "muted", `Embeddings (${e.embed.model}): about ${fmt$(e.embed.cost_usd)}, ~${e.embed.minutes_est} min.`));
+  const choice = teChoice[l.path] ?? (e.te.to_do > 0);
+  const o1 = el("label", "opt" + (choice ? " on" : "")), o2 = el("label", "opt" + (!choice ? " on" : ""));
+  const r1 = el("input"); r1.type = "radio"; r1.name = "te-" + l.path; r1.checked = choice;
+  const r2 = el("input"); r2.type = "radio"; r2.name = "te-" + l.path; r2.checked = !choice;
+  r1.onchange = () => { teChoice[l.path] = true; drawLibs(); }; r2.onchange = () => { teChoice[l.path] = false; drawLibs(); };
+  o1.append(r1, document.createTextNode(` Run the te pass on ${e.te.to_do.toLocaleString()} Instagram items (${e.te.model}): about ${fmt$(e.te.cost_usd)}, ~${e.te.minutes_est_at_6} min at 6 at a time.`));
+  o2.append(r2, document.createTextNode(" Skip te (cheaper, Instagram search will be weaker)."));
+  wrap.append(o1, o2);
+  const capRow = el("div", "inline"); capRow.style.alignItems = "center";
+  const cap = el("input"); cap.type = "number"; cap.min = "0.05"; cap.step = "0.25"; cap.value = capVal[l.path] ?? Math.max(0.5, Math.ceil((e.te.cost_usd * 1.3) * 4) / 4).toFixed(2); cap.style.width = "90px";
+  cap.oninput = () => { capVal[l.path] = cap.value; };
+  capRow.append(el("span", "muted", "te spend cap $"), cap, el("span", "faint", "the pass stops there (resumable)"));
+  if (choice) wrap.append(capRow);
+  const total = e.embed.cost_usd + (choice ? e.te.cost_usd : 0);
+  const need = [!e.keys.openai && "an OpenAI key", choice && !e.keys.gemini && "a Gemini key"].filter(Boolean);
+  if (need.length) wrap.append(el("div", "notice", "Needs " + need.join(" and ") + " (API keys, top right)."));
+  const go = el("button", "btn primary", `Confirm: prepare for about ${fmt$(total)}`);
+  go.disabled = need.length > 0;
+  go.onclick = async () => { go.disabled = true; try { await api("/api/prepare", {path: l.path, te: choice, te_cap: parseFloat(cap.value), workers: 6, estimate: e}); delete estimates[l.path]; } catch (err) { alert(err.message); } refresh(); };
+  wrap.append(go);
+  return wrap;
+}
+
+// ---------- uploads ----------
+function upload(file, kind) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest(); x.open("POST", "/api/upload");
+    x.setRequestHeader("X-Demo-Token", TOKEN); x.setRequestHeader("X-Kind", kind); x.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+    const line = el("div", "faint", "uploading " + file.name + "…"); $("files").append(line);
+    x.upload.onprogress = (e) => { if (e.lengthComputable) line.textContent = `uploading ${file.name}: ${Math.round(100 * e.loaded / e.total)}%`; };
+    x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch (e) {} x.status === 200 ? resolve(j) : reject(new Error(j.error || "upload failed")); };
+    x.onerror = () => reject(new Error("upload failed")); x.send(file);
+  });
+}
+for (const kind of ["ig", "yt"]) {
+  $("f-" + kind).onchange = async (ev) => { for (const f of ev.target.files) { try { await upload(f, kind); } catch (e) { alert(e.message); } } ev.target.value = ""; refresh(); };
+}
+document.querySelectorAll("[data-addpath]").forEach((b) => (b.onclick = async () => {
+  const kind = b.dataset.addpath, v = $("p-" + kind).value.trim(); if (!v) return;
+  try { await api("/api/upload_path", {path: v, kind}); $("p-" + kind).value = ""; } catch (e) { alert(e.message); } refresh();
+}));
+$("doimport").onclick = async () => {
+  if (!S.uploads.length) { alert("Add an Instagram export or a Takeout zip first."); return; }
+  try { await api("/api/import", {name: $("libname").value, uploads: S.uploads.map((u) => u.id), own_names: $("own").value}); } catch (e) { alert(e.message); }
+  refresh();
+};
+
+drawSegs(); refresh();
+</script>
+</body>
+</html>

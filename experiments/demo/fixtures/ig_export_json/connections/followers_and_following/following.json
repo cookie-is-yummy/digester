@@ -1,0 +1,22 @@
+{
+ "relationships_following": [
+  {
+   "title": "sample_pal",
+   "string_list_data": [
+    {
+     "href": "https://www.instagram.com/_u/sample_pal",
+     "timestamp": 1700000001
+    }
+   ]
+  },
+  {
+   "title": "synthetic_baker",
+   "string_list_data": [
+    {
+     "href": "https://www.instagram.com/_u/synthetic_baker",
+     "timestamp": 1700000002
+    }
+   ]
+  }
+ ]
+}
