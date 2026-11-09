@@ -16,6 +16,16 @@ Mode `dev` runs the same loop on the dev query set, dev rewrites and dev caches 
 reproduces runs/r8.1/h0r8_r*, runs/r8.5/q8_r*, runs/r8.8/fm_r* exactly.
 Prints aggregates only (never query or item text).
 
+Round 9 (orchestrator-side extension; defaults unchanged): `--splits` picks the held-out split(s). The default is the
+round-8 pair known_test,ig_known_test with every path above unchanged. A round-9 split runs alone, one per call:
+  ig_real      queries evals/labels/ig_real_queries.jsonl (hidden; ids, texts, kinds; no label row is read)
+  facet_dev    queries evals/queries.jsonl + split.json (method-side texts, via corpus.load_queries)
+  facet_test   queries evals/labels/facet_test_queries.jsonl (hidden)
+and every new paid output goes to held-out-only stores under runs/rewrites/<split>/: qr-v1 rewrites and their call
+cache, qvec_3l / qvec_te, refine/ (rf-v1 nano and mini responses) and timing/. Dev caches are read only. Ledger
+purposes carry the split (r9_<split>_*), and every cost is read from rows of this call's own purpose and model.
+Run files go to runs/r9/<cfg>_<split>_r<k>.json.
+
 usage: python experiments/eval/final8_heldout.py rewrite --split known_test --rep 1
        python experiments/eval/final8_heldout.py prefetch
        python experiments/eval/final8_heldout.py timing --kind 3l|te
@@ -48,17 +58,21 @@ import c82_lib as P  # noqa: E402
 import c88_lib as K  # noqa: E402
 import c88_search as S88  # noqa: E402
 import yt_lib as Y  # noqa: E402
-from corpus import DATA, write_run  # noqa: E402
+from corpus import DATA, load_queries, write_run  # noqa: E402
 
-HSPLITS = ["known_test", "ig_known_test"]
-QFILE = {s: os.path.join(DATA, "evals", "labels", f"{s}_queries.jsonl") for s in HSPLITS}
-RW = {s: os.path.join(DATA, "runs", "rewrites", s) for s in HSPLITS}
-QV3L = {s: os.path.join(RW[s], "qvec_3l") for s in HSPLITS}
-QVTE = {s: os.path.join(RW[s], "qvec_te") for s in HSPLITS}
+HSPLITS = ["known_test", "ig_known_test"]  # round-8 default set (paths below unchanged for it)
+R9_SPLITS = ["ig_real", "facet_dev", "facet_test"]  # round 9: one split per call, stores under runs/rewrites/<split>/
+ALL_SPLITS = HSPLITS + R9_SPLITS
+QFILE = {s: os.path.join(DATA, "evals", "labels", f"{s}_queries.jsonl") for s in ALL_SPLITS if s != "facet_dev"}
+RW = {s: os.path.join(DATA, "runs", "rewrites", s) for s in ALL_SPLITS}
+QV3L = {s: os.path.join(RW[s], "qvec_3l") for s in ALL_SPLITS}
+QVTE = {s: os.path.join(RW[s], "qvec_te") for s in ALL_SPLITS}
+ACTIVE = list(HSPLITS)  # set by --splits
 WORK = os.path.join(DATA, "final8")
 TIMING = os.path.join(WORK, "timing")
 RCACHE = {K.NANO: os.path.join(WORK, "cache", "rf-v1.jsonl"), K.MINI: os.path.join(WORK, "cache", "rfm-v1.jsonl")}
 OUT = os.path.join(DATA, "runs", "final8")
+OUT9 = os.path.join(DATA, "runs", "r9")
 CHECK = os.path.join(DATA, "tmp", "final8_checks")
 DEV_REF = {"h0r8": os.path.join(DATA, "runs", "r8.1", "h0r8_r{rep}.json"),
            "q8": os.path.join(DATA, "runs", "r8.5", "q8_r{rep}.json"),
@@ -69,29 +83,60 @@ MODE = {"m": "heldout"}
 pct = S81.pct
 
 
+def set_active(names):
+    names = list(names)
+    assert names == HSPLITS or (len(names) == 1 and names[0] in R9_SPLITS), \
+        f"--splits is {','.join(HSPLITS)} (default) or exactly one of {R9_SPLITS}"
+    ACTIVE[:] = names
+
+
+def r9():
+    return ACTIVE != HSPLITS
+
+
+def timing_dir():
+    return os.path.join(RW[ACTIVE[0]], "timing") if r9() else TIMING
+
+
+def rcache():
+    if not r9():
+        return RCACHE
+    d = os.path.join(RW[ACTIVE[0]], "refine")
+    return {K.NANO: os.path.join(d, "rf-v1.jsonl"), K.MINI: os.path.join(d, "rfm-v1.jsonl")}
+
+
+def purpose(base):
+    """Ledger purpose: round-8 names by default; r9_<split>_<base> for a round-9 split."""
+    return f"r9_{ACTIVE[0]}_{base}" if r9() else f"final8_{base}"
+
+
+def _split_queries(s):
+    if s in QFILE:
+        return [json.loads(line) for line in open(QFILE[s]) if line.strip()]
+    return load_queries(s)
+
+
 # ---------------- data sources ----------------
 def queries():
     if MODE["m"] == "dev":
         return S81.queries()
     out, split_of = [], {}
-    for s in HSPLITS:
-        for line in open(QFILE[s]):
-            if line.strip():
-                q = json.loads(line)
-                out.append(q)
-                split_of[q["id"]] = s
+    for s in ACTIVE:
+        for q in _split_queries(s):
+            out.append(q)
+            split_of[q["id"]] = s
     return out, split_of
 
 
 def splits():
-    return S81.SPLITS if MODE["m"] == "dev" else HSPLITS
+    return S81.SPLITS if MODE["m"] == "dev" else list(ACTIVE)
 
 
 def rewrites(rep):
     if MODE["m"] == "dev":
         return S81.rewrites("qr-v1", rep)
     out, per, src = {}, {}, []
-    for s in HSPLITS:
+    for s in ACTIVE:
         p = os.path.join(RW[s], f"qr-v1_gpt-5-nano_r{rep}.json")
         d = json.load(open(p))
         ks = [k for k in d if not k.startswith("_")]
@@ -133,22 +178,24 @@ def load_rcache(rf, path, tag):
 
 def env_h0():
     env = S81.Env(need_h5=False)
-    env.S.QV = UnionQV(env.S.QV.vec, [QV3L[s] for s in HSPLITS])
+    env.S.QV = UnionQV(env.S.QV.vec, [QV3L[s] for s in ACTIVE])
     return env
 
 
 def env_88():
     env = S88.Env()
-    env.S.QV = UnionQV(env.S.QV.vec, [QV3L[s] for s in HSPLITS])
-    env.te.QVs = UnionQV(env.te.QVs.vec, [QVTE[s] for s in HSPLITS])
-    if MODE["m"] == "heldout":  # new refine responses go to final8/cache only (dev caches stay read-only, unused)
-        te_rows = F.te_meta_rows()
+    env.S.QV = UnionQV(env.S.QV.vec, [QV3L[s] for s in ACTIVE])
+    env.te.QVs = UnionQV(env.te.QVs.vec, [QVTE[s] for s in ACTIVE])
+    if MODE["m"] == "heldout":  # new refine responses go to final8/cache (round 8) or runs/rewrites/<split>/refine
+        te_rows = F.te_meta_rows()  # (round 9) only; dev caches stay read-only, unused
         env.refiners = {}
-        for m, pur, tag in ((K.NANO, "final8_refine", "final8"), (K.MINI, "final8_refine_mini", "final8-mini")):
+        tag0 = f"r9-{ACTIVE[0]}" if r9() else "final8"
+        rc = rcache()
+        for m, pur, tag in ((K.NANO, purpose("refine"), tag0), (K.MINI, purpose("refine_mini"), f"{tag0}-mini")):
             rf = K.Refiner88(env.S, te_rows, model=m, purpose=pur)
             rf.cache, rf.source = {}, {}
-            load_rcache(rf, RCACHE[m], tag)
-            rf.out_path, rf.tag = RCACHE[m], tag
+            load_rcache(rf, rc[m], tag)
+            rf.out_path, rf.tag = rc[m], tag
             env.refiners[m] = rf
     return env
 
@@ -156,7 +203,11 @@ def env_88():
 # ---------------- rewrites (paid) ----------------
 def rewrite(split, rep):
     G.CACHE = os.path.join(RW[split], f"cache_r{rep}")
-    C6.ALT.update({"queries": QFILE[split], "outdir": RW[split], "splits": [split]})
+    if split in QFILE:
+        C6.ALT.update({"queries": QFILE[split], "outdir": RW[split], "splits": [split]})
+    else:  # facet_dev: method-side texts (queries.jsonl + split.json); outputs still go to the held-out-only store
+        C6.ALT.update({"queries": None, "outdir": RW[split], "splits": [split]})
+        C6.typed_queries = lambda: [q for q in load_queries(split) if not q["examples"]]
     C6.run("gpt-5-nano", [rep])
 
 
@@ -201,27 +252,29 @@ def prefetch():
     from sklearn.preprocessing import normalize
     qs, split_of, paths, s3l, ste, _, _ = held_jobs()
     n_inst = collections.Counter(split_of[k] for k, v in paths.items() if v == "instant")
-    print(f"routes (instant / typed): { {s: (n_inst[s], sum(1 for q in qs if split_of[q['id']] == s)) for s in HSPLITS} }",
+    print(f"routes (instant / typed): { {s: (n_inst[s], sum(1 for q in qs if split_of[q['id']] == s)) for s in ACTIVE} }",
           flush=True)
     for kind, need, base, stores in (("3l", s3l, G.QueryVecs3L().vec, QV3L), ("te", ste, L.QueryVecs("c4_queries").vec,
                                                                                 QVTE)):
         have = set(base)
-        for s in HSPLITS:
+        for s in ACTIVE:
             ids, V = L.load_store(stores[s])
             have |= set(ids)
             miss = sorted({t for t in need[s] if t not in have})
             n0 = len(L.ledger())
             t0 = time.time()
+            pur = purpose("query_vectors_3l" if kind == "3l" else "te_query_vectors")
             if miss:
                 if kind == "3l":
-                    Vn = G.embed_3l(miss, "final8_query_vectors_3l", batch=500, workers=1)
+                    Vn = G.embed_3l(miss, pur, batch=500, workers=1)
                 else:
-                    Vn = normalize(Y.embed_texts(miss, "final8_te_query_vectors", batch=500, workers=1))
+                    Vn = normalize(Y.embed_texts(miss, pur, batch=500, workers=1))
                 allids = list(ids) + miss
                 L.save_store(stores[s], allids, np.vstack([V, Vn]) if len(ids) else Vn)
                 have |= set(miss)
             wall = time.time() - t0
-            cost = sum(r["cost_usd"] for r in L.ledger()[n0:])
+            # this call's own rows only (same purpose), as in _timed: other jobs may append rows concurrently
+            cost = sum(r["cost_usd"] for r in L.ledger()[n0:] if r.get("purpose") == pur)
             print(f"prefetch {kind} {s}: {len(set(need[s]))} distinct strings, {len(miss)} embedded in {wall:.1f} s "
                   f"({len(miss) / max(wall, 1e-9):.0f}/s), ${cost:.5f}", flush=True)
 
@@ -248,15 +301,16 @@ def timing(kind):
     """c81_search.timing (3-large: raw query once per typed search; query + phrases + HyDE per search and repeat) and
     c83_search.timing (3-small te: instant-routed raw query once; rewrite-routed plan strings per repeat)."""
     _, _, _, _, _, l3_t, te_t = held_jobs()
-    os.makedirs(TIMING, exist_ok=True)
+    tdir = timing_dir()
+    os.makedirs(tdir, exist_ok=True)
     jobs = l3_t if kind == "3l" else te_t
-    model, dim, pur = ((G.EMB3L_MODEL, G.EMB3L_DIM, "final8_query_embed_timing") if kind == "3l"
-                       else (Y.EMB_MODEL, Y.EMB_DIM, "final8_te_embed_timing"))
+    model, dim, pur = ((G.EMB3L_MODEL, G.EMB3L_DIM, purpose("query_embed_timing")) if kind == "3l"
+                       else (Y.EMB_MODEL, Y.EMB_DIM, purpose("te_embed_timing")))
     fname = (lambda r: "embed_timing_inst.json" if r == 0 else f"embed_timing_h0_r{r}.json") if kind == "3l" else \
         (lambda r: "embed_timing_te_inst.json" if r == 0 else f"embed_timing_te_r{r}.json")
     out = {}
     for r in (0, 1, 2, 3):
-        p = os.path.join(TIMING, fname(r))
+        p = os.path.join(tdir, fname(r))
         out[r] = json.load(open(p)) if os.path.exists(p) else {}
     t0, n = time.time(), 0
     for rep, q, ss in jobs:
@@ -266,9 +320,9 @@ def timing(kind):
         n += 1
         if n % 200 == 0:
             for r, d in out.items():
-                json.dump(d, open(os.path.join(TIMING, fname(r)), "w"))
+                json.dump(d, open(os.path.join(tdir, fname(r)), "w"))
     for r, d in out.items():
-        json.dump(d, open(os.path.join(TIMING, fname(r)), "w"))
+        json.dump(d, open(os.path.join(tdir, fname(r)), "w"))
     wall = time.time() - t0
     print(f"timing {kind}: {n} live calls in {wall:.1f} s ({n / max(wall, 1e-9):.2f} items/s)", flush=True)
 
@@ -324,7 +378,7 @@ def _lat(d, k):
 def timing_files():
     if MODE["m"] == "dev":
         return S81.WORK, S88.T83
-    return TIMING, TIMING
+    return timing_dir(), timing_dir()
 
 
 def search(env, cfg, q, parse, rep):
@@ -458,7 +512,8 @@ def run_rep(env, cfg, rep, qs, split_of):
 
 
 def common_meta(env, cfg, rep, wall, n, sources):
-    m = {"config": cfg, "definition": NAME[cfg], "round": "8 final (held-out)", "repeat": rep,
+    m = {"config": cfg, "definition": NAME[cfg], "round": "9 (held-out runner)" if r9() and MODE["m"] == "heldout"
+         else "8 final (held-out)", "repeat": rep,
          "embedding": f"{G.EMB3L_MODEL}@{G.EMB3L_DIM}", "route_version": R.ROUTE_VERSION,
          "rewrites": {"qr-v1": sources}, "index_build_s": round(env.build_s, 1),
          "run_wall_s": round(wall, 1), "searches_per_s": round(n / max(wall, 1e-9), 2),
@@ -480,6 +535,13 @@ def common_meta(env, cfg, rep, wall, n, sources):
                                    "3-large call, live 3-small te call) + refine call; first screen = all but the "
                                    "refine, refined screen = first screen + refine (refined searches)"})
     m["cost_note"] = "ledger list prices; per 1k typed searches; rewrite at the original call's cost"
+    if r9() and MODE["m"] == "heldout":
+        s = ACTIVE[0]
+        m["heldout_stores"] = {"queries": os.path.relpath(QFILE[s], DATA) if s in QFILE
+                               else "evals/queries.jsonl + split.json (method-side texts)",
+                               "rewrites": f"runs/rewrites/{s}/qr-v1_gpt-5-nano_r<k>.json",
+                               "refine": os.path.relpath(os.path.dirname(rcache()[K.NANO]), DATA),
+                               "timing": os.path.relpath(timing_dir(), DATA)}
     return m
 
 
@@ -506,12 +568,12 @@ def run(mode, cfgs, reps, outdir):
                       f"{os.path.relpath(DEV_REF[cfg].format(rep=rep), DATA)} (1,000 deep; run has {len(out)}); "
                       f"wall {wall:.1f} s", flush=True)
                 continue
-            for sp in HSPLITS:
+            for sp in ACTIVE:
                 ks = [k for k in out if split_of[k] == sp]
                 m = {**meta, "split": sp, "n_searches": len(ks),
                      "file_layout": "one file per method, split and repeat",
                      "counts": {k: v for k, v in agg.items() if k.startswith(sp + ":")},
-                     "per_split": {sp: rows[sp], "both_splits_all_typed": sa},
+                     "per_split": {sp: rows[sp], "both_splits_all_typed": sa} if not r9() else {sp: rows[sp]},
                      "per_search": {k: per[k] for k in ks if k in per}}
                 path = write_run(os.path.join(outdir, f"{cfg}_{sp}_r{rep}.json"), f"final8:{cfg}",
                                  L.CodeIds(meta["embedding"]), {k: out[k] for k in ks}, m)
@@ -549,11 +611,14 @@ def main():
     ap.add_argument("--configs", default="q8,fm")
     ap.add_argument("--reps", default="1,2,3")
     ap.add_argument("--outdir")
+    ap.add_argument("--splits", default=",".join(HSPLITS),
+                    help="held-out splits: the round-8 pair (default) or one round-9 split (ig_real|facet_dev|facet_test)")
     ap.add_argument("--a")
     ap.add_argument("--b")
     a = ap.parse_args()
+    set_active(a.splits.split(","))
     if a.cmd == "rewrite":
-        assert a.split in HSPLITS
+        assert a.split in ALL_SPLITS
         return rewrite(a.split, a.rep)
     if a.cmd == "prefetch":
         return prefetch()
@@ -565,7 +630,7 @@ def main():
         return compare(a.a, a.b)
     cfgs = a.configs.split(",")
     assert cfgs == ["h0r8"] or set(cfgs) <= {"q8", "fm"}, "h0r8 runs alone (float store); q8 / fm share int8"
-    outdir = a.outdir or (CHECK if a.mode == "dev" else OUT)
+    outdir = a.outdir or (CHECK if a.mode == "dev" else OUT9 if r9() else OUT)
     run(a.mode, cfgs, [int(x) for x in a.reps.split(",")], outdir)
 
 

@@ -13,6 +13,9 @@ Adapted from score_yt.py for the combined root (DIGESTER_DATA=data/all):
 - metrics: nDCG@10, R@10, R@50, MRR, P@10, success@5, R@100, capped recall, unjudged10, nonlib10.
 - round 8 (see results/validation-audit.md): any split in split.json (plus `known_test_clean`) is honoured; known-item
   metrics `mrr2` / `s10_2` use only the grade-2 target; `success10` = any relevant item in the top 10.
+- round 9 (BRIEF-9): `--gains` picks the nDCG gain: `exp2` (default, 2^g - 1, as in rounds 1-8), `lin4` (gain = grade,
+  0/1/2/3 for the 4-point scale) or `col3` (4-point grades collapsed 3, 2 -> 2, then 2^g - 1: comparable with old
+  3-point labels). Only nDCG changes; mrr2 / s10_2 still count grade >= 2.
 - milestone (round 4): the `test` split's label rows use `judged_nonrelevant` (Derrick's gold zeros) and may have
   scope `both` (no own platform, so cross10 = 0); `unvetted_candidates` are left unjudged; a `both` subset is reported.
 
@@ -41,6 +44,15 @@ SCOPE_PLAT = {"ig": "instagram", "yt": "youtube", "both": None}
 SCOPES = ("all", "ig", "yt", "both")
 
 _PLAT = None
+GAINS = "exp2"  # round 9: set by --gains (exp2 | lin4 | col3)
+
+
+def gain(g):
+    if GAINS == "lin4":
+        return float(g)
+    if GAINS == "col3":
+        g = min(g, 2)
+    return 2.0 ** g - 1
 
 
 def platforms():
@@ -82,9 +94,9 @@ def score_one(ranked, lab):
     own = SCOPE_PLAT[lab["scope"]]
     top = ranked[:10]
     gains = [rel.get(c, 0) for c in top]
-    dcg = sum((2 ** g - 1) / math.log2(i + 2) for i, g in enumerate(gains))
+    dcg = sum(gain(g) / math.log2(i + 2) for i, g in enumerate(gains))
     ideal = sorted(rel.values(), reverse=True)[:10]
-    idcg = sum((2 ** g - 1) / math.log2(i + 2) for i, g in enumerate(ideal))
+    idcg = sum(gain(g) / math.log2(i + 2) for i, g in enumerate(ideal))
     pos = {}
     for i, c in enumerate(ranked):
         pos.setdefault(c, i)
@@ -206,11 +218,14 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--detail", default=None)
     ap.add_argument("--pool", default=None)
+    ap.add_argument("--gains", default="exp2", choices=["exp2", "lin4", "col3"])  # round 9
     a = ap.parse_args()
+    global GAINS
+    GAINS = a.gains
     L = load_labels(a.labels, a.split)
     R = Runs(a.rundir, L)
     stems = list(dict.fromkeys(a.runs + [s for c in a.cmp for s in c.split(":")]))
-    rep = {"split": a.split, "labels": os.path.basename(a.labels), "runs": {}, "comparisons": {}}
+    rep = {"split": a.split, "labels": os.path.basename(a.labels), "gains": a.gains, "runs": {}, "comparisons": {}}
     detail = {}
     for s in stems:
         g = R.reps(s)
