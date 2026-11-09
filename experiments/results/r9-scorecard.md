@@ -31,21 +31,23 @@ Written 9 Nov 2026 by the round-9 evaluator, which built none of the methods sco
 - dev, the `known_dev` 100-search sample and `ig_real` (kept evaluator-side) use the Phase A tagger `r9c-v2`.
 - `known_dev` facet cells are therefore from the 100-search sample, and its "all" row from all 381.
 
-| # | Facet | Metric | **Proposed target (founders)** | ig_real (real IG, Derrick's searches) | facet_dev (Derrick's sheet) | dev | known_dev (YT, auto labels) | Reading |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | **All searches** | Gate 1 | **≥ 80%** (existing Gate 1: 16 of 20) | 0.70 [0.56, 0.85] n31 · 0.14 | 0.79 [0.60, 0.96] n16 · 0.27 | 0.82 [0.69, 0.92] n38 · 0.17 | 0.37 [0.33, 0.42] n381 · 0.033 | Below on real IG and `known_dev`. The shortfall comes from known-item searches |
-| 2 | **Known item** (exact) | hit10 | **≥ 80%** | **0.42** [0.13, 0.71] n8 · 0.58 | 0.22 [0, 0.67] n3 · – | 0.67 n3 · – | **0.45** [0.40, 0.49] n381 · 0.036; clean labels ≈ 0.58 [0.47, 0.69]† | **Missed.** CI upper bounds are below 80% |
-| 3 | **Topic / like it** | good5 | **≥ 80%** on Derrick's grades (≥ 90% on AI grades as a screen) | 0.86 [0.71, 0.97] n23 · 0.11; floor 0.17 | 0.92 [0.77, 1.00] n13 · 0.29; floor 0.00 | 0.83 [0.71, 0.93] n35 · 0.18; floor 0.07 | – | Met on AI grades; not anchored |
-| 4 | **Creator, named** | worked | **≥ 90%** (handle 98%, channel 87%) | – (n1) | 0.56 n3 · – | – (n1) | **0.42** [0.28, 0.57] n46 · 0.13 (top 5: 0.26) | **Missed.** Present but not used |
-| 5 | Creator, described | worked | ≥ 60% interim (no creator-profile text yet) | – | – (n2) | – (n2) | – | Not measurable (n ≤ 2) |
-| 6 | **Type / format** | worked | **≥ 80%** (format in 87–97% of targets' text) | 0.84 [0.67, 1.00] n17 · 0.18 | 0.79 [0.55, 1.00] n11 · 0.36 | 0.83 [0.69, 0.94] n24 · 0.23 | 0.75 [0.38, 1.00] n8 · 0.41 | About at target on AI grades; not anchored |
-| 7 | **Looks** | good5, Derrick-graded | **≥ 60% interim without media; 80% once a media route exists** | AI 0.93 n10; Derrick's target on first screen 0.22 [0, 0.56] n9 | AI 0.71 n7; target 0.00 n6 | AI 1.00 n3 | 0.25 n4 · 0.52 | **Unknown.** Text judges cannot see the look |
-| 8 | Sound | good5, Derrick-graded | ≥ 50% interim without media | – (n2) | – (n1) | 0.67 n3 · – | 0.00 n3 · – | Not measurable |
-| 9 | Said | – | **No target until founders decide** the rule-8 "what is said" summary | – | – | – (n1) | – (n2) | Not measurable; almost never searched |
-| 10 | Tone / vibe | worked | ≥ 80% (te `vibe` 85% IG; 5% YT) | – (n2) | – (n0 ticks) | 0.67 n3 · – | 0.50 n4 · – | Not measurable |
-| 11 | **Examples of a quality** | good5, Derrick-graded | **≥ 70%** | AI 0.75 [0.50, 1.00] n8 · 0.27; target 0.00 n6 | AI 0.83 n6 · 0.58; target 0.00 n6 | AI 0.58 n4 · 0.98 | – | Unknown. The AI grade is the only reading, and Derrick's targets are never on the first screen |
-| 12 | **When / behaviour** | good5 | **≥ 80%** (dates 100%, watch counts 94%) | – (n1) | – | **0.53** [0.23, 0.80] n10 · 0.44 | – (n2) | Probably missed. Present but not used |
-| 13 | Platform named | worked | ≥ 90%, and no wrong-platform item on the first screen | – | – | 0.83 [0.50, 1.00] n6 · 0.19 | – | Too small |
+**Held-out column (added by the round-9 final evaluator, 9 Nov; `r9-final.md`).** Q8's values on the hidden sets: `facet_test` (FT, scoring 1 of 3: 15 searches, 3 exact + 12 like, Derrick's ticks; like searches pooled and judged by the two judges, round r9.F), `known_test_clean` (KTC, 216 YouTube known-item, auto labels) and `ig_known_test` (IGK, 150 synthetic Instagram known-item). KTC and IGK are the round-8 runs re-read, with facets from the Phase A tagger applied evaluator-side; they used no new scoring. Every KTC and IGK search is exact, so their cells read `hit10` (row 1: `hit5`). ‡ = no MDE: Q8 and H0r8 are equal on every search in that cell.
+
+| # | Facet | Metric | **Proposed target (founders)** | ig_real (real IG, Derrick's searches) | facet_dev (Derrick's sheet) | dev | known_dev (YT, auto labels) | **Q8 held-out, round-9 final** (FT facet_test · KTC known_test_clean · IGK ig_known_test) | Reading |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | **All searches** | Gate 1 | **≥ 80%** (existing Gate 1: 16 of 20) | 0.70 [0.56, 0.85] n31 · 0.14 | 0.79 [0.60, 0.96] n16 · 0.27 | 0.82 [0.69, 0.92] n38 · 0.17 | 0.37 [0.33, 0.42] n381 · 0.033 | FT 0.80 [0.60, 1.00] n15 · –‡; KTC 0.39 [0.33, 0.46] n216 · 0.050; IGK 0.60 [0.52, 0.68] n150 · 0.090 | Below on real IG and `known_dev`. The shortfall comes from known-item searches |
+| 2 | **Known item** (exact) | hit10 | **≥ 80%** | **0.42** [0.13, 0.71] n8 · 0.58 | 0.22 [0, 0.67] n3 · – | 0.67 n3 · – | **0.45** [0.40, 0.49] n381 · 0.036; clean labels ≈ 0.58 [0.47, 0.69]† | FT **0.00** n3 · –; KTC **0.45** [0.39, 0.52] n216 · 0.052; IGK **0.69** [0.62, 0.76] n150 · 0.084 | **Missed.** CI upper bounds are below 80% |
+| 3 | **Topic / like it** | good5 | **≥ 80%** on Derrick's grades (≥ 90% on AI grades as a screen) | 0.86 [0.71, 0.97] n23 · 0.11; floor 0.17 | 0.92 [0.77, 1.00] n13 · 0.29; floor 0.00 | 0.83 [0.71, 0.93] n35 · 0.18; floor 0.07 | – | FT 1.00 (AI) n12 · –‡; floor 0.08 [0, 0.25] | Met on AI grades; not anchored |
+| 4 | **Creator, named** | worked | **≥ 90%** (handle 98%, channel 87%) | – (n1) | 0.56 n3 · – | – (n1) | **0.42** [0.28, 0.57] n46 · 0.13 (top 5: 0.26) | FT – (n2); KTC **0.40** [0.31, 0.50] n94 · 0.082; IGK 1.00 n12 · 0.23 | **Missed.** Present but not used |
+| 5 | Creator, described | worked | ≥ 60% interim (no creator-profile text yet) | – | – (n2) | – (n2) | – | FT – (n1); KTC – (n2); IGK 0.53 [0.28, 0.78] n12 · 0.28 | Not measurable (n ≤ 2) |
+| 6 | **Type / format** | worked | **≥ 80%** (format in 87–97% of targets' text) | 0.84 [0.67, 1.00] n17 · 0.18 | 0.79 [0.55, 1.00] n11 · 0.36 | 0.83 [0.69, 0.94] n24 · 0.23 | 0.75 [0.38, 1.00] n8 · 0.41 | FT 0.85 [0.62, 1.00] n13 · –‡; KTC 0.53 [0.29, 0.77] n17 · 0.15; IGK 0.62 [0.52, 0.72] n76 · 0.090 | About at target on AI grades; not anchored |
+| 7 | **Looks** | good5, Derrick-graded | **≥ 60% interim without media; 80% once a media route exists** | AI 0.93 n10; Derrick's target on first screen 0.22 [0, 0.56] n9 | AI 0.71 n7; target 0.00 n6 | AI 1.00 n3 | 0.25 n4 · 0.52 | FT AI 1.00 n6; Derrick's target on first screen 0.00 n6; KTC 0.40 n5 · –; IGK 0.72 [0.60, 0.83] n52 · 0.14 | **Unknown.** Text judges cannot see the look |
+| 8 | Sound | good5, Derrick-graded | ≥ 50% interim without media | – (n2) | – (n1) | 0.67 n3 · – | 0.00 n3 · – | FT – (n1); KTC 0.50 n8 · 0.14; IGK 0.64 [0.36, 0.91] n11 · 0.094 | Not measurable |
+| 9 | Said | – | **No target until founders decide** the rule-8 "what is said" summary | – | – | – (n1) | – (n2) | FT –; KTC – (n1); IGK 0.93 n5 · 0.78 | Not measurable; almost never searched |
+| 10 | Tone / vibe | worked | ≥ 80% (te `vibe` 85% IG; 5% YT) | – (n2) | – (n0 ticks) | 0.67 n3 · – | 0.50 n4 · – | FT – (n1); KTC –; IGK 0.79 [0.64, 0.94] n21 · 0.30 | Not measurable |
+| 11 | **Examples of a quality** | good5, Derrick-graded | **≥ 70%** | AI 0.75 [0.50, 1.00] n8 · 0.27; target 0.00 n6 | AI 0.83 n6 · 0.58; target 0.00 n6 | AI 0.58 n4 · 0.98 | – | FT AI 1.00 n5; target 0.00 n5; KTC 0.83 n6 · –; IGK 0.49 [0.30, 0.70] n21 · 0.19 | Unknown. The AI grade is the only reading, and Derrick's targets are never on the first screen |
+| 12 | **When / behaviour** | good5 | **≥ 80%** (dates 100%, watch counts 94%) | – (n1) | – | **0.53** [0.23, 0.80] n10 · 0.44 | – (n2) | FT –; KTC 1.00 n3 · –; IGK 0.75 n4 · – | Probably missed. Present but not used |
+| 13 | Platform named | worked | ≥ 90%, and no wrong-platform item on the first screen | – | – | 0.83 [0.50, 1.00] n6 · 0.19 | – | FT –; KTC –; IGK 0.59 [0.30, 0.89] n9 · 0.43 | Too small |
 
 † `known_dev` targets are the next video watched. Phase A flags 23 of the 100 sampled searches as "doubtful auto-label": the target shares no word with the search. Leaving those out gives 0.58. That is an upper reading, because the flag only fires on failures. The true clean rate lies between 0.45 and 0.58, still well below 80%.
 
@@ -55,6 +57,13 @@ Written 9 Nov 2026 by the round-9 evaluator, which built none of the methods sco
 - named creator 0.41; when 0.63.
 
 Q8 does not move any per-facet cell by more than its MDE.
+
+**Held-out reading (round-9 final, Q8; targets unchanged, still proposals):**
+- **Known item is missed on every held-out set.** FT exact 0 of 3 on the first screen; KTC 0.45 [0.39, 0.52]; IGK 0.69 [0.62, 0.76]. Every CI ends below the proposed 80%. Gate 1 (top 5) is 0.39 on KTC and 0.60 on IGK.
+- **Named creator is missed on held-out too:** KTC 0.40 [0.31, 0.50] (94 searches), as on `known_dev` (0.42).
+- **Like searches pass on AI grades and fail on Derrick's floor.** FT good5 is 1.00 for Q8 and for H0r8 (AI ceiling; the judges graded 2.0 of 3 on average), and Derrick's own target is in Q8's top 5 on 1 of 12 like searches. Not anchored.
+- **Looks and examples** repeat the dev pattern: AI good5 1.00 on FT, Derrick's target never on the first screen (6 and 5 searches).
+- **H0r8 on the same held-out cells:** known-item hit10 KTC 0.45, IGK 0.60; FT Gate 1 0.80. Only IGK as a whole moves past its MDE (hit10 +0.091, MDE 0.084); no real-search held-out cell does.
 
 ## Why these targets (anchors)
 

@@ -57,6 +57,49 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-007 · An optional, soft "direction" input on search requests
+- **Date:** 2026-11-09
+- **Requested by:** Derrick (BRIEF-9 Track 3, design only), written up by the round-9 search loop (`docs/research/2026-11-09-round9.md` section 8)
+- **Status:** Proposed
+- **Conflicts with:**
+  - `05-processor.md` › Query API, `search` params: "`query?`, `types?`, `themes?`, `kinds?`, `platforms?`, `since?`, `until?`, `exclude_item_ids?`, `limit`". There is no field for the user's current direction.
+  - `AGENTS.md` rule 1: "Do not invent fields ad hoc."
+  - The name: `glossary.md` already defines **Direction** as "the user's goals and theme relations, compared with where attention actually goes", and the query API has a `direction` op.
+
+**What is requested**
+- Add an optional `direction` to `search` params: `{ text?: str (≤ 300 chars), goal_ids?: [gol_…] }`. It is null by default.
+- When set, the planner may sharpen the search toward it **softly**:
+  - one extra low-weight list (weight ≈ 0.3);
+  - a small boost (≤ ×1.1) to items close to the direction;
+  - no filtering, no removal or replacement of typed words, and no effect on the instant keyword path.
+- The user writes the stored direction, can edit it, and can switch it off. It lives in the private vault as user-created core data, which is never regenerated.
+
+**Why the requester wants it**
+Derrick expects the same words to mean different things depending on what the user is working toward: a search for packaging ideas from someone opening a bakery probably means packaging for baked goods. Today every search is read without that context.
+
+**Why it is better than the current approach**
+- No evidence yet. It was not built or tested in round 9.
+- What supports trying it:
+  - real searches are short and topical (Phase A);
+  - round 9's frame showed that reading intent from the words alone does not help;
+  - a stated direction is information the search text cannot carry.
+
+**Costs and risks**
+- **Contract change:** a new field in `schema/query.py` and in `05-processor.md`.
+- **Overlap with `goals`:** if a direction is not simply an active goal, there will be two concepts for one idea. Recommend storing it as a goal and passing `goal_ids`.
+- **Privacy:**
+  - The direction is user data. It goes to the model provider inside the frame call, as the search itself does.
+  - It must never reach the shared content store or a cross-user cache. A rewrite cache must key on it, or skip caching.
+  - The vault privacy section (A-006 item 6) is still missing.
+- **Quality risk:** a direction can pull results away from what was typed. Round 9's A1 lost −0.043 on dev by replacing the typed words.
+- **Evaluation cost:** about 45 on-direction searches written by the person whose direction it is (MDE ≈ 0.05), plus about 20 off-direction searches for a no-harm check. That means roughly 300–450 of that person's grades.
+
+**Agent's assessment**
+Agree with changes. Reserve the field now, and wire it only after the evaluation above shows a gain and no harm off-direction. Prefer `goal_ids` over free text, so one concept serves both direction reports and search. If free text stays, rename the request field (for example `steer`) to avoid clashing with the `direction` op.
+
+**Affected**
+Docs: 05-processor (Query API `search` params), 03-data-contract (if a new stored field rather than `goals`), 07-privacy-and-safety (vault), glossary · Code: `schema/query.py` (none built; the experiment frame `qi-v1` already reserves a null `direction`) · Contract change: yes · Needs both founders: yes
+
 ### A-006 · Search as one index with a deterministic query planner, per-platform list sets and a tool surface for agents
 - **Date:** 2026-11-08
 - **Requested by:** the search loop, round 8 phase B (`docs/research/2026-11-08-architecture-review.md`), for the founders
