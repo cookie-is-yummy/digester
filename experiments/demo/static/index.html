@@ -374,7 +374,8 @@ function whyPanel(w, compact) {
   }
   sec("Refine");
   const rf = w.refine || {};
-  if (!rf.model) p.append(row("status", "not part of H0"));
+  if (w.mode === "keyword_fallback") p.append(row("status", "not run (keyword fallback)"));
+  else if (!rf.model) p.append(row("status", "not part of H0"));
   else if (!rf.gated) p.append(row("ran", "no: gate not met (" + rf.gate + ")"));
   else {
     p.append(row("ran", rf.ran ? "yes (" + rf.model + ")" : "no: " + (rf.skipped || "failed")));

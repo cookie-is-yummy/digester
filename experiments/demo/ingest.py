@@ -19,9 +19,10 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "youtube"))
+import takeout_import as T  # noqa: E402
+
 import ig_import  # noqa: E402
 import library as LIB  # noqa: E402
-import takeout_import as T  # noqa: E402
 
 YT_KEEP = re.compile(r"(^|/)(history/watch-history\.(json|html)|playlists/[^/]+\.csv|subscriptions/[^/]+\.csv"
                      r"|my activity/youtube/myactivity\.(json|html))$", re.IGNORECASE)

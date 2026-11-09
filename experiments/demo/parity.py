@@ -149,6 +149,7 @@ def side_demo(lib, ref, out, pack=False):
 def pack_int8(pack, out):
     """The pack's int8 rows and scales against c88_search.Env's QMat on the research root, for every kept item."""
     import numpy as np
+
     import engine as EN
     EN.configure(DATA)
     import c88_search as S88

@@ -305,7 +305,7 @@ class Engine:
                                   "captions": parse["hypothetical_captions"], "cached": True}
         else:
             why["rewrite"] = {"used": False, "skipped": "instant path (no rewrite needed)"}
-        texts, caps, bq = (F.plan_c0(q, parse) if proc == "h0" else S88.plan(q, parse, path))
+        texts, caps, _ = (F.plan_c0(q, parse) if proc == "h0" else S88.plan(q, parse, path))
         need3l = [query] + texts + caps
         need_te = (texts + caps) if (proc != "h0" and self.te_available) else []
         miss3l = [s for s in need3l if s not in S.QV.vec]
@@ -332,12 +332,12 @@ class Engine:
             why["embed_cached"] = True
         t = time.time()
         if fallback:
-            order = self._keyword_fallback(proc, query)
+            order, fb_te = self._keyword_fallback(proc, query)
+            info = {"te_used": fb_te}
             why["mode"] = "keyword_fallback"
             why["notes"].append(f"Keyword-only fallback ({fallback}): BM25 over item text"
                                 + (" and Instagram te text" if proc != "h0" and self.te_available else "")
                                 + ". This is not the real processor; set an OpenAI key for it.")
-            info = {}
         elif proc == "h0":
             order, info = C7.search_one(env, "h0", q, parse, None)
             order = order[:1000]
@@ -394,7 +394,7 @@ class Engine:
         own = [S.bm.rank(query)]
         te = env.te.E.bm25(query, None) if proc != "h0" and self.te_available else []
         groups = [([te], env.te.E.codeset)] if te else []  # an empty te list would only scale non-te items up
-        return F.fair_fuse(own, groups)[0][:1000]
+        return F.fair_fuse(own, groups)[0][:1000], bool(te)
 
     def row(self, c, it, rank):
         pd = it.get("platform_data") or {}
@@ -461,7 +461,7 @@ def estimate(lib):
     configure(lib)
     L, E, EB, ai = M["L"], M["E"], M["EB"], M["ai"]
     items = L.jl(LIB.p(lib, "corpus", "items.jsonl"))
-    ids, texts = _item_texts(items)
+    _, texts = _item_texts(items)
     tok = sum(min(len(t), 6000) for t in texts) / 4.0
     p3 = ai.prices()[EMB3L[0]]["input_per_m"]
     ig = _te_items(items)
@@ -473,10 +473,10 @@ def estimate(lib):
     te_small = len(todo) * 80 / 1e6 * ai.prices()[EMB3S[0]]["input_per_m"]  # ~80 tokens per te text
     return {"items": len(items), "items_with_text": len(texts),
             "embed": {"model": f"{EMB3L[0]} @ {EMB3L[1]} d, stored int8", "tokens_est": int(tok),
-                      "cost_usd": round(tok / 1e6 * p3, 4), "minutes_est": round(len(texts) / 400 / 60 + 0.2, 1)},
-            "te": {"model": TE_MODEL + " (synchronous, te-v1c prompt)", "instagram_items": len(ig),
+                      "cost_usd": round(tok / 1e6 * p3, 6), "minutes_est": round(len(texts) / 400 / 60 + 0.2, 1)},
+            "te": {"model": TE_MODEL + ", synchronous, te-v1c prompt", "instagram_items": len(ig),
                    "already_done": len(ig) - len(todo), "to_do": len(todo),
-                   "cost_usd": round(te_cost + te_small, 4),
+                   "cost_usd": round(te_cost + te_small, 6),
                    "minutes_est_at_6": round(len(todo) * 2.0 / 6 / 60 + 0.2, 1)},
             "spent_in_this_library": {"openai": round(ai.spent("openai"), 4), "gemini": round(ai.spent("gemini"), 4)},
             "budget_caps": {"openai": ai.budget("openai"), "gemini": ai.budget("gemini")}}
@@ -516,7 +516,7 @@ def prepare(lib, te=True, te_cap=1.0, workers=6):
     from sklearn.preprocessing import normalize
     lib = configure(lib)
     st = Status(lib)
-    ai, L, G, X, Y, E, EB = M["ai"], M["L"], M["G"], M["X"], M["Y"], M["E"], M["EB"]
+    ai, L, G, X = M["ai"], M["L"], M["G"], M["X"]
     man = LIB.read_json(LIB.p(lib, "library.json"), {}) or {}
     try:
         LIB.ensure_empty_te_files(lib)

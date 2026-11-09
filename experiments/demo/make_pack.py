@@ -53,6 +53,7 @@ def q8_rows(src, items):
     store read as normalised float32) through c85_lib.QMat. Returns (ids in store order, QMat)."""
     import numpy as np
     from sklearn.preprocessing import normalize
+
     import engine as EN
     EN.configure(src)
     d = os.path.join(src, "corpus", "emb", "oai3l_1024")

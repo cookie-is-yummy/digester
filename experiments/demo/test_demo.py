@@ -226,7 +226,6 @@ def cache_query_vectors(lib, src, strings_to_item):
     """Synthetic 'cached query vectors': each query string gets an item's own vector (3-large and te 3-small)."""
     sids = json.load(open(os.path.join(src, "corpus", "emb", "oai3l_1024", "ids.json")))
     V = np.load(os.path.join(src, "corpus", "emb", "oai3l_1024", "emb.npy"))
-    tids = json.load(open(os.path.join(src, "corpus", "emb", f"emb_{LIB.TE_IG}", "ids.json")))
     T = np.load(os.path.join(src, "corpus", "emb", f"emb_{LIB.TE_IG}", "emb.npy"))
     for name, rows in (("oai3l_1024_queries", [V[sids.index(i)] for i in strings_to_item.values()]),
                        ("c4_queries", [T[0] for _ in strings_to_item])):

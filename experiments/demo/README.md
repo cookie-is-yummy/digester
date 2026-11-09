@@ -10,7 +10,7 @@ This is a prototype for trying the search, not product code.
 - **Python 3.12 or newer**, from [python.org/downloads](https://www.python.org/downloads/).
   - On Windows, tick **"Add python.exe to PATH"** on the installer's first screen.
 - The `digester` code folder (Derrick will send it, or use the `experiments/search-loop` branch).
-- The data pack `derrick.zip` (Derrick will send it; about 220 MB).
+- The data pack `derrick.zip` (Derrick will send it; about 150 MB, 270 MB unzipped).
 - An **OpenAI API key** for real searches. A **Gemini key** is optional; it is only needed to run the te pass on your own Instagram export.
 
 ## Set it up (once)

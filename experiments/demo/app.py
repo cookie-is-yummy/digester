@@ -17,6 +17,7 @@ import json
 import os
 import secrets
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -427,6 +428,10 @@ def main():
             print(f"  no {VAR[prov]} set: you can paste one into the page (kept in memory only)", flush=True)
     if not a.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+
+    def _term(*_):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, _term)  # a plain kill also stops the engine and prepare processes
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
