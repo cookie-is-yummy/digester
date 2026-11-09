@@ -1,6 +1,18 @@
 # State
 
-## Round 8 (`BRIEF-8.md`) — in progress (started 8 Nov 2026)
+## Round 8 (`BRIEF-8.md`) — DONE (8–9 Nov 2026). Summary for the founders
+
+- **Recommendation: B8.5 ("Q8").** LLM-free router (short keyword searches skip the rewrite) → 3-large dense (int8, 1 KB/item) + BM25 + RRF, with a soft platform prior from the user's own library, te lists for Instagram items only, and a gpt-5-nano refine of the top 20 only for rewrite searches read as YouTube.
+  - Held-out: ties H0 on 216 real YouTube searches (mrr2 0.301 vs 0.299, within noise); **+0.110 [+0.057, +0.162]** on 150 synthetic Instagram searches (te-biased set).
+  - **Cost −61%** ($0.049 vs $0.127 per 1k typed); first screen 0.58 s p50 on keyword searches (vs 1.97 s), refined screen ~3.5 s; storage −50% vs the float16 file.
+  - **FM** (gpt-5-mini refine) is optional: +0.026 more on Instagram (below the bar), +86% cost.
+- **Validation audit:** AI judges agree with each other (κ 0.66) but only moderately with Derrick (κ 0.39–0.49); dev can only detect Δ ≥ 0.05; most past "near misses" were noise. Protocol fixed; **A-005** proposes dev-as-screen + large held-out confirmation + two judges + a Derrick calibration sheet.
+- **Architecture:** the LLM rewrite was ~92% of cost; round 8 removed it from 69% of searches with no measured loss. **A-006** (planner, per-platform lists, agent tool surface) now has held-out support for the planner and Instagram te lists; creator index and refine do not.
+- **Not adopted:** creator index, wider routing, interaction prior, per-field YouTube lists, binary vectors, te-weight ramps, refine on the fast path.
+- **Spend in round 8:** about $1.81 OpenAI (incl. $0.60 vector rebuild) and $0.10 Gemini. Ledger now OpenAI $4.69, Gemini $3.88.
+- **Founders, please:** decide A-005 and A-006; write 30–40 real Instagram searches (to settle the te bias); grade a calibration sheet; upload the raw My Activity search history (or click logs) to unblock learned fusion; plan an int8 dot kernel for the desktop build.
+- Full write-up: `docs/research/2026-11-08-round8.md`. Rounds 8.1–8.8 detail below.
+
 
 **Round 8 final held-out** (9 Nov 2026; `results/r8-final.md`; fresh evaluator, $0)
 - **`known_test` scoring 1 of 3 and `ig_known_test` 1 of 3.** H0r8, B8.5 = Q8 and B8.8 = FM were scored once per set, all together. There was no pooling (known-item sets) and the labels are unchanged. Run integrity checks pass: FM differs from Q8 only by reordering the refined top 20, and 0 refines failed.
