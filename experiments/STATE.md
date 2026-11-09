@@ -1,5 +1,13 @@
 # State
 
+## Round 9 (`BRIEF-9.md`) — in progress (started 9 Nov 2026)
+
+- **Setup:** same session as round 8; `data/all/` kept. Q8 reproduces on dev (586/586, r1, from caches, 0 calls).
+- **Derrick's decisions (prompt, 9 Nov):** A-005 accepted for this round (two judges from different model families, his calibration as the anchor, 4-point grades). The user-direction input is design only (reserve the field; don't build or test). No Instagram media fetched.
+- **Derrick's files** stored evaluator-side in `data/all/evals/labels/derrick_inputs/` (`derrick-labels-2026-11-08.json`, `search-sheet-r9-answers.json`).
+- **Rule slip, recorded:** the harness displayed both attached files in full to the orchestrator when they were attached. The orchestrator does not use their contents for any method decision, does not pass them to builders, and hands them only to evaluator-side agents.
+- **Budget:** account left at start ≈ OpenAI $14.19, Gemini $12.90 (Derrick's round-8 figures minus round-8 spend). Round cap $8: caps exported per command, OpenAI **$9.70** (ledger $4.692 + $5.0), Gemini **$6.88** (ledger $3.878 + $3.0).
+
 ## Round 8 (`BRIEF-8.md`) — DONE (8–9 Nov 2026). Summary for the founders
 
 - **Recommendation: B8.5 ("Q8").** LLM-free router (short keyword searches skip the rewrite) → 3-large dense (int8, 1 KB/item) + BM25 + RRF, with a soft platform prior from the user's own library, te lists for Instagram items only, and a gpt-5-nano refine of the top 20 only for rewrite searches read as YouTube.
