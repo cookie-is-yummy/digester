@@ -130,7 +130,7 @@ Q8 was recommended in round 8 as configuration B8.5. It runs these steps for one
 
 **Reading the numbers:**
 - **Topic searches.** The cloud's estimate, corrected to Derrick's calibration grades, is that about 4 in 10 first-screen results are good. That is about 2 of 5 against his 4 of 5 bar.
-- **Instagram judging is unreliable.** The AI judges agree with Derrick no better than chance on Instagram items (κ ≈ 0). No AI-graded Instagram quality claim should be read as settled.
+- **Instagram judging is weak evidence, not chance.** Against Derrick's calibration grades the two AI judges reach κ 0.60 and 0.34 on Instagram items (relevant vs not; 0.47 combined). The κ ≈ 0 reported for Instagram is the two judges against *each other* on the facet_test pool, where almost no Instagram item gets a 0, so relevant vs not carries no signal there. Agreement with Derrick was measured only on the 72 dev calibration items (36 of them Instagram), so no AI-graded Instagram quality claim should be read as settled. *(Corrected 10 Nov 2026: this line first said the judges agree with Derrick no better than chance.)*
 - **The precision caveat.** "4 of 5 good" assumes the library holds at least 5 relevant items. For niche topics the bar is "every relevant item you have".
 
 **Q8 against H0 on real searches:**
@@ -192,7 +192,7 @@ Defined in `experiments/eval/PROTOCOL.md`, with A-005 accepted for round 9 only.
   - Two judges from different model families (gpt-5.4-mini and gemini-3-flash-preview).
   - Against Derrick's 72 calibration grades they reach κ ≈ 0.55 on relevant vs not.
   - Both are more lenient than he is.
-  - On Instagram they are near chance.
+  - On Instagram items they reach κ 0.60 and 0.34 against Derrick (0.47 combined). The two judges agree with *each other* at κ ≈ 0 on the facet_test Instagram items, a prevalence effect: almost none gets a 0. *(Corrected 10 Nov 2026: this line first said "near chance".)*
   - **Derrick's grades are the binding anchor.**
 
 ### 5.2 Search sets
