@@ -10,7 +10,7 @@ This is not a search-research round. There are no new arms, no new judges and no
 
 ## Who does what
 
-Every item has an **owner**, a founder, as in the review. The agent builds code, tests, page text and reports for that owner. Only a founder may:
+Every item has an **owner**, a founder, as in the first version of the review. The agent builds code, tests, page text and reports for that owner. Only a founder may:
 
 - publish anything outside the repo (a page, a post, a Meta app), or deploy anything to a public address (the pilot server, the webhook receiver, the demand page);
 - spend money, or open an account with a provider;
@@ -75,7 +75,7 @@ An agent that reaches one of these stops, writes what is ready into `STATE.md`, 
 - **Filters as first-class inputs,** with the query API's parameter names and the contract's values (`05-processor.md` › Query API; `03-data-contract.md`): `kinds` (`InteractionKind`: share, save, collection, like, comment, watch, view), `platforms` (`Platform`), `since` and `until`. A creator filter is the one new parameter.
 - **MCP tools, all read-only, named after the query API's ops and using its envelope:** `search` (`query?`, `kinds?`, `platforms?`, `since?`, `until?`, `creator?`, `exclude_item_ids?`, `limit`), `similar` (`item_ids`, `limit`) and `get_items` (`ids`). Listing by creator or by date is `search` without a query. A request carries `budget` (`max_items`, `detail`); a response carries `data`, `evidence` and `meta` (`processor_version`, `took_ms`, `truncated`). A result carries id, URL, platform, creator, date, interaction kinds, the YouTube title (Instagram items have none) and the user's own note if there is one. The demo's result row also carries caption text and a summary: drop both from search results, and leave out `why_matched`, which quotes the caption. Captions come only from `get_items` (open decision 13). Results are paged and in a fixed order. Tool descriptions are prompts: version them. The agent sees search only: `list_themes`, `what_changed`, `direction` and `opportunities` are not in the pilot.
 - **Tester web surface, the minimum:** sign-in by the chosen access method; upload of the two zips, read in place and deleted when the import ends; import status and counts; a search box over the same core; the page that connects an agent; a delete button that runs the delete command. The pilot has no export of a tester's data, so no page promises one.
-- **Raw layer:** the import writes one raw record per export entry, append-only, and one upload row with counts and timings, as `03-data-contract.md` and `04-intake.md` (rule 5) require.
+- **Raw layer:** the import writes one raw record per export entry, append-only, and one upload row with counts and timings, as `03-data-contract.md` and `04-intake.md` (rules 2 and 5) require.
 - **Access:** revocable and per user. The founders choose between OAuth and an unguessable per-user URL (open decision 5). The data policy names the choice and its risk.
 - **Isolation:** one library per user, and one isolated worker process per loaded library. The round-8 modules read `$DIGESTER_DATA` at import, which is why each library gets its own process.
 - **Logging and caches:** log rows take the contract's `events` shape (`type`, `subject`, `created_at`) and hold user ID, timestamp, tool name, route (`mcp` or `web`), result count, and the item IDs asked for through `get_items`. For a tester without consent box 2, nothing derived from a search is written to disk: query vectors and rewrite output (phrases, keywords, captions) stay in memory and go when the worker unloads. Searches travel in POST bodies, and access logs drop query strings and per-user URL tokens.
@@ -139,14 +139,14 @@ With ten people these marks give direction, not proof. A mark made or missed by 
 - Whole-library media passes, and any promise to find what was said or shown.
 - The rules-and-actions engine, the hub, and the product skeleton, until a Go.
 - New amendments from the research loop. Decide the open ones first.
-- The advertiser-access idea. It gives away the one position Meta cannot copy.
+- The advertiser-access idea. `10-decisions.md` already rules it out.
 
 ## Open decisions for the founders (item 3)
 
 1. A new amendment for this pilot (its conflict list is at the end of this file): run it on prototype code before the platform, with agent access first. Both founders, in their own words: why, or why not.
 2. A-001 to A-007: accept, reject or defer each. The pilot depends on A-004 (YouTube items) and the tool surface in A-006.
 3. Short said-and-shown descriptions. Rule 8 is not the obstacle: summaries and moments are kept (`10-decisions.md`, 15 Oct). The open point is the platforms' terms: YouTube's derived-data clause, and Gemini's preview terms for video URLs.
-4. The advertiser-access idea: drop it in writing.
+4. The advertiser-access idea: confirm that the Agreed decision ("no ads; no selling data") rules it out.
 5. Access to the MCP server: OAuth, or an unguessable per-user URL for ten testers.
 6. Form a company now? Meta's Business Verification and App Review appear to need one, and the checkout needs a name.
 7. The hours each founder can give a week through December, including Phase 3. The dates assume about 20 each.
@@ -154,7 +154,7 @@ With ten people these marks give direction, not proof. A mark made or missed by 
 9. Every pass mark above except the two Gate 1 bars (16 of 20; 4 of 5 themes), and the session gap. Agree them before the first result arrives.
 10. te in the pilot: off (one model, OpenAI only) or on (a second model, and Google as a processor). The agent's suggestion: start with it off.
 11. Where the founders' store is, who hosts the pilot server, and whether a lawyer reads the data policy and the payment terms.
-12. Desktop scope, and the embedding model: `02-tech-stack.md` and `03-data-contract.md` pin bge-small at 384 dimensions (`vector(384)`), and the pilot uses text-embedding-3-large.
+12. Desktop scope, and the embedding model: `02-tech-stack.md` pins bge-small (384 dimensions) and `03-data-contract.md` fixes `vector(384)`, while the pilot uses text-embedding-3-large.
 13. Search results for Instagram items carry no caption text by default. Allow a short marked snippet, or keep captions to `get_items` only?
 14. The privacy design (a shared content store, a private per-user vault, a revocable key; A-006 item 6) is unwritten. Accept none for the pilot and say so in the data policy, or build it first.
 
@@ -191,6 +191,6 @@ The first draft of A-008 listed these. A-008 now covers the action test in `BRIE
 - `07-privacy-and-safety.md` › Personal data: "**Sensitive categories** (health, relationships, money) are tagged on item cards and hidden from agents and digests unless the user opts in." The pilot has no tagger; it gates agent access on the opt-in instead. › Retention and deletion: "**Full export** of a user's data in open formats". The pilot has none.
 - `04-intake.md` › YouTube lists only `history/watch-history.json` and `playlists/`; the pilot also reads `subscriptions/` and the My Activity file, against `07-privacy-and-safety.md` › Personal data: "**Minimum necessary.**"
 - `05-processor.md` › Query API: `search` returns "`why_matched` (caption line or moment) and confidence"; the pilot leaves `why_matched` out by default. The API also offers `list_themes`, `what_changed`, `direction` and `opportunities`; the pilot's agent sees search only. › Performance targets: "`search` p95 ≤ 500 ms"; the pilot's mark is 1 s.
-- `05-processor.md` and `02-tech-stack.md` choose a local embedder, so that search text never leaves the server. The pilot sends every search to a cloud embedding API.
+- `05-processor.md` and `02-tech-stack.md` pin a local embedder (bge-small through fastembed); with it, search text would not leave the server. The pilot sends every search to a cloud embedding API.
 - `03-data-contract.md`: `vector(384)` and the 384-dimension theme space; no table for search requests or tool calls; notes are not part of the embedded text. **Contract change: yes, if text-embedding-3-large is kept beyond the pilot.**
 - The privacy design that the architecture review of 8 November proposed (a shared content store, a private per-user vault, a revocable key; A-006 item 6) is unwritten. The pilot would store tester libraries without it.

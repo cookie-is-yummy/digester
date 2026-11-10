@@ -57,49 +57,51 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
-### A-008 · Action test before platform: run the loop by hand with ten outside testers, then build only what passed
+### A-008 · Action test before platform: run the product by hand with ten outside testers, then build only what passed
 - **Date:** 2026-11-10 (revised the same day; the first draft proposed a hosted agent-access pilot, now parked in `experiments/PARKED-agent-layer-pilot.md` with its own conflict list)
-- **Requested by:** the agent, in the outside review of 10 Nov 2026, written at Derrick's request and revised after Derrick supplied his founding notes as its frame. Derrick asked for this draft. Neither founder's own reasons are recorded yet
+- **Requested by:** the agent, in the outside review of 10 Nov 2026, written at Derrick's request and revised after Derrick supplied his vision notes as its frame. Derrick asked for this draft. Neither founder's own reasons are recorded yet
 - **Status:** Proposed
 - **Conflicts with:**
   - `09-roadmap-and-ownership.md`: "We prove the core on real data first, then build a thin version of every backend layer end to end", and › Milestones, M5: "Friendly testers … Week-3 retention and actions marked done measured", after M0 to M4. The test measures actions done first, by hand, before M0.
   - `00-vision.md` › Principles: "**Value on day one** from the history export, not after weeks of capture", and › The core loop, steps 1 and 2 (the export, then the first report as "the moment of value"). The test takes no export. Its moment of value is a plan on day 2, made from up to 20 items the tester sends on day 0.
   - `00-vision.md` › Principles: "MCP access is the paid core", and `10-decisions.md` (Sep, Agreed): "MCP access for the user's own agent is a first-class output and the paid core". The test charges $4.99 for plans, with no agent access. It does not reverse the decision: it asks whether the plan alone is worth paying for, and treats agent access as a later upgrade.
-  - `AGENTS.md` rule 8: "DM message text is never read or stored, only shared-post objects", and `07-privacy-and-safety.md` › Personal data › DM messages. In the test a founder reads, by eye, what testers send to the product's own account. Only the shared post and the words typed with that share are recorded, which `04-intake.md` › Live capture already keeps ("Any text the user types with the share … is kept"). No tester's other conversations are involved.
+  - `AGENTS.md` rule 8: "DM message text is never read or stored, only shared-post objects"; `04-intake.md` › Rules of the road 3: "Never read or store DM message text"; and `07-privacy-and-safety.md` › Personal data › DM messages. In the test a founder reads the product account's own inbox by eye. Only the shared post and the one word typed with that share are recorded, which `04-intake.md` › Live capture already keeps ("Any text the user types with the share … is kept"). A founder will also see recruiting messages there, answers them with a link to a form, and copies none of that text. No tester's other conversations are involved.
   - `07-privacy-and-safety.md` › Personal data › Friends: "posts by mutual follows and shares received from friends are counts only". The test has no follow lists, so mutual follows cannot be detected. A founder counts, and leaves out of every plan, any post from a private account or one that looks like a friend's.
-  - `07-privacy-and-safety.md` › Personal data › Sensitive categories: "hidden from agents and digests unless the user opts in". No tagger exists. In the test a founder reads everything a tester chooses to send, under consent box 1.
-  - `09-roadmap-and-ownership.md` › Open questions: "revisit the business-data idea after Gate 1?" The test brings it forward: about ten business conversations run beside it.
+  - `07-privacy-and-safety.md` › Personal data › Sensitive categories: "hidden from agents and digests unless the user opts in". No tagger exists. In the test a founder reads everything a tester chooses to send, under consent box 1, and goals about health conditions, weight loss or diet are declined.
+  - `09-roadmap-and-ownership.md` › Open questions: "revisit the business-data idea after Gate 1?" The test brings it forward: five to ten business conversations run beside it.
   - `08-evals-and-quality.md`: "Every learned or generated step has a fixed eval set built from real use". On a Go, the plan writer starts with no eval set. Its first measures are the founder's edits and what testers do.
   - `AGENTS.md` › Prototype code: "prototype scripts are not product code". On a Go, the plan writer is prototype code under `experiments/`, run by a founder on tester data after Gate 0.
 
 **What is requested**
-Before building M0 to M4, run the product's loop by hand for ten outside testers, at least five of them strangers. They send items; a founder writes each of them two plans of four small dated actions; the founders count what gets done and who pays $4.99. Half of each plan's actions come from the tester's goal alone, as a control. The founders decide on 7 December by marks committed beforehand, and build a plan writer only on a Go. `experiments/BRIEF-10.md` (a draft) has the items, owners, marks and decision table.
+Before building M0 to M4, run the product by hand for ten outside testers, at least five of them strangers. They send items; the founders write each of them two plans of four small dated actions; forms record what gets done, and a one-time $4.99 is asked on day 14. Half of each plan's actions are written from the tester's goal alone, by the other founder, as a control. The founders decide on 7 December by marks committed beforehand, and build a plan writer only on a Go. `experiments/BRIEF-10.md` (a draft) has the items, owners, marks and decision table.
 
 **Why the requester wants it**
 Derrick and Eason have not yet said in their own words why they want this, or why not. Ask both before the decision. What follows is the review's case.
 
-Derrick's notes describe the product as a loop: send what you scroll, get a plan, act on it. The review found that nine rounds of search research ran on one founder's library, that no plan has been made for anyone, and that no one outside one founder has used anything. Meta's Muse now writes action plans from goals and reads Instagram saves, free. The review argues that the cheapest way to learn whether there is a business is to run the loop by hand, with a control for whether the sending adds anything.
+Derrick's notes describe the product as a loop: send what you scroll, get a plan, act on it. The review found that nine rounds of search research ran on one founder's library, that no plan has been made for anyone, and that no one outside one founder has used anything. Meta's Muse now writes action plans from goals, and Meta's own examples act on Instagram saves. The review argues that the cheapest way to learn whether there is a business is to run the product by hand, with a control for whether the sending adds anything.
 
 **Why it is better than the current approach**
-- The roadmap reaches testers, and "actions marked done", at M5. The test reaches both in week 2, for about 16 founder-days and almost no cash, with no code.
-- It tests the product's central claim directly, and it can end the consumer direction early: the decision table has a stop row, and the marks are committed before any result.
-- Its control answers the objection that people with a goal do not need the product. If actions from the goal alone are done as often, the sending adds nothing the test can see.
+- The roadmap reaches testers, and "actions marked done", at M5. The test reaches both in week 2, for about 17 founder-days and almost no cash, with no code.
+- It tests the product's central claim directly, and it can end the consumer direction early: the decision table has stop rows, and the marks are committed before any result.
+- Its control gives a hearing to the objection that people with a goal do not need the product. A Go needs either item actions clearly ahead of goal actions, or testers who keep sending unasked.
 - It takes no export and needs no server and no model, so no tester data is stored outside the founders' own store.
 - Evidence: `experiments/results/r8-final.md` and `r9-final.md` show no search gain on real held-out searches beyond the noise band; no branch holds product code; published studies put the effect of a written plan at a few points (the review, Part 2).
 
 **Costs and risks**
-- **A founder reads what testers send.** That exposes it to a person, which a pipeline would not. The consent note says so, testers are told to send only what they are content for a founder to see, and records are deleted 30 days after the decision.
+- **A founder reads what testers send.** That exposes it to a person, which a pipeline would not. The consent form says so, testers are told to send only what they are content for a founder to see, and records are deleted 30 days after the decision.
+- **Partial disclosure.** Testers are told at the start that plans mix suggestions made in different ways, and learn of the control only at the end. They may then withdraw their records, and payers may ask for a refund.
+- **Minors and health.** Recruiting through short videos can reach people under 18, and goals about health are common. BRIEF-10 stops, deletes and takes no payment if a tester appears to be under 18, and declines goals about a medical or mental-health condition, weight loss or diet. No lawyer has read this.
 - **A hand-written plan flatters the product.** A founder who watches a reel sees what software will not. The test records which actions needed the video. A pass is a ceiling for the pipeline, not a forecast.
-- **Small numbers.** Ten testers give direction, not proof. The control can only see a gap of about 20 points.
-- **Taking money.** A real charge needs terms, a refund rule and a name on the checkout. BRIEF-10 sets them out; no lawyer has read them.
-- **Delay to the platform.** M0 to M4 wait four weeks, and longer if the test ties.
-- **Eason's area.** It pulls recruiting forward and adds the check-ins, the tally and the business conversations. Intake work waits for a Go.
+- **Small numbers.** Ten testers give direction, not proof. The control can only see a gap of about 20 points, and misses a true gap of that size about half the time.
+- **Taking money.** A one-time charge in a founder's own name needs terms and a refund rule, and it commits the founders to four more weekly plans for each payer whatever the decision. BRIEF-10 sets the terms out; no lawyer has read them.
+- **Delay to the platform.** M0 to M4 wait at least nine weeks: four to Gate B and five more through Phase 3 on a Go. Longer if the test ties.
+- **Eason's area.** It pulls recruiting forward and adds the goal actions, the forms and the business conversations: about ten days in four weeks. Intake work waits for a Go.
 
 **Agent's assessment**
-Agree with changes. Running the loop by hand before building is the right order, and the cost is small. Three conditions: the marks are committed before the first tester starts; the founder who writes the plans does not count the results; and nothing is fetched from Instagram by code, with no scraping service (rule 7). The marks are proposals. The agent wrote the review that proposes this, so this assessment is not independent. The agent's first draft of this amendment proposed a different first test, written before it had the founder's notes.
+Agree with changes. Running the product by hand before building is the right order, and the cost is small. Three conditions: the marks are committed before the first tester starts; each founder writes one kind of action and the tally is computed from forms, not counted by hand; and nothing is fetched from Instagram by code, with no scraping service (rule 7). The marks are proposals. The agent wrote the review that proposes this, so this assessment is not independent. The agent's first draft of this amendment proposed a different first test, written before it had Derrick's notes.
 
 **Affected**
-Docs: `09-roadmap-and-ownership.md` (milestone order, the business-data question), `00-vision.md` (day-one value, the paid core), `10-decisions.md`, `07-privacy-and-safety.md` (the product account's inbox, friends' posts without follow lists, a consent note), `04-intake.md` (what a share delivers, once BRIEF-10 item 9 reports), `08-evals-and-quality.md` (an eval for plans) · Code: none before Gate B; then `experiments/action_test/` and, on a Go, `experiments/plan_writer/` (prototype) · Contract change: no · Needs both founders: yes
+Docs: `09-roadmap-and-ownership.md` (milestone order, the business-data question), `00-vision.md` (day-one value, the paid core), `10-decisions.md`, `07-privacy-and-safety.md` (the product account's inbox, friends' posts without follow lists, a consent form), `04-intake.md` (rule 3 for the product account's inbox; what a share delivers, once BRIEF-10 item 9 reports), `08-evals-and-quality.md` (an eval for plans), `AGENTS.md` (not edited: the reading of rule 8 and the prototype-code exception are recorded here only) · Code: none before Gate B; then `experiments/action_test/` and, on a Go, `experiments/plan_writer/` (prototype) · Contract change: no · Needs both founders: yes
 
 ### A-007 · An optional, soft "direction" input on search requests
 - **Date:** 2026-11-09
