@@ -59,7 +59,7 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ### A-008 · Action test before platform: run the product by hand with ten outside testers, then build only what passed
 - **Date:** 2026-11-10 (revised the same day; the first draft proposed a hosted agent-access pilot, now parked in `experiments/PARKED-agent-layer-pilot.md` with its own conflict list)
-- **Requested by:** the agent, in the outside review of 10 Nov 2026, written at Derrick's request and revised after Derrick supplied his vision notes as its frame. Derrick asked for this draft. Neither founder's own reasons are recorded yet
+- **Requested by:** the agent, in the outside review of 10 Nov 2026, written at Derrick's request and revised after Derrick supplied his vision notes as its frame. Derrick asked for the review and for the brief that this amendment accompanies. Neither founder's own reasons are recorded yet
 - **Status:** Proposed
 - **Conflicts with:**
   - `09-roadmap-and-ownership.md`: "We prove the core on real data first, then build a thin version of every backend layer end to end", and › Milestones, M5: "Friendly testers … Week-3 retention and actions marked done measured", after M0 to M4. The test measures actions done first, by hand, before M0.
@@ -90,7 +90,7 @@ Derrick's notes describe the product as a loop: send what you scroll, get a plan
 - Evidence: `experiments/results/r8-final.md` and `r9-final.md` show no search gain on real held-out searches beyond the noise band; no branch holds product code; published studies put the effect of a written plan at a few points (the review, Part 2).
 
 **Costs and risks**
-- **A founder reads what testers send.** That exposes it to a person, which a pipeline would not. The consent form says so, testers are told to send only what they are content for a founder to see, and records are deleted 30 days after the decision.
+- **A founder reads what testers send.** That exposes it to a person, which a pipeline would not. The consent form says so, testers are told to send only what they are content for a founder to see, and records are deleted 30 days after the decision, or for payers 30 days after their last plan.
 - **Partial disclosure.** Testers are told at the start that plans mix suggestions made in different ways, and learn of the control only at the end. They may then withdraw their records, and payers may ask for a refund.
 - **Minors and health.** Recruiting through short videos can reach people under 18, and goals about health are common. BRIEF-10 stops, deletes and takes no payment if a tester appears to be under 18, and declines goals about a medical or mental-health condition, weight loss or diet. No lawyer has read this.
 - **A hand-written plan flatters the product.** A founder who watches a reel sees what software will not. The test records which actions needed the video. A pass is a ceiling for the pipeline, not a forecast.
