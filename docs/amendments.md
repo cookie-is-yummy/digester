@@ -59,30 +59,38 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ### A-008 · Pilot before platform: agent access first, on prototype code, with ten outside testers
 - **Date:** 2026-11-10
-- **Requested by:** Derrick asked for `experiments/BRIEF-10.md` to be drafted from the outside review of 10 Nov 2026. The review, written by the agent at his request, proposes the change
+- **Requested by:** the agent, in the outside review of 10 Nov 2026, written at Derrick's request. Derrick asked for this draft. Neither founder's own reasons are recorded yet
 - **Status:** Proposed
 - **Conflicts with:**
-  - `AGENTS.md` › What we are building: "Current focus: **the backend only.** The frontend (hub, onboarding screens) is deliberately deferred." The pilot needs a demand page and an upload step.
+  - `AGENTS.md` › What we are building: "Current focus: **the backend only.** The frontend (hub, onboarding screens) is deliberately deferred." The pilot needs a demand page, an upload step and a search box.
   - `AGENTS.md` › Prototype code: "Port the ideas, not the files: prototype scripts are not product code." The pilot serves outsiders from the prototype engine.
-  - `00-vision.md` › MVP scope: "**MCP server.** Designed (`01-architecture.md`), built after the query API is stable." `09-roadmap-and-ownership.md` lists the MCP server under "Later" and testers at M5, after M0 to M4.
-  - `AGENTS.md` rule 2: "Raw records are append-only and never edited", against `07-privacy-and-safety.md` › "Real deletion". The pilot deletes a tester's raw records on request, and 30 days after it ends.
+  - `AGENTS.md` rules 1 ("Do not invent fields ad hoc"), 3 ("All reads and writes go through `scrolldigest/db/`") and 4 ("must not branch on `platform` except through `platform_data`"). The pilot's MCP result shapes are not in the contract, it has no database layer, and if te is switched on it applies to Instagram items only.
+  - `00-vision.md` › Out of scope for now: "**MCP server.** Designed (`01-architecture.md`), built after the query API is stable." `09-roadmap-and-ownership.md` lists the MCP server under "Later" and testers at M5, after M0 to M4.
+  - `10-decisions.md` (28 Oct, Agreed): "Backend first; frontend deferred"; "Supabase for database, vectors, auth, storage and queues"; and (18 Oct) "One processing path for all platforms; only adapters differ".
+  - `09-roadmap-and-ownership.md` › Ownership: "Intake: Instagram and YouTube fetchers, DM webhook, Takeout, enrichers and benchmark" is Eason's. The brief has the agent build the DM receiver and importer fixes; Eason, not Derrick, should review them.
+  - `02-tech-stack.md`: Embeddings "`fastembed` with `BAAI/bge-small-en-v1.5`"; Auth "Supabase Auth (Google sign-in)" with row-level security; and under Later, "**MCP server:** Python MCP SDK in the same codebase, calling the query API in-process." The pilot uses text-embedding-3-large, its own per-user access, and no query API.
+  - `01-architecture.md`: "**MCP server**: exposes `get_profile`, `get_context(task)`, `search`, `list_themes`, `get_items`, `what_changed`, `list_actions`". The pilot has five other tools.
+  - `07-privacy-and-safety.md` › Personal data: "**Sensitive categories** (health, relationships, money) are tagged on item cards and hidden from agents and digests unless the user opts in." The pilot has no tagger; it gates agent access on the opt-in instead.
+  - `04-intake.md` › YouTube lists only `history/watch-history.json` and `playlists/`; the pilot also reads the My Activity file. › Live capture says "development mode works for accounts that have a role on the app"; Meta's webhook page says the app must be published.
 
 **What is requested**
 Before building M0 to M4, run an eight-week pilot. Host the existing prototype engine behind a read-only MCP server, take exports from ten outside testers after a data-readiness gate, and decide on 4 January from their use and from a real $8 charge. `experiments/BRIEF-10.md` (a draft) has the items, owners and pass marks.
 
 **Why the requester wants it**
+Derrick and Eason have not yet said in their own words why they want this, or why not. Ask both before the decision. What follows is the review's case.
+
 The outside review found three things. Nine rounds of search research ran on one founder's library while no one else had used the product. The paid core (MCP access) has never been used by anyone. Meta's Muse and Google's Gemini now offer single-platform versions of the promise for free. The review argues that the cheapest way to learn whether there is a business is to test demand before building the platform.
 
 **Why it is better than the current approach**
 - The roadmap reaches testers at M5. The pilot reaches them in week 4, for about 20 founder-days and about $100.
-- It tests the one opening the review found (both platforms in one library, for the user's own agent) directly. It can stop the project after two weeks if a demand page draws no sign-ups.
+- It tests the one opening the review found (both platforms in one library, for the user's own agent) directly. It can stop the project early: if the demand page misses its mark twice, with one rewrite of the promise between, the plan says stop or pick one vertical job.
 - It produces the first judge-free measurements across libraries: tester-named items and logged sessions.
 - Evidence: `experiments/results/r8-final.md` and `r9-final.md` show no gain on real held-out searches beyond the noise band, and no branch holds product code.
 
 **Costs and risks**
 - **Privacy and trust.** Outsiders' histories sit on a server built in weeks, and item text goes to OpenAI and Google. BRIEF-10's Gate 0 is the control: isolation, deletion, no raw zips, billed API projects with recorded terms, friends' posts kept from models, a data policy and a consent note. A published policy is a promise; it must be true on the day it is published.
 - **Rework.** Pilot code is thrown away after a Go. M0 still has to be built.
-- **Rule 2.** Deleting raw records on request needs a sentence in the contract saying that deletion overrides append-only.
+- **Deletion.** `03-data-contract.md` already allows raw records to be deleted on user deletion or under retention rules, so no contract change is needed. The pilot's delete command must still reach every copy: items, vectors, query stores, caches and logs. The reused engine writes search text to disk in two places, which the brief's spec has to close.
 - **Platform review.** A demand page, and an MCP server that returns Instagram and YouTube items, could draw objections from Meta, Google or the assistants' directories.
 - **Small numbers.** Ten testers give direction, not proof.
 - **Eason's area.** It pulls recruiting and intake hardening forward, and defers triggers and actions.
@@ -91,7 +99,7 @@ The outside review found three things. Nine rounds of search research ran on one
 Agree with changes. The order (demand before platform) is right and the cost is small. Two conditions: Gate 0 is never cut for schedule, and the pilot stays inside rule 7 (nothing fetched from Instagram, no logged-in collection). The pass marks are proposals and should be agreed before any result arrives. The agent wrote the review that proposes this, so this assessment is not independent.
 
 **Affected**
-Docs: `AGENTS.md` (current focus, prototype code), `00-vision.md` (MVP scope), `09-roadmap-and-ownership.md` (milestone order), `03-data-contract.md` and rule 2 (deletion), `07-privacy-and-safety.md` (provider terms, pilot policy) · Code: `experiments/pilot/` (new, prototype) · Contract change: no, apart from one sentence on deletion · Needs both founders: yes
+Docs: `AGENTS.md` (current focus, prototype code, rules 1, 3 and 4 for the pilot only), `00-vision.md` (out of scope), `09-roadmap-and-ownership.md` (milestone order, who reviews intake work), `10-decisions.md`, `02-tech-stack.md`, `01-architecture.md` (MCP tools), `04-intake.md` (My Activity file, Live app), `07-privacy-and-safety.md` (provider terms, sensitive items, pilot policy) · Code: `experiments/pilot/` (new, prototype) · Contract change: no · Needs both founders: yes
 
 ### A-007 · An optional, soft "direction" input on search requests
 - **Date:** 2026-11-09
