@@ -1,175 +1,174 @@
-# Brief, round 10 (DRAFT): pilot before platform. Ten outside testers and a payment decision by 4 January
+# Brief, round 10 (DRAFT): run the loop by hand. Ten outside testers and a decision on the consumer direction by 7 December
 
-> **Status: DRAFT, not binding.** Written by the agent on 10 Nov 2026 from the outside review "Scroll Digest: outside review and 8-week plan" (a private doc; ask Derrick for the link). It becomes binding only when both founders accept it **and** amendment A-008 in `docs/amendments.md`.
+> **Status: DRAFT, not binding.** Written by the agent on 10 Nov 2026 from the outside review "Scroll Digest: outside review and 8-week plan" (a private doc; ask Derrick for the link), after Derrick supplied his founding notes as the frame for it. It replaces the first draft of this brief, a hosted agent-access pilot, which is kept, unscheduled, in `PARKED-agent-layer-pilot.md`. It becomes binding only when both founders accept it **and** amendment A-008 in `docs/amendments.md`.
 >
-> **Until then,** an agent may build and test Phase 1 code on this branch, locally and on synthetic data only: no deployment to a public address, no Meta app, no sign-up form, and no real library other than the existing `data/all/`.
+> **Until then,** an agent may write the templates and the tally script for Phase 1 on this branch and test them on synthetic data only. Nothing is published, nobody is contacted, and no real person's data is touched.
 
-This is not a search-research round. There are no new arms, no new judges and no adoption rule. The roles, the `lib/ai.py` ledger and the privacy rules are the same as in `BRIEF.md` and `BRIEF-8.md`: the agent that evaluates never builds, builders never open `data/all/evals/labels/` or `eval_work/`, and nothing under `data/` goes into git.
+This is not a search-research round and, until Gate B, not a build round. There are no new arms, judges or adoption rules, and no product code. The roles and privacy rules of `BRIEF.md` and `BRIEF-8.md` still hold: the agent that evaluates never builds, builders never open `data/all/evals/labels/` or `eval_work/`, and nothing under `data/` goes into git.
 
-**The question for this round is not "is the search better" but "does anyone want this".** Will ten people who are not founders import their history, connect their own AI agent, come back, and pay? And is there a reason to use it beside Meta's Muse and Google's Gemini?
+**The question for this round: does a plan made from what people send lead them to act, and does the sending add anything?** The founders' notes describe the product as a loop: a person sends posts while scrolling, gets a plan that cites them, and acts on it. Nine rounds measured search, a supporting layer of that loop. No plan has been made for anyone. This round runs the loop by hand for ten people before anything is built.
 
 ## Who does what
 
-Every item has an **owner**, a founder, as in the review. The agent builds code, tests, page text and reports for that owner. Only a founder may:
+Every item has an **owner**, a founder. Phases 1 and 2 are founders' work; the agent prepares templates, a tally script and reports. Only a founder may:
 
-- publish anything outside the repo (a page, a post, a Meta app), or deploy anything to a public address (the pilot server, the webhook receiver, the demand page);
-- spend money, or open an account with a provider;
-- contact, recruit or onboard a person, accept a file from one, or show a tester anything;
-- run tasks on a personal Muse, Gemini, Claude or ChatGPT account;
-- take money;
+- publish anything outside the repo (a video, a post, a page, a Meta app);
+- contact, recruit or onboard a person, read what a tester sends, write or send a plan, or run a check-in;
+- spend money, open an account with a provider, or take money;
+- run tasks on a personal Muse, Claude or ChatGPT account;
 - accept or reject an amendment.
 
 An agent that reaches one of these stops, writes what is ready into `STATE.md`, and waits. Do not work unattended past a gate.
 
+**The founder who writes the plans does not count the results.** Derrick writes the plans. Eason runs the check-ins and holds the tally.
+
 ## Setup
 
-1. **Decisions first (item 3).** Nothing that touches an outsider starts until the founders have ruled on everything the pilot depends on (see "Open decisions"), and the outcome is in `docs/10-decisions.md`.
-2. **Data for regression checks.** Same as round 9: keep `data/all/` or rebuild it as in `BRIEF-8.md` setup step 1. Check that `r8.5/q8` (Q8) reproduces on `known_dev` before anything else.
-3. **A deadline inside this round.** The YouTube Data API reference text (`data/yt/ref`, `data/all/yt_ref`) must be deleted by 29 November 2026 (`docs/research/2026-11-09-current-state.md` section 1.4). A founder confirms it is gone from every copy and records that in `STATE.md`.
-4. **Keys** come from the founders and live only in the environment. Never print, log or commit them.
-5. **The founders' store.** Task texts, sign-ups, tester records and consent records live in one place that only the founders can open, outside git and outside every cloud agent session. The founders name it in item 3.
-6. **Tester data, and any new founder data, never enters a cloud agent session or the repo.** It lives only on the pilot server, and agents hold no credentials for it. Aggregates (counts, timings, pass or fail) come from scripts that a founder runs on the server; the founder pastes the output. Eason's export in item 7 is treated like a tester's: the agent sees file names, field names, counts and error classes, never content.
+1. **Decisions first (item 1).** No tester starts until the marks and the decision table are committed (see "The marks"), and the outcome of the other decisions is in `docs/10-decisions.md`.
+2. **The founders' store.** Directions, sent items, plans, tallies, sign-ups and consent records live in one place that only the founders can open, outside git and outside every cloud agent session. The founders name it in item 1.
+3. **Tester data never enters a cloud agent session or the repo.** The agent sees only the counts listed under "What the tally reports", pasted by a founder.
+4. **Keys.** Phases 1 and 2 need none. Phase 3 keys come from the founders and live only in the environment. Never print, log or commit them.
+5. **A deadline inside this round.** The YouTube Data API reference text (`data/yt/ref`, `data/all/yt_ref`) must be deleted by 29 November 2026 (`docs/research/2026-11-09-current-state.md` section 1.4). A founder confirms it is gone from every copy and records that in `STATE.md`.
 
 ## Where we are
 
-- Q8 is the recommended pipeline (`docs/research/2026-11-09-current-state.md`). Its gain over H0 on real held-out searches is inside the noise band on every set (`results/r8-final.md`, `results/r9-final.md`).
-- Exact-post finding is the weak spot: 30% on 11 real exact-post searches, 45% on 216 real YouTube searches, named creators 40% (`results/r9-scorecard.md`, `results/r9-final.md`).
-- The information audit puts 70% of the lost score on `dev` and 41% on `known_dev` on information that is present but unused (`docs/research/2026-11-09-information-audit.md`).
-- Everything was measured on one library. No record shows anyone but its owner using the system. No product code exists on any branch.
-- The held-out sets are not touched in this brief. Each keeps its 2 remaining scorings.
+- Search (Q8) gains nothing over the earlier finalist on real held-out searches beyond the noise band (`results/r8-final.md`, `results/r9-final.md`). Exact-post finding works 30 to 45% of the time. Everything was measured on one library.
+- Nothing of the loop exists as code: no capture, no plan, no delivery. `04-intake.md` mentions an earlier prototype with sign-up by DM; its code and logs are not in this repo.
+- The design holds the loop's parts on paper: the filter (0.84 accuracy on one library), goals and direction, and the opportunity finder in `05-processor.md`; `actions` rows (`title`, `why`, `evidence[]`, `due_at`, `state`) and `placements` into email, calendar or a document in `03-data-contract.md`.
+- The roadmap measures "actions marked done" at M5, its last milestone (`09-roadmap-and-ownership.md`). This brief measures it first.
+- Published studies say a plan adds a few points of follow-through, more with a day and a time (the review, Part 2). Meta's Muse already writes action plans from goals. So the test needs a control: actions written from the goal alone.
 
 ## Rules that hold throughout
 
-- **`AGENTS.md`.** Rules 2 and 5 to 11 apply to the pilot exactly as to product code: every derived row and vector records `processor_version` and `embedding_model`, and every AI call goes through the `lib/ai.py` ledger. Rules 1, 3 and 4 are set aside for `experiments/pilot/` only, as A-008 records.
-- **Nothing is fetched from instagram.com or its CDN.** oEmbed output is never stored.
-- **YouTube Data API.** If it is used at all (item 13), each stored field carries `refresh_by` (30 days) and a daily job refreshes or deletes it. A tester's API-derived data is deleted within 7 days of their leaving. The data policy says the service uses YouTube API Services and links the YouTube Terms of Service and Google's privacy policy. What the terms allow is recorded in `04-intake.md` before the first call on tester data.
-- **Friends' posts never reach a model or an MCP response.** The importer refuses an Instagram export that lacks the followers and following files.
-- **Sensitive items.** `07-privacy-and-safety.md` hides health, relationships and money items from agents unless the user opts in. The pilot has no tagger, so a tester's MCP access is switched on only if they tick that opt-in in the consent note. Without it they use the search box only.
-- **No outsider's file is accepted before Gate 0 passes.** The demand page collects only what item 2 lists.
-- **Testers** are adults living in the US. No gifts or payment for taking part. Their data is deleted within 30 days of Gate C, or within 7 days if Gate C ends in Stop, unless they ask to stay.
-- **Logs and caches.** Logs hold a pseudonymous user ID, timestamp, tool name, route and item IDs. Search text, and anything derived from it, is kept only for testers who tick consent box 2, and no agent uses it in this round. The reused engine writes both to disk (the query-vector stores and the rewrite cache); see the item 5 spec.
-- **MCP tools are read-only.** By default a result carries IDs, the title and the user's own note. Longer third-party text (captions, descriptions) comes only from `get_item`, in a marked field with a length cap. When a tester connects, the page says that whatever the tools return is then held by their assistant provider under that provider's terms.
-- **Nothing personal in git:** no task texts, no tester names, no sign-ups, no webhook payload bodies. Fixtures are synthetic. Results files hold aggregates only, as in `eval/PROTOCOL.md`. Tasks are frozen by committing the SHA-256 of the task file, not the file.
-- **Consent record,** one per tester, kept in the founders' store: pseudonymous user ID, consent-note version, which boxes are ticked, the timestamp, the 18-or-over and US confirmations, where the tester came from, and whether either founder knew them before 10 November.
-- **If something goes wrong** (tester data exposed, a key leaked): a founder takes the server offline, rotates the keys, tells the affected testers within 72 hours, and records what happened in `STATE.md` without personal details.
-- All pilot code is prototype code under `experiments/pilot/`. It is rewritten after a Go.
+- **`AGENTS.md`** rules 7 to 9 apply as written. Rule 8 needs a reading for a hand-run test. A founder reads the product account's inbox, and records only the shared post and the words typed with that share; `04-intake.md` › Live capture keeps those words as an intent label. Anything else a tester writes there is not copied anywhere. No tester's other conversations are involved: this round takes no export. A-008 records this.
+- **No code fetches anything from instagram.com or its CDN.** A founder opens a shared post in the app, as any recipient would. No scraping service is used, for any platform.
+- **Public creators' posts only.** A post from a private account, or one that looks like a friend's, is counted and not used in a plan (`07-privacy-and-safety.md` › Friends). This round has no follow lists, so the founder decides by eye and records the count.
+- **No advice.** An action is a small first step that the item or the goal itself suggests. No medical, legal or financial advice.
+- **No model sees tester data in Phases 1 and 2.** A founder writes the plans. A model's help is Phase 3: it needs Gate 0 and consent box 2.
+- **Testers** are adults living in the US. No gifts or payment for taking part. A tester's records are deleted 30 days after the Gate B decision, or 30 days after Gate C for those who continue, unless they ask to stay.
+- **Nothing personal in git:** no directions, items, plans, names, handles, sign-ups or message text. Results files hold the tally's counts only.
+- **Consent record,** one per tester, in the founders' store: a pseudonymous ID, the consent-note version, which boxes are ticked, the timestamp, the 18-or-over and US confirmations, where the tester came from, whether either founder knew them before 10 November, and their answer to one question: how much do you already do toward this goal (nothing, a little, a lot).
+- **If something goes wrong** (tester data exposed): a founder tells the affected testers within 72 hours and records what happened in `STATE.md` without personal details.
 
-## Phase 1 (10 to 23 November): a reason to exist
+## Phase 1 (10 to 16 November): decide and recruit
 
 | # | Item | Owner | The agent may | Pass or fail |
 | --- | --- | --- | --- | --- |
-| 1 | **Head-to-head against Muse and Gemini**, on Derrick's library and the founders' own accounts only. Freeze 20 tasks before running anything: 14 on one platform, 6 that need both. Eason grades with the system names hidden. Check first that Gemini's YouTube History access is switched on. | Both | Make a blind grading sheet template. A founder runs the 20 tasks through the demo on his own machine, on a copy of the library outside every agent session. The agent never runs the tasks; task texts and answers stay in the founders' store. | Pass: the demo beats the incumbent on 8 of the 14. If not, single-platform search is not the promise: say so on the demand page and let item 2 decide. The 6 cross-platform tasks show what the promise can honestly claim. |
-| 2 | **Demand page.** One page with the paid promise and the $8 price, posted in three or four places where the first segment gathers, named by the middle of week 1. The sign-up asks only for an email, what the person would ask first, and two ticks (18 or over; living in the US). It asks people to request both exports now. A notice above the form says who holds the answers, for what, and that they are deleted on request, or within 30 days of the pilot's decision. Keep the page open until about 50 people have signed up: about one in five follows through. | Eason | Write the page text, the notice and a static page. Sign-ups go to a form service Eason chooses and then to the founders' store. The agent sees counts. Visits are counted without cookies. | Pass: 15 sign-ups from the first 100 visits, and 10 people who request their exports, read on 17 November. Fail: rewrite the promise once and judge the new page on its own first 100 visits by 23 November. A second fail means stop, or pick one vertical job. |
-| 3 | **Decide.** See "Open decisions". | Both | Nothing. | Pass: by 13 November nothing the pilot depends on is left Proposed or open. Item 2 is not posted before then. |
-| 4 | **DM-share payloads.** Before the app goes Live, Eason posts a short privacy note for the receiver at a public URL (Meta appears to require one: check its current page). Then publish the Meta app (Live needs no App Review) and share 10 reels and 10 posts from the founders' own role accounts, never a tester's. | Eason | Write the receiver and the sanitiser. The receiver checks Meta's signature, drops every message text field in memory before any write (rule 8), keeps raw bodies only on the receiving machine, deletes them once the summary of field names and presence counts is written, and is switched off when item 4 reports. | Pass: 18 of 20 carry caption text and a stable ID. Fail: live Instagram capture means a link plus the user's note. Either way, record in `04-intake.md` what a share delivers and that webhook data is Meta Platform Data, and correct its "development mode works" line. |
-| 5 | **Pilot stack** (spec below). Weeks 1 to 3: it runs into Phase 2 and is due on 27 November. Item 7 starts when it passes. | Derrick | Build and test it locally, and write the deploy and load-test scripts and a short runbook. After acceptance a founder provides the host, the domain and the keys, deploys, and runs pass marks 1 and 3 on the server. The agent holds no server credentials. | Pass: all four marks in the spec. Fail: move the tester dates and Gate C together, not the checks. |
+| 1 | **Decide.** See "Open decisions". | Both | Nothing. | Pass: by 16 November the marks and the decision table are committed with their date, and nothing the test depends on is left open. |
+| 2 | **What free looks like** (a reading, not a gate). Each founder writes three lines of direction and gets a plan from Muse and from a general assistant, on his own accounts. The other founder writes a third plan from 20 items the first one sent. | Both | Make a comparison sheet template. The agent never sees the plans. | Output: one sentence on what the hand-written plan has that the free ones lack, used in item 3. If that sentence cannot be written, say so in `STATE.md` before recruiting. |
+| 3 | **The message.** Three to five short videos from the product's accounts, each ending with one instruction: send us the word "plan". A founder answers each message by hand with the consent note. | Eason | Draft scripts and captions if asked. The agent sees counts. | Pass: at least five strangers start by 21 November. Report views, messages and sign-ups per 1,000 views. Fail: fill the places from the founders' circle and record that the message did not pull. |
+| 4 | **Prepare.** The consent note, the plan template, the check-in script, the day-14 questions, the tally sheet and a payment link. | Derrick | Draft all of them, and write `experiments/action_test/tally.py`, which turns a sheet of counts into the four marks. Test it on synthetic sheets. | Pass: one founder completes a dry run from first send to tally. |
 
-**Gate A, 23 November:** items 1 and 2. 15 of the first 100 visitors sign up and 10 request their exports. Item 2 is the stop signal. Item 1 decides what the page may promise.
+**Gate A, 16 November:** items 1 and 4. The marks are committed and the dry run is done. The first testers start on 17 November.
 
-### Item 5: pilot stack spec
-
-- **Reuse** the engine and importers in `experiments/demo/` and `experiments/youtube/`. Put new code in `experiments/pilot/`. Do not expose the demo's `app.py`: it is local, single-user and holds keys in the page.
-- **Core:** text-embedding-3-large (1,024 d, int8) for items and searches, BM25, rank fusion, and filters. No platform prior and no LLM rerank. Build the index without `PlatformPrior`, so that no library needs `r7/router.npz`.
-- **te is off unless the founders switch it on** (open decision 10). With te off the pilot uses one embedding model and one provider. With te on it also needs text-embedding-3-small (512 d) and gemini-3.1-flash-lite at import, and Google becomes a processor in the data policy.
-- **Server-side rewrite** (`qr-v1`) stays behind an `expand` flag, off by default. Item 7 decides whether it stays.
-- **Filters as first-class inputs:** platform, behaviour (saved, liked, watched, shared), creator, date range.
-- **MCP tools, all read-only:** `search_library`, `find_similar`, `list_by_creator`, `list_recent`, `get_item`. A result carries id, URL, platform, creator, date, behaviour, the YouTube title (Instagram items have none) and the user's own note if there is one. The demo's result row also carries caption text and a summary: drop both from search results. Captions come only from `get_item` (open decision 13). Results are paged and in a fixed order. Tool descriptions are prompts: version them.
-- **Tester web surface, the minimum:** sign-in by the chosen access method; upload of the two zips, read in place and deleted when the import ends; import status and counts; a search box over the same core; the page that connects an agent; a delete button that runs the delete command.
-- **Access:** revocable and per user. The founders choose between OAuth and an unguessable per-user URL (open decision 5). The data policy names the choice and its risk.
-- **Isolation:** one library per user. The round-8 modules read `$DIGESTER_DATA` at import, so run one worker process per loaded library, or change the loaders to take a path.
-- **Logging and caches:** user ID, timestamp, tool name, route (`mcp` or `web`), result count, and the item IDs asked for through `get_item`. For a tester without consent box 2, nothing derived from a search is written to disk: query vectors and rewrite output (phrases, keywords, captions) stay in memory and go when the worker unloads. Searches travel in POST bodies, and access logs drop query strings and per-user URL tokens.
-- **Delete:** one command removes a user's items, vectors, te rows, query stores, caches and logs. Their `ai_runs.jsonl` rows hold no content (provider, model, purpose, tokens, cost); they move to the pilot-wide ledger under a deleted-user marker, so the caps and rule 11 still count them.
-
-**The four pass marks.**
-
-1. **It connects.** A founder connects the deployed server from a founder's Claude account and a founder's ChatGPT account, runs one search in each, and records pass or fail.
-2. **It still searches as well.** The builder writes run files for the pilot core, three repeats, to `data/all/runs/r10/`. A fresh evaluator scores them with `experiments/eval/score_c4.py`. Two readings: (a) parity: with te and `expand` off, the pilot core scores within 0.005 mrr2 of `runs/r8.1/inst_r1` on `known_dev` (raw query, 3-large dense, BM25 and fusion; that run read float vectors, so a small int8 gap is expected); (b) the cost of the cuts: the CI lower bound of pilot core minus Q8 is above −0.03 mrr2 on `known_dev` (381). The same difference on `ig_known_dev` (150) is reported, not gated, because that set is synthetic; a loss there beyond 0.05 goes to the founders before item 9. No AI judging and no pooling.
-3. **It holds ten people.** A founder runs the load-test script on the server: 12 synthetic libraries of 20,000 items each, with the first screen within 1 s at p95 and `expand` off.
-4. **It forgets.** One test proves that, for a tester without box 2, no file on the server holds a search string or a rewrite output: not the library folder, the caches, the service's error log or the web server's access log. Another proves by counts that the delete command leaves nothing but the ledger rows.
-
-## Phase 2 (24 November to 7 December): ready, then ten people in
+## Phase 2 (17 November to 7 December): the loop by hand
 
 | # | Item | Owner | The agent may | Pass or fail |
 | --- | --- | --- | --- | --- |
-| 6 | **Exact-post fixes.** Use the filters; add creator and exact-phrase matching in the query. Code only, no LLM. | Derrick | Build it. A fresh evaluator scores it. | Pass: named-creator searches "work" 70% of the time on the `known_dev` creator subset (0.42 today, n 46; metric as in `results/r9-scorecard.md` row 4), and the change is non-inferior on `known_dev` and `ig_known_dev` (point at or above −0.005 mrr2, CI lower bound at or above −0.03). The held-out figure of 0.40 is not touched. |
-| 7 | **Second library.** Eason's Instagram export and Takeout through the pilot stack with no hand edits. He runs 20 tasks of his own through his agent twice, `expand` off and on, in shuffled order. | Eason | Fix what the import breaks, working from `import_stats` only. | Pass: of the export records that carry a post or video URL and are not ads, 95% end as an item or as a counted exclusion (a friend's post, a repeat watch). 16 of 20 tasks succeed in the `expand`-off run, the Gate 1 bar in `docs/09`; a task succeeds when the item he wanted is in the top 5, recorded before the next task. Keep `expand` off unless it wins by 3 tasks. Fail: fix the importer before item 9. |
-| 8 | **Gate 0: data readiness.** Target 30 November. All of: (a) one user's access returns nothing of another's on every route and tool; (b) the delete test passes; (c) uploaded zips are gone when the import ends; (d) every API key sits on a billed project, the providers' data-use and retention terms are recorded and dated in `07-privacy-and-safety.md`, and no preview-only feature touches tester data; (e) no friend caption reaches a model call or an MCP response, tested on a synthetic export with mutual follows; (f) the data policy and the consent note exist and match what the code does; (g) the no-search-text test passes; (h) MCP access is off for a tester without the sensitive-items opt-in. | Both | Write the tests for (a), (b), (c), (e), (g), (h) and drafts for (f). A founder does (d) and approves (f). | Pass: every check passes. Fail: no outsider's file is accepted. |
-| 9 | **Onboard ten outsiders,** 1 to 7 December. Ten people who already pay for Claude or ChatGPT, use Instagram or YouTube daily, and have a job in mind (a trip, a course, a swipe file of ideas). At least five from the sign-up page, because friends tend to be generous; five on a call, five from an emailed link. Each gets the data policy first, then the consent note. Before seeing any result, each names five items they remember saving or watching. | Eason | Nothing with testers. Fix bugs from counts and error classes. | Pass: 6 of 10 upload and are searchable by 7 December. 5 of 10 connect their own agent within 7 days of upload, read on 14 December. 60% of the named items are in the top 5 when the tester types one search per item into the search box and records the rank. Record each export wait. Below 4 of 10 searchable, export upload is not an on-ramp. |
+| 5 | **The loop, 14 days for each tester** (protocol below). Ten testers start between 17 and 21 November. A later starter is reported, not counted. | Derrick writes the plans; Eason runs the check-ins and holds the tally | Nothing with testers. Fix the tally script from counts. | Marks 1 to 3. |
+| 6 | **Payment.** On day 14, a real charge of $4.99 for the next month of weekly plans. Hosted checkout in a founder's name, one-click cancellation. The terms say the service is a prototype, and that the payment is refunded in full if the Gate B decision is to stop. | Eason | Draft the one-page terms; both founders approve them. The agent sees the number of payments and refunds. | Mark 4. Payments made within two days of the request count. |
+| 7 | **The other direction.** About ten conversations with businesses, and with people who keep swipe files of posts (marketers, agencies, creators). `09-roadmap-and-ownership.md` lists the business-data idea as an open question. | Eason | Nothing. | Pass: one named workflow with its input and its output, and three people who ask to see it. Fail: the idea stays an open question. |
+| 8 | **Gate B.** Read the marks and decide. | Both | Run `tally.py` on the pasted counts and write `results/r10-action-test.md`. | The decision is recorded in `STATE.md` and `docs/10-decisions.md` on 7 December. |
 
-**Gate B, 7 December:** items 7, 8 and 9. Gate 0 passed with no exceptions. Item 7: 95% of export records counted and 16 of 20 tasks. Item 9: 6 of 10 testers searchable and 60% of the named items in the top 5. The connection mark (5 of 10 within 7 days of upload) is read on 14 December and does not hold up Phase 3.
+### The protocol (item 5)
 
-**Dates.** The last upload that counts is 7 December, so every use window closes by 28 December. Later uploads are reported, not counted. If item 3, item 5 or Gate 0 slips, every later date, Gate C included, moves by the same number of days.
+- **Day 0.** The tester ticks the consent note, writes three lines of direction (what they want, in their own words), and sends up to 20 items they already saved or sent to themselves. Instagram posts go by DM to the product's account, with a few words in the share's own message box. Anything else goes as a link with a line. They are told once that they can keep sending whenever they scroll. Nobody reminds them.
+- **Day 2: plan 1,** by email. Four actions in one format and in random order. Two are **item actions**: each is drawn from an item the tester sent and cites it. Two are **goal actions**: written from the direction alone. The founder writes the goal actions first, before opening the tester's items.
+- **Each action** is a first step that takes under 30 minutes, in if-then form: "If it is [day, time], then I will [step]". The tester replies with a day and a time for each action they accept, and gets a calendar invite for each.
+- **Day 7: check-in,** from the script. It asks which actions were done, what was done and when. It never asks for items.
+- **Day 9: plan 2,** in the same format, from items sent since day 0. If there are none, from day-0 items not yet used.
+- **Day 14: a call or a message,** from the script. Which actions were done. A label for each item sent: "do", "someday" or "just liked it". Which two of the eight actions were most worth doing. Then the founder explains the two kinds of action and sends the payment link.
+- **For every item action,** the plan writer records whether writing it needed the video or image itself, or only the caption and the tester's line.
+- **For every completed action,** the tally records whether it came before or after a check-in.
 
-**Changes after Gate 0.** Once Gate 0 has passed, a change to the importer, the search path or the MCP tools goes live only after checks (a), (c), (e), (g) and (h) are run again. Item 6 goes live only after it passes its own mark. Item 9's named-items mark is read on the engine as it stood when each tester uploaded.
+### The marks (commit them before the first tester starts)
 
-**What testers are asked for.** Instagram export: JSON, all time, and only saved posts, likes, and followers and following. Messages and contacts are left out, so DM shares do not reach the library. Google Takeout: two products only, "YouTube and YouTube Music" (history as JSON, playlists, subscriptions) and "My Activity" with its filter set to YouTube. They download each file when its email arrives, because the links expire within days. The importer reads only the watch history, playlists, subscriptions and the YouTube My Activity file, and skips search records. Subscriptions and the My Activity file are added to `04-intake.md` before Gate 0.
+| Mark | What is counted | Pass | Stop signal |
+| --- | --- | --- | --- |
+| 1. They act | Testers who complete at least one item action within their 14 days, and say what they did and when | 6 of 10 | 2 or fewer |
+| 2. The items add something | Completed item actions minus completed goal actions, out of 40 issued of each | Ahead by 8 or more: supported. Within 7 either way: not shown | Behind by 8 or more |
+| 3. They keep sending | Testers who send an item after day 2, with no reminder | 4 of 10 | 1 or none |
+| 4. They pay | Testers who pay $4.99 within two days of being asked | 3 of 10, at least 2 of them strangers | No stranger pays |
 
-**The data policy** names each model provider that is switched on as a processor, with how long it keeps inputs. It says what is stored and for how long, that whatever the tester's own assistant receives falls under that assistant's terms, and that agent query logs never feed themes or reports. A draft is linked from the demand page in week 1. The founders say in item 3 whether to get a legal read of it.
+A **stranger** is a tester whose consent record says neither founder knew them before 10 November. A tester who drops out counts as not acting, not sending and not paying. If fewer than 40 actions of a kind are issued, the line in mark 2 is a fifth of the number issued, rounded up.
 
-**The consent note has four boxes:** (1) run the service; (2) keep my search texts so that the founders can read what people look for; they stay on the pilot server and are deleted with the rest of my data; (3) let a founder look at my library with me on a call; (4) let my own agent see every item, including ones about health, relationships or money. Box 1 alone is enough to take part. Without box 4 a tester's agent is not connected, so they cannot count toward the connect mark in item 9 or the MCP clause in item 10: report at Gate B how many ticked it.
+Three readings are reported beside the marks and are not gates: the share of sent items labelled "do" (under 15% says the feed is the problem, as the business case argues); the share of item actions that needed the video; and sign-ups per 1,000 video views. Marks 1 and 2 are also reported apart for testers who said "nothing" or "a little" at sign-up and for those who said "a lot".
 
-## Phase 3 (8 December to 4 January): do they return and pay
+**The line of 8** is the agent's arithmetic. With 40 actions on each side and about 45% of them done, chance alone gives a gap of 8 or more about one time in twenty. So mark 2 can only see a large gap. A level result means "not shown", and the control stays in every later plan until it shows.
+
+### The decision on 7 December
+
+The first row that fits decides.
+
+| Result | Decision |
+| --- | --- |
+| Two or more stop signals | Stop the consumer direction. Take the business workflow from item 7 if it passed; if not, stop. |
+| Marks 1 and 4 pass, with no stop signal on mark 2 | Go to Phase 3. If mark 3 shows its stop signal, collect items in a weekly batch instead of live sending. |
+| Marks 1 and 4 pass, but goal actions lead by 8 or more | They act and pay, and the sending added nothing. That is another AI planner, which is free elsewhere. Rebuild the promise around the check-ins, or stop. |
+| Mark 1 passes and mark 4 does not | They act but do not pay. One rerun with ten new strangers at $2.99; stop unless 2 pay. |
+| Mark 4 passes and mark 1 does not | Goodwill payments. Ask each payer what they paid for; narrow to that, or stop. |
+| Anything else | A tie. One rerun with ten new strangers and the same marks. A second miss ends the consumer direction. |
+
+With ten people these marks give direction, not proof.
+
+**What the tally reports.** These are the only numbers that leave the founders' store: testers started, and how many are strangers; the count for each mark; item and goal actions issued, accepted and completed, split by before or after a check-in; the number of items each tester sent, as a list of counts; the counts labelled "do", "someday" and "just liked it"; item actions that needed the video; payments and refunds; video views, messages and sign-ups; and the number of private or friends' posts counted and not used.
+
+**The consent note has three boxes.** (1) Run the test: a founder reads my direction and what I send, writes my plans, asks what I did, and keeps these records until 30 days after the decision. (2) Let software draft my later plans: my direction, my own lines and the public text of items I sent go to a named model provider, under terms that exclude training. (3) The founders may quote what I said, without my name. Box 1 alone is enough to take part. The note also says that a payment will be asked for on day 14, that taking part does not depend on paying, and that testers should send only posts they are content for a founder to see.
+
+## Phase 3 (8 December to 4 January): build what passed. Only on a Go
+
+A full brief for Phase 3 is written after Gate B, from what the tally shows. In outline:
 
 | # | Item | Owner | The agent may | Pass or fail |
 | --- | --- | --- | --- | --- |
-| 10 | **Use, hands off.** Days 8 to 21 after each tester's upload. No check-ins in the window. One exit interview after it: what they tried first, what they found, why they stopped. | Both | Write `experiments/pilot/use_report.py`. A founder runs it on the server. | Pass: 4 of 10 testers each have 3 or more sessions in days 8 to 14 and again in days 15 to 21, and at least 3 of those testers have an MCP session in each of the two weeks. A session is a run of calls from one user ID with gaps under 30 minutes (the agent's proposal; fix it in item 3). An MCP session came through the `mcp` route. Founders' IDs are left out. |
-| 11 | **Payment.** A real charge of $8 for one month of continued service from the day of payment, asked on the day after each tester's window closes (the last on 29 December). Payments made by 3 January count. Hosted checkout in a founder's or the company's name, one-click cancellation. The terms say the service is a prototype, and that the payment is refunded in full within 7 days of the decision if Gate C ends in Stop, and on request if it narrows to a job the payer did not use. | Eason | Draft the one-page terms; both founders approve them. The agent sees the number of payments and refunds. | Pass: 3 of 10 pay, at least 2 of them testers whose consent record says neither founder knew them before 10 November. |
-| 12 | *Optional.* First report v0: top themes, and what is rising or fading. Agent query logs never feed it. | Derrick | Build it. A founder shows it. | A reading, not a gate: do testers recognise 4 of their 5 themes (the Gate 1 bar)? |
-| 13 | *Optional.* Share-sheet capture with a note. An Instagram share stores the link and the note. A YouTube share adds the title through the Data API, under the rule above. | Eason | Build it. A founder gives it to testers. | Pass: a later search on the note or title finds the item in the top 5. |
+| 9 | **DM-share payloads,** founders' accounts only. Before the app goes Live, Eason posts a short privacy note for the receiver at a public URL (Meta appears to require one: check its current page). Then publish the Meta app (Live needs no App Review) and share 10 reels and 10 posts from the founders' own role accounts, never a tester's. | Eason | Write the receiver and the sanitiser. The receiver checks Meta's signature, keeps the share and the words typed with it, drops every other message text field in memory before any write, keeps raw bodies only on the receiving machine, deletes them once the summary of field names and presence counts is written, and is switched off when the item reports. | Pass: 18 of 20 carry caption text and a stable ID. Fail: Instagram capture means a link plus the person's line. Either way, record in `04-intake.md` what a share delivers and that webhook data is Meta Platform Data, and correct its "development mode works" line. |
+| 10 | **Gate 0: data readiness,** before software touches a tester's data. All of: (a) each model provider's data-use and retention terms are recorded and dated in `07-privacy-and-safety.md`, every key sits on a billed project, and no preview-only feature touches tester data; (b) no private or friend's post reaches a model call, tested on synthetic input; (c) one command deletes a tester's rows, the writer's cache and its logs, proved by counts; (d) logs and `ai_runs` rows hold IDs, counts and costs, never directions, lines or captions; (e) the writer runs only for testers who ticked box 2; (f) the consent note and a short data policy exist and match what the code does. | Both | Write the tests for (b) to (e) and drafts for (f). A founder does (a) and approves (f). | Pass: every check passes on synthetic data. Fail: plans stay hand-written. |
+| 11 | **The plan writer,** prototype code in `experiments/plan_writer/`: a script a founder runs on his own machine against the founders' store. In: the direction, the items and the tester's lines. For each item it sees only what an official route would deliver (the review's Intake table), entered by the founder. Out: rows in the contract's `actions` shape, validated before use (rule 6); each item action cites its items in `evidence[]`, and a goal action carries `goal_id` and no evidence. A founder edits and sends; no model sends anything. Every call goes through the `lib/ai.py` ledger (rule 11). It drafts the payers' plans from 21 December. | Derrick | Build it and test it on synthetic input and on the founders' own items. A founder runs it on tester data. | Pass: the founder sends at least half of the drafted item actions with wording changes only. Report the cost of each plan and the share of drafted actions the founder discarded. |
+| 12 | **Do they stay.** Payers get a plan each week and keep sending. Until item 11 passes, a founder writes those plans by hand. | Both | Extend `tally.py`. | Pass: 3 of the ten send an item in week 4, and 2 payers are still active on 4 January. Active means: sent an item or reported an action in the last 14 days, and has not cancelled. |
 
-**Gate C, 4 January:** items 10 and 11. 4 of 10 have 3 or more sessions in each week, at least 3 of them with an MCP session in each week. 3 of 10 pay $8, at least 2 of them testers neither founder knew before 10 November.
+**Gate C, 4 January:** items 11 and 12. A Go earns a second cohort of 20 to 30 strangers with software-drafted plans and the control kept, and starts the long-lead items (a company, Business Verification, App Review). Anything else: narrow to the job the payers named, or stop.
 
-| Use (item 10) | Payment (item 11) | Decision |
-| --- | --- | --- |
-| Pass | Pass | Go. It earns the next six weeks: 50 users, a Claude directory listing, the product skeleton (M0), Meta App Review. |
-| Pass | Fail | Re-price or narrow. Three more weeks with ten new strangers at another price; stop unless 2 pay. |
-| Fail | Pass | Goodwill payments. Narrow to the job the payers used, or stop. |
-| Fail | Fail | Stop. |
+## What this brief stops or parks
 
-With ten people these marks give direction, not proof. A mark made or missed by one person is a tie, and a tie earns one two-week extension of the same test.
-
-**If time runs short,** drop items 13 and 12, then onboard all ten from an emailed link. Gate 0 is never cut.
-
-## What this brief stops
-
-- New search arms, judges and rounds. Ranking changes other than item 6 wait for the decision.
-- Adopting anything on AI grades or synthetic searches. The judge-free sets stay as the regression check.
-- Cost-per-search and vector-storage tuning, and tuning for a desktop app.
-- Whole-library media passes, and any promise to find what was said or shown.
-- The rules-and-actions engine, the hub, and the product skeleton, until a Go.
+- New search arms, judges and rounds, and adopting anything on AI grades or synthetic searches.
+- The hosted agent-access pilot, the exact-post fixes, the second-library run and the search head-to-head. They are parked in `PARKED-agent-layer-pilot.md` until paying testers ask for agent access.
+- Export onboarding for testers. The loop starts from what people send.
+- Forming a company, Business Verification and App Review, until a Go.
+- A local-first build, and cost or storage tuning.
+- Any scraping service.
+- Ads, selling insight, and keeping data after deletion. `10-decisions.md` says: "Real deletion; no ads; no selling data".
+- The rules-and-actions engine, the hub and the product skeleton, until a Go.
 - New amendments from the research loop. Decide the open ones first.
-- The advertiser-access idea. It gives away the one position Meta cannot copy.
 
-## Open decisions for the founders (item 3)
+## Open decisions for the founders (item 1)
 
-1. A-008: run a pilot on prototype code before the platform, with agent access first. Both founders, in their own words: why, or why not.
-2. A-001 to A-007: accept, reject or defer each. The pilot depends on A-004 (YouTube items) and the tool surface in A-006.
-3. Rule 8 against "what is said" descriptions.
-4. The advertiser-access idea: drop it in writing.
-5. Access to the MCP server: OAuth, or an unguessable per-user URL for ten testers.
-6. Form a company now? Meta's Business Verification and App Review appear to need one, and the checkout needs a name.
-7. The hours each founder can give a week through December, including Phase 3. The dates assume about 20 each.
-8. Whether the "Muse" in the earlier briefs is Meta's Muse. Item 1 assumes it is.
-9. Every pass mark above except the two Gate 1 bars (16 of 20; 4 of 5 themes), and the session gap. Agree them before the first result arrives.
-10. te in the pilot: off (one model, OpenAI only) or on (a second model, and Google as a processor). The agent's suggestion: start with it off.
-11. Where the founders' store is, who hosts the pilot server, and whether a lawyer reads the data policy and the payment terms.
-12. Desktop scope, and the embedding model named in `02-tech-stack.md`: the docs still say bge-small.
-13. Search results for Instagram items carry no caption text by default. Allow a short marked snippet, or keep captions to `get_item` only?
+1. A-008: run the loop by hand before building, and charge for the plan first. Both founders, in their own words: why, or why not.
+2. The four marks, the line of 8, the 15% reading and the decision table. Agree them or change them, then commit them before the first tester starts.
+3. The price: $4.99 (the agent's proposal: anyone who pays it would pay $2.99), or $2.99 from the start.
+4. Agent access. The founding notes hold two views of it: hard to market, and "above all". `10-decisions.md` calls MCP the paid core. Which view holds, and does charging for the plan first change that decision or only postpone it?
+5. Ads, selling insight and keeping deleted data: drop all three in writing, or propose an amendment to the Agreed decision.
+6. A scraping service for enrichment: never, or only as `04-intake.md` allows (a paid provider with clear terms, last in the order). The agent's suggestion: not in this round.
+7. The reading of rule 8 for the product account's inbox (see "Rules that hold throughout").
+8. Where the founders' store is and who may open it, and whether a lawyer reads the consent note and the payment terms.
+9. The hours each founder can give a week through December. The dates assume about 20 each.
+10. Whether the "Muse" in the earlier briefs is Meta's Muse, and whether it is available on the founders' accounts for item 2.
+11. A-001 to A-007: accept, reject or defer each. Nothing in Phases 1 and 2 depends on them.
+12. The privacy design for any later hosted build (a shared store, a private vault, a revocable key; A-006 item 6). Phase 3 as outlined stores nothing on a server; decide the design before anything does.
+13. Where the code and logs of the earlier DM prototype are. They would show what a DM share delivered and how often people sent.
 
 ## Deliverables
 
-- `experiments/pilot/`: the stack, its tests, the deploy and load-test scripts and a runbook, the demand page, the DM receiver and sanitiser, `use_report.py`.
-- `results/r10-head-to-head.md`, `r10-demand-page.md`, `r10-dm-payload.md`: counts only.
-- `results/r10-pilot-stack.md` and `r10-exact-post.md`: the regression checks, by a fresh evaluator.
-- `results/r10-second-library.md`, `r10-gate0.md`, `r10-onboarding.md`, `r10-use.md`, `r10-payment.md`: aggregates only, from output a founder pastes.
-- Drafts for the founders to approve: the data policy, the consent note, the receiver's privacy note, the payment terms.
+- `experiments/action_test/`: drafts for the founders of the consent note, the plan template, the check-in script, the day-14 questions and the comparison sheet; `tally.py` and its tests on synthetic sheets.
+- `results/r10-marks.md`: the marks and the decision table as the founders agreed them, committed before the first tester starts.
+- `results/r10-action-test.md`: the tally's counts and the decision. Aggregates only.
+- `results/r10-message.md` and `results/r10-business.md`: counts and a one-paragraph outcome each, from what a founder pastes.
+- On a Go: the Phase 3 brief, then `experiments/plan_writer/`, `results/r10-dm-payload.md`, `r10-gate0.md`, `r10-plan-writer.md` and `r10-stay.md`.
 - A **founders' summary at the top of `STATE.md`** at each gate: what passed, what failed, what needs their decision.
 
 Commit and push after each item. Personal data stays out of git.
 
 ## Budget
 
-- **Caps are enforced in code.** One pilot-wide ledger adds up every library's `ai_runs.jsonl`. API cap: $40 across all libraries and $3 per library. If te is on, it may use at most $2 per library, through the Batch API where the wait allows, on saved, collection, shared and liked Instagram items, newest first. Query embeddings for searches are exempt from the per-library cap and count only toward the pilot-wide one, so a library at its cap stays searchable. At the pilot-wide cap, new imports and te passes stop, searches continue, and a founder decides whether to raise it.
-- Hosting through 4 January: about $50, and one more week if Gate C ends in Stop. Domain: about $15. A founder pays and records the amounts in `STATE.md`. A Go or a re-price brings its own budget.
-- **Total cap: $105** (or what the founders say, if lower). Report at the cap.
-- **Founder time:** about 20 working days as the review counts them, with the founders building beside the agent; 18.5 of them fall in the first four weeks, which is tight. The more the agent builds, the less of that is founder time. Time for Phase 3 is agreed in item 3.
+- **Phases 1 and 2:** no API spend and no hosting; card fees on the payments. Founder time: about 16 working days as the review counts them (Derrick about 7, Eason about 9), against about 20 available at 20 hours a week each.
+- **Phase 3, only on a Go:** API cap $10, enforced through the ledger; about 11 founder-days.
+- **Total cash cap: $25** (or what the founders say, if lower). Report at the cap.
