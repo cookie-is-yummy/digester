@@ -31,6 +31,7 @@ This is the skeleton the product grows from, and the version shown to the first 
 | Recurring rules: a day or days of the week and a time, in the person's timezone | Rules triggered by events ("when I save a recipe…"), deadlines |
 | One-off questions over the library, and follow-up questions on the last answer | Searching for new content outside the person's library |
 | Extracting ingredients, steps or key points only when they are in the post's own text | Transcripts, audio or video understanding |
+| Managing rules by text (list, pause, resume, change, stop), "delete my data", help | Sharing rules between people |
 | Feedback replies: 👍, 👎, "more like 2", "stop", "pause" | Learned personalisation beyond the feedback rules in section 5 |
 | Libraries built from the Instagram export and Google Takeout, with the demo's importer | Live capture of new saves (a later step: share-to-account) |
 | One machine runs everything; data stays on it | Hosting, accounts, payments inside the product |
@@ -68,23 +69,23 @@ Libraries are loaded by a founder before the first message, from the person's ex
 > Bot: (preview) … Reply YES to start.
 
 **Nothing good.**
-> Bot: No new pasta recipe this week. I've sent you all 12 I could find with ingredients listed. Want ones where the recipe is in the video too?
+> Bot: No new pasta recipe this week. I've sent you all 19 I could find with ingredients listed. Want ones where the recipe is in the video too?
 
-**Managing rules.** "my rules" lists them with numbers. "pause 2", "stop 2", "change 1 to Saturday" and "stop everything" work. "delete my data" removes the person's library, rules and history, after a YES.
+**Managing rules.** "my rules" lists them with numbers. "pause 2", "stop 2", "change 1 to Saturday" and "stop everything" work. "delete my data" removes the person's library, rules, runs, deliveries and feedback, and deletes their conversation from Messages on the bot Mac, after a YES. A founder confirms by message within 24 hours.
 
 **Feedback.** 👍 or 👎 as a reply to a pick, "more like 2" or "less like this" change what later runs pick (section 5).
 
-## 5. Reliability rules (hard rules, enforced in code)
+## 5. Reliability rules (hard rules, enforced in code, for every reply that cites items: previews, scheduled runs, one-off questions and follow-ups)
 
-1. **Only the person's own library.** Every pick is an item from their library, with its link. The code rejects any item ID that was not in the candidate list sent to the model.
-2. **Nothing invented.** An extracted ingredient, step or quote must appear in the item's own text, by a normalised string match. A line that does not match is dropped, and the item is marked "the details are in the video".
+1. **Only the person's own library.** Every pick is an item from their library, with its link. The code rejects any item ID that was not in the candidate list sent to the model. A follow-up may use only the items in the last answer, plus any new search it states.
+2. **Nothing invented.** An extracted ingredient, step or quote must appear in the item's own text, by a normalised string match. A line that does not match is dropped, and the item is marked "the details are in the video". The match is against the full caption from `items.jsonl`. Counts and comparisons ("six ingredients", "fewest") are computed by code from the matched lines, not stated by the model.
 3. **Abstain rather than pad.** If fewer good candidates exist than asked for, send fewer, or none, and say why. The model gives each pick a fit score; picks under the threshold are not sent.
-4. **No repeats.** A rule never sends the same item twice, through a deliveries table checked before every send.
-5. **Friends' posts are never used.** The library already marks posts by mutual follows; they are filtered before the model sees anything.
-6. **Captions are data, not instructions.** Third-party text goes to the model inside marked data fields, with a system instruction to treat it as data. Captions are cut to 600 characters.
-7. **A preview before any recurring rule starts.** Nothing is scheduled until the person replies YES.
-8. **Caps.** At most 5 scheduled messages a day per person, no messages between 10pm and 8am local unless the rule asks for it, and a daily API cost cap per person.
-9. **Feedback is obeyed.** An item with 👎 is never sent again by any rule. "Less like this" lowers items from that creator and that topic for that rule. "More like 2" adds item 2 as an example to the rule.
+4. **No repeats.** A recurring rule never sends the same item twice, through a deliveries table checked before every send. One-off answers and follow-ups may cite items sent before.
+5. **Friends' posts are never used.** The Instagram importer removes posts by mutual follows when the library is built, and `library.is_friend` is checked again in retrieve. A library whose import warned that the follower lists were missing is not used until the export is redone with them.
+6. **Captions are data, not instructions.** Third-party text goes to the model inside marked data fields, with a system instruction to treat it as data. Captions are cut to 600 characters, taken from `items.jsonl`, not from the 260-character search rows.
+7. **A preview before any recurring rule starts.** Nothing is scheduled until the person replies YES. A preview is not a delivery: after YES, the edited request is run again, so the first send obeys any change ("no cream") and may differ from the preview.
+8. **Caps.** At most 5 scheduled messages a day per person, no messages between 10pm and 8am local unless the rule asks for it, and a cost cap of $1 a day per person.
+9. **Feedback is obeyed.** An item with 👎 is never sent again by any rule or answer. "Less like this" lowers items from that creator and that topic for that rule. "More like 2" adds item 2 as an example to the rule.
 10. **No advice.** The bot finds and quotes. It gives no medical, legal or financial advice, and declines health goals, as the earlier briefs did.
 
 ## 6. Message channel
@@ -105,7 +106,7 @@ Sources: the channel notes from 12 Nov 2026 in the review's working files (Teleg
 **How the iMessage channel works.**
 - A separate Apple Account for the bot, signed in to Messages on the Mac. People text its email address, so no founder's personal number is shown. Apple asks for a phone number to secure a new account; a founder's number is fine for that.
 - Sending: AppleScript tells Messages to send to a handle.
-- Receiving: the bot reads new rows from the Messages database (`~/Library/Messages/chat.db`) every few seconds. It needs Full Disk Access for the terminal that runs it, and permission to control Messages. It keeps each read short.
+- Receiving: the bot polls the Messages database (`~/Library/Messages/chat.db`, opened read-only) every few seconds for rows above the last one seen with `is_from_me = 0`, so it never answers itself. On recent macOS the text is often only in the `attributedBody` blob, so the reader decodes that when `text` is empty. A tapback (👍, 👎) is a separate row pointing at the bot's message; after each send the bot records the ID of its own outgoing row, so a tapback maps to that delivery. A tapback on a message with several picks counts for all of them; for one pick the person types "👎 2". The terminal that runs the bot needs Full Disk Access and permission to control Messages. Each read is kept short.
 - The channel sits behind one small interface (`receive()` and `send(handle, text)`), so Telegram, SMS or a paid service can replace it without touching anything else. A console channel is used for development and tests.
 
 ## 7. How it works
@@ -122,7 +123,8 @@ scheduler (every 30 s) ─► due rules ─► executor ─► retrieve ─► c
 
 | Part | New or reused | What it does |
 | --- | --- | --- |
-| Library and search | Reused: `experiments/demo/engine.py`, `ingest.py`, `ig_import.py`, `library.py` | Loads a library and runs Q8 search. A new wrapper adds deeper candidate lists, filters by interaction kind and date, and exclusion of items already sent |
+| Library and search | Reused with a small change: `experiments/demo/engine.py` gets a `depth` option on its `search` command that returns the friend-filtered ID order (up to 300) instead of 20 rows. `ingest.py`, `ig_import.py`, `library.py` are unchanged | Runs Q8 search in one `engine.py serve` process per library. `mvp/retrieve.py` reads the library's own `corpus/items.jsonl` and `interactions.jsonl` for full captions, interaction kinds and the date of each kind (the save date, not the first-seen date), then filters by kind and date and removes items already sent |
+| Engine processes | New: `mvp/engines.py`, adapted from the demo app's `Worker` | One engine process per library, because the engine allows one library per process. Starts, restarts and talks to them over JSON lines. Up to about 4 resident on a 16 GB Mac; beyond that, a library's process starts about 2 minutes before its rule is due, and a one-off question gets "one moment" while it loads |
 | Store | New: `mvp/store.py`, SQLite | People, rules, runs, deliveries, feedback, pending confirmations |
 | Interpreter | New: `mvp/interpret.py` | Turns a message into an intent and, for rules and questions, a rule spec. One LLM call, JSON out, validated with Pydantic. Code, not the model, works out dates and times |
 | Retrieve | New: `mvp/retrieve.py` | Runs 2 to 4 searches from the spec, merges them, filters friends, applies kind and date filters, removes sent and disliked items, and keeps the top 40 |
@@ -141,22 +143,24 @@ scheduler (every 30 s) ─► due rules ─► executor ─► retrieve ─► c
   "content": {
     "goal": "a pasta recipe for pasta night",
     "searches": ["pasta recipe", "easy pasta dinner", "spaghetti sauce"],
-    "kinds": ["save", "collection", "share_self", "like"],
+    "kinds": ["save", "collection", "share_self", "playlist", "like", "watch"],
     "platforms": ["instagram", "youtube"],
     "count": 1,
     "extract": "ingredients",
     "avoid": ["cream"],
-    "new_since_last_run": true
+    "exclude_sent": true
   },
   "do": [{"action": "message.send"}]
 }
 ```
 
-`when.type` can be `now`, `once` or `schedule`. `extract` can be `none`, `ingredients`, `steps` or `key_points`. `kinds` gives an order of preference: saves, collections and posts sent to yourself first, then likes, then watches.
+`when.type` can be `now`, `once` or `schedule`. `extract` can be `none`, `ingredients`, `steps` or `key_points`. `kinds` is an order of preference over the kinds the importers write: Instagram `save`, `collection`, `share_self`, `like`, `watch`, `view`; YouTube `playlist`, `share_self`, `like`, `watch`. Saves, playlists and posts sent to yourself rank first, then likes, then watches. A filter that removes every item of a listed platform is a validation error. `exclude_sent` drops items this rule has already delivered (rule 4). A date filter uses `saved_after` and `saved_before`, worked out by code from the request and checked against the date of the matching interaction.
 
 **Intents the interpreter returns:** `new_rule`, `ask` (a one-off question), `follow_up` (about the last answer), `change_rule`, `list_rules`, `pause`, `resume`, `stop`, `feedback`, `delete_data`, `help`, `unsupported`. An unsupported request gets the nearest thing the bot can do, and is logged as a feature request.
 
 **Prompts** live in `mvp/prompts/` with a version in each file name: `interpret_v1.md` and `compose_v1.md`. Changing a prompt means a new version and a rerun of the test set (section 9).
+
+**Packages.** `pydantic>=2` goes in a new `experiments/mvp/requirements.txt`, next to the demo's requirements.
 
 **Models.** `gpt-5.4-mini` for the interpreter and the composer, with the OpenAI key already used by the demo. The estimate is under 1 cent per run, so a weekly rule costs a few cents a month. Search embeddings work as in the demo.
 
@@ -171,7 +175,7 @@ scheduler (every 30 s) ─► due rules ─► executor ─► retrieve ─► c
 | `feedback` | Delivery, kind (up, down, more, less), time | |
 | `requests` | Requests the bot could not do, for the backlog | |
 
-The message database of the Mac is Apple's own; the bot only reads it. Libraries stay in `data/` on the Mac, outside git.
+The message database of the Mac is Apple's own; the bot only reads it. Libraries stay in `data/` on the Mac, outside git. Raw export zips are deleted once the library is built. OpenAI receives item text and requests under API terms that exclude training, and the consent note says so.
 
 ## 8. The three days
 
@@ -193,31 +197,32 @@ Founder hours are about 20 a week each; most of the building is the agent's. Tim
 | Task | Owner | Done when |
 | --- | --- | --- |
 | Interpreter and the rule spec, with validation and time handling | Agent | |
-| Retrieve wrapper over the demo engine | Agent | |
+| A 20-line iMessage test on the Mac: send to Derrick's phone, read his reply from the Messages database, including the `attributedBody` case | Agent writes; Derrick runs | Works by Friday evening |
+| Engine `depth` option, the engine process pool and the retrieve step; the demo's parity test still passes | Agent | |
 | Composer, the checks in section 5, and rendering | Agent | |
 | Run the 20 requests end to end in the console on Derrick's library; write `results/r10-mvp-day1.md` with counts only | Agent | 18 of 20 give a valid rule or a sensible question back. No check in section 5 fails |
-| Grade each answer: send as is, send after a small edit, or not sendable | Derrick | 15 of 20 sendable as is |
+| Grade each answer: send as is, send after a small edit, or not sendable | Derrick | 15 of 20 sendable as is. For the 4 hard cases, "sendable" means the right question back, the nearest alternative, or an honest "nothing found" |
 
 **Day 2, Saturday 14 November: it lives in Messages.**
 
 | Task | Owner | Done when |
 | --- | --- | --- |
-| iMessage channel, and the Telegram channel as backup | Agent writes; Derrick runs it on the Mac | |
+| iMessage channel, and the Telegram channel as backup. The agent cannot run macOS here, so Derrick runs each version and reports errors | Agent writes; Derrick runs it on the Mac | If the Friday test failed, or iMessage is not working by Saturday noon, Telegram is used for days 2 and 3 |
 | All message flows in section 4: preview and YES, rules list, pause, stop, change, feedback, follow-up, delete my data, help | Agent | |
-| Scheduler, deliveries, caps, quiet hours | Agent | A fast-forwarded month sends every rule on time in the right timezone, with no repeated item |
-| Derrick sets up the pasta and photography rules from his phone | Derrick | Both arrive on his phone at the set time |
+| Scheduler, deliveries, cost caps over the ledgers, quiet hours | Agent | A fast-forwarded month sends every rule on time in the right timezone, with no repeated item |
+| Derrick sets up the pasta and photography rules from his phone | Derrick | Two test copies set for later that Saturday both arrive on time. The real rules are set for Friday 7pm and Sunday 4pm; the Sunday one is checked on day 3 |
 
 **Day 3, Sunday 15 November: a second person can use it.**
 
 | Task | Owner | Done when |
 | --- | --- | --- |
-| Build Eason's library from his exports with the demo's importer, on the bot Mac | Eason, with Derrick | |
+| Import Eason's exports with the demo's importer on the bot Mac, copy the router file from Derrick's library, run the demo's Prepare step (embeddings; the te pass if a Gemini key is set, about 5 to 10 minutes per 1,000 Instagram posts), and check the library loads | Eason, with Derrick | If his exports have not arrived by Saturday evening, use a synthetic second library built from the demo's fixtures, and move his real library to the first session |
 | Onboarding: consent note, timezone question, the handle-to-library link | Agent drafts; both approve | |
 | Reliability pass on 10 requests Eason writes himself; fix what fails | Agent; Eason grades | 8 of 10 sendable as is |
 | Kill switch, a one-page runbook, and a one-page guide for testers | Agent | |
 | Dry run: Eason sets up two rules from his phone without help | Eason | Both rules work |
 
-**If time runs short,** drop Telegram, then "change rule", then follow-up questions. Do not drop the checks in section 5, the preview, or "delete my data".
+**If time runs short,** drop whichever of iMessage or Telegram is not yet working, then "change rule", then follow-up questions. Do not drop the checks in section 5, the preview, or "delete my data".
 
 **Stretch, only if day 3 ends early:** a short YouTube description for the top candidates through the YouTube Data API, under its 30-day rule. Without it, YouTube picks rest on titles, which suits "motivating videos I watched" less well than recipes.
 
@@ -233,7 +238,7 @@ Founder hours are about 20 a week each; most of the building is the agent's. Tim
 
 From Tuesday 17 November, as exports arrive.
 
-- **Who:** 5 to 10 adults in the US with an iPhone, who save things on Instagram or YouTube. At least half should be strangers: people neither founder knew before 10 November.
+- **Who:** 5 to 10 adults in the US with an iPhone, who save things on Instagram or YouTube. At least half should be strangers: people neither founder knew before 10 November. The consent note asks each person to confirm they are 18 or over.
 - **How:** each person consents and sends their exports. A founder builds their library on the bot Mac, then sets up the first rule with them on a 15-minute call. After that they use it alone.
 - **What counts** (agree the numbers before the first session):
 
@@ -254,7 +259,7 @@ From Tuesday 17 November, as exports arrive.
 | 5, the processor reads and the executor writes | Retrieve and compose only read. Only the executor sends |
 | 6, the LLM fills forms and code acts | The interpreter returns JSON; code validates it and builds the schedule. The model never sends anything |
 | 7, intake within platform terms | Exports only. Nothing fetched from Instagram. No scraping service |
-| 8, privacy defaults | No Instagram DMs are read. Friends' posts are never used. The person's messages to the bot are kept only as rule and request text, with consent |
+| 8, privacy defaults | No Instagram DMs are read. Friends' posts are never used. The person's messages to the bot are kept only as rule and request text, with consent. No transcripts, audio or video are fetched or stored. Captions go to the model as marked data (section 5, rule 6) |
 | 9, no real data in git | Requests, grades, libraries and the store live in `data/` |
 | 10 and 11, pin versions and measure | Prompt versions in file names; every call in the ledger; timings in `runs` |
 | 1, 3 and 4 | Set aside for `experiments/mvp/`, as prototype code |
@@ -265,6 +270,7 @@ A-008 must record these conflicts with the docs:
 - `docs/09-roadmap-and-ownership.md`: rules (M4) are built before M0 to M3, and testers come before M5.
 - `docs/10-decisions.md`: Supabase for the database. The MVP uses SQLite on one Mac.
 - `AGENTS.md` › Prototype code: outsiders use prototype code.
+- `docs/09-roadmap-and-ownership.md` › Ownership: triggers, scheduler, executor and output actions are Eason's, and the interpreter is Derrick's. The agent builds them for this prototype; Eason reviews the scheduler and executor, and Derrick the interpreter.
 - `docs/07-privacy-and-safety.md` › Sensitive categories: there is no tagger. Health goals are declined, and the consent note says the bot reads the whole library.
 - `docs/06-rules-and-actions.md` › RuleSpec: a subset, with days and a time in place of cron.
 
@@ -277,7 +283,7 @@ A-008 must record these conflicts with the docs:
 5. **Models:** `gpt-5.4-mini` with the existing OpenAI key. The consent note names OpenAI as the provider that sees item text and requests.
 6. **Price** for the sessions: $4.99 for the next month, asked on day 7.
 7. **The session marks** in section 10.
-8. **A-008:** rewrite it for this MVP; both founders accept it before outsiders use the bot.
+8. **A-008:** already rewritten for this MVP (Proposed). Both founders accept it, and this brief, before anyone outside the founders uses the bot.
 
 ## 13. Risks
 
@@ -286,14 +292,14 @@ A-008 must record these conflicts with the docs:
 | Captions are thin: about two in three recipe posts have no ingredients written | Say "the recipe is in the video" plainly. Prefer items with text when the rule asks for details |
 | YouTube items have titles only | Use them for "videos I watched" requests, and say so. The YouTube description is the stretch step |
 | The Mac sleeps, loses its network, or Apple flags the bot's account | Keep the Mac on power with sleep off. Keep volume low. Telegram is the backup |
-| Loading a large library takes about a minute and 2.5 GB of memory | Keep libraries loaded. Up to about 4 libraries on a 16 GB Mac; more means one at a time |
+| Loading a large library takes about a minute and 2.5 GB of memory | The engine process pool in section 7 keeps up to about 4 loaded, and starts others ahead of their rules |
 | Slop: picks that technically match but are not good | The fit threshold, abstaining, feedback, and Derrick's grades on day 1 |
 | Exports arrive late | Ask for them on day 0 |
 | Muse already turns a saved recipe reel into a grocery list | The MVP shows what Muse does not: YouTube and Instagram together, and rules on a schedule |
 
 ## 14. Budget
 
-- API: a $10 cap for the build and tests, enforced through the ledger, and $1 a day per tester.
+- API: a $10 cap for the build and tests, and $1 a day per tester. The existing ledger caps each ledger file as a whole ($4 by default) and keeps no person or day split, so the MVP points each person's calls at their own library's ledger, sets that ledger's budget, and `mvp/run.py` sums the day's rows before each run and skips a run that would pass $1. The $10 build cap is the sum over all ledgers, also checked by `mvp/run.py`.
 - Channel: $0 for iMessage and Telegram.
 - Founder time: about 2 hours on day 0, then about half a day each on days 1 to 3.
 
