@@ -318,7 +318,7 @@ def test_the_merge_checks_what_it_stores(rich):
     assert "Home cooking is off your interests" in res["changes"]
     # fix pass 2, finding 38: only the clause that states a condition is left out, never the rest of their goal
     res = P.apply_merge(bot.store, H, {"direction": "cook more at home and manage my diabetes"},
-                        "cook more at home and manage my diabetes")
+                        "I want to cook more at home and manage my diabetes")
     assert res["skipped_sensitive"] and P.get(bot.store, H)["direction"] == "cook more at home"
 
 

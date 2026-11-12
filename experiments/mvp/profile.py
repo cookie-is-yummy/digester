@@ -118,7 +118,7 @@ def _prompt(name):
 STOP = set("a an and the of for to in on with my your our this that is it at by from or how what when new best easy "
            "quick simple ideas idea video videos reel reels post posts tutorial tutorials tips tip recipe recipes "
            "beginner beginners guide make making learn learning start starting finish finished ends end whole full "
-           "one some more any things thing stuff saved save saves".split())
+           "one some more any things thing stuff saved save saves mostly".split())
 
 
 def topic_words(*texts):
@@ -182,6 +182,27 @@ def guess_key(view):
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()
 
 
+# fix pass 2, finding 41: a broad field alone ("Gaming", "Music") says nothing a person would say; code adds the topic's
+# own words, which it checked in the topic's lines ("Gaming, mostly Minecraft and Fortnite"). Nothing is invented.
+BROAD_FIELDS = set("""animation gaming games music technology tech art arts cooking food fitness design entertainment
+    comedy lifestyle diy sports sport travel fashion beauty education science crafts memes media hobbies""".split())
+
+
+def refine_broad(topic, words, texts):
+    if norm(topic) not in BROAD_FIELDS:
+        return topic
+    own = {_stem(norm(topic))}
+    specific = [w for w in words if w not in BROAD_FIELDS and _stem(w) not in own and w not in STOP][:2]
+    if not specific:
+        return topic
+    shown = []
+    for w in specific:
+        found = re.findall(r"(?<![\w])(" + re.escape(w) + r")(?![\w])", " ".join(texts), re.I)
+        caps = sum(1 for f in found if f[:1].isupper())
+        shown.append(w.capitalize() if found and caps * 2 > len(found) else w)
+    return f"{topic}, mostly {_and(shown)}"
+
+
 def check_guess(raw, items, chans, view):
     """The code checks on the model's topics (pure). Returns (interests, removed): line ids must be in the sample and
     count once; a topic needs PROFILE_MIN_SUPPORT lines; words must be in its lines; a level needs a quote found in one
@@ -224,6 +245,7 @@ def check_guess(raw, items, chans, view):
         need = min(2, len(texts))
         words = [w for w in dict.fromkeys(words) if len(w) >= 3 and not sensitive(w)
                  and sum(contains_word(tx, w) for tx in texts) >= need][:4]
+        topic = refine_broad(topic, words, texts)
         saved = {it.id for it in sup}
         if words:
             saved |= {it.id for it in kept_all if any(contains_word(it.caption, w) for w in words)}
@@ -380,6 +402,59 @@ def _about(i, words):
     return bool((set(topic_words(i["topic"])) | {_stem(w) for w in i.get("words") or []}) & words)
 
 
+# ---------- what the message asks for wins over the profile (fix pass 2, finding 62) ----------
+# A thing to avoid and the things it covers: "meat" covers chicken, so "what can I make with chicken and rice?" from
+# someone whose profile says "avoid meat" runs as asked. A diet word covers its kinds.
+AVOID_COVERS = {
+    "meat": "chicken beef pork lamb bacon steak turkey ham sausage mince veal duck chorizo pepperoni salami brisket "
+            "prosciutto",
+    "fish": "salmon tuna cod trout shrimp prawn seafood anchovy sardine tilapia halibut mackerel",
+    "seafood": "shrimp prawn crab lobster mussel clam oyster scallop squid octopus",
+    "pork": "bacon ham sausage chorizo pepperoni prosciutto",
+    "dairy": "milk cheese cream butter yogurt yoghurt",
+    "egg": "omelette omelet frittata quiche",
+}
+DIETS = {"vegetarian": ("meat", "fish", "seafood"), "pescatarian": ("meat",),
+         "vegan": ("meat", "fish", "seafood", "dairy", "egg", "honey")}
+_NEGATING = (r"\b(?:no|not|without|avoid|skip|minus|hold the|free of|never|don['’]?t|do not|can['’]?t|cannot)\s+"
+             r"(?:any\s+)?(?:\w+\s+){0,2}?")
+
+
+def _covered(entry):
+    """The words a thing to avoid (or a diet word) covers: itself, its kinds and their members."""
+    out = set()
+    for w in re.findall(r"[^\W\d_]+", str(entry or "").lower()):
+        heads = list(DIETS.get(w, ())) + [w]
+        for h in heads:
+            out.add(h)
+            out.update(AVOID_COVERS.get(h, "").split())
+            out.update(AVOID_COVERS.get(h.rstrip("s"), "").split())
+    return out
+
+
+def named_against(entry, *texts):
+    """True when the message names the thing to avoid, or something it covers, and does not say to leave it out:
+    "chicken and rice" names chicken, which "meat" and "vegetarian" cover; "no chicken" does not."""
+    from .retrieve import contains_word
+    for t in texts:
+        for w in _covered(entry):
+            if contains_word(t or "", w) and not re.search(_NEGATING + re.escape(w), t or "", re.I) \
+                    and not re.search(re.escape(w) + r"\w*[- ]free\b", t or "", re.I):
+                return True
+    return False
+
+
+def avoid_for(avoid, *texts):
+    """The person's things to avoid without the ones this message asks for (finding 62)."""
+    return [a for a in avoid or [] if not named_against(a, *texts)]
+
+
+def notes_for(notes, *texts):
+    """Their notes without one this message overrides ("vegetarian now" when they ask for chicken)."""
+    return [n for n in notes if not any(w in DIETS or w in AVOID_COVERS for w in re.findall(r"[a-z]+", n.lower())
+                                        if named_against(w, *texts))]
+
+
 def about_lines(store, handle, message=None):
     """For the interpreter: the profile in the evaluation set's shape, then what they said about themselves.
 
@@ -392,7 +467,11 @@ def about_lines(store, handle, message=None):
     interests = prof["interests"]
     direction = prof["direction"]
     named_level = False
+    notes = list(prof["notes"])
     if message is not None:
+        # finding 62: what the message asks for wins: an avoid entry it names is not given to the interpreter
+        prefs = dict(prefs, avoid=avoid_for(prefs.get("avoid"), message))
+        notes = notes_for(notes, message)
         words = set(topic_words(message))
         interests = [i for i in interests if _about(i, words)]
         if direction and not (set(topic_words(direction)) & words):
@@ -410,7 +489,7 @@ def about_lines(store, handle, message=None):
     p = pref_words(prefs)
     if lines or p:
         lines.append("Preferences: " + ("; ".join(p) if p else "none given") + ".")
-    return lines + list(prof["notes"])
+    return lines + notes
 
 
 # the kinds of their library in plain words ("don't use my likes": "I won't use your likes")
@@ -464,10 +543,11 @@ def composer_context(store, handle, *texts):
     if ok:
         how = "they told you" if (m.get("confirmed") or m.get("source") != "guess") else "a guess from what they saved"
         lines.append(f"Their level at {m['topic']}: {LEVEL_PLAIN[m['level']]} ({how})")
-    p = pref_words({k: v for k, v in prefs.items() if k in ("avoid", "tools", "time", "style")})
+    p = pref_words({k: (avoid_for(v, *texts) if k == "avoid" else v) for k, v in prefs.items()
+                    if k in ("avoid", "tools", "time", "style")})   # finding 62: the message wins over the profile
     if p:
         lines.append("Preferences: " + "; ".join(p))
-    lines.extend(prof["notes"])
+    lines.extend(notes_for(prof["notes"], *texts))
     said = next((m.group(0) for t in texts for m in [ASKED_LEVEL_WORD.search(t or "")] if m), None)
     if said:   # fix pass 2, finding 58: a level in their own words ("easy", "beginner") reaches the composer
         lines.append(f"The level they asked for, in their words: {said.lower()}")
@@ -521,14 +601,56 @@ def merge(store, handle, message, asked=None, person=None, shown=None):
     raw, cost = llm.chat_json(_prompt(config.PROMPT_PROFILE_MERGE), user, purpose="mvp_profile_merge",
                               prompt_version=config.PROMPT_PROFILE_MERGE, person=person or handle, max_tokens=700,
                               temperature=config.PROFILE_TEMPERATURE, seed=config.PROFILE_SEED)
-    return apply_merge(store, handle, raw, message, shown=shown), cost
+    return apply_merge(store, handle, raw, message, shown=shown,
+                       asked_direction=bool(asked and "working toward" in asked)), cost
 
 
-def apply_merge(store, handle, raw, message, shown=None):
+# fix pass 2, finding 63: a direction is stored only when the person states a goal ("I'm working toward...", "I want to
+# learn...", "my goal is..."), or answers the setup's question about it; never words about timing or the request
+GOAL = re.compile(r"\b(?:working (?:toward|towards|on)|work toward|(?:want|wanna|hope|hoping|plan|planning|aim|aiming|"
+                  r"trying|try|need|going) to (?!send|show|find|get me|see|have|know|watch)|my (?:main |big )?goals?\b|"
+                  r"goals? (?:is|are|for)\b|i(?:'|’)?m learning|i am learning|learning (?:to|how)|i(?:'|’)?d like to|"
+                  r"i would like to|getting (?:better|into)|so (?:that )?i can|to become|i(?:'|’)?m (?:getting|"
+                  r"building|training|studying|practi[sc]ing|starting)|i(?:'|’)?ve started)", re.I)
+# fix pass 2, finding 62: "I eat meat again", "I'm not vegetarian any more": an avoid entry the person takes back
+ALLOW_AGAIN = re.compile(
+    r"\bi(?:'|’)?m not (?:a )?(vegetarian|vegan|pescatarian)\b|\bi am not (?:a )?(vegetarian|vegan|pescatarian)\b"
+    r"|\bno longer (?:a )?(vegetarian|vegan|pescatarian)\b|\bnot (vegetarian|vegan|pescatarian) any ?more\b"
+    r"|\bi (?:eat|drink|do eat|can eat) ([a-z]+(?: [a-z]+)?) again\b|\bi(?:'|’)?m eating ([a-z]+) again\b"
+    r"|\bstop (?:avoiding|leaving out) ([a-z]+(?: [a-z]+)?)", re.I)
+
+
+LEVEL_SAID = [("new", re.compile(r"\b(?:total|complete|absolute|real) (?:beginner|newbie|novice)|\bbrand new\b|"
+                                 r"\bnever (?:tried|done|used)\b|\bjust (?:starting|started)\b|\bnew to\b", re.I)),
+              ("intermediate", re.compile(r"\bintermediate\b|\bpast (?:the )?(?:beginner|basics)\b", re.I)),
+              ("advanced", re.compile(r"\badvanced\b|\bexpert\b|\bpro\b", re.I)),
+              ("beginner", re.compile(r"\bbeginner\b|\bnovice\b|\bnewbie\b", re.I))]
+
+
+def level_said(message):
+    """The one level the person's message states in so many words, or None (none, or more than one)."""
+    found = []
+    for lv, rx in LEVEL_SAID:
+        if rx.search(message or "") and not (lv == "beginner" and {"new", "intermediate"} & set(found)):
+            found.append(lv)
+    return found[0] if len(found) == 1 else None
+
+
+def allowed_again(message):
+    """The things the person says they no longer avoid, in their words ("meat", "vegetarian")."""
+    out = []
+    for m in ALLOW_AGAIN.finditer(message or ""):
+        w = next(g for g in m.groups() if g).lower()
+        if w not in out:
+            out.append(w)
+    return out
+
+
+def apply_merge(store, handle, raw, message, shown=None, asked_direction=False):
     """Validates the model's form against the message and the stored profile and applies it. Returns {"kind",
     "changes": [plain lines], "other": [the lines short_summary() does not cover], "skipped_sensitive": bool}. Levels and topics must name a stored topic or use the person's
     own words; direction and tools must be their own words; anything sensitive is left out (and said)."""
-    from .interpret import own_words
+    from .interpret import own_words, timing_only
     from .schema import KINDS, PLATFORMS
     raw = raw if isinstance(raw, dict) else {}
     kind = raw.get("kind") if raw.get("kind") in ("about_me", "request", "both") else "about_me"
@@ -551,9 +673,12 @@ def apply_merge(store, handle, raw, message, shown=None):
         for i in confirm:
             i["confirmed"] = True
         changes.append("you confirmed " + _and([i["topic"] for i in confirm]))
+    said_level = level_said(message)
     for lv in raw.get("levels") or []:
         if not isinstance(lv, dict) or lv.get("level") not in LEVELS:
             continue
+        if said_level and len(raw.get("levels") or []) == 1 and lv["level"] != said_level:
+            lv = dict(lv, level=said_level)   # their own word wins: "a beginner" is beginner, never "new"
         name = _clean(lv.get("topic"), 40)
         i = _find(interests, name) if name else None
         if i is not None and not _named_in(i, message):
@@ -584,6 +709,8 @@ def apply_merge(store, handle, raw, message, shown=None):
                           "confirmed": True, "source": "person"})
         changes.append(f"you're into {name}")
     d = _clean(raw.get("direction"), 240)
+    if d and not (asked_direction or GOAL.search(message)) or timing_only(d):
+        d = ""   # finding 63: no goal stated, or only words about timing ("start doing daily"): never a direction
     if d:
         d, cut = keep_stated(d)   # finding 38: only the clause that states a personal matter goes, never the rest
         skipped = skipped or cut
@@ -595,8 +722,23 @@ def apply_merge(store, handle, raw, message, shown=None):
         prefs["time"] = t   # finding 46: how much time they usually have, in their words
         changes.append(f"you usually have {t}")
         other.append(changes[-1])
+    allow = [a for a in _strs(raw.get("allow"), 6, 30) + allowed_again(message) if own_words(a, message)]
+    if allow:   # finding 62: "I eat meat again, I'm not vegetarian": those avoid entries go, and the reply says so
+        cover = set().union(*(_covered(a) for a in allow))
+        gone = [e for e in prefs.get("avoid") or [] if set(re.findall(r"[a-z]+", e.lower())) & cover]
+        if gone:
+            prefs["avoid"] = [e for e in prefs["avoid"] if e not in gone]
+            changes.append(f"I won't leave out {_and(gone)} any more")
+            other.append(changes[-1])
+        ids = [r["id"] for r in store.profile_note_rows(handle, limit=50)
+               if any(w in allow or ((w in DIETS or w in AVOID_COVERS) and _covered(w) & cover)
+                      for w in re.findall(r"[a-z]+", r["text"].lower()))]
+        store.drop_profile_notes(handle, ids)   # "vegetarian now" no longer holds
     for key, word in (("avoid", "you'd rather avoid"), ("tools", "you have")):
         vals = _strs(raw.get(key), 6, 30)
+        if key == "avoid" and allow:
+            vals = [v for v in vals if not set(re.findall(r"[a-z]+", v.lower())) & set().union(
+                *(_covered(a) for a in allow))]
         bad = [v for v in vals if stated_sensitive(v)]
         skipped = skipped or bool(bad)
         vals = [v for v in vals if v not in bad and (key == "avoid" or own_words(v, message))]
@@ -628,6 +770,8 @@ def apply_merge(store, handle, raw, message, shown=None):
             changes.append(("I won't use your " if key == "exclude_kinds" else "I won't use ") + _and(_plain(key, new)))
             other.append(changes[-1])
     note = _clean(raw.get("note"), 120)
+    if note and (timing_only(note) or (allow and any(named_against(a, note) for a in allow))):
+        note = ""   # finding 63: words about timing are never a note; a note that repeats what they took back neither
     if note:
         note, cut = keep_stated(note)
         skipped = skipped or cut

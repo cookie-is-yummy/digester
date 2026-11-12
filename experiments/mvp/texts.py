@@ -582,6 +582,27 @@ SENT_AGAIN_HEAD = "Here's what you asked me to send you:"
 ITEMS_GONE = "The post you asked me to send again isn't in your library any more, so there's nothing to send."
 
 
+# fix pass 2, finding 62: a request the bot will not do gets a sentence picked by code, never the model's own words
+NOT_CAUGHT = "Sorry, I didn't catch that. Could you say it another way?"
+UNSUPPORTED = ("That's not something I can do. I find things in what you've saved and watched, now or at a time you "
+               "pick, and I keep reminders and to-do lists.")
+UNSUPPORTED_EVENT = ("I can't tell when that happens, so I can't send things then. Pick a time instead, like \"every "
+                     "day at 6pm\".")
+EVENT_TRIGGER = re.compile(r"\b(?:when|whenever|once|as soon as|if)\s+(?:i|it|i'm|im|i am|my|the|we)\b[^?]{0,40}"
+                           r"\b(?:get|gets|got|arrive|arrives|leave|leaves|rains?|snows?|wake|wakes|home|work|gym|"
+                           r"office|school|land|lands|done|finish|finishes|start|starts)\b", re.I)
+
+
+def unsupported_reply(text, model_reply=None):
+    """The reply to a request the bot will not do: the parse-failure line as it is, an event the bot cannot see
+    ("when I get home") with the offer to pick a time, else one plain line about what the bot does."""
+    if model_reply == NOT_CAUGHT:
+        return NOT_CAUGHT
+    if EVENT_TRIGGER.search(text or ""):
+        return UNSUPPORTED_EVENT
+    return UNSUPPORTED
+
+
 # ---------- slice 6: the person's context and onboarding ----------
 PROFILE_HOW_TO_CORRECT = ("To correct me, just say it: \"I'm past beginner at Blender\", \"I'm not into cooking any more\", "
                           "\"I have an air fryer\" or \"stop guessing my level\".")
@@ -736,19 +757,48 @@ def level_moved_now(topic, plain, way, shorter=False):
     return f"Noted. Here's {one}:\n\n"
 
 
-def outside_auto_head(n_clear, lang=None):
-    """Finding 26: the YouTube block that comes without being asked, because the saves hold too few."""
+REQUEST_NOUNS = {"recipe": "recipes", "tutorial": "tutorials", "workout": "workouts", "routine": "routines",
+                 "project": "projects", "lesson": "lessons", "dish": "dishes", "meal": "meals", "build": "builds",
+                 "guide": "guides", "craft": "crafts", "drill": "drills", "exercise": "exercises",
+                 "stretch": "stretches", "how-to": "how-tos", "course": "courses", "class": "classes",
+                 "dinner": "dinners", "lunch": "lunches", "breakfast": "breakfasts", "snack": "snacks",
+                 "dessert": "desserts", "bake": "bakes", "video": "videos"}
+_NOUN = re.compile(r"(?:\b([A-Z][\w+#-]*)\s+)?\b(" + "|".join(sorted(map(re.escape, REQUEST_NOUNS), key=len, reverse=True))
+                   + r")(?:s|es)?\b", re.I)
+
+
+def request_noun(*texts):
+    """(singular, plural) of what the request is for, in its own terms ("Blender tutorial", "Blender tutorials";
+    "recipe", "recipes"), or None. A name just before the noun (a capital: "Blender") is kept."""
+    for t in texts:
+        m = _NOUN.search(t or "")
+        if m:
+            one = m.group(2).lower()
+            name = m.group(1) + " " if m.group(1) and m.group(1)[0].isupper() and m.group(1).lower() not in (
+                "a", "an", "the", "some", "any", "my", "new", "mini", "short", "quick", "easy") else ""
+            return name + one, name + REQUEST_NOUNS[one]
+    return None
+
+
+def outside_auto_head(n_clear, lang=None, noun=None):
+    """Findings 26 and 64: the YouTube block that comes without being asked, because the saves hold too few, said in
+    the request's terms: "You only have 2 saved recipes that fit, so here are a few more from YouTube:"."""
     from . import lang as L
     t = L.table(lang)
+    one, many = noun or ("one", "ones")
     if not n_clear:
-        return t["outside_auto0"]
-    return t["outside_autoN"].format(n=n_clear, go=t["go"][0 if n_clear == 1 else 1])
+        return t["outside_auto0"].format(nouns=many) if noun or "outside_auto0_any" not in t \
+            else t["outside_auto0_any"]
+    return t["outside_autoN"].format(n=n_clear, go=t["go"][0 if n_clear == 1 else 1], noun=one if n_clear == 1 else many,
+                                     fit=t.get("fit", ("", ""))[0 if n_clear == 1 else 1])
 
 
-def few_finished(n_clear, lang=None):
+def few_finished(n_clear, lang=None, noun=None):
     from . import lang as L
     t = L.table(lang)
-    return t["few_finished"].format(n=n_clear, go=t["go"][0 if n_clear == 1 else 1])
+    one, many = noun or ("one", "ones")
+    return t["few_finished"].format(n=n_clear, go=t["go"][0 if n_clear == 1 else 1],
+                                    noun=one if n_clear == 1 else many, fit=t.get("fit", ("", ""))[0 if n_clear == 1 else 1])
 
 
 def supply_note(n):

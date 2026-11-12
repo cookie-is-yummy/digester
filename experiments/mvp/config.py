@@ -80,10 +80,12 @@ PROMPT_PROFILE_GUESS = "profile_guess_v3"      # one call groups a sample of the
 #                                               pass 2, finding 41: things they do or make, at the grain they would
 #                                               say, up to 8, each with what they seem to be doing with it; v2 gave
 #                                               coarse names like "Technology")
-PROMPT_PROFILE_MERGE = "profile_merge_v2"      # what they say about themselves, as a form code validates (v2, finding
+PROMPT_PROFILE_MERGE = "profile_merge_v3"      # what they say about themselves, as a form code validates (v2, finding
 #                                               38: their own goals are kept in their words; only a stated diagnosis,
 #                                               debt or income figures, religion, politics, sexuality or relationship
-#                                               status is left out; finding 46: time they usually have)
+#                                               status is left out; finding 46: time they usually have; v3, findings
+#                                               62 and 63: "allow" for what they no longer avoid, and a direction only
+#                                               from a stated goal, never timing or the request)
 PROMPT_FIRST_REQUESTS = "first_requests_v1"    # the first requests written for them, each checked against the library
 PROFILE_TEMPERATURE = 0
 PROFILE_SEED = 7

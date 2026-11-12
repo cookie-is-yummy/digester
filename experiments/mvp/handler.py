@@ -327,6 +327,9 @@ class HandlerMixin:
                 self.store.log_request(h, text, it.intent)
                 if self.to_someone_else(text):   # sending to others stays out; offer to send it to them (section 11)
                     return self.send(h, T.EMAIL_ONLY_YOU)
+                # fix pass 2, finding 62: never the model's own words for a request it would not do: code picks the
+                # sentence (the model's "reply" is not shown)
+                return self.send(h, T.unsupported_reply(text, it.reply))
             return self.send(h, HELP if it.intent == "help" and not it.reply else (it.reply or HELP))
         if it.intent == "confirm":
             if pending and pending["kind"] == "confirm_rule":

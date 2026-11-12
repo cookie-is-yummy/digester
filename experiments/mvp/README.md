@@ -128,8 +128,9 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   bot share one quota. Needs `YOUTUBE_API_KEY`; `MVP_OUTSIDE=0` switches it off. When it cannot serve a request, the
   reply says why in one line. These finds are shown in the chat only: an answer that goes by email still shows them
   in the thread, and "email me only new ones" says they were not emailed. When someone wants something to do or make
-  and their saves hold fewer than 3 that clearly end with a finished result, the answer says so, shows the closest
-  from the saves, and adds this block without being asked (one search at most); a rule's preview then offers "Want
+  and their saves hold fewer than 3 that clearly end with a finished result, the answer says so in the request's terms
+  ("You only have 2 saved recipes that fit, so here are a few more from YouTube:"), shows the closest from the saves,
+  and adds this block without being asked (one search at most, and at most once per topic per day); a rule's preview then offers "Want
   these … from YouTube as well as your saves?", and its YES starts the rule with them.
   Before anyone outside the founders gets these: a terms page linking YouTube's Terms of Service and a privacy note
   naming YouTube API Services (DESIGN.md section 11).
@@ -156,13 +157,16 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
 
 ## The person's context and the setup (profile and onboarding)
 
-- **The setup** (`onboarding.py`), for anyone who agrees from now on, in at most four bot messages: (1) the consent
-  text; (2) the read of them: up to four lines, one per main interest, with the level guessed and a count worked out by
-  code ("Blender: you look new to it (about 45 saved posts and 3 watched videos)"), then "did I get that right, and what
-  are you working toward?"; (3) their answer merged into the profile (one form call; code checks it), a line or two on
-  what the bot now knows, the email address (the 6-digit code flow) and the time zone check; (4) the export routine and
-  its reminder offer, then up to three first requests written for them, each kept only if at least three items of their
-  library mention its topic words. They reply 1, 2 or 3 to run one now, or "every morning" for a preview of number 1
+- **The setup** (`onboarding.py`), for anyone who agrees from now on, in at most five bot messages: (1) the consent
+  text; (2) the read of them: every guessed topic (up to 8), most saved first, with the level guessed and the counts
+  worked out by code ("Blender 3D: new to it (about 45 saved, 3 watched)"), a guessed direction built by code ("It
+  looks like you're learning Blender 3D and collecting quick dinners."), then "did I get that right, and what are you
+  working toward?"; (3) their answer merged into the profile (one form call; code checks it) in one message: every
+  topic with its level, the direction in their words, then the email address (the 6-digit code flow) and the time zone
+  check; (4) one line offering the export reminders (the steps go out with each reminder, and on "how do I export?"),
+  up to three first requests written for them, each kept only if at least three items of their library mention its
+  topic words, and one optional question ("food you avoid, kit you have, how much time you usually have?"); (5) the
+  reply to that answer. They reply 1, 2 or 3 to run one now, or "every morning" for a preview of number 1
   as a morning rule (one YES starts it and the export reminders). "skip" skips any step; a real request at any step is
   answered and the setup goes on (the read is asked again once; not when the answer asked a question of its own, which
   the next message answers). Only a bare "yes" / "that's right" counts as one; "yes, but I'm past beginner" goes to the
@@ -170,17 +174,24 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   (`ONBOARD_STEP_HOURS`) ends the setup quietly. Deleting a person's data also drops the guess of their library
   (unless someone else uses the same library). People already in the store are not set up again; "set me up again"
   restarts it.
-- **The guess** (`profile.py`, `prompts/profile_guess_v2.md`): code samples their own kept items (the 60 newest and 60
-  more at random, seeded by the library build; never friends' items) and their 12 most watched YouTube channels; one
-  call groups them into topics with the lines behind each; code checks the line ids, counts the support, works out the
+- **The guess** (`profile.py`, `prompts/profile_guess_v3.md`): code samples what they chose to keep (saved, in a
+  collection, sent to themselves: the 45 newest and 45 more at random, seeded by the library build; never friends'
+  items), a smaller set of likes and playlists, and only their 6 most watched YouTube channels; one call groups them
+  into topics at the grain a person would say ("Blender 3D", "quick dinners"), with the lines behind each (a broad field
+  alone, "Gaming", gets the topic's own checked words: "Gaming, mostly Minecraft"); code checks the line ids, counts the support, works out the
   share and the library-wide counts, keeps a level only with a quote from the topic's own lines, and removes any topic
   about health, relationships, money, religion, politics or sexuality, whatever the model returned. It is cached per
   library build (a new import gets a new guess; what the person confirmed or said is never overwritten by one).
 - **Any time**: "what do you know about me" shows the profile and how to correct it; "I'm past beginner at Blender
   now", "I have an air fryer", "I'm not into cooking any more", "stop guessing my level" are merged by the same form call
-  (`prompts/profile_merge_v1.md`) and the reply says what changed; a fact said inside a request ("I'm vegetarian now,
+  (`prompts/profile_merge_v3.md`) and the reply says what changed; their own goals are kept in their words (only a
+  stated diagnosis, debt or income figures, religion, politics, sexuality or relationship status is left out, and only
+  that clause); a direction is stored only from a stated goal, never from timing words or the request; "I eat meat
+  again" removes that avoid entry; what a message asks for wins over the profile's avoid list ("chicken and rice" from
+  someone who avoids meat runs as asked); a fact said inside a request ("I'm vegetarian now,
   any dinner ideas?") is merged too, and the answer ends with what changed. "Too easy" / "too hard" after an answer move
   that topic's level one step (and say so); "made it" marks the pick done, so it is never sent again.
+- **Requests it will not do** get a sentence picked by code (the model's own wording is never shown).
 - **Using it**: the interpreter gets only the profile lines about the message's topic (and no profile level when the
   message names a level itself); the composer gets their level at the request's topic and may say it in the reason only
   when they confirmed it or the guess has a quote behind it; while it is a guess, the answer says once per topic "I'm
@@ -213,7 +224,7 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `runtime.py` | The run loop: message log, workers (one person at a time per person), joining quick texts, scheduler thread |
 | `core.py` | Message handler, executor, scheduler rules. The only code that sends |
 | `interpret.py`, `prompts/interpret_v5.md`, `schema.py` | Message to a validated form for every intent (RuleSpec v 2); temperature 0, a seed, a 6-hour cache. Code completes what the message says in so many words: a target for every rule command (all rules, or the rule whose topic is named; "the next two" is a count), the section 11 times for "twice a day", a one-time surprise as one random moment, "this week" as an end on Sunday, the days a clarify keeps, "this week's pasta now" as run_rule, a time for an open to-do as its due time, "put a few recipes on my list" as an ask with todo.add, an output of a new ask in its own do list, "no mushrooms" as avoid, a fact inside an ask as a profile note, nested month weeks made flat (`interpret_v4.md` was tried in slice 6 and scored worse: not in use) |
-| `profile.py`, `prompts/profile_guess_v2.md`, `prompts/profile_merge_v1.md` | The person's profile: the guess from their library (checked and counted by code, the sensitive-topic filter, cached per library build), merging what they say, the lines for the interpreter and the composer, "what do you know about me", level moves |
+| `profile.py`, `prompts/profile_guess_v3.md`, `prompts/profile_merge_v3.md` | The person's profile: the guess from their library (checked and counted by code, the sensitive-topic filter, cached per library build), merging what they say, the lines for the interpreter and the composer, "what do you know about me", level moves |
 | `onboarding.py`, `prompts/first_requests_v1.md` | The setup after consent: the read, their answer merged, email and time zone, the export routine, three checked first requests and the morning-rule offer; "set me up again" |
 | `eval_rules.py`, `evalset/` | The rule evaluation runner and the development half of the set |
 | `todos.py` | To-do lists, due reminders, undo records, library counts |
@@ -234,4 +245,5 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 344 offline tests (`test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings) |
+| `tests/` | 385 offline tests (`test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
+the second live run, 38 to 64) |

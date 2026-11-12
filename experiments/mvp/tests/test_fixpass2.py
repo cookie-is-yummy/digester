@@ -1,5 +1,5 @@
-"""Offline tests for fix pass 2 (live findings of 12 Nov, round 2): one or more tests per finding 38 to 61, each failing
-without its fix. Group F is the setup, G answers and rules, H what was left from the first pass. Synthetic data, a fake
+"""Offline tests for fix pass 2 (live findings of 12 Nov, round 2): one or more tests per finding 38 to 64, each failing
+without its fix. Group F is the setup, G answers and rules, H what was left from the first pass, I what was added later. Synthetic data, a fake
 model, a fake search pool, a fake YouTube and a fake clock only; the fixtures come from the earlier test files."""
 import json
 import os
@@ -624,3 +624,134 @@ def test_61_no_must_have_no_other_than_the_finished_result_is_ever_shown(env):
     unknown_no = {"picks": [{"n": 1, "verdict": "close", "title": "Beginner modeling tips",
                              "criteria": [{"answer": "unknown"}, {"answer": "no"}]}]}
     assert check(unknown_no, [tips], spec)["picks"] == []
+
+
+# ======================================= I. added while the pass was running =======================================
+CHICKEN = {"id": "itm_ck", "platform": "instagram", "source_url": "https://example.com/itm_ck",
+           "caption": "Chicken and rice one pan dinner\nIngredients:\n- 2 chicken thighs\n- 1 cup rice",
+           "interaction_kinds": ["save"], "platform_data": {"owner_handle": "cook"}}
+
+
+def _vegetarian(e):
+    P().apply_merge(e["bot"].store, H, {"avoid": ["meat", "fish"]}, "I'm vegetarian now")
+    e["bot"].store.add_profile_note(H, "vegetarian now")
+
+
+def test_62_what_the_message_asks_for_wins_over_the_profiles_avoid_list(env):
+    _vegetarian(env)
+    add_items(env, [dict(CHICKEN)])
+    env["bot"].pool.search = lambda lib, q, depth=300: {"ids": ["itm_ck", "itm_a"], "mode": "normal", "cost_usd": 0.0}
+    prompts, composed = [], []
+
+    def interp(u):
+        prompts.append(u)
+        return {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+            "goal": "something to make with chicken and rice", "searches": ["chicken rice"],
+            "avoid": ["meat", "chicken", "fish"]}}}   # the model copied the profile's list anyway
+    env["state"]["answers"]["mvp_compose"] = lambda u: (composed.append(u), {"picks": [
+        {"n": number_of(u, "Chicken and rice"), "verdict": "clear", "title": "Chicken and rice one pan dinner"}]})[1]
+    msg = say(env, "what can I make with chicken and rice?", interp)
+    assert "avoid meat" not in prompts[0] and "vegetarian now" not in prompts[0]     # not given to the interpreter
+    assert "avoid meat" not in composed[0] and "vegetarian" not in composed[0]       # nor to the composer
+    assert "I recommend Chicken and rice one pan dinner" in msg
+    assert env["bot"].store.last_answer(H)["items"][0] == "itm_ck"
+    form = S(ask_form("dinner", avoid=["meat", "fish"]), "what can I make with chicken and rice?")
+    assert form.spec.content.avoid == ["fish"]                                    # fish was not named: still left out
+    assert S(ask_form("dinner", avoid=["chicken"]), "a rice dinner, no chicken").spec.content.avoid == ["chicken"]
+    assert S(ask_form("dinner", avoid=["meat"]), "a meat-free burger with rice").spec.content.avoid == ["meat"]
+    # a plain pasta ask still gets the profile's avoid list
+    assert "avoid meat" in P().about_lines(env["bot"].store, H, "a pasta dinner")[-2]
+
+
+def test_62_a_request_the_bot_will_not_do_gets_a_sentence_picked_by_code(env):
+    msg = say(env, "what can I make with chicken and rice?",
+              {"intent": "unsupported", "reply": "I can't use chicken because you avoid meat."})
+    assert msg == T().UNSUPPORTED and "chicken" not in msg
+    assert say(env, "text me when I get home", {"intent": "unsupported", "reply": "Sure thing!"}) == \
+        T().UNSUPPORTED_EVENT
+    assert say(env, "book me a table", {"intent": "unsupported", "reply": "Booked for 8!"}) == T().UNSUPPORTED
+
+
+def test_62_i_eat_meat_again_removes_that_avoid_entry_and_says_so(env):
+    _vegetarian(env)
+    env["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me"}   # the form missed it
+    msg = say(env, "I eat meat again, I'm not vegetarian", {"intent": "chat", "reply": "Nice!"})
+    prof = P().get(env["bot"].store, H)
+    assert prof["prefs"]["avoid"] == [] and prof["notes"] == []
+    assert "I won't leave out meat and fish any more" in msg and "Nice!" not in msg
+    # the form's own "allow" works too, and only the entries it covers go
+    P().apply_merge(env["bot"].store, H, {"avoid": ["pork", "mushrooms"]}, "no pork or mushrooms please")
+    res = P().apply_merge(env["bot"].store, H, {"allow": ["pork"]}, "pork is back on, I like it")
+    assert P().get(env["bot"].store, H)["prefs"]["avoid"] == ["mushrooms"]
+    assert res["changes"] == ["I won't leave out pork any more"]
+
+
+def test_63_a_direction_or_a_note_is_only_a_stated_goal_never_timing_or_the_request(env):
+    store = env["bot"].store
+    P().apply_merge(store, H, {"direction": "start doing daily", "note": "start doing daily"}, FOUNDER)
+    assert P().get(store, H)["direction"] is None and P().get(store, H)["notes"] == []
+    P().apply_merge(store, H, {"direction": "mini beginner blender tutorials"}, FOUNDER)
+    assert P().get(store, H)["direction"] is None                            # the request is not a goal
+    P().apply_merge(store, H, {"direction": "learn Blender"}, "I want to learn Blender")
+    assert P().get(store, H)["direction"] == "learn Blender"
+    # the interpreter's note on the founder's request is dropped by code, so no form call runs at all
+    it = S(rule_form({"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "times": ["08:00"]},
+                     goal="mini beginner Blender tutorials") | {"profile_note": "start doing daily"}, FOUNDER)
+    assert it.profile_note is None
+    assert S(ask_form("dinner ideas") | {"profile_note": "vegan now"}, "vegan now, dinner ideas?").profile_note == \
+        "vegan now"
+    env["state"]["answers"]["mvp_compose"] = lemon_pick()
+    say(env, FOUNDER, ask_pasta() | {"profile_note": "start doing daily"})
+    assert "mvp_profile_merge" not in env["calls"] and P().get(store, H)["notes"] == []
+    assert "start doing" not in P().show_text(P().get(store, H))
+
+
+def test_64_the_uninvited_block_speaks_in_the_requests_terms(env):
+    noun = T().request_noun("easy pasta recipes")
+    assert noun == ("recipe", "recipes")
+    assert T().outside_auto_head(2, None, noun) == \
+        "You only have 2 saved recipes that fit, so here are a few more from YouTube:"
+    assert T().outside_auto_head(1, None, T().request_noun("mini beginner Blender tutorials")) == \
+        "You only have 1 saved Blender tutorial that fits, so here are a few more from YouTube:"
+    assert T().outside_auto_head(0, None, None) == "Nothing you saved fits, so here are a few from YouTube:"
+    assert "start to finish" not in T().outside_auto_head(2, None, noun)
+
+
+def test_64_the_uninvited_block_comes_once_per_topic_per_day(yt):
+    from mvp.tests.test_fixpass import DAILY_BLENDER, _tips_only
+    _tips_only(yt)
+    form = {"intent": "ask", "spec": dict(DAILY_BLENDER["spec"], when={"type": "now"})}
+    first = say(yt, "a mini beginner blender tutorial", form)
+    assert "None of your saved Blender tutorials fits, so here are a few from YouTube:" in first
+    again = say(yt, "a beginner blender tutorial please", form)
+    assert "YouTube" not in again and len(yt["yt"].searches()) == 1           # the same topic, the same day
+    pasta = {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "a pasta dish you can cook", "searches": ["pasta"], "criteria": ["ends with a dish you can eat"]}}}
+    yt["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": 1, "verdict": "close", "title": "Beginner modeling tips", "criteria": [{"answer": "unknown"}]}]}
+    other = say(yt, "a pasta dish to cook", pasta)
+    assert "from YouTube:" in other                                           # another topic: its own block
+    _tips_only(yt)
+    yt["clock"][0] += timedelta(days=1)
+    assert "from YouTube:" in say(yt, "a mini beginner blender tutorial", form)   # the next day: once more
+
+
+# ======================================= checked live (round 2): what the first live run found =======================
+def test_41_a_broad_field_alone_gets_the_topics_own_checked_words(env):
+    lines = ["Minecraft castle build part 1", "minecraft survival base", "Minecraft redstone farm", "Fortnite win"]
+    assert P().refine_broad("Gaming", ["gaming", "minecraft", "redstone"], lines) == \
+        "Gaming, mostly Minecraft and redstone"
+    assert P().refine_broad("Gaming", ["gaming"], lines) == "Gaming"                 # nothing more specific: as it is
+    assert P().refine_broad("Blender 3D", ["blender"], lines) == "Blender 3D"        # already at the right grain
+    assert "mostly" not in P().topic_words("Gaming, mostly Minecraft")
+
+
+def test_39_their_own_level_word_wins_over_the_forms(env):
+    store = env["bot"].store
+    P().set_interests(store, H, [guessed("Blender 3D", saved=5, words=["blender"]),
+                                 guessed("Animation", saved=9, words=["animation"])])
+    P().apply_merge(store, H, {"levels": [{"topic": "Blender", "level": "new"}]}, "I'm a beginner at Blender.")
+    got = {i["topic"]: i for i in P().get(store, H)["interests"]}
+    assert got["Blender 3D"]["level"] == "beginner" and got["Animation"]["level"] is None
+    P().apply_merge(store, H, {"levels": [{"topic": "Blender", "level": "beginner"}]}, "total beginner at Blender")
+    assert {i["topic"]: i for i in P().get(store, H)["interests"]}["Blender 3D"]["level"] == "new"

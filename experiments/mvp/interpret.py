@@ -1073,6 +1073,41 @@ def _two_parts(it: Interpretation, message):
     return it
 
 
+# fix pass 2, finding 63: a profile note needs the person to say something about themselves; words about timing or the
+# request itself ("start doing daily") are never one
+ABOUT_ME = re.compile(r"\b(?:i|i['’]m|im|i['’]ve|ive|i['’]d|i['’]ll|myself|my (?:goal|diet|kitchen|level|knee|back))\b|"
+                      r"\b(?:vegetarian|vegan|pescatarian|gluten[- ]free|dairy[- ]free|keto|halal|kosher|lactose)\b", re.I)
+
+
+def _request_note(x: Interpretation, message):
+    if x.profile_note and (timing_only(x.profile_note) or not ABOUT_ME.search(message)):
+        x.profile_note = None
+
+
+def _message_wins(x: Interpretation, message):
+    """Finding 62: what the message asks for wins over the profile: an avoid entry the message names ("chicken" for
+    "what can I make with chicken and rice?", or "meat", which covers it) is dropped; "no chicken" stays."""
+    from .profile import avoid_for
+    if x.spec is not None and x.spec.content.avoid:
+        x.spec.content.avoid = avoid_for(x.spec.content.avoid, message)
+    if x.avoid:
+        x.avoid = avoid_for(x.avoid, message)
+
+
+def _took_back(it: Interpretation, message):
+    """Finding 62: "I eat meat again, I'm not vegetarian" is about them: profile_update (or a note on a request), so
+    the avoid entry is removed."""
+    from .profile import ALLOW_AGAIN
+    m = ALLOW_AGAIN.search(message)
+    if not m:
+        return it
+    if it.intent in ("chat", "unsupported", "feedback", "help"):
+        return Interpretation(intent="profile_update", lang=it.lang)
+    if it.intent in ("ask", "new_rule", "more") and not it.profile_note:
+        it.profile_note = " ".join(m.group(0).split())[:120]
+    return it
+
+
 def settle(raw, message, rules, now, tzname, todos=()):
     """A raw form from the model (or the cache) to a validated, completed Interpretation. Raises ValidationError."""
     it = Interpretation.model_validate(_fill_raw(_drop_model_moment(merge_todo_adds(raw))))
@@ -1084,7 +1119,10 @@ def settle(raw, message, rules, now, tzname, todos=()):
         it.also = _find_for_list(_due_for_todo(it.also, todos), message)
     _act_into_do(it)
     _fact_note(it, message)
+    it = _took_back(it, message)
     for x in [it] + ([it.also] if it.also else []):
+        _request_note(x, message)
+        _message_wins(x, message)
         _from_message(x, message)
         _todo_by_text(x, todos)
         _rule_now(x, rules, message)
@@ -1149,7 +1187,8 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
             return it, cost
         except ValidationError as e:
             err = "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors()[:4])
-    return Interpretation(intent="unsupported", reply="Sorry, I didn't catch that. Could you say it another way?"), cost
+    from .texts import NOT_CAUGHT
+    return Interpretation(intent="unsupported", reply=NOT_CAUGHT), cost
 
 
 def _use_message(it, message):

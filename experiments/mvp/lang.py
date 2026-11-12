@@ -54,9 +54,12 @@ EN = {
     "months": None,
     # the outside block and the level note, when they ride on an answer (checker, finding 15: never a mixed reply)
     "outside_head": "Not from your saves, but close to them:",
-    "outside_auto0": "Your saves don't have a start-to-finish one, so here are some from YouTube:",
-    "outside_autoN": "Your saves only have {n} that {go} from start to finish, so here are some more from YouTube:",
-    "few_finished": "Your saves only have {n} that {go} from start to finish.",
+    # fix pass 2, finding 64: said in the request's terms ("saved recipes"), built by code from its goal
+    "outside_auto0": "None of your saved {nouns} fits, so here are a few from YouTube:",
+    "outside_auto0_any": "Nothing you saved fits, so here are a few from YouTube:",
+    "outside_autoN": "You only have {n} saved {noun} that {fit}, so here are a few more from YouTube:",
+    "few_finished": "You only have {n} saved {noun} that {fit}.",
+    "fit": ("fits", "fit"),
     "go": ("goes", "go"),
     "outside_line": "• {title} by {channel}{length}, on YouTube",
     "outside_cant": None,   # English keeps the exact reason line outside.py gives

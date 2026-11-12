@@ -481,27 +481,50 @@ class ExecutorMixin:
         block was not asked for; it comes because the saves hold fewer than 3 that end with a finished result. Its
         label says so; when it cannot be served nothing is said about YouTube, only the honest line about the saves."""
         bound = length_bound(spec, request_text or "", getattr(self._tl, "hint", None) or "")
+        n_clear = (auto or {}).get("n_clear", 0)
+        lang = self._answer_lang()   # the block follows the answer's language (finding 15: never a mixed reply)
+        noun = T.request_noun(spec.content.goal or "", request_text or "", *spec.content.searches)
+        if auto is not None and self._auto_outside_seen(person, spec, request_text):
+            # fix pass 2, finding 64: the block that was not asked for comes at most once per topic per day
+            self._tl.auto_outside = False
+            return msg + ("\n\n" + T.few_finished(n_clear, lang, noun) if n_clear else "")
         try:
             res = self._outside_find(person, spec, kind, rule_id, request_text, run_id=run_id, max_minutes=bound)
         except Exception as e:  # noqa: BLE001 - the library answer is never lost to this block
             res = {"picks": [], "status": "error:" + type(e).__name__, "line": T.OUTSIDE_ERROR, "searched": False,
                    "cached": False}
         self._note_outside(run_id, res)
-        n_clear = (auto or {}).get("n_clear", 0)
-        lang = self._answer_lang()   # the block follows the answer's language (finding 15: never a mixed reply)
         if auto is not None:
             self._tl.auto_outside = bool(res["picks"])
+            if res["picks"]:
+                self._auto_outside_seen(person, spec, request_text, mark=True)
         if res["picks"]:
-            label = T.outside_auto_head(n_clear, lang) if auto is not None else None
+            label = T.outside_auto_head(n_clear, lang, noun) if auto is not None else None
             # kept aside too: when the answer itself goes only by email, deliver() still puts this block in the thread
             self._tl.outside_block = (run_id, self._outside_parts(res["picks"], label=label, lang=lang))
             return self._outside_parts(res["picks"], before=msg, label=label, lang=lang)
         if auto is not None:
-            return msg + ("\n\n" + T.few_finished(n_clear, lang) if n_clear else "")
+            return msg + ("\n\n" + T.few_finished(n_clear, lang, noun) if n_clear else "")
         if res["line"]:
             from . import lang as L
             return msg + "\n\n" + (L.table(lang)["outside_cant"] or res["line"])
         return msg
+
+    AUTO_SAME_TOPIC_SKIP = {"mini", "short", "shorter", "tiny", "daily", "today", "tonight"}
+
+    def _auto_outside_seen(self, person, spec, request_text, mark=False):
+        """Finding 64: whether the uninvited YouTube block was already shown today (the person's day) for this topic
+        (the request's content words overlap); with mark, record that it was shown now."""
+        from .profile import topic_words
+        h = person["handle"]
+        day = self.clock().astimezone(ZoneInfo(person["timezone"])).date().isoformat()
+        words = set(topic_words(spec.content.goal or "", *spec.content.searches)) - self.AUTO_SAME_TOPIC_SKIP
+        st = self.store.get_state(f"outside_auto:{h}") or {}
+        topics = st.get("topics", []) if st.get("day") == day else []
+        seen = any(words & set(t) for t in topics) if words else False
+        if mark and words and not seen:
+            self.store.set_state(f"outside_auto:{h}", {"day": day, "topics": topics + [sorted(words)]})
+        return seen
 
     def _run_outside_only(self, person, spec, kind, rule_id, request_text):
         """outside "only": just the outside block (or the one line saying why there is none). No library search and

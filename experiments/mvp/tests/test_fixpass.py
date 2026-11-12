@@ -501,7 +501,7 @@ def test_26_the_founders_blender_request_never_ends_with_nothing(yt):
     reply = yt["replies"][-1]
     assert msg.startswith("Here's what that would look like now:\n\nNone of what I found walks you through a whole "
                           "project, so the closest I have is Beginner modeling tips")
-    assert "Your saves don't have a start-to-finish one, so here are some from YouTube:" in msg
+    assert "None of your saved Blender tutorials fits, so here are a few from YouTube:" in msg   # finding 64
     vids = [p for p in reply.parts if p.get("outside")]
     assert len(vids) == 2 and len(yt["yt"].searches()) == 1             # one search, in the same reply
     # fix pass 2, findings 57 and 59: "mini" is at most 10 minutes; a longer video is never shown
@@ -517,7 +517,9 @@ def test_26_the_founders_blender_request_never_ends_with_nothing(yt):
     yt["bot"].store.clear_pending(H)
     ask_form = {"intent": "ask", "spec": dict(DAILY_BLENDER["spec"], when={"type": "now"})}
     msg = say(yt, "a mini beginner blender tutorial", ask_form)
-    assert "the closest I have is Beginner modeling tips" in msg and "from YouTube:" in msg
+    # fix pass 2, finding 64: the block nobody asked for comes once per topic per day; the preview had it already
+    assert "the closest I have is Beginner modeling tips" in msg and "YouTube" not in msg
+    assert len(yt["yt"].searches()) == 1
     os.environ.pop("YOUTUBE_API_KEY")
     msg = say(yt, "a mini beginner blender tutorial to do", ask_form)
     assert "the closest I have is Beginner modeling tips" in msg and "https://example.com/itm_t" in msg
@@ -536,7 +538,7 @@ def test_26_a_few_finished_ones_are_said_in_one_line(env):
     msg = say(env, "a mini beginner blender tutorial", {"intent": "ask", "spec": dict(DAILY_BLENDER["spec"],
                                                                                       when={"type": "now"})})
     assert "I recommend Blender donut tutorial" in msg and msg.endswith(
-        "Your saves only have 1 that goes from start to finish.")
+        "You only have 1 saved Blender tutorial that fits.")   # fix pass 2, finding 64: in the request's terms
 
 
 def test_27_only_new_stuff_after_an_answer_is_more_from_outside_only(yt):
