@@ -199,7 +199,7 @@ def fallback_because(it):
 INTERNAL = re.compile(r"\b(candidates?|the bot|item text|items? text|verdicts?|criteri(?:a|on)|must-haves?|<item>|"
                       r"json|the model|the request|the prompt)\b", re.I)
 # "I recommend this one, because it is ..." or "because it is ...": the clause alone is kept (finding 7)
-_LEAD_RECOMMEND = re.compile(r"^\s*i\s+(?:would\s+|'d\s+)?recommend\b[^,.;:]{0,40}?(?:[,;:]\s*|\s+(?=(?:because|since|as)\b))",
+_LEAD_RECOMMEND = re.compile(r"^\s*i(?:\s+would|['’]d)?\s+recommend\b[^,.;:]{0,40}?(?:[,;:]\s*|\s+(?=(?:because|since|as)\b))",
                              re.I)
 _LEAD_BECAUSE = re.compile(r"^\s*(?:because|since|as|cause|'cause)\b[\s,]*", re.I)
 

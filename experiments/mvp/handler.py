@@ -642,7 +642,8 @@ class HandlerMixin:
         if c.source != "library" or not spec.when.repeating or info.get("run_id") != run_id:
             return "", ""
         supply = info.get("n_clear", 0) + info.get("n_close", 0)
-        low = supply < 3
+        # fewer than 3 that fit BEYOND the pick this preview shows: the rule would run dry within a few sends
+        low = supply - min(supply, info.get("n_picks", 0)) < 3
         shown = bool(getattr(self._tl, "auto_outside", False))
         heads = T.supply_note(supply) if low else ""
         offer = ""
@@ -808,8 +809,10 @@ class HandlerMixin:
                                      avoid=[*(it.avoid if it else []), *(more.avoid if more else [])][:8])
                 lead = T.level_moved_now(interest["topic"] if interest else None,
                                          P.LEVEL_PLAIN[level] if interest else None, kind, T.SHORTER.search(text or ""))
+                none = (T.level_moved_only(interest["topic"], P.LEVEL_PLAIN[level], kind) if interest else "Noted.") \
+                    + "\n\n"
                 self._tl.ran_more = True
-                return self._more(person, ask, text, lead=lead, easier=(kind == "easier"))
+                return self._more(person, ask, text, lead=lead, easier=(kind == "easier"), lead_none=none)
             if interest:
                 return self.send(h, T.level_moved(interest["topic"], P.LEVEL_PLAIN[level], kind))
         return self.send(h, T.FEEDBACK_REPLIES.get(kind, T.FEEDBACK_OTHER))

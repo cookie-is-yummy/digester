@@ -59,6 +59,15 @@ def topic_kind(*texts):
     return None
 
 
+def fit_extract(extract, *texts):
+    """The details asked for, as code keeps them: never ingredients for a workout (checker, finding 12: a form that
+    asked for "ingredients" for a leg workout showed its exercises under "Ingredients")."""
+    out = list(extract or [])
+    if "ingredients" in out and topic_kind(*texts) == "fitness":
+        out = [k for k in out if k != "ingredients"] or ["steps"]
+    return out
+
+
 def default_extract(spec, *texts):
     """The details a recommended pick gets when the person did not name any (finding 28): a recipe its ingredients
     and steps, a workout its steps (shown as exercises), a tutorial or how-to its steps or key points."""

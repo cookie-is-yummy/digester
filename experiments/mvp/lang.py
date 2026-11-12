@@ -9,6 +9,7 @@ import re
 
 EN = {
     "recommend": "I recommend",
+    "its": "It's",
     "closest": "The closest I have is",
     "no_clear": "Nothing I found is a clear fit for \"{goal}\".",
     "lead_unknown": "I couldn't confirm any of these {phrase}, but the closest I have is",
@@ -51,10 +52,23 @@ EN = {
     "none_lib": "nothing in your library matched",
     "none_since": "nothing you kept since {date} matched",
     "months": None,
+    # the outside block and the level note, when they ride on an answer (checker, finding 15: never a mixed reply)
+    "outside_head": "Not from your saves, but close to them:",
+    "outside_auto0": "Your saves don't have a start-to-finish one, so here are some from YouTube:",
+    "outside_autoN": "Your saves only have {n} that {go} from start to finish, so here are some more from YouTube:",
+    "few_finished": "Your saves only have {n} that {go} from start to finish.",
+    "go": ("goes", "go"),
+    "outside_line": "• {title} by {channel}{length}, on YouTube",
+    "outside_cant": None,   # English keeps the exact reason line outside.py gives
+    "level": {"new": "I'm guessing you're new to {topic}", "beginner": "I'm guessing you're a beginner at {topic}",
+              "intermediate": "I'm guessing you're past the basics with {topic}",
+              "advanced": "I'm guessing you're advanced at {topic}"},
+    "level_tail": "; tell me if that's wrong.",
 }
 
 ES = {
     "recommend": "Te recomiendo",
+    "its": "Es",
     "closest": "Lo más parecido que tengo es",
     "no_clear": "No encontré nada que encaje del todo con \"{goal}\".",
     "lead_unknown": "No pude confirmar que alguno {phrase}, pero lo más parecido que tengo es",
@@ -96,6 +110,17 @@ ES = {
     "none_default": "nada de tu biblioteca encaja bien",
     "none_lib": "nada de tu biblioteca coincide",
     "none_since": "nada de lo que guardaste desde {date} coincide",
+    "outside_head": "No está en lo que guardaste, pero se le parece:",
+    "outside_auto0": "Lo que guardaste no tiene ninguno de principio a fin, así que aquí tienes algunos de YouTube:",
+    "outside_autoN": "Lo que guardaste solo tiene {n} de principio a fin, así que aquí tienes más de YouTube:",
+    "few_finished": "Lo que guardaste solo tiene {n} de principio a fin.",
+    "go": ("", ""),
+    "outside_line": "• {title} de {channel}{length}, en YouTube",
+    "outside_cant": "Esta vez no pude buscar cosas nuevas en YouTube.",
+    "level": {"new": "Supongo que eres nuevo en {topic}", "beginner": "Supongo que eres principiante en {topic}",
+              "intermediate": "Supongo que ya dominas lo básico de {topic}",
+              "advanced": "Supongo que tienes un nivel avanzado en {topic}"},
+    "level_tail": "; dime si me equivoco.",
     "months": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
                "noviembre", "diciembre"],
 }

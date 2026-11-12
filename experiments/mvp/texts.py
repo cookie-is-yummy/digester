@@ -203,12 +203,14 @@ def outside_limit_person(n):
     return f"You've had today's {n} searches for new things on YouTube. Ask me again tomorrow."
 
 
-def outside_line(it):
+def outside_line(it, lang=None):
     """'• Title by Channel (9 minutes 40 seconds), on YouTube': YouTube's own title and channel, the length from
     videos.list worked out by code."""
+    from . import lang as L
     from .ytinfo import minutes_text
-    length = minutes_text(it.get("duration_s"))
-    return f"• {it['title']} by {it['channel']}" + (f" ({length})" if length else "") + ", on YouTube"
+    length = L.length(minutes_text(it.get("duration_s")), lang)
+    return L.table(lang)["outside_line"].format(title=it["title"], channel=it["channel"],
+                                                length=f" ({length})" if length else "")
 
 
 # ---------- slice 5: keeping the library fresh ----------
@@ -646,12 +648,17 @@ def level_moved(topic, plain, way):
     return f"{lead} with {topic}: I now have you as {plain}. Ask for \"{ask}\" and I'll look for one now."
 
 
-def level_guess_note(topic, level):
-    """Said at most once per topic while the level is a guess."""
-    words = {"new": f"I'm guessing you're new to {topic}", "beginner": f"I'm guessing you're a beginner at {topic}",
-             "intermediate": f"I'm guessing you're past the basics with {topic}",
-             "advanced": f"I'm guessing you're advanced at {topic}"}[level]
-    return words + "; tell me if that's wrong."
+def level_moved_only(topic, plain, way):
+    """The feedback line alone, when nothing easier (or harder) could be sent with it."""
+    lead = "Noted, I'll aim higher" if way == "harder" else "Noted, I'll keep it simpler"
+    return f"{lead} with {topic}: I now have you as {plain}."
+
+
+def level_guess_note(topic, level, lang=None):
+    """Said at most once per topic while the level is a guess (in the answer's language: lang.py)."""
+    from . import lang as L
+    t = L.table(lang)
+    return t["level"][level].format(topic=topic) + t["level_tail"]
 
 
 # ---------- fix pass (live findings of 12 Nov) ----------
@@ -694,16 +701,19 @@ def level_moved_now(topic, plain, way, shorter=False):
     return f"Noted. Here's {one}:\n\n"
 
 
-def outside_auto_head(n_clear):
+def outside_auto_head(n_clear, lang=None):
     """Finding 26: the YouTube block that comes without being asked, because the saves hold too few."""
+    from . import lang as L
+    t = L.table(lang)
     if not n_clear:
-        return "Your saves don't have a start-to-finish one, so here are some from YouTube:"
-    return (f"Your saves only have {n_clear} that {'goes' if n_clear == 1 else 'go'} from start to finish, so here are "
-            "some more from YouTube:")
+        return t["outside_auto0"]
+    return t["outside_autoN"].format(n=n_clear, go=t["go"][0 if n_clear == 1 else 1])
 
 
-def few_finished(n_clear):
-    return f"Your saves only have {n_clear} that {'goes' if n_clear == 1 else 'go'} from start to finish."
+def few_finished(n_clear, lang=None):
+    from . import lang as L
+    t = L.table(lang)
+    return t["few_finished"].format(n=n_clear, go=t["go"][0 if n_clear == 1 else 1])
 
 
 def supply_note(n):

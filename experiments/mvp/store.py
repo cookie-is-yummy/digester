@@ -6,6 +6,7 @@ verdicts, cost; no captions), deliveries (item IDs), feedback, pending confirmat
 """
 import json
 import os
+import re
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -86,6 +87,30 @@ ADDED_COLUMNS = [
 
 def now_iso(dt=None):
     return (dt or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+_LIST_LINE = re.compile(r"^\s*(?:•\s*|\d+\.\s+)(.*)$")
+_LABEL_LINE = re.compile(r"^[^\W\d_][\w ]{1,30} \(\d+\):$")
+
+
+def _scrub_parts(parts, cut):
+    """A kept answer's text without the detail lines in `cut` (lines read from a YouTube description, which may be
+    kept 30 days at most), and without a label left with no lines under it."""
+    out = []
+    for p in parts:
+        if not isinstance(p, dict) or p.get("type") != "text":
+            out.append(p)
+            continue
+        kept = []
+        for line in str(p.get("text") or "").split("\n"):
+            m = _LIST_LINE.match(line)
+            if m and m.group(1).strip() in cut:
+                continue
+            kept.append(line)
+        lines = [x for i, x in enumerate(kept)
+                 if not (_LABEL_LINE.match(x) and not (i + 1 < len(kept) and _LIST_LINE.match(kept[i + 1])))]
+        out.append(dict(p, text="\n".join(lines)))
+    return out
 
 
 class Store:
@@ -421,7 +446,13 @@ class Store:
         """YouTube API data and anything derived from it, older than `before` (ISO), is deleted: the cache, the
         details lines read from descriptions, and their copies in each person's state and kept answers (fix pass,
         finding 24: facts:/lines:/linekinds: copies outlived the 30 days)."""
-        old = {r["item_id"] for r in self.q("SELECT item_id FROM facts WHERE source='youtube_api' AND at<?", (before,))}
+        gone = {}   # item -> the lines read from its description: also cut from the kept answer's text (checker)
+        for r in self.q("SELECT item_id, lines FROM facts WHERE source='youtube_api' AND at<?", (before,)):
+            try:
+                gone.setdefault(r["item_id"], set()).update(str(x) for x in json.loads(r["lines"] or "[]"))
+            except ValueError:
+                gone.setdefault(r["item_id"], set())
+        old = set(gone)
         self.x("DELETE FROM youtube_cache WHERE fetched_at<?", (before,))
         self.x("DELETE FROM facts WHERE source='youtube_api' AND at<?", (before,))
         if not old:
@@ -434,14 +465,18 @@ class Store:
                 continue
             if isinstance(val, dict) and old & set(val):
                 self.set_state(row["key"], {k: v for k, v in val.items() if k not in old})
-        for row in self.q("SELECT run_id, picks FROM answers WHERE picks LIKE '%\"facts\"%'"):
+        for row in self.q("SELECT run_id, picks, parts FROM answers WHERE picks LIKE '%\"facts\"%'"):
             picks = json.loads(row["picks"] or "[]")
-            hit = False
+            cut = set()
             for p in picks:
                 if p.get("item_id") in old and (p.get("facts") or p.get("lines")):
-                    p["facts"], p["lines"], p["line_kinds"], hit = {}, [], None, True
-            if hit:
-                self.x("UPDATE answers SET picks=? WHERE run_id=?", (json.dumps(picks), row["run_id"]))
+                    cut |= gone.get(p["item_id"], set()) | {str(x) for x in p.get("lines") or []}
+                    cut |= {str(x) for v in (p.get("facts") or {}).values() for x in (v or [])}
+                    p["facts"], p["lines"], p["line_kinds"] = {}, [], None
+            if cut:
+                parts = _scrub_parts(json.loads(row["parts"] or "[]"), cut)
+                self.x("UPDATE answers SET picks=?, parts=? WHERE run_id=?",
+                       (json.dumps(picks), json.dumps(parts), row["run_id"]))
 
     # caches keyed by a hash (sections 4 and 11)
     def cache_get(self, table, key, since):
@@ -565,7 +600,7 @@ class Store:
                         f"lastwrite:{handle}", f"linekinds:{handle}", f"facts:{handle}",
                         f"card:{handle}", f"emailcode:{handle}", f"emailcodes:{handle}", f"emailwait:{handle}",
                         f"emailask:{handle}", f"outside_shown:{handle}", f"export_reminders:{handle}",
-                        f"onboard:{handle}", f"levelnote:{handle}"):
+                        f"onboard:{handle}", f"levelnote:{handle}", f"heldimport:{handle}", f"heldnotice:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 

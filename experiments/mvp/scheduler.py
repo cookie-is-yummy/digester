@@ -73,7 +73,7 @@ class SchedulerMixin:
                 ended = [RuleSpec.model_validate(r["spec"]).content.goal for r in self.store.rules(h, statuses=("done",))
                          if r["id"] in live]
                 if ended:
-                    self._notice(h, T.ended_by_revert(p["tz_revert_to"], ended))
+                    self._notice(h, T.ended_by_revert(p["tz_revert_to"], ended), now)
         for r in self.store.rules_to_resume(now):
             person = self.store.person(r["handle"])
             if not person:
@@ -84,11 +84,17 @@ class SchedulerMixin:
                 self.store.set_slot(r["id"], nxt, status)
                 self.store.update_rule(r["id"], paused_until=None)
                 if status == "done":
-                    self._notice(person["handle"], T.ended_on_resume([spec.content.goal]))
+                    self._notice(person["handle"], T.ended_on_resume([spec.content.goal]), now)
         self._release_held(now)
 
-    def _notice(self, handle, text):
-        """A short notice that time alone caused; a failed send is recorded, never retried."""
+    def _notice(self, handle, text, now=None):
+        """A short notice that time alone caused; a failed send is recorded, never retried. In quiet hours or a snooze
+        it waits, like an import's message, and goes out when they end (checker, finding 21)."""
+        person = self.store.person(handle)
+        if person and now is not None and (person["paused"] or self._held_now(person, now)):
+            held = self.store.get_state(f"heldnotice:{handle}") or []
+            self.store.set_state(f"heldnotice:{handle}", held + [text])
+            return
         try:
             self.send(handle, text)
         except Exception as e:  # noqa: BLE001
@@ -102,7 +108,18 @@ class SchedulerMixin:
         return in_quiet_hours(now, person["timezone"], self.store.quiet(person["handle"]))
 
     def _release_held(self, now):
-        """An import's message and its new_items answers, held through quiet hours or a snooze, go out now."""
+        """An import's message and its new_items answers, and notices, held through quiet hours or a snooze, go out
+        now."""
+        for row in self.store.q("SELECT key FROM state WHERE key LIKE 'heldnotice:%'"):
+            h = row["key"].split(":", 1)[1]
+            person = self.store.person(h)
+            texts = self.store.get_state(row["key"]) or []
+            if person and texts and (person["paused"] or self._held_now(person, now)):
+                continue
+            with self.lock_for(h):
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                if person and texts:
+                    self._notice(h, "\n\n".join(dict.fromkeys(texts)))
         rows = self.store.q("SELECT key FROM state WHERE key LIKE 'heldimport:%'")
         for row in rows:
             h = row["key"].split(":", 1)[1]

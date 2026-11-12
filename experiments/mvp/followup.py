@@ -17,8 +17,8 @@ from . import texts as T
 from .render import Reply, by, kind_lines, link_part
 from .schema import Interpretation, RuleSpec
 
-COMMAND = re.compile(r"^\s*(stop|pause|resume|skip|run|done|remove)\s+(?:rule\s+|#\s*|number\s+)?(\d{1,2}|all)"
-                     r"\s*[.!?]*\s*$", re.I)
+COMMAND = re.compile(r"^\s*(?:(?:please|pls|plz)[\s,]+)?(stop|pause|resume|skip|run|done|remove)\s+"
+                     r"(?:rule\s+|#\s*|number\s+)?(\d{1,2}|all)\s*(?:,?\s*(?:please|pls|plz))?\s*[.!?]*\s*$", re.I)
 WORDS = {"my rules": "list_rules", "rules": "list_rules", "list my rules": "list_rules", "show my rules": "list_rules",
          "undo": "undo", "help": "help"}
 MORE = re.compile(r"^\s*(?:(?:give me|send me|show me|try|ok|okay)\s+)?(another(?: one)?|more|one more|next(?: one)?|"
@@ -50,6 +50,7 @@ KIND_WORDS = {"ingredients": "the ingredients", "steps": "the steps", "key_point
 def plain_command(text):
     """The Interpretation for a plain command, or None. Code only; no model call."""
     t = " ".join((text or "").lower().split()).rstrip(" .!?")
+    t = re.sub(r"^(?:please|pls|plz)[\s,]+|[\s,]+(?:please|pls|plz)$", "", t)   # "pls stop rule 2", "undo please"
     if t in WORDS:
         return Interpretation(intent=WORDS[t])
     m = COMMAND.match(text or "")
@@ -132,7 +133,7 @@ class FollowupMixin:
         return None, False
 
     # ---------- another one ----------
-    def _more(self, person, it, text, lead="", easier=False):
+    def _more(self, person, it, text, lead="", easier=False, lead_none=""):
         """One more like the last answer, without what it showed. A change rides on it ("another but shorter"); a
         must-have made of filler words never does (finding 2). `lead` starts the reply (a feedback line)."""
         from .interpret import clean_criteria
@@ -153,12 +154,12 @@ class FollowupMixin:
         rule = self.store.rule(st["rule_id"]) if st.get("rule_id") else None
         request = st.get("text") or text
         if rule and rule["status"] in ("active", "paused"):  # one more from a rule counts as sent by that rule
-            msg, run_id, _ = self.run(person, spec, "manual", rule_id=rule["id"], request_text=request,
+            msg, run_id, n = self.run(person, spec, "manual", rule_id=rule["id"], request_text=request,
                                       shown=st.get("shown") or [])
         else:
-            msg, run_id, _ = self.run(person, spec, "more", request_text=request, shown=st.get("shown") or [])
-        if lead:
-            msg = lead + msg
+            msg, run_id, n = self.run(person, spec, "more", request_text=request, shown=st.get("shown") or [])
+        if lead:   # "Here's an easier one:" only above one; above "nothing found" or an error, the feedback line alone
+            msg = (lead if n and not self._run_failed(run_id) else (lead_none or "")) + msg
         return self.deliver(person, spec, msg + self._not_yet_notes(spec, sep="\n\n"), run_id,
                             kind="manual" if rule else "more", rule_id=rule["id"] if rule else None,
                             request_text=request)

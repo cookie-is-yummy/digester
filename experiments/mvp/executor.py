@@ -13,18 +13,15 @@ from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from . import config, llm
+from . import texts as T
 from .channels.base import SendUncertain
-from .compose import compose
-from .compose import FINISHED, duration_of
-from .extract import default_extract, details_many, kinds_for, topic_kind
+from .compose import FINISHED, compose, duration_of
+from .extract import default_extract, details_many, fit_extract, kinds_for, topic_kind
 from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
 from .retrieve import candidates
-from .schema import KINDS, PLATFORMS
-from .schema import RuleSpec
+from .schema import KINDS, PLATFORMS, RuleSpec
 from .store import now_iso
-from . import texts as T
 from .texts import LIMIT, LIMIT_TOTAL, LOADING, RUN_ERROR, SCHEDULED_FOOTER
-
 
 # fix pass, finding 18: "mini" / "short" / "quick" is a length bound, worked out by code and checked against YouTube's
 # length where it is known (not for food: a quick recipe is about cooking time, not the video)
@@ -76,6 +73,16 @@ class ExecutorMixin:
         lang = getattr(self._tl, "lang", None)
         return L.code(lang) if L.supported(lang) else None
 
+    def _compose_lang(self):
+        """The language the composer writes its sentences in. A person writing in a language with no phrase table
+        gets the whole answer in English, so the composer is told so: left without it, it follows the request's
+        language and the answer comes out mixed (checker, finding 15)."""
+        from . import lang as L
+        lang = getattr(self._tl, "lang", None)
+        if L.supported(lang):
+            return L.code(lang)
+        return "en" if L.code(lang) else None
+
     # ---------- the person's context ----------
     def _profile_text(self, handle, *texts):
         """What the composer may use about the person (slice 6, profile.composer_context): their direction, their level
@@ -93,7 +100,7 @@ class ExecutorMixin:
         if guessed["topic"].lower() in seen:
             return
         self.store.set_state(f"levelnote:{h}", seen + [guessed["topic"].lower()])
-        result["level_note"] = T.level_guess_note(guessed["topic"], guessed["level"])
+        result["level_note"] = T.level_guess_note(guessed["topic"], guessed["level"], lang=self._answer_lang())
 
     def _exclusions(self, handle):
         prefs = self.store.person_context(handle).get("prefs") or {}
@@ -196,7 +203,7 @@ class ExecutorMixin:
             bound = length_bound(spec, request_text or "", hint) if kind != "follow_up" else None
             result, c = compose(cands, spec, h, request_text=request_text,
                                 feedback_note=self._feedback_note(rule_id, view), known_lines=known_lines,
-                                extra=extra, profile=about, lang=self._answer_lang(),
+                                extra=extra, profile=about, lang=self._compose_lang(),
                                 store=self.store, use_cache=(kind != "more"), sent_count=len(sent_before),
                                 wider=(kind == "ask"), now=now, level_ok=level_ok,
                                 survey=(kind in ("preview", "more")), max_minutes=bound)
@@ -213,7 +220,8 @@ class ExecutorMixin:
                     from .ytinfo import minutes_text
                     p["length_text"] = minutes_text(duration_of(p["item"], extra))
             t1 = time.time()
-            asked = list(spec.content.extract)
+            asked = fit_extract(spec.content.extract, spec.content.goal or "", *spec.content.searches,
+                                request_text or "", hint)
             extract = asked or (default_extract(spec, request_text or "", hint) if kind != "follow_up" else [])
             result["extract"] = extract
             main = result.get("picks") or []
@@ -299,7 +307,8 @@ class ExecutorMixin:
                 number = next((i for i, r in enumerate(self.store.rules(person["handle"]), 1) if r["id"] == rule_id), 1)
                 footer = SCHEDULED_FOOTER.format(n=number)
             ex = result.get("extract")
-            msg = picks_message(result, spec, footer=footer, now=self.clock(), extract=ex, lang=self._answer_lang())
+            msg = picks_message(result, spec, footer=footer, now=self.clock(), extract=ex, lang=self._answer_lang(),
+                                follow_up=(kind == "follow_up"))
             # what this run showed, kept for its outputs (email, calendar, to-dos) and for sending it again later:
             # the same parts without the chat footer, and each pick's checked title, link and details
             main = {id(p) for p in result["picks"]}
@@ -350,17 +359,18 @@ class ExecutorMixin:
         return res
 
     @staticmethod
-    def _outside_parts(picks, before=None, label=None):
+    def _outside_parts(picks, before=None, label=None, lang=None):
         """The block: its label, then per video one line (YouTube's title and channel, its length) and its link alone,
         marked as an outside pick so the test page labels the card. After `before` (the library answer), with a blank
         line between them when they are joined into one text."""
+        from . import lang as L
         from .outside import watch_url
-        label = label or T.OUTSIDE_HEAD
+        label = label or L.table(lang)["outside_head"]
         head = Reply.of(before) + ("\n\n" + label) if before is not None else \
             Reply([{"type": "text", "text": label}])
         parts = list(head.parts)
         for p in picks:
-            parts.append({"type": "text", "text": T.outside_line(p)})
+            parts.append({"type": "text", "text": T.outside_line(p, lang)})
             parts.append({"type": "link", "url": watch_url(p["video_id"]), "title": p["title"], "platform": "youtube",
                           "video_id": p["video_id"], "outside": True})
         return Reply(parts)
@@ -384,17 +394,19 @@ class ExecutorMixin:
                    "cached": False}
         self._note_outside(run_id, res)
         n_clear = (auto or {}).get("n_clear", 0)
+        lang = self._answer_lang()   # the block follows the answer's language (finding 15: never a mixed reply)
         if auto is not None:
             self._tl.auto_outside = bool(res["picks"])
         if res["picks"]:
-            label = T.outside_auto_head(n_clear) if auto is not None else None
+            label = T.outside_auto_head(n_clear, lang) if auto is not None else None
             # kept aside too: when the answer itself goes only by email, deliver() still puts this block in the thread
-            self._tl.outside_block = (run_id, self._outside_parts(res["picks"], label=label))
-            return self._outside_parts(res["picks"], before=msg, label=label)
+            self._tl.outside_block = (run_id, self._outside_parts(res["picks"], label=label, lang=lang))
+            return self._outside_parts(res["picks"], before=msg, label=label, lang=lang)
         if auto is not None:
-            return msg + ("\n\n" + T.few_finished(n_clear) if n_clear else "")
+            return msg + ("\n\n" + T.few_finished(n_clear, lang) if n_clear else "")
         if res["line"]:
-            return msg + "\n\n" + res["line"]
+            from . import lang as L
+            return msg + "\n\n" + (L.table(lang)["outside_cant"] or res["line"])
         return msg
 
     def _run_outside_only(self, person, spec, kind, rule_id, request_text):

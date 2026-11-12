@@ -286,7 +286,10 @@ class OutputsMixin:
             return self.send(h, T.NOTHING_TO_ACT_ON if problem == T.NO_PICK_TO_ADD else problem)
         goal = picks[0]["title"] if len(picks) == 1 else f"the {len(picks)} picks for \"{answer.get('goal') or 'that'}\""
         do = [{"action": n, "params": p} for n, p in acts] or ["message.send"]
-        spec = RuleSpec.model_validate({"when": it.when.model_dump(exclude_none=True),
+        when = it.when.model_dump(exclude_none=True)
+        if when.get("date") and when.get("times"):   # "in 2 hours", resolved by code: the moment is what is kept
+            when.pop("in_minutes", None)            # (validation would otherwise drop it and the send never comes)
+        spec = RuleSpec.model_validate({"when": when,
                                         "content": {"source": "items", "item_ids": [p["item_id"] for p in picks][:10],
                                                     "goal": goal[:200], "count": min(len(picks), 10)}, "do": do})
         never = self._never_sends(person, spec, now)

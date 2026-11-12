@@ -169,9 +169,11 @@ ABOUT_LAST = ("follow_up", "act_on_last")
 
 
 # forms that never refer to the person's rules (fix pass, finding 20): an ask, a to-do, a reminder or a new rule is
-# read the same whatever rules exist, so its cached reading is reused after a rule is added or changed
+# read the same whatever rules exist, so its cached reading is reused after a rule is added or changed. Nor does such a
+# form depend on whether there is a write to undo (checker: starting a rule made one, so the same ask was read again);
+# "chat" is left out, since "never mind" is chat with nothing to undo and an undo with something to undo
 RULE_FREE = {"ask", "new_rule", "todo_add", "todo_list", "todo_done", "todo_remove", "todo_due", "profile_show",
-             "profile_update", "set_email", "library_status", "library_stats", "help", "chat", "set_quiet_hours",
+             "profile_update", "set_email", "library_status", "library_stats", "help", "set_quiet_hours",
              "snooze", "set_timezone", "follow_up", "more", "feedback"}
 
 
@@ -189,8 +191,8 @@ def cache_key(text, person, rules, pending, now, todos=(), about=(), last_write=
         "pending": [pending["kind"], pending["payload"].get("spec"), pending["payload"].get("draft")] if pending else None,
         "todos": [[t.get("id"), t["text"], t.get("list"), t.get("due_at")] for t in todos],
         "about": list(about),
-        "undoable": bool(last_write),   # "never mind" is an undo only while there is something to undo
-    }
+        "undoable": bool(last_write) if with_rules else "any",   # "never mind" is an undo only while there is
+    }                                                                 # something to undo (never a rule-free form)
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -407,9 +409,37 @@ def later_on_last(it: Interpretation, message, last, now=None, tzname=None):
     return out
 
 
+def _plain_todo(x):
+    return isinstance(x, dict) and x.get("intent") == "todo_add" and bool(x.get("todo_text")) \
+        and not x.get("pick_number") and x.get("what") in (None, "pick")
+
+
+def _todo_key(x):
+    return (x.get("list") or x.get("todo_list"), x.get("due"), x.get("in_minutes"))
+
+
+def merge_todo_adds(raw):
+    """Found live (checker): "add bread, rice and lemons to groceries" came back as one todo_add per item, chained
+    through `also` three deep; the form keeps one `also` and drops a chain, so the third item was lost without a word.
+    Plain todo_adds in a row for the same list and time are one to-do text here (on the raw form, before the chain is
+    cut), and code then splits it (todos.split_todo)."""
+    if not isinstance(raw, dict):
+        return raw
+    while _plain_todo(raw) and _plain_todo(raw.get("also")) and _todo_key(raw) == _todo_key(raw["also"]):
+        nxt = raw["also"]
+        raw = dict(raw, todo_text=f"{raw['todo_text']}, {nxt['todo_text']}"[:200])
+        if nxt.get("also") is not None:
+            raw["also"] = nxt["also"]
+        else:
+            raw.pop("also", None)
+    if isinstance(raw.get("also"), dict):
+        raw = dict(raw, also=merge_todo_adds(raw["also"]))
+    return raw
+
+
 def settle(raw, message, rules, now, tzname):
     """A raw form from the model (or the cache) to a validated, completed Interpretation. Raises ValidationError."""
-    it = Interpretation.model_validate(_fill_raw(_drop_model_moment(raw)))
+    it = Interpretation.model_validate(_fill_raw(_drop_model_moment(merge_todo_adds(raw))))
     for x in [it] + ([it.also] if it.also else []):
         _from_message(x, message)
         _canonical_change(x, rules)

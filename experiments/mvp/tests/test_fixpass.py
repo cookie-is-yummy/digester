@@ -298,7 +298,8 @@ def test_15_a_reply_is_all_spanish_or_all_english(env):
     env["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": [
         {"n": 2, "verdict": "clear", "title": "Lemon garlic pasta"}], "intro": "I found a lemon pasta in your saves."})[1]
     msg = say(env, "des pâtes ?", dict(ask(), lang="fr"))
-    assert "I recommend Lemon garlic pasta by @chef, which you saved in March" in msg and '"lang"' not in seen[-1]
+    # checker: the composer is told to write English (left alone it follows the request's language: a mixed reply)
+    assert "I recommend Lemon garlic pasta by @chef, which you saved in March" in msg and '"lang": "en"' in seen[-1]
 
 
 # ---------- C. the choice ----------
@@ -407,6 +408,9 @@ def test_21_a_rule_ended_by_time_alone_gets_one_notice(env):
     clock[0] = datetime(2026, 11, 13, 5, 1, tzinfo=UTC)                   # the pause ends; 3pm yesterday has passed
     n = len(ch.outbox)
     bot.tick()
+    assert len(ch.outbox) == n                                            # checker: 00:01 there is quiet; it waits
+    clock[0] = datetime(2026, 11, 13, 13, 1, tzinfo=UTC)                  # 8:01am: the quiet hours are over
+    bot.tick()
     assert len(ch.outbox) == n + 1 and "\"call mum\" had no send left after its pause" in last(ch)
     # a temporary time zone that switches back and leaves a one-time send in the past
     clock[0] = now + timedelta(days=1)
@@ -416,6 +420,9 @@ def test_21_a_rule_ended_by_time_alone_gets_one_notice(env):
         {"type": "once", "date": "2026-11-13", "time": "22:00"}, "sleep")})   # 10pm there is 9pm-ish here: passed
     clock[0] = clock[0] + timedelta(hours=10, minutes=1)
     n = len(ch.outbox)
+    bot.tick()
+    assert len(ch.outbox) == n                                            # 11:01pm in New York: held
+    clock[0] = datetime(2026, 11, 14, 13, 1, tzinfo=UTC)
     bot.tick()
     assert len(ch.outbox) == n + 1 and last(ch).startswith("I'm back on New York time.") and "\"sleep\"" in last(ch)
 

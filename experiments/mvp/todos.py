@@ -37,15 +37,28 @@ VERBS = set("""call buy get pick email text book pay clean fix send make finish 
     submit prepare plan schedule book review practise practice study learn find look""".split())
 
 
-def split_todo(text):
-    """(items, list name or None): the things one to-do text names, without the list phrase."""
+# lists people name without "my ... list" ("add eggs to groceries"); the person's own list names count too
+COMMON_LISTS = ("groceries", "grocery", "shopping", "packing")
+
+
+def split_todo(text, lists=()):
+    """(items, list name or None): the things one to-do text names, without the list phrase. `lists`: names of the
+    person's lists (and the list the form named), so "eggs and bread to groceries" loses "to groceries" too."""
+    from .schema import list_name
     t = " ".join((text or "").split())
     name = None
     m = LIST_TAIL.search(t)
     if m:
-        from .schema import list_name
         name = list_name(m.group(1).strip() or "todo")
         t = t[:m.start()]
+    else:
+        names = sorted({x.lower() for x in (*lists, *COMMON_LISTS) if x and x != "todo"}, key=len, reverse=True)
+        if names:
+            bare = re.search(r"\s+(?:to|on|onto|in|into|for)\s+(?:(?:my|the|our)\s+)?(" + "|".join(map(re.escape, names))
+                             + r")(?:\s+list)?\s*[.!]*$", t, re.I)
+            if bare:
+                name = list_name(bare.group(1))
+                t = t[:bare.start()]
     t = LEAD_ADD.sub("", t).strip(" .,;")
     if not t:
         return [], name
@@ -131,7 +144,8 @@ class TodoMixin:
         if it.pick_number or it.what == "ingredients":
             return self._add_picks(person, [it.pick_number] if it.pick_number else None, name, it.what or "pick", due,
                                    tail=tail)
-        texts, named = split_todo(it.todo_text)
+        known = {t.get("list") for t in self.store.todos(h)} | ({name} if it.todo_list else set())
+        texts, named = split_todo(it.todo_text, lists=[x for x in known if x])
         if named and named != "todo" and name == "todo":
             name = named
         texts = texts or [it.todo_text]

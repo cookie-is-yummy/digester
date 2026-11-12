@@ -18,7 +18,7 @@ LABEL = {"ingredients": "Ingredients", "steps": "Steps", "key_points": "Key poin
 KIND_PLURAL = {"ingredients": "The ingredients", "steps": "The steps", "key_points": "The key points"}
 # a clause that can follow "because": it starts with a subject (finding 8); anything else follows a colon
 SUBJECT = re.compile(r"^(?:it|it's|it’s|its|you|you'll|you're|you’re|your|the|this|these|there|they|all|both|each|"
-                     r"every|one|he|she|we)\b", re.I)
+                     r"every|he|she|we)\b", re.I)   # not "one": "one pot and 15 minutes" is not a clause
 _ENDED = re.compile(r"[.!?…][\"'”’)\]]*$")
 HOW = {"save": "saved", "collection": "put in a collection", "share_self": "sent to yourself",
        "playlist": "added to a playlist", "like": "liked", "watch": "watched", "view": "viewed"}
@@ -204,7 +204,7 @@ def alt_note(pick, extract, lang=None):
     return pick["because"] if pick.get("because_backed") and pick.get("because") else ""
 
 
-def pick_sentence(lead, p, now=None, lang=None):
+def pick_sentence(lead, p, now=None, lang=None, colon=False):
     """'I recommend One Pot Pasta by @chef (9 minutes), which you saved in March, because it takes 15 minutes.' The
     reason only when it is backed (finding 10); after "because" only a full clause, else after a colon (finding 8)."""
     t = L.table(lang)
@@ -217,6 +217,8 @@ def pick_sentence(lead, p, now=None, lang=None):
     b = p["because"] if p.get("because_backed") and p.get("because") else None
     if b:
         subject = SUBJECT.match(b) or L.code(lang) is not None   # the subject words are English ones
+        if colon:   # a follow-up names a pick already shown: "It's X, which you saved in May: it has no cream."
+            subject = False
         s += ((f", {t['because']} " if kept else f" {t['because']} ") + b) if subject else (": " + b)
     return end_sentence(s)
 
@@ -248,8 +250,10 @@ def intro_line(result, spec, lang=None):
     return t["intro_plain"] if not goal else t["intro_for"].format(goal=goal)
 
 
-def picks_message(result, spec, footer=None, now=None, extract=None, lang=None):
-    """The answer. `lang`: the person's language when the phrase table holds it (lang.py); else English."""
+def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, follow_up=False):
+    """The answer. `lang`: the person's language when the phrase table holds it (lang.py); else English.
+    follow_up: an answer to a question about picks already shown ("is the second one vegetarian?"): never "I
+    recommend", and no opening line built from the question; the composer's own line when it passed the checks."""
     t = L.table(lang)
     lang = lang if L.supported(lang) else None
     c = spec.content
@@ -279,6 +283,11 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None):
             text.append(t["no_clear"].format(goal=c.goal))
             text.append("")
             text.append(pick_sentence(t["closest"], first, now, lang))
+    elif follow_up:
+        if result.get("intro"):
+            text.append(end_sentence(result["intro"]))
+            text.append("")
+        text.append(pick_sentence(t["its"], first, now, lang, colon=True))
     else:
         text.append(intro_line(result, spec, lang))
         text.append("")

@@ -37,7 +37,7 @@ LINE_CHARS = 140
 # Fix pass, finding 35: whole words that are personal on their own, and phrases for words that have an everyday sense
 # too ("partner workout", "god tier", "trading cards", "keto recipes", "chicken stock", "budget meals" stay allowed).
 SENSITIVE = re.compile(
-    r"\b(health\w*|medical|medicine|medication\w*|illness\w*|disease\w*|symptom\w*|diagnos\w*|therap\w*|mental|"
+    r"\b(health(?!y\b|ier\b|iest\b)\w*|chemo\w*|trump|biden|harris|medical|medicine|medication\w*|illness\w*|disease\w*|symptom\w*|diagnos\w*|therap\w*|mental|"
     r"anxiety|anxious|depress\w*|adhd|autis\w*|cancer|diabet\w*|pregnan\w*|fertility|ivf|weight[- ]?loss|"
     r"lose weight|losing weight|dieting|eating disorder\w*|disorder\w*|addiction\w*|sobriety|sober|rehab|surgery|"
     r"pills?|relationship\w*|dating|marriage|married|divorc\w*|breakup|break-up|boyfriend|girlfriend|husband|wife|"

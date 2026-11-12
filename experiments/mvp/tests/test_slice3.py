@@ -172,7 +172,7 @@ def test_profile_and_lang_reach_the_composer(env):
     assert "<item>What they are working toward" in seen[0]          # the profile goes in as data
     # fix pass, finding 15: a language with no phrase table gets an all-English answer (the composer writes English)
     say(env, "des pâtes ?", dict(ask(), lang="fr"))
-    assert '"lang"' not in seen[-1]
+    assert '"lang": "en"' in seen[-1]          # checker: told so, or it follows the request's language
 
 
 # ---------- the details step ----------

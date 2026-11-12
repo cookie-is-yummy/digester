@@ -69,7 +69,7 @@ SENSITIVE = {
     "health": """health diagnosis diagnosed symptom symptoms disease illness cancer diabetes depression depressed
         anxiety adhd autism autistic bipolar ocd ptsd therapist psychiatrist psychiatry medication medications
         prescription pregnant pregnancy fertility ivf surgery addiction sobriety suicide suicidal anorexia bulimia
-        hospital std hiv covid vaccine vaccines chemotherapy menopause miscarriage""",
+        hospital std hiv covid vaccine vaccines chemo chemotherapy menopause miscarriage""",
     "relationships": """relationship relationships dating breakup divorce divorced hookup tinder bumble""",
     "money": """debt debts loan loans salary paycheck investing investment investments crypto bitcoin finances financial
         banking mortgage taxes bankruptcy savings""",
