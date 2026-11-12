@@ -36,6 +36,10 @@ class SchedulerMixin:
     def tick(self):
         now = self.clock()
         self._upkeep(now)
+        try:   # new exports in the inboxes (refresh.py); an import runs in its own thread
+            self.refresher.poll(now)
+        except Exception as e:  # noqa: BLE001 - the type only; timed sends go on
+            print(f"inbox check: {type(e).__name__}", file=__import__("sys").stderr)
         sent = 0
         for rule in self.store.due_rules(now):
             progress = {}

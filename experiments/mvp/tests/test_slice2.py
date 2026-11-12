@@ -486,13 +486,16 @@ def test_profile_notes_are_kept_and_later_features_say_so_honestly(env):
     assert say(env, "my email is a@b.co", {"intent": "set_email", "email": "a@b.co"}).startswith(
         "I saved a@b.co as your email address and sent a 6-digit code to it.")
     assert bot.store.email_of(H) == ("a@b.co", False)
-    assert say(env, "did my export come", {"intent": "library_status"}).startswith("I can't check your library")
+    # slice 5: library_status answers with counts; outside picks without a YouTube key say so in one line
+    assert say(env, "did my export come", {"intent": "library_status"}).startswith(
+        "I haven't added an export for you yet")
     only = ask_pasta()
     only["spec"]["content"]["outside"] = "only"
-    assert say(env, "only new pasta stuff", only).startswith("I can only look in your own saves")
+    assert say(env, "only new pasta stuff", only) == (
+        "I can't look for new things outside your saves right now. Ask without \"new\" and I'll look in your own saves.")
     some = ask_pasta()
     some["spec"]["content"]["outside"] = "some"
-    assert say(env, "new pasta stuff", some).endswith("so these are all from your library.")
+    assert say(env, "new pasta stuff", some).endswith("\n\nI can't look for new things outside your saves right now.")
 
 
 def test_feedback_kinds_more_with_a_change_and_the_language(env):

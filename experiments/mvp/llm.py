@@ -51,13 +51,34 @@ def _today(row, day):
     return str(row.get("at", "")).startswith(day)
 
 
+# A library built by an import (refresh.py) records its build in its own ledger; that spend is also written to the
+# MVP ledger (log_spend), so those rows are counted once, from the MVP ledger.
+MIRRORED = ("demo_item_vectors_3l", "demo_key_check")
+
+
+def _lib_rows(library):
+    rows = _rows(os.path.join(library, "ai_runs.jsonl"))
+    try:
+        with open(os.path.join(library, "library.json"), encoding="utf-8") as f:
+            mirrored = bool(json.load(f).get("mvp_import"))
+    except (OSError, ValueError):
+        mirrored = False
+    return [r for r in rows if str(r.get("purpose", "")).startswith("demo_")
+            and not (mirrored and r.get("purpose") in MIRRORED)]
+
+
 def spent_today(handle, library):
     """Cost today (local server date) for one person: their MVP calls plus their library's search calls."""
     day = datetime.now().strftime("%Y-%m-%d")
     mine = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER) if r.get("person") == handle and _today(r, day))
-    lib = sum(r.get("cost_usd", 0) for r in _rows(os.path.join(library, "ai_runs.jsonl"))
-              if _today(r, day) and str(r.get("purpose", "")).startswith("demo_"))
+    lib = sum(r.get("cost_usd", 0) for r in _lib_rows(library) if _today(r, day))
     return mine + lib
+
+
+def log_spend(person, purpose, cost_usd, **extra):
+    """A cost made outside this process (a library build), written to the MVP ledger with the person it served."""
+    ai._log({"provider": "openai", "purpose": purpose, "prompt_version": None, "cost_usd": round(cost_usd, 6),
+             **extra, "person": person})
 
 
 def started_at():
@@ -75,8 +96,7 @@ def spent_total(libraries):
     since = started_at()
     total = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER))
     for lib in set(libraries):
-        total += sum(r.get("cost_usd", 0) for r in _rows(os.path.join(lib, "ai_runs.jsonl"))
-                     if str(r.get("at", "")) >= since and str(r.get("purpose", "")).startswith("demo_"))
+        total += sum(r.get("cost_usd", 0) for r in _lib_rows(lib) if str(r.get("at", "")) >= since)
     return total
 
 

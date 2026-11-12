@@ -227,8 +227,6 @@ class HandlerMixin:
             if pending:
                 self.store.clear_pending(h)
             return self.send(h, T.DECLINED)
-        if it.intent in ("new_rule", "ask") and it.spec.content.outside == "only":
-            return self.send(h, T.NOT_YET["outside_only"])   # outside picks come in a later slice
         if it.intent == "new_rule":
             if it.spec.when.type in ("once", "on_request") or it.spec.content.source in ("note", "todos"):
                 # one send at a stated time, a saved request, or a reminder in their own words: nothing from the
@@ -288,8 +286,6 @@ class HandlerMixin:
                 c = spec.content
                 c.avoid = list(dict.fromkeys([*c.avoid, *it.avoid]))[:8]
                 c.criteria = list(dict.fromkeys([*c.criteria, *it.criteria]))[:5]
-                if it.outside == "only":
-                    return self.send(h, T.NOT_YET["outside_only"])
                 if it.outside:
                     c.outside = it.outside
             rule = self.store.rule(st["rule_id"]) if st.get("rule_id") else None
@@ -407,7 +403,10 @@ class HandlerMixin:
             if not it.profile_note and note.lower() not in {n.lower() for n in self.store.profile_notes(h)}:
                 self.store.add_profile_note(h, note, at=now)   # kept for the profile slice; the interpreter sees it
             return self.send(h, T.PROFILE_NOTED)
-        if it.intent in ("profile_show", "library_status"):
+        if it.intent == "library_status":
+            from .refresh import library_status
+            return self.send(h, library_status(self, person, now))
+        if it.intent == "profile_show":
             return self.send(h, T.NOT_YET[it.intent])
         return self.send(h, HELP)
 
@@ -427,10 +426,9 @@ class HandlerMixin:
 
     @staticmethod
     def _not_yet_notes(spec, sep=" "):
-        """One honest line when a spec asks for something that comes in a later slice."""
+        """One honest line when a spec asks for something that comes in a later slice. None is left: outside picks
+        (slice 5) say in the answer itself when they cannot be served."""
         notes = []
-        if spec.content.outside == "some":
-            notes.append(T.OUTSIDE_SOME)
         return (sep + " ".join(notes)) if notes else ""
 
     def _rule_rows(self, ids):

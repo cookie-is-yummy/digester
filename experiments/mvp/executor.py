@@ -5,8 +5,10 @@ Only the bot sends (AGENTS.md rule 5): retrieve, compose and extract read. A rep
 a channel that shows link previews gets each part as its own message, others get the parts joined; every message a
 reply went out as is recorded, so a reaction on any of them maps to the run. Mixed into core.Bot.
 """
+import hashlib
 import json
 import time
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from . import config, llm
@@ -90,10 +92,26 @@ class ExecutorMixin:
 
     # ---------- one run ----------
     def run(self, person, spec: RuleSpec, kind, rule_id=None, request_text=None, cands_override=None, known_lines=None,
-            shown=()):
+            shown=(), only_ids=None):
         """kind: preview | scheduled | manual | ask | more | follow_up. Returns (message, run_id, n_picks). 'manual'
         is a rule run because the person asked for it now; 'more' repeats the last question without the picks already
-        shown (`shown`). Deliveries are written here; a caller whose send fails removes them (unsend)."""
+        shown (`shown`). Deliveries are written here; a caller whose send fails removes them (unsend). `only_ids`
+        limits the library's candidates to those items (a new_items rule after an import).
+        A library request with outside "some" gets the outside block after its picks; "only" shows just that block
+        (outside.py). The block is never kept with the answer, never a delivery and never counted in n_picks."""
+        c = spec.content
+        outside = c.source == "library" and cands_override is None and kind != "follow_up"
+        if outside and c.outside == "only":
+            return self._run_outside_only(person, spec, kind, rule_id, request_text)
+        msg, run_id, n = self._run_once(person, spec, kind, rule_id=rule_id, request_text=request_text,
+                                        cands_override=cands_override, known_lines=known_lines, shown=shown,
+                                        only_ids=only_ids)
+        if outside and c.outside == "some" and not self._run_failed(run_id):
+            msg = self._add_outside(person, spec, kind, rule_id, request_text, msg, run_id)
+        return msg, run_id, n
+
+    def _run_once(self, person, spec: RuleSpec, kind, rule_id=None, request_text=None, cands_override=None,
+                  known_lines=None, shown=(), only_ids=None):
         if spec.content.source in ("note", "todos"):
             return self._run_plain(person, spec, kind, rule_id)
         if spec.content.source == "items" and kind in ("scheduled", "manual"):
@@ -121,7 +139,7 @@ class ExecutorMixin:
                 seed = f"{rule_id or h}:{now.date().isoformat()}"   # order "random": one draw per run, repeatable
                 cands, meta = candidates(self.pool, view, spec, exclude=exclude, disliked=disliked,
                                          creator_weights=weights, now=now, store=self.store, exclude_kinds=ex_kinds,
-                                         exclude_platforms=ex_platforms, seed=seed)
+                                         exclude_platforms=ex_platforms, seed=seed, only=only_ids)
                 cost += meta.get("cost_usd", 0.0)
             steps["search"] = round(time.time() - t0, 2)
             t1 = time.time()
@@ -207,6 +225,110 @@ class ExecutorMixin:
                               [dict(pick_record(p), main=id(p) in main) for p in picks])
             return msg, run_id, len(picks)
         return none_message(result, spec, scheduled=(kind == "scheduled")), run_id, 0
+
+    # ---------- outside picks (outside.py, DESIGN.md section 11) ----------
+    def _outside(self):
+        o = getattr(self, "outside", None)
+        if o is None:
+            from .outside import Outside
+            o = self.outside = Outside(self.store)
+        return o
+
+    def _outside_find(self, person, spec, kind, rule_id, request_text):
+        """The outside block for this run: the person's own words are the request (and, for a rule, its stored
+        request text); videos already in their library are removed; a rule or "another" does not show a video it
+        showed in the last 30 days. Returns the result of Outside.find."""
+        from . import outside as O
+        h = person["handle"]
+        texts = [request_text or ""]
+        if rule_id:
+            r = self.store.rule(rule_id)
+            if r and r.get("text") and r["text"] != request_text:
+                texts.append(r["text"])
+        view = self.view(person["library"])
+        have = {it.video_id for it in view.items.values() if it.platform == "youtube" and it.video_id}
+        q = O.search_text(spec, texts)
+        scope = f"rule:{rule_id}" if rule_id else ("q:" + hashlib.sha1(q.lower().encode()).hexdigest()[:12] if q else None)
+        now = self.clock()
+        shown = self.store.get_state(f"outside_shown:{h}", {}) or {}
+        cutoff = now_iso(now - timedelta(days=config.OUTSIDE_SHOWN_DAYS))
+        shown = {k: {v: at for v, at in vids.items() if at >= cutoff} for k, vids in shown.items()}
+        skip = set(shown.get(scope, {})) if scope and kind in ("scheduled", "manual", "more") else set()
+        res = self._outside().find(h, spec, texts, have_ids=have, now=now, skip_ids=skip)
+        if scope and res["picks"]:
+            box = shown.setdefault(scope, {})
+            for p in res["picks"]:
+                box[p["video_id"]] = now_iso(now)
+        self.store.set_state(f"outside_shown:{h}", {k: v for k, v in shown.items() if v})
+        return res
+
+    @staticmethod
+    def _outside_parts(picks, before=None):
+        """The block: its label, then per video one line (YouTube's title and channel, its length) and its link alone,
+        marked as an outside pick so the test page labels the card. After `before` (the library answer), with a blank
+        line between them when they are joined into one text."""
+        from .outside import watch_url
+        head = Reply.of(before) + ("\n\n" + T.OUTSIDE_HEAD) if before is not None else \
+            Reply([{"type": "text", "text": T.OUTSIDE_HEAD}])
+        parts = list(head.parts)
+        for p in picks:
+            parts.append({"type": "text", "text": T.outside_line(p)})
+            parts.append({"type": "link", "url": watch_url(p["video_id"]), "title": p["title"], "platform": "youtube",
+                          "video_id": p["video_id"], "outside": True})
+        return Reply(parts)
+
+    def _note_outside(self, run_id, res):
+        row = self.store.one("SELECT steps FROM runs WHERE id=?", (run_id,))
+        steps = json.loads(row["steps"]) if row and row.get("steps") else {}
+        steps["outside"] = {"status": res["status"], "shown": len(res["picks"]), "searched": res["searched"],
+                            "cached": res["cached"]}
+        self.store.x("UPDATE runs SET steps=? WHERE id=?", (json.dumps(steps), run_id))
+
+    def _add_outside(self, person, spec, kind, rule_id, request_text, msg, run_id):
+        """The library answer, then the outside block or one line saying why there is none."""
+        try:
+            res = self._outside_find(person, spec, kind, rule_id, request_text)
+        except Exception as e:  # noqa: BLE001 - the library answer is never lost to this block
+            res = {"picks": [], "status": "error:" + type(e).__name__, "line": T.OUTSIDE_ERROR, "searched": False,
+                   "cached": False}
+        self._note_outside(run_id, res)
+        if res["picks"]:
+            return self._outside_parts(res["picks"], before=msg)
+        if res["line"]:
+            return msg + "\n\n" + res["line"]
+        return msg
+
+    def _run_outside_only(self, person, spec, kind, rule_id, request_text):
+        """outside "only": just the outside block (or the one line saying why there is none). No library search and
+        no model call; nothing is recorded as a delivery or as the last answer, so feedback never lands on it."""
+        h = person["handle"]
+        t0 = time.time()
+        try:
+            res = self._outside_find(person, spec, kind, rule_id, request_text)
+        except Exception as e:  # noqa: BLE001
+            res = {"picks": [], "status": "error:" + type(e).__name__, "line": T.OUTSIDE_ERROR, "searched": False,
+                   "cached": False}
+        n = len(res["picks"])
+        run_id = self.store.add_run(handle=h, rule_id=rule_id, kind=kind, at=now_iso(self.clock()), n_candidates=0,
+                                    n_picks=0, n_dropped=0, cost_usd=0.0, status="picked" if n else "none",
+                                    prompt_version=None, seconds=round(time.time() - t0, 2),
+                                    lang=getattr(self._tl, "lang", None))
+        self._note_outside(run_id, res)
+        self.note(run_id=run_id)
+        if kind != "follow_up":   # "another" repeats this request, without the videos it showed
+            self.store.set_state(f"lastspec:{h}", {"spec": spec.stored(),
+                                                   "rule_id": rule_id if kind in ("scheduled", "manual") else None,
+                                                   "text": (request_text or "")[:300], "shown": []})
+        if n:
+            msg = self._outside_parts(res["picks"])
+            if kind == "scheduled":
+                number = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), 1)
+                msg = msg + ("\n\n" + T.REMINDER_FOOTER.format(n=number))
+            return msg, run_id, n
+        line = res["line"] or T.OUTSIDE_NONE
+        if res["status"] in ("sensitive", "off", "instagram_only", "limit_all", "limit_person", "error"):
+            line += T.OUTSIDE_ONLY_TAIL
+        return line, run_id, 0
 
     def _run_plain(self, person, spec, kind, rule_id):
         """A reminder in the person's own words, or their open to-dos: no search and no model call."""

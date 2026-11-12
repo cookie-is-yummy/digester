@@ -157,11 +157,15 @@ def in_period(kept, saved_after, saved_before):
 
 
 def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, k=config.CANDIDATES, now=None,
-               store=None, exclude_kinds=(), exclude_platforms=(), seed=None):
+               store=None, exclude_kinds=(), exclude_platforms=(), seed=None, only=None):
     """Candidates for one spec, best first (or in the order the spec asks for). `seed` makes order "random" repeatable
-    for one run (a rule's slot, or an ask's day)."""
+    for one run (a rule's slot, or an ask's day). `only` (a set of item ids) keeps just those items: the items an
+    import added, for a new_items rule (slice 5)."""
     c = spec.content
     exclude, disliked = set(exclude), set(disliked)
+    if only is not None:   # everything else is left out, whatever the source
+        only = set(only)
+        exclude |= {iid for iid in view.items if iid not in only}
     saved_after, saved_before = _period(c, now)
     if c.source == "items":   # fixed ids set by code (an earlier answer sent again): in that order, nothing searched
         out = [view.get(i) for i in c.item_ids if i not in disliked]

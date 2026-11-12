@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("MVP_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MVP_LEDGER_HOME", str(tmp_path / "ledger"))
+    monkeypatch.setenv("MVP_INBOX", str(tmp_path / "inbox"))   # slice 5: never the real data/inbox
     for m in [m for m in sys.modules if m.startswith("mvp")]:
         del sys.modules[m]
     lib = tmp_path / "lib"

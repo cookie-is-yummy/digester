@@ -178,11 +178,96 @@ TODO_LIST_EMPTY_SEND = "Your list is empty right now. Nice work."
 # features that come in later slices: one honest line each
 NOT_YET = {
     "profile_show": "Showing what I know about you isn't ready yet.",
-    "library_status": "I can't check your library imports from here yet. The founders can tell you when the last export "
-                      "arrived.",
-    "outside_only": "I can only look in your own saves for now, not for new things outside them.",
 }
-OUTSIDE_SOME = "I can only look in your own saves for now, so these are all from your library."
+
+# ---------- slice 5: outside picks (YouTube) ----------
+OUTSIDE_HEAD = "Not from your saves, but close to them:"
+OUTSIDE_INSTAGRAM = "I can only look for new things on YouTube, not on Instagram."
+OUTSIDE_SENSITIVE = ("I didn't look for new things on YouTube for this: I keep personal topics like health, money and "
+                     "relationships to your own saves.")
+OUTSIDE_OFF = "I can't look for new things outside your saves right now."
+OUTSIDE_NO_WORDS = "Tell me what kind of thing you want, and I'll look for new ones on YouTube."
+OUTSIDE_LIMIT_ALL = "I've used up today's searches for new things on YouTube. Ask me again tomorrow."
+OUTSIDE_NONE = "I didn't find anything new on YouTube for this that isn't already in your saves."
+OUTSIDE_ERROR = "I couldn't reach YouTube just now, so I couldn't look for new things."
+OUTSIDE_ONLY_TAIL = " Ask without \"new\" and I'll look in your own saves."
+
+
+def outside_limit_person(n):
+    return f"You've had today's {n} searches for new things on YouTube. Ask me again tomorrow."
+
+
+def outside_line(it):
+    """'• Title by Channel (9 minutes 40 seconds), on YouTube': YouTube's own title and channel, the length from
+    videos.list worked out by code."""
+    from .ytinfo import minutes_text
+    length = minutes_text(it.get("duration_s"))
+    return f"• {it['title']} by {it['channel']}" + (f" ({length})" if length else "") + ", on YouTube"
+
+
+# ---------- slice 5: keeping the library fresh ----------
+PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube"}
+IMPORT_NOT_EXPORT = ("I couldn't use the file you sent: it isn't an Instagram export (JSON) or a Google Takeout zip "
+                     "with YouTube in it. Nothing changed in your library.")
+IMPORT_HTML = ("Your Instagram export is in HTML format, and I can only read JSON. Please request it again and choose "
+               "JSON. Nothing changed in your library.")
+IMPORT_NO_FOLLOWERS = ("Your Instagram export is missing \"Followers and following\", which I need to leave your "
+                       "friends' posts out. Please request it again with that ticked. Nothing changed in your library.")
+IMPORT_FAILED = ("Something went wrong while I was adding your new export, so I'm still using your library as it was. "
+                 "The founders will look into it.")
+
+
+def import_too_costly(est, cap):
+    return (f"Your new export is big: adding it would cost about ${est:.2f}, and I can only spend ${cap:.2f} on one "
+            "import. I'm still using your library as it was. The founders can raise the limit.")
+
+
+def import_over_budget():
+    return ("The test budget doesn't have room to add your new export, so I'm still using your library as it was. "
+            "The founders need to raise it.")
+
+
+def _by_source(counts):
+    parts = [f"{n} from {PLATFORM_NAMES.get(p, p)}" for p, n in counts.items() if n]
+    return _and(parts) if parts else ""
+
+
+def import_done(new_counts, total_counts, refused=0):
+    """'Your new export is in: 42 new items (12 from Instagram, 30 from YouTube). Your library now has 1,234 items.'"""
+    n = sum(new_counts.values())
+    total = sum(total_counts.values())
+    head = (f"Your new export is in: {n} new {'item' if n == 1 else 'items'}"
+            + (f" ({_by_source(new_counts)})" if n else "") + "." if n else "Your new export is in, with nothing new in it.")
+    msg = f"{head} Your library now has {total:,} {'item' if total == 1 else 'items'}, and I'm using it from now on."
+    if refused:
+        msg += f" I couldn't use {refused} other {'file' if refused == 1 else 'files'} you sent: " + \
+            "they aren't an Instagram export (JSON) or a Google Takeout zip with YouTube in it."
+    return msg
+
+
+def nothing_new_matched(goals):
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return f"Nothing new matched {'your rule' if len(goals) == 1 else 'your rules'} {names}."
+
+
+def new_items_ended(goals):
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return (f"{'Your rule' if len(goals) == 1 else 'Your rules'} {names} "
+            f"{'has' if len(goals) == 1 else 'have'} ended: {'its' if len(goals) == 1 else 'their'} end date has passed.")
+
+
+def library_status_message(last_import, counts, newest, next_due, links):
+    """When the last export came in, items by source, how old the newest item is, when the next export is due, and
+    the export links. Every number is worked out by code."""
+    lines = [last_import or "I haven't added an export for you yet: your library is the one the founders set up."]
+    total = sum(counts.values())
+    lines.append(f"It has {total:,} {'item' if total == 1 else 'items'}" + (f": {_by_source(counts)}." if total else "."))
+    if newest:
+        lines.append(newest)
+    lines.append(next_due)
+    if links:
+        lines.append("To export again: " + "; ".join(f"{PLATFORM_NAMES.get(p, p)}: {u}" for p, u in links) + ".")
+    return "\n".join(lines)
 
 
 def first_send(first):

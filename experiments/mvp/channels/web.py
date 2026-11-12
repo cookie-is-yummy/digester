@@ -7,8 +7,9 @@ and move the bot's clock forward to make a timed or repeating rule fire now inst
 same handler, executor and scheduler as the iMessage channels; only the transport differs. Nothing is sent to a phone.
 
 It keeps its own store (MVP_HOME/webtest.sqlite), so moving the clock never touches rules that real testers have.
-Beside the thread: the person's rules, their To-dos (open and done, by list) and their Outbox (emails and calendar files
-that were written; click one to read it). "Start over" clears all of these for that person.
+Beside the thread: the person's rules, their To-dos (open and done, by list), their Outbox (emails and calendar files
+that were written; click one to read it), and an upload box that puts an export file in the person's inbox (refresh.py)
+with their last imports. "Start over" clears the rules, thread, to-dos and outbox for that person.
 The server listens on this machine only, and every call needs a token that is built into the page when it is served,
 so another site open in the browser cannot drive the bot or read the thread.
 """
@@ -115,8 +116,9 @@ class WebChannel(Channel):
         vid = part.get("video_id") if part.get("platform") == "youtube" else None
         if vid and not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", str(vid)):
             vid = None
-        card = {"url": url, "title": str(part.get("title") or "")[:120], "platform": part.get("platform"),
-                "video_id": vid, "permalink": instagram_permalink(url) if part.get("platform") == "instagram" else None}
+        card = {"url": url, "title": str(part.get("title") or "")[:200], "platform": part.get("platform"),
+                "video_id": vid, "permalink": instagram_permalink(url) if part.get("platform") == "instagram" else None,
+                "outside": bool(part.get("outside"))}   # an outside pick: the card says it is not from their saves
         return self.send(handle, url, link=card)
 
     def close(self):
@@ -204,11 +206,31 @@ class WebChannel(Channel):
         todos = self.todos_panel(me["handle"], tz)
         outbox = [{"id": o["id"], "kind": o["kind"], "subject": o["subject"], "via": o["via"],
                    "time": _local(datetime.fromisoformat(o["at"]), tz)} for o in bot.store.outbox(me["handle"])]
+        imports = [{"status": r["status"], "time": _local(datetime.fromisoformat(r["at"]), tz),
+                    "new": sum(json.loads(r["new_counts"] or "{}").values())}
+                   for r in bot.store.q("SELECT status, at, new_counts FROM imports WHERE handle=? ORDER BY id DESC "
+                                        "LIMIT 3", (me["handle"],))]
+        importing = me["handle"] in getattr(bot.refresher, "busy", ())
         return {"people": [{"handle": p["handle"], "name": p["name"] or p["handle"]} for p in people],
                 "me": me["handle"], "agreed": bool(me["consent_version"]), "ready": self.ready, "busy": busy,
                 "problem": self.problem,
                 "now": _local(now, tz), "timezone": tz, "ahead_minutes": int(self.offset.total_seconds() // 60),
-                "messages": msgs, "rules": rules, "todos": todos, "outbox": outbox}
+                "messages": msgs, "rules": rules, "todos": todos, "outbox": outbox, "imports": imports,
+                "importing": importing}
+
+    def upload(self, handle, filename, stream, length):
+        """The upload box: an export file goes to the person's inbox (refresh.py), and the inbox is looked at next."""
+        from .. import config
+        from ..refresh import save_upload
+        bot = self.bot
+        if not bot or not bot.store.person(handle):
+            raise ValueError("unknown person")
+        if length <= 0 or length > config.UPLOAD_MAX_MB * 1024 * 1024:
+            raise ValueError("too large")
+        path = save_upload(handle, filename, stream, length)
+        bot.refresher.nudge(path)
+        self._tick = True
+        return os.path.basename(path)
 
     def todos_panel(self, handle, tz):
         """The person's lists: open to-dos numbered as the bot numbers them, then the last few done, by list."""
@@ -317,6 +339,15 @@ class WebChannel(Channel):
             def do_POST(self):
                 if not self._ok():
                     return self._json(403, {"error": "token"})
+                if self.path.startswith("/api/upload"):   # a raw file body, streamed to the inbox
+                    from urllib.parse import parse_qs
+                    q = parse_qs(self.path.partition("?")[2])
+                    try:
+                        name = ch.upload((q.get("as") or [None])[0], (q.get("name") or ["export.zip"])[0], self.rfile,
+                                         int(self.headers.get("Content-Length") or 0))
+                    except ValueError as e:
+                        return self._json(400, {"error": str(e)})
+                    return self._json(200, {"ok": True, "name": name})
                 n = int(self.headers.get("Content-Length") or 0)
                 if n > MAX_BODY:
                     return self._json(413, {"error": "too long"})

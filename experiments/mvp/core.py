@@ -2,7 +2,9 @@
 
 Only this bot sends (AGENTS.md rule 5): retrieve and compose read; the interpreter fills forms (rule 6).
 Bot is assembled from five mixins: handler.py (messages in), todos.py (to-dos and library counts), outputs.py (a spec's
-`do`, acting on an answer, the person's email), executor.py (one run, and the send) and scheduler.py (timed sends). What it says is in texts.py. The names below stay importable from mvp.core.
+`do`, acting on an answer, the person's email), executor.py (one run with its outside block, and the send) and
+scheduler.py (timed sends, and the inbox check of refresh.py). What it says is in texts.py. The names below stay
+importable from mvp.core.
 """
 import json
 import os
@@ -102,6 +104,19 @@ class Bot(HandlerMixin, TodoMixin, OutputsMixin, ExecutorMixin, SchedulerMixin):
         self._tl = threading.local()   # what happened to the message this thread is handling (for the journal)
         self._arrivals = {}   # handle -> real times of recent messages
         self.max_per_minute = MAX_MESSAGES_PER_MINUTE   # None switches the flood guard off (batch test runs)
+        self._refresher = None
+
+    @property
+    def refresher(self):
+        """The inbox watcher and importer (refresh.py), made on first use."""
+        if self._refresher is None:
+            from .refresh import Refresher
+            self._refresher = Refresher(self)
+        return self._refresher
+
+    @refresher.setter
+    def refresher(self, value):
+        self._refresher = value
 
     # ---------- people ----------
     def load_people(self, path=None):

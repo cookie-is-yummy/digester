@@ -49,3 +49,26 @@ CODES_PER_DAY = 5            # codes sent per person a day at most (each one is 
 EMAIL_WAIT_HOURS = 24        # an email waiting for a confirmed address is dropped after this
 EMAIL_WAIT_MAX = 3           # emails kept waiting at most
 CALENDAR_MINUTES = 30        # an event's length when none is named
+
+# ---------- outside picks (DESIGN.md section 11 "Outside picks", slice 5) ----------
+# YouTube only, official API only: one search.list per answer, checked by one videos.list. Off when MVP_OUTSIDE is "0"
+# or YOUTUBE_API_KEY is unset (the key is read by name when a search is made, never printed).
+OUTSIDE_ON = os.environ.get("MVP_OUTSIDE", "1") != "0"
+OUTSIDE_SHOW = 3              # the first 3 that pass the checks, in YouTube's order
+OUTSIDE_FETCH = 8             # maxResults of the one search
+OUTSIDE_CACHE_HOURS = 24      # one search text reuses its results this long; then they are dropped
+OUTSIDE_PER_DAY = 80          # searches a day for everyone (the project's search bucket is 100; the rest is headroom)
+OUTSIDE_PER_PERSON = 5        # searches a day per person
+OUTSIDE_DAY_TZ = "America/Los_Angeles"   # YouTube's quota day ends at midnight Pacific
+OUTSIDE_REGION = os.environ.get("MVP_OUTSIDE_REGION", "US")
+OUTSIDE_SHOWN_DAYS = 30       # a rule (or "another") does not show the same outside video again within this
+
+# ---------- keeping the library fresh (DESIGN.md section 11 "Keeping the library fresh", slice 5) ----------
+INBOX = os.path.abspath(os.environ.get("MVP_INBOX", os.path.join(REPO, "data", "inbox")))   # <INBOX>/<person>/
+LIBRARY_ROOT = os.environ.get("MVP_LIBRARY_ROOT")   # where new libraries go; unset = beside the person's current one
+INBOX_MINUTES = float(os.environ.get("MVP_INBOX_MINUTES", "3"))   # the scheduler looks at the inboxes this often
+INBOX_SETTLE_SECONDS = float(os.environ.get("MVP_INBOX_SETTLE_SECONDS", "60"))  # a file must be unchanged this long
+IMPORT_CAP_USD = float(os.environ.get("MVP_IMPORT_CAP_USD", "1.50"))   # one library build (its embeddings) at most
+UPLOAD_MAX_MB = int(os.environ.get("MVP_UPLOAD_MAX_MB", "2048"))      # the test page's upload box
+INBOX_EMAIL = os.environ.get("MVP_INBOX_EMAIL")     # the bot's inbox account a tester shares a Drive folder with
+EXPORT_EVERY_DAYS = {"instagram": 28, "youtube": 61}   # the reminder's interval: 4 weeks; the Takeout schedule (2 months)

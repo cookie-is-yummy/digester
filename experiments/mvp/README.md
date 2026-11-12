@@ -16,7 +16,8 @@ sessions.
    The key is the phone number (with country code) or the Apple Account email the person texts from. For the test page
    any name works as the key. `library` is read from the repo root. The bot checks every entry when it starts and
    stops with a clear message if a library or a time zone is wrong.
-4. `export OPENAI_API_KEY=...` in the terminal that runs the bot. Never put keys in files.
+4. `export OPENAI_API_KEY=...` in the terminal that runs the bot. Never put keys in files. Optional:
+   `export YOUTUBE_API_KEY=...` for YouTube lengths and descriptions and for new picks from outside the saves.
 
 ## Test it without a phone
 
@@ -36,7 +37,11 @@ Then open `http://127.0.0.1:8765`. It is a message thread with the bot, on this 
   file the bot wrote for them. Click one to read it (an email's HTML opens in a sandboxed frame). Without email settings
   nothing leaves the computer: try "email it to me" after an answer, give any address, then type the 6-digit code from
   the code email in the Outbox panel.
-- "Start over" clears that person's rules, history, thread, to-dos, email address and outbox.
+- **Exports** panel: an upload box that puts an Instagram export (JSON zip) or a Google Takeout zip into that person's
+  inbox (`data/inbox/<person>/`); the bot adds it within a few minutes and says what's new. The panel lists the last
+  imports.
+- "Start over" clears that person's rules, history, thread, to-dos, email address and outbox (not their imports or
+  library).
 
 It is the same handler, search, checks and scheduler as the iMessage channels; only the transport differs. It keeps its
 own store (`data/mvp/webtest.sqlite`), so nothing you do there touches real testers' rules. The first reply after a
@@ -103,6 +108,35 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   model, what it needs, its module name and its order). Nothing else changes: specs are validated against the registry
   and the executor runs whatever the registry names.
 
+## New picks from outside the saves, and keeping the library fresh
+
+- **Outside picks** (`outside.py`): when someone asks for new things ("…and show me a few new ones from outside my
+  saves", "only new stuff, not from my saves: sourdough"), the answer gets a block "Not from your saves, but close to
+  them:" after the library picks (or only that block). YouTube only: one official `search.list` call with the
+  person's own words (code keeps only words from their message), checked by one `videos.list` call; the first 3 that
+  are public, embeddable, not for kids, not live and not already in their library, in YouTube's order, with YouTube's
+  own title and channel and the length. No model reads or rewords them; they are never kept with the answer or counted
+  as sent picks. Never for personal topics (health, relationships, money, religion, politics, sexuality). Limits: 80
+  searches a day for everyone, 5 per person, a search text reused for 24 hours. Needs `YOUTUBE_API_KEY`;
+  `MVP_OUTSIDE=0` switches it off. When it cannot serve a request, the reply says why in one line.
+  Before anyone outside the founders gets these: a terms page linking YouTube's Terms of Service and a privacy note
+  naming YouTube API Services (DESIGN.md section 11).
+- **The inbox** (`refresh.py`): `MVP_INBOX` (default `data/inbox/`) holds one folder per person (the handle's letters
+  and digits, e.g. `data/inbox/15551234567/`). Every `MVP_INBOX_MINUTES` (3) the scheduler takes any file there that
+  has not changed for a minute: an Instagram export (JSON, zip or folder) or a Google Takeout zip with YouTube. It is
+  imported with the demo's importer into a new library beside the old one (`MVP_LIBRARY_ROOT` to put it elsewhere),
+  with the export's `messages` folder left out unread. The search vectors are built by the demo engine's `prepare`
+  (embeddings only); an import whose estimated cost is over `MVP_IMPORT_CAP_USD` (default $1.50) is refused. Only
+  when the build succeeded is the person switched to the new library (the old folder is kept; a restart keeps the
+  switch while `people.json` still names the old one); they get one message with the counts, and their "when I save
+  something new" rules run once on the new items. An imported file is deleted; a refused or failed one goes to
+  `<inbox>/<person>/.failed/`. Do not drop a real export there before the founders agree.
+- **"Did my export come in?"** answers with the last import, items by source, how old the newest item is, when the
+  next export is due and the export links. `refresh.offer_export_routine()` gives the export steps and offers the
+  reminder rules (every 4 weeks for Instagram, every 2 months for YouTube); the onboarding slice sends it. A fully
+  automatic export is not available for US accounts: the person still requests each export and puts the file in
+  the inbox.
+
 ## See what happened to a message
 
 ```bash
@@ -136,12 +170,14 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `contact_card.py` | Writes the bot's `.vcf` contact card, for the founders to host |
 | `retrieve.py`, `engines.py`, `libview.py` | Candidates from the person's own library (Q8 search, cached ranked lists, filters, orders, recent and fixed items) |
 | `ytinfo.py` | A YouTube candidate's length and description from the official `videos.list` (`YOUTUBE_API_KEY`), kept at most 30 days |
+| `outside.py` | New picks from outside the library: YouTube `search.list` with the person's own words, checked by `videos.list`; the sensitive-topic stop, the daily limits and the 24-hour cache |
+| `refresh.py` | The inbox per person, the import (demo importer, without the messages folder), the cost cap, the library switch, new_items rules, library_status, and the export routine with its reminders |
 | `compose.py`, `prompts/compose_v2.md` | The model chooses (verdicts clear / close / no, a backed "because", must-haves); code checks it; a cached answer per spec and candidates |
 | `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table |
 | `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
 | `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
 | `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |
-| `store.py`, `llm.py` | Records (including each answer as shown, the action log and the outbox); model calls, the cost ledger and the caps |
-| `channels/` | Test page (`web.py`, `web_page.html`: thread, rules, To-dos and Outbox panels), terminal, Mac Messages, Sendblue |
+| `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
+| `channels/` | Test page (`web.py`, `web_page.html`: thread, rules, To-dos, Outbox and Exports panels with the upload box), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 203 offline tests |
+| `tests/` | 220 offline tests |

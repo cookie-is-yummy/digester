@@ -140,6 +140,14 @@
         this computer: they stay here.</div>
     </div>
     <div>
+      <h2>Exports</h2>
+      <input type="file" id="upfile" accept=".zip,application/zip">
+      <button class="btn" id="upbtn">Upload to this person's inbox</button>
+      <div class="small" id="upmsg">An Instagram export (JSON) or a Google Takeout zip with YouTube. The bot adds it
+        within a few minutes and says what's new.</div>
+      <div id="imports"></div>
+    </div>
+    <div>
       <h2>Things to try</h2>
       <button class="try">what can I make with chicken and rice?</button>
       <button class="try">remind me in two hours to watch something that gets me motivated</button>
@@ -148,6 +156,8 @@
       <button class="try">email it to me</button>
       <button class="try">add the first one to my calendar for Saturday at 10</button>
       <button class="try">add its ingredients to my grocery list</button>
+      <button class="try">pasta recipes, and show me a few new ones from outside my saves</button>
+      <button class="try">did my new export come in?</button>
     </div>
     <div>
       <button class="btn quiet" data-op="start_over">Start over (clear this person's rules, thread, to-dos and outbox)</button>
@@ -201,6 +211,8 @@ function draw(s) {
   $("outbox").innerHTML = (s.outbox || []).length ? s.outbox.map(o =>
     `<button class="ob" data-oid="${o.id}"><b>${o.kind === "email" ? "Email" : "Calendar"}:</b> ${esc(o.subject || "")}<div class="small">${esc(o.time)}${o.kind === "email" ? (o.via === "smtp" ? " · sent" : " · not sent") : " · calendar file"}</div></button>`).join("")
     : `<div class="small">Nothing yet.</div>`;
+  $("imports").innerHTML = (s.importing ? `<div class="small">Adding an export now…</div>` : "") + (s.imports || []).map(i =>
+    `<div class="small">${esc(i.time)} · ${i.status === "done" ? `added, ${i.new} new` : esc(i.status)}</div>`).join("");
   const sig = JSON.stringify(s.messages.map(m => [m.id, m.reaction]));
   if (sig !== lastSig) {
     lastSig = sig;
@@ -227,7 +239,8 @@ function card(m) {
     const vid = esc(l.video_id);
     const media = playing.has(m.id) ? ytPlayer(l.video_id, false)
       : `<button class="thumb" data-vid="${vid}" data-mid="${m.id}" aria-label="Play on YouTube"><img src="https://i.ytimg.com/vi/${vid}/hqdefault.jpg" alt="${title}" loading="lazy"><span class="play">▶</span></button>`;
-    return `<div class="card yt">${media}<div class="cap"><span class="brand">YouTube</span><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div></div>`;
+    const from = l.outside ? `<div class="note">Not from your saves · from YouTube</div>` : "";
+    return `<div class="card yt">${media}<div class="cap"><span class="brand">YouTube</span><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div>${from}</div>`;
   }
   if (l.platform === "instagram") {
     const btn = l.permalink ? `<button class="embed" data-perm="${esc(l.permalink)}">Show the post here</button>` : "";
@@ -304,6 +317,20 @@ document.querySelectorAll(".btn[data-op]").forEach(b => b.addEventListener("clic
   if (b.dataset.op === "start_over" && !confirm("Clear this test person's rules, history and thread?")) return;
   api("/api/control", {op: b.dataset.op, handle: me, minutes: Number(b.dataset.minutes || 0), with_welcome: !!b.dataset.welcome}).then(poll);
 }));
+// The upload box: the file is sent as it is to this person's inbox on this computer; the bot imports it from there.
+$("upbtn").addEventListener("click", async () => {
+  const f = $("upfile").files[0];
+  if (!f || !me) return;
+  $("upmsg").textContent = "Uploading…";
+  try {
+    const r = await fetch(`/api/upload?as=${encodeURIComponent(me)}&name=${encodeURIComponent(f.name)}`,
+                          {method: "POST", headers: {"X-Test-Token": TOKEN}, body: f});
+    const j = await r.json();
+    $("upmsg").textContent = r.ok ? `In the inbox as ${j.name}. The bot adds it within a few minutes.` : `Not uploaded: ${j.error}`;
+  } catch (e) { $("upmsg").textContent = "Not uploaded: the bot is not running."; }
+  $("upfile").value = "";
+  poll();
+});
 document.querySelectorAll(".try").forEach(b => b.addEventListener("click", () => { $("box").value = b.textContent; $("box").focus(); }));
 poll();
 setInterval(poll, 800);

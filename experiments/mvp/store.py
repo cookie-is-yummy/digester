@@ -50,6 +50,12 @@ CREATE TABLE IF NOT EXISTS action_log (id INTEGER PRIMARY KEY AUTOINCREMENT, han
   rule_id INTEGER, slot TEXT, action TEXT NOT NULL, status TEXT NOT NULL, ref TEXT, detail TEXT, at TEXT);
 CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, kind TEXT NOT NULL,
   subject TEXT, path TEXT, via TEXT, run_id INTEGER, at TEXT);
+CREATE TABLE IF NOT EXISTS outside_searches (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT, day TEXT NOT NULL,
+  at TEXT, status TEXT);
+CREATE TABLE IF NOT EXISTS outside_cache (key TEXT PRIMARY KEY, results TEXT NOT NULL, at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, at TEXT, status TEXT,
+  sources TEXT, library TEXT, old_library TEXT, counts TEXT, new_counts TEXT, estimate_usd REAL, cost_usd REAL,
+  error TEXT, seconds REAL);
 """
 
 
@@ -71,6 +77,7 @@ ADDED_COLUMNS = [
     ("runs", "steps TEXT"),              # JSON: seconds per step (search, youtube, compose, extract) and cache hits
     ("people", "email TEXT"),            # the person's own address (slice 4), set by text; NULL = none
     ("people", "email_verified_at TEXT"),  # when they texted back the code sent to it; NULL = not confirmed
+    ("people", "imported_from TEXT"),    # slice 5: the people.json library an import replaced (kept at the next start)
 ]
 
 
@@ -110,9 +117,18 @@ class Store:
 
     # people
     def upsert_person(self, handle, name, library, tz):
+        """The time zone is set once: after that the person changes it by text. A library switched by an import (slice
+        5) is kept while people.json still names the library it replaced; a different library there wins."""
         self.x("INSERT INTO people(handle,name,library,timezone,created_at) VALUES(?,?,?,?,?) "
-               "ON CONFLICT(handle) DO UPDATE SET name=excluded.name, library=excluded.library",
-               (handle, name, library, tz, now_iso()))  # the time zone is set once: after that the person changes it by text
+               "ON CONFLICT(handle) DO UPDATE SET name=excluded.name, library=CASE WHEN people.imported_from IS NOT "
+               "NULL AND people.imported_from=excluded.library THEN people.library ELSE excluded.library END, "
+               "imported_from=CASE WHEN people.imported_from=excluded.library THEN people.imported_from ELSE NULL END",
+               (handle, name, library, tz, now_iso()))
+
+    def switch_library(self, handle, library):
+        """An import built a new library for the person: use it from now on (the old folder is kept)."""
+        self.x("UPDATE people SET imported_from=COALESCE(imported_from, library), library=? WHERE handle=?",
+               (library, handle))
 
     def person(self, handle):
         return self.one("SELECT * FROM people WHERE handle=?", (handle,))
@@ -489,13 +505,14 @@ class Store:
                 except OSError:
                     pass
             for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests", "inbound",
-                      "todos", "profile_notes", "interp_cache", "answer_cache", "answers", "action_log", "outbox"):
+                      "todos", "profile_notes", "interp_cache", "answer_cache", "answers", "action_log", "outbox",
+                      "outside_searches", "imports"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
             for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}",
                         f"lastwrite:{handle}", f"linekinds:{handle}", f"facts:{handle}",
                         f"card:{handle}", f"emailcode:{handle}", f"emailcodes:{handle}", f"emailwait:{handle}",
-                        f"emailask:{handle}"):
+                        f"emailask:{handle}", f"outside_shown:{handle}", f"export_reminders:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 
