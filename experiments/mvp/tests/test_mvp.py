@@ -100,7 +100,11 @@ def test_schedule_next_run_and_dst():
     biweekly = When(type="schedule", days=["MON"], time="08:30", every_weeks=2)
     a = datetime(2026, 11, 9, 14, 0, tzinfo=timezone.utc)  # Monday 9:00 New York, anchor week
     first = next_run(biweekly, "America/New_York", a, anchor=a)
-    assert first.date().isoformat() == "2026-11-23"
+    # DESIGN.md section 11: "every other" starts on the first matching day after creation (here Monday 16 Nov),
+    # then every second week from there
+    assert first.date().isoformat() == "2026-11-16"
+    second = next_run(biweekly, "America/New_York", first, anchor=a)
+    assert second.date().isoformat() == "2026-11-30"
 
 
 def test_schema_rejects_kinds_that_exclude_youtube():
@@ -445,8 +449,7 @@ def test_one_off_send_needs_no_preview_and_fires_once(env):
     assert "Today at 3pm" in last(ch) and "stop 1" in last(ch) and "YES" not in last(ch)   # 18:00 UTC is 1pm in New York
     assert env["calls"].count("mvp_compose") == 0                                          # nothing was searched yet
     r = bot.store.rules(h)[0]
-    assert r["spec"]["when"] == {"type": "once", "days": [], "every_weeks": 1, "time": "15:00", "date": "2026-11-12",
-                                 "in_minutes": None, "max_sends": None}
+    assert r["spec"]["when"] == {"type": "once", "date": "2026-11-12", "times": ["15:00"]}   # the canonical stored form
     clock[0] += timedelta(minutes=119)
     assert bot.tick() == 0
     clock[0] += timedelta(minutes=2)
@@ -492,11 +495,17 @@ def test_skip_and_time_zone_change(env):
     assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-14T00:00:00+00:00"       # Fri 13 Nov 7pm in New York
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "skip", "rule_number": 1}
     bot.on_message(h, "skip this week")
-    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-21T00:00:00+00:00" and "Skipped" in last(ch)
+    # a skip is kept on the rule and used up when that send comes due (DESIGN.md section 11: skip by count or date)
+    assert "Skipped. Next one on Friday 20 November at 7pm" in last(ch) and bot.store.rules(h)[0]["skip_count"] == 1
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "set_timezone", "timezone": "America/Los_Angeles"}
     bot.on_message(h, "I'm in LA now")
     assert bot.store.person(h)["timezone"] == "America/Los_Angeles"
-    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-21T03:00:00+00:00"       # same Friday, 7pm in LA: the skip holds
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-14T03:00:00+00:00"       # Friday 13th, 7pm in LA
+    n = len(ch.outbox)
+    env["clock"][0] = datetime(2026, 11, 14, 3, 1, tzinfo=timezone.utc)
+    assert bot.tick() == 0 and len(ch.outbox) == n                                    # the skip holds in the new zone
+    assert bot.store.one("SELECT status, error FROM runs ORDER BY id DESC LIMIT 1") == {"status": "skipped", "error": "count"}
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-21T03:00:00+00:00" and bot.store.rules(h)[0]["skip_count"] == 0
     from mvp.schema import Interpretation
     with pytest.raises(Exception):
         Interpretation.model_validate({"intent": "set_timezone", "timezone": "Mars/Olympus"})

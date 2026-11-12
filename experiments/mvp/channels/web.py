@@ -168,7 +168,9 @@ class WebChannel(Channel):
             spec = RuleSpec.model_validate(r["spec"])
             nxt = datetime.fromisoformat(r["next_run_at"]) if r.get("next_run_at") else None
             rules.append({"number": i, "goal": spec.content.goal, "when": describe(spec.when), "status": r["status"],
-                          "next": _local(nxt, tz) if nxt and r["status"] == "active" else None})
+                          # random moments are never shown in advance (DESIGN.md section 1)
+                          "next": _local(nxt, tz) if nxt and r["status"] == "active" and spec.when.type != "random"
+                          else None})
         with self.lock:
             msgs = [dict(m, time=_local(datetime.fromisoformat(m["at"]), tz)) for m in self.threads.get(me["handle"], [])]
             busy = self.busy.get(me["handle"], 0) > 0

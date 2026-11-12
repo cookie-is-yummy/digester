@@ -88,12 +88,14 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `bot.py` | Start-up: channel, store, people, engines |
 | `runtime.py` | The run loop: message log, workers (one person at a time per person), joining quick texts, scheduler thread |
 | `core.py` | Message handler, executor, scheduler rules. The only code that sends |
-| `interpret.py`, `prompts/interpret_v2.md`, `schema.py` | Message to a validated intent and rule spec |
+| `interpret.py`, `prompts/interpret_v2.md`, `schema.py` | Message to a validated intent and rule spec (RuleSpec v 2) |
+| `actions/` | The action registry: what a rule's `do` may name, and its params |
 | `retrieve.py`, `engines.py`, `libview.py` | Candidates from the person's own library (Q8 search, filters) |
 | `compose.py`, `prompts/compose_v1.md` | The model picks; code enforces the reliability rules (BRIEF-10 section 5) |
 | `render.py` | The message text |
-| `schedule.py` | Every date and time, in the person's time zone |
+| `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
+| `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |
 | `store.py`, `llm.py` | Records; model calls, the cost ledger and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 40 offline tests |
+| `tests/` | 68 offline tests |

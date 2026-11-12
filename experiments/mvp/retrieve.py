@@ -102,7 +102,7 @@ def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, 
         if any(contains_word(it.caption, w) for w in c.avoid):
             continue
         boost = max((KIND_BOOST.get(kd, 1.0) for kd in it.kinds), default=1.0)
-        if c.extract != "none" and len(it.caption) >= 200:
+        if c.extract and len(it.caption) >= 200:
             boost *= 1.2  # details are only usable when the item's own text holds them
         boost *= creator_weights.get(it.creator, 1.0)
         out.append((s * boost, it))

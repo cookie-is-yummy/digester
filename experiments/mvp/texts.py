@@ -58,6 +58,7 @@ NO_RULES_ASK = "You have no rules yet. Just ask me for what you want."
 CHANGE_TIME_PASSED = "That time has already passed, so I left the rule as it was. When should I send it?"
 NO_SEND_COMING = "That one has no send coming up."
 SKIPPED_LAST = "Skipped. That was its only send, so the rule is finished."
+SKIPPED_RANDOM = "Skipped. The next one comes at a random time as usual."
 DELETE_ASK = "This deletes your library, rules and history with me. Reply YES to delete everything."
 DELETED = ("Done: your rules and history are deleted. A founder will remove your library "
            "and our message thread within 24 hours and confirm here.")
@@ -97,13 +98,36 @@ def changed(when, goal):
     return f"Changed: {when}, {goal}."
 
 
-def skipped(next_time):
-    return f"Skipped. Next one {next_time}."
+def skipped(next_time, count=1, dates=None):
+    """'Skipped. Next one ...'; 'Skipped the next 2. ...'; 'Skipped Thursday 26 November. ...'"""
+    if dates:
+        head = f"Skipped {dates}."
+    elif count > 1:
+        head = f"Skipped the next {count}."
+    else:
+        head = "Skipped."
+    return f"{head} Next one {next_time}."
+
+
+def zone_name(tz_name):
+    return tz_name.split('/')[-1].replace('_', ' ')
 
 
 def timezone_set(tz_name, local):
-    return (f"OK, I'll use {tz_name.split('/')[-1].replace('_', ' ')} time from now on "
+    return (f"OK, I'll use {zone_name(tz_name)} time from now on "
             f"(it's {local} there). Your send times keep their clock time.")
+
+
+def timezone_back(home, when):
+    return f" I'll switch back to {zone_name(home)} time {when}."
+
+
+def resumes_at(when):
+    return f" It starts again {when}."
+
+
+def daily_limit_note(n):
+    return f" I send at most {n} timed messages a day, so some of these will be left out."
 
 
 def saved_rule(n, what):
@@ -116,8 +140,10 @@ def once_set(first, what, n):
 
 
 def rule_started(edited, when, goal, avoid, first):
+    """`first` is None for random times, which are never shown in advance."""
     lead = "Got it" + (" with your change" if edited else "")
-    return (f"{lead}: {when}, {goal}{avoid}. First one {first}. "
+    first = f" First one {first}." if first else ""
+    return (f"{lead}: {when}, {goal}{avoid}.{first} "
             "Reply \"my rules\" any time to see or change it.")
 
 

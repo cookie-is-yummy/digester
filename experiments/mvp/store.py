@@ -35,6 +35,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS inbound_ref ON inbound(channel, ref) WHERE ref
 """
 
 
+# Columns added after the first build, each with a guarded ALTER TABLE so older stores still load.
+ADDED_COLUMNS = [
+    ("rules", "slot_at TEXT"),           # the time of the slot a rule is due for (next_run_at also holds retries and holds)
+    ("rules", "paused_until TEXT"),      # a paused rule resumes at this UTC time ("pause it until Monday")
+    ("rules", "skip_count INTEGER DEFAULT 0"),   # "skip the next two": the next N due sends are skipped and recorded
+    ("rules", "skip_dates TEXT"),        # JSON list of local dates whose sends are skipped ("not on the 26th")
+    ("people", "quiet TEXT"),            # JSON list of up to 4 quiet blocks; NULL = the default 22:00 to 08:00
+    ("people", "snooze_until TEXT"),     # timed sends before this UTC time are skipped and recorded as 'snoozed'
+    ("people", "tz_revert_to TEXT"),     # a temporary time zone: switch back to this zone ...
+    ("people", "tz_revert_at TEXT"),     # ... at this UTC time
+]
+
+
 def now_iso(dt=None):
     return (dt or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat(timespec="seconds")
 
@@ -48,10 +61,11 @@ class Store:
         self.lock = threading.RLock()
         with self.lock:
             self.db.executescript(SCHEMA)
-            try:  # added after day 1: the time of the slot a rule is due for (next_run_at also holds retries)
-                self.db.execute("ALTER TABLE rules ADD COLUMN slot_at TEXT")
-            except sqlite3.OperationalError:
-                pass
+            for table, column in ADDED_COLUMNS:  # stores made by earlier builds gain these columns
+                try:
+                    self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column}")
+                except sqlite3.OperationalError:
+                    pass  # already there
             self.db.commit()
 
     def x(self, sql, args=()):
@@ -80,8 +94,30 @@ class Store:
     def set_consent(self, handle, version):
         self.x("UPDATE people SET consent_version=?, consent_at=? WHERE handle=?", (version, now_iso(), handle))
 
-    def set_timezone(self, handle, tz):
-        self.x("UPDATE people SET timezone=? WHERE handle=?", (tz, handle))
+    def set_timezone(self, handle, tz, revert_to=None, revert_at=None):
+        """A plain change clears any planned switch back; with revert_to and revert_at (UTC) the change is temporary."""
+        self.x("UPDATE people SET timezone=?, tz_revert_to=?, tz_revert_at=? WHERE handle=?",
+               (tz, revert_to, now_iso(revert_at) if revert_at else None, handle))
+
+    def timezone_reverts_due(self, now):
+        return self.q("SELECT * FROM people WHERE tz_revert_at IS NOT NULL AND tz_revert_at<=?", (now_iso(now),))
+
+    def quiet(self, handle):
+        """The person's quiet blocks as dicts ({start, end, days}); the default when none are set."""
+        from .schema import quiet_blocks
+        r = self.one("SELECT quiet FROM people WHERE handle=?", (handle,))
+        raw = json.loads(r["quiet"]) if r and r["quiet"] else None
+        return [b.model_dump(exclude_defaults=True) for b in quiet_blocks(raw)]
+
+    def set_quiet(self, handle, blocks):
+        """Up to 4 blocks, validated; None restores the default."""
+        from .schema import quiet_blocks
+        value = None if blocks is None else json.dumps([b.model_dump(exclude_defaults=True) for b in quiet_blocks(blocks)])
+        self.x("UPDATE people SET quiet=? WHERE handle=?", (value, handle))
+
+    def set_snooze(self, handle, until=None):
+        """'I'm away until the 20th': timed sends before `until` (aware datetime) are skipped. None clears it."""
+        self.x("UPDATE people SET snooze_until=? WHERE handle=?", (now_iso(until) if until else None, handle))
 
     # rules
     def add_rule(self, handle, text, spec, status, next_run_at, created_at=None):
@@ -89,18 +125,21 @@ class Store:
                      (handle, text, json.dumps(spec), status, created_at or now_iso(), next_run_at, next_run_at))
         return cur.lastrowid
 
+    @staticmethod
+    def _rule_row(r):
+        r["spec"] = json.loads(r["spec"])
+        r["skip_dates"] = json.loads(r.get("skip_dates") or "[]")
+        r["skip_count"] = r.get("skip_count") or 0
+        return r
+
     def rules(self, handle, statuses=("active", "paused")):
         marks = ",".join("?" * len(statuses))
         rows = self.q(f"SELECT * FROM rules WHERE handle=? AND status IN ({marks}) ORDER BY id", (handle, *statuses))
-        for r in rows:
-            r["spec"] = json.loads(r["spec"])
-        return rows
+        return [self._rule_row(r) for r in rows]
 
     def rule(self, rule_id):
         r = self.one("SELECT * FROM rules WHERE id=?", (rule_id,))
-        if r:
-            r["spec"] = json.loads(r["spec"])
-        return r
+        return self._rule_row(r) if r else None
 
     def update_rule(self, rule_id, **fields):
         if "spec" in fields:
@@ -115,9 +154,45 @@ class Store:
     def due_rules(self, now):
         rows = self.q("SELECT * FROM rules WHERE status='active' AND next_run_at IS NOT NULL AND next_run_at<=? "
                       "ORDER BY next_run_at", (now_iso(now),))
-        for r in rows:
-            r["spec"] = json.loads(r["spec"])
-        return rows
+        return [self._rule_row(r) for r in rows]
+
+    def pause_rule(self, rule_id, until=None):
+        """Paused; with `until` (aware datetime) the scheduler resumes it then."""
+        self.x("UPDATE rules SET status='paused', paused_until=? WHERE id=?", (now_iso(until) if until else None, rule_id))
+
+    def rules_to_resume(self, now):
+        rows = self.q("SELECT * FROM rules WHERE status='paused' AND paused_until IS NOT NULL AND paused_until<=? "
+                      "ORDER BY id", (now_iso(now),))
+        return [self._rule_row(r) for r in rows]
+
+    def skip(self, rule_id, count=0, dates=()):
+        """'Skip the next two' adds to the count; 'not on the 26th' adds local dates. The scheduler consumes them."""
+        with self.lock:
+            r = self.rule(rule_id)
+            if not r:
+                return
+            kept = sorted(set(r["skip_dates"]) | set(dates))
+            self.x("UPDATE rules SET skip_count=?, skip_dates=? WHERE id=?",
+                   ((r["skip_count"] or 0) + count, json.dumps(kept) if kept else None, rule_id))
+
+    def consume_skip(self, rule_id, local_date):
+        """At a due send: 'date' if its local date (YYYY-MM-DD) is skipped, else 'count' if a counted skip is left,
+        else None. What is used up is removed (and dates already past are dropped)."""
+        with self.lock:
+            r = self.rule(rule_id)
+            if not r:
+                return None
+            dates = [d for d in r["skip_dates"] if d >= local_date]
+            reason = None
+            if local_date in dates:
+                dates.remove(local_date)
+                reason = "date"
+            count = r["skip_count"]
+            if reason is None and count > 0:
+                count, reason = count - 1, "count"
+            self.x("UPDATE rules SET skip_count=?, skip_dates=? WHERE id=?",
+                   (count, json.dumps(dates) if dates else None, rule_id))
+            return reason
 
     # runs and deliveries
     def add_run(self, **f):

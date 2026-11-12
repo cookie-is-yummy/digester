@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from . import config
 from . import texts as T
 from .interpret import interpret
-from .schedule import describe, next_run, say_time
+from .schedule import describe, next_run, resolve_until, say_time
 from .schema import RuleSpec
 from .store import now_iso
 from .texts import (
@@ -166,7 +166,7 @@ class HandlerMixin:
                 # the reply states exactly what will happen and how to cancel it
                 return self._activate(person, text, it.spec)
             if pending and it.edits_pending and T.YES_WITH_EDIT.match(text):
-                same = it.spec.content.model_dump() == pending["payload"]["spec"]["content"]
+                same = it.spec.stored()["content"] == RuleSpec.model_validate(pending["payload"]["spec"]).stored()["content"]
                 return self._activate(person, pending["payload"]["text"] + " / " + text, it.spec, edited=True,
                                       preview_run=pending["payload"].get("run_id") if same else None)
             if pending and it.edits_pending:  # keep the whole request, not only the edit
@@ -175,12 +175,18 @@ class HandlerMixin:
             if self._run_failed(run_id):  # no preview, so nothing to say yes to
                 self.store.clear_pending(h)
                 return self.send(h, msg, run_id)
-            self.store.set_pending(h, "confirm_rule", {"text": text, "spec": it.spec.model_dump(), "run_id": run_id},
+            self.store.set_pending(h, "confirm_rule", {"text": text, "spec": it.spec.stored(), "run_id": run_id},
                                    at=self.clock())
             when = describe(it.spec.when)
             c = it.spec.content
             what = T.picks_for(c.count, c.goal)
             tail = T.preview_tail(when, what)
+            w = it.spec.when
+            if w.every_hours and w.window:  # more sends a day than the daily limit allows: the preview says so
+                per_day = (int(w.window[1][:2]) * 60 + int(w.window[1][3:]) - int(w.window[0][:2]) * 60
+                           - int(w.window[0][3:])) // (w.every_hours * 60) + 1
+                if per_day > config.MAX_SCHEDULED_PER_DAY:
+                    tail += T.daily_limit_note(config.MAX_SCHEDULED_PER_DAY)
             head = T.PREVIEW_HEAD if n else ""
             return self.send(h, head + msg + tail, run_id)
         if it.intent == "ask":
@@ -214,15 +220,15 @@ class HandlerMixin:
         if it.intent == "list_rules":
             return self.send(h, self._rules_text(person, rules))
         if it.intent in ("pause", "resume", "stop"):
-            return self._manage(person, rules, it.intent, it.rule_number, it.all_rules)
+            return self._manage(person, rules, it.intent, it.rule_number, it.all_rules, it.until, it.in_minutes)
         if it.intent == "change_rule":
             r = self._pick_rule(rules, it.rule_number)
             if not r:
                 return self.send(h, T.WHICH_RULE)
-            status, nxt = self._state_for(it.spec, person["timezone"], now, datetime.fromisoformat(r["created_at"]))
+            status, nxt = self._next_for(it.spec, person, now, r)
             if status == "done":  # a one-off time that has passed would end the rule without saying so
                 return self.send(h, T.CHANGE_TIME_PASSED)
-            self.store.update_rule(r["id"], spec=it.spec.model_dump(), text=text)
+            self.store.update_rule(r["id"], spec=it.spec.stored(), text=text)
             self.store.set_slot(r["id"], nxt, status if r["status"] == "active" else r["status"])
             return self.send(h, T.changed(describe(it.spec.when), it.spec.content.goal))
         if it.intent == "run_rule":
@@ -231,6 +237,8 @@ class HandlerMixin:
                 return self.send(h, T.WHICH_RULE if rules else T.NO_RULES_ASK)
             msg, run_id, _ = self.run(person, RuleSpec.model_validate(r["spec"]), "manual", rule_id=r["id"],
                                       request_text=text)
+            if it.skip_next and r["status"] == "active" and r["next_run_at"] and not self._run_failed(run_id):
+                self.store.skip(r["id"], count=1)  # "send Friday's one now": Friday's is not sent again
             return self.send(h, msg, run_id)
         if it.intent == "skip":
             r = self._pick_rule(rules, it.rule_number)
@@ -238,28 +246,19 @@ class HandlerMixin:
                 return self.send(h, T.WHICH_RULE if rules else T.NO_RULES)
             if r["status"] != "active" or not r["next_run_at"]:
                 return self.send(h, T.NO_SEND_COMING)
-            spec = RuleSpec.model_validate(r["spec"])
-            nxt = next_run(spec.when, person["timezone"], datetime.fromisoformat(r["next_run_at"]),
-                           anchor=datetime.fromisoformat(r["created_at"]))
-            self.store.set_slot(r["id"], now_iso(nxt) if nxt else None, "active" if nxt else "done")
-            return self.send(h, T.skipped(say_time(nxt, now, person["timezone"])) if nxt else T.SKIPPED_LAST)
+            return self._skip(person, r, it, now)
         if it.intent == "set_timezone":
-            old_tz, new_tz = ZoneInfo(person["timezone"]), ZoneInfo(it.timezone)
-            self.store.set_timezone(h, it.timezone)
-            for r in self.store.rules(h, statuses=("active",)):
-                if not r["next_run_at"]:
-                    continue
-                # the next send keeps its date and clock time, read in the new zone (so a skipped or already-sent
-                # day stays skipped); only if that moment has passed is the next one worked out afresh
-                kept = datetime.fromisoformat(r["next_run_at"]).astimezone(old_tz).replace(tzinfo=new_tz)
-                if kept > now:
-                    self.store.set_slot(r["id"], now_iso(kept), "active")
-                    continue
-                status, nxt = self._state_for(RuleSpec.model_validate(r["spec"]), it.timezone, now,
-                                              datetime.fromisoformat(r["created_at"]))
-                self.store.set_slot(r["id"], nxt, status)
+            back = resolve_until(it.until, None, now, it.timezone) if it.until else None
+            if back is not None and back <= now:
+                back = None
+            # "I'm in Chicago until Sunday": code switches back then (to the zone they had before any temporary one)
+            home = (person.get("tz_revert_to") or person["timezone"]) if back else None
+            self._move_timezone(h, it.timezone, now, revert_to=home, revert_at=back)
             local = now.astimezone(ZoneInfo(it.timezone)).strftime("%-I:%M%p").lower()
-            return self.send(h, T.timezone_set(it.timezone, local))
+            msg = T.timezone_set(it.timezone, local)
+            if back:
+                msg += T.timezone_back(home, say_time(back, now, it.timezone))
+            return self.send(h, msg)
         if it.intent == "delete_data":
             self.store.set_pending(h, "confirm_delete", {}, at=self.clock())
             return self.send(h, T.DELETE_ASK)
@@ -274,7 +273,7 @@ class HandlerMixin:
         if last.get("rule_id"):
             r = self.store.rule(last["rule_id"])
             prev = RuleSpec.model_validate(r["spec"]) if r else None
-        extract = prev.content.extract if prev else ("ingredients" if T.RECIPE_WORDS.search(question) else "none")
+        extract = prev.content.extract if prev else (["ingredients"] if T.RECIPE_WORDS.search(question) else [])
         return RuleSpec.model_validate({"when": {"type": "now"}, "content": {
             "goal": question[:200], "searches": [question[:120]], "count": min(3, len(last["items"])) or 1,
             "extract": extract, "avoid": avoid, "exclude_sent": False}})
@@ -303,14 +302,20 @@ class HandlerMixin:
         c = spec.content
         avoid = T.avoid_clause(c.avoid)
         what = T.picks_for(c.count, c.goal) + avoid
-        if spec.when.type == "on_request":
-            self.store.add_rule(h, text, spec.model_dump(), "active", None, created_at=now_iso(now))
+        if spec.when.type in ("on_request", "new_items"):
+            self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
             n = len(self.store.rules(h))
             return self.send(h, T.saved_rule(n, what))
-        nxt = next_run(spec.when, tz, now, anchor=now)
-        if nxt is None:
+        quiet = self.store.quiet(h)
+        if next_run(spec.when, tz, now, anchor=now, quiet=quiet) is None:
             return self.send(h, T.TIME_PASSED)
-        rule_id = self.store.add_rule(h, text, spec.model_dump(), "active", now_iso(nxt), created_at=now_iso(now))
+        # random and window moments are seeded with the rule's id, so the slot is worked out once the rule has one
+        rule_id = self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
+        nxt = next_run(spec.when, tz, now, anchor=now, seed=rule_id, quiet=quiet)
+        if nxt is None:  # nothing is left of this period's random sends and the rule ends with it
+            self.store.set_slot(rule_id, None, "done")
+            return self.send(h, T.TIME_PASSED)
+        self.store.set_slot(rule_id, now_iso(nxt), "active")
         if preview_run:  # the preview's picks count as sent by this rule, so its first send is something new
             self.store.x("UPDATE deliveries SET rule_id=? WHERE run_id=? AND handle=?", (rule_id, preview_run, h))
             # 👍, 👎 and "more like 2" given on the preview belong to the rule it became
@@ -320,6 +325,8 @@ class HandlerMixin:
         first = say_time(nxt, now, tz)
         if spec.when.type == "once":
             return self.send(h, T.once_set(first, what, n))
+        if spec.when.type == "random" or spec.when.window:
+            first = None  # random moments are never shown in advance
         return self.send(h, T.rule_started(edited, describe(spec.when), c.goal, avoid, first))
 
     def _answer_seen(self, h):
@@ -367,28 +374,62 @@ class HandlerMixin:
             spec = RuleSpec.model_validate(r["spec"])
             state = T.RULE_PAUSED if r["status"] == "paused" else ""
             nxt = ""
-            if r["status"] == "active" and r["next_run_at"] and spec.when.type == "schedule":
-                nxt = T.rule_next(say_time(datetime.fromisoformat(r["next_run_at"]), now, person["timezone"]))
+            if r["status"] == "active" and r["next_run_at"] and spec.when.type == "schedule" and not spec.when.window:
+                up = self._upcoming(r, person, now)
+                nxt = T.rule_next(say_time(up, now, person["timezone"])) if up else ""
             lines.append(T.rule_line(i, spec.content.goal, describe(spec.when), state, nxt))
         lines.append(T.RULES_FOOT)
         return "\n".join(lines)
 
-    def _manage(self, person, rules, action, number, all_rules):
+    def _manage(self, person, rules, action, number, all_rules, until=None, in_minutes=None):
         h = person["handle"]
         one = self._pick_rule(rules, number)
         targets = rules if all_rules else ([one] if one else [])
         if not targets:
             return self.send(h, T.WHICH_RULE if rules else T.NO_RULES)
         now = self.clock()
+        back = resolve_until(until, in_minutes, now, person["timezone"]) if action == "pause" else None
+        if back is not None and back <= now:
+            back = None
         for r in targets:
             if action == "pause":
-                self.store.update_rule(r["id"], status="paused")
+                self.store.pause_rule(r["id"], back)  # with a time, the scheduler resumes it then
             elif action == "stop":
                 self.store.set_slot(r["id"], None, "stopped")
+                self.store.update_rule(r["id"], paused_until=None)
             else:
-                status, nxt = self._state_for(RuleSpec.model_validate(r["spec"]), person["timezone"], now,
-                                              datetime.fromisoformat(r["created_at"]))
+                status, nxt = self._next_for(RuleSpec.model_validate(r["spec"]), person, now, r)
                 self.store.set_slot(r["id"], nxt, status)
+                self.store.update_rule(r["id"], paused_until=None)
         word = T.MANAGE_WORDS[action]
         names = ", ".join(RuleSpec.model_validate(r["spec"]).content.goal for r in targets)
-        return self.send(h, T.managed(word, names))
+        msg = T.managed(word, names)
+        if back:
+            msg += T.resumes_at(say_time(back, now, person["timezone"]))
+        return self.send(h, msg)
+
+    def _skip(self, person, r, it, now):
+        """'Skip the next one', 'skip the next two' (count), 'not on the 26th' (date), 'not Thanksgiving week' (date
+        to until). The scheduler skips those sends when they come due and records them as 'skipped'."""
+        tz = person["timezone"]
+        dates = []
+        if it.date:
+            first = datetime.fromisoformat(it.date).date()
+            last = datetime.fromisoformat(it.until[:10]).date() if it.until else first
+            span = min(max((last - first).days, 0), 62)
+            dates = [(first + timedelta(days=i)).isoformat() for i in range(span + 1)]
+        count = 0 if dates else (it.count or 1)
+        self.store.skip(r["id"], count=count, dates=dates)
+        r = self.store.rule(r["id"])
+        up = self._upcoming(r, person, now)
+        if up is None:
+            self.store.set_slot(r["id"], None, "done")
+            return self.send(person["handle"], T.SKIPPED_LAST)
+        if RuleSpec.model_validate(r["spec"]).when.type == "random":
+            return self.send(person["handle"], T.SKIPPED_RANDOM)
+        label = None
+        if dates:
+            first, last = datetime.fromisoformat(dates[0]), datetime.fromisoformat(dates[-1])
+            label = first.strftime("%A %-d %B") if len(dates) == 1 else \
+                f"{first.strftime('%-d %B')} to {last.strftime('%-d %B')}"
+        return self.send(person["handle"], T.skipped(say_time(up, now, tz), count=count, dates=label))

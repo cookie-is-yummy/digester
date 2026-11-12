@@ -90,7 +90,7 @@ class ExecutorMixin:
             self.store.set_state(f"lines:{person['handle']}", lines)
             if kind != "follow_up":  # what "another" repeats: this request, without what has been shown
                 self.store.set_state(f"lastspec:{person['handle']}", {
-                    "spec": spec.model_dump(), "rule_id": rule_id if kind in ("scheduled", "manual") else None,
+                    "spec": spec.stored(), "rule_id": rule_id if kind in ("scheduled", "manual") else None,
                     "text": (request_text or "")[:300], "shown": list(shown) + [p["item"].id for p in picks]})
             footer = None
             if kind == "scheduled":

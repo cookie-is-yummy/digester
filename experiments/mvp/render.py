@@ -26,16 +26,20 @@ def picks_message(result, spec, footer=None):
         num = f"{i}. " if len(picks) > 1 else ""
         out.append(f"{num}{EMOJI.get(it.platform, '')} {p['title']}" + (f" ({source})" if source else ""))
         out.append(f"Why: {p['why']}")
-        if c.extract != "none":
+        if c.extract:
+            kind = c.extract[0] if len(c.extract) == 1 else "details"   # render v1: one label for the lines
             if p["lines"]:
-                noun = LABEL[c.extract].lower()
+                label = LABEL.get(kind, "Details")
+                noun = label.lower()
                 n = len(p["lines"])
                 if n == 1:
-                    noun = {"ingredients": "ingredient", "steps": "step", "key points": "key point"}[noun]
-                out.append(f"{LABEL[c.extract]} from the post ({n} {noun} listed):")
+                    noun = {"ingredients": "ingredient", "steps": "step", "key points": "key point",
+                            "details": "detail"}[noun]
+                out.append(f"{label} from the post ({n} {noun} listed):")
                 out.extend(f"• {line}" for line in p["lines"])
-            elif c.extract in ("ingredients", "steps"):
-                out.append(f"I couldn't find the {c.extract} written in the post. They may be in the video.")
+            elif set(c.extract) & {"ingredients", "steps"}:
+                what = " and ".join(x for x in c.extract if x in ("ingredients", "steps"))
+                out.append(f"I couldn't find the {what} written in the post. They may be in the video.")
         if it.url:
             out.append(it.url)
         out.append("")

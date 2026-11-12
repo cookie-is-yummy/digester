@@ -123,7 +123,9 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
         reason = (f"nothing you kept since {c.saved_after} matched" if c.saved_after else
                   "nothing in your library matched")
         return {"picks": [], "intro": "", "none_reason": reason, "dropped": {}}, 0.0
-    ask = {"request": request_text or c.goal, "goal": c.goal, "count": c.count, "extract": c.extract, "avoid": c.avoid}
+    # compose v1 reads one extract word; a v2 list of several kinds is passed as one phrase ("ingredients and steps")
+    extract = " and ".join(c.extract) if c.extract else "none"
+    ask = {"request": request_text or c.goal, "goal": c.goal, "count": c.count, "extract": extract, "avoid": c.avoid}
     block = _candidate_block(cands)
     if known_lines is not None:  # a follow-up: the details already found, with counts computed here
         notes = []
@@ -185,13 +187,13 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
                 lines.append(line)
             elif not line:
                 dropped["not_a_detail"] = dropped.get("not_a_detail", 0) + 1
-        if known_lines is not None and c.extract != "none" and not lines:
+        if known_lines is not None and c.extract and not lines:
             lines = list(known_lines.get(it.id) or [])
         why = _safe(p.get("why"), 160)
         if re.search(r"\d", why) or not why:
             why = f"It fits: {c.goal}."
         picks.append({"item": it, "title": title, "why": why, "fit": round(fit, 2), "lines": lines,
-                      "n_lines": len(lines), "details_in_video": c.extract != "none" and not lines})
+                      "n_lines": len(lines), "details_in_video": bool(c.extract) and not lines})
     intro = _safe(raw.get("intro"), 160)
     if re.search(r"\d", intro):
         intro = ""
