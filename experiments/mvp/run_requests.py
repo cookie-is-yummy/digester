@@ -74,7 +74,11 @@ def main():
     with open(os.path.join(out, "counts.json"), "w") as f:
         json.dump(rows, f, indent=1)
     by_kind = Counter(r["kind"] for r in rows)
-    print(json.dumps({"requests": len(rows), "by_kind": by_kind, "errors": sum(r["error"] for r in rows),
+    shapes = {"closest": sum("The closest I have is" in t for t in transcript),
+              "with_detail_lines": sum(any(f"{k} (" in t for k in ("Ingredients", "Steps", "Key points")) for t in transcript),
+              "in_video_lines": sum(t.count("in the video, not written") for t in transcript),
+              "why_labels": sum(t.count("Why:") for t in transcript)}
+    print(json.dumps({"requests": len(rows), "by_kind": by_kind, "shapes": shapes, "errors": sum(r["error"] for r in rows),
                       "with_picks": sum(r["picks"] > 0 for r in rows), "no_pick_answers": sum(r["kind"] in ("ask", "preview", "follow_up") and r["picks"] == 0 for r in rows),
                       "dropped_by_checks": sum(r["dropped"] for r in rows), "cost_usd": round(sum(r["cost"] for r in rows), 4),
                       "seconds_median": sorted(r["seconds"] for r in rows)[len(rows) // 2],

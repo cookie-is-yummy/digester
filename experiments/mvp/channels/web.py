@@ -15,6 +15,7 @@ import itertools
 import json
 import os
 import queue
+import re
 import secrets
 import threading
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,13 @@ from zoneinfo import ZoneInfo
 from .base import Channel, Inbound
 
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web_page.html")
+IG_POST = re.compile(r"^https://www\.instagram\.com/(p|reel|tv)/([A-Za-z0-9_-]+)/")
+
+
+def instagram_permalink(url):
+    """The post's plain permalink for Instagram's embed ('https://www.instagram.com/reel/CODE/'), or None."""
+    m = IG_POST.match(url or "")
+    return f"https://www.instagram.com/{'reel' if m.group(1) == 'reel' else 'p'}/{m.group(2)}/" if m else None
 MAX_BODY = 20_000
 
 
@@ -35,6 +43,7 @@ def _local(dt, tzname, with_day=True):
 
 class WebChannel(Channel):
     name = "web"
+    link_previews = True   # a link part is drawn as a card (YouTube thumbnail or a plain Instagram card)
     poll_seconds = 0.2
     join_seconds = 1.2
 
@@ -84,13 +93,26 @@ class WebChannel(Channel):
         t, self._tick = self._tick, False
         return t
 
-    def send(self, handle, text):
+    def send(self, handle, text, link=None):
         n = next(self._ids)
         ref = f"web-{n}"
         with self.lock:
             self.threads.setdefault(handle, []).append(
-                {"id": n, "ref": ref, "dir": "out", "text": text, "at": self.clock().isoformat(), "reaction": None})
+                {"id": n, "ref": ref, "dir": "out", "text": text, "at": self.clock().isoformat(), "reaction": None,
+                 "link": link})
         return ref
+
+    def send_link(self, handle, part):
+        """A link part becomes a card on the page. Only the URL, our own title and a YouTube video ID are kept: the page
+        loads YouTube's thumbnail and player, or Instagram's embed, in the viewer's browser. This server never fetches
+        Instagram or YouTube media."""
+        url = str(part.get("url") or "")
+        vid = part.get("video_id") if part.get("platform") == "youtube" else None
+        if vid and not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", str(vid)):
+            vid = None
+        card = {"url": url, "title": str(part.get("title") or "")[:120], "platform": part.get("platform"),
+                "video_id": vid, "permalink": instagram_permalink(url) if part.get("platform") == "instagram" else None}
+        return self.send(handle, url, link=card)
 
     def close(self):
         if self.server:

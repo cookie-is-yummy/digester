@@ -85,7 +85,9 @@ class HandlerMixin:
             self.note(intent="consent")
             if text and AGREE.match(text) and not NEGATION.search(text):
                 self.store.set_consent(handle, CONSENT_VERSION)
-                return self.send(handle, T.WELCOME)
+                ref = self.send(handle, T.WELCOME)
+                self._contact_card(handle)
+                return ref
             return self.send(handle, CONSENT)
         pending = self._live_pending(handle, now)
         if tapback:
@@ -139,6 +141,19 @@ class HandlerMixin:
             self.store.add_run(handle=handle, kind="interpret", status="error", error=type(e).__name__)
             return self.send(handle, T.INTERPRET_ERROR)
         return self._dispatch(person, it, text, rules, pending, last, now)
+
+    def _contact_card(self, handle):
+        """Once, after the person's first replies: our contact card, so their phone shows previews of our links
+        (DESIGN.md section 11). Only on a channel that can send one; a failure never stops the welcome."""
+        if self.store.get_state(f"card:{handle}"):
+            return
+        try:
+            ref = self.channel.send_contact_card(handle)
+        except Exception:  # noqa: BLE001 - the type is enough; the card is a nicety
+            return
+        if ref is not None:
+            self.store.set_state(f"card:{handle}", True)
+            self.send(handle, T.CONTACT_CARD)
 
     def _live_pending(self, handle, now):
         p = self.store.pending(handle)

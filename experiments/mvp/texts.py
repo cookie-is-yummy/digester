@@ -33,7 +33,7 @@ CONSENT = ("Hi! I'm a prototype that finds things in your own saved and watched 
            "(not used for training). You can say "
            "\"delete my data\" at any time. Reply \"I agree\" to start, and confirm you're 18 or over.")
 WELCOME = "Thanks! " + HELP
-SCHEDULED_FOOTER = "Reply 👎 if it's not for you, \"another\" for one more now, or \"pause {n}\" to pause this."
+SCHEDULED_FOOTER = "Not for you? Reply 👎. Want one more now? Reply \"another\". To pause these, reply \"pause {n}\"."
 LAST_SEND = "That was the last one of this rule."
 STILL_USEFUL = "Still useful? Reply 👍 to keep these coming."
 PAUSED_QUIET = ("I've paused your timed sends because I haven't heard from you in a while. "
@@ -329,6 +329,7 @@ def stopped_rule(n_goal):
     return f"I stopped {n_goal}"
 
 
+CONTACT_CARD = "Save me as a contact, so the links I send show a preview."
 PROFILE_NOTED = "Noted. I'll keep that in mind when I read your requests. A full profile isn't ready yet."
 QUIET_NEEDS_BOTH = "For quiet hours on some days only, tell me both times, for example \"not 9am to 3pm on weekdays\"."
 QUIET_INVALID = "I can keep up to 4 sets of quiet hours, each with a start and a different end. Could you say it another way?"

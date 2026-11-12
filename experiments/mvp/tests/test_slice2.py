@@ -36,7 +36,7 @@ def ask_pasta():
 
 
 def lemon_pick():
-    return compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "Fits.", "fit": 0.95,
+    return compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "Fits.", "verdict": "clear",
                           "lines": ["200g spaghetti", "2 lemons"]})
 
 
@@ -273,7 +273,7 @@ def test_runner_end_to_end_with_a_fake_model(tmp_path, monkeypatch):
 
 # ---------- conversation flows ----------
 def test_a_preview_says_the_schedule_and_the_first_send(env):
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta A", "why": "Good.", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta A", "why": "Good.", "verdict": "clear"})
     msg = say(env, "pasta every friday at 7pm", {"intent": "new_rule", "spec": pasta_spec()})
     assert "Every Friday at 7pm I'll send" in msg and "The first one would come tomorrow at 7pm." in msg
     window = pasta_spec({"type": "schedule", "days": EVERY_DAY, "window": ["18:00", "20:00"]})
@@ -373,7 +373,7 @@ def test_undo_reverses_the_last_write_within_10_minutes(env):
     assert say(env, "undo", {"intent": "undo"}) == \
         'Undone: I stopped the rule I just started, "water the cactus".'   # the reply says a rule ended
     assert bot.store.rules(H) == []
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "P", "why": "Good.", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "P", "why": "Good.", "verdict": "clear"})
     say(env, "pasta every friday at 7pm", {"intent": "new_rule", "spec": pasta_spec()})
     say(env, "yes", {"intent": "confirm"})
     clock[0] += timedelta(minutes=11)
@@ -387,7 +387,7 @@ def test_undo_reverses_the_last_write_within_10_minutes(env):
 
 def test_clarify_keeps_the_half_built_form_and_the_next_message_completes_it(env):
     bot = env["bot"]
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Tip", "why": "Good.", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Tip", "why": "Good.", "verdict": "clear"})
     draft = {"when": {"type": "schedule", "days": ["SUN"], "time": "09:00"},
              "content": {"goal": "a study tip", "searches": ["study tip"]}}
     msg = say(env, "every sunday a study tip until the end of the semester",
@@ -420,7 +420,7 @@ def test_also_runs_a_second_request_in_order(env):
 
 def test_two_rules_in_one_message_start_with_one_yes(env):
     bot = env["bot"]
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Workout", "why": "Good.", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Workout", "why": "Good.", "verdict": "clear"})
     weekdays = pasta_spec({"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI"], "time": "08:00"})
     weekends = pasta_spec({"type": "schedule", "days": ["SAT", "SUN"], "time": "10:00"})
     n0 = len(env["ch"].outbox)
@@ -435,7 +435,7 @@ def test_two_rules_in_one_message_start_with_one_yes(env):
 
 def test_run_now_and_skip_the_next_says_so(env):
     bot = env["bot"]
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "P", "why": "Good.", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "P", "why": "Good.", "verdict": "clear"})
     say(env, "pasta every friday at 7pm", {"intent": "new_rule", "spec": pasta_spec()})
     say(env, "yes", {"intent": "confirm"})
     msg = say(env, "send me fridays pasta now", {"intent": "run_rule", "rule_number": 1, "skip_next": True})

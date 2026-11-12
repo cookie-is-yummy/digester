@@ -10,7 +10,8 @@ class ConsoleChannel(Channel):
     name = "console"
     join_seconds = 0.0
 
-    def __init__(self, printer=print):
+    def __init__(self, printer=print, link_previews=False):
+        self.link_previews = link_previews   # True: replies arrive part by part, as on a phone
         self.inbox = queue.Queue()
         self.outbox = []   # (ref, handle, text)
         self.printer = printer

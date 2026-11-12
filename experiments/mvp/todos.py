@@ -131,8 +131,13 @@ class TodoMixin:
                 extract = [extract]
             lines = (self.store.get_state(f"lines:{h}", {}) or {})
             kinds = self.store.get_state(f"linekinds:{h}")
+            facts = self.store.get_state(f"facts:{h}", {}) or {}
             for n in numbers:
                 iid = items[n - 1]
+                ing = (facts.get(iid) or {}).get("ingredients") if isinstance(facts, dict) else None
+                if ing:   # the checked ingredient lines, kept apart from the steps (extract.py)
+                    rows += [(line, iid, None, None) for line in ing]
+                    continue
                 got = lines.get(iid) or []
                 kind = kinds.get(iid) if isinstance(kinds, dict) else extract   # older state: the request's extract
                 if kind != ["ingredients"] or not got:   # lines that are not only ingredients are never guessed apart

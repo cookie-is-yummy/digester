@@ -1,17 +1,27 @@
-"""PROTOTYPE ONLY - the model picks from the candidates; code enforces BRIEF-10 section 5 on what it returns.
+"""PROTOTYPE ONLY - the model chooses from the candidates (compose v2); code checks what it returns (BRIEF-10 section 5,
+DESIGN.md sections 3, 4 and 11).
 
-Checks, all in code: a pick must be a listed candidate (rule 1); every extracted line must appear in that item's own
-text (rule 2), and counts are computed here from the lines that matched; picks under the fit threshold are dropped,
-and fewer picks or none are sent rather than padding (rule 3); avoided words are rechecked; reasons that state
-numbers are replaced. Captions go to the model inside <item> tags as data (rule 6).
+The model gives each pick a verdict (clear / close / no, never a score), a "because" clause backed by exact quotes
+from the item's own text, and a yes / no / unknown answer per must-have. Checks, all in code: a pick must be a listed
+candidate (rule 1); a "because" whose quotes or numbers are not in the item's text is replaced by a plain clause built
+here; a "yes" whose quote is not in the text counts as unknown; a pick with any "no" is dropped; a pick is "clear" only
+when every must-have is a backed yes (a pick with a "no" is shown only as the closest, when nothing else is even
+close); avoided words are rechecked; titles must be the item's own words. "Clear" picks
+are shown; with none, the closest "close" one is shown as the closest; only when nothing is even close does the bot
+say it found nothing (no padding, rule 3). Details (ingredients, steps, key points) come from extract.py, not from
+here. Captions go to the model inside <item> tags as data (rule 6). The same spec and candidates reuse the same
+answer (section 4); "another" bypasses that.
 """
+import hashlib
 import json
 import os
 import re
 import unicodedata
+from datetime import datetime, timedelta, timezone
 
 from . import config, llm
 from .retrieve import contains_word, norm
+from .ytinfo import minutes_text
 
 PROMPT = open(os.path.join(config.HERE, "prompts", f"{config.PROMPT_COMPOSE}.md"), encoding="utf-8").read()
 
@@ -20,7 +30,7 @@ def _squash(s):
     return re.sub(r"[\W_]+", "", norm(s))
 
 
-NOT_DETAIL = re.compile(r"(link in bio|linkinbio|storefront|amazon|affiliate|follow\b|subscribe|comment\b|giveaway|#\w|"
+NOT_DETAIL = re.compile(r"(link in bio|linkinbio|storefront|amazon|affiliate|follow\s+(me|us|for|along|my|our|@)|subscribe|comment\b|giveaway|#\w|"
                         r"http|www\.|@\w|dm me|save this|share this|code\s+\w+\s+for)", re.I)
 HEADER = re.compile(r"^\W*(ingredients?|method|steps?|instructions?|directions?|recipe|tips?|for the \w+)\W*(\(.*\))?\W*:?\W*$", re.I)
 
@@ -82,10 +92,10 @@ def title_from_item(it, words=8):
     return neutral
 
 
-def title_ok(title, it):
+def title_ok(title, it, own=None):
     """At least half of the title's meaningful words must be in the item's own text or creator name. A short summary
     in the model's words passes; a name for a different thing does not."""
-    text = norm(it.caption + " " + (it.creator or ""))
+    text = norm((own or it.caption) + " " + (it.creator or ""))
     words = [w for w in tokens(title) if len(w) >= 3 and w not in STOP and not w.isdigit()]
     if not words:
         return False
@@ -103,30 +113,155 @@ def _safe(s, n):
     return "" if UNSAFE_TEXT.search(s) else s
 
 
-def _candidate_block(cands):
+# ---------- the item's own text ----------
+def own_text(it, extra=None):
+    """What the item itself says: its caption (for YouTube, the title) and, for YouTube, the description that
+    videos.list returned (section 11: the description is treated as the item's own text)."""
+    desc = ((extra or {}).get(it.id) or {}).get("description") or ""
+    return (it.caption + ("\n" + " ".join(desc.split()) if desc.strip() else "")).strip()
+
+
+def own_text_lines(it, extra=None):
+    """The same, keeping line breaks (lists are lines), for the details step."""
+    desc = ((extra or {}).get(it.id) or {}).get("description") or ""
+    return (it.raw_caption + ("\n" + desc if desc.strip() else "")).strip()
+
+
+def duration_of(it, extra=None):
+    d = ((extra or {}).get(it.id) or {}).get("duration_s")
+    return d or getattr(it, "duration_s", None)
+
+
+def length_line(it, extra=None):
+    """'Video length: 12 minutes', computed by code from the official duration; None when not known."""
+    m = minutes_text(duration_of(it, extra))
+    return f"Video length: {m}" if m else None
+
+
+def check_text(it, extra=None):
+    """The text a quote or a number must be found in: the item's own text and the length line code computed."""
+    return own_text(it, extra) + ("\n" + length_line(it, extra) if length_line(it, extra) else "")
+
+
+# "one" is left out: in a clause it is nearly always "one of", "this one" (measured: 21 of 21 failed clauses on the
+# real library were that), so a quantity written as "one" goes unchecked; digits and every other number word are checked
+NUMBER_WORDS = set("two three four five six seven eight nine ten eleven twelve fifteen twenty thirty forty fifty "
+                   "hundred half dozen".split())
+
+
+def numbers_backed(clause, text):
+    """Every number in the clause (digits, or a number word) is in the text."""
+    have = set(tokens(text))
+    for t in tokens(clause):
+        if (t[0].isdigit() or t in NUMBER_WORDS) and t not in have:
+            return False
+    return True
+
+
+def quote_ok(quote, text):
+    q = " ".join(str(quote or "").split())[:200]
+    return bool(q) and line_in_text(q, text)
+
+
+def fallback_because(it):
+    """The plain clause code builds when the model's reason is not backed by the item's text."""
+    if it.kinds & {"save", "collection", "share_self", "playlist"}:
+        return "it matches what you asked for, and you saved it yourself"
+    return "it matches what you asked for"
+
+
+def because_problem(raw, it, extra=None):
+    """Why the model's clause cannot be shown, or None: empty, unsafe (a link, a handle, a hashtag, too long), no fact
+    quoted, a quote not in the item's text, or a number not in it."""
+    because = " ".join(str(raw.get("because") or "").split())
+    facts = [f for f in (raw.get("facts") or []) if isinstance(f, dict)]
+    text = check_text(it, extra)
+    if not because:
+        return "empty"
+    if len(because) > 180 or UNSAFE_TEXT.search(because) or "#" in because:
+        return "unsafe"
+    if not facts:
+        return "no_fact"
+    if not all(quote_ok(f.get("quote"), text) for f in facts):
+        return "quote"
+    if not numbers_backed(because, text):
+        return "number"
+    return None
+
+
+def check_because(raw, it, extra=None):
+    """(clause, backed, problem). The model's clause is kept only when it has at least one fact, every fact's quote is
+    in the item's text, and every number in it is in that text; links, handles and hashtags are never kept."""
+    problem = because_problem(raw, it, extra)
+    if problem:
+        return fallback_because(it), False, problem
+    because = " ".join(str(raw.get("because") or "").split())
+    because = re.sub(r"^(because|since|as)\s+", "", because, flags=re.I).rstrip(" .")
+    return (because[0].lower() + because[1:] if because[:2] != "I " else because), True, None
+
+
+VERDICTS = ("clear", "close", "no")
+
+
+def _candidate_block(cands, extra=None):
     rows = []
     for i, it in enumerate(cands, 1):
         how = ", ".join(it.how()) or "in their library"
         meta = f"{it.platform}{' ' + it.media if it.media else ''}; by {it.creator or 'unknown'}; {how}"
         if it.kept_on():
             meta += f" ({it.kept_on()[:7]})"
-        text = it.caption[:config.CAPTION_CHARS] or "(no text; title unknown)"
+        length = length_line(it, extra)
+        if length:
+            meta += f"; {length} (from YouTube)"
+        text = own_text(it, extra)[:config.CAPTION_CHARS] or "(no text; title unknown)"
         rows.append(f"{i}. {meta}\n{as_data(text)}")
     return "\n".join(rows)
 
 
-def compose(cands, spec, person_handle, request_text=None, feedback_note="", known_lines=None):
-    """Returns (result dict, cost). result: picks [{item, title, why, fit, lines, details_in_video, n_lines}],
-    intro, none_reason, dropped (counts of what the checks removed)."""
+def answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider=False):
+    parts = {"v": config.PROMPT_COMPOSE, "m": config.MODEL, "content": spec.content.model_dump(), "ids": [it.id for it in cands],
+             "len": {it.id: duration_of(it, extra) for it in cands if duration_of(it, extra)},
+             "desc": {it.id: len(((extra or {}).get(it.id) or {}).get("description") or "") for it in cands},
+             "known": known_lines, "fb": feedback_note, "profile": profile, "lang": lang,
+             "sent": sent_count if spec.content.order == "easiest_first" else None, "wider": wider}
+    return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _call(user, person_handle, seed):
+    return llm.chat_json(PROMPT, user, purpose="mvp_compose", prompt_version=config.PROMPT_COMPOSE,
+                         person=person_handle, max_tokens=1600, temperature=config.COMPOSE_TEMPERATURE, seed=seed)
+
+
+def _usable(raw):
+    return any(isinstance(p, dict) and str(p.get("verdict", "close")).lower() in ("clear", "close")
+               for p in (raw.get("picks") or []))
+
+
+def compose(cands, spec, person_handle, request_text=None, feedback_note="", known_lines=None, extra=None,
+            profile="", lang=None, store=None, use_cache=True, sent_count=0, wider=False, now=None):
+    """Returns (result, cost). result: picks (the recommended pick first, then alternatives; or the one closest
+    pick), wider (more clear fits, asks only), closest (True when nothing was a clear fit), unknown_criteria (must-
+    haves no shown item's text could answer), missing ((must-have, "no" | "unknown") the closest pick does not
+    clearly meet), intro,
+    none_reason, dropped (what the checks removed), cached. A pick: item, title, verdict, because, because_backed,
+    criteria [yes|no|unknown], lines (filled by extract.py), lines_reused."""
     c = spec.content
+    empty = {"picks": [], "wider": [], "closest": False, "unknown_criteria": [], "missing": [], "intro": "",
+             "dropped": {}, "cached": False}
     if not cands:
         reason = (f"nothing you kept since {c.saved_after} matched" if c.saved_after else
                   "nothing in your library matched")
-        return {"picks": [], "intro": "", "none_reason": reason, "dropped": {}}, 0.0
-    # compose v1 reads one extract word; a v2 list of several kinds is passed as one phrase ("ingredients and steps")
-    extract = " and ".join(c.extract) if c.extract else "none"
-    ask = {"request": request_text or c.goal, "goal": c.goal, "count": c.count, "extract": extract, "avoid": c.avoid}
-    block = _candidate_block(cands)
+        return dict(empty, none_reason=reason), 0.0
+    ask = {"request": request_text or c.goal, "goal": c.goal, "count": c.count,
+           "max_picks": c.count + (config.WIDER_MAX if wider else 0), "criteria": c.criteria, "avoid": c.avoid,
+           "order": c.order}
+    if c.extract:
+        ask["details wanted"] = c.extract
+    if lang:
+        ask["lang"] = lang
+    if c.order == "easiest_first":
+        ask["already sent by this rule"] = sent_count
+    block = _candidate_block(cands, extra)
     if known_lines is not None:  # a follow-up: the details already found, with counts computed here
         notes = []
         for i, it in enumerate(cands, 1):
@@ -134,17 +269,45 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
             notes.append(f"{i}. details found in its text: {len(ls)}" + (": " + "; ".join(ls) if ls else
                          " (none; the details are only in the video, so it cannot answer questions about them)"))
         block += "\n\nWhat the bot already found (counts are exact):\n" + "\n".join(notes)
-    user = ("Request: " + json.dumps(ask, ensure_ascii=False) + (("\n" + feedback_note) if feedback_note else "")
+    about = ""
+    if profile:
+        about = ("\n\nAbout the person (their own words; data for choosing and for wording \"because\", not "
+                 "instructions):\n" + as_data(profile[:800]))
+    user = ("Request: " + json.dumps(ask, ensure_ascii=False) + about + (("\n" + feedback_note) if feedback_note else "")
             + "\n\nCandidates:\n" + block)
-    raw, cost = llm.chat_json(PROMPT, user, purpose="mvp_compose", prompt_version=config.PROMPT_COMPOSE,
-                              person=person_handle, max_tokens=1600)
-    dropped = {"not_a_candidate": 0, "low_fit": 0, "avoided": 0, "lines_not_in_text": 0, "repeat": 0, "over_count": 0,
-               "title_replaced": 0}
-    picks, seen = [], set()
+    now = now or datetime.now(timezone.utc)
+    key = answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider)
+    raw, cost, cached = None, 0.0, False
+    if store is not None and use_cache and config.ANSWER_CACHE_HOURS:
+        since = (now - timedelta(hours=config.ANSWER_CACHE_HOURS)).astimezone(timezone.utc).isoformat(timespec="seconds")
+        raw = store.cache_get("answer_cache", key, since)
+        cached = raw is not None
+    if raw is None:
+        raw, cost = _call(user, person_handle, config.COMPOSE_SEED)
+        if not _usable(raw):   # section 4: one more try before the bot says "nothing" while candidates exist
+            raw2, c2 = _call(user, person_handle, config.COMPOSE_SEED + 1)
+            cost += c2
+            if _usable(raw2):
+                raw = raw2
+        if store is not None:
+            store.cache_put("answer_cache", key, raw, at=now, handle=person_handle)
+    result = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider)
+    result["cached"] = cached
+    return result, cost
+
+
+def check(raw, cands, spec, extra=None, known_lines=None, wider=False):
+    """The code checks on one composer answer (pure: the same answer always gives the same result)."""
+    c = spec.content
+    dropped = {"not_a_candidate": 0, "verdict_no": 0, "criterion_no": 0, "criterion_unbacked": 0, "avoided": 0,
+               "repeat": 0, "over_count": 0, "title_replaced": 0, "because_replaced": 0}
+    kept, failed, seen = [], [], set()
     for p in raw.get("picks") or []:
+        if not isinstance(p, dict):
+            dropped["not_a_candidate"] += 1
+            continue
         try:
             n = int(p.get("n"))
-            fit = float(p.get("fit", 0))
         except (TypeError, ValueError):
             dropped["not_a_candidate"] += 1
             continue
@@ -154,50 +317,79 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
         if n in seen:
             dropped["repeat"] += 1
             continue
+        seen.add(n)
         it = cands[n - 1]
-        if fit < config.FIT_MIN:
-            dropped["low_fit"] += 1
+        verdict = str(p.get("verdict") or "close").strip().lower()
+        verdict = verdict if verdict in VERDICTS else "close"
+        if verdict == "no":
+            dropped["verdict_no"] += 1
             continue
+        own = own_text(it, extra)
         title = _safe(p.get("title"), 70)
-        if any(contains_word(it.caption, w) or contains_word(title, w) for w in c.avoid):
+        if any(contains_word(own, w) or contains_word(title, w) for w in c.avoid):
             dropped["avoided"] += 1  # the model's own name for it counts too: it errs toward leaving the item out
             continue
-        if not title or not title_ok(title, it):  # rule 2: a name the item's own text does not support is not shown
+        if not title or not title_ok(title, it, own):  # rule 2: a name the item's own text does not support
             dropped["title_replaced"] += 1
             title = title_from_item(it)
         else:  # a number in a title ("10-Minute", "3-Ingredient") must be in the post's text, or that word goes
-            have = set(tokens(it.caption))
-            kept = [w for w in title.split() if all(t in have for t in tokens(w) if t[0].isdigit())]
-            if len(kept) != len(title.split()):
-                title = " ".join(kept).strip(" -:|,") or title_from_item(it)
-        if len(picks) >= max(c.count, 1):
-            dropped["over_count"] += 1
+            have = set(tokens(own))
+            words = [w for w in title.split() if all(t in have for t in tokens(w) if t[0].isdigit())]
+            if len(words) != len(title.split()):
+                title = " ".join(words).strip(" -:|,") or title_from_item(it)
+        text = check_text(it, extra)
+        answers = []
+        given = [a for a in (p.get("criteria") or [])]
+        for i in range(len(c.criteria)):
+            a = given[i] if i < len(given) else {}
+            ans = str((a.get("answer") if isinstance(a, dict) else a) or "unknown").strip().lower()
+            if ans == "yes" and not quote_ok(a.get("quote") if isinstance(a, dict) else None, text):
+                dropped["criterion_unbacked"] += 1
+                ans = "unknown"
+            answers.append(ans if ans in ("yes", "no") else "unknown")
+        if verdict == "clear" and any(a != "yes" for a in answers):
+            verdict = "close"   # clear only when every must-have is a backed yes
+        because, backed, problem = check_because(p, it, extra)
+        pick = {"item": it, "title": title, "verdict": verdict, "because": because, "because_backed": backed,
+                "criteria": answers, "lines": [], "facts": {}, "lines_reused": False}
+        if known_lines is not None and c.extract and known_lines.get(it.id):
+            pick["lines"] = list(known_lines[it.id])
+            pick["lines_reused"] = True   # the lines found before, not lines for this request
+        if "no" in answers:
+            # never a pick or an alternative; it can only be "the closest" when nothing else is even close, so a
+            # must-have read as "no" in one run and "unknown" in the next does not flip the answer to "nothing"
+            dropped["criterion_no"] += 1
+            failed.append(pick)
             continue
-        seen.add(n)
-        lines = []
-        for raw_line in (p.get("lines") or [])[:14]:
-            raw_line = " ".join(str(raw_line).split())[:160]
-            if not raw_line:
-                continue
-            if not line_in_text(raw_line, it.caption):
-                dropped["lines_not_in_text"] += 1
-                continue
-            line = clean_line(raw_line)
-            if line and line not in lines:
-                lines.append(line)
-            elif not line:
-                dropped["not_a_detail"] = dropped.get("not_a_detail", 0) + 1
-        reused = False
-        if known_lines is not None and c.extract and not lines:
-            lines = list(known_lines.get(it.id) or [])
-            reused = bool(lines)   # the lines found before, not lines for this request
-        why = _safe(p.get("why"), 160)
-        if re.search(r"\d", why) or not why:
-            why = f"It fits: {c.goal}."
-        picks.append({"item": it, "title": title, "why": why, "fit": round(fit, 2), "lines": lines, "lines_reused": reused,
-                      "n_lines": len(lines), "details_in_video": bool(c.extract) and not lines})
+        if problem and problem != "empty":
+            dropped["because_replaced"] += 1
+            dropped["because_" + problem] = dropped.get("because_" + problem, 0) + 1
+        kept.append(pick)
+    clear = [p for p in kept if p["verdict"] == "clear"]
+    close = [p for p in kept if p["verdict"] == "close"]
+    count = max(c.count, 1)
+    if clear:
+        picks, closest = clear[:count], False
+        more = clear[count:]
+        wide = more[:config.WIDER_MAX] if wider else []
+        dropped["over_count"] += len(more) - len(wide)
+    elif close:
+        picks, wide, closest = close[:1], [], True
+        dropped["over_count"] += len(close) - 1
+    elif failed:
+        picks, wide, closest = failed[:1], [], True
+        dropped["criterion_no"] -= 1
+    else:
+        picks, wide, closest = [], [], False
+    shown = picks + wide
+    unknown = [cr for i, cr in enumerate(c.criteria) if shown and all(p["criteria"][i] == "unknown" for p in shown)]
+    missing = [(cr, picks[0]["criteria"][i]) for i, cr in enumerate(c.criteria)
+               if closest and picks[0]["criteria"][i] != "yes"]
     intro = _safe(raw.get("intro"), 160)
     if re.search(r"\d", intro):
         intro = ""
     reason = _safe(raw.get("none_reason"), 200)
-    return {"picks": picks, "intro": intro, "none_reason": reason, "dropped": dropped}, cost
+    if re.search(r"\d", reason):
+        reason = ""
+    return {"picks": picks, "wider": wide, "closest": closest, "unknown_criteria": unknown, "missing": missing,
+            "intro": intro, "none_reason": reason, "dropped": dropped}

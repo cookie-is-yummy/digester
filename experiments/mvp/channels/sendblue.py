@@ -48,6 +48,7 @@ def parse_receive(payload):
 
 class SendblueChannel(Channel):
     name = "sendblue"
+    link_previews = True   # one link per message, nothing else in it (iMessage shows it as a card)
 
     def __init__(self, port=8787, poster=None):
         self.inbox = queue.Queue()
@@ -118,6 +119,15 @@ class SendblueChannel(Channel):
 
     def send(self, handle, text):
         r = self.poster({"number": handle, "content": text[:18000], "from_number": _env("SENDBLUE_FROM_NUMBER")})
+        return r.get("message_handle")
+
+    def send_contact_card(self, handle):
+        """Our .vcf card as media (MVP_CONTACT_CARD_URL: a public https URL of our own file, ending in .vcf). Apple
+        does not expand links from senders who are not in the person's contacts (Sendblue FAQ)."""
+        url = os.environ.get("MVP_CONTACT_CARD_URL")
+        if not url:
+            return None
+        r = self.poster({"number": handle, "content": "", "media_url": url, "from_number": _env("SENDBLUE_FROM_NUMBER")})
         return r.get("message_handle")
 
     def close(self):

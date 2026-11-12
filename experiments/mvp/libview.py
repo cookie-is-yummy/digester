@@ -19,7 +19,7 @@ KIND_LABEL = {"save": "saved", "collection": "in a collection", "share_self": "s
 
 class Item:
     __slots__ = ("id", "platform", "url", "caption", "first_line", "creator", "media", "kinds", "dates", "collections",
-                 "watch_count")
+                 "watch_count", "video_id", "duration_s", "raw_caption")
 
     def __init__(self, raw):
         pd = raw.get("platform_data") or {}
@@ -36,6 +36,10 @@ class Item:
         self.dates = {}  # kind -> latest ISO date of that kind
         self.collections = [c for c in pd.get("collections") or [] if c]
         self.watch_count = pd.get("watch_count") or 0
+        self.video_id = pd.get("video_id") if self.platform == "youtube" else None
+        self.duration_s = pd.get("duration_s") if isinstance(pd.get("duration_s"), (int, float)) else None
+        # the caption with its line breaks, for the details step (lists are lines); `caption` is one line
+        self.raw_caption = raw.get("caption") or ""
 
     def how(self):
         order = ["save", "collection", "share_self", "playlist", "like", "watch", "view"]

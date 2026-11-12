@@ -1,9 +1,16 @@
 """PROTOTYPE ONLY - candidate items for one spec, from the person's own library only (BRIEF-10 rule 1).
 
-Runs each search of the spec through the library's Q8 engine (deep ID lists), fuses the lists, then applies in code:
-platform and kind filters, the saved-after/before dates, items already sent by this rule (rule 4), items the person
-gave 👎 (rule 9), anything containing an avoided word, and friends' posts (rule 5, already dropped by LibraryView).
+Source library: runs each search of the spec through the library's Q8 engine (deep ID lists; the same text on the same
+library build reuses its ranked list), fuses the lists, then applies in code: platform and kind filters, the person's
+excluded kinds and platforms, creators and collections (and the ones to avoid), the saved-after (inclusive) and
+saved-before (exclusive) dates, items already sent by this rule (rule 4), items the person gave 👎 (rule 9), anything
+containing an avoided word, and friends' posts (rule 5, already dropped by LibraryView). Then the order asked for.
+Source recent: what they kept in the period, newest first, no search. Source items: fixed ids set by code.
 """
+import hashlib
+import json
+import os
+import random
 import re
 import unicodedata
 from datetime import datetime, timedelta, timezone
@@ -71,33 +78,124 @@ def date_for(it, kinds):
     return max(dates)[:10] if dates else it.kept_on()
 
 
-def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, k=config.CANDIDATES, now=None):
-    c = spec.content
+def _squash(s):
+    return re.sub(r"[\W_]+", "", norm(s))
+
+
+def name_matches(name, wanted):
+    """A creator or collection name the person gave matches the item's: the same letters and digits (case, spaces,
+    '@' and punctuation ignored), or, for a name of 4 or more, contained in it ('blender guru' in 'Blender Guru Pro')."""
+    a, b = _squash(name), _squash(wanted)
+    if not a or not b:
+        return False
+    return a == b or (len(b) >= 4 and b in a)
+
+
+def _library_stamp(lib):
+    """Changes when the library is rebuilt, so ranked lists cached for the old build are not reused."""
+    path = os.path.join(lib, "corpus", "items.jsonl")
+    try:
+        st = os.stat(path)
+        return f"{st.st_size}:{int(st.st_mtime)}"
+    except OSError:
+        return "none"
+
+
+def ranked(pool, lib, query, store=None, now=None):
+    """The engine's ranked IDs for one search text. The engine is deterministic for a text (consistency note); the
+    same text on the same library build reuses the list (section 4), which also saves the search time."""
+    if store is None or not config.RANKED_CACHE_HOURS:
+        return pool.search(lib, query)
+    now = now or datetime.now(timezone.utc)
+    key = hashlib.sha256(json.dumps([os.path.abspath(lib), _library_stamp(lib), " ".join(query.lower().split()),
+                                     config.SEARCH_DEPTH]).encode()).hexdigest()
+    since = (now - timedelta(hours=config.RANKED_CACHE_HOURS)).astimezone(timezone.utc).isoformat(timespec="seconds")
+    hit = store.cache_get("ranked_cache", key, since)
+    if hit is not None:
+        return {"ids": hit["ids"], "mode": hit.get("mode"), "cost_usd": 0.0, "cached": True}
+    r = pool.search(lib, query)
+    store.cache_put("ranked_cache", key, {"ids": r["ids"], "mode": r.get("mode")}, at=now, library=lib, mode=r.get("mode"))
+    return r
+
+
+def keep(it, c, exclude_kinds=(), exclude_platforms=()):
+    """The filters every source shares: platforms and kinds asked for, the person's own exclusions ("don't use my
+    likes": an item kept only by a like is left out, one also saved stays), creators and collections."""
+    if c.platforms and it.platform not in c.platforms:
+        return False
+    if exclude_platforms and it.platform in exclude_platforms:
+        return False
+    if c.kinds and not (it.kinds & set(c.kinds)):
+        return False
+    if exclude_kinds and it.kinds and not (it.kinds - set(exclude_kinds)):
+        return False
+    if c.creators and not any(name_matches(it.creator or "", w) for w in c.creators):
+        return False
+    if c.avoid_creators and any(name_matches(it.creator or "", w) for w in c.avoid_creators):
+        return False
+    if c.collections and not any(name_matches(col, w) for col in it.collections for w in c.collections):
+        return False
+    if c.avoid_collections and any(name_matches(col, w) for col in it.collections for w in c.avoid_collections):
+        return False
+    return True
+
+
+def _period(c, now):
     saved_after = c.saved_after
     if c.since_days and not saved_after:  # a relative period, worked out at each run
         saved_after = ((now or datetime.now(timezone.utc)) - timedelta(days=c.since_days)).date().isoformat()
-    scores, cost, modes = {}, 0.0, set()
+    return saved_after, c.saved_before
+
+
+def in_period(kept, saved_after, saved_before):
+    """saved_after is inclusive, saved_before exclusive (section 11)."""
+    if saved_after and (not kept or kept < saved_after):
+        return False
+    if saved_before and (not kept or kept >= saved_before):
+        return False
+    return True
+
+
+def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, k=config.CANDIDATES, now=None,
+               store=None, exclude_kinds=(), exclude_platforms=(), seed=None):
+    """Candidates for one spec, best first (or in the order the spec asks for). `seed` makes order "random" repeatable
+    for one run (a rule's slot, or an ask's day)."""
+    c = spec.content
+    exclude, disliked = set(exclude), set(disliked)
+    saved_after, saved_before = _period(c, now)
+    if c.source == "items":   # fixed ids set by code (an earlier answer sent again): in that order, nothing searched
+        out = [view.get(i) for i in c.item_ids if i not in disliked]
+        return [it for it in out if it is not None][:k], {"cost_usd": 0.0, "modes": [], "fused": len(c.item_ids)}
+    if c.source == "recent":  # what they kept in the period, newest first; no search
+        rows = []
+        for it in view.items.values():
+            if it.id in exclude or it.id in disliked or not keep(it, c, exclude_kinds, exclude_platforms):
+                continue
+            kept = date_for(it, c.kinds)
+            if not in_period(kept, saved_after, saved_before):
+                continue
+            if any(contains_word(it.caption, w) for w in c.avoid):
+                continue
+            rows.append((kept or "", it.id, it))
+        rows.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        return [it for *_, it in rows[:k]], {"cost_usd": 0.0, "modes": [], "fused": len(rows)}
+    scores, cost, modes, cached = {}, 0.0, set(), 0
     for q in c.searches:
-        r = pool.search(view.lib, q)
+        r = ranked(pool, view.lib, q, store=store, now=now)
         cost += r["cost_usd"] or 0.0
+        cached += bool(r.get("cached"))
         modes.add(r["mode"])
         for rank, iid in enumerate(r["ids"]):
             scores[iid] = scores.get(iid, 0.0) + 1.0 / (60 + rank)
-    exclude, disliked = set(exclude), set(disliked)
     creator_weights = creator_weights or {}
     out = []
     for iid, s in scores.items():
         it = view.get(iid)
         if it is None or iid in exclude or iid in disliked:
             continue
-        if c.platforms and it.platform not in c.platforms:
+        if not keep(it, c, exclude_kinds, exclude_platforms):
             continue
-        if c.kinds and not (it.kinds & set(c.kinds)):
-            continue
-        kept = date_for(it, c.kinds)
-        if saved_after and (not kept or kept < saved_after):
-            continue
-        if c.saved_before and (not kept or kept > c.saved_before):
+        if not in_period(date_for(it, c.kinds), saved_after, saved_before):
             continue
         if any(contains_word(it.caption, w) for w in c.avoid):
             continue
@@ -105,6 +203,12 @@ def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, 
         if c.extract and len(it.caption) >= 200:
             boost *= 1.2  # details are only usable when the item's own text holds them
         boost *= creator_weights.get(it.creator, 1.0)
-        out.append((s * boost, it))
-    out.sort(key=lambda x: -x[0])
-    return [it for _, it in out[:k]], {"cost_usd": cost, "modes": sorted(m for m in modes if m), "fused": len(scores)}
+        out.append((s * boost, iid, it))
+    out.sort(key=lambda x: (-x[0], x[1]))
+    top = [it for *_, it in out[:k]]
+    if c.order in ("newest", "oldest"):   # the best matches, then by date
+        top.sort(key=lambda it: (date_for(it, c.kinds) or "", it.id), reverse=(c.order == "newest"))
+    elif c.order == "random":
+        rnd = random.Random(str(seed if seed is not None else "") + "|" + "|".join(c.searches))
+        rnd.shuffle(top)
+    return top, {"cost_usd": cost, "modes": sorted(m for m in modes if m), "fused": len(scores), "cached": cached}

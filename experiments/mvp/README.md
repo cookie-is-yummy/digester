@@ -66,6 +66,9 @@ Other ways to test:
   webhook with the same secret in Sendblue's dashboard. Start the tunnel in its own terminal and leave it running: a
   quick tunnel gets a new address each time it starts, and the webhook must then be registered again. The channel has
   never run against a real Sendblue line: check the first send, and set `SENDBLUE_API_URL` if the address is wrong.
+  Links are sent alone in their own message, but Messages only shows a preview for a sender in the person's contacts:
+  put the bot's contact card (a `.vcf` file of our own) at a public https address and set `MVP_CONTACT_CARD_URL`; it
+  is sent once, after the person agrees.
 
 ## See what happened to a message
 
@@ -96,12 +99,14 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `eval_rules.py`, `evalset/` | The rule evaluation runner and the development half of the set |
 | `todos.py` | To-do lists, due reminders, undo records, library counts |
 | `actions/` | The action registry: what a rule's `do` may name, and its params |
-| `retrieve.py`, `engines.py`, `libview.py` | Candidates from the person's own library (Q8 search, filters) |
-| `compose.py`, `prompts/compose_v1.md` | The model picks; code enforces the reliability rules (BRIEF-10 section 5) |
-| `render.py` | The message text |
+| `retrieve.py`, `engines.py`, `libview.py` | Candidates from the person's own library (Q8 search, cached ranked lists, filters, orders, recent and fixed items) |
+| `ytinfo.py` | A YouTube candidate's length and description from the official `videos.list` (`YOUTUBE_API_KEY`), kept at most 30 days |
+| `compose.py`, `prompts/compose_v2.md` | The model chooses (verdicts clear / close / no, a backed "because", must-haves); code checks it; a cached answer per spec and candidates |
+| `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table |
+| `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone |
 | `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
 | `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |
 | `store.py`, `llm.py` | Records; model calls, the cost ledger and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 122 offline tests |
+| `tests/` | 148 offline tests |

@@ -1,14 +1,20 @@
-"""PROTOTYPE ONLY - the executor: one run (retrieve, compose, render, record) and the send (docs/06 'Executor').
+"""PROTOTYPE ONLY - the executor: one run (retrieve, enrich, compose, extract, render, record) and the send (docs/06
+'Executor', DESIGN.md sections 3, 4 and 11).
 
-Only the bot sends (AGENTS.md rule 5): retrieve and compose read. Mixed into core.Bot.
+Only the bot sends (AGENTS.md rule 5): retrieve, compose and extract read. A reply is a list of parts (render.Reply):
+a channel that shows link previews gets each part as its own message, others get the parts joined; every message a
+reply went out as is recorded, so a reaction on any of them maps to the run. Mixed into core.Bot.
 """
 import time
 from zoneinfo import ZoneInfo
 
 from . import config, llm
+from .channels.base import SendUncertain
 from .compose import compose
-from .render import none_message, picks_message
+from .extract import details_many, kinds_for
+from .render import Reply, joined, none_message, picks_message
 from .retrieve import candidates
+from .schema import KINDS, PLATFORMS
 from .schema import RuleSpec
 from .store import now_iso
 from . import texts as T
@@ -17,10 +23,51 @@ from .texts import LIMIT, LIMIT_TOTAL, LOADING, RUN_ERROR, SCHEDULED_FOOTER
 
 class ExecutorMixin:
     def send(self, handle, text, run_id=None):
-        ref = self.channel.send(handle, text)
+        """Sends a reply. A Reply goes out part by part on a channel that shows link previews (each link alone in its
+        message, so the app can show it as a card); elsewhere it is one text. Returns the first message's reference."""
+        if isinstance(text, Reply) and getattr(self.channel, "link_previews", False):
+            first = None
+            for i, part in enumerate(text.split()):
+                try:
+                    if part["type"] == "link":
+                        ref = self.channel.send_link(handle, part)
+                    else:
+                        ref = self.channel.send(handle, part["text"])
+                except Exception as e:  # noqa: BLE001
+                    if i == 0:
+                        raise
+                    raise SendUncertain("partly sent") from e   # the first parts went out: never sent again
+                self.store.record_sent(ref, handle, run_id, part=i)
+                first = first or ref
+            self.note(reply_ref=first)
+            return first
+        ref = self.channel.send(handle, joined(text))
         self.store.record_sent(ref, handle, run_id)
         self.note(reply_ref=ref)
         return ref
+
+    # ---------- the person's context ----------
+    def _profile_text(self, handle):
+        """What the composer may use about the person: their direction and what they said about themselves."""
+        ctx = self.store.person_context(handle)
+        lines = []
+        if ctx.get("direction"):
+            lines.append("What they are working toward: " + " ".join(str(ctx["direction"]).split())[:300])
+        lines.extend(ctx.get("notes") or [])
+        return "\n".join(lines)
+
+    def _exclusions(self, handle):
+        prefs = self.store.person_context(handle).get("prefs") or {}
+        kinds = [k for k in prefs.get("exclude_kinds") or [] if k in KINDS]
+        platforms = [p for p in prefs.get("exclude_platforms") or [] if p in PLATFORMS]
+        return kinds, platforms
+
+    def _youtube(self):
+        yt = getattr(self, "yt", None)
+        if yt is None:
+            from .ytinfo import YouTubeInfo
+            yt = self.yt = YouTubeInfo(self.store)
+        return yt
 
     # ---------- caps ----------
     def _over_cap(self, person):
@@ -51,34 +98,67 @@ class ExecutorMixin:
         t0 = time.time()
         cost = 0.0
         status, err, result, cands, view = "ok", None, None, [], None
+        steps = {}
         disliked = self.store.disliked(person["handle"])
         try:
             view = self.view(person["library"])
             ready = getattr(self.pool, "is_ready", None)
             if cands_override is None and kind != "scheduled" and ready and not ready(person["library"]):
                 self.send(person["handle"], LOADING)  # the first search after a start can take a minute
+            h = person["handle"]
+            now = self.clock()
+            sent_before = self.store.delivered(rule_id) if rule_id else set()
             if cands_override is not None:
                 cands = [c for c in cands_override if c.id not in disliked]  # rule 9 holds for follow-ups too
             else:
-                exclude = self.store.delivered(rule_id) if (rule_id and spec.content.exclude_sent) else set()
+                exclude = sent_before if spec.content.exclude_sent else set()
                 exclude |= set(shown)
                 weights = self._feedback_weights(rule_id, view)
+                ex_kinds, ex_platforms = self._exclusions(h)
+                seed = f"{rule_id or h}:{now.date().isoformat()}"   # order "random": one draw per run, repeatable
                 cands, meta = candidates(self.pool, view, spec, exclude=exclude, disliked=disliked,
-                                         creator_weights=weights, now=self.clock())
+                                         creator_weights=weights, now=now, store=self.store, exclude_kinds=ex_kinds,
+                                         exclude_platforms=ex_platforms, seed=seed)
                 cost += meta.get("cost_usd", 0.0)
-            result, c = compose(cands, spec, person["handle"], request_text=request_text,
-                                feedback_note=self._feedback_note(rule_id, view), known_lines=known_lines)
+            steps["search"] = round(time.time() - t0, 2)
+            t1 = time.time()
+            extra = self._youtube().details(cands, now=now) if any(c.platform == "youtube" for c in cands) else {}
+            steps["youtube"] = round(time.time() - t1, 2)
+            t1 = time.time()
+            result, c = compose(cands, spec, h, request_text=request_text,
+                                feedback_note=self._feedback_note(rule_id, view), known_lines=known_lines,
+                                extra=extra, profile=self._profile_text(h), lang=getattr(self._tl, "lang", None),
+                                store=self.store, use_cache=(kind != "more"), sent_count=len(sent_before),
+                                wider=(kind == "ask"), now=now)
             cost += c
+            steps["compose"], steps["answer_cached"] = round(time.time() - t1, 2), result.get("cached", False)
+            t1 = time.time()
+            main = result.get("picks") or []
+            if main and kinds_for(spec.content.extract):
+                facts, info = details_many([p["item"] for p in main], spec.content.extract, view.lib, store=self.store,
+                                           person=h, extra=extra, now=now)
+                cost += info["cost"]
+                result["dropped"]["lines_not_in_text"] = info["dropped"]
+                for p in main:
+                    p["facts"] = facts.get(p["item"].id) or {}
+                    found = [line for k in ("ingredients", "steps", "key_points") for line in p["facts"].get(k) or []]
+                    if found or not p.get("lines_reused"):
+                        p["lines"], p["lines_reused"] = found, False
+                steps["extract"], steps["extract_calls"] = round(time.time() - t1, 2), info["calls"]
         except Exception as e:  # noqa: BLE001 - one failed run never stops the bot
             status, err = "error", type(e).__name__ + (": " + str(e)[:120] if isinstance(e, RuntimeError) else "")
-        picks = (result or {}).get("picks") or []
+        picks = ((result or {}).get("picks") or []) + ((result or {}).get("wider") or [])
         run_id = self.store.add_run(handle=person["handle"], rule_id=rule_id, kind=kind, at=now_iso(self.clock()),
                                     n_candidates=len(cands), n_picks=len(picks),
-                                    n_dropped=sum(((result or {}).get("dropped") or {}).values()),
-                                    fits=[p["fit"] for p in picks], cost_usd=round(cost, 6),
+                                    # what the checks removed (picks, lines, titles); a replaced "because" is not
+                                    n_dropped=sum(v for k, v in ((result or {}).get("dropped") or {}).items()
+                                                  if not k.startswith("because_")),
+                                    fits=[p["verdict"] for p in picks], cost_usd=round(cost, 6),
                                     status=status if status == "error" else ("picked" if picks else "none"),
                                     error=err, prompt_version=config.PROMPT_COMPOSE, seconds=round(time.time() - t0, 2),
-                                    lang=getattr(self._tl, "lang", None))
+                                    lang=getattr(self._tl, "lang", None),
+                                    dropped={k: v for k, v in ((result or {}).get("dropped") or {}).items() if v},
+                                    steps=steps)
         self.note(run_id=run_id)
         if status == "error":
             return RUN_ERROR, run_id, 0
@@ -88,19 +168,23 @@ class ExecutorMixin:
         if picks:
             self.store.set_last_answer(person["handle"], run_id, rule_id, [p["item"].id for p in picks], spec.content.goal)
             lines = {p["item"].id: p["lines"] for p in picks}
-            # what each item's lines are ("ingredients" only, or mixed with steps), so a to-do of its ingredients
-            # is made only from lines that are ingredients alone
-            kinds = {p["item"].id: (list(spec.content.extract) if p["lines"] and not p.get("lines_reused") else None)
-                     for p in picks}
+            # what each item's lines are (the kinds that were found), so a to-do of its ingredients is made only
+            # from lines that are ingredients alone
+            kinds = {p["item"].id: ([k for k in ("ingredients", "steps", "key_points") if (p.get("facts") or {}).get(k)]
+                                    if p["lines"] and not p.get("lines_reused") else None) for p in picks}
+            facts = {p["item"].id: p.get("facts") or {} for p in picks}
             if kind == "follow_up":  # a follow-up without details must not erase the details found before
                 old = self.store.get_state(f"lines:{person['handle']}", {}) or {}
                 old_kinds = self.store.get_state(f"linekinds:{person['handle']}", {}) or {}
+                old_facts = self.store.get_state(f"facts:{person['handle']}", {}) or {}
                 for p in picks:
                     if not p["lines"] or p.get("lines_reused"):   # the lines found before: they keep what they were
                         kinds[p["item"].id] = old_kinds.get(p["item"].id)
+                        facts[p["item"].id] = old_facts.get(p["item"].id) or {}
                 lines = {iid: (ls or old.get(iid) or []) for iid, ls in lines.items()}
             self.store.set_state(f"lines:{person['handle']}", lines)
             self.store.set_state(f"linekinds:{person['handle']}", kinds)
+            self.store.set_state(f"facts:{person['handle']}", facts)
             if kind != "follow_up":  # what "another" repeats: this request, without what has been shown
                 self.store.set_state(f"lastspec:{person['handle']}", {
                     "spec": spec.stored(), "rule_id": rule_id if kind in ("scheduled", "manual") else None,
@@ -109,9 +193,9 @@ class ExecutorMixin:
             if kind == "scheduled":
                 number = next((i for i, r in enumerate(self.store.rules(person["handle"]), 1) if r["id"] == rule_id), 1)
                 footer = SCHEDULED_FOOTER.format(n=number)
-            msg = picks_message(result, spec, footer=footer)
+            msg = picks_message(result, spec, footer=footer, now=self.clock())
             if kind != "preview" and any(a.action == "todo.add" for a in spec.do):
-                msg += "\n\n" + self._picks_to_list(person, spec, picks)
+                msg += "\n\n" + self._picks_to_list(person, spec, result["picks"])
             return msg, run_id, len(picks)
         return none_message(result, spec, scheduled=(kind == "scheduled")), run_id, 0
 

@@ -57,6 +57,22 @@
   .rule .small { margin-top: 2px; }
   .try { font-size: 13px; color: var(--accent); cursor: pointer; display: block; margin: 5px 0; background: none;
          border: 0; padding: 0; text-align: left; font-family: inherit; }
+  .card { background: var(--bot); color: var(--bot-ink); border-radius: 14px; padding: 8px; max-width: 100%;
+          overflow-x: auto; }
+  .card .cap { font-size: 13.5px; margin: 6px 4px 2px; }
+  .card .brand { font-weight: 700; font-size: 12px; letter-spacing: .02em; margin-right: 6px; }
+  .card.yt .brand { color: #ff0000; }
+  .card a { color: inherit; }
+  .card .thumb { position: relative; display: block; border: 0; padding: 0; background: #000; cursor: pointer;
+                 border-radius: 10px; overflow: hidden; width: 320px; height: 180px; }
+  .card .thumb img { width: 320px; height: 180px; object-fit: cover; display: block; }
+  .card .thumb .play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #ff0000;
+                       color: #fff; border-radius: 12px; padding: 6px 16px; font-size: 18px; }
+  .card iframe { display: block; border: 0; border-radius: 10px; }
+  .card .open { display: inline-block; margin: 6px 4px 0; font-weight: 600; }
+  .card .embed { margin: 6px 4px 0; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+                 border-radius: 10px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .card .note { font-size: 12px; color: var(--quiet); margin: 4px; }
   @media (max-width: 760px) {
     .wrap { grid-template-columns: minmax(0, 1fr); height: auto; }
     .chat { height: 78vh; }
@@ -143,11 +159,50 @@ function draw(s) {
     t.innerHTML = s.messages.map(m => {
       const taps = m.dir === "out"
         ? `<button class="tap ${m.reaction === "up" ? "on" : ""}" data-ref="${m.ref}" data-kind="up">👍</button><button class="tap ${m.reaction === "down" ? "on" : ""}" data-ref="${m.ref}" data-kind="down">👎</button>` : "";
-      return `<div class="row ${m.dir}"><div class="bubble">${linkify(m.text)}</div><div class="meta">${esc(m.time)}${taps}</div></div>`;
+      const body = m.link ? card(m) : `<div class="bubble">${linkify(m.text)}</div>`;
+      return `<div class="row ${m.dir}">${body}<div class="meta">${esc(m.time)}${taps}</div></div>`;
     }).join("");
     if (s.messages.length !== lastCount) t.scrollTop = t.scrollHeight;
     lastCount = s.messages.length;
   }
+}
+// A link part is drawn as a card. YouTube: the thumbnail by its URL with a YouTube label, and the official player
+// (privacy-enhanced, at least 480 by 270) on click. Instagram: a plain card; on click, Instagram's own embed is loaded
+// by this browser, and the plain card stays if it does not render (private posts never do). The bot's server fetches
+// no Instagram or YouTube media: everything below is loaded by the viewer's browser from those sites.
+const playing = new Set();
+const ytPlayer = (vid, auto) => `<iframe width="480" height="270" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(vid)}?playsinline=1${auto ? "&autoplay=1" : ""}" title="YouTube video player" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+function card(m) {
+  const l = m.link, title = esc(l.title || l.url), url = esc(l.url);
+  if (l.platform === "youtube" && l.video_id) {
+    const vid = esc(l.video_id);
+    const media = playing.has(m.id) ? ytPlayer(l.video_id, false)
+      : `<button class="thumb" data-vid="${vid}" data-mid="${m.id}" aria-label="Play on YouTube"><img src="https://i.ytimg.com/vi/${vid}/hqdefault.jpg" alt="${title}" loading="lazy"><span class="play">▶</span></button>`;
+    return `<div class="card yt">${media}<div class="cap"><span class="brand">YouTube</span><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div></div>`;
+  }
+  if (l.platform === "instagram") {
+    const btn = l.permalink ? `<button class="embed" data-perm="${esc(l.permalink)}">Show the post here</button>` : "";
+    return `<div class="card ig"><div class="cap"><span class="brand">Instagram</span>${title}</div><a class="open" href="${url}" target="_blank" rel="noopener noreferrer">Open on Instagram</a> ${btn}<div class="slot"></div></div>`;
+  }
+  return `<div class="bubble">${linkify(m.text)}</div>`;
+}
+let igLoading = null;
+function igScript() {
+  if (window.instgrm) return Promise.resolve();
+  if (!igLoading) igLoading = new Promise((ok, bad) => {
+    const s = document.createElement("script");
+    s.src = "https://www.instagram.com/embed.js"; s.async = true; s.onload = ok; s.onerror = bad;
+    document.body.appendChild(s);
+  });
+  return igLoading;
+}
+async function igEmbed(btn) {
+  const slot = btn.parentElement.querySelector(".slot");
+  btn.disabled = true;
+  slot.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${esc(btn.dataset.perm)}" data-instgrm-version="14" style="max-width:480px;min-width:280px"></blockquote>`;
+  const fallback = () => { slot.innerHTML = `<div class="note">Instagram didn't show this post here. Open it on Instagram instead.</div>`; };
+  try { await igScript(); window.instgrm.Embeds.process(); } catch (e) { fallback(); return; }
+  setTimeout(() => { if (!slot.querySelector("iframe")) fallback(); }, 8000);
 }
 const fmtAhead = m => m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor(m % 1440 / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
 
@@ -166,6 +221,10 @@ $("form").addEventListener("submit", e => { e.preventDefault(); send($("box").va
 $("box").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send($("box").value); } });
 $("who").addEventListener("change", e => { me = e.target.value; lastSig = ""; lastCount = -1; poll(); });
 $("thread").addEventListener("click", e => {
+  const th = e.target.closest(".thumb");
+  if (th) { playing.add(Number(th.dataset.mid)); th.outerHTML = ytPlayer(th.dataset.vid, true); return; }
+  const em = e.target.closest(".embed");
+  if (em) { igEmbed(em); return; }
   const b = e.target.closest(".tap");
   if (b) api("/api/tapback", {handle: me, ref: b.dataset.ref, kind: b.dataset.kind}).then(poll);
 });

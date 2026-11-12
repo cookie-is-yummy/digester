@@ -2,6 +2,10 @@
 
 receive() returns new Inbound messages (never the bot's own); send(handle, text) returns a channel reference for the
 sent message (used to map tapbacks to deliveries), or None.
+
+A reply is made of parts (text and link, render.Reply). A channel whose app shows link previews (`link_previews`)
+gets each part as its own message, and a link part through send_link, alone in its message, so the app can show it as
+a card. Others get the parts joined into one text.
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -25,6 +29,16 @@ class Channel:
     name = "base"
     poll_seconds = 1.0   # how often the bot's loop asks for new messages
     join_seconds = 2.0   # texts from one person closer together than this are handled as one request
+    link_previews = False   # True: each part of a reply is sent as its own message
+
+    def send_link(self, handle, part):
+        """A link part: the bare URL, nothing else in the message (DESIGN.md section 11, link previews)."""
+        return self.send(handle, part["url"])
+
+    def send_contact_card(self, handle):
+        """Our own contact card, so the person's phone expands our links (Messages does not for unknown senders).
+        Returns a reference, or None when this channel cannot send one."""
+        return None
 
     def receive(self):
         raise NotImplementedError

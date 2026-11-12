@@ -72,6 +72,7 @@ def _target_guid(associated):
 
 class MacMessagesChannel(Channel):
     name = "imessage_mac"
+    link_previews = True    # one link per message, so Messages can show it as a card
     reply_to_unknown = False  # this is a founder's own account: people not set up get no reply at all
 
     def __init__(self, store, db_path=CHAT_DB, sender=None, self_handle=None):

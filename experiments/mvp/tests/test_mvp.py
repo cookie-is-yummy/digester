@@ -40,17 +40,32 @@ def env(tmp_path, monkeypatch):
 
     def fake_chat(system, user, purpose, prompt_version, person=None, max_tokens=0, **kw):
         calls.append(purpose)
-        return env_state["answers"][purpose](user), 0.001
+        if purpose == "mvp_extract" and purpose not in env_state["answers"]:
+            # compose v2 writes no details: the lines a test puts in a compose pick are what the fake details call
+            # returns, for the first kind asked; code checks them against each item's own text as it would the model's
+            picks = (env_state.get("last_compose") or {}).get("picks") or []
+            lines = [x for p in picks if isinstance(p, dict) for x in p.get("lines") or []]
+            first = next((k for k in ("ingredients", "steps", "key_points") if f'"{k}"' in user.split("\n")[0]), None)
+            if "Look again" in user or "not exact copies" in user:   # the retry finds nothing more
+                first = None
+            return ({first: lines} if first else {}), 0.001
+        out = env_state["answers"][purpose](user)
+        if purpose == "mvp_compose":
+            env_state["last_compose"] = out
+        return out, 0.001
     env_state = {"answers": {}}
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)   # never a live call from a test
     monkeypatch.setattr(llm, "chat_json", fake_chat)
     monkeypatch.setattr(llm, "spent_today", lambda h, l: 0.0)
     monkeypatch.setattr(llm, "spent_total", lambda libs: 0.0)
-    for name in ("interpret", "compose"):
+    for name in ("interpret", "compose", "extract"):
         mod = __import__(f"mvp.{name}", fromlist=["x"])
         monkeypatch.setattr(mod.llm, "chat_json", fake_chat)
     from mvp import config as _config
     # the fakes change their answer for the same text between steps; the cache has its own tests (test_slice2.py)
     monkeypatch.setattr(_config, "INTERPRET_CACHE_HOURS", 0)
+    monkeypatch.setattr(_config, "ANSWER_CACHE_HOURS", 0)    # the same for the composed answer (test_slice3.py)
+    monkeypatch.setattr(_config, "RANKED_CACHE_HOURS", 0)
 
     class FakePool:
         max_resident = 4
@@ -135,8 +150,8 @@ def test_ask_enforces_reliability_rules(env):
         assert "My friend's pasta" not in user                      # rule 5
         assert "<item>" in user                                       # rule 6
         assert "heavy cream" not in user                            # avoided words never reach the model
-        return {"picks": [{"n": 99, "title": "ghost", "why": "x", "fit": 0.9},
-                          {"n": 1, "title": "Lemon garlic pasta", "why": "Fits pasta night.", "fit": 0.95,
+        return {"picks": [{"n": 99, "title": "ghost", "why": "x", "verdict": "clear"},
+                          {"n": 1, "title": "Lemon garlic pasta", "why": "Fits pasta night.", "verdict": "clear",
                            "lines": ["200g spaghetti", "2 lemons", "1 cup cream", "link in bio for my storefront"]}],
                 "intro": "Here you go."}
     st["answers"]["mvp_compose"] = compose_answer
@@ -144,7 +159,7 @@ def test_ask_enforces_reliability_rules(env):
     msg = last(ch)
     assert "ghost" not in msg                                         # rule 1
     assert "1 cup cream" not in msg and "storefront" not in msg       # rule 2
-    assert "(2 ingredients listed)" in msg                            # counts from code
+    assert "Ingredients (2):" in msg                                  # counts from code
     run = bot.store.one("SELECT * FROM runs WHERE kind='ask'")
     assert run["n_picks"] == 1 and run["n_dropped"] >= 2
 
@@ -152,7 +167,7 @@ def test_ask_enforces_reliability_rules(env):
 def test_avoid_word_is_enforced_in_code(env):
     bot, ch, st = env["bot"], env["ch"], env["state"]
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"}, avoid=["cream"])}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy thing", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy thing", "why": "x", "verdict": "clear"})
     bot.on_message("+15550001", "pasta, no cream")
     assert "didn't find a good match" in last(ch)                     # rule 3: no padding
 
@@ -160,7 +175,7 @@ def test_avoid_word_is_enforced_in_code(env):
 def test_rule_preview_confirm_schedule_no_repeats(env):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta A", "why": "Good fit.", "fit": 0.9}], "intro": "Hi."}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta A", "why": "Good fit.", "verdict": "clear"}], "intro": "Hi."}
     bot.on_message("+15550001", "pasta every friday at 7pm")
     assert "Reply YES to start" in last(ch)
     assert not bot.store.rules("+15550001")                           # rule 7: preview only
@@ -184,7 +199,7 @@ def test_rule_preview_confirm_schedule_no_repeats(env):
 def test_feedback_down_is_never_sent_again(env):
     bot, ch, st = env["bot"], env["ch"], env["state"]
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "P", "why": "Good.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "P", "why": "Good.", "verdict": "clear"}]}
     bot.on_message("+15550001", "pasta?")
     first = bot.store.last_answer("+15550001")["items"][0]
     bot.on_message("+15550001", "👎 1")
@@ -309,7 +324,7 @@ def test_consent_rejects_negation(env):
 def test_send_failure_retries_without_burning_items(env):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta A", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta A", "why": "Good fit.", "verdict": "clear"}]}
     bot.on_message("+15550001", "pasta every friday at 7pm")
     bot.on_message("+15550001", "yes")
     real_send = ch.send
@@ -329,7 +344,7 @@ def test_send_failure_retries_without_burning_items(env):
 def test_rule_numbers_and_preview_thumbs_up(env):
     bot, ch, st = env["bot"], env["ch"], env["state"]
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta A", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta A", "why": "Good fit.", "verdict": "clear"}]}
     bot.on_message("+15550001", "pasta every friday at 7pm")
     bot.on_message("+15550001", "👍")                                 # a thumbs-up on the preview means yes
     assert len(bot.store.rules("+15550001")) == 1
@@ -343,8 +358,8 @@ def test_follow_up_never_resends_a_disliked_item(env):
     spec = pasta_spec({"type": "now"})
     spec["content"]["count"] = 2
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": spec}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "P", "why": "Good.", "fit": 0.9},
-                                                        {"n": 2, "title": "Q", "why": "Good.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "P", "why": "Good.", "verdict": "clear"},
+                                                        {"n": 2, "title": "Q", "why": "Good.", "verdict": "clear"}]}
     bot.on_message("+15550001", "pasta?")
     first = bot.store.last_answer("+15550001")["items"][0]
     bot.on_message("+15550001", "👎 1")
@@ -369,7 +384,7 @@ def test_web_test_page_runs_the_same_bot_and_moves_the_clock(env, tmp_path):
     ch.ready = True
     h = "+15550001"
     env["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 2, "title": "Lemon garlic pasta", "why": "saved", "fit": 0.9,
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 2, "title": "Lemon garlic pasta", "why": "saved", "verdict": "clear",
                                                                    "lines": ["200g spaghetti", "2 lemons"]}]}
     base = f"http://127.0.0.1:{ch.port}"
 
@@ -394,7 +409,11 @@ def test_web_test_page_runs_the_same_bot_and_moves_the_clock(env, tmp_path):
     assert call("/api/state?as=" + h.replace("+", "%2B"))["busy"] is True
     pump()
     s = call("/api/state?as=" + h.replace("+", "%2B"))
-    assert s["busy"] is False and [m["dir"] for m in s["messages"]] == ["in", "out"]
+    # the reply arrives in parts, as on a phone: the text, the pick's link alone (drawn as a card), the rest
+    assert s["busy"] is False and [m["dir"] for m in s["messages"]] == ["in", "out", "out", "out"]
+    card = s["messages"][2]
+    assert card["text"] == "https://example.com/itm_a" and card["link"]["platform"] == "instagram"
+    assert card["link"]["permalink"] is None          # not an Instagram post URL: no embed is offered
     assert "Reply YES" in s["messages"][-1]["text"] and not s["rules"]
     call("/api/tapback", {"handle": h, "ref": s["messages"][-1]["ref"], "kind": "up"})   # 👍 on the preview = YES
     pump()
@@ -404,8 +423,10 @@ def test_web_test_page_runs_the_same_bot_and_moves_the_clock(env, tmp_path):
     call("/api/control", {"op": "to_next", "handle": h})
     pump()
     s = call("/api/state?as=" + h.replace("+", "%2B"))
-    assert s["ahead_minutes"] > 0 and len(s["messages"]) == n + 1      # the rule fired on the moved clock
-    assert "https://example.com/itm_c" in s["messages"][-1]["text"]   # not itm_a again: the preview counted as sent
+    new = s["messages"][n:]
+    assert s["ahead_minutes"] > 0 and len(new) == 3                    # the rule fired on the moved clock
+    assert new[1]["text"] == "https://example.com/itm_c"              # not itm_a again: the preview counted as sent
+    assert "pause 1" in new[-1]["text"]                                # the timed send's footer
     call("/api/control", {"op": "start_over", "handle": h})
     pump()
     s = call("/api/state?as=" + h.replace("+", "%2B"))
@@ -422,11 +443,11 @@ def test_a_title_that_is_not_from_the_item_is_replaced(env):
     cands = [view.get("itm_b"), view.get("itm_a")]
     spec = RuleSpec.model_validate(pasta_spec({"type": "now"}))
     env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
-        {"n": 1, "title": "Lemon garlic pasta", "why": "fits", "fit": 0.9, "lines": []}]}
+        {"n": 1, "title": "Lemon garlic pasta", "why": "fits", "verdict": "clear", "lines": []}]}
     r, _ = compose(cands, spec, "+15550001")
     assert r["picks"][0]["title"] == "Creamy mushroom pasta with heavy cream" and r["dropped"]["title_replaced"] == 1
     env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
-        {"n": 2, "title": "Lemon Garlic Pasta", "why": "fits", "fit": 0.9, "lines": []}]}
+        {"n": 2, "title": "Lemon Garlic Pasta", "why": "fits", "verdict": "clear", "lines": []}]}
     r, _ = compose(cands, spec, "+15550001")
     assert r["picks"][0]["title"] == "Lemon Garlic Pasta" and r["dropped"]["title_replaced"] == 0
     assert title_from_item(view.get("itm_a")) == "Lemon garlic pasta"
@@ -447,7 +468,7 @@ def test_one_off_send_needs_no_preview_and_fires_once(env):
     h = "+15550001"
     spec = pasta_spec({"type": "once", "in_minutes": 120})
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": spec}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "in two hours send me a pasta recipe")
     assert "Today at 3pm" in last(ch) and "stop 1" in last(ch) and "YES" not in last(ch)   # 18:00 UTC is 1pm in New York
     assert env["calls"].count("mvp_compose") == 0                                          # nothing was searched yet
@@ -473,7 +494,7 @@ def test_saved_request_runs_whenever_asked_without_repeats(env):
     clock[0] += timedelta(days=30)
     assert bot.tick() == 0                                             # the clock never fires it
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "run_rule", "rule_number": 1}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "pasta please")
     assert "example.com/itm_b" in last(ch)
     bot.on_message(h, "run 1")                                         # itm_b is no longer a candidate: n=1 is itm_a now
@@ -492,7 +513,7 @@ def test_skip_and_time_zone_change(env):
     bot, ch, st = env["bot"], env["ch"], env["state"]
     h = "+15550001"
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "pasta every friday 7pm")
     bot.on_message(h, "yes")
     assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-14T00:00:00+00:00"       # Fri 13 Nov 7pm in New York
@@ -567,7 +588,7 @@ def test_a_crash_while_sending_never_sends_the_slot_twice(env):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     h = "+15550001"
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "verdict": "clear"}]}
     bot.on_message(h, "pasta every friday at 7pm")
     bot.on_message(h, "yes")
     real_send = ch.send
@@ -593,7 +614,7 @@ def test_a_timed_out_send_is_not_retried(env):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     h = "+15550001"
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "verdict": "clear"}]}
     bot.on_message(h, "pasta every friday at 7pm")
     bot.on_message(h, "yes")
     real_send = ch.send
@@ -610,7 +631,7 @@ def test_a_send_missed_while_the_bot_was_off_is_skipped(env):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     h = "+15550001"
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "verdict": "clear"}]}
     bot.on_message(h, "pasta every friday at 7pm")
     bot.on_message(h, "yes")
     n = len(ch.outbox)
@@ -626,7 +647,7 @@ def test_a_preview_survives_small_talk_and_a_yes_with_nothing_waiting_says_so(en
     from datetime import timedelta
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     h = "+15550001"
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "verdict": "clear"}]}
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "confirm"}
     bot.on_message(h, "yes please do")
     assert "anything waiting for a yes" in last(ch) and not bot.store.rules(h)
@@ -799,12 +820,12 @@ def test_bug_hunt_conversation_state(env):
     h = "+15550001"
     # a follow-up that returns no detail lines keeps the details found before
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9,
+    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear",
                                                   "lines": ["200g spaghetti", "2 lemons"]})
     bot.on_message(h, "pasta?")
     assert bot.store.get_state(f"lines:{h}")["itm_a"] == ["200g spaghetti", "2 lemons"]
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "follow_up", "question": "Which is quickest?"}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "which is quickest?")
     assert bot.store.get_state(f"lines:{h}")["itm_a"] == ["200g spaghetti", "2 lemons"]
     # a preview whose run failed asks for nothing
@@ -813,7 +834,7 @@ def test_bug_hunt_conversation_state(env):
     bot.on_message(h, "pasta every friday")
     assert "went wrong" in last(ch) and "YES" not in last(ch) and bot.store.pending(h) is None
     # feedback in words on a preview keeps the preview open, and belongs to the rule it becomes
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "pasta every friday")
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "feedback", "feedback": "more", "pick_number": 1}
     bot.on_message(h, "more like that")
@@ -827,7 +848,7 @@ def test_bug_hunt_conversation_state(env):
     assert "left the rule as it was" in last(ch) and bot.store.rules(h)[0]["spec"]["when"]["type"] == "schedule"
     # a scheduled send that fails is not the person's "last answer"
     before = bot.store.last_answer(h)["run_id"]
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear"})
     real_send = ch.send
     ch.send = lambda handle, text: (_ for _ in ()).throw(OSError("down"))
     clock[0] = datetime(2026, 11, 14, 0, 1, tzinfo=timezone.utc)
@@ -842,7 +863,7 @@ def test_stop_after_n_sends_and_another(env):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     h = "+15550001"
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "a pasta recipe?")
     assert "example.com/itm_b" in last(ch)
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "more"}
@@ -880,7 +901,7 @@ def test_timed_sends_pause_when_nobody_answers(env):
     bot.pool.search = lambda lib, q, depth=300: {"ids": [f"itm_{x}" for x in "fghijklm"], "mode": "normal", "cost_usd": 0.0}
     daily = {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "time": "12:00"}
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec(daily)}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta number", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta number", "why": "Good fit.", "verdict": "clear"}]}
     bot.on_message(h, "pasta every day at noon")
     bot.on_message(h, "yes")
     texts = []
@@ -902,7 +923,7 @@ def test_over_the_test_budget_says_so_and_skips_timed_sends(env, monkeypatch):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     h = "+15550001"
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "verdict": "clear"}]}
     bot.on_message(h, "pasta every friday at 7pm")
     bot.on_message(h, "yes")
     monkeypatch.setattr(llm, "spent_total", lambda libs: 99.0)
@@ -922,12 +943,12 @@ def test_a_typed_thumbs_down_lands_on_the_answer_the_person_saw(env):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     h = "+15550001"
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "a pasta recipe?")                                # the answer they saw: itm_b
     _time.sleep(1.1)
     typed_at = datetime.now(timezone.utc)                               # they start typing the 👎 now
     _time.sleep(1.1)
-    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "pasta again?")                                   # stands in for a timed send landing meanwhile: itm_a
     bot.on_message(h, "👎", received=typed_at)
     assert bot.store.disliked(h) == {"itm_b"}
@@ -944,14 +965,14 @@ def test_verifier_found_gaps(env):
     # a number in a title must come from the post
     view = bot.view(str(env["lib"]))
     spec = RuleSpec.model_validate(pasta_spec({"type": "now"}))
-    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "10-Minute Lemon Garlic Pasta", "why": "x", "fit": 0.9}]}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "10-Minute Lemon Garlic Pasta", "why": "x", "verdict": "clear"}]}
     r, _ = compose([view.get("itm_a")], spec, h)
     assert r["picks"][0]["title"] == "Lemon Garlic Pasta"
     # a follow-up carries what was ruled out, and code rechecks it
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": dict(pasta_spec({"type": "now"}), content=dict(
         pasta_spec()["content"], count=2))}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "fit": 0.9},
-                                                 {"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "verdict": "clear"},
+                                                 {"n": 2, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "two pasta recipes?")
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "follow_up", "question": "Any without cream?", "avoid": ["cream"]}
     bot.on_message(h, "any without cream?")

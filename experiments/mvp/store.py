@@ -1,7 +1,7 @@
 """PROTOTYPE ONLY - the MVP's own records, in one SQLite file under MVP_HOME (outside git).
 
 Kept: people (handle, library folder, timezone, consent), their rules (their request text and the spec), runs (counts,
-fit scores, cost; no captions), deliveries (item IDs), feedback, pending confirmations, the last answer's item IDs
+verdicts, cost; no captions), deliveries (item IDs), feedback, pending confirmations, the last answer's item IDs
 (for follow-ups and "👎 2"), the channel IDs of sent messages (for tapbacks), and requests the bot could not do.
 """
 import json
@@ -38,6 +38,12 @@ CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, handle T
 CREATE TABLE IF NOT EXISTS profile_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, text TEXT NOT NULL,
   at TEXT);
 CREATE TABLE IF NOT EXISTS interp_cache (key TEXT PRIMARY KEY, handle TEXT, raw TEXT, at TEXT);
+CREATE TABLE IF NOT EXISTS facts (library TEXT NOT NULL, item_id TEXT NOT NULL, kind TEXT NOT NULL, lines TEXT NOT NULL,
+  prompt_version TEXT, at TEXT, attempts INTEGER DEFAULT 1, source TEXT, PRIMARY KEY (library, item_id, kind));
+CREATE TABLE IF NOT EXISTS answer_cache (key TEXT PRIMARY KEY, handle TEXT, raw TEXT, at TEXT);
+CREATE TABLE IF NOT EXISTS ranked_cache (key TEXT PRIMARY KEY, library TEXT, ids TEXT, mode TEXT, at TEXT);
+CREATE TABLE IF NOT EXISTS youtube_cache (video_id TEXT PRIMARY KEY, ok INTEGER, duration_s INTEGER, description TEXT,
+  fetched_at TEXT);
 """
 
 
@@ -52,6 +58,11 @@ ADDED_COLUMNS = [
     ("people", "tz_revert_to TEXT"),     # a temporary time zone: switch back to this zone ...
     ("people", "tz_revert_at TEXT"),     # ... at this UTC time
     ("runs", "lang TEXT"),               # the language the person wrote in, when it was not English (section 11)
+    ("people", "direction TEXT"),        # what they are working toward, in their own words (filled by the profile slice)
+    ("people", "prefs TEXT"),            # JSON: exclude_kinds, exclude_platforms, ... (filled by the profile slice)
+    ("sent", "part INTEGER"),            # which part of a reply this channel message was (0 = the first)
+    ("runs", "dropped TEXT"),            # JSON: what the checks removed, by reason (counts only)
+    ("runs", "steps TEXT"),              # JSON: seconds per step (search, youtube, compose, extract) and cache hits
 ]
 
 
@@ -261,10 +272,12 @@ class Store:
             r["items"] = json.loads(r["items"])
         return r
 
-    def record_sent(self, channel_ref, handle, run_id):
+    def record_sent(self, channel_ref, handle, run_id, part=None):
+        """Every message a reply was sent as (a text part, a link part) is recorded, so a reaction on any of them maps to
+        the run."""
         if channel_ref:
-            self.x("INSERT OR REPLACE INTO sent(channel_ref,handle,run_id,at) VALUES(?,?,?,?)",
-                   (str(channel_ref), handle, run_id, now_iso()))
+            self.x("INSERT OR REPLACE INTO sent(channel_ref,handle,run_id,at,part) VALUES(?,?,?,?,?)",
+                   (str(channel_ref), handle, run_id, now_iso(), part))
 
     def run_for_ref(self, channel_ref):
         r = self.one("SELECT run_id FROM sent WHERE channel_ref=?", (str(channel_ref),))
@@ -304,6 +317,69 @@ class Store:
         rows = self.q("SELECT text FROM profile_notes WHERE handle=? ORDER BY id DESC LIMIT ?", (handle, limit))
         return [r["text"] for r in reversed(rows)]
 
+    # the person's context for the composer and retrieval (DESIGN.md sections 5 and 11)
+    def person_context(self, handle):
+        """{"direction": str|None, "notes": [str], "prefs": dict}. The profile slice fills direction and prefs; what
+        the person said about themselves (profile_notes) is used as it is until then."""
+        r = self.one("SELECT direction, prefs FROM people WHERE handle=?", (handle,)) or {}
+        try:
+            prefs = json.loads(r.get("prefs") or "{}")
+        except ValueError:
+            prefs = {}
+        return {"direction": r.get("direction"), "notes": self.profile_notes(handle),
+                "prefs": prefs if isinstance(prefs, dict) else {}}
+
+    def set_prefs(self, handle, **prefs):
+        cur = self.person_context(handle)["prefs"]
+        cur.update(prefs)
+        self.x("UPDATE people SET prefs=? WHERE handle=?", (json.dumps(cur), handle))
+
+    # details found in an item's own text (DESIGN.md section 4): found once, reused always
+    def facts_get(self, library, item_id, kinds, final_only=True, since=None):
+        """{kind: lines} for the kinds held. An empty result counts only after two attempts (final_only). Rows from
+        YouTube API text older than `since` are not used (that text is kept at most 30 days)."""
+        marks = ",".join("?" * len(kinds))
+        rows = self.q(f"SELECT kind, lines, attempts, source, at FROM facts WHERE library=? AND item_id=? AND kind IN ({marks})",
+                      (library, item_id, *kinds))
+        out = {}
+        for r in rows:
+            if since and r["source"] == "youtube_api" and (r["at"] or "") < since:
+                continue
+            lines = json.loads(r["lines"])
+            if lines or not final_only or (r["attempts"] or 0) >= 2:
+                out[r["kind"]] = lines
+        return out
+
+    def facts_attempts(self, library, item_id, kind):
+        r = self.one("SELECT attempts, lines FROM facts WHERE library=? AND item_id=? AND kind=?", (library, item_id, kind))
+        return (r["attempts"] or 0) if r and r["lines"] == "[]" else 0
+
+    def facts_put(self, library, item_id, kind, lines, prompt_version, attempts=1, source="caption", at=None):
+        self.x("INSERT OR REPLACE INTO facts(library,item_id,kind,lines,prompt_version,at,attempts,source) "
+               "VALUES(?,?,?,?,?,?,?,?)", (library, item_id, kind, json.dumps(lines), prompt_version, now_iso(at),
+                                          attempts, source))
+
+    def purge_youtube(self, before):
+        """YouTube API data and anything derived from it, older than `before` (ISO), is deleted."""
+        self.x("DELETE FROM youtube_cache WHERE fetched_at<?", (before,))
+        self.x("DELETE FROM facts WHERE source='youtube_api' AND at<?", (before,))
+
+    # caches keyed by a hash (sections 4 and 11)
+    def cache_get(self, table, key, since):
+        col = "ids" if table == "ranked_cache" else "raw"
+        r = self.one(f"SELECT {col} v, at FROM {table} WHERE key=?", (key,))
+        if r and (r["at"] or "") >= since:
+            return json.loads(r["v"])
+        return None
+
+    def cache_put(self, table, key, value, at=None, handle=None, library=None, mode=None):
+        if table == "ranked_cache":
+            self.x("INSERT OR REPLACE INTO ranked_cache(key,library,ids,mode,at) VALUES(?,?,?,?,?)",
+                   (key, library, json.dumps(value), mode, now_iso(at)))
+        else:
+            self.x(f"INSERT OR REPLACE INTO {table}(key,handle,raw,at) VALUES(?,?,?,?)",
+                   (key, handle, json.dumps(value), now_iso(at)))
+
     def log_request(self, handle, text, intent):
         self.x("INSERT INTO requests(handle,text,intent,at) VALUES(?,?,?,?)", (handle, text[:500], intent, now_iso()))
 
@@ -336,11 +412,12 @@ class Store:
         """'delete my data': everything the MVP holds about the person except a deletion marker."""
         with self.lock:
             for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests", "inbound",
-                      "todos", "profile_notes", "interp_cache"):
+                      "todos", "profile_notes", "interp_cache", "answer_cache"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
             for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}",
-                        f"lastwrite:{handle}", f"linekinds:{handle}"):
+                        f"lastwrite:{handle}", f"linekinds:{handle}", f"facts:{handle}",
+                        f"card:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 

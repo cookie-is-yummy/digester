@@ -21,7 +21,7 @@ def _status(bot, n=1):
 
 
 def _start_pasta(env, spec=None):
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "P", "why": "Good.", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "P", "why": "Good.", "verdict": "clear"})
     say(env, "pasta", {"intent": "new_rule", "spec": spec or pasta_spec()})
     say(env, "yes", {"intent": "confirm"})
 
@@ -72,7 +72,7 @@ def test_pause_then_undo_really_resumes(env):
 # ---------- undo reverses the whole write of one message ----------
 def test_undo_after_one_yes_started_two_rules_stops_both(env):
     bot = env["bot"]
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "W", "why": "Good.", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "W", "why": "Good.", "verdict": "clear"})
     a = pasta_spec({"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI"], "time": "08:00"})
     b = pasta_spec({"type": "schedule", "days": ["SAT", "SUN"], "time": "10:00"})
     say(env, "weekdays at 8 and weekends at 10", {"intent": "new_rule", "spec": a, "also": {"intent": "new_rule", "spec": b}})
@@ -114,7 +114,7 @@ def test_act_on_last_with_a_rule_number_uses_that_rules_last_send(env):
     assert bot.tick() == 1
     sent = bot.store.items_of_run(bot.store.one("SELECT id FROM runs WHERE kind='scheduled'")["id"])
     assert [d["item_id"] for d in sent] == ["itm_c"]                        # Friday's send: "Pasta night!"
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 3, "title": "Best carbonara ever", "why": "x", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 3, "title": "Best carbonara ever", "why": "x", "verdict": "clear"})
     say(env, "anything else", {"intent": "ask", "spec": pasta_spec({"type": "now"}, avoid=["cream"])})
     assert bot.store.last_answer(H)["items"] == ["itm_e"]
     msg = say(env, "add friday's pasta to my list", {"intent": "act_on_last", "actions": ["todo.add"], "answer_ref": "1"})
@@ -132,9 +132,9 @@ def test_ingredients_come_only_from_lines_that_are_ingredients_alone(env):
     from mvp.schema import Interpretation
     assert Interpretation.model_validate({"intent": "todo_add", "what": "ingredients"}).what == "ingredients"
     bot = env["bot"]
-    two = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "Fits.", "fit": 0.95,
+    two = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "Fits.", "verdict": "clear",
                          "lines": ["200g spaghetti", "2 lemons"]},
-                        {"n": 2, "title": "Pasta night", "why": "Fits.", "fit": 0.9})
+                        {"n": 2, "title": "Pasta night", "why": "Fits.", "verdict": "clear"})
     env["state"]["answers"]["mvp_compose"] = two
     spec = pasta_spec({"type": "now"}, avoid=["cream"])
     spec["content"]["count"] = 2
@@ -143,20 +143,22 @@ def test_ingredients_come_only_from_lines_that_are_ingredients_alone(env):
         "My last message had 2 picks. Which one?"                           # whose ingredients
     assert say(env, "add the ingredients of 2", {"intent": "todo_add", "pick_number": 2, "what": "ingredients"}) \
         .startswith("I don't have the ingredients") and bot.store.todos(H) == []
-    # a recipe ask keeps ingredients and steps together: never guessed apart ...
+    # a recipe ask: the details step (extract.py) returns ingredients and steps apart, so "add its ingredients" adds
+    # the ingredient lines only, never a step (slice 3; before it, mixed lines were never guessed apart)
     env["state"]["answers"]["mvp_compose"] = lemon_pick()
+    env["state"]["answers"]["mvp_extract"] = lambda u: {"ingredients": ["200g spaghetti", "2 lemons"],
+                                                        "steps": ["4 cloves garlic"]}
     recipe = pasta_spec({"type": "now"}, avoid=["cream"])
     recipe["content"]["extract"] = ["ingredients", "steps"]
+    bot.store.x("DELETE FROM facts")   # the first ask cached itm_a's details (no steps after two tries): start afresh
     say(env, "a pasta recipe", {"intent": "ask", "spec": recipe})
     add = {"intent": "todo_add", "pick_number": 1, "what": "ingredients"}
-    assert say(env, "add its ingredients to my list", add).startswith("I don't have the ingredients")
-    # ... but once they asked for its ingredients, as the reply tells them to, those lines can be added
-    say(env, "what are the ingredients?", {"intent": "follow_up", "question": "what are the ingredients?"})
     assert say(env, "add its ingredients to my list", add) == "Added 2 things to your list: 200g spaghetti; 2 lemons."
     # a follow-up that found nothing new keeps what the lines were
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear"})
     say(env, "how long does it take?", {"intent": "follow_up", "question": "how long does it take?"})
-    assert bot.store.get_state(f"linekinds:{H}") == {"itm_a": ["ingredients"]}
+    assert bot.store.get_state(f"linekinds:{H}") == {"itm_a": ["ingredients", "steps"]}
+    assert bot.store.get_state(f"facts:{H}")["itm_a"]["ingredients"] == ["200g spaghetti", "2 lemons"]
 
 
 # ---------- small things ----------
@@ -208,7 +210,7 @@ def test_cache_never_reuses_a_question_about_another_answer(env, monkeypatch):
     say(env, "pasta, no cream", ask_pasta())
     ask = lambda q: lambda u: (seen.append(u), {"intent": "follow_up", "question": q})[1]   # noqa: E731
     say(env, "is it spicy?", ask("is the lemon pasta spicy?"))
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Best carbonara", "why": "x", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Best carbonara", "why": "x", "verdict": "clear"})
     say(env, "carbonara please", {"intent": "ask", "spec": pasta_spec({"type": "now"})})
     say(env, "is it spicy?", ask("is the carbonara spicy?"))
     assert len(seen) == 2                                                   # a new answer: asked again

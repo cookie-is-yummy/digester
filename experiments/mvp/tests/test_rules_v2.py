@@ -373,7 +373,7 @@ def test_quiet_blocks_validate_and_read():
 
 def weekly(bot, st, h="+15550001", when=None):
     st["answers"]["mvp_interpret"] = lambda u_: {"intent": "new_rule", "spec": pasta_spec(when)}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "pasta rule")
     bot.on_message(h, "yes")
     return bot.store.rules(h)[-1]
@@ -425,7 +425,7 @@ CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, 
     Store(str(old))                                                     # opening it twice is fine
     clock = [u(2026, 11, 14, 0, 1)]
     bot = Bot(env["ch"], store=store, pool=env["bot"].pool, clock=lambda: clock[0])
-    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
     assert bot.tick() == 1 and store.rules("+15550001")[0]["next_run_at"] == "2026-11-21T00:00:00+00:00"
 
 
@@ -472,7 +472,7 @@ def test_a_retry_held_for_quiet_hours_is_sent_not_missed(env):
     clock[0] = u(2026, 11, 13, 3, 6)                                     # the retry, at 10:06pm: quiet hours
     assert bot.tick() == 0
     assert bot.store.rules("+15550001")[0]["next_run_at"] == "2026-11-13T13:00:00+00:00"   # held to 8am
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
     clock[0] = u(2026, 11, 13, 13, 1)
     n = len(ch.outbox)
     assert bot.tick() == 1 and len(ch.outbox) == n + 1
@@ -486,7 +486,7 @@ def test_daily_limit_holds_a_one_time_send_and_skips_a_repeating_one(env):
     bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
     h = "+15550001"
     st["answers"]["mvp_interpret"] = lambda u_: {"intent": "new_rule", "spec": pasta_spec({"type": "once", "in_minutes": 120})}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "in two hours send me pasta")
     for i in range(5):                                                   # five timed sends already went out today
         bot.store.add_run(handle=h, rule_id=None, kind="scheduled", status="sent", at=f"2026-11-12T1{i}:00:00+00:00")
@@ -652,7 +652,7 @@ def test_every_hours_preview_says_the_daily_limit_applies(env):
     bot, ch, st = env["bot"], env["ch"], env["state"]
     st["answers"]["mvp_interpret"] = lambda u_: {"intent": "new_rule", "spec": pasta_spec(
         {"type": "schedule", "every_hours": 2, "window": ["09:00", "21:00"]})}
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
     bot.on_message("+15550001", "pasta every 2 hours")
     assert "every 2 hours from 9am to 9pm" in last(ch).lower() and "at most 5 timed messages a day" in last(ch)
     assert bot.store.pending("+15550001")["payload"]["spec"]["when"] == {
@@ -718,7 +718,7 @@ def test_a_hold_or_retry_from_an_earlier_slot_never_applies_to_a_new_one(env):
     clock[0] = u(2026, 11, 13, 3, 6)
     bot.tick()                                                           # held to 8am
     assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-13T13:00:00+00:00"
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
     st["answers"]["mvp_interpret"] = lambda u_: {"intent": "change_rule", "rule_number": 1,
                                                   "spec": pasta_spec({"type": "schedule", "days": DAILY, "time": "07:00"})}
     bot.on_message(h, "make it 7am")
@@ -766,7 +766,7 @@ def test_hours_that_are_all_quiet_are_said_plainly_before_any_preview(env):
     from mvp import texts as T
     bot, ch, st = env["bot"], env["ch"], env["state"]
     h = "+15550001"
-    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
     for when, says in [({"type": "schedule", "window": ["22:30", "23:30"]}, T.ALL_QUIET),
                        ({"type": "random", "window": ["23:00", "23:59"]}, T.ALL_QUIET),
                        ({"type": "schedule", "days": ["MON"], "time": "09:00", "until": "2026-11-01"}, T.TIME_PASSED)]:
