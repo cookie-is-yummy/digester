@@ -521,3 +521,154 @@ def test_onboarding_offer_expires(rich):
     assert bot.store.get_state(f"onboard:{H}")["step"] == "offer"
     rich["clock"][0] += timedelta(hours=25)
     assert say(rich, "2", {"intent": "chat", "reply": "Two what?"}) == "Two what?"
+
+
+# ---------- checker fixes ----------
+CHAT = {"intent": "chat", "reply": "unused"}
+PASTA = {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {"goal": "a pasta recipe", "searches": ["pasta"]}}}
+
+
+def test_only_a_bare_yes_confirms_the_read_or_the_time_zone(rich):
+    bot, st = rich["bot"], rich["state"]
+    from mvp import texts as T
+    for s in ("yes", "Yes!", "spot on, thanks!", "Yep, you got it.", "ok"):
+        assert T.RIGHT.match(s), s
+    for s in ("yes, I'm a beginner", "ok but I'm in Chicago", "yes except cooking", "great idea, find me pasta"):
+        assert not T.RIGHT.match(s), s
+    start(rich)
+    seen = []
+    st["answers"]["mvp_profile_merge"] = lambda u: (seen.append(u), {"kind": "about_me", "levels": [
+        {"topic": "Blender", "level": "beginner"}]})[1]
+    say(rich, "yes, I'm a beginner", CHAT)
+    assert seen and P_level(bot) == "beginner"                       # the level they gave is kept
+    st["answers"]["mvp_first_requests"] = lambda u: {"requests": []}
+    say(rich, "ok but I'm in Chicago", {"intent": "set_timezone", "timezone": "America/Chicago"})
+    assert bot.store.person(H)["timezone"] == "America/Chicago"      # not taken as "the time zone is right"
+
+
+def P_level(bot):
+    from mvp import profile as P
+    return P.get(bot.store, H)["interests"][0]["level"]
+
+
+def test_a_person_who_never_answers_is_not_held_in_the_setup(rich):
+    bot, st = rich["bot"], rich["state"]
+    start(rich)
+    rich["clock"][0] += timedelta(hours=25)
+    st["answers"]["mvp_compose"] = pick("Lemon garlic pasta")
+    msg = say(rich, "find me a pasta recipe", PASTA)
+    assert "mvp_profile_merge" not in rich["calls"] and "Lemon garlic pasta" in msg and "When you're ready" not in msg
+    assert bot.store.get_state(f"onboard:{H}")["step"] == "done"
+
+
+def test_the_read_is_asked_again_once_and_not_over_a_question(rich):
+    bot, ch, st = rich["bot"], rich["ch"], rich["state"]
+    start(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "request"}
+    st["answers"]["mvp_compose"] = pick("Lemon garlic pasta")
+    assert say(rich, "find me a pasta recipe", PASTA).startswith("When you're ready")
+    assert "When you're ready" not in say(rich, "another pasta recipe", PASTA)     # once is enough
+    # a request that asks a question of its own: no second question, and the answer goes to it, not the form call
+    start(rich)
+    clar = {"intent": "clarify", "question": "When does the semester end?", "draft": {
+        "intent": "new_rule", "spec": {"when": {"type": "schedule", "days": ["MON"], "time": "08:00"},
+                                       "content": {"source": "note", "text": "study"}}}}
+    n0 = len(ch.outbox)
+    say(rich, "remind me to study every monday until the semester ends", clar)
+    assert [m[2] for m in ch.outbox[n0:]] == ["When does the semester end?"]
+    merges = rich["calls"].count("mvp_profile_merge")
+    seen = []
+    say(rich, "June 5", lambda u: (seen.append(u), {"intent": "chat", "reply": "ok"})[1])
+    assert seen and rich["calls"].count("mvp_profile_merge") == merges
+    assert bot.store.get_state(f"onboard:{H}")["step"] == "read"                 # the setup is still open after it
+
+
+def test_no_paid_call_from_the_offer_over_the_cap(rich, monkeypatch):
+    st = rich["state"]
+    start(rich)
+    say(rich, "skip", CHAT)
+    st["answers"]["mvp_first_requests"] = first_requests_answer
+    say(rich, "skip", CHAT)
+    from mvp import llm
+    monkeypatch.setattr(llm, "spent_today", lambda h, l: 99.0)
+    n = len(rich["calls"])
+    say(rich, "2", CHAT)
+    say(rich, "every morning", CHAT)
+    assert rich["calls"][n:] == [] and rich["bot"].store.rules(H) == []
+
+
+def test_settings_changed_by_the_answer_to_the_read_are_said(rich):
+    st = rich["state"]
+    start(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "confirm_all": True,
+                                                    "exclude_kinds": ["like"], "style": "brief"}
+    msg = say(rich, "Spot on. Don't use my likes and keep answers short.", CHAT)
+    assert msg.startswith("Thanks. Here's what I have now: You're into Blender 3D (just starting) and Home cooking. "
+                          "You like brief answers; I won't use your likes.")
+
+
+def test_more_sensitive_topics_are_removed_also_from_an_older_cached_guess(rich):
+    from mvp import profile as P
+    for t in ("Day trading", "Forex", "Fat loss", "Keto diet", "Jesus", "Side hustles", "Retirement planning"):
+        assert P.sensitive(t), t
+    for t in ("Christmas baking", "Woodworking", "Low poly modeling"):
+        assert not P.sensitive(t), t
+    bot = rich["bot"]
+    old = {"interests": [{"topic": t, "share": 0.5, "support": 4, "saved": 4, "watched": 0, "words": [], "level": None,
+                          "quote": None, "why": None, "confirmed": False, "source": "guess"}
+                         for t in ("Day trading", "Woodworking")]}
+    P.adopt_guess(bot.store, H, old)
+    assert [i["topic"] for i in P.get(bot.store, H)["interests"]] == ["Woodworking"]
+
+
+def test_the_finished_result_wording_of_each_topic_is_recognised():
+    from mvp.compose import FINISHED
+    for cr in ("ends with a finished model", "ends with a dish you can eat", "ends with a finished drawing",
+               "a full routine from start to finish"):
+        assert FINISHED.search(cr), cr
+    for cr in ("suits a complete beginner", "uses whole wheat flour", "under 20 minutes", "suits a beginner"):
+        assert not FINISHED.search(cr), cr
+
+
+def test_delete_my_data_also_drops_the_guess_of_their_library(rich):
+    from mvp import profile as P
+    bot = rich["bot"]
+    P.guess(bot.view(str(rich["lib"])), store=bot.store, handle=H)
+    bot.store.upsert_person("+15550002", "B", str(rich["lib"]), "UTC")       # someone else on the same library
+    bot.store.delete_person_data(H)
+    assert bot.store.q("SELECT key FROM profile_guess")                     # still theirs
+    bot.store.delete_person_data("+15550002")
+    assert bot.store.q("SELECT key FROM profile_guess") == []
+
+
+def test_an_address_and_a_request_together(rich):
+    bot, st = rich["bot"], rich["state"]
+    start(rich)
+    say(rich, "skip", CHAT)
+    st["answers"]["mvp_first_requests"] = lambda u: {"requests": []}
+    seen = []
+    say(rich, "me@example.com and I'm in Chicago",
+        lambda u: (seen.append(u), {"intent": "set_timezone", "timezone": "America/Chicago"})[1])
+    assert seen and "me@example.com" not in seen[0] and "I'm in Chicago" in seen[0]
+    assert bot.store.email_of(H) == ("me@example.com", False) and bot.store.person(H)["timezone"] == "America/Chicago"
+
+
+def test_a_note_in_an_answer_to_the_read_is_merged_once(rich):
+    st = rich["state"]
+    start(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "both", "avoid": ["meat"]}
+    st["answers"]["mvp_compose"] = pick("Lemon garlic pasta")
+    say(rich, "I'm vegetarian, find me a pasta recipe", dict(PASTA, profile_note="vegetarian"))
+    assert rich["calls"].count("mvp_profile_merge") == 1
+
+
+def test_that_s_right_confirms_only_the_topics_the_read_showed(rich):
+    from mvp import profile as P
+    bot = rich["bot"]
+    start(rich)
+    assert bot.store.get_state(f"onboard:{H}")["shown"] == ["Blender 3D", "Home cooking"]
+    have = P.get(bot.store, H)["interests"]
+    P.set_interests(bot.store, H, have + [dict(have[1], topic="Woodworking", words=["wood"])])   # a 5th, not shown
+    say(rich, "yes", CHAT)
+    got = {i["topic"]: i["confirmed"] for i in P.get(bot.store, H)["interests"]}
+    assert got == {"Blender 3D": True, "Home cooking": True, "Woodworking": False}

@@ -182,7 +182,8 @@ class HandlerMixin:
         self._tl.profile_said = None
         for x in [it] + ([it.also] if it.also else []):
             known = {n.lower() for n in self.store.profile_notes(h)}
-            if x.profile_note and x.profile_note.lower() not in known and x.intent != "profile_update":
+            if x.profile_note and x.profile_note.lower() not in known and x.intent != "profile_update" \
+                    and getattr(self._tl, "merged_text", None) != text:   # onboarding merged this message already
                 self._merge_note(person, x.profile_note, text, now)   # slice 6: merged into the profile
         self._tl.lang = it.lang
         self._tl.made_pending = False

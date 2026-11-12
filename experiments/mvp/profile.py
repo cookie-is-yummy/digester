@@ -43,7 +43,11 @@ SENSITIVE = re.compile(
     r"money|financ\w*|invest\w*|crypto\w*|bitcoin|stocks?|debt|loans?|budget\w*|salary|income|taxes|mortgage|"
     r"religio\w*|church\w*|god|gods|faith|pray\w*|bible|quran|koran|islam\w*|muslim\w*|christian\w*|jewish|judaism|"
     r"hindu\w*|buddhis\w*|spiritual\w*|politic\w*|election\w*|democrat\w*|republican\w*|conservative\w*|liberal\w*|"
-    r"vote|voting|abortion|immigration)\b", re.I)
+    r"vote|voting|abortion|immigration|"
+    # checker additions: money, diet and faith words the first list missed
+    r"trading|traders?|forex|wealth\w*|millionaires?|retire\w*|savings|side hustles?|passive income|"
+    r"credit (?:cards?|scores?)|real estate|fat[- ]?loss|lose fat|calorie deficit|diets?|keto|"
+    r"jesus|christ|allah|torah|mosques?|synagogues?|scriptures?|porn\w*|onlyfans|hook-?ups?|tinder)\b", re.I)
 
 
 def sensitive(*texts):
@@ -234,7 +238,8 @@ def adopt_guess(store, handle, result, now=None):
     have = get(store, handle)["interests"]
     mine = [i for i in have if i.get("confirmed") or i.get("source") != "guess"]
     names = {i["topic"].lower() for i in mine}
-    new = mine + [dict(i) for i in result.get("interests") or [] if i["topic"].lower() not in names]
+    new = mine + [dict(i) for i in result.get("interests") or [] if i["topic"].lower() not in names
+                  and not sensitive(i["topic"], i.get("why"), " ".join(i.get("words") or []))]   # an older cached guess
     set_interests(store, handle, new, build=result.get("build"), guessed_at=now_iso(now))
     return new
 
@@ -309,6 +314,17 @@ def about_lines(store, handle, message=None):
     return lines + list(prof["notes"])
 
 
+# the kinds of their library in plain words ("don't use my likes": "I won't use your likes")
+KIND_PLAIN = {"save": "saves", "collection": "collections", "share_self": "posts sent to yourself",
+              "playlist": "playlists", "like": "likes", "watch": "watch history", "view": "views"}
+PLATFORM_PLAIN = {"instagram": "Instagram", "youtube": "YouTube"}
+
+
+def _plain(key, vals):
+    names = KIND_PLAIN if key == "exclude_kinds" else PLATFORM_PLAIN
+    return [names.get(v, v) for v in vals]
+
+
 def pref_words(prefs):
     out = []
     if prefs.get("avoid"):
@@ -320,9 +336,9 @@ def pref_words(prefs):
     if prefs.get("outside") is True:
         out.append("wants new things from outside their saves too")
     if prefs.get("exclude_kinds"):
-        out.append("never use their " + ", ".join(prefs["exclude_kinds"]))
+        out.append("never use their " + ", ".join(_plain("exclude_kinds", prefs["exclude_kinds"])))
     if prefs.get("exclude_platforms"):
-        out.append("never use " + ", ".join(prefs["exclude_platforms"]))
+        out.append("never use " + ", ".join(_plain("exclude_platforms", prefs["exclude_platforms"])))
     return out
 
 
@@ -376,7 +392,7 @@ def _strs(v, n=8, size=40):
     return [s for s in (_clean(x, size) for x in (v or []) if isinstance(x, str)) if s][:n]
 
 
-def merge(store, handle, message, asked=None, person=None):
+def merge(store, handle, message, asked=None, person=None, shown=None):
     """One model call fills the form; apply_merge() checks and applies it. Returns (result, cost); result is
     apply_merge's."""
     prof = get(store, handle)
@@ -390,12 +406,12 @@ def merge(store, handle, message, asked=None, person=None):
     raw, cost = llm.chat_json(_prompt(config.PROMPT_PROFILE_MERGE), user, purpose="mvp_profile_merge",
                               prompt_version=config.PROMPT_PROFILE_MERGE, person=person or handle, max_tokens=700,
                               temperature=config.PROFILE_TEMPERATURE, seed=config.PROFILE_SEED)
-    return apply_merge(store, handle, raw, message), cost
+    return apply_merge(store, handle, raw, message, shown=shown), cost
 
 
-def apply_merge(store, handle, raw, message):
+def apply_merge(store, handle, raw, message, shown=None):
     """Validates the model's form against the message and the stored profile and applies it. Returns {"kind",
-    "changes": [plain lines], "skipped_sensitive": bool}. Levels and topics must name a stored topic or use the person's
+    "changes": [plain lines], "other": [the lines short_summary() does not cover], "skipped_sensitive": bool}. Levels and topics must name a stored topic or use the person's
     own words; direction and tools must be their own words; anything sensitive is left out (and said)."""
     from .interpret import own_words
     from .schema import KINDS, PLATFORMS
@@ -405,12 +421,16 @@ def apply_merge(store, handle, raw, message):
     interests = [dict(i) for i in prof["interests"]]
     prefs = dict(prof["prefs"])
     changes, skipped = [], False
+    other = []   # the changes short_summary() does not show (onboarding step 3 says these too)
     for name in _strs(raw.get("drop_topics")):
         i = _find(interests, name)
         if i:
             interests.remove(i)
             changes.append(f"{i['topic']} is off your interests")
-    confirm = [i for i in interests if raw.get("confirm_all") is True]
+            other.append(changes[-1])
+    # "that's right" confirms what the person was shown (the read shows at most 4 topics), never a topic they did not see
+    seen = None if shown is None else {t.lower() for t in shown}
+    confirm = [i for i in interests if raw.get("confirm_all") is True and (seen is None or i["topic"].lower() in seen)]
     confirm += [i for i in (_find(interests, n) for n in _strs(raw.get("confirm_topics"))) if i and i not in confirm]
     if any(not i.get("confirmed") for i in confirm):
         for i in confirm:
@@ -458,24 +478,29 @@ def apply_merge(store, handle, raw, message):
         if new:
             prefs[key] = (list(prefs.get(key) or []) + new)[-10:]
             changes.append(f"{word} {_and(new)}")
+            other.append(changes[-1])
     if raw.get("style") in ("brief", "full") and prefs.get("style") != raw["style"]:
         prefs["style"] = raw["style"]
         changes.append("you like brief answers" if raw["style"] == "brief" else "you like full answers")
+        other.append(changes[-1])
     if isinstance(raw.get("outside"), bool) and prefs.get("outside") is not raw["outside"]:
         prefs["outside"] = raw["outside"]
         changes.append("I'll add new things from outside your saves" if raw["outside"]
                        else "I'll stick to your own saves")
+        other.append(changes[-1])
     if isinstance(raw.get("stop_guessing_level"), bool):
         want = not raw["stop_guessing_level"]
         if prefs.get("guess_level", True) is not want:
             prefs["guess_level"] = want
             changes.append("I'll stop guessing your level" if not want else "I'll guess your level again")
+            other.append(changes[-1])
     for key, allowed in (("exclude_kinds", KINDS), ("exclude_platforms", PLATFORMS)):
         vals = [v for v in _strs(raw.get(key), 7, 20) if v in allowed]
         new = [v for v in vals if v not in (prefs.get(key) or [])]
         if new:
             prefs[key] = list(prefs.get(key) or []) + new
-            changes.append(("I won't use your " if key == "exclude_kinds" else "I won't use ") + _and(new))
+            changes.append(("I won't use your " if key == "exclude_kinds" else "I won't use ") + _and(_plain(key, new)))
+            other.append(changes[-1])
     note = _clean(raw.get("note"), 120)
     if note:
         if sensitive(note):
@@ -483,9 +508,10 @@ def apply_merge(store, handle, raw, message):
         elif note.lower() not in {n.lower() for n in store.profile_notes(handle)}:
             store.add_profile_note(handle, note)
             changes.append(f"noted: {note}")
+            other.append(changes[-1])
     set_interests(store, handle, interests)
     store.x("UPDATE people SET prefs=? WHERE handle=?", (json.dumps(prefs), handle))
-    return {"kind": kind, "changes": changes, "skipped_sensitive": skipped}
+    return {"kind": kind, "changes": changes, "other": other, "skipped_sensitive": skipped}
 
 
 def _drop_notes_about(store, handle, interest):
@@ -600,9 +626,9 @@ def show_text(prof, now=None):
     if prefs.get("guess_level") is False:
         p.append("I don't guess your level")
     if prefs.get("exclude_kinds"):
-        p.append("I don't use your " + _and(prefs["exclude_kinds"]))
+        p.append("I don't use your " + _and(_plain("exclude_kinds", prefs["exclude_kinds"])))
     if prefs.get("exclude_platforms"):
-        p.append("I don't use " + _and(prefs["exclude_platforms"]))
+        p.append("I don't use " + _and(_plain("exclude_platforms", prefs["exclude_platforms"])))
     if p:
         lines.append(T.cap_first("; ".join(p)) + ".")
     if prof["notes"]:

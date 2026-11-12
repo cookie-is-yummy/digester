@@ -42,16 +42,18 @@ class OnboardingMixin:
     def onboard_start(self, person, now, lead="Thanks!"):
         """After consent (or "set me up again"): the guess, kept as unconfirmed interests, and message 2."""
         h = person["handle"]
-        lines = []
+        lines, shown = [], []
         try:
             if self._over_cap(person):
                 raise RuntimeError("over the cap")
             result, _ = P.guess(self.view(person["library"]), store=self.store, handle=h, now=now)
             P.adopt_guess(self.store, h, result, now=now)
-            lines = P.read_lines(P.get(self.store, h))
+            prof = P.get(self.store, h)
+            lines = P.read_lines(prof)
+            shown = [i["topic"] for i in prof["interests"][:len(lines)]]
         except Exception as e:  # noqa: BLE001 - the setup goes on without a read
             self.store.add_run(handle=h, kind="profile_guess", status="error", error=type(e).__name__)
-        self._set_onboard(h, "read", now)
+        self._set_onboard(h, "read", now, shown=shown)
         self.note(intent="onboarding")
         return self.send(h, T.read_message(lines, lead=lead))
 
@@ -66,6 +68,13 @@ class OnboardingMixin:
         if not st or st.get("step") == "done":
             return None
         step = st["step"]
+        if step in ("read", "contact"):
+            if datetime.fromisoformat(st["at"]) < now - timedelta(hours=config.ONBOARD_STEP_HOURS):
+                self._set_onboard(h, "done", now)   # they never answered: the setup ends quietly ("set me up again")
+                return None
+            pending = self._live_pending(h, now)
+            if pending and pending["kind"] == "clarify":
+                return None   # a request answered in the middle asked a question: this message answers it
         if step == "read":
             return self._onboard_read(person, text, now)
         if step == "contact":
@@ -83,21 +92,34 @@ class OnboardingMixin:
         if T.SKIP.match(text):
             return self._onboard_contact_ask(person, now, "No problem.")
         if T.RIGHT.match(text):
-            res = P.apply_merge(self.store, h, {"kind": "about_me", "confirm_all": True}, text)
+            res = P.apply_merge(self.store, h, {"kind": "about_me", "confirm_all": True}, text,
+                                shown=(self._onboard(h) or {}).get("shown") or [])
             return self._onboard_contact_ask(person, now, "Great, thanks." + self._knows_line(h), res)
         if self._over_cap(person):   # no paid call: the answer is kept as a note, and the setup goes on
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
             return self._onboard_contact_ask(person, now, "Thanks.")
         try:
             res, _ = P.merge(self.store, h, text, asked="Here's my read of you (their main interests). Did I get that "
-                             "right? And in a sentence or two, what are you working toward right now?")
+                             "right? And in a sentence or two, what are you working toward right now?",
+                             shown=(self._onboard(h) or {}).get("shown") or [])
         except Exception as e:  # noqa: BLE001 - their words are kept as a note, and the setup goes on
             self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
             return self._onboard_contact_ask(person, now, "Thanks.")
         if res["kind"] in ("request", "both"):
-            ref = self.answer_normally(person, text, now)   # the request is answered; then the setup goes on
+            self._tl.merged_text = text   # merged already: a profile_note in it is not merged a second time
+            try:
+                ref = self.answer_normally(person, text, now)   # the request is answered; then the setup goes on
+            finally:
+                self._tl.merged_text = None
             if res["kind"] == "request":
+                st = self._onboard(h) or {}
+                pending = self._live_pending(h, now)
+                if st.get("reasked") or (pending and (pending["kind"] == "clarify"
+                                                      or datetime.fromisoformat(pending["at"]) >= now)):
+                    return ref   # asked once already, or the answer just asked a question of its own (a YES, a date)
+                self._set_onboard(h, "read", datetime.fromisoformat(st["at"]) if st.get("at") else now, reasked=True,
+                                  shown=st.get("shown") or [])
                 return self.send(h, T.READ_AGAIN) or ref
         lead = "Thanks." + self._knows_line(h)
         return self._onboard_contact_ask(person, now, lead, res)
@@ -110,6 +132,8 @@ class OnboardingMixin:
     def _onboard_contact_ask(self, person, now, lead, res=None):
         h = person["handle"]
         person = self.store.person(h) or person   # a request answered in between may have moved the time zone
+        if res and res.get("other"):   # a setting their answer changed that the summary does not show
+            lead += " " + T.cap_first("; ".join(res["other"])) + "."
         if res and res.get("skipped_sensitive"):
             lead += " " + T.PROFILE_SENSITIVE
         tz = person["timezone"]
@@ -127,8 +151,9 @@ class OnboardingMixin:
             line = self._set_email(person, m.group(0), now, reply=False)
             rest = [w for w in re.findall(r"[a-z']+", (text[:m.start()] + " " + text[m.end():]).lower())
                     if w not in FILLER]
-            if rest:   # "a@b.co, and I'm in Chicago now": the rest is a request of its own
-                self.answer_normally(person, text, now)
+            if rest:   # "a@b.co, and I'm in Chicago now": the rest is a request of its own (without the address,
+                #          which is set already)
+                self.answer_normally(person, " ".join((text[:m.start()] + " " + text[m.end():]).split()), now)
             return self._onboard_final(person, now, lead=line)
         self.answer_normally(person, text, now)   # a time zone ("I'm in Chicago") or any other request
         return self._onboard_final(person, now)
@@ -197,6 +222,11 @@ class OnboardingMixin:
         h = person["handle"]
         reqs = st.get("requests") or []
         m = T.ONBOARD_PICK.match(text)
+        if (m or T.ONBOARD_REPEAT.match(text)) and reqs:
+            over = self._over_cap(person)
+            if over:   # no paid call over the cap
+                self.note(intent="over_cap")
+                return self._limit_notice(person, over) or ""
         if m and reqs:
             n = int(m.group(1)) if m.group(1) else {"first": 1, "second": 2, "third": 3}[m.group(2).lower()]
             if not 1 <= n <= len(reqs):

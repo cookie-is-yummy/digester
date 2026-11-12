@@ -563,8 +563,12 @@ PROFILE_HOW_TO_CORRECT = ("To correct me, just say it: \"I'm past beginner at Bl
                           "\"I have an air fryer\" or \"stop guessing my level\".")
 PROFILE_SENSITIVE = "I don't keep notes about health, relationships, money, religion or politics, so I left that out."
 SKIP = re.compile(r"^\W*(skip|skip it|skip this|skip that|next|later|not now|pass|no thanks)\W*$", re.I)
-RIGHT = re.compile(r"^\W*(yes|yep|yeah|yup|right|correct|that'?s right|thats right|spot on|exactly|ok|okay|sure|"
-                   r"sounds right|looks right|all good|good|perfect|great)\b[\w\s!.,']{0,20}$", re.I)
+# a bare "that's right" (with thanks and the like): anything more ("yes, but I'm past beginner", "ok but I'm in
+# Chicago") is an answer of its own and goes to the form call or the interpreter
+_RIGHT_WORDS = (r"yes|yep|yeah|yup|right|correct|that'?s right|thats right|that'?s it|spot on|exactly|ok|okay|sure|"
+                r"sounds right|looks right|all good|good|perfect|great|thanks|thank you|you got it|nailed it|totally|"
+                r"pretty much|it is|yes it is|all correct")
+RIGHT = re.compile(rf"^\W*(?:{_RIGHT_WORDS})(?:[\s!.,]+(?:{_RIGHT_WORDS}))*[\s!.,:)]*$", re.I)
 SET_ME_UP_AGAIN = re.compile(r"^\W*(please\s+)?(set me up again|set up again|redo (my |the )?(setup|set ?up|onboarding)|"
                              r"start (the |my )?(setup|set ?up|onboarding) (again|over)|run (the )?setup again)\W*$", re.I)
 ONBOARD_PICK = re.compile(r"^\W*(?:(?:number|#|no\.?)\s*)?([1-3])\W*$|^\W*(?:the\s+)?(first|second|third)(?:\s+one)?\W*$", re.I)

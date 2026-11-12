@@ -358,8 +358,11 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
 # slice 6: "leads to a finished result". A must-have about a finished result, and an item whose own text is only
 # tips (tips, tricks, mistakes, ideas, with no sign of a whole project, recipe or routine): code answers "no" for it,
 # whatever the model said, so loose tips are never shown as a pick for "something to make or do".
-FINISHED = re.compile(r"\b(finish\w*|complete[ds]?|start to finish|from start|whole|final (?:piece|model|render|"
-                      r"result|product|dish|drawing))\b", re.I)
+# (checker: "ends with a dish you can eat" is the interpreter's cooking wording; "complete" and "whole" alone matched
+# "suits a complete beginner" and "whole wheat flour", which made every tips post a "no" for them)
+_THING = r"(?:project|piece|model|render|result|product|dish|meal|drawing|painting|scene|routine|workout|build|thing)"
+FINISHED = re.compile(rf"\b(finish\w*|ends? with an? |ends? in an? |start to finish|from start|end to end|"
+                      rf"(?:complete[ds]?|whole|final|full) {_THING})", re.I)
 TIPS = re.compile(r"\b(tips?|tricks?|hacks?|mistakes?|shortcuts?|things (?:you|i) wish|ideas?|inspo|inspiration|"
                   r"facts?|reasons?)\b", re.I)
 PROJECT = re.compile(r"\b(tutorials?|step[- ]by[- ]step|steps|step \d|from scratch|start to finish|walk ?through|follow along|"

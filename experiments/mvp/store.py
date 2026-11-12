@@ -535,6 +535,10 @@ class Store:
                       "todos", "profile_notes", "interp_cache", "answer_cache", "answers", "action_log", "outbox",
                       "outside_searches", "imports"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
+            lib = (self.one("SELECT library FROM people WHERE handle=?", (handle,)) or {}).get("library")
+            if lib and not self.one("SELECT 1 AS x FROM people WHERE library=? AND handle<>?", (lib, handle)):
+                # the profile guess made from their library (slice 6), unless someone else uses the same library
+                self.db.execute("DELETE FROM profile_guess WHERE library=?", (os.path.abspath(lib),))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
             for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}",
                         f"lastwrite:{handle}", f"linekinds:{handle}", f"facts:{handle}",

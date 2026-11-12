@@ -158,7 +158,12 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   its reminder offer, then up to three first requests written for them, each kept only if at least three items of their
   library mention its topic words. They reply 1, 2 or 3 to run one now, or "every morning" for a preview of number 1
   as a morning rule (one YES starts it and the export reminders). "skip" skips any step; a real request at any step is
-  answered and the setup goes on. People already in the store are not set up again; "set me up again" restarts it.
+  answered and the setup goes on (the read is asked again once; not when the answer asked a question of its own, which
+  the next message answers). Only a bare "yes" / "that's right" counts as one; "yes, but I'm past beginner" goes to the
+  form call, and "that's right" confirms only the topics the read showed. A step left unanswered for 24 hours
+  (`ONBOARD_STEP_HOURS`) ends the setup quietly. Deleting a person's data also drops the guess of their library
+  (unless someone else uses the same library). People already in the store are not set up again; "set me up again"
+  restarts it.
 - **The guess** (`profile.py`, `prompts/profile_guess_v2.md`): code samples their own kept items (the 60 newest and 60
   more at random, seeded by the library build; never friends' items) and their 12 most watched YouTube channels; one
   call groups them into topics with the lines behind each; code checks the line ids, counts the support, works out the
@@ -221,4 +226,4 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 243 offline tests |
+| `tests/` | 254 offline tests |

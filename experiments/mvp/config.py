@@ -89,3 +89,4 @@ PROFILE_MIN_SUPPORT = 3        # a topic needs this many sample lines behind it
 FIRST_REQUESTS = 3             # offered at the end of onboarding, each with at least FIRST_REQUEST_MIN candidates
 FIRST_REQUEST_MIN = 3
 ONBOARD_OFFER_HOURS = 24       # "1", "2", "3" and "every morning" pick from the offer this long
+ONBOARD_STEP_HOURS = 24        # steps 2 and 3 wait this long for an answer; after that the setup ends quietly
