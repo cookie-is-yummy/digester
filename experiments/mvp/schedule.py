@@ -130,12 +130,15 @@ def _pick_in(intervals, rng, n=1):
 
 
 # ---------- which days a rule sends on ----------
-def _limits_ok(when, d):
+def _in_span(when, d):
+    """d is between start and until (both inclusive)."""
     if when.start and d < date.fromisoformat(when.start):
         return False
-    if when.until and d > date.fromisoformat(when.until):
-        return False
-    return d.isoformat() not in when.except_dates
+    return not (when.until and d > date.fromisoformat(when.until))
+
+
+def _limits_ok(when, d):
+    return _in_span(when, d) and d.isoformat() not in when.except_dates
 
 
 def _month_set(when, y, m, anchor_day):
@@ -171,7 +174,8 @@ def _cadence(when, tz, anchor_local, day_moments):
     def first_after(match):
         for i in range(HORIZON_DAYS):
             d = base_from + timedelta(days=i)
-            if match(d) and _limits_ok(when, d) and any(m > anchor_local for m in day_moments(d)):
+            # except_dates remove sends; they never move the cadence ("every other Friday, but not the 13th")
+            if match(d) and _in_span(when, d) and any(m > anchor_local for m in day_moments(d)):
                 return d
         return None
 
@@ -283,10 +287,12 @@ def random_moments(when, tzname, d, anchor, seed, quiet=None):
     anchor_utc = _utc(anchor)
     day = a
     while day <= b:
-        if day.weekday() in wanted and _limits_ok(when, day):
+        if day.weekday() in wanted:
+            # the full period counts every allowed day, so a period cut short by start, until or except_dates gets
+            # its share of `count`, not all of it squeezed into the days that are left
             for s, e in _free(_utc(_at(day, window[0], tz)), _utc(_at(day, window[1], tz)), quiet, tzname):
                 full.append((s, e))
-                if e > anchor_utc:
+                if e > anchor_utc and _limits_ok(when, day):
                     left.append((max(s, anchor_utc), e))
         day += timedelta(days=1)
     full_len = sum((e - s).total_seconds() for s, e in full)
@@ -332,6 +338,8 @@ def complete(when: When, now: datetime, tzname: str) -> When:
         when.days = [DAYS[ref.weekday()]]
     if when.every_months and not when.month_days and not when.month_weeks:
         when.month_days = [-1 if ref.day == 31 else ref.day]
+    if when.every_months == 12 and not when.start:
+        when.start = ref.isoformat()   # "every year on the 3rd" counts from this month; describe can name the month
     return when
 
 

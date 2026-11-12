@@ -63,6 +63,8 @@ DELETE_ASK = "This deletes your library, rules and history with me. Reply YES to
 DELETED = ("Done: your rules and history are deleted. A founder will remove your library "
            "and our message thread within 24 hours and confirm here.")
 TIME_PASSED = "That time has already passed. When should I send it?"
+ALL_QUIET = ("Those hours are all inside your quiet hours, and I only send at a time you name there. "
+             "Pick other hours, or tell me an exact time.")
 NOTHING_TO_ATTACH = "Thanks! Nothing to attach that to yet."
 FEEDBACK_REPLIES = {"up": "Noted 👍", "down": "Noted. I won't send that again.", "more": "Noted: more like that.",
                     "less": "Noted: less like that."}

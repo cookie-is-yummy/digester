@@ -98,4 +98,4 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `store.py`, `llm.py` | Records; model calls, the cost ledger and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 68 offline tests |
+| `tests/` | 76 offline tests |

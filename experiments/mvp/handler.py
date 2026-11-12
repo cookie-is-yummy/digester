@@ -171,6 +171,9 @@ class HandlerMixin:
                                       preview_run=pending["payload"].get("run_id") if same else None)
             if pending and it.edits_pending:  # keep the whole request, not only the edit
                 text = pending["payload"]["text"] + " / " + text
+            never = self._never_sends(person, it.spec, now)
+            if never:  # no preview for a rule that would never send (its end has passed, or every moment is quiet)
+                return self.send(h, never)
             msg, run_id, n = self.run(person, it.spec, "preview", request_text=text)
             if self._run_failed(run_id):  # no preview, so nothing to say yes to
                 self.store.clear_pending(h)
@@ -307,8 +310,9 @@ class HandlerMixin:
             n = len(self.store.rules(h))
             return self.send(h, T.saved_rule(n, what))
         quiet = self.store.quiet(h)
-        if next_run(spec.when, tz, now, anchor=now, quiet=quiet) is None:
-            return self.send(h, T.TIME_PASSED)
+        never = self._never_sends(person, spec, now)
+        if never:
+            return self.send(h, never)
         # random and window moments are seeded with the rule's id, so the slot is worked out once the rule has one
         rule_id = self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
         nxt = next_run(spec.when, tz, now, anchor=now, seed=rule_id, quiet=quiet)
@@ -328,6 +332,18 @@ class HandlerMixin:
         if spec.when.type == "random" or spec.when.window:
             first = None  # random moments are never shown in advance
         return self.send(h, T.rule_started(edited, describe(spec.when), c.goal, avoid, first))
+
+    def _never_sends(self, person, spec, now):
+        """The reply for a timed rule that would never send, else None. Random, window and every_hours moments never
+        fall in quiet hours, so hours that are all quiet are said plainly rather than as 'that time has passed'."""
+        w, tz = spec.when, person["timezone"]
+        if w.type in ("now", "on_request", "new_items"):
+            return None
+        if next_run(w, tz, now, anchor=now, quiet=self.store.quiet(person["handle"])) is not None:
+            return None
+        if next_run(w, tz, now, anchor=now, quiet=[]) is not None:
+            return T.ALL_QUIET
+        return T.TIME_PASSED
 
     def _answer_seen(self, h):
         """The answer a typed reaction is about: the last one, unless that one was sent after the person's message

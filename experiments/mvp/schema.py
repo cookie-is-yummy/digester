@@ -391,7 +391,11 @@ class Action(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _name_only(cls, v):
-        return {"action": v} if isinstance(v, str) else v
+        if isinstance(v, str):
+            return {"action": v}
+        if isinstance(v, dict) and v.get("params") is None:
+            return {**v, "params": {}}   # "params": null from the model means no params
+        return v
 
     @model_validator(mode="after")
     def _registry(self):
@@ -404,6 +408,14 @@ class RuleSpec(BaseModel):
     when: When
     content: Content
     do: list[Action] = Field(default_factory=lambda: [Action()], min_length=1, max_length=4)
+
+    @field_validator("do", mode="before")
+    @classmethod
+    def _do_list(cls, v):
+        """One action given on its own ("email.send") is a list of one; none at all (null, []) is the reply."""
+        if v is None or v == []:
+            return [{"action": "message.send"}]
+        return [v] if isinstance(v, (str, dict)) else v
 
     @model_validator(mode="after")
     def _v2(self):

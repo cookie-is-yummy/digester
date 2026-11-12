@@ -177,7 +177,8 @@ class Store:
 
     def consume_skip(self, rule_id, local_date):
         """At a due send: 'date' if its local date (YYYY-MM-DD) is skipped, else 'count' if a counted skip is left,
-        else None. What is used up is removed (and dates already past are dropped)."""
+        else None. A skipped date covers every send on that day ("not on the 26th" with a rule that sends twice a
+        day), so it is kept until the day has passed; a counted skip is used up."""
         with self.lock:
             r = self.rule(rule_id)
             if not r:
@@ -185,7 +186,6 @@ class Store:
             dates = [d for d in r["skip_dates"] if d >= local_date]
             reason = None
             if local_date in dates:
-                dates.remove(local_date)
                 reason = "date"
             count = r["skip_count"]
             if reason is None and count > 0:

@@ -313,9 +313,15 @@ def test_do_is_validated_against_the_action_registry():
     assert set(REGISTRY) == {"message.send", "email.send", "calendar.add", "todo.add"} and needs("email.send") == "verified_email"
     for do in [["sms.send"], [{"action": "calendar.add", "params": {"time": "25:00"}}],
                [{"action": "calendar.add", "params": {"date": "2026-11-20", "day_offset": 1}}],
-               [{"action": "email.send", "params": {"to": "someone@example.com"}}], []]:
+               [{"action": "email.send", "params": {"to": "someone@example.com"}}], "sms.send"]:
         with pytest.raises(ValidationError):
             RuleSpec.model_validate(dict(base, do=do))
+    # forms a model gives for "just reply" or one action: read as the list they mean (nothing outside the registry)
+    for do in ([], None):
+        assert RuleSpec.model_validate(dict(base, do=do)).stored()["do"] == [{"action": "message.send"}]
+    assert RuleSpec.model_validate(dict(base, do="email.send")).stored()["do"] == [{"action": "email.send"}]
+    one = RuleSpec.model_validate(dict(base, do={"action": "todo.add", "params": None}))
+    assert one.stored()["do"] == [{"action": "todo.add"}]
 
 
 def test_v1_specs_still_validate():
@@ -651,3 +657,125 @@ def test_every_hours_preview_says_the_daily_limit_applies(env):
     assert "every 2 hours from 9am to 9pm" in last(ch).lower() and "at most 5 timed messages a day" in last(ch)
     assert bot.store.pending("+15550001")["payload"]["spec"]["when"] == {
         "type": "schedule", "days": DAILY, "every_weeks": 1, "every_hours": 2, "window": ["09:00", "21:00"]}
+
+
+# ---------- found by the checker ----------
+
+def test_except_dates_never_move_the_cadence():
+    """'Every 2 days' and 'every other Friday' keep their rhythm when the first day is excluded."""
+    w = W(type="schedule", every_days=2, times=["08:00"], except_dates=["2026-11-13"])
+    assert [local(t).date().isoformat() for t in run_of(w, 3)] == ["2026-11-15", "2026-11-17", "2026-11-19"]
+    f = W(type="schedule", days=["FRI"], every_weeks=2, times=["19:00"], except_dates=["2026-11-13"])
+    assert [local(t).date().isoformat() for t in run_of(f, 2)] == ["2026-11-27", "2026-12-11"]
+
+
+def test_a_random_period_cut_by_start_or_until_gets_its_share():
+    """3 a week that ends on a Wednesday sends about 3 x 3/7 = 1 that week, not 3 squeezed into three days."""
+    w = W(type="random", until="2026-11-18")
+    moments = run_of(w, 5, after=u(2026, 11, 16, 5), anchor=u(2026, 11, 1))
+    assert len(moments) == 1 and local(moments[0]).date().isoformat() <= "2026-11-18"
+    s = W(type="random", start="2026-11-21")                              # starts on a Saturday
+    sat_sun = [t for t in run_of(s, 6) if local(t).date().isoformat() <= "2026-11-22"]
+    assert len(sat_sun) == 1
+
+
+def test_each_year_without_a_start_names_its_month():
+    from mvp.schedule import complete, describe
+    w = complete(W(type="schedule", every_months=12, month_days=[3]), ANCHOR, NY)
+    assert w.start == "2026-11-12" and describe(w) == "every year on 3 November at 9am"
+    assert local(nxt(w)).date().isoformat() == "2027-11-03"
+
+
+def test_a_skipped_date_covers_every_send_that_day(env):
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    weekly(bot, st, when={"type": "schedule", "times": ["08:00", "20:00"]})
+    st["answers"]["mvp_interpret"] = lambda u_: {"intent": "skip", "rule_number": 1, "date": "2026-11-14"}
+    bot.on_message(h, "not on saturday")
+    assert "Skipped Saturday 14 November. Next one today at 8pm" in last(ch)
+    for t in [u(2026, 11, 13, 1, 1), u(2026, 11, 13, 13, 1), u(2026, 11, 14, 1, 1), u(2026, 11, 14, 13, 1),
+              u(2026, 11, 15, 1, 1), u(2026, 11, 15, 13, 1)]:
+        clock[0] = t
+        bot.tick()
+    got = statuses(bot)                                                  # both Saturday sends are skipped
+    assert got[:5] == ["sent", "sent", "sent", "skipped", "skipped"] and got[5] in ("sent", "none_sent")
+    # a long run of skipped days does not end the rule, and the reply names the first real send after it
+    st["answers"]["mvp_interpret"] = lambda u_: {"intent": "skip", "rule_number": 1, "date": "2026-11-15",
+                                                  "until": "2027-01-10"}
+    bot.on_message(h, "no pasta until 11 January")
+    assert "Next one on Monday 11 January at 8am" in last(ch) and bot.store.rules(h)[0]["status"] == "active"
+
+
+def test_a_hold_or_retry_from_an_earlier_slot_never_applies_to_a_new_one(env):
+    """A retry count or a hold belongs to its slot. After the person changes or skips, a stale one must not stop a
+    skip from being used or hold a time they named."""
+    bot, st, clock = env["bot"], env["state"], env["clock"]
+    h = "+15550001"
+    weekly(bot, st, when={"type": "schedule", "days": DAILY, "time": "21:50"})
+    st["answers"]["mvp_compose"] = lambda u_: (_ for _ in ()).throw(RuntimeError("model down"))
+    clock[0] = u(2026, 11, 13, 2, 51)
+    bot.tick()
+    clock[0] = u(2026, 11, 13, 3, 6)
+    bot.tick()                                                           # held to 8am
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-13T13:00:00+00:00"
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    st["answers"]["mvp_interpret"] = lambda u_: {"intent": "change_rule", "rule_number": 1,
+                                                  "spec": pasta_spec({"type": "schedule", "days": DAILY, "time": "07:00"})}
+    bot.on_message(h, "make it 7am")
+    st["answers"]["mvp_interpret"] = lambda u_: {"intent": "skip", "rule_number": 1}
+    bot.on_message(h, "skip the next one")
+    clock[0] = u(2026, 11, 13, 12, 1)                                    # 7:01am, in quiet hours, a time they named
+    assert bot.tick() == 0 and statuses(bot)[-1] == "skipped"            # the skip is used, not held to 8am
+    clock[0] = u(2026, 11, 14, 12, 1)
+    assert bot.tick() == 1                                               # the next 7am goes out at 7am
+
+
+def test_a_failed_send_is_retried_three_times_then_moves_on(env):
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    weekly(bot, st)
+    real, tries = ch.send, []
+
+    def down(*a, **k):
+        tries.append(1)
+        raise ConnectionError("down")
+    ch.send = down
+    for i in range(10):
+        clock[0] = u(2026, 11, 14, 0, 1) + timedelta(minutes=16 * i)
+        bot.tick()
+    ch.send = real
+    assert len(tries) == 4                                               # the first try and 3 retries, not until 'missed'
+    assert bot.store.rules("+15550001")[0]["next_run_at"] == "2026-11-21T00:00:00+00:00"
+
+
+def test_a_rule_paused_until_a_date_stays_paused_while_the_person_is_silent(env):
+    from mvp.texts import PAUSED_QUIET
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    weekly(bot, st, when={"type": "schedule", "days": DAILY, "time": "12:00"})
+    second = weekly(bot, st, when={"type": "schedule", "days": DAILY, "time": "13:00"})
+    bot.store.pause_rule(second["id"], u(2026, 11, 22, 0))
+    bot.store.set_state(f"last_in:{h}", "2026-11-12T18:30:00+00:00")
+    for d in range(14):
+        clock[0] = u(2026, 11, 13, 17, 1) + timedelta(days=d)
+        bot.tick()
+    assert sum(1 for m in ch.outbox if m[2] == PAUSED_QUIET) == 1      # one note, not one more when the date comes
+    assert [r["status"] for r in bot.store.rules(h)] == ["paused", "paused"]
+
+
+def test_hours_that_are_all_quiet_are_said_plainly_before_any_preview(env):
+    from mvp import texts as T
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    h = "+15550001"
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    for when, says in [({"type": "schedule", "window": ["22:30", "23:30"]}, T.ALL_QUIET),
+                       ({"type": "random", "window": ["23:00", "23:59"]}, T.ALL_QUIET),
+                       ({"type": "schedule", "days": ["MON"], "time": "09:00", "until": "2026-11-01"}, T.TIME_PASSED)]:
+        st["answers"]["mvp_interpret"] = lambda u_, w=when: {"intent": "new_rule", "spec": pasta_spec(w)}
+        bot.on_message(h, "pasta rule")
+        assert last(ch) == says and bot.store.pending(h) is None
+    assert env["calls"].count("mvp_compose") == 0 and bot.store.rules(h) == []
+    bot.store.set_quiet(h, [])                                            # no quiet hours: a late window is fine
+    st["answers"]["mvp_interpret"] = lambda u_: {"intent": "new_rule",
+                                                  "spec": pasta_spec({"type": "schedule", "window": ["22:30", "23:30"]})}
+    bot.on_message(h, "pasta rule")
+    assert "YES" in last(ch)

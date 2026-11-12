@@ -110,15 +110,16 @@ class SchedulerMixin:
         tz = ZoneInfo(spec.when.tz or person["timezone"])
         t = datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
         count, dates = rule.get("skip_count") or 0, set(rule.get("skip_dates") or [])
-        for _ in range(60):
-            day = t.astimezone(tz).date().isoformat()
-            if day in dates:
-                dates.discard(day)
+        for _ in range(200):
+            local = t.astimezone(tz)
+            after = t
+            if local.date().isoformat() in dates:   # every send on a skipped date: go on from the end of that day
+                after = _at(local.date() + timedelta(days=1), "00:00", tz) - timedelta(seconds=1)
             elif count > 0:
                 count -= 1
             else:
                 return t
-            _, nxt = self._next_for(spec, person, now, rule, after=t)
+            _, nxt = self._next_for(spec, person, now, rule, after=after)
             if not nxt:
                 return None
             t = datetime.fromisoformat(nxt)
@@ -148,11 +149,21 @@ class SchedulerMixin:
         self._advance(rule, spec, tz, now)
         return 0
 
-    def _retry_or_skip(self, rule, now, slot=None, advanced=False):
+    @staticmethod
+    def _moved(rule):
+        """True when next_run_at was moved off the rule's slot by a retry or a hold. Anything that sets a new slot
+        (a send, a skip, a change, a resume, a time zone move) sets both to the same time, so retry counts and holds
+        left from an earlier slot never apply to a new one."""
+        return bool(rule.get("slot_at")) and rule.get("next_run_at") != rule.get("slot_at")
+
+    def _retry_or_skip(self, rule, now, slot=None, advanced=False, tries=None):
         """After an error: try this slot again in 15 minutes, up to 3 times; then move to the next scheduled time.
-        `advanced` says the rule was already moved on to its next slot (a send that failed). A retry that lands in
-        quiet hours is held to their end when it comes due."""
-        n = self.store.get_state(f"retry:{rule['id']}", 0) or 0
+        `advanced` says the rule was already moved on to its next slot (a send that failed). `tries` is how many
+        retries this slot has had (read before the rule moved on). A retry that lands in quiet hours is held to their
+        end when it comes due."""
+        if tries is None:
+            tries = (self.store.get_state(f"retry:{rule['id']}", 0) or 0) if self._moved(rule) else 0
+        n = tries
         if n < MAX_RETRIES:
             self.store.set_state(f"retry:{rule['id']}", n + 1)
             fields = {"next_run_at": now_iso(now + RETRY_AFTER), "status": "active"}
@@ -188,15 +199,18 @@ class SchedulerMixin:
             return 0
         quiet_streak = self._unanswered(person["handle"])
         if quiet_streak >= UNANSWERED_PAUSE:
-            for r in self.store.rules(person["handle"], statuses=("active",)):
-                if r["next_run_at"]:
+            for r in self.store.rules(person["handle"]):
+                if r["status"] == "active" and r["next_run_at"]:
                     self.store.update_rule(r["id"], status="paused")
+                if r.get("paused_until"):  # "paused until Monday" must not restart while they are still silent
+                    self.store.update_rule(r["id"], paused_until=None)
             self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="paused_quiet",
                                at=now_iso(now))
             self.send(person["handle"], PAUSED_QUIET)
             return 0
-        retries = self.store.get_state(f"retry:{rule['id']}", 0) or 0
-        hold = self.store.get_state(f"hold:{rule['id']}")
+        moved = self._moved(rule)   # a retry or a held send of this slot (never one left from an earlier slot)
+        retries = (self.store.get_state(f"retry:{rule['id']}", 0) or 0) if moved else 0
+        hold = self.store.get_state(f"hold:{rule['id']}") if moved else None
         late_from = max(slot, datetime.fromisoformat(hold)) if hold else slot
         if now - late_from > MISSED_AFTER:  # e.g. the bot was off on Friday evening: Friday's pick is not sent on Monday
             return self._skip_slot(rule, spec, tz, now, "missed")
@@ -237,7 +251,7 @@ class SchedulerMixin:
         msg, run_id, n = self.run(person, spec, "scheduled", rule_id=rule["id"])
         progress["run_id"] = run_id
         if self._run_failed(run_id):
-            self._retry_or_skip(rule, now, slot)  # nothing is sent: an error text would be unprompted and useless
+            self._retry_or_skip(rule, now, slot, tries=retries)  # nothing is sent: an error text would be unprompted
             return 0
         # Recorded before the send: the rule moves to its next slot and the run is marked 'sending'. A crash from here
         # on can lose this one message but can never send the slot twice.
@@ -262,7 +276,7 @@ class SchedulerMixin:
             else:
                 self.store.x("DELETE FROM last_answer WHERE handle=?", (h,))
             self.store.set_state(f"lines:{h}", lines or {})
-            self._retry_or_skip(rule, now, slot, advanced=True)
+            self._retry_or_skip(rule, now, slot, advanced=True, tries=retries)  # _advance reset the stored count
             return 0
         self.store.x("UPDATE runs SET status=? WHERE id=?", ("sent" if n else "none_sent", run_id))
         return 1
