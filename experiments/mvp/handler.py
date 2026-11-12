@@ -57,11 +57,19 @@ def change_words(old, new):
     added = [x for x in b.avoid if x not in a.avoid]
     if added:
         out.append("nothing with " + ", ".join(added))
+    back = [x for x in a.avoid if x not in b.avoid]   # checker, round 2: what a change takes away is said too
+    if back:
+        out.append(T.and_words(back) + " allowed again")
     crit = [x for x in b.criteria if x not in a.criteria]
     if crit:
-        out.append("only ones that " + T.and_words([f"\"{x}\"" for x in crit]))
+        out.append("only ones that fit " + T.and_words([f"\"{x}\"" for x in crit]))
+    gone = [x for x in a.criteria if x not in b.criteria]
+    if gone:
+        out.append("no longer only ones that fit " + T.and_words([f"\"{x}\"" for x in gone]))
     if b.platforms != a.platforms and b.platforms:
         out.append("only from " + T.and_words([T.PLATFORM_NAMES.get(p, p) for p in b.platforms]))
+    elif b.platforms != a.platforms:
+        out.append("from " + T.and_words([T.PLATFORM_NAMES.get(p, p) for p in ("instagram", "youtube")]))
     if b.order != a.order and b.order in ("newest", "oldest", "random", "easiest_first"):
         out.append({"newest": "newest first", "oldest": "oldest first", "random": "in a random order",
                     "easiest_first": "easiest first"}[b.order])
@@ -69,6 +77,11 @@ def change_words(old, new):
     for act in [x.action for x in new.do if x.action not in {y.action for y in old.do}]:
         if act in names:
             out.append(names[act])
+    stopped = {"email.send": "no longer emailed", "calendar.add": "without the calendar link",
+               "todo.add": "no longer put on your list"}
+    for act in [x.action for x in old.do if x.action not in {y.action for y in new.do}]:
+        if act in stopped:
+            out.append(stopped[act])
     return ", ".join(out) or None
 
 
@@ -220,7 +233,10 @@ class HandlerMixin:
         """The interpretation, then the one more it may carry ('also'), in order. A lasting fact the person stated
         about themselves is kept for the profile; the language they wrote in is passed on to the runs."""
         h = person["handle"]
-        self._tl.profile_said = None
+        # what the setup's last question just changed rides on this answer (checker, round 2: it was reset here and
+        # never said)
+        self._tl.profile_said = getattr(self._tl, "carry_said", None)
+        self._tl.carry_said = None
         for x in [it] + ([it.also] if it.also else []):
             known = {n.lower() for n in self.store.profile_notes(h)}
             if x.profile_note and x.profile_note.lower() not in known and x.intent != "profile_update" \
@@ -329,7 +345,7 @@ class HandlerMixin:
                     return self.send(h, T.EMAIL_ONLY_YOU)
                 # fix pass 2, finding 62: never the model's own words for a request it would not do: code picks the
                 # sentence (the model's "reply" is not shown)
-                return self.send(h, T.unsupported_reply(text, it.reply))
+                return self.send(h, T.unsupported_reply(text, it.reply, lang=it.lang))
             return self.send(h, HELP if it.intent == "help" and not it.reply else (it.reply or HELP))
         if it.intent == "confirm":
             if pending and pending["kind"] == "confirm_rule":

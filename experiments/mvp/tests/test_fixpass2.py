@@ -755,3 +755,81 @@ def test_39_their_own_level_word_wins_over_the_forms(env):
     assert got["Blender 3D"]["level"] == "beginner" and got["Animation"]["level"] is None
     P().apply_merge(store, H, {"levels": [{"topic": "Blender", "level": "beginner"}]}, "total beginner at Blender")
     assert {i["topic"]: i for i in P().get(store, H)["interests"]}["Blender 3D"]["level"] == "new"
+
+
+# ======================================= checker, round 2: near-variants the pass missed =======================
+def test_41_mostly_right_through_the_form_also_keeps_the_guessed_direction(many):
+    start(many)
+    many["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "confirm_all": True}
+    say(many, "mostly right", CHAT)                         # not a bare yes: the form call reads it
+    assert P().get(many["bot"].store, H)["direction"] == "learning guitar and collecting sourdough"
+    start(many)
+    many["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "confirm_all": True,
+                                                               "direction": "learning to fix my bike"}
+    say(many, "mostly right, but I'm working toward learning to fix my bike", CHAT)
+    assert P().get(many["bot"].store, H)["direction"] == "learning to fix my bike"   # their own goal wins
+
+
+def test_46_what_the_last_question_changed_rides_on_the_answer_to_a_request_in_it(rich):
+    ch, st = rich["ch"], rich["state"]
+    _to_the_last_message(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "both", "tools": ["air fryer"]}
+    st["answers"]["mvp_compose"] = pick("pasta")
+    n0 = len(ch.outbox)
+    say(rich, "I have an air fryer. a pasta recipe please", {"intent": "ask", "spec": {
+        "when": {"type": "now"}, "content": {"goal": "a pasta recipe", "searches": ["pasta"]}}})
+    texts = [m[2] for m in ch.outbox[n0:]]
+    assert len(texts) == 1 and "I recommend pasta" in texts[0] and "you have air fryer" in texts[0]
+
+
+def test_49_for_tonight_and_in_the_morning_are_timing_too():
+    form = rule_form({"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "times": ["07:00"]},
+                     goal="a stretch routine", criteria=["for tonight", "in the morning", "every morning",
+                                                         "a full routine from start to finish", "for beginners"])
+    it = S(form, "send me a stretch routine every morning")
+    assert it.spec.content.criteria == ["a full routine from start to finish", "for beginners"]
+
+
+def test_50_a_change_that_takes_something_away_says_so(env):
+    every = {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "times": ["08:00"]}
+    spec = {"when": every, "content": {"goal": "a pasta recipe", "searches": ["pasta"], "avoid": ["cream"],
+                                       "criteria": ["ends with a dish you can eat"]},
+            "do": [{"action": "message.send"}, {"action": "email.send"}]}
+    env["bot"].store.add_rule(H, "a pasta recipe every day, no cream, by email", spec, "active",
+                              "2026-11-13T13:00:00+00:00", created_at="2026-11-12T18:00:00+00:00")
+    new = json.loads(json.dumps(spec))
+    new["content"]["avoid"], new["content"]["criteria"], new["do"] = [], [], [{"action": "message.send"}]
+    msg = say(env, "cream is fine, any pasta, and stop emailing it", {"intent": "change_rule", "rule_number": 1,
+                                                                     "spec": new})
+    assert msg == ("Changed: every day at 8am, a pasta recipe, cream allowed again, no longer only ones that fit "
+                   "\"ends with a dish you can eat\", no longer emailed.")
+
+
+def test_58_a_level_they_rule_out_is_never_the_level_asked_for(env):
+    it = S(ask_form("an advanced Blender tutorial"), "an advanced Blender tutorial, not beginner stuff")
+    assert it.spec.content.criteria == ["suits an advanced level"]
+    it = S(ask_form("a Blender tutorial"), "a Blender tutorial that isn't for beginners")
+    assert it.spec.content.criteria == []
+    it = S(ask_form("a Blender tutorial"), "something more advanced than beginner level")
+    assert it.spec.content.criteria == ["suits an advanced level"]
+    assert S(ask_form("a tutorial"), "a beginner tutorial").spec.content.criteria == ["suits a beginner"]
+    text, _, _ = P().composer_context(env["bot"].store, H, "a pasta recipe, nothing easy please")
+    assert "The level they asked for" not in text
+
+
+def test_63_a_request_answered_at_the_read_is_never_the_direction(rich):
+    st = rich["state"]
+    start(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "request", "note": "mini blender tutorials",
+                                                    "direction": "mini beginner blender tutorials daily"}
+    st["answers"]["mvp_compose"] = pick("Low poly island")
+    say(rich, FOUNDER, {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "mini beginner Blender tutorials", "searches": ["blender beginner"]}}})
+    prof = P().get(rich["bot"].store, H)
+    assert prof["direction"] is None and prof["notes"] == []
+
+
+def test_62_a_request_the_bot_will_not_do_is_answered_in_their_language(env):
+    msg = say(env, "resérvame una mesa para cenar", {"intent": "unsupported", "reply": "¡Hecho!", "lang": "es"})
+    assert msg.startswith("Eso no lo puedo hacer.")
+    assert say(env, "book me a table", {"intent": "unsupported", "reply": "Booked!"}) == T().UNSUPPORTED

@@ -124,6 +124,11 @@ ES = {
               "intermediate": "Supongo que ya dominas lo básico de {topic}",
               "advanced": "Supongo que tienes un nivel avanzado en {topic}"},
     "level_tail": "; dime si me equivoco.",
+    # checker, round 2 (finding 62): a request the bot will not do, in a sentence picked by code
+    "unsupported": ("Eso no lo puedo hacer. Busco cosas en lo que guardaste y viste, ahora o a la hora que elijas, y "
+                    "guardo recordatorios y listas de tareas."),
+    "unsupported_event": "No puedo saber cuándo pasa eso. Elige una hora, por ejemplo \"cada día a las 6pm\".",
+    "not_caught": "Perdona, no te entendí. ¿Me lo dices de otra forma?",
     "months": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
                "noviembre", "diciembre"],
 }

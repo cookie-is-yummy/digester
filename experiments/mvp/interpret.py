@@ -270,10 +270,15 @@ TIMING_CRITERIA = set("""daily every day days each weekly week weeks monthly mon
     start starting doing do to begin practise practice practising practicing habit times time once twice""".split())
 LENGTH_CRITERIA = set("""mini short shorter quick quicker tiny small bite bitesized bite-sized sized brief little length
     long minutes minute video videos tutorial tutorials clip clips""".split())
+# small words that only join timing words ("for tonight", "in the morning", "at night", "on weekends"); never enough
+# on their own (checker, round 2: "for tonight" was kept as a must-have)
+TIMING_JOINERS = set("for in at on by per of from until till each every all through".split())
+
+
 def timing_only(cr):
     """A must-have made only of words about when or how often (and filler)."""
     words = WORD.findall(cr.lower())
-    return bool(words) and all(w in FILLER_CRITERIA or w in TIMING_CRITERIA for w in words) \
+    return bool(words) and all(w in FILLER_CRITERIA or w in TIMING_CRITERIA or w in TIMING_JOINERS for w in words) \
         and any(w in TIMING_CRITERIA for w in words)
 
 
@@ -925,14 +930,25 @@ LEVEL_IN_CRITERION = re.compile(r"\b(?:beginner|novice|newbie|intermediate|advan
                                 re.I)
 
 
+# a level word the person rules out ("not beginner stuff", "isn't for beginners", "more advanced than beginner",
+# "past the beginner stage"): never the level they asked for (checker, round 2)
+LEVEL_NEGATED = re.compile(r"(?:\bnot|\bno|n['’]t|\bnothing|\bwithout|\bbeyond|\bpast|\bthan|\bother than|\bover)"
+                           r"(?:\s+(?:for|a|an|the|too|so|really|very|just|any|at|like|my))*\s*$", re.I)
+
+
+def _level_said_in(rx, message):
+    """True when the message uses this level word and does not rule it out."""
+    return any(not LEVEL_NEGATED.search(message[:m.start()]) for m in rx.finditer(message))
+
+
 def _level_criterion(c, message):
     """Finding 58: a level word in the person's own message (beginner, intermediate, advanced, for kids) is a
     must-have, worded in plain words, when the form left it out. ("easy" is given to the composer as the level asked
-    for instead: profile.composer_context.)"""
+    for instead: profile.composer_context.) A level they rule out ("not for beginners") is never one."""
     if any(LEVEL_IN_CRITERION.search(cr) for cr in c.criteria) or len(c.criteria) >= 5:
         return
     for rx, crit in LEVEL_WORD:
-        if rx.search(message):
+        if _level_said_in(rx, message):
             c.criteria.append(crit)
             return
 

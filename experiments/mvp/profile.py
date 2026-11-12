@@ -548,7 +548,9 @@ def composer_context(store, handle, *texts):
     if p:
         lines.append("Preferences: " + "; ".join(p))
     lines.extend(notes_for(prof["notes"], *texts))
-    said = next((m.group(0) for t in texts for m in [ASKED_LEVEL_WORD.search(t or "")] if m), None)
+    from .interpret import LEVEL_NEGATED
+    said = next((m.group(0) for t in texts for m in ASKED_LEVEL_WORD.finditer(t or "")
+                 if not LEVEL_NEGATED.search((t or "")[:m.start()])), None)   # never a level they rule out
     if said:   # fix pass 2, finding 58: a level in their own words ("easy", "beginner") reaches the composer
         lines.append(f"The level they asked for, in their words: {said.lower()}")
     asked = any(LEVEL_ASKED.search(t or "") for t in texts)
@@ -709,8 +711,10 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False):
                           "confirmed": True, "source": "person"})
         changes.append(f"you're into {name}")
     d = _clean(raw.get("direction"), 240)
-    if d and not (asked_direction or GOAL.search(message)) or timing_only(d):
-        d = ""   # finding 63: no goal stated, or only words about timing ("start doing daily"): never a direction
+    if d and not (asked_direction or GOAL.search(message)) or timing_only(d) or kind == "request":
+        # finding 63: no goal stated, or only words about timing ("start doing daily"): never a direction; nor is a
+        # message the form read as only a request, even as the answer to the setup's question (checker, round 2)
+        d = ""
     if d:
         d, cut = keep_stated(d)   # finding 38: only the clause that states a personal matter goes, never the rest
         skipped = skipped or cut
@@ -770,7 +774,7 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False):
             changes.append(("I won't use your " if key == "exclude_kinds" else "I won't use ") + _and(_plain(key, new)))
             other.append(changes[-1])
     note = _clean(raw.get("note"), 120)
-    if note and (timing_only(note) or (allow and any(named_against(a, note) for a in allow))):
+    if note and (timing_only(note) or kind == "request" or (allow and any(named_against(a, note) for a in allow))):
         note = ""   # finding 63: words about timing are never a note; a note that repeats what they took back neither
     if note:
         note, cut = keep_stated(note)
@@ -781,7 +785,8 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False):
             other.append(changes[-1])
     set_interests(store, handle, interests)
     store.x("UPDATE people SET prefs=? WHERE handle=?", (json.dumps(prefs), handle))
-    return {"kind": kind, "changes": changes, "other": other, "skipped_sensitive": skipped}
+    return {"kind": kind, "changes": changes, "other": other, "skipped_sensitive": skipped,
+            "confirmed_all": raw.get("confirm_all") is True}
 
 
 def _drop_notes_about(store, handle, interest):

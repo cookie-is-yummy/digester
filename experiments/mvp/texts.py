@@ -593,14 +593,17 @@ EVENT_TRIGGER = re.compile(r"\b(?:when|whenever|once|as soon as|if)\s+(?:i|it|i'
                            r"office|school|land|lands|done|finish|finishes|start|starts)\b", re.I)
 
 
-def unsupported_reply(text, model_reply=None):
+def unsupported_reply(text, model_reply=None, lang=None):
     """The reply to a request the bot will not do: the parse-failure line as it is, an event the bot cannot see
-    ("when I get home") with the offer to pick a time, else one plain line about what the bot does."""
+    ("when I get home") with the offer to pick a time, else one plain line about what the bot does. In the person's
+    language when lang.py has it (checker, round 2: the model's own reply in Spanish was replaced by English)."""
+    from . import lang as L
+    t = L.table(lang)
     if model_reply == NOT_CAUGHT:
-        return NOT_CAUGHT
+        return t.get("not_caught") or NOT_CAUGHT
     if EVENT_TRIGGER.search(text or ""):
-        return UNSUPPORTED_EVENT
-    return UNSUPPORTED
+        return t.get("unsupported_event") or UNSUPPORTED_EVENT
+    return t.get("unsupported") or UNSUPPORTED
 
 
 # ---------- slice 6: the person's context and onboarding ----------

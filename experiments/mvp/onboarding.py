@@ -113,14 +113,19 @@ class OnboardingMixin:
         if self._over_cap(person):   # no paid call: the answer is kept as a note, and the setup goes on
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
             return self._onboard_contact_ask(person, now, "Thanks.")
+        st0 = self._onboard(h) or {}
         try:
             res, _ = P.merge(self.store, h, text, asked="Here's my read of you (their main interests). Did I get that "
                              "right? And in a sentence or two, what are you working toward right now?",
-                             shown=(self._onboard(h) or {}).get("shown") or [])
+                             shown=st0.get("shown") or [])
         except Exception as e:  # noqa: BLE001 - their words are kept as a note, and the setup goes on
             self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
             return self._onboard_contact_ask(person, now, "Thanks.")
+        if res.get("confirmed_all") and st0.get("guessed_direction") and not P.get(self.store, h)["direction"]:
+            # checker, round 2 (finding 41): "mostly right" through the form also says yes to the direction it was
+            # shown, as a bare "yes" does; a goal of their own (stored by the form) wins
+            self.store.set_direction(h, st0["guessed_direction"])
         if res["kind"] in ("request", "both"):
             # merged already: a profile_note in it is not merged a second time, and a reading of it as only about
             # them (profile_update, chat) sends nothing, so the one summary below is the only reply (finding 42)
@@ -224,11 +229,12 @@ class OnboardingMixin:
             if res["changes"] else ""
         if res["kind"] in ("request", "both"):
             self._tl.merged_text = text
-            self._tl.profile_said = said or None   # what changed rides on the answer
+            self._tl.carry_said = said or None   # what changed rides on the answer (_dispatch takes it up)
             try:
                 return self.answer_normally(person, text, now)
             finally:
                 self._tl.merged_text = None
+                self._tl.carry_said = None
         if not said and not res["skipped_sensitive"]:
             note = " ".join(text.split())[:300]
             if not P.stated_sensitive(note):
