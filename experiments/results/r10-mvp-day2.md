@@ -73,4 +73,4 @@ section 6 and the MVP document.
 ## Tests and spend
 
 - 40 offline tests in `experiments/mvp/tests` (17 on day 1). The demo's 10 tests still pass.
-- Spend so far on the MVP ledger: about $0.57 of the $10 build cap, plus under 1 cent of search calls.
+- Spend so far on the MVP ledger: about $0.53 of the $10 build cap, plus under 1 cent of search calls.
