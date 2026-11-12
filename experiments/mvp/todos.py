@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from . import config
 from . import texts as T
+from .channels.base import SendUncertain
 from .schedule import _at, end_of_quiet, say_time
 from .store import now_iso
 
@@ -82,54 +83,74 @@ class TodoMixin:
         h = person["handle"]
         name = it.todo_list or "todo"
         due = self._due_from(it, person, now)
+        # a time that has passed sets no reminder, and the reply says so
+        tail = " " + T.TODO_DUE_PASSED if (it.due or it.in_minutes) and due is None else ""
         if it.pick_number or it.what == "ingredients":
-            return self._add_picks(person, [it.pick_number] if it.pick_number else None, name, it.what or "pick", due)
+            return self._add_picks(person, [it.pick_number] if it.pick_number else None, name, it.what or "pick", due,
+                                   tail=tail)
         tid = self.store.add_todo(h, it.todo_text, name, due_at=due, at=now)
         self._wrote(h, "todo_add", f"added to-do \"{it.todo_text}\" to the list \"{name}\"", {"ids": [tid]})
-        return self.send(h, T.todos_added([it.todo_text], name, say_time(due, now, person["timezone"]) if due else None))
+        return self.send(h, T.todos_added([it.todo_text], name, say_time(due, now, person["timezone"]) if due else None)
+                         + tail)
 
-    def _add_picks(self, person, numbers, name="todo", what="pick", due=None):
+    def _answer_for(self, h, answer_ref=None):
+        """The answer a person points at: the last one, or with answer_ref a rule number, that rule's latest send."""
+        if answer_ref and str(answer_ref).strip().isdigit():
+            rules = self.store.rules(h)
+            n = int(str(answer_ref).strip())
+            if not 1 <= n <= len(rules):
+                return None
+            row = self.store.one("SELECT run_id FROM deliveries WHERE handle=? AND rule_id=? ORDER BY run_id DESC "
+                                 "LIMIT 1", (h, rules[n - 1]["id"]))
+            if not row:
+                return None
+            rows = self.store.items_of_run(row["run_id"])
+            return {"run_id": row["run_id"], "rule_id": rules[n - 1]["id"], "items": [r["item_id"] for r in rows]}
+        return self._answer_seen(h)
+
+    def _add_picks(self, person, numbers, name="todo", what="pick", due=None, answer_ref=None, tail=""):
         """Picks of the last answer (title from the item's own words, and its link), or the checked ingredient lines
-        of one pick, go on a list."""
+        of one pick, go on a list. Nothing is written unless everything asked for can be added."""
         h = person["handle"]
-        last = self._answer_seen(h)
+        last = self._answer_for(h, answer_ref)
         if not last or not last.get("items"):
-            return self.send(h, T.NO_PICK_TO_ADD)
+            return self.send(h, T.NO_PICK_TO_ADD + tail)
         items = last["items"]
+        if what == "ingredients" and not numbers and len(items) > 1:
+            return self.send(h, T.which_pick(len(items)) + tail)   # whose ingredients: one pick at a time
         numbers = numbers or list(range(1, len(items) + 1))
         if any(not 1 <= n <= len(items) for n in numbers):
-            return self.send(h, T.which_pick(len(items)))
+            return self.send(h, T.which_pick(len(items)) + tail)
         view = self.view(person["library"])
         from .compose import title_from_item
-        added, ids = [], []
+        rows = []   # (text, item_id, url, due)
         if what == "ingredients":
             spec = (self.store.get_state(f"lastspec:{h}") or {}).get("spec", {})
             extract = spec.get("content", {}).get("extract") or []
             if isinstance(extract, str):
                 extract = [extract]
             lines = (self.store.get_state(f"lines:{h}", {}) or {})
+            kinds = self.store.get_state(f"linekinds:{h}")
             for n in numbers:
-                got = lines.get(items[n - 1]) or []
-                if extract != ["ingredients"] or not got:   # lines that are not only ingredients are never guessed apart
-                    return self.send(h, T.NO_INGREDIENTS)
-                for line in got:
-                    ids.append(self.store.add_todo(h, line, name, item_id=items[n - 1], at=self.clock()))
-                    added.append(line)
+                iid = items[n - 1]
+                got = lines.get(iid) or []
+                kind = kinds.get(iid) if isinstance(kinds, dict) else extract   # older state: the request's extract
+                if kind != ["ingredients"] or not got:   # lines that are not only ingredients are never guessed apart
+                    return self.send(h, T.NO_INGREDIENTS + tail)
+                rows += [(line, iid, None, None) for line in got]
         else:
             for n in numbers:
                 it = view.get(items[n - 1])
-                if it is None:
-                    continue
-                title = title_from_item(it)
-                ids.append(self.store.add_todo(h, title, name, item_id=it.id, url=it.url,
-                                               due_at=due, at=self.clock()))
-                added.append(title)
-        if not ids:
-            return self.send(h, T.NO_PICK_TO_ADD)
+                if it is not None:
+                    rows.append((title_from_item(it), it.id, it.url, due))
+        if not rows:
+            return self.send(h, T.NO_PICK_TO_ADD + tail)
+        ids = [self.store.add_todo(h, text, name, item_id=iid, url=url, due_at=d, at=self.clock())
+               for text, iid, url, d in rows]
         self._wrote(h, "todo_add", f"added {len(ids)} to-do{'s' if len(ids) > 1 else ''} to the list \"{name}\"",
                     {"ids": ids})
         due_text = say_time(due, self.clock(), person["timezone"]) if due else None
-        return self.send(h, T.todos_added(added, name, due_text))
+        return self.send(h, T.todos_added([r[0] for r in rows], name, due_text) + tail)
 
     def _todo_list(self, person, it, now):
         h = person["handle"]
@@ -220,8 +241,20 @@ class TodoMixin:
                     tomorrow = _at(local.date() + timedelta(days=1), "00:00", ZoneInfo(tz))
                     self.store.update_todo(t["id"], due_at=now_iso(end_of_quiet(tomorrow, tz, self.store.quiet(h))))
                     continue
-                self.send(h, T.todo_reminder(t["text"]))   # a time the person named: honoured in quiet hours
-                record("sent")
+                # recorded before the send, as for a rule: a crash from here on can lose this reminder but never
+                # send it twice; a clear failure is tried again next tick, until it is too late (missed)
+                self.store.update_todo(t["id"], reminded_at=now_iso(now))
+                run_id = self.store.add_run(handle=h, kind="todo", status="sending", at=now_iso(now))
+                try:
+                    self.send(h, T.todo_reminder(t["text"]), run_id)   # a time the person named: honoured in quiet hours
+                except SendUncertain:   # it may have gone out: never again
+                    self.store.x("UPDATE runs SET status='unknown', error='SendUncertain' WHERE id=?", (run_id,))
+                    continue
+                except Exception as e:  # noqa: BLE001 - one to-do never blocks the others
+                    self.store.x("UPDATE runs SET status='send_failed', error=? WHERE id=?", (type(e).__name__, run_id))
+                    self.store.update_todo(t["id"], reminded_at=None)
+                    continue
+                self.store.x("UPDATE runs SET status='sent' WHERE id=?", (run_id,))
                 sent += 1
         return sent
 

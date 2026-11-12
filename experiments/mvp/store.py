@@ -340,7 +340,7 @@ class Store:
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
             for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}",
-                        f"lastwrite:{handle}"):
+                        f"lastwrite:{handle}", f"linekinds:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 

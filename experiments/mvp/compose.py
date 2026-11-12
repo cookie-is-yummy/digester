@@ -187,12 +187,14 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
                 lines.append(line)
             elif not line:
                 dropped["not_a_detail"] = dropped.get("not_a_detail", 0) + 1
+        reused = False
         if known_lines is not None and c.extract and not lines:
             lines = list(known_lines.get(it.id) or [])
+            reused = bool(lines)   # the lines found before, not lines for this request
         why = _safe(p.get("why"), 160)
         if re.search(r"\d", why) or not why:
             why = f"It fits: {c.goal}."
-        picks.append({"item": it, "title": title, "why": why, "fit": round(fit, 2), "lines": lines,
+        picks.append({"item": it, "title": title, "why": why, "fit": round(fit, 2), "lines": lines, "lines_reused": reused,
                       "n_lines": len(lines), "details_in_video": bool(c.extract) and not lines})
     intro = _safe(raw.get("intro"), 160)
     if re.search(r"\d", intro):

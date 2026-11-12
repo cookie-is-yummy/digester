@@ -88,10 +88,19 @@ class ExecutorMixin:
         if picks:
             self.store.set_last_answer(person["handle"], run_id, rule_id, [p["item"].id for p in picks], spec.content.goal)
             lines = {p["item"].id: p["lines"] for p in picks}
+            # what each item's lines are ("ingredients" only, or mixed with steps), so a to-do of its ingredients
+            # is made only from lines that are ingredients alone
+            kinds = {p["item"].id: (list(spec.content.extract) if p["lines"] and not p.get("lines_reused") else None)
+                     for p in picks}
             if kind == "follow_up":  # a follow-up without details must not erase the details found before
                 old = self.store.get_state(f"lines:{person['handle']}", {}) or {}
+                old_kinds = self.store.get_state(f"linekinds:{person['handle']}", {}) or {}
+                for p in picks:
+                    if not p["lines"] or p.get("lines_reused"):   # the lines found before: they keep what they were
+                        kinds[p["item"].id] = old_kinds.get(p["item"].id)
                 lines = {iid: (ls or old.get(iid) or []) for iid, ls in lines.items()}
             self.store.set_state(f"lines:{person['handle']}", lines)
+            self.store.set_state(f"linekinds:{person['handle']}", kinds)
             if kind != "follow_up":  # what "another" repeats: this request, without what has been shown
                 self.store.set_state(f"lastspec:{person['handle']}", {
                     "spec": spec.stored(), "rule_id": rule_id if kind in ("scheduled", "manual") else None,
@@ -124,7 +133,8 @@ class ExecutorMixin:
 
     def _picks_to_list(self, person, spec, picks):
         """do todo.add: each main pick (its checked title and its link) goes on the person's list."""
-        name = next((a.params.get("list") for a in spec.do if a.action == "todo.add"), None) or "todo"
+        from .schema import list_name
+        name = list_name(next((a.params.get("list") for a in spec.do if a.action == "todo.add"), None)) or "todo"
         ids = [self.store.add_todo(person["handle"], p["title"], name, item_id=p["item"].id, url=p["item"].url,
                                    at=self.clock()) for p in picks]
         self._wrote(person["handle"], "todo_add", f"added {len(ids)} picks to the list \"{name}\"", {"ids": ids})

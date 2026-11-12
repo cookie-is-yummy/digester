@@ -141,9 +141,21 @@ def own_words(text, message):
     return True
 
 
+# a message that puts something from the last answer on a list says so; "what are the ingredients?" does not
+ADDING = re.compile(r"\b(add|adding|put|list|lists|to-?dos?|jot|note|stick|throw|pop|save|keep|remember|track|buy|shop"
+                    r"|shopping)\b", re.I)
+
+
+def _adds_from_answer(x):
+    return (x.intent == "todo_add" and bool(x.pick_number or x.what)) or \
+        (x.intent == "act_on_last" and any(a.action == "todo.add" for a in x.actions))
+
+
 def _grounding(it: Interpretation, message):
-    """Problems with words shown back to the person as theirs, or None."""
+    """Problems with words shown back to the person as theirs, or with a write they did not ask for; or None."""
     for x in [it] + ([it.also] if it.also else []):
+        if _adds_from_answer(x) and not ADDING.search(message):
+            return "the message does not ask to add anything to a list; a question about the last answer is follow_up"
         if x.spec is not None and x.spec.content.source == "note" and not own_words(x.spec.content.text, message):
             return "content.text of a note must use only words from their message"
         if x.intent == "todo_add" and x.todo_text and not own_words(x.todo_text, message):
@@ -152,7 +164,11 @@ def _grounding(it: Interpretation, message):
 
 
 # ---------- the interpretation cache (section 4) ----------
-def cache_key(text, person, rules, pending, now, todos=(), about=()):
+# forms whose words come from the last answer ("is it spicy?" is asked about that dish): reused only for that answer
+ABOUT_LAST = ("follow_up", "act_on_last")
+
+
+def cache_key(text, person, rules, pending, now, todos=(), about=(), last_write=None):
     local = now.astimezone(ZoneInfo(person["timezone"])).date().isoformat()
     parts = {
         "v": config.PROMPT_INTERPRET, "who": person["handle"], "text": " ".join(text.lower().split()), "day": local,
@@ -161,8 +177,22 @@ def cache_key(text, person, rules, pending, now, todos=(), about=()):
         "pending": [pending["kind"], pending["payload"].get("spec"), pending["payload"].get("draft")] if pending else None,
         "todos": [[t.get("id"), t["text"], t.get("list"), t.get("due_at")] for t in todos],
         "about": list(about),
+        "undoable": bool(last_write),   # "never mind" is an undo only while there is something to undo
     }
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _still_good(it, cached_last, last, now, tzname):
+    """A cached form is reused only if its moment has not passed ("at 6" asked again at 7pm is tomorrow's 6) and, for
+    a form about the last answer, the last answer is still the same one."""
+    from .schedule import next_run
+    for x in [it] + ([it.also] if it.also else []):
+        if x.intent in ABOUT_LAST and cached_last != (last or {}).get("run_id"):
+            return False
+        for w in ((x.spec.when if x.spec is not None else None), x.when):
+            if w is not None and w.type == "once" and next_run(w, tzname, now) is None:
+                return False
+    return True
 
 
 def _ttl():
@@ -178,12 +208,12 @@ def _cached(store, key, now):
     return None
 
 
-def _remember(store, key, handle, raw, now):
+def _remember(store, key, handle, raw, now, last=None):
     if store is None or not config.INTERPRET_CACHE_HOURS:
         return
     from .store import now_iso
     store.x("INSERT OR REPLACE INTO interp_cache(key,handle,raw,at) VALUES(?,?,?,?)",
-            (key, handle, json.dumps(raw), now_iso(now)))
+            (key, handle, json.dumps({"form": raw, "last": (last or {}).get("run_id")}), now_iso(now)))
     store.x("DELETE FROM interp_cache WHERE at<?", (now_iso(now - _ttl()),))
 
 
@@ -217,11 +247,19 @@ def _from_message(x: Interpretation, message):
             c.kinds = list(SAVED_KINDS)
         elif c.kinds == ["watch"]:
             c.kinds = list(WATCHED_KINDS)
-    if x.intent in ("todo_add", "todo_list") and not x.todo_list:
+    adds = x.intent in ("todo_add", "todo_list") or (x.intent == "act_on_last"
+                                                     and any(a.action == "todo.add" for a in x.actions))
+    if adds and not x.todo_list:
         m = NAMED_LIST.search(message)
         name = list_name(m.group(1)) if m else None
         if name and name != "todo":
             x.todo_list = name
+    if x.intent == "act_on_last" and {a.action for a in x.actions} == {"todo.add"} and x.when is None \
+            and INGREDIENTS.search(message):
+        # "add its ingredients to my list" read as "add the pick": the ingredient lines are what they asked for
+        given = x.actions[0].params.get("list")
+        x.intent, x.what, x.actions = "todo_add", "ingredients", []
+        x.todo_list = x.todo_list or (list_name(given) if given and list_name(given) != "todo" else None)
     if x.intent == "todo_add" and x.pick_number and x.what == "pick" and INGREDIENTS.search(message):
         x.what = "ingredients"
 
@@ -262,11 +300,15 @@ def settle(raw, message, rules, now, tzname):
 # ---------- one message ----------
 def interpret(text, person, rules, pending, last, now, todos=(), last_write=None, about=(), store=None):
     """Returns (Interpretation, cost_usd). With `store`, the same request reuses the same interpretation (6 hours)."""
-    key = cache_key(text, person, rules, pending, now, todos, about)
-    raw = _cached(store, key, now)
-    if raw is not None:
+    key = cache_key(text, person, rules, pending, now, todos, about, last_write)
+    hit = _cached(store, key, now)
+    if isinstance(hit, dict):
+        # rows written before the last answer was recorded beside the form hold the bare form
+        raw, cached_last = (hit["form"], hit.get("last")) if "form" in hit and "intent" not in hit else (hit, None)
         try:
-            return settle(raw, text, rules, now, person["timezone"]), 0.0
+            it = settle(raw, text, rules, now, person["timezone"])
+            if _still_good(it, cached_last, last, now, person["timezone"]):
+                return it, 0.0
         except ValidationError:
             pass   # a form that no longer validates (the rules changed under it) is asked for again
     user = _context(person, rules, pending, last, now, todos, last_write, about) + \
@@ -287,7 +329,7 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
             if err:   # still not their words: their whole message is used instead, never words they did not write
                 it = _use_message(it, text)
             else:
-                _remember(store, key, person["handle"], raw, now)
+                _remember(store, key, person["handle"], raw, now, last)
             return it, cost
         except ValidationError as e:
             err = "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors()[:4])
@@ -297,6 +339,9 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
 def _use_message(it, message):
     msg = " ".join(message.split())[:200]
     for x in [it] + ([it.also] if it.also else []):
+        if _adds_from_answer(x) and not ADDING.search(message):   # still a write they did not ask for: their question
+            x.intent, x.question, x.what, x.actions, x.todo_text, x.todo_list = "follow_up", msg, None, [], None, None
+            continue
         if x.spec is not None and x.spec.content.source == "note":
             x.spec.content.text = msg
         if x.intent == "todo_add" and x.todo_text:

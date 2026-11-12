@@ -248,7 +248,7 @@ class SchedulerMixin:
         if self._over_cap(person):  # this slot is skipped and recorded; it is not held to fire late
             return self._skip_slot(rule, spec, tz, now, "over_cap")
         h = person["handle"]
-        before = (self.store.last_answer(h), self.store.get_state(f"lines:{h}"))
+        before = (self.store.last_answer(h), self.store.get_state(f"lines:{h}"), self.store.get_state(f"linekinds:{h}"))
         msg, run_id, n = self.run(person, spec, "scheduled", rule_id=rule["id"])
         progress["run_id"] = run_id
         if self._run_failed(run_id):
@@ -271,12 +271,13 @@ class SchedulerMixin:
         except Exception as e:  # noqa: BLE001 - a clear failure: nothing went out
             self.store.x("DELETE FROM deliveries WHERE run_id=?", (run_id,))
             self.store.x("UPDATE runs SET status='send_failed', error=? WHERE id=?", (type(e).__name__, run_id))
-            last, lines = before  # what they never received is not their "last answer": 👎 must not land on it
+            last, lines, kinds = before  # what they never received is not their "last answer": 👎 must not land on it
             if last:
                 self.store.set_last_answer(h, last["run_id"], last["rule_id"], last["items"], last["goal"])
             else:
                 self.store.x("DELETE FROM last_answer WHERE handle=?", (h,))
             self.store.set_state(f"lines:{h}", lines or {})
+            self.store.set_state(f"linekinds:{h}", kinds or {})
             self._retry_or_skip(rule, now, slot, advanced=True, tries=retries)  # _advance reset the stored count
             return 0
         self.store.x("UPDATE runs SET status=? WHERE id=?", ("sent" if n else "none_sent", run_id))

@@ -12,7 +12,7 @@ from . import config
 from . import texts as T
 from .interpret import interpret
 from .schedule import describe, next_run, resolve_until, say_time, t12
-from .schema import RuleSpec
+from .schema import RuleSpec, list_name
 from .store import now_iso
 from .texts import (
     AGREE,
@@ -30,7 +30,8 @@ from .texts import (
 
 MAX_MESSAGES_PER_MINUTE = 15  # per person; more than this is a loop or a script, and is ignored
 MAX_MESSAGES_PER_HOUR = 90
-PENDING_TTL = {"confirm_rule": timedelta(hours=24), "confirm_delete": timedelta(minutes=30)}
+# a clarify question waits as long as a preview: any next message uses it up, so a late answer still completes it
+PENDING_TTL = {"confirm_rule": timedelta(hours=24), "confirm_delete": timedelta(minutes=30), "clarify": timedelta(hours=24)}
 # what a message must be for an open preview to be dropped; small talk, questions about the last answer, feedback and
 # rule management leave it open, so a later "yes" still starts the rule
 ENDS_PENDING = ("ask", "change_rule", "delete_data", "decline", "stop")
@@ -151,20 +152,38 @@ class HandlerMixin:
         about themselves is kept for the profile; the language they wrote in is passed on to the runs."""
         h = person["handle"]
         for x in [it] + ([it.also] if it.also else []):
-            if x.profile_note:
+            known = {n.lower() for n in self.store.profile_notes(h)}
+            if x.profile_note and x.profile_note.lower() not in known:   # the same fact said twice is kept once
                 self.store.add_profile_note(h, x.profile_note, at=now)
         self._tl.lang = it.lang
         self._tl.made_pending = False
         self._tl.chained = False
+        before = self.store.get_state(f"lastwrite:{h}")
         ref = self._dispatch_one(person, it, text, rules, pending, last, now)
         if it.also is not None:
+            first = self.store.get_state(f"lastwrite:{h}")
+            first = None if first == before else first   # only a write this message made
             self._tl.chained = True
             try:
                 ref = self._dispatch_one(person, it.also, text, self.store.rules(h), self._live_pending(h, now),
                                          self.store.last_answer(h), now) or ref
             finally:
                 self._tl.chained = False
+            self._join_writes(h, first, self.store.get_state(f"lastwrite:{h}"))
         return ref
+
+    def _join_writes(self, h, first, second):
+        """Two writes of one message ("add milk and eggs", two reminders) are one write for 'undo'."""
+        if not first or not second or first == second or first["kind"] != second["kind"] or \
+                first["kind"] not in ("todo_add", "rule_add"):
+            return
+        if first["kind"] == "todo_add":
+            undo = {"ids": first["undo"]["ids"] + second["undo"]["ids"]}
+        else:
+            ids = (first["undo"].get("rule_ids") or [first["undo"]["rule_id"]]) + \
+                (second["undo"].get("rule_ids") or [second["undo"]["rule_id"]])
+            undo = {"rule_id": ids[0], "rule_ids": list(dict.fromkeys(ids))}
+        self.store.set_state(f"lastwrite:{h}", dict(second, say=first["say"] + " and " + second["say"], undo=undo))
 
     def _dispatch_one(self, person, it, text, rules, pending, last, now):
         h = person["handle"]
@@ -199,9 +218,7 @@ class HandlerMixin:
                 same = it.spec.stored()["content"] == RuleSpec.model_validate(pending["payload"]["spec"]).stored()["content"]
                 ref = self._activate(person, pending["payload"]["text"] + " / " + text, it.spec, edited=True,
                                      preview_run=pending["payload"].get("run_id") if same else None)
-                for extra in pending["payload"].get("more") or []:   # a second rule shown in the same preview
-                    ref = self._activate(person, extra["text"], RuleSpec.model_validate(extra["spec"])) or ref
-                return ref
+                return self._activate_more(person, pending, ref)
             more = (pending["payload"].get("more") or []) if pending and pending["kind"] == "confirm_rule" else []
             if pending and it.edits_pending:  # keep the whole request, not only the edit
                 text = pending["payload"]["text"] + " / " + text
@@ -314,9 +331,10 @@ class HandlerMixin:
             self._wrote(h, "rule_rows", "skipped sends of a rule", {"rows": self._rule_rows([r["id"]])})
             return self._skip(person, r, it, now)
         if it.intent == "set_timezone":
+            live = [r["id"] for r in self.store.rules(h, statuses=("active",))]
             self._wrote(h, "timezone", f"switched to {T.zone_name(it.timezone)} time",
                         {"timezone": person["timezone"], "revert_to": person.get("tz_revert_to"),
-                         "revert_at": person.get("tz_revert_at")})
+                         "revert_at": person.get("tz_revert_at"), "rows": self._rule_rows(live)})
             back = resolve_until(it.until, None, now, it.timezone) if it.until else None
             if back is not None and back <= now:
                 back = None
@@ -327,6 +345,11 @@ class HandlerMixin:
             msg = T.timezone_set(it.timezone, local)
             if back:
                 msg += T.timezone_back(home, say_time(back, now, it.timezone))
+            # a one-off time that, read in the new zone, has already passed ends its rule: the reply says so
+            ended = [RuleSpec.model_validate(r["spec"]).content.goal for r in map(self.store.rule, live)
+                     if r and r["status"] == "done"]
+            if ended:
+                msg += T.ended_by_move(ended)
             return self.send(h, msg)
         if it.intent == "delete_data":
             self.store.set_pending(h, "confirm_delete", {}, at=self.clock())
@@ -350,15 +373,21 @@ class HandlerMixin:
         if it.intent in ("todo_done", "todo_remove", "todo_due"):
             return self._todo_change(person, it, now)
         if it.intent == "act_on_last":
-            if it.when is None and {a.action for a in it.actions} == {"todo.add"}:
-                name = it.actions[0].params.get("list") or "todo"
-                return self._add_picks(person, [it.pick_number] if it.pick_number else None, name)
-            return self.send(h, T.NOT_YET["act_on_last"])   # email and calendar come in a later slice
+            names = {a.action for a in it.actions}
+            later = names - {"todo.add", "message.send"}   # email and calendar come in a later slice
+            if "todo.add" in names:   # a to-do needs no later time: it goes on the list now
+                given = next((a.params.get("list") for a in it.actions if a.action == "todo.add"), None)
+                name = it.todo_list or list_name(given) or "todo"
+                return self._add_picks(person, [it.pick_number] if it.pick_number else None, name,
+                                       answer_ref=it.answer_ref,
+                                       tail=(" " + T.NOT_YET["act_on_last"]) if later else "")
+            return self.send(h, T.NOT_YET["act_on_last"])
         if it.intent == "library_stats":
             return self._library_stats(person, it)
         if it.intent == "profile_update":
-            if not it.profile_note:   # kept for the profile slice; the interpreter already sees these notes
-                self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
+            note = " ".join(text.split())[:300]
+            if not it.profile_note and note.lower() not in {n.lower() for n in self.store.profile_notes(h)}:
+                self.store.add_profile_note(h, note, at=now)   # kept for the profile slice; the interpreter sees it
             return self.send(h, T.PROFILE_NOTED)
         if it.intent in ("profile_show", "set_email", "library_status"):
             return self.send(h, T.NOT_YET[it.intent])
@@ -392,6 +421,13 @@ class HandlerMixin:
         cols = "id, text, spec, status, next_run_at, slot_at, paused_until, skip_count, skip_dates"
         return [self.store.one(f"SELECT {cols} FROM rules WHERE id=?", (i,)) for i in ids]
 
+    def _restore_rows(self, rows):
+        for row in rows:
+            self.store.x("UPDATE rules SET text=?, spec=?, status=?, next_run_at=?, slot_at=?, paused_until=?, "
+                         "skip_count=?, skip_dates=? WHERE id=?",
+                         (row["text"], row["spec"], row["status"], row["next_run_at"], row["slot_at"],
+                          row["paused_until"], row["skip_count"], row["skip_dates"], row["id"]))
+
     def _set_quiet(self, person, it, now):
         """'No messages before 10am' changes the everyday block; a block with days ('not during class 9 to 3 on
         weekdays') is added beside it (up to 4). Random and window sends move out of the new quiet hours."""
@@ -411,15 +447,20 @@ class HandlerMixin:
             self.store.set_quiet(h, blocks)
         except ValueError:
             return self.send(h, T.QUIET_INVALID)
-        self._wrote(h, "quiet", "changed the quiet hours", {"quiet": old})
-        for r in self.store.rules(h, statuses=("active",)):   # moments drawn inside the new quiet hours are redrawn
+        moved = [r for r in self.store.rules(h, statuses=("active",))
+                 if RuleSpec.model_validate(r["spec"]).when.type == "random" or RuleSpec.model_validate(r["spec"]).when.window]
+        self._wrote(h, "quiet", "changed the quiet hours", {"quiet": old, "rows": self._rule_rows([r["id"] for r in moved])})
+        ended = []
+        for r in moved:   # moments drawn inside the new quiet hours are redrawn
             spec = RuleSpec.model_validate(r["spec"])
-            if spec.when.type == "random" or spec.when.window:
-                status, nxt = self._next_for(spec, person, now, r)
-                self.store.set_slot(r["id"], nxt, status)
+            status, nxt = self._next_for(spec, person, now, r)
+            self.store.set_slot(r["id"], nxt, status)
+            if status == "done":   # its hours are now all quiet: the rule ends, and the reply says so
+                ended.append(spec.content.goal)
+        tail = T.quiet_ended(ended) if ended else ""
         if blocks is None:
-            return self.send(h, T.QUIET_RESET)
-        return self.send(h, T.quiet_set(T.quiet_words(self.store.quiet(h))))
+            return self.send(h, T.QUIET_RESET + tail)
+        return self.send(h, T.quiet_set(T.quiet_words(self.store.quiet(h))) + tail)
 
     def _snooze(self, person, it, now):
         h = person["handle"]
@@ -432,7 +473,7 @@ class HandlerMixin:
             return self.send(h, T.SNOOZE_CLEARED)
         until = resolve_until(it.until, it.in_minutes, now, person["timezone"])
         if until is None or until <= now:
-            return self.send(h, T.TIME_PASSED)
+            return self.send(h, T.SNOOZE_PASSED)
         self.store.set_snooze(h, until)
         self._wrote(h, "snooze", f"paused timed messages until {say_time(until, now, person['timezone'])}",
                     {"snooze": old})
@@ -450,7 +491,7 @@ class HandlerMixin:
         if k == "todo_add":
             for i in u["ids"]:
                 self.store.update_todo(i, removed_at=now_iso(now))
-            return self.send(h, T.undone(f"I took that off your list ({lw['say']})"))
+            return self.send(h, T.undone(f"I took {'that' if len(u['ids']) == 1 else 'those'} off your list ({lw['say']})"))
         if k in ("todo_done", "todo_remove"):
             for i in u["ids"]:
                 self.store.update_todo(i, **{u["col"]: None})
@@ -460,20 +501,22 @@ class HandlerMixin:
                 self.store.update_todo(row["id"], due_at=row["due_at"], reminded_at=row["reminded_at"])
             return self.send(h, T.undone("the reminder is off"))
         if k == "rule_add":
-            r = self.store.rule(u["rule_id"])
-            self.store.set_slot(u["rule_id"], None, "stopped")
-            goal = RuleSpec.model_validate(r["spec"]).content.goal if r else "that rule"
-            return self.send(h, T.undone(f"I stopped the rule I just started, \"{goal}\""))
+            ids = u.get("rule_ids") or [u["rule_id"]]
+            goals = []
+            for i in ids:
+                r = self.store.rule(i)
+                self.store.set_slot(i, None, "stopped")
+                goals.append(RuleSpec.model_validate(r["spec"]).content.goal if r else "that rule")
+            if len(goals) == 1:
+                return self.send(h, T.undone(f"I stopped the rule I just started, \"{goals[0]}\""))
+            return self.send(h, T.undone("I stopped the rules I just started, " + ", ".join(f"\"{g}\"" for g in goals)))
         if k == "rule_rows":
-            for row in u["rows"]:
-                self.store.x("UPDATE rules SET text=?, spec=?, status=?, next_run_at=?, slot_at=?, paused_until=?, "
-                             "skip_count=?, skip_dates=? WHERE id=?",
-                             (row["text"], row["spec"], row["status"], row["next_run_at"], row["slot_at"],
-                              row["paused_until"], row["skip_count"], row["skip_dates"], row["id"]))
+            self._restore_rows(u["rows"])
             goals = ", ".join(RuleSpec.model_validate(json.loads(row["spec"])).content.goal for row in u["rows"])
             return self.send(h, T.undone(f"\"{goals}\" is back as it was"))
         if k == "quiet":
             self.store.set_quiet(h, u["quiet"])
+            self._restore_rows(u.get("rows") or [])   # random and window moments as they were drawn before
             return self.send(h, T.undone("your quiet hours are back as they were"))
         if k == "snooze":
             back = datetime.fromisoformat(u["snooze"]) if u.get("snooze") else None
@@ -482,6 +525,7 @@ class HandlerMixin:
         if k == "timezone":
             at = datetime.fromisoformat(u["revert_at"]) if u.get("revert_at") else None
             self._move_timezone(h, u["timezone"], now, revert_to=u.get("revert_to"), revert_at=at)
+            self._restore_rows(u.get("rows") or [])   # the sends as they were before the switch
             return self.send(h, T.undone(f"I'm back on {T.zone_name(u['timezone'])} time"))
         return self.send(h, T.NOTHING_TO_UNDO)
 
@@ -506,9 +550,7 @@ class HandlerMixin:
         if pending["kind"] == "confirm_rule":
             ref = self._activate(person, pending["payload"]["text"], RuleSpec.model_validate(pending["payload"]["spec"]),
                                  preview_run=pending["payload"].get("run_id"))
-            for extra in pending["payload"].get("more") or []:   # a second rule shown in the same preview
-                ref = self._activate(person, extra["text"], RuleSpec.model_validate(extra["spec"])) or ref
-            return ref
+            return self._activate_more(person, pending, ref)
         if pending["kind"] == "confirm_delete":
             self.store.delete_person_data(h)
             os.makedirs(config.HOME, exist_ok=True)
@@ -517,6 +559,26 @@ class HandlerMixin:
             # sent through the channel directly, so nothing new is recorded about the person
             return self.channel.send(h, T.DELETED)
         return None
+
+    def _activate_more(self, person, pending, ref):
+        """A second rule shown in the same preview starts with the same YES; 'undo' then stops both."""
+        self._tl.join_write = True
+        try:
+            for extra in pending["payload"].get("more") or []:
+                ref = self._activate(person, extra["text"], RuleSpec.model_validate(extra["spec"])) or ref
+        finally:
+            self._tl.join_write = False
+        return ref
+
+    def _wrote_rule(self, h, say, rule_id):
+        """The last write for 'undo': a rule started (with the rules the same YES started before it)."""
+        ids, says = [rule_id], [say]
+        if getattr(self._tl, "join_write", False):
+            prev = self.store.get_state(f"lastwrite:{h}") or {}
+            if prev.get("kind") == "rule_add":
+                ids = (prev["undo"].get("rule_ids") or [prev["undo"]["rule_id"]]) + ids
+                says = [prev["say"]] + says
+        self._wrote(h, "rule_add", " and ".join(says), {"rule_id": ids[0], "rule_ids": ids})
 
     def _activate(self, person, text, spec, edited=False, preview_run=None):
         h = person["handle"]
@@ -529,7 +591,7 @@ class HandlerMixin:
         what = T.picks_for(c.count, c.goal) + avoid
         if spec.when.type in ("on_request", "new_items"):
             rule_id = self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
-            self._wrote(h, "rule_add", f"saved a rule, \"{c.goal}\"", {"rule_id": rule_id})
+            self._wrote_rule(h, f"saved a rule, \"{c.goal}\"", rule_id)
             n = len(self.store.rules(h))
             return self.send(h, T.saved_rule(n, what) + self._not_yet_notes(spec))
         quiet = self.store.quiet(h)
@@ -543,7 +605,7 @@ class HandlerMixin:
             self.store.set_slot(rule_id, None, "done")
             return self.send(h, T.TIME_PASSED)
         self.store.set_slot(rule_id, now_iso(nxt), "active")
-        self._wrote(h, "rule_add", f"started a rule, \"{c.goal}\" ({describe(spec.when)})", {"rule_id": rule_id})
+        self._wrote_rule(h, f"started a rule, \"{c.goal}\" ({describe(spec.when)})", rule_id)
         if preview_run:  # the preview's picks count as sent by this rule, so its first send is something new
             self.store.x("UPDATE deliveries SET rule_id=? WHERE run_id=? AND handle=?", (rule_id, preview_run, h))
             # 👍, 👎 and "more like 2" given on the preview belong to the rule it became
@@ -642,6 +704,8 @@ class HandlerMixin:
         back = resolve_until(until, in_minutes, now, person["timezone"]) if action == "pause" else None
         if back is not None and back <= now:
             back = None
+        rows = self._rule_rows([r["id"] for r in targets])   # as they were, for "undo"
+        ended = []
         for r in targets:
             if action == "pause":
                 self.store.pause_rule(r["id"], back)  # with a time, the scheduler resumes it then
@@ -652,12 +716,16 @@ class HandlerMixin:
                 status, nxt = self._next_for(RuleSpec.model_validate(r["spec"]), person, now, r)
                 self.store.set_slot(r["id"], nxt, status)
                 self.store.update_rule(r["id"], paused_until=None)
+                if status == "done":   # its only time passed while it was paused: it ends, and the reply says so
+                    ended.append(RuleSpec.model_validate(r["spec"]).content.goal)
         self._wrote(h, "rule_rows", f"{T.MANAGE_WORDS[action].lower()} " + ", ".join(
-            f"\"{RuleSpec.model_validate(r['spec']).content.goal}\"" for r in targets),
-            {"rows": self._rule_rows([r["id"] for r in targets])})
+            f"\"{RuleSpec.model_validate(r['spec']).content.goal}\"" for r in targets), {"rows": rows})
         word = T.MANAGE_WORDS[action]
-        names = ", ".join(RuleSpec.model_validate(r["spec"]).content.goal for r in targets)
-        msg = T.managed(word, names)
+        names = ", ".join(RuleSpec.model_validate(r["spec"]).content.goal for r in targets
+                          if RuleSpec.model_validate(r["spec"]).content.goal not in ended)
+        msg = T.managed(word, names) if names else ""
+        if ended:
+            msg = (msg + " " if msg else "") + T.ended_on_resume(ended)
         if back:
             msg += T.resumes_at(say_time(back, now, person["timezone"]))
         return self.send(h, msg)

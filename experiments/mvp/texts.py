@@ -173,6 +173,7 @@ NO_PICK_TO_ADD = "I haven't sent you anything to add yet. Ask me for something f
 QUIET_RESET = "OK, quiet hours are back to normal: no timed messages from 10pm to 8am."
 SNOOZE_CLEARED = "OK, timed messages are back on."
 SNOOZE_NONE = "Nothing was paused, so nothing changes."
+TODO_DUE_PASSED = "That time has already passed, so I didn't set a reminder for it."
 TODO_LIST_EMPTY_SEND = "Your list is empty right now. Nice work."
 # features that come in later slices: one honest line each
 NOT_YET = {
@@ -270,6 +271,28 @@ NO_INGREDIENTS = ("I don't have the ingredients of that one written out, so I ca
 
 def quiet_set(blocks_text):
     return f"OK, no timed messages {blocks_text}. Times you named yourself still go out."
+
+
+def quiet_ended(goals):
+    """A window or random rule whose hours are now all quiet ends; the reply names it."""
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    one = len(goals) == 1
+    return (f" That leaves no time to send {names}, so I stopped {'that rule' if one else 'those rules'}. "
+            "Reply \"undo\" to keep your old quiet hours.")
+
+
+def ended_on_resume(goals):
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return f"{names} had no send left after its pause, so that rule is finished. Ask me to set it up again with a new time."
+
+
+def ended_by_move(goals):
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return (f" At the same clock time there, {names} has no send left, so I ended "
+            f"{'that rule' if len(goals) == 1 else 'those rules'}. Reply \"undo\" to go back.")
+
+
+SNOOZE_PASSED = "That time has already passed, so nothing changes. Until when should I hold timed messages?"
 
 
 def snoozed(until_text):

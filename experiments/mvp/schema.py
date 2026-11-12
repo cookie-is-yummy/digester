@@ -714,7 +714,7 @@ class Interpretation(BaseModel):
         if i == "todo_add":
             if self.pick_number and not self.what:
                 self.what = "pick"
-            if not (self.todo_text or self.pick_number):
+            if not (self.todo_text or self.pick_number or self.what == "ingredients"):
                 raise ValueError("todo_add needs todo_text, or pick_number for a pick of the last answer")
         if i in ("todo_done", "todo_remove", "todo_due") and not (self.todo_number or self.todo_text):
             raise ValueError(f"{i} needs todo_number or todo_text")
@@ -727,6 +727,8 @@ class Interpretation(BaseModel):
                 cal = next((a for a in self.actions if a.action == "calendar.add"), None)
                 if cal is not None:
                     _, cal.params = validate_action("calendar.add", {**self.params, **cal.params})
+                    # one checked form ("6" is "06:00") wherever it is read; keys given as a default stay
+                    self.params = {k: cal.params.get(k, v) for k, v in self.params.items()}
             if self.when is not None and self.when.type == "now":
                 self.when = None
             if self.when is not None and self.when.type != "once":
