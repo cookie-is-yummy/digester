@@ -1,8 +1,15 @@
-"""PROTOTYPE ONLY - the action registry (DESIGN.md section 1 'do'). Nothing outside this registry can run.
+"""PROTOTYPE ONLY - the action registry (DESIGN.md sections 1 'do', 6 and 11). Nothing outside this registry can run.
 
-This module only validates: each action's name, its params and what it needs. The actions themselves (email, calendar
-links and files, to-dos) are built in later slices; a rule spec is checked against this registry before it is stored.
+Each entry names an action, its params (validated here, before a rule spec is stored), what it needs, and the module
+in this package that does it. Each module has one plain function, `run(ctx, params) -> Outcome` (base.py), that the
+executor calls once per answer (outputs.py). A new output is one new module plus one entry in REGISTRY.
+
+    message.send  message.py   the reply in the thread
+    email.send    email.py     the same answer as an email to the person's own confirmed address
+    calendar.add  calendar.py  a Google Calendar "add event" link in the reply and an .ics file (attached to the email)
+    todo.add      todo.py      each main pick (checked title and link), or its checked ingredient lines, on a list
 """
+import importlib
 from datetime import date
 from typing import Literal, Optional
 
@@ -50,9 +57,11 @@ class CalendarParams(BaseModel):
 
 
 class TodoParams(BaseModel):
-    """todo.add: each main pick (title and link) goes on the person's list."""
+    """todo.add: each main pick (its checked title and link) goes on the person's list; with what "ingredients", each
+    checked ingredient line of the pick does."""
     model_config = ConfigDict(extra="forbid")
     list: str = Field(default="todo", min_length=1, max_length=40)   # a list name ("shopping"); default "todo"
+    what: Literal["pick", "ingredients"] = "pick"
 
 
 class ActionDef(BaseModel):
@@ -60,15 +69,19 @@ class ActionDef(BaseModel):
     params: type
     needs: Optional[Literal["verified_email"]] = None
     does: str
+    module: str          # the module in this package whose run(ctx, params) does it
+    order: int           # actions run in this order; the thread's message goes last, so it can say what was done
 
 
 REGISTRY = {
-    "message.send": ActionDef(name="message.send", params=NoParams, does="The reply in the thread"),
-    "email.send": ActionDef(name="email.send", params=NoParams, needs="verified_email",
-                            does="The same answer as an email to the person's own verified address"),
-    "calendar.add": ActionDef(name="calendar.add", params=CalendarParams,
+    "todo.add": ActionDef(name="todo.add", params=TodoParams, module="todo", order=10,
+                          does="Each main pick goes on the person's to-do list"),
+    "calendar.add": ActionDef(name="calendar.add", params=CalendarParams, module="calendar", order=20,
                               does="An 'add to calendar' link in the message and an .ics file on the email"),
-    "todo.add": ActionDef(name="todo.add", params=TodoParams, does="Each main pick goes on the person's to-do list"),
+    "email.send": ActionDef(name="email.send", params=NoParams, needs="verified_email", module="email", order=30,
+                            does="The same answer as an email to the person's own verified address"),
+    "message.send": ActionDef(name="message.send", params=NoParams, module="message", order=90,
+                              does="The reply in the thread"),
 }
 
 
@@ -84,3 +97,15 @@ def validate_action(name, params=None):
 def needs(name):
     """What an action needs before it can run (None, or 'verified_email')."""
     return REGISTRY[name].needs
+
+
+def ordered(actions):
+    """Actions (objects with .action) in the order they run: outputs first, the thread's message last."""
+    return sorted(actions, key=lambda a: REGISTRY[a.action].order)
+
+
+def perform(name, ctx, params=None):
+    """Runs one action through its module. Returns its Outcome (base.py); an error is raised to the caller."""
+    d = REGISTRY[name]
+    module = importlib.import_module(f"{__name__}.{d.module}")
+    return module.run(ctx, d.params.model_validate(params or {}))

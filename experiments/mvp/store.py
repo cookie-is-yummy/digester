@@ -44,6 +44,12 @@ CREATE TABLE IF NOT EXISTS answer_cache (key TEXT PRIMARY KEY, handle TEXT, raw 
 CREATE TABLE IF NOT EXISTS ranked_cache (key TEXT PRIMARY KEY, library TEXT, ids TEXT, mode TEXT, at TEXT);
 CREATE TABLE IF NOT EXISTS youtube_cache (video_id TEXT PRIMARY KEY, ok INTEGER, duration_s INTEGER, description TEXT,
   fetched_at TEXT);
+CREATE TABLE IF NOT EXISTS answers (run_id INTEGER PRIMARY KEY, handle TEXT NOT NULL, rule_id INTEGER, goal TEXT,
+  kind TEXT, parts TEXT, picks TEXT, at TEXT);
+CREATE TABLE IF NOT EXISTS action_log (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, run_id INTEGER,
+  rule_id INTEGER, slot TEXT, action TEXT NOT NULL, status TEXT NOT NULL, ref TEXT, detail TEXT, at TEXT);
+CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, kind TEXT NOT NULL,
+  subject TEXT, path TEXT, via TEXT, run_id INTEGER, at TEXT);
 """
 
 
@@ -63,6 +69,8 @@ ADDED_COLUMNS = [
     ("sent", "part INTEGER"),            # which part of a reply this channel message was (0 = the first)
     ("runs", "dropped TEXT"),            # JSON: what the checks removed, by reason (counts only)
     ("runs", "steps TEXT"),              # JSON: seconds per step (search, youtube, compose, extract) and cache hits
+    ("people", "email TEXT"),            # the person's own address (slice 4), set by text; NULL = none
+    ("people", "email_verified_at TEXT"),  # when they texted back the code sent to it; NULL = not confirmed
 ]
 
 
@@ -387,6 +395,63 @@ class Store:
             self.x(f"INSERT OR REPLACE INTO {table}(key,handle,raw,at) VALUES(?,?,?,?)",
                    (key, handle, json.dumps(value), now_iso(at)))
 
+    # outputs (DESIGN.md sections 6 and 11, slice 4)
+    def set_email(self, handle, email, verified=False, at=None):
+        """The person's own address; a new address is unconfirmed until they text back its code."""
+        self.x("UPDATE people SET email=?, email_verified_at=? WHERE handle=?",
+               (email, now_iso(at) if verified else None, handle))
+
+    def email_of(self, handle):
+        """(address, confirmed) or (None, False)."""
+        r = self.one("SELECT email, email_verified_at FROM people WHERE handle=?", (handle,))
+        return (r["email"], bool(r["email_verified_at"])) if r and r["email"] else (None, False)
+
+    def put_answer(self, run_id, handle, rule_id, goal, kind, parts, picks, at=None):
+        """What a run showed, kept so it can be emailed, put on a calendar or sent again later: the rendered parts
+        (without chat footers) and each pick's checked title, link and checked details."""
+        self.x("INSERT OR REPLACE INTO answers(run_id,handle,rule_id,goal,kind,parts,picks,at) VALUES(?,?,?,?,?,?,?,?)",
+               (run_id, handle, rule_id, goal, kind, json.dumps(parts), json.dumps(picks), now_iso(at)))
+
+    def answer(self, run_id):
+        r = self.one("SELECT * FROM answers WHERE run_id=?", (run_id,))
+        if r:
+            r["parts"], r["picks"] = json.loads(r["parts"] or "[]"), json.loads(r["picks"] or "[]")
+        return r
+
+    def log_action(self, handle, run_id, rule_id, action, status, ref=None, detail=None, slot=None, at=None):
+        cur = self.x("INSERT INTO action_log(handle,run_id,rule_id,slot,action,status,ref,detail,at) "
+                     "VALUES(?,?,?,?,?,?,?,?,?)", (handle, run_id, rule_id, slot, action, status,
+                                                    None if ref is None else str(ref),
+                                                    json.dumps(detail) if detail is not None else None, now_iso(at)))
+        return cur.lastrowid
+
+    def action_done(self, rule_id, slot, action):
+        """The row of an action already performed for this rule's slot (a retried send does it only once)."""
+        if not rule_id or not slot:
+            return None
+        r = self.one("SELECT * FROM action_log WHERE rule_id=? AND slot=? AND action=? AND status IN ('done','outbox',"
+                     "'waiting') ORDER BY id DESC LIMIT 1", (rule_id, slot, action))
+        if r and r.get("detail"):
+            r["detail"] = json.loads(r["detail"])
+        return r
+
+    def actions_of_run(self, run_id):
+        return self.q("SELECT action, status, ref FROM action_log WHERE run_id=? ORDER BY id", (run_id,))
+
+    def add_outbox(self, handle, kind, subject, path, via, run_id=None, at=None):
+        cur = self.x("INSERT INTO outbox(handle,kind,subject,path,via,run_id,at) VALUES(?,?,?,?,?,?,?)",
+                     (handle, kind, subject, path, via, run_id, now_iso(at)))
+        return cur.lastrowid
+
+    def outbox(self, handle, limit=50):
+        return self.q("SELECT id, kind, subject, path, via, run_id, at FROM outbox WHERE handle=? ORDER BY id DESC LIMIT ?",
+                      (handle, limit))
+
+    def all_todos(self, handle):
+        """Open and done to-dos (not removed), for the test page's To-dos panel."""
+        return self.q("SELECT * FROM todos WHERE handle=? AND removed_at IS NULL "
+                      "ORDER BY CASE WHEN COALESCE(list,'todo')='todo' THEN 0 ELSE 1 END, list, id", (handle,))
+
     def log_request(self, handle, text, intent):
         self.x("INSERT INTO requests(handle,text,intent,at) VALUES(?,?,?,?)", (handle, text[:500], intent, now_iso()))
 
@@ -418,13 +483,19 @@ class Store:
     def delete_person_data(self, handle):
         """'delete my data': everything the MVP holds about the person except a deletion marker."""
         with self.lock:
+            for row in self.q("SELECT path FROM outbox WHERE handle=? AND path IS NOT NULL", (handle,)):
+                try:   # the emails and calendar files written for them
+                    os.remove(row["path"])
+                except OSError:
+                    pass
             for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests", "inbound",
-                      "todos", "profile_notes", "interp_cache", "answer_cache"):
+                      "todos", "profile_notes", "interp_cache", "answer_cache", "answers", "action_log", "outbox"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
             for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}",
                         f"lastwrite:{handle}", f"linekinds:{handle}", f"facts:{handle}",
-                        f"card:{handle}"):
+                        f"card:{handle}", f"emailcode:{handle}", f"emailcodes:{handle}", f"emailwait:{handle}",
+                        f"emailask:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 

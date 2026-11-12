@@ -358,8 +358,10 @@ def test_picks_and_their_checked_ingredients_go_on_a_list(env):
     assert msg == 'Added "Lemon garlic pasta" to your list.'                 # a title made of the item's own words
     assert bot.store.todos(H)[0]["url"] == "https://example.com/itm_a"
     assert say(env, "add the 4th one", {"intent": "todo_add", "pick_number": 4}).startswith("My last message had 1 pick")
+    # slice 4: email is built; with no confirmed address the bot asks for one and keeps the email waiting
     assert say(env, "email me that", {"intent": "act_on_last", "actions": ["email.send"]}) == \
-        "I can't email answers or add them to your calendar yet. You can copy the link from my last message for now."
+        "What's your email address? I'll send a 6-digit code there to check it's yours, then email this to you."
+    assert len(bot.store.get_state(f"emailwait:{H}")) == 1
 
 
 def test_undo_reverses_the_last_write_within_10_minutes(env):
@@ -480,7 +482,10 @@ def test_profile_notes_are_kept_and_later_features_say_so_honestly(env):
     assert bot.store.profile_notes(H)[-1] == "I'm a total beginner at Blender"
     assert say(env, "what do you know about me", {"intent": "profile_show"}) == \
         "Showing what I know about you isn't ready yet."
-    assert say(env, "my email is a@b.co", {"intent": "set_email", "email": "a@b.co"}).startswith("Email isn't switched on")
+    # slice 4: the address is saved unconfirmed and a code goes to it (here, into the outbox)
+    assert say(env, "my email is a@b.co", {"intent": "set_email", "email": "a@b.co"}).startswith(
+        "I saved a@b.co as your email address and sent a 6-digit code to it.")
+    assert bot.store.email_of(H) == ("a@b.co", False)
     assert say(env, "did my export come", {"intent": "library_status"}).startswith("I can't check your library")
     only = ask_pasta()
     only["spec"]["content"]["outside"] = "only"

@@ -32,7 +32,11 @@ Then open `http://127.0.0.1:8765`. It is a message thread with the bot, on this 
 - Tap 👍 or 👎 under a reply: that is a tapback. A 👍 on a preview starts the rule.
 - **The bot's clock**: "Jump to the next timed send" fires the next rule now. "Forward 1 hour" and "Forward 1 day" move
   time on. A jump of more than 2 hours past a send skips it, exactly as if the bot had been switched off.
-- "Start over" clears that person's rules, history and thread.
+- **To-dos** and **Outbox** panels beside the thread: the person's lists (open and done), and every email and calendar
+  file the bot wrote for them. Click one to read it (an email's HTML opens in a sandboxed frame). Without email settings
+  nothing leaves the computer: try "email it to me" after an answer, give any address, then type the 6-digit code from
+  the code email in the Outbox panel.
+- "Start over" clears that person's rules, history, thread, to-dos, email address and outbox.
 
 It is the same handler, search, checks and scheduler as the iMessage channels; only the transport differs. It keeps its
 own store (`data/mvp/webtest.sqlite`), so nothing you do there touches real testers' rules. The first reply after a
@@ -70,6 +74,31 @@ Other ways to test:
   put the bot's contact card (a `.vcf` file of our own) at a public https address and set `MVP_CONTACT_CARD_URL`; it
   is sent once, after the person agrees.
 
+## Email, calendar and to-dos (outputs)
+
+What an answer or a rule can do besides the chat message is the spec's `do` list, run once per answer after composing
+(`outputs.py`): `todo.add`, `calendar.add`, `email.send`, then `message.send`. The reply says in one line per action
+what was done; a failed action is said in the reply and never loses the answer; every action is recorded in the
+`action_log` table.
+
+- **Email** goes only to the person's own address, confirmed with a 6-digit code sent to it (15 minutes, 5 wrong tries,
+  "new code" for another, at most 5 codes a day). Set `MVP_SMTP_HOST`, `MVP_SMTP_PORT` (587 STARTTLS, or 465 SSL),
+  `MVP_SMTP_USER`, `MVP_SMTP_PASSWORD` and `MVP_SMTP_FROM` in the terminal that runs the bot (for example a separate
+  Gmail account with an app password). Without them, or when a send fails, each email is written as an `.eml` file under
+  `MVP_HOME/outbox/` and the reply says so. Every email is kept there.
+- **Calendar**: a Google Calendar "add event" link in the reply (no sign-in) and an `.ics` file in the outbox, attached
+  when the answer is emailed. One event per send, in the person's zone, 30 minutes unless they say otherwise.
+- **Acting on an answer**: "email it to me", "add the first one to my calendar for Saturday at 10", "add its
+  ingredients to my grocery list", "remind me of the second one tonight at 8" (a one-time rule that sends that pick
+  again, with no new search).
+- **The bot's contact card** for Messages link previews: `python3 -m mvp.contact_card --out bot.vcf` (name from
+  `MVP_BOT_NAME`, number from `SENDBLUE_FROM_NUMBER`, or `--name` and `--number`). Host the file at a public https
+  address ending in `.vcf` and set `MVP_CONTACT_CARD_URL`.
+- **A new output** (Apple Reminders, Notion, …) is one new module in `actions/` with a `run(ctx, params)` function
+  that returns an `Outcome` (`actions/base.py`), plus one entry in `REGISTRY` in `actions/__init__.py` (its params
+  model, what it needs, its module name and its order). Nothing else changes: specs are validated against the registry
+  and the executor runs whatever the registry names.
+
 ## See what happened to a message
 
 ```bash
@@ -98,15 +127,17 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `interpret.py`, `prompts/interpret_v3.md`, `schema.py` | Message to a validated form for every intent (RuleSpec v 2); temperature 0, a seed, a 6-hour cache |
 | `eval_rules.py`, `evalset/` | The rule evaluation runner and the development half of the set |
 | `todos.py` | To-do lists, due reminders, undo records, library counts |
-| `actions/` | The action registry: what a rule's `do` may name, and its params |
+| `actions/` | The action registry (`__init__.py`: names, params, needs, module, order) and one module per action: `message.py`, `email.py` (SMTP or the outbox), `calendar.py` (Google link and `.ics`), `todo.py` (picks or ingredient lines on a list); `base.py` holds what each action gets and returns |
+| `outputs.py` | Runs a spec's `do` after composing (once per answer, logged, one line each in the reply); acting on the last answer now or later; the email address and its 6-digit code |
+| `contact_card.py` | Writes the bot's `.vcf` contact card, for the founders to host |
 | `retrieve.py`, `engines.py`, `libview.py` | Candidates from the person's own library (Q8 search, cached ranked lists, filters, orders, recent and fixed items) |
 | `ytinfo.py` | A YouTube candidate's length and description from the official `videos.list` (`YOUTUBE_API_KEY`), kept at most 30 days |
 | `compose.py`, `prompts/compose_v2.md` | The model chooses (verdicts clear / close / no, a backed "because", must-haves); code checks it; a cached answer per spec and candidates |
 | `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table |
-| `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone |
+| `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
 | `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
 | `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |
-| `store.py`, `llm.py` | Records; model calls, the cost ledger and the caps |
-| `channels/` | Test page (`web.py`, `web_page.html`), terminal, Mac Messages, Sendblue |
+| `store.py`, `llm.py` | Records (including each answer as shown, the action log and the outbox); model calls, the cost ledger and the caps |
+| `channels/` | Test page (`web.py`, `web_page.html`: thread, rules, To-dos and Outbox panels), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 159 offline tests |
+| `tests/` | 182 offline tests |

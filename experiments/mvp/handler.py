@@ -12,7 +12,7 @@ from . import config
 from . import texts as T
 from .interpret import interpret
 from .schedule import describe, next_run, resolve_until, say_time, t12
-from .schema import RuleSpec, list_name
+from .schema import RuleSpec
 from .store import now_iso
 from .texts import (
     AGREE,
@@ -125,6 +125,9 @@ class HandlerMixin:
         elif pending and NO.match(text):
             self.store.clear_pending(handle)
             return self.send(handle, T.NOT_STARTED if pending["kind"] == "confirm_rule" else T.WAITING_FOR_ANSWER)
+        ref = self._email_text(person, text, now)   # a code, "new code", or the address the bot just asked for
+        if ref is not None:
+            return ref
         over = self._over_cap(person)
         if over:
             self.note(intent="over_cap")
@@ -267,12 +270,13 @@ class HandlerMixin:
                            - int(w.window[0][3:])) // (w.every_hours * 60) + 1
                 if per_day > config.MAX_SCHEDULED_PER_DAY:
                     tail += T.daily_limit_note(config.MAX_SCHEDULED_PER_DAY)
-            tail += self._not_yet_notes(it.spec)
+            tail += self._do_note(it.spec) + self._not_yet_notes(it.spec)
             head = T.PREVIEW_HEAD if n else ""
             return self.send(h, head + msg + tail, run_id)
         if it.intent == "ask":
             msg, run_id, _ = self.run(person, it.spec, "ask", request_text=text)
-            return self.send(h, msg + self._not_yet_notes(it.spec, sep="\n\n"), run_id)
+            return self.deliver(person, it.spec, msg + self._not_yet_notes(it.spec, sep="\n\n"), run_id, kind="ask",
+                                request_text=text)
         if it.intent == "more":
             st = self.store.get_state(f"lastspec:{h}")
             if not st:
@@ -293,7 +297,9 @@ class HandlerMixin:
             else:
                 msg, run_id, _ = self.run(person, spec, "more", request_text=st.get("text") or text,
                                           shown=st.get("shown") or [])
-            return self.send(h, msg + self._not_yet_notes(spec, sep="\n\n"), run_id)
+            return self.deliver(person, spec, msg + self._not_yet_notes(spec, sep="\n\n"), run_id,
+                                kind="manual" if rule else "more", rule_id=rule["id"] if rule else None,
+                                request_text=st.get("text") or text)
         if it.intent == "follow_up":
             if not last:
                 return self.send(h, T.NOTHING_TO_FOLLOW_UP)
@@ -321,13 +327,14 @@ class HandlerMixin:
                         {"rows": self._rule_rows([r["id"]])})
             self.store.update_rule(r["id"], spec=it.spec.stored(), text=text)
             self.store.set_slot(r["id"], nxt, status if r["status"] == "active" else r["status"])
-            return self.send(h, T.changed(describe(it.spec.when), it.spec.content.goal) + self._not_yet_notes(it.spec))
+            return self.send(h, T.changed(describe(it.spec.when), it.spec.content.goal) + self._do_note(it.spec)
+                             + self._not_yet_notes(it.spec) + self._email_ask(person, it.spec, now))
         if it.intent == "run_rule":
             r = self._pick_rule(rules, it.rule_number)
             if not r:
                 return self.send(h, T.WHICH_RULE if rules else T.NO_RULES_ASK)
-            msg, run_id, _ = self.run(person, RuleSpec.model_validate(r["spec"]), "manual", rule_id=r["id"],
-                                      request_text=text)
+            spec = RuleSpec.model_validate(r["spec"])
+            msg, run_id, _ = self.run(person, spec, "manual", rule_id=r["id"], request_text=text)
             if it.skip_next and r["status"] == "active" and r["next_run_at"] and not self._run_failed(run_id):
                 rows = self._rule_rows([r["id"]])
                 self.store.skip(r["id"], count=1)  # "send Friday's one now": Friday's is not sent again
@@ -336,7 +343,7 @@ class HandlerMixin:
                 msg += "\n\n" + (T.skipped_next(say_time(up, now, person["timezone"])) if up else T.SKIPPED_LAST)
                 if up is None:
                     self.store.set_slot(r["id"], None, "done")
-            return self.send(h, msg, run_id)
+            return self.deliver(person, spec, msg, run_id, kind="manual", rule_id=r["id"], request_text=r.get("text"))
         if it.intent == "skip":
             r = self._pick_rule(rules, it.rule_number)
             if not r:
@@ -388,15 +395,9 @@ class HandlerMixin:
         if it.intent in ("todo_done", "todo_remove", "todo_due"):
             return self._todo_change(person, it, now)
         if it.intent == "act_on_last":
-            names = {a.action for a in it.actions}
-            later = names - {"todo.add", "message.send"}   # email and calendar come in a later slice
-            if "todo.add" in names:   # a to-do needs no later time: it goes on the list now
-                given = next((a.params.get("list") for a in it.actions if a.action == "todo.add"), None)
-                name = it.todo_list or list_name(given) or "todo"
-                return self._add_picks(person, [it.pick_number] if it.pick_number else None, name,
-                                       answer_ref=it.answer_ref,
-                                       tail=(" " + T.NOT_YET["act_on_last"]) if later else "")
-            return self.send(h, T.NOT_YET["act_on_last"])
+            return self._act_on_last(person, it, text, now)
+        if it.intent == "set_email":
+            return self._set_email(person, it.email, now)
         if it.intent == "library_stats":
             return self._library_stats(person, it)
         if it.intent == "profile_update":
@@ -404,7 +405,7 @@ class HandlerMixin:
             if not it.profile_note and note.lower() not in {n.lower() for n in self.store.profile_notes(h)}:
                 self.store.add_profile_note(h, note, at=now)   # kept for the profile slice; the interpreter sees it
             return self.send(h, T.PROFILE_NOTED)
-        if it.intent in ("profile_show", "set_email", "library_status"):
+        if it.intent in ("profile_show", "library_status"):
             return self.send(h, T.NOT_YET[it.intent])
         return self.send(h, HELP)
 
@@ -428,8 +429,6 @@ class HandlerMixin:
         notes = []
         if spec.content.outside == "some":
             notes.append(T.OUTSIDE_SOME)
-        if {a.action for a in spec.do} & {"email.send", "calendar.add"}:
-            notes.append(T.OUTPUTS_NOT_YET)
         return (sep + " ".join(notes)) if notes else ""
 
     def _rule_rows(self, ids):
@@ -608,7 +607,8 @@ class HandlerMixin:
             rule_id = self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
             self._wrote_rule(h, f"saved a rule, \"{c.goal}\"", rule_id)
             n = len(self.store.rules(h))
-            return self.send(h, T.saved_rule(n, what) + self._not_yet_notes(spec))
+            return self.send(h, T.saved_rule(n, what) + self._do_note(spec) + self._not_yet_notes(spec)
+                             + self._email_ask(person, spec, now))
         quiet = self.store.quiet(h)
         never = self._never_sends(person, spec, now)
         if never:
@@ -628,17 +628,17 @@ class HandlerMixin:
                          "(SELECT item_id FROM deliveries WHERE run_id=?)", (rule_id, h, preview_run))
         n = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), len(self.store.rules(h)))
         first = say_time(nxt, now, spec.when.tz or tz)
-        notes = self._not_yet_notes(spec)
+        notes = self._do_note(spec) + self._not_yet_notes(spec) + self._email_ask(person, spec, now)
         if c.source == "note":   # a reminder in their own words
             if spec.when.type == "once":
-                return self.send(h, T.reminder_once(first, c.text, n))
+                return self.send(h, T.reminder_once(first, c.text, n) + notes)
             return self.send(h, T.reminder_started(describe(spec.when), c.text, self._first_text(spec.when, person, now)
-                                                   if spec.when.type != "random" else None, n))
+                                                   if spec.when.type != "random" else None, n) + notes)
         if c.source == "todos":
             if spec.when.type == "once":
-                return self.send(h, T.todos_once(first, n))
+                return self.send(h, T.todos_once(first, n) + notes)
             return self.send(h, T.todos_rule_started(describe(spec.when), self._first_text(spec.when, person, now)
-                                                     if spec.when.type != "random" else None, n))
+                                                     if spec.when.type != "random" else None, n) + notes)
         if spec.when.type == "once":
             return self.send(h, T.once_set(first, what, n) + notes)
         if spec.when.type == "random" or spec.when.window:

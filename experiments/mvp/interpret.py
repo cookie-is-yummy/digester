@@ -288,6 +288,36 @@ def _canonical_change(x: Interpretation, rules):
             x.until = added[-1] if len(added) > 1 else None
 
 
+# a message that points at a pick of the last answer ("the second one", "#2") or at the answer itself ("send me that")
+PICK_REF = re.compile(r"\b(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)\s+(?:one|pick|recipe|"
+                      r"video|post|reel)\b|#\s?([1-9])\b|\bnumber\s+([1-9])\b", re.I)
+THAT_REF = re.compile(r"^\W*(?:(?:please|pls|can you|could you)\s+)?(?:remind me (?:of|about)|send(?: me)?|email(?: me)?"
+                      r"|text me|resend)\s+(?:it|that|this|these|those)\b", re.I)
+ORDINAL = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5}
+
+
+def later_on_last(it: Interpretation, message, last):
+    """Found live: "remind me of the second one tonight at 8" came back as a new library search at that time, and on
+    another run as a reminder whose text was "the second one". A one-time send whose message points at a pick of the
+    last answer (or at the answer: "send me that tonight") is act_on_last with that pick and that time, so the pick
+    itself is sent and nothing is searched again."""
+    items = (last or {}).get("items") or []
+    if not items or it.intent != "new_rule" or it.spec is None or it.spec.when.type != "once" \
+            or it.spec.content.source not in ("library", "note"):
+        return it
+    m = PICK_REF.search(message)
+    n = None
+    if m:
+        word = (m.group(1) or "").lower()
+        n = len(items) if word == "last" else ORDINAL.get(word) or int(m.group(2) or m.group(3))
+        if not 1 <= n <= len(items):
+            return it
+    elif not THAT_REF.search(message):
+        return it
+    return Interpretation(intent="act_on_last", actions=[a.model_dump() for a in it.spec.do], pick_number=n,
+                          when=it.spec.stored()["when"], answer_ref="last", profile_note=it.profile_note, lang=it.lang)
+
+
 def settle(raw, message, rules, now, tzname):
     """A raw form from the model (or the cache) to a validated, completed Interpretation. Raises ValidationError."""
     it = Interpretation.model_validate(_fill_raw(_drop_model_moment(raw)))
@@ -306,7 +336,7 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
         # rows written before the last answer was recorded beside the form hold the bare form
         raw, cached_last = (hit["form"], hit.get("last")) if "form" in hit and "intent" not in hit else (hit, None)
         try:
-            it = settle(raw, text, rules, now, person["timezone"])
+            it = later_on_last(settle(raw, text, rules, now, person["timezone"]), text, last)
             if _still_good(it, cached_last, last, now, person["timezone"]):
                 return it, 0.0
         except ValidationError:
@@ -322,7 +352,7 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
                                seed=config.INTERPRET_SEED)
         cost += c
         try:
-            it = settle(raw, text, rules, now, person["timezone"])
+            it = later_on_last(settle(raw, text, rules, now, person["timezone"]), text, last)
             err = _grounding(it, text)
             if err and attempt == 0:
                 continue

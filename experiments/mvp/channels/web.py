@@ -1,4 +1,4 @@
-"""PROTOTYPE ONLY - a local chat page for testing without a phone (BRIEF-10 section 9).
+"""PROTOTYPE ONLY - a local chat page for testing without a phone (BRIEF-10 section 9, DESIGN.md section 7).
 
     python -m mvp.bot --channel web      then open http://127.0.0.1:8765
 
@@ -7,6 +7,8 @@ and move the bot's clock forward to make a timed or repeating rule fire now inst
 same handler, executor and scheduler as the iMessage channels; only the transport differs. Nothing is sent to a phone.
 
 It keeps its own store (MVP_HOME/webtest.sqlite), so moving the clock never touches rules that real testers have.
+Beside the thread: the person's rules, their To-dos (open and done, by list) and their Outbox (emails and calendar files
+that were written; click one to read it). "Start over" clears all of these for that person.
 The server listens on this machine only, and every call needs a token that is built into the page when it is served,
 so another site open in the browser cannot drive the bot or read the thread.
 """
@@ -44,6 +46,7 @@ def _local(dt, tzname, with_day=True):
 class WebChannel(Channel):
     name = "web"
     link_previews = True   # a link part is drawn as a card (YouTube thumbnail or a plain Instagram card)
+    outbox_place = "in the Outbox panel"   # where an email that was not sent is, in the bot's reply
     poll_seconds = 0.2
     join_seconds = 1.2
 
@@ -198,11 +201,65 @@ class WebChannel(Channel):
         with self.lock:
             msgs = [dict(m, time=_local(datetime.fromisoformat(m["at"]), tz)) for m in self.threads.get(me["handle"], [])]
             busy = self.busy.get(me["handle"], 0) > 0
+        todos = self.todos_panel(me["handle"], tz)
+        outbox = [{"id": o["id"], "kind": o["kind"], "subject": o["subject"], "via": o["via"],
+                   "time": _local(datetime.fromisoformat(o["at"]), tz)} for o in bot.store.outbox(me["handle"])]
         return {"people": [{"handle": p["handle"], "name": p["name"] or p["handle"]} for p in people],
                 "me": me["handle"], "agreed": bool(me["consent_version"]), "ready": self.ready, "busy": busy,
                 "problem": self.problem,
                 "now": _local(now, tz), "timezone": tz, "ahead_minutes": int(self.offset.total_seconds() // 60),
-                "messages": msgs, "rules": rules}
+                "messages": msgs, "rules": rules, "todos": todos, "outbox": outbox}
+
+    def todos_panel(self, handle, tz):
+        """The person's lists: open to-dos numbered as the bot numbers them, then the last few done, by list."""
+        bot = self.bot
+        now = self.clock()
+        lists = {}
+        numbers = {t["id"]: i for i, t in enumerate(bot.store.todos(handle), 1)}
+        for t in bot.store.all_todos(handle):
+            name = t.get("list") or "todo"
+            box = lists.setdefault(name, {"list": name, "open": [], "done": []})
+            row = {"text": t["text"], "url": t["url"] if re.match(r"^https?://", t["url"] or "", re.I) else None}
+            if t["done_at"]:
+                box["done"].append(dict(row, at=t["done_at"]))
+            else:
+                due = datetime.fromisoformat(t["due_at"]) if t.get("due_at") else None
+                box["open"].append(dict(row, number=numbers.get(t["id"]), due=_local(due, tz) if due else None,
+                                        overdue=bool(due and due < now)))
+        for box in lists.values():
+            box["done"] = sorted(box["done"], key=lambda r: r["at"], reverse=True)[:5]
+            for r in box["done"]:
+                r.pop("at", None)
+        return sorted(lists.values(), key=lambda b: (b["list"] != "todo", b["list"]))
+
+    def outbox_item(self, handle, item_id):
+        """One email or calendar file of this person's outbox, to read on the page: its plain text, its HTML (shown
+        in a sandboxed frame), and the names of its attachments. Only files inside MVP_HOME/outbox are read."""
+        from email import policy
+        from email.parser import BytesParser
+        from .. import config
+        bot = self.bot
+        row = bot.store.one("SELECT * FROM outbox WHERE id=? AND handle=?", (item_id, handle))
+        if not row or not row["path"]:
+            return None
+        root = os.path.realpath(config.OUTBOX)
+        path = os.path.realpath(row["path"])
+        if not path.startswith(root + os.sep) or not os.path.isfile(path):
+            return None
+        out = {"id": row["id"], "kind": row["kind"], "subject": row["subject"], "via": row["via"],
+               "text": "", "html": None, "attachments": []}
+        with open(path, "rb") as f:
+            raw = f.read()
+        if row["kind"] == "email":
+            m = BytesParser(policy=policy.default).parsebytes(raw)
+            out["to"] = str(m["To"] or "")
+            plain, html = m.get_body(("plain",)), m.get_body(("html",))
+            out["text"] = plain.get_content() if plain else ""
+            out["html"] = html.get_content() if html else None
+            out["attachments"] = [a.get_filename() or "file" for a in m.iter_attachments()]
+        else:
+            out["text"] = raw.decode("utf-8", "replace")
+        return out
 
     def _handler(self):
         ch = self
@@ -241,6 +298,17 @@ class WebChannel(Channel):
                     from urllib.parse import parse_qs
                     handle = (parse_qs(query).get("as") or [None])[0]
                     return self._json(200, ch.state(handle))
+                if path == "/api/outbox":
+                    if not self._ok():
+                        return self._json(403, {"error": "token"})
+                    from urllib.parse import parse_qs
+                    q = parse_qs(query)
+                    try:
+                        item_id = int((q.get("id") or ["0"])[0])
+                    except ValueError:
+                        return self._json(400, {"error": "id"})
+                    got = ch.outbox_item((q.get("as") or [None])[0], item_id)
+                    return self._json(200, got) if got else self._json(404, {"error": "not found"})
                 self._json(404, {"error": "not found"})
 
             def do_POST(self):

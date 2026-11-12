@@ -36,3 +36,16 @@ MAX_SCHEDULED_PER_DAY = 5
 QUIET_START, QUIET_END = 22, 8   # local hours; scheduled sends are held in this window unless the rule's time is in it
 DAILY_CAP_USD = float(os.environ.get("MVP_DAILY_CAP_USD", "1.00"))     # per person (rule 8)
 TOTAL_CAP_USD = float(os.environ.get("MVP_TOTAL_CAP_USD", "10.00"))    # whole build and test (section 14)
+
+# ---------- outputs (DESIGN.md sections 6 and 11, slice 4) ----------
+# SMTP comes from the environment only, read when an email is sent (names only here; values are never printed).
+SMTP_ENV = ("MVP_SMTP_HOST", "MVP_SMTP_PORT", "MVP_SMTP_USER", "MVP_SMTP_PASSWORD", "MVP_SMTP_FROM")
+SMTP_TIMEOUT = 20
+OUTBOX = os.path.join(HOME, "outbox")   # without SMTP every email (and every calendar file) is written here
+BOT_NAME = os.environ.get("MVP_BOT_NAME", "Digest bot")
+CODE_MINUTES = 15            # an email code works this long
+CODE_TRIES = 5               # wrong tries before the code is cancelled
+CODES_PER_DAY = 5            # codes sent per person a day at most (each one is an email to an address they typed)
+EMAIL_WAIT_HOURS = 24        # an email waiting for a confirmed address is dropped after this
+EMAIL_WAIT_MAX = 3           # emails kept waiting at most
+CALENDAR_MINUTES = 30        # an event's length when none is named

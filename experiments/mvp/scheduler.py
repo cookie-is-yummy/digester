@@ -260,12 +260,15 @@ class SchedulerMixin:
         self._advance(rule, spec, tz, now, sending=True)
         progress["advanced"] = True
         self.store.x("UPDATE runs SET status='sending' WHERE id=?", (run_id,))
+        after = ""
         if spec.when.repeating and self.store.rule(rule["id"])["status"] == "done":
-            msg += "\n" + LAST_SEND   # max_sends reached, or until has passed
+            after = "\n" + LAST_SEND   # max_sends reached, or until has passed
         elif quiet_streak >= UNANSWERED_CHECK and spec.when.repeating:
-            msg += "\n" + STILL_USEFUL
+            after = "\n" + STILL_USEFUL
         try:
-            self.send(person["handle"], msg, run_id)
+            # the rule's do (email, calendar, to-dos), once per slot, then the message (outputs.py)
+            self.deliver(person, spec, msg, run_id, kind="scheduled", rule_id=rule["id"], slot=now_iso(slot),
+                         request_text=rule.get("text"), after=after)
         except SendUncertain:  # it may have gone out: keep the deliveries, do not retry
             self.store.x("UPDATE runs SET status='unknown', error='SendUncertain' WHERE id=?", (run_id,))
             return 0

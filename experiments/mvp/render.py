@@ -246,3 +246,92 @@ def none_message(result, spec, scheduled=False):
     if scheduled:
         return f"Nothing new for \"{spec.content.goal}\" this time: {reason.rstrip('.')}. I'd rather skip than send something weak."
     return f"I didn't find a good match: {reason.rstrip('.')}."
+
+
+# ---------- slice 4: a pick on its own, and an answer as an email (DESIGN.md sections 3 and 6) ----------
+def pick_record(p):
+    """What is kept of a checked pick (store.answers): its checked title, its link and its checked details."""
+    it = p["item"]
+    facts = p.get("facts") or {}
+    kinds = [k for k in ("ingredients", "steps", "key_points") if facts.get(k)]
+    return {"item_id": it.id, "title": p["title"], "url": it.url, "platform": it.platform,
+            "video_id": getattr(it, "video_id", None), "creator": it.creator, "facts": facts,
+            "lines": list(p.get("lines") or []), "line_kinds": kinds if p.get("lines") and not p.get("lines_reused") else None}
+
+
+def pick_parts(rec, lead=""):
+    """One kept pick as parts: its title (and creator), its link alone, and its checked details."""
+    head = f"{lead}{rec['title']}" + (f" by {rec['creator']}" if rec.get("creator") else "") + "."
+    parts = [{"type": "text", "text": head}]
+    if rec.get("url"):
+        parts.append({"type": "link", "url": rec["url"], "title": rec["title"], "platform": rec.get("platform"),
+                      "video_id": rec.get("video_id")})
+    lines = []
+    facts = rec.get("facts") or {}
+    for kind in ("ingredients", "steps", "key_points"):
+        got = facts.get(kind) or []
+        if got:
+            lines.append(f"{LABEL[kind]} ({len(got)}):")
+            lines.extend(f"{i}. {x}" if kind == "steps" else f"• {x}" for i, x in enumerate(got, 1))
+    if not lines and rec.get("lines"):
+        lines.append(f"Details ({len(rec['lines'])}):")
+        lines.extend(f"• {x}" for x in rec["lines"])
+    if lines:
+        parts.append({"type": "text", "text": "\n".join(lines)})
+    return parts
+
+
+def _esc(s):
+    import html
+    return html.escape(str(s), quote=True)
+
+
+def _linkify(line):
+    import re
+    out, last = [], 0
+    for m in re.finditer(r"https?://[^\s<>\"]+", line):
+        out.append(_esc(line[last:m.start()]))
+        url = m.group(0).rstrip(".,)")
+        out.append(f'<a href="{_esc(url)}">{_esc(url)}</a>' + _esc(m.group(0)[len(url):]))
+        last = m.end()
+    out.append(_esc(line[last:]))
+    return "".join(out)
+
+
+def _link_html(p):
+    import re
+    url, title = p.get("url") or "", p.get("title") or p.get("url") or ""
+    if not re.match(r"^https?://", url, re.I):
+        return f"<p>{_esc(url)}</p>"
+    vid = p.get("video_id") if p.get("platform") == "youtube" else None
+    if vid and re.fullmatch(r"[A-Za-z0-9_-]{6,20}", str(vid)):
+        # the thumbnail by its public URL, linked to the video, with YouTube named as the source; nothing is fetched
+        return (f'<p><a href="{_esc(url)}"><img src="https://i.ytimg.com/vi/{vid}/hqdefault.jpg" width="320" '
+                f'height="180" alt="{_esc(title)}" style="display:block;border:0;border-radius:8px"></a>'
+                f'<span style="color:#ff0000;font-weight:bold">YouTube</span> <a href="{_esc(url)}">{_esc(title)}</a></p>')
+    label = {"instagram": " (Instagram)", "youtube": " (YouTube)"}.get(p.get("platform"), "")
+    return f'<p><a href="{_esc(url)}">{_esc(title)}</a>{label}</p>'
+
+
+def email_bodies(parts, links=(), footer=""):
+    """(plain text, simple HTML) of an answer's parts, plus links such as "Add to Google Calendar". Links in text are
+    made clickable; a YouTube pick shows its thumbnail by URL; an Instagram pick is a linked title (email runs no
+    embed script)."""
+    rep = Reply(parts)
+    text = rep.text()
+    html = []
+    for p in rep.split():
+        if p["type"] == "link":
+            html.append(_link_html(p))
+            continue
+        for para in p["text"].split("\n\n"):
+            html.append("<p>" + "<br>".join(_linkify(x) for x in para.split("\n")) + "</p>")
+    for label, url in links:
+        text += f"\n\n{label}: {url}"
+        html.append(f'<p><a href="{_esc(url)}">{_esc(label)}</a></p>')
+    if footer:
+        text += "\n\n" + footer
+        html.append(f'<p style="color:#666;font-size:12px">{_esc(footer)}</p>')
+    body = ('<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
+            'font-size:15px;line-height:1.45;color:#16161a;max-width:560px">' + "\n".join(html) + "</body></html>")
+    return text, body

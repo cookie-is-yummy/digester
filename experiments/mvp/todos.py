@@ -109,53 +109,16 @@ class TodoMixin:
         return self._answer_seen(h)
 
     def _add_picks(self, person, numbers, name="todo", what="pick", due=None, answer_ref=None, tail=""):
-        """Picks of the last answer (title from the item's own words, and its link), or the checked ingredient lines
-        of one pick, go on a list. Nothing is written unless everything asked for can be added."""
+        """Picks of the last answer (each one's checked title and link), or the checked ingredient lines of one pick,
+        go on a list. Nothing is written unless everything asked for can be added. The writing is actions/todo.py,
+        the same code a rule's or an ask's `do: todo.add` runs."""
+        from .actions import todo as todo_action
         h = person["handle"]
-        last = self._answer_for(h, answer_ref)
-        if not last or not last.get("items"):
-            return self.send(h, T.NO_PICK_TO_ADD + tail)
-        items = last["items"]
-        if what == "ingredients" and not numbers and len(items) > 1:
-            return self.send(h, T.which_pick(len(items)) + tail)   # whose ingredients: one pick at a time
-        numbers = numbers or list(range(1, len(items) + 1))
-        if any(not 1 <= n <= len(items) for n in numbers):
-            return self.send(h, T.which_pick(len(items)) + tail)
-        view = self.view(person["library"])
-        from .compose import title_from_item
-        rows = []   # (text, item_id, url, due)
-        if what == "ingredients":
-            spec = (self.store.get_state(f"lastspec:{h}") or {}).get("spec", {})
-            extract = spec.get("content", {}).get("extract") or []
-            if isinstance(extract, str):
-                extract = [extract]
-            lines = (self.store.get_state(f"lines:{h}", {}) or {})
-            kinds = self.store.get_state(f"linekinds:{h}")
-            facts = self.store.get_state(f"facts:{h}", {}) or {}
-            for n in numbers:
-                iid = items[n - 1]
-                ing = (facts.get(iid) or {}).get("ingredients") if isinstance(facts, dict) else None
-                if ing:   # the checked ingredient lines, kept apart from the steps (extract.py)
-                    rows += [(line, iid, None, None) for line in ing]
-                    continue
-                got = lines.get(iid) or []
-                kind = kinds.get(iid) if isinstance(kinds, dict) else extract   # older state: the request's extract
-                if kind != ["ingredients"] or not got:   # lines that are not only ingredients are never guessed apart
-                    return self.send(h, T.NO_INGREDIENTS + tail)
-                rows += [(line, iid, None, None) for line in got]
-        else:
-            for n in numbers:
-                it = view.get(items[n - 1])
-                if it is not None:
-                    rows.append((title_from_item(it), it.id, it.url, due))
-        if not rows:
-            return self.send(h, T.NO_PICK_TO_ADD + tail)
-        ids = [self.store.add_todo(h, text, name, item_id=iid, url=url, due_at=d, at=self.clock())
-               for text, iid, url, d in rows]
-        self._wrote(h, "todo_add", f"added {len(ids)} to-do{'s' if len(ids) > 1 else ''} to the list \"{name}\"",
-                    {"ids": ids})
-        due_text = say_time(due, self.clock(), person["timezone"]) if due else None
-        return self.send(h, T.todos_added([r[0] for r in rows], name, due_text) + tail)
+        picks, _, _, problem = self._answer_picks(h, numbers, answer_ref, what)
+        if problem:
+            return self.send(h, problem + tail)
+        out = todo_action.add(self, person, picks, what, name, due)
+        return self.send(h, out.line + tail)
 
     def _todo_list(self, person, it, now):
         h = person["handle"]

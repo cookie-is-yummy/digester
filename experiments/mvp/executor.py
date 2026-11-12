@@ -5,6 +5,7 @@ Only the bot sends (AGENTS.md rule 5): retrieve, compose and extract read. A rep
 a channel that shows link previews gets each part as its own message, others get the parts joined; every message a
 reply went out as is recorded, so a reaction on any of them maps to the run. Mixed into core.Bot.
 """
+import json
 import time
 from zoneinfo import ZoneInfo
 
@@ -12,7 +13,7 @@ from . import config, llm
 from .channels.base import SendUncertain
 from .compose import compose
 from .extract import details_many, kinds_for
-from .render import Reply, joined, none_message, picks_message
+from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
 from .retrieve import candidates
 from .schema import KINDS, PLATFORMS
 from .schema import RuleSpec
@@ -95,6 +96,8 @@ class ExecutorMixin:
         shown (`shown`). Deliveries are written here; a caller whose send fails removes them (unsend)."""
         if spec.content.source in ("note", "todos"):
             return self._run_plain(person, spec, kind, rule_id)
+        if spec.content.source == "items" and kind in ("scheduled", "manual"):
+            return self._run_items(person, spec, kind, rule_id)
         t0 = time.time()
         cost = 0.0
         status, err, result, cands, view = "ok", None, None, [], None
@@ -196,8 +199,12 @@ class ExecutorMixin:
                 number = next((i for i, r in enumerate(self.store.rules(person["handle"]), 1) if r["id"] == rule_id), 1)
                 footer = SCHEDULED_FOOTER.format(n=number)
             msg = picks_message(result, spec, footer=footer, now=self.clock())
-            if kind != "preview" and any(a.action == "todo.add" for a in spec.do):
-                msg += "\n\n" + self._picks_to_list(person, spec, result["picks"])
+            # what this run showed, kept for its outputs (email, calendar, to-dos) and for sending it again later:
+            # the same parts without the chat footer, and each pick's checked title, link and details
+            main = {id(p) for p in result["picks"]}
+            self._keep_answer(run_id, person["handle"], rule_id if kind in ("scheduled", "manual") else None,
+                              spec.content.goal, "picks", picks_message(result, spec, now=self.clock()) if footer else msg,
+                              [dict(pick_record(p), main=id(p) in main) for p in picks])
             return msg, run_id, len(picks)
         return none_message(result, spec, scheduled=(kind == "scheduled")), run_id, 0
 
@@ -212,19 +219,52 @@ class ExecutorMixin:
                                     n_picks=n, n_dropped=0, cost_usd=0.0, status="picked" if n else "none",
                                     prompt_version=None, seconds=0.0)
         self.note(run_id=run_id)
+        if n:   # kept for the rule's outputs ("email me my list every morning")
+            self._keep_answer(run_id, h, rule_id, spec.content.goal, spec.content.source, msg)
         if kind == "scheduled" and spec.when.repeating:
             number = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), 1)
             msg += "\n" + T.REMINDER_FOOTER.format(n=number)
         return msg, run_id, n
 
-    def _picks_to_list(self, person, spec, picks):
-        """do todo.add: each main pick (its checked title and its link) goes on the person's list."""
-        from .schema import list_name
-        name = list_name(next((a.params.get("list") for a in spec.do if a.action == "todo.add"), None)) or "todo"
-        ids = [self.store.add_todo(person["handle"], p["title"], name, item_id=p["item"].id, url=p["item"].url,
-                                   at=self.clock()) for p in picks]
-        self._wrote(person["handle"], "todo_add", f"added {len(ids)} picks to the list \"{name}\"", {"ids": ids})
-        return T.picks_added(len(ids), name)
+    def _run_items(self, person, spec, kind, rule_id):
+        """An earlier answer sent again ("remind me of the 2nd one at 6"): the picks as they were kept, with their
+        checked titles and details, and no new search or model call. An item no longer in the library is left out."""
+        h = person["handle"]
+        view = self.view(person["library"])
+        kept = {}
+        for row in self.store.q("SELECT picks FROM answers WHERE handle=? ORDER BY run_id DESC LIMIT 200", (h,)):
+            for p in json.loads(row["picks"] or "[]"):
+                kept.setdefault(p["item_id"], p)
+        from .compose import title_from_item
+        recs = []
+        disliked = self.store.disliked(h)
+        for iid in spec.content.item_ids:
+            it = view.get(iid)
+            if it is None or iid in disliked:
+                continue
+            rec = dict(kept.get(iid) or {"item_id": iid, "title": title_from_item(it), "url": it.url,
+                                         "platform": it.platform, "video_id": it.video_id, "creator": it.creator,
+                                         "facts": {}, "lines": [], "line_kinds": None})
+            rec["main"] = True
+            recs.append(rec)
+        parts = [{"type": "text", "text": T.SENT_AGAIN_HEAD}] if recs else []
+        for i, rec in enumerate(recs):
+            parts += pick_parts(rec, lead="\n" if i else "")
+        run_id = self.store.add_run(handle=h, rule_id=rule_id, kind=kind, at=now_iso(self.clock()),
+                                    n_candidates=len(spec.content.item_ids), n_picks=len(recs), n_dropped=0,
+                                    cost_usd=0.0, status="picked" if recs else "none", prompt_version=None, seconds=0.0)
+        self.note(run_id=run_id)
+        if not recs:
+            return T.ITEMS_GONE, run_id, 0
+        for i, rec in enumerate(recs, 1):
+            self.store.add_delivery(h, rule_id, run_id, rec["item_id"], i, at=self.clock())
+        self.store.set_last_answer(h, run_id, rule_id, [r["item_id"] for r in recs], spec.content.goal)
+        self.store.set_state(f"lines:{h}", {r["item_id"]: r.get("lines") or [] for r in recs})
+        self.store.set_state(f"linekinds:{h}", {r["item_id"]: r.get("line_kinds") for r in recs})
+        self.store.set_state(f"facts:{h}", {r["item_id"]: r.get("facts") or {} for r in recs})
+        msg = Reply(parts)
+        self._keep_answer(run_id, h, rule_id, spec.content.goal, "picks", msg, recs)
+        return msg, run_id, len(recs)
 
     def _feedback_weights(self, rule_id, view):
         if not rule_id:

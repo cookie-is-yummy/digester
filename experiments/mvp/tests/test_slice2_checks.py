@@ -101,7 +101,9 @@ def test_act_on_last_keeps_a_named_list_and_does_the_part_that_works(env):
     msg = say(env, "add it to my list and email it to me",
               {"intent": "act_on_last", "actions": [{"action": "todo.add", "params": {"list": "My Groceries List"}},
                                                     "email.send"], "pick_number": 1})
-    assert msg.startswith('Added "Lemon garlic pasta" to your groceries list. I can\'t email answers')
+    # slice 4: the email part is done too; with no confirmed address it waits and the reply asks for one
+    assert msg == ('Added "Lemon garlic pasta" to your groceries list.\n'
+                   "What's your email address? I'll send a 6-digit code there to check it's yours, then email this to you.")
     assert len(bot.store.todos(H)) == 2
 
 

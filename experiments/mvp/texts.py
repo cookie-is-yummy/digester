@@ -177,16 +177,12 @@ TODO_DUE_PASSED = "That time has already passed, so I didn't set a reminder for 
 TODO_LIST_EMPTY_SEND = "Your list is empty right now. Nice work."
 # features that come in later slices: one honest line each
 NOT_YET = {
-    "act_on_last": "I can't email answers or add them to your calendar yet. You can copy the link from my last message "
-                   "for now.",
     "profile_show": "Showing what I know about you isn't ready yet.",
-    "set_email": "Email isn't switched on yet, so I haven't saved that address.",
     "library_status": "I can't check your library imports from here yet. The founders can tell you when the last export "
                       "arrived.",
     "outside_only": "I can only look in your own saves for now, not for new things outside them.",
 }
 OUTSIDE_SOME = "I can only look in your own saves for now, so these are all from your library."
-OUTPUTS_NOT_YET = "Email and calendar aren't switched on yet, so I'll send it here."
 
 
 def first_send(first):
@@ -378,6 +374,85 @@ def quiet_words(blocks):
 REMINDER_FOOTER = "Reply \"stop {n}\" to end these."
 
 
-def picks_added(n, name):
-    where = "your list" if name in (None, "todo") else f"your {name} list"
-    return f"I added {'it' if n == 1 else f'these {n}'} to {where}."
+# ---------- slice 4: outputs (email, calendar, to-dos) and the email code ----------
+ACTION_FAILED = {"email.send": "I couldn't email this, sorry. Ask me again in a bit.",
+                 "calendar.add": "I couldn't make the calendar entry this time, sorry.",
+                 "todo.add": "I couldn't add it to your list this time, sorry."}
+ACTION_FAILED_OTHER = "One of the things you asked for didn't work this time, sorry."
+EMAIL_ASK = ("What's your email address? I'll send a 6-digit code there to check it's yours, then email this to you.")
+EMAIL_ASK_RULE = ("What's your email address? I'll send a 6-digit code there to check it's yours. Until then I can't "
+                  "email these.")
+CODE_EXPIRED = "That code has expired. Reply \"new code\" and I'll send another."
+CODE_CANCELLED = "That code was cancelled after too many wrong tries. Reply \"new code\" and I'll send another."
+CODE_TOO_MANY = ("That's not it either, so I've cancelled that code. Reply \"new code\" and I'll send another, or send "
+                 "me a different address.")
+CODE_LIMIT = "I've sent enough codes for today. Please try again tomorrow."
+
+
+def code_wrong(left):
+    return f"That's not the code. You have {left} {'try' if left == 1 else 'tries'} left."
+
+
+def code_sent(email, minutes, changed=False, again=False):
+    if again:
+        return f"I sent a new 6-digit code to {email}. Text it to me here within {minutes} minutes."
+    lead = f"I changed your email address to {email}" if changed else f"I saved {email} as your email address"
+    tail = " Until then I won't email you." if changed else ""
+    return (f"{lead} and sent a 6-digit code to it. Text me the code within {minutes} minutes to confirm it's "
+            f"yours.{tail}")
+
+
+def code_in_outbox(where, failed=False):
+    if failed:
+        return f"I couldn't send that email just now, so it's {where} instead."
+    return f"Email isn't connected here, so the code email is {where} instead of your inbox."
+
+
+def email_confirmed(email):
+    return f"Thanks, {email} is confirmed."
+
+
+def email_already(email):
+    return f"{email} is already your email address, and it's confirmed."
+
+
+def email_confirm_first(email):
+    return f"Your email isn't confirmed yet. Text me the 6-digit code I sent to {email}, and I'll email it then."
+
+
+def waiting_sent(subject, to, via, err, where):
+    if via == "smtp":
+        return f"I emailed you \"{subject}\" at {to}."
+    if err:
+        return f"I couldn't send \"{subject}\" just now, so the email is {where} instead."
+    return f"Email isn't connected here, so I didn't send \"{subject}\". The email is {where}."
+
+
+def waiting_failed(subject):
+    return f"I couldn't email \"{subject}\", sorry. Ask me again in a bit."
+
+
+def _and(xs):
+    xs = list(xs)
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+
+
+def outputs_note(names, repeating=False):
+    """What a rule's do adds, in a preview or when it starts: ' Each time I'll also email it to you.'"""
+    words = {"email.send": "email it to you", "calendar.add": "give you a link to put it on your calendar",
+             "todo.add": "put it on your list"}
+    extra = [words[n] for n in ("todo.add", "calendar.add", "email.send") if n in names]
+    if not extra:
+        return ""
+    if "message.send" not in names:
+        return f" I'll {_and(extra)} instead of sending it here."
+    return f" Each time I'll also {_and(extra)}." if repeating else f" I'll also {_and(extra)}."
+
+
+def later_set(first, verbs, what, n):
+    """'OK. Today at 8pm I'll send it to you here: "One Pot Chicken Rice". Reply "stop 2" to cancel.'"""
+    return f"OK. {cap_first(first)} I'll {_and(verbs or ['send it to you here'])}: {what}. Reply \"stop {n}\" to cancel."
+
+
+SENT_AGAIN_HEAD = "Here's what you asked me to send you:"
+ITEMS_GONE = "The post you asked me to send again isn't in your library any more, so there's nothing to send."

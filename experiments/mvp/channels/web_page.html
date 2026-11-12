@@ -73,6 +73,27 @@
   .card .embed { margin: 6px 4px 0; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
                  border-radius: 10px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
   .card .note { font-size: 12px; color: var(--quiet); margin: 4px; }
+  .list { margin-bottom: 8px; font-size: 13.5px; }
+  .list b { font-size: 12.5px; }
+  .list ol { margin: 4px 0 2px; padding-left: 22px; }
+  .list li { margin: 2px 0; }
+  .list .done { color: var(--quiet); text-decoration: line-through; }
+  .list .due { color: var(--quiet); font-size: 12px; }
+  .list .due.late { color: var(--warn); }
+  .ob { display: block; width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px;
+        margin-bottom: 6px; background: var(--bg); color: var(--ink); font: inherit; font-size: 13.5px; cursor: pointer; }
+  .ob:hover { border-color: var(--accent); }
+  .ob .small { margin-top: 2px; }
+  .reader { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center;
+            padding: 16px; z-index: 10; }
+  .reader.on { display: flex; }
+  .reader .box { background: var(--panel); color: var(--ink); border-radius: 14px; width: min(680px, 100%);
+                 max-height: 90vh; overflow: auto; padding: 16px; }
+  .reader pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 13.5px/1.45 ui-monospace, Menlo, Consolas, monospace;
+                background: var(--bg); border-radius: 9px; padding: 10px; }
+  .reader iframe { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+  .reader .row2 { display: flex; gap: 8px; margin-top: 8px; }
+  .reader .row2 .btn { width: auto; }
   @media (max-width: 760px) {
     .wrap { grid-template-columns: minmax(0, 1fr); height: auto; }
     .chat { height: 78vh; }
@@ -109,18 +130,37 @@
       <div id="rules"></div>
     </div>
     <div>
+      <h2>To-dos</h2>
+      <div id="todos"></div>
+    </div>
+    <div>
+      <h2>Outbox</h2>
+      <div id="outbox"></div>
+      <div class="small">Emails and calendar files the bot wrote for this person. Without email settings nothing leaves
+        this computer: they stay here.</div>
+    </div>
+    <div>
       <h2>Things to try</h2>
       <button class="try">what can I make with chicken and rice?</button>
       <button class="try">remind me in two hours to watch something that gets me motivated</button>
       <button class="try">send me a pasta recipe every Friday at 7pm, nothing with cream</button>
       <button class="try">my rules</button>
+      <button class="try">email it to me</button>
+      <button class="try">add the first one to my calendar for Saturday at 10</button>
+      <button class="try">add its ingredients to my grocery list</button>
     </div>
     <div>
-      <button class="btn quiet" data-op="start_over">Start over (clear this person's rules and thread)</button>
+      <button class="btn quiet" data-op="start_over">Start over (clear this person's rules, thread, to-dos and outbox)</button>
       <button class="btn quiet" data-op="start_over" data-welcome="1">Start over from the welcome message</button>
       <div class="small">This page is a test thread on this computer. Nothing here is sent to a phone.</div>
     </div>
   </aside>
+</div>
+<div class="reader" id="reader" role="dialog" aria-modal="true">
+  <div class="box">
+    <div id="readerBody"></div>
+    <div class="row2"><button class="btn" id="asEmail" hidden>Show as the email looks</button><button class="btn" id="closeReader">Close</button></div>
+  </div>
 </div>
 <script>
 const TOKEN = "__TOKEN__";
@@ -152,6 +192,15 @@ function draw(s) {
   $("rules").innerHTML = s.rules.length ? s.rules.map(r =>
     `<div class="rule"><b>${r.number}.</b> ${esc(r.goal)}<div class="small">${esc(r.when)}${r.status !== "active" ? " · " + esc(r.status) : ""}${r.next ? "<br>next: " + esc(r.next) : ""}</div></div>`).join("")
     : `<div class="small">None yet.</div>`;
+  $("todos").innerHTML = (s.todos || []).length ? s.todos.map(l => {
+    const open = l.open.map(t => `<li>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">${esc(t.text)}</a>` : esc(t.text)}${t.due ? ` <span class="due ${t.overdue ? "late" : ""}">due ${esc(t.due)}</span>` : ""}</li>`).join("");
+    const firstNo = l.open.length ? l.open[0].number : 1;
+    const done = l.done.map(t => `<li class="done">${esc(t.text)}</li>`).join("");
+    return `<div class="list"><b>${l.list === "todo" ? "To-do" : esc(l.list)}</b>${open ? `<ol start="${firstNo}">${open}</ol>` : `<div class="small">Nothing open.</div>`}${done ? `<div class="small">Done:</div><ul>${done}</ul>` : ""}</div>`;
+  }).join("") : `<div class="small">None yet.</div>`;
+  $("outbox").innerHTML = (s.outbox || []).length ? s.outbox.map(o =>
+    `<button class="ob" data-oid="${o.id}"><b>${o.kind === "email" ? "Email" : "Calendar"}:</b> ${esc(o.subject || "")}<div class="small">${esc(o.time)}${o.kind === "email" ? (o.via === "smtp" ? " · sent" : " · not sent") : " · calendar file"}</div></button>`).join("")
+    : `<div class="small">Nothing yet.</div>`;
   const sig = JSON.stringify(s.messages.map(m => [m.id, m.reaction]));
   if (sig !== lastSig) {
     lastSig = sig;
@@ -228,6 +277,29 @@ $("thread").addEventListener("click", e => {
   const b = e.target.closest(".tap");
   if (b) api("/api/tapback", {handle: me, ref: b.dataset.ref, kind: b.dataset.kind}).then(poll);
 });
+// The Outbox panel: click an email or a calendar file to read it. An email's HTML is shown in a sandboxed frame (no
+// scripts); its plain text is shown first.
+let readerHtml = null;
+$("outbox").addEventListener("click", async e => {
+  const b = e.target.closest(".ob");
+  if (!b || !me) return;
+  const o = await api(`/api/outbox?as=${encodeURIComponent(me)}&id=${b.dataset.oid}`);
+  readerHtml = o.html || null;
+  const att = o.attachments && o.attachments.length ? `<div class="small">Attached: ${o.attachments.map(esc).join(", ")}</div>` : "";
+  $("readerBody").innerHTML = `<b>${esc(o.subject || "")}</b>${o.to ? `<div class="small">To: ${esc(o.to)}</div>` : ""}${att}<pre>${linkify(o.text || "")}</pre>`;
+  $("asEmail").hidden = !readerHtml;
+  $("reader").classList.add("on");
+});
+$("asEmail").addEventListener("click", () => {
+  if (!readerHtml) return;
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+  f.srcdoc = readerHtml.replace(/^<!doctype html>/i, "<!doctype html><base target=\"_blank\">");
+  $("readerBody").appendChild(f);
+  $("asEmail").hidden = true;
+});
+$("closeReader").addEventListener("click", () => $("reader").classList.remove("on"));
+$("reader").addEventListener("click", e => { if (e.target.id === "reader") $("reader").classList.remove("on"); });
 document.querySelectorAll(".btn[data-op]").forEach(b => b.addEventListener("click", () => {
   if (b.dataset.op === "start_over" && !confirm("Clear this test person's rules, history and thread?")) return;
   api("/api/control", {op: b.dataset.op, handle: me, minutes: Number(b.dataset.minutes || 0), with_welcome: !!b.dataset.welcome}).then(poll);
