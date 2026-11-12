@@ -335,9 +335,10 @@ class Store:
         self.x("UPDATE people SET prefs=? WHERE handle=?", (json.dumps(cur), handle))
 
     # details found in an item's own text (DESIGN.md section 4): found once, reused always
-    def facts_get(self, library, item_id, kinds, final_only=True, since=None):
-        """{kind: lines} for the kinds held. An empty result counts only after two attempts (final_only). Rows from
-        YouTube API text older than `since` are not used (that text is kept at most 30 days)."""
+    def facts_get(self, library, item_id, kinds, final_only=True, since=None, empty_source=None):
+        """{kind: lines} for the kinds held. An empty result counts only after two attempts (final_only), and, with
+        `empty_source`, only when it was read from that source (a title alone says nothing about a description). Rows
+        from YouTube API text older than `since` are not used (that text is kept at most 30 days)."""
         marks = ",".join("?" * len(kinds))
         rows = self.q(f"SELECT kind, lines, attempts, source, at FROM facts WHERE library=? AND item_id=? AND kind IN ({marks})",
                       (library, item_id, *kinds))
@@ -346,13 +347,19 @@ class Store:
             if since and r["source"] == "youtube_api" and (r["at"] or "") < since:
                 continue
             lines = json.loads(r["lines"])
+            if not lines and empty_source and r["source"] != empty_source:
+                continue
             if lines or not final_only or (r["attempts"] or 0) >= 2:
                 out[r["kind"]] = lines
         return out
 
-    def facts_attempts(self, library, item_id, kind):
-        r = self.one("SELECT attempts, lines FROM facts WHERE library=? AND item_id=? AND kind=?", (library, item_id, kind))
-        return (r["attempts"] or 0) if r and r["lines"] == "[]" else 0
+    def facts_attempts(self, library, item_id, kind, source=None):
+        """Empty attempts so far (from the same source, when given)."""
+        r = self.one("SELECT attempts, lines, source FROM facts WHERE library=? AND item_id=? AND kind=?",
+                     (library, item_id, kind))
+        if not r or r["lines"] != "[]" or (source and r["source"] != source):
+            return 0
+        return r["attempts"] or 0
 
     def facts_put(self, library, item_id, kind, lines, prompt_version, attempts=1, source="caption", at=None):
         self.x("INSERT OR REPLACE INTO facts(library,item_id,kind,lines,prompt_version,at,attempts,source) "

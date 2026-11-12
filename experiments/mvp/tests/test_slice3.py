@@ -96,12 +96,10 @@ def test_a_criterion_no_drops_the_pick_and_an_unbacked_yes_is_unknown(env):
     raw["picks"][1]["criteria"] = [{"answer": "yes", "quote": "Pasta night"}]
     r = check(raw, cands, spec)
     assert not r["closest"] and r["picks"][0]["verdict"] == "clear" and r["unknown_criteria"] == []
-    # a "no" is never a pick, but when nothing else is even close it is the closest, said plainly: a must-have read as
-    # "no" in one run and "unknown" in the next must not flip the answer to "nothing" (measured on the real library)
+    # section 3: code drops a pick with any "no", so a "no" is never a pick, an alternative or the closest; with
+    # nothing else the bot says it found nothing (the composer's none_reason, or the default)
     r = check({"picks": [raw["picks"][0]]}, cands, spec)
-    assert r["closest"] and r["picks"][0]["item"].id == "itm_a" and r["missing"] == [("uses lemons", "no")]
-    from mvp.render import picks_message
-    assert picks_message(r, spec).text().startswith("None of what I found meets \"uses lemons\".\n\nThe closest I have")
+    assert r["picks"] == [] and not r["closest"] and r["dropped"]["criterion_no"] == 1
 
 
 def test_only_close_picks_show_the_closest_and_all_no_says_nothing(env):
@@ -126,8 +124,16 @@ def test_a_retry_that_finds_a_pick_is_used(env):
 def test_a_must_have_unknown_for_every_candidate_is_said(env):
     raw = {"picks": [{"n": 2, "verdict": "clear", "title": "Lemon garlic pasta", "criteria": [{"answer": "unknown"}]}]}
     msg = compose_once(env, raw, criteria=["under 10 minutes"])
+    # it is the closest, not a clear pick, and the must-have nobody's text answers is said once, with the reason
+    assert msg.startswith("None of what I found clearly meets \"under 10 minutes\": the posts don't say.")
+    assert msg.count("under 10 minutes") == 1
+    # two must-haves unknown for every shown item: the first opens the reply, the second gets its own line
+    raw = {"picks": [{"n": 2, "verdict": "clear", "title": "Lemon garlic pasta",
+                      "criteria": [{"answer": "unknown"}, {"answer": "unknown"}]}]}
+    msg = compose_once(env, raw, criteria=["vegetarian", "under 10 minutes"])
+    assert msg.startswith("None of what I found clearly meets \"vegetarian\": the posts don't say.")
     assert "I couldn't check \"under 10 minutes\" for any of these: the posts don't say." in msg
-    assert "None of what I found clearly meets \"under 10 minutes\"." in msg   # so it is the closest, not a clear pick
+    assert msg.count("vegetarian") == 1
 
 
 def test_alternatives_wider_selection_and_top_n(env):
@@ -265,7 +271,7 @@ def test_youtube_details_are_used_and_expire(env, monkeypatch):
                            "criteria": [{"answer": "yes", "quote": "from start to finish"}]}]}
     env["bot"].pool.search = lambda lib, q, depth=300: {"ids": ["itm_y"], "mode": "normal", "cost_usd": 0.0}
     msg = compose_once(env, composer, extract=["key_points"], criteria=["ends with a finished model"])
-    assert "Video length: 12 minutes (from YouTube)" in seen[0] and "Make a donut from start to finish" in seen[0]
+    assert "Video length: 12 minutes 5 seconds (from YouTube)" in seen[0] and "Make a donut from start to finish" in seen[0]
     assert "because it takes 12 minutes and ends with a finished donut." in msg
     assert "Key points (1):\n• Blender 4.2" in msg and asked == [["SYNvid00001"]]
     assert bot.store.one("SELECT source FROM facts WHERE item_id='itm_y'")["source"] == "youtube_api"
@@ -418,7 +424,8 @@ def test_the_same_search_text_reuses_its_ranked_list(env, monkeypatch, tmp_path)
 # ---------- replies made of parts ----------
 def test_parts_are_joined_or_sent_one_by_one_and_a_reaction_on_any_maps_to_the_run(env):
     bot, ch = env["bot"], env["ch"]
-    pick = {"picks": [{"n": 2, "verdict": "clear", "title": "Lemon garlic pasta"}], "intro": "Found one."}
+    pick = {"picks": [{"n": 2, "verdict": "clear", "title": "Lemon garlic pasta", "lines": ["200g spaghetti"]}],
+            "intro": "Found one."}
     msg = compose_once(env, pick)
     assert len(ch.outbox) == 1 and msg.startswith("Found one.") and "\nhttps://example.com/itm_a\n" in msg
     ch.link_previews = True

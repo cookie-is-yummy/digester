@@ -5,10 +5,10 @@ The model gives each pick a verdict (clear / close / no, never a score), a "beca
 from the item's own text, and a yes / no / unknown answer per must-have. Checks, all in code: a pick must be a listed
 candidate (rule 1); a "because" whose quotes or numbers are not in the item's text is replaced by a plain clause built
 here; a "yes" whose quote is not in the text counts as unknown; a pick with any "no" is dropped; a pick is "clear" only
-when every must-have is a backed yes (a pick with a "no" is shown only as the closest, when nothing else is even
-close); avoided words are rechecked; titles must be the item's own words. "Clear" picks
-are shown; with none, the closest "close" one is shown as the closest; only when nothing is even close does the bot
-say it found nothing (no padding, rule 3). Details (ingredients, steps, key points) come from extract.py, not from
+when every must-have is a backed yes; avoided words are rechecked; titles must be the item's own words. "Clear" picks
+are shown; with none, the closest "close" one is shown as the closest; when every pick the model gave fails a
+must-have, it is asked once for the closest among the others; only when nothing is even close does the bot say it found
+nothing (no padding, rule 3). Details (ingredients, steps, key points) come from extract.py, not from
 here. Captions go to the model inside <item> tags as data (rule 6). The same spec and candidates reuse the same
 answer (section 4); "another" bypasses that.
 """
@@ -143,17 +143,43 @@ def check_text(it, extra=None):
     return own_text(it, extra) + ("\n" + length_line(it, extra) if length_line(it, extra) else "")
 
 
-# "one" is left out: in a clause it is nearly always "one of", "this one" (measured: 21 of 21 failed clauses on the
-# real library were that), so a quantity written as "one" goes unchecked; digits and every other number word are checked
-NUMBER_WORDS = set("two three four five six seven eight nine ten eleven twelve fifteen twenty thirty forty fifty "
-                   "hundred half dozen".split())
+# Number words count as numbers, and a word and its digits back each other ("two" is backed by "2"). "one" is a number
+# only as a quantity ("one pot"), not in "one of", "this one", "the one that" (measured: 21 of 21 failed clauses on the
+# real library were those).
+NUMBER_WORDS = {w: str(i) for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve".split())}
+NUMBER_WORDS.update({"fifteen": "15", "twenty": "20", "thirty": "30", "forty": "40", "fifty": "50", "hundred": "100",
+                     "half": "1/2", "dozen": "12"})
+DIGIT_WORDS = {}
+for _w, _d in NUMBER_WORDS.items():
+    DIGIT_WORDS.setdefault(_d, set()).add(_w)
+NOT_QUANTITY_BEFORE = set("this that the which each every any no some another someone anyone everyone".split())
+NOT_QUANTITY_AFTER = set("of that which who another".split())
+
+
+def _number_tokens(clause):
+    toks = tokens(clause)
+    out = []
+    for i, t in enumerate(toks):
+        if t[0].isdigit():
+            out.append(t)
+        elif t == "one":
+            before = toks[i - 1] if i else ""
+            after = toks[i + 1] if i + 1 < len(toks) else ""
+            if before not in NOT_QUANTITY_BEFORE and after and after not in NOT_QUANTITY_AFTER:
+                out.append(t)
+        elif t in NUMBER_WORDS and t != "zero":
+            out.append(t)
+    return out
 
 
 def numbers_backed(clause, text):
-    """Every number in the clause (digits, or a number word) is in the text."""
+    """Every number in the clause (digits, or a number word used as a quantity) is in the text, as digits or as
+    the word."""
     have = set(tokens(text))
-    for t in tokens(clause):
-        if (t[0].isdigit() or t in NUMBER_WORDS) and t not in have:
+    for t in _number_tokens(clause):
+        same = {t} | ({NUMBER_WORDS[t]} if t in NUMBER_WORDS else DIGIT_WORDS.get(t, set()))
+        if not same & have:
             return False
     return True
 
@@ -232,9 +258,33 @@ def _call(user, person_handle, seed):
                          person=person_handle, max_tokens=1600, temperature=config.COMPOSE_TEMPERATURE, seed=seed)
 
 
+def _picks_of(raw):
+    """The model's picks as a list, whatever shape came back (a wrong shape is read as no picks)."""
+    picks = raw.get("picks") if isinstance(raw, dict) else None
+    return picks if isinstance(picks, list) else []
+
+
 def _usable(raw):
-    return any(isinstance(p, dict) and str(p.get("verdict", "close")).lower() in ("clear", "close")
-               for p in (raw.get("picks") or []))
+    return any(isinstance(p, dict) and str(p.get("verdict") or "close").lower() in ("clear", "close")
+               for p in _picks_of(raw))
+
+
+def _failed_must_haves(raw, cands, spec, extra, known_lines, wider):
+    """The candidate numbers the model picked when every one of them was dropped for a must-have "no" (else [])."""
+    if not spec.content.criteria:
+        return []
+    r = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider)
+    if r["picks"] or not r["dropped"].get("criterion_no"):
+        return []
+    out = []
+    for p in _picks_of(raw):
+        try:
+            n = int(p.get("n"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if 1 <= n <= len(cands) and n not in out:
+            out.append(n)
+    return out
 
 
 def compose(cands, spec, person_handle, request_text=None, feedback_note="", known_lines=None, extra=None,
@@ -289,6 +339,15 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
             cost += c2
             if _usable(raw2):
                 raw = raw2
+        failed = _failed_must_haves(raw, cands, spec, extra, known_lines, wider)
+        if failed:   # section 3: every pick it gave fails a must-have; ask once for the closest among the others
+            note = ("\n\nNote from the bot: candidates " + ", ".join(str(n) for n in failed) + " fail a must-have, so "
+                    "they cannot be shown. From the other candidates, return the closest one (\"close\", or \"clear\" "
+                    "if it fits), or no picks if nothing else is even close.")
+            raw2, c2 = _call(user + note, person_handle, config.COMPOSE_SEED)
+            cost += c2
+            if check(raw2, cands, spec, extra=extra, known_lines=known_lines, wider=wider)["picks"]:
+                raw = raw2
         if store is not None:
             store.cache_put("answer_cache", key, raw, at=now, handle=person_handle)
     result = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider)
@@ -301,8 +360,9 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False):
     c = spec.content
     dropped = {"not_a_candidate": 0, "verdict_no": 0, "criterion_no": 0, "criterion_unbacked": 0, "avoided": 0,
                "repeat": 0, "over_count": 0, "title_replaced": 0, "because_replaced": 0}
-    kept, failed, seen = [], [], set()
-    for p in raw.get("picks") or []:
+    kept, seen = [], set()
+    raw = raw if isinstance(raw, dict) else {}
+    for p in _picks_of(raw):
         if not isinstance(p, dict):
             dropped["not_a_candidate"] += 1
             continue
@@ -339,7 +399,7 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False):
                 title = " ".join(words).strip(" -:|,") or title_from_item(it)
         text = check_text(it, extra)
         answers = []
-        given = [a for a in (p.get("criteria") or [])]
+        given = p.get("criteria") if isinstance(p.get("criteria"), list) else []
         for i in range(len(c.criteria)):
             a = given[i] if i < len(given) else {}
             ans = str((a.get("answer") if isinstance(a, dict) else a) or "unknown").strip().lower()
@@ -355,11 +415,8 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False):
         if known_lines is not None and c.extract and known_lines.get(it.id):
             pick["lines"] = list(known_lines[it.id])
             pick["lines_reused"] = True   # the lines found before, not lines for this request
-        if "no" in answers:
-            # never a pick or an alternative; it can only be "the closest" when nothing else is even close, so a
-            # must-have read as "no" in one run and "unknown" in the next does not flip the answer to "nothing"
+        if "no" in answers:   # section 3: code drops a pick with any "no" (never a pick, an alternative or the closest)
             dropped["criterion_no"] += 1
-            failed.append(pick)
             continue
         if problem and problem != "empty":
             dropped["because_replaced"] += 1
@@ -376,9 +433,6 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False):
     elif close:
         picks, wide, closest = close[:1], [], True
         dropped["over_count"] += len(close) - 1
-    elif failed:
-        picks, wide, closest = failed[:1], [], True
-        dropped["criterion_no"] -= 1
     else:
         picks, wide, closest = [], [], False
     shown = picks + wide

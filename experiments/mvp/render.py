@@ -114,6 +114,22 @@ def link_part(it, title):
             "video_id": getattr(it, "video_id", None)}
 
 
+def in_video(pick, extract):
+    """The kind to say "is in the video" about, or None. Said only for Instagram, only when the details step read the
+    post and found none of it, and never when the post's text looks like it holds a list (then the step missed it, and
+    saying "not written in the post" would be wrong)."""
+    it, facts = pick["item"], pick.get("facts") or {}
+    if not extract or it.platform != "instagram":
+        return None
+    asked = [k for k in ("ingredients", "steps", "key_points") if k in extract]
+    if not asked or any(facts.get(k) for k in facts) or not all(k in facts for k in asked):
+        return None
+    from .extract import list_like
+    if list_like(getattr(it, "raw_caption", "") or it.caption):
+        return None
+    return asked[0]
+
+
 def details_lines(pick, extract):
     """The checked lines under their labels, counted here; for Instagram with nothing written, one plain line; for
     YouTube with nothing written, nothing (the video may well show it)."""
@@ -134,10 +150,9 @@ def details_lines(pick, extract):
         out.append(f"Details ({len(pick['lines'])}):")
         out.extend(f"• {line}" for line in pick["lines"])
         shown = True
-    if not shown and extract and pick["item"].platform == "instagram":
-        kind = next((k for k in ("ingredients", "steps", "key_points") if k in extract), None)
-        if kind:
-            out.append(IN_VIDEO[kind])
+    kind = None if shown else in_video(pick, extract)
+    if kind:
+        out.append(IN_VIDEO[kind])
     return out
 
 
@@ -153,7 +168,7 @@ def alt_note(pick, extract):
         return "the steps are written out"
     if keys:
         return "the tips are written out"
-    if extract and pick["item"].platform == "instagram" and set(extract) & {"ingredients", "steps"}:
+    if in_video(pick, extract) in ("ingredients", "steps"):
         return "the recipe is in the video"
     return pick["because"] if pick.get("because_backed") else ""
 
@@ -176,11 +191,16 @@ def picks_message(result, spec, footer=None, now=None):
     because = first["because"]
     if not first.get("because_backed") and kept:   # the plain clause; how they kept it is already in the sentence
         because = because.split(", and you ")[0]
+    unknown = list(result.get("unknown_criteria") or [])
     if result.get("closest"):
         missing = result.get("missing") or []
         if missing:
             cr, ans = missing[0] if isinstance(missing[0], (list, tuple)) else (missing[0], "unknown")
-            text.append(f"None of what I found {'meets' if ans == 'no' else 'clearly meets'} \"{cr}\".")
+            if cr in unknown:   # said once, here, with the reason
+                unknown.remove(cr)
+                text.append(f"None of what I found clearly meets \"{cr}\": the posts don't say.")
+            else:
+                text.append(f"None of what I found {'meets' if ans == 'no' else 'clearly meets'} \"{cr}\".")
         else:
             text.append(f"Nothing I found is a clear fit for \"{c.goal}\".")
         text.append("")
@@ -206,7 +226,7 @@ def picks_message(result, spec, footer=None, now=None):
         text.append("Or here's a wider selection:")
         for p in wider:
             text.append(f"• {p['title']}" + (f": {p['item'].url}" if p["item"].url else ""))
-    for cr in result.get("unknown_criteria") or []:
+    for cr in unknown:
         text.append("")
         text.append(f"I couldn't check \"{cr}\" for any of these: the posts don't say.")
     if c.asked_count and c.asked_count > c.count:

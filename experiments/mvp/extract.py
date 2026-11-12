@@ -56,7 +56,11 @@ def _cut(line, limit=105):
 def verify(raw_lines, text, kind):
     """(lines, dropped): the model's lines that are in the text, cleaned; at most MAX_LINES."""
     out, dropped = [], 0
-    for raw in (raw_lines or [])[:MAX_LINES + 5]:
+    if isinstance(raw_lines, str):   # one line given as a string, not a list: read as that one line
+        raw_lines = [raw_lines]
+    if not isinstance(raw_lines, list):
+        raw_lines = []
+    for raw in raw_lines[:MAX_LINES + 5]:
         line = " ".join(str(raw).split())[:400]
         if not line:
             continue
@@ -87,14 +91,18 @@ def _call(kinds, text, person, seed, note=""):
 
 
 def details(it, extract, library, store=None, person=None, extra=None, now=None):
-    """({kind: lines}, info) for one item. info: cost, calls, dropped, cached (kinds read from the cache)."""
+    """({kind: lines}, info) for one item. info: cost, calls, dropped, cached (kinds read from the cache), errors. On a
+    failed call the kinds not read are left out (nothing is cached, and nothing is said about them)."""
     kinds = kinds_for(extract)
-    info = {"cost": 0.0, "calls": 0, "dropped": 0, "cached": 0}
+    info = {"cost": 0.0, "calls": 0, "dropped": 0, "cached": 0, "errors": 0}
     if not kinds:
         return {}, info
     now = now or datetime.now(timezone.utc)
     since = (now - timedelta(days=config.YOUTUBE_KEEP_DAYS)).astimezone(timezone.utc).isoformat(timespec="seconds")
-    have = store.facts_get(library, it.id, kinds, since=since) if store is not None else {}
+    source = "youtube_api" if ((extra or {}).get(it.id) or {}).get("description") else "caption"
+    # with a YouTube description now in hand, an empty result read from the title alone does not count
+    have = (store.facts_get(library, it.id, kinds, since=since, empty_source=source if source == "youtube_api" else None)
+            if store is not None else {})
     info["cached"] = len(have)
     need = [k for k in kinds if k not in have]
     if not need:
@@ -103,11 +111,16 @@ def details(it, extract, library, store=None, person=None, extra=None, now=None)
     if len(full) < MIN_TEXT:   # a bare title: no list to read, and nothing worth caching
         return {**{k: [] for k in need}, **have}, info
     text = own_text(it, extra)
-    source = "youtube_api" if ((extra or {}).get(it.id) or {}).get("description") else "caption"
     got, tries = {k: [] for k in need}, {k: 0 for k in need}
     ask, note = list(need), ""
     for attempt in range(2):
-        raw, cost = _call(ask, full, person, config.EXTRACT_SEED + attempt, note)
+        try:
+            raw, cost = _call(ask, full, person, config.EXTRACT_SEED + attempt, note)
+        except Exception:  # noqa: BLE001 - a failed details call never fails the answer
+            info["errors"] += 1
+            if attempt == 0:
+                return dict(have), info
+            break
         info["cost"] += cost
         info["calls"] += 1
         returned_any = False
@@ -124,7 +137,7 @@ def details(it, extract, library, store=None, person=None, extra=None, now=None)
                 if returned_any else "Look again: the text seems to hold a list.")
     if store is not None:
         for k in need:
-            prev = store.facts_attempts(library, it.id, k)
+            prev = store.facts_attempts(library, it.id, k, source=source)
             store.facts_put(library, it.id, k, got[k], config.PROMPT_EXTRACT,
                             attempts=1 if got[k] else prev + tries[k], source=source, at=now)
     return {k: (have.get(k) if k in have else got[k]) for k in kinds}, info
@@ -133,7 +146,7 @@ def details(it, extract, library, store=None, person=None, extra=None, now=None)
 def details_many(items, extract, library, store=None, person=None, extra=None, now=None, workers=4):
     """details() for several picked items at once (the calls run in parallel). Returns ({item_id: {kind: lines}},
     info summed)."""
-    total = {"cost": 0.0, "calls": 0, "dropped": 0, "cached": 0}
+    total = {"cost": 0.0, "calls": 0, "dropped": 0, "cached": 0, "errors": 0}
     if not items or not kinds_for(extract):
         return {}, total
     if len(items) == 1:

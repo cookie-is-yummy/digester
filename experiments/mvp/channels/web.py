@@ -107,6 +107,8 @@ class WebChannel(Channel):
         loads YouTube's thumbnail and player, or Instagram's embed, in the viewer's browser. This server never fetches
         Instagram or YouTube media."""
         url = str(part.get("url") or "")
+        if not re.match(r"^https?://", url, re.I):   # only web links become cards (never javascript: or data:)
+            return self.send(handle, url)
         vid = part.get("video_id") if part.get("platform") == "youtube" else None
         if vid and not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", str(vid)):
             vid = None

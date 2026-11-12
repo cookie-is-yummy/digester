@@ -145,6 +145,8 @@ class ExecutorMixin:
                     if found or not p.get("lines_reused"):
                         p["lines"], p["lines_reused"] = found, False
                 steps["extract"], steps["extract_calls"] = round(time.time() - t1, 2), info["calls"]
+                if info.get("errors"):   # a failed details call: the answer goes out without those details
+                    steps["extract_errors"] = info["errors"]
         except Exception as e:  # noqa: BLE001 - one failed run never stops the bot
             status, err = "error", type(e).__name__ + (": " + str(e)[:120] if isinstance(e, RuntimeError) else "")
         picks = ((result or {}).get("picks") or []) + ((result or {}).get("wider") or [])

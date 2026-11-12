@@ -11,7 +11,6 @@ text: data, never instructions. Our server never fetches YouTube media.
 import json
 import os
 import sys
-import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -40,9 +39,11 @@ def fetch_batch(ids, key, timeout=None):
 def parse(resp, ids):
     """videos.list response -> {video_id: (ok, duration_s, description)}; ids not returned are unavailable."""
     out = {}
+    if not isinstance(resp, dict) or not isinstance(resp.get("items") or [], list):
+        raise ValueError("unexpected videos.list response")
     for v in resp.get("items") or []:
-        vid = v.get("id")
-        if not vid:
+        vid = v.get("id") if isinstance(v, dict) else None
+        if not vid or vid not in ids:
             continue
         sn, cd = v.get("snippet") or {}, v.get("contentDetails") or {}
         dur = parse_duration(cd.get("duration"))
@@ -82,7 +83,7 @@ class YouTubeInfo:
                 try:
                     got = parse((self.fetch or fetch_batch)(chunk, key), chunk)
                     self.calls += 1
-                except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+                except Exception:  # noqa: BLE001 - an HTTP error, a timeout or an odd response: work as before
                     self.errors += 1   # the type only; the request URL and headers are never logged
                     break
                 at = _iso(now)
@@ -100,13 +101,15 @@ class YouTubeInfo:
 
 
 def minutes_text(seconds):
-    """'12 minutes', '1 hour 5 minutes', 'under a minute': a video's length in words, computed by code."""
+    """'9 minutes 40 seconds', '1 hour 5 minutes', 'under a minute': a video's length in words, computed by code. Not
+    rounded: 9:40 must not read as "10 minutes" when the person asked for "under 10 minutes"."""
     if not seconds:
         return None
-    m = int(round(seconds / 60))
-    if m < 1:
+    s = int(seconds)
+    if s < 60:
         return "under a minute"
-    if m < 60:
-        return f"{m} minute{'s' if m != 1 else ''}"
-    h, m = divmod(m, 60)
+    if s < 3600:
+        m, sec = divmod(s, 60)
+        return f"{m} minute{'s' if m != 1 else ''}" + (f" {sec} second{'s' if sec != 1 else ''}" if sec else "")
+    h, m = divmod(s // 60, 60)
     return f"{h} hour{'s' if h != 1 else ''}" + (f" {m} minute{'s' if m != 1 else ''}" if m else "")
