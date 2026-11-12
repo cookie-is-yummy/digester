@@ -216,6 +216,8 @@ class HandlerMixin:
         if it.intent in ("unsupported", "chat", "help"):
             if it.intent == "unsupported":
                 self.store.log_request(h, text, it.intent)
+                if self.to_someone_else(text):   # sending to others stays out; offer to send it to them (section 11)
+                    return self.send(h, T.EMAIL_ONLY_YOU)
             return self.send(h, HELP if it.intent == "help" and not it.reply else (it.reply or HELP))
         if it.intent == "confirm":
             if pending and pending["kind"] == "confirm_rule":
@@ -397,7 +399,7 @@ class HandlerMixin:
         if it.intent == "act_on_last":
             return self._act_on_last(person, it, text, now)
         if it.intent == "set_email":
-            return self._set_email(person, it.email, now)
+            return self.set_email_from(person, it.email, text, now)
         if it.intent == "library_stats":
             return self._library_stats(person, it)
         if it.intent == "profile_update":

@@ -328,6 +328,7 @@ def test_act_on_last_todo_and_the_todo_intent_share_one_implementation(env, monk
 # ---------- a spec's do, as the executor runs it ----------
 def test_a_rule_whose_do_is_email_only_sends_one_line_here_and_never_twice(env):
     bot, clock, ch = env["bot"], env["clock"], env["ch"]
+    ch.outbox_place = "in the Outbox panel"   # the test page: the person can open the outbox (see the probe tests below)
     confirmed(env)
     env["state"]["answers"]["mvp_compose"] = lemon_pick()
     spec = pasta_spec(avoid=["cream"])
@@ -340,7 +341,7 @@ def test_a_rule_whose_do_is_email_only_sends_one_line_here_and_never_twice(env):
     clock[0] = datetime(2026, 11, 14, 0, 1, tzinfo=UTC)
     assert bot.tick() == 1
     assert last(ch) == ('For "a pasta recipe": Email isn\'t connected here, so I didn\'t send it. The email is in the '
-                        "bot's outbox folder.")
+                        "Outbox panel.")
     assert "I recommend" not in last(ch)
     m = read_eml(outbox_rows(bot, "email")[-1]["path"])
     assert "I recommend Lemon garlic pasta" in m.get_body(("plain",)).get_content()
@@ -434,8 +435,9 @@ def test_act_on_last_email_tomorrow_asks_for_the_address_and_sends_once_confirme
     say(env, last_code(bot), {"intent": "chat"})
     clock[0] = datetime(2026, 11, 13, 13, 0, 30, tzinfo=UTC)
     assert bot.tick() == 1
-    assert last(ch) == ('For "Lemon garlic pasta": Email isn\'t connected here, so I didn\'t send it. The email is in '
-                        "the bot's outbox folder.")
+    # on a channel with no Outbox panel the person cannot open the outbox, so the pick comes here too, with the line
+    assert last(ch).startswith("Here's what you asked me to send you:\nLemon garlic pasta by @chef.")
+    assert last(ch).endswith("Email isn't connected here, so I didn't send it. The email is in the bot's outbox folder.")
     m = read_eml(outbox_rows(bot, "email")[-1]["path"])
     assert m["Subject"] == "From your saves: Lemon garlic pasta" and "Lemon garlic pasta by @chef" in \
         m.get_body(("plain",)).get_content()

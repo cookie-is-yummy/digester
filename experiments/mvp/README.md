@@ -79,13 +79,17 @@ Other ways to test:
 What an answer or a rule can do besides the chat message is the spec's `do` list, run once per answer after composing
 (`outputs.py`): `todo.add`, `calendar.add`, `email.send`, then `message.send`. The reply says in one line per action
 what was done; a failed action is said in the reply and never loses the answer; every action is recorded in the
-`action_log` table.
+`action_log` table. When `do` has no `message.send`, the thread gets one line saying where the answer went, unless the
+email could not reach the person (no confirmed address yet, a failure, or an outbox they cannot open because the
+channel has no Outbox panel): then the answer comes in the thread too, with that line.
 
 - **Email** goes only to the person's own address, confirmed with a 6-digit code sent to it (15 minutes, 5 wrong tries,
   "new code" for another, at most 5 codes a day). Set `MVP_SMTP_HOST`, `MVP_SMTP_PORT` (587 STARTTLS, or 465 SSL),
   `MVP_SMTP_USER`, `MVP_SMTP_PASSWORD` and `MVP_SMTP_FROM` in the terminal that runs the bot (for example a separate
   Gmail account with an app password). Without them, or when a send fails, each email is written as an `.eml` file under
-  `MVP_HOME/outbox/` and the reply says so. Every email is kept there.
+  `MVP_HOME/outbox/` and the reply says so. Every answer email is kept there; a code email that SMTP sent is only
+  listed, so the code is not left in a file. The address must be typed by the person (the model never supplies one),
+  and "email this to my mom" gets the offer to email it to them so they can forward it.
 - **Calendar**: a Google Calendar "add event" link in the reply (no sign-in) and an `.ics` file in the outbox, attached
   when the answer is emailed. One event per send, in the person's zone, 30 minutes unless they say otherwise.
 - **Acting on an answer**: "email it to me", "add the first one to my calendar for Saturday at 10", "add its
@@ -140,4 +144,4 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log and the outbox); model calls, the cost ledger and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, rules, To-dos and Outbox panels), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 182 offline tests |
+| `tests/` | 203 offline tests |

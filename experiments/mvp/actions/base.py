@@ -39,6 +39,7 @@ class Ctx:
     now: object = None
     tz: str = "America/New_York"
     request_text: str = ""
+    slot_at: object = None           # a timed send: the moment it was due (an event at that time is today's)
     params_of: dict = field(default_factory=dict)   # action name -> its params (validated)
     done: list = field(default_factory=list)        # [(name, Outcome)] of the actions run before this one
     chat: object = None              # message.send: the Reply to send in the thread

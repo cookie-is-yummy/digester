@@ -7,7 +7,8 @@ calendar link and the .ics file when calendar.add ran before it.
 SMTP settings come from the environment (MVP_SMTP_HOST, MVP_SMTP_PORT, MVP_SMTP_USER, MVP_SMTP_PASSWORD,
 MVP_SMTP_FROM), read at each send and never printed. Port 465 is SSL; any other port uses STARTTLS. Without SMTP, or
 when sending fails (a revoked app password, a timeout), the email is written as an .eml file to MVP_HOME/outbox/ and
-the reply says plainly where it is. Every email is also kept there as an .eml file, so the Outbox panel can show it.
+the reply says plainly where it is. Every answer email is also kept there as an .eml file, so the Outbox panel can
+show it; a code email that SMTP sent is only listed (the code is not left in a file).
 """
 import os
 import smtplib
@@ -40,7 +41,7 @@ def _sender():
 
 def build_message(to, subject, text, html=None, attach=()):
     m = EmailMessage()
-    m["Subject"] = subject
+    m["Subject"] = " ".join(str(subject).split())[:150]   # a title with a line break never breaks the header
     m["From"] = formataddr((config.BOT_NAME, _sender()))
     m["To"] = to
     m["Date"] = formatdate(localtime=False)
@@ -71,9 +72,11 @@ def _smtp_send(s, m):
             pass
 
 
-def send(bot, handle, to, subject, text, html=None, attach=(), run_id=None, now=None):
+def send(bot, handle, to, subject, text, html=None, attach=(), run_id=None, now=None, keep_sent=True):
     """Sends one email (SMTP when configured) and keeps it in the outbox. Returns (via, path, error): via is "smtp"
-    or "outbox"; error is the exception's type name when SMTP failed (nothing else of it is logged)."""
+    or "outbox"; error is the exception's type name when SMTP failed (nothing else of it is logged). With
+    keep_sent=False an email that SMTP sent is only listed (subject "Sent"), not kept: a code that went out is not
+    left in a file."""
     now = now or bot.clock()
     m = build_message(to, subject, text, html, attach)
     via, err = "outbox", None
@@ -85,8 +88,11 @@ def send(bot, handle, to, subject, text, html=None, attach=(), run_id=None, now=
         except Exception as e:  # noqa: BLE001 - e.g. an app password revoked by a password change: fall back
             err = type(e).__name__
             print(f"email: SMTP send failed ({err}); written to the outbox instead", file=sys.stderr)
+    if via == "smtp" and not keep_sent:
+        bot.store.add_outbox(handle, "email", "Your code (sent)", None, via, run_id=run_id, at=now)
+        return via, None, err
     path = write_outbox(handle, subject, "eml", m.as_bytes(), now)
-    bot.store.add_outbox(handle, "email", subject, path, via, run_id=run_id, at=now)
+    bot.store.add_outbox(handle, "email", m["Subject"], path, via, run_id=run_id, at=now)
     return via, path, err
 
 
@@ -132,4 +138,4 @@ def send_code(bot, handle, to, code, now):
     """The 6-digit code that confirms an address, sent to that address."""
     text = (f"Your code is {code}.\n\nText it to {config.BOT_NAME} to confirm this is your email address. It works for "
             f"{config.CODE_MINUTES} minutes.\n\nIf you didn't ask for this, you can ignore this email.")
-    return send(bot, handle, to, f"Your code: {code}", text, now=now)
+    return send(bot, handle, to, f"Your code: {code}", text, now=now, keep_sent=False)

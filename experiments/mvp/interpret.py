@@ -288,11 +288,18 @@ def _canonical_change(x: Interpretation, rules):
             x.until = added[-1] if len(added) > 1 else None
 
 
-# a message that points at a pick of the last answer ("the second one", "#2") or at the answer itself ("send me that")
-PICK_REF = re.compile(r"\b(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)\s+(?:one|pick|recipe|"
-                      r"video|post|reel)\b|#\s?([1-9])\b|\bnumber\s+([1-9])\b", re.I)
-THAT_REF = re.compile(r"^\W*(?:(?:please|pls|can you|could you)\s+)?(?:remind me (?:of|about)|send(?: me)?|email(?: me)?"
-                      r"|text me|resend)\s+(?:it|that|this|these|those)\b", re.I)
+# a message that asks for a pick of the last answer ("remind me of the second one", "send me #2") or for the answer
+# itself ("send me that tonight") to be sent again. The verb must come right before the pointer, so "remind me to
+# watch the last video of the series" or "send me the first recipe I ever saved" stay what they are, and the pointer
+# must end the phrase, so "send me this weekend's pasta" stays a search.
+AGAIN = r"(?:remind me (?:of|about)|send(?: me)?|email(?: me)?|text me|resend|re-send|share)"
+ORD = r"(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)"
+THEN = r"(?=\s*$|\s*[.,!?]|\s+(?:again|at|on|in|by|around|tonight|tomorrow|later|this\s+(?:morning|afternoon|evening)" \
+       r"|next|before|after|to me|please)\b)"
+PICK_REF = re.compile(r"\b" + AGAIN + r"\s+(?:the\s+)?" + ORD + r"\s+(?:one|pick|recipe|video|post|reel)" + THEN
+                      + r"|\b" + AGAIN + r"\s+(?:#\s?|number\s+)([1-9])\b" + THEN, re.I)
+THAT_REF = re.compile(r"^\W*(?:(?:please|pls|can you|could you)\s+)?" + AGAIN + r"\s+(?:it|that|this|these|those)"
+                      r"(?:\s+(?:one|ones))?" + THEN, re.I)
 ORDINAL = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5}
 
 
@@ -309,7 +316,7 @@ def later_on_last(it: Interpretation, message, last):
     n = None
     if m:
         word = (m.group(1) or "").lower()
-        n = len(items) if word == "last" else ORDINAL.get(word) or int(m.group(2) or m.group(3))
+        n = len(items) if word == "last" else ORDINAL.get(word) or int(m.group(2))
         if not 1 <= n <= len(items):
             return it
     elif not THAT_REF.search(message):
@@ -369,6 +376,10 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
 def _use_message(it, message):
     msg = " ".join(message.split())[:200]
     for x in [it] + ([it.also] if it.also else []):
+        if x.intent == "act_on_last" and not ADDING.search(message) and \
+                any(a.action != "todo.add" for a in x.actions):   # "email it": the email stays, the to-do goes
+            x.actions = [a for a in x.actions if a.action != "todo.add"]
+            continue
         if _adds_from_answer(x) and not ADDING.search(message):   # still a write they did not ask for: their question
             x.intent, x.question, x.what, x.actions, x.todo_text, x.todo_list = "follow_up", msg, None, [], None, None
             continue

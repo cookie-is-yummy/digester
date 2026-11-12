@@ -240,8 +240,11 @@ class WebChannel(Channel):
         from .. import config
         bot = self.bot
         row = bot.store.one("SELECT * FROM outbox WHERE id=? AND handle=?", (item_id, handle))
-        if not row or not row["path"]:
+        if not row:
             return None
+        if not row["path"]:   # a code email that went out by SMTP: listed, not kept
+            return {"id": row["id"], "kind": row["kind"], "subject": row["subject"], "via": row["via"],
+                    "text": "This email was sent. Its code is not kept here.", "html": None, "attachments": []}
         root = os.path.realpath(config.OUTBOX)
         path = os.path.realpath(row["path"])
         if not path.startswith(root + os.sep) or not os.path.isfile(path):

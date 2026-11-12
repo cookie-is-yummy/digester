@@ -387,6 +387,10 @@ CODE_CANCELLED = "That code was cancelled after too many wrong tries. Reply \"ne
 CODE_TOO_MANY = ("That's not it either, so I've cancelled that code. Reply \"new code\" and I'll send another, or send "
                  "me a different address.")
 CODE_LIMIT = "I've sent enough codes for today. Please try again tomorrow."
+EMAIL_ONLY_YOU = ("I can only email you, at your own address. Say \"email it to me\" and I'll send it to you, so you can "
+                  "forward it.")
+EMAIL_TYPE_IT = "What's your email address? Type it out and I'll send a 6-digit code there to check it's yours."
+NOTHING_TO_ACT_ON = "I haven't sent you anything yet. Ask me for something first."
 
 
 def code_wrong(left):
@@ -418,6 +422,11 @@ def email_already(email):
 
 def email_confirm_first(email):
     return f"Your email isn't confirmed yet. Text me the 6-digit code I sent to {email}, and I'll email it then."
+
+
+def email_new_code_first(email):
+    return (f"Your email isn't confirmed yet, and the code I sent to {email} has run out. Reply \"new code\" and I'll "
+            "send another, then email it.")
 
 
 def waiting_sent(subject, to, via, err, where):

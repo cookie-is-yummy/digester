@@ -8,7 +8,8 @@ One event per answer, never a recurrence rule: a repeating rule with calendar.ad
 The title is the pick's checked title, or the reminder's own words; a title in `params` is used only when every word of
 it is in the person's own request. The description is the link to the post. Default length 30 minutes; with no time it
 is an all-day event. The day is `date`, or the day of the send plus `day_offset`; a time already passed today moves to
-tomorrow, a named day that has passed adds nothing (and the line says so).
+tomorrow (for a timed send: a time before the moment the send was due), a named day that has passed adds nothing
+(and the line says so).
 """
 from datetime import date, timedelta, timezone
 from urllib.parse import quote, urlencode
@@ -47,7 +48,9 @@ def event_for(ctx, params):
           "uid": f"r{ctx.rule_id or 0}-run{ctx.run_id or 0}-{(pick or {}).get('item_id') or 'note'}@{UID_DOMAIN}"}
     if params.time:
         start = _at(day, params.time, tz)
-        if start <= now:
+        # a timed send compares with the moment it was due, so "remind me at 2pm and put it on my calendar" makes
+        # today's 2pm event even though the send goes out a few seconds after 2pm (or later, on a retry)
+        if start < (ctx.slot_at or now):
             if named:
                 return None
             start = _at(day + timedelta(days=1), params.time, tz)

@@ -497,7 +497,8 @@ INTENTS = ["new_rule", "ask", "follow_up", "more", "change_rule", "run_rule", "s
            "todo_add", "todo_list", "todo_done", "todo_remove", "todo_due", "act_on_last", "profile_show", "profile_update",
            "set_quiet_hours", "snooze", "set_email", "clarify", "undo", "library_status", "library_stats"]
 FEEDBACK = ["up", "down", "more", "less", "harder", "easier", "done", "hide"]
-EMAIL = r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$"
+# one plain address: no commas, brackets or quotes (a header with "a,b@c.co" would reach two people)
+EMAIL = r"^[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$"
 
 
 def local_moment(v):

@@ -4,7 +4,9 @@ slice 4). Mixed into core.Bot.
 - deliver(): after composing, for an ask and for every rule send, each action in the spec's `do` is performed once
   (actions/, in registry order), recorded in the action log (run, action, status, a reference such as the outbox
   file), and the reply says what was done in one short line per action. The thread's message goes last. A failed
-  action never loses the chat answer; it is said in the reply. With no message.send, the thread gets only the lines.
+  action never loses the chat answer; it is said in the reply. With no message.send, the thread gets only the lines,
+  unless the email could not reach the person (no confirmed address, a failure, an outbox they cannot open): then the
+  answer comes in the thread too.
   A timed send that is retried after a failed message does not repeat its other actions (the log is keyed by slot).
 - act_on_last: the last answer (or a rule's latest send, answer_ref) or one pick of it, emailed, put on a calendar,
   added to a list or sent again, now or later ("when": a one-off rule whose content is source items for those picks).
@@ -25,15 +27,26 @@ from .actions import email as email_action
 from .actions.base import Ctx, Outcome
 from .render import Reply, pick_parts
 from .schedule import next_run, say_time
-from .schema import RuleSpec, list_name
+from .schema import EMAIL, RuleSpec, list_name
 from .store import now_iso
 
 CODE = re.compile(r"^\s*(?:(?:my|the|here'?s? the|here is the)\s+)?(?:code(?:\s+is)?\s*[:\-]?\s*)?(\d{3})[\s-]?(\d{3})"
                   r"\s*[.!]?\s*$", re.I)
-NEW_CODE = re.compile(r"\b(new|another|resend|re-send|send (?:it |me )?again|didn'?t get|never got)\b.*\bcode\b"
-                      r"|\bcode\b.*\b(again|resend)\b", re.I)
+# "new code", "send me another code", "I didn't get the code": the whole message is about the code
+NEW_CODE = re.compile(r"^\W*(?:(?:please|pls|can you|could you|can i (?:get|have))\s+)?(?:(?:send|text|email)\s+(?:me\s+)?)?"
+                      r"(?:a\s+)?(?:new|another|fresh)\s+(?:6[- ]digit\s+)?code(?:\s+please)?\W*$"
+                      r"|^\W*(?:please\s+)?(?:resend|re-send)\s+(?:me\s+)?(?:the\s+|my\s+|a\s+)?code(?:\s+please)?\W*$"
+                      r"|^\W*(?:(?:send|text|email)\s+(?:me\s+)?)(?:the\s+|my\s+)?code\s+again(?:\s+please)?\W*$"
+                      r"|^\W*(?:i\s+)?(?:didn'?t|did not|never|haven'?t)\s+(?:get|got|gotten|received?)\s+(?:the|a|my|any|your)"
+                      r"\s+code\W*$", re.I)
 BARE_EMAIL = re.compile(r"^\s*(?:(?:it'?s|it is|my email is|my email'?s|email:?|use)\s+)?([^@\s]+@[^@\s]+\.[A-Za-z]{2,})"
                         r"\s*[.!]?\s*$", re.I)
+# someone other than the person ("email this to my mom"): sending to others stays out (DESIGN.md section 11)
+OTHER_PERSON = re.compile(r"\b(?:my|our)\s+(?:mom|mum|mother|dad|father|parents?|wife|husband|partner|friends?|boss|"
+                          r"sister|brother|son|daughter|girlfriend|boyfriend|roommate|colleague|coworker|co-worker|"
+                          r"teacher|team|family|grandma|grandpa|aunt|uncle|cousin)s?\b|\b(?:to|cc)\s+(?:him|her|them)\b",
+                          re.I)
+SEND_WORDS = re.compile(r"\be-?mail\b|\bforward\b|\b(?:send|share)\s+(?:it|this|that|these|those|the\s+\w+\s+one)\b", re.I)
 VERB = {"message.send": "send it to you here", "email.send": "email it to you",
         "calendar.add": "give you a link to put it on your calendar", "todo.add": "add it to your list"}
 
@@ -58,9 +71,11 @@ class OutputsMixin:
             return self.send(h, msg + after if after else msg, run_id)
         ctx = Ctx(bot=self, person=person, answer=answer, picks=[p for p in answer["picks"] if p.get("main", True)],
                   run_id=run_id, rule_id=rule_id, kind=kind, now=self.clock(), tz=spec.when.tz or person["timezone"],
-                  request_text=request_text or "")
+                  request_text=request_text or "", slot_at=datetime.fromisoformat(slot) if slot else None)
         done = self._perform(ctx, [(a.action, a.params) for a in spec.do], slot=slot)
-        if "message.send" in names:
+        if "message.send" in names or ("email.send" in names and not self._email_reached(done)):
+            # an email that waits for an address, failed, or sits in an outbox the person cannot open: the answer
+            # comes here too, so it is never lost (with the line that says what happened to the email)
             ctx.chat = self._with_lines(msg, done) + after
             return self._message(ctx, slot)
         head = f"For \"{answer.get('goal') or 'your request'}\": "
@@ -69,15 +84,24 @@ class OutputsMixin:
             lines = Reply.of(msg)
         return self.send(h, lines + after, run_id)
 
+    def _email_reached(self, done):
+        """True when the answer's email went where the person can read it: sent, or (on the test page) written to
+        the Outbox panel they can open."""
+        o = next((o for n, o in done if n == "email.send"), None)
+        if o is None:
+            return False
+        return o.status == "done" or (o.status == "outbox" and bool(getattr(self.channel, "outbox_place", None)))
+
     def _perform(self, ctx, actions, slot=None):
         """[(name, Outcome)] for every action but message.send, in registry order. Each is logged."""
         class A:   # registry order works on objects with .action
             def __init__(self, name, params):
                 self.action, self.params = name, params
-        out = []
+        out, seen = [], set()
         for a in ordered([A(n, p) for n, p in actions]):
-            if a.action == "message.send":
+            if a.action == "message.send" or a.action in seen:   # each action once per answer
                 continue
+            seen.add(a.action)
             prior = self.store.action_done(ctx.rule_id, slot, a.action) if ctx.kind == "scheduled" else None
             if prior:   # this slot's send is being retried: what was done is not done again
                 d = prior.get("detail") or {}
@@ -176,8 +200,21 @@ class OutputsMixin:
             whole = False   # nothing kept to send whole: the picks one by one
         return picks, whole, answer, None
 
+    def _plain_answer(self, h):
+        """The newest answer when it is a reminder or a to-do list sent after the last picks ("email me that" after
+        "Reminder: call mum"), or None."""
+        row = self.store.one("SELECT run_id, kind FROM answers WHERE handle=? ORDER BY run_id DESC LIMIT 1", (h,))
+        if not row or row["kind"] not in ("note", "todos"):
+            return None
+        cur = self.store.last_answer(h)
+        if cur and cur.get("run_id") and cur["run_id"] > row["run_id"]:
+            return None
+        return self.store.answer(row["run_id"])
+
     def _act_on_last(self, person, it, text, now):
         h = person["handle"]
+        if any(a.action == "email.send" for a in it.actions) and self.to_someone_else(text):
+            return self.send(h, T.EMAIL_ONLY_YOU)
         acts = []
         for a in it.actions:
             params = dict(a.params)
@@ -187,9 +224,17 @@ class OutputsMixin:
         if it.when is not None:
             return self._act_later(person, it, acts, text, now)
         what = next((p.get("what") for n, p in acts if n == "todo.add"), "pick") or "pick"
-        picks, whole, answer, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else None,
-                                                           it.answer_ref, what)
+        plain = None
+        if not it.pick_number and str(it.answer_ref or "last") == "last" and not any(n == "todo.add" for n, _ in acts):
+            plain = self._plain_answer(h)
+        if plain:   # a reminder or a list: the whole message, as it was sent
+            picks, whole, answer, problem = [], True, plain, None
+        else:
+            picks, whole, answer, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else None,
+                                                               it.answer_ref, what)
         if problem:
+            if problem == T.NO_PICK_TO_ADD and not any(n == "todo.add" for n, _ in acts):
+                problem = T.NOTHING_TO_ACT_ON
             return self.send(h, problem)
         ctx = Ctx(bot=self, person=person, answer=answer, picks=picks, whole=whole, run_id=answer.get("run_id"),
                   rule_id=answer.get("rule_id"), kind="act_on_last", now=now, tz=person["timezone"], request_text=text)
@@ -207,7 +252,7 @@ class OutputsMixin:
         picks, whole, answer, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else None,
                                                            it.answer_ref)
         if problem:
-            return self.send(h, problem)
+            return self.send(h, T.NOTHING_TO_ACT_ON if problem == T.NO_PICK_TO_ADD else problem)
         goal = picks[0]["title"] if len(picks) == 1 else f"the {len(picks)} picks for \"{answer.get('goal') or 'that'}\""
         do = [{"action": n, "params": p} for n, p in acts] or ["message.send"]
         spec = RuleSpec.model_validate({"when": it.when.model_dump(exclude_none=True),
@@ -238,13 +283,42 @@ class OutputsMixin:
         addr, ok = self.store.email_of(person["handle"])
         if ok:
             return ""
-        code = self.store.get_state(f"emailcode:{person['handle']}")
-        if addr and code and not code.get("cancelled"):
-            return " " + T.email_confirm_first(addr)
+        line = self._unconfirmed_line(person["handle"], addr, now)
+        if line:
+            return " " + line
         self.store.set_state(f"emailask:{person['handle']}", now_iso(now))
         return " " + T.EMAIL_ASK_RULE
 
+    @staticmethod
+    def to_someone_else(text):
+        """'email this to my mom', 'forward it to my friend': a send to someone other than the person."""
+        return bool(OTHER_PERSON.search(text) and SEND_WORDS.search(text))
+
     # ---------- the person's email address and its code ----------
+    def _open_code(self, h, now):
+        return self.store.get_state(f"emailcode:{h}")
+
+    def _unconfirmed_line(self, h, addr, now):
+        """For an address that has a code: 'text me the code' while it works, 'reply "new code"' once it has expired
+        or was cancelled. None when there is no address with a code (the bot then asks for the address)."""
+        code = self._open_code(h, now)
+        if not (addr and code and code.get("email") == addr):
+            return None
+        live = not code.get("cancelled") and \
+            now - datetime.fromisoformat(code["sent_at"]) <= timedelta(minutes=config.CODE_MINUTES)
+        return T.email_confirm_first(addr) if live else T.email_new_code_first(addr)
+
+    def set_email_from(self, person, email, text, now):
+        """set_email from the interpreter: the address must be written in the person's own message (the model never
+        supplies one), and it must be theirs: sending to someone else stays out."""
+        h = person["handle"]
+        if self.to_someone_else(text) or (OTHER_PERSON.search(text) and "@" in text):
+            return self.send(h, T.EMAIL_ONLY_YOU)
+        if not email or email.lower() not in text.lower():
+            self.store.set_state(f"emailask:{h}", now_iso(now))
+            return self.send(h, T.EMAIL_TYPE_IT)
+        return self._set_email(person, email, now)
+
     def email_waiting(self, person, content, run_id, now):
         """email.send with no confirmed address: the email waits, and the line asks for the address (or the code)."""
         h = person["handle"]
@@ -253,9 +327,9 @@ class OutputsMixin:
         wait = (wait + [{"content": content, "run_id": run_id, "at": now_iso(now)}])[-config.EMAIL_WAIT_MAX:]
         self.store.set_state(f"emailwait:{h}", wait)
         addr, _ = self.store.email_of(h)
-        code = self.store.get_state(f"emailcode:{h}")
-        if addr and code and not code.get("cancelled") and code.get("email") == addr:
-            return Outcome("waiting", line=T.email_confirm_first(addr))
+        line = self._unconfirmed_line(h, addr, now)
+        if line:
+            return Outcome("waiting", line=line)
         self.store.set_state(f"emailask:{h}", now_iso(now))
         return Outcome("waiting", line=T.EMAIL_ASK)
 
@@ -289,7 +363,7 @@ class OutputsMixin:
         """A message about the email address that code answers without the model: a 6-digit code while one is open,
         "new code", or a bare address right after the bot asked for one. Returns the reply's reference, or None."""
         h = person["handle"]
-        st = self.store.get_state(f"emailcode:{h}")
+        st = self._open_code(h, now)
         m = CODE.match(text)
         if st and m:
             self.note(intent="email_code")
@@ -308,11 +382,16 @@ class OutputsMixin:
                 return self.send(h, T.CODE_TOO_MANY)
             self.store.set_state(f"emailcode:{h}", st)
             return self.send(h, T.code_wrong(config.CODE_TRIES - st["tries"]))
-        if st and NEW_CODE.search(text):
-            self.note(intent="email_code")
-            return self._set_email(person, st["email"], now, again=True)
+        if NEW_CODE.match(text):
+            addr, ok = self.store.email_of(h)
+            target = (st or {}).get("email") or (addr if addr and not ok else None)
+            if target:
+                self.note(intent="email_code")
+                return self._set_email(person, target, now, again=True)
         asked = self.store.get_state(f"emailask:{h}")
         m = BARE_EMAIL.match(text)
+        if m and not re.match(EMAIL, m.group(1)):   # "x,y@b.co" would reach two people
+            m = None
         if m and asked and datetime.fromisoformat(asked) > now - timedelta(hours=config.EMAIL_WAIT_HOURS):
             self.note(intent="set_email")
             return self._set_email(person, m.group(1), now)
