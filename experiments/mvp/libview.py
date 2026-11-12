@@ -50,6 +50,10 @@ class Item:
 class LibraryView:
     def __init__(self, lib):
         self.lib = os.path.abspath(lib)
+        manifest = LIB.read_json(LIB.p(self.lib, "library.json"), {}) or {}
+        if any("followers" in str(w).lower() for w in manifest.get("warnings") or []):
+            raise RuntimeError("this library was imported without the followers and following lists, so friends' "
+                               "posts cannot be left out (rule 5); redo the Instagram export with them")
         self.items = {}
         self.friends = 0
         with open(LIB.p(self.lib, "corpus", "items.jsonl"), encoding="utf-8") as f:

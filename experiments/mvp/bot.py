@@ -8,14 +8,22 @@ Run from experiments/. People come from MVP_HOME/people.json: {"<handle>": {"nam
 Keys only from the environment. Stop with Ctrl+C.
 """
 import argparse
+import os
 import sys
 import time
-import traceback
 from datetime import timedelta
 
 from . import config
 from .core import Bot
 from .store import Store, now_iso
+
+
+def _report(e):
+    tb = e.__traceback__
+    while tb and tb.tb_next:
+        tb = tb.tb_next
+    where = f"{os.path.basename(tb.tb_frame.f_code.co_filename)}:{tb.tb_lineno}" if tb else "?"
+    print(f"error: {type(e).__name__} at {where}", file=sys.stderr)
 
 
 def make_channel(name, store, port):
@@ -61,8 +69,8 @@ def main():
             for msg in channel.receive():
                 try:
                     bot.on_message(msg.handle, msg.text, tapback=msg.tapback, tapback_ref=msg.tapback_ref)
-                except Exception:  # noqa: BLE001
-                    traceback.print_exc()
+                except Exception as e:  # noqa: BLE001 - type and place only: messages can hold numbers and text
+                    _report(e)
             if time.time() - last_tick > 30:
                 last_tick = time.time()
                 try:
@@ -71,8 +79,8 @@ def main():
                                      "WHERE r.status='active' AND r.next_run_at<=?", (now_iso(soon),)):
                         bot.pool.warm(r["library"])
                     bot.tick()
-                except Exception:  # noqa: BLE001
-                    traceback.print_exc()
+                except Exception as e:  # noqa: BLE001
+                    _report(e)
             time.sleep(2)
     except KeyboardInterrupt:
         pass

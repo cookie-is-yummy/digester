@@ -76,9 +76,9 @@ class Store:
         self.x("UPDATE people SET timezone=? WHERE handle=?", (tz, handle))
 
     # rules
-    def add_rule(self, handle, text, spec, status, next_run_at):
+    def add_rule(self, handle, text, spec, status, next_run_at, created_at=None):
         cur = self.x("INSERT INTO rules(handle,text,spec,status,created_at,next_run_at) VALUES(?,?,?,?,?,?)",
-                     (handle, text, json.dumps(spec), status, now_iso(), next_run_at))
+                     (handle, text, json.dumps(spec), status, created_at or now_iso(), next_run_at))
         return cur.lastrowid
 
     def rules(self, handle, statuses=("active", "paused")):
@@ -123,7 +123,8 @@ class Store:
         return {r["item_id"] for r in self.q("SELECT item_id FROM deliveries WHERE rule_id=?", (rule_id,))}
 
     def scheduled_today(self, handle, day_start_utc):
-        r = self.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind='scheduled' AND status='sent' AND at>=?",
+        r = self.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
+                     "('sent','none_sent','send_failed') AND at>=?",
                      (handle, now_iso(day_start_utc)))
         return r["n"] if r else 0
 
@@ -139,9 +140,10 @@ class Store:
         return self.q("SELECT item_id, kind FROM feedback WHERE rule_id=? ORDER BY id", (rule_id,))
 
     # conversation state
-    def set_pending(self, handle, kind, payload):
+    def set_pending(self, handle, kind, payload, at=None):
         self.x("INSERT INTO pending(handle,kind,payload,at) VALUES(?,?,?,?) ON CONFLICT(handle) DO UPDATE SET "
-               "kind=excluded.kind, payload=excluded.payload, at=excluded.at", (handle, kind, json.dumps(payload), now_iso()))
+               "kind=excluded.kind, payload=excluded.payload, at=excluded.at",
+               (handle, kind, json.dumps(payload), now_iso(at)))
 
     def pending(self, handle):
         r = self.one("SELECT * FROM pending WHERE handle=?", (handle,))
@@ -191,6 +193,8 @@ class Store:
             for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
+            for key in (f"lines:{handle}", f"cap_notice:{handle}"):
+                self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 
 

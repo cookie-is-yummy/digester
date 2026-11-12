@@ -6,6 +6,7 @@ gave 👎 (rule 9), anything containing an avoided word, and friends' posts (rul
 """
 import re
 import unicodedata
+from datetime import datetime, timedelta, timezone
 
 from . import config
 
@@ -17,14 +18,26 @@ def norm(s):
     return re.sub(r"\s+", " ", s).strip()
 
 
-def contains_word(text, word):
-    """Whole word, or a word that starts with it: 'cream' matches 'creams' and 'creamy'."""
+def _stem(word):
     w = norm(word)
-    return bool(w) and re.search(r"(?<!\w)" + re.escape(w), norm(text)) is not None
+    for suffix in ("ies", "es", "s"):
+        if len(w) > len(suffix) + 2 and w.endswith(suffix):
+            return w[: -len(suffix)] + ("y" if suffix == "ies" else "")
+    return w
 
 
-def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, k=config.CANDIDATES):
+def contains_word(text, word):
+    """For avoided words: the word's stem anywhere in the text, inside longer words too ('egg' in 'eggs', 'nut' in
+    'peanut', 'cream' in 'creamy'). It errs toward leaving an item out."""
+    w = _stem(word)
+    return len(w) >= 2 and w in norm(text)
+
+
+def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, k=config.CANDIDATES, now=None):
     c = spec.content
+    saved_after = c.saved_after
+    if c.since_days and not saved_after:  # a relative period, worked out at each run
+        saved_after = ((now or datetime.now(timezone.utc)) - timedelta(days=c.since_days)).date().isoformat()
     scores, cost, modes = {}, 0.0, set()
     for q in c.searches:
         r = pool.search(view.lib, q)
@@ -44,7 +57,7 @@ def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, 
         if c.kinds and not (it.kinds & set(c.kinds)):
             continue
         kept = it.kept_on()
-        if c.saved_after and (not kept or kept < c.saved_after):
+        if saved_after and (not kept or kept < saved_after):
             continue
         if c.saved_before and (not kept or kept > c.saved_before):
             continue

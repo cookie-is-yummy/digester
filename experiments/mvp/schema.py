@@ -116,6 +116,7 @@ class Interpretation(BaseModel):
     spec: Optional[RuleSpec] = None            # new_rule, ask, change_rule (the full new spec)
     rule_number: Optional[int] = None          # change_rule, pause, resume, stop: as listed to the person
     all_rules: bool = False                    # "stop everything"
+    edits_pending: bool = False                # new_rule that changes the rule whose preview is waiting for YES
     feedback: Optional[Literal["up", "down", "more", "less"]] = None
     pick_number: Optional[int] = None          # feedback on one pick of the last answer
     question: Optional[str] = Field(default=None, max_length=300)    # follow_up: the question to answer

@@ -28,7 +28,8 @@ def _context(person, rules, pending, last, now):
         lines.append("They have no rules yet.")
     if pending and pending["kind"] == "confirm_rule":
         lines.append("The bot just showed a preview of a NEW rule and asked them to reply YES to start it. If their message "
-                     "changes that rule (with or without a yes), return intent new_rule with the whole changed spec. "
+                     "changes that rule (with or without a yes), return intent new_rule with the whole changed spec and "
+                     "edits_pending true. A different, unrelated request is a new_rule with edits_pending false. "
                      f"Pending spec={json.dumps(pending['payload']['spec'])}")
     elif pending and pending["kind"] == "confirm_delete":
         lines.append("The bot just asked them to confirm deleting all their data.")
@@ -39,11 +40,8 @@ def _context(person, rules, pending, last, now):
 
 
 def finish(spec: RuleSpec, now, tzname):
-    """Code-side completion of a spec: dates from since_days."""
-    c = spec.content
-    if c.since_days and not c.saved_after:
-        day = (now.astimezone(ZoneInfo(tzname)) - timedelta(days=c.since_days)).date()
-        c.saved_after = day.isoformat()
+    """Code-side completion of a spec. A period ('recently', since_days) stays relative: retrieve turns it into a date
+    at each run, so a recurring rule's window moves with time."""
     return spec
 
 

@@ -64,6 +64,7 @@ def _target_guid(associated):
 
 class MacMessagesChannel(Channel):
     name = "imessage_mac"
+    reply_to_unknown = False  # this is a founder's own account: people not set up get no reply at all
 
     def __init__(self, store, db_path=CHAT_DB, sender=None):
         self.store = store
@@ -85,12 +86,14 @@ class MacMessagesChannel(Channel):
         with self._conn() as c:
             rows = c.execute(
                 "SELECT m.ROWID, m.guid, m.text, m.attributedBody, m.is_from_me, m.associated_message_type, "
-                "m.associated_message_guid, h.id FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID "
+                "m.associated_message_guid, h.id, "
+                "(SELECT MAX(c.style) FROM chat_message_join j JOIN chat c ON c.ROWID = j.chat_id WHERE j.message_id = m.ROWID) "
+                "FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID "
                 "WHERE m.ROWID > ? ORDER BY m.ROWID LIMIT 200", (last,)).fetchall()
         out = []
-        for rowid, guid, text, body, from_me, assoc_type, assoc_guid, handle in rows:
+        for rowid, guid, text, body, from_me, assoc_type, assoc_guid, handle, style in rows:
             last = max(last, rowid)
-            if from_me or not handle:
+            if from_me or not handle or style == 43:  # 43 = a group chat; only one-to-one chats reach the bot
                 continue
             assoc_type = assoc_type or 0
             if 2000 <= assoc_type <= 2005:
@@ -106,7 +109,9 @@ class MacMessagesChannel(Channel):
         return out
 
     def _osascript(self, handle, text):
-        subprocess.run(["osascript", "-e", SEND_SCRIPT, handle, text], check=True, capture_output=True, timeout=30)
+        r = subprocess.run(["osascript", "-e", SEND_SCRIPT, handle, text], capture_output=True, timeout=30)
+        if r.returncode != 0:  # never raise with the arguments: they hold the handle and the message
+            raise RuntimeError(f"osascript failed with exit status {r.returncode}")
 
     def send(self, handle, text):
         started = time.time()

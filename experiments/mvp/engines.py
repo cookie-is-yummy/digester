@@ -25,7 +25,7 @@ def _library_spent(lib):
 
 
 class EngineProcess:
-    def __init__(self, lib):
+    def __init__(self, lib, budget_usd):
         self.lib = lib
         self.state, self.message = "loading", ""
         self.cond = threading.Condition()
@@ -36,7 +36,7 @@ class EngineProcess:
         env = os.environ.copy()
         env.pop("DIGESTER_DATA", None)  # the engine points the round-8 code at the library itself
         # The library's ledger may already hold research spend; the engine may spend up to HEADROOM more on searches.
-        env["DIGESTER_OPENAI_BUDGET_USD"] = f"{_library_spent(lib) + ENGINE_HEADROOM_USD:.4f}"
+        env["DIGESTER_OPENAI_BUDGET_USD"] = f"{budget_usd:.4f}"
         self.proc = subprocess.Popen([sys.executable, config.ENGINE, "serve", lib], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1, env=env)
         threading.Thread(target=self._read, daemon=True).start()
@@ -94,6 +94,7 @@ class EnginePool:
     def __init__(self, max_resident=MAX_RESIDENT):
         self.max_resident = max_resident
         self.engines = {}
+        self.budgets = {}  # fixed once per library per process, so restarts do not grant more headroom
         self.lock = threading.Lock()
 
     def get(self, lib):
@@ -105,7 +106,9 @@ class EnginePool:
                     oldest = min(self.engines.values(), key=lambda e: e.last_used)
                     oldest.stop()
                     self.engines.pop(oldest.lib)
-                eng = self.engines[lib] = EngineProcess(lib)
+                if lib not in self.budgets:
+                    self.budgets[lib] = _library_spent(lib) + ENGINE_HEADROOM_USD
+                eng = self.engines[lib] = EngineProcess(lib, self.budgets[lib])
         if not eng.wait_ready():
             raise RuntimeError(f"search engine not available: {eng.message or eng.state}")
         return eng

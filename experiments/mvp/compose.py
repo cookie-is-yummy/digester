@@ -34,10 +34,34 @@ def clean_line(line):
     return line
 
 
+TOKEN = re.compile(r"\d+(?:[./,]\d+)*|[^\W\d_]+", re.UNICODE)
+UNSAFE_TEXT = re.compile(r"(https?://|www\.|\b[\w-]+\.(com|net|org|io|co|ly|me|app|link)\b|@\w)", re.I)
+
+
+def tokens(s):
+    s = norm(s).replace("\u2044", "/").replace("½", " 1/2").replace("¼", " 1/4").replace("¾", " 3/4")
+    return TOKEN.findall(re.sub(r"(?<=\d)(?=1/[234]\b)", " ", s))
+
+
 def line_in_text(line, text):
-    """A normalised match: case, spacing and punctuation are ignored; the words and numbers must all be there, in order."""
-    a = _squash(line)
-    return len(a) >= 3 and a in _squash(text)
+    """The line's words and numbers must appear in the item's text as a whole run, in order (case, spacing and
+    punctuation ignored). '2 cups' does not match '12 cups'; 'oil' does not match 'boil'. A one-word line needs at
+    least 4 letters."""
+    a, b = tokens(line), tokens(text)
+    if not a or (len(a) == 1 and (len(a[0]) < 4 or a[0].isdigit())):
+        return False
+    n = len(a)
+    return any(b[i:i + n] == a for i in range(len(b) - n + 1))
+
+
+def as_data(text):
+    """Item text wrapped as data; angle brackets are neutralised so the text cannot close its own tag."""
+    return "<item>" + text.replace("<", "‹").replace(">", "›") + "</item>"
+
+
+def _safe(s, n):
+    s = " ".join(str(s or "").split())[:n]
+    return "" if UNSAFE_TEXT.search(s) else s
 
 
 def _candidate_block(cands):
@@ -48,7 +72,7 @@ def _candidate_block(cands):
         if it.kept_on():
             meta += f" ({it.kept_on()[:7]})"
         text = it.caption[:config.CAPTION_CHARS] or "(no text; title unknown)"
-        rows.append(f"{i}. {meta}\n<item>{text}</item>")
+        rows.append(f"{i}. {meta}\n{as_data(text)}")
     return "\n".join(rows)
 
 
@@ -92,7 +116,7 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
         if fit < config.FIT_MIN:
             dropped["low_fit"] += 1
             continue
-        title = " ".join(str(p.get("title") or "").split())[:70] or (it.creator or "From your library")
+        title = _safe(p.get("title"), 70) or (it.creator or "From your library")
         if any(contains_word(it.caption, w) or contains_word(title, w) for w in c.avoid):
             dropped["avoided"] += 1
             continue
@@ -115,13 +139,13 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
                 dropped["not_a_detail"] = dropped.get("not_a_detail", 0) + 1
         if known_lines is not None and c.extract != "none" and not lines:
             lines = list(known_lines.get(it.id) or [])
-        why = " ".join(str(p.get("why") or "").split())[:160]
+        why = _safe(p.get("why"), 160)
         if re.search(r"\d", why) or not why:
             why = f"It fits: {c.goal}."
         picks.append({"item": it, "title": title, "why": why, "fit": round(fit, 2), "lines": lines,
                       "n_lines": len(lines), "details_in_video": c.extract != "none" and not lines})
-    intro = " ".join(str(raw.get("intro") or "").split())[:160]
+    intro = _safe(raw.get("intro"), 160)
     if re.search(r"\d", intro):
         intro = ""
-    reason = " ".join(str(raw.get("none_reason") or "").split())[:200]
+    reason = _safe(raw.get("none_reason"), 200)
     return {"picks": picks, "intro": intro, "none_reason": reason, "dropped": dropped}, cost

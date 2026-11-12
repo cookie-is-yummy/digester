@@ -12,8 +12,11 @@ from datetime import datetime, timezone
 
 from . import config
 
-os.environ.setdefault("DIGESTER_DATA", config.HOME)
-os.environ.setdefault("DIGESTER_OPENAI_BUDGET_USD", str(config.TOTAL_CAP_USD))
+# One fixed MVP ledger, whatever MVP_HOME is (test runs share the build cap). Set explicitly: a DIGESTER_DATA left
+# over from demo work must not move the MVP's calls into a library's ledger.
+LEDGER_HOME = os.path.abspath(os.environ.get("MVP_LEDGER_HOME", os.path.join(config.REPO, "data", "mvp")))
+os.environ["DIGESTER_DATA"] = LEDGER_HOME
+os.environ["DIGESTER_OPENAI_BUDGET_USD"] = str(config.TOTAL_CAP_USD)
 sys.path.insert(0, os.path.join(config.EXP, "lib"))
 import ai  # noqa: E402
 
@@ -55,8 +58,19 @@ def spent_today(handle, library):
     return mine + lib
 
 
-def spent_total(libraries, since):
-    """Build-and-test spend since the MVP started: the MVP ledger plus the libraries' search calls since then."""
+def started_at():
+    """When the MVP's spending began, in the ledgers' own format (local time, no zone, as ai.py writes it)."""
+    path = os.path.join(LEDGER_HOME, "started_at.txt")
+    if not os.path.exists(path):
+        os.makedirs(LEDGER_HOME, exist_ok=True)
+        with open(path, "w") as f:
+            f.write(datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
+    return open(path).read().strip()
+
+
+def spent_total(libraries):
+    """Build-and-test spend: the MVP ledger plus the libraries' search calls since the MVP started."""
+    since = started_at()
     total = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER))
     for lib in set(libraries):
         total += sum(r.get("cost_usd", 0) for r in _rows(os.path.join(lib, "ai_runs.jsonl"))

@@ -22,10 +22,11 @@ Return ONE JSON object with these keys (omit keys that do not apply):
     - "platforms": ["instagram"] or ["youtube"] only when they name one ("reels", "Instagram", "YouTube videos"); otherwise [].
     - "count": how many to send (1 to 5). Default 1 for a rule unless they say more; 3 for an ask.
     - "extract": "ingredients" for recipes, "steps" for how-tos and routines, "key_points" for tips and advice, otherwise "none".
-    - "avoid": words for things to leave out ("cream", "pork"); [] if none.
+    - "avoid": words for things to leave out, as singular nouns ("cream", "pork", "nut"); [] if none.
     - "since_days": only when they limit time ("this year" = days since 1 January, "last month" = 30, "recently" = 60).
 - "rule_number": the number of the rule as listed below (change_rule, pause, resume, stop).
 - "all_rules": true for "stop everything" or "pause all".
+- "edits_pending": true only when the message changes the rule whose preview is waiting for YES (see the context).
 - "feedback": "up", "down", "more" or "less"; "pick_number": the pick it refers to, if given.
 - "question": for follow_up, the question rewritten so it stands alone ("Which of the last picks has the fewest ingredients?").
 - "reply": for unsupported, chat and help: at most two short sentences, plain words, no promises the bot cannot keep.
