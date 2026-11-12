@@ -193,7 +193,8 @@ def test_6_too_hard_something_shorter_records_it_and_sends_one_now(rich):
     assert msg.startswith("Noted. Here's a shorter, easier one:") or msg.startswith("Noted, I'll keep it simpler")
     assert "Here's a shorter, easier one:" in msg and "cosy room" in msg and "Ask for" not in msg
     assert bot.store.one("SELECT kind FROM feedback ORDER BY id DESC LIMIT 1")["kind"] == "easier"
-    assert len(seen) == 1 and '"order": "easiest_first"' in seen[0] and "shorter" in seen[0]
+    # "shorter" is the length bound worked out by code (fix pass 2, finding 49), never a must-have
+    assert len(seen) == 1 and '"order": "easiest_first"' in seen[0] and '"criteria": []' in seen[0]
     assert "Low poly island" not in seen[0]                                # not the one just shown
 
 
@@ -341,7 +342,8 @@ def test_17_several_closest_up_to_the_count_shortest_first(env):
     msg = say(env, "show me 3 blender tutorials for beginners, shortest first", {"intent": "ask", "spec": {
         "when": {"type": "now"}, "content": {"goal": "Blender tutorials for beginners", "searches": ["blender"],
                                              "count": 3}}})
-    assert "The closest I have is A mug" in msg and "Or these, which are close too:" in msg
+    # fix pass 2, finding 58: "for beginners" is a must-have now; nothing confirms it, and the reply says so
+    assert "the closest I have is A mug" in msg and "Or these, which are close too:" in msg
     assert msg.index("A mug") < msg.index("Low poly tree") < msg.index("A whole kitchen scene")
 
 
@@ -501,8 +503,10 @@ def test_26_the_founders_blender_request_never_ends_with_nothing(yt):
                           "project, so the closest I have is Beginner modeling tips")
     assert "Your saves don't have a start-to-finish one, so here are some from YouTube:" in msg
     vids = [p for p in reply.parts if p.get("outside")]
-    assert len(vids) == 3 and len(yt["yt"].searches()) == 1             # one search, in the same reply
-    assert "(9 minutes 40 seconds)" in msg and msg.index("VIDaaaaaa04") < msg.index("VIDaaaaaa02")  # mini first
+    assert len(vids) == 2 and len(yt["yt"].searches()) == 1             # one search, in the same reply
+    # fix pass 2, findings 57 and 59: "mini" is at most 10 minutes; a longer video is never shown
+    assert "(9 minutes 40 seconds)" in msg and "VIDaaaaaa04" in msg and "VIDaaaaaa02" not in msg
+    assert yt["yt"].searches()[0][1]["videoDuration"] == "medium"
     assert "Want these every day at 8am from YouTube as well as your saves? Reply YES to start it that way" in msg
     say(yt, "yes", {"intent": "confirm"})
     rule = yt["bot"].store.rules(H)[0]
@@ -527,7 +531,8 @@ def test_26_a_few_finished_ones_are_said_in_one_line(env):
     env["bot"].pool.search = lambda lib, q, depth=300: {"ids": ["itm_p", "itm_t"], "mode": "normal", "cost_usd": 0.0}
     env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
         {"n": 1, "verdict": "clear", "title": "Blender donut tutorial",
-         "criteria": [{"answer": "yes", "quote": "from start to finish"}]}]}
+         "criteria": [{"answer": "yes", "quote": "from start to finish"},
+                      {"answer": "yes", "quote": "tutorial for beginners"}]}]}   # finding 58: the level must-have
     msg = say(env, "a mini beginner blender tutorial", {"intent": "ask", "spec": dict(DAILY_BLENDER["spec"],
                                                                                       when={"type": "now"})})
     assert "I recommend Blender donut tutorial" in msg and msg.endswith(

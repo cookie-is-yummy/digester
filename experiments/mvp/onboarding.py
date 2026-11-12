@@ -42,20 +42,21 @@ class OnboardingMixin:
     def onboard_start(self, person, now, lead="Thanks!"):
         """After consent (or "set me up again"): the guess, kept as unconfirmed interests, and message 2."""
         h = person["handle"]
-        lines, shown = [], []
+        lines, shown, guessed = [], [], None
         try:
             if self._over_cap(person):
                 raise RuntimeError("over the cap")
             result, _ = P.guess(self.view(person["library"]), store=self.store, handle=h, now=now)
             P.adopt_guess(self.store, h, result, now=now)
             prof = P.get(self.store, h)
-            lines = P.read_lines(prof)
+            lines = P.read_lines(prof)   # finding 41: every guessed topic is shown, most saved first
             shown = [i["topic"] for i in prof["interests"][:len(lines)]]
+            guessed = P.direction_guess(prof["interests"]) if not prof["direction"] else None
         except Exception as e:  # noqa: BLE001 - the setup goes on without a read
             self.store.add_run(handle=h, kind="profile_guess", status="error", error=type(e).__name__)
-        self._set_onboard(h, "read", now, shown=shown)
+        self._set_onboard(h, "read", now, shown=shown, guessed_direction=guessed)
         self.note(intent="onboarding")
-        return self.send(h, T.read_message(lines, lead=lead))
+        return self.send(h, T.read_message(lines, lead=lead, direction=guessed))
 
     # ---------- any message while the setup is open ----------
     def onboard_step(self, person, text, now):
@@ -84,6 +85,8 @@ class OnboardingMixin:
                 self._set_onboard(h, "done", now)
                 return None
             ref = self._onboard_choice(person, st, text, now)
+            if ref is None and st.get("prefs_open"):
+                return self._onboard_prefs(person, st, text, now)   # finding 46: the optional last question
             if ref is None:
                 # fix pass, finding 34: the offer closes once two other messages have come since, so a bare "2"
                 # much later is never read as a pick from it
@@ -101,8 +104,11 @@ class OnboardingMixin:
         if T.SKIP.match(text):
             return self._onboard_contact_ask(person, now, "No problem.")
         if T.RIGHT.match(text):
+            st = self._onboard(h) or {}
             res = P.apply_merge(self.store, h, {"kind": "about_me", "confirm_all": True}, text,
-                                shown=(self._onboard(h) or {}).get("shown") or [])
+                                shown=st.get("shown") or [])
+            if st.get("guessed_direction") and not P.get(self.store, h)["direction"]:
+                self.store.set_direction(h, st["guessed_direction"])   # the direction they just said yes to
             return self._onboard_contact_ask(person, now, "Great, thanks." + self._knows_line(h), res)
         if self._over_cap(person):   # no paid call: the answer is kept as a note, and the setup goes on
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
@@ -116,7 +122,9 @@ class OnboardingMixin:
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
             return self._onboard_contact_ask(person, now, "Thanks.")
         if res["kind"] in ("request", "both"):
-            self._tl.merged_text = text   # merged already: a profile_note in it is not merged a second time
+            # merged already: a profile_note in it is not merged a second time, and a reading of it as only about
+            # them (profile_update, chat) sends nothing, so the one summary below is the only reply (finding 42)
+            self._tl.merged_text = text
             try:
                 ref = self.answer_normally(person, text, now)   # the request is answered; then the setup goes on
             finally:
@@ -144,7 +152,7 @@ class OnboardingMixin:
         if res and res.get("other"):   # a setting their answer changed that the summary does not show
             lead += " " + T.cap_first("; ".join(res["other"])) + "."
         if res and res.get("skipped_sensitive"):
-            lead += " " + T.PROFILE_SENSITIVE
+            lead += self._sensitive_once(" ")
         tz = person["timezone"]
         local = now.astimezone(ZoneInfo(tz)).strftime("%-I:%M%p").lower()
         _, ok = self.store.email_of(h)
@@ -169,6 +177,8 @@ class OnboardingMixin:
 
     # ---------- step 4: the export routine and the first requests ----------
     def _onboard_final(self, person, now, lead=""):
+        """The setup's last message: the export reminder offer (one line, finding 43), up to three first requests,
+        and one optional question about what would help the bot pick (finding 46)."""
         from .refresh import offer_export_routine
         h = person["handle"]
         person = self.store.person(h)   # the time zone may have just changed
@@ -182,9 +192,48 @@ class OnboardingMixin:
             reqs = self.first_requests(person, now)
         except Exception as e:  # noqa: BLE001 - no offer rather than an unchecked one
             self.store.add_run(handle=h, kind="first_requests", status="error", error=type(e).__name__)
-        parts.append(T.first_requests_block([r["text"] for r in reqs]) if reqs else T.SETUP_DONE)
-        self._set_onboard(h, "offer" if reqs else "done", now, requests=reqs)
+        if reqs:
+            parts.append(T.first_requests_block([r["text"] for r in reqs]))
+        parts.append(T.PREFS_QUESTION)
+        self._set_onboard(h, "offer", now, requests=reqs, prefs_open=True)
         return self.send(h, "\n\n".join(p for p in parts if p))
+
+    def _onboard_prefs(self, person, st, text, now):
+        """The answer to the last question ("food you avoid, kit you have, how much time you usually have?"), merged
+        into the profile by the form call. A request in it is answered as usual. Either way the question is closed,
+        and with it the setup unless the first-requests offer is still open."""
+        h = person["handle"]
+        self.note(intent="onboarding")
+        others = (st.get("others") or 0) + 1
+        if not st.get("requests") or others >= 2:
+            self._set_onboard(h, "done", now)
+        else:
+            self.store.set_state(f"onboard:{h}", dict(st, prefs_open=False, others=others))
+        if T.SKIP.match(text):
+            return self.send(h, T.PREFS_SKIPPED)
+        if self._over_cap(person):
+            self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
+            return self.send(h, T.PREFS_THANKS)
+        try:
+            res, _ = P.merge(self.store, h, text, asked=T.PREFS_QUESTION)
+        except Exception as e:  # noqa: BLE001 - their words are kept as a note
+            self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
+            self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
+            return self.send(h, T.PREFS_THANKS)
+        said = T.profile_changed(res["changes"], res["skipped_sensitive"] and self._sensitive_once()) \
+            if res["changes"] else ""
+        if res["kind"] in ("request", "both"):
+            self._tl.merged_text = text
+            self._tl.profile_said = said or None   # what changed rides on the answer
+            try:
+                return self.answer_normally(person, text, now)
+            finally:
+                self._tl.merged_text = None
+        if not said and not res["skipped_sensitive"]:
+            note = " ".join(text.split())[:300]
+            if not P.stated_sensitive(note):
+                self.store.add_profile_note(h, note, at=now)
+        return self.send(h, said or (T.PREFS_THANKS + (self._sensitive_once(" ") if res["skipped_sensitive"] else "")))
 
     def first_requests(self, person, now):
         """Up to FIRST_REQUESTS requests written for the person (one model call), each run through retrieval and

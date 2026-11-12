@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from mvp.tests.test_mvp import env, last  # noqa: E402,F401  (env is a fixture)
 from mvp.tests.test_slice2 import H, say  # noqa: E402
+from mvp import texts as T  # noqa: E402
 
 BLENDER = [
     ("b1", "Blender donut tutorial for absolute beginners, part 1: modeling the donut"),
@@ -181,10 +182,10 @@ def test_the_sensitive_filter_and_the_read_lines():
                            "source": "guess", "confirmed": False},
                           {"topic": "Home cooking", "level": None, "saved": 12, "watched": 0, "source": "guess"}],
             "prefs": {}}
-    assert P.read_lines(prof) == ["• Blender 3D: you look new to it (about 45 saved posts and 3 watched videos)",
-                                  "• Home cooking (12 saved posts)"]
+    # fix pass 2, finding 41: every topic, in the fewest words
+    assert P.read_lines(prof) == ["• Blender 3D: new to it (about 45 saved, 3 watched)", "• Home cooking (12 saved)"]
     prof["prefs"] = {"guess_level": False}                               # "stop guessing my level"
-    assert P.read_lines(prof)[0] == "• Blender 3D (about 45 saved posts and 3 watched videos)"
+    assert P.read_lines(prof)[0] == "• Blender 3D (about 45 saved, 3 watched)"
 
 
 # ---------- onboarding ----------
@@ -199,8 +200,8 @@ def test_onboarding_step_by_step(rich):
     n0 = len(ch.outbox)
     read = start(rich)
     assert read.startswith("Thanks! Here's my read of you from what you've saved and watched:\n"
-                           "• Blender 3D: you look new to it (5 saved posts and 3 watched videos)\n"
-                           "• Home cooking (4 saved posts)\n\nDid I get that right?")
+                           "• Blender 3D: new to it (5 saved, 3 watched)\n"
+                           "• Home cooking (4 saved)\n\nDid I get that right?")
     assert "finance" not in read.lower()
     st["answers"]["mvp_profile_merge"] = lambda u: {
         "kind": "about_me", "confirm_topics": ["Home cooking"], "levels": [{"topic": "Blender", "level": "beginner"}],
@@ -217,10 +218,11 @@ def test_onboarding_step_by_step(rich):
     st["answers"]["mvp_first_requests"] = first_requests_answer
     fourth = say(rich, "it's me@example.com", {"intent": "chat", "reply": "unused"})
     assert fourth.startswith("I saved me@example.com as your email address and sent a 6-digit code to it.")
-    assert "Instagram, every 4 weeks:" in fourth and "Reply YES to start the reminders" in fourth
+    assert "(Instagram every 4 weeks, YouTube every 2 months) and send the steps then. OK?" in fourth
     assert ('Or try one of these, picked from your own saves:\n1. "a beginner Blender tutorial that ends with a '
             'finished model"\n2. "a pasta recipe for tonight"\n3. "a low poly Blender scene to model"\n') in fourth
     assert "quilting" not in fourth                                    # nothing in their library: not offered
+    assert fourth.endswith(T.PREFS_QUESTION)                           # finding 46: one optional question, last
     assert len(ch.outbox) - n0 == 3            # read, contact, routine (the consent text came before "I agree")
     assert bot.store.email_of(H) == ("me@example.com", False)
     # "2" runs the second request now, with no interpreter call
@@ -252,8 +254,8 @@ def test_every_step_can_be_skipped(rich):
     assert second.startswith("No problem.\n\nWhat's your email address?")
     st["answers"]["mvp_first_requests"] = lambda u: {"requests": []}
     final = say(rich, "skip", {"intent": "chat", "reply": "unused"})
-    assert "Instagram, every 4 weeks:" in final and final.endswith(
-        "That's the setup done. Ask me for anything you've saved, any time, or say \"help\".")
+    assert "Instagram every 4 weeks" in final and final.endswith(T.PREFS_QUESTION)
+    assert say(rich, "skip", {"intent": "chat", "reply": "unused"}) == T.PREFS_SKIPPED    # finding 46: skippable too
     assert bot.store.get_state(f"onboard:{H}")["step"] == "done"
     assert "mvp_profile_merge" not in rich["calls"]
     # after the setup, messages go the normal way
@@ -287,7 +289,7 @@ def test_a_request_in_the_middle_is_answered_and_the_setup_goes_on(rich):
     n0 = len(ch.outbox)
     say(rich, "I'm in Chicago this week", {"intent": "set_timezone", "timezone": "America/Chicago"})
     texts = [m[2] for m in ch.outbox[n0:]]
-    assert texts[0].startswith("OK, I'll use Chicago time from now on") and "Instagram, every 4 weeks:" in texts[1]
+    assert texts[0].startswith("OK, I'll use Chicago time from now on") and "Instagram every 4 weeks" in texts[1]
 
 
 def test_a_person_already_set_up_is_not_onboarded_again_until_they_ask(rich):
@@ -314,8 +316,10 @@ def test_the_merge_checks_what_it_stores(rich):
     assert prof["prefs"]["style"] == "brief" and prof["prefs"]["exclude_kinds"] == ["like"]
     assert res["skipped_sensitive"] and prof["notes"] == []               # nothing about money is kept
     assert "Home cooking is off your interests" in res["changes"]
-    res = P.apply_merge(bot.store, H, {"direction": "get healthier and lose weight"}, "get healthier and lose weight")
-    assert res["skipped_sensitive"] and P.get(bot.store, H)["direction"] == "a job in film"
+    # fix pass 2, finding 38: only the clause that states a condition is left out, never the rest of their goal
+    res = P.apply_merge(bot.store, H, {"direction": "cook more at home and manage my diabetes"},
+                        "cook more at home and manage my diabetes")
+    assert res["skipped_sensitive"] and P.get(bot.store, H)["direction"] == "cook more at home"
 
 
 # ---------- the profile any time ----------
@@ -337,7 +341,8 @@ def test_profile_show_and_update(rich):
     assert say(rich, "stop guessing my level", {"intent": "profile_update"}).startswith(
         "Noted: I'll stop guessing your level.")
     shown = say(rich, "what do you know about me", {"intent": "profile_show"})
-    assert "• Blender 3D (past the basics, you told me)" in shown and "• Home cooking (my guess" in shown
+    assert "• Blender 3D (past the basics, you told me, from 5 saved posts and 3 watched videos)" in shown
+    assert "• Home cooking (my guess" in shown                         # finding 39: a topic keeps its counts
     assert "You have air fryer; I don't guess your level." in shown
     # a statement the form cannot use is kept as a note, as before
     st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me"}
@@ -544,7 +549,7 @@ def test_only_a_bare_yes_confirms_the_read_or_the_time_zone(rich):
     seen = []
     st["answers"]["mvp_profile_merge"] = lambda u: (seen.append(u), {"kind": "about_me", "levels": [
         {"topic": "Blender", "level": "beginner"}]})[1]
-    say(rich, "yes, I'm a beginner", CHAT)
+    say(rich, "yes, I'm a beginner at Blender", CHAT)   # finding 39: a level goes to the topic they name
     assert seen and P_level(bot) == "beginner"                       # the level they gave is kept
     st["answers"]["mvp_first_requests"] = lambda u: {"requests": []}
     say(rich, "ok but I'm in Chicago", {"intent": "set_timezone", "timezone": "America/Chicago"})

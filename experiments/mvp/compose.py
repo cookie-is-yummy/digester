@@ -399,6 +399,18 @@ LEVEL_TALK = re.compile(r"\b(you'?re|you are|you'?ve|you have|your)\b[\w\s'-]{0,
                         r"advanced)\b|\bbeginners? like you\b", re.I)
 
 
+def same_key(p):
+    """(creator, title) of a pick, normalised, for finding copies of one post; None when either is unknown. Both the
+    title shown and the item's own first words are tried, so a copy whose model title differs is still found."""
+    it = p["item"]
+    creator = norm(it.creator or "")
+    title = _squash(title_from_item(it))
+    if not creator or not title or title.startswith(_squash(f"A post from {it.creator}")) \
+            or title.startswith(_squash(f"A video from {it.creator}")):
+        return None
+    return creator, title
+
+
 def tips_only(text):
     """The item's own text is tips and nothing that makes a whole thing."""
     return bool(TIPS.search(text or "")) and not PROJECT.search(text or "")
@@ -490,6 +502,18 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
             dropped["because_replaced"] += 1
             dropped["because_" + problem] = dropped.get("because_" + problem, 0) + 1
         kept.append(pick)
+    # fix pass 2, finding 48: two copies of one post (the same creator and the same title, normalised) are one pick;
+    # the best-ranked is kept (clear before close, then the model's order)
+    seen_keys, unique = set(), []
+    for p in [p for p in kept if p["verdict"] == "clear"] + [p for p in kept if p["verdict"] != "clear"]:
+        key = same_key(p)
+        if key and key in seen_keys:
+            dropped["duplicate"] = dropped.get("duplicate", 0) + 1
+            continue
+        if key:
+            seen_keys.add(key)
+        unique.append(p)
+    kept = [p for p in kept if any(p is u for u in unique)]
     clear = [p for p in kept if p["verdict"] == "clear"]
     close = sorted([p for p in kept if p["verdict"] == "close"], key=lambda p: p["too_long"])   # stable
     count = max(c.count, 1)

@@ -565,21 +565,19 @@ def test_the_export_routine_and_its_reminders(fresh):
     assert "upload box on the test page" in routine_text(export_routine())
     assert "google drive folder" in routine_text(export_routine(tester=True)).lower()
     msg = offer_export_routine(bot, H)
-    assert msg.endswith("Shall I remind you when the next export is due, every 4 weeks for Instagram and every 2 "
-                        "months for YouTube? Reply YES to start the reminders, or tell me what to change.")
+    # fix pass 2, findings 43 and 44: one line at setup, one line when the YES starts them, the steps with each send
+    assert msg == ("I'll remind you when a fresh export is due (Instagram every 4 weeks, YouTube every 2 months) and "
+                   "send the steps then. OK?")
     assert not bot.store.rules(H)                                                 # nothing starts before the yes
+    n0 = len(ch.outbox)
     bot.on_message(H, "yes")
     rules = bot.store.rules(H)
     assert len(rules) == 2 and all(r["spec"]["content"]["source"] == "note" for r in rules)
-    texts = [m[2] for m in ch.outbox[-2:]]
-    assert texts[0].startswith("Got it: every 4 weeks on Thursday at 10am, starting 10 December, I'll remind you: "
-                               "\"Time for a fresh Instagram export")
-    assert texts[1].startswith("Got it: every 2 months on the 12th at 10am, starting 12 January, I'll remind you: "
-                               "\"Time for a fresh YouTube export")
+    assert [m[2] for m in ch.outbox[n0:]] == ["Done. Next Instagram reminder 10 December, next YouTube one 12 January."]
     msg = say(fresh, "when is my next export due", {"intent": "library_status"})
     assert "Your next Instagram export is due Thursday 10 December, and I'll remind you" in msg
     # a platform it has no steps for is left out (both are offered) rather than failing
-    assert "Instagram, every 4 weeks:" in offer_export_routine(bot, H, platforms=["tiktok"])
+    assert "Instagram every 4 weeks" in offer_export_routine(bot, H, platforms=["tiktok"])
 
 
 def test_old_stores_load_and_deleting_data_clears_the_new_tables(tmp_path):

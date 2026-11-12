@@ -62,10 +62,24 @@ def event_for(ctx, params):
             return None
         ev["day"] = day
     if ev["url"]:
-        ev["details"] = f"From your saves: {ev['url']}"
+        ev["details"] = f"From your saves: {ev['url']}" + details_text(pick)
     else:
         ev["details"] = f"A reminder you set with {config.BOT_NAME}."
     return ev
+
+
+def details_text(pick):
+    """The pick's checked details, as the answer shows them (fix pass 2, finding 47: the email body and the calendar
+    description carry the same lines)."""
+    from ..render import LABEL
+    facts = (pick or {}).get("facts") or {}
+    out = []
+    for kind in ("ingredients", "steps", "key_points"):
+        lines = facts.get(kind) or []
+        if lines:
+            out.append(f"{LABEL[kind]} ({len(lines)}):")
+            out += [f"{i}. {x}" if kind == "steps" else f"• {x}" for i, x in enumerate(lines[:20], 1)]
+    return ("\n\n" + "\n".join(out)) if out else ""
 
 
 def google_link(ev):
@@ -135,10 +149,14 @@ def run(ctx, params):
     link = google_link(ev)
     data = ics_text(ev, ctx.now).encode("utf-8")
     path = write_outbox(ctx.handle, "event-" + ev["title"], "ics", data, ctx.now)
-    ctx.store.add_outbox(ctx.handle, "calendar", f"{ev['title']}, {when}", path, "file", run_id=ctx.run_id, at=ctx.now)
+    oid = ctx.store.add_outbox(ctx.handle, "calendar", f"{ev['title']}, {when}", path, "file", run_id=ctx.run_id,
+                               at=ctx.now)
+    # fix pass 2, finding 56: one short line, then the link alone; the test page draws it as a card with the title,
+    # the day and time, and the .ics file beside it
     return Outcome("done", line=f"To put \"{ev['title']}\" on your calendar {when}, tap this link:",
                    link={"type": "link", "url": link, "title": f"Add to Google Calendar: {ev['title']}",
-                         "platform": "calendar"},
+                         "platform": "calendar", "event_title": ev["title"], "when": when,
+                         "outbox_id": oid},
                    ref=path, attach=[("event.ics", path, "text", "calendar")],
                    email_links=[(f"Add \"{ev['title']}\" to Google Calendar", link)],
                    detail={"title": ev["title"], "when": when, "link": link, "path": path})

@@ -30,6 +30,11 @@ LEVELS = ["new", "beginner", "intermediate", "advanced"]
 LEVEL_PLAIN = {"new": "just starting", "beginner": "a beginner", "intermediate": "past the basics",
                "advanced": "advanced"}
 KEPT = {"save", "collection", "share_self", "playlist"}
+# fix pass 2, finding 41: what the person chose to keep weighs far more than what they watched. Saves, collections
+# and posts sent to themselves fill most of the sample; likes and playlists a smaller part; watch history only the
+# few channels they watch most.
+CHOSEN = {"save", "collection", "share_self"}
+LIKED = {"like", "playlist"}
 LINE_CHARS = 140
 
 # Never inferred or stored (docs/07): health, relationships, money, religion, politics, sexuality. Checked by code on
@@ -56,6 +61,49 @@ SENSITIVE = re.compile(
 
 def sensitive(*texts):
     return any(t and SENSITIVE.search(str(t)) for t in texts)
+
+
+# Fix pass 2, finding 38: what the person TELLS us about their own goal is kept in their words ("eating healthier on a
+# budget", "getting fit", "saving money", "learning to invest", "sleeping better"). SENSITIVE above is for what the bot
+# would INFER from what they watched. From their own words only these are left out, and only the clause that says
+# them: a stated diagnosis or condition, debt or income figures, religion, politics, sexuality, relationship status.
+STATED_SENSITIVE = re.compile(
+    r"\b(diagnos\w*|my (?:illness|disease|condition|meds|medication|therapy|therapist|doctor|psychiatrist)|cancer|"
+    r"diabet\w*|adhd|autis\w*|depress\w*|anxiety|anxious|bipolar|ocd|ptsd|chemo\w*|pregnan\w*|ivf|infertil\w*|"
+    r"eating disorder\w*|anorexi\w*|bulimi\w*|addict\w*|rehab|sobriety|hiv|surgery|miscarriage|"
+    r"debts?|in debt|owe|owing|loans?|bankrupt\w*|paycheck|salary|income|mortgage|money (?:trouble|problems|worries)|"
+    r"worr\w* about money|"
+    r"religio\w*|church\w*|mosques?|synagogues?|pray\w*|bible|quran|koran|torah|jesus|christ|allah|my faith|"
+    r"christian\w*|muslim\w*|islam\w*|jewish|judaism|hindu\w*|buddhis\w*|atheis\w*|spiritual\w*|"
+    r"politic\w*|elections?|democrat\w*|republican\w*|trump|biden|harris|voting|vote for|abortion|"
+    r"immigra\w*|deport\w*|asylum|green card|"
+    r"sex|sexual\w*|gay|lesbian|bisexual|queer|lgbt\w*|transgender|non-?binary|coming out|porn\w*|"
+    r"i(?:'|’)?m (?:single|married|divorced|engaged|separated|widowed|dating)|in a relationship|"
+    r"my (?:wife|husband|partner|boyfriend|girlfriend|ex|fianc\w*)|divorc\w*|break-?up|dating)\b"
+    r"|\$\s?\d|\b\d+(?:[.,]\d+)?\s?(?:k|grand|dollars|bucks|euros|pounds)\b", re.I)
+_CLAUSE = re.compile(r"(\s*(?:[,;.]|\band\b|\bbut\b|\bplus\b|\balso\b)\s*)", re.I)
+
+
+def stated_sensitive(*texts):
+    return any(t and STATED_SENSITIVE.search(str(t)) for t in texts)
+
+
+def keep_stated(text):
+    """(kept, dropped): the person's own words without any clause that states one of the things left out (finding
+    38), never the rest of the sentence. A clause is a run between commas, semicolons, "and", "but" or full stops."""
+    text = " ".join(str(text or "").split())
+    if not stated_sensitive(text):
+        return text, False
+    pieces = _CLAUSE.split(text)
+    out, sep = [], ""
+    for i, piece in enumerate(pieces):
+        if i % 2:   # a separator
+            sep = piece
+            continue
+        if not piece.strip() or stated_sensitive(piece):
+            continue
+        out.append((sep if out else "") + piece)
+    return "".join(out).strip(" ,;.") if out else "", True
 
 
 def _clean(s, n):
@@ -86,14 +134,20 @@ def topic_words(*texts):
 
 # ---------- the guess ----------
 def sample(view):
-    """(items, channels): the newest kept items, then a seeded random set of the rest (the seed is the library build,
-    so the same build gives the same sample), and the most watched YouTube channels with their watched videos."""
-    kept = [it for it in view.items.values() if it.kinds & KEPT]
-    kept.sort(key=lambda it: (it.kept_on() or "", it.id), reverse=True)
-    recent = kept[:config.PROFILE_SAMPLE_RECENT]
-    rest = sorted(kept[config.PROFILE_SAMPLE_RECENT:], key=lambda it: it.id)
+    """(items, channels): the newest items the person chose to keep (saved, in a collection, sent to themselves), then
+    a seeded random set of the rest of them (the seed is the library build, so the same build gives the same sample),
+    then a smaller seeded set of their likes and playlists, and the few YouTube channels they watch most (finding 41:
+    watched videos must not drown what they kept)."""
+    chosen = [it for it in view.items.values() if it.kinds & CHOSEN]
+    chosen.sort(key=lambda it: (it.kept_on() or "", it.id), reverse=True)
+    recent = chosen[:config.PROFILE_SAMPLE_RECENT]
+    rest = sorted(chosen[config.PROFILE_SAMPLE_RECENT:], key=lambda it: it.id)
     rnd = random.Random(_library_stamp(view.lib) + ":profile")
     items = recent + rnd.sample(rest, min(config.PROFILE_SAMPLE_RANDOM, len(rest)))
+    liked = sorted((it for it in view.items.values() if it.kinds & LIKED and not it.kinds & CHOSEN
+                    and (it.caption or "").strip()), key=lambda it: it.id)
+    short = max(0, config.PROFILE_SAMPLE_RECENT + config.PROFILE_SAMPLE_RANDOM - len(items))   # few kept: more likes
+    items += rnd.sample(liked, min(config.PROFILE_SAMPLE_LIKED + short // 2, len(liked)))
     by = {}
     for it in view.items.values():
         if it.platform == "youtube" and "watch" in it.kinds and it.creator:
@@ -112,7 +166,8 @@ def sample_block(items, chans):
     rows = []
     for i, it in enumerate(items, 1):
         how = "saved" if it.kinds & {"save", "collection"} else ("sent to self" if "share_self" in it.kinds
-                                                                  else "in a playlist")
+                                                                  else "in a playlist" if "playlist" in it.kinds
+                                                                  else "liked")
         rows.append(f"S{i}. {it.platform}, {how}: " + as_data(_item_text(it)[:LINE_CHARS] or "(no text)"))
     for j, (name, vids) in enumerate(chans, 1):
         titles = " | ".join(_item_text(v)[:70] for v in vids[:3])
@@ -122,7 +177,8 @@ def sample_block(items, chans):
 
 def guess_key(view):
     parts = [os.path.abspath(view.lib), _library_stamp(view.lib), config.PROMPT_PROFILE_GUESS, config.MODEL,
-             config.PROFILE_SAMPLE_RECENT, config.PROFILE_SAMPLE_RANDOM, config.PROFILE_CHANNELS]
+             config.PROFILE_SAMPLE_RECENT, config.PROFILE_SAMPLE_RANDOM, config.PROFILE_SAMPLE_LIKED,
+             config.PROFILE_CHANNELS, config.PROFILE_MAX_TOPICS]
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()
 
 
@@ -180,12 +236,51 @@ def check_guess(raw, items, chans, view):
             level, quote = None, ""   # a level needs the topic's own words behind it
         if why and re.search(r"\d|@", why):
             why = ""
+        doing = t.get("doing") if t.get("doing") in DOING else None
         out.append({"topic": topic, "share": round(support / total, 3), "support": support,
                     "support_ids": sorted(it.id for it in sup), "saved": len(saved),
                     "watched": watched, "words": words, "level": level, "quote": quote or None, "why": why or None,
-                    "confirmed": False, "source": "guess"})
-    out.sort(key=lambda x: (-x["share"], x["topic"].lower()))
+                    "doing": doing, "confirmed": False, "source": "guess"})
+    # finding 41: the read lists them most-saved first (what they chose to keep), then by their share of the sample
+    out.sort(key=lambda x: (-x["saved"], -x["share"], x["topic"].lower()))
     return out[:config.PROFILE_MAX_TOPICS], removed
+
+
+# what the guess says the person seems to be doing with a topic; the direction guess is built from these by code
+DOING = {"learning": "learning", "making": "making", "collecting": "collecting", "practising": "practising",
+         "following": "following"}
+
+
+def topic_in_sentence(topic):
+    """'quick dinners', 'Blender 3D': a topic as it reads inside a sentence (a capital only where the name has one
+    past its first letter, or the model gave one for a name)."""
+    t = " ".join(str(topic).split())
+    first = t.split(" ")[0]
+    if len(first) > 1 and first[1:].islower() and first.lower() in COMMON_WORDS:
+        return first.lower() + t[len(first):]
+    return t
+
+
+COMMON_WORDS = set("""quick easy home street video photo music guitar piano drawing painting cooking baking dinner
+    dinners lunch lunches breakfast recipes recipe meals meal workouts workout running yoga gardening knitting
+    sewing woodworking pottery dance dancing travel coffee cocktails sourdough bread pasta skincare makeup fashion
+    hair nails cars bikes cycling climbing hiking fishing camping language languages spanish french chess board
+    card magic film movie animation animated digital 3d graphic graphics web game games gaming minecraft lego
+    interior home plant plants pet pets dog dogs cat cats calligraphy lettering crochet embroidery jewelry
+    origami photography editing writing reading poetry productivity study studying coding programming""".split())
+
+
+def direction_guess(interests, n=2):
+    """'learning Blender 3D and collecting quick dinners': what the person seems to be working toward, built by code
+    from the top topics the guess backed and what it says they do with each (finding 41). None without two."""
+    parts = []
+    for i in interests:
+        if i.get("source") != "guess" or not i.get("doing") or i["doing"] == "following":
+            continue
+        parts.append(f"{DOING[i['doing']]} {topic_in_sentence(i['topic'])}")
+        if len(parts) >= n:
+            break
+    return _and(parts) if parts else None
 
 
 def guess(view, store=None, handle=None, use_cache=True, now=None):
@@ -335,6 +430,8 @@ def pref_words(prefs):
         out.append("avoid " + ", ".join(prefs["avoid"]))
     if prefs.get("tools"):
         out.append("has " + ", ".join(prefs["tools"]))
+    if prefs.get("time"):
+        out.append("usually has " + prefs["time"])
     if prefs.get("style") in ("brief", "full"):
         out.append("brief answers" if prefs["style"] == "brief" else "full answers")
     if prefs.get("outside") is True:
@@ -348,6 +445,9 @@ def pref_words(prefs):
 
 LEVEL_ASKED = re.compile(r"\b(beginners?|newbies?|novice|first[- ]time|intermediate|advanced|experienced|"
                          r"just start\w*|starting out|new to)\b", re.I)
+
+
+ASKED_LEVEL_WORD = re.compile(r"\b(?:easy|easier|simple|beginners?|intermediate|advanced|for kids|kid-friendly)\b", re.I)
 
 
 def composer_context(store, handle, *texts):
@@ -364,10 +464,13 @@ def composer_context(store, handle, *texts):
     if ok:
         how = "they told you" if (m.get("confirmed") or m.get("source") != "guess") else "a guess from what they saved"
         lines.append(f"Their level at {m['topic']}: {LEVEL_PLAIN[m['level']]} ({how})")
-    p = pref_words({k: v for k, v in prefs.items() if k in ("avoid", "tools", "style")})
+    p = pref_words({k: v for k, v in prefs.items() if k in ("avoid", "tools", "time", "style")})
     if p:
         lines.append("Preferences: " + "; ".join(p))
     lines.extend(prof["notes"])
+    said = next((m.group(0) for t in texts for m in [ASKED_LEVEL_WORD.search(t or "")] if m), None)
+    if said:   # fix pass 2, finding 58: a level in their own words ("easy", "beginner") reaches the composer
+        lines.append(f"The level they asked for, in their words: {said.lower()}")
     asked = any(LEVEL_ASKED.search(t or "") for t in texts)
     guessed = m if ok and not (m.get("confirmed") or m.get("source") != "guess") else None
     return "\n".join(lines), bool(ok or asked), guessed
@@ -375,6 +478,9 @@ def composer_context(store, handle, *texts):
 
 # ---------- what the person says about themselves ----------
 def _find(interests, name):
+    """The stored topic the person NAMED: the same name, or one whose own name shares a word with it ("Blender" is
+    "Blender 3D"). Fix pass 2, finding 39: never by the guess's supporting words, so "I'm a beginner at Blender" can
+    not land on a guessed "Animation" whose lines mention Blender."""
     n = norm(name)
     if not n:
         return None
@@ -384,10 +490,15 @@ def _find(interests, name):
     words = set(topic_words(name))
     best, score = None, 0
     for i in interests:
-        s = len(words & (set(topic_words(i["topic"])) | {_stem(w) for w in i.get("words") or []}))
+        s = len(words & set(topic_words(i["topic"])))
         if s > score:
             best, score = i, s
     return best
+
+
+def _named_in(i, message):
+    """True when the person's message names this stored topic (a word of its name is in their message)."""
+    return bool(set(topic_words(i["topic"])) & set(topic_words(message)))
 
 
 def _strs(v, n=8, size=40):
@@ -445,19 +556,25 @@ def apply_merge(store, handle, raw, message, shown=None):
             continue
         name = _clean(lv.get("topic"), 40)
         i = _find(interests, name) if name else None
+        if i is not None and not _named_in(i, message):
+            i = None   # finding 39: a level goes only to the topic the person named, never a nearby one
         if i is None:
-            if not name or sensitive(name) or not own_words(name, message):
-                skipped = skipped or sensitive(name)
+            if not name or stated_sensitive(name) or not own_words(name, message):
+                skipped = skipped or stated_sensitive(name)
                 continue
             i = {"topic": name, "share": 0.0, "support": 0, "saved": 0, "watched": 0, "words": topic_words(name)[:3],
                  "level": None, "quote": None, "why": None, "confirmed": True, "source": "person"}
-            interests.append(i)
-        if i.get("level") != lv["level"] or not i.get("confirmed") or i.get("source") == "guess":
-            i.update(level=lv["level"], confirmed=True, source="person")
+            interests.append(i)   # a new topic is added beside the guessed ones
+        if i.get("level") != lv["level"] or not i.get("confirmed") or \
+                (i.get("source") == "guess" and i.get("level_from") != "person"):
+            # the topic keeps its counts and where it came from; the level is now theirs (finding 39)
+            i.update(level=lv["level"], confirmed=True, level_from="person")
+            if i.get("source") != "guess":
+                i["source"] = "person"
             changes.append(f"{i['topic']}: {LEVEL_PLAIN[lv['level']]}")
             _drop_notes_about(store, handle, i)
     for name in _strs(raw.get("add_topics"), 4):
-        if sensitive(name):
+        if stated_sensitive(name):
             skipped = True
             continue
         if _find(interests, name) or not own_words(name, message):
@@ -468,14 +585,19 @@ def apply_merge(store, handle, raw, message, shown=None):
         changes.append(f"you're into {name}")
     d = _clean(raw.get("direction"), 240)
     if d:
-        if sensitive(d):
-            skipped = True
-        elif own_words(d, message) and d != prof["direction"]:
+        d, cut = keep_stated(d)   # finding 38: only the clause that states a personal matter goes, never the rest
+        skipped = skipped or cut
+        if d and own_words(d, message) and d != prof["direction"]:
             store.set_direction(handle, d)
             changes.append(f"you're working toward \"{d}\"")
+    t = _clean(raw.get("time"), 60)
+    if t and not stated_sensitive(t) and own_words(t, message) and t != prefs.get("time"):
+        prefs["time"] = t   # finding 46: how much time they usually have, in their words
+        changes.append(f"you usually have {t}")
+        other.append(changes[-1])
     for key, word in (("avoid", "you'd rather avoid"), ("tools", "you have")):
         vals = _strs(raw.get(key), 6, 30)
-        bad = [v for v in vals if sensitive(v)]
+        bad = [v for v in vals if stated_sensitive(v)]
         skipped = skipped or bool(bad)
         vals = [v for v in vals if v not in bad and (key == "avoid" or own_words(v, message))]
         new = [v for v in vals if v.lower() not in {x.lower() for x in prefs.get(key) or []}]
@@ -507,9 +629,9 @@ def apply_merge(store, handle, raw, message, shown=None):
             other.append(changes[-1])
     note = _clean(raw.get("note"), 120)
     if note:
-        if sensitive(note):
-            skipped = True
-        elif note.lower() not in {n.lower() for n in store.profile_notes(handle)}:
+        note, cut = keep_stated(note)
+        skipped = skipped or cut
+        if note and note.lower() not in {n.lower() for n in store.profile_notes(handle)}:
             store.add_profile_note(handle, note)
             changes.append(f"noted: {note}")
             other.append(changes[-1])
@@ -570,24 +692,35 @@ def count_words(i):
     return " and ".join(parts)
 
 
-def read_lines(prof, limit=4):
-    """The read of the person for onboarding: one short line per main interest, with the guessed level in plain words
-    and the count behind it."""
+def short_count(i):
+    """'about 45 saved, 3 watched': the counts code worked out for the topic, in the fewest words."""
+    parts = []
+    if i.get("saved"):
+        parts.append(f"{about_count(i['saved'])} saved")
+    if i.get("watched"):
+        parts.append(f"{about_count(i['watched'])} watched")
+    return ", ".join(parts)
+
+
+def read_lines(prof, limit=None):
+    """The read of the person for onboarding: one short line per guessed topic, ALL of them (finding 41), in the
+    order the guess put them (most saved first), with the guessed level in plain words and the counts behind it."""
     out = []
     for i in prof["interests"][:limit]:
         lv = i.get("level") if level_allowed(i, prof["prefs"]) else None
-        level = {"new": "you look new to it", "beginner": "you look like a beginner",
-                 "intermediate": "you look past the basics", "advanced": "you look advanced"}.get(lv)
-        n = count_words(i)
-        line = f"• {i['topic']}" + (f": {level}" if level else "") + (f" ({n})" if n else "")
-        out.append(line)
+        level = {"new": "new to it", "beginner": "a beginner", "intermediate": "past the basics",
+                 "advanced": "advanced"}.get(lv)
+        n = short_count(i)
+        out.append(f"• {i['topic'][:1].upper() + i['topic'][1:]}" + (f": {level}" if level else "")
+                   + (f" ({n})" if n else ""))
     return out
 
 
 def short_summary(prof):
-    """One or two lines of what the bot now knows (onboarding step 3)."""
+    """What the bot now knows, in one or two lines (onboarding step 3): every topic with its level, and the direction
+    in their words (finding 42: the topics they just added are never left out)."""
     parts = []
-    for i in prof["interests"][:4]:
+    for i in prof["interests"]:
         lv = i.get("level") if level_allowed(i, prof["prefs"]) else None
         parts.append(f"{i['topic']}" + (f" ({LEVEL_PLAIN[lv]})" if lv else ""))
     lines = []
@@ -605,14 +738,15 @@ def show_text(prof, now=None):
     prefs = prof["prefs"]
     for i in prof["interests"]:
         lv = i.get("level")
-        if lv and (i.get("confirmed") or i.get("source") != "guess"):
+        told = i.get("source") != "guess" or i.get("level_from") in ("person", "feedback")
+        if lv and told:
             how = f"{LEVEL_PLAIN[lv]}, you told me"
-        elif lv and level_allowed(i, prefs):
-            how = f"{LEVEL_PLAIN[lv]}, my guess"
+        elif lv and level_allowed(i, prefs):   # finding 40: a guess they confirmed is not something they told me
+            how = f"{LEVEL_PLAIN[lv]}, " + ("you confirmed it" if i.get("confirmed") else "my guess")
         else:
             how = "you told me" if i.get("source") != "guess" else ("you confirmed it" if i.get("confirmed")
                                                                     else "my guess")
-        n = count_words(i) if i.get("source") == "guess" else ""
+        n = count_words(i)   # finding 39: a topic keeps its counts when its level changes
         lines.append(f"• {i['topic']} ({how}" + (f", from {n}" if n else "") + ")")
     if not prof["interests"]:
         lines.append("• No interests yet.")
@@ -621,6 +755,8 @@ def show_text(prof, now=None):
     p = []
     if prefs.get("tools"):
         p.append("you have " + _and(prefs["tools"]))
+    if prefs.get("time"):
+        p.append("you usually have " + prefs["time"])
     if prefs.get("avoid"):
         p.append("you'd rather avoid " + _and(prefs["avoid"]))
     if prefs.get("style") in ("brief", "full"):

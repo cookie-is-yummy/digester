@@ -262,6 +262,29 @@ def _fill_raw(raw):
 FILLER_CRITERIA = set("""another more one ones next else different new newer something anything other others please pls
     again give me show send a an the some pick picks option options thing things try i want like this that these those
     just same kind sort""".split())
+# fix pass 2, finding 49: words about when or how often ("daily", "every day", "to start doing") are timing, and
+# "mini" / "short" / "quick" is the length bound of finding 18 (worked out by code from the request): a must-have
+# made only of these and filler is dropped
+TIMING_CRITERIA = set("""daily every day days each weekly week weeks monthly month nightly night nights tonight today
+    tomorrow morning mornings evening evenings afternoon weekday weekdays weekend weekends regularly often routine
+    start starting doing do to begin practise practice practising practicing habit times time once twice""".split())
+LENGTH_CRITERIA = set("""mini short shorter quick quicker tiny small bite bitesized bite-sized sized brief little length
+    long minutes minute video videos tutorial tutorials clip clips""".split())
+def timing_only(cr):
+    """A must-have made only of words about when or how often (and filler)."""
+    words = WORD.findall(cr.lower())
+    return bool(words) and all(w in FILLER_CRITERIA or w in TIMING_CRITERIA for w in words) \
+        and any(w in TIMING_CRITERIA for w in words)
+
+
+def length_only(cr):
+    """A must-have made only of a length word ("mini", "shorter", "short videos"): the length bound of finding 18
+    covers it (worked out by code and checked against YouTube's length), so the composer is not asked it."""
+    words = WORD.findall(cr.lower())
+    return bool(words) and all(w in FILLER_CRITERIA or w in LENGTH_CRITERIA or w in TIMING_CRITERIA for w in words) \
+        and any(w in LENGTH_CRITERIA - {"video", "videos", "tutorial", "tutorials", "clip", "clips"} for w in words)
+
+
 FINISHED_BY_TOPIC = {"food": "ends with a dish you can eat", "fitness": "a full routine from start to finish",
                      "making": "walks through one whole project from start to finish"}
 _CRIT_TOPIC = [("food", re.compile(r"\b(dish|eat|meal|food|recipe)\b", re.I)),
@@ -280,6 +303,8 @@ def clean_criteria(criteria, *texts):
         words = WORD.findall(cr.lower())
         if not words or all(w in FILLER_CRITERIA for w in words):
             continue
+        if timing_only(cr):
+            continue   # finding 49: "daily", "every day", "to start doing" are timing, never must-haves
         if FINISHED.search(cr) and kind in FINISHED_BY_TOPIC:
             own = next((k for k, rx in _CRIT_TOPIC if rx.search(cr)), "making")
             if own != kind:
@@ -890,10 +915,171 @@ def _recent_week(c, message, now, tzname):
         c.since_days, c.saved_after, c.saved_before = 7, None, None
 
 
+# ---------- fix pass 2 (findings 58 and 60): code-side completions for kinds the interpreter still misses ----------
+LEVEL_WORD = [(re.compile(r"\b(?:absolute |complete |total )?beginners?\b|\bnewbies?\b|\bnovices?\b|\bfor starters\b",
+                          re.I), "suits a beginner"),
+              (re.compile(r"\bintermediate\b", re.I), "suits an intermediate level"),
+              (re.compile(r"\badvanced\b|\bexpert[- ]level\b", re.I), "suits an advanced level"),
+              (re.compile(r"\bfor (?:kids|children|my kids|toddlers)\b|\bkid[- ]friendly\b", re.I), "suits kids")]
+LEVEL_IN_CRITERION = re.compile(r"\b(?:beginner|novice|newbie|intermediate|advanced|expert|kids?|children|toddlers?)",
+                                re.I)
+
+
+def _level_criterion(c, message):
+    """Finding 58: a level word in the person's own message (beginner, intermediate, advanced, for kids) is a
+    must-have, worded in plain words, when the form left it out. ("easy" is given to the composer as the level asked
+    for instead: profile.composer_context.)"""
+    if any(LEVEL_IN_CRITERION.search(cr) for cr in c.criteria) or len(c.criteria) >= 5:
+        return
+    for rx, crit in LEVEL_WORD:
+        if rx.search(message):
+            c.criteria.append(crit)
+            return
+
+
+RANDOM_PICK = re.compile(r"\b(?:a|any|some|one)\s+random\b|\brandom\s+(?:one|pick|picks|recipe|recipes|video|videos|post|"
+                         r"posts|reel|reels|tutorial|tutorials|workout|workouts|thing|things|idea|ideas|meal|meals|dish)\b"
+                         r"|\bsurprise me with (?:any|anything|something|one|a)\b|\b(?:pick|choose|grab) (?:any|one) at random\b",
+                         re.I)
+
+
+def _random_pick(c, message):
+    """Finding 60: an explicit "random one" or "surprise me with any" is the order, not the timing."""
+    if c.source == "library" and c.order == "best" and RANDOM_PICK.search(message):
+        c.order = "random"
+
+
+TOO_HARD = re.compile(r"\btoo (?:hard|difficult|advanced|complicated|complex)\b|\b(?:something|one) easier\b|"
+                      r"\beasier (?:one|please|pls)\b|\bover my head\b", re.I)
+TOO_EASY = re.compile(r"\btoo (?:easy|basic|simple)\b|\b(?:something|one) harder\b|\bharder (?:one|please|pls)\b|"
+                      r"\bmore (?:advanced|challenging)\b", re.I)
+
+
+def _level_feedback(it: Interpretation, message):
+    """Finding 60: "too hard" is feedback "easier" (and "too easy" is "harder"), never generic negative feedback; a
+    "more" that says it ("too hard, something shorter") keeps its change as the one sent now."""
+    way = "easier" if TOO_HARD.search(message) else "harder" if TOO_EASY.search(message) else None
+    if not way:
+        return it
+    if it.intent == "feedback" and it.feedback in (None, "down", "less", "up", "more"):
+        it.feedback = way
+    elif it.intent == "more" and it.also is None:
+        more = it.model_copy(deep=True)
+        return Interpretation(intent="feedback", feedback=way, pick_number=it.pick_number, lang=it.lang,
+                              also=more)
+    return it
+
+
+# a few words that mark a language (each a whole word), for a message the form left without "lang"
+LANG_WORDS = {
+    "es": set("qué que quiero receta recetas para con por favor dame busca búscame envíame mándame cómo como hacer "
+              "una unos unas algo nuevo nueva cena comida rápida fácil mañana hoy noche semana".split()),
+    "fr": set("je veux une des recette recettes pour avec s'il te plaît plait donne moi cherche envoie comment faire "
+              "quelque chose nouveau dîner rapide facile demain ce soir semaine".split()),
+    "de": set("ich möchte ein eine rezept rezepte für mit bitte gib mir such schick wie machen etwas neues "
+              "abendessen schnell einfach morgen heute woche".split()),
+    "pt": set("eu quero uma receita receitas para com por favor dá manda procura como fazer algo novo jantar rápido "
+              "fácil amanhã hoje semana".split()),
+    "it": set("voglio una ricetta ricette con favore dammi cerca mandami qualcosa nuovo cena veloce facile domani oggi "
+              "settimana".split()),
+}
+EN_WORDS = set("i me my the a an to for with and of some please send find give show want need what how recipe "
+               "recipes video videos new quick easy dinner tonight tomorrow week".split())
+
+
+def detect_lang(message):
+    """The language a message is written in, by its script or its common words; None for English or when unsure."""
+    t = message or ""
+    if re.search(r"[\u3040-\u30ff]", t):
+        return "ja"
+    if re.search(r"[\u4e00-\u9fff]", t):
+        return "zh"
+    if re.search(r"[\uac00-\ud7af]", t):
+        return "ko"
+    if re.search(r"[\u0400-\u04ff]", t):
+        return "ru"
+    if re.search(r"[\u0600-\u06ff]", t):
+        return "ar"
+    words = re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?", t.lower())
+    if len(words) < 2:
+        return None
+    en = sum(w in EN_WORDS for w in words)
+    best, score = None, 0
+    for code, vocab in LANG_WORDS.items():
+        n = sum(w in vocab for w in words)
+        if n > score:
+            best, score = code, n
+    return best if score >= 2 and score > en else None
+
+
+NEW_SAVES_IN = re.compile(r"\b(?:get|bring|add|load|import|put|upload|send)\s+(?:in\s+)?(?:my\s+|the\s+)?(?:new|newest|"
+                          r"latest|recent|fresh|more)?\s*(?:saves|saved posts|saved stuff|exports?|likes|data|library|"
+                          r"watch history|history)\s+(?:in|into|over|across|to you|up to date)\b"
+                          r"|\bhow (?:do|can|should) i (?:export|update|refresh|sync)\b"
+                          r"|\b(?:update|refresh|sync)\s+my\s+(?:library|saves|data)\b"
+                          r"|\bhow do i (?:get|send|give) you my\b", re.I)
+
+
+def _library_question(it: Interpretation, message):
+    """Finding 60: "how do I get my new saves in?" is the library status with the export steps."""
+    if it.intent in ("unsupported", "help", "chat") and NEW_SAVES_IN.search(message):
+        return Interpretation(intent="library_status", lang=it.lang)
+    return it
+
+
+def _every_day(when, message):
+    """Finding 60: "every day" stays every day even when the message also names a routine ("before work", "after
+    my run"); the weekdays come only from the message saying weekdays."""
+    if when.type == "schedule" and when.days == ALL_DAYS[:5] and DAILY.search(message) \
+            and not WEEKDAYS.search(message) and stated_days(message) in (None, ALL_DAYS):
+        when.days = list(ALL_DAYS)
+
+
+FIND_CLAUSE = re.compile(r"(?:,|;|\band\b|\bthen\b|\balso\b)\s+(?:also\s+|then\s+)?(?:can you\s+|could you\s+|please\s+)?"
+                         r"(?:find|send|show|get|give|recommend|suggest|look up|pull up|pick)\s+(?:me\s+)?"
+                         r"(?P<what>[^,;.!?]{3,120})", re.I)
+TODO_CLAUSE = re.compile(r"\b(?:add|put|jot down|stick)\s+(?P<what>[^,;.!?]{2,80}?)\s+(?:to|on|onto)\s+(?:my|the)\s+"
+                         r"(?:(?P<list>[a-z]+)\s+)?(?:to-?do\s+)?list\b", re.I)
+
+
+def _two_parts(it: Interpretation, message):
+    """Finding 60: a to-do and a request in one message keep their two-part shape ("add milk to my list and find me
+    a pancake recipe"). Code adds the half the form dropped, in the person's own words. Both clauses must be in the
+    message, apart from each other ("put a few recipes on my list" is one request: _find_for_list)."""
+    if it.also is not None or it.intent not in ("todo_add", "ask", "new_rule"):
+        return it
+    f, t = FIND_CLAUSE.search(message), TODO_CLAUSE.search(message)
+    if not f or not t or (t.start() < f.end() and f.start() < t.end()):
+        return it
+    what = " ".join(f.group("what").split()).strip(" .")
+    if it.intent == "todo_add":
+        if it.todo_text and what.lower() in it.todo_text.lower():   # the request was lumped into the to-do's text
+            cut = it.todo_text[:it.todo_text.lower().index(what.lower())]
+            cut = re.sub(r"[\s,;]*(?:and|then|also)?\s*(?:find|send|show|get|give|recommend|suggest|pick)?\s*(?:me)?\s*$",
+                         "", cut, flags=re.I).strip(" ,;.")
+            it.todo_text = cut or it.todo_text
+        it.also = Interpretation.model_validate({"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+            "goal": what[:120], "searches": [what[:120]]}}})
+        return it
+    if it.spec is not None and any(a.action == "todo.add" for a in it.spec.do):
+        return it
+    name = list_name(t.group("list")) if t.group("list") else None
+    todo = Interpretation.model_validate({"intent": "todo_add", "todo_text": " ".join(t.group("what").split()),
+                                          **({"list": name} if name and name != "todo" else {})})
+    if t.start() < f.start():   # in the order they said them
+        todo.also, todo.lang = it, it.lang
+        return todo
+    it.also = todo
+    return it
+
+
 def settle(raw, message, rules, now, tzname, todos=()):
     """A raw form from the model (or the cache) to a validated, completed Interpretation. Raises ValidationError."""
     it = Interpretation.model_validate(_fill_raw(_drop_model_moment(merge_todo_adds(raw))))
-    it = _find_for_list(_due_for_todo(it, todos), message)
+    it = _library_question(_level_feedback(it, message), message)
+    if not it.lang:
+        it.lang = detect_lang(message)
+    it = _two_parts(_find_for_list(_due_for_todo(it, todos), message), message)
     if it.also is not None:
         it.also = _find_for_list(_due_for_todo(it.also, todos), message)
     _act_into_do(it)
@@ -909,10 +1095,13 @@ def settle(raw, message, rules, now, tzname, todos=()):
             _surprise(x, message, now, tzname)
             _times_a_day(x.spec.when, message)
             _calendar_end(x.spec.when, message, now, tzname)
+            _every_day(x.spec.when, message)
             c = x.spec.content
             c.criteria = _negations_to_avoid(c.criteria, c.avoid)
             if c.source == "library" and x.intent in ("ask", "new_rule"):
                 _tips_must_haves(c, message)
+                _level_criterion(c, message)
+                _random_pick(c, message)
             _recent_week(c, message, now, tzname)
         if x.criteria:
             x.criteria = _negations_to_avoid(x.criteria, x.avoid)

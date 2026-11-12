@@ -701,7 +701,7 @@ def _ago(days):
         f"in {-days} days"
 
 
-def library_status(bot, person, now):
+def library_status(bot, person, now, steps=False):
     """The reply to "did my export come in?": when the last export came in, items by source, how old the newest item
     is, when the next export is due (the reminder rule, else the last import plus the platform's interval), and the
     export links. Code works out every number."""
@@ -742,7 +742,10 @@ def library_status(bot, person, now):
         due.append(f"your next {T.PLATFORM_NAMES[platform]} export {word} around {when.strftime('%A %-d %B')}")
     next_due = (T.cap_first("; ".join(due)) + ".") if due else "Send me a new export whenever you like."
     links = [(p, EXPORT_LINKS[p]) for p in counts]
-    return T.library_status_message(last, counts, newest, next_due, links)
+    msg = T.library_status_message(last, counts, newest, next_due, links)
+    if steps:   # "how do I export?", "how do I get my new saves in?" (findings 43 and 60)
+        msg += "\n\n" + routine_text(export_routine(tuple(counts) or ("instagram", "youtube")))
+    return msg
 
 
 # ---------- the export routine (for onboarding) ----------
@@ -863,7 +866,15 @@ def offer_export_routine(bot, handle, platforms=None, tester=False, now=None):
     bot.store.set_pending(handle, "confirm_rule", {
         "text": f"export reminders ({first[0]})", "spec": first[1].stored(), "run_id": None,
         "more": [{"text": f"export reminders ({p})", "spec": s.stored()} for p, s in more]}, at=now)
-    every = T._and([f"every {'4 weeks' if p == 'instagram' else '2 months'} for {T.PLATFORM_NAMES[p]}"
-                    for p, _ in specs])
-    return (routine_text(routine) + f"\n\nShall I remind you when the next export is due, {every}? Reply YES to "
-            "start the reminders, or tell me what to change.")
+    # fix pass 2, finding 43: at setup one line; the steps go out with each reminder (reminder_message) and on
+    # request (library_status with steps)
+    return T.export_offer([p for p, _ in specs])
+
+
+def reminder_message(text, tester=False):
+    """The send of an export reminder: its opening line, then that platform's steps (finding 43). None for any other
+    reminder."""
+    for p, opening in REMINDER_OPENING.items():
+        if str(text or "").startswith(opening):
+            return f"{opening}. Here's how:\n\n" + routine_text(export_routine((p,), tester=tester))
+    return None

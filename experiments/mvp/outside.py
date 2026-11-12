@@ -294,7 +294,8 @@ class Outside:
         out["query"] = True
         since = _iso(now - timedelta(hours=config.OUTSIDE_CACHE_HOURS))
         self.store.x("DELETE FROM outside_cache WHERE at<?", (since,))   # results are dropped after 24 hours
-        ck = hashlib.sha256(json.dumps([q.lower(), config.OUTSIDE_REGION]).encode()).hexdigest()
+        dur = video_duration(max_minutes)
+        ck = hashlib.sha256(json.dumps([q.lower(), config.OUTSIDE_REGION] + ([dur] if dur else [])).encode()).hexdigest()
         row = self.store.one("SELECT results FROM outside_cache WHERE key=? AND at>=?", (ck, since))
         if row is not None:
             checked = json.loads(row["results"])
@@ -311,9 +312,11 @@ class Outside:
             out["searched"] = True
             try:
                 self.searches += 1
-                resp = self.http(SEARCH_API, {"part": "snippet", "type": "video", "videoEmbeddable": "true",
-                                              "safeSearch": "strict", "maxResults": config.OUTSIDE_FETCH,
-                                              "regionCode": config.OUTSIDE_REGION, "q": q}, key)
+                params = {"part": "snippet", "type": "video", "videoEmbeddable": "true", "safeSearch": "strict",
+                          "maxResults": config.OUTSIDE_FETCH, "regionCode": config.OUTSIDE_REGION, "q": q}
+                if dur:   # fix pass 2, finding 57: YouTube's own length filter for a request with a length bound
+                    params["videoDuration"] = dur
+                resp = self.http(SEARCH_API, params, key)
                 ids = []
                 for it in (resp or {}).get("items") or []:
                     vid = ((it or {}).get("id") or {}).get("videoId") if isinstance(it, dict) else None
@@ -333,14 +336,30 @@ class Outside:
                          (ck, json.dumps(checked), _iso(now)))
         have, skip = set(have_ids), set(skip_ids)
         left = [v for v in checked if v["video_id"] not in have and v["video_id"] not in skip]
-        if max_minutes:   # finding 26: videos within the length the request allows come first (YouTube's order kept)
-            left.sort(key=lambda v: v["duration_s"] > max_minutes * 60)
+        over = 0
+        if max_minutes:   # findings 57 and 59: a video over the length the request allows is never shown
+            over = sum(1 for v in left if v["duration_s"] > max_minutes * 60)
+            left = [v for v in left if v["duration_s"] <= max_minutes * 60]
         picks = left[:config.OUTSIDE_SHOW]
         out["picks"] = picks
         if not picks:
+            if over:
+                return stop("none_short", T.outside_none_short(max_minutes))
             return stop("none_found", T.OUTSIDE_NONE)
         out["status"] = "shown"
         return out
+
+
+def video_duration(max_minutes):
+    """search.list's videoDuration for a length bound: "short" is under 4 minutes, "medium" 4 to 20; a longer bound
+    gets no filter (the length check after videos.list still applies)."""
+    if not max_minutes:
+        return None
+    if max_minutes <= 4:
+        return "short"
+    if max_minutes <= 20:
+        return "medium"
+    return None
 
 
 def watch_url(video_id):

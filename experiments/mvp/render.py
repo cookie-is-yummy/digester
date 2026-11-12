@@ -69,7 +69,8 @@ class Reply:
             if p["type"] == "link":
                 out.append(p)
             elif p["text"].strip():
-                out.append({"type": "text", "text": p["text"].strip()})
+                out.append({"type": "text", "text": p["text"].strip(), **({"card_alt": True} if p.get("card_alt")
+                                                                           else {})})
         return out
 
     def text(self):
@@ -215,6 +216,9 @@ def pick_sentence(lead, p, now=None, lang=None, colon=False):
     if kept:
         s += f", {kept}"
     b = p["because"] if p.get("because_backed") and p.get("because") else None
+    fit = p.get("fit") if not colon else None   # finding 54: the person's kit or level, backed by the pick's text
+    if fit:
+        b = f"{b}, and {fit}" if b else fit
     if b:
         subject = SUBJECT.match(b) or L.code(lang) is not None   # the subject words are English ones
         if colon:   # a follow-up names a pick already shown: "It's X, which you saved in May: it has no cream."
@@ -233,6 +237,11 @@ def criterion_phrase(cr, lang=None, no=False):
         return t["ph_routine"]
     if re.search(r"start to finish|finished|ends? with|whole project|complete project", low):
         return t["ph_project"]
+    m = re.match(r"suits (?:an? )?(beginner|kids|intermediate level|advanced level)$", low)
+    if m and not L.code(lang):   # finding 58: the level must-have, in a sentence
+        return {"beginner": "is made for a beginner", "kids": "is made for kids",
+                "intermediate level": "is made for an intermediate level",
+                "advanced level": "is made for an advanced level"}[m.group(1)]
     m = re.match(r"under (\d+) minutes$", low)
     if m:
         return t["ph_under"].format(n=m.group(1))

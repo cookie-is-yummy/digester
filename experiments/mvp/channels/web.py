@@ -47,6 +47,7 @@ def _local(dt, tzname, with_day=True):
 class WebChannel(Channel):
     name = "web"
     link_previews = True   # a link part is drawn as a card (YouTube thumbnail or a plain Instagram card)
+    draws_cards = True     # a card carries a video's title, channel and length: no text line repeats them (finding 55)
     outbox_place = "in the Outbox panel"   # where an email that was not sent is, in the bot's reply
     poll_seconds = 0.2
     join_seconds = 1.2
@@ -119,6 +120,11 @@ class WebChannel(Channel):
         card = {"url": url, "title": str(part.get("title") or "")[:200], "platform": part.get("platform"),
                 "video_id": vid, "permalink": instagram_permalink(url) if part.get("platform") == "instagram" else None,
                 "outside": bool(part.get("outside"))}   # an outside pick: the card says it is not from their saves
+        if part.get("outside"):   # fix pass 2, finding 55: the card carries YouTube's channel name and the length
+            card.update(channel=str(part.get("channel") or "")[:100] or None, length=part.get("length") or None)
+        if part.get("platform") == "calendar":   # finding 56: a calendar card, with the .ics from the outbox beside it
+            card.update(event_title=str(part.get("event_title") or "")[:200], when=str(part.get("when") or "")[:80],
+                        outbox_id=part.get("outbox_id") if isinstance(part.get("outbox_id"), int) else None)
         return self.send(handle, url, link=card)
 
     def close(self):

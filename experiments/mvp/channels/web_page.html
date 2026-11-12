@@ -257,7 +257,14 @@ function card(m) {
     const media = playing.has(m.id) ? ytPlayer(l.video_id, false)
       : `<button class="thumb" data-vid="${vid}" data-mid="${m.id}" aria-label="Play on YouTube"><img src="https://i.ytimg.com/vi/${vid}/hqdefault.jpg" alt="${title}" loading="lazy"><span class="play">▶</span></button>`;
     const from = l.outside ? `<div class="note">Not from your saves · from YouTube</div>` : "";
-    return `<div class="card yt">${media}<div class="cap"><span class="brand">YouTube</span><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div>${from}</div>`;
+    // an outside pick's card carries its channel and length, so no bullet line repeats it (fix pass 2, finding 55)
+    const meta = [l.channel, l.length].filter(Boolean).map(esc).join(" · ");
+    return `<div class="card yt">${media}<div class="cap"><span class="brand">YouTube</span><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div>${meta ? `<div class="note">${meta}</div>` : ""}${from}</div>`;
+  }
+  if (l.platform === "calendar") {
+    // the calendar link as a card, never the raw link (finding 56): the title, the day and time, and the .ics file
+    const ics = l.outbox_id ? `<button class="embed ics" data-oid="${esc(String(l.outbox_id))}">Calendar file (.ics)</button>` : "";
+    return `<div class="card cal"><div class="cap"><span class="brand">Calendar</span>${esc(l.event_title || "")}</div>${l.when ? `<div class="note">${esc(l.when)}</div>` : ""}<a class="open" href="${url}" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a> ${ics}</div>`;
   }
   if (l.platform === "instagram") {
     const btn = l.permalink ? `<button class="embed" data-perm="${esc(l.permalink)}">Show the post here</button>` : "";
@@ -304,22 +311,27 @@ $("thread").addEventListener("click", e => {
   if (th) { playing.add(Number(th.dataset.mid)); th.outerHTML = ytPlayer(th.dataset.vid, true); return; }
   const em = e.target.closest(".embed");
   if (em) { igEmbed(em); return; }
+  const ics = e.target.closest(".ics");
+  if (ics) { openOutbox(ics.dataset.oid); return; }
   const b = e.target.closest(".tap");
   if (b) api("/api/tapback", {handle: me, ref: b.dataset.ref, kind: b.dataset.kind}).then(poll);
 });
 // The Outbox panel: click an email or a calendar file to read it. An email's HTML is shown in a sandboxed frame (no
 // scripts); its plain text is shown first.
 let readerHtml = null;
-$("outbox").addEventListener("click", async e => {
+$("outbox").addEventListener("click", e => {
   const b = e.target.closest(".ob");
-  if (!b || !me) return;
-  const o = await api(`/api/outbox?as=${encodeURIComponent(me)}&id=${b.dataset.oid}`);
+  if (b) openOutbox(b.dataset.oid);
+});
+async function openOutbox(oid) {
+  if (!me || !oid) return;
+  const o = await api(`/api/outbox?as=${encodeURIComponent(me)}&id=${encodeURIComponent(oid)}`);
   readerHtml = o.html || null;
   const att = o.attachments && o.attachments.length ? `<div class="small">Attached: ${o.attachments.map(esc).join(", ")}</div>` : "";
   $("readerBody").innerHTML = `<b>${esc(o.subject || "")}</b>${o.to ? `<div class="small">To: ${esc(o.to)}</div>` : ""}${att}<pre>${linkify(o.text || "")}</pre>`;
   $("asEmail").hidden = !readerHtml;
   $("reader").classList.add("on");
-});
+}
 $("asEmail").addEventListener("click", () => {
   if (!readerHtml) return;
   const f = document.createElement("iframe");

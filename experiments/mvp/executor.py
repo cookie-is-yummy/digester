@@ -31,6 +31,37 @@ UNDER_MINUTES = re.compile(r"\b(?:under|less than|at most|max(?:imum)?|within)\s
 SHORTEST = re.compile(r"\b(shortest|quickest)(?:\s+ones?)?\s+first\b", re.I)
 
 
+# fix pass 2, finding 47: a reason that promises details ("with ingredients and step-by-step guides") is shown only
+# when those details are shown too
+DETAIL_CLAIM = {"ingredients": re.compile(r"\bingredients?\b|\bshopping list\b", re.I),
+                "steps": re.compile(r"\bsteps?\b|step[- ]by[- ]step|\binstructions?\b|\bmethod\b", re.I)}
+# fix pass 2, finding 53: kit the person HAS ("I have an instant pot", "I've got an air fryer") is a preference that
+# lifts matching picks, never a must-have
+KIT_HAVE = re.compile(r"\bi\s*(?:have|'ve got|’ve got|got|own|bought|just got|use)\s+(?:a|an|my|the|one|some)\s+(?:new\s+)?"
+                      r"([a-z][a-z0-9 -]{2,30}?)(?=\s*(?:[,.;!?]|\band\b|\bso\b|\bbut\b|\bnow\b|\bat\b|\bwhat\b|\bany\b|$))",
+                      re.I)
+BEGINNER_TEXT = re.compile(r"\b(?:for (?:absolute |complete |total )?beginners?|beginners?'? (?:guide|tutorial|friendly)|"
+                           r"beginner|your first|first time|easy|simple|basics)\b", re.I)
+
+
+NOT_KIT = re.compile(r"\b(?:time|minutes?|hours?|days?|nights?|weeks?|question|party|date|meeting|class|lot|few|bit|"
+                     r"problem|deadline|idea|moment|kids?|friends?|guests?|family|cold|headache|injury|job|test|exam)\b",
+                     re.I)
+
+
+def kit_words(text):
+    """The kit a message says the person has, in their words ("instant pot"); never a time, an event or people."""
+    from .compose import UNSAFE_TEXT
+    return [" ".join(m.group(1).split()).lower() for m in KIT_HAVE.finditer(text or "")
+            if not UNSAFE_TEXT.search(m.group(1)) and not NOT_KIT.search(m.group(1))]
+
+
+def mentions(text, phrase):
+    from .retrieve import contains_word
+    words = [w for w in re.findall(r"[^\W_]+", phrase.lower()) if len(w) >= 2]
+    return bool(words) and all(contains_word(text or "", w) for w in words)
+
+
 def length_bound(spec, *texts):
     """The longest video length, in minutes, the request allows, or None."""
     c = spec.content
@@ -47,7 +78,10 @@ class ExecutorMixin:
         message, so the app can show it as a card); elsewhere it is one text. Returns the first message's reference."""
         if isinstance(text, Reply) and getattr(self.channel, "link_previews", False):
             first = None
-            for i, part in enumerate(text.split()):
+            parts = text.split()
+            if getattr(self.channel, "draws_cards", False):   # finding 55: the card says it; the line is not sent
+                parts = [p for p in parts if not p.get("card_alt")]
+            for i, part in enumerate(parts):
                 try:
                     if part["type"] == "link":
                         ref = self.channel.send_link(handle, part)
@@ -101,6 +135,38 @@ class ExecutorMixin:
             return
         self.store.set_state(f"levelnote:{h}", seen + [guessed["topic"].lower()])
         result["level_note"] = T.level_guess_note(guessed["topic"], guessed["level"], lang=self._answer_lang())
+
+    def _kits(self, handle, *texts):
+        """The kit the person has: in their profile (tools) and said in this message (finding 53)."""
+        prefs = self.store.person_context(handle).get("prefs") or {}
+        out = []
+        for k in [*(prefs.get("tools") or []), *[w for t in texts for w in kit_words(t)]]:
+            k = re.sub(r"^(?:a|an|my|the|some)\s+", "", " ".join(str(k).split()), flags=re.I)
+            if k and k.lower() not in {x.lower() for x in out}:
+                out.append(k)
+        return out[:4]
+
+    def _fit_note(self, h, pick, kits, extra, spec, *texts):
+        """Finding 54: when the person's kit or their level from the profile is what makes the recommended pick fit,
+        the reason says so in a few words ("it uses your Instant Pot", "it's good for a beginner"); only then. Backed
+        by code: the pick's own text names the kit, or says it is for beginners."""
+        from .compose import own_text
+        from .profile import LEVEL_ASKED, get, level_allowed, match_topic
+        own = own_text(pick["item"], extra)
+        if pick.get("because") and pick.get("because_backed"):
+            said = pick["because"].lower()
+        else:
+            said = ""
+        for k in kits:
+            if mentions(own, k) and not mentions(said, k):
+                return f"it uses your {k}"
+        if any(LEVEL_ASKED.search(t or "") for t in texts) or "beginner" in said:
+            return None   # the request named a level itself: the profile did not choose it
+        prof = get(self.store, h)
+        m = match_topic(prof, spec.content.goal or "", *spec.content.searches, *texts)
+        if m and level_allowed(m, prof["prefs"]) and m.get("level") in ("new", "beginner") and BEGINNER_TEXT.search(own):
+            return "it's good for a beginner"
+        return None
 
     def _exclusions(self, handle):
         prefs = self.store.person_context(handle).get("prefs") or {}
@@ -172,6 +238,17 @@ class ExecutorMixin:
         status, err, result, cands, view = "ok", None, None, [], None
         steps = {}
         disliked = self.store.disliked(person["handle"])
+        kits = self._kits(person["handle"], request_text or "", getattr(self._tl, "hint", None) or "")
+        from .interpret import length_only
+        lengths = [cr for cr in spec.content.criteria if length_only(cr)]
+        if lengths:   # finding 49: "mini" is the length bound, worked out by code; never "I couldn't check mini"
+            spec = spec.model_copy(deep=True)
+            spec.content.criteria = [cr for cr in spec.content.criteria if cr not in lengths]
+            request_text = " ".join([request_text or "", *lengths]).strip()   # so the bound is still read
+        if kits and any(mentions(cr, k) for cr in spec.content.criteria for k in kits):
+            # finding 53: a must-have about kit they HAVE ("uses an instant pot") is a preference, not a must-have
+            spec = spec.model_copy(deep=True)
+            spec.content.criteria = [cr for cr in spec.content.criteria if not any(mentions(cr, k) for k in kits)]
         try:
             view = self.view(person["library"])
             ready = getattr(self.pool, "is_ready", None)
@@ -192,6 +269,8 @@ class ExecutorMixin:
                                          creator_weights=weights, now=now, store=self.store, exclude_kinds=ex_kinds,
                                          exclude_platforms=ex_platforms, seed=seed, only=only_ids)
                 cost += meta.get("cost_usd", 0.0)
+                if kits:   # finding 53: picks that use their kit come first (the search order kept otherwise)
+                    cands = sorted(cands, key=lambda it: not any(mentions(it.caption, k) for k in kits))
             steps["search"] = round(time.time() - t0, 2)
             t1 = time.time()
             extra = self._youtube().details(cands, now=now) if any(c.platform == "youtube" for c in cands) else {}
@@ -254,6 +333,15 @@ class ExecutorMixin:
                 steps["extract"], steps["extract_calls"] = round(time.time() - t1, 2), info["calls"]
                 if info.get("errors"):   # a failed details call: the answer goes out without those details
                     steps["extract_errors"] = info["errors"]
+            for p in (result.get("picks") or []) + (result.get("wider") or []):
+                # finding 47: a reason that promises ingredients or steps the answer does not show is left out
+                b = p.get("because") if p.get("because_backed") else None
+                if b and any(rx.search(b) and not (p.get("facts") or {}).get(k) for k, rx in DETAIL_CLAIM.items()):
+                    p["because"], p["because_backed"] = None, False
+                    result["dropped"]["because_detail_claim"] = result["dropped"].get("because_detail_claim", 0) + 1
+            if result.get("picks") and kind != "follow_up" and not self._answer_lang():
+                result["picks"][0]["fit"] = self._fit_note(h, result["picks"][0], kits, extra, spec,
+                                                           request_text or "", hint)
         except Exception as e:  # noqa: BLE001 - one failed run never stops the bot
             status, err = "error", type(e).__name__ + (": " + str(e)[:120] if isinstance(e, RuntimeError) else "")
         picks = ((result or {}).get("picks") or []) + ((result or {}).get("wider") or [])
@@ -348,6 +436,8 @@ class ExecutorMixin:
         cutoff = now_iso(now - timedelta(days=config.OUTSIDE_SHOWN_DAYS))
         shown = {k: {v: at for v, at in vids.items() if at >= cutoff} for k, vids in shown.items()}
         skip = set(shown.get(scope, {})) if scope and kind in ("scheduled", "manual", "more") else set()
+        if max_minutes is None:   # fix pass 2, finding 59: a rule's own words ("mini") bound its videos at every send
+            max_minutes = length_bound(spec, *texts, getattr(self._tl, "hint", None) or "")
         res = self._outside().find(h, spec, texts, have_ids=have, now=now, skip_ids=skip, max_minutes=max_minutes)
         scopes = [scope] + ([f"preview:{run_id}"] if kind == "preview" and run_id else [])
         for sc in scopes:   # finding 33: a preview's videos move to its rule when the person says yes
@@ -369,10 +459,14 @@ class ExecutorMixin:
         head = Reply.of(before) + ("\n\n" + label) if before is not None else \
             Reply([{"type": "text", "text": label}])
         parts = list(head.parts)
+        from . import lang as L2
+        from .ytinfo import minutes_text
         for p in picks:
-            parts.append({"type": "text", "text": T.outside_line(p, lang)})
+            # the line is for channels without cards; a channel that draws cards shows the same on the card
+            parts.append({"type": "text", "text": T.outside_line(p, lang), "card_alt": True})
             parts.append({"type": "link", "url": watch_url(p["video_id"]), "title": p["title"], "platform": "youtube",
-                          "video_id": p["video_id"], "outside": True})
+                          "video_id": p["video_id"], "outside": True, "channel": p.get("channel"),
+                          "length": L2.length(minutes_text(p.get("duration_s")), lang)})
         return Reply(parts)
 
     def _note_outside(self, run_id, res):
@@ -448,7 +542,8 @@ class ExecutorMixin:
         """A reminder in the person's own words, or their open to-dos: no search and no model call."""
         h = person["handle"]
         if spec.content.source == "note":
-            msg, n = T.reminder(spec.content.text), 1
+            from .refresh import reminder_message
+            msg, n = reminder_message(spec.content.text) or T.reminder(spec.content.text), 1
         else:
             msg, n = self._todos_text(h)
         run_id = self.store.add_run(handle=h, rule_id=rule_id, kind=kind, at=now_iso(self.clock()), n_candidates=0,

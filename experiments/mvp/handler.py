@@ -38,6 +38,40 @@ PENDING_TTL = {"confirm_rule": timedelta(hours=24), "confirm_delete": timedelta(
 ENDS_PENDING = ("ask", "change_rule", "delete_data", "decline", "stop")
 
 
+# the export reminders offered in the setup (refresh.offer_export_routine names them so)
+EXPORT_REMINDER = re.compile(r"^export reminders \((instagram|youtube)\)$")
+HOW_EXPORT = re.compile(r"\bhow (?:do|can|should|would) i\b|\bsteps?\b|\binstructions?\b|\bhow to\b", re.I)
+
+
+def change_words(old, new):
+    """What a change to a rule changed, in plain words (fix pass 2, finding 50), or None when nothing but the time
+    or the topic changed (those are said by the reply already)."""
+    a, b = old.content, new.content
+    out = []
+    if a.outside != b.outside:
+        out.append({"only": "now from YouTube, outside your saves",
+                    "some": "now with new videos from YouTube as well as your saves",
+                    "none": "now from your saves only"}[b.outside])
+    if b.count != a.count:
+        out.append(f"{b.count} {'pick' if b.count == 1 else 'picks'} each time")
+    added = [x for x in b.avoid if x not in a.avoid]
+    if added:
+        out.append("nothing with " + ", ".join(added))
+    crit = [x for x in b.criteria if x not in a.criteria]
+    if crit:
+        out.append("only ones that " + T.and_words([f"\"{x}\"" for x in crit]))
+    if b.platforms != a.platforms and b.platforms:
+        out.append("only from " + T.and_words([T.PLATFORM_NAMES.get(p, p) for p in b.platforms]))
+    if b.order != a.order and b.order in ("newest", "oldest", "random", "easiest_first"):
+        out.append({"newest": "newest first", "oldest": "oldest first", "random": "in a random order",
+                    "easiest_first": "easiest first"}[b.order])
+    names = {"email.send": "emailed to you", "calendar.add": "with a calendar link", "todo.add": "put on your list"}
+    for act in [x.action for x in new.do if x.action not in {y.action for y in old.do}]:
+        if act in names:
+            out.append(names[act])
+    return ", ".join(out) or None
+
+
 def norm_handle(h):
     """One spelling per person: a lower-case email, or a phone number in E.164 (+1 added to a bare US number)."""
     h = (h or "").strip()
@@ -59,6 +93,7 @@ class HandlerMixin:
         message arrived (it may wait behind a timed send to the same person)."""
         handle = norm_handle(handle)
         self._tl.received = received
+        self._tl.sens_said = False   # the "left out one personal detail" line, at most once per message (finding 38)
         with self.lock_for(handle):
             return self._on_message(handle, text, tapback, tapback_ref)
 
@@ -221,6 +256,13 @@ class HandlerMixin:
             ref = self.send(h, said) or ref
         return ref
 
+    def _sensitive_once(self, prefix=""):
+        """The line that says a personal detail was left out: the first time in this message only (finding 38)."""
+        if getattr(self._tl, "sens_said", False):
+            return ""
+        self._tl.sens_said = True
+        return prefix + T.PROFILE_SENSITIVE
+
     def _merge_note(self, person, note, text, now):
         """A lasting fact said inside a request ("I'm vegetarian now, any dinner ideas?"): merged into the profile by
         the form call, and the line saying what changed rides on the reply. When the call fails or changes nothing,
@@ -233,9 +275,10 @@ class HandlerMixin:
             except Exception as e:  # noqa: BLE001
                 self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
         if res and res["changes"]:
-            self._tl.profile_said = T.profile_changed(res["changes"], res["skipped_sensitive"])
+            self._tl.profile_said = T.profile_changed(res["changes"],
+                                                      res["skipped_sensitive"] and self._sensitive_once())
             return
-        if not P.sensitive(note):
+        if not P.stated_sensitive(note):
             self.store.add_profile_note(h, note, at=now)
 
     def _profile_tail(self):
@@ -268,6 +311,10 @@ class HandlerMixin:
     def _dispatch_one(self, person, it, text, rules, pending, last, now):
         h = person["handle"]
         self.note(intent=it.intent)
+        if it.intent in ("profile_update", "chat") and getattr(self._tl, "merged_text", None) == text:
+            # a setup answer the form call merged already: no second "Noted" and no small talk beside the setup's
+            # own reply (fix pass 2, finding 42)
+            return None
         chained = getattr(self._tl, "chained", False)
         if pending and not chained and (pending["kind"] == "clarify" or it.intent in ENDS_PENDING
                                         or (it.intent == "new_rule" and not it.edits_pending)):
@@ -373,12 +420,17 @@ class HandlerMixin:
             status, nxt = self._next_for(it.spec, person, now, r)
             if status == "done":  # a one-off time that has passed would end the rule without saying so
                 return self.send(h, T.CHANGE_TIME_PASSED)
-            self._wrote(h, "rule_rows", f"changed rule \"{RuleSpec.model_validate(r['spec']).content.goal}\"",
-                        {"rows": self._rule_rows([r["id"]])})
-            self.store.update_rule(r["id"], spec=it.spec.stored(), text=text)
+            old = RuleSpec.model_validate(r["spec"])
+            self._wrote(h, "rule_rows", f"changed rule \"{old.content.goal}\"", {"rows": self._rule_rows([r["id"]])})
+            # fix pass 2, finding 51: the rule keeps the words it was made with (its outside search and its length
+            # bound are read from them); the change is added after them, never in their place
+            kept = (r.get("text") or "").strip()
+            self.store.update_rule(r["id"], spec=it.spec.stored(),
+                                   text=text if not kept else (kept if text in kept else f"{kept} / {text}"))
             self.store.set_slot(r["id"], nxt, status if r["status"] == "active" else r["status"])
-            return self.send(h, T.changed(describe(it.spec.when), it.spec.content.goal) + self._do_note(it.spec)
-                             + self._not_yet_notes(it.spec) + self._email_ask(person, it.spec, now))
+            return self.send(h, T.changed(describe(it.spec.when), it.spec.content.goal, change_words(old, it.spec))
+                             + self._do_note(it.spec) + self._not_yet_notes(it.spec)
+                             + self._email_ask(person, it.spec, now))
         if it.intent == "run_rule":
             r = self._pick_rule(rules, it.rule_number)
             if not r:
@@ -454,7 +506,8 @@ class HandlerMixin:
             return self._profile_update(person, text, now)
         if it.intent == "library_status":
             from .refresh import library_status
-            return self.send(h, library_status(self, person, now))
+            # "how do I export?", "how do I get my new saves in?": the steps too (findings 43 and 60)
+            return self.send(h, library_status(self, person, now, steps=bool(HOW_EXPORT.search(text))))
         if it.intent == "profile_show":
             return self.send(h, P.show_text(P.get(self.store, h), now))
         return self.send(h, HELP)
@@ -470,10 +523,10 @@ class HandlerMixin:
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
         if res and res["changes"]:
-            return self.send(h, T.profile_changed(res["changes"], res["skipped_sensitive"]))
+            return self.send(h, T.profile_changed(res["changes"], res["skipped_sensitive"] and self._sensitive_once()))
         note = " ".join(text.split())[:300]
-        if P.sensitive(note):
-            return self.send(h, T.PROFILE_SENSITIVE)
+        if P.stated_sensitive(note):
+            return self.send(h, self._sensitive_once() or T.PROFILE_NOTED)
         if note.lower() not in {n.lower() for n in self.store.profile_notes(h)}:
             self.store.add_profile_note(h, note, at=now)
         return self.send(h, T.PROFILE_NOTED)
@@ -660,6 +713,13 @@ class HandlerMixin:
         h = person["handle"]
         self.note(intent="confirm")
         self.store.clear_pending(h)
+        if pending["kind"] == "confirm_rule" and EXPORT_REMINDER.match(str(pending["payload"].get("text") or "")):
+            self._tl.join_write = True
+            try:   # only export reminders: one line for all of them (finding 44)
+                return self._start_export_reminders(person, [pending["payload"]] +
+                                                    list(pending["payload"].get("more") or []))
+            finally:
+                self._tl.join_write = False
         if pending["kind"] == "confirm_rule":
             spec = RuleSpec.model_validate(pending["payload"]["spec"])
             if pending["payload"].get("outside_offer") and spec.content.outside == "none":
@@ -677,14 +737,39 @@ class HandlerMixin:
         return None
 
     def _activate_more(self, person, pending, ref):
-        """A second rule shown in the same preview starts with the same YES; 'undo' then stops both."""
+        """A second rule shown in the same preview starts with the same YES; 'undo' then stops both. Export
+        reminders started this way are said in one line together (finding 44)."""
         self._tl.join_write = True
+        exports = []
         try:
             for extra in pending["payload"].get("more") or []:
+                if EXPORT_REMINDER.match(str(extra.get("text") or "")):
+                    exports.append(extra)
+                    continue
                 ref = self._activate(person, extra["text"], RuleSpec.model_validate(extra["spec"])) or ref
+            if exports:
+                ref = self._start_export_reminders(person, exports) or ref
         finally:
             self._tl.join_write = False
         return ref
+
+    def _start_export_reminders(self, person, entries):
+        """The export reminders a YES started, said in one line: 'Done. Next Instagram reminder 10 December, next
+        YouTube one 12 January.' (finding 44: never their whole text)."""
+        h, tz = person["handle"], person["timezone"]
+        now = self.clock()
+        nexts = []
+        for e in entries:
+            spec = RuleSpec.model_validate(e["spec"])
+            rule_id = self.store.add_rule(h, e["text"], spec.stored(), "active", None, created_at=now_iso(now))
+            nxt = next_run(spec.when, tz, now, anchor=now, seed=rule_id, quiet=self.store.quiet(h))
+            if nxt is None:
+                self.store.set_slot(rule_id, None, "done")
+                continue
+            self.store.set_slot(rule_id, now_iso(nxt), "active")
+            self._wrote_rule(h, f"started the {EXPORT_REMINDER.match(e['text']).group(1)} export reminder", rule_id)
+            nexts.append((EXPORT_REMINDER.match(e["text"]).group(1), nxt.astimezone(ZoneInfo(tz))))
+        return self.send(h, T.export_started(nexts)) if nexts else None
 
     def _wrote_rule(self, h, say, rule_id):
         """The last write for 'undo': a rule started (with the rules the same YES started before it)."""

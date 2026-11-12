@@ -76,16 +76,22 @@ INBOX_EMAIL = os.environ.get("MVP_INBOX_EMAIL")     # the bot's inbox account a 
 EXPORT_EVERY_DAYS = {"instagram": 28, "youtube": 61}   # the reminder's interval: 4 weeks; the Takeout schedule (2 months)
 
 # ---------- the person's context and onboarding (DESIGN.md sections 5 and 11, slice 6) ----------
-PROMPT_PROFILE_GUESS = "profile_guess_v2"      # one call groups a sample of their own kept items into topics (v2: plainer,
-#                                               steadier names; v1 gave different names on two runs)
-PROMPT_PROFILE_MERGE = "profile_merge_v1"      # what they say about themselves, as a form code validates
+PROMPT_PROFILE_GUESS = "profile_guess_v3"      # one call groups a sample of their own kept items into topics (v3, fix
+#                                               pass 2, finding 41: things they do or make, at the grain they would
+#                                               say, up to 8, each with what they seem to be doing with it; v2 gave
+#                                               coarse names like "Technology")
+PROMPT_PROFILE_MERGE = "profile_merge_v2"      # what they say about themselves, as a form code validates (v2, finding
+#                                               38: their own goals are kept in their words; only a stated diagnosis,
+#                                               debt or income figures, religion, politics, sexuality or relationship
+#                                               status is left out; finding 46: time they usually have)
 PROMPT_FIRST_REQUESTS = "first_requests_v1"    # the first requests written for them, each checked against the library
 PROFILE_TEMPERATURE = 0
 PROFILE_SEED = 7
-PROFILE_SAMPLE_RECENT = 60     # their newest kept items ...
-PROFILE_SAMPLE_RANDOM = 60     # ... and this many more at random (seeded by the library build: the same sample each time)
-PROFILE_CHANNELS = 12          # their most watched YouTube channels (3 videos or more)
-PROFILE_MAX_TOPICS = 6
+PROFILE_SAMPLE_RECENT = 45     # their newest saved, collected or sent-to-self items ...
+PROFILE_SAMPLE_RANDOM = 45     # ... and this many more at random (seeded by the library build: the same sample each time)
+PROFILE_SAMPLE_LIKED = 24      # likes and playlists weigh less (finding 41) ...
+PROFILE_CHANNELS = 6           # ... and watch history least: their most watched YouTube channels (3 videos or more)
+PROFILE_MAX_TOPICS = 8         # all of them are shown in the read (finding 41)
 PROFILE_MIN_SUPPORT = 3        # a topic needs this many sample lines behind it
 FIRST_REQUESTS = 3             # offered at the end of onboarding, each with at least FIRST_REQUEST_MIN candidates
 FIRST_REQUEST_MIN = 3

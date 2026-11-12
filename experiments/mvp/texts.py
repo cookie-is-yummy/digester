@@ -95,8 +95,10 @@ def avoid_clause(avoid):
     return f", nothing with {', '.join(avoid)}" if avoid else ""
 
 
-def changed(when, goal):
-    return f"Changed: {when}, {goal}."
+def changed(when, goal, what=None):
+    """'Changed: every day at 8am, mini Blender tutorials, now from YouTube, outside your saves.' (fix pass 2,
+    finding 50: what changed is said, not only the rule as it now is)"""
+    return f"Changed: {when}, {goal}" + (f", {what}" if what else "") + "."
 
 
 def skipped(next_time, count=1, dates=None):
@@ -189,6 +191,11 @@ OUTSIDE_LIMIT_ALL = "I've used up today's searches for new things on YouTube. As
 OUTSIDE_NONE = "I didn't find anything new on YouTube for this that isn't already in your saves."
 OUTSIDE_ERROR = "I couldn't reach YouTube just now, so I couldn't look for new things."
 OUTSIDE_ONLY_TAIL = " Ask without \"new\" and I'll look in your own saves."
+
+
+def outside_none_short(minutes):
+    """Findings 57 and 59: every new video found was longer than the request allows."""
+    return f"There's no new one on YouTube under {minutes} minutes today, so I didn't send a longer one."
 
 
 def outside_only_no_actions(actions):
@@ -578,7 +585,8 @@ ITEMS_GONE = "The post you asked me to send again isn't in your library any more
 # ---------- slice 6: the person's context and onboarding ----------
 PROFILE_HOW_TO_CORRECT = ("To correct me, just say it: \"I'm past beginner at Blender\", \"I'm not into cooking any more\", "
                           "\"I have an air fryer\" or \"stop guessing my level\".")
-PROFILE_SENSITIVE = "I don't keep notes about health, relationships, money, religion or politics, so I left that out."
+# fix pass 2, finding 38: said at most once per reply, and it names nothing (not even the kind of thing left out)
+PROFILE_SENSITIVE = "I left out one personal detail; I don't keep those."
 SKIP = re.compile(r"^\W*(skip|skip it|skip this|skip that|next|later|not now|pass|no thanks)\W*$", re.I)
 # a bare "that's right" (with thanks and the like): anything more ("yes, but I'm past beginner", "ok but I'm in
 # Chicago") is an answer of its own and goes to the form call or the interpreter
@@ -593,10 +601,13 @@ ONBOARD_REPEAT = re.compile(r"^\W*(?:yes,?\s+)?(?:every\s+(?:morning|day)|daily|
                             r"make it a rule|send (?:it|that|me one) every (?:morning|day))\W*$", re.I)
 
 
-def read_message(lines, lead="Thanks!"):
-    """Onboarding step 2: the read of the person, then the two questions."""
+def read_message(lines, lead="Thanks!", direction=None):
+    """Onboarding step 2: the read of the person (every guessed topic), the direction the bot guesses from it (finding
+    41: built by code from the checked topics), then the two questions."""
     if lines:
         head = f"{lead} Here's my read of you from what you've saved and watched:\n" + "\n".join(lines)
+        if direction:
+            head += f"\nIt looks like you're {direction}."
         ask = ("Did I get that right? And in a sentence or two, what are you working toward right now? "
                "(Or say \"skip\".)")
     else:
@@ -615,6 +626,30 @@ def contact_message(lead, zone, local, has_email=False):
              "a 6-digit code to check it's yours. ")
     return (f"{lead}\n\n{email}I have you on {zone} time, where it's {local} now. If that's wrong, tell me the city "
             f"you're in. (Or say \"skip\".)").strip()
+
+
+def export_offer(platforms):
+    """Finding 43: at setup only the reminder offer; the steps go out with each reminder, and on request."""
+    every = {"instagram": "Instagram every 4 weeks", "youtube": "YouTube every 2 months"}
+    names = ", ".join(every[p] for p in ("instagram", "youtube") if p in platforms)
+    return f"I'll remind you when a fresh export is due ({names}) and send the steps then. OK?"
+
+
+def export_started(nexts):
+    """Finding 44: one line for every export reminder the YES started: [(platform, date)]."""
+    parts = []
+    for i, (p, d) in enumerate(nexts):
+        day = d.strftime("%-d %B")
+        parts.append(f"next {PLATFORM_NAMES.get(p, p)} reminder {day}" if i == 0 else
+                     f"next {PLATFORM_NAMES.get(p, p)} one {day}")
+    return "Done. " + cap_first(", ".join(parts)) + "."
+
+
+# finding 46: the one optional question of the setup's last message, answered in free text or skipped
+PREFS_QUESTION = ("Anything I should know to pick better: food you avoid, kit you have, how much time you usually "
+                  "have? (Or say \"skip\".)")
+PREFS_THANKS = "Thanks, that helps."
+PREFS_SKIPPED = "No problem. Ask me for anything you've saved, any time."
 
 
 def first_requests_block(texts, repeat_first=True):
