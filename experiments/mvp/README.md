@@ -64,6 +64,7 @@ Other ways to test:
   writes the conversation and a grading sheet to `data/mvp/eval/...` (outside git) and prints counts only.
 - **The interpreter on the rule evaluation set** (live model calls, about $0.003 a case at list price):
   `python3 -m mvp.eval_rules mvp/evalset/rules_dev_timing.jsonl [--limit N] [--ids t-dev-001,...] [--debug F]`
+  (also `rules_dev_content.jsonl` and `rules_dev_extra.jsonl`)
   prints one line per failed case and a total, and writes counts to `MVP_HOME/eval_rules/<file>.json`. The case texts
   are invented. The held-out half is run only by an evaluator who did not build the interpreter.
 
@@ -211,7 +212,7 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `bot.py` | Start-up: channel, store, people, engines |
 | `runtime.py` | The run loop: message log, workers (one person at a time per person), joining quick texts, scheduler thread |
 | `core.py` | Message handler, executor, scheduler rules. The only code that sends |
-| `interpret.py`, `prompts/interpret_v3.md`, `schema.py` | Message to a validated form for every intent (RuleSpec v 2); temperature 0, a seed, a 6-hour cache (`interpret_v4.md` was tried in slice 6 and scored worse: not in use) |
+| `interpret.py`, `prompts/interpret_v5.md`, `schema.py` | Message to a validated form for every intent (RuleSpec v 2); temperature 0, a seed, a 6-hour cache. Code completes what the message says in so many words: a target for every rule command (all rules, or the rule whose topic is named; "the next two" is a count), the section 11 times for "twice a day", a one-time surprise as one random moment, "this week" as an end on Sunday, the days a clarify keeps, "this week's pasta now" as run_rule, a time for an open to-do as its due time, "put a few recipes on my list" as an ask with todo.add, an output of a new ask in its own do list, "no mushrooms" as avoid, a fact inside an ask as a profile note, nested month weeks made flat (`interpret_v4.md` was tried in slice 6 and scored worse: not in use) |
 | `profile.py`, `prompts/profile_guess_v2.md`, `prompts/profile_merge_v1.md` | The person's profile: the guess from their library (checked and counted by code, the sensitive-topic filter, cached per library build), merging what they say, the lines for the interpreter and the composer, "what do you know about me", level moves |
 | `onboarding.py`, `prompts/first_requests_v1.md` | The setup after consent: the read, their answer merged, email and time zone, the export routine, three checked first requests and the morning-rule offer; "set me up again" |
 | `eval_rules.py`, `evalset/` | The rule evaluation runner and the development half of the set |
@@ -233,4 +234,4 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 325 offline tests (`test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings) |
+| `tests/` | 344 offline tests (`test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings) |

@@ -10,6 +10,7 @@ produce. The set checks the form the interpreter returns, not the reply text.
 | --- | --- | --- |
 | `rules_dev_timing.jsonl` | when and how often: once, schedules, random, windows, limits, pause, skip, snooze, quiet hours, time zones, clarify, two requests in one message | `t-dev-001` to `t-dev-059` |
 | `rules_dev_content.jsonl` | what and where: filters, must-haves, details, outputs, acting on an answer, to-dos, profile, library status and statistics, feedback, refusals | `t-dev-001` to `t-dev-059` |
+| `rules_dev_extra.jsonl` | added by the builders in the interpreter's improvement round, one or more cases per kind of misreading the evaluator reported: rule targets and scope, nested month weeks, two requests in one message, "twice a day", a one-time surprise, "this week" as an end, clarify keeping its days, running a rule now, a due time for an open to-do, finding things for the list, outputs of a new ask, things to avoid, a fact inside an ask | `x-dev-001` to `x-dev-034` |
 
 This is the development half: builders may read it. A held-out half in the same format, with the same context
 names, is kept outside git and is run only by an evaluator who did not build the interpreter. Do not try to obtain it.

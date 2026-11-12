@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 from pydantic import ValidationError
 
 from . import config, llm
-from .schema import Interpretation, RuleSpec, list_name
+from .schema import Interpretation, RuleSpec, When, list_name
 from .schedule import complete, describe, resolve_relative, say_time
 
 PROMPT = open(os.path.join(config.HERE, "prompts", f"{config.PROMPT_INTERPRET}.md"), encoding="utf-8").read()
@@ -240,9 +240,15 @@ INGREDIENTS = re.compile(r"\bingredients?\b", re.I)
 
 
 def _fill_raw(raw):
-    """Before validation: a library search with no search text searches for its goal."""
+    """Before validation: a library search with no search text searches for its goal; a schedule given a window and
+    a clock time beside it keeps the window ("every evening some time between 6 and 8" came back with both, was refused
+    twice and read as unsupported: improvement round)."""
     if not isinstance(raw, dict):
         return raw
+    spec_ = raw.get("spec") if isinstance(raw.get("spec"), dict) else raw
+    w = spec_.get("when") if isinstance(spec_, dict) else None
+    if isinstance(w, dict) and w.get("type") == "schedule" and w.get("window") and (w.get("times") or w.get("time")):
+        spec_["when"] = {k: v for k, v in w.items() if k not in ("times", "time")}
     spec = raw.get("spec") if isinstance(raw.get("spec"), dict) else raw
     c = spec.get("content") if isinstance(spec, dict) else None
     if isinstance(c, dict) and c.get("source", "library") == "library" and not c.get("searches") and c.get("goal"):
@@ -409,6 +415,47 @@ def later_on_last(it: Interpretation, message, last, now=None, tzname=None):
     return out
 
 
+FIND_THEN = re.compile(r"^\W*(?:(?:can|could|would)\s+you\s+|please\s+|pls\s+)?(?:find|pick|choose|get|look\s+up|"
+                       r"search\s+for|dig\s+up|grab)\s+(?:me\s+)?(?P<what>.+?)\s*,?\s+(?:and|then|&)\s+"
+                       r"(?:(?:please|pls)\s+)?(?:email|e-mail|mail|put|add|send|save|text)\b", re.I)
+ARTICLE = re.compile(r"^(?:a|an|one|some|the)\s+|\s+for\s+me$", re.I)
+
+
+def new_find(it: Interpretation, message, last):
+    """'Pick a blender project for me and email it to me' asks for something NEW, then sends it on: an ask with that
+    action in do. Read as act_on_last, it would have emailed the answer shown before, about something else. Only when
+    the thing asked for shares no topic word with the last answer."""
+    if it.intent != "act_on_last" or it.when is not None or not it.actions:
+        return it
+    m = FIND_THEN.match(message)
+    if not m:
+        return it
+    what = m.group("what").strip()
+    said = _topic_stems(what)
+    if not said or len(what) > 120:
+        return it
+    before = _topic_stems((last or {}).get("goal") or "", (last or {}).get("request") or "")
+    if said & before:
+        return it
+    goal = ARTICLE.sub("", ARTICLE.sub("", what)).strip() or what
+    count = 1 if re.match(r"^(?:a|an|one)\s", what, re.I) else 3
+    q = QUANTITY.match(what)
+    if q and q.group(1).lower() not in ("some",):
+        w = " ".join(q.group(1).lower().split())
+        count = int(w) if w.isdigit() else NUMBER_WORDS.get(w, count)
+        goal = what[q.end():].strip() or goal
+    do = ["message.send"] + [a.model_dump() for a in it.actions if a.action != "message.send"]
+    try:
+        out = Interpretation.model_validate({
+            "intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+                "source": "library", "goal": goal[:200], "searches": [goal[:120]], "count": max(1, min(count, 10))},
+                "do": do}, "profile_note": it.profile_note, "lang": it.lang})
+    except ValidationError:
+        return it
+    out.also = it.also
+    return out
+
+
 def _plain_todo(x):
     return isinstance(x, dict) and x.get("intent") == "todo_add" and bool(x.get("todo_text")) \
         and not x.get("pick_number") and x.get("what") in (None, "pick")
@@ -437,12 +484,438 @@ def merge_todo_adds(raw):
     return raw
 
 
-def settle(raw, message, rules, now, tzname):
+# ---------- improvement round: completions for kinds of misreading the evaluator reported ----------
+# Each one fills or corrects a form from what the message says in so many words, or from the person's own rules and
+# to-dos. None of them invents a time, a text or a number the person did not give.
+STOP_TOPIC = set("""a an the my me i to for of and or on in at with from by your this that these those one ones it its
+    some any next last first second third two three four five few couple times time today tomorrow tonight morning
+    mornings evening evenings night nights week weeks weekend weekends day days daily now please pls send sending skip
+    pause stop resume no not don dont do want get give again more new monday tuesday wednesday thursday friday saturday
+    sunday mondays tuesdays wednesdays thursdays fridays saturdays sundays recipe recipes idea ideas video videos
+    reminder reminders rule rules thing things stuff""".split())
+ALL_WORDS = re.compile(r"\b(?:everything|all\s+(?:of\s+)?(?:them|my|the|it|rules|reminders|messages|texts|sends)"
+                       r"|(?:pause|stop|resume|restart|unpause)\s+all\b|both|every\s+(?:rule|reminder)"
+                       r"|any(?:thing|\s+(?:more\s+)?(?:messages|texts|reminders)))\b", re.I)
+NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+                "ten": 10, "couple": 2, "a couple": 2, "couple of": 2, "a couple of": 2, "few": 3, "a few": 3}
+NEXT_N = re.compile(r"\bnext\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|couple(?:\s+of)?|few)\s+"
+                    r"(?!days?\b|weeks?\b|months?\b|hours?\b|minutes?\b)([a-z]+)", re.I)
+
+
+def _topic_stems(*texts):
+    return {s for s in _stems(" ".join(t or "" for t in texts)) if s not in STOP_TOPIC and len(s) > 2}
+
+
+def _rule_by_topic(message, rules):
+    """The one rule whose topic the message names ("no workouts" is the workout rule), or None."""
+    said = _topic_stems(message)
+    if not said:
+        return None
+    hits = []
+    for i, r in enumerate(rules, 1):
+        c = RuleSpec.model_validate(r["spec"]).content
+        own = _topic_stems(c.goal or "", *c.searches)
+        n = sum(1 for s in said if s in own or difflib.get_close_matches(s, list(own), n=1, cutoff=0.85))
+        hits.append((n, i))
+    hits.sort(reverse=True)
+    if hits and hits[0][0] > 0 and (len(hits) == 1 or hits[0][0] > hits[1][0]):
+        return hits[0][1]
+    return None
+
+
+def _target(x: Interpretation, message, rules):
+    """A command about rules always has a target: 'all_rules' when they say everything (or, for a resume, name no
+    rule), else the rule whose topic they name. A skip of "the next two" counts two sends."""
+    if x.intent not in ("pause", "resume", "stop", "skip", "run_rule", "change_rule"):
+        return
+    if x.rule_number is not None and not 1 <= x.rule_number <= len(rules):
+        x.rule_number = None
+    if x.all_rules and x.rule_number is not None:   # both: the words decide
+        if ALL_WORDS.search(message):
+            x.rule_number = None
+        else:
+            x.all_rules = False
+    if x.rule_number is None and not x.all_rules:
+        n = _rule_by_topic(message, rules) if rules else None
+        if n is not None:
+            x.rule_number = n
+        elif x.intent in ("pause", "resume", "stop") and (ALL_WORDS.search(message) or x.intent == "resume"):
+            x.all_rules = True   # "text me again" names no rule: every paused rule (the handler asks when none fit)
+    if x.intent == "skip" and not x.date:
+        m = NEXT_N.search(message)
+        if m:
+            w = m.group(1).lower()
+            n = int(w) if w.isdigit() else NUMBER_WORDS.get(w)
+            if n and 1 <= n <= 20:
+                x.count = n
+
+
+TWICE = re.compile(r"\b(?:twice|2\s*x|2\s*times|two\s+times)\s*(?:a|per|each|every)?\s*day\b|\b(?:twice|2\s*x)\s+daily\b",
+                   re.I)
+THRICE = re.compile(r"\b(?:three\s+times|3\s*x|3\s*times|thrice)\s*(?:a|per|each|every)?\s*day\b|\b3\s*x\s+daily\b", re.I)
+FOUR = re.compile(r"\b(?:four\s+times|4\s*x|4\s*times)\s*(?:a|per|each|every)?\s*day\b|\b4\s*x\s+daily\b", re.I)
+PART_OF_DAY = re.compile(r"\b(?:noon|lunch|midday|afternoon|breakfast|dinner|supper|bedtime)\b", re.I)
+EVENING_PARTS = re.compile(r"\b(?:morning|evening|night|tonight)s?\b", re.I)
+CLOCK = re.compile(r"\d")
+
+
+def _times_a_day(when, message):
+    """Section 11 defaults, set by code: 'twice a day' with no clock times is 08:00 and 20:00 (also with "morning and
+    night"); three times 08:00, 13:00, 19:00; four adds 16:00. Named times or other parts of the day stay theirs."""
+    if when is None or when.type != "schedule" or when.window:
+        return
+    for rx, n, default in ((TWICE, 2, ["08:00", "20:00"]), (THRICE, 3, ["08:00", "13:00", "19:00"]),
+                           (FOUR, 4, ["08:00", "13:00", "16:00", "19:00"])):
+        m = rx.search(message)
+        if not m:
+            continue
+        rest = message[:m.start()] + " " + message[m.end():]
+        if CLOCK.search(rest) or PART_OF_DAY.search(rest) or (n > 2 and EVENING_PARTS.search(rest)):
+            return
+        if len(when.times) in (1, n) and when.times != default:
+            when.times = list(default)
+        return
+
+
+SURPRISE = re.compile(r"\bsurprise\b|\b(?:some\s?time|at\s+some\s+point|some\s+day|someday|one\s+day)\b", re.I)
+REPEAT = re.compile(r"\b(?:every|each|weekly|daily|monthly|per|times\s+a|a\s+(?:day|week|month))\b", re.I)
+
+
+def _surprise(x: Interpretation, message, now, tzname):
+    """One surprise in a coming period ("surprise me sometime next week") is a random moment, never a fixed time the
+    model chose: random, count 1 for that period, max_sends 1 unless they ask for it every period."""
+    if x.spec is None or not SURPRISE.search(message) or CLOCK.search(message):
+        return
+    w = x.spec.when
+    if w.type not in ("once", "schedule") or w.window or w.every_hours:
+        return
+    if w.type == "schedule" and (w.month_days or w.month_weeks or w.every_days):
+        return
+    low = message.lower()
+    local = now.astimezone(ZoneInfo(tzname)).date()
+    per = "day" if re.search(r"\b(?:today|tonight|tomorrow)\b", low) else \
+        "month" if re.search(r"\bmonth\b", low) else "week"
+    days, start, until = [], None, None
+    if re.search(r"\bweekend\b", low):
+        days = ["SAT", "SUN"]
+    if re.search(r"\bnext\s+(?:week|weekend)\b", low):
+        start = (local + timedelta(days=7 - local.weekday())).isoformat()
+    elif re.search(r"\bnext\s+month\b", low):
+        start = (local.replace(day=1) + timedelta(days=32)).replace(day=1).isoformat()
+    elif re.search(r"\btomorrow\b", low):
+        start = until = (local + timedelta(days=1)).isoformat()
+    elif re.search(r"\b(?:today|tonight)\b", low):
+        start = until = local.isoformat()
+    once = not REPEAT.search(message)
+    x.spec.when = When(type="random", count=1, per=per, days=days or (w.days if w.type == "schedule"
+                                                                        and len(w.days) < 7 else []),
+                       start=start, until=until, max_sends=1 if once else None)
+
+
+WEEK_END = re.compile(r"\b(?:this\s+week|(?:the\s+)?end\s+of\s+(?:the|this)\s+week|rest\s+of\s+(?:the|this)\s+week)\b",
+                      re.I)
+MONTH_END = re.compile(r"\b(?:this\s+month|(?:the\s+)?end\s+of\s+(?:the|this)\s+month|rest\s+of\s+(?:the|this)\s+month)\b",
+                       re.I)
+
+
+def _calendar_end(when, message, now, tzname):
+    """'This week' as an end is this coming Sunday, not seven days on; 'this month' is its last day."""
+    if when is None or not when.repeating or not when.until:
+        return
+    local = now.astimezone(ZoneInfo(tzname)).date()
+    gap = (date.fromisoformat(when.until) - local).days
+    if WEEK_END.search(message) and 6 <= gap <= 8:
+        when.until = (local + timedelta(days=6 - local.weekday())).isoformat()
+    elif MONTH_END.search(message) and 27 <= gap <= 31:
+        nxt = (local.replace(day=1) + timedelta(days=32)).replace(day=1)
+        when.until = (nxt - timedelta(days=1)).isoformat()
+
+
+DAY_NAMES = {"monday": "MON", "tuesday": "TUE", "tues": "TUE", "wednesday": "WED", "thursday": "THU", "thurs": "THU",
+             "friday": "FRI", "saturday": "SAT", "sunday": "SUN"}
+ALL_DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+DAY_WORD = re.compile(r"\b(" + "|".join(DAY_NAMES) + r")s?\b", re.I)
+WEEKDAYS = re.compile(r"\b(?:week\s?days|every\s+week\s?day)\b", re.I)
+WEEKENDS = re.compile(r"\b(?:week\s?ends|every\s+week\s?end)\b", re.I)
+DAILY = re.compile(r"\b(?:every\s+(?:single\s+)?(?:day|morning|evening|night|afternoon)|daily|each\s+(?:day|morning|"
+                   r"evening|night)|nightly)\b", re.I)
+AT_TIME = re.compile(r"\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", re.I)
+
+
+def stated_days(message):
+    """The weekdays a message names in so many words, or None."""
+    if WEEKDAYS.search(message):
+        return ALL_DAYS[:5]
+    if WEEKENDS.search(message):
+        return ["SAT", "SUN"]
+    named = [DAY_NAMES[m.lower()] for m in DAY_WORD.findall(message)]
+    if named:
+        return sorted(set(named), key=ALL_DAYS.index)
+    if DAILY.search(message):
+        return list(ALL_DAYS)
+    return None
+
+
+def _clarify_keeps(x: Interpretation, message):
+    """The half-built form of clarify keeps the weekly days (and a clock time) the person stated; the model sometimes
+    dropped them for on_request."""
+    if x.intent != "clarify" or not isinstance(x.draft, dict):
+        return
+    w = x.draft.get("when") if isinstance(x.draft.get("when"), dict) else {}
+    if w.get("days") or w.get("type") in ("random", "once", "new_items") or w.get("every_days") \
+            or w.get("month_days") or w.get("month_weeks"):
+        return
+    days = stated_days(message)
+    if not days:
+        return
+    new = {k: v for k, v in w.items() if k not in ("type",)}
+    new.update({"type": "schedule", "days": days})
+    m = AT_TIME.search(message)
+    if m and not (new.get("times") or new.get("time")):
+        h = int(m.group(1)) % 12 + (12 if m.group(3).lower() == "pm" else 0)
+        new["times"] = [f"{h:02d}:{int(m.group(2) or 0):02d}"]
+    try:
+        new = When.model_validate(new).model_dump(exclude_none=True)
+    except ValueError:
+        return
+    x.draft = {**x.draft, "when": {k: v for k, v in new.items() if v not in ([], None)}}
+
+
+def _norm(text):
+    return " ".join(WORD.findall((text or "").lower()))
+
+
+RULE_NOW = re.compile(r"\b(?:now|right\s+now|early|earlier)\b", re.I)
+NEXT_SEND = re.compile(r"\b(?:this\s+week'?s|tomorrow'?s|next|(?:mon|tues|wednes|thurs|fri|satur|sun)day'?s)\b", re.I)
+WHOSE = re.compile(r"\b(?:today'?s|tonight'?s|this\s+week'?s|tomorrow'?s|next|"
+                   r"(?:mon|tues|wednes|thurs|fri|satur|sun)day'?s|the\s+[a-z]+(?:\s+[a-z]+)?\s+one)\b", re.I)
+
+
+def _rule_now(x: Interpretation, rules, message=""):
+    """An ask for an existing rule's send now ("can I have this week's pasta now?", "the workout one now") is that rule
+    run now, not a fresh search with a copy of its spec. "Next", "tomorrow's" or a weekday's is the next send, so it
+    is not sent again then (skip_next). A plain ask on the same topic ("pasta ideas?") stays an ask."""
+    if x.intent != "ask" or x.spec is None or not rules:
+        return
+    if RULE_NOW.search(message) and WHOSE.search(message):
+        n = _rule_by_topic(message, rules)
+        if n is not None:
+            x.intent, x.spec, x.rule_number = "run_rule", None, n
+            x.skip_next = bool(NEXT_SEND.search(message))
+            return
+
+
+def _todo_match(text, todos):
+    """The number of the one open to-do whose words are all in `text` (or nearly the same text), or None."""
+    want = _topic_stems(text) - {"remind", "due", "need", "doing", "done", "finish", "finished"}
+    hits = []
+    for i, t in enumerate(todos, 1):
+        own = _topic_stems(t["text"])
+        if not own:
+            continue
+        if own <= want or (want and want <= own) or \
+                difflib.SequenceMatcher(None, _norm(text), _norm(t["text"])).ratio() >= 0.85:
+            hits.append(i)
+    return hits[0] if len(hits) == 1 else None
+
+
+def _due_for_todo(x: Interpretation, todos):
+    """A one-time reminder (or a new to-do with a time) whose words are an open to-do's is that to-do's due time."""
+    if not todos:
+        return x
+    w, text = None, None
+    if x.intent == "new_rule" and x.spec is not None and x.spec.content.source == "note" and x.spec.when.type == "once":
+        w, text = x.spec.when, x.spec.content.text
+    elif x.intent == "todo_add" and x.todo_text and (x.due or x.in_minutes) and not x.pick_number:
+        text = x.todo_text
+    else:
+        return x
+    n = _todo_match(text, todos)
+    if n is None:
+        return x
+    form = {"intent": "todo_due", "todo_number": [n], "profile_note": x.profile_note, "lang": x.lang}
+    if w is not None:
+        if w.in_minutes:
+            form["in_minutes"] = w.in_minutes
+        elif w.date and w.times:
+            form["due"] = f"{w.date}T{w.times[0]}"
+    else:
+        form["due"], form["in_minutes"] = x.due, x.in_minutes
+    try:
+        out = Interpretation.model_validate({k: v for k, v in form.items() if v is not None})
+    except ValidationError:
+        return x
+    out.also = x.also
+    return out
+
+
+FINDABLE = re.compile(r"\b(?:recipes|videos|vids|tutorials|reels|posts|workouts|routines|ideas|projects|lessons|"
+                      r"exercises|stretches|tips|meals|dishes|songs|crafts)\b", re.I)
+QUANTITY = re.compile(r"^\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|a\s+couple(?:\s+of)?|couple(?:\s+of)?"
+                      r"|a\s+few|few|some|several)\s+", re.I)
+FROM_SAVES = re.compile(r"\b(?:from|in)\s+my\s+(?:saves|saved|library|youtube|instagram|feed|likes)\b|\bi\s+(?:saved|kept|"
+                        r"liked|watched)\b", re.I)
+
+
+def _todo_by_text(x: Interpretation, todos):
+    """'Mark call the landlord done' gives the to-do's words: its number is filled when exactly one open to-do fits, so
+    one meaning has one form."""
+    if x.intent in ("todo_done", "todo_remove", "todo_due") and x.todo_text and not x.todo_number and todos:
+        n = _todo_match(x.todo_text, todos)
+        if n is not None:
+            x.todo_number = [n]
+
+
+def _find_for_list(x: Interpretation, message):
+    """'Put a couple of lunch recipes on my list' asks the bot to FIND them first: an ask with todo.add, never a to-do
+    whose text is the request."""
+    if x.intent != "todo_add" or not x.todo_text or x.pick_number or x.what == "ingredients" or x.due or x.in_minutes:
+        return x
+    text = x.todo_text
+    if not FINDABLE.search(text):
+        return x
+    q = QUANTITY.match(text)
+    if not (q or FROM_SAVES.search(text) or FROM_SAVES.search(message)):
+        return x
+    count = 3
+    goal = text
+    if q:
+        w = " ".join(q.group(1).lower().split())
+        count = int(w) if w.isdigit() else NUMBER_WORDS.get(w, 3)
+        goal = text[q.end():]
+    goal = FROM_SAVES.sub("", goal).strip(" ,.") or text
+    todo = {"action": "todo.add", "params": {"list": x.todo_list}} if x.todo_list and x.todo_list != "todo" \
+        else {"action": "todo.add"}
+    content = {"source": "library", "goal": goal[:200], "searches": [goal[:120]], "count": max(1, min(count, 10))}
+    if FROM_SAVES.search(message) and re.search(r"\bsaves?\b|\bsaved\b", message, re.I):
+        content["kinds"] = list(SAVED_KINDS)
+    try:
+        out = Interpretation.model_validate({"intent": "ask", "spec": {"when": {"type": "now"}, "content": content,
+                                                                         "do": ["message.send", todo]},
+                                             "profile_note": x.profile_note, "lang": x.lang})
+    except ValidationError:
+        return x
+    out.also = x.also
+    return out
+
+
+def _act_into_do(it: Interpretation):
+    """'Find a yoga flow and put it on my calendar at 7': the calendar (email, list) is the new answer's own output, in
+    its do list, not a second act_on_last that would act on the answer shown before."""
+    a = it.also
+    if it.intent not in ("ask", "new_rule") or it.spec is None or a is None or a.intent != "act_on_last":
+        return
+    if a.when is not None or (a.pick_number not in (None, 1)) or (a.answer_ref not in (None, "last")):
+        return
+    do = list(it.spec.do)
+    for act in a.actions:
+        if all(d.action != act.action for d in do):
+            do.append(act)
+    if len(do) > 4:
+        return
+    it.spec.do = do
+    it.also = None
+
+
+NEGATED = re.compile(r"^\s*(?:no|without|nothing\s+with|not|avoid|skip|minus|leave\s+out|hold\s+the)\s+(?:any\s+)?"
+                     r"([a-z][a-z' -]{1,30}?)\s*$", re.I)
+# a thing they lack is a must-have ("needs no oven"), not a word to leave out: avoid would drop every item whose text
+# says "no oven needed"
+NEEDS = set("""equipment gear weights weight dumbbells dumbbell kettlebell kettlebells oven stove stovetop microwave
+    blender mixer machine machines tools tool gym mat bench bands band cooking baking prep jumping jump noise""".split())
+NOT_THINGS = set("more less longer than too over under fewer".split())
+
+
+def _negations_to_avoid(criteria, avoid):
+    """'no mushrooms' as a must-have is a thing to leave out: it moves to avoid (as the plain noun)."""
+    from .retrieve import _stem
+    keep = []
+    for cr in criteria:
+        m = NEGATED.match(cr)
+        words = m.group(1).lower().split() if m else []
+        if not words or words[0] in NOT_THINGS or any(_stem(w) in NEEDS or w in NEEDS for w in words) \
+                or len(words) > 3:
+            keep.append(cr)
+            continue
+        noun = " ".join(_stem(w) for w in words)
+        if noun not in avoid and len(avoid) < 8:
+            avoid.append(noun)
+    return keep
+
+
+AP = "['\u2019]?"
+FACT = re.compile(
+    r"\b(?:i" + AP + r"m|i\s+am)\s+(?:now\s+)?(?:a\s+)?(?:vegetarian|vegan|pescatarian|gluten[- ]free|dairy[- ]free|keto|"
+    r"halal|kosher|lactose[- ]intolerant)\b(?:\s+now)?"
+    r"|\bi\s+(?:don" + AP + r"t|do\s+not|can" + AP + r"t|cannot|never)\s+eat\s+[a-z][a-z -]{1,30}?"
+    r"(?=[,.;!?]|\s+(?:and|so|but|any|anymore)\b|$)"
+    r"|\bi\s+(?:(?:only|just)\s+(?:have|got|bought)|bought|own|(?:have|got)(?=\s+(?:a|an)\s+new\b))\s+"
+    r"(?:a|an|my|one|some)\s+(?:new\s+)?[a-z][a-z -]{1,30}?(?=[,.;!?]|\s+(?:and|so|but|at|in|for|now|any|what|anymore)\b|$)",
+    re.I)
+NOT_A_FACT = re.compile(r"\b(?:time|minutes?|hours?|question|party|day|night|week|idea|moment|sec|second)\b", re.I)
+
+
+def _fact_note(it: Interpretation, message):
+    """A lasting fact said inside a request ("I'm vegetarian now, dinner ideas?") is kept as a profile note too."""
+    if it.intent not in ("ask", "new_rule", "more") or any(x.profile_note for x in [it] + ([it.also] if it.also else [])):
+        return
+    m = FACT.search(message)
+    if m and not NOT_A_FACT.search(m.group(0)):
+        it.profile_note = " ".join(m.group(0).split())[:120]
+
+
+TIPS_ONLY = re.compile(r"\b(?:tips?|tricks?|hacks?|advice|theory|inspo|inspiration|recap)\b", re.I)
+
+
+def _tips_must_haves(c, message):
+    """A tips request keeps only the must-haves its own words state: the person's direction or level from their
+    profile is not a must-have for tips (DESIGN.md section 3: tips and theory get no finished-result criterion)."""
+    if TIPS_ONLY.search(message):
+        said = set(_stems(message))
+        c.criteria = [cr for cr in c.criteria
+                      if any(s in said for s in _topic_stems(cr) - {"end", "finish", "finished", "whole", "full"})]
+
+
+THIS_WEEK = re.compile(r"\b(?:this|the\s+past|the\s+last)\s+week\b|\blast\s+7\s+days\b", re.I)
+
+
+def _recent_week(c, message, now, tzname):
+    """'What did I save this week' written as dates (a week back to tomorrow) is since_days 7: one form, and a rule
+    keeps a window that moves with time."""
+    if c.source != "recent" or not c.saved_after or c.since_days or not THIS_WEEK.search(message):
+        return
+    local = now.astimezone(ZoneInfo(tzname)).date()
+    back = (local - date.fromisoformat(c.saved_after)).days
+    if 6 <= back <= 8 and (not c.saved_before or date.fromisoformat(c.saved_before) > local):
+        c.since_days, c.saved_after, c.saved_before = 7, None, None
+
+
+def settle(raw, message, rules, now, tzname, todos=()):
     """A raw form from the model (or the cache) to a validated, completed Interpretation. Raises ValidationError."""
     it = Interpretation.model_validate(_fill_raw(_drop_model_moment(merge_todo_adds(raw))))
+    it = _find_for_list(_due_for_todo(it, todos), message)
+    if it.also is not None:
+        it.also = _find_for_list(_due_for_todo(it.also, todos), message)
+    _act_into_do(it)
+    _fact_note(it, message)
     for x in [it] + ([it.also] if it.also else []):
         _from_message(x, message)
+        _todo_by_text(x, todos)
+        _rule_now(x, rules, message)
+        _target(x, message, rules)
         _canonical_change(x, rules)
+        _clarify_keeps(x, message)
+        if x.spec is not None:
+            _surprise(x, message, now, tzname)
+            _times_a_day(x.spec.when, message)
+            _calendar_end(x.spec.when, message, now, tzname)
+            c = x.spec.content
+            c.criteria = _negations_to_avoid(c.criteria, c.avoid)
+            if c.source == "library" and x.intent in ("ask", "new_rule"):
+                _tips_must_haves(c, message)
+            _recent_week(c, message, now, tzname)
+        if x.criteria:
+            x.criteria = _negations_to_avoid(x.criteria, x.avoid)
     return finish_all(it, now, tzname)
 
 
@@ -458,7 +931,8 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
         # rows written before the last answer was recorded beside the form hold the bare form
         raw, cached_last = (hit["form"], hit.get("last")) if "form" in hit and "intent" not in hit else (hit, None)
         try:
-            it = later_on_last(settle(raw, text, rules, now, person["timezone"]), text, last, now, person["timezone"])
+            it = new_find(later_on_last(settle(raw, text, rules, now, person["timezone"], todos), text, last, now,
+                                            person["timezone"]), text, last)
             if (rule_free(it) or not need_free) and _still_good(it, cached_last, last, now, person["timezone"]):
                 return it, 0.0
         except ValidationError:
@@ -474,7 +948,8 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
                                seed=config.INTERPRET_SEED)
         cost += c
         try:
-            it = later_on_last(settle(raw, text, rules, now, person["timezone"]), text, last, now, person["timezone"])
+            it = new_find(later_on_last(settle(raw, text, rules, now, person["timezone"], todos), text, last, now,
+                                            person["timezone"]), text, last)
             err = _grounding(it, text)
             if err and attempt == 0:
                 continue

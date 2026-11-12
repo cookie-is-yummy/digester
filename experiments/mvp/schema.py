@@ -52,6 +52,22 @@ def _days(v):
     return sorted(set(v), key=DAYS.index)
 
 
+ORDINAL_WORDS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5,
+                 "5th": 5, "last": -1}
+
+
+def _flatten(v):
+    """[[1, 3]] or [{"week": 1, "day": "MON"}] as a flat list; a single value as a list of one."""
+    if isinstance(v, (list, tuple)):
+        out = []
+        for x in v:
+            out.extend(_flatten(x))
+        return out
+    if isinstance(v, dict):
+        return _flatten(list(v.values()))
+    return [v]
+
+
 def minutes(hm):
     h, m = map(int, hm.split(":"))
     return h * 60 + m
@@ -157,6 +173,31 @@ class When(BaseModel):
             ZoneInfo(v)
         except Exception:  # noqa: BLE001
             raise ValueError("tz must be an IANA zone such as America/New_York") from None
+        return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _flat(cls, v):
+        """Lists the model sometimes nests or writes as words are made flat here, so a plain meaning is never refused
+        (improvement round: "the first and third Monday" came back as month_weeks [[1, 3]] or [[1, "MON"], [3, "MON"]],
+        failed validation twice, and the person got "I didn't catch that"). A weekday found among month_weeks moves to
+        days; "first" .. "fifth" and "last" become 1 .. 5 and -1."""
+        if not isinstance(v, dict):
+            return v
+        v = dict(v)
+        for k in ("days", "times", "month_days", "month_weeks", "except_dates"):
+            if k in v and v[k] is not None:
+                v[k] = _flatten(v[k])
+        weeks, days = [], list(v.get("days") or [])
+        for w in v.get("month_weeks") or []:
+            if isinstance(w, str) and w.strip().upper()[:3] in DAYS and not w.strip().isdigit():
+                days.append(w.strip().upper()[:3])
+            else:
+                weeks.append(ORDINAL_WORDS.get(str(w).strip().lower(), w))
+        if v.get("month_weeks"):
+            v["month_weeks"], v["days"] = weeks, days
+        if v.get("month_days"):
+            v["month_days"] = [ORDINAL_WORDS.get(str(d).strip().lower(), d) for d in v["month_days"]]
         return v
 
     # ---------- the canonical form ----------
@@ -601,6 +642,19 @@ class Interpretation(BaseModel):
         v = dict(v)
         if v.get("intent") in ("new_rule", "ask", "change_rule", "clarify") and "spec" not in v and "content" in v:
             v["spec"] = {k: v.pop(k) for k in ("when", "content", "do") if k in v}   # a form written flat
+        spec0 = v.get("spec")
+        if isinstance(spec0, dict) and isinstance(spec0.get("content"), dict) and \
+                ("do" in spec0["content"] or "when" in spec0["content"]):
+            # "do" (or "when") written inside content was dropped without a word (improvement round: "put a couple of
+            # lunch recipes on my list" lost its todo.add)
+            spec0, c = dict(spec0), dict(spec0["content"])
+            for k in ("when", "do"):
+                if k in c:
+                    val = c.pop(k)
+                    if not spec0.get(k):
+                        spec0[k] = val
+            spec0["content"] = c
+            v["spec"] = spec0
         if isinstance(v.get("spec"), dict):
             spec = dict(v["spec"])
             for k in [k for k in spec if k not in ("v", "when", "content", "do")]:

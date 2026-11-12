@@ -11,8 +11,8 @@ DB = os.path.join(HOME, "mvp.sqlite")
 PEOPLE = os.path.join(HOME, "people.json")  # handle -> {name, library, timezone}
 
 MODEL = os.environ.get("MVP_MODEL", "gpt-5.4-mini")
-PROMPT_INTERPRET = "interpret_v3"   # a v4 (profile rules in the prompt) scored worse on the dev set: slice 6 keeps v3
-                                   # and gives it only the profile lines about the message's topic (profile.py)
+PROMPT_INTERPRET = "interpret_v5"   # v3 plus the improvement round's rules (rule targets, two requests, surprises,
+                                   # to-dos, outputs in do, avoid); v4 (profile rules) scored worse and is not in use
 INTERPRET_TEMPERATURE = 0     # the most deterministic settings the model accepts (DESIGN.md sections 4 and 11)
 INTERPRET_SEED = 7
 INTERPRET_CACHE_HOURS = 6     # the same request from the same person reuses its interpretation (section 4)
