@@ -8,6 +8,7 @@ numbers are replaced. Captions go to the model inside <item> tags as data (rule 
 import json
 import os
 import re
+import unicodedata
 
 from . import config, llm
 from .retrieve import contains_word, norm
@@ -27,6 +28,9 @@ HEADER = re.compile(r"^\W*(ingredients?|method|steps?|instructions?|directions?|
 def clean_line(line):
     """Strip list marks; return None for headers and promotional lines, which are not details."""
     line = " ".join(str(line).split())
+    line = re.sub(r"^(?:\d\ufe0f?\u20e3\s*)+", "", line)  # keycap list numbers
+    while line and (unicodedata.category(line[0]) in ("So", "Sk", "Mn", "Me", "Cf", "Co", "Cn") or line[0] == "\ufffd"):
+        line = line[1:].lstrip()  # an emoji or symbol used as a list mark is not part of the detail
     line = re.sub(r"^(?:[\-\*•·▪✅✔️]+|\d+[\.\)](?!\d))\s*", "", line).strip()  # list marks, never "1.5 cups"
     line = re.sub(r"^(ingredients?|steps?|method|instructions?|tips?)\s*:\s*", "", line, flags=re.I).strip()
     if not line or len(line) > 110 or HEADER.match(line) or line.endswith(":") or NOT_DETAIL.search(line):

@@ -740,6 +740,8 @@ def test_bug_hunt_text_matching():
     from mvp.retrieve import contains_word
     assert clean_line("1.5 cups flour") == "1.5 cups flour" and clean_line("0.5 tsp salt") == "0.5 tsp salt"
     assert clean_line("1. Boil the water") == "Boil the water" and clean_line("2) 3 eggs") == "3 eggs"
+    assert clean_line("🔥 Band circles 2×12") == "Band circles 2×12" and clean_line("1️⃣ Cobra pose 3×8") == "Cobra pose 3×8"
+    assert clean_line("½ cup sugar") == "½ cup sugar"
     hit = [("pavlova with strawberries", "berries"), ("fresh cherries", "cherry"), ("anchovies", "anchovy"),
            ("two eggs", "egg"), ("peanut sauce", "nut"), ("creamy sauce", "cream"), ("udon noodles", "noodle"),
            ("vanilla ice cream", "ice cream"), ("roasted tomatoes", "tomato"), ("shellfish stock", "fish")]
