@@ -226,3 +226,108 @@ would be sent). The clock controls stay.
   held-out half (run only by an evaluator who did not build). Target: 90% on the held-out half.
 - The 20 draft requests, before and after. The same request 5 times: same answer.
 - Live runs on the founder's library through the test page.
+
+## 11. Additions after the gap review (13 Nov 2026)
+
+Two authors of the rule evaluation set listed what sections 1 to 9 could not express. These are adopted. Where this
+section and an earlier one differ, this section wins.
+
+### More timing forms (when)
+- `month_weeks: [1..5, -1]` with `days`: "the first Monday of the month", "the last Friday".
+- `every_months` (1 to 12) with `month_days` or `month_weeks`: "every 6 months", "each year on 3 March" (12, with
+  `start`).
+- `every_hours` (1 to 12) inside `window`: "every 2 hours while I'm at my desk". The daily limit of timed sends
+  still applies, and the preview says so.
+- `except_dates: ["YYYY-MM-DD"]`: "weekdays but not on the 26th".
+- `tz`: an IANA zone that pins one rule ("7pm New York time even when I travel").
+- Defaults, set by code and shown in the preview: "twice a day" is 08:00 and 20:00; three times is 08:00, 13:00,
+  19:00; four adds 16:00; "once a month" with no day is today's day of the month; "a couple of times a week" is 2
+  and "a few" is 3 (`random`).
+- `when.count` is sends per period; `content.count` is picks per send. The prompt carries an example of both.
+- One canonical stored form per meaning (14 days as `every_weeks: 2` when `days` are given; `month_days: 31` as -1),
+  so `describe`, duplicates and tests agree.
+- "Every other Friday" starts on the first matching day after creation (or `start`); the reply states the first date.
+- "Random" with no frequency word means random picks (`order: random`), not random times.
+- Quiet hours: a time the person names is honoured. Random moments, windows, `every_hours` and retries never fall
+  inside quiet hours; windows are clipped to waking hours. A random moment for the current period is drawn from the
+  part of the period that is left.
+- Quiet hours are stored as up to 4 blocks `{start: "HH:MM", end: "HH:MM", days: [...]}` ("not during class 9 to 3
+  on weekdays").
+- Only events the bot can see are triggers. "When I get home" and "when it rains" stay unsupported, with "pick a
+  time" as the offer.
+
+### Managing rules
+- `pause` takes `until` (date or in_minutes); code resumes the rule. This also covers "no workouts this weekend".
+- `skip` takes `count` and `date` ("skip the next two", "no pasta Thanksgiving week").
+- `run_rule` takes `skip_next: true` ("send Friday's one now").
+- `set_timezone` takes `until`; code switches back.
+- `clarify`: when one needed fact is missing ("until the end of the semester"), the bot keeps the half-built form,
+  asks one question, and the next message completes it.
+- `also`: an interpretation may carry one more interpretation, run in order ("I'm in Chicago now, and move pasta to
+  8"; "add milk to my list and find me a pancake recipe").
+- `undo`: reverses the last write (a to-do added, a rule started or changed) within 10 minutes.
+- `library_status`: last import, item counts, when the next export is expected, and the export links again.
+- `library_stats`: counts worked out by code only (totals by platform and kind, by month, top creators, and how many
+  kept items mention given words). Friends' items are excluded.
+
+### Content
+- `avoid_creators`, `avoid_collections`; YouTube playlist names are matched by `collections`.
+- `count`: 1 to 10 for an ask, 1 to 5 for a rule; when cut, the reply says "here are the top N".
+- `saved_before` is exclusive.
+- `source: items` with `item_ids` (set by code from pick numbers, never by the model): used when an earlier answer
+  is sent again or sent elsewhere later.
+- `outside`: `none | some | only`. If the person asked for new things and no route can serve it (no key, quota used
+  up, an Instagram-only request), the reply says so in one line.
+- `more` may carry `avoid`, `criteria` and `outside` ("another but shorter", "more like these but new ones").
+- "Ends with a finished result" is worded per topic and added only for making and building ("a finished model", "a
+  dish you can eat"); for routines it is "a full routine from start to finish".
+- A must-have that is unknown for every candidate (for example a video's length when it is not known) is said in one
+  line, not silently ignored.
+- `prefs.exclude_kinds`, `prefs.exclude_platforms` ("don't use my likes"): applied in retrieval for every request.
+- `lang`: the reply is in the language the person writes in.
+- `profile_note` on any intent ("I'm vegetarian now, any dinner ideas?"): merged into the profile.
+- Feedback gains `harder`, `easier` (also moves the profile level for that topic), `done` ("made it") and `hide`.
+- A fitness request with an injury is an ordinary topic with avoid words; `because` makes no health claim.
+
+### To-dos and acting on answers
+- `todo_add` fields: `todo_text`, `pick_number`, `due`, `list` (a list name, default "todo"), `what: pick |
+  ingredients` (one to-do per verified ingredient line). `todo_done`, `todo_remove`, `todo_due` take `todo_number`
+  (a list) or `todo_text`.
+- `act_on_last`: `actions: [...]` (several at once), `pick_number`, `answer_ref` ("last" or a rule number), and an
+  optional `when` of type `once` ("email me these tonight at 8").
+- `calendar.add` params: `date` (default: the day of the send), `time`, `duration_min`, `title`.
+- Sending to someone else stays out; the reply offers to send it to the person so they can forward it.
+
+### Answers (replaces the 0.6 fit cutoff)
+- The composer gives each pick a verdict: `clear`, `close` or `no`, never a number. `clear` picks are shown as
+  picks. If there is no `clear` pick but a `close` one, the reply shows it as "the closest I have is …". Only when
+  all are `no` does the bot say it found nothing. This removes the flip between "nothing" and an answer that the
+  measurement traced to a score hovering around the cutoff.
+- The interpreter and the composer run with temperature 0 and a fixed seed.
+- YouTube items: titles only is too little for "under 10 minutes" or "ends with a finished model". For candidates
+  shown to the composer, code fetches the video's length and description from YouTube's official `videos.list`
+  (one call per 50 videos, key from `YOUTUBE_API_KEY`), keeps them at most 30 days (YouTube's rule), and treats the
+  description as the item's own text. Without a key the bot works as before.
+
+### Outside picks (replaces the method in section 8)
+- YouTube only: one official `search.list` call, checked by one `videos.list` call (public, embeddable, not made
+  for kids). The first 3 not already in the library, in YouTube's order, shown with YouTube's own title and channel
+  and nothing written by a model. The search words are only words from the person's own message, checked in code;
+  never for sensitive topics. Results are kept at most 30 days. All people share 100 searches a day.
+- Before anyone outside the founders gets outside picks: a terms page that links YouTube's Terms of Service and a
+  privacy note that names YouTube API Services (YouTube's developer policies require both).
+
+### Link previews in Messages
+- A link is sent as its own bubble. A contact card for the bot is sent after the person's first reply, because
+  Messages does not expand links from senders who are not in the person's contacts.
+
+### Keeping the library fresh (replaces the routine in section 9)
+What the research found: Google's Data Portability API is not offered to US users; Takeout can repeat every 2 months
+for a year, into the person's Drive; Meta's repeating export to outside storage is documented for the EU and is
+unverified for a US account. So a fully automatic routine cannot be promised today. The prototype does this:
+- Onboarding step: which accounts, then the shortest steps with direct links, and a rule made for them that reminds
+  them when the next export is due (every 4 weeks for Instagram; the Takeout schedule for YouTube).
+- An inbox folder per person and an upload box on the test page. A new export there is imported without anyone
+  typing a command, and `new_items` rules run.
+- A pick-up from a shared Drive folder is later work: it needs its own Google project and a restricted permission.
+- Messages are never part of an export we ask for.
