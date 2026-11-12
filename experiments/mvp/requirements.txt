@@ -1,0 +1,2 @@
+# MVP skeleton (experiments/mvp). Also needs experiments/demo/requirements.txt for the search engine.
+pydantic>=2,<3

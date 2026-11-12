@@ -1,5 +1,12 @@
 # State
 
+## Founders' summary - round 10, MVP day 1 (12 Nov 2026; `BRIEF-10.md`, `results/r10-mvp-day1.md`)
+
+- **Built:** `experiments/mvp/`, a bot that takes a request by message, turns it into a rule with a preview, searches the person's own library, and replies now or on schedule with picks that link to their posts. The reliability rules are enforced in code. Channels: console, this Mac's Messages app, and Sendblue (written; untested until a line exists).
+- **Ran:** 20 draft requests on Derrick's library: 20 handled, 0 errors, 15 answers with picks, $0.06 in all, about 4 s a reply.
+- **Derrick, please:** edit the 20 draft requests into your own (`data/mvp/requests.draft.jsonl` to `data/mvp/requests.jsonl`), grade the answers in `data/mvp/eval/draft-3/grades.csv`, and run the Mac channel once (`experiments/mvp/README.md`).
+- **Open:** Sendblue's two questions (BRIEF-10 section 6); the session marks (section 10).
+
 ## Founders' summary — round 9 (`BRIEF-9.md`, 9 Nov 2026; full write-up `docs/research/2026-11-09-round9.md`)
 
 **Is the processor good enough?** For finding a post on a topic you remember: probably yes, on AI grades. For finding one exact post you remember: **no**. The finalist stays **Q8**; nothing new was adopted in rounds 9.1–9.3 (stop rule fired).

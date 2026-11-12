@@ -234,10 +234,10 @@ class Engine:
                 "keys": {"openai": has_key("openai"), "gemini": has_key("gemini")}}
 
     # ---------------- one search ----------------
-    def search(self, query, processors, parity=None):
+    def search(self, query, processors, parity=None, depth=None):
         if parity is None:
             query = " ".join(str(query or "").split())[:300]
-        return {p: self._one(query, p, parity) for p in processors}
+        return {p: self._one(query, p, parity, depth) for p in processors}
 
     def _rewrite(self, query, ctx, why):
         """qr-v1 (gpt-5-nano, c6_lib.rewrite_one) from the library's cache, else live when a key is set."""
@@ -280,7 +280,7 @@ class Engine:
             L.save_store(store.path, ids, np.array([store.vec[s] for s in ids]))
         return len(miss)
 
-    def _one(self, query, proc, parity=None):
+    def _one(self, query, proc, parity=None, depth=None):
         env, S = self.env, self.env.S
         F, C7, S88 = M["F"], M["C7"], M["S88"]
         ctx = {"rows": [], "allow_calls": parity is None, "lat": {}, "refine": None, "refine_wall_s": 0.0}
@@ -385,6 +385,15 @@ class Engine:
         if hidden:
             why["notes"].append(f"{hidden} friends' posts were left out of the list.")
         out = {"processor": proc, "results": results, "why": why}
+        if depth:  # MVP: the friend-filtered ranking as item IDs, deeper than the 20 display rows
+            ids = []
+            for c in order:
+                it = S.items[S.pos[c]]
+                if not LIB.is_friend(it):
+                    ids.append(it.get("id") or c)
+                    if len(ids) >= int(depth):
+                        break
+            out["ids"] = ids
         if parity:
             out["order"] = order[:1000]
         return out
@@ -688,7 +697,8 @@ def serve(lib):
                 send({"id": rid, "ok": True, "info": eng.info()})
             elif cmd == "search":
                 procs = [p for p in msg.get("processors") or ["q8"] if p in PROCESSORS][:2] or ["q8"]
-                send({"id": rid, "ok": True, "result": eng.search(msg.get("query", ""), procs)})
+                depth = max(0, min(int(msg.get("depth") or 0), 1000)) or None
+                send({"id": rid, "ok": True, "result": eng.search(msg.get("query", ""), procs, depth=depth)})
             elif cmd == "quit":
                 send({"id": rid, "ok": True})
                 break
