@@ -193,6 +193,14 @@ OUTSIDE_ERROR = "I couldn't reach YouTube just now, so I couldn't look for new t
 OUTSIDE_ONLY_TAIL = " Ask without \"new\" and I'll look in your own saves."
 
 
+def outside_only_no_actions(actions):
+    """New finds from YouTube are shown here only: 'so I didn't email them or put them on your calendar.'"""
+    words = {"email.send": "email them", "calendar.add": "put them on your calendar", "todo.add": "add them to your list"}
+    xs = [words.get(a, "do anything else with them") for a in dict.fromkeys(actions)]
+    did_not = xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " or " + xs[-1]   # "didn't ... or ...", not "and"
+    return f"New finds from YouTube only come here in the chat, so I didn't {did_not}."
+
+
 def outside_limit_person(n):
     return f"You've had today's {n} searches for new things on YouTube. Ask me again tomorrow."
 

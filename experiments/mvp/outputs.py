@@ -82,6 +82,10 @@ class OutputsMixin:
         lines = self._with_lines(None, done, head=head)
         if not lines.parts:   # nothing to say about where it went: the answer itself, rather than silence
             lines = Reply.of(msg)
+        else:
+            block = getattr(self._tl, "outside_block", None)
+            if block and block[0] == run_id:   # finds from YouTube are never emailed (never kept): they come here
+                lines = lines + "\n\n" + block[1]
         return self.send(h, lines + after, run_id)
 
     def _email_reached(self, done):

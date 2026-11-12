@@ -20,6 +20,10 @@ os.environ["DIGESTER_OPENAI_BUDGET_USD"] = str(config.TOTAL_CAP_USD)
 sys.path.insert(0, os.path.join(config.EXP, "lib"))
 import ai  # noqa: E402
 
+# ai.py reads DIGESTER_DATA once, when it is first imported. A process that imports this module again with another
+# MVP_LEDGER_HOME (the tests do) must not keep writing to the first one (it was the real data/mvp ledger).
+ai.DATA = LEDGER_HOME
+ai.LEDGER = os.path.join(LEDGER_HOME, "ai_runs.jsonl")
 ai.TIMEOUT = float(os.environ.get("MVP_MODEL_TIMEOUT", "60"))  # a person is waiting: fail in a minute, not five
 _tl = threading.local()
 _orig_log = ai._log

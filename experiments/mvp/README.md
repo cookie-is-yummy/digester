@@ -117,8 +117,11 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   are public, embeddable, not for kids, not live and not already in their library, in YouTube's order, with YouTube's
   own title and channel and the length. No model reads or rewords them; they are never kept with the answer or counted
   as sent picks. Never for personal topics (health, relationships, money, religion, politics, sexuality). Limits: 80
-  searches a day for everyone, 5 per person, a search text reused for 24 hours. Needs `YOUTUBE_API_KEY`;
-  `MVP_OUTSIDE=0` switches it off. When it cannot serve a request, the reply says why in one line.
+  searches a day for everyone, 5 per person, a search text reused for 24 hours. Everyone's count is also kept in
+  `outside_searches.jsonl` beside the MVP ledger (`MVP_LEDGER_HOME`, day and time only), so the test page and the real
+  bot share one quota. Needs `YOUTUBE_API_KEY`; `MVP_OUTSIDE=0` switches it off. When it cannot serve a request, the
+  reply says why in one line. These finds are shown in the chat only: an answer that goes by email still shows them
+  in the thread, and "email me only new ones" says they were not emailed.
   Before anyone outside the founders gets these: a terms page linking YouTube's Terms of Service and a privacy note
   naming YouTube API Services (DESIGN.md section 11).
 - **The inbox** (`refresh.py`): `MVP_INBOX` (default `data/inbox/`) holds one folder per person (the handle's letters
@@ -130,7 +133,10 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   when the build succeeded is the person switched to the new library (the old folder is kept; a restart keeps the
   switch while `people.json` still names the old one); they get one message with the counts, and their "when I save
   something new" rules run once on the new items. An imported file is deleted; a refused or failed one goes to
-  `<inbox>/<person>/.failed/`. Do not drop a real export there before the founders agree.
+  `<inbox>/<person>/.failed/`, and an importer crash is said to the person like a failed build. An import cut off
+  by a stop starts again at the next start (its half-built library is removed). If two people's handles give the same
+  folder name, that folder is left alone and the upload box refuses it. Do not drop a real export there before the
+  founders agree.
 - **"Did my export come in?"** answers with the last import, items by source, how old the newest item is, when the
   next export is due and the export links. `refresh.offer_export_routine()` gives the export steps and offers the
   reminder rules (every 4 weeks for Instagram, every 2 months for YouTube); the onboarding slice sends it. A fully
@@ -170,8 +176,8 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `contact_card.py` | Writes the bot's `.vcf` contact card, for the founders to host |
 | `retrieve.py`, `engines.py`, `libview.py` | Candidates from the person's own library (Q8 search, cached ranked lists, filters, orders, recent and fixed items) |
 | `ytinfo.py` | A YouTube candidate's length and description from the official `videos.list` (`YOUTUBE_API_KEY`), kept at most 30 days |
-| `outside.py` | New picks from outside the library: YouTube `search.list` with the person's own words, checked by `videos.list`; the sensitive-topic stop, the daily limits and the 24-hour cache |
-| `refresh.py` | The inbox per person, the import (demo importer, without the messages folder), the cost cap, the library switch, new_items rules, library_status, and the export routine with its reminders |
+| `outside.py` | New picks from outside the library: YouTube `search.list` with the person's own words, checked by `videos.list`; the sensitive-topic stop, the daily limits (with the shared count file) and the 24-hour cache |
+| `refresh.py` | The inbox per person, the import (demo importer, without the messages folder), the cost cap, the library switch, recovery of an import cut off by a stop, new_items rules, library_status, and the export routine with its reminders |
 | `compose.py`, `prompts/compose_v2.md` | The model chooses (verdicts clear / close / no, a backed "because", must-haves); code checks it; a cached answer per spec and candidates |
 | `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table |
 | `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
@@ -180,4 +186,4 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, rules, To-dos, Outbox and Exports panels with the upload box), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 220 offline tests |
+| `tests/` | 226 offline tests |

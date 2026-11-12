@@ -78,6 +78,7 @@ ADDED_COLUMNS = [
     ("people", "email TEXT"),            # the person's own address (slice 4), set by text; NULL = none
     ("people", "email_verified_at TEXT"),  # when they texted back the code sent to it; NULL = not confirmed
     ("people", "imported_from TEXT"),    # slice 5: the people.json library an import replaced (kept at the next start)
+    ("imports", "work TEXT"),            # slice 5: an import's working folder, so a restart can put its files back
 ]
 
 

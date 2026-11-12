@@ -16,7 +16,8 @@ recommendation").
   YouTube's order, are shown with YouTube's own title and channel name exactly as returned, the link and the length.
   No model call reads, ranks, describes or rewords them.
 - Limits: a search text reuses its checked results for 24 hours, then they are dropped; at most 80 searches a day for
-  everyone and 5 per person (YouTube's quota day ends at midnight Pacific), counted in the store.
+  everyone and 5 per person (YouTube's quota day ends at midnight Pacific), counted in the store; everyone's count is
+  also kept in a file beside the MVP ledger, shared by every process that uses the same key.
 - Results are never stored in the library and never recorded as deliveries, so feedback never lands on them.
 """
 import hashlib
@@ -24,6 +25,7 @@ import json
 import os
 import re
 import sys
+import threading
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -155,6 +157,43 @@ def _iso(dt):
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
+# ---------- the shared daily count (one file beside the MVP ledger, whatever MVP_HOME is) ----------
+_count_lock = threading.Lock()
+
+
+def _count_path():
+    from . import llm   # its LEDGER_HOME is the one ledger every MVP process shares
+    return os.path.join(llm.LEDGER_HOME, "outside_searches.jsonl")
+
+
+def _shared_rows():
+    try:
+        with open(_count_path(), encoding="utf-8") as f:
+            return [json.loads(line) for line in f if line.strip()]
+    except (OSError, ValueError):
+        return []
+
+
+def _shared_count(day):
+    return sum(1 for r in _shared_rows() if r.get("day") == day)
+
+
+def _shared_add(day, at):
+    """One search, with its quota day and time only (no person, no words)."""
+    path = _count_path()
+    with _count_lock:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        rows = _shared_rows()
+        if len(rows) > 1000:   # only the last few days matter
+            keep = sorted({r.get("day") for r in rows if r.get("day")})[-3:]
+            rows = [r for r in rows if r.get("day") in keep]
+            with open(path + ".tmp", "w", encoding="utf-8") as f:
+                f.writelines(json.dumps(r) + "\n" for r in rows)
+            os.replace(path + ".tmp", path)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"day": day, "at": at}) + "\n")
+
+
 def check_videos(resp, ids, region=None):
     """videos.list response -> the videos that pass, in the order of `ids` (YouTube's search order):
     [{"video_id", "title", "channel", "duration_s"}] with the title and channel exactly as returned."""
@@ -197,9 +236,13 @@ class Outside:
         return now.astimezone(ZoneInfo(config.OUTSIDE_DAY_TZ)).date().isoformat()
 
     def used_today(self, now, handle=None):
+        """Searches made today: for one person (this store), or for everyone. Everyone's count is the larger of this
+        store's and the shared count file's: the test page and the real bot keep separate stores but share one key and
+        one quota, and deleting a person's data does not hand the day's searches back."""
         day = self._day(now)
         if handle is None:
-            return self.store.one("SELECT COUNT(*) n FROM outside_searches WHERE day=?", (day,))["n"]
+            mine = self.store.one("SELECT COUNT(*) n FROM outside_searches WHERE day=?", (day,))["n"]
+            return max(mine, _shared_count(day))
         return self.store.one("SELECT COUNT(*) n FROM outside_searches WHERE day=? AND handle=?", (day, handle))["n"]
 
     def find(self, handle, spec, texts, have_ids=(), now=None, skip_ids=()):
@@ -240,6 +283,7 @@ class Outside:
             # counted before the call: every request uses quota, even one that fails
             sid = self.store.x("INSERT INTO outside_searches(handle,day,at,status) VALUES(?,?,?,?)",
                                (handle, self._day(now), _iso(now), "sent")).lastrowid
+            _shared_add(self._day(now), _iso(now))
             out["searched"] = True
             try:
                 self.searches += 1

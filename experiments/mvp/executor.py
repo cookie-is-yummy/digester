@@ -293,6 +293,8 @@ class ExecutorMixin:
                    "cached": False}
         self._note_outside(run_id, res)
         if res["picks"]:
+            # kept aside too: when the answer itself goes only by email, deliver() still puts this block in the thread
+            self._tl.outside_block = (run_id, self._outside_parts(res["picks"]))
             return self._outside_parts(res["picks"], before=msg)
         if res["line"]:
             return msg + "\n\n" + res["line"]
@@ -321,6 +323,9 @@ class ExecutorMixin:
                                                    "text": (request_text or "")[:300], "shown": []})
         if n:
             msg = self._outside_parts(res["picks"])
+            undone = [a.action for a in spec.do if a.action != "message.send"]
+            if undone:   # finds from YouTube are never kept, so no email, calendar or list entry is made: say so
+                msg = msg + ("\n\n" + T.outside_only_no_actions(undone))
             if kind == "scheduled":
                 number = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), 1)
                 msg = msg + ("\n\n" + T.REMINDER_FOOTER.format(n=number))

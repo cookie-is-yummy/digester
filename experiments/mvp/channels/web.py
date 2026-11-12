@@ -221,10 +221,12 @@ class WebChannel(Channel):
     def upload(self, handle, filename, stream, length):
         """The upload box: an export file goes to the person's inbox (refresh.py), and the inbox is looked at next."""
         from .. import config
-        from ..refresh import save_upload
+        from ..refresh import inbox_name, save_upload, shared_inboxes
         bot = self.bot
         if not bot or not bot.store.person(handle):
             raise ValueError("unknown person")
+        if inbox_name(handle) in shared_inboxes(bot.store):
+            raise ValueError("this person's inbox folder has the same name as another person's")
         if length <= 0 or length > config.UPLOAD_MAX_MB * 1024 * 1024:
             raise ValueError("too large")
         path = save_upload(handle, filename, stream, length)

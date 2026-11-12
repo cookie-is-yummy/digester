@@ -374,9 +374,12 @@ def test_a_synthetic_export_is_imported_and_the_library_switched(fresh, monkeypa
         not os.listdir(os.path.join(fresh["inbox"], ".working"))
     # the build's cost is in the MVP ledger with the person, and counted once
     from mvp import llm
-    with open(llm.ai.LEDGER) as f:   # (ai.py is imported once per test session, so its ledger may be shared)
+    # this test's own ledger, never the real data/mvp one (ai.py is imported once per session; llm.py re-points it)
+    assert llm.ai.LEDGER == os.path.join(llm.LEDGER_HOME, "ai_runs.jsonl")
+    assert llm.LEDGER_HOME.startswith(str(fresh["lib"].parent))
+    with open(llm.ai.LEDGER) as f:
         rows = [json.loads(line) for line in f if '"mvp_import"' in line]
-    assert [(r["purpose"], r["person"], r["cost_usd"]) for r in rows][-1:] == [("mvp_import", H, 0.0123)]
+    assert [(r["purpose"], r["person"], r["cost_usd"]) for r in rows] == [("mvp_import", H, 0.0123)]
     assert llm._lib_rows(new) == []
     # the search now reads the new library; a restart keeps it (people.json still names the old one)
     assert bot.view(new).get("itm_a") is None
@@ -403,7 +406,8 @@ def test_a_failed_build_leaves_the_old_library_in_use(fresh):
     assert bot.store.person(H)["library"] == old
     assert last(ch) == ("Something went wrong while I was adding your new export, so I'm still using your library as "
                         "it was. The founders will look into it.")
-    assert set(os.listdir(os.path.dirname(old))) == before                        # the failed build was removed
+    # the failed build was removed (the test's own ledger folder, beside the library here, is new: its spend is logged)
+    assert set(os.listdir(os.path.dirname(old))) - {"ledger"} == before - {"ledger"}
     assert os.listdir(os.path.join(fresh["inbox"], ".failed"))                    # the file is kept for a founder
     imp = bot.store.one("SELECT * FROM imports")
     assert imp["status"] == "failed" and imp["cost_usd"] == 0.004                 # what it spent is still recorded
@@ -573,6 +577,8 @@ def test_the_export_routine_and_its_reminders(fresh):
                                "\"Time for a fresh YouTube export")
     msg = say(fresh, "when is my next export due", {"intent": "library_status"})
     assert "Your next Instagram export is due Thursday 10 December, and I'll remind you" in msg
+    # a platform it has no steps for is left out (both are offered) rather than failing
+    assert "Instagram, every 4 weeks:" in offer_export_routine(bot, H, platforms=["tiktok"])
 
 
 def test_old_stores_load_and_deleting_data_clears_the_new_tables(tmp_path):
@@ -589,7 +595,7 @@ def test_old_stores_load_and_deleting_data_clears_the_new_tables(tmp_path):
     s.switch_library("+1555", "lib2")
     assert s.person("+1555")["library"] == "lib2" and s.person("+1555")["imported_from"] == "lib"
     s.x("INSERT INTO outside_searches(handle,day,at,status) VALUES('+1555','d','a','ok')")
-    s.x("INSERT INTO imports(handle,status) VALUES('+1555','done')")
+    s.x("INSERT INTO imports(handle,status,work) VALUES('+1555','done',NULL)")
     s.delete_person_data("+1555")
     assert not s.q("SELECT * FROM outside_searches") and not s.q("SELECT * FROM imports")
 
@@ -604,3 +610,109 @@ def test_a_build_ledger_is_counted_once(tmp_path, monkeypatch):
     assert [r["cost_usd"] for r in llm._lib_rows(str(lib))] == [0.5, 0.01]      # a library the demo built: counted
     (lib / "library.json").write_text(json.dumps({"mvp_import": True}))
     assert [r["cost_usd"] for r in llm._lib_rows(str(lib))] == [0.01]           # built by an import: in the MVP ledger
+
+
+# ---------- checker fixes (slice 5) ----------
+def test_an_importer_crash_tells_the_person_and_keeps_the_file(fresh, monkeypatch):
+    bot, ch = fresh["bot"], fresh["ch"]
+    from mvp import refresh
+
+    def boom(*a, **k):   # not a ValueError: an export the importer did not expect
+        raise KeyError("x")
+    monkeypatch.setattr(refresh.ingest, "create_library", boom)
+    old = bot.store.person(H)["library"]
+    drop(fresh, fresh["ig_zip"])
+    bot.refresher.poll(force=True)
+    assert bot.store.person(H)["library"] == old
+    assert last(ch) == ("Something went wrong while I was adding your new export, so I'm still using your library as "
+                        "it was. The founders will look into it.")
+    assert os.listdir(os.path.join(fresh["inbox"], ".failed"))
+    assert not os.listdir(os.path.join(fresh["inbox"], ".working"))
+    imp = bot.store.one("SELECT status, error FROM imports")
+    assert (imp["status"], imp["error"]) == ("failed", "KeyError")
+
+
+def test_an_import_cut_off_by_a_stop_starts_again_after_the_restart(fresh):
+    bot, ch = fresh["bot"], fresh["ch"]
+    from mvp import refresh
+    built = []
+
+    def die(lib, cap):   # the process stops in the middle of the build
+        built.append(lib)
+        raise SystemExit("stopped")
+    bot.refresher.prepare = die
+    old = bot.store.person(H)["library"]
+    drop(fresh, fresh["ig_zip"])
+    with pytest.raises(SystemExit):
+        bot.refresher.import_files(H, bot.refresher.waiting(H))
+    assert bot.store.one("SELECT status FROM imports")["status"] == "running"
+    assert os.path.isdir(built[0]) and bot.store.person(H)["library"] == old
+    with open(os.path.join(built[0], "half-built.marker"), "w") as f:
+        f.write("x")
+    # restart: the half-built library is removed, the file goes back to the inbox and is imported again (the new
+    # build may take the same folder name, so the marker shows the half-built one is gone)
+    bot.refresher = refresh.Refresher(bot, prepare=fake_prepare(), background=False, settle_seconds=0)
+    assert bot.refresher.poll(force=True) == 1
+    assert not os.path.exists(os.path.join(built[0], "half-built.marker"))
+    assert [r["status"] for r in bot.store.q("SELECT status FROM imports ORDER BY id")] == ["interrupted", "done"]
+    assert bot.store.person(H)["library"] != old
+    assert last(ch).startswith("Your new export is in: ")
+    assert not os.listdir(os.path.join(fresh["inbox"], ".working"))
+
+
+def test_two_people_with_one_inbox_folder_are_left_alone(fresh):
+    bot = fresh["bot"]
+    from mvp.refresh import inbox_dir, safe_filename
+    for h in ("john.doe@example.com", "john_doe@example.com"):   # both map to john_doe_example_com
+        bot.store.upsert_person(h, "x", str(fresh["lib"]), "UTC")
+        bot.store.set_consent(h, "test")
+    os.makedirs(inbox_dir("john.doe@example.com"), exist_ok=True)
+    shutil.copy(fresh["ig_zip"], inbox_dir("john.doe@example.com"))
+    assert bot.refresher.poll(force=True) == 0 and not bot.store.q("SELECT * FROM imports")
+    from mvp.channels.web import WebChannel
+    ch = WebChannel(port=0)
+    ch.bot = bot
+    with pytest.raises(ValueError):
+        ch.upload("john_doe@example.com", "x.zip", None, 10)
+    # a name the inbox check would skip (its own "." and "_" folders) is changed so the file is not stranded
+    assert safe_filename("_my export.zip") == "my export.zip" and safe_filename(".x.zip") == "x.zip"
+
+
+def test_the_daily_search_count_is_shared_and_survives_a_deletion(yt, tmp_path):
+    bot = yt["bot"]
+    from mvp.outside import Outside
+    from mvp.store import Store
+    yt["state"]["answers"]["mvp_compose"] = lemon_pick()
+    for w in ("pasta", "noodles", "penne"):
+        say(yt, f"new {w} recipe", outside_ask(goal=f"a {w} recipe", searches=[f"{w} recipe"]))
+    now = yt["clock"][0]
+    other = Outside(Store(str(tmp_path / "web.sqlite")), http=standard_fake())   # the test page's own store
+    assert other.used_today(now) == 3 and other.used_today(now, H) == 0           # one quota, one key
+    bot.store.delete_person_data(H)
+    assert bot.outside.used_today(now) == 3                                       # not handed back by a deletion
+
+
+def test_outside_only_with_an_email_says_it_was_not_emailed(yt):
+    a = outside_ask(outside="only")
+    a["spec"]["do"] = [{"action": "email.send"}, {"action": "todo.add"}]
+    msg = str(say(yt, "email me only new pasta videos, not from my saves, and add them to my list", a))
+    assert msg.startswith("Not from your saves, but close to them:")
+    assert msg.endswith("\nNew finds from YouTube only come here in the chat, so I didn't email them or add them to "
+                        "your list.")
+    assert not yt["bot"].store.q("SELECT * FROM todos") and not yt["bot"].store.outbox(H)
+
+
+def test_an_emailed_answer_still_shows_the_outside_block_in_the_thread(yt):
+    bot, ch = yt["bot"], yt["ch"]
+    bot.store.x("UPDATE people SET email='a@b.co', email_verified_at='2026-11-01T00:00:00+00:00' WHERE handle=?", (H,))
+    ch.outbox_place = "in the Outbox panel"   # as on the test page: the email reaches the person
+    yt["state"]["answers"]["mvp_compose"] = lemon_pick()
+    a = outside_ask()
+    a["spec"]["do"] = [{"action": "email.send"}]
+    n = len(ch.outbox)
+    say(yt, "email me pasta recipes and some new ones from outside my saves", a)
+    thread = "\n".join(str(m[2]) for m in ch.outbox[n:])
+    assert thread.startswith("For \"a pasta recipe\": ")
+    assert "Not from your saves, but close to them:\n• One Pot Chicken & Rice (Easy!)" in thread
+    email = open(bot.store.outbox(H)[0]["path"], encoding="utf-8").read()
+    assert "One Pot Chicken" not in email                                         # never emailed (never kept)

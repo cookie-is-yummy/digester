@@ -75,9 +75,17 @@ def inbox_dir(handle):
     return os.path.join(config.INBOX, inbox_name(handle))
 
 
+def shared_inboxes(store):
+    """Inbox folder names that two or more people map to ('a.b@x.com' and 'a_b@x.com'). Such a folder is never
+    imported from and the upload box refuses it: an export there could be either person's."""
+    names = Counter(inbox_name(p["handle"]) for p in store.q("SELECT handle FROM people"))
+    return {n for n, k in names.items() if k > 1}
+
+
 def safe_filename(name):
     base = os.path.basename((name or "").replace("\\", "/"))
-    base = re.sub(r"[^A-Za-z0-9._ -]+", "_", base).strip(" .")
+    # no leading "." or "_": the inbox check skips such names (its own working folders), so the file would wait forever
+    base = re.sub(r"[^A-Za-z0-9._ -]+", "_", base).lstrip("._ ").rstrip(" .")
     return base[:120] or "export.zip"
 
 
@@ -318,6 +326,8 @@ class Refresher:
         self.ready = set()        # files the upload box finished writing (no need to wait for them to settle)
         self.last_poll = 0.0
         self.threads = []
+        self.recovered = False    # recover() runs at the first look
+        self.warned = set()
 
     def nudge(self, path=None):
         """The upload box wrote a whole file: look at the inboxes at the next scheduler turn."""
@@ -347,11 +357,20 @@ class Refresher:
         if not force and time.time() - self.last_poll < config.INBOX_MINUTES * 60:
             return 0
         self.last_poll = time.time()
+        if not self.recovered:
+            self.recovered = True
+            self.recover()
         if not os.path.isdir(config.INBOX):
             return 0
         started = 0
+        shared = shared_inboxes(self.bot.store)
         for p in self.bot.store.q("SELECT handle FROM people WHERE consent_version IS NOT NULL AND paused=0"):
             h = p["handle"]
+            if inbox_name(h) in shared:   # two people, one folder: whose export it is can't be told, so nobody's
+                if h not in self.warned:
+                    self.warned.add(h)
+                    print("inbox check: two people share one inbox folder; it is left alone", file=sys.stderr)
+                continue
             with self.lock:
                 if h in self.busy:
                     continue
@@ -394,11 +413,14 @@ class Refresher:
             os.replace(f, dest)
             self.ready.discard(os.path.abspath(f))
             claimed.append(dest)
-        row = {"handle": handle, "at": now_iso(now or bot.clock()), "old_library": old_lib}
-        new_lib = None
+        # recorded at once as "running", with its working folder: a restart in the middle finds it (recover())
+        row = {"handle": handle, "at": now_iso(now or bot.clock()), "old_library": old_lib, "status": "running",
+               "work": work}
+        row["id"] = _add_import(store, row)
 
-        def finish(status, message, error=None, keep_files=False):
+        def finish(status, message, error=None):
             row.update(status=status, error=error, seconds=round(time.time() - t0, 1))
+            new_lib = row.get("library")
             if new_lib and status != "done" and os.path.isdir(new_lib) and \
                     os.path.abspath(new_lib) != os.path.abspath(old_lib):
                 shutil.rmtree(new_lib, ignore_errors=True)   # a failed build is derived data: removed, old kept
@@ -417,6 +439,52 @@ class Refresher:
             print(f"import: {status}, {row.get('n_new', 0)} new items, {row['seconds']} s", file=sys.stderr)
             return row
 
+        try:
+            return self._import_claimed(handle, claimed, work, row, old_lib, t0, finish)
+        except Exception as e:  # noqa: BLE001 - any crash of the importer or the build: the type only, never content
+            if row.get("status") == "done":   # switched already: the new library stays; the imported files go
+                row["error"] = type(e).__name__
+                _add_import(store, row)
+                for f in claimed:
+                    _remove(f)
+                shutil.rmtree(work, ignore_errors=True)
+                print(f"import: done, then {type(e).__name__}", file=sys.stderr)
+                return row
+            return finish("failed", T.IMPORT_FAILED, error=type(e).__name__)
+
+    def recover(self):
+        """At the first look after a start: an import this store recorded as running was cut off by a stop. Its
+        half-built library is removed (the person never switched to it) and its files go back into the inbox, so the
+        import starts again; the row says "interrupted". Only folders named in this store's rows are touched, so a
+        second process sharing the inbox keeps its own imports."""
+        n = 0
+        for r in self.bot.store.q("SELECT * FROM imports WHERE status='running'"):
+            if r["handle"] in self.busy:
+                continue
+            person = self.bot.store.person(r["handle"])
+            lib = r.get("library")
+            if lib and os.path.isdir(lib) and (person is None or os.path.abspath(lib) != os.path.abspath(
+                    person["library"])) and os.path.abspath(lib) != os.path.abspath(r.get("old_library") or ""):
+                shutil.rmtree(lib, ignore_errors=True)
+            work = r.get("work")
+            if work and os.path.isdir(work) and person is not None:
+                d = inbox_dir(r["handle"])
+                for name in os.listdir(work):
+                    if name == "in":
+                        continue
+                    dest, k = os.path.join(d, name), 2
+                    while os.path.exists(dest):
+                        dest, k = os.path.join(d, f"{k}-{name}"), k + 1
+                    os.replace(os.path.join(work, name), dest)
+                    self.ready.add(os.path.abspath(dest))
+                    n += 1
+            if work:
+                shutil.rmtree(work, ignore_errors=True)
+            self.bot.store.x("UPDATE imports SET status='interrupted' WHERE id=?", (r["id"],))
+        return n
+
+    def _import_claimed(self, handle, claimed, work, row, old_lib, t0, finish):
+        bot, store = self.bot, self.bot.store
         ig, yt, refused, html = [], [], 0, False
         for i, f in enumerate(claimed):
             kind, why = classify(f)
@@ -443,6 +511,7 @@ class Refresher:
         except ValueError as e:
             return finish("refused", T.IMPORT_HTML if "HTML" in str(e) else T.IMPORT_NOT_EXPORT, error="ValueError")
         row["library"] = new_lib
+        _add_import(store, row)   # recorded now: a stop during the build leaves a folder recover() must remove
         man = LIB.read_json(LIB.p(new_lib, "library.json"), {}) or {}
         if ig and any("followers" in str(w).lower() for w in man.get("warnings") or []):
             return finish("refused", T.IMPORT_NO_FOLLOWERS)
@@ -514,7 +583,7 @@ def _remove(path):
 
 
 IMPORT_COLS = ("handle", "at", "status", "sources", "library", "old_library", "counts", "new_counts", "estimate_usd",
-               "cost_usd", "error", "seconds")
+               "cost_usd", "error", "seconds", "work")
 
 
 def _add_import(store, row):
@@ -749,7 +818,8 @@ def offer_export_routine(bot, handle, platforms=None, tester=False, now=None):
     person = bot.store.person(handle)
     now = now or bot.clock()
     if platforms is None:
-        platforms = sorted(bot.view(person["library"]).platforms() & {"instagram", "youtube"}) or ["instagram", "youtube"]
+        platforms = sorted(bot.view(person["library"]).platforms() & {"instagram", "youtube"})
+    platforms = [p for p in (platforms or ()) if p in EXPORT_LINKS] or ["instagram", "youtube"]   # only these two
     routine = export_routine(platforms, tester=tester)
     specs = [(p, reminder_spec(p, now, person["timezone"], tester=tester)) for p in ("instagram", "youtube")
              if p in routine]
