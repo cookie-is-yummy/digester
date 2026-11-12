@@ -18,7 +18,8 @@ KIND_LABEL = {"save": "saved", "collection": "in a collection", "share_self": "s
 
 
 class Item:
-    __slots__ = ("id", "platform", "url", "caption", "creator", "media", "kinds", "dates", "collections", "watch_count")
+    __slots__ = ("id", "platform", "url", "caption", "first_line", "creator", "media", "kinds", "dates", "collections",
+                 "watch_count")
 
     def __init__(self, raw):
         pd = raw.get("platform_data") or {}
@@ -26,6 +27,7 @@ class Item:
         self.platform = raw.get("platform")
         self.url = raw.get("source_url")
         self.caption = " ".join((raw.get("caption") or "").split())
+        self.first_line = next((" ".join(l.split()) for l in (raw.get("caption") or "").splitlines() if l.strip()), "")
         handle = (pd.get("owner_handle") or "").strip().lstrip("@")
         name = (pd.get("owner_name") or "").strip()
         self.creator = ("@" + handle if handle and self.platform == "instagram" else (name or handle)) or None

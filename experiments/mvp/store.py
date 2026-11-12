@@ -8,7 +8,6 @@ import json
 import os
 import sqlite3
 import threading
-import time
 from datetime import datetime, timezone
 
 SCHEMA = """
@@ -29,6 +28,10 @@ CREATE TABLE IF NOT EXISTS last_answer (handle TEXT PRIMARY KEY, run_id INTEGER,
 CREATE TABLE IF NOT EXISTS sent (channel_ref TEXT PRIMARY KEY, handle TEXT, run_id INTEGER, at TEXT);
 CREATE TABLE IF NOT EXISTS requests (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT, text TEXT, intent TEXT, at TEXT);
 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS inbound (id INTEGER PRIMARY KEY AUTOINCREMENT, channel TEXT, ref TEXT, handle TEXT, text TEXT,
+  tapback TEXT, tapback_ref TEXT, received_at TEXT, status TEXT, intent TEXT, run_id INTEGER, reply_ref TEXT,
+  error TEXT, seconds REAL);
+CREATE UNIQUE INDEX IF NOT EXISTS inbound_ref ON inbound(channel, ref) WHERE ref IS NOT NULL;
 """
 
 
@@ -38,12 +41,17 @@ def now_iso(dt=None):
 
 class Store:
     def __init__(self, path):
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        self.path = os.path.abspath(path)
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.lock = threading.RLock()
         with self.lock:
             self.db.executescript(SCHEMA)
+            try:  # added after day 1: the time of the slot a rule is due for (next_run_at also holds retries)
+                self.db.execute("ALTER TABLE rules ADD COLUMN slot_at TEXT")
+            except sqlite3.OperationalError:
+                pass
             self.db.commit()
 
     def x(self, sql, args=()):
@@ -77,8 +85,8 @@ class Store:
 
     # rules
     def add_rule(self, handle, text, spec, status, next_run_at, created_at=None):
-        cur = self.x("INSERT INTO rules(handle,text,spec,status,created_at,next_run_at) VALUES(?,?,?,?,?,?)",
-                     (handle, text, json.dumps(spec), status, created_at or now_iso(), next_run_at))
+        cur = self.x("INSERT INTO rules(handle,text,spec,status,created_at,next_run_at,slot_at) VALUES(?,?,?,?,?,?,?)",
+                     (handle, text, json.dumps(spec), status, created_at or now_iso(), next_run_at, next_run_at))
         return cur.lastrowid
 
     def rules(self, handle, statuses=("active", "paused")):
@@ -99,6 +107,10 @@ class Store:
             fields["spec"] = json.dumps(fields["spec"])
         sets = ", ".join(f"{k}=?" for k in fields)
         self.x(f"UPDATE rules SET {sets} WHERE id=?", (*fields.values(), rule_id))
+
+    def set_slot(self, rule_id, next_run_at, status):
+        """A rule's next real send time (or None). Retries and holds change next_run_at only, through update_rule."""
+        self.x("UPDATE rules SET next_run_at=?, slot_at=?, status=? WHERE id=?", (next_run_at, next_run_at, status, rule_id))
 
     def due_rules(self, now):
         rows = self.q("SELECT * FROM rules WHERE status='active' AND next_run_at IS NOT NULL AND next_run_at<=? "
@@ -124,7 +136,7 @@ class Store:
 
     def scheduled_today(self, handle, day_start_utc):
         r = self.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
-                     "('sent','none_sent','send_failed') AND at>=?",
+                     "('sent','none_sent','sending','unknown') AND at>=?",
                      (handle, now_iso(day_start_utc)))
         return r["n"] if r else 0
 
@@ -180,6 +192,24 @@ class Store:
     def log_request(self, handle, text, intent):
         self.x("INSERT INTO requests(handle,text,intent,at) VALUES(?,?,?,?)", (handle, text[:500], intent, now_iso()))
 
+    # the inbound journal: one row per message received, with no text once it has been handled
+    def inbound_add(self, channel, msg, at=None):
+        """Returns the row id, or None when this channel reference was already received (a webhook retry, a restart)."""
+        try:
+            cur = self.x("INSERT INTO inbound(channel,ref,handle,text,tapback,tapback_ref,received_at,status) "
+                         "VALUES(?,?,?,?,?,?,?,'received')",
+                         (channel, msg.ref, msg.handle, msg.text or None, msg.tapback, msg.tapback_ref, now_iso(at)))
+            return cur.lastrowid
+        except sqlite3.IntegrityError:
+            return None
+
+    def inbound_done(self, inbound_id, status, intent=None, run_id=None, reply_ref=None, error=None, seconds=None):
+        self.x("UPDATE inbound SET status=?, intent=?, run_id=?, reply_ref=?, error=?, seconds=?, text=NULL WHERE id=?",
+               (status, intent, run_id, str(reply_ref) if reply_ref else None, error, seconds, inbound_id))
+
+    def inbound_unfinished(self):
+        return self.q("SELECT * FROM inbound WHERE status='received' ORDER BY id")
+
     def get_state(self, key, default=None):
         r = self.one("SELECT value FROM state WHERE key=?", (key,))
         return json.loads(r["value"]) if r else default
@@ -190,13 +220,10 @@ class Store:
     def delete_person_data(self, handle):
         """'delete my data': everything the MVP holds about the person except a deletion marker."""
         with self.lock:
-            for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests"):
+            for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests", "inbound"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
-            for key in (f"lines:{handle}", f"cap_notice:{handle}"):
+            for key in (f"lines:{handle}", f"cap_notice:{handle}", f"unknown:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 
-
-def ts():
-    return time.time()

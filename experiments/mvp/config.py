@@ -11,7 +11,7 @@ DB = os.path.join(HOME, "mvp.sqlite")
 PEOPLE = os.path.join(HOME, "people.json")  # handle -> {name, library, timezone}
 
 MODEL = os.environ.get("MVP_MODEL", "gpt-5.4-mini")
-PROMPT_INTERPRET = "interpret_v1"
+PROMPT_INTERPRET = "interpret_v2"
 PROMPT_COMPOSE = "compose_v1"
 
 SEARCH_DEPTH = 300      # ranked item IDs taken from each search

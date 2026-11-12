@@ -27,7 +27,7 @@ HEADER = re.compile(r"^\W*(ingredients?|method|steps?|instructions?|directions?|
 def clean_line(line):
     """Strip list marks; return None for headers and promotional lines, which are not details."""
     line = " ".join(str(line).split())
-    line = re.sub(r"^(?:[\-\*•·▪✅✔️]+|\d+[\.\)])\s*", "", line).strip()  # list marks only, not quantities
+    line = re.sub(r"^(?:[\-\*•·▪✅✔️]+|\d+[\.\)](?!\d))\s*", "", line).strip()  # list marks, never "1.5 cups"
     line = re.sub(r"^(ingredients?|steps?|method|instructions?|tips?)\s*:\s*", "", line, flags=re.I).strip()
     if not line or len(line) > 110 or HEADER.match(line) or line.endswith(":") or NOT_DETAIL.search(line):
         return None
@@ -52,6 +52,28 @@ def line_in_text(line, text):
         return False
     n = len(a)
     return any(b[i:i + n] == a for i in range(len(b) - n + 1))
+
+
+STOP = set("a an and the of for to in on with my your our this that is it at by from or easy best quick simple "
+           "recipe video reel post how make".split())
+
+
+def title_from_item(it, words=8):
+    """A name made only of the item's own first words (the fallback when the model's title is not from the item)."""
+    first = re.split(r"(?<=[.!?])\s", it.first_line, maxsplit=1)[0]
+    first = " ".join(w for w in first.split() if not w.startswith(("#", "@", "http")))
+    out = " ".join(first.split()[:words]).strip(" -:|,")
+    return out[:70] or (it.creator or "From your library")
+
+
+def title_ok(title, it):
+    """At least two thirds of the title's meaningful words must be in the item's own text or creator name."""
+    text = norm(it.caption + " " + (it.creator or ""))
+    words = [w for w in tokens(title) if len(w) >= 3 and w not in STOP and not w.isdigit()]
+    if not words:
+        return False
+    hits = sum(1 for w in words if contains_word(text, w))
+    return hits * 3 >= len(words) * 2
 
 
 def as_data(text):
@@ -97,7 +119,8 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
             + "\n\nCandidates:\n" + block)
     raw, cost = llm.chat_json(PROMPT, user, purpose="mvp_compose", prompt_version=config.PROMPT_COMPOSE,
                               person=person_handle, max_tokens=1600)
-    dropped = {"not_a_candidate": 0, "low_fit": 0, "avoided": 0, "lines_not_in_text": 0, "repeat": 0, "over_count": 0}
+    dropped = {"not_a_candidate": 0, "low_fit": 0, "avoided": 0, "lines_not_in_text": 0, "repeat": 0, "over_count": 0,
+               "title_replaced": 0}
     picks, seen = [], set()
     for p in raw.get("picks") or []:
         try:
@@ -116,10 +139,13 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
         if fit < config.FIT_MIN:
             dropped["low_fit"] += 1
             continue
-        title = _safe(p.get("title"), 70) or (it.creator or "From your library")
+        title = _safe(p.get("title"), 70)
         if any(contains_word(it.caption, w) or contains_word(title, w) for w in c.avoid):
-            dropped["avoided"] += 1
+            dropped["avoided"] += 1  # the model's own name for it counts too: it errs toward leaving the item out
             continue
+        if not title or not title_ok(title, it):  # rule 2: a name the item's own text does not support is not shown
+            dropped["title_replaced"] += 1
+            title = title_from_item(it)
         if len(picks) >= max(c.count, 1):
             dropped["over_count"] += 1
             continue

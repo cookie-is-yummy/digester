@@ -8,7 +8,7 @@ import json
 import os
 import sys
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
 
 from . import config
 
@@ -20,6 +20,7 @@ os.environ["DIGESTER_OPENAI_BUDGET_USD"] = str(config.TOTAL_CAP_USD)
 sys.path.insert(0, os.path.join(config.EXP, "lib"))
 import ai  # noqa: E402
 
+ai.TIMEOUT = float(os.environ.get("MVP_MODEL_TIMEOUT", "60"))  # a person is waiting: fail in a minute, not five
 _tl = threading.local()
 _orig_log = ai._log
 
@@ -28,6 +29,7 @@ def _log(row):
     row = dict(row)
     if getattr(_tl, "person", None):
         row["person"] = _tl.person
+    _tl.cost = getattr(_tl, "cost", 0.0) + (row.get("cost_usd") or 0.0)  # this thread's calls only
     _orig_log(row)
 
 
@@ -78,27 +80,12 @@ def spent_total(libraries):
     return total
 
 
-def library_spent(library):
-    return sum(r.get("cost_usd", 0) for r in _rows(os.path.join(library, "ai_runs.jsonl")))
-
-
 def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=1200):
     """One JSON call. Returns (parsed, cost_usd)."""
-    _tl.person = person
+    _tl.person, _tl.cost = person, 0.0
     try:
-        before = os.path.getsize(ai.LEDGER) if os.path.exists(ai.LEDGER) else 0
         out, _ = ai.openai_chat_json(config.MODEL, system, user, max_tokens=max_tokens, purpose=purpose,
                                      prompt_version=prompt_version)
-        cost = 0.0
-        with open(ai.LEDGER) as f:
-            f.seek(before)
-            for line in f:
-                if line.strip():
-                    cost += json.loads(line).get("cost_usd", 0)
-        return out, cost
+        return out, _tl.cost
     finally:
         _tl.person = None
-
-
-def now_utc():
-    return datetime.now(timezone.utc)

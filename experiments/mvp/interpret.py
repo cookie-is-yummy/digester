@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from . import config, llm
 from .schema import Interpretation, RuleSpec
-from .schedule import describe
+from .schedule import describe, resolve_relative
 
 PROMPT = open(os.path.join(config.HERE, "prompts", f"{config.PROMPT_INTERPRET}.md"), encoding="utf-8").read()
 
@@ -41,7 +41,9 @@ def _context(person, rules, pending, last, now):
 
 def finish(spec: RuleSpec, now, tzname):
     """Code-side completion of a spec. A period ('recently', since_days) stays relative: retrieve turns it into a date
-    at each run, so a recurring rule's window moves with time."""
+    at each run, so a recurring rule's window moves with time. A relative time ('in two hours') becomes a date and a
+    time here, from the moment the message arrived."""
+    resolve_relative(spec.when, now, tzname)
     return spec
 
 

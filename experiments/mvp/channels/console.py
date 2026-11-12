@@ -8,6 +8,7 @@ from .base import Channel, Inbound
 
 class ConsoleChannel(Channel):
     name = "console"
+    join_seconds = 0.0
 
     def __init__(self, printer=print):
         self.inbox = queue.Queue()

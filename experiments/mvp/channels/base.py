@@ -16,14 +16,28 @@ class Inbound:
     ref: Optional[str] = None         # this message's own channel reference (for dedupe)
 
 
+class SendUncertain(Exception):
+    """The send timed out: it may or may not have gone out. It is recorded as unknown and never retried, because a
+    second copy of a message is worse than a missing one."""
+
+
 class Channel:
     name = "base"
+    poll_seconds = 1.0   # how often the bot's loop asks for new messages
+    join_seconds = 2.0   # texts from one person closer together than this are handled as one request
 
     def receive(self):
         raise NotImplementedError
 
     def send(self, handle, text):
         raise NotImplementedError
+
+    def done(self, msg):
+        """Called by the loop when one inbound message has been handled (the test page shows 'typing…' until then)."""
+
+    def wants_tick(self):
+        """True when the scheduler should run now rather than at its next 30-second turn."""
+        return False
 
     def close(self):
         pass

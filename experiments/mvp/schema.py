@@ -10,11 +10,22 @@ PLATFORMS = ["instagram", "youtube"]
 
 
 class When(BaseModel):
-    type: Literal["now", "once", "schedule"] = "now"
+    """When a rule sends. now: answer this message. once: one send at a time. schedule: repeating, on chosen days.
+    on_request: saved, and run whenever the person asks for it."""
+    type: Literal["now", "once", "schedule", "on_request"] = "now"
     days: list[str] = Field(default_factory=list)       # schedule: MON..SUN
     every_weeks: int = 1                                 # schedule: 1 = weekly, 2 = every two weeks
     time: Optional[str] = None                           # HH:MM, 24-hour, local
     date: Optional[str] = None                           # once: YYYY-MM-DD local
+    in_minutes: Optional[int] = Field(default=None, ge=1, le=60 * 24 * 60)  # once: "in two hours"; code sets date and time
+
+    @field_validator("date")
+    @classmethod
+    def _date(cls, v):
+        if v is None:
+            return v
+        from datetime import date
+        return date.fromisoformat(v[:10]).isoformat()
 
     @field_validator("days")
     @classmethod
@@ -45,8 +56,8 @@ class When(BaseModel):
                 raise ValueError("a schedule needs a time")
             if not 1 <= self.every_weeks <= 4:
                 raise ValueError("every_weeks must be 1 to 4")
-        if self.type == "once" and not (self.date and self.time):
-            raise ValueError("a one-time rule needs a date and a time")
+        if self.type == "once" and not (self.in_minutes or (self.date and self.time)):
+            raise ValueError("a one-time rule needs in_minutes, or a date and a time")
         return self
 
 
@@ -62,6 +73,14 @@ class Content(BaseModel):
     saved_after: Optional[str] = None                        # ISO date, worked out by code from since_days
     saved_before: Optional[str] = None
     exclude_sent: bool = True
+
+    @field_validator("saved_after", "saved_before")
+    @classmethod
+    def _iso(cls, v):
+        if v is None:
+            return v
+        from datetime import date
+        return date.fromisoformat(str(v)[:10]).isoformat()   # "last month" is not a date: the form is refused
 
     @field_validator("searches")
     @classmethod
@@ -91,8 +110,11 @@ class Content(BaseModel):
     def _kinds_reach_platforms(self):
         """A filter that removes every item of a listed platform is a validation error (BRIEF-10 section 7)."""
         yt_kinds = {"playlist", "share_self", "like", "watch"}
+        ig_kinds = {"save", "collection", "share_self", "like", "watch", "view"}
         if self.kinds and "youtube" in self.platforms and not (set(self.kinds) & yt_kinds):
             raise ValueError("these kinds exclude every YouTube item")
+        if self.kinds and "instagram" in self.platforms and not (set(self.kinds) & ig_kinds):
+            raise ValueError("these kinds exclude every Instagram item")
         return self
 
 
@@ -107,14 +129,15 @@ class RuleSpec(BaseModel):
     do: list[Action] = Field(default_factory=lambda: [Action()])
 
 
-INTENTS = ["new_rule", "ask", "follow_up", "change_rule", "list_rules", "pause", "resume", "stop", "feedback",
-           "delete_data", "help", "confirm", "decline", "unsupported", "chat"]
+INTENTS = ["new_rule", "ask", "follow_up", "change_rule", "run_rule", "skip", "list_rules", "pause", "resume", "stop",
+           "feedback", "set_timezone", "delete_data", "help", "confirm", "decline", "unsupported", "chat"]
 
 
 class Interpretation(BaseModel):
     intent: Literal[tuple(INTENTS)]
     spec: Optional[RuleSpec] = None            # new_rule, ask, change_rule (the full new spec)
-    rule_number: Optional[int] = None          # change_rule, pause, resume, stop: as listed to the person
+    rule_number: Optional[int] = None          # change_rule, run_rule, skip, pause, resume, stop: as listed to them
+    timezone: Optional[str] = None             # set_timezone: an IANA name ("America/Los_Angeles")
     all_rules: bool = False                    # "stop everything"
     edits_pending: bool = False                # new_rule that changes the rule whose preview is waiting for YES
     feedback: Optional[Literal["up", "down", "more", "less"]] = None
@@ -126,12 +149,18 @@ class Interpretation(BaseModel):
     def _needs(self):
         if self.intent in ("new_rule", "ask", "change_rule") and self.spec is None:
             raise ValueError(f"{self.intent} needs a spec")
-        if self.intent == "new_rule" and self.spec.when.type == "now":
-            raise ValueError("a new rule needs a schedule or a time")
+        if self.intent in ("new_rule", "change_rule") and self.spec.when.type == "now":
+            raise ValueError("a rule needs a time, a schedule, or on_request")
         if self.intent == "ask" and self.spec.when.type != "now":
             self.intent = "new_rule"
         if self.intent == "follow_up" and not self.question:
             raise ValueError("follow_up needs the question")
         if self.intent == "feedback" and not self.feedback:
             raise ValueError("feedback needs a kind")
+        if self.intent == "set_timezone":
+            from zoneinfo import ZoneInfo
+            try:
+                ZoneInfo(self.timezone or "")
+            except Exception:  # noqa: BLE001
+                raise ValueError("set_timezone needs an IANA timezone name such as America/Chicago") from None
         return self

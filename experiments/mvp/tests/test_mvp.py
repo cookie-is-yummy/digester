@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -198,7 +199,9 @@ def test_quiet_hours_and_delete(env):
 def test_unknown_person_and_consent(env):
     bot, ch = env["bot"], env["ch"]
     bot.on_message("+19999999", "hi")
-    assert "don't have your library" in last(ch)
+    assert "not set up" in last(ch)
+    bot.on_message("+19999999", "hi again")
+    assert len(ch.outbox) == 1                                         # one reply a day to a stranger, not one per text
 
 
 def test_mac_reader_decodes_attributed_body_and_tapbacks(tmp_path):
@@ -308,7 +311,8 @@ def test_send_failure_retries_without_burning_items(env):
     assert bot.tick() == 0
     rule = bot.store.rules("+15550001")[0]
     assert rule["next_run_at"] == "2026-11-14T00:16:00+00:00"        # retry in 15 minutes, not every tick
-    assert not bot.store.q("SELECT * FROM deliveries WHERE rule_id=?", (rule["id"],))
+    # only the preview's pick is on the rule: the failed send left nothing behind
+    assert [d["run_id"] for d in bot.store.q("SELECT run_id FROM deliveries WHERE rule_id=?", (rule["id"],))] == [1]
     ch.send = real_send
     clock[0] = datetime(2026, 11, 14, 0, 17, tzinfo=timezone.utc)
     assert bot.tick() == 1
@@ -343,3 +347,468 @@ def test_follow_up_never_resends_a_disliked_item(env):
     bot.on_message("+15550001", "which is easiest?")
     caption = bot.view(str(env["lib"])).get(first).caption
     assert seen and caption[:15] not in seen[0]
+
+
+def test_web_test_page_runs_the_same_bot_and_moves_the_clock(env, tmp_path):
+    """The phone-free test page: a message in, a reply out, a 👍 on the preview starts the rule, and moving the
+    clock to the next send fires it. Calls without the page's token are refused."""
+    from mvp.channels.web import WebChannel
+    from mvp.core import Bot
+    old = env["bot"]
+    ch = WebChannel(port=0)
+    bot = Bot(ch, store=old.store, pool=old.pool, clock=ch.clock)
+    ch.attach(bot)
+    bot.people_path = old.people_path
+    ch.ready = True
+    h = "+15550001"
+    env["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 2, "title": "Lemon garlic pasta", "why": "saved", "fit": 0.9,
+                                                                   "lines": ["200g spaghetti", "2 lemons"]}]}
+    base = f"http://127.0.0.1:{ch.port}"
+
+    def call(path, body=None, token=ch.token):
+        req = urllib.request.Request(base + path, data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"X-Test-Token": token, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as r:
+            return json.loads(r.read())
+
+    from mvp.runtime import Runtime
+    rt = Runtime(bot, ch, workers=0)
+    pump = rt.step
+
+    with pytest.raises(urllib.error.HTTPError):
+        call("/api/state", token="wrong")
+    with pytest.raises(urllib.error.HTTPError):
+        call("/api/send", {"handle": h, "text": "hi"}, token="wrong")
+    page = urllib.request.urlopen(base + "/").read().decode()
+    assert ch.token in page and "__TOKEN__" not in page
+
+    call("/api/send", {"handle": h, "text": "send me a pasta recipe every Friday at 7pm"})
+    assert call("/api/state?as=" + h.replace("+", "%2B"))["busy"] is True
+    pump()
+    s = call("/api/state?as=" + h.replace("+", "%2B"))
+    assert s["busy"] is False and [m["dir"] for m in s["messages"]] == ["in", "out"]
+    assert "Reply YES" in s["messages"][-1]["text"] and not s["rules"]
+    call("/api/tapback", {"handle": h, "ref": s["messages"][-1]["ref"], "kind": "up"})   # 👍 on the preview = YES
+    pump()
+    s = call("/api/state?as=" + h.replace("+", "%2B"))
+    assert len(s["rules"]) == 1 and s["rules"][0]["next"] and s["messages"][-2]["reaction"] == "up"
+    n = len(s["messages"])
+    call("/api/control", {"op": "to_next", "handle": h})
+    pump()
+    s = call("/api/state?as=" + h.replace("+", "%2B"))
+    assert s["ahead_minutes"] > 0 and len(s["messages"]) == n + 1      # the rule fired on the moved clock
+    assert "https://example.com/itm_c" in s["messages"][-1]["text"]   # not itm_a again: the preview counted as sent
+    call("/api/control", {"op": "start_over", "handle": h})
+    pump()
+    s = call("/api/state?as=" + h.replace("+", "%2B"))
+    assert s["messages"] == [] and s["rules"] == [] and s["ahead_minutes"] == 0 and s["agreed"] is True
+    ch.close()
+
+
+def test_a_title_that_is_not_from_the_item_is_replaced(env):
+    """Rule 2 covers the title too: a name the model gives must come from the item's own text, or the item's own
+    first words are shown instead."""
+    from mvp.compose import compose, title_from_item
+    from mvp.schema import RuleSpec
+    view = env["bot"].view(str(env["lib"]))
+    cands = [view.get("itm_b"), view.get("itm_a")]
+    spec = RuleSpec.model_validate(pasta_spec({"type": "now"}))
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": 1, "title": "Lemon garlic pasta", "why": "fits", "fit": 0.9, "lines": []}]}
+    r, _ = compose(cands, spec, "+15550001")
+    assert r["picks"][0]["title"] == "Creamy mushroom pasta with heavy cream" and r["dropped"]["title_replaced"] == 1
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": 2, "title": "Lemon Garlic Pasta", "why": "fits", "fit": 0.9, "lines": []}]}
+    r, _ = compose(cands, spec, "+15550001")
+    assert r["picks"][0]["title"] == "Lemon Garlic Pasta" and r["dropped"]["title_replaced"] == 0
+    assert title_from_item(view.get("itm_a")) == "Lemon garlic pasta"
+
+
+def test_one_off_send_needs_no_preview_and_fires_once(env):
+    """'In two hours' is one send at a stated time: code works out the time, the reply says it, and it fires once."""
+    from datetime import timedelta
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    spec = pasta_spec({"type": "once", "in_minutes": 120})
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": spec}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "in two hours send me a pasta recipe")
+    assert "Today at 3pm" in last(ch) and "stop 1" in last(ch) and "YES" not in last(ch)   # 18:00 UTC is 1pm in New York
+    assert env["calls"].count("mvp_compose") == 0                                          # nothing was searched yet
+    r = bot.store.rules(h)[0]
+    assert r["spec"]["when"] == {"type": "once", "days": [], "every_weeks": 1, "time": "15:00", "date": "2026-11-12",
+                                 "in_minutes": None}
+    clock[0] += timedelta(minutes=119)
+    assert bot.tick() == 0
+    clock[0] += timedelta(minutes=2)
+    assert bot.tick() == 1 and "example.com/itm_a" in last(ch)
+    assert bot.store.rules(h) == [] and bot.store.rule(r["id"])["status"] == "done"
+    clock[0] += timedelta(days=8)
+    assert bot.tick() == 0
+
+
+def test_saved_request_runs_whenever_asked_without_repeats(env):
+    """A rule with no fixed time: saved at once, never fired by the clock, run when the person asks, no repeats."""
+    from datetime import timedelta
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec({"type": "on_request"})}
+    bot.on_message(h, "whenever I ask for pasta, give me one recipe")
+    assert "Saved as rule 1" in last(ch) and "run 1" in last(ch)
+    clock[0] += timedelta(days=30)
+    assert bot.tick() == 0                                             # the clock never fires it
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "run_rule", "rule_number": 1}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "pasta please")
+    assert "example.com/itm_b" in last(ch)
+    bot.on_message(h, "run 1")                                         # itm_b is no longer a candidate: n=1 is itm_a now
+    assert "example.com/itm_a" in last(ch) and "itm_b" not in last(ch)
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "pause", "rule_number": 1}
+    bot.on_message(h, "pause 1")
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "resume", "rule_number": 1}
+    bot.on_message(h, "resume 1")
+    assert bot.store.rules(h)[0]["status"] == "active"                 # resuming keeps it, though it has no next time
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "list_rules"}
+    bot.on_message(h, "my rules")
+    assert "whenever you ask" in last(ch)
+
+
+def test_skip_and_time_zone_change(env):
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    h = "+15550001"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "pasta every friday 7pm")
+    bot.on_message(h, "yes")
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-14T00:00:00+00:00"       # Fri 13 Nov 7pm in New York
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "skip", "rule_number": 1}
+    bot.on_message(h, "skip this week")
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-21T00:00:00+00:00" and "Skipped" in last(ch)
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "set_timezone", "timezone": "America/Los_Angeles"}
+    bot.on_message(h, "I'm in LA now")
+    assert bot.store.person(h)["timezone"] == "America/Los_Angeles"
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-21T03:00:00+00:00"       # same Friday, 7pm in LA: the skip holds
+    from mvp.schema import Interpretation
+    with pytest.raises(Exception):
+        Interpretation.model_validate({"intent": "set_timezone", "timezone": "Mars/Olympus"})
+
+
+def test_mac_self_chat_answers_in_your_own_thread_without_looping(tmp_path):
+    """Testing alone: your own messages to yourself reach the bot once; the bot's replies (marked) never do."""
+    for m in [m for m in sys.modules if m.startswith("mvp")]:
+        del sys.modules[m]
+    from mvp.channels.imessage_mac import BOT_MARK, MacMessagesChannel
+    from mvp.store import Store
+    db = tmp_path / "chat.db"
+    c = sqlite3.connect(db)
+    c.executescript("CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);"
+                    "CREATE TABLE message (ROWID INTEGER PRIMARY KEY, guid TEXT, text TEXT, attributedBody BLOB, "
+                    "is_from_me INTEGER, associated_message_type INTEGER, associated_message_guid TEXT, handle_id INTEGER, date INTEGER);"
+                    "CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, style INTEGER);"
+                    "CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);"
+                    "INSERT INTO chat VALUES (1, 45);"
+                    "INSERT INTO handle VALUES (1, '+15550009'), (2, '+15550002');")
+    c.commit()
+    sent = []
+    ch = MacMessagesChannel(Store(str(tmp_path / "s.sqlite")), db_path=str(db), sender=lambda h, t: sent.append((h, t)),
+                            self_handle="+15550009")
+    ch._own_guid = lambda *a, **k: None   # no real Messages database to wait for
+    rows = [(1, "a1", "what can I make tonight?", 1, 1),      # my message to myself: the sent row
+            (2, "a2", "what can I make tonight?", 0, 1),      # ... and its received copy
+            (3, "a3", BOT_MARK + "Here you go", 1, 1),        # the bot's reply, sent row
+            (4, "a4", BOT_MARK + "Here you go", 0, 1),        # the bot's reply, received copy
+            (5, "a5", "a note to a friend", 1, 2)]            # my ordinary message to someone else
+    for rowid, guid, text, from_me, handle_id in rows:
+        c.execute("INSERT INTO message VALUES (?, ?, ?, NULL, ?, 0, NULL, ?, 0)", (rowid, guid, text, from_me, handle_id))
+        c.execute("INSERT INTO chat_message_join VALUES (1, ?)", (rowid,))
+    c.commit()
+    got = ch.receive()
+    assert [(m.handle, m.text) for m in got] == [("+15550009", "what can I make tonight?")]
+    ch.send("+15550009", "Here you go")
+    ch.send("+15550002", "Hello")
+    assert sent == [("+15550009", BOT_MARK + "Here you go"), ("+15550002", "Hello")]   # only the self-chat is marked
+    assert ch.receive() == []
+
+
+def test_a_flood_from_one_person_is_ignored(env):
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "chat", "reply": "Hi!"}
+    for _ in range(20):
+        bot.on_message("+15550001", "hello")
+    assert len(ch.outbox) == 15 and env["calls"].count("mvp_interpret") == 15
+
+
+# ---------- the run loop and what it writes down ----------
+
+def test_a_crash_while_sending_never_sends_the_slot_twice(env):
+    """The rule moves to its next slot before the send. A crash right after the message went out, then a restart,
+    must not send that Friday's pick again."""
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    bot.on_message(h, "pasta every friday at 7pm")
+    bot.on_message(h, "yes")
+    real_send = ch.send
+
+    def send_then_die(handle, text):
+        real_send(handle, text)
+        raise SystemExit("power cut")   # the message is out; nothing after the send gets recorded
+    ch.send = send_then_die
+    clock[0] = datetime(2026, 11, 14, 0, 1, tzinfo=timezone.utc)
+    n_before = len(ch.outbox)
+    with pytest.raises(SystemExit):
+        bot.tick()
+    assert len(ch.outbox) == n_before + 1
+    ch.send = real_send
+    bot.recover()                                                       # the restart
+    assert bot.tick() == 0 and len(ch.outbox) == n_before + 1           # not sent a second time
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-21T00:00:00+00:00"
+    assert bot.store.one("SELECT status FROM runs ORDER BY id DESC LIMIT 1")["status"] == "unknown"
+
+
+def test_a_timed_out_send_is_not_retried(env):
+    from mvp.channels.base import SendUncertain
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    bot.on_message(h, "pasta every friday at 7pm")
+    bot.on_message(h, "yes")
+    real_send = ch.send
+    ch.send = lambda handle, text: (_ for _ in ()).throw(SendUncertain("timeout"))
+    clock[0] = datetime(2026, 11, 14, 0, 1, tzinfo=timezone.utc)
+    assert bot.tick() == 0
+    ch.send = real_send
+    rule = bot.store.rules(h)[0]
+    assert rule["next_run_at"] == "2026-11-21T00:00:00+00:00"          # no retry in 15 minutes: it may have arrived
+    assert len(bot.store.q("SELECT 1 FROM deliveries WHERE rule_id=?", (rule["id"],))) == 2   # preview + this one kept
+
+
+def test_a_send_missed_while_the_bot_was_off_is_skipped(env):
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    bot.on_message(h, "pasta every friday at 7pm")
+    bot.on_message(h, "yes")
+    n = len(ch.outbox)
+    clock[0] = datetime(2026, 11, 16, 15, 0, tzinfo=timezone.utc)      # Monday morning: Friday 7pm was missed
+    assert bot.tick() == 0 and len(ch.outbox) == n
+    assert bot.store.one("SELECT status FROM runs ORDER BY id DESC LIMIT 1")["status"] == "missed"
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-21T00:00:00+00:00"
+    clock[0] = datetime(2026, 11, 21, 0, 30, tzinfo=timezone.utc)      # 30 minutes late is still sent
+    assert bot.tick() == 1
+
+
+def test_a_preview_survives_small_talk_and_a_yes_with_nothing_waiting_says_so(env):
+    from datetime import timedelta
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "confirm"}
+    bot.on_message(h, "yes please do")
+    assert "anything waiting for a yes" in last(ch) and not bot.store.rules(h)
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    bot.on_message(h, "pasta every friday at 7pm")
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "chat", "reply": "Glad you like it!"}
+    bot.on_message(h, "ooh that looks amazing")
+    clock[0] += timedelta(hours=3)
+    bot.on_message(h, "yes")
+    assert len(bot.store.rules(h)) == 1 and "First one" in last(ch)    # the rule started: it was not lost
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    bot.on_message(h, "another pasta rule every friday")
+    clock[0] += timedelta(hours=25)
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "confirm"}
+    bot.on_message(h, "yes")                                           # a day later the preview has lapsed
+    assert "anything waiting for a yes" in last(ch) and len(bot.store.rules(h)) == 1
+
+
+def test_run_loop_journal_dedupe_joining_and_restart(env):
+    """Every message gets a journal row with no text once handled; a repeated reference is dropped; quick texts are
+    joined; an unfinished fresh message is handled after a restart and an old one is dropped."""
+    from mvp.channels.base import Inbound
+    from mvp.runtime import Runtime
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    h = "+15550001"
+    seen = []
+
+    def interp(user):
+        seen.append(user.split("Their message:\n")[1])
+        return {"intent": "chat", "reply": "Hi!"}
+    st["answers"]["mvp_interpret"] = interp
+    rt = Runtime(bot, ch, workers=0)
+    ch.inbox.put(Inbound(handle=h, text="send me pasta recipes", ref="m1"))
+    ch.inbox.put(Inbound(handle=h, text="every friday", ref="m2"))
+    ch.inbox.put(Inbound(handle=h, text="send me pasta recipes", ref="m1"))    # a webhook retry
+    rt.step()
+    assert seen == ["send me pasta recipes\nevery friday"] and len(ch.outbox) == 1
+    rows = bot.store.q("SELECT ref, status, intent, text, reply_ref FROM inbound ORDER BY id")
+    assert [(r["ref"], r["status"], r["intent"], r["text"]) for r in rows] == [("m1", "done", "chat", None),
+                                                                              ("m2", "done", "chat", None)]
+    assert rows[0]["reply_ref"]
+    # a restart: one message arrived 2 minutes ago and was never handled, one a day ago
+    bot.store.x("INSERT INTO inbound(channel,ref,handle,text,received_at,status) VALUES('console','m3',?,?,?,'received')",
+                (h, "are you there?", datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    bot.store.x("INSERT INTO inbound(channel,ref,handle,text,received_at,status) VALUES('console','m4',?,?,?,'received')",
+                (h, "old question", "2026-01-01T00:00:00+00:00"))
+    rt2 = Runtime(bot, ch, workers=0)
+    rt2.recover()
+    rt2.step()
+    assert seen[-1] == "are you there?" and len(ch.outbox) == 2
+    assert bot.store.one("SELECT status, text FROM inbound WHERE ref='m4'") == {"status": "dropped", "text": None}
+    # an error while handling: the person still gets an answer, and the journal says what kind of error
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "list_rules"}
+    bot._rules_text = lambda *a: (_ for _ in ()).throw(KeyError("boom"))
+    ch.inbox.put(Inbound(handle=h, text="my rules", ref="m5"))
+    rt2.step()
+    assert "went wrong" in last(ch)
+    assert bot.store.one("SELECT status, error FROM inbound WHERE ref='m5'") == {"status": "error", "error": "KeyError"}
+
+
+def test_two_people_are_answered_in_parallel_and_each_in_order(env, tmp_path):
+    """A slow answer for one person does not hold up another person; one person's messages stay in order."""
+    import threading
+    import time as _time
+    from mvp.channels.base import Inbound
+    from mvp.runtime import Runtime
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    bot.store.upsert_person("+15550002", "U", str(env["lib"]), "America/New_York")
+    bot.store.set_consent("+15550002", "test")
+    gate = threading.Event()
+
+    def interp(user):
+        if "slow" in user.split("Their message:\n")[1]:
+            gate.wait(5)
+        return {"intent": "chat", "reply": "re: " + user.split("Their message:\n")[1]}
+    st["answers"]["mvp_interpret"] = interp
+    rt = Runtime(bot, ch, workers=4, join_seconds=0)
+    ch.inbox.put(Inbound(handle="+15550001", text="slow one", ref="a1"))
+    rt.poll(); rt.dispatch()
+    ch.inbox.put(Inbound(handle="+15550001", text="second", ref="a2"))
+    ch.inbox.put(Inbound(handle="+15550002", text="quick", ref="b1"))
+    rt.poll(); rt.dispatch()
+    end = _time.time() + 3
+    while _time.time() < end and not ch.outbox:
+        _time.sleep(0.02)
+    assert [t for _, _, t in ch.outbox] == ["re: quick"]              # answered while the first person's is still running
+    gate.set()
+    end = _time.time() + 3
+    while _time.time() < end and len(ch.outbox) < 3:
+        rt.dispatch()
+        _time.sleep(0.02)
+    assert [t for _, h, t in ch.outbox if h == "+15550001"] == ["re: slow one", "re: second"]
+    rt.pool.shutdown(wait=True)
+
+
+def test_handles_are_normalised_and_deleted_people_stay_deleted(env, tmp_path, monkeypatch):
+    from mvp import config
+    from mvp.core import norm_handle
+    assert norm_handle("15550001234") == "+15550001234" and norm_handle("(555) 000-1234") == "+15550001234"
+    assert norm_handle(" Me@Example.COM ") == "me@example.com" and norm_handle("tester") == "tester"
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    people = tmp_path / "p2.json"
+    people.write_text(json.dumps({"1 (555) 000-9999": {"name": "N", "library": str(env["lib"]), "timezone": "America/Chicago"}}))
+    assert bot.load_people(str(people)) == 1 and bot.store.person("+15550009999")
+    bot.store.set_consent("+15550009999", "test")
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "delete_data"}
+    bot.on_message("15550009999", "delete my data")
+    bot.on_message("+1 555 000 9999", "YES")
+    assert bot.store.person("+15550009999") is None
+    assert bot.load_people(str(people)) == 0 and bot.store.person("+15550009999") is None   # not added back
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"+15550007777": {"library": str(tmp_path / "nope"), "timezone": "America/Chicago"}}))
+    with pytest.raises(SystemExit):
+        bot.load_people(str(bad))
+
+
+# ---------- bugs found by the 12 Nov bug hunt ----------
+
+def test_bug_hunt_text_matching():
+    for m in [m for m in sys.modules if m.startswith("mvp")]:
+        del sys.modules[m]
+    from mvp.compose import clean_line
+    from mvp.retrieve import contains_word
+    assert clean_line("1.5 cups flour") == "1.5 cups flour" and clean_line("0.5 tsp salt") == "0.5 tsp salt"
+    assert clean_line("1. Boil the water") == "Boil the water" and clean_line("2) 3 eggs") == "3 eggs"
+    hit = [("pavlova with strawberries", "berries"), ("fresh cherries", "cherry"), ("anchovies", "anchovy"),
+           ("two eggs", "egg"), ("peanut sauce", "nut"), ("creamy sauce", "cream"), ("udon noodles", "noodle"),
+           ("vanilla ice cream", "ice cream"), ("roasted tomatoes", "tomato"), ("shellfish stock", "fish")]
+    miss = [("ready in 10 minutes", "nut"), ("roast the veggies", "egg"), ("boil the pasta", "oil"),
+            ("a beginner recipe", "gin"), ("use this instead", "tea"), ("graham crackers", "ham"),
+            ("cream of the crop ice", "ice cream")]
+    assert all(contains_word(t, w) for t, w in hit), [x for x in hit if not contains_word(*x)]
+    assert not any(contains_word(t, w) for t, w in miss), [x for x in miss if contains_word(*x)]
+
+
+def test_bug_hunt_schedule_and_forms():
+    for m in [m for m in sys.modules if m.startswith("mvp")]:
+        del sys.modules[m]
+    from zoneinfo import ZoneInfo
+    from mvp.schedule import describe, next_run
+    from mvp.schema import Content, Interpretation, When
+    ny = ZoneInfo("America/New_York")
+    daily = When(type="schedule", days=["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], time="01:30")
+    after = datetime(2026, 11, 1, 1, 10, tzinfo=ny, fold=1)            # 01:10 in the repeated hour, after clocks went back
+    nxt = next_run(daily, "America/New_York", after)
+    assert nxt > after.astimezone(timezone.utc)                         # never a time that has already passed
+    assert nxt == datetime(2026, 11, 2, 6, 30, tzinfo=timezone.utc)
+    assert describe(When(type="schedule", days=["MON", "TUE", "WED", "THU", "FRI"], time="08:00", every_weeks=2)) == \
+        "every other week, on weekdays at 8am"
+    with pytest.raises(Exception):
+        Content(goal="x y", searches=["x"], kinds=["playlist"], platforms=["instagram"])
+    with pytest.raises(Exception):
+        Content(goal="x y", searches=["x"], saved_after="last month")
+    with pytest.raises(Exception):
+        Interpretation.model_validate({"intent": "change_rule", "rule_number": 1, "spec": pasta_spec({"type": "now"})})
+
+
+def test_bug_hunt_dates_follow_the_kind_asked_for(env):
+    from mvp.retrieve import date_for
+    view = env["bot"].view(str(env["lib"]))
+    it = view.get("itm_a")
+    it.kinds, it.dates = {"save", "like"}, {"save": "2026-11-05T00:00:00+00:00", "like": "2021-02-01T00:00:00+00:00"}
+    assert date_for(it, ["like"]) == "2021-02-01" and date_for(it, []) == "2026-11-05"
+
+
+def test_bug_hunt_conversation_state(env):
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    # a follow-up that returns no detail lines keeps the details found before
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9,
+                                                  "lines": ["200g spaghetti", "2 lemons"]})
+    bot.on_message(h, "pasta?")
+    assert bot.store.get_state(f"lines:{h}")["itm_a"] == ["200g spaghetti", "2 lemons"]
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "follow_up", "question": "Which is quickest?"}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "which is quickest?")
+    assert bot.store.get_state(f"lines:{h}")["itm_a"] == ["200g spaghetti", "2 lemons"]
+    # a preview whose run failed asks for nothing
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    st["answers"]["mvp_compose"] = lambda u: (_ for _ in ()).throw(RuntimeError("model down"))
+    bot.on_message(h, "pasta every friday")
+    assert "went wrong" in last(ch) and "YES" not in last(ch) and bot.store.pending(h) is None
+    # feedback in words on a preview keeps the preview open, and belongs to the rule it becomes
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "pasta every friday")
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "feedback", "feedback": "more", "pick_number": 1}
+    bot.on_message(h, "more like that")
+    bot.on_message(h, "yes")
+    rule = bot.store.rules(h)[0]
+    assert bot.store.feedback_for_rule(rule["id"]) == [{"item_id": "itm_b", "kind": "more"}]
+    # a change to a time that has passed leaves the rule as it was
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "change_rule", "rule_number": 1, "spec": pasta_spec(
+        {"type": "once", "date": "2026-01-01", "time": "09:00"})}
+    bot.on_message(h, "change 1 to 1 january")
+    assert "left the rule as it was" in last(ch) and bot.store.rules(h)[0]["spec"]["when"]["type"] == "schedule"
+    # a scheduled send that fails is not the person's "last answer"
+    before = bot.store.last_answer(h)["run_id"]
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    real_send = ch.send
+    ch.send = lambda handle, text: (_ for _ in ()).throw(OSError("down"))
+    clock[0] = datetime(2026, 11, 14, 0, 1, tzinfo=timezone.utc)
+    assert bot.tick() == 0
+    ch.send = real_send
+    assert bot.store.last_answer(h)["run_id"] == before

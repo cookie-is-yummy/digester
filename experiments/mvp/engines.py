@@ -32,6 +32,7 @@ class EngineProcess:
         self.replies = {}
         self.wlock = threading.Lock()
         self.next_id = 0
+        self.busy = 0   # requests in flight: an engine that is answering is never stopped to make room
         self.last_used = time.time()
         env = os.environ.copy()
         env.pop("DIGESTER_DATA", None)  # the engine points the round-8 code at the library itself
@@ -68,20 +69,25 @@ class EngineProcess:
                 self.cond.wait(1.0)
             return self.state == "ready"
 
-    def request(self, obj, timeout=300):
+    def request(self, obj, timeout=90):
         with self.wlock:
             self.next_id += 1
             rid = obj["id"] = self.next_id
+            self.busy += 1
             self.proc.stdin.write(json.dumps(obj) + "\n")
             self.proc.stdin.flush()
         self.last_used = time.time()
         end = time.time() + timeout
-        with self.cond:
-            while rid not in self.replies:
-                if self.state in ("error", "stopped") or time.time() > end:
-                    return {"ok": False, "error": self.message or "engine not available"}
-                self.cond.wait(1.0)
-            return self.replies.pop(rid)
+        try:
+            with self.cond:
+                while rid not in self.replies:
+                    if self.state in ("error", "stopped") or time.time() > end:
+                        return {"ok": False, "error": self.message or "engine not available"}
+                    self.cond.wait(1.0)
+                return self.replies.pop(rid)
+        finally:
+            with self.wlock:
+                self.busy -= 1
 
     def stop(self):
         try:
@@ -103,7 +109,10 @@ class EnginePool:
             eng = self.engines.get(lib)
             if eng is None or eng.state in ("error", "stopped"):
                 while len(self.engines) >= self.max_resident:
-                    oldest = min(self.engines.values(), key=lambda e: e.last_used)
+                    idle = [e for e in self.engines.values() if e.busy == 0 and e.state != "loading"]
+                    if not idle:
+                        break  # every engine is answering or loading: go over the limit rather than cut one off
+                    oldest = min(idle, key=lambda e: e.last_used)
                     oldest.stop()
                     self.engines.pop(oldest.lib)
                 if lib not in self.budgets:
@@ -112,6 +121,10 @@ class EnginePool:
         if not eng.wait_ready():
             raise RuntimeError(f"search engine not available: {eng.message or eng.state}")
         return eng
+
+    def is_ready(self, lib):
+        eng = self.engines.get(os.path.abspath(lib))
+        return bool(eng and eng.state == "ready")
 
     def warm(self, lib):
         """Start a library's engine without waiting (before a scheduled rule is due)."""

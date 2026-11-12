@@ -37,7 +37,7 @@ def picks_message(result, spec, footer=None, header=None):
                 out.append(f"{LABEL[c.extract]} from the post ({n} {noun} listed):")
                 out.extend(f"• {line}" for line in p["lines"])
             elif c.extract in ("ingredients", "steps"):
-                out.append("The details aren't written in the post. They're in the video.")
+                out.append(f"I couldn't find the {c.extract} written in the post. They may be in the video.")
         if it.url:
             out.append(it.url)
         out.append("")

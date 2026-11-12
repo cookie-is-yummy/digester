@@ -6,6 +6,9 @@ from . import config
 from .schema import DAYS, When
 
 
+UTC = ZoneInfo("UTC")
+
+
 def _at(day, hhmm, tz):
     h, m = map(int, hhmm.split(":"))
     return datetime(day.year, day.month, day.day, h, m, tzinfo=tz)
@@ -16,12 +19,13 @@ def next_run(when: When, tzname: str, after: datetime, anchor: datetime | None =
     `anchor` (the rule's creation time) fixes the week parity for every_weeks > 1."""
     tz = ZoneInfo(tzname)
     local = after.astimezone(tz)
-    if when.type == "now":
+    after_utc = after.astimezone(UTC)
+    if when.type in ("now", "on_request"):
         return None
     if when.type == "once":
         y, mo, d = map(int, when.date.split("-"))
-        t = _at(datetime(y, mo, d), when.time, tz)
-        return t.astimezone(ZoneInfo("UTC")) if t > local else None
+        t = _at(datetime(y, mo, d), when.time, tz).astimezone(UTC)
+        return t if t > after_utc else None
     wanted = {DAYS.index(d) for d in when.days}
     base = (anchor or after).astimezone(tz).date()
     base_monday = base - timedelta(days=base.weekday())
@@ -32,10 +36,31 @@ def next_run(when: When, tzname: str, after: datetime, anchor: datetime | None =
         weeks = ((day - timedelta(days=day.weekday())) - base_monday).days // 7
         if weeks % when.every_weeks:
             continue
-        t = _at(day, when.time, tz)
-        if t > local:
-            return t.astimezone(ZoneInfo("UTC"))
+        t = _at(day, when.time, tz).astimezone(UTC)
+        if t > after_utc:  # compared in UTC: in the repeated hour when clocks go back, local times compare wrongly
+            return t
     return None
+
+
+def resolve_relative(when: When, now: datetime, tzname: str) -> When:
+    """'in two hours' (in_minutes) becomes a local date and time here, never in the model."""
+    if when.type == "once" and when.in_minutes:
+        t = now.astimezone(ZoneInfo(tzname)) + timedelta(minutes=when.in_minutes)
+        when.date, when.time, when.in_minutes = t.strftime("%Y-%m-%d"), t.strftime("%H:%M"), None
+    return when
+
+
+def say_time(at: datetime, now: datetime, tzname: str) -> str:
+    """'today at 9pm', 'tomorrow at 8am', 'on Friday 13 November at 7pm', in the person's time zone."""
+    tz = ZoneInfo(tzname)
+    a, n = at.astimezone(tz), now.astimezone(tz)
+    clock = a.strftime("%-I:%M%p").lower().replace(":00", "")
+    days = (a.date() - n.date()).days
+    if days == 0:
+        return f"today at {clock}"
+    if days == 1:
+        return f"tomorrow at {clock}"
+    return f"on {a.strftime('%A %-d %B')} at {clock}"
 
 
 def in_quiet_hours(at_utc: datetime, tzname: str) -> bool:
@@ -70,14 +95,20 @@ def describe(when: When) -> str:
         return f"{h12}{suffix}" if m == 0 else f"{h12}:{m:02d}{suffix}"
     if when.type == "now":
         return "now"
+    if when.type == "on_request":
+        return "whenever you ask"
     if when.type == "once":
-        return f"on {when.date} at {t12(when.time)}"
-    days = when.days
+        if not when.date:
+            return f"in {when.in_minutes} minutes"
+        y, mo, d = map(int, when.date.split("-"))
+        return f"once on {datetime(y, mo, d).strftime('%a %-d %b')} at {t12(when.time)}"
+    days, n = when.days, when.every_weeks
+    weeks = {1: "", 2: "every other week, "}.get(n, f"every {n} weeks, ")
     if days == ["MON", "TUE", "WED", "THU", "FRI"]:
-        d = "every weekday"
+        d = "every weekday" if n == 1 else weeks + "on weekdays"
     elif len(days) == 7:
-        d = "every day"
+        d = "every day" if n == 1 else weeks + "every day"
     else:
         joined = " and ".join(names[x] for x in days)
-        d = {1: f"every {joined}", 2: f"every other {joined}"}.get(when.every_weeks, f"every {when.every_weeks} weeks on {joined}")
+        d = {1: f"every {joined}", 2: f"every other {joined}"}.get(n, f"every {n} weeks on {joined}")
     return f"{d} at {t12(when.time)}"

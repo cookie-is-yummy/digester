@@ -57,10 +57,13 @@ def _log(row):
         f.write(json.dumps(row) + "\n")
 
 
+TIMEOUT = 300  # seconds for one call; a caller that answers people in real time lowers it
+
+
 def _post(url, body, headers):
     req = urllib.request.Request(url, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json", **headers})
-    with urllib.request.urlopen(req, timeout=300) as r:
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
         return json.loads(r.read())
 
 

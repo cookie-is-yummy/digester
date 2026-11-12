@@ -42,6 +42,7 @@ def main():
     ch = ConsoleChannel(printer=None)
     clock = [datetime(2026, 11, 13, 17, 0, tzinfo=timezone.utc)]
     bot = Bot(ch, store=Store(config.DB), clock=lambda: clock[0])
+    bot.max_per_minute = None  # a batch run sends many messages a minute by design
     handle = "tester"
     bot.store.upsert_person(handle, "Tester", os.path.abspath(a.library), a.timezone)
     bot.store.set_consent(handle, "eval")

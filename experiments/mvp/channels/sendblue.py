@@ -15,11 +15,12 @@ import json
 import os
 import queue
 import threading
+import urllib.error
 import urllib.request
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .base import Channel, Inbound
+from .base import Channel, Inbound, SendUncertain
 
 API = "https://api.sendblue.com/api/send-message"
 WEBHOOK_PATH = "/sendblue/receive"
@@ -85,7 +86,7 @@ class SendblueChannel(Channel):
         msg = parse_receive(payload)
         if msg is None:
             return
-        if msg.ref:
+        if msg.ref:  # a quick in-memory check; the store's inbound table is what dedupes across restarts
             if msg.ref in self.seen:
                 return
             self.seen[msg.ref] = True
@@ -103,8 +104,15 @@ class SendblueChannel(Channel):
         req = urllib.request.Request(API, data=json.dumps(body).encode(), method="POST", headers={
             "sb-api-key-id": _env("SENDBLUE_API_KEY_ID"), "sb-api-secret-key": _env("SENDBLUE_API_SECRET_KEY"),
             "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read() or b"{}")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.loads(r.read() or b"{}")
+        except TimeoutError as e:  # the request may have reached Sendblue
+            raise SendUncertain("timeout") from e
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, TimeoutError):
+                raise SendUncertain("timeout") from e
+            raise
 
     def send(self, handle, text):
         r = self.poster({"number": handle, "content": text[:18000], "from_number": _env("SENDBLUE_FROM_NUMBER")})

@@ -1,0 +1,240 @@
+"""PROTOTYPE ONLY - a local chat page for testing without a phone (BRIEF-10 section 9).
+
+    python -m mvp.bot --channel web      then open http://127.0.0.1:8765
+
+The page is a message thread with the bot: type as any person in people.json, tap 👍 or 👎 on a reply (a tapback),
+and move the bot's clock forward to make a timed or repeating rule fire now instead of waiting for Friday. It runs the
+same handler, executor and scheduler as the iMessage channels; only the transport differs. Nothing is sent to a phone.
+
+It keeps its own store (MVP_HOME/webtest.sqlite), so moving the clock never touches rules that real testers have.
+The server listens on this machine only, and every call needs a token that is built into the page when it is served,
+so another site open in the browser cannot drive the bot or read the thread.
+"""
+import hmac
+import itertools
+import json
+import os
+import queue
+import secrets
+import threading
+from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from zoneinfo import ZoneInfo
+
+from .base import Channel, Inbound
+
+PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web_page.html")
+MAX_BODY = 20_000
+
+
+def _local(dt, tzname, with_day=True):
+    t = dt.astimezone(ZoneInfo(tzname))
+    clock = t.strftime("%-I:%M %p").lower()
+    return f"{t.strftime('%a %-d %b')}, {clock}" if with_day else clock
+
+
+class WebChannel(Channel):
+    name = "web"
+    poll_seconds = 0.2
+    join_seconds = 1.2
+
+    def __init__(self, port=8765, host="127.0.0.1", serve=True):
+        self.inbox = queue.Queue()        # ("msg", Inbound) or ("control", dict), handled on the bot's own thread
+        self.lock = threading.Lock()
+        self.threads = {}                 # handle -> [{"id","ref","dir","text","at","reaction"}]
+        self.busy = {}                    # handle -> messages received but not yet handled
+        self.offset = timedelta(0)        # how far the test clock is ahead of the real one
+        self.ready = False                # set by the bot once the search engines are loaded
+        self.problem = None               # a start-up problem to show on the page
+        self.bot = None
+        self.token = secrets.token_urlsafe(18)
+        self._ids = itertools.count(1)
+        self._tick = False
+        self.server = None
+        if serve:
+            self.server = ThreadingHTTPServer((host, port), self._handler())
+            self.port = self.server.server_address[1]
+            threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    # ---------- the bot's side ----------
+    def attach(self, bot):
+        self.bot = bot
+
+    def clock(self):
+        return datetime.now(timezone.utc) + self.offset
+
+    def receive(self):
+        out = []
+        while True:
+            try:
+                kind, payload = self.inbox.get_nowait()
+            except queue.Empty:
+                break
+            if kind == "msg":
+                out.append(payload)
+            else:
+                self._control(payload)
+        return out
+
+    def done(self, msg):
+        with self.lock:
+            self.busy[msg.handle] = max(0, self.busy.get(msg.handle, 0) - 1)
+
+    def wants_tick(self):
+        t, self._tick = self._tick, False
+        return t
+
+    def send(self, handle, text):
+        n = next(self._ids)
+        ref = f"web-{n}"
+        with self.lock:
+            self.threads.setdefault(handle, []).append(
+                {"id": n, "ref": ref, "dir": "out", "text": text, "at": self.clock().isoformat(), "reaction": None})
+        return ref
+
+    def close(self):
+        if self.server:
+            self.server.shutdown()
+
+    # ---------- the page's side ----------
+    def post_message(self, handle, text):
+        text = (text or "").strip()[:2000]
+        if not text:
+            return
+        n = next(self._ids)
+        with self.lock:
+            self.threads.setdefault(handle, []).append(
+                {"id": n, "ref": f"web-{n}", "dir": "in", "text": text, "at": self.clock().isoformat(), "reaction": None})
+            self.busy[handle] = self.busy.get(handle, 0) + 1
+        self.inbox.put(("msg", Inbound(handle=handle, text=text, ref=f"web-{n}")))
+
+    def post_tapback(self, handle, ref, kind):
+        if kind not in ("up", "down"):
+            return
+        with self.lock:
+            for m in self.threads.get(handle, []):
+                if m["ref"] == ref and m["dir"] == "out":
+                    m["reaction"] = kind
+                    break
+            else:
+                return
+            self.busy[handle] = self.busy.get(handle, 0) + 1
+        self.inbox.put(("msg", Inbound(handle=handle, tapback=kind, tapback_ref=ref)))
+
+    def post_control(self, payload):
+        self.inbox.put(("control", payload))
+
+    def _control(self, c):
+        """Clock moves and 'start over', run on the bot's thread so they never race a run in progress."""
+        bot = self.bot
+        op = c.get("op")
+        if op == "add_minutes":
+            self.offset += timedelta(minutes=max(0, min(int(c.get("minutes") or 0), 60 * 24 * 60)))
+        elif op == "to_next" and bot:
+            now = self.clock()
+            nxt = [datetime.fromisoformat(r["next_run_at"]) for r in bot.store.rules(c.get("handle"), statuses=("active",))
+                   if r.get("next_run_at")]
+            nxt = [t for t in nxt if t > now]
+            if nxt:
+                self.offset += (min(nxt) - now) + timedelta(seconds=1)
+        elif op == "start_over" and bot:
+            handle = c.get("handle")
+            with bot.lock_for(handle):  # not in the middle of an answer to this person
+                person = bot.store.person(handle)
+                agreed = bool(person and person["consent_version"]) and not c.get("with_welcome")
+                bot.store.delete_person_data(handle)
+                bot.load_people()
+                if agreed and bot.store.person(handle):
+                    from ..core import CONSENT_VERSION
+                    bot.store.set_consent(handle, CONSENT_VERSION)
+                with self.lock:
+                    self.threads[handle] = []
+                    self.busy[handle] = 0
+                self.offset = timedelta(0)
+        self._tick = True
+
+    def state(self, handle):
+        bot = self.bot
+        people = bot.store.q("SELECT handle, name, timezone, consent_version FROM people ORDER BY handle") if bot else []
+        if not people:
+            return {"people": [], "ready": self.ready}
+        me = next((p for p in people if p["handle"] == handle), people[0])
+        tz = me["timezone"]
+        now = self.clock()
+        rules = []
+        from ..schedule import describe
+        from ..schema import RuleSpec
+        for i, r in enumerate(bot.store.rules(me["handle"]), 1):
+            spec = RuleSpec.model_validate(r["spec"])
+            nxt = datetime.fromisoformat(r["next_run_at"]) if r.get("next_run_at") else None
+            rules.append({"number": i, "goal": spec.content.goal, "when": describe(spec.when), "status": r["status"],
+                          "next": _local(nxt, tz) if nxt and r["status"] == "active" else None})
+        with self.lock:
+            msgs = [dict(m, time=_local(datetime.fromisoformat(m["at"]), tz)) for m in self.threads.get(me["handle"], [])]
+            busy = self.busy.get(me["handle"], 0) > 0
+        return {"people": [{"handle": p["handle"], "name": p["name"] or p["handle"]} for p in people],
+                "me": me["handle"], "agreed": bool(me["consent_version"]), "ready": self.ready, "busy": busy,
+                "problem": self.problem,
+                "now": _local(now, tz), "timezone": tz, "ahead_minutes": int(self.offset.total_seconds() // 60),
+                "messages": msgs, "rules": rules}
+
+    def _handler(self):
+        ch = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *a):  # messages hold personal text: nothing is logged
+                pass
+
+            def _json(self, code, obj):
+                body = json.dumps(obj).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _ok(self):
+                return hmac.compare_digest(self.headers.get("X-Test-Token") or "", ch.token)
+
+            def do_GET(self):
+                path, _, query = self.path.partition("?")
+                if path in ("/", "/index.html"):
+                    with open(PAGE, encoding="utf-8") as f:
+                        body = f.read().replace("__TOKEN__", ch.token).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if path == "/api/state":
+                    if not self._ok():
+                        return self._json(403, {"error": "token"})
+                    from urllib.parse import parse_qs
+                    handle = (parse_qs(query).get("as") or [None])[0]
+                    return self._json(200, ch.state(handle))
+                self._json(404, {"error": "not found"})
+
+            def do_POST(self):
+                if not self._ok():
+                    return self._json(403, {"error": "token"})
+                n = int(self.headers.get("Content-Length") or 0)
+                if n > MAX_BODY:
+                    return self._json(413, {"error": "too long"})
+                try:
+                    body = json.loads(self.rfile.read(n) or b"{}")
+                except ValueError:
+                    return self._json(400, {"error": "json"})
+                if self.path == "/api/send":
+                    ch.post_message(body.get("handle"), body.get("text"))
+                elif self.path == "/api/tapback":
+                    ch.post_tapback(body.get("handle"), body.get("ref"), body.get("kind"))
+                elif self.path == "/api/control":
+                    ch.post_control(body)
+                else:
+                    return self._json(404, {"error": "not found"})
+                self._json(200, {"ok": True})
+
+        return Handler

@@ -1,7 +1,9 @@
 """PROTOTYPE ONLY - run the MVP bot.
 
-    python -m mvp.bot --channel console      # type messages as a test person (development)
+    python -m mvp.bot --channel web          # a chat page on this computer: test without a phone, move the clock
+    python -m mvp.bot --channel console      # type messages as a test person in the terminal
     python -m mvp.bot --channel mac          # iMessage through this Mac's Messages app (founders, build days)
+    python -m mvp.bot --channel mac --self-chat +15551234567   # the same, tested alone: text your own number
     python -m mvp.bot --channel sendblue     # Sendblue webhook on 127.0.0.1:8787, behind a tunnel (testers)
 
 Run from experiments/. People come from MVP_HOME/people.json: {"<handle>": {"name", "library", "timezone"}}.
@@ -10,49 +12,65 @@ Keys only from the environment. Stop with Ctrl+C.
 import argparse
 import os
 import sys
-import time
-from datetime import timedelta
+import threading
 
 from . import config
 from .core import Bot
-from .store import Store, now_iso
+from .runtime import Runtime, report
+from .store import Store
 
 
-def _report(e):
-    tb = e.__traceback__
-    while tb and tb.tb_next:
-        tb = tb.tb_next
-    where = f"{os.path.basename(tb.tb_frame.f_code.co_filename)}:{tb.tb_lineno}" if tb else "?"
-    print(f"error: {type(e).__name__} at {where}", file=sys.stderr)
-
-
-def make_channel(name, store, port):
+def make_channel(name, store, port, host="127.0.0.1", self_chat=None):
     if name == "console":
         from .channels.console import ConsoleChannel
         return ConsoleChannel()
+    if name == "web":
+        from .channels.web import WebChannel
+        return WebChannel(port=port or 8765, host=host)
     if name == "mac":
         from .channels.imessage_mac import MacMessagesChannel
-        return MacMessagesChannel(store)
+        return MacMessagesChannel(store, self_handle=self_chat)
     if name == "sendblue":
         from .channels.sendblue import SendblueChannel
-        return SendblueChannel(port=port)
+        return SendblueChannel(port=port or 8787)
     raise SystemExit(f"unknown channel {name}")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--channel", default="console", choices=["console", "mac", "sendblue"])
-    ap.add_argument("--port", type=int, default=8787)
+    ap.add_argument("--channel", default="web", choices=["web", "console", "mac", "sendblue"])
+    ap.add_argument("--port", type=int, default=None, help="web: 8765 by default; sendblue: 8787")
+    ap.add_argument("--host", default="127.0.0.1", help="web only: the address the test page listens on")
+    ap.add_argument("--self-chat", default=None, metavar="HANDLE",
+                    help="mac only: your own number or Apple Account email; text yourself and the bot answers there")
     ap.add_argument("--as", dest="as_handle", default=None, help="console only: the test person's handle")
     a = ap.parse_args()
-    store = Store(config.DB)
-    channel = make_channel(a.channel, store, a.port)
-    bot = Bot(channel, store=store)
+    # The test page has its own store: moving its clock must never touch rules that real testers have.
+    store = Store(os.path.join(config.HOME, "webtest.sqlite") if a.channel == "web" else config.DB)
+    channel = make_channel(a.channel, store, a.port, a.host, a.self_chat)
+    bot = Bot(channel, store=store, clock=getattr(channel, "clock", None))
+    if hasattr(channel, "attach"):
+        channel.attach(bot)
     n = bot.load_people()
-    print(f"MVP bot: {n} people, channel {a.channel}, store {config.DB}", file=sys.stderr)
-    for r in store.q("SELECT DISTINCT library FROM people")[:bot.pool.max_resident]:
-        bot.pool.warm(r["library"])  # load search engines now, so the first reply is not a minute late
+    print(f"MVP bot: {n} people, channel {a.channel}, store {store.path}", file=sys.stderr)
+    if a.channel == "web":
+        print(f"Open http://{a.host}:{channel.port} in a browser on this computer.", file=sys.stderr)
+    libs = [r["library"] for r in store.q("SELECT DISTINCT library FROM people")][:bot.pool.max_resident]
+
+    def _load():  # read each library and start its search engine now, so the first reply is not a minute late
+        for lib in libs:
+            try:
+                bot.view(lib)
+                bot.pool.get(lib)
+            except Exception as e:  # noqa: BLE001
+                report(e)
+                channel.problem = "A library did not load. Look at the terminal that runs the bot."
+        channel.ready = True
+        print("A library did not load." if getattr(channel, "problem", None) else "Libraries loaded.", file=sys.stderr)
+    threading.Thread(target=_load, daemon=True).start()
     if a.channel == "console":
+        rt = Runtime(bot, channel, workers=0)
+        rt.recover()
         handle = a.as_handle or next(iter(p["handle"] for p in store.q("SELECT handle FROM people")), None)
         if not handle:
             raise SystemExit("no people in people.json")
@@ -60,33 +78,11 @@ def main():
         for line in sys.stdin:
             line = line.rstrip("\n")
             if line:
-                bot.on_message(handle, line)
-            bot.tick()
+                channel.push(handle, line)
+            rt.step()
+        rt.stop()
         return
-    last_tick = 0.0
-    try:
-        while True:
-            for msg in channel.receive():
-                try:
-                    bot.on_message(msg.handle, msg.text, tapback=msg.tapback, tapback_ref=msg.tapback_ref)
-                except Exception as e:  # noqa: BLE001 - type and place only: messages can hold numbers and text
-                    _report(e)
-            if time.time() - last_tick > 30:
-                last_tick = time.time()
-                try:
-                    soon = bot.clock() + timedelta(minutes=3)
-                    for r in store.q("SELECT DISTINCT p.library FROM rules r JOIN people p ON p.handle=r.handle "
-                                     "WHERE r.status='active' AND r.next_run_at<=?", (now_iso(soon),)):
-                        bot.pool.warm(r["library"])
-                    bot.tick()
-                except Exception as e:  # noqa: BLE001
-                    _report(e)
-            time.sleep(2)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        channel.close()
-        bot.pool.stop_all()
+    Runtime(bot, channel).run_forever()
 
 
 if __name__ == "__main__":
