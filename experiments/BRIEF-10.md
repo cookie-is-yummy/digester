@@ -90,24 +90,52 @@ Libraries are loaded by a founder before the first message, from the person's ex
 
 ## 6. Message channel
 
-**Recommendation: iMessage, through a Mac that runs the bot and holds the libraries.** Keep Telegram as a backup for anyone without an iPhone. Start SMS registration only if the founders want SMS for the public later.
+**Decided 12 Nov: the product lives in each person's default messaging app, starting with iMessage.** Android Messages (SMS and RCS), Instagram and others follow, behind the same channel interface.
+
+**Recommendation for the testers: a paid iMessage service, Sendblue's AI Agent plan** ($100 a month for one dedicated line; prices confirmed on its pricing page on 12 Nov 2026). The person texts the bot's number first and the bot replies. Sendblue's own limits page says that after 24 hours, a message to that person counts against a follow-up limit of 200 people a day per line, so a weekly Friday message is allowed. People on Android get SMS automatically, at no extra fee. Two things to confirm with Sendblue support before paying: that a send days after the person's last text is a normal follow-up, and how its separate cap of 150 unanswered messages in a row applies. Its free sandbox cannot send first and has no webhooks, so it tests replies only.
+
+**For the build days: Derrick's Mac with his own Apple Account** (free). The founders text Derrick's Mac and it replies through Messages. This is for founders only; testers use the Sendblue number.
+
+**Where the bot runs:** Derrick's Mac, which also holds the libraries. Sendblue reaches it through a webhook, exposed by a free tunnel (Cloudflare Tunnel or ngrok), so no data is hosted elsewhere.
+
+Other options, checked on 12 Nov 2026:
 
 | Option | Setup for this week | Can it message people days later? | Cost | Main risk |
 | --- | --- | --- | --- | --- |
 | **iMessage from a Mac** (a script sends through Messages and reads replies from its database; open-source tools such as `imsg` do this) | An afternoon. No approval | Yes | $0 | Unofficial. The Mac must stay awake and online. Forum reports (not Apple's own text) describe accounts flagged as spam. Only Apple users can receive it |
 | Telegram bot | An hour. No approval | Yes, once the person has started the bot (common practice; Telegram's pages do not state it) | $0 | Testers must install Telegram |
 | SMS through Twilio | US carrier registration first: about 2 days to a few weeks. Unregistered traffic is blocked | Yes, after opt-in | A few dollars a month | Timing of approval |
-| A paid iMessage service (for example Sendblue, LoopMessage) | Minutes to days; free sandboxes cannot send first | Plans differ: Sendblue's $100 plan answers people who wrote first; LoopMessage needs add-ons to write first | About $60 to $150 a month per line | Not approved by Apple; messages pass through the vendor |
+| **Sendblue AI Agent** (recommended) | Self-serve sign-up; company or review needs not stated | Yes: after the person's first text, up to 200 follow-ups a day per line | $100 a month per line; SMS for Android included | Not approved by Apple; messages pass through the vendor |
+| LoopMessage | Self-serve; a number, SMS fallback and "start conversations" are add-ons | Not stated by LoopMessage; ask | About $90 a month or more with add-ons | Same as Sendblue |
+| Blooio | Self-serve | Its $98 plan is reply-only with no scheduled messages; its $89 shared plan has scheduled messages | $89 to $289 a month | Same as Sendblue |
 | Instagram DMs | Needs a published Meta app, and testers added as app roles | No: replies are limited to 24 hours after the person's last message | $0 | Weekly messages are not allowed |
 | WhatsApp | Same day with a test number for up to 5 people | Only with approved template messages | Per message | Meta's January 2026 policy restricts general AI assistants |
 
 Sources: the channel notes from 12 Nov 2026 in the review's working files (Telegram Bot FAQ, Twilio pricing and registration pages, Apple Business Register guide, vendor pages, Meta's Instagram and WhatsApp messaging docs). Vendor prices come from vendors' own or rivals' pages and are unconfirmed.
 
-**How the iMessage channel works.**
-- A separate Apple Account for the bot, signed in to Messages on the Mac. People text its email address, so no founder's personal number is shown. Apple asks for a phone number to secure a new account; a founder's number is fine for that.
+**How the Mac channel works (build days).**
+- Derrick's own Apple Account, signed in to Messages on his Mac. Only the founders text it.
 - Sending: AppleScript tells Messages to send to a handle.
 - Receiving: the bot polls the Messages database (`~/Library/Messages/chat.db`, opened read-only) every few seconds for rows above the last one seen with `is_from_me = 0`, so it never answers itself. On recent macOS the text is often only in the `attributedBody` blob, so the reader decodes that when `text` is empty. A tapback (👍, 👎) is a separate row pointing at the bot's message; after each send the bot records the ID of its own outgoing row, so a tapback maps to that delivery. A tapback on a message with several picks counts for all of them; for one pick the person types "👎 2". The terminal that runs the bot needs Full Disk Access and permission to control Messages. Each read is kept short.
-- The channel sits behind one small interface (`receive()` and `send(handle, text)`), so Telegram, SMS or a paid service can replace it without touching anything else. A console channel is used for development and tests.
+- The channel sits behind one small interface (`receive()` and `send(handle, text)`), so Sendblue, SMS, Telegram or Instagram can replace it without touching anything else. A console channel is used for development and tests.
+
+**How the Sendblue channel works (testers).** A small web server on the Mac receives Sendblue's "message received" webhook, checks its signing secret, and answers through Sendblue's send API. Tapbacks and replies map to deliveries as above. The Sendblue key lives only in the Mac's environment.
+
+## 6b. Connecting a person's media
+
+Decided 12 Nov: onboarding should connect everything media-related automatically. What can be connected lawfully today, in the US:
+
+| Source | Automatic? | What it gives | How |
+| --- | --- | --- | --- |
+| YouTube | Yes, with Google sign-in | Liked videos, playlists, subscriptions, refreshed weekly | YouTube Data API, read-only. Until Google verifies the app it runs in testing mode for up to 100 named testers, who see a warning screen, and its sign-in lapses after 7 days. API data must be refreshed or deleted every 30 days |
+| YouTube watch history | No | Every video watched | Google Takeout, which the person requests by link. Takeout can repeat every 2 months for a year. Google's portability API, which would make it automatic, serves only the EU, Switzerland and the UK |
+| Instagram saves, likes, posts sent to yourself | No | All of them, with captions | Instagram's "Download your information", which the person requests by link; it takes minutes to days. Meta closed the consumer API in December 2024 |
+| New Instagram saves after onboarding | Partly | The post's link | The person shares a post to the bot's number. A link alone gives no caption, so the bot asks for a word or two about it |
+| TikTok | No | Watch history, likes, favourites | TikTok's data download, by link. TikTok's portability API serves only the EEA and the UK |
+
+Signing in with someone's Instagram or TikTok password and reading their account is not an option: it breaks the platforms' terms and `AGENTS.md` rule 7, and it puts the person's account at risk.
+
+So onboarding is: Google sign-in for YouTube (instant), plus two links that request the Instagram export and Takeout, with a message from the bot when each is loaded. Building Google sign-in is a day-3 stretch; until then a founder loads exports by hand.
 
 ## 7. How it works
 
@@ -186,9 +214,9 @@ Founder hours are about 20 a week each; most of the building is the agent's. Tim
 | Task | Owner |
 | --- | --- |
 | Accept or change this brief, and decide section 12 | Both |
-| Write 20 test requests from real life, before anything is built: 8 recurring rules, 8 one-off questions, 4 hard cases (vague, unsupported, nothing to find, a follow-up). Keep them in `data/mvp/requests.jsonl`, outside git; commit only their SHA-256 | Derrick |
-| Ask Eason and three to five other people to request their Instagram export and Takeout now, because exports take days | Eason |
-| Create the bot's Apple Account, and choose the Mac that will run the bot | Derrick |
+| Test requests: the agent drafted 20 from the topics in Derrick's library (`data/mvp/requests.draft.jsonl`, outside git): 8 recurring rules, 8 one-off questions, 4 hard cases. Derrick edits them into things he would really text, and saves them as `data/mvp/requests.jsonl` before day 1; commit only their SHA-256 | Derrick |
+| Ask three to five more people to request their Instagram export and Takeout now, because exports take days. Eason requested his on 12 Nov | Eason |
+| Write to Sendblue support with the two questions in section 6 | Derrick |
 | Scaffold `experiments/mvp/`, the store, the console channel and a fake clock | Agent |
 | Standing deadline from round 9: delete the YouTube Data API reference text (`data/yt/ref`, `data/all/yt_ref`) from every copy by 29 November 2026, and record it in `STATE.md` | Derrick |
 
@@ -207,7 +235,7 @@ Founder hours are about 20 a week each; most of the building is the agent's. Tim
 
 | Task | Owner | Done when |
 | --- | --- | --- |
-| iMessage channel, and the Telegram channel as backup. The agent cannot run macOS here, so Derrick runs each version and reports errors | Agent writes; Derrick runs it on the Mac | If the Friday test failed, or iMessage is not working by Saturday noon, Telegram is used for days 2 and 3 |
+| The Mac iMessage channel for the founders, and the Sendblue channel (webhook server, signature check, send) for testers. The agent cannot run macOS here, so Derrick runs each version and reports errors. The Sendblue channel is tested against recorded sample webhooks until a line is paid for | Agent writes; Derrick runs it on the Mac | If the Friday test failed, or the Mac channel is not working by Saturday noon, the founders test through the console channel on day 2 and through Sendblue's sandbox for replies |
 | All message flows in section 4: preview and YES, rules list, pause, stop, change, feedback, follow-up, delete my data, help | Agent | |
 | Scheduler, deliveries, cost caps over the ledgers, quiet hours | Agent | A fast-forwarded month sends every rule on time in the right timezone, with no repeated item |
 | Derrick sets up the pasta and photography rules from his phone | Derrick | Two test copies set for later that Saturday both arrive on time. The real rules are set for Friday 7pm and Sunday 4pm; the Sunday one is checked on day 3 |
@@ -222,9 +250,9 @@ Founder hours are about 20 a week each; most of the building is the agent's. Tim
 | Kill switch, a one-page runbook, and a one-page guide for testers | Agent | |
 | Dry run: Eason sets up two rules from his phone without help | Eason | Both rules work |
 
-**If time runs short,** drop whichever of iMessage or Telegram is not yet working, then "change rule", then follow-up questions. Do not drop the checks in section 5, the preview, or "delete my data".
+**If time runs short,** drop whichever channel is not yet working, then "change rule", then follow-up questions. Do not drop the checks in section 5, the preview, or "delete my data".
 
-**Stretch, only if day 3 ends early:** a short YouTube description for the top candidates through the YouTube Data API, under its 30-day rule. Without it, YouTube picks rest on titles, which suits "motivating videos I watched" less well than recipes.
+**Stretch, only if day 3 ends early:** Google sign-in for YouTube (section 6b), so a tester's likes and playlists load without a Takeout. Then a short YouTube description for the top candidates through the YouTube Data API, under its 30-day rule. Without it, YouTube picks rest on titles, which suits "motivating videos I watched" less well than recipes.
 
 ## 9. How it is tested
 
@@ -240,14 +268,14 @@ From Tuesday 17 November, as exports arrive.
 
 - **Who:** 5 to 10 adults in the US with an iPhone, who save things on Instagram or YouTube. At least half should be strangers: people neither founder knew before 10 November. The consent note asks each person to confirm they are 18 or over.
 - **How:** each person consents and sends their exports. A founder builds their library on the bot Mac, then sets up the first rule with them on a 15-minute call. After that they use it alone.
-- **What counts** (agree the numbers before the first session):
+- **What counts.** These are the signs that someone finds it worth keeping. Write the numbers down before the first session, so nobody reads the results generously afterwards. No payment is asked for now (decided 12 Nov).
 
-| Signal | Proposed mark |
+| Sign | Proposed mark |
 | --- | --- |
 | Sets up a second rule or asks a second question without being prompted, in the first session | Half of them |
 | Replies to a scheduled message (feedback, follow-up or a new request) in week 1 | Half of them |
 | Still has a rule running after 7 days | Half of them |
-| Pays $4.99 for the next month when asked on day 7 | 2, at least 1 of them a stranger |
+| Asked "would you be disappointed if this stopped?", answers "very" | Half of them |
 
 - **What else is recorded:** every unsupported request, every 👎 with its reason if given, and how many picks said "the recipe is in the video".
 
@@ -274,16 +302,20 @@ A-008 must record these conflicts with the docs:
 - `docs/07-privacy-and-safety.md` › Sensitive categories: there is no tagger. Health goals are declined, and the consent note says the bot reads the whole library.
 - `docs/06-rules-and-actions.md` › RuleSpec: a subset, with days and a time in place of cron.
 
-## 12. Decisions needed today
+## 12. Decisions
 
-1. **Channel:** iMessage from a Mac (recommended), Telegram, or start SMS registration now for later.
-2. **The Mac:** which one runs the bot, and can it stay on and awake from 15 November to the end of the sessions?
-3. **The bot's Apple Account:** a new one (recommended), not a founder's own.
-4. **Scope:** answers come only from the person's own library (recommended). Searching for new content is a later step.
-5. **Models:** `gpt-5.4-mini` with the existing OpenAI key. The consent note names OpenAI as the provider that sees item text and requests.
-6. **Price** for the sessions: $4.99 for the next month, asked on day 7.
-7. **The session marks** in section 10.
-8. **A-008:** already rewritten for this MVP (Proposed). Both founders accept it, and this brief, before anyone outside the founders uses the bot.
+Made on 12 Nov:
+1. **Channel:** the default messaging app, iMessage first. Testers use a paid iMessage service (Sendblue recommended); the founders use Derrick's Mac during the build.
+2. **The Mac:** Derrick's Mac runs the bot.
+3. **Apple Account:** no separate account; Derrick's own for the build days.
+4. **Scope:** answers come only from the person's own library. Onboarding connects as much as can be connected (section 6b).
+5. **Models:** `gpt-5.4-mini`.
+6. **Price:** none asked during the sessions.
+
+Still open:
+7. **Sendblue:** pay $100 a month for one line from the first tester session, after support confirms the follow-up rule.
+8. **The session marks** in section 10: agree them or change them.
+9. **A-008:** both founders accept it, and this brief, before anyone outside the founders uses the bot.
 
 ## 13. Risks
 
@@ -300,7 +332,7 @@ A-008 must record these conflicts with the docs:
 ## 14. Budget
 
 - API: a $10 cap for the build and tests, and $1 a day per tester. The existing ledger caps each ledger file as a whole ($4 by default) and keeps no person or day split, so the MVP points each person's calls at their own library's ledger, sets that ledger's budget, and `mvp/run.py` sums the day's rows before each run and skips a run that would pass $1. The $10 build cap is the sum over all ledgers, also checked by `mvp/run.py`.
-- Channel: $0 for iMessage and Telegram.
+- Channel: $0 during the build; $100 a month for one Sendblue line from the first tester session.
 - Founder time: about 2 hours on day 0, then about half a day each on days 1 to 3.
 
 ## 15. Deliverables
