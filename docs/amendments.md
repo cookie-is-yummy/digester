@@ -57,53 +57,43 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
-### A-008 · Action test before platform: run the product by hand with ten outside testers, then build only what passed
-- **Date:** 2026-11-10 (revised the same day; the first draft proposed a hosted agent-access pilot, now parked in `experiments/PARKED-agent-layer-pilot.md` with its own conflict list)
-- **Requested by:** the agent, in the outside review of 10 Nov 2026, written at Derrick's request and revised after Derrick supplied his vision notes as its frame. Derrick asked for the review and for the brief that this amendment accompanies. Neither founder's own reasons are recorded yet
+### A-008 · A three-day MVP skeleton: text a request, get cited answers from your own saves on a schedule, on prototype code
+- **Date:** 2026-11-12 (third version; the first proposed a hosted agent-access pilot, now in `experiments/PARKED-agent-layer-pilot.md`; the second a hand-run action test, now in `experiments/PARKED-action-test.md`)
+- **Requested by:** Derrick, on 12 Nov 2026; written up by the agent
 - **Status:** Proposed
 - **Conflicts with:**
-  - `09-roadmap-and-ownership.md`: "We prove the core on real data first, then build a thin version of every backend layer end to end", and › Milestones, M5: "Friendly testers … Week-3 retention and actions marked done measured", after M0 to M4. The test measures actions done first, by hand, before M0.
-  - `00-vision.md` › Principles: "**Value on day one** from the history export, not after weeks of capture", and › The core loop, steps 1 and 2 (the export, then the first report as "the moment of value"). The test takes no export. Its moment of value is a plan on day 2, made from up to 20 items the tester sends on day 0.
-  - `00-vision.md` › Principles: "MCP access is the paid core", and `10-decisions.md` (Sep, Agreed): "MCP access for the user's own agent is a first-class output and the paid core". The test charges $4.99 for plans, with no agent access. It does not reverse the decision: it asks whether the plan alone is worth paying for, and treats agent access as a later upgrade.
-  - `AGENTS.md` rule 8: "DM message text is never read or stored, only shared-post objects"; `04-intake.md` › Rules of the road 3: "Never read or store DM message text"; and `07-privacy-and-safety.md` › Personal data › DM messages. In the test a founder reads the product account's own inbox by eye. Only the shared post and the one word typed with that share are recorded, which `04-intake.md` › Live capture already keeps ("Any text the user types with the share … is kept"). A founder will also see recruiting messages there, answers them with a link to a form, and copies none of that text. No tester's other conversations are involved.
-  - `07-privacy-and-safety.md` › Personal data › Friends: "posts by mutual follows and shares received from friends are counts only". The test has no follow lists, so mutual follows cannot be detected. A founder counts, and leaves out of every plan, any post from a private account or one that looks like a friend's.
-  - `07-privacy-and-safety.md` › Personal data › Sensitive categories: "hidden from agents and digests unless the user opts in". No tagger exists. In the test a founder reads everything a tester chooses to send, under consent box 1, and goals about health conditions, weight loss or diet are declined. On a Go, the plan writer sends items to a model with no tagger; Gate 0 check (g) and consent box 4 cover that.
-  - `07-privacy-and-safety.md` › Retention and deletion: "**Real deletion:** deleting an item or an account removes it from our database and from everything we created in their tools". The test's records also sit in a form account, a mailbox, a calendar and the product account's inbox. BRIEF-10 lists all of them for deletion; payment records are kept only as long as the law requires.
-  - `03-data-contract.md` › Conventions: "**Evidence:** every generated claim cites item IDs". A goal action is written from the goal alone, so it carries `goal_id` and an empty `evidence[]`. It is a suggestion, not a claim about the user's items, and the contract is not changed.
-  - `09-roadmap-and-ownership.md` › Open questions: "revisit the business-data idea after Gate 1?" The test brings it forward: five to ten business conversations run beside it.
-  - `08-evals-and-quality.md`: "Every learned or generated step has a fixed eval set built from real use". On a Go, the plan writer starts with no eval set. Its first measures are the founder's edits and what testers do.
-  - `AGENTS.md` › Prototype code: "prototype scripts are not product code". On a Go, the plan writer is prototype code under `experiments/`, run by a founder on tester data after Gate 0.
+  - `docs/06-rules-and-actions.md` › Action registry: "`email.send` … Build first: no OAuth", and "Avoid SMS for now (US carrier registration, per-message cost)". The MVP's only action is a text message, sent by iMessage from a Mac.
+  - `docs/00-vision.md` › MVP scope: outputs are "**Email** (first, no OAuth needed) and **Google Calendar** (second)", and "**Text messages** as an output" is listed as planned later.
+  - `docs/09-roadmap-and-ownership.md` › Milestones: rules end to end are M4, after M0 to M3, and testers come at M5. The MVP builds rules first, on the prototype engine, and shows them to testers.
+  - `docs/10-decisions.md` (28 Oct, Agreed): "Supabase for database, vectors, auth, storage and queues". The MVP uses SQLite and the demo's files on one Mac.
+  - `docs/06-rules-and-actions.md` › RuleSpec (Proposed): the MVP uses a subset, with days and a time in place of a cron string, and one action.
+  - `AGENTS.md` › Prototype code: "prototype scripts are not product code". Outsiders use prototype code under `experiments/mvp/`. `AGENTS.md` rules 1, 3 and 4 are set aside there.
+  - `docs/07-privacy-and-safety.md` › Personal data › Sensitive categories: "hidden from agents and digests unless the user opts in". There is no tagger. The consent note says the bot reads the whole library, and health goals are declined.
+  - `docs/09-roadmap-and-ownership.md` › Ownership: triggers, scheduler, executor and output actions are Eason's. The agent builds them for this prototype; Eason reviews them.
 
 **What is requested**
-Before building M0 to M4, run the product by hand for ten outside testers, at least five of them strangers. They send items; the founders write each of them two plans of four small dated actions; forms record what gets done, and a one-time $4.99 is asked on day 14. Half of each plan's actions are written from the tester's goal alone, by the other founder, as a control. The founders decide on 7 December by marks committed beforehand, and build a plan writer only on a Go. `experiments/BRIEF-10.md` (a draft) has the items, owners, marks and decision table.
+Spend three days, 13 to 15 November, building a rough MVP: a person texts a request, the bot turns it into a rule with a preview, searches that person's own library of saved and watched posts, and replies on schedule with picks that link to their posts. Then show it to 5 to 10 people from 17 November. `experiments/BRIEF-10.md` (a draft) is the build plan.
 
 **Why the requester wants it**
-Derrick and Eason have not yet said in their own words why they want this, or why not. Ask both before the decision. What follows is the review's case.
-
-Derrick's notes describe the product as a loop: send what you scroll, get a plan, act on it. The review found that nine rounds of search research ran on one founder's library, that no plan has been made for anyone, and that no one outside one founder has used anything. Meta's Muse now writes action plans from goals, and Meta's own examples act on Instagram saves. The review argues that the cheapest way to learn whether there is a business is to run the product by hand, with a control for whether the sending adds anything.
+In Derrick's words, summarised: the product makes it easier to use what people have saved and watched; it cannot make anyone act. People see that value by trying it on their own saves, not by reading a hand-written plan or answering a test. A working skeleton shows the shape of the product, exposes its holes, and is something to put in front of users to see whether they want it.
 
 **Why it is better than the current approach**
-- The roadmap reaches testers, and "actions marked done", at M5. The test reaches testers in week 2 and actions done in week 3, for about 17 founder-days and almost no cash, with no code.
-- It tests the product's central claim directly, and it can end the consumer direction early: the decision table has stop rows, and the marks are committed before any result.
-- Its control gives a hearing to the objection that people with a goal do not need the product. A Go needs either item actions clearly ahead of goal actions, or testers who keep sending unasked.
-- It takes no export and needs no server and no model, so no tester data is stored outside the founders' own store.
-- Evidence: `experiments/results/r8-final.md` and `r9-final.md` show no search gain on real held-out searches beyond the noise band; no branch holds product code; published studies put the effect of a written plan at a few points (the review, Part 2).
+- The roadmap reaches a rule that runs for a real person at M4 and testers at M5. The MVP reaches both in a week.
+- About 70% of the hard part exists: the demo imports exports and searches a library. The new parts are small: interpreter, composer, schedule, channel.
+- It tests the product's own promise on people's own data, which the review's earlier test designs did not.
 
 **Costs and risks**
-- **A founder reads what testers send.** That exposes it to a person, which a pipeline would not. The consent form says so, testers are told to send only what they are content for a founder to see, and records are deleted 30 days after the decision, or for payers 30 days after their last plan.
-- **Partial disclosure.** Testers are told at the start that plans mix suggestions made in different ways, and learn of the control only at the end. They may then withdraw their records, and payers may ask for a refund.
-- **Minors and health.** Recruiting through short videos can reach people under 18, and goals about health are common. BRIEF-10 stops, deletes and takes no payment if a tester appears to be under 18, and declines goals about a medical or mental-health condition, weight loss or diet. No lawyer has read this.
-- **A hand-written plan flatters the product.** A founder who watches a reel sees what software will not. The test records which actions needed the video. A pass is a ceiling for the pipeline, not a forecast.
-- **Small numbers.** Ten testers give direction, not proof. The control calls a gap only at 8 of 40 actions (20 points), and misses a true gap of that size about half the time.
-- **Taking money.** A one-time charge in a founder's own name needs terms and a refund rule, and it commits the founders to four more weekly plans for each payer whatever the decision. BRIEF-10 sets the terms out; no lawyer has read them.
-- **Delay to the platform.** M0 to M4 wait at least nine weeks: four to Gate B and five more through Phase 3 on a Go. Longer if the test ties.
-- **Eason's area.** It pulls recruiting forward and adds the goal actions, the forms and the business conversations: about ten days in four weeks. Intake work waits for a Go.
+- **Prototype debt.** The code is thrown away and rewritten after the decision that follows the sessions.
+- **The channel is unofficial.** Sending iMessage from a Mac by script is not an Apple-approved route; an account can be flagged. Volume stays low and Telegram is the backup.
+- **Privacy.** Testers' libraries sit on a founder's Mac, and item text and requests go to OpenAI. A consent note, a delete command, and no raw zips kept are the controls; no lawyer has read them.
+- **Thin text.** About two in three of Derrick's saved recipe posts have no ingredients in the caption, and YouTube items have titles only. Answers say so plainly.
+- **Strangers and payment are still the real answer.** A good demo to friends proves little; the sessions keep the earlier review's strangers, real price and marks agreed beforehand.
 
 **Agent's assessment**
-Agree with changes. Running the product by hand before building is the right order, and the cost is small. Three conditions: the marks are committed before the first tester starts; each founder writes one kind of action and the tally is computed from forms, not counted by hand; and nothing is fetched from Instagram by code, with no scraping service (rule 7). The marks are proposals. The agent wrote the review that proposes this, so this assessment is not independent. The agent's first draft of this amendment proposed a different first test, written before it had Derrick's notes.
+Agree. The skeleton is small given what exists, and it tests the product as Derrick describes it. Two conditions: the reliability rules in BRIEF-10 section 5 are enforced in code, not left to prompts; and the session marks are agreed before the first session. The agent drafted the two earlier versions of this amendment, which proposed other first steps.
 
 **Affected**
-Docs: `09-roadmap-and-ownership.md` (milestone order, the business-data question), `00-vision.md` (day-one value, the paid core), `10-decisions.md`, `07-privacy-and-safety.md` (the product account's inbox, friends' posts without follow lists, a consent form), `04-intake.md` (rule 3 for the product account's inbox; what a share delivers, once BRIEF-10 item 9 reports), `08-evals-and-quality.md` (an eval for plans), `AGENTS.md` (not edited: the reading of rule 8 and the prototype-code exception are recorded here only) · Code: none before Gate B; then `experiments/action_test/` and, on a Go, `experiments/plan_writer/` (prototype) · Contract change: no · Needs both founders: yes
+Docs: `docs/06-rules-and-actions.md` (channel, RuleSpec subset), `docs/00-vision.md` (MVP outputs), `docs/09-roadmap-and-ownership.md` (milestone order, who builds the executor), `docs/10-decisions.md`, `docs/07-privacy-and-safety.md` (consent note, sensitive items) · Code: `experiments/mvp/` (new, prototype) · Contract change: no · Needs both founders: yes
 
 ### A-007 · An optional, soft "direction" input on search requests
 - **Date:** 2026-11-09
