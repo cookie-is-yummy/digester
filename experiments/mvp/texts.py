@@ -70,7 +70,7 @@ FEEDBACK_REPLIES = {"up": "Noted 👍", "down": "Noted. I won't send that again.
                     "less": "Noted: less like that.",
                     "harder": "Noted. Ask for \"a harder one\" and I'll look for one now.",
                     "easier": "Noted. Ask for \"an easier one\" and I'll look for one now.",
-                    "done": "Nice! I've noted that you made it.",
+                    "done": "Nice! I've marked it as done, so I won't send it again.",
                     "hide": "Hidden. I won't send that one again."}
 FEEDBACK_OTHER = "Noted."
 NO_RULES_LIST = ("You have no rules yet. Ask me anything now, or tell me when to send something: "
@@ -175,10 +175,8 @@ SNOOZE_CLEARED = "OK, timed messages are back on."
 SNOOZE_NONE = "Nothing was paused, so nothing changes."
 TODO_DUE_PASSED = "That time has already passed, so I didn't set a reminder for it."
 TODO_LIST_EMPTY_SEND = "Your list is empty right now. Nice work."
-# features that come in later slices: one honest line each
-NOT_YET = {
-    "profile_show": "Showing what I know about you isn't ready yet.",
-}
+# features that come in later slices: one honest line each (none left after slice 6)
+NOT_YET = {}
 
 # ---------- slice 5: outside picks (YouTube) ----------
 OUTSIDE_HEAD = "Not from your saves, but close to them:"
@@ -419,7 +417,7 @@ def stopped_rule(n_goal):
 
 
 CONTACT_CARD = "Save me as a contact, so the links I send show a preview."
-PROFILE_NOTED = "Noted. I'll keep that in mind when I read your requests. A full profile isn't ready yet."
+PROFILE_NOTED = "Noted. I'll keep that in mind when I read your requests."
 QUIET_NEEDS_BOTH = "For quiet hours on some days only, tell me both times, for example \"not 9am to 3pm on weekdays\"."
 QUIET_INVALID = "I can keep up to 4 sets of quiet hours, each with a start and a different end. Could you say it another way?"
 
@@ -558,3 +556,80 @@ def later_set(first, verbs, what, n):
 
 SENT_AGAIN_HEAD = "Here's what you asked me to send you:"
 ITEMS_GONE = "The post you asked me to send again isn't in your library any more, so there's nothing to send."
+
+
+# ---------- slice 6: the person's context and onboarding ----------
+PROFILE_HOW_TO_CORRECT = ("To correct me, just say it: \"I'm past beginner at Blender\", \"I'm not into cooking any more\", "
+                          "\"I have an air fryer\" or \"stop guessing my level\".")
+PROFILE_SENSITIVE = "I don't keep notes about health, relationships, money, religion or politics, so I left that out."
+SKIP = re.compile(r"^\W*(skip|skip it|skip this|skip that|next|later|not now|pass|no thanks)\W*$", re.I)
+RIGHT = re.compile(r"^\W*(yes|yep|yeah|yup|right|correct|that'?s right|thats right|spot on|exactly|ok|okay|sure|"
+                   r"sounds right|looks right|all good|good|perfect|great)\b[\w\s!.,']{0,20}$", re.I)
+SET_ME_UP_AGAIN = re.compile(r"^\W*(please\s+)?(set me up again|set up again|redo (my |the )?(setup|set ?up|onboarding)|"
+                             r"start (the |my )?(setup|set ?up|onboarding) (again|over)|run (the )?setup again)\W*$", re.I)
+ONBOARD_PICK = re.compile(r"^\W*(?:(?:number|#|no\.?)\s*)?([1-3])\W*$|^\W*(?:the\s+)?(first|second|third)(?:\s+one)?\W*$", re.I)
+ONBOARD_REPEAT = re.compile(r"^\W*(?:yes,?\s+)?(?:every\s+(?:morning|day)|daily|each morning|repeat it|"
+                            r"make it a rule|send (?:it|that|me one) every (?:morning|day))\W*$", re.I)
+
+
+def read_message(lines, lead="Thanks!"):
+    """Onboarding step 2: the read of the person, then the two questions."""
+    if lines:
+        head = f"{lead} Here's my read of you from what you've saved and watched:\n" + "\n".join(lines)
+        ask = ("Did I get that right? And in a sentence or two, what are you working toward right now? "
+               "(Or say \"skip\".)")
+    else:
+        head = f"{lead} I couldn't get a good read of your library yet."
+        ask = "In a sentence or two, what are you working toward right now? (Or say \"skip\".)"
+    return head + "\n\n" + ask
+
+
+READ_AGAIN = ("When you're ready: did I get that right, and what are you working toward right now? "
+              "(Or say \"skip\".)")
+
+
+def contact_message(lead, zone, local, has_email=False):
+    """Onboarding step 3: what the bot now knows (lead), then the email and the time zone check."""
+    email = ("" if has_email else "What's your email address? I use it to email you answers and calendar files, after "
+             "a 6-digit code to check it's yours. ")
+    return (f"{lead}\n\n{email}I have you on {zone} time, where it's {local} now. If that's wrong, tell me the city "
+            f"you're in. (Or say \"skip\".)").strip()
+
+
+def first_requests_block(texts, repeat_first=True):
+    lines = ["Or try one of these, picked from your own saves:"]
+    lines += [f"{i}. \"{t}\"" for i, t in enumerate(texts, 1)]
+    tail = f"Reply {', '.join(str(i) for i in range(1, len(texts)))} or {len(texts)}" if len(texts) > 1 else "Reply 1"
+    tail += " and I'll find it now."
+    if repeat_first:
+        tail += " Or reply \"every morning\" and I'll send you number 1 every morning at 8 (I'll show you one first)."
+    return "\n".join(lines) + "\n" + tail
+
+
+SETUP_DONE = "That's the setup done. Ask me for anything you've saved, any time, or say \"help\"."
+
+
+def export_more_note(n):
+    return f"(Your export {'reminder' if n == 1 else 'reminders'} will start with the same YES.)"
+
+
+def profile_changed(changes, skipped=False):
+    """'Noted: Blender: past the basics; you have an air fryer.'"""
+    msg = "Noted: " + "; ".join(changes) + "." if changes else PROFILE_NOTED
+    if skipped:
+        msg += " " + PROFILE_SENSITIVE
+    return msg + " Say \"what do you know about me\" to see it all."
+
+
+def level_moved(topic, plain, way):
+    lead = "Noted, I'll aim higher" if way == "harder" else "Noted, I'll keep it simpler"
+    ask = "a harder one" if way == "harder" else "an easier one"
+    return f"{lead} with {topic}: I now have you as {plain}. Ask for \"{ask}\" and I'll look for one now."
+
+
+def level_guess_note(topic, level):
+    """Said at most once per topic while the level is a guess."""
+    words = {"new": f"I'm guessing you're new to {topic}", "beginner": f"I'm guessing you're a beginner at {topic}",
+             "intermediate": f"I'm guessing you're past the basics with {topic}",
+             "advanced": f"I'm guessing you're advanced at {topic}"}[level]
+    return words + "; tell me if that's wrong."

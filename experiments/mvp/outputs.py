@@ -337,17 +337,19 @@ class OutputsMixin:
         self.store.set_state(f"emailask:{h}", now_iso(now))
         return Outcome("waiting", line=T.EMAIL_ASK)
 
-    def _set_email(self, person, email, now, again=False):
-        """Stores the address unconfirmed and sends a new 6-digit code to it. The reply says what changed."""
+    def _set_email(self, person, email, now, again=False, reply=True):
+        """Stores the address unconfirmed and sends a new 6-digit code to it. The reply says what changed. With
+        reply=False the reply's text is returned instead of sent (onboarding puts it in its own message)."""
         h = person["handle"]
+        out = (lambda m: self.send(h, m)) if reply else (lambda m: m)
         email = email.strip().lower()
         cur, ok = self.store.email_of(h)
         if cur == email and ok and not again:
-            return self.send(h, T.email_already(email) + self._flush_waiting(person, now))
+            return out(T.email_already(email) + self._flush_waiting(person, now))
         sent = [t for t in (self.store.get_state(f"emailcodes:{h}") or [])
                 if datetime.fromisoformat(t) > now - timedelta(days=1)]
         if len(sent) >= config.CODES_PER_DAY:
-            return self.send(h, T.CODE_LIMIT)
+            return out(T.CODE_LIMIT)
         self.store.set_email(h, email)
         self.store.set_state(f"emailask:{h}", None)
         code = f"{secrets.randbelow(10 ** 6):06d}"
@@ -361,7 +363,7 @@ class OutputsMixin:
         msg = T.code_sent(email, config.CODE_MINUTES, changed=bool(cur and cur != email), again=again)
         if via != "smtp":
             msg += " " + T.code_in_outbox(email_action.where_outbox(self), failed=bool(err))
-        return self.send(h, msg)
+        return out(msg)
 
     def _email_text(self, person, text, now):
         """A message about the email address that code answers without the model: a 6-digit code while one is open,

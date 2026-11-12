@@ -170,6 +170,8 @@ class WebChannel(Channel):
             handle = c.get("handle")
             with bot.lock_for(handle):  # not in the middle of an answer to this person
                 person = bot.store.person(handle)
+                # "Start over" (with_welcome) runs the whole setup again from its first message (slice 6): consent,
+                # then the read of the person; the other button keeps the consent and the setup
                 agreed = bool(person and person["consent_version"]) and not c.get("with_welcome")
                 bot.store.delete_person_data(handle)
                 bot.load_people()
@@ -180,6 +182,9 @@ class WebChannel(Channel):
                     self.threads[handle] = []
                     self.busy[handle] = 0
                 self.offset = timedelta(0)
+                if c.get("with_welcome") and bot.store.person(handle):
+                    from ..texts import CONSENT
+                    bot.send(handle, CONSENT)   # the setup's first message, as a new person gets it
         self._tick = True
 
     def state(self, handle):
@@ -211,12 +216,29 @@ class WebChannel(Channel):
                    for r in bot.store.q("SELECT status, at, new_counts FROM imports WHERE handle=? ORDER BY id DESC "
                                         "LIMIT 3", (me["handle"],))]
         importing = me["handle"] in getattr(bot.refresher, "busy", ())
+        profile = self.profile_panel(me["handle"])
         return {"people": [{"handle": p["handle"], "name": p["name"] or p["handle"]} for p in people],
                 "me": me["handle"], "agreed": bool(me["consent_version"]), "ready": self.ready, "busy": busy,
                 "problem": self.problem,
                 "now": _local(now, tz), "timezone": tz, "ahead_minutes": int(self.offset.total_seconds() // 60),
                 "messages": msgs, "rules": rules, "todos": todos, "outbox": outbox, "imports": imports,
-                "importing": importing}
+                "importing": importing, "profile": profile}
+
+    def profile_panel(self, handle):
+        """The Profile panel (slice 6): interests with their level and whether confirmed, direction, preferences,
+        email and whether it is confirmed, time zone, quiet hours and the setup step."""
+        from .. import profile as P
+        from .. import texts as T
+        prof = P.get(self.bot.store, handle)
+        step = (self.bot.store.get_state(f"onboard:{handle}") or {}).get("step")
+        return {"interests": [{"topic": i["topic"], "level": P.LEVEL_PLAIN.get(i.get("level")) if i.get("level") else None,
+                               "confirmed": bool(i.get("confirmed") or i.get("source") != "guess"),
+                               "counts": P.count_words(i) if i.get("source") == "guess" else ""}
+                              for i in prof["interests"]],
+                "direction": prof["direction"], "prefs": P.pref_words(prof["prefs"])
+                + (["no level guessing"] if prof["prefs"].get("guess_level") is False else []),
+                "notes": prof["notes"], "email": prof["email"], "email_verified": prof["email_verified"],
+                "timezone": prof["timezone"], "quiet": T.quiet_words(prof["quiet"]), "setup": step}
 
     def upload(self, handle, filename, stream, length):
         """The upload box: an export file goes to the person's inbox (refresh.py), and the inbox is looked at next."""

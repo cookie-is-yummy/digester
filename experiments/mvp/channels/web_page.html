@@ -126,6 +126,10 @@
       <div class="small">Moving the clock makes timed and repeating rules fire now. It only moves forward.</div>
     </div>
     <div>
+      <h2>Profile</h2>
+      <div id="profile"></div>
+    </div>
+    <div>
       <h2>Rules</h2>
       <div id="rules"></div>
     </div>
@@ -158,10 +162,13 @@
       <button class="try">add its ingredients to my grocery list</button>
       <button class="try">pasta recipes, and show me a few new ones from outside my saves</button>
       <button class="try">did my new export come in?</button>
+      <button class="try">what do you know about me</button>
+      <button class="try">I'm past beginner at Blender now</button>
+      <button class="try">set me up again</button>
     </div>
     <div>
-      <button class="btn quiet" data-op="start_over">Start over (clear this person's rules, thread, to-dos and outbox)</button>
-      <button class="btn quiet" data-op="start_over" data-welcome="1">Start over from the welcome message</button>
+      <button class="btn quiet" data-op="start_over" data-welcome="1">Start over (runs the setup from its first message)</button>
+      <button class="btn quiet" data-op="start_over">Clear rules, thread, to-dos and outbox (keeps the setup)</button>
       <div class="small">This page is a test thread on this computer. Nothing here is sent to a phone.</div>
     </div>
   </aside>
@@ -199,6 +206,16 @@ function draw(s) {
   $("now").textContent = s.now;
   $("ahead").innerHTML = s.ahead_minutes ? `<span class="ahead">${fmtAhead(s.ahead_minutes)} ahead of real time</span> · ${esc(s.timezone)}` : `real time · ${esc(s.timezone)}`;
   $("typing").textContent = s.busy ? (s.ready ? "typing…" : "waiting for the library to load…") : "";
+  const pr = s.profile || {};
+  $("profile").innerHTML = (pr.interests || []).map(i =>
+    `<div class="rule"><b>${esc(i.topic)}</b><div class="small">${i.level ? esc(i.level) + " · " : ""}${i.confirmed ? "confirmed" : "a guess"}${i.counts ? " · " + esc(i.counts) : ""}</div></div>`).join("")
+    + `<div class="small">${pr.interests && pr.interests.length ? "" : "No interests yet.<br>"}`
+    + `Working toward: ${pr.direction ? esc(pr.direction) : "–"}<br>`
+    + `Preferences: ${(pr.prefs || []).length ? esc(pr.prefs.join("; ")) : "–"}<br>`
+    + ((pr.notes || []).length ? `Told me: ${esc(pr.notes.join("; "))}<br>` : "")
+    + `Email: ${pr.email ? esc(pr.email) + (pr.email_verified ? " (confirmed)" : " (not confirmed)") : "–"}<br>`
+    + `Time zone: ${esc(pr.timezone || "–")} · quiet ${esc(pr.quiet || "")}`
+    + (pr.setup && pr.setup !== "done" ? `<br>Setup: at step "${esc(pr.setup)}"` : "") + `</div>`;
   $("rules").innerHTML = s.rules.length ? s.rules.map(r =>
     `<div class="rule"><b>${r.number}.</b> ${esc(r.goal)}<div class="small">${esc(r.when)}${r.status !== "active" ? " · " + esc(r.status) : ""}${r.next ? "<br>next: " + esc(r.next) : ""}</div></div>`).join("")
     : `<div class="small">None yet.</div>`;
@@ -314,7 +331,7 @@ $("asEmail").addEventListener("click", () => {
 $("closeReader").addEventListener("click", () => $("reader").classList.remove("on"));
 $("reader").addEventListener("click", e => { if (e.target.id === "reader") $("reader").classList.remove("on"); });
 document.querySelectorAll(".btn[data-op]").forEach(b => b.addEventListener("click", () => {
-  if (b.dataset.op === "start_over" && !confirm("Clear this test person's rules, history and thread?")) return;
+  if (b.dataset.op === "start_over" && !confirm(b.dataset.welcome ? "Clear everything about this test person and run the setup again from its first message?" : "Clear this test person's rules, history and thread?")) return;
   api("/api/control", {op: b.dataset.op, handle: me, minutes: Number(b.dataset.minutes || 0), with_welcome: !!b.dataset.welcome}).then(poll);
 }));
 // The upload box: the file is sent as it is to this person's inbox on this computer; the bot imports it from there.

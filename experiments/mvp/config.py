@@ -11,11 +11,12 @@ DB = os.path.join(HOME, "mvp.sqlite")
 PEOPLE = os.path.join(HOME, "people.json")  # handle -> {name, library, timezone}
 
 MODEL = os.environ.get("MVP_MODEL", "gpt-5.4-mini")
-PROMPT_INTERPRET = "interpret_v3"
+PROMPT_INTERPRET = "interpret_v3"   # a v4 (profile rules in the prompt) scored worse on the dev set: slice 6 keeps v3
+                                   # and gives it only the profile lines about the message's topic (profile.py)
 INTERPRET_TEMPERATURE = 0     # the most deterministic settings the model accepts (DESIGN.md sections 4 and 11)
 INTERPRET_SEED = 7
 INTERPRET_CACHE_HOURS = 6     # the same request from the same person reuses its interpretation (section 4)
-PROMPT_COMPOSE = "compose_v2"  # verdicts clear / close / no, backed "because", criteria per item (section 11)
+PROMPT_COMPOSE = "compose_v3"  # v2 plus the finished-result must-have and the person's level (slice 6)
 COMPOSE_TEMPERATURE = 0       # the interpreter's settings, for the same reason
 COMPOSE_SEED = 7
 PROMPT_EXTRACT = "extract_v1"  # details on the full text, one call per picked item, cached (section 4)
@@ -72,3 +73,19 @@ IMPORT_CAP_USD = float(os.environ.get("MVP_IMPORT_CAP_USD", "1.50"))   # one lib
 UPLOAD_MAX_MB = int(os.environ.get("MVP_UPLOAD_MAX_MB", "2048"))      # the test page's upload box
 INBOX_EMAIL = os.environ.get("MVP_INBOX_EMAIL")     # the bot's inbox account a tester shares a Drive folder with
 EXPORT_EVERY_DAYS = {"instagram": 28, "youtube": 61}   # the reminder's interval: 4 weeks; the Takeout schedule (2 months)
+
+# ---------- the person's context and onboarding (DESIGN.md sections 5 and 11, slice 6) ----------
+PROMPT_PROFILE_GUESS = "profile_guess_v2"      # one call groups a sample of their own kept items into topics (v2: plainer,
+#                                               steadier names; v1 gave different names on two runs)
+PROMPT_PROFILE_MERGE = "profile_merge_v1"      # what they say about themselves, as a form code validates
+PROMPT_FIRST_REQUESTS = "first_requests_v1"    # the first requests written for them, each checked against the library
+PROFILE_TEMPERATURE = 0
+PROFILE_SEED = 7
+PROFILE_SAMPLE_RECENT = 60     # their newest kept items ...
+PROFILE_SAMPLE_RANDOM = 60     # ... and this many more at random (seeded by the library build: the same sample each time)
+PROFILE_CHANNELS = 12          # their most watched YouTube channels (3 videos or more)
+PROFILE_MAX_TOPICS = 6
+PROFILE_MIN_SUPPORT = 3        # a topic needs this many sample lines behind it
+FIRST_REQUESTS = 3             # offered at the end of onboarding, each with at least FIRST_REQUEST_MIN candidates
+FIRST_REQUEST_MIN = 3
+ONBOARD_OFFER_HOURS = 24       # "1", "2", "3" and "every morning" pick from the offer this long

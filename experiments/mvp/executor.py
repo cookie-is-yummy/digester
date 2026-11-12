@@ -50,14 +50,23 @@ class ExecutorMixin:
         return ref
 
     # ---------- the person's context ----------
-    def _profile_text(self, handle):
-        """What the composer may use about the person: their direction and what they said about themselves."""
-        ctx = self.store.person_context(handle)
-        lines = []
-        if ctx.get("direction"):
-            lines.append("What they are working toward: " + " ".join(str(ctx["direction"]).split())[:300])
-        lines.extend(ctx.get("notes") or [])
-        return "\n".join(lines)
+    def _profile_text(self, handle, *texts):
+        """What the composer may use about the person (slice 6, profile.composer_context): their direction, their level
+        at this request's topic when it may be used, their preferences and what they said about themselves. Returns
+        (text, level_ok, guessed interest)."""
+        from .profile import composer_context
+        return composer_context(self.store, handle, *texts)
+
+    def _level_note(self, h, result, guessed):
+        """'I'm guessing you're new to Blender; tell me if that's wrong.': said once per topic, when an answer's reason
+        leans on a level that is only a guess."""
+        if not guessed or not result.get("level_used"):
+            return
+        seen = self.store.get_state(f"levelnote:{h}") or []
+        if guessed["topic"].lower() in seen:
+            return
+        self.store.set_state(f"levelnote:{h}", seen + [guessed["topic"].lower()])
+        result["level_note"] = T.level_guess_note(guessed["topic"], guessed["level"])
 
     def _exclusions(self, handle):
         prefs = self.store.person_context(handle).get("prefs") or {}
@@ -146,12 +155,16 @@ class ExecutorMixin:
             extra = self._youtube().details(cands, now=now) if any(c.platform == "youtube" for c in cands) else {}
             steps["youtube"] = round(time.time() - t1, 2)
             t1 = time.time()
+            about, level_ok, guessed = self._profile_text(h, spec.content.goal, request_text or "",
+                                                          *spec.content.searches)
             result, c = compose(cands, spec, h, request_text=request_text,
                                 feedback_note=self._feedback_note(rule_id, view), known_lines=known_lines,
-                                extra=extra, profile=self._profile_text(h), lang=getattr(self._tl, "lang", None),
+                                extra=extra, profile=about, lang=getattr(self._tl, "lang", None),
                                 store=self.store, use_cache=(kind != "more"), sent_count=len(sent_before),
-                                wider=(kind == "ask"), now=now)
+                                wider=(kind == "ask"), now=now, level_ok=level_ok)
             cost += c
+            if result.get("picks") and kind != "follow_up":
+                self._level_note(h, result, guessed)
             steps["compose"], steps["answer_cached"] = round(time.time() - t1, 2), result.get("cached", False)
             t1 = time.time()
             main = result.get("picks") or []

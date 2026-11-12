@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, handle 
 CREATE TABLE IF NOT EXISTS outside_searches (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT, day TEXT NOT NULL,
   at TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS outside_cache (key TEXT PRIMARY KEY, results TEXT NOT NULL, at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS profile_guess (key TEXT PRIMARY KEY, library TEXT, result TEXT, at TEXT);
 CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, at TEXT, status TEXT,
   sources TEXT, library TEXT, old_library TEXT, counts TEXT, new_counts TEXT, estimate_usd REAL, cost_usd REAL,
   error TEXT, seconds REAL);
@@ -79,6 +80,7 @@ ADDED_COLUMNS = [
     ("people", "email_verified_at TEXT"),  # when they texted back the code sent to it; NULL = not confirmed
     ("people", "imported_from TEXT"),    # slice 5: the people.json library an import replaced (kept at the next start)
     ("imports", "work TEXT"),            # slice 5: an import's working folder, so a restart can put its files back
+    ("people", "profile TEXT"),          # slice 6: JSON {"interests": [...], "build", "guessed_at"} (profile.py)
 ]
 
 
@@ -264,9 +266,9 @@ class Store:
                (handle, item_id, rule_id, kind, now_iso()))
 
     def disliked(self, handle):
-        """Items never to be sent again: 👎 and 'hide'."""
-        return {r["item_id"] for r in self.q("SELECT item_id FROM feedback WHERE handle=? AND kind IN ('down','hide')",
-                                             (handle,))}
+        """Items never to be sent again: 👎, 'hide' and 'done' ("made it": slice 6)."""
+        return {r["item_id"] for r in self.q("SELECT item_id FROM feedback WHERE handle=? AND kind IN "
+                                             "('down','hide','done')", (handle,))}
 
     def feedback_for_rule(self, rule_id):
         return self.q("SELECT item_id, kind FROM feedback WHERE rule_id=? ORDER BY id", (rule_id,))
@@ -358,6 +360,30 @@ class Store:
         cur = self.person_context(handle)["prefs"]
         cur.update(prefs)
         self.x("UPDATE people SET prefs=? WHERE handle=?", (json.dumps(cur), handle))
+
+    # the profile (slice 6, profile.py): interests, direction and prefs live on the people row
+    def profile_data(self, handle):
+        """{"interests": [...], ...} as stored; {} when nothing is stored (or the column holds something else)."""
+        r = self.one("SELECT profile FROM people WHERE handle=?", (handle,)) or {}
+        try:
+            data = json.loads(r.get("profile") or "{}")
+        except ValueError:
+            data = {}
+        return data if isinstance(data, dict) else {}
+
+    def set_profile_data(self, handle, data):
+        self.x("UPDATE people SET profile=? WHERE handle=?", (json.dumps(data), handle))
+
+    def set_direction(self, handle, text):
+        self.x("UPDATE people SET direction=? WHERE handle=?", (text, handle))
+
+    def drop_profile_notes(self, handle, ids):
+        for i in ids:
+            self.x("DELETE FROM profile_notes WHERE handle=? AND id=?", (handle, i))
+
+    def profile_note_rows(self, handle, limit=10):
+        rows = self.q("SELECT id, text FROM profile_notes WHERE handle=? ORDER BY id DESC LIMIT ?", (handle, limit))
+        return list(reversed(rows))
 
     # details found in an item's own text (DESIGN.md section 4): found once, reused always
     def facts_get(self, library, item_id, kinds, final_only=True, since=None, empty_source=None):
@@ -513,7 +539,8 @@ class Store:
             for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}",
                         f"lastwrite:{handle}", f"linekinds:{handle}", f"facts:{handle}",
                         f"card:{handle}", f"emailcode:{handle}", f"emailcodes:{handle}", f"emailwait:{handle}",
-                        f"emailask:{handle}", f"outside_shown:{handle}", f"export_reminders:{handle}"):
+                        f"emailask:{handle}", f"outside_shown:{handle}", f"export_reminders:{handle}",
+                        f"onboard:{handle}", f"levelnote:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 

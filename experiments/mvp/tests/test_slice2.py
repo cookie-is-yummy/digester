@@ -480,8 +480,10 @@ def test_profile_notes_are_kept_and_later_features_say_so_honestly(env):
     assert "About them" in seen[0] and "- vegetarian" in seen[0]
     assert say(env, "I'm a total beginner at Blender", {"intent": "profile_update"}).startswith("Noted.")
     assert bot.store.profile_notes(H)[-1] == "I'm a total beginner at Blender"
-    assert say(env, "what do you know about me", {"intent": "profile_show"}) == \
-        "Showing what I know about you isn't ready yet."
+    # slice 6: the profile in plain words, with how to correct it (the profile itself is tested in test_slice6.py)
+    shown = say(env, "what do you know about me", {"intent": "profile_show"})
+    assert shown.startswith("Here's what I know about you:") and "I'm a total beginner at Blender" in shown
+    assert shown.endswith("\"stop guessing my level\".")
     # slice 4: the address is saved unconfirmed and a code goes to it (here, into the outbox)
     assert say(env, "my email is a@b.co", {"intent": "set_email", "email": "a@b.co"}).startswith(
         "I saved a@b.co as your email address and sent a 6-digit code to it.")

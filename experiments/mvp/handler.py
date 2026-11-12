@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from . import config
+from . import profile as P
 from . import texts as T
 from .interpret import interpret
 from .schedule import describe, next_run, resolve_until, say_time, t12
@@ -85,7 +86,7 @@ class HandlerMixin:
             self.note(intent="consent")
             if text and AGREE.match(text) and not NEGATION.search(text):
                 self.store.set_consent(handle, CONSENT_VERSION)
-                ref = self.send(handle, T.WELCOME)
+                ref = self.onboard_start(person, now)   # slice 6: the setup starts with the read of the person
                 self._contact_card(handle)
                 return ref
             return self.send(handle, CONSENT)
@@ -128,17 +129,26 @@ class HandlerMixin:
         ref = self._email_text(person, text, now)   # a code, "new code", or the address the bot just asked for
         if ref is not None:
             return ref
+        ref = self.onboard_step(person, text, now)   # slice 6: a step of the setup ("skip", their answer, "2")
+        if ref is not None:
+            return ref
+        return self.answer_normally(person, text, now)
+
+    def answer_normally(self, person, text, now):
+        """The normal path for a message: the caps, the interpreter, then the dispatch."""
+        handle = person["handle"]
         over = self._over_cap(person)
         if over:
             self.note(intent="over_cap")
             return self._limit_notice(person, over)  # before any paid call
+        pending = self._live_pending(handle, now)
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
         if last and not last.get("rule_id"):
             last = dict(last, request=(self.store.get_state(f"lastspec:{handle}") or {}).get("text"))
         try:
             it, _ = interpret(text, person, rules, pending, last, now, todos=self.store.todos(handle),
-                              last_write=self._last_write_ctx(handle, now), about=self.store.profile_notes(handle),
+                              last_write=self._last_write_ctx(handle, now), about=P.about_lines(self.store, handle, text),
                               store=self.store)
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=handle, kind="interpret", status="error", error=type(e).__name__)
@@ -169,10 +179,11 @@ class HandlerMixin:
         """The interpretation, then the one more it may carry ('also'), in order. A lasting fact the person stated
         about themselves is kept for the profile; the language they wrote in is passed on to the runs."""
         h = person["handle"]
+        self._tl.profile_said = None
         for x in [it] + ([it.also] if it.also else []):
             known = {n.lower() for n in self.store.profile_notes(h)}
-            if x.profile_note and x.profile_note.lower() not in known:   # the same fact said twice is kept once
-                self.store.add_profile_note(h, x.profile_note, at=now)
+            if x.profile_note and x.profile_note.lower() not in known and x.intent != "profile_update":
+                self._merge_note(person, x.profile_note, text, now)   # slice 6: merged into the profile
         self._tl.lang = it.lang
         self._tl.made_pending = False
         self._tl.chained = False
@@ -188,7 +199,36 @@ class HandlerMixin:
             finally:
                 self._tl.chained = False
             self._join_writes(h, first, self.store.get_state(f"lastwrite:{h}"))
+        said = getattr(self._tl, "profile_said", None)
+        if said:   # what changed in the profile is always said; here when no reply carried it
+            self._tl.profile_said = None
+            ref = self.send(h, said) or ref
         return ref
+
+    def _merge_note(self, person, note, text, now):
+        """A lasting fact said inside a request ("I'm vegetarian now, any dinner ideas?"): merged into the profile by
+        the form call, and the line saying what changed rides on the reply. When the call fails or changes nothing,
+        the note is kept as it is (as before)."""
+        h = person["handle"]
+        res = None
+        if not self._over_cap(person):
+            try:
+                res, _ = P.merge(self.store, h, text)
+            except Exception as e:  # noqa: BLE001
+                self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
+        if res and res["changes"]:
+            self._tl.profile_said = T.profile_changed(res["changes"], res["skipped_sensitive"])
+            return
+        if not P.sensitive(note):
+            self.store.add_profile_note(h, note, at=now)
+
+    def _profile_tail(self):
+        """The profile line for a reply that carries it (once)."""
+        said = getattr(self._tl, "profile_said", None)
+        if not said:
+            return ""
+        self._tl.profile_said = None
+        return "\n\n" + said
 
     def _join_writes(self, h, first, second):
         """Two writes of one message ("add milk and eggs", two reminders) are one write for 'undo'."""
@@ -276,7 +316,7 @@ class HandlerMixin:
         if it.intent == "ask":
             msg, run_id, _ = self.run(person, it.spec, "ask", request_text=text)
             return self.deliver(person, it.spec, msg + self._not_yet_notes(it.spec, sep="\n\n"), run_id, kind="ask",
-                                request_text=text)
+                                request_text=text, after=self._profile_tail())
         if it.intent == "more":
             st = self.store.get_state(f"lastspec:{h}")
             if not st:
@@ -399,16 +439,32 @@ class HandlerMixin:
         if it.intent == "library_stats":
             return self._library_stats(person, it)
         if it.intent == "profile_update":
-            note = " ".join(text.split())[:300]
-            if not it.profile_note and note.lower() not in {n.lower() for n in self.store.profile_notes(h)}:
-                self.store.add_profile_note(h, note, at=now)   # kept for the profile slice; the interpreter sees it
-            return self.send(h, T.PROFILE_NOTED)
+            return self._profile_update(person, text, now)
         if it.intent == "library_status":
             from .refresh import library_status
             return self.send(h, library_status(self, person, now))
         if it.intent == "profile_show":
-            return self.send(h, T.NOT_YET[it.intent])
+            return self.send(h, P.show_text(P.get(self.store, h), now))
         return self.send(h, HELP)
+
+    def _profile_update(self, person, text, now):
+        """'I'm past beginner at Blender now', 'I have an air fryer', 'stop guessing my level': the form call fills
+        the profile form, code applies it, and the reply says what changed. If nothing could be applied, their words
+        are kept as a note (as before)."""
+        h = person["handle"]
+        res = None
+        try:
+            res, _ = P.merge(self.store, h, text)
+        except Exception as e:  # noqa: BLE001
+            self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
+        if res and res["changes"]:
+            return self.send(h, T.profile_changed(res["changes"], res["skipped_sensitive"]))
+        note = " ".join(text.split())[:300]
+        if P.sensitive(note):
+            return self.send(h, T.PROFILE_SENSITIVE)
+        if note.lower() not in {n.lower() for n in self.store.profile_notes(h)}:
+            self.store.add_profile_note(h, note, at=now)
+        return self.send(h, T.PROFILE_NOTED)
 
     # ---------- helpers for the slice-2 intents ----------
     def _first_text(self, when, person, now):
@@ -683,8 +739,16 @@ class HandlerMixin:
         if pick_number and not 1 <= pick_number <= len(items):
             return self.send(h, T.which_pick(len(items)))
         chosen = [items[pick_number - 1]] if pick_number else items
+        if kind == "done" and not pick_number and len(items) > 1:
+            chosen = items[:1]   # "made it" is about the recommended pick, not every alternative
         for iid in chosen:
             self.store.add_feedback(h, iid, last.get("rule_id"), kind)
+        if kind in ("harder", "easier"):   # slice 6: the level of the answer's topic moves one step, and is said
+            spec = (self.store.get_state(f"lastspec:{h}") or {})
+            words = " ".join(x for x in [last.get("goal") or "", spec.get("text") or ""] if x)
+            interest, level = P.move_level(self.store, h, words, kind)
+            if interest:
+                return self.send(h, T.level_moved(interest["topic"], P.LEVEL_PLAIN[level], kind))
         return self.send(h, T.FEEDBACK_REPLIES.get(kind, T.FEEDBACK_OTHER))
 
     # ---------- rule management ----------

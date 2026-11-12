@@ -288,7 +288,7 @@ def _failed_must_haves(raw, cands, spec, extra, known_lines, wider):
 
 
 def compose(cands, spec, person_handle, request_text=None, feedback_note="", known_lines=None, extra=None,
-            profile="", lang=None, store=None, use_cache=True, sent_count=0, wider=False, now=None):
+            profile="", lang=None, store=None, use_cache=True, sent_count=0, wider=False, now=None, level_ok=True):
     """Returns (result, cost). result: picks (the recommended pick first, then alternatives; or the one closest
     pick), wider (more clear fits, asks only), closest (True when nothing was a clear fit), unknown_criteria (must-
     haves no shown item's text could answer), missing ((must-have, "no" | "unknown") the closest pick does not
@@ -350,16 +350,41 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
                 raw = raw2
         if store is not None:
             store.cache_put("answer_cache", key, raw, at=now, handle=person_handle)
-    result = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider)
+    result = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider, level_ok=level_ok)
     result["cached"] = cached
     return result, cost
 
 
-def check(raw, cands, spec, extra=None, known_lines=None, wider=False):
-    """The code checks on one composer answer (pure: the same answer always gives the same result)."""
+# slice 6: "leads to a finished result". A must-have about a finished result, and an item whose own text is only
+# tips (tips, tricks, mistakes, ideas, with no sign of a whole project, recipe or routine): code answers "no" for it,
+# whatever the model said, so loose tips are never shown as a pick for "something to make or do".
+FINISHED = re.compile(r"\b(finish\w*|complete[ds]?|start to finish|from start|whole|final (?:piece|model|render|"
+                      r"result|product|dish|drawing))\b", re.I)
+TIPS = re.compile(r"\b(tips?|tricks?|hacks?|mistakes?|shortcuts?|things (?:you|i) wish|ideas?|inspo|inspiration|"
+                  r"facts?|reasons?)\b", re.I)
+PROJECT = re.compile(r"\b(tutorials?|step[- ]by[- ]step|steps|step \d|from scratch|start to finish|walk ?through|follow along|"
+                     r"let'?s (?:make|build|model|cook|draw|create)|how to (?:make|build|model|cook|draw|create|bake)|"
+                     r"recipes?|ingredients?|method|instructions|full (?:course|project|process|routine|workout)|"
+                     r"part \d|episode|making of|project|routine|workout|course|lesson|beginner series)\b", re.I)
+# "because" that talks about the person's level ("since you're just starting"): only when a level may be used
+LEVEL_TALK = re.compile(r"\b(you'?re|you are|you'?ve|you have|your)\b[\w\s'-]{0,30}?\b(beginner|beginning|start\w*|new|"
+                        r"novice|level|advanced|intermediate|basics|experienced|experience|skills?)\b"
+                        r"|\b(?:as|for) an? (?:complete |total |absolute )?(?:beginner|novice|newbie|intermediate|"
+                        r"advanced)\b|\bbeginners? like you\b", re.I)
+
+
+def tips_only(text):
+    """The item's own text is tips and nothing that makes a whole thing."""
+    return bool(TIPS.search(text or "")) and not PROJECT.search(text or "")
+
+
+def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=True):
+    """The code checks on one composer answer (pure: the same answer always gives the same result). level_ok: whether
+    "because" may talk about the person's level (their level is known, or the request names one)."""
     c = spec.content
     dropped = {"not_a_candidate": 0, "verdict_no": 0, "criterion_no": 0, "criterion_unbacked": 0, "avoided": 0,
-               "repeat": 0, "over_count": 0, "title_replaced": 0, "because_replaced": 0}
+               "repeat": 0, "over_count": 0, "title_replaced": 0, "because_replaced": 0, "criterion_tips": 0}
+    finished = [i for i, cr in enumerate(c.criteria) if FINISHED.search(cr)]
     kept, seen = [], set()
     raw = raw if isinstance(raw, dict) else {}
     for p in _picks_of(raw):
@@ -407,9 +432,16 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False):
                 dropped["criterion_unbacked"] += 1
                 ans = "unknown"
             answers.append(ans if ans in ("yes", "no") else "unknown")
+        if finished and tips_only(own):
+            for i in finished:
+                if answers[i] != "no":
+                    dropped["criterion_tips"] += 1
+                    answers[i] = "no"
         if verdict == "clear" and any(a != "yes" for a in answers):
             verdict = "close"   # clear only when every must-have is a backed yes
         because, backed, problem = check_because(p, it, extra)
+        if backed and not level_ok and LEVEL_TALK.search(str(p.get("because") or "")):
+            because, backed, problem = fallback_because(it), False, "level"   # a level nobody gave
         pick = {"item": it, "title": title, "verdict": verdict, "because": because, "because_backed": backed,
                 "criteria": answers, "lines": [], "facts": {}, "lines_reused": False}
         if known_lines is not None and c.extract and known_lines.get(it.id):
@@ -445,5 +477,6 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False):
     reason = _safe(raw.get("none_reason"), 200)
     if re.search(r"\d", reason):
         reason = ""
+    level_used = any(p["because_backed"] and LEVEL_TALK.search(p["because"]) for p in picks[:1])
     return {"picks": picks, "wider": wide, "closest": closest, "unknown_criteria": unknown, "missing": missing,
-            "intro": intro, "none_reason": reason, "dropped": dropped}
+            "intro": intro, "none_reason": reason, "dropped": dropped, "level_used": level_used}

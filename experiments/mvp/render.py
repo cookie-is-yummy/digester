@@ -210,6 +210,8 @@ def picks_message(result, spec, footer=None, now=None):
             text.append(result["intro"])
             text.append("")
         text.append(f"I recommend {first['title']}{where} because {because}.")
+    if result.get("level_note"):   # slice 6: once per topic while the level is a guess
+        text.append(result["level_note"])
     flush()
     if it.url:
         parts.append(link_part(it, first["title"]))

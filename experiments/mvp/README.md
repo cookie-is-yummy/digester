@@ -33,6 +33,9 @@ Then open `http://127.0.0.1:8765`. It is a message thread with the bot, on this 
 - Tap 👍 or 👎 under a reply: that is a tapback. A 👍 on a preview starts the rule.
 - **The bot's clock**: "Jump to the next timed send" fires the next rule now. "Forward 1 hour" and "Forward 1 day" move
   time on. A jump of more than 2 hours past a send skips it, exactly as if the bot had been switched off.
+- **Profile** panel: what the bot knows about the person (interests with the level and whether they confirmed it,
+  what they are working toward, preferences, email and whether it is confirmed, time zone, quiet hours, and the setup
+  step while one is open).
 - **To-dos** and **Outbox** panels beside the thread: the person's lists (open and done), and every email and calendar
   file the bot wrote for them. Click one to read it (an email's HTML opens in a sandboxed frame). Without email settings
   nothing leaves the computer: try "email it to me" after an answer, give any address, then type the 6-digit code from
@@ -40,8 +43,10 @@ Then open `http://127.0.0.1:8765`. It is a message thread with the bot, on this 
 - **Exports** panel: an upload box that puts an Instagram export (JSON zip) or a Google Takeout zip into that person's
   inbox (`data/inbox/<person>/`); the bot adds it within a few minutes and says what's new. The panel lists the last
   imports.
-- "Start over" clears that person's rules, history, thread, to-dos, email address and outbox (not their imports or
-  library).
+- "Start over" clears everything the bot holds about that person (rules, history, thread, profile, to-dos, email
+  address, outbox; not their imports or library) and runs the setup from its first message: the consent text, then the
+  read of them once they reply "I agree". "Clear rules, thread, to-dos and outbox" does the same but keeps the consent,
+  so no setup runs.
 
 It is the same handler, search, checks and scheduler as the iMessage channels; only the transport differs. It keeps its
 own store (`data/mvp/webtest.sqlite`), so nothing you do there touches real testers' rules. The first reply after a
@@ -143,6 +148,34 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   automatic export is not available for US accounts: the person still requests each export and puts the file in
   the inbox.
 
+## The person's context and the setup (profile and onboarding)
+
+- **The setup** (`onboarding.py`), for anyone who agrees from now on, in at most four bot messages: (1) the consent
+  text; (2) the read of them: up to four lines, one per main interest, with the level guessed and a count worked out by
+  code ("Blender: you look new to it (about 45 saved posts and 3 watched videos)"), then "did I get that right, and what
+  are you working toward?"; (3) their answer merged into the profile (one form call; code checks it), a line or two on
+  what the bot now knows, the email address (the 6-digit code flow) and the time zone check; (4) the export routine and
+  its reminder offer, then up to three first requests written for them, each kept only if at least three items of their
+  library mention its topic words. They reply 1, 2 or 3 to run one now, or "every morning" for a preview of number 1
+  as a morning rule (one YES starts it and the export reminders). "skip" skips any step; a real request at any step is
+  answered and the setup goes on. People already in the store are not set up again; "set me up again" restarts it.
+- **The guess** (`profile.py`, `prompts/profile_guess_v2.md`): code samples their own kept items (the 60 newest and 60
+  more at random, seeded by the library build; never friends' items) and their 12 most watched YouTube channels; one
+  call groups them into topics with the lines behind each; code checks the line ids, counts the support, works out the
+  share and the library-wide counts, keeps a level only with a quote from the topic's own lines, and removes any topic
+  about health, relationships, money, religion, politics or sexuality, whatever the model returned. It is cached per
+  library build (a new import gets a new guess; what the person confirmed or said is never overwritten by one).
+- **Any time**: "what do you know about me" shows the profile and how to correct it; "I'm past beginner at Blender
+  now", "I have an air fryer", "I'm not into cooking any more", "stop guessing my level" are merged by the same form call
+  (`prompts/profile_merge_v1.md`) and the reply says what changed; a fact said inside a request ("I'm vegetarian now,
+  any dinner ideas?") is merged too, and the answer ends with what changed. "Too easy" / "too hard" after an answer move
+  that topic's level one step (and say so); "made it" marks the pick done, so it is never sent again.
+- **Using it**: the interpreter gets only the profile lines about the message's topic (and no profile level when the
+  message names a level itself); the composer gets their level at the request's topic and may say it in the reason only
+  when they confirmed it or the guess has a quote behind it; while it is a guess, the answer says once per topic "I'm
+  guessing you're new to Blender; tell me if that's wrong." A request to make, cook, build or practise something
+  carries a finished-result must-have, and code answers "no" to it for any item whose own text is only tips.
+
 ## See what happened to a message
 
 ```bash
@@ -168,7 +201,9 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `bot.py` | Start-up: channel, store, people, engines |
 | `runtime.py` | The run loop: message log, workers (one person at a time per person), joining quick texts, scheduler thread |
 | `core.py` | Message handler, executor, scheduler rules. The only code that sends |
-| `interpret.py`, `prompts/interpret_v3.md`, `schema.py` | Message to a validated form for every intent (RuleSpec v 2); temperature 0, a seed, a 6-hour cache |
+| `interpret.py`, `prompts/interpret_v3.md`, `schema.py` | Message to a validated form for every intent (RuleSpec v 2); temperature 0, a seed, a 6-hour cache (`interpret_v4.md` was tried in slice 6 and scored worse: not in use) |
+| `profile.py`, `prompts/profile_guess_v2.md`, `prompts/profile_merge_v1.md` | The person's profile: the guess from their library (checked and counted by code, the sensitive-topic filter, cached per library build), merging what they say, the lines for the interpreter and the composer, "what do you know about me", level moves |
+| `onboarding.py`, `prompts/first_requests_v1.md` | The setup after consent: the read, their answer merged, email and time zone, the export routine, three checked first requests and the morning-rule offer; "set me up again" |
 | `eval_rules.py`, `evalset/` | The rule evaluation runner and the development half of the set |
 | `todos.py` | To-do lists, due reminders, undo records, library counts |
 | `actions/` | The action registry (`__init__.py`: names, params, needs, module, order) and one module per action: `message.py`, `email.py` (SMTP or the outbox), `calendar.py` (Google link and `.ics`), `todo.py` (picks or ingredient lines on a list); `base.py` holds what each action gets and returns |
@@ -178,12 +213,12 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `ytinfo.py` | A YouTube candidate's length and description from the official `videos.list` (`YOUTUBE_API_KEY`), kept at most 30 days |
 | `outside.py` | New picks from outside the library: YouTube `search.list` with the person's own words, checked by `videos.list`; the sensitive-topic stop, the daily limits (with the shared count file) and the 24-hour cache |
 | `refresh.py` | The inbox per person, the import (demo importer, without the messages folder), the cost cap, the library switch, recovery of an import cut off by a stop, new_items rules, library_status, and the export routine with its reminders |
-| `compose.py`, `prompts/compose_v2.md` | The model chooses (verdicts clear / close / no, a backed "because", must-haves); code checks it; a cached answer per spec and candidates |
+| `compose.py`, `prompts/compose_v3.md` | The model chooses (verdicts clear / close / no, a backed "because", must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text; a reason may name a level only when one may be used); a cached answer per spec and candidates |
 | `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table |
 | `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
 | `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
 | `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
-| `channels/` | Test page (`web.py`, `web_page.html`: thread, rules, To-dos, Outbox and Exports panels with the upload box), terminal, Mac Messages, Sendblue |
+| `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 226 offline tests |
+| `tests/` | 243 offline tests |
