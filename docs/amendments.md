@@ -57,6 +57,54 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-009 · MVP v2: every kind of rule, a guessed-then-confirmed profile, outputs beyond chat, and YouTube picks from outside the library
+- **Date:** 2026-11-12
+- **Requested by:** Derrick, on 12 Nov 2026 after trying the first skeleton; written up by the agent
+- **Status:** Proposed
+- **Conflicts with:**
+  - `docs/00-vision.md` › Out of scope for now: "Recommendations from outside the user's own data, habits, screen-time measurement." The request adds a block of related YouTube videos that are not in the person's library.
+  - `docs/07-privacy-and-safety.md` › Honesty in outputs: "Inferred statements are labelled as inferred, with evidence; no personality labels or psychological claims." The request guesses a person's interests and skill level from their library. This is allowed only in the labelled, evidenced form; the amendment records how.
+  - `docs/07-privacy-and-safety.md` › Third-party data: the open check "YouTube's derived-data clause before building YouTube summaries". The bot now reads a video's description and length from the official API and quotes lines from the description.
+  - `docs/06-rules-and-actions.md` › RuleSpec (Proposed) and Action registry: the prototype's rule form grows well past the documented subset (random times, every N days, windows, exceptions, to-dos, reminders, acting on an earlier answer), and the registry gains `todo.add` and a calendar action that needs no sign-in.
+  - `docs/09-roadmap-and-ownership.md` › Ownership: scheduler, executor, actions and the registry are Eason's. As in A-008, the agent builds them for the prototype.
+  - Everything in A-008 still applies (prototype code, SQLite, the message channel).
+
+**What is requested**
+Make the skeleton cover what a person would really ask of it. `experiments/mvp/DESIGN.md` is the contract. In short:
+- Rules for any timing a person can say (every 2 days, at random, the first Monday, several times a day, until a date) and rules that are not about timing (plain reminders, to-do lists, when new items arrive).
+- Answers that give the person what they asked for: one recommended post with a reason checked against the post, the ingredients or steps, then alternatives and a wider selection. The same question must give the same answer.
+- The person's context: a guess of their interests and level from their own library, which they confirm or correct in a sentence or two during setup.
+- Outputs: email, a calendar link and file, a to-do list.
+- Related videos from outside the library, shown apart from the person's own.
+- An export routine set up during onboarding.
+
+**Why the requester wants it**
+In Derrick's words, shortened: "think of and implement all possible rules"; "it shouldn't say Why, it should give exactly what the users want"; "sometimes it says it can't find something but when I ask again it finds it"; "these should lead to a final product"; "base it upon the user's own context … make a guess, then have them validate it"; "we want to get as much as possible out of them during onboarding so that everything after feels frictionless"; "extra recommendations outside of their history but strongly related could be really good too".
+
+**Why it is better than the current approach**
+- The first skeleton handled weekly rules only. On 24 timing phrasings it read 13 correctly before the first fix. A tester who says "every other day" and gets a wrong rule stops trusting it.
+- Measured on the founder's library: the "nothing found" flip came from a score cutoff, not from search. Verdicts, caches and a separate details step removed it in repeat runs (6 requests, 5 repeats each, identical every time).
+- Without a level, "beginner" requests return advanced posts; without outputs, a recipe stays in a chat thread.
+
+**Costs and risks**
+- **Outside picks reverse a stated scope line.** They are limited to YouTube's official search, at most one search per answer, shown in a separate labelled block with YouTube's own title and channel. No model reads, ranks or rewords them, and the search text comes only from the person's own request. Sensitive topics are refused. YouTube's rules also require a terms page and a privacy page that name the YouTube API before outsiders use it: neither exists yet. Instagram has no lawful route, so there are no outside Instagram picks.
+- **Profile inference.** The guess is shown to the person with counts as evidence and is theirs to correct. It never covers health, relationships, money, religion, politics or sexuality (a prompt rule and a code filter). It is a new store of personal statements; "delete my data" must remove it.
+- **YouTube API data** (description, length) is kept at most 30 days and is quoted, not summarised. Whether quoting description lines is "derived data" under YouTube's terms is still the open check in `docs/07`; a human should read that clause before outsiders use it.
+- **The export routine cannot be automatic for US accounts.** Google's data-portability API is not offered in the US and Meta documents repeating exports for the EU only. Onboarding gives links, the choices to tick and a reminder; the person still taps through the export.
+- **Email needs a sending account.** Without SMTP settings, emails go to a local outbox. No sending domain exists.
+- **Size.** The prototype grew from about 2,500 to about 9,000 lines in a day, written by agents and checked by other agents and by tests. It is still throwaway code, and nobody has read all of it by hand.
+- **Cost per message** rose: interpretation about $0.003, an answer about $0.009.
+
+**Agent's assessment**
+Agree with most of it; two parts carry real doubt.
+- Rules, answers, consistency, to-dos and outputs: agree. They make the test honest.
+- Profile: agree in the labelled, confirmed form above.
+- Outside picks: agree only as built (YouTube, separate block, off unless asked or switched on). They move the product toward a recommender, which the vision ruled out for a reason: the promise is "use what you saved". Watch whether testers value the block or ignore it before it goes any further.
+- Scope: this is a lot to put in front of the first testers at once. Sessions should start from the core (ask, rule, answer) and reach the rest only if the person goes there.
+
+**Affected**
+Docs: `docs/00-vision.md` (out-of-scope list), `docs/06-rules-and-actions.md` (RuleSpec, registry), `docs/07-privacy-and-safety.md` (profile inference, YouTube API data), `docs/10-decisions.md` · Code: `experiments/mvp/` (prototype) · Contract change: no (prototype only; the product contract is untouched) · Needs both founders: yes
+
 ### A-008 · A three-day MVP skeleton: text a request, get cited answers from your own saves on a schedule, on prototype code
 - **Date:** 2026-11-12 (third version; the first proposed a hosted agent-access pilot, now in `experiments/PARKED-agent-layer-pilot.md`; the second a hand-run action test, now in `experiments/PARKED-action-test.md`)
 - **Requested by:** Derrick, on 12 Nov 2026; written up by the agent
