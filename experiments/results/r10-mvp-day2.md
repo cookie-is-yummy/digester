@@ -56,12 +56,13 @@ the bot cannot do are answered as unsupported with the nearest offer. Cost of on
 
 ## Reviews
 
-Three reviewers (design, bugs, timing), each followed by a verifier who rebuilt the probes. 33 findings; the verifiers
-confirmed 27, rejected 6 and added 6 the reviewers had missed. All confirmed findings and all six additions are
-fixed, each with a test, except two left as noted in the MVP document (splitting `core.py`; the Mac tapback race was
-fixed anyway). Two rejected findings were built on purpose: the saved request (`on_request`), because it is what
-"whenever the user requests it" asks for, and the preview pick counting as sent, which is recorded as a founders' call
-in BRIEF-10 section 12.
+Three reviewers (design, bugs, timing), each followed by a verifier who rebuilt the probes. 36 findings: the
+verifiers confirmed 26, rejected 10, and added 6 that the reviewers had missed. All 32 confirmed points are fixed, with
+tests where behaviour changed. Six of the 10 rejected ones were fixed or built anyway, because they were cheap or
+matched the founder's ask: the daylight-saving repeat, a read error stopping the bot, the Mac tapback race, "in N
+minutes" worked out by code, the saved request (`on_request`), and the preview pick counting as sent. The last is
+recorded as a founders' call in BRIEF-10 section 12. Not done: splitting `core.py` (745 lines) into handler, executor
+and scheduler files.
 
 ## Channel re-check
 
