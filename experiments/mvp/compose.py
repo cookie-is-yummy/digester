@@ -190,10 +190,26 @@ def quote_ok(quote, text):
 
 
 def fallback_because(it):
-    """The plain clause code builds when the model's reason is not backed by the item's text."""
-    if it.kinds & {"save", "collection", "share_self", "playlist"}:
-        return "it matches what you asked for, and you saved it yourself"
-    return "it matches what you asked for"
+    """When the model's reason is not backed by the item's text, no reason is shown at all (fix pass, finding 10: the
+    old plain clause "because it matches what you asked for" said nothing). Kept as a function for older callers."""
+    return None
+
+
+# words about how the bot works that must never reach the person (finding 5: "The candidates only show titles")
+INTERNAL = re.compile(r"\b(candidates?|the bot|item text|items? text|verdicts?|criteri(?:a|on)|must-haves?|<item>|"
+                      r"json|the model|the request|the prompt)\b", re.I)
+# "I recommend this one, because it is ..." or "because it is ...": the clause alone is kept (finding 7)
+_LEAD_RECOMMEND = re.compile(r"^\s*i\s+(?:would\s+|'d\s+)?recommend\b[^,.;:]{0,40}?(?:[,;:]\s*|\s+(?=(?:because|since|as)\b))",
+                             re.I)
+_LEAD_BECAUSE = re.compile(r"^\s*(?:because|since|as|cause|'cause)\b[\s,]*", re.I)
+
+
+def clause_alone(text):
+    """The reason as a bare clause: a leading "I recommend this one, because" or "because" removed, and no full stop."""
+    s = " ".join(str(text or "").split())
+    for _ in range(2):
+        s = _LEAD_BECAUSE.sub("", _LEAD_RECOMMEND.sub("", s))
+    return s.strip().rstrip(" .")
 
 
 def because_problem(raw, it, extra=None):
@@ -206,6 +222,8 @@ def because_problem(raw, it, extra=None):
         return "empty"
     if len(because) > 180 or UNSAFE_TEXT.search(because) or "#" in because:
         return "unsafe"
+    if INTERNAL.search(because):
+        return "internal"
     if not facts:
         return "no_fact"
     if not all(quote_ok(f.get("quote"), text) for f in facts):
@@ -221,8 +239,9 @@ def check_because(raw, it, extra=None):
     problem = because_problem(raw, it, extra)
     if problem:
         return fallback_because(it), False, problem
-    because = " ".join(str(raw.get("because") or "").split())
-    because = re.sub(r"^(because|since|as)\s+", "", because, flags=re.I).rstrip(" .")
+    because = clause_alone(raw.get("because"))
+    if not because:
+        return fallback_because(it), False, "empty"
     return (because[0].lower() + because[1:] if because[:2] != "I " else because), True, None
 
 
@@ -274,7 +293,7 @@ def _failed_must_haves(raw, cands, spec, extra, known_lines, wider):
     if not spec.content.criteria:
         return []
     r = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider)
-    if r["picks"] or not r["dropped"].get("criterion_no"):
+    if (r["picks"] and not r["from_fallback"]) or not r["dropped"].get("criterion_no"):
         return []
     out = []
     for p in _picks_of(raw):
@@ -288,7 +307,8 @@ def _failed_must_haves(raw, cands, spec, extra, known_lines, wider):
 
 
 def compose(cands, spec, person_handle, request_text=None, feedback_note="", known_lines=None, extra=None,
-            profile="", lang=None, store=None, use_cache=True, sent_count=0, wider=False, now=None, level_ok=True):
+            profile="", lang=None, store=None, use_cache=True, sent_count=0, wider=False, now=None, level_ok=True,
+            survey=False, max_minutes=None):
     """Returns (result, cost). result: picks (the recommended pick first, then alternatives; or the one closest
     pick), wider (more clear fits, asks only), closest (True when nothing was a clear fit), unknown_criteria (must-
     haves no shown item's text could answer), missing ((must-have, "no" | "unknown") the closest pick does not
@@ -303,7 +323,8 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
                   "nothing in your library matched")
         return dict(empty, none_reason=reason), 0.0
     ask = {"request": request_text or c.goal, "goal": c.goal, "count": c.count,
-           "max_picks": c.count + (config.WIDER_MAX if wider else 0), "criteria": c.criteria, "avoid": c.avoid,
+           "max_picks": c.count + (config.WIDER_MAX if wider or survey else 0), "criteria": c.criteria,
+           "avoid": c.avoid,
            "order": c.order}
     if c.extract:
         ask["details wanted"] = c.extract
@@ -326,7 +347,7 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
     user = ("Request: " + json.dumps(ask, ensure_ascii=False) + about + (("\n" + feedback_note) if feedback_note else "")
             + "\n\nCandidates:\n" + block)
     now = now or datetime.now(timezone.utc)
-    key = answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider)
+    key = answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider or survey)
     raw, cost, cached = None, 0.0, False
     if store is not None and use_cache and config.ANSWER_CACHE_HOURS:
         since = (now - timedelta(hours=config.ANSWER_CACHE_HOURS)).astimezone(timezone.utc).isoformat(timespec="seconds")
@@ -346,11 +367,13 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
                     "if it fits), or no picks if nothing else is even close.")
             raw2, c2 = _call(user + note, person_handle, config.COMPOSE_SEED)
             cost += c2
-            if check(raw2, cands, spec, extra=extra, known_lines=known_lines, wider=wider)["picks"]:
+            r2 = check(raw2, cands, spec, extra=extra, known_lines=known_lines, wider=wider)
+            if r2["picks"] and not r2["from_fallback"]:
                 raw = raw2
         if store is not None:
             store.cache_put("answer_cache", key, raw, at=now, handle=person_handle)
-    result = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider, level_ok=level_ok)
+    result = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider, level_ok=level_ok,
+                   max_minutes=max_minutes)
     result["cached"] = cached
     return result, cost
 
@@ -381,14 +404,17 @@ def tips_only(text):
     return bool(TIPS.search(text or "")) and not PROJECT.search(text or "")
 
 
-def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=True):
+def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=True, max_minutes=None):
     """The code checks on one composer answer (pure: the same answer always gives the same result). level_ok: whether
-    "because" may talk about the person's level (their level is known, or the request names one)."""
+    "because" may talk about the person's level (their level is known, or the request names one). max_minutes: a
+    length bound code worked out from the request ("mini": 10), checked against YouTube's length where known; a
+    longer video is never a clear pick (fix pass, finding 18)."""
     c = spec.content
     dropped = {"not_a_candidate": 0, "verdict_no": 0, "criterion_no": 0, "criterion_unbacked": 0, "avoided": 0,
                "repeat": 0, "over_count": 0, "title_replaced": 0, "because_replaced": 0, "criterion_tips": 0}
     finished = [i for i, cr in enumerate(c.criteria) if FINISHED.search(cr)]
     kept, seen = [], set()
+    fallback = []   # picks whose only "no" is the finished-result must-have (tips): the closest when nothing else is
     raw = raw if isinstance(raw, dict) else {}
     for p in _picks_of(raw):
         if not isinstance(p, dict):
@@ -442,44 +468,55 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
                     answers[i] = "no"
         if verdict == "clear" and any(a != "yes" for a in answers):
             verdict = "close"   # clear only when every must-have is a backed yes
+        dur = duration_of(it, extra)
+        too_long = bool(max_minutes and dur and dur > max_minutes * 60)
+        if too_long and verdict == "clear":
+            verdict = "close"   # "a mini tutorial": a 26-minute video is at most the closest
         because, backed, problem = check_because(p, it, extra)
         if backed and not level_ok and LEVEL_TALK.search(str(p.get("because") or "")):
             because, backed, problem = fallback_because(it), False, "level"   # a level nobody gave
         pick = {"item": it, "title": title, "verdict": verdict, "because": because, "because_backed": backed,
-                "criteria": answers, "lines": [], "facts": {}, "lines_reused": False}
+                "criteria": answers, "lines": [], "facts": {}, "lines_reused": False, "too_long": too_long,
+                "minutes": round(dur / 60) if (max_minutes and dur) else None}
         if known_lines is not None and c.extract and known_lines.get(it.id):
             pick["lines"] = list(known_lines[it.id])
             pick["lines_reused"] = True   # the lines found before, not lines for this request
         if "no" in answers:   # section 3: code drops a pick with any "no" (never a pick, an alternative or the closest)
             dropped["criterion_no"] += 1
+            if finished and all(a != "no" or i in finished for i, a in enumerate(answers)):
+                fallback.append(pick)   # finding 26: tips for "something to make" can still be the closest
             continue
         if problem and problem != "empty":
             dropped["because_replaced"] += 1
             dropped["because_" + problem] = dropped.get("because_" + problem, 0) + 1
         kept.append(pick)
     clear = [p for p in kept if p["verdict"] == "clear"]
-    close = [p for p in kept if p["verdict"] == "close"]
+    close = sorted([p for p in kept if p["verdict"] == "close"], key=lambda p: p["too_long"])   # stable
     count = max(c.count, 1)
     if clear:
         picks, closest = clear[:count], False
         more = clear[count:]
         wide = more[:config.WIDER_MAX] if wider else []
         dropped["over_count"] += len(more) - len(wide)
-    elif close:
-        picks, wide, closest = close[:1], [], True
-        dropped["over_count"] += len(close) - 1
+    elif close:   # finding 17: up to the number asked for, all shown as the closest
+        picks, wide, closest = close[:count], [], True
+        dropped["over_count"] += len(close) - len(picks)
+    elif fallback:   # finding 26: nothing leads to a finished result; the closest tips, said plainly
+        picks, wide, closest = fallback[:1], [], True
     else:
         picks, wide, closest = [], [], False
     shown = picks + wide
     unknown = [cr for i, cr in enumerate(c.criteria) if shown and all(p["criteria"][i] == "unknown" for p in shown)]
     missing = [(cr, picks[0]["criteria"][i]) for i, cr in enumerate(c.criteria)
                if closest and picks[0]["criteria"][i] != "yes"]
+    if closest and picks and picks[0]["too_long"]:
+        missing.append((f"under {max_minutes} minutes", "no"))
     intro = _safe(raw.get("intro"), 160)
-    if re.search(r"\d", intro):
+    if re.search(r"\d", intro) or INTERNAL.search(intro):
         intro = ""
-    reason = _safe(raw.get("none_reason"), 200)
-    if re.search(r"\d", reason):
-        reason = ""
-    level_used = any(p["because_backed"] and LEVEL_TALK.search(p["because"]) for p in picks[:1])
+    level_used = any(p["because_backed"] and LEVEL_TALK.search(p["because"] or "") for p in picks[:1])
+    # the model's none_reason is never shown (finding 5): the sentence is chosen by code (render.none_message)
     return {"picks": picks, "wider": wide, "closest": closest, "unknown_criteria": unknown, "missing": missing,
-            "intro": intro, "none_reason": reason, "dropped": dropped, "level_used": level_used}
+            "intro": intro, "none_reason": "", "dropped": dropped, "level_used": level_used,
+            "n_clear": len(clear), "n_close": len(close), "max_minutes": max_minutes,
+            "from_fallback": bool(picks) and not clear and not close}

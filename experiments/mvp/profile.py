@@ -34,19 +34,23 @@ LINE_CHARS = 140
 
 # Never inferred or stored (docs/07): health, relationships, money, religion, politics, sexuality. Checked by code on
 # topic names, reasons, words and anything the person's message would put in the profile.
+# Fix pass, finding 35: whole words that are personal on their own, and phrases for words that have an everyday sense
+# too ("partner workout", "god tier", "trading cards", "keto recipes", "chicken stock", "budget meals" stay allowed).
 SENSITIVE = re.compile(
-    r"\b(health\w*|medic\w*|illness\w*|disease\w*|symptom\w*|diagnos\w*|therap\w*|mental|anxiety|anxious|depress\w*|"
-    r"adhd|autis\w*|cancer|diabet\w*|pregnan\w*|fertility|ivf|weight[- ]?loss|lose weight|losing weight|dieting|"
-    r"eating disorder\w*|disorder\w*|addiction\w*|sobriety|sober|rehab|surgery|medication\w*|pills?|"
-    r"relationship\w*|dating|marriage|married|divorc\w*|breakup|break-up|boyfriend|girlfriend|husband|wife|"
-    r"sex\w*|lgbt\w*|gay|lesbian|queer|trans|transgender|bisexual|"
-    r"money|financ\w*|invest\w*|crypto\w*|bitcoin|stocks?|debt|loans?|budget\w*|salary|income|taxes|mortgage|"
-    r"religio\w*|church\w*|god|gods|faith|pray\w*|bible|quran|koran|islam\w*|muslim\w*|christian\w*|jewish|judaism|"
-    r"hindu\w*|buddhis\w*|spiritual\w*|politic\w*|election\w*|democrat\w*|republican\w*|conservative\w*|liberal\w*|"
-    r"vote|voting|abortion|immigration|"
-    # checker additions: money, diet and faith words the first list missed
-    r"trading|traders?|forex|wealth\w*|millionaires?|retire\w*|savings|side hustles?|passive income|"
-    r"credit (?:cards?|scores?)|real estate|fat[- ]?loss|lose fat|calorie deficit|diets?|keto|"
+    r"\b(health\w*|medical|medicine|medication\w*|illness\w*|disease\w*|symptom\w*|diagnos\w*|therap\w*|mental|"
+    r"anxiety|anxious|depress\w*|adhd|autis\w*|cancer|diabet\w*|pregnan\w*|fertility|ivf|weight[- ]?loss|"
+    r"lose weight|losing weight|dieting|eating disorder\w*|disorder\w*|addiction\w*|sobriety|sober|rehab|surgery|"
+    r"pills?|relationship\w*|dating|marriage|married|divorc\w*|breakup|break-up|boyfriend|girlfriend|husband|wife|"
+    r"sex|sexual\w*|lgbt\w*|gay|lesbian|queer|transgender|bisexual|"
+    r"money|financ\w*|invest\w*|crypto\w*|bitcoin|stock market|"
+    r"stocks and shares|debt|loans?|budgeting|salary|income|taxes|mortgage|"
+    r"religio\w*|church\w*|my faith|pray\w*|bible|quran|koran|islam\w*|muslim\w*|christian\w*|jewish|judaism|"
+    r"hindu\w*|buddhis\w*|spiritual\w*|politic\w*|election\w*|democrat\w*|republican\w*|"
+    r"voting|vote for|abortion|immigration|immigrants?|deportation|asylum|green card|"
+    # checker additions: money, diet and faith words the first list missed (as phrases where a word has another sense)
+    r"day trading|stock trading|forex|wealth\w*|millionaires?|retirement (?:savings|planning|fund)|savings|"
+    r"side hustles?|passive income|credit (?:cards?|scores?)|real estate|fat[- ]?loss|lose fat|calorie deficit|diets?|"
+    r"coming out|my partner|my ex|"
     r"jesus|christ|allah|torah|mosques?|synagogues?|scriptures?|porn\w*|onlyfans|hook-?ups?|tinder)\b", re.I)
 
 

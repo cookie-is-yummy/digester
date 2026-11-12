@@ -281,13 +281,23 @@ def first_send(first):
     return f" The first one would come {first}." if first else ""
 
 
-def preview_tail(when, what, first=None):
-    return (f"\n\n{cap_first(when)} I'll send {what} that I haven't sent you before.{first_send(first)} "
-            "Reply YES to start, or tell me what to change.")
+def when_lead(when):
+    """'every weekday at 7am and 6pm until 20 December,': the schedule as the start of a sentence, with its comma at
+    the end of the whole phrase (fix pass, finding 13), never before "until"."""
+    for word in ("until", "starting", "except on", "just once"):
+        when = when.replace(f", {word} ", f" {word} ").replace(f", {word}", f" {word}")
+    return when.rstrip(",") + ","
+
+
+def preview_tail(when, what, first=None, heads="", offer=""):
+    """`heads`, `offer`: a heads-up and an offer (findings 19 and 26), said before the YES they are answered by."""
+    return (f"\n\n{cap_first(when_lead(when))} I'll send {what} that I haven't sent you before.{first_send(first)}"
+            f"{heads}{offer or ' Reply YES to start'}, or tell me what to change.")
 
 
 def preview_also_tail(when, what, first=None):
-    return (f"\n\nAnd {when} I'll send {what}.{first_send(first)} Reply YES to start both, or tell me what to change.")
+    return (f"\n\nAnd {when_lead(when)} I'll send {what}.{first_send(first)} Reply YES to start both, or tell me what to "
+            "change.")
 
 
 def reminder_once(first, text, n):
@@ -390,6 +400,11 @@ def snoozed(until_text):
 
 def undone(what):
     return f"Undone: {what}."
+
+
+# words that say what kind of thing a post is, not what it is about (fix pass, finding 14): never counted as topics
+GENERIC_WORDS = set("video videos post posts reel reels saved save saves things thing stuff content clip clips "
+                    "item items photo photos pic pics".split())
 
 
 def stats_message(total, by_platform, by_kind, words=None, matched=None, by=None, extra=None):
@@ -637,3 +652,95 @@ def level_guess_note(topic, level):
              "intermediate": f"I'm guessing you're past the basics with {topic}",
              "advanced": f"I'm guessing you're advanced at {topic}"}[level]
     return words + "; tell me if that's wrong."
+
+
+# ---------- fix pass (live findings of 12 Nov) ----------
+SHORTER = re.compile(r"\b(short|shorter|quick|quicker|mini|less time|not so long)\b", re.I)
+
+
+def and_words(xs):
+    return _and(xs)
+
+
+def detail_head(kinds, name):
+    """'Here are the steps of One Pot Pasta by @chef:' (finding 4: one line naming the pick, then the lines)."""
+    return f"Here are {_and(kinds)} of {name}:"
+
+
+def detail_missing(kind_words, platform, has_description):
+    """One honest line for a kind the pick does not write out (findings 5 and 16)."""
+    if platform == "youtube":
+        return (f"The video's description doesn't list {kind_words}." if has_description else
+                f"I only have the video's title, so I can't quote {kind_words}.")
+    return f"{cap_first(kind_words)} aren't written out in the post; they're in the video."
+
+
+def detail_none(kind_words, name, platform, has_description):
+    """Nothing of what was asked is written out: say so, then the link (finding 5)."""
+    if platform == "youtube":
+        if has_description:
+            return f"The description of {name} doesn't list {kind_words}, so I can't quote them. Here's the video:"
+        return f"I only have the title of {name}, not its description, so I can't quote {kind_words}. Here's the video:"
+    return f"{name} doesn't write out {kind_words}; they're in the video. Here's the post:"
+
+
+def level_moved_now(topic, plain, way, shorter=False):
+    """The feedback line, then the one sent now (finding 6)."""
+    one = ("a shorter, harder one" if way == "harder" else "a shorter, easier one") if shorter else \
+        ("a harder one" if way == "harder" else "an easier one")
+    if topic:
+        lead = "Noted, I'll aim higher" if way == "harder" else "Noted, I'll keep it simpler"
+        return f"{lead} with {topic}: I now have you as {plain}. Here's {one}:\n\n"
+    return f"Noted. Here's {one}:\n\n"
+
+
+def outside_auto_head(n_clear):
+    """Finding 26: the YouTube block that comes without being asked, because the saves hold too few."""
+    if not n_clear:
+        return "Your saves don't have a start-to-finish one, so here are some from YouTube:"
+    return (f"Your saves only have {n_clear} that {'goes' if n_clear == 1 else 'go'} from start to finish, so here are "
+            "some more from YouTube:")
+
+
+def few_finished(n_clear):
+    return f"Your saves only have {n_clear} that {'goes' if n_clear == 1 else 'go'} from start to finish."
+
+
+def supply_note(n):
+    """Finding 19: a repeating rule whose supply in the library is tiny."""
+    if n == 0:
+        return " Heads up: I don't see anything in your library that clearly fits, so this will run dry quickly."
+    return (f" Heads up: I only see about {n} {'post' if n == 1 else 'posts'} in your library that "
+            f"{'fits' if n == 1 else 'fit'}, so this will run dry quickly.")
+
+
+def outside_offer(when, shown=False):
+    """Findings 19 and 26: the offer in a preview; YES starts the rule with new videos from YouTube as well."""
+    if shown:
+        return f" Want these {when} from YouTube as well as your saves? Reply YES to start it that way"
+    return " Want me to add related videos from outside your saves? Reply YES to start it that way"
+
+
+def ended_by_revert(zone, goals):
+    """Finding 21: the temporary time zone ended, and with it a rule's only send."""
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return (f"I'm back on {zone_name(zone)} time. At the same clock time here, {names} has no send left, so I ended "
+            f"{'that rule' if len(goals) == 1 else 'those rules'}. Ask me to set it up again with a new time.")
+
+
+def emails_dropped(expired, over):
+    """Finding 30: emails that waited for a confirmed address and were dropped."""
+    out = []
+    if expired:
+        out.append(f"{'One email' if expired == 1 else f'{expired} emails'} that waited more than a day for your "
+                   f"address {'was' if expired == 1 else 'were'} dropped; ask me again if you still want "
+                   f"{'it' if expired == 1 else 'them'}.")
+    if over:
+        out.append(f"I can keep only {config_wait_max()} emails waiting, so the oldest "
+                   f"{'one was' if over == 1 else f'{over} were'} dropped.")
+    return " ".join(out)
+
+
+def config_wait_max():
+    from . import config
+    return config.EMAIL_WAIT_MAX

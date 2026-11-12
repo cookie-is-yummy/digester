@@ -7,6 +7,7 @@ reply went out as is recorded, so a reaction on any of them maps to the run. Mix
 """
 import hashlib
 import json
+import re
 import time
 from datetime import timedelta
 from zoneinfo import ZoneInfo
@@ -14,7 +15,8 @@ from zoneinfo import ZoneInfo
 from . import config, llm
 from .channels.base import SendUncertain
 from .compose import compose
-from .extract import details_many, kinds_for
+from .compose import FINISHED, duration_of
+from .extract import default_extract, details_many, kinds_for, topic_kind
 from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
 from .retrieve import candidates
 from .schema import KINDS, PLATFORMS
@@ -22,6 +24,24 @@ from .schema import RuleSpec
 from .store import now_iso
 from . import texts as T
 from .texts import LIMIT, LIMIT_TOTAL, LOADING, RUN_ERROR, SCHEDULED_FOOTER
+
+
+# fix pass, finding 18: "mini" / "short" / "quick" is a length bound, worked out by code and checked against YouTube's
+# length where it is known (not for food: a quick recipe is about cooking time, not the video)
+LENGTH_WORDS = [(re.compile(r"\b(mini|short|shorter|bite-?sized|tiny)\b", re.I), 10),
+                (re.compile(r"\b(quick|quicker)\b", re.I), 15)]
+UNDER_MINUTES = re.compile(r"\b(?:under|less than|at most|max(?:imum)?|within)\s+(\d{1,3})\s*(?:min|mins|minutes)\b", re.I)
+SHORTEST = re.compile(r"\b(shortest|quickest)(?:\s+ones?)?\s+first\b", re.I)
+
+
+def length_bound(spec, *texts):
+    """The longest video length, in minutes, the request allows, or None."""
+    c = spec.content
+    t = " ".join(x for x in [*texts, c.goal or ""] if x)   # a rule's goal ("mini Blender tutorials") counts too
+    if topic_kind(c.goal or "", *c.searches, t) == "food":
+        return None
+    found = [int(m.group(1)) for m in UNDER_MINUTES.finditer(t)] + [n for rx, n in LENGTH_WORDS if rx.search(t)]
+    return min(found) if found else None
 
 
 class ExecutorMixin:
@@ -48,6 +68,13 @@ class ExecutorMixin:
         self.store.record_sent(ref, handle, run_id)
         self.note(reply_ref=ref)
         return ref
+
+    def _answer_lang(self):
+        """The language the answer is written in: the person's, when lang.py has its phrases; else English for the
+        whole answer, the composer's sentences included (fix pass, finding 15: never a mixed reply)."""
+        from . import lang as L
+        lang = getattr(self._tl, "lang", None)
+        return L.code(lang) if L.supported(lang) else None
 
     # ---------- the person's context ----------
     def _profile_text(self, handle, *texts):
@@ -112,11 +139,19 @@ class ExecutorMixin:
         outside = c.source == "library" and cands_override is None and kind != "follow_up"
         if outside and c.outside == "only":
             return self._run_outside_only(person, spec, kind, rule_id, request_text)
+        self._tl.run_info = None
         msg, run_id, n = self._run_once(person, spec, kind, rule_id=rule_id, request_text=request_text,
                                         cands_override=cands_override, known_lines=known_lines, shown=shown,
                                         only_ids=only_ids)
+        info = getattr(self._tl, "run_info", None) or {}
         if outside and c.outside == "some" and not self._run_failed(run_id):
             msg = self._add_outside(person, spec, kind, rule_id, request_text, msg, run_id)
+        elif outside and c.outside == "none" and kind in ("ask", "preview", "more") and info.get("run_id") == run_id \
+                and info.get("finished") and info.get("n_clear", 0) < 3 and not self._run_failed(run_id):
+            # fix pass, finding 26: something to do or make, and the saves hold fewer than 3 that clearly end with a
+            # finished result: one honest line, the closest library picks, and (when the route is open and the topic
+            # is not personal) the YouTube block in the same reply, without being asked. One search at most.
+            msg = self._add_outside(person, spec, kind, rule_id, request_text, msg, run_id, auto=info)
         return msg, run_id, n
 
     def _run_once(self, person, spec: RuleSpec, kind, rule_id=None, request_text=None, cands_override=None,
@@ -157,27 +192,57 @@ class ExecutorMixin:
             t1 = time.time()
             about, level_ok, guessed = self._profile_text(h, spec.content.goal, request_text or "",
                                                           *spec.content.searches)
+            hint = getattr(self._tl, "hint", None) or ""
+            bound = length_bound(spec, request_text or "", hint) if kind != "follow_up" else None
             result, c = compose(cands, spec, h, request_text=request_text,
                                 feedback_note=self._feedback_note(rule_id, view), known_lines=known_lines,
-                                extra=extra, profile=about, lang=getattr(self._tl, "lang", None),
+                                extra=extra, profile=about, lang=self._answer_lang(),
                                 store=self.store, use_cache=(kind != "more"), sent_count=len(sent_before),
-                                wider=(kind == "ask"), now=now, level_ok=level_ok)
+                                wider=(kind == "ask"), now=now, level_ok=level_ok,
+                                survey=(kind in ("preview", "more")), max_minutes=bound)
             cost += c
             if result.get("picks") and kind != "follow_up":
                 self._level_note(h, result, guessed)
             steps["compose"], steps["answer_cached"] = round(time.time() - t1, 2), result.get("cached", False)
+            if SHORTEST.search(" ".join([request_text or "", hint])):   # finding 17: "shortest first"
+                for key in ("picks", "wider"):
+                    result[key] = sorted(result.get(key) or [],
+                                         key=lambda p: duration_of(p["item"], extra) or 10 ** 9)
+            for p in (result.get("picks") or []) + (result.get("wider") or []):
+                if p.get("minutes"):
+                    from .ytinfo import minutes_text
+                    p["length_text"] = minutes_text(duration_of(p["item"], extra))
             t1 = time.time()
+            asked = list(spec.content.extract)
+            extract = asked or (default_extract(spec, request_text or "", hint) if kind != "follow_up" else [])
+            result["extract"] = extract
             main = result.get("picks") or []
-            if main and kinds_for(spec.content.extract):
-                facts, info = details_many([p["item"] for p in main], spec.content.extract, view.lib, store=self.store,
+            if main and kinds_for(extract):
+                if not asked:   # finding 28: details nobody named, for the recommended pick only
+                    targets = main[:1]
+                elif result.get("closest"):
+                    targets = list(main)
+                else:   # finding 16: the details step on the top 3 clear picks, then the best one that has them all
+                    targets = list({id(p): p for p in main + (result.get("wider") or [])}.values())[:max(3, len(main))]
+                facts, info = details_many([p["item"] for p in targets], extract, view.lib, store=self.store,
                                            person=h, extra=extra, now=now)
                 cost += info["cost"]
                 result["dropped"]["lines_not_in_text"] = info["dropped"]
-                for p in main:
+                for p in targets:
                     p["facts"] = facts.get(p["item"].id) or {}
                     found = [line for k in ("ingredients", "steps", "key_points") for line in p["facts"].get(k) or []]
                     if found or not p.get("lines_reused"):
                         p["lines"], p["lines_reused"] = found, False
+                if asked and not result.get("closest"):
+                    # the best-ranked of the top 3 that has every kind asked for; else the one with the most of them
+                    have = [(sum(1 for k in asked if p["facts"].get(k)), -i, p) for i, p in enumerate(targets[:3])]
+                    top = max(have, key=lambda x: x[:2]) if have else None
+                    best = top[2] if top and top[0] else None
+                    if best is not None and best is not main[0]:
+                        both = main + (result.get("wider") or [])
+                        both.remove(best)
+                        both.insert(0, best)
+                        result["picks"], result["wider"] = both[:len(main)], both[len(main):]
                 steps["extract"], steps["extract_calls"] = round(time.time() - t1, 2), info["calls"]
                 if info.get("errors"):   # a failed details call: the answer goes out without those details
                     steps["extract_errors"] = info["errors"]
@@ -198,6 +263,10 @@ class ExecutorMixin:
         self.note(run_id=run_id)
         if status == "error":
             return RUN_ERROR, run_id, 0
+        picks = ((result or {}).get("picks") or []) + ((result or {}).get("wider") or [])   # (reordered above)
+        self._tl.run_info = {"run_id": run_id, "n_clear": (result or {}).get("n_clear", 0),
+                             "n_close": (result or {}).get("n_close", 0), "n_picks": len(picks),
+                             "finished": any(FINISHED.search(cr) for cr in spec.content.criteria)}
         for i, p in enumerate(picks, 1):
             self.store.add_delivery(person["handle"], rule_id if kind in ("scheduled", "manual") else None, run_id,
                                     p["item"].id, i, at=self.clock())
@@ -229,15 +298,18 @@ class ExecutorMixin:
             if kind == "scheduled":
                 number = next((i for i, r in enumerate(self.store.rules(person["handle"]), 1) if r["id"] == rule_id), 1)
                 footer = SCHEDULED_FOOTER.format(n=number)
-            msg = picks_message(result, spec, footer=footer, now=self.clock())
+            ex = result.get("extract")
+            msg = picks_message(result, spec, footer=footer, now=self.clock(), extract=ex, lang=self._answer_lang())
             # what this run showed, kept for its outputs (email, calendar, to-dos) and for sending it again later:
             # the same parts without the chat footer, and each pick's checked title, link and details
             main = {id(p) for p in result["picks"]}
             self._keep_answer(run_id, person["handle"], rule_id if kind in ("scheduled", "manual") else None,
-                              spec.content.goal, "picks", picks_message(result, spec, now=self.clock()) if footer else msg,
+                              spec.content.goal, "picks",
+                              picks_message(result, spec, now=self.clock(), extract=ex, lang=self._answer_lang())
+                              if footer else msg,
                               [dict(pick_record(p), main=id(p) in main) for p in picks])
             return msg, run_id, len(picks)
-        return none_message(result, spec, scheduled=(kind == "scheduled")), run_id, 0
+        return none_message(result, spec, scheduled=(kind == "scheduled"), lang=self._answer_lang()), run_id, 0
 
     # ---------- outside picks (outside.py, DESIGN.md section 11) ----------
     def _outside(self):
@@ -247,7 +319,7 @@ class ExecutorMixin:
             o = self.outside = Outside(self.store)
         return o
 
-    def _outside_find(self, person, spec, kind, rule_id, request_text):
+    def _outside_find(self, person, spec, kind, rule_id, request_text, run_id=None, max_minutes=None):
         """The outside block for this run: the person's own words are the request (and, for a rule, its stored
         request text); videos already in their library are removed; a rule or "another" does not show a video it
         showed in the last 30 days. Returns the result of Outside.find."""
@@ -267,22 +339,25 @@ class ExecutorMixin:
         cutoff = now_iso(now - timedelta(days=config.OUTSIDE_SHOWN_DAYS))
         shown = {k: {v: at for v, at in vids.items() if at >= cutoff} for k, vids in shown.items()}
         skip = set(shown.get(scope, {})) if scope and kind in ("scheduled", "manual", "more") else set()
-        res = self._outside().find(h, spec, texts, have_ids=have, now=now, skip_ids=skip)
-        if scope and res["picks"]:
-            box = shown.setdefault(scope, {})
-            for p in res["picks"]:
-                box[p["video_id"]] = now_iso(now)
+        res = self._outside().find(h, spec, texts, have_ids=have, now=now, skip_ids=skip, max_minutes=max_minutes)
+        scopes = [scope] + ([f"preview:{run_id}"] if kind == "preview" and run_id else [])
+        for sc in scopes:   # finding 33: a preview's videos move to its rule when the person says yes
+            if sc and res["picks"]:
+                box = shown.setdefault(sc, {})
+                for p in res["picks"]:
+                    box[p["video_id"]] = now_iso(now)
         self.store.set_state(f"outside_shown:{h}", {k: v for k, v in shown.items() if v})
         return res
 
     @staticmethod
-    def _outside_parts(picks, before=None):
+    def _outside_parts(picks, before=None, label=None):
         """The block: its label, then per video one line (YouTube's title and channel, its length) and its link alone,
         marked as an outside pick so the test page labels the card. After `before` (the library answer), with a blank
         line between them when they are joined into one text."""
         from .outside import watch_url
-        head = Reply.of(before) + ("\n\n" + T.OUTSIDE_HEAD) if before is not None else \
-            Reply([{"type": "text", "text": T.OUTSIDE_HEAD}])
+        label = label or T.OUTSIDE_HEAD
+        head = Reply.of(before) + ("\n\n" + label) if before is not None else \
+            Reply([{"type": "text", "text": label}])
         parts = list(head.parts)
         for p in picks:
             parts.append({"type": "text", "text": T.outside_line(p)})
@@ -297,18 +372,27 @@ class ExecutorMixin:
                             "cached": res["cached"]}
         self.store.x("UPDATE runs SET steps=? WHERE id=?", (json.dumps(steps), run_id))
 
-    def _add_outside(self, person, spec, kind, rule_id, request_text, msg, run_id):
-        """The library answer, then the outside block or one line saying why there is none."""
+    def _add_outside(self, person, spec, kind, rule_id, request_text, msg, run_id, auto=None):
+        """The library answer, then the outside block or one line saying why there is none. `auto` (finding 26): the
+        block was not asked for; it comes because the saves hold fewer than 3 that end with a finished result. Its
+        label says so; when it cannot be served nothing is said about YouTube, only the honest line about the saves."""
+        bound = length_bound(spec, request_text or "", getattr(self._tl, "hint", None) or "")
         try:
-            res = self._outside_find(person, spec, kind, rule_id, request_text)
+            res = self._outside_find(person, spec, kind, rule_id, request_text, run_id=run_id, max_minutes=bound)
         except Exception as e:  # noqa: BLE001 - the library answer is never lost to this block
             res = {"picks": [], "status": "error:" + type(e).__name__, "line": T.OUTSIDE_ERROR, "searched": False,
                    "cached": False}
         self._note_outside(run_id, res)
+        n_clear = (auto or {}).get("n_clear", 0)
+        if auto is not None:
+            self._tl.auto_outside = bool(res["picks"])
         if res["picks"]:
+            label = T.outside_auto_head(n_clear) if auto is not None else None
             # kept aside too: when the answer itself goes only by email, deliver() still puts this block in the thread
-            self._tl.outside_block = (run_id, self._outside_parts(res["picks"]))
-            return self._outside_parts(res["picks"], before=msg)
+            self._tl.outside_block = (run_id, self._outside_parts(res["picks"], label=label))
+            return self._outside_parts(res["picks"], before=msg, label=label)
+        if auto is not None:
+            return msg + ("\n\n" + T.few_finished(n_clear) if n_clear else "")
         if res["line"]:
             return msg + "\n\n" + res["line"]
         return msg

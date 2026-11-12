@@ -64,16 +64,17 @@ def test_because_needs_quotes_from_the_item_and_numbers_from_its_text(env):
     bad_quote["picks"][0]["facts"][1]["quote"] = "a pinch of chili"
     msg = compose_once(env, bad_quote)
     # (how they kept it is already in the sentence, so the clause does not say it twice)
-    assert "which you saved in March, because it matches what you asked for." in msg and "2 lemons and" not in msg
+    # fix pass, finding 10: an unbacked reason is dropped altogether, never "because it matches what you asked for"
+    assert "which you saved in March.\n" in msg and "2 lemons and" not in msg and "because" not in msg
     # a number that is not in the text ("15 minutes") is never shown, even with good quotes
     bad_number = json.loads(json.dumps(good))
     bad_number["picks"][0]["because"] = "it takes 15 minutes and needs 2 lemons"
     msg = compose_once(env, bad_number)
-    assert "15 minutes" not in msg and "because it matches what you asked for" in msg
+    assert "15 minutes" not in msg and "because" not in msg
     # no facts at all: not backed
     no_facts = json.loads(json.dumps(good))
     no_facts["picks"][0]["facts"] = []
-    assert "because it matches what you asked for" in compose_once(env, no_facts)
+    assert "because" not in compose_once(env, no_facts)
     run = env["bot"].store.one("SELECT fits FROM runs ORDER BY id DESC LIMIT 1")
     assert json.loads(run["fits"]) == ["clear"]                     # verdicts, never a score
 
@@ -111,7 +112,7 @@ def test_only_close_picks_show_the_closest_and_all_no_says_nothing(env):
     assert env["bot"].store.last_answer(H)["items"] == ["itm_a"]
     calls = env["calls"].count("mvp_compose")
     msg = compose_once(env, {"picks": [{"n": 1, "verdict": "no", "title": "x"}], "none_reason": "none of these is pasta"})
-    assert msg == "I didn't find a good match: none of these is pasta."
+    assert msg == "I didn't find a good match: nothing in your library fits well."   # finding 5: never the model's words
     assert env["calls"].count("mvp_compose") == calls + 2           # one more try before saying nothing (section 4)
 
 
@@ -125,13 +126,14 @@ def test_a_must_have_unknown_for_every_candidate_is_said(env):
     raw = {"picks": [{"n": 2, "verdict": "clear", "title": "Lemon garlic pasta", "criteria": [{"answer": "unknown"}]}]}
     msg = compose_once(env, raw, criteria=["under 10 minutes"])
     # it is the closest, not a clear pick, and the must-have nobody's text answers is said once, with the reason
-    assert msg.startswith("None of what I found clearly meets \"under 10 minutes\": the posts don't say.")
+    assert msg.startswith("I couldn't confirm any of these is under 10 minutes long, but the closest I have "
+                          "is Lemon garlic pasta")
     assert msg.count("under 10 minutes") == 1
     # two must-haves unknown for every shown item: the first opens the reply, the second gets its own line
     raw = {"picks": [{"n": 2, "verdict": "clear", "title": "Lemon garlic pasta",
                       "criteria": [{"answer": "unknown"}, {"answer": "unknown"}]}]}
     msg = compose_once(env, raw, criteria=["vegetarian", "under 10 minutes"])
-    assert msg.startswith("None of what I found clearly meets \"vegetarian\": the posts don't say.")
+    assert msg.startswith("I couldn't confirm any of these clearly fits \"vegetarian\", but the closest I have is")
     assert "I couldn't check \"under 10 minutes\" for any of these: the posts don't say." in msg
     assert msg.count("vegetarian") == 1
 
@@ -144,7 +146,7 @@ def test_alternatives_wider_selection_and_top_n(env):
            "intro": "Here are some pasta ideas from your saves."}
     msg = compose_once(env, raw, count=2)
     # an alternative's line says what is written out, from the checked lines (here: nothing, on Instagram)
-    assert "Alternatively, try these:\n• Pasta night by @chef: the recipe is in the video. https://example.com/itm_c" in msg
+    assert "Or try these:\n• Pasta night by @chef: the recipe is in the video. https://example.com/itm_c" in msg
     assert "Or here's a wider selection:\n• Best carbonara ever: https://example.com/itm_e" in msg
     assert env["bot"].store.last_answer(H)["items"] == ["itm_a", "itm_c", "itm_e"]
     # a timed rule never gets the wider selection; a count that was cut says "top N"
@@ -165,9 +167,12 @@ def test_profile_and_lang_reach_the_composer(env):
     seen = []
     say(env, "x", {"intent": "chat", "reply": "hi"})
     env["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": []})[1]
-    say(env, "des pâtes ?", dict(ask(), lang="fr"))
-    assert "Vegetarian" in seen[0] and "learning to cook for one" in seen[0] and '"lang": "fr"' in seen[0]
+    say(env, "¿pasta?", dict(ask(), lang="es"))
+    assert "Vegetarian" in seen[0] and "learning to cook for one" in seen[0] and '"lang": "es"' in seen[0]
     assert "<item>What they are working toward" in seen[0]          # the profile goes in as data
+    # fix pass, finding 15: a language with no phrase table gets an all-English answer (the composer writes English)
+    say(env, "des pâtes ?", dict(ask(), lang="fr"))
+    assert '"lang"' not in seen[-1]
 
 
 # ---------- the details step ----------

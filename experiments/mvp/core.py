@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from . import config
 from .executor import ExecutorMixin
+from .followup import FollowupMixin
 from .handler import (
     ENDS_PENDING,
     MAX_MESSAGES_PER_HOUR,
@@ -90,7 +91,7 @@ __all__ = [
 ]
 
 
-class Bot(HandlerMixin, OnboardingMixin, TodoMixin, OutputsMixin, ExecutorMixin, SchedulerMixin):
+class Bot(HandlerMixin, FollowupMixin, OnboardingMixin, TodoMixin, OutputsMixin, ExecutorMixin, SchedulerMixin):
     def __init__(self, channel, store=None, pool=None, clock=None):
         self.channel = channel
         self.store = store or Store(config.DB)

@@ -62,18 +62,61 @@ class SchedulerMixin:
 
     # ---------- what changes with time alone ----------
     def _upkeep(self, now):
-        """A temporary time zone switches back, and a rule paused until a time resumes."""
+        """A temporary time zone switches back, and a rule paused until a time resumes. A rule that this ends (its
+        only send has passed) is never ended silently: the person gets one short notice (fix pass, finding 21)."""
+        from . import texts as T
         for p in self.store.timezone_reverts_due(now):
-            with self.lock_for(p["handle"]):
-                self._move_timezone(p["handle"], p["tz_revert_to"], now)
+            h = p["handle"]
+            with self.lock_for(h):
+                live = {r["id"] for r in self.store.rules(h, statuses=("active",))}
+                self._move_timezone(h, p["tz_revert_to"], now)
+                ended = [RuleSpec.model_validate(r["spec"]).content.goal for r in self.store.rules(h, statuses=("done",))
+                         if r["id"] in live]
+                if ended:
+                    self._notice(h, T.ended_by_revert(p["tz_revert_to"], ended))
         for r in self.store.rules_to_resume(now):
             person = self.store.person(r["handle"])
             if not person:
                 continue
             with self.lock_for(person["handle"]):
-                status, nxt = self._next_for(RuleSpec.model_validate(r["spec"]), person, now, r)
+                spec = RuleSpec.model_validate(r["spec"])
+                status, nxt = self._next_for(spec, person, now, r)
                 self.store.set_slot(r["id"], nxt, status)
                 self.store.update_rule(r["id"], paused_until=None)
+                if status == "done":
+                    self._notice(person["handle"], T.ended_on_resume([spec.content.goal]))
+        self._release_held(now)
+
+    def _notice(self, handle, text):
+        """A short notice that time alone caused; a failed send is recorded, never retried."""
+        try:
+            self.send(handle, text)
+        except Exception as e:  # noqa: BLE001
+            self.store.add_run(handle=handle, kind="notice", status="send_failed", error=type(e).__name__)
+
+    def _held_now(self, person, now):
+        """True while a message nobody asked for at this moment must wait: in quiet hours or a snooze (finding 32)."""
+        snooze = person.get("snooze_until")
+        if snooze and now < datetime.fromisoformat(snooze):
+            return True
+        return in_quiet_hours(now, person["timezone"], self.store.quiet(person["handle"]))
+
+    def _release_held(self, now):
+        """An import's message and its new_items answers, held through quiet hours or a snooze, go out now."""
+        rows = self.store.q("SELECT key FROM state WHERE key LIKE 'heldimport:%'")
+        for row in rows:
+            h = row["key"].split(":", 1)[1]
+            person = self.store.person(h)
+            held = self.store.get_state(row["key"])
+            if not person or not held:
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                continue
+            if person["paused"] or self._held_now(person, now):
+                continue
+            with self.lock_for(h):
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                from .refresh import announce_import
+                announce_import(self, person, held, now)
 
     def _move_timezone(self, handle, new_tz, now, revert_to=None, revert_at=None):
         """The person's zone changes. Each rule's next send keeps its date and clock time, read in the new zone (so a
@@ -295,7 +338,8 @@ class SchedulerMixin:
     def _unanswered(self, handle):
         """Timed sends that went out since the person last wrote or reacted."""
         since = self.store.get_state(f"last_in:{handle}") or ""
-        return self.store.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind IN ('scheduled','todo') AND status IN "
+        # a to-do's reminder is the person's own time, not a stream they did not answer (fix pass, finding 22)
+        return self.store.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
                               "('sent','none_sent','unknown') AND at>?", (handle, since))["n"]
 
     def _run_failed(self, run_id):

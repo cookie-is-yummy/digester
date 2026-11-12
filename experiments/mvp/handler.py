@@ -135,15 +135,21 @@ class HandlerMixin:
         return self.answer_normally(person, text, now)
 
     def answer_normally(self, person, text, now):
-        """The normal path for a message: the caps, the interpreter, then the dispatch."""
+        """The normal path for a message: what code reads by itself (plain commands, "another", a question about a
+        shown pick: followup.py), the caps, the interpreter, then the dispatch."""
         handle = person["handle"]
+        pending = self._live_pending(handle, now)
+        rules = self.store.rules(handle)
+        last = self.store.last_answer(handle)
+        it, paid = self.code_reads(person, text, self._answer_seen(handle))
+        if it is not None and not paid:   # "stop 2", "my rules", "undo": no model call, never misread
+            return self._dispatch(person, it, text, rules, pending, last, now)
         over = self._over_cap(person)
         if over:
             self.note(intent="over_cap")
             return self._limit_notice(person, over)  # before any paid call
-        pending = self._live_pending(handle, now)
-        rules = self.store.rules(handle)
-        last = self.store.last_answer(handle)
+        if it is not None:
+            return self._dispatch(person, it, text, rules, pending, last, now)
         if last and not last.get("rule_id"):
             last = dict(last, request=(self.store.get_state(f"lastspec:{handle}") or {}).get("text"))
         try:
@@ -188,9 +194,17 @@ class HandlerMixin:
         self._tl.lang = it.lang
         self._tl.made_pending = False
         self._tl.chained = False
+        self._tl.hint = text          # the message itself, for what code reads from it (a length bound: "mini")
+        self._tl.ran_more = False
         before = self.store.get_state(f"lastwrite:{h}")
-        ref = self._dispatch_one(person, it, text, rules, pending, last, now)
-        if it.also is not None:
+        try:
+            ref = self._dispatch_one(person, it, text, rules, pending, last, now)
+        except BaseException:
+            self._tl.hint = None
+            raise
+        if it.also is not None and it.also.intent == "more" and self._tl.ran_more:
+            pass   # "too hard, something shorter": the feedback already sent the shorter one
+        elif it.also is not None:
             first = self.store.get_state(f"lastwrite:{h}")
             first = None if first == before else first   # only a write this message made
             self._tl.chained = True
@@ -200,6 +214,7 @@ class HandlerMixin:
             finally:
                 self._tl.chained = False
             self._join_writes(h, first, self.store.get_state(f"lastwrite:{h}"))
+        self._tl.hint = None
         said = getattr(self._tl, "profile_said", None)
         if said:   # what changed in the profile is always said; here when no reply carried it
             self._tl.profile_said = None
@@ -232,9 +247,15 @@ class HandlerMixin:
         return "\n\n" + said
 
     def _join_writes(self, h, first, second):
-        """Two writes of one message ("add milk and eggs", two reminders) are one write for 'undo'."""
-        if not first or not second or first == second or first["kind"] != second["kind"] or \
-                first["kind"] not in ("todo_add", "rule_add"):
+        """Two writes of one message ("add milk and eggs", two reminders) are one write for 'undo'. Two writes of
+        different kinds ("add milk to my list and pause the yoga one") are kept as both, and 'undo' reverses both
+        (fix pass, finding 25)."""
+        if not first or not second or first == second:
+            return
+        if first["kind"] != second["kind"] or first["kind"] not in ("todo_add", "rule_add"):
+            parts = (first["undo"]["writes"] if first["kind"] == "multi" else [first]) + [second]
+            self.store.set_state(f"lastwrite:{h}", {"kind": "multi", "say": first["say"] + " and " + second["say"],
+                                                    "undo": {"writes": parts}, "at": second["at"]})
             return
         if first["kind"] == "todo_add":
             undo = {"ids": first["undo"]["ids"] + second["undo"]["ids"]}
@@ -285,7 +306,9 @@ class HandlerMixin:
             if never:  # no preview for a rule that would never send (its end has passed, or every moment is quiet)
                 return self.send(h, never)
             joined = chained and pending and pending["kind"] == "confirm_rule" and getattr(self._tl, "made_pending", False)
+            self._tl.auto_outside = False
             msg, run_id, n = self.run(person, it.spec, "preview", request_text=text)
+            offer = self._preview_supply(person, it.spec, text, run_id, now)
             if self._run_failed(run_id):  # no preview, so nothing to say yes to
                 if not joined:
                     self.store.clear_pending(h)
@@ -300,9 +323,10 @@ class HandlerMixin:
                 tail = T.preview_also_tail(describe(it.spec.when), what, first)
             else:
                 self.store.set_pending(h, "confirm_rule", {"text": text, "spec": it.spec.stored(), "run_id": run_id,
-                                                           "more": more}, at=self.clock())
+                                                           "more": more, "outside_offer": bool(offer[1])},
+                                       at=self.clock())
                 self._tl.made_pending = True
-                tail = T.preview_tail(describe(it.spec.when), what, first)
+                tail = T.preview_tail(describe(it.spec.when), what, first, heads=offer[0], offer=offer[1])
                 if more:
                     tail += " " + T.preview_more_note(len(more))
             w = it.spec.when
@@ -319,29 +343,16 @@ class HandlerMixin:
             return self.deliver(person, it.spec, msg + self._not_yet_notes(it.spec, sep="\n\n"), run_id, kind="ask",
                                 request_text=text, after=self._profile_tail())
         if it.intent == "more":
-            st = self.store.get_state(f"lastspec:{h}")
-            if not st:
-                return self.send(h, T.MORE_OF_WHAT)
-            spec = RuleSpec.model_validate(st["spec"])
-            if it.avoid or it.criteria or it.outside:   # "another but shorter": the change rides on the same request
-                c = spec.content
-                c.avoid = list(dict.fromkeys([*c.avoid, *it.avoid]))[:8]
-                c.criteria = list(dict.fromkeys([*c.criteria, *it.criteria]))[:5]
-                if it.outside:
-                    c.outside = it.outside
-            rule = self.store.rule(st["rule_id"]) if st.get("rule_id") else None
-            if rule and rule["status"] in ("active", "paused"):  # one more from a rule counts as sent by that rule
-                msg, run_id, _ = self.run(person, spec, "manual", rule_id=rule["id"], request_text=st.get("text") or text,
-                                          shown=st.get("shown") or [])
-            else:
-                msg, run_id, _ = self.run(person, spec, "more", request_text=st.get("text") or text,
-                                          shown=st.get("shown") or [])
-            return self.deliver(person, spec, msg + self._not_yet_notes(spec, sep="\n\n"), run_id,
-                                kind="manual" if rule else "more", rule_id=rule["id"] if rule else None,
-                                request_text=st.get("text") or text)
+            return self._more(person, it, text)
         if it.intent == "follow_up":
             if not last:
                 return self.send(h, T.NOTHING_TO_FOLLOW_UP)
+            from .followup import detail_kinds, pick_number
+            kinds = detail_kinds(it.question or "", text)
+            if kinds:   # the details of a pick already shown: answered directly, never "I recommend" (findings 4, 5)
+                seen = self._answer_seen(h) or last
+                n = it.pick_number or pick_number(text, len(seen["items"])) or 1
+                return self._detail_answer(person, seen, kinds, n)
             view = self.view(person["library"])
             cands = [c for c in (view.get(i) for i in last["items"]) if c]
             spec = self._spec_for_followup(last, it.question, it.avoid, h)
@@ -350,7 +361,7 @@ class HandlerMixin:
                                       known_lines=known)
             return self.send(h, msg, run_id)
         if it.intent == "feedback":
-            return self._feedback(person, it.feedback, it.pick_number)
+            return self._feedback(person, it.feedback, it.pick_number, it=it, text=text)
         if it.intent == "list_rules":
             return self.send(h, self._rules_text(person, rules))
         if it.intent in ("pause", "resume", "stop"):
@@ -557,20 +568,28 @@ class HandlerMixin:
         lw = self._last_write(h, now)
         if not lw:
             return self.send(h, T.NOTHING_TO_UNDO)
-        k, u = lw["kind"], lw["undo"]
         self.store.set_state(f"lastwrite:{h}", None)
+        writes = lw["undo"]["writes"] if lw["kind"] == "multi" else [lw]
+        said = [x for x in (self._undo_one(h, w, now) for w in reversed(writes)) if x]   # the last write first
+        if not said:
+            return self.send(h, T.NOTHING_TO_UNDO)
+        return self.send(h, T.undone("; ".join(reversed(said))))
+
+    def _undo_one(self, h, lw, now):
+        """Reverses one write; returns what was undone, in words (or None)."""
+        k, u = lw["kind"], lw["undo"]
         if k == "todo_add":
             for i in u["ids"]:
                 self.store.update_todo(i, removed_at=now_iso(now))
-            return self.send(h, T.undone(f"I took {'that' if len(u['ids']) == 1 else 'those'} off your list ({lw['say']})"))
+            return f"I took {'that' if len(u['ids']) == 1 else 'those'} off your list ({lw['say']})"
         if k in ("todo_done", "todo_remove"):
             for i in u["ids"]:
                 self.store.update_todo(i, **{u["col"]: None})
-            return self.send(h, T.undone("it's back on your list"))
+            return "it's back on your list"
         if k == "todo_due":
             for row in u["rows"]:
                 self.store.update_todo(row["id"], due_at=row["due_at"], reminded_at=row["reminded_at"])
-            return self.send(h, T.undone("the reminder is off"))
+            return "the reminder is off"
         if k == "rule_add":
             ids = u.get("rule_ids") or [u["rule_id"]]
             goals = []
@@ -579,26 +598,26 @@ class HandlerMixin:
                 self.store.set_slot(i, None, "stopped")
                 goals.append(RuleSpec.model_validate(r["spec"]).content.goal if r else "that rule")
             if len(goals) == 1:
-                return self.send(h, T.undone(f"I stopped the rule I just started, \"{goals[0]}\""))
-            return self.send(h, T.undone("I stopped the rules I just started, " + ", ".join(f"\"{g}\"" for g in goals)))
+                return f"I stopped the rule I just started, \"{goals[0]}\""
+            return "I stopped the rules I just started, " + ", ".join(f"\"{g}\"" for g in goals)
         if k == "rule_rows":
             self._restore_rows(u["rows"])
             goals = ", ".join(RuleSpec.model_validate(json.loads(row["spec"])).content.goal for row in u["rows"])
-            return self.send(h, T.undone(f"\"{goals}\" is back as it was"))
+            return f"\"{goals}\" is back as it was"
         if k == "quiet":
             self.store.set_quiet(h, u["quiet"])
             self._restore_rows(u.get("rows") or [])   # random and window moments as they were drawn before
-            return self.send(h, T.undone("your quiet hours are back as they were"))
+            return "your quiet hours are back as they were"
         if k == "snooze":
             back = datetime.fromisoformat(u["snooze"]) if u.get("snooze") else None
             self.store.set_snooze(h, back)
-            return self.send(h, T.undone("timed messages are back as they were"))
+            return "timed messages are back as they were"
         if k == "timezone":
             at = datetime.fromisoformat(u["revert_at"]) if u.get("revert_at") else None
             self._move_timezone(h, u["timezone"], now, revert_to=u.get("revert_to"), revert_at=at)
             self._restore_rows(u.get("rows") or [])   # the sends as they were before the switch
-            return self.send(h, T.undone(f"I'm back on {T.zone_name(u['timezone'])} time"))
-        return self.send(h, T.NOTHING_TO_UNDO)
+            return f"I'm back on {T.zone_name(u['timezone'])} time"
+        return None
 
     def _spec_for_followup(self, last, question, avoid=(), handle=None):
         """The follow-up's spec. What the person ruled out before ("no cream") and in this question ("any without
@@ -614,12 +633,37 @@ class HandlerMixin:
             "goal": question[:200], "searches": [question[:120]], "count": min(3, len(last["items"])) or 1,
             "extract": extract, "avoid": avoid, "exclude_sent": False}})
 
+    def _preview_supply(self, person, spec, text, run_id, now):
+        """(heads-up, offer) for a repeating library rule's preview (findings 19 and 26): how many fitting items code
+        saw (clear and close, from the composer's verdicts), said when under 3; and, when YouTube can serve it, the
+        offer to include new videos from there (YES then stores outside "some")."""
+        info = getattr(self._tl, "run_info", None) or {}
+        c = spec.content
+        if c.source != "library" or not spec.when.repeating or info.get("run_id") != run_id:
+            return "", ""
+        supply = info.get("n_clear", 0) + info.get("n_close", 0)
+        low = supply < 3
+        shown = bool(getattr(self._tl, "auto_outside", False))
+        heads = T.supply_note(supply) if low else ""
+        offer = ""
+        if (low or shown) and c.outside == "none":
+            try:
+                ok = shown or self._outside().available(person["handle"], spec, [text], now=now)
+            except Exception:  # noqa: BLE001
+                ok = False
+            if ok:
+                offer = T.outside_offer(describe(spec.when), shown=shown)
+        return heads, offer
+
     def _confirm(self, person, pending):
         h = person["handle"]
         self.note(intent="confirm")
         self.store.clear_pending(h)
         if pending["kind"] == "confirm_rule":
-            ref = self._activate(person, pending["payload"]["text"], RuleSpec.model_validate(pending["payload"]["spec"]),
+            spec = RuleSpec.model_validate(pending["payload"]["spec"])
+            if pending["payload"].get("outside_offer") and spec.content.outside == "none":
+                spec.content.outside = "some"   # the YES answers the offer too: new videos from YouTube as well
+            ref = self._activate(person, pending["payload"]["text"], spec,
                                  preview_run=pending["payload"].get("run_id"))
             return self._activate_more(person, pending, ref)
         if pending["kind"] == "confirm_delete":
@@ -680,6 +724,11 @@ class HandlerMixin:
         self._wrote_rule(h, f"started a rule, \"{c.goal}\" ({describe(spec.when)})", rule_id)
         if preview_run:  # the preview's picks count as sent by this rule, so its first send is something new
             self.store.x("UPDATE deliveries SET rule_id=? WHERE run_id=? AND handle=?", (rule_id, preview_run, h))
+            shown = self.store.get_state(f"outside_shown:{h}", {}) or {}
+            if shown.get(f"preview:{preview_run}"):   # finding 33: so are the preview's videos from YouTube
+                box = shown.setdefault(f"rule:{rule_id}", {})
+                box.update(shown.pop(f"preview:{preview_run}"))
+                self.store.set_state(f"outside_shown:{h}", shown)
             # 👍, 👎 and "more like 2" given on the preview belong to the rule it became
             self.store.x("UPDATE feedback SET rule_id=? WHERE handle=? AND rule_id IS NULL AND item_id IN "
                          "(SELECT item_id FROM deliveries WHERE run_id=?)", (rule_id, h, preview_run))
@@ -730,7 +779,7 @@ class HandlerMixin:
             return last
         return {"run_id": seen["run_id"], "rule_id": rows[0]["rule_id"], "items": [r["item_id"] for r in rows]}
 
-    def _feedback(self, person, kind, pick_number):
+    def _feedback(self, person, kind, pick_number, it=None, text=""):
         h = person["handle"]
         self.note(intent="feedback")
         last = self._answer_seen(h)
@@ -748,6 +797,19 @@ class HandlerMixin:
             spec = (self.store.get_state(f"lastspec:{h}") or {})
             words = " ".join(x for x in [last.get("goal") or "", spec.get("text") or ""] if x)
             interest, level = P.move_level(self.store, h, words, kind)
+            if spec and not self._over_cap(person):
+                # fix pass, finding 6: "too hard, something shorter" records the feedback AND sends one now, in one
+                # reply: the same request without what was shown, easiest first for "easier", with the change it
+                # carries ("shorter" is a length bound worked out by code from the message)
+                from .schema import Interpretation
+                more = it.also if it is not None and it.also is not None and it.also.intent == "more" else None
+                ask = Interpretation(intent="more", criteria=[*(it.criteria if it else []),
+                                                              *(more.criteria if more else [])][:5],
+                                     avoid=[*(it.avoid if it else []), *(more.avoid if more else [])][:8])
+                lead = T.level_moved_now(interest["topic"] if interest else None,
+                                         P.LEVEL_PLAIN[level] if interest else None, kind, T.SHORTER.search(text or ""))
+                self._tl.ran_more = True
+                return self._more(person, ask, text, lead=lead, easier=(kind == "easier"))
             if interest:
                 return self.send(h, T.level_moved(interest["topic"], P.LEVEL_PLAIN[level], kind))
         return self.send(h, T.FEEDBACK_REPLIES.get(kind, T.FEEDBACK_OTHER))

@@ -309,6 +309,9 @@ def prepare_library(lib, cap_usd, timeout=3600):
     return {"ok": ok, "message": "" if ok else str(st.get("message") or f"prepare ended ({code})")[:200]}
 
 
+PART = re.compile(r"^(.+?)-(\d{3})\.zip$", re.I)
+
+
 # ---------- the import ----------
 class Refresher:
     """Looks at the inboxes (poll), imports what it finds (import_files), switches the library, tells the person and
@@ -349,6 +352,20 @@ class Refresher:
             if os.path.abspath(path) not in self.ready and time.time() - _mtime(path) < self.settle:
                 continue   # still being copied in
             out.append(path)
+        # fix pass, finding 31: a Takeout export in parts (-001.zip, -002.zip) is imported in one go, once no new part
+        # of it has come for MVP_INBOX_PARTS_MINUTES; otherwise a second import would replace the first part's items
+        groups = {}
+        for path in out:
+            m = PART.match(os.path.basename(path))
+            if m:
+                groups.setdefault(m.group(1).lower(), []).append(path)
+        wait = config.INBOX_PARTS_MINUTES * 60
+        for name in os.listdir(d):   # parts still being copied count as new parts too
+            m = PART.match(name) or PART.match(re.sub(r"\.(part|tmp)$", "", name))
+            if m and m.group(1).lower() in groups:
+                p = os.path.join(d, name)
+                if time.time() - _mtime(p) < wait:
+                    out = [x for x in out if x not in groups[m.group(1).lower()]]
         return out
 
     def poll(self, now=None, force=False):
@@ -549,15 +566,20 @@ class Refresher:
             row.update(status="done", seconds=round(time.time() - t0, 1))
             row["id"] = _add_import(store, row)
             person = store.person(handle)
-            answers, nothing, ended = run_new_items(bot, person, fresh, bot.clock())
-            msg = T.import_done(dict(by_source), totals, refused=refused)
-            if nothing:   # at most once per import
-                msg += "\n" + T.nothing_new_matched(nothing)
-            if ended:
-                msg += "\n" + T.new_items_ended(ended)
-            bot.send(handle, msg)
-            for r, spec, m, run_id, after in answers:
-                _deliver_new(bot, person, r, spec, m, run_id, after)
+            held = {"fresh": sorted(fresh), "by_source": dict(by_source), "totals": totals, "refused": refused}
+            now = bot.clock()
+            if bot._held_now(person, now):
+                # fix pass, finding 32: in quiet hours or a snooze, the import's message and its new_items answers
+                # wait; the scheduler sends them when the quiet block (and the snooze) ends
+                prev = store.get_state(f"heldimport:{handle}") or {}
+                if prev:   # two imports in one night: one message, with every new item
+                    held["fresh"] = sorted(set(prev.get("fresh") or []) | set(held["fresh"]))
+                    for k, v in (prev.get("by_source") or {}).items():
+                        held["by_source"][k] = held["by_source"].get(k, 0) + v
+                    held["refused"] += prev.get("refused") or 0
+                store.set_state(f"heldimport:{handle}", held)
+            else:
+                announce_import(bot, person, held, now)
         for f in claimed:
             _remove(f)
         shutil.rmtree(work, ignore_errors=True)
@@ -594,6 +616,20 @@ def _add_import(store, row):
         return row["id"]
     return store.x(f"INSERT INTO imports({','.join(vals)}) VALUES({','.join('?' * len(vals))})",
                    tuple(vals.values())).lastrowid
+
+
+def announce_import(bot, person, held, now):
+    """The import's one message (counts) and the new_items answers on the items it added."""
+    h = person["handle"]
+    answers, nothing, ended = run_new_items(bot, person, set(held.get("fresh") or []), now)
+    msg = T.import_done(dict(held.get("by_source") or {}), held.get("totals") or {}, refused=held.get("refused") or 0)
+    if nothing:   # at most once per import
+        msg += "\n" + T.nothing_new_matched(nothing)
+    if ended:
+        msg += "\n" + T.new_items_ended(ended)
+    bot.send(h, msg)
+    for r, spec, m, run_id, after in answers:
+        _deliver_new(bot, person, r, spec, m, run_id, after)
 
 
 # ---------- new_items rules ----------

@@ -20,6 +20,49 @@ from .store import now_iso
 UNDO_WINDOW = timedelta(minutes=10)
 WORD = re.compile(r"[^\W_]+", re.UNICODE)
 SMALL = set("a an the my to of for on in at and".split())
+# fix pass, finding 3: "add oat milk and eggs to my grocery list" is two to-dos on the list "grocery". The list's name
+# never stays in an item's text, and a few fixed pairs stay one thing.
+LIST_TAIL = re.compile(r"\s+(?:to|on|onto|in|into|for)\s+(?:my|the|our)\s+((?:[^\W\d_][\w-]*\s+){0,2}?)"
+                       r"(?:to-?do\s+|todo\s+)?list\b.*$", re.I)
+LEAD_ADD = re.compile(r"^\s*(?:please\s+)?(?:add|put|jot down|jot|write down|stick|pop|throw)\s+", re.I)
+SPLIT = re.compile(r"\s*,\s*(?:and\s+|&\s+)?|\s+and\s+|\s*&\s*|\s*\+\s*", re.I)
+PAIRS = {"mac and cheese", "salt and pepper", "peanut butter and jelly", "fish and chips", "bread and butter",
+         "rock and roll", "pros and cons", "oil and vinegar", "black and white", "sweet and sour", "rice and beans",
+         "chips and salsa", "milk and cookies", "bacon and eggs", "ham and cheese", "spaghetti and meatballs",
+         "strawberries and cream", "cookies and cream", "pb and j", "fruit and nut", "salt and vinegar"}
+
+
+VERBS = set("""call buy get pick email text book pay clean fix send make finish do go take write read watch check ring
+    phone order return cancel renew wash cook bake visit meet tell ask help water feed walk mail post print sign file
+    submit prepare plan schedule book review practise practice study learn find look""".split())
+
+
+def split_todo(text):
+    """(items, list name or None): the things one to-do text names, without the list phrase."""
+    t = " ".join((text or "").split())
+    name = None
+    m = LIST_TAIL.search(t)
+    if m:
+        from .schema import list_name
+        name = list_name(m.group(1).strip() or "todo")
+        t = t[:m.start()]
+    t = LEAD_ADD.sub("", t).strip(" .,;")
+    if not t:
+        return [], name
+    low = t.lower()
+    if low in PAIRS or not SPLIT.search(t) or low.split()[0] in VERBS:   # "call mum and dad" is one thing to do
+        return [t], name
+    protected = low
+    for i, pair in enumerate(PAIRS):   # a fixed pair inside a longer list stays whole
+        protected = protected.replace(pair, pair.replace(" and ", f" \x00{i}\x00 "))
+    parts, out, pos = SPLIT.split(protected), [], 0
+    for part in parts:
+        part = re.sub(r" \x00\d+\x00 ", " and ", part).strip(" .,;")
+        if part:
+            k = low.find(part, pos)
+            out.append(t[k:k + len(part)] if k >= 0 else part)
+            pos = max(pos, k + len(part)) if k >= 0 else pos
+    return (out or [t]), name
 
 
 class TodoMixin:
@@ -88,9 +131,14 @@ class TodoMixin:
         if it.pick_number or it.what == "ingredients":
             return self._add_picks(person, [it.pick_number] if it.pick_number else None, name, it.what or "pick", due,
                                    tail=tail)
-        tid = self.store.add_todo(h, it.todo_text, name, due_at=due, at=now)
-        self._wrote(h, "todo_add", f"added to-do \"{it.todo_text}\" to the list \"{name}\"", {"ids": [tid]})
-        return self.send(h, T.todos_added([it.todo_text], name, say_time(due, now, person["timezone"]) if due else None)
+        texts, named = split_todo(it.todo_text)
+        if named and named != "todo" and name == "todo":
+            name = named
+        texts = texts or [it.todo_text]
+        ids = [self.store.add_todo(h, x, name, due_at=due, at=now) for x in texts]
+        self._wrote(h, "todo_add", f"added to-do{'s' if len(ids) > 1 else ''} " + "; ".join(f"\"{x}\"" for x in texts)
+                    + f" to the list \"{name}\"", {"ids": ids})
+        return self.send(h, T.todos_added(texts, name, say_time(due, now, person["timezone"]) if due else None)
                          + tail)
 
     def _answer_for(self, h, answer_ref=None):
@@ -239,7 +287,7 @@ class TodoMixin:
         by_platform = sorted(Counter(names.get(x.platform, x.platform) for x in items).items(), key=lambda kv: -kv[1])
         kinds = Counter(k for x in items for k in x.kinds if k in KIND_LABEL)
         by_kind = [(KIND_LABEL[k], n) for k, n in kinds.most_common()]
-        words = list(q.words) if q else []
+        words = [w for w in (q.words if q else []) if w.lower().strip() not in T.GENERIC_WORDS]
         matched = sum(1 for x in items if any(contains_word(x.caption, w) for w in words)) if words else None
         extra = None
         if q and q.by == "month":

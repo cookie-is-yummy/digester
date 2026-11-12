@@ -83,7 +83,16 @@ class OnboardingMixin:
             if datetime.fromisoformat(st["at"]) < now - timedelta(hours=config.ONBOARD_OFFER_HOURS):
                 self._set_onboard(h, "done", now)
                 return None
-            return self._onboard_choice(person, st, text, now)
+            ref = self._onboard_choice(person, st, text, now)
+            if ref is None:
+                # fix pass, finding 34: the offer closes once two other messages have come since, so a bare "2"
+                # much later is never read as a pick from it
+                others = (st.get("others") or 0) + 1
+                if others >= 2:
+                    self._set_onboard(h, "done", now)
+                else:
+                    self.store.set_state(f"onboard:{h}", dict(st, others=others))
+            return ref
         return None
 
     def _onboard_read(self, person, text, now):
@@ -233,6 +242,7 @@ class OnboardingMixin:
                 return self.send(h, T.which_pick(len(reqs)))
             r = reqs[n - 1]
             self.note(intent="ask")
+            self._set_onboard(h, "done", now)   # finding 34: the offer is used, so it is closed
             spec = RuleSpec.model_validate(r["spec"])
             msg, run_id, _ = self.run(person, spec, "ask", request_text=r["text"])
             return self.deliver(person, spec, msg, run_id, kind="ask", request_text=r["text"])

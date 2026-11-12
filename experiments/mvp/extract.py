@@ -29,11 +29,44 @@ LIST_HEAD = re.compile(r"^\W*(ingredients?|method|steps?|instructions?|direction
 
 
 def kinds_for(extract):
-    """The kinds one call asks for: a recipe ask (ingredients or steps) gets both, when both are in the text."""
+    """The kinds one call asks for: a recipe ask (ingredients) gets the steps too, when both are in the text. Steps
+    alone stay steps alone (fix pass, finding 12: a workout's steps were also asked for, and shown, as ingredients)."""
     ks = set(extract or [])
-    if ks & {"ingredients", "steps"}:
-        ks |= {"ingredients", "steps"}
+    if "ingredients" in ks:
+        ks.add("steps")
     return [k for k in ORDER if k in ks]
+
+
+# ---------- what kind of request it is (fix pass, findings 11, 12 and 28); code decides, from the person's words ----
+FOOD = re.compile(r"\b(recipes?|dish(?:es)?|dinners?|lunch(?:es)?|breakfasts?|brunch|meals?|cook\w*|bak(?:e|es|ed|ing)|"
+                  r"soups?|salads?|pasta|noodles?|sauces?|desserts?|snacks?|curr(?:y|ies)|stews?|bread|cakes?|cookies?|"
+                  r"smoothies?|chicken|beef|pork|tofu|rice|eggs?|vegan|vegetarian|ingredients?|food)\b", re.I)
+FITNESS = re.compile(r"\b(workouts?|exercises?|stretch\w*|yoga|pilates|hiit|warm-?ups?|abs|mobility|"
+                     r"cardio|gym|lifting|squats?|push-?ups?|fitness|routines?)\b", re.I)
+HOWTO = re.compile(r"\b(tutorials?|how[- ]to|how do i|guides?|lessons?|walk-?through|step[- ]by[- ]step|courses?|"
+                   r"projects?|build|make|model(?:ing|ling)?|draw\w*|paint\w*|knit\w*|sew\w*|crochet\w*)\b", re.I)
+
+
+def topic_kind(*texts):
+    """'food', 'fitness', 'making' or None, from the request's own words (goal, searches, the message)."""
+    t = " ".join(x for x in texts if x)
+    if FITNESS.search(t) and not re.search(r"\b(recipes?|ingredients?|dish(?:es)?|meals?)\b", t, re.I):
+        return "fitness"
+    if FOOD.search(t):
+        return "food"
+    if HOWTO.search(t):
+        return "making"
+    return None
+
+
+def default_extract(spec, *texts):
+    """The details a recommended pick gets when the person did not name any (finding 28): a recipe its ingredients
+    and steps, a workout its steps (shown as exercises), a tutorial or how-to its steps or key points."""
+    c = spec.content
+    if c.extract or c.source not in ("library", "recent"):
+        return list(c.extract)
+    kind = topic_kind(c.goal or "", *c.searches, *texts)
+    return {"food": ["ingredients", "steps"], "fitness": ["steps"], "making": ["steps", "key_points"]}.get(kind, [])
 
 
 def list_like(text):

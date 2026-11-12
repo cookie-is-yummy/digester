@@ -126,7 +126,10 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   `outside_searches.jsonl` beside the MVP ledger (`MVP_LEDGER_HOME`, day and time only), so the test page and the real
   bot share one quota. Needs `YOUTUBE_API_KEY`; `MVP_OUTSIDE=0` switches it off. When it cannot serve a request, the
   reply says why in one line. These finds are shown in the chat only: an answer that goes by email still shows them
-  in the thread, and "email me only new ones" says they were not emailed.
+  in the thread, and "email me only new ones" says they were not emailed. When someone wants something to do or make
+  and their saves hold fewer than 3 that clearly end with a finished result, the answer says so, shows the closest
+  from the saves, and adds this block without being asked (one search at most); a rule's preview then offers "Want
+  these … from YouTube as well as your saves?", and its YES starts the rule with them.
   Before anyone outside the founders gets these: a terms page linking YouTube's Terms of Service and a privacy note
   naming YouTube API Services (DESIGN.md section 11).
 - **The inbox** (`refresh.py`): `MVP_INBOX` (default `data/inbox/`) holds one folder per person (the handle's letters
@@ -138,7 +141,9 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   when the build succeeded is the person switched to the new library (the old folder is kept; a restart keeps the
   switch while `people.json` still names the old one); they get one message with the counts, and their "when I save
   something new" rules run once on the new items. An imported file is deleted; a refused or failed one goes to
-  `<inbox>/<person>/.failed/`, and an importer crash is said to the person like a failed build. An import cut off
+  `<inbox>/<person>/.failed/`, and an importer crash is said to the person like a failed build. A Takeout in parts
+  (`-001.zip`, `-002.zip`) waits until no new part has come for `MVP_INBOX_PARTS_MINUTES` (10) and is imported in one
+  go. An import that finishes in quiet hours or a snooze is announced (and its new-item rules run) when they end. An import cut off
   by a stop starts again at the next start (its half-built library is removed). If two people's handles give the same
   folder name, that folder is left alone and the upload box refuses it. Do not drop a real export there before the
   founders agree.
@@ -218,12 +223,14 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `ytinfo.py` | A YouTube candidate's length and description from the official `videos.list` (`YOUTUBE_API_KEY`), kept at most 30 days |
 | `outside.py` | New picks from outside the library: YouTube `search.list` with the person's own words, checked by `videos.list`; the sensitive-topic stop, the daily limits (with the shared count file) and the 24-hour cache |
 | `refresh.py` | The inbox per person, the import (demo importer, without the messages folder), the cost cap, the library switch, recovery of an import cut off by a stop, new_items rules, library_status, and the export routine with its reminders |
-| `compose.py`, `prompts/compose_v3.md` | The model chooses (verdicts clear / close / no, a backed "because", must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text; a reason may name a level only when one may be used); a cached answer per spec and candidates |
-| `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table |
+| `followup.py` | What code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
+| `compose.py`, `prompts/compose_v4.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); a cached answer per spec and candidates |
+| `lang.py` | The answer's fixed phrases in Spanish; any other language gets an all-English answer |
+| `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table; a recipe, workout or tutorial gets its details for the recommended pick even when none were asked for; when details are asked for, the best of the top 3 that has them all is recommended |
 | `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
 | `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
 | `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 254 offline tests |
+| `tests/` | 309 offline tests (`test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov) |

@@ -418,9 +418,30 @@ class Store:
                                           attempts, source))
 
     def purge_youtube(self, before):
-        """YouTube API data and anything derived from it, older than `before` (ISO), is deleted."""
+        """YouTube API data and anything derived from it, older than `before` (ISO), is deleted: the cache, the
+        details lines read from descriptions, and their copies in each person's state and kept answers (fix pass,
+        finding 24: facts:/lines:/linekinds: copies outlived the 30 days)."""
+        old = {r["item_id"] for r in self.q("SELECT item_id FROM facts WHERE source='youtube_api' AND at<?", (before,))}
         self.x("DELETE FROM youtube_cache WHERE fetched_at<?", (before,))
         self.x("DELETE FROM facts WHERE source='youtube_api' AND at<?", (before,))
+        if not old:
+            return
+        for row in self.q("SELECT key, value FROM state WHERE key LIKE 'facts:%' OR key LIKE 'lines:%' "
+                          "OR key LIKE 'linekinds:%'"):
+            try:
+                val = json.loads(row["value"])
+            except ValueError:
+                continue
+            if isinstance(val, dict) and old & set(val):
+                self.set_state(row["key"], {k: v for k, v in val.items() if k not in old})
+        for row in self.q("SELECT run_id, picks FROM answers WHERE picks LIKE '%\"facts\"%'"):
+            picks = json.loads(row["picks"] or "[]")
+            hit = False
+            for p in picks:
+                if p.get("item_id") in old and (p.get("facts") or p.get("lines")):
+                    p["facts"], p["lines"], p["line_kinds"], hit = {}, [], None, True
+            if hit:
+                self.x("UPDATE answers SET picks=? WHERE run_id=?", (json.dumps(picks), row["run_id"]))
 
     # caches keyed by a hash (sections 4 and 11)
     def cache_get(self, table, key, since):

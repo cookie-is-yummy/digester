@@ -101,19 +101,31 @@ def _library_stamp(lib):
         return "none"
 
 
+def _search(pool, lib, query):
+    """One search, never read as "nothing found" when it failed (fix pass, finding 23): the engine ranks the whole
+    library, so an empty list from a library that has items is a fault. It is tried once more, then it is an error
+    (the run fails and says "try again"; a timed send is retried), and it is never cached."""
+    r = pool.search(lib, query)
+    if not r.get("ids"):
+        r = pool.search(lib, query)
+        if not r.get("ids"):
+            raise RuntimeError("the search returned no ranking")
+    return r
+
+
 def ranked(pool, lib, query, store=None, now=None):
     """The engine's ranked IDs for one search text. The engine is deterministic for a text (consistency note); the
     same text on the same library build reuses the list (section 4), which also saves the search time."""
     if store is None or not config.RANKED_CACHE_HOURS:
-        return pool.search(lib, query)
+        return _search(pool, lib, query)
     now = now or datetime.now(timezone.utc)
     key = hashlib.sha256(json.dumps([os.path.abspath(lib), _library_stamp(lib), " ".join(query.lower().split()),
                                      config.SEARCH_DEPTH]).encode()).hexdigest()
     since = (now - timedelta(hours=config.RANKED_CACHE_HOURS)).astimezone(timezone.utc).isoformat(timespec="seconds")
     hit = store.cache_get("ranked_cache", key, since)
-    if hit is not None:
+    if hit is not None and hit.get("ids"):   # an empty list kept by an older build is never reused
         return {"ids": hit["ids"], "mode": hit.get("mode"), "cost_usd": 0.0, "cached": True}
-    r = pool.search(lib, query)
+    r = _search(pool, lib, query)
     store.cache_put("ranked_cache", key, {"ids": r["ids"], "mode": r.get("mode")}, at=now, library=lib, mode=r.get("mode"))
     return r
 
@@ -184,6 +196,8 @@ def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, 
         rows.sort(key=lambda x: (x[0], x[1]), reverse=True)
         return [it for *_, it in rows[:k]], {"cost_usd": 0.0, "modes": [], "fused": len(rows)}
     scores, cost, modes, cached = {}, 0.0, set(), 0
+    if not view.items:   # an empty library: nothing to rank (the only time no ranking is right)
+        return [], {"cost_usd": 0.0, "modes": [], "fused": 0, "cached": 0}
     for q in c.searches:
         r = ranked(pool, view.lib, q, store=store, now=now)
         cost += r["cost_usd"] or 0.0

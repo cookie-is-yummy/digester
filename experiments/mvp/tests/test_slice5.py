@@ -207,6 +207,7 @@ def test_sensitive_topic_no_key_off_and_instagram_only_say_so_in_one_line(yt, mo
         "I can't look for new things outside your saves right now.")
     assert not fake.calls
     monkeypatch.setattr(config, "OUTSIDE_ON", True)
+    yt["bot"].store.set_state(f"lastspec:{H}", None)   # after an answer this is "more" with its topic (finding 27)
     assert say(yt, "only new stuff, not from my saves", outside_ask(outside="only")) == \
         "Tell me what kind of thing you want, and I'll look for new ones on YouTube."
     assert not fake.calls
@@ -263,16 +264,14 @@ def test_a_rule_does_not_show_the_same_outside_video_twice(yt):
     spec = pasta_spec({"type": "schedule", "days": ["FRI"], "time": "19:00"})
     spec["content"]["outside"] = "some"
     say(yt, "a pasta recipe every friday at 7pm, plus some new ones", {"intent": "new_rule", "spec": spec})
+    preview = [p["video_id"] for p in yt["replies"][-1].parts if p.get("outside")]
     say(yt, "yes", {"intent": "confirm"})
     rule = bot.store.rules(H)[0]
     clock[0] = datetime.fromisoformat(rule["next_run_at"]) + timedelta(minutes=1)
     assert bot.tick() == 1
     one = [p["video_id"] for p in yt["replies"][-1].parts if p.get("outside")]
-    rule = bot.store.rule(rule["id"])
-    clock[0] = datetime.fromisoformat(rule["next_run_at"]) + timedelta(minutes=1)
-    assert bot.tick() == 1
-    two = [p["video_id"] for p in yt["replies"][-1].parts if p.get("outside")]
-    assert one == ["VIDaaaaaa01", "VIDaaaaaa02", "VIDaaaaaa03"] and two == ["VIDaaaaaa04"]
+    # fix pass, finding 33: the preview's videos count as shown by the rule, so its first send has only new ones
+    assert preview == ["VIDaaaaaa01", "VIDaaaaaa02", "VIDaaaaaa03"] and one == ["VIDaaaaaa04"]
 
 
 # ---------- keeping the library fresh ----------
@@ -304,6 +303,8 @@ def fresh(env, tmp_path):
     (env["lib"] / "r7").mkdir()
     (env["lib"] / "r7" / "router.npz").write_bytes(b"synthetic")
     from mvp.refresh import Refresher, inbox_dir
+    from mvp import config
+    config.INBOX_PARTS_MINUTES = 0   # a Takeout in parts waits for its last part: test_fixpass.py
     env["bot"].refresher = Refresher(env["bot"], prepare=fake_prepare(), background=False, settle_seconds=0)
     env["inbox"] = inbox_dir(H)
     os.makedirs(env["inbox"])

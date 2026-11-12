@@ -198,11 +198,38 @@ class OutputsMixin:
             picks.append(rec)
         if not picks:
             return None, False, None, T.NO_PICK_TO_ADD
+        if what == "ingredients":
+            self._ingredients_now(h, picks, view, is_last)
         answer = snap or {"run_id": last["run_id"], "rule_id": last.get("rule_id"), "kind": "picks",
                           "goal": (cur or {}).get("goal"), "parts": [], "picks": picks}
         if not answer.get("parts"):
             whole = False   # nothing kept to send whole: the picks one by one
         return picks, whole, answer, None
+
+    def _ingredients_now(self, h, picks, view, is_last):
+        """Fix pass, finding 28: "add its ingredients to my list" when no ingredient lines were found yet (the answer
+        did not ask for details): the details step runs now on the pick's whole text, checked as always."""
+        from .extract import details
+        person = self.store.person(h)
+        for rec in picks:
+            if (rec.get("facts") or {}).get("ingredients") or (rec.get("line_kinds") == ["ingredients"]
+                                                                and rec.get("lines")):
+                continue
+            it = view.get(rec["item_id"])
+            if it is None or self._over_cap(person):
+                continue
+            now = self.clock()
+            extra = self._youtube().details([it], now=now) if it.platform == "youtube" else {}
+            try:
+                got, _ = details(it, ["ingredients"], view.lib, store=self.store, person=h, extra=extra, now=now)
+            except Exception:  # noqa: BLE001 - then nothing is added, and the reply says so
+                continue
+            if got.get("ingredients"):
+                rec["facts"] = dict(rec.get("facts") or {}, **{k: v for k, v in got.items() if v})
+                if is_last:
+                    fs = self.store.get_state(f"facts:{h}", {}) or {}
+                    fs[rec["item_id"]] = rec["facts"]
+                    self.store.set_state(f"facts:{h}", fs)
 
     def _plain_answer(self, h):
         """The newest answer when it is a reminder or a to-do list sent after the last picks ("email me that" after
@@ -327,15 +354,21 @@ class OutputsMixin:
         """email.send with no confirmed address: the email waits, and the line asks for the address (or the code)."""
         h = person["handle"]
         keep = now - timedelta(hours=config.EMAIL_WAIT_HOURS)
-        wait = [w for w in (self.store.get_state(f"emailwait:{h}") or []) if datetime.fromisoformat(w["at"]) > keep]
-        wait = (wait + [{"content": content, "run_id": run_id, "at": now_iso(now)}])[-config.EMAIL_WAIT_MAX:]
+        held = self.store.get_state(f"emailwait:{h}") or []
+        wait = [w for w in held if datetime.fromisoformat(w["at"]) > keep]
+        expired = len(held) - len(wait)
+        wait = wait + [{"content": content, "run_id": run_id, "at": now_iso(now)}]
+        over = max(0, len(wait) - config.EMAIL_WAIT_MAX)
+        wait = wait[-config.EMAIL_WAIT_MAX:]
         self.store.set_state(f"emailwait:{h}", wait)
+        # fix pass, finding 30: an email dropped from the queue (too old, or over the cap) is said, once, here
+        gone = (" " + T.emails_dropped(expired, over)) if (expired or over) else ""
         addr, _ = self.store.email_of(h)
         line = self._unconfirmed_line(h, addr, now)
         if line:
-            return Outcome("waiting", line=line)
+            return Outcome("waiting", line=line + gone)
         self.store.set_state(f"emailask:{h}", now_iso(now))
-        return Outcome("waiting", line=T.EMAIL_ASK)
+        return Outcome("waiting", line=T.EMAIL_ASK + gone)
 
     def _set_email(self, person, email, now, again=False, reply=True):
         """Stores the address unconfirmed and sends a new 6-digit code to it. The reply says what changed. With
@@ -408,11 +441,13 @@ class OutputsMixin:
         h = person["handle"]
         to, ok = self.store.email_of(h)
         keep = now - timedelta(hours=config.EMAIL_WAIT_HOURS)
-        wait = [w for w in (self.store.get_state(f"emailwait:{h}") or []) if datetime.fromisoformat(w["at"]) > keep]
+        held = self.store.get_state(f"emailwait:{h}") or []
+        wait = [w for w in held if datetime.fromisoformat(w["at"]) > keep]
+        expired = len(held) - len(wait)
         self.store.set_state(f"emailwait:{h}", None)
+        lines = [T.emails_dropped(expired, 0)] if (ok and expired) else []   # finding 30: said once, never silently
         if not ok or not wait:
-            return ""
-        lines = []
+            return ("\n" + "\n".join(lines)) if lines else ""
         for w in wait:
             c = w["content"]
             try:

@@ -194,11 +194,11 @@ def test_the_same_request_reuses_its_interpretation_for_6_hours(env, monkeypatch
     assert len(calls) == 1 and c2 == 0.0 and a.spec.stored() == b.spec.stored()
     rule = {"id": 1, "status": "active", "spec": pasta_spec()}
     I.interpret("pasta ideas?", person, [rule], None, None, now + timedelta(hours=5), store=store)
-    assert len(calls) == 2                                                    # other rules: asked again
+    assert len(calls) == 1          # fix pass, finding 20: an ask is reused whatever rules exist (test_fixpass.py)
     I.interpret("pasta ideas?", dict(person, handle="+1999"), [], None, None, now, store=store)
-    assert len(calls) == 3                                                    # another person
+    assert len(calls) == 2                                                    # another person
     I.interpret("pasta ideas?", person, [], None, None, now + timedelta(hours=6, minutes=1), store=store)
-    assert len(calls) == 4                                                    # older than 6 hours
+    assert len(calls) == 3                                                    # older than 6 hours
 
 
 # ---------- the evaluation runner's matcher ----------
@@ -275,7 +275,7 @@ def test_runner_end_to_end_with_a_fake_model(tmp_path, monkeypatch):
 def test_a_preview_says_the_schedule_and_the_first_send(env):
     env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta A", "why": "Good.", "verdict": "clear"})
     msg = say(env, "pasta every friday at 7pm", {"intent": "new_rule", "spec": pasta_spec()})
-    assert "Every Friday at 7pm I'll send" in msg and "The first one would come tomorrow at 7pm." in msg
+    assert "Every Friday at 7pm, I'll send" in msg and "The first one would come tomorrow at 7pm." in msg
     window = pasta_spec({"type": "schedule", "days": EVERY_DAY, "window": ["18:00", "20:00"]})
     msg = say(env, "pasta every evening between 6 and 8", {"intent": "new_rule", "spec": window})
     assert "The first one would come today, between 6pm and 8pm." in msg   # the day, never the drawn minute
@@ -505,10 +505,11 @@ def test_feedback_kinds_more_with_a_change_and_the_language(env):
     env["state"]["answers"]["mvp_compose"] = lemon_pick()
     say(env, "pasta, no cream", dict(ask_pasta(), lang="es"))
     assert bot.store.one("SELECT lang FROM runs WHERE kind='ask'")["lang"] == "es"
-    assert say(env, "too easy", {"intent": "feedback", "feedback": "harder"}).startswith("Noted. Ask for \"a harder one\"")
+    assert say(env, "too easy", {"intent": "feedback", "feedback": "harder"}).startswith("Noted. Here's a harder one:")
     assert say(env, "made it!", {"intent": "feedback", "feedback": "done", "pick_number": 1}).startswith("Nice!")
+    shown = bot.store.last_answer(H)["items"][0]    # the harder one sent with the feedback (finding 6)
     say(env, "never show me that", {"intent": "feedback", "feedback": "hide", "pick_number": 1})
-    assert "itm_a" in bot.store.disliked(H)
+    assert shown in bot.store.disliked(H)
     seen = []
     env["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": []})[1]
     say(env, "another but without garlic", {"intent": "more", "avoid": ["garlic"], "criteria": ["shorter"]})

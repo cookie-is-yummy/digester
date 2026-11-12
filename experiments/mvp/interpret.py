@@ -168,12 +168,24 @@ def _grounding(it: Interpretation, message):
 ABOUT_LAST = ("follow_up", "act_on_last")
 
 
-def cache_key(text, person, rules, pending, now, todos=(), about=(), last_write=None):
+# forms that never refer to the person's rules (fix pass, finding 20): an ask, a to-do, a reminder or a new rule is
+# read the same whatever rules exist, so its cached reading is reused after a rule is added or changed
+RULE_FREE = {"ask", "new_rule", "todo_add", "todo_list", "todo_done", "todo_remove", "todo_due", "profile_show",
+             "profile_update", "set_email", "library_status", "library_stats", "help", "chat", "set_quiet_hours",
+             "snooze", "set_timezone", "follow_up", "more", "feedback"}
+
+
+def rule_free(it):
+    return all(x.intent in RULE_FREE and not x.edits_pending and x.rule_number is None
+               for x in [it] + ([it.also] if it.also else []))
+
+
+def cache_key(text, person, rules, pending, now, todos=(), about=(), last_write=None, with_rules=True):
     local = now.astimezone(ZoneInfo(person["timezone"])).date().isoformat()
     parts = {
         "v": config.PROMPT_INTERPRET, "who": person["handle"], "text": " ".join(text.lower().split()), "day": local,
         "tz": person["timezone"],
-        "rules": [[r["id"], r["status"], r["spec"]] for r in rules],
+        "rules": [[r["id"], r["status"], r["spec"]] for r in rules] if with_rules else "any",
         "pending": [pending["kind"], pending["payload"].get("spec"), pending["payload"].get("draft")] if pending else None,
         "todos": [[t.get("id"), t["text"], t.get("list"), t.get("due_at")] for t in todos],
         "about": list(about),
@@ -238,15 +250,50 @@ def _fill_raw(raw):
     return raw
 
 
+# words that only say "give me one" (fix pass, finding 2): a must-have made of these alone is not a must-have
+FILLER_CRITERIA = set("""another more one ones next else different new newer something anything other others please pls
+    again give me show send a an the some pick picks option options thing things try i want like this that these those
+    just same kind sort""".split())
+FINISHED_BY_TOPIC = {"food": "ends with a dish you can eat", "fitness": "a full routine from start to finish",
+                     "making": "walks through one whole project from start to finish"}
+_CRIT_TOPIC = [("food", re.compile(r"\b(dish|eat|meal|food|recipe)\b", re.I)),
+               ("fitness", re.compile(r"\b(routine|workout|exercise)\b", re.I))]
+
+
+def clean_criteria(criteria, *texts):
+    """Must-haves as code keeps them: never only filler words ("another" is not a must-have), and a finished-result
+    must-have worded for the request's own topic (finding 11: a workout's "full routine from start to finish" was
+    used for Blender tutorials)."""
+    from .compose import FINISHED
+    from .extract import topic_kind
+    kind = topic_kind(*texts)
+    out = []
+    for cr in criteria:
+        words = WORD.findall(cr.lower())
+        if not words or all(w in FILLER_CRITERIA for w in words):
+            continue
+        if FINISHED.search(cr) and kind in FINISHED_BY_TOPIC:
+            own = next((k for k, rx in _CRIT_TOPIC if rx.search(cr)), "making")
+            if own != kind:
+                cr = FINISHED_BY_TOPIC[kind]
+        if cr not in out:
+            out.append(cr)
+    return out
+
+
 def _from_message(x: Interpretation, message):
     """Facts the message states in so many words, filled when the form left them out: the saved or watched kinds in
-    full, a named list ("on my packing list"), and ingredients asked for by name."""
+    full, a named list ("on my packing list"), and ingredients asked for by name. Must-haves are cleaned (above)."""
     if x.spec is not None:
         c = x.spec.content
         if c.kinds == ["save"]:
             c.kinds = list(SAVED_KINDS)
         elif c.kinds == ["watch"]:
             c.kinds = list(WATCHED_KINDS)
+        if c.criteria:
+            c.criteria = clean_criteria(c.criteria, c.goal or "", *c.searches, message)
+    if x.criteria:
+        x.criteria = clean_criteria(x.criteria)
     adds = x.intent in ("todo_add", "todo_list") or (x.intent == "act_on_last"
                                                      and any(a.action == "todo.add" for a in x.actions))
     if adds and not x.todo_list:
@@ -303,14 +350,18 @@ THAT_REF = re.compile(r"^\W*(?:(?:please|pls|can you|could you)\s+)?" + AGAIN + 
 ORDINAL = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5}
 
 
-def later_on_last(it: Interpretation, message, last):
-    """Found live: "remind me of the second one tonight at 8" came back as a new library search at that time, and on
-    another run as a reminder whose text was "the second one". A one-time send whose message points at a pick of the
-    last answer (or at the answer: "send me that tonight") is act_on_last with that pick and that time, so the pick
-    itself is sent and nothing is searched again."""
+REMIND = re.compile(r"\bremind me (?:of|about)\b", re.I)
+CALENDAR_WORD = re.compile(r"\bcalendar\b|\bcal\b", re.I)
+
+
+def later_on_last(it: Interpretation, message, last, now=None, tzname=None):
+    """Found live: "remind me of the second one tonight at 8" came back in a different form from run to run: a new
+    library search at that time, a reminder whose text was "the second one", a to-do with a due time, or act_on_last
+    with the time in its calendar params. A message that points at a pick of the last answer (or at the answer: "send
+    me that tonight") plus a time always ends as act_on_last with that pick and that time, so the pick itself is sent
+    and nothing is searched again (fix pass, finding 29)."""
     items = (last or {}).get("items") or []
-    if not items or it.intent != "new_rule" or it.spec is None or it.spec.when.type != "once" \
-            or it.spec.content.source not in ("library", "note"):
+    if not items:
         return it
     m = PICK_REF.search(message)
     n = None
@@ -321,8 +372,39 @@ def later_on_last(it: Interpretation, message, last):
             return it
     elif not THAT_REF.search(message):
         return it
-    return Interpretation(intent="act_on_last", actions=[a.model_dump() for a in it.spec.do], pick_number=n,
-                          when=it.spec.stored()["when"], answer_ref="last", profile_note=it.profile_note, lang=it.lang)
+    remind = bool(REMIND.search(message))
+    when, actions = None, None
+    if it.intent == "new_rule" and it.spec is not None and it.spec.when.type == "once" \
+            and it.spec.content.source in ("library", "note"):
+        when, actions = it.spec.stored()["when"], [a.model_dump() for a in it.spec.do]
+    elif it.intent == "todo_add" and (it.due or it.in_minutes) and remind and not it.todo_list:
+        if it.in_minutes:
+            when = {"type": "once", "in_minutes": it.in_minutes}
+        elif len(it.due) > 10:
+            when = {"type": "once", "date": it.due[:10], "time": it.due[11:16]}
+        actions = [{"action": "message.send"}]
+    elif it.intent == "act_on_last":
+        when = it.when.model_dump(exclude_none=True) if it.when is not None else None
+        actions = [a.model_dump() for a in it.actions]
+        cal = next((a for a in it.actions if a.action == "calendar.add"), None)
+        if when is None and remind and cal is not None and cal.params.get("time") and now is not None and tzname:
+            day = cal.params.get("date") or now.astimezone(ZoneInfo(tzname)).date().isoformat()
+            when = {"type": "once", "date": day, "time": cal.params["time"]}
+        if when is None:
+            if n and it.pick_number != n:   # "email me the second one": the pick the message names
+                it.pick_number = n
+            return it
+    if when is None or actions is None:
+        return it
+    if remind:   # "remind me of" sends the pick here; a calendar entry only when they name the calendar
+        actions = [a for a in actions if a.get("action") != "calendar.add" or CALENDAR_WORD.search(message)]
+        if not any(a.get("action") in ("message.send", "email.send") for a in actions):
+            actions.insert(0, {"action": "message.send"})
+    out = Interpretation(intent="act_on_last", actions=actions, pick_number=n, when=when, answer_ref="last",
+                         profile_note=it.profile_note, lang=it.lang)
+    if out.when is not None and out.when.in_minutes and now is not None and tzname:
+        resolve_relative(out.when, now, tzname)
+    return out
 
 
 def settle(raw, message, rules, now, tzname):
@@ -338,13 +420,16 @@ def settle(raw, message, rules, now, tzname):
 def interpret(text, person, rules, pending, last, now, todos=(), last_write=None, about=(), store=None):
     """Returns (Interpretation, cost_usd). With `store`, the same request reuses the same interpretation (6 hours)."""
     key = cache_key(text, person, rules, pending, now, todos, about, last_write)
-    hit = _cached(store, key, now)
-    if isinstance(hit, dict):
+    free_key = cache_key(text, person, rules, pending, now, todos, about, last_write, with_rules=False)
+    for k, need_free in ((free_key, True), (key, False)):
+        hit = _cached(store, k, now)
+        if not isinstance(hit, dict):
+            continue
         # rows written before the last answer was recorded beside the form hold the bare form
         raw, cached_last = (hit["form"], hit.get("last")) if "form" in hit and "intent" not in hit else (hit, None)
         try:
-            it = later_on_last(settle(raw, text, rules, now, person["timezone"]), text, last)
-            if _still_good(it, cached_last, last, now, person["timezone"]):
+            it = later_on_last(settle(raw, text, rules, now, person["timezone"]), text, last, now, person["timezone"])
+            if (rule_free(it) or not need_free) and _still_good(it, cached_last, last, now, person["timezone"]):
                 return it, 0.0
         except ValidationError:
             pass   # a form that no longer validates (the rules changed under it) is asked for again
@@ -359,14 +444,14 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
                                seed=config.INTERPRET_SEED)
         cost += c
         try:
-            it = later_on_last(settle(raw, text, rules, now, person["timezone"]), text, last)
+            it = later_on_last(settle(raw, text, rules, now, person["timezone"]), text, last, now, person["timezone"])
             err = _grounding(it, text)
             if err and attempt == 0:
                 continue
             if err:   # still not their words: their whole message is used instead, never words they did not write
                 it = _use_message(it, text)
             else:
-                _remember(store, key, person["handle"], raw, now, last)
+                _remember(store, free_key if rule_free(it) else key, person["handle"], raw, now, last)
             return it, cost
         except ValidationError as e:
             err = "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors()[:4])

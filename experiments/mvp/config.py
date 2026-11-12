@@ -16,7 +16,7 @@ PROMPT_INTERPRET = "interpret_v3"   # a v4 (profile rules in the prompt) scored 
 INTERPRET_TEMPERATURE = 0     # the most deterministic settings the model accepts (DESIGN.md sections 4 and 11)
 INTERPRET_SEED = 7
 INTERPRET_CACHE_HOURS = 6     # the same request from the same person reuses its interpretation (section 4)
-PROMPT_COMPOSE = "compose_v3"  # v2 plus the finished-result must-have and the person's level (slice 6)
+PROMPT_COMPOSE = "compose_v4"  # v3 with "because" as a bare clause and no internal words (fix pass, findings 7, 8, 37)
 COMPOSE_TEMPERATURE = 0       # the interpreter's settings, for the same reason
 COMPOSE_SEED = 7
 PROMPT_EXTRACT = "extract_v1"  # details on the full text, one call per picked item, cached (section 4)
@@ -69,6 +69,7 @@ INBOX = os.path.abspath(os.environ.get("MVP_INBOX", os.path.join(REPO, "data", "
 LIBRARY_ROOT = os.environ.get("MVP_LIBRARY_ROOT")   # where new libraries go; unset = beside the person's current one
 INBOX_MINUTES = float(os.environ.get("MVP_INBOX_MINUTES", "3"))   # the scheduler looks at the inboxes this often
 INBOX_SETTLE_SECONDS = float(os.environ.get("MVP_INBOX_SETTLE_SECONDS", "60"))  # a file must be unchanged this long
+INBOX_PARTS_MINUTES = float(os.environ.get("MVP_INBOX_PARTS_MINUTES", "10"))   # a Takeout in parts waits for its last part
 IMPORT_CAP_USD = float(os.environ.get("MVP_IMPORT_CAP_USD", "1.50"))   # one library build (its embeddings) at most
 UPLOAD_MAX_MB = int(os.environ.get("MVP_UPLOAD_MAX_MB", "2048"))      # the test page's upload box
 INBOX_EMAIL = os.environ.get("MVP_INBOX_EMAIL")     # the bot's inbox account a tester shares a Drive folder with

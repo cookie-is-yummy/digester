@@ -9,9 +9,17 @@ No "Why:" label.
 A reply is a list of parts: {"type": "text", "text"} and {"type": "link", "url", "title", "platform", "video_id"}.
 `Reply` joins with plain strings (`head + reply + tail`), so callers that add a line keep working.
 """
+import re
 from datetime import datetime
 
+from . import lang as L
+
 LABEL = {"ingredients": "Ingredients", "steps": "Steps", "key_points": "Key points"}
+KIND_PLURAL = {"ingredients": "The ingredients", "steps": "The steps", "key_points": "The key points"}
+# a clause that can follow "because": it starts with a subject (finding 8); anything else follows a colon
+SUBJECT = re.compile(r"^(?:it|it's|it’s|its|you|you'll|you're|you’re|your|the|this|these|there|they|all|both|each|"
+                     r"every|one|he|she|we)\b", re.I)
+_ENDED = re.compile(r"[.!?…][\"'”’)\]]*$")
 HOW = {"save": "saved", "collection": "put in a collection", "share_self": "sent to yourself",
        "playlist": "added to a playlist", "like": "liked", "watch": "watched", "view": "viewed"}
 HOW_ORDER = ["share_self", "save", "collection", "playlist", "like", "watch", "view"]
@@ -91,8 +99,9 @@ def joined(x):
 
 
 # ---------- words ----------
-def when_kept(it, now=None):
+def when_kept(it, now=None, lang=None):
     """'which you sent to yourself in July', 'which you saved in March 2025': the strongest way they kept it."""
+    t = L.table(lang)
     kind = next((k for k in HOW_ORDER if k in it.kinds), None)
     if not kind:
         return ""
@@ -100,13 +109,13 @@ def when_kept(it, now=None):
     try:
         d = datetime.fromisoformat(str(day)[:10])
     except (TypeError, ValueError):
-        return f"which you {HOW[kind]}"
+        return t["kept_plain"].format(how=t["how"][kind])
     this_year = (now or datetime.now()).year == d.year
-    return f"which you {HOW[kind]} in {d.strftime('%B') if this_year else d.strftime('%B %Y')}"
+    return t["kept"].format(how=t["how"][kind], when=L.month(d, lang, not this_year))
 
 
-def by(it):
-    return f" by {it.creator}" if it.creator else ""
+def by(it, lang=None):
+    return L.table(lang)["by"].format(creator=it.creator) if it.creator else ""
 
 
 def link_part(it, title):
@@ -130,51 +139,121 @@ def in_video(pick, extract):
     return asked[0]
 
 
-def details_lines(pick, extract):
+def end_sentence(s):
+    """A full stop unless the sentence already ends with one (also before a closing quote: finding 9)."""
+    s = s.rstrip()
+    return s if _ENDED.search(s) else s + "."
+
+
+def kind_lines(kind, lines, label=True, lang=None):
+    out = [f"{L.table(lang)['label'][kind]} ({len(lines)}):"] if label else []
+    if kind == "steps":
+        out.extend(f"{i}. {line}" for i, line in enumerate(lines, 1))
+    else:
+        out.extend(f"• {line}" for line in lines)
+    return out
+
+
+def details_lines(pick, extract, asked=None, lang=None):
     """The checked lines under their labels, counted here; for Instagram with nothing written, one plain line; for
-    YouTube with nothing written, nothing (the video may well show it)."""
+    YouTube with nothing written, nothing (the video may well show it). Ingredients only for a food request, and a
+    line is never shown under two labels (finding 12). A kind the person asked for that the post does not write out
+    while another kind is: one honest line (finding 16)."""
+    t = L.table(lang)
     out = []
     facts = pick.get("facts") or {}
-    shown = False
+    food = "ingredients" in (extract or [])
+    shown, seen = False, set()
     for kind in [k for k in ("ingredients", "steps", "key_points") if k in facts or k in (extract or [])]:
-        lines = facts.get(kind) or []
+        if kind == "ingredients" and not food:
+            continue
+        lines = [x for x in facts.get(kind) or [] if x not in seen]
+        seen.update(lines)
         if not lines:
             continue
         shown = True
-        out.append(f"{LABEL[kind]} ({len(lines)}):")
-        if kind == "steps":
-            out.extend(f"{i}. {line}" for i, line in enumerate(lines, 1))
-        else:
-            out.extend(f"• {line}" for line in lines)
+        out.extend(kind_lines(kind, lines, lang=lang))
     if not shown and pick.get("lines"):   # lines found before (a follow-up), kind unknown
-        out.append(f"Details ({len(pick['lines'])}):")
+        out.append(f"{t['label']['details']} ({len(pick['lines'])}):")
         out.extend(f"• {line}" for line in pick["lines"])
         shown = True
     kind = None if shown else in_video(pick, extract)
     if kind:
-        out.append(IN_VIDEO[kind])
+        out.append(t["in_video"][kind])
+    elif shown and pick["item"].platform == "instagram":
+        for k in asked or []:
+            if k in facts and not facts.get(k) and (k != "ingredients" or food):
+                out.append(t["not_written"][k])
     return out
 
 
-def alt_note(pick, extract):
+def alt_note(pick, extract, lang=None):
     """The one line after an alternative: what is written out (counted from checked lines), else its reason."""
+    t = L.table(lang)
     facts = pick.get("facts") or {}
     ing, steps, keys = facts.get("ingredients") or [], facts.get("steps") or [], facts.get("key_points") or []
-    if ing:
+    if ing and "ingredients" in (extract or []):
         amounts = sum(any(ch.isdigit() for ch in line) for line in ing) * 2 >= len(ing)
-        what = "the ingredients and steps are" if steps else "the ingredients are"
-        return f"{what} written out" + (", with amounts" if amounts else "")
+        return (t["alt_ing_steps"] if steps else t["alt_ing"]) + (t["amounts"] if amounts else "")
     if steps:
-        return "the steps are written out"
+        return t["alt_steps"]
     if keys:
-        return "the tips are written out"
+        return t["alt_keys"]
     if in_video(pick, extract) in ("ingredients", "steps"):
-        return "the recipe is in the video"
-    return pick["because"] if pick.get("because_backed") else ""
+        return t["alt_video"]
+    return pick["because"] if pick.get("because_backed") and pick.get("because") else ""
 
 
-def picks_message(result, spec, footer=None, now=None):
+def pick_sentence(lead, p, now=None, lang=None):
+    """'I recommend One Pot Pasta by @chef (9 minutes), which you saved in March, because it takes 15 minutes.' The
+    reason only when it is backed (finding 10); after "because" only a full clause, else after a colon (finding 8)."""
+    t = L.table(lang)
+    it = p["item"]
+    kept = when_kept(it, now, lang)
+    length = L.length(p.get("length_text"), lang)
+    s = f"{lead} {p['title']}{by(it, lang)}" + (f" ({length})" if length else "")
+    if kept:
+        s += f", {kept}"
+    b = p["because"] if p.get("because_backed") and p.get("because") else None
+    if b:
+        subject = SUBJECT.match(b) or L.code(lang) is not None   # the subject words are English ones
+        s += ((f", {t['because']} " if kept else f" {t['because']} ") + b) if subject else (": " + b)
+    return end_sentence(s)
+
+
+def criterion_phrase(cr, lang=None, no=False):
+    """A must-have as it reads in a sentence about the picks (finding 11)."""
+    t = L.table(lang)
+    low = cr.lower()
+    if re.search(r"\b(dish|eat|meal|recipe)\b", low) and re.search(r"finish|end|whole|full|complete", low):
+        return t["ph_recipe"]
+    if re.search(r"\b(routine|workout)\b", low) and re.search(r"finish|end|whole|full|complete", low):
+        return t["ph_routine"]
+    if re.search(r"start to finish|finished|ends? with|whole project|complete project", low):
+        return t["ph_project"]
+    m = re.match(r"under (\d+) minutes$", low)
+    if m:
+        return t["ph_under"].format(n=m.group(1))
+    return t["ph_fits_no" if no else "ph_fits"].format(cr=cr)
+
+
+def intro_line(result, spec, lang=None):
+    """The opening line: the composer's, when it passed the checks, else one built here (finding 37)."""
+    t = L.table(lang)
+    if result.get("intro"):
+        return end_sentence(result["intro"])
+    goal = (spec.content.goal or "").strip()
+    if re.match(r"^(a|an|some)\s", goal, re.I):
+        return t["intro_a"].format(goal=goal)
+    return t["intro_plain"] if not goal else t["intro_for"].format(goal=goal)
+
+
+def picks_message(result, spec, footer=None, now=None, extract=None, lang=None):
+    """The answer. `lang`: the person's language when the phrase table holds it (lang.py); else English."""
+    t = L.table(lang)
+    lang = lang if L.supported(lang) else None
     c = spec.content
+    extract = list(c.extract if extract is None else extract)
     picks, wider = result["picks"], result.get("wider") or []
     parts = []
     text = []
@@ -186,54 +265,49 @@ def picks_message(result, spec, footer=None, now=None):
 
     first = picks[0]
     it = first["item"]
-    kept = when_kept(it, now)
-    where = f"{by(it)}, {kept}," if kept else f"{by(it)},"
-    because = first["because"]
-    if not first.get("because_backed") and kept:   # the plain clause; how they kept it is already in the sentence
-        because = because.split(", and you ")[0]
     unknown = list(result.get("unknown_criteria") or [])
     if result.get("closest"):
         missing = result.get("missing") or []
         if missing:
             cr, ans = missing[0] if isinstance(missing[0], (list, tuple)) else (missing[0], "unknown")
-            if cr in unknown:   # said once, here, with the reason
+            if cr in unknown:   # said once, here
                 unknown.remove(cr)
-                text.append(f"None of what I found clearly meets \"{cr}\": the posts don't say.")
-            else:
-                text.append(f"None of what I found {'meets' if ans == 'no' else 'clearly meets'} \"{cr}\".")
+            phrase = criterion_phrase(cr, lang, no=(ans == "no"))
+            lead = t["lead_no" if ans == "no" else "lead_unknown"].format(phrase=phrase)
+            text.append(pick_sentence(lead, first, now, lang))
         else:
-            text.append(f"Nothing I found is a clear fit for \"{c.goal}\".")
-        text.append("")
-        text.append(f"The closest I have is {first['title']}{where} because {because}.")
-    else:
-        if result.get("intro"):
-            text.append(result["intro"])
+            text.append(t["no_clear"].format(goal=c.goal))
             text.append("")
-        text.append(f"I recommend {first['title']}{where} because {because}.")
+            text.append(pick_sentence(t["closest"], first, now, lang))
+    else:
+        text.append(intro_line(result, spec, lang))
+        text.append("")
+        text.append(pick_sentence(t["recommend"], first, now, lang))
     if result.get("level_note"):   # slice 6: once per topic while the level is a guess
         text.append(result["level_note"])
     flush()
     if it.url:
         parts.append(link_part(it, first["title"]))
-    text.extend(details_lines(first, c.extract))
+    text.extend(details_lines(first, extract, asked=c.extract, lang=lang))
     if len(picks) > 1:
         text.append("")
-        text.append("Alternatively, try these:")
+        text.append(t["or_close"] if result.get("closest") else t["or_try"])
         for p in picks[1:]:
-            note = alt_note(p, c.extract)
-            text.append(f"• {p['title']}{by(p['item'])}" + (f": {note}." if note else "") +
-                        (f" {p['item'].url}" if p["item"].url else ""))
+            note = alt_note(p, extract, lang)
+            length = L.length(p.get("length_text"), lang)
+            text.append(f"• {p['title']}{by(p['item'], lang)}" + (f" ({length})" if length else "") +
+                        (f": {end_sentence(note)}" if note else "") + (f" {p['item'].url}" if p["item"].url else ""))
     if wider:
         text.append("")
-        text.append("Or here's a wider selection:")
+        text.append(t["wider"])
         for p in wider:
             text.append(f"• {p['title']}" + (f": {p['item'].url}" if p["item"].url else ""))
     for cr in unknown:
         text.append("")
-        text.append(f"I couldn't check \"{cr}\" for any of these: the posts don't say.")
+        text.append(t["cant_check"].format(cr=cr))
     if c.asked_count and c.asked_count > c.count:
         text.append("")
-        text.append(f"You asked for {c.asked_count}, so here are the top {c.count}.")
+        text.append(t["top_n"].format(asked=c.asked_count, n=c.count))
     if footer:
         text.append("")
         text.append(footer)
@@ -241,13 +315,19 @@ def picks_message(result, spec, footer=None, now=None):
     return Reply(parts)
 
 
-def none_message(result, spec, scheduled=False):
-    reason = result.get("none_reason") or "nothing in your library fits well"
+def none_message(result, spec, scheduled=False, lang=None):
+    """Nothing to show. The reason is always a sentence code chose (finding 5), never the model's words."""
+    t = L.table(lang)
+    reason = result.get("none_reason") or t["none_default"]
+    if t is not L.EN:   # the reasons code builds, in the person's language
+        m = re.match(r"nothing you kept since (\S+) matched$", reason)
+        reason = t["none_lib"] if reason == L.EN["none_lib"] else \
+            (t["none_since"].format(date=m.group(1)) if m else reason)
     if scheduled and spec.when.type == "once":
         return f"Nothing good for \"{spec.content.goal}\" right now: {reason.rstrip('.')}. Ask me again any time."
     if scheduled:
         return f"Nothing new for \"{spec.content.goal}\" this time: {reason.rstrip('.')}. I'd rather skip than send something weak."
-    return f"I didn't find a good match: {reason.rstrip('.')}."
+    return t["none"].format(reason=reason.rstrip("."))
 
 
 # ---------- slice 4: a pick on its own, and an answer as an email (DESIGN.md sections 3 and 6) ----------

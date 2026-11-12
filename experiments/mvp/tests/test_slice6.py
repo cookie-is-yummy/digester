@@ -227,13 +227,16 @@ def test_onboarding_step_by_step(rich):
     st["answers"]["mvp_compose"] = pick("Lemon garlic pasta", criteria=[{"answer": "yes", "quote": "200g spaghetti"}],
                                         extra=[{"answer": "yes", "quote": "200g spaghetti"}])
     calls = len(rich["calls"])
+    offer = bot.store.get_state(f"onboard:{H}")
     say(rich, "2", {"intent": "chat", "reply": "unused"})
     assert "mvp_interpret" not in rich["calls"][calls:] and bot.store.last_answer(H)["items"] == ["k1"]
+    assert bot.store.get_state(f"onboard:{H}")["step"] == "done"    # fix pass, finding 34: used, so closed
+    bot.store.set_state(f"onboard:{H}", offer)                       # (open again, for "every morning")
     # "every morning": a preview of number 1, whose YES also starts the export reminders
     st["answers"]["mvp_compose"] = pick("Low poly island in Blender",
                                         criteria=[{"answer": "yes", "quote": "from start to finish"}])
     preview = say(rich, "every morning", {"intent": "chat", "reply": "unused"})
-    assert "Every day at 8am I'll send 1 pick for \"a beginner Blender project\"" in preview
+    assert "Every day at 8am, I'll send 1 pick for \"a beginner Blender project\"" in preview
     assert preview.endswith("(Your export reminders will start with the same YES.)")
     bot.on_message(H, "yes")
     rules = bot.store.rules(H)
@@ -392,7 +395,7 @@ def test_the_profile_reaches_the_interpreter_and_the_composer(rich):
     msg = say(rich, "pasta?", {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
         "goal": "a pasta dish", "searches": ["pasta"]}}})
     assert "Their level" not in composed[0] and "as a beginner" not in msg
-    assert "because it matches what you asked for" in msg
+    assert "because" not in msg
 
 
 def test_feedback_moves_the_level_and_done_hides_the_item(rich):
@@ -402,11 +405,13 @@ def test_feedback_moves_the_level_and_done_hides_the_item(rich):
     st["answers"]["mvp_compose"] = pick("Blender donut tutorial")
     say(rich, "a blender tutorial", {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
         "goal": "a Blender tutorial", "searches": ["blender tutorial"]}}})
+    st["answers"]["mvp_compose"] = pick("cosy room")   # fix pass, finding 6: one is sent now, in the same reply
     msg = say(rich, "too easy", {"intent": "feedback", "feedback": "harder"})
-    assert msg == ("Noted, I'll aim higher with Blender 3D: I now have you as a beginner. Ask for \"a harder one\" and "
-                   "I'll look for one now.")
+    assert msg.startswith("Noted, I'll aim higher with Blender 3D: I now have you as a beginner. Here's a harder one:")
+    assert "cosy room" in msg
     lv = P.get(bot.store, H)["interests"][0]
     assert lv["level"] == "beginner" and lv["confirmed"] and lv["source"] == "feedback"
+    st["answers"]["mvp_compose"] = pick("Low poly island")
     assert say(rich, "too hard", {"intent": "feedback", "feedback": "easier"}).startswith(
         "Noted, I'll keep it simpler with Blender 3D: I now have you as just starting.")
     assert say(rich, "made it!", {"intent": "feedback", "feedback": "done"}) == \
@@ -417,7 +422,7 @@ def test_feedback_moves_the_level_and_done_hides_the_item(rich):
     st["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": []})[1]
     say(rich, "a blender tutorial", {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
         "goal": "a Blender tutorial", "searches": ["blender tutorial"]}}})
-    assert "donut tutorial" not in seen[0]
+    assert "Low poly island" not in seen[0]   # the one marked done (sent with "too hard", finding 6)
 
 
 # ---------- leads to a finished result ----------

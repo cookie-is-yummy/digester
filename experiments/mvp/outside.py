@@ -62,28 +62,38 @@ monday tuesday wednesday thursday friday saturday sunday am pm minute minutes ho
 really actually kind sort type""".split())
 
 # personal topics (docs/07, DESIGN.md sections 5 and 11): a whole word or phrase match in the request blocks the search
+# Fix pass, finding 35: only words that are personal on their own. Words with an everyday sense ("partner workout",
+# "god tier", "trading cards", "chicken stock", "liberal amount of salt", "injury-friendly workout": an injury is an
+# ordinary topic with avoid words, DESIGN.md section 11) are not here; the personal sense comes in as a phrase below.
 SENSITIVE = {
-    "health": """health doctor doctors diagnosis diagnosed symptom symptoms disease illness cancer diabetes depression
-        depressed anxiety anxious adhd autism autistic bipolar ocd ptsd therapy therapist psychiatrist medication
-        medications meds pill pills prescription pregnant pregnancy fertility ivf injury injured surgery rehab
-        addiction sober sobriety suicide suicidal anorexia bulimia hospital std hiv covid vaccine vaccines""",
-    "relationships": """relationship relationships dating breakup divorce divorced boyfriend girlfriend husband wife
-        partner marriage married crush ex hookup tinder hinge bumble cheating""",
-    "money": """money debt debts loan loans salary paycheck invest investing investment investments crypto bitcoin
-        finance finances financial banking credit mortgage tax taxes bankruptcy income savings""",
-    "religion": """religion religious god jesus christ allah church mosque temple synagogue prayer pray bible quran koran
-        torah faith christian christianity muslim islam jewish judaism hindu hinduism buddhist buddhism atheist
-        spiritual""",
-    "politics": """politics political election elections vote voting voter democrat democrats republican republicans
-        liberal conservative trump biden harris congress senate abortion immigration protest protests government""",
-    "sexuality": """sex sexual sexuality gay lesbian bisexual queer lgbt lgbtq trans transgender nonbinary porn nsfw kink
+    "health": """health diagnosis diagnosed symptom symptoms disease illness cancer diabetes depression depressed
+        anxiety adhd autism autistic bipolar ocd ptsd therapist psychiatrist psychiatry medication medications
+        prescription pregnant pregnancy fertility ivf surgery addiction sobriety suicide suicidal anorexia bulimia
+        hospital std hiv covid vaccine vaccines chemotherapy menopause miscarriage""",
+    "relationships": """relationship relationships dating breakup divorce divorced hookup tinder bumble""",
+    "money": """debt debts loan loans salary paycheck investing investment investments crypto bitcoin finances financial
+        banking mortgage taxes bankruptcy savings""",
+    "religion": """religion religious jesus christ allah church mosque synagogue prayer prayers bible quran koran torah
+        christian christians christianity muslim islam jewish judaism hindu hinduism buddhist buddhism atheist""",
+    "politics": """politics political election elections voting voter democrat democrats republican republicans trump
+        biden harris congress senate abortion immigration immigrant immigrants deportation asylum""",
+    "sexuality": """sex sexual sexuality gay lesbian bisexual queer lgbt lgbtq transgender nonbinary porn nsfw kink
         kinky nude nudes erotic""",
 }
 SENSITIVE_STEMS = {_stem(w): topic for topic, words in SENSITIVE.items() for w in words.split()}
 SENSITIVE_PHRASES = {"self harm": "health", "eating disorder": "health", "mental health": "health",
                      "weight loss": "health", "lose weight": "health", "birth control": "health",
+                     "my doctor": "health", "my therapy": "health", "physical therapy": "health", "my meds": "health",
+                     "panic attack": "health", "panic attacks": "health", "my partner": "relationships",
+                     "my boyfriend": "relationships", "my girlfriend": "relationships", "my husband": "relationships",
+                     "my wife": "relationships", "my ex": "relationships", "my marriage": "relationships",
+                     "relationship advice": "relationships", "dating advice": "relationships",
                      "coming out": "sexuality", "stock market": "money", "side hustle": "money",
-                     "make money": "money", "get rich": "money"}
+                     "make money": "money", "get rich": "money", "money trouble": "money", "money problems": "money",
+                     "pay off": "money", "credit score": "money", "credit card debt": "money", "day trading": "money",
+                     "stock trading": "money", "personal finance": "money", "green card": "politics",
+                     "god's word": "religion", "praise god": "religion", "my faith": "religion",
+                     "how to pray": "religion", "vote for": "politics"}
 
 
 def _clean(text):
@@ -245,7 +255,21 @@ class Outside:
             return max(mine, _shared_count(day))
         return self.store.one("SELECT COUNT(*) n FROM outside_searches WHERE day=? AND handle=?", (day, handle))["n"]
 
-    def find(self, handle, spec, texts, have_ids=(), now=None, skip_ids=()):
+    def available(self, handle, spec, texts, now=None):
+        """True when find() could serve this request now (a key, the route on, not personal, not Instagram only, words
+        to search with, the daily limits not reached). No search is made."""
+        now = now or datetime.now(timezone.utc)
+        c = spec.content
+        texts = [t for t in texts if t]
+        if c.source != "library" or c.platforms == ["instagram"] or not config.OUTSIDE_ON \
+                or not os.environ.get(self.key_env):
+            return False
+        if sensitive_topic(texts + [c.goal or "", *c.searches, *c.criteria]) or not search_text(spec, texts):
+            return False
+        return self.used_today(now) < config.OUTSIDE_PER_DAY and \
+            self.used_today(now, handle) < config.OUTSIDE_PER_PERSON
+
+    def find(self, handle, spec, texts, have_ids=(), now=None, skip_ids=(), max_minutes=None):
         from . import texts as T
         now = now or datetime.now(timezone.utc)
         c = spec.content
@@ -308,7 +332,10 @@ class Outside:
             self.store.x("INSERT OR REPLACE INTO outside_cache(key,results,at) VALUES(?,?,?)",
                          (ck, json.dumps(checked), _iso(now)))
         have, skip = set(have_ids), set(skip_ids)
-        picks = [v for v in checked if v["video_id"] not in have and v["video_id"] not in skip][:config.OUTSIDE_SHOW]
+        left = [v for v in checked if v["video_id"] not in have and v["video_id"] not in skip]
+        if max_minutes:   # finding 26: videos within the length the request allows come first (YouTube's order kept)
+            left.sort(key=lambda v: v["duration_s"] > max_minutes * 60)
+        picks = left[:config.OUTSIDE_SHOW]
         out["picks"] = picks
         if not picks:
             return stop("none_found", T.OUTSIDE_NONE)

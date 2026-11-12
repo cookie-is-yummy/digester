@@ -89,7 +89,10 @@ def test_a_must_have_no_is_never_shown_even_as_the_closest(env):
            "none_reason": "none of these ends with a finished dish"}
     n = env["calls"].count("mvp_compose")
     msg = compose_once(env, raw, criteria=["ends with a finished dish"])
-    assert msg == "I didn't find a good match: none of these ends with a finished dish."
+    # fix pass, finding 26: a pick whose only "no" is the finished-result must-have is still shown, plainly as the
+    # closest, when nothing else is even close (a "no" on any other must-have is never shown: test_slice3.py)
+    assert msg.startswith("None of what I found is a whole recipe you can cook, so the closest I have is Lemon garlic "
+                          "pasta")
     assert env["calls"].count("mvp_compose") == n + 2      # asked once more for the closest among the others
 
 
@@ -100,8 +103,9 @@ def test_when_every_pick_fails_a_must_have_the_closest_of_the_others_is_offered(
                     {"picks": [{"n": 3, "verdict": "close", "title": "Pasta night", "criteria": [{"answer": "unknown"}]}]}])
     msg = compose_once(env, lambda u: (seen.append(u), next(answers))[1], criteria=["ends with a finished dish"])
     assert "candidates 2 fail a must-have" in seen[1]
-    assert msg.startswith("None of what I found clearly meets \"ends with a finished dish\": the posts don't say.")
-    assert "The closest I have is Pasta night" in msg and "Lemon garlic" not in msg
+    assert msg.startswith("I couldn't confirm any of these is a whole recipe you can cook, but the closest I have is "
+                          "Pasta night")
+    assert "the closest I have is Pasta night" in msg and "Lemon garlic" not in msg
 
 
 def test_a_web_card_is_only_made_for_a_web_link():
