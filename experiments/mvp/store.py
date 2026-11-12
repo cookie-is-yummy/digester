@@ -71,8 +71,8 @@ class Store:
     # people
     def upsert_person(self, handle, name, library, tz):
         self.x("INSERT INTO people(handle,name,library,timezone,created_at) VALUES(?,?,?,?,?) "
-               "ON CONFLICT(handle) DO UPDATE SET name=excluded.name, library=excluded.library, "
-               "timezone=excluded.timezone", (handle, name, library, tz, now_iso()))
+               "ON CONFLICT(handle) DO UPDATE SET name=excluded.name, library=excluded.library",
+               (handle, name, library, tz, now_iso()))  # the time zone is set once: after that the person changes it by text
 
     def person(self, handle):
         return self.one("SELECT * FROM people WHERE handle=?", (handle,))
@@ -223,7 +223,7 @@ class Store:
             for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests", "inbound"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
-            for key in (f"lines:{handle}", f"cap_notice:{handle}", f"unknown:{handle}"):
+            for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 

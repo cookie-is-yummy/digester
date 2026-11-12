@@ -36,6 +36,11 @@ PENDING_TTL = {"confirm_rule": timedelta(hours=24), "confirm_delete": timedelta(
 # what a message must be for an open preview to be dropped; small talk, questions about the last answer, feedback and
 # rule management leave it open, so a later "yes" still starts the rule
 ENDS_PENDING = ("ask", "change_rule", "delete_data", "decline", "stop")
+UNANSWERED_CHECK = 3   # after this many timed sends in a row with no word from the person, the next one asks
+UNANSWERED_PAUSE = 5   # after this many, their timed sends are paused (message services flag unanswered streams)
+STILL_USEFUL = "Still useful? Reply 👍 to keep these coming."
+PAUSED_QUIET = ("I've paused your timed sends because I haven't heard from you in a while. "
+                "Reply \"resume all\" to restart them, or just ask me for something any time.")
 MISSED_AFTER = timedelta(hours=2)   # a timed send this late is skipped, not sent (the bot was off, or kept failing)
 RETRY_AFTER = timedelta(minutes=15)
 MAX_RETRIES = 3
@@ -52,7 +57,8 @@ CONSENT = ("Hi! I'm a prototype that finds things in your own saved and watched 
            "them only to fix problems. Your requests and the text of posts I consider go to OpenAI to understand them "
            "(not used for training). You can say "
            "\"delete my data\" at any time. Reply \"I agree\" to start, and confirm you're 18 or over.")
-SCHEDULED_FOOTER = "Reply 👎 if that's not for you, or \"pause\" to pause."
+SCHEDULED_FOOTER = "Reply 👎 if it's not for you, \"another\" for one more now, or \"pause {n}\" to pause this."
+LAST_SEND = "That was the last one of this rule."
 UNKNOWN = "Hi! I'm a private test bot, and you're not set up with me yet."
 NOTHING_PENDING = "I don't have anything waiting for a yes. Tell me what you'd like and I'll set it up."
 LOADING = "One moment, I'm opening your library…"
@@ -71,6 +77,7 @@ def norm_handle(h):
         return "+" + digits
     return h
 LIMIT = "I've reached today's limit for you. I'll be able to search again tomorrow."
+LIMIT_TOTAL = "The test budget is used up, so I can't search right now. The founders need to raise it."
 
 
 class Bot:
@@ -153,20 +160,21 @@ class Bot:
             return "daily"
         return None
 
-    def _limit_notice(self, person):
+    def _limit_notice(self, person, which="daily"):
         """The limit message, at most once a day per person; otherwise silence (no paid calls either way)."""
         day = self.clock().astimezone(ZoneInfo(person["timezone"])).date().isoformat()
         key = f"cap_notice:{person['handle']}"
         if self.store.get_state(key) == day:
             return None
         self.store.set_state(key, day)
-        return self.send(person["handle"], LIMIT)
+        return self.send(person["handle"], LIMIT_TOTAL if which == "total" else LIMIT)
 
     # ---------- the executor ----------
-    def run(self, person, spec: RuleSpec, kind, rule_id=None, request_text=None, cands_override=None, known_lines=None):
-        """kind: preview | scheduled | manual | ask | follow_up. Returns (message, run_id, n_picks). 'manual' is a
-        rule run because the person asked for it now. Deliveries are written here; a caller whose send fails removes
-        them (unsend)."""
+    def run(self, person, spec: RuleSpec, kind, rule_id=None, request_text=None, cands_override=None, known_lines=None,
+            shown=()):
+        """kind: preview | scheduled | manual | ask | more | follow_up. Returns (message, run_id, n_picks). 'manual'
+        is a rule run because the person asked for it now; 'more' repeats the last question without the picks already
+        shown (`shown`). Deliveries are written here; a caller whose send fails removes them (unsend)."""
         t0 = time.time()
         cost = 0.0
         status, err, result, cands, view = "ok", None, None, [], None
@@ -180,6 +188,7 @@ class Bot:
                 cands = [c for c in cands_override if c.id not in disliked]  # rule 9 holds for follow-ups too
             else:
                 exclude = self.store.delivered(rule_id) if (rule_id and spec.content.exclude_sent) else set()
+                exclude |= set(shown)
                 weights = self._feedback_weights(rule_id, view)
                 cands, meta = candidates(self.pool, view, spec, exclude=exclude, disliked=disliked,
                                          creator_weights=weights, now=self.clock())
@@ -209,7 +218,14 @@ class Bot:
                 old = self.store.get_state(f"lines:{person['handle']}", {}) or {}
                 lines = {iid: (ls or old.get(iid) or []) for iid, ls in lines.items()}
             self.store.set_state(f"lines:{person['handle']}", lines)
-            footer = SCHEDULED_FOOTER if kind == "scheduled" else None
+            if kind != "follow_up":  # what "another" repeats: this request, without what has been shown
+                self.store.set_state(f"lastspec:{person['handle']}", {
+                    "spec": spec.model_dump(), "rule_id": rule_id if kind in ("scheduled", "manual") else None,
+                    "text": (request_text or "")[:300], "shown": list(shown) + [p["item"].id for p in picks]})
+            footer = None
+            if kind == "scheduled":
+                number = next((i for i, r in enumerate(self.store.rules(person["handle"]), 1) if r["id"] == rule_id), 1)
+                footer = SCHEDULED_FOOTER.format(n=number)
             return picks_message(result, spec, footer=footer), run_id, len(picks)
         return none_message(result, spec, scheduled=(kind == "scheduled")), run_id, 0
 
@@ -250,8 +266,13 @@ class Bot:
                 self._retry_or_skip(rule, now)
         return sent
 
-    def _advance(self, rule, spec, tz, now):
+    def _advance(self, rule, spec, tz, now, sending=False):
         status, nxt = self._state_for(spec, tz, now, datetime.fromisoformat(rule["created_at"]))
+        if spec.when.max_sends:  # "stop after three times": counted in messages that went out
+            sent = self.store.one("SELECT COUNT(*) n FROM runs WHERE rule_id=? AND kind='scheduled' AND status IN "
+                                  "('sent','none_sent','unknown')", (rule["id"],))["n"] + (1 if sending else 0)
+            if sent >= spec.when.max_sends:
+                status, nxt = "done", None
         self.store.set_slot(rule["id"], nxt, status)
         self.store.update_rule(rule["id"], last_run_at=now_iso(now))
         self.store.set_state(f"retry:{rule['id']}", 0)
@@ -299,6 +320,15 @@ class Bot:
         if person["paused"]:
             self._advance(rule, spec, tz, now)  # skip this slot rather than fire late after unpausing
             return 0
+        quiet_streak = self._unanswered(person["handle"])
+        if quiet_streak >= UNANSWERED_PAUSE:
+            for r in self.store.rules(person["handle"], statuses=("active",)):
+                if r["next_run_at"]:
+                    self.store.update_rule(r["id"], status="paused")
+            self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="paused_quiet",
+                               at=now_iso(now))
+            self.send(person["handle"], PAUSED_QUIET)
+            return 0
         if now - slot > MISSED_AFTER:  # e.g. the bot was off on Friday evening: Friday's pick is not sent on Monday
             self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="missed",
                                at=now_iso(now))
@@ -311,8 +341,10 @@ class Bot:
         if self.store.scheduled_today(person["handle"], local_midnight) >= config.MAX_SCHEDULED_PER_DAY:
             self.store.update_rule(rule["id"], next_run_at=now_iso(local_midnight + timedelta(days=1, hours=config.QUIET_END)))
             return 0
-        if self._over_cap(person):
-            self.store.update_rule(rule["id"], next_run_at=now_iso(now + timedelta(hours=1)))
+        if self._over_cap(person):  # this slot is skipped and recorded; it is not held to fire late
+            self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="over_cap",
+                               at=now_iso(now))
+            self._advance(rule, spec, tz, now)
             return 0
         h = person["handle"]
         before = (self.store.last_answer(h), self.store.get_state(f"lines:{h}"))
@@ -322,7 +354,11 @@ class Bot:
             return 0
         # Recorded before the send: the rule moves to its next slot and the run is marked 'sending'. A crash from here
         # on can lose this one message but can never send the slot twice.
-        self._advance(rule, spec, tz, now)
+        self._advance(rule, spec, tz, now, sending=True)
+        if spec.when.max_sends and self.store.rule(rule["id"])["status"] == "done":
+            msg += "\n" + LAST_SEND
+        elif quiet_streak >= UNANSWERED_CHECK and spec.when.type == "schedule":
+            msg += "\n" + STILL_USEFUL
         self.store.x("UPDATE runs SET status='sending' WHERE id=?", (run_id,))
         try:
             self.send(person["handle"], msg, run_id)
@@ -343,6 +379,12 @@ class Bot:
         self.store.x("UPDATE runs SET status=? WHERE id=?", ("sent" if n else "none_sent", run_id))
         return 1
 
+    def _unanswered(self, handle):
+        """Timed sends that went out since the person last wrote or reacted."""
+        since = self.store.get_state(f"last_in:{handle}") or ""
+        return self.store.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
+                              "('sent','none_sent','unknown') AND at>?", (handle, since))["n"]
+
     def _run_failed(self, run_id):
         return self.store.one("SELECT status FROM runs WHERE id=?", (run_id,))["status"] == "error"
 
@@ -351,9 +393,11 @@ class Bot:
         self.store.x("UPDATE runs SET status='unknown', error='stopped while sending' WHERE status='sending'")
 
     # ---------- messages in ----------
-    def on_message(self, handle, text, tapback=None, tapback_ref=None):
-        """tapback: 'up' or 'down' on an earlier bot message identified by tapback_ref."""
+    def on_message(self, handle, text, tapback=None, tapback_ref=None, received=None):
+        """tapback: 'up' or 'down' on an earlier bot message identified by tapback_ref. received: the real time the
+        message arrived (it may wait behind a timed send to the same person)."""
         handle = norm_handle(handle)
+        self._tl.received = received
         with self.lock_for(handle):
             return self._on_message(handle, text, tapback, tapback_ref)
 
@@ -372,6 +416,10 @@ class Bot:
                 self.store.set_state(f"unknown:{handle}", day)  # one reply a day at most, and no names in it
                 return self.channel.send(handle, UNKNOWN)
             return None  # e.g. the Mac channel: people who text the founder's own account are not the bot's users
+        if person["paused"]:  # the kill switch for one person: no replies, no paid calls, no timed sends
+            self.note(intent="paused_person")
+            return None
+        self.store.set_state(f"last_in:{handle}", now_iso(now))
         text = (text or "").strip()
         if not person["consent_version"]:
             self.note(intent="consent")
@@ -415,8 +463,10 @@ class Bot:
         elif pending and NO.match(text):
             self.store.clear_pending(handle)
             return self.send(handle, "OK, I won't start it. Tell me what you'd like instead.")
-        if self._over_cap(person):
-            return self._limit_notice(person)  # before any paid call
+        over = self._over_cap(person)
+        if over:
+            self.note(intent="over_cap")
+            return self._limit_notice(person, over)  # before any paid call
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
         try:
@@ -478,12 +528,25 @@ class Bot:
         if it.intent == "ask":
             msg, run_id, _ = self.run(person, it.spec, "ask", request_text=text)
             return self.send(h, msg, run_id)
+        if it.intent == "more":
+            st = self.store.get_state(f"lastspec:{h}")
+            if not st:
+                return self.send(h, "More of what? Tell me what you're looking for.")
+            spec = RuleSpec.model_validate(st["spec"])
+            rule = self.store.rule(st["rule_id"]) if st.get("rule_id") else None
+            if rule and rule["status"] in ("active", "paused"):  # one more from a rule counts as sent by that rule
+                msg, run_id, _ = self.run(person, spec, "manual", rule_id=rule["id"], request_text=st.get("text") or text,
+                                          shown=st.get("shown") or [])
+            else:
+                msg, run_id, _ = self.run(person, spec, "more", request_text=st.get("text") or text,
+                                          shown=st.get("shown") or [])
+            return self.send(h, msg, run_id)
         if it.intent == "follow_up":
             if not last:
                 return self.send(h, "I haven't sent you anything to follow up on yet. What are you looking for?")
             view = self.view(person["library"])
             cands = [c for c in (view.get(i) for i in last["items"]) if c]
-            spec = self._spec_for_followup(last, it.question)
+            spec = self._spec_for_followup(last, it.question, it.avoid, h)
             known = self.store.get_state(f"lines:{h}", {}) or {}
             msg, run_id, _ = self.run(person, spec, "follow_up", request_text=it.question, cands_override=cands,
                                       known_lines=known)
@@ -547,7 +610,11 @@ class Bot:
             return self.send(h, "This deletes your library, rules and history with me. Reply YES to delete everything.")
         return self.send(h, HELP)
 
-    def _spec_for_followup(self, last, question):
+    def _spec_for_followup(self, last, question, avoid=(), handle=None):
+        """The follow-up's spec. What the person ruled out before ("no cream") and in this question ("any without
+        cheese?") is carried into it, so code rechecks it."""
+        earlier = (self.store.get_state(f"lastspec:{handle}") or {}).get("spec", {}).get("content", {}).get("avoid") or []
+        avoid = list(dict.fromkeys([*avoid, *earlier]))[:8]
         prev = None
         if last.get("rule_id"):
             r = self.store.rule(last["rule_id"])
@@ -555,10 +622,11 @@ class Bot:
         extract = prev.content.extract if prev else ("ingredients" if re.search(r"ingredient|recipe|make|cook", question, re.I) else "none")
         return RuleSpec.model_validate({"when": {"type": "now"}, "content": {
             "goal": question[:200], "searches": [question[:120]], "count": min(3, len(last["items"])) or 1,
-            "extract": extract, "exclude_sent": False}})
+            "extract": extract, "avoid": avoid, "exclude_sent": False}})
 
     def _confirm(self, person, pending):
         h = person["handle"]
+        self.note(intent="confirm")
         self.store.clear_pending(h)
         if pending["kind"] == "confirm_rule":
             return self._activate(person, pending["payload"]["text"], RuleSpec.model_validate(pending["payload"]["spec"]),
@@ -603,9 +671,26 @@ class Bot:
         return self.send(h, f"{lead}: {describe(spec.when)}, {c.goal}{avoid}. First one {first}. "
                             "Reply \"my rules\" any time to see or change it.")
 
+    def _answer_seen(self, h):
+        """The answer a typed reaction is about: the last one, unless that one was sent after the person's message
+        arrived (a timed send that landed while they were typing); then it is the one before."""
+        last = self.store.last_answer(h)
+        received = getattr(self._tl, "received", None)
+        if not last or not received:
+            return last
+        seen = self.store.one("SELECT run_id FROM sent WHERE handle=? AND run_id IS NOT NULL AND at<=? "
+                              "ORDER BY at DESC, rowid DESC LIMIT 1", (h, now_iso(received)))
+        if not seen or seen["run_id"] == last["run_id"]:
+            return last
+        rows = self.store.items_of_run(seen["run_id"])
+        if not rows:
+            return last
+        return {"run_id": seen["run_id"], "rule_id": rows[0]["rule_id"], "items": [r["item_id"] for r in rows]}
+
     def _feedback(self, person, kind, pick_number):
         h = person["handle"]
-        last = self.store.last_answer(h)
+        self.note(intent="feedback")
+        last = self._answer_seen(h)
         if not last:
             return self.send(h, "Thanks! Nothing to attach that to yet.")
         items = last["items"]

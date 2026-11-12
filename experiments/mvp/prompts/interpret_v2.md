@@ -7,12 +7,13 @@ Return ONE JSON object with these keys (omit keys that do not apply):
   - "run_rule": the person wants one of their existing rules run right now ("send the pasta one now", "run 2", "pasta please" when a saved rule is about pasta). Give "rule_number".
   - "skip": skip the next send of a rule, once ("skip this week", "not this Friday"). Give "rule_number" if they have more than one rule.
   - "set_timezone": the person says where they are or that their time zone changed ("I'm in LA this week", "use London time"). Give "timezone" as an IANA name ("America/Los_Angeles").
+  - "more": they want more of what the bot just sent, with nothing else changed ("another", "one more", "more like these", "next"). The bot repeats the last request and leaves out what it has already shown.
   - "follow_up": a question about the bot's last answer ("which of those…", "the second one?", "any without cheese?").
   - "change_rule": change an existing rule ("change 1 to Saturday", "make the pasta one 2 recipes").
   - "list_rules", "pause", "resume", "stop": manage rules ("my rules", "pause 2", "stop everything").
   - "feedback": a reaction to a pick ("👍", "👎 2", "more like 2", "less like this", "not for me").
   - "delete_data": the person wants all their data deleted.
-  - "confirm" / "decline": yes or no to the bot's last question, with nothing else.
+  - "confirm" / "decline": a clear yes or no to the bot's last question, with nothing else ("yes", "go ahead", "start it"; "no", "cancel"). Praise alone ("love it", "looks great", "nice") is not a yes: return "chat" with a reply that thanks them and says to reply YES to start it.
   - "help": what can you do, how does this work.
   - "unsupported": something the bot cannot do. Give the nearest thing it can do in "reply".
   - "chat": greetings, thanks, small talk. Give a short friendly "reply".
@@ -22,9 +23,11 @@ Return ONE JSON object with these keys (omit keys that do not apply):
     - {"type": "once", "in_minutes": 120} for a time counted from now ("in 20 minutes" is 20, "in two hours" is 120, "in three days" is 4320). Never work out the clock time for these yourself; the bot does it.
     - {"type": "once", "date": "YYYY-MM-DD", "time": "HH:MM"} for one send at a named time ("tonight at 9", "tomorrow morning", "next Tuesday at noon", "on 3 December"). Use today's local date given below.
     - {"type": "schedule", "days": ["FRI"], "time": "19:00", "every_weeks": 1} for repeating sends. Days are MON TUE WED THU FRI SAT SUN; "weekdays" is MON-FRI; "every day" or "daily" is all seven; "every two weeks" or "every other" is every_weeks 2 (up to 4).
-    - {"type": "on_request"} for a request to save and run whenever they ask, with no fixed time.
+    - {"type": "on_request"} for a request to save and run whenever they ask, with no fixed time ("whenever I ask for pasta…", "save this", "keep this for when I need it").
+    A schedule may also carry "max_sends": N when they say how many times: "every Monday at 7am, stop after three times" is {"type": "schedule", "days": ["MON"], "time": "07:00", "max_sends": 3}; "for the next 4 Fridays" is max_sends 4. This is supported: use it, do not refuse it.
+    Never invent a time or a repeat. If the person named no time and no repeat, it is an ask (answer now), or on_request if they asked to keep it for later. "When I need it" and "whenever" mean on_request, never a daily schedule. "Weekly" with no day is today's weekday at 09:00. If the default time for "tonight" or "this morning" has already passed, treat it as an ask.
     Use 24-hour local time. When no time is given: morning 08:00, lunch 12:00, afternoon 15:00, evening or night 19:00, otherwise 09:00.
-    The bot cannot do these timings: a day of the month ("the 1st of each month"), every N days, several times a day in one rule, an end date ("for three weeks"), or "when I save something new" (the library is a copy taken when the person was set up; it does not update by itself). For these return "unsupported" and offer the nearest thing in "reply": every 4 weeks on a day they pick; one rule per time of day; "stop" when they want it to end.
+    The bot cannot do these timings: a day of the month ("the 1st of each month"), every N days, several times a day in one rule, an end date ("until Christmas"), personal quiet hours ("don't message me before 10am": the bot only sends at times they set, and never between 10pm and 8am unless they pick such a time), or "when I save something new" (the library is a copy taken when the person was set up; it does not update by itself). For these return "unsupported" and offer only the one nearest thing in "reply": for a day of the month, every 4 weeks on a day they pick; for every N days, named days of the week that come close ("Monday, Thursday and Sunday"); for several times a day, one rule per time; for an end date, a number of sends; for quiet hours, choosing each rule's time; for new saves, asking any time or a saved request. Never change an existing rule's time unless they ask for that. How often someone wants a workout, recipe or routine is a timing question, not a health goal.
   - "content":
     - "goal": what they want, in a few plain words ("a pasta recipe for pasta night").
     - "searches": 2 to 4 short search texts over the library, from different angles, using words a caption or title would contain ("pasta recipe", "easy spaghetti dinner", "carbonara"). Never a single word if two are clearer.
@@ -40,6 +43,7 @@ Return ONE JSON object with these keys (omit keys that do not apply):
 - "edits_pending": true only when the message changes the rule whose preview is waiting for YES (see the context).
 - "feedback": "up", "down", "more" or "less"; "pick_number": the pick it refers to, if given.
 - "question": for follow_up, the question rewritten so it stands alone ("Which of the last picks has the fewest ingredients?").
+- "avoid": for follow_up, anything the question rules out, as singular nouns ("any without cheese?" gives ["cheese"]); otherwise omit it.
 - "reply": for unsupported, chat and help: at most two short sentences, plain words, no promises the bot cannot keep.
 
 Health goals (treating a medical or mental-health condition, weight loss, diets) are "unsupported": say the bot doesn't do health advice. Workouts, stretching, recipes, sport and cooking are ordinary topics, not health goals: handle them normally.

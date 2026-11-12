@@ -40,6 +40,7 @@ class Runtime:
         self.pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="msg") if workers else None
         self.buffers = {}       # handle -> [(inbound id, Inbound)] waiting to be joined and handled
         self.last_arrival = {}  # handle -> real time of the newest buffered message
+        self.arrived = {}       # handle -> real time the oldest buffered message arrived
         self.in_flight = set()  # handles with a batch being handled: their next batch waits, to keep order
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
@@ -72,6 +73,7 @@ class Runtime:
         with self.lock:
             self.buffers.setdefault(msg.handle, []).append((inbound_id, msg))
             self.last_arrival[msg.handle] = time.time()
+            self.arrived.setdefault(msg.handle, datetime.now(timezone.utc))  # when this batch began to arrive
 
     def poll(self):
         """Take new messages from the channel into the journal and the buffers."""
@@ -95,20 +97,21 @@ class Runtime:
                 if wait and now - self.last_arrival.get(handle, 0) < self.join_seconds:
                     continue
                 self.in_flight.add(handle)
-                ready.append((handle, self.buffers.pop(handle)))
-        for handle, batch in ready:
+                ready.append((handle, self.buffers.pop(handle), self.arrived.pop(handle, None)))
+        for handle, batch, received in ready:
             if self.pool:
-                self.pool.submit(self._handle, handle, batch)
+                self.pool.submit(self._handle, handle, batch, received)
             else:
-                self._handle(handle, batch)
+                self._handle(handle, batch, received)
 
-    def _handle(self, handle, batch):
+    def _handle(self, handle, batch, received=None):
         t0 = time.time()
         trace = self.bot._tl.trace = {}
         status, error = "done", None
         try:
             for unit in _join(batch):
-                self.bot.on_message(handle, unit.text, tapback=unit.tapback, tapback_ref=unit.tapback_ref)
+                self.bot.on_message(handle, unit.text, tapback=unit.tapback, tapback_ref=unit.tapback_ref,
+                                    received=received)
         except Exception as e:  # noqa: BLE001 - type and place only: messages can hold numbers and text
             report(e)
             status, error = "error", type(e).__name__

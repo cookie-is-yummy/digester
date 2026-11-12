@@ -423,6 +423,14 @@ def test_a_title_that_is_not_from_the_item_is_replaced(env):
     r, _ = compose(cands, spec, "+15550001")
     assert r["picks"][0]["title"] == "Lemon Garlic Pasta" and r["dropped"]["title_replaced"] == 0
     assert title_from_item(view.get("itm_a")) == "Lemon garlic pasta"
+    from mvp.libview import Item
+    promo = Item({"id": "p", "platform": "instagram", "caption": "Comment SHOP for links!\nThree looks for a park date",
+                  "platform_data": {"owner_handle": "styl"}})
+    assert title_from_item(promo) == "Three looks for a park date"      # not the call to comment
+    only_promo = Item({"id": "q", "platform": "instagram", "caption": "Follow for more! Link in bio", "platform_data": {"owner_handle": "styl"}})
+    assert title_from_item(only_promo) == "A post from @styl"
+    long = Item({"id": "r", "platform": "youtube", "caption": "He got disqualified but came back for the win of his life", "platform_data": {}})
+    assert title_from_item(long) == "He got disqualified but came back for the…"
 
 
 def test_one_off_send_needs_no_preview_and_fires_once(env):
@@ -438,7 +446,7 @@ def test_one_off_send_needs_no_preview_and_fires_once(env):
     assert env["calls"].count("mvp_compose") == 0                                          # nothing was searched yet
     r = bot.store.rules(h)[0]
     assert r["spec"]["when"] == {"type": "once", "days": [], "every_weeks": 1, "time": "15:00", "date": "2026-11-12",
-                                 "in_minutes": None}
+                                 "in_minutes": None, "max_sends": None}
     clock[0] += timedelta(minutes=119)
     assert bot.tick() == 0
     clock[0] += timedelta(minutes=2)
@@ -760,8 +768,8 @@ def test_bug_hunt_schedule_and_forms():
         Content(goal="x y", searches=["x"], kinds=["playlist"], platforms=["instagram"])
     with pytest.raises(Exception):
         Content(goal="x y", searches=["x"], saved_after="last month")
-    with pytest.raises(Exception):
-        Interpretation.model_validate({"intent": "change_rule", "rule_number": 1, "spec": pasta_spec({"type": "now"})})
+    it = Interpretation.model_validate({"intent": "change_rule", "rule_number": 1, "spec": pasta_spec({"type": "now"})})
+    assert it.intent == "run_rule" and it.spec is None                  # "send it now" runs the rule, never ends it
 
 
 def test_bug_hunt_dates_follow_the_kind_asked_for(env):
@@ -812,3 +820,130 @@ def test_bug_hunt_conversation_state(env):
     assert bot.tick() == 0
     ch.send = real_send
     assert bot.store.last_answer(h)["run_id"] == before
+
+
+def test_stop_after_n_sends_and_another(env):
+    """'Stop after two times' ends the rule after two sends and says so. 'Another' repeats the last request without
+    what was shown; after a rule's send it counts as sent by that rule."""
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "a pasta recipe?")
+    assert "example.com/itm_b" in last(ch)
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "more"}
+    bot.on_message(h, "another")
+    assert "example.com/itm_a" in last(ch)                              # not itm_b again
+    bot.on_message(h, "one more")
+    assert "example.com/itm_c" in last(ch)
+    when = {"type": "schedule", "days": ["FRI"], "time": "19:00", "max_sends": 2}
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec(when)}
+    bot.on_message(h, "pasta every friday at 7pm, stop after two times")
+    bot.on_message(h, "yes")
+    clock[0] = datetime(2026, 11, 14, 0, 1, tzinfo=timezone.utc)
+    assert bot.tick() == 1 and "last one" not in last(ch) and "pause 1" in last(ch)
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "more"}
+    n_deliveries = len(bot.store.delivered(bot.store.rules(h)[0]["id"]))
+    bot.on_message(h, "another")                                        # one more from the rule, now
+    assert len(bot.store.delivered(bot.store.rules(h)[0]["id"])) == n_deliveries + 1
+    clock[0] = datetime(2026, 11, 21, 0, 1, tzinfo=timezone.utc)
+    assert bot.tick() == 1 and "last one of this rule" in last(ch)
+    assert bot.store.rules(h) == []                                     # finished after two timed sends
+    clock[0] = datetime(2026, 11, 28, 0, 1, tzinfo=timezone.utc)
+    assert bot.tick() == 0
+
+
+def test_timed_sends_pause_when_nobody_answers(env):
+    """Message services flag a stream of unanswered messages. After 3 in a row the bot asks; after 5 it pauses."""
+    from datetime import timedelta
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    for i, iid in enumerate("fghijklm"):                                # enough pasta posts for a daily rule
+        view = bot.view(str(env["lib"]))
+        from mvp.libview import Item
+        view.items[f"itm_{iid}"] = Item({"id": f"itm_{iid}", "platform": "instagram", "source_url": f"https://example.com/itm_{iid}",
+                                         "caption": f"Pasta number {i}", "interaction_kinds": ["save"], "platform_data": {}})
+    bot.pool.search = lambda lib, q, depth=300: {"ids": [f"itm_{x}" for x in "fghijklm"], "mode": "normal", "cost_usd": 0.0}
+    daily = {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "time": "12:00"}
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec(daily)}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta number", "why": "Good fit.", "fit": 0.9}]}
+    bot.on_message(h, "pasta every day at noon")
+    bot.on_message(h, "yes")
+    texts = []
+    for day in range(7):
+        clock[0] = datetime(2026, 11, 13 + day, 17, 1, tzinfo=timezone.utc)
+        bot.tick()
+        texts.append(last(ch))
+    assert ["Still useful" in t for t in texts[:5]] == [False, False, False, True, True]
+    assert "paused your timed sends" in texts[5] and texts[6] == texts[5]          # paused once, then silence
+    assert bot.store.rules(h)[0]["status"] == "paused"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "resume", "all_rules": True}
+    bot.on_message(h, "resume all")
+    clock[0] = datetime(2026, 11, 20, 17, 1, tzinfo=timezone.utc)
+    assert bot.tick() == 1 and "Still useful" not in last(ch)                      # they answered: the count starts again
+
+
+def test_over_the_test_budget_says_so_and_skips_timed_sends(env, monkeypatch):
+    from mvp import llm
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "new_rule", "spec": pasta_spec()}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good fit.", "fit": 0.9}]}
+    bot.on_message(h, "pasta every friday at 7pm")
+    bot.on_message(h, "yes")
+    monkeypatch.setattr(llm, "spent_total", lambda libs: 99.0)
+    n = env["calls"].count("mvp_interpret")
+    bot.on_message(h, "what can I cook?")
+    assert "test budget is used up" in last(ch) and "tomorrow" not in last(ch)
+    assert env["calls"].count("mvp_interpret") == n                     # no paid call
+    clock[0] = datetime(2026, 11, 14, 0, 1, tzinfo=timezone.utc)
+    assert bot.tick() == 0
+    assert bot.store.rules(h)[0]["next_run_at"] == "2026-11-21T00:00:00+00:00"   # skipped, not held to fire late
+    assert bot.store.one("SELECT status FROM runs ORDER BY id DESC LIMIT 1")["status"] == "over_cap"
+
+
+def test_a_typed_thumbs_down_lands_on_the_answer_the_person_saw(env):
+    """A timed send that arrives while the person is typing 👎 must not take the 👎 meant for the answer before it."""
+    import time as _time
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    h = "+15550001"
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "a pasta recipe?")                                # the answer they saw: itm_b
+    _time.sleep(1.1)
+    typed_at = datetime.now(timezone.utc)                               # they start typing the 👎 now
+    _time.sleep(1.1)
+    st["answers"]["mvp_compose"] = compose_picks({"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "pasta again?")                                   # stands in for a timed send landing meanwhile: itm_a
+    bot.on_message(h, "👎", received=typed_at)
+    assert bot.store.disliked(h) == {"itm_b"}
+
+
+def test_verifier_found_gaps(env):
+    from mvp.compose import compose
+    from mvp.retrieve import contains_word
+    from mvp.schema import RuleSpec
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    h = "+15550001"
+    assert contains_word("a cheesy bake", "cheese") and not contains_word("2 teaspoons", "tea") \
+        and not contains_word("fresh ginger", "gin")
+    # a number in a title must come from the post
+    view = bot.view(str(env["lib"]))
+    spec = RuleSpec.model_validate(pasta_spec({"type": "now"}))
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "10-Minute Lemon Garlic Pasta", "why": "x", "fit": 0.9}]}
+    r, _ = compose([view.get("itm_a")], spec, h)
+    assert r["picks"][0]["title"] == "Lemon Garlic Pasta"
+    # a follow-up carries what was ruled out, and code rechecks it
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": dict(pasta_spec({"type": "now"}), content=dict(
+        pasta_spec()["content"], count=2))}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Creamy mushroom pasta", "why": "x", "fit": 0.9},
+                                                 {"n": 2, "title": "Lemon garlic pasta", "why": "x", "fit": 0.9})
+    bot.on_message(h, "two pasta recipes?")
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "follow_up", "question": "Any without cream?", "avoid": ["cream"]}
+    bot.on_message(h, "any without cream?")
+    assert "itm_b" not in last(ch) and "itm_a" in last(ch)             # the cream pasta is not offered as the answer
+    # the kill switch for one person stops replies and paid calls
+    bot.store.x("UPDATE people SET paused=1 WHERE handle=?", (h,))
+    n_out, n_calls = len(ch.outbox), len(env["calls"])
+    bot.on_message(h, "hello?")
+    assert len(ch.outbox) == n_out and len(env["calls"]) == n_calls

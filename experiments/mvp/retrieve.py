@@ -57,6 +57,8 @@ def contains_word(text, word):
             return True
         if tok.startswith(w) and tok[len(w):] in ENDINGS:
             return True
+        if w.endswith("e") and tok == w[:-1] + "y":  # cheese -> cheesy
+            return True
         if len(w) >= 4 and ts.endswith(w):
             return True
     return False

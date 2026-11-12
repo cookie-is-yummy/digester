@@ -18,6 +18,7 @@ class When(BaseModel):
     time: Optional[str] = None                           # HH:MM, 24-hour, local
     date: Optional[str] = None                           # once: YYYY-MM-DD local
     in_minutes: Optional[int] = Field(default=None, ge=1, le=60 * 24 * 60)  # once: "in two hours"; code sets date and time
+    max_sends: Optional[int] = Field(default=None, ge=1, le=100)            # schedule: "stop after three times"
 
     @field_validator("date")
     @classmethod
@@ -129,7 +130,7 @@ class RuleSpec(BaseModel):
     do: list[Action] = Field(default_factory=lambda: [Action()])
 
 
-INTENTS = ["new_rule", "ask", "follow_up", "change_rule", "run_rule", "skip", "list_rules", "pause", "resume", "stop",
+INTENTS = ["new_rule", "ask", "follow_up", "more", "change_rule", "run_rule", "skip", "list_rules", "pause", "resume", "stop",
            "feedback", "set_timezone", "delete_data", "help", "confirm", "decline", "unsupported", "chat"]
 
 
@@ -143,13 +144,16 @@ class Interpretation(BaseModel):
     feedback: Optional[Literal["up", "down", "more", "less"]] = None
     pick_number: Optional[int] = None          # feedback on one pick of the last answer
     question: Optional[str] = Field(default=None, max_length=300)    # follow_up: the question to answer
+    avoid: list[str] = Field(default_factory=list, max_length=8)     # follow_up: things the question rules out
     reply: Optional[str] = Field(default=None, max_length=400)       # unsupported, chat, help: a short answer
 
     @model_validator(mode="after")
     def _needs(self):
         if self.intent in ("new_rule", "ask", "change_rule") and self.spec is None:
             raise ValueError(f"{self.intent} needs a spec")
-        if self.intent in ("new_rule", "change_rule") and self.spec.when.type == "now":
+        if self.intent == "change_rule" and self.spec.when.type == "now":
+            self.intent, self.spec = "run_rule", None   # "send the pasta one now" runs the rule; it never ends it
+        if self.intent == "new_rule" and self.spec.when.type == "now":
             raise ValueError("a rule needs a time, a schedule, or on_request")
         if self.intent == "ask" and self.spec.when.type != "now":
             self.intent = "new_rule"

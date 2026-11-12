@@ -1,4 +1,4 @@
-# Brief, round 10 (DRAFT): the MVP skeleton. Text a request, get cited answers from your own saves, on a schedule
+# Brief, round 10 (DRAFT): the MVP skeleton. Text a request, get cited answers from your own saves, when you need them
 
 > **Status: DRAFT, not binding.** Written by the agent on 12 Nov 2026 at Derrick's request, as the build plan for a three-day MVP. It replaces the earlier draft of this brief (a hand-run action test), which is kept, unscheduled, in `PARKED-action-test.md`. The hosted agent-access pilot stays parked in `PARKED-agent-layer-pilot.md`. This brief becomes binding when both founders accept it and amendment A-008 in `docs/amendments.md`.
 >
@@ -6,7 +6,7 @@
 
 ## 1. What we are building, in one paragraph
 
-A person texts the product in plain words: "send me a new pasta recipe every Friday at 7pm", or "what can I make with chicken and rice from my saved recipes?". The product turns the text into a rule and shows a preview: "Every Friday 7pm, one pasta recipe from your saves. Reply YES to start." It searches that person's own saved, shared, liked and watched posts from Instagram and YouTube. It picks what fits and replies in the same message thread. Each pick links to its post and says why it was chosen. Where the post's own text has the ingredients, the reply lists them. Where it does not, the reply says "the recipe is in the video". When nothing good fits, it says so instead of padding.
+A person texts the product in plain words whenever they need something: "what can I make with chicken and rice from my saved recipes?". It answers in a few seconds. They can also say when they want it: "tonight at 9", "in two hours", "whenever I ask for pasta", or "a new pasta recipe every Friday at 7pm". For something repeating, the product turns the text into a rule and shows a preview: "Every Friday 7pm, one pasta recipe from your saves. Reply YES to start." (Changed on 12 Nov after Derrick's note: it is not a weekly digest; a message goes out when the person needs it or asks for it.) It searches that person's own saved, shared, liked and watched posts from Instagram and YouTube. It picks what fits and replies in the same message thread. Each pick links to its post and says why it was chosen. Where the post's own text has the ingredients, the reply lists them. Where it does not, the reply says "the recipe is in the video". When nothing good fits, it says so instead of padding.
 
 This is the skeleton the product grows from, and the version shown to the first outside users. It is prototype code under `experiments/mvp/`. It is rewritten as product code after the decision that follows the first sessions.
 
@@ -28,7 +28,7 @@ This is the skeleton the product grows from, and the version shown to the first 
 | In the MVP | Not in the MVP |
 | --- | --- |
 | Requests and replies by text message (channel in section 6) | A web app, a hub or a phone app |
-| Recurring rules: a day or days of the week and a time, in the person's timezone | Rules triggered by events ("when I save a recipe…"), deadlines |
+| Answers now; one-off sends at a named time ("in two hours", "tonight at 9"); saved requests run whenever the person asks; repeating rules on days of the week at a time, with an optional number of sends. All in the person's timezone | Rules triggered by events ("when I save a recipe…": libraries are copies and do not update), deadlines, a day of the month, every N days, several times a day in one rule |
 | One-off questions over the library, and follow-up questions on the last answer | Searching for new content outside the person's library |
 | Extracting ingredients, steps or key points only when they are in the post's own text | Transcripts, audio or video understanding |
 | Managing rules by text (list, pause, resume, change, stop), "delete my data", help | Sharing rules between people |
@@ -43,13 +43,15 @@ The conversations below are the spec for the message flows. The wording is a dra
 
 **First message.**
 > Person: hi
-> Bot: Hi, I'm the digest bot. I find things in what you've saved and watched on Instagram and YouTube, and send them when you want them. Before we start, please read and agree to this note: [link]. What city are you in, so I get the times right?
+> Bot: Hi! I'm a prototype that finds things in your own saved and watched posts and sends them when you ask. [The consent note follows in the same message.] Reply "I agree" to start, and confirm you're 18 or over.
+
+The founder sets the person's timezone at set-up. The person changes it by text ("I'm in LA this week").
 
 Libraries are loaded by a founder before the first message, from the person's exports. The bot knows the person by their handle in the message app.
 
 **A recurring rule.**
 > Person: send me a new pasta recipe every friday night for pasta night
-> Bot: Here's what that would look like this week:
+> Bot: Here's what that would look like now:
 > 🍝 **Creamy lemon garlic pasta** from @creator · you saved it in March
 > Why: a weeknight pasta with the ingredients listed.
 > Ingredients (from the caption): spaghetti 200 g, lemon, garlic, parmesan, butter
@@ -83,7 +85,7 @@ Libraries are loaded by a founder before the first message, from the person's ex
 4. **No repeats.** A recurring rule never sends the same item twice, through a deliveries table checked before every send. One-off answers and follow-ups may cite items sent before.
 5. **Friends' posts are never used.** The Instagram importer removes posts by mutual follows when the library is built, and `library.is_friend` is checked again in retrieve. A library whose import warned that the follower lists were missing is not used until the export is redone with them.
 6. **Captions are data, not instructions.** Third-party text goes to the model inside marked data fields, with a system instruction to treat it as data. Captions are cut to 600 characters, taken from `items.jsonl`, not from the 260-character search rows.
-7. **A preview before any recurring rule starts.** Nothing is scheduled until the person replies YES. A preview is not a delivery: after YES, the edited request is run again, so the first send obeys any change ("no cream") and may differ from the preview.
+7. **A preview before any recurring rule starts.** Nothing is scheduled until the person replies YES. The preview's pick counts as sent by the rule it becomes, so the first send is something new (changed 12 Nov: on the first real run the first Friday repeated the preview). After a YES with an edit ("no cream"), the edited request is run fresh. The preview stays open for 24 hours and through small talk; a "yes" with nothing waiting is told so, never answered "OK". One-off sends and saved requests are not recurring: they need no preview, and the reply states the exact time and how to cancel.
 8. **Caps.** At most 5 scheduled messages a day per person, no messages between 10pm and 8am local unless the rule asks for it, and a cost cap of $1 a day per person.
 9. **Feedback is obeyed.** An item with 👎 is never sent again by any rule or answer. "Less like this" lowers items from that creator and that topic for that rule. "More like 2" adds item 2 as an example to the rule.
 10. **No advice.** The bot finds and quotes. It gives no medical, legal or financial advice, and declines health goals, as the earlier briefs did.
@@ -92,7 +94,17 @@ Libraries are loaded by a founder before the first message, from the person's ex
 
 **Decided 12 Nov: the product lives in each person's default messaging app, starting with iMessage.** Android Messages (SMS and RCS), Instagram and others follow, behind the same channel interface.
 
-**Recommendation for the testers: a paid iMessage service, Sendblue's AI Agent plan** ($100 a month for one dedicated line; prices confirmed on its pricing page on 12 Nov 2026). The person texts the bot's number first and the bot replies. Sendblue's own limits page says that after 24 hours, a message to that person counts against a follow-up limit of 200 people a day per line, so a weekly Friday message is allowed. People on Android get SMS automatically, at no extra fee. Two things to confirm with Sendblue support before paying: that a send days after the person's last text is a normal follow-up, and how its separate cap of 150 unanswered messages in a row applies. Its free sandbox cannot send first and has no webhooks, so it tests replies only.
+**Re-check on 12 Nov (evening), after Derrick asked whether Sendblue is the best and cheapest.** It is not the cheapest. It is the only vendor found with a written rule that allows messages more than 24 hours after the person's last text. The plan by stage:
+
+| Stage | Channel | Cost a month | Why |
+| --- | --- | --- | --- |
+| Now, founders only | The test page (`--channel web`), and the Mac's Messages app | $0 | Nothing to buy to build and test. On the Mac, prefer an Apple Account made for the bot: Apple's iCloud terms forbid "accessing the Service through any automated means, like scripts", and a block would then not hit a founder's own iMessage. |
+| First 5 to 10 outside testers | Photon's shared plan if it confirms later sends in writing and a weekend test passes; otherwise Sendblue AI Agent | $0 or $25 (Photon); $100 (Sendblue) | Not the Mac: outside testers on a scripted personal account is not clearly within Apple's terms. Photon needs each tester registered first, each tester sees a different number, and a new channel adapter (its SDK is TypeScript). |
+| About 100 users | Sendblue AI Agent, one line | $100, plus a 3% card fee | 200 follow-up contacts a day per line. LoopMessage is about $75 but needs 2 minutes between later sends. SMS costs more at this size. |
+
+Pay nobody until the day the first outside tester starts: Sendblue's fees are "non-cancellable and non-refundable". Every price, rule and quote, with its source page, is in the MVP document (link in `STATE.md`) and in the research notes of 12 Nov. Still unknown: whether Photon's shared lines may send days later, and whether Sendblue's "150 consecutive outbound messages per line without a reply" counts per line or per contact. Because every vendor treats a stream of unanswered messages as a risk, the bot now asks "Still useful?" after 3 timed sends with no reply and pauses timed sends after 5.
+
+**The earlier recommendation, now the fallback for the testers: Sendblue's AI Agent plan** ($100 a month for one dedicated line; prices confirmed on its pricing page on 12 Nov 2026). The person texts the bot's number first and the bot replies. Sendblue's own limits page says that after 24 hours, a message to that person counts against a follow-up limit of 200 people a day per line, so a weekly Friday message is allowed. People on Android get SMS automatically, at no extra fee. Two things to confirm with Sendblue support before paying: that a send days after the person's last text is a normal follow-up, and how its separate cap of 150 unanswered messages in a row applies. Its free sandbox cannot send first and has no webhooks, so it tests replies only.
 
 **For the build days: Derrick's Mac with his own Apple Account** (free). The founders text Derrick's Mac and it replies through Messages. This is for founders only; testers use the Sendblue number.
 
@@ -182,7 +194,7 @@ scheduler (every 30 s) ─► due rules ─► executor ─► retrieve ─► c
 }
 ```
 
-`when.type` can be `now`, `once` or `schedule`. `extract` can be `none`, `ingredients`, `steps` or `key_points`. `kinds` is an order of preference over the kinds the importers write: Instagram `save`, `collection`, `share_self`, `like`, `watch`, `view`; YouTube `playlist`, `share_self`, `like`, `watch`. Saves, playlists and posts sent to yourself rank first, then likes, then watches. A filter that removes every item of a listed platform is a validation error. `exclude_sent` drops items this rule has already delivered (rule 4). A date filter uses `saved_after` and `saved_before`, worked out by code from the request and checked against the date of the matching interaction.
+`when.type` can be `now`, `once`, `schedule` or `on_request` (a saved request with no time, run when the person asks). A `once` may give `in_minutes` instead of a date and time; code works out the time. A `schedule` may carry `max_sends`. The spec's `when` has no timezone field: the timezone is the person's. Intents added on 12 Nov: `more` ("another"), `run_rule`, `skip`, `set_timezone`. `extract` can be `none`, `ingredients`, `steps` or `key_points`. `kinds` is an order of preference over the kinds the importers write: Instagram `save`, `collection`, `share_self`, `like`, `watch`, `view`; YouTube `playlist`, `share_self`, `like`, `watch`. Saves, playlists and posts sent to yourself rank first, then likes, then watches. A filter that removes every item of a listed platform is a validation error. `exclude_sent` drops items this rule has already delivered (rule 4). A date filter uses `saved_after` and `saved_before`, worked out by code from the request and checked against the date of the matching interaction.
 
 **Intents the interpreter returns:** `new_rule`, `ask` (a one-off question), `follow_up` (about the last answer), `change_rule`, `list_rules`, `pause`, `resume`, `stop`, `feedback`, `delete_data`, `help`, `unsupported`. An unsupported request gets the nearest thing the bot can do, and is logged as a feature request.
 
@@ -190,7 +202,7 @@ scheduler (every 30 s) ─► due rules ─► executor ─► retrieve ─► c
 
 **Packages.** `pydantic>=2` goes in a new `experiments/mvp/requirements.txt`, next to the demo's requirements.
 
-**Models.** `gpt-5.4-mini` for the interpreter and the composer, with the OpenAI key already used by the demo. The estimate is under 1 cent per run, so a weekly rule costs a few cents a month. Search embeddings work as in the demo.
+**Models.** `gpt-5.4-mini` for the interpreter and the composer, with the OpenAI key already used by the demo. The estimate is under 1 cent per run, whether asked for or scheduled. Search embeddings work as in the demo.
 
 **Data kept.**
 
@@ -260,6 +272,7 @@ Founder hours are about 20 a week each; most of the building is the agent's. Tim
 - **Automatic checks on every run:** each cited ID is in the candidate list; each extracted line is in the item's text; no repeats per rule; no friend's post; no message in quiet hours; cost under the cap.
 - **Unit tests** for the time handling (timezones, the change to winter time, "tonight", "every weekday"), the store, the dedupe and each message flow, with the console channel and the fake clock.
 - **A fake message database** to test the iMessage reader, since this environment is not a Mac.
+- **A test page** (`python3 -m mvp.bot --channel web`): a message thread in the browser that runs the same bot, with a clock that can be moved forward to fire timed rules. A founder tests alone, without a second phone. On a Mac, `--self-chat` lets a founder text their own number instead.
 - **Derrick grades** day 1, and Eason grades day 3. Grades go in a sheet outside git; the result files hold counts only.
 
 ## 10. After day 3: showing it to people
@@ -312,10 +325,14 @@ Made on 12 Nov:
 5. **Models:** `gpt-5.4-mini`.
 6. **Price:** none asked during the sessions.
 
+Made later on 12 Nov:
+7. **Timing:** not a weekly digest. A message goes out when the person asks or at a time they chose: now, once, whenever asked, or repeating.
+
 Still open:
-7. **Sendblue:** pay $100 a month for one line from the first tester session, after support confirms the follow-up rule.
-8. **The session marks** in section 10: agree them or change them.
-9. **A-008:** both founders accept it, and this brief, before anyone outside the founders uses the bot.
+8. **Preview picks.** The agent changed rule 7 so that a preview's pick counts as sent by the rule (otherwise the first Friday repeats what the preview showed on Thursday). It uses up one item of a small set. Say so if the old behaviour is wanted.
+9. **The testers' channel:** Photon's shared plan ($0 or $25) if it confirms later sends, otherwise Sendblue ($100). Pay on the day the first outside tester starts, not before. Send the support questions first.
+10. **The session marks** in section 10: agree them or change them. They still count "a rule running after 7 days"; with any-time use, "asked again without a prompt after day 3" may be the better sign.
+11. **A-008:** both founders accept it, and this brief, before anyone outside the founders uses the bot.
 
 ## 13. Risks
 

@@ -58,22 +58,35 @@ STOP = set("a an and the of for to in on with my your our this that is it at by 
            "recipe video reel post how make".split())
 
 
+PROMO_TITLE = re.compile(r"\b(comment|links?|giveaway|follow|dm|subscribe|shop|discount|code|sale|tap|click)\b", re.I)
+
+
 def title_from_item(it, words=8):
-    """A name made only of the item's own first words (the fallback when the model's title is not from the item)."""
-    first = re.split(r"(?<=[.!?])\s", it.first_line, maxsplit=1)[0]
-    first = " ".join(w for w in first.split() if not w.startswith(("#", "@", "http")))
-    out = " ".join(first.split()[:words]).strip(" -:|,")
-    return out[:70] or (it.creator or "From your library")
+    """A name made only of the item's own words (used when the model's title is not supported by the item): its first
+    line that is not a call to comment, follow or shop; otherwise a neutral name with the creator."""
+    kind = {"youtube": "video"}.get(it.platform, "post")
+    neutral = f"A {kind} from {it.creator}" if it.creator else f"A {kind} from your library"
+    for line in [it.first_line] + re.split(r"(?<=[.!?])\s+", it.caption)[:3]:
+        line = re.split(r"(?<=[.!?])\s", line, maxsplit=1)[0]
+        parts = [w for w in line.split() if not w.startswith(("#", "@", "http"))]
+        if len(parts) < 2 or PROMO_TITLE.search(line) or NOT_DETAIL.search(line):
+            continue
+        out = " ".join(parts[:words]).strip(" -:|,(")
+        if len(parts) > words:
+            out += "…"
+        return out[:72]
+    return neutral
 
 
 def title_ok(title, it):
-    """At least two thirds of the title's meaningful words must be in the item's own text or creator name."""
+    """At least half of the title's meaningful words must be in the item's own text or creator name. A short summary
+    in the model's words passes; a name for a different thing does not."""
     text = norm(it.caption + " " + (it.creator or ""))
     words = [w for w in tokens(title) if len(w) >= 3 and w not in STOP and not w.isdigit()]
     if not words:
         return False
     hits = sum(1 for w in words if contains_word(text, w))
-    return hits * 3 >= len(words) * 2
+    return hits * 2 >= len(words)
 
 
 def as_data(text):
@@ -146,6 +159,11 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
         if not title or not title_ok(title, it):  # rule 2: a name the item's own text does not support is not shown
             dropped["title_replaced"] += 1
             title = title_from_item(it)
+        else:  # a number in a title ("10-Minute", "3-Ingredient") must be in the post's text, or that word goes
+            have = set(tokens(it.caption))
+            kept = [w for w in title.split() if all(t in have for t in tokens(w) if t[0].isdigit())]
+            if len(kept) != len(title.split()):
+                title = " ".join(kept).strip(" -:|,") or title_from_item(it)
         if len(picks) >= max(c.count, 1):
             dropped["over_count"] += 1
             continue

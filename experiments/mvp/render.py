@@ -12,12 +12,10 @@ def _month(iso):
         return None
 
 
-def picks_message(result, spec, footer=None, header=None):
+def picks_message(result, spec, footer=None):
     c = spec.content
     picks = result["picks"]
     out = []
-    if header:
-        out.append(header)
     if result.get("intro"):
         out.append(result["intro"])
     for i, p in enumerate(picks, 1):
@@ -48,6 +46,8 @@ def picks_message(result, spec, footer=None, header=None):
 
 def none_message(result, spec, scheduled=False):
     reason = result.get("none_reason") or "nothing in your library fits well"
+    if scheduled and spec.when.type == "once":
+        return f"Nothing good for \"{spec.content.goal}\" right now: {reason.rstrip('.')}. Ask me again any time."
     if scheduled:
         return f"Nothing new for \"{spec.content.goal}\" this time: {reason.rstrip('.')}. I'd rather skip than send something weak."
     return f"I didn't find a good match: {reason.rstrip('.')}."

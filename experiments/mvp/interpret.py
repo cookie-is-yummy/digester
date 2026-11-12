@@ -3,7 +3,6 @@ retries once on an invalid form, and works out dates (saved_after from since_day
 their request; nothing it says can call an action directly (AGENTS.md rule 6)."""
 import json
 import os
-from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
@@ -34,8 +33,9 @@ def _context(person, rules, pending, last, now):
     elif pending and pending["kind"] == "confirm_delete":
         lines.append("The bot just asked them to confirm deleting all their data.")
     if last:
+        from_rule = next((i for i, r in enumerate(rules, 1) if r["id"] == last.get("rule_id")), None)
         lines.append(f"The bot's last answer was about: {last['goal']} ({len(last['items'])} picks, numbered 1 to "
-                     f"{len(last['items'])}).")
+                     f"{len(last['items'])})" + (f", sent by rule {from_rule}." if from_rule else "."))
     return "\n".join(lines)
 
 
@@ -66,10 +66,3 @@ def interpret(text, person, rules, pending, last, now):
             err = "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors()[:4])
     return Interpretation(intent="unsupported", reply="Sorry, I didn't catch that. Could you say it another way?"), cost
 
-
-def now_local(now, tzname):
-    return now.astimezone(ZoneInfo(tzname))
-
-
-def parse_iso(s):
-    return datetime.fromisoformat(s) if s else None

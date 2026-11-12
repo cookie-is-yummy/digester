@@ -22,7 +22,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .base import Channel, Inbound, SendUncertain
 
-API = "https://api.sendblue.com/api/send-message"
+# Sendblue's API reference shows api.sendblue.co; an earlier page showed api.sendblue.com. Neither could be tried
+# without an account, so check the first real send and set SENDBLUE_API_URL if needed.
+API = os.environ.get("SENDBLUE_API_URL", "https://api.sendblue.co/api/send-message")
 WEBHOOK_PATH = "/sendblue/receive"
 
 

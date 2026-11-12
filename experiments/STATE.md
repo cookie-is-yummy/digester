@@ -1,5 +1,16 @@
 # State
 
+## Founders' summary - round 10, MVP day 2 (12 Nov 2026, late; `BRIEF-10.md`, `results/r10-mvp-day2.md`)
+
+How it all works, in one document: "Digest bot MVP: how it works", https://claude.ai/artifact/MbuBQQMjVndxdeUhqvTcJ4
+
+- **Not a weekly digest any more.** The bot answers when asked, sends once at any time ("in two hours", "tonight at 9"), keeps a request to run whenever the person asks, or repeats on chosen days. 24 of 24 timing phrasings are now handled correctly on the live model (13 before).
+- **Test it without a phone:** from `experiments/`, `python3 -m mvp.bot --channel web`, then open `http://127.0.0.1:8765`. It is a message thread with the bot and a clock you can move forward to fire timed rules. On the Mac, `--channel mac --self-chat <your number>` lets you text yourself (untested on a real Mac).
+- **Channel:** Sendblue is not the cheapest, only the one with a written rule for later sends. Pay nothing now. For the first outside testers: Photon's shared plan ($0 to $25) if it confirms later sends, otherwise Sendblue ($100). Details in BRIEF-10 section 6.
+- **Reviewed and fixed:** three reviews with verifiers; 33 confirmed findings fixed with tests (40 offline tests now). The 20 draft requests: 20 handled, 0 errors, 18 with picks, 7 cents.
+- **Derrick, please:** try the test page; replace the 20 draft requests with your own and grade `data/mvp/eval/draft-6/grades.csv`; say whether a preview's pick should count as sent (BRIEF-10 section 12, point 8).
+- **Still untested for real:** the Mac channel and the Sendblue channel.
+
 ## Founders' summary - round 10, MVP day 1 (12 Nov 2026; `BRIEF-10.md`, `results/r10-mvp-day1.md`)
 
 - **Built:** `experiments/mvp/`, a bot that takes a request by message, turns it into a rule with a preview, searches the person's own library, and replies now or on schedule with picks that link to their posts. The reliability rules are enforced in code. Channels: console, this Mac's Messages app, and Sendblue (written; untested until a line exists).
