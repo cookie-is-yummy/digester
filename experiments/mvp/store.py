@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS inbound (id INTEGER PRIMARY KEY AUTOINCREMENT, channe
   tapback TEXT, tapback_ref TEXT, received_at TEXT, status TEXT, intent TEXT, run_id INTEGER, reply_ref TEXT,
   error TEXT, seconds REAL);
 CREATE UNIQUE INDEX IF NOT EXISTS inbound_ref ON inbound(channel, ref) WHERE ref IS NOT NULL;
+CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, text TEXT NOT NULL,
+  item_id TEXT, url TEXT, due_at TEXT, reminded_at TEXT, done_at TEXT, created_at TEXT, list TEXT DEFAULT 'todo',
+  removed_at TEXT);
+CREATE TABLE IF NOT EXISTS profile_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, text TEXT NOT NULL,
+  at TEXT);
+CREATE TABLE IF NOT EXISTS interp_cache (key TEXT PRIMARY KEY, handle TEXT, raw TEXT, at TEXT);
 """
 
 
@@ -45,6 +51,7 @@ ADDED_COLUMNS = [
     ("people", "snooze_until TEXT"),     # timed sends before this UTC time are skipped and recorded as 'snoozed'
     ("people", "tz_revert_to TEXT"),     # a temporary time zone: switch back to this zone ...
     ("people", "tz_revert_at TEXT"),     # ... at this UTC time
+    ("runs", "lang TEXT"),               # the language the person wrote in, when it was not English (section 11)
 ]
 
 
@@ -210,7 +217,7 @@ class Store:
         return {r["item_id"] for r in self.q("SELECT item_id FROM deliveries WHERE rule_id=?", (rule_id,))}
 
     def scheduled_today(self, handle, day_start_utc):
-        r = self.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
+        r = self.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind IN ('scheduled','todo') AND status IN "
                      "('sent','none_sent','sending','unknown') AND at>=?",
                      (handle, now_iso(day_start_utc)))
         return r["n"] if r else 0
@@ -221,7 +228,9 @@ class Store:
                (handle, item_id, rule_id, kind, now_iso()))
 
     def disliked(self, handle):
-        return {r["item_id"] for r in self.q("SELECT item_id FROM feedback WHERE handle=? AND kind='down'", (handle,))}
+        """Items never to be sent again: 👎 and 'hide'."""
+        return {r["item_id"] for r in self.q("SELECT item_id FROM feedback WHERE handle=? AND kind IN ('down','hide')",
+                                             (handle,))}
 
     def feedback_for_rule(self, rule_id):
         return self.q("SELECT item_id, kind FROM feedback WHERE rule_id=? ORDER BY id", (rule_id,))
@@ -264,6 +273,37 @@ class Store:
     def items_of_run(self, run_id):
         return self.q("SELECT item_id, rule_id, pick_number FROM deliveries WHERE run_id=? ORDER BY pick_number", (run_id,))
 
+    # to-dos (DESIGN.md sections 2 and 11)
+    def add_todo(self, handle, text, list_name="todo", item_id=None, url=None, due_at=None, at=None):
+        cur = self.x("INSERT INTO todos(handle,text,item_id,url,due_at,created_at,list) VALUES(?,?,?,?,?,?,?)",
+                     (handle, text[:200], item_id, url, now_iso(due_at) if due_at else None, now_iso(at), list_name or "todo"))
+        return cur.lastrowid
+
+    def todos(self, handle):
+        """Open to-dos in the order they are numbered to the person: the default list first, then the others by name,
+        oldest first within a list. One numbering across all lists, so "done 3" always means the same to-do."""
+        return self.q("SELECT * FROM todos WHERE handle=? AND done_at IS NULL AND removed_at IS NULL "
+                      "ORDER BY CASE WHEN COALESCE(list,'todo')='todo' THEN 0 ELSE 1 END, list, id", (handle,))
+
+    def todo(self, todo_id):
+        return self.one("SELECT * FROM todos WHERE id=?", (todo_id,))
+
+    def update_todo(self, todo_id, **fields):
+        sets = ", ".join(f"{k}=?" for k in fields)
+        self.x(f"UPDATE todos SET {sets} WHERE id=?", (*fields.values(), todo_id))
+
+    def due_todos(self, now):
+        return self.q("SELECT * FROM todos WHERE due_at IS NOT NULL AND due_at<=? AND reminded_at IS NULL "
+                      "AND done_at IS NULL AND removed_at IS NULL ORDER BY due_at", (now_iso(now),))
+
+    # what the person said about themselves, kept for the profile (DESIGN.md sections 5 and 11)
+    def add_profile_note(self, handle, text, at=None):
+        self.x("INSERT INTO profile_notes(handle,text,at) VALUES(?,?,?)", (handle, text[:300], now_iso(at)))
+
+    def profile_notes(self, handle, limit=10):
+        rows = self.q("SELECT text FROM profile_notes WHERE handle=? ORDER BY id DESC LIMIT ?", (handle, limit))
+        return [r["text"] for r in reversed(rows)]
+
     def log_request(self, handle, text, intent):
         self.x("INSERT INTO requests(handle,text,intent,at) VALUES(?,?,?,?)", (handle, text[:500], intent, now_iso()))
 
@@ -295,10 +335,12 @@ class Store:
     def delete_person_data(self, handle):
         """'delete my data': everything the MVP holds about the person except a deletion marker."""
         with self.lock:
-            for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests", "inbound"):
+            for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests", "inbound",
+                      "todos", "profile_notes", "interp_cache"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
-            for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}"):
+            for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}",
+                        f"lastwrite:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
 

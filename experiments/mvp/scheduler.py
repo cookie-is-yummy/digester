@@ -53,6 +53,7 @@ class SchedulerMixin:
                     continue
                 slot = progress.get("slot") or datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
                 self._retry_or_skip(self.store.rule(rule["id"]) or rule, now, slot)
+        sent += self._tick_todos(now)   # due to-dos remind once (todos.py)
         return sent
 
     # ---------- what changes with time alone ----------
@@ -284,7 +285,7 @@ class SchedulerMixin:
     def _unanswered(self, handle):
         """Timed sends that went out since the person last wrote or reacted."""
         since = self.store.get_state(f"last_in:{handle}") or ""
-        return self.store.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
+        return self.store.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind IN ('scheduled','todo') AND status IN "
                               "('sent','none_sent','unknown') AND at>?", (handle, since))["n"]
 
     def _run_failed(self, run_id):

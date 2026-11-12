@@ -67,7 +67,11 @@ ALL_QUIET = ("Those hours are all inside your quiet hours, and I only send at a 
              "Pick other hours, or tell me an exact time.")
 NOTHING_TO_ATTACH = "Thanks! Nothing to attach that to yet."
 FEEDBACK_REPLIES = {"up": "Noted 👍", "down": "Noted. I won't send that again.", "more": "Noted: more like that.",
-                    "less": "Noted: less like that."}
+                    "less": "Noted: less like that.",
+                    "harder": "Noted. Ask for \"a harder one\" and I'll look for one now.",
+                    "easier": "Noted. Ask for \"an easier one\" and I'll look for one now.",
+                    "done": "Nice! I've noted that you made it.",
+                    "hide": "Hidden. I won't send that one again."}
 FEEDBACK_OTHER = "Noted."
 NO_RULES_LIST = ("You have no rules yet. Ask me anything now, or tell me when to send something: "
                  "\"tonight at 9…\", \"every Friday at 7pm…\".")
@@ -89,11 +93,6 @@ def picks_for(count, goal):
 
 def avoid_clause(avoid):
     return f", nothing with {', '.join(avoid)}" if avoid else ""
-
-
-def preview_tail(when, what):
-    return (f"\n\n{cap_first(when)} I'll send {what} that I haven't sent you before. "
-            "Reply YES to start, or tell me what to change.")
 
 
 def changed(when, goal):
@@ -163,3 +162,198 @@ def rule_line(i, goal, when, state, nxt):
 
 def managed(word, names):
     return f"{word}: {names}."
+
+
+# ---------- slice 2: previews, reminders, to-dos, person-level timing, undo, and what is not ready yet ----------
+WAITING_FOR_ANSWER = "OK, I won't set that up. Tell me what you'd like instead."
+NOTHING_TO_UNDO = "There's nothing from the last 10 minutes to undo."
+NO_TODOS = "Your list is empty. Add something with \"add … to my list\"."
+TODO_NOT_FOUND = "I can't find that on your list. Reply \"my list\" to see the numbers."
+NO_PICK_TO_ADD = "I haven't sent you anything to add yet. Ask me for something first."
+QUIET_RESET = "OK, quiet hours are back to normal: no timed messages from 10pm to 8am."
+SNOOZE_CLEARED = "OK, timed messages are back on."
+SNOOZE_NONE = "Nothing was paused, so nothing changes."
+TODO_LIST_EMPTY_SEND = "Your list is empty right now. Nice work."
+# features that come in later slices: one honest line each
+NOT_YET = {
+    "act_on_last": "I can't email answers or add them to your calendar yet. You can copy the link from my last message "
+                   "for now.",
+    "profile_show": "Showing what I know about you isn't ready yet.",
+    "set_email": "Email isn't switched on yet, so I haven't saved that address.",
+    "library_status": "I can't check your library imports from here yet. The founders can tell you when the last export "
+                      "arrived.",
+    "outside_only": "I can only look in your own saves for now, not for new things outside them.",
+}
+OUTSIDE_SOME = "I can only look in your own saves for now, so these are all from your library."
+OUTPUTS_NOT_YET = "Email and calendar aren't switched on yet, so I'll send it here."
+
+
+def first_send(first):
+    """'The first one would come on Friday 13 November at 7pm.' (None for random moments, never shown in advance)."""
+    return f" The first one would come {first}." if first else ""
+
+
+def preview_tail(when, what, first=None):
+    return (f"\n\n{cap_first(when)} I'll send {what} that I haven't sent you before.{first_send(first)} "
+            "Reply YES to start, or tell me what to change.")
+
+
+def preview_also_tail(when, what, first=None):
+    return (f"\n\nAnd {when} I'll send {what}.{first_send(first)} Reply YES to start both, or tell me what to change.")
+
+
+def reminder_once(first, text, n):
+    return f"OK. {cap_first(first)} I'll remind you: \"{text}\". Reply \"stop {n}\" to cancel."
+
+
+def reminder_started(when, text, first, n):
+    first = f" First one {first}." if first else ""
+    return f"Got it: {when}, I'll remind you: \"{text}\".{first} Reply \"stop {n}\" to end it."
+
+
+def todos_rule_started(when, first, n):
+    first = f" First one {first}." if first else ""
+    return f"Got it: {when}, I'll send you your open to-dos.{first} Reply \"stop {n}\" to end it."
+
+
+def reminder(text):
+    return f"Reminder: {text}"
+
+
+def todo_reminder(text):
+    return f"Reminder from your list: {text}"
+
+
+def todo_line(i, t, due_text=None, show_list=False):
+    tail = f" (due {due_text})" if due_text else ""
+    return f"{i}. {t['text']}{tail}" + (f" [{t['list']}]" if show_list and t.get("list") not in (None, "todo") else "")
+
+
+def todo_list_head(name=None):
+    return f"Your {name} list:" if name and name != "todo" else "Your list:"
+
+
+TODO_FOOT = "Reply \"done 1\" when one is done, or \"remove 1\"."
+
+
+def todos_added(texts, name, due_text=None):
+    where = "your list" if name in (None, "todo") else f"your {name} list"
+    due = f" I'll remind you {due_text}." if due_text else ""
+    if len(texts) == 1:
+        return f"Added \"{texts[0]}\" to {where}.{due}"
+    return f"Added {len(texts)} things to {where}: " + "; ".join(texts) + "." + due
+
+
+def todos_done(texts, left):
+    return f"Done: {'; '.join(texts)}. {left} left on your list." if left else f"Done: {'; '.join(texts)}. Your list is clear."
+
+
+def todos_removed(texts):
+    return f"Removed: {'; '.join(texts)}."
+
+
+def todo_due_set(text, due_text):
+    return f"OK. I'll remind you about \"{text}\" {due_text}."
+
+
+def which_todo(matches):
+    return "Which one? " + "; ".join(f"{i}. {t['text']}" for i, t in matches)
+
+
+def todo_numbers_unknown(n):
+    return f"Your list has {n} {'thing' if n == 1 else 'things'} on it. Which number?"
+
+
+NO_INGREDIENTS = ("I don't have the ingredients of that one written out, so I can't add them. "
+                  "Ask me for its ingredients first.")
+
+
+def quiet_set(blocks_text):
+    return f"OK, no timed messages {blocks_text}. Times you named yourself still go out."
+
+
+def snoozed(until_text):
+    until_text = until_text[3:] if until_text.startswith("on ") else until_text   # "until Monday 16 November at 12am"
+    return (f"OK, no timed messages until {until_text}. Any sends in that time are skipped, "
+            "and you can still ask me for things.")
+
+
+def undone(what):
+    return f"Undone: {what}."
+
+
+def stats_message(total, by_platform, by_kind, words=None, matched=None, by=None, extra=None):
+    """Counts worked out by code only; friends' posts are not counted."""
+    parts = [f"You've kept {total} {'thing' if total == 1 else 'things'}"]
+    if by_platform:
+        parts[0] += ": " + ", ".join(f"{n} on {p}" for p, n in by_platform)
+    lines = [parts[0] + "."]
+    if by_kind:
+        lines.append("By how you kept them: " + ", ".join(f"{k} {n}" for k, n in by_kind) + ".")
+    if words:
+        lines.append(f"{matched} of them mention " + " or ".join(f"\"{w}\"" for w in words) + ".")
+    if extra:
+        lines.append(extra)
+    lines.append("Posts from friends are not counted.")
+    return "\n".join(lines)
+
+
+def clarify_ask(question):
+    return question
+
+
+def stopped_rule(n_goal):
+    return f"I stopped {n_goal}"
+
+
+PROFILE_NOTED = "Noted. I'll keep that in mind when I read your requests. A full profile isn't ready yet."
+QUIET_NEEDS_BOTH = "For quiet hours on some days only, tell me both times, for example \"not 9am to 3pm on weekdays\"."
+QUIET_INVALID = "I can keep up to 4 sets of quiet hours, each with a start and a different end. Could you say it another way?"
+
+
+def preview_more_note(n):
+    return f"(Your other {'rule' if n == 1 else f'{n} rules'} from before will start with the same YES.)"
+
+
+def skipped_next(when):
+    return f"The next scheduled one is skipped, so the one after comes {when}."
+
+
+def todos_once(first, n):
+    return f"OK. {cap_first(first)} I'll send you your open to-dos. Reply \"stop {n}\" to cancel."
+
+
+def _hm(hhmm):
+    h, m = map(int, hhmm.split(":"))
+    if (h, m) == (12, 0):
+        return "noon"
+    if (h, m) == (0, 0):
+        return "midnight"
+    return f"{h % 12 or 12}{'' if m == 0 else f':{m:02d}'}{'am' if h < 12 else 'pm'}"
+
+
+DAY_NAMES = {"MON": "Mondays", "TUE": "Tuesdays", "WED": "Wednesdays", "THU": "Thursdays", "FRI": "Fridays",
+             "SAT": "Saturdays", "SUN": "Sundays"}
+
+
+def quiet_words(blocks):
+    """'from 10pm to 10am, and from 9am to 3pm on weekdays'."""
+    out = []
+    for b in blocks:
+        days = b.get("days") or []
+        when = ""
+        if days == ["MON", "TUE", "WED", "THU", "FRI"]:
+            when = " on weekdays"
+        elif days == ["SAT", "SUN"]:
+            when = " on weekends"
+        elif days:
+            when = " on " + ", ".join(DAY_NAMES[d] for d in days)
+        out.append(f"from {_hm(b['start'])} to {_hm(b['end'])}{when}")
+    return ", and ".join(out)
+
+REMINDER_FOOTER = "Reply \"stop {n}\" to end these."
+
+
+def picks_added(n, name):
+    where = "your list" if name in (None, "todo") else f"your {name} list"
+    return f"I added {'it' if n == 1 else f'these {n}'} to {where}."

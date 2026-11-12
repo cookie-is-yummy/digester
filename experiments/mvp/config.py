@@ -11,7 +11,10 @@ DB = os.path.join(HOME, "mvp.sqlite")
 PEOPLE = os.path.join(HOME, "people.json")  # handle -> {name, library, timezone}
 
 MODEL = os.environ.get("MVP_MODEL", "gpt-5.4-mini")
-PROMPT_INTERPRET = "interpret_v2"
+PROMPT_INTERPRET = "interpret_v3"
+INTERPRET_TEMPERATURE = 0     # the most deterministic settings the model accepts (DESIGN.md sections 4 and 11)
+INTERPRET_SEED = 7
+INTERPRET_CACHE_HOURS = 6     # the same request from the same person reuses its interpretation (section 4)
 PROMPT_COMPOSE = "compose_v1"
 
 SEARCH_DEPTH = 300      # ranked item IDs taken from each search

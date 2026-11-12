@@ -80,12 +80,13 @@ def spent_total(libraries):
     return total
 
 
-def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=1200):
-    """One JSON call. Returns (parsed, cost_usd)."""
+def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=1200, temperature=None, seed=None):
+    """One JSON call. Returns (parsed, cost_usd). temperature and seed are sent only when given."""
     _tl.person, _tl.cost = person, 0.0
+    extra = {k: v for k, v in (("temperature", temperature), ("seed", seed)) if v is not None}
     try:
         out, _ = ai.openai_chat_json(config.MODEL, system, user, max_tokens=max_tokens, purpose=purpose,
-                                     prompt_version=prompt_version)
+                                     prompt_version=prompt_version, **extra)
         return out, _tl.cost
     finally:
         _tl.person = None

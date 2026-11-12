@@ -38,7 +38,7 @@ def env(tmp_path, monkeypatch):
     from mvp import llm
     calls = []
 
-    def fake_chat(system, user, purpose, prompt_version, person=None, max_tokens=0):
+    def fake_chat(system, user, purpose, prompt_version, person=None, max_tokens=0, **kw):
         calls.append(purpose)
         return env_state["answers"][purpose](user), 0.001
     env_state = {"answers": {}}
@@ -48,6 +48,9 @@ def env(tmp_path, monkeypatch):
     for name in ("interpret", "compose"):
         mod = __import__(f"mvp.{name}", fromlist=["x"])
         monkeypatch.setattr(mod.llm, "chat_json", fake_chat)
+    from mvp import config as _config
+    # the fakes change their answer for the same text between steps; the cache has its own tests (test_slice2.py)
+    monkeypatch.setattr(_config, "INTERPRET_CACHE_HOURS", 0)
 
     class FakePool:
         max_resident = 4
@@ -551,8 +554,8 @@ def test_mac_self_chat_answers_in_your_own_thread_without_looping(tmp_path):
 def test_a_flood_from_one_person_is_ignored(env):
     bot, ch, st = env["bot"], env["ch"], env["state"]
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "chat", "reply": "Hi!"}
-    for _ in range(20):
-        bot.on_message("+15550001", "hello")
+    for i in range(20):   # different texts: a repeat would be answered from the interpretation cache, for free
+        bot.on_message("+15550001", f"hello {i}")
     assert len(ch.outbox) == 15 and env["calls"].count("mvp_interpret") == 15
 
 

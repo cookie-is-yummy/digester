@@ -1,8 +1,8 @@
 """PROTOTYPE ONLY - the bot: message handler, executor and scheduler (docs/06 'Executor', BRIEF-10 sections 4 and 5).
 
 Only this bot sends (AGENTS.md rule 5): retrieve and compose read; the interpreter fills forms (rule 6).
-Bot is assembled from three mixins: handler.py (messages in), executor.py (one run, and the send) and scheduler.py
-(timed sends). What it says is in texts.py. The names below stay importable from mvp.core.
+Bot is assembled from four mixins: handler.py (messages in), todos.py (to-dos and library counts), executor.py (one run,
+and the send) and scheduler.py (timed sends). What it says is in texts.py. The names below stay importable from mvp.core.
 """
 import json
 import os
@@ -31,6 +31,7 @@ from .scheduler import (
     SchedulerMixin,
 )
 from .store import Store
+from .todos import TodoMixin
 from .texts import (
     AGREE,
     CONSENT,
@@ -85,7 +86,7 @@ __all__ = [
 ]
 
 
-class Bot(HandlerMixin, ExecutorMixin, SchedulerMixin):
+class Bot(HandlerMixin, TodoMixin, ExecutorMixin, SchedulerMixin):
     def __init__(self, channel, store=None, pool=None, clock=None):
         self.channel = channel
         self.store = store or Store(config.DB)

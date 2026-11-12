@@ -48,6 +48,10 @@ Other ways to test:
 - **Offline tests** (no API calls): `python3 -m pytest -q mvp/tests`
 - **A set of test requests on a library**: `python3 -m mvp.run_requests ../data/mvp/requests.jsonl ../data/all`
   writes the conversation and a grading sheet to `data/mvp/eval/...` (outside git) and prints counts only.
+- **The interpreter on the rule evaluation set** (live model calls, about $0.003 a case at list price):
+  `python3 -m mvp.eval_rules mvp/evalset/rules_dev_timing.jsonl [--limit N] [--ids t-dev-001,...] [--debug F]`
+  prints one line per failed case and a total, and writes counts to `MVP_HOME/eval_rules/<file>.json`. The case texts
+  are invented. The held-out half is run only by an evaluator who did not build the interpreter.
 
 ## Run it for real
 
@@ -88,7 +92,9 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `bot.py` | Start-up: channel, store, people, engines |
 | `runtime.py` | The run loop: message log, workers (one person at a time per person), joining quick texts, scheduler thread |
 | `core.py` | Message handler, executor, scheduler rules. The only code that sends |
-| `interpret.py`, `prompts/interpret_v2.md`, `schema.py` | Message to a validated intent and rule spec (RuleSpec v 2) |
+| `interpret.py`, `prompts/interpret_v3.md`, `schema.py` | Message to a validated form for every intent (RuleSpec v 2); temperature 0, a seed, a 6-hour cache |
+| `eval_rules.py`, `evalset/` | The rule evaluation runner and the development half of the set |
+| `todos.py` | To-do lists, due reminders, undo records, library counts |
 | `actions/` | The action registry: what a rule's `do` may name, and its params |
 | `retrieve.py`, `engines.py`, `libview.py` | Candidates from the person's own library (Q8 search, filters) |
 | `compose.py`, `prompts/compose_v1.md` | The model picks; code enforces the reliability rules (BRIEF-10 section 5) |
@@ -98,4 +104,4 @@ confirms to them. A person listed there is not added back from `people.json`.
 | `store.py`, `llm.py` | Records; model calls, the cost ledger and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 76 offline tests |
+| `tests/` | 102 offline tests |

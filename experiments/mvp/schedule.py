@@ -320,10 +320,11 @@ def _next_random(when, tz, tzname, after_utc, anchor_local, seed, quiet):
 
 # ---------- code-side completion ----------
 def resolve_relative(when: When, now: datetime, tzname: str) -> When:
-    """'in two hours' (in_minutes) becomes a local date and time here, never in the model."""
-    if when.type == "once" and when.in_minutes:
+    """'in two hours' (in_minutes) becomes a local date and time here, never in the model. in_minutes stays on the
+    object as the record of what was asked; RuleSpec.stored() keeps only the moment."""
+    if when.type == "once" and when.in_minutes and not when.date:
         t = now.astimezone(ZoneInfo(when.tz or tzname)) + timedelta(minutes=when.in_minutes)
-        when.date, when.times, when.in_minutes = t.strftime("%Y-%m-%d"), [t.strftime("%H:%M")], None
+        when.date, when.times = t.strftime("%Y-%m-%d"), [t.strftime("%H:%M")]
     return when
 
 

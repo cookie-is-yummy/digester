@@ -11,6 +11,7 @@ from .render import none_message, picks_message
 from .retrieve import candidates
 from .schema import RuleSpec
 from .store import now_iso
+from . import texts as T
 from .texts import LIMIT, LIMIT_TOTAL, LOADING, RUN_ERROR, SCHEDULED_FOOTER
 
 
@@ -45,6 +46,8 @@ class ExecutorMixin:
         """kind: preview | scheduled | manual | ask | more | follow_up. Returns (message, run_id, n_picks). 'manual'
         is a rule run because the person asked for it now; 'more' repeats the last question without the picks already
         shown (`shown`). Deliveries are written here; a caller whose send fails removes them (unsend)."""
+        if spec.content.source in ("note", "todos"):
+            return self._run_plain(person, spec, kind, rule_id)
         t0 = time.time()
         cost = 0.0
         status, err, result, cands, view = "ok", None, None, [], None
@@ -74,7 +77,8 @@ class ExecutorMixin:
                                     n_dropped=sum(((result or {}).get("dropped") or {}).values()),
                                     fits=[p["fit"] for p in picks], cost_usd=round(cost, 6),
                                     status=status if status == "error" else ("picked" if picks else "none"),
-                                    error=err, prompt_version=config.PROMPT_COMPOSE, seconds=round(time.time() - t0, 2))
+                                    error=err, prompt_version=config.PROMPT_COMPOSE, seconds=round(time.time() - t0, 2),
+                                    lang=getattr(self._tl, "lang", None))
         self.note(run_id=run_id)
         if status == "error":
             return RUN_ERROR, run_id, 0
@@ -96,8 +100,35 @@ class ExecutorMixin:
             if kind == "scheduled":
                 number = next((i for i, r in enumerate(self.store.rules(person["handle"]), 1) if r["id"] == rule_id), 1)
                 footer = SCHEDULED_FOOTER.format(n=number)
-            return picks_message(result, spec, footer=footer), run_id, len(picks)
+            msg = picks_message(result, spec, footer=footer)
+            if kind != "preview" and any(a.action == "todo.add" for a in spec.do):
+                msg += "\n\n" + self._picks_to_list(person, spec, picks)
+            return msg, run_id, len(picks)
         return none_message(result, spec, scheduled=(kind == "scheduled")), run_id, 0
+
+    def _run_plain(self, person, spec, kind, rule_id):
+        """A reminder in the person's own words, or their open to-dos: no search and no model call."""
+        h = person["handle"]
+        if spec.content.source == "note":
+            msg, n = T.reminder(spec.content.text), 1
+        else:
+            msg, n = self._todos_text(h)
+        run_id = self.store.add_run(handle=h, rule_id=rule_id, kind=kind, at=now_iso(self.clock()), n_candidates=0,
+                                    n_picks=n, n_dropped=0, cost_usd=0.0, status="picked" if n else "none",
+                                    prompt_version=None, seconds=0.0)
+        self.note(run_id=run_id)
+        if kind == "scheduled" and spec.when.repeating:
+            number = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), 1)
+            msg += "\n" + T.REMINDER_FOOTER.format(n=number)
+        return msg, run_id, n
+
+    def _picks_to_list(self, person, spec, picks):
+        """do todo.add: each main pick (its checked title and its link) goes on the person's list."""
+        name = next((a.params.get("list") for a in spec.do if a.action == "todo.add"), None) or "todo"
+        ids = [self.store.add_todo(person["handle"], p["title"], name, item_id=p["item"].id, url=p["item"].url,
+                                   at=self.clock()) for p in picks]
+        self._wrote(person["handle"], "todo_add", f"added {len(ids)} picks to the list \"{name}\"", {"ids": ids})
+        return T.picks_added(len(ids), name)
 
     def _feedback_weights(self, rule_id, view):
         if not rule_id:
