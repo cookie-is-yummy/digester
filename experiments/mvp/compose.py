@@ -356,10 +356,11 @@ def _failed_must_haves(raw, cands, spec, extra, known_lines, wider):
 
 def compose(cands, spec, person_handle, request_text=None, feedback_note="", known_lines=None, extra=None,
             profile="", lang=None, store=None, use_cache=True, sent_count=0, wider=False, now=None, level_ok=True,
-            survey=False, max_minutes=None):
-    """Returns (result, cost). result: picks (the recommended pick first, then alternatives; or the one closest
-    pick), wider (more clear fits, asks only), closest (True when nothing was a clear fit), unknown_criteria (must-
-    haves no shown item's text could answer), missing ((must-have, "no" | "unknown") the closest pick does not
+            survey=False, max_minutes=None, once=False):
+    """Returns (result, cost). once: one model call and no retry (fix pass 5, finding 84: the second look).
+    result: picks (the recommended pick first, then alternatives; or the one closest pick), wider (more clear fits,
+    asks only), closest (True when nothing was a clear fit), unknown_criteria (must-haves no shown item's text could
+    answer), missing ((must-have, "no" | "unknown") the closest pick does not
     clearly meet), intro,
     none_reason, dropped (what the checks removed), cached. A pick: item, title, verdict, because, because_backed,
     criteria [yes|no|unknown], lines (filled by extract.py), lines_reused."""
@@ -407,7 +408,9 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
     if raw is None:
         try:
             raw, cost = _call(user, person_handle, config.COMPOSE_SEED, budget)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            if once:
+                raise ComposeCut("the reply was cut off") from e
             # review fix X7: a reply cut off at its token limit (or none at all): once more, asking only for the
             # picks the answer shows, with more room; a second cut is ComposeCut
             ask = dict(ask, max_picks=c.count)
@@ -417,12 +420,12 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
                 raw, cost = _call(user, person_handle, config.COMPOSE_SEED, budget)
             except (ValueError, TypeError) as e2:
                 raise ComposeCut("the reply was cut off") from e2
-        if not _usable(raw):   # section 4: one more try before the bot says "nothing" while candidates exist
+        if not once and not _usable(raw):   # section 4: one more try before the bot says "nothing" while candidates exist
             raw2, c2 = _call(user, person_handle, config.COMPOSE_SEED + 1, budget)
             cost += c2
             if _usable(raw2):
                 raw = raw2
-        failed = _failed_must_haves(raw, cands, spec, extra, known_lines, wider)
+        failed = [] if once else _failed_must_haves(raw, cands, spec, extra, known_lines, wider)
         if failed:   # section 3: every pick it gave fails a must-have; ask once for the closest among the others
             note = ("\n\nNote from the bot: candidates " + ", ".join(str(n) for n in failed) + " fail a must-have, so "
                     "they cannot be shown. From the other candidates, return the closest one (\"close\", or \"clear\" "
@@ -498,6 +501,58 @@ def tips_only(text):
     return bool(TIPS.search(text or "")) and not PROJECT.search(text or "")
 
 
+def cand_keys(it):
+    """Fix pass 5, finding 84 (1): every (creator, title) a candidate goes by before the composer has named it: its own
+    first words (as same_keys reads them) and its first line, normalised. Empty when the creator is unknown."""
+    keys = same_keys({"item": it, "title": ""})
+    creator = norm(it.creator or "")
+    first = _squash(getattr(it, "first_line", "") or "")
+    if creator and first:
+        keys.add((creator, first))
+    return keys
+
+
+def collapse_copies(cands, extra=None):
+    """Fix pass 5, finding 84 (1): copies of one post (the same creator and the same title or first line) take one
+    place among the candidates, so they never use up the composer's picks. The copy whose own text writes out more of
+    the details is kept, in the place of the best-ranked copy. Returns (candidates, copies left out)."""
+    out, keys = [], []
+    for it in cands:
+        k = cand_keys(it)
+        hit = next((i for i, ks in enumerate(keys) if k & ks), None) if k else None
+        if hit is None:
+            out.append(it)
+            keys.append(k)
+            continue
+        keys[hit] = keys[hit] | k
+        if written_details(it, extra) > written_details(out[hit], extra):
+            out[hit] = it
+    return out, len(cands) - len(out)
+
+
+def dish_words(p):
+    """The words of a pick's title that name the thing itself (stop words and numbers left out), singular."""
+    from .retrieve import _stem
+    return {_stem(w) for w in tokens(p.get("title") or "") if len(w) >= 3 and w not in STOP and not w.isdigit()}
+
+
+def same_dish(a, b):
+    """Fix pass 5, finding 84 (4): two picks whose titles name the same thing, give or take one word ("Chicken and
+    rice" and "Easy chicken and rice"); different creators count too."""
+    x, y = dish_words(a), dish_words(b)
+    if not x or not y:
+        return False
+    return (x == y or len(x & y) >= 2) and len(x ^ y) <= 1
+
+
+def _different_first(rest, lead):
+    """The alternatives with the ones that are the lead's own dish last, and at most one of those (finding 84 (4))."""
+    same = [p for p in rest if same_dish(p, lead)]
+    if not same:
+        return rest, 0
+    return [p for p in rest if not any(p is s for s in same)] + same[:1], len(same) - 1
+
+
 def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=True, max_minutes=None,
           request_text=None):
     """The code checks on one composer answer (pure: the same answer always gives the same result). level_ok: whether
@@ -508,7 +563,7 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
     dropped = {"not_a_candidate": 0, "verdict_no": 0, "criterion_no": 0, "criterion_unbacked": 0, "avoided": 0,
                "repeat": 0, "over_count": 0, "title_replaced": 0, "because_replaced": 0, "criterion_tips": 0}
     finished = [i for i, cr in enumerate(c.criteria) if FINISHED.search(cr)]
-    kept, seen = [], set()
+    kept, seen, returned = [], set(), []
     fallback = []   # picks whose only "no" is the finished-result must-have (tips): the closest when nothing else is
     raw = raw if isinstance(raw, dict) else {}
     for p in _picks_of(raw):
@@ -528,6 +583,7 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
             continue
         seen.add(n)
         it = cands[n - 1]
+        returned.append(it.id)
         verdict = str(p.get("verdict") or "close").strip().lower()
         verdict = verdict if verdict in VERDICTS else "close"
         if verdict == "no":
@@ -572,7 +628,10 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
             because, backed, problem = fallback_because(it), False, "level"   # a level nobody gave
         pick = {"item": it, "title": title, "verdict": verdict, "because": because, "because_backed": backed,
                 "criteria": answers, "lines": [], "facts": {}, "lines_reused": False, "too_long": too_long,
-                "minutes": round(dur / 60) if (max_minutes and dur) else None}
+                "minutes": round(dur / 60) if (max_minutes and dur) else None,
+                # fix pass 5, finding 84 (5): the checked quotes behind the reason, so a part of it can be trimmed
+                "because_quotes": [" ".join(str(f.get("quote") or "").split()) for f in (p.get("facts") or [])
+                                   if isinstance(f, dict)] if backed else []}
         if known_lines is not None and c.extract and known_lines.get(it.id):
             pick["lines"] = list(known_lines[it.id])
             pick["lines_reused"] = True   # the lines found before, not lines for this request
@@ -606,10 +665,21 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
     close = sorted([p for p in kept if p["verdict"] == "close"], key=lambda p: p["too_long"])   # stable
     count = max(c.count, 1)
     if clear:
-        picks, closest = clear[:count], False
-        more = clear[count:]
+        # fix pass 5, finding 84 (4): alternatives that are the lead's own dish go last, at most one of them
+        rest, n_same = _different_first(clear[1:], clear[0])
+        if n_same:
+            dropped["same_dish"] = dropped.get("same_dish", 0) + n_same
+        picks, closest = [clear[0]] + rest[:count - 1], False
+        more = rest[count - 1:]
         wide = more[:config.WIDER_MAX] if wider else []
         dropped["over_count"] += len(more) - len(wide)
+        if len(picks) < count and close:
+            # fix pass 5, finding 84 (3): fewer clear fits than asked for: close ones fill the places left, after the
+            # clear ones and under their own heading (render), never as the lead; a pick with any "no" is never here
+            had_same = any(same_dish(p, picks[0]) for p in picks[1:])
+            fill = [p for p in close if not same_dish(p, picks[0])] + \
+                ([] if had_same else [p for p in close if same_dish(p, picks[0])][:1])
+            picks = picks + fill[:count - len(picks)]
     elif close:   # finding 17: up to the number asked for, all shown as the closest
         picks, wide, closest = close[:count], [], True
         dropped["over_count"] += len(close) - len(picks)
@@ -635,4 +705,5 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
     return {"picks": picks, "wider": wide, "closest": closest, "unknown_criteria": unknown, "missing": missing,
             "intro": intro, "none_reason": "", "dropped": dropped, "level_used": level_used,
             "n_clear": len(clear), "n_close": len(close), "max_minutes": max_minutes,
-            "from_fallback": bool(picks) and not clear and not close}
+            "from_fallback": bool(picks) and not clear and not close,
+            "returned": returned}   # fix pass 5, finding 84 (2): every candidate the composer gave a verdict for

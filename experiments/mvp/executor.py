@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from . import config, llm
 from . import texts as T
 from .channels.base import SendUncertain
-from .compose import FINISHED, compose, duration_of, own_text, written_details
+from .compose import FINISHED, collapse_copies, compose, duration_of, own_text, written_details
 from .extract import default_extract, default_fits, details_many, fit_extract, kinds_for, topic_kind
 from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
 from .retrieve import candidates
@@ -91,6 +91,29 @@ def pref_backed(because, own, kits, time_pref):
     mine = set(topic_words(str(time_pref or ""))) - {"usually", "usual", "has", "have", "got", "minute", "hour", "time",
                                                      "about", "around", "most", "day", "days", "only", "max"}
     return not ((said & mine) - have)
+
+
+_REASON_SPLIT = re.compile(r"(\s*,\s*(?:and\s+)?|\s+and\s+)", re.I)
+_REASON_START = re.compile(r"^(?:it|it's|it’s|its|you|you'll|you're|your|the)\b", re.I)
+
+
+def trim_reason(because, bad, quotes):
+    """Fix pass 5, finding 84 (5): a reason with one part that fails a check loses that part, not all of it. Split at
+    "and" and commas; the parts `bad` says no to go; the rest is kept when it still starts with "it", "you" or "the"
+    and shares a word with a checked quote (a backed fact). Returns the reason (unchanged when nothing fails), or None."""
+    from .compose import STOP, tokens
+    pieces = _REASON_SPLIT.split(because)
+    parts, seps = pieces[0::2], [""] + pieces[1::2]
+    keep = [i for i, part in enumerate(parts) if part.strip() and not bad(part)]
+    if len(keep) == len(parts):
+        return because
+    if not keep:
+        return None
+    out = parts[keep[0]].strip() + "".join(seps[i] + parts[i] for i in keep[1:])
+    out = " ".join(out.split()).strip(" ,;")
+    words = {w for w in tokens(out) if len(w) >= 4 and w not in STOP}
+    backed = any(words & set(tokens(q)) for q in quotes or [])
+    return out if _REASON_START.match(out) and backed else None
 
 
 def makes_whole(facts, food):
@@ -382,6 +405,10 @@ class ExecutorMixin:
             t1 = time.time()
             extra = self._youtube().details(cands, now=now) if any(c.platform == "youtube" for c in cands) else {}
             steps["youtube"] = round(time.time() - t1, 2)
+            if cands_override is None:   # fix pass 5, finding 84 (1): copies of one post take one place
+                cands, n_copies = collapse_copies(cands, extra)
+                if n_copies:
+                    steps["copies"] = n_copies
             t1 = time.time()
             about, level_ok, guessed = self._profile_text(h, spec.content.goal, request_text or "",
                                                           *spec.content.searches)
@@ -394,6 +421,11 @@ class ExecutorMixin:
                                 wider=(kind == "ask"), now=now, level_ok=level_ok,
                                 survey=(kind in ("preview", "more")), max_minutes=bound)
             cost += c
+            if kind in ("ask", "preview") and cands_override is None and known_lines is None:
+                # fix pass 5, finding 84 (2): a thin answer gets one more look at what the composer did not return
+                result, c = self._second_look(person, spec, cands, result, request_text, extra, about, level_ok,
+                                              bound, now, steps, len(sent_before))
+                cost += c
             if result.get("picks") and kind != "follow_up":
                 self._level_note(h, result, guessed)
             steps["compose"], steps["answer_cached"] = round(time.time() - t1, 2), result.get("cached", False)
@@ -419,7 +451,7 @@ class ExecutorMixin:
                 pool = main[1:] + (result.get("wider") or [])
                 # (checker: a list of tips is not a recipe written out; it never takes the lead this way)
                 from .compose import tips_only
-                better = next((p for p in pool if p["verdict"] == main[0]["verdict"]
+                better = next((p for p in pool if p["verdict"] == main[0]["verdict"] and not p.get("second_look")
                                and written_details(p["item"], extra)
                                and not tips_only(own_text(p["item"], extra))
                                and default_fits(own_text(p["item"], extra))), None)
@@ -445,7 +477,9 @@ class ExecutorMixin:
                         p["lines"], p["lines_reused"] = found, False
                 if asked and not result.get("closest"):
                     # the best-ranked of the top 3 that has every kind asked for; else the one with the most of them
-                    have = [(sum(1 for k in asked if p["facts"].get(k)), -i, p) for i, p in enumerate(targets[:3])]
+                    # (fix pass 5, finding 84: never a close one or one from the second look as the lead)
+                    have = [(sum(1 for k in asked if p["facts"].get(k)), -i, p) for i, p in enumerate(targets[:3])
+                            if p["verdict"] == main[0]["verdict"] and not p.get("second_look")]
                     top = max(have, key=lambda x: x[:2]) if have else None
                     best = top[2] if top and top[0] else None
                     if best is not None and best is not main[0]:
@@ -458,6 +492,12 @@ class ExecutorMixin:
                     steps["extract_errors"] = info["errors"]
             if main and kind != "follow_up":   # fix pass 4, finding 80: a whole recipe written out is a finished result
                 finished_by_details(result, spec, extra, request_text or "", hint)
+            if result.get("picks") and not result.get("closest"):
+                # fix pass 5, finding 84 (3): the alternatives in the order they are shown (clear, then close), so
+                # "the second one" is the second one the person reads
+                ps = result["picks"]
+                result["picks"] = ps[:1] + [p for p in ps[1:] if p["verdict"] == "clear"] + \
+                    [p for p in ps[1:] if p["verdict"] != "clear"]
             for p in (result.get("picks") or []) + (result.get("wider") or []):
                 own = own_text(p["item"], extra)
                 if any(names_kit(p.get("title") or "", k) and not names_kit(own, k) for k in kits):
@@ -468,16 +508,33 @@ class ExecutorMixin:
                     result["dropped"]["title_pref"] = result["dropped"].get("title_pref", 0) + 1
                 # finding 47: a reason that promises ingredients or steps the answer does not show is left out
                 b = p.get("because") if p.get("because_backed") else None
-                if b and any(rx.search(b) and not (p.get("facts") or {}).get(k) for k, rx in DETAIL_CLAIM.items()):
-                    p["because"], p["because_backed"] = None, False
-                    result["dropped"]["because_detail_claim"] = result["dropped"].get("because_detail_claim", 0) + 1
+                if not b:
                     continue
-                # fix pass 4, finding 74: a reason may name their kit or their usual time only when the post's own
-                # text backs it ("it needs only an Instant Pot" for a post that never names one is left out)
-                if b and not pref_backed(b, own, kits,
-                                         (self.store.person_context(h).get("prefs") or {}).get("time")):
-                    p["because"], p["because_backed"] = None, False
-                    result["dropped"]["because_pref_claim"] = result["dropped"].get("because_pref_claim", 0) + 1
+                pfacts = p.get("facts") or {}
+                time_pref = (self.store.person_context(h).get("prefs") or {}).get("time")
+
+                def claims(part, pfacts=pfacts):
+                    return any(rx.search(part) and not pfacts.get(k) for k, rx in DETAIL_CLAIM.items())
+
+                def unbacked(part, own=own):
+                    # fix pass 4, finding 74: a reason may name their kit or their usual time only when the post's own
+                    # text backs it ("it needs only an Instant Pot" for a post that never names one is left out)
+                    return not pref_backed(part, own, kits, time_pref)
+                why = "detail_claim" if claims(b) else ("pref_claim" if unbacked(b) else None)
+                if why is None:
+                    continue
+                # fix pass 5, finding 84 (5): the failing part is trimmed; the rest stays when it is still a clause
+                # with a backed fact; with nothing left the reason is gone (the lead then gets one code stands behind)
+                trimmed = trim_reason(b, lambda part: claims(part) or unbacked(part), p.get("because_quotes"))
+                key = "because_" + why + ("_trimmed" if trimmed else "")
+                result["dropped"][key] = result["dropped"].get(key, 0) + 1
+                p["because"], p["because_backed"] = (trimmed, True) if trimmed else (None, False)
+                if not trimmed and p is (result.get("picks") or [None])[0] and kind != "follow_up":
+                    from .render import code_reason
+                    own_reason = code_reason(p, result.get("extract"), self._answer_lang())
+                    if own_reason:
+                        p["because"], p["because_backed"] = own_reason, True
+                        result["dropped"]["because_code"] = result["dropped"].get("because_code", 0) + 1
             if result.get("picks") and kind != "follow_up" and not self._answer_lang():
                 result["picks"][0]["fit"] = self._fit_note(h, result["picks"][0], kits, extra, spec,
                                                            request_text or "", hint)
@@ -595,6 +652,85 @@ class ExecutorMixin:
         except Exception as e:  # noqa: BLE001 - a count only; never lose the answer to it
             print(f"supply count failed: {type(e).__name__}", file=sys.stderr)
             return None
+
+    SECOND_LOOK_MAX = 12   # candidates the second look shows the composer at most
+
+    def _second_look(self, person, spec, cands, result, request_text, extra, about, level_ok, bound, now, steps,
+                     sent_count):
+        """Fix pass 5, finding 84 (2): when the checked answer shows fewer picks than asked for and candidates remain
+        that the composer did not return and that look like the kind asked for (and share a topic word with the
+        request), the composer looks once more at those only. Never more than one extra call; its checked picks come
+        after the first call's, and the lead changes only when the first call had no pick at all. A first answer that
+        is only the closest is left as it is (a clear fit beside "none of what I found ..." would contradict it). Any
+        failure (a cut-off reply, the budget guard) leaves the first answer. Returns (result, cost)."""
+        from .compose import cand_keys, same_dish, same_keys
+        from .outside import _tokens, kind_fit_items, query_words
+        from .retrieve import _stem
+        c = spec.content
+        picks = list(result.get("picks") or [])
+        need = max(c.count, 1) - len(picks)
+        if need <= 0 or (picks and result.get("closest")) or c.source != "library":
+            return result, 0.0
+        shown = picks + list(result.get("wider") or [])
+        keys = set().union(*[same_keys(p) for p in shown]) if shown else set()
+        returned = set(result.get("returned") or [])
+        rest = [it for it in cands if it.id not in returned and not (cand_keys(it) & keys)]
+        own = getattr(self._tl, "own_words", None)
+        texts = [request_text or ""] if own is None else [own]
+        try:
+            fit = kind_fit_items(rest, spec, texts, lambda it: own_text(it, extra or {}))
+            if fit is None:
+                stems = {_stem(w) for w in query_words(spec, texts)}
+                fit = [it for it in rest if stems & {_stem(t) for t in _tokens(own_text(it, extra or {}))}] \
+                    if stems else []
+        except Exception as e:  # noqa: BLE001 - a filter only; the first answer stands
+            print(f"second look filter failed: {type(e).__name__}", file=sys.stderr)
+            fit = []
+        fit = fit[:self.SECOND_LOOK_MAX]
+        if not fit:
+            return result, 0.0
+        t1 = time.time()
+        info = {"candidates": len(fit)}
+        try:
+            r2, cost = compose(fit, spec, person["handle"], request_text=request_text, extra=extra, profile=about,
+                               lang=self._compose_lang(), store=self.store, use_cache=True, sent_count=sent_count,
+                               wider=False, now=now, level_ok=level_ok, max_minutes=bound, once=True)
+        except Exception as e:  # noqa: BLE001 - the first answer goes out as it was
+            steps["second_look"] = dict(info, error=type(e).__name__, seconds=round(time.time() - t1, 2))
+            return result, 0.0
+        info.update(cost=round(cost, 6), cached=r2.get("cached", False), seconds=round(time.time() - t1, 2))
+        new = []
+        for p in r2.get("picks") or []:
+            if any(same_keys(p) & same_keys(q) for q in shown + new):
+                continue
+            p["second_look"] = True
+            new.append(p)
+        if not picks:   # nothing at all from the first call: the second call's answer is the answer
+            if new:
+                r2 = dict(r2, picks=new[:max(c.count, 1)])
+                r2["dropped"] = {k: result["dropped"].get(k, 0) + r2["dropped"].get(k, 0)
+                                 for k in set(result["dropped"]) | set(r2["dropped"])}
+                result = r2
+            info["merged"] = len(result.get("picks") or [])
+            steps["second_look"] = info
+            return result, cost
+        lead = picks[0]
+        new = [p for p in new if p["verdict"] in ("clear", "close")]
+        if any(same_dish(p, lead) for p in picks[1:]):
+            new = [p for p in new if not same_dish(p, lead)]
+        else:
+            same = [p for p in new if same_dish(p, lead)]
+            new = [p for p in new if not same_dish(p, lead)] + same[:1]
+        alts = picks[1:] + new
+        merged = [lead] + [p for p in alts if p["verdict"] == "clear"] + [p for p in alts if p["verdict"] != "clear"]
+        merged = merged[:max(c.count, 1)]
+        added = [p for p in merged if p.get("second_look")]
+        result = dict(result, picks=merged)
+        result["n_clear"] = result.get("n_clear", 0) + sum(1 for p in added if p["verdict"] == "clear")
+        result["n_close"] = result.get("n_close", 0) + sum(1 for p in added if p["verdict"] != "clear")
+        info["merged"] = len(added)
+        steps["second_look"] = info
+        return result, cost
 
     def _outside(self):
         o = getattr(self, "outside", None)

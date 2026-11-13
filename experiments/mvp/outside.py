@@ -216,21 +216,28 @@ def kind_fits(items, spec, texts, own_text):
     """Finding 67 (a): how many of the candidates look like the kind asked for in their own text (a recipe, a
     workout, a whole tutorial; not tips alone) and share a topic word with the request when it has one. None when the
     request names no kind. The uninvited outside block needs fewer than 3 of these as well as fewer than 3 clear picks."""
+    fit = kind_fit_items(items, spec, texts, own_text)
+    return None if fit is None else len(fit)
+
+
+def kind_fit_items(items, spec, texts, own_text):
+    """The candidates kind_fits counts, in their order (fix pass 5, finding 84: the second look draws on these); None
+    when the request names no kind."""
     from .compose import PROJECT, tips_only
     kind = request_kind(texts, spec)
     if not kind:
         return None
     rx = {"recipe": ITEM_RECIPE, "workout": ITEM_WORKOUT, "tutorial": PROJECT}[kind]
     stems = {_stem(w) for w in query_words(spec, texts)}
-    n = 0
+    out = []
     for it in items:
         text = own_text(it)
         if not rx.search(text) or tips_only(text):
             continue
         if stems and not stems & {_stem(t) for t in _tokens(text)}:
             continue
-        n += 1
-    return n
+        out.append(it)
+    return out
 
 
 ITEM_RECIPE = re.compile(r"\b(?:recipes?|ingredients?|tbsp|tsp|tablespoons?|teaspoons?|cups?|bake[ds]?|baking|"

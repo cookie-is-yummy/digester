@@ -205,6 +205,15 @@ def alt_note(pick, extract, lang=None):
     return pick["because"] if pick.get("because_backed") and pick.get("because") else ""
 
 
+def code_reason(pick, extract, lang=None):
+    """Fix pass 5, finding 84 (5): a reason code can stand behind, from what it read in the pick's own text and shows
+    under it ("the ingredients are written out, with amounts"); '' when no details are shown."""
+    p = dict(pick, because=None, because_backed=False)
+    note = alt_note(p, extract, lang)
+    t = L.table(lang)
+    return note if note and note != t["alt_video"] else ""
+
+
 def pick_sentence(lead, p, now=None, lang=None, colon=False):
     """'I recommend One Pot Pasta by @chef (9 minutes), which you saved in March, because it takes 15 minutes.' The
     reason only when it is backed (finding 10); after "because" only a full clause, else after a colon (finding 8)."""
@@ -307,10 +316,17 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
     if it.url:
         parts.append(link_part(it, first["title"]))
     text.extend(details_lines(first, extract, asked=c.extract, lang=lang))
-    if len(picks) > 1:
+    if result.get("closest"):
+        groups = [(t["or_close"], picks[1:])]
+    else:   # fix pass 5, finding 84 (3): close ones after a clear lead come under their own heading, never mixed
+        groups = [(t["or_try"], [p for p in picks[1:] if p.get("verdict", "clear") == "clear"]),
+                  (t["or_close"], [p for p in picks[1:] if p.get("verdict", "clear") != "clear"])]
+    for head, group in groups:
+        if not group:
+            continue
         text.append("")
-        text.append(t["or_close"] if result.get("closest") else t["or_try"])
-        for p in picks[1:]:
+        text.append(head)
+        for p in group:
             note = alt_note(p, extract, lang)
             length = L.length(p.get("length_text"), lang)
             text.append(f"• {p['title']}{by(p['item'], lang)}" + (f" ({length})" if length else "") +

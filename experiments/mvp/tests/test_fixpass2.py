@@ -303,7 +303,9 @@ def test_47_a_reason_that_promises_details_not_shown_is_left_out(env):
         "because": "it has the ingredients and step-by-step guides", "facts": [{"label": "x", "quote": "2 lemons"}],
         "lines": ["200g spaghetti", "2 lemons"]}]}
     msg = say(env, "a lemon pasta recipe", ask_with(["message.send"], extract=["ingredients", "steps"]))
-    assert "I recommend Lemon garlic pasta" in msg and "step-by-step" not in msg and "because" not in msg
+    assert "I recommend Lemon garlic pasta" in msg and "step-by-step" not in msg
+    # fix pass 5, finding 84 (5): with nothing backed left of it, the lead gets a reason code stands behind
+    assert "because the ingredients are written out, with amounts." in msg
     assert "Ingredients (2):" in msg
 
 

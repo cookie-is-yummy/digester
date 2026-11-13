@@ -1,0 +1,284 @@
+"""Offline tests for fix pass 5 (live findings of 13 Nov, round 5, after a full setup): one or more tests per finding 84
+to 87, each failing without its fix. Synthetic data, a fake model, a fake search pool, a fake YouTube and a fake clock
+only; the fixtures come from the earlier test files."""
+import json
+import os
+import sys
+
+import pytest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+
+from mvp.tests.test_mvp import env, last  # noqa: E402,F401  (env is a fixture)
+from mvp.tests.test_slice2 import H, say  # noqa: E402
+from mvp.tests.test_slice5 import yt  # noqa: E402,F401
+from mvp.tests.test_slice6 import AllPool, number_of  # noqa: E402
+
+CHICKEN = "convenient chicken and rice recipes"
+LEAD = "Rice cooker chicken and rice"
+LEAD_TEXT = LEAD + "\nIngredients:\n- 2 cups rice\n- 1 lb chicken thighs\n- 1 tbsp soy sauce\nCook it all in the rice cooker."
+ROWS = [   # (id, creator, caption)
+    ("c1", "cook_a", LEAD + "\nSo easy."),                                     # a copy with less written out ...
+    ("c2", "cook_a", LEAD_TEXT),                                               # ... and the fuller copy
+    ("c3", "cook_b", "Easy rice cooker chicken and rice, recipe in the video"),  # the same dish, another creator
+    ("c4", "cook_c", "Hainanese chicken rice recipe\nIngredients:\n- 1 whole chicken\n- 2 cups jasmine rice"),
+    ("c5", "cook_d", "Chicken fried rice recipe in one pan, with ingredients below"),
+    ("c6", "cook_e", "Teriyaki chicken rice bowl recipe for dinner"),
+    ("c7", "cook_f", "Lemon pasta for one"),
+]
+
+
+def write_lib(path, rows=ROWS):
+    (path / "corpus").mkdir(parents=True)
+    with open(path / "corpus" / "items.jsonl", "w") as f:
+        for iid, who, cap in rows:
+            f.write(json.dumps({"id": iid, "platform": "instagram", "source_url": f"https://example.com/{iid}",
+                                "caption": cap, "interaction_kinds": ["share_self"],
+                                "platform_data": {"owner_handle": who, "owner_relation": "none"}}) + "\n")
+    with open(path / "corpus" / "interactions.jsonl", "w") as f:
+        for iid, *_ in rows:
+            f.write(json.dumps({"item_id": iid, "kind": "share_self", "at": "2026-07-01T10:00:00+00:00"}) + "\n")
+    return path
+
+
+@pytest.fixture()
+def food(env, tmp_path):
+    lib = write_lib(tmp_path / "foodlib")
+    env["bot"].store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    env["bot"].pool = AllPool(str(lib))
+    env["lib"] = lib
+    return env
+
+
+def chicken_form(count=3, criteria=()):
+    return {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "convenient chicken and rice recipes", "searches": ["chicken and rice"], "criteria": list(criteria),
+        "count": count}}}
+
+
+def has(u, needle):
+    return needle.lower() in u.lower()
+
+
+def pick_of(u, needle, verdict="clear", title=None, **kw):
+    return dict({"n": number_of(u, needle), "verdict": verdict, "title": title or needle}, **kw)
+
+
+LEAD_REASON = {"because": "it uses a rice cooker and gives ingredients and steps for a quick dinner",
+               "facts": [{"label": "kit", "quote": "Cook it all in the rice cooker"}]}
+LEAD_LINES = ["2 cups rice", "1 lb chicken thighs", "1 tbsp soy sauce"]
+
+
+def first_call(u):
+    """What the live composer did: the lead and the same dish twice (here once more, the copies being one now)."""
+    return {"picks": [pick_of(u, LEAD, lines=LEAD_LINES, **LEAD_REASON),
+                      pick_of(u, "Easy rice cooker chicken", "close", "Easy rice cooker chicken and rice")],
+            "intro": "I've found some convenient chicken and rice recipes for you."}
+
+
+def second_call(u):
+    return {"picks": [pick_of(u, "Hainanese chicken rice", lines=LEAD_LINES),
+                      pick_of(u, "Chicken fried rice", title="Chicken fried rice in one pan")]}
+
+
+def composer(first, second, seen):
+    def answer(u):
+        seen.append(u)
+        return first(u) if has(u, LEAD) else second(u)
+    return answer
+
+
+def steps_of(bot):
+    row = bot.store.one("SELECT steps, cost_usd FROM runs WHERE kind='ask' ORDER BY id DESC LIMIT 1")
+    return json.loads(row["steps"] or "{}"), row["cost_usd"]
+
+
+# ======================================= 84. one pick, no reason, no alternatives =======================================
+def test_84_copies_of_one_post_reach_the_composer_as_one_the_fuller_one(food):
+    seen = []
+    food["state"]["answers"]["mvp_compose"] = composer(first_call, second_call, seen)
+    say(food, CHICKEN, chicken_form())
+    first = seen[0]
+    assert first.count("<item>" + LEAD) == 1 and "Cook it all in the rice cooker" in first   # c2 kept, c1 left out
+    from mvp.compose import collapse_copies
+    view = food["bot"].view(str(food["lib"]))
+    three = [view.get("c1"), view.get("c2"), view.get("c1")]
+    out, n = collapse_copies(three)
+    assert [it.id for it in out] == ["c2"] and n == 2
+
+
+def test_84_the_founders_example_gets_a_reason_and_two_different_dishes(food):
+    seen = []
+    food["state"]["answers"]["mvp_compose"] = composer(first_call, second_call, seen)
+    msg = say(food, CHICKEN, chicken_form())
+    assert len(seen) == 2 and not has(seen[1], LEAD) and not has(seen[1], "Easy rice cooker")   # the remaining ones
+    assert "I recommend Rice cooker chicken and rice by @cook_a, which you sent to yourself in July, because it uses " \
+           "a rice cooker and gives ingredients." in msg
+    assert "Ingredients (3):" in msg and "Or try these:" in msg
+    assert "• Hainanese chicken rice" in msg and "• Chicken fried rice in one pan" in msg
+    assert "Easy rice cooker chicken and rice" not in msg   # the same dish, with two different ones to show
+    steps, cost = steps_of(food["bot"])
+    assert steps["copies"] == 1 and steps["second_look"]["merged"] == 2 and steps["second_look"]["candidates"] >= 2
+    assert cost >= 0.002   # both composer calls are counted
+    # the person reads them in the order they are numbered
+    items = food["bot"].store.last_answer(H)["items"]
+    assert items == ["c2", "c4", "c5"]
+
+
+def test_84_the_lead_never_changes_because_of_the_second_call(food):
+    seen = []
+
+    def second(u):   # the second look finds one that has the details written out: it still only follows
+        return {"picks": [pick_of(u, "Hainanese chicken rice", lines=["1 whole chicken", "2 cups jasmine rice"])]}
+    food["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": [pick_of(u, "Teriyaki chicken")]}
+                                                         if has(u, "Teriyaki") else second(u))[1]
+    msg = say(food, CHICKEN, chicken_form())
+    assert len(seen) == 2 and "I recommend Teriyaki chicken" in msg and "• Hainanese chicken rice" in msg
+
+
+def test_84_enough_clear_different_picks_make_no_second_call_and_read_as_before(env, tmp_path):
+    lib = write_lib(tmp_path / "nocopies", [r for r in ROWS if r[0] != "c1"])
+    env["bot"].store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    env["bot"].pool = AllPool(str(lib))
+    food = env
+    seen = []
+    food["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": [
+        pick_of(u, LEAD, lines=LEAD_LINES, because="it cooks in the rice cooker",
+                facts=[{"label": "kit", "quote": "Cook it all in the rice cooker"}]),
+        pick_of(u, "Hainanese chicken rice"), pick_of(u, "Chicken fried rice", title="Chicken fried rice in one pan"),
+        pick_of(u, "Teriyaki chicken")], "intro": "I've found some convenient chicken and rice recipes for you."})[1]
+    msg = say(food, CHICKEN, chicken_form())
+    assert len(seen) == 1
+    steps, _ = steps_of(food["bot"])
+    assert "second_look" not in steps
+    # the answer exactly as the code at 8b66b6d gives it for the same input
+    assert msg == (
+        "I've found some convenient chicken and rice recipes for you.\n\n"
+        "I recommend Rice cooker chicken and rice by @cook_a, which you sent to yourself in July, because it cooks in "
+        "the rice cooker.\n"
+        "https://example.com/c2\n"
+        "Ingredients (3):\n• 2 cups rice\n• 1 lb chicken thighs\n• 1 tbsp soy sauce\n\n"
+        "Or try these:\n"
+        "• Hainanese chicken rice by @cook_c https://example.com/c4\n"
+        "• Chicken fried rice in one pan by @cook_d https://example.com/c5\n\n"
+        "Or here's a wider selection:\n"
+        "• Teriyaki chicken: https://example.com/c6")
+
+
+def test_84_close_ones_follow_a_clear_lead_under_their_own_heading(food):
+    food["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        pick_of(u, LEAD, lines=LEAD_LINES), pick_of(u, "Teriyaki chicken", "close"),
+        pick_of(u, "Hainanese chicken rice"), pick_of(u, "Lemon pasta", "close", criteria=[])]} \
+        if has(u, LEAD) else {"picks": []}
+    msg = say(food, CHICKEN, chicken_form())
+    head, close = msg.split("Or these, which are close too:")
+    assert "Or try these:\n• Hainanese chicken rice" in head and "Teriyaki" not in head
+    assert "• Teriyaki chicken" in close
+    assert food["bot"].store.last_answer(H)["items"] == ["c2", "c4", "c6"]   # numbered as shown
+    # a pick with any "no" is never shown, beside a clear lead or anywhere
+    from mvp.compose import check
+    from mvp.schema import RuleSpec
+    view = food["bot"].view(str(food["lib"]))
+    cands = [view.get(i) for i in ("c2", "c4", "c6")]
+    spec = RuleSpec.model_validate({"when": {"type": "now"}, "content": {"goal": "chicken", "searches": ["chicken"], "count": 3,
+                                                                         "criteria": ["has rice"]}})
+    yes = [{"answer": "yes", "quote": "rice"}]
+    r = check({"picks": [{"n": 1, "verdict": "clear", "title": LEAD, "criteria": yes},
+                         {"n": 2, "verdict": "close", "title": "Hainanese chicken rice", "criteria": [{"answer": "no"}]},
+                         {"n": 3, "verdict": "close", "title": "Teriyaki chicken", "criteria": [{"answer": "unknown"}]}]},
+              cands, spec)
+    assert [p["item"].id for p in r["picks"]] == ["c2", "c6"]
+
+
+def test_84_at_most_one_alternative_is_the_leads_own_dish_and_it_goes_last(food):
+    from mvp.compose import check, same_dish
+    from mvp.schema import RuleSpec
+    view = food["bot"].view(str(food["lib"]))
+    cands = [view.get(i) for i in ("c2", "c3", "c4", "c5", "c6")]
+    spec = RuleSpec.model_validate({"when": {"type": "now"}, "content": {"goal": "chicken", "searches": ["chicken"], "count": 3}})
+    raw = {"picks": [{"n": 1, "verdict": "clear", "title": LEAD},
+                     {"n": 2, "verdict": "clear", "title": "Easy rice cooker chicken and rice"},
+                     {"n": 3, "verdict": "clear", "title": "Hainanese chicken rice"}]}
+    r = check(raw, cands, spec)
+    assert [p["item"].id for p in r["picks"]] == ["c2", "c4", "c3"]
+    assert same_dish({"title": "Chicken and rice"}, {"title": "Easy chicken and rice"})
+    assert not same_dish({"title": "Hainanese chicken rice"}, {"title": "One pot chicken and rice"})
+
+
+def test_84_a_reason_is_trimmed_not_thrown_away():
+    from mvp.executor import trim_reason, DETAIL_CLAIM
+    facts = {"ingredients": ["x"]}
+
+    def bad(part):
+        return any(rx.search(part) and not facts.get(k) for k, rx in DETAIL_CLAIM.items())
+    q = ["Cook it all in the rice cooker"]
+    assert trim_reason("it uses a rice cooker and gives ingredients and steps for a quick dinner", bad, q) == \
+        "it uses a rice cooker and gives ingredients"
+    assert trim_reason("it uses a rice cooker", bad, q) == "it uses a rice cooker"        # nothing fails: unchanged
+    assert trim_reason("the steps are clear, and it uses a rice cooker", bad, q) == "it uses a rice cooker"
+    assert trim_reason("it has step-by-step steps", bad, q) is None                      # nothing left
+    assert trim_reason("it has the steps and gives ingredients", bad, q) is None         # no subject left
+    assert trim_reason("it has the steps and it is tasty", bad, q) is None               # no backed fact left
+
+
+def test_84_with_nothing_left_of_the_reason_the_lead_gets_one_code_stands_behind(food):
+    food["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick_of(
+        u, LEAD, lines=LEAD_LINES, because="it gives step-by-step instructions",
+        facts=[{"label": "kit", "quote": "Cook it all in the rice cooker"}])]} if has(u, LEAD) else {"picks": []}
+    msg = say(food, CHICKEN, chicken_form(count=1))
+    assert "which you sent to yourself in July, because the ingredients are written out, with amounts." in msg
+    assert "step-by-step" not in msg
+
+
+# ---------- near-variants ----------
+def test_84_all_candidates_copies_of_one_post_give_one_pick_and_no_second_call(env, tmp_path):
+    rows = [("c1", "cook_a", LEAD + "\nSo easy."), ("c2", "cook_a", LEAD_TEXT), ("c8", "cook_a", LEAD + "\nAgain."),
+            ("c7", "cook_f", "Lemon pasta for one")]
+    lib = write_lib(tmp_path / "copies", rows)
+    env["bot"].store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    env["bot"].pool = AllPool(str(lib))
+    seen = []
+    env["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": [pick_of(u, LEAD, lines=LEAD_LINES)]})[1]
+    msg = say(env, CHICKEN, chicken_form())
+    assert len(seen) == 1 and msg.count("Rice cooker chicken and rice") == 1 and "Or try these" not in msg
+
+
+def test_84_a_second_call_that_returns_nothing_leaves_the_answer(food):
+    seen = []
+    food["state"]["answers"]["mvp_compose"] = composer(first_call, lambda u: {"picks": []}, seen)
+    msg = say(food, CHICKEN, chicken_form())
+    assert len(seen) == 2 and "I recommend Rice cooker chicken and rice" in msg
+    assert "Or these, which are close too:\n• Easy rice cooker chicken and rice" in msg
+    steps, _ = steps_of(food["bot"])
+    assert steps["second_look"]["merged"] == 0
+
+
+@pytest.mark.parametrize("failure", ["cut", "budget"])
+def test_84_a_second_call_that_fails_leaves_the_first_answer(food, failure):
+    seen = []
+
+    def second(u):
+        if failure == "cut":
+            raise ValueError("the reply was cut off")
+        raise RuntimeError("budget stop: total")
+    food["state"]["answers"]["mvp_compose"] = composer(first_call, second, seen)
+    msg = say(food, CHICKEN, chicken_form())
+    assert len(seen) == 2 and "I recommend Rice cooker chicken and rice" in msg and "close too" in msg
+    steps, _ = steps_of(food["bot"])
+    assert steps["second_look"]["error"] in ("ComposeCut", "RuntimeError")
+    run = food["bot"].store.one("SELECT status FROM runs WHERE kind='ask' ORDER BY id DESC LIMIT 1")
+    assert run["status"] == "picked"
+
+
+def test_84_a_timed_send_with_count_one_never_makes_a_second_call(food):
+    from mvp.schema import RuleSpec
+    seen = []
+    food["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": []})[1]
+    bot = food["bot"]
+    spec = RuleSpec.model_validate({"when": {"type": "schedule", "days": ["FRI"], "time": "19:00"}, "content": {
+        "goal": "a chicken and rice recipe", "searches": ["chicken and rice"], "count": 1}})
+    bot.run(bot.store.person(H), spec, "scheduled")
+    assert len(seen) == 2   # the one retry before "nothing" (section 4), and no second look
+    row = bot.store.one("SELECT steps FROM runs WHERE kind='scheduled' ORDER BY id DESC LIMIT 1")
+    assert "second_look" not in json.loads(row["steps"])

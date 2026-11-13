@@ -113,7 +113,8 @@ def test_only_close_picks_show_the_closest_and_all_no_says_nothing(env):
     calls = env["calls"].count("mvp_compose")
     msg = compose_once(env, {"picks": [{"n": 1, "verdict": "no", "title": "x"}], "none_reason": "none of these is pasta"})
     assert msg == "I didn't find a good match: nothing in your library fits well."   # finding 5: never the model's words
-    assert env["calls"].count("mvp_compose") == calls + 2           # one more try before saying nothing (section 4)
+    # one more try before saying nothing (section 4), then (fix pass 5, finding 84) one look at what it did not return
+    assert env["calls"].count("mvp_compose") == calls + 3
 
 
 def test_a_retry_that_finds_a_pick_is_used(env):
