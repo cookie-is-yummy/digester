@@ -126,6 +126,27 @@ def test_84_the_founders_example_gets_a_reason_and_two_different_dishes(food):
     assert items == ["c2", "c4", "c5"]
 
 
+def test_84_an_alternative_of_the_leads_own_dish_gives_way_to_a_different_one(food):
+    """(live check of fix pass 5) Three clear picks, one of them the lead's own dish: a second look, and the
+    different dish it finds takes that place."""
+    seen = []
+    food["state"]["answers"]["mvp_compose"] = composer(
+        lambda u: {"picks": [pick_of(u, LEAD, lines=LEAD_LINES), pick_of(u, "Hainanese chicken rice"),
+                             pick_of(u, "Easy rice cooker chicken", title="Easy rice cooker chicken and rice")]},
+        lambda u: {"picks": [pick_of(u, "Chicken fried rice", title="Chicken fried rice in one pan")]}, seen)
+    msg = say(food, CHICKEN, chicken_form())
+    assert len(seen) == 2 and "Easy rice cooker chicken and rice" not in msg
+    assert food["bot"].store.last_answer(H)["items"] == ["c2", "c4", "c5"]
+    # with nothing different found, the lead's own dish keeps its place (at most one)
+    seen.clear()
+    food["state"]["answers"]["mvp_compose"] = composer(
+        lambda u: {"picks": [pick_of(u, LEAD, lines=LEAD_LINES), pick_of(u, "Hainanese chicken rice"),
+                             pick_of(u, "Easy rice cooker chicken", title="Easy rice cooker chicken and rice")]},
+        lambda u: {"picks": []}, seen)
+    msg = say(food, CHICKEN + " please", chicken_form())
+    assert len(seen) == 2 and msg.count("• Easy rice cooker chicken and rice") == 1
+
+
 def test_84_the_lead_never_changes_because_of_the_second_call(food):
     seen = []
 

@@ -685,7 +685,8 @@ class ExecutorMixin:
         from .retrieve import _stem
         c = spec.content
         picks = list(result.get("picks") or [])
-        need = max(c.count, 1) - len(picks)
+        # (an alternative that is the lead's own dish does not count: different dishes first, finding 84 (4))
+        need = max(c.count, 1) - len([p for i, p in enumerate(picks) if not i or not same_dish(p, picks[0])])
         if need <= 0 or (picks and result.get("closest")) or c.source != "library":
             return result, 0.0
         shown = picks + list(result.get("wider") or [])
@@ -732,15 +733,14 @@ class ExecutorMixin:
             steps["second_look"] = info
             return result, cost
         lead = picks[0]
-        new = [p for p in new if p["verdict"] in ("clear", "close")]
-        if any(same_dish(p, lead) for p in picks[1:]):
-            new = [p for p in new if not same_dish(p, lead)]
-        else:
-            same = [p for p in new if same_dish(p, lead)]
-            new = [p for p in new if not same_dish(p, lead)] + same[:1]
-        alts = picks[1:] + new
-        merged = [lead] + [p for p in alts if p["verdict"] == "clear"] + [p for p in alts if p["verdict"] != "clear"]
-        merged = merged[:max(c.count, 1)]
+        alts = picks[1:] + [p for p in new if p["verdict"] in ("clear", "close")]
+        # different dishes first; one that is the lead's own dish only fills a place nothing different can
+        diff = [p for p in alts if not same_dish(p, lead)]
+        diff = [p for p in diff if p["verdict"] == "clear"] + [p for p in diff if p["verdict"] != "clear"]
+        chosen = diff[:max(c.count, 1) - 1]
+        if len(chosen) < max(c.count, 1) - 1:
+            chosen += [p for p in alts if same_dish(p, lead)][:1]
+        merged = [lead] + [p for p in chosen if p["verdict"] == "clear"] + [p for p in chosen if p["verdict"] != "clear"]
         added = [p for p in merged if p.get("second_look")]
         result = dict(result, picks=merged)
         result["n_clear"] = result.get("n_clear", 0) + sum(1 for p in added if p["verdict"] == "clear")
