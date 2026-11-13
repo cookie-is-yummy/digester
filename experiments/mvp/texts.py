@@ -243,6 +243,28 @@ OUTSIDE_ERROR = "I couldn't reach YouTube just now, so I couldn't look for new t
 OUTSIDE_ONLY_TAIL = " Ask without \"new\" and I'll look in your own saves."
 
 
+# fix pass 5, finding 87: a repeating rule whose preview was the closest only because of its length limit
+def length_way_out(minutes):
+    return (f" Heads up: nothing I found is under {minutes} minutes, so each pick may be longer. Say \"any length\" to "
+            "drop the limit, or \"include YouTube\" and I'll look for shorter ones there too.")
+
+
+ANY_LENGTH = re.compile(r"^\W*(?:(?:ok|okay|sure|yes|fine)[\s,.!]+)?(?:any length|any length is (?:fine|ok|okay)|"
+                        r"drop the (?:length )?limit|no length limit|length doesn'?t matter|"
+                        r"longer (?:ones )?(?:is|are) (?:fine|ok|okay))(?:[\s,.!]+please)?\W*$", re.I)
+INCLUDE_YOUTUBE = re.compile(r"^\W*(?:(?:ok|okay|sure|yes)[\s,.!]+)?(?:include youtube|add youtube|youtube too|"
+                             r"youtube as well|look on youtube|include youtube too|include youtube as well|"
+                             r"try youtube)(?:\s+too)?(?:[\s,.!]+please)?\W*$", re.I)
+
+
+def length_changed(way, number=None, pending=False):
+    what = "picks any length" if way == "any" else "looks on YouTube too, for shorter ones"
+    if pending:
+        return ("OK, it'll pick any length." if way == "any" else
+                "OK, I'll look on YouTube too, for shorter ones.") + " Reply YES to start it."
+    return f"Done: rule {number} now {what}." if number else f"Done: it now {what}."
+
+
 def outside_only_head(noun=None):
     """Fix pass 5, finding 85: the opening line of an answer made only of new finds from YouTube."""
     many = (noun or (None, None))[1]

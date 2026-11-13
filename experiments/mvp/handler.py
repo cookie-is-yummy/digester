@@ -187,6 +187,9 @@ class HandlerMixin:
         ref = self._email_text(person, text, now)   # a code, "new code", or the address the bot just asked for
         if ref is not None:
             return ref
+        ref = self._length_way_out(person, text, now)   # fix pass 5, finding 87: "any length", "include YouTube"
+        if ref is not None:
+            return ref
         ref = self.onboard_step(person, text, now)   # slice 6: a step of the setup ("skip", their answer, "2")
         if ref is not None:
             return ref
@@ -429,9 +432,15 @@ class HandlerMixin:
                 self.store.set_pending(h, "confirm_rule", payload, at=datetime.fromisoformat(pending["at"]))
                 tail = T.preview_also_tail(describe(it.spec.when), what, first)
             else:
+                info = getattr(self._tl, "run_info", None) or {}
+                length_only = info.get("length_only") if info.get("run_id") == run_id and it.spec.when.repeating \
+                    else None
                 self.store.set_pending(h, "confirm_rule", {"text": text, "spec": it.spec.stored(), "run_id": run_id,
-                                                           "more": more, "outside_offer": bool(offer[1])},
+                                                           "more": more, "outside_offer": bool(offer[1]),
+                                                           **({"length_only": length_only} if length_only else {})},
                                        at=self.clock())
+                if length_only:   # fix pass 5, finding 87: "any length" or "include YouTube" may answer it
+                    self.store.set_state(f"lengthout:{h}", {"run_id": run_id, "at": now_iso(self.clock())})
                 self._tl.made_pending = True
                 tail = T.preview_tail(describe(it.spec.when), what, first, heads=offer[0], offer=offer[1])
                 if more:
@@ -824,8 +833,12 @@ class HandlerMixin:
             spec = RuleSpec.model_validate(pending["payload"]["spec"])
             if pending["payload"].get("outside_offer") and spec.content.outside == "none":
                 spec.content.outside = "some"   # the YES answers the offer too: new videos from YouTube as well
-            ref = self._activate(person, pending["payload"]["text"], spec,
-                                 preview_run=pending["payload"].get("run_id"))
+            self._tl.length_only = pending["payload"].get("length_only")
+            try:
+                ref = self._activate(person, pending["payload"]["text"], spec,
+                                     preview_run=pending["payload"].get("run_id"))
+            finally:
+                self._tl.length_only = None
             return self._activate_more(person, pending, ref)
         if pending["kind"] == "confirm_delete":
             # review fix PRIV-5: the inbox folder (raw exports, the failed ones too) goes with the rows; every library
@@ -955,7 +968,53 @@ class HandlerMixin:
                 and self._outside_serves(person, spec, text, now):
             # fix pass 4, finding 77: where its picks come from, said when it starts too
             notes = (T.OUTSIDE_RULE_NOTE if c.outside == "some" else T.OUTSIDE_RULE_ONLY) + notes
+        length_only = getattr(self._tl, "length_only", None)
+        if length_only and c.source == "library" and spec.when.repeating and c.outside == "none":
+            # fix pass 5, finding 87: every pick will be longer than asked; the two ways out, said when it starts
+            notes = T.length_way_out(length_only) + notes
+            self.store.set_state(f"lengthout:{h}", {"rule_id": rule_id, "at": now_iso(now)})
         return self.send(h, T.rule_started(edited, describe(spec.when), c.goal, avoid, first) + notes)
+
+    def _length_way_out(self, person, text, now):
+        """Fix pass 5, finding 87: "any length" or "include YouTube" right after a rule whose picks are all longer than
+        its length limit (its preview, or the rule just started): the first lifts the limit for that rule (its own
+        words then say "any length", which length_bound reads), the second adds new videos from YouTube. Read by code
+        only while that rule is the last thing the bot offered this for (24 hours); else None."""
+        h = person["handle"]
+        way = "any" if T.ANY_LENGTH.match(text) else ("youtube" if T.INCLUDE_YOUTUBE.match(text) else None)
+        st = self.store.get_state(f"lengthout:{h}") if way else None
+        if not st or datetime.fromisoformat(st["at"]) < now - timedelta(hours=24):
+            return None
+        from .interpret import length_only
+        self.note(intent="change_rule")
+        pending = self._live_pending(h, now)
+        if st.get("run_id") and pending and pending["kind"] == "confirm_rule" \
+                and pending["payload"].get("run_id") == st["run_id"]:
+            payload = dict(pending["payload"])
+            spec = RuleSpec.model_validate(payload["spec"])
+            if way == "any" and not re.search(r"\bany length\b", payload["text"], re.I):
+                payload["text"] = payload["text"] + " / any length"
+                spec.content.criteria = [cr for cr in spec.content.criteria if not length_only(cr)]
+                payload.pop("length_only", None)
+            else:
+                spec.content.outside = "some"
+            payload["spec"] = spec.stored()
+            self.store.set_pending(h, "confirm_rule", payload, at=datetime.fromisoformat(pending["at"]))
+            return self.send(h, T.length_changed(way, pending=True))
+        r = self.store.rule(st["rule_id"]) if st.get("rule_id") else None
+        if not r or r["status"] not in ("active", "paused") or r["handle"] != h:
+            return None
+        spec = RuleSpec.model_validate(r["spec"])
+        fields = {}
+        if way == "any":
+            if not re.search(r"\bany length\b", r.get("text") or "", re.I):
+                fields["text"] = (r.get("text") or "") + " / any length"
+            spec.content.criteria = [cr for cr in spec.content.criteria if not length_only(cr)]
+        else:
+            spec.content.outside = "some"
+        fields["spec"] = spec.stored()
+        self.store.update_rule(r["id"], **fields)
+        return self.send(h, T.length_changed(way, self.store.rule_number(h, r["id"])))
 
     @staticmethod
     def _per_day(when):

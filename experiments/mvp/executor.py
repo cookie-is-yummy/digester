@@ -29,6 +29,7 @@ from .texts import LIMIT, LIMIT_TOTAL, LOADING, RUN_ERROR, SCHEDULED_FOOTER
 LENGTH_WORDS = [(re.compile(r"\b(mini|short|shorter|bite-?sized|tiny)\b", re.I), 10),
                 (re.compile(r"\b(quick|quicker)\b", re.I), 15)]
 UNDER_MINUTES = re.compile(r"\b(?:under|less than|at most|max(?:imum)?|within)\s+(\d{1,3})\s*(?:min|mins|minutes)\b", re.I)
+ANY_LENGTH_SAID = re.compile(r"\bany length\b", re.I)
 SHORTEST = re.compile(r"\b(shortest|quickest)(?:\s+ones?)?\s+first\b", re.I)
 
 
@@ -67,8 +68,8 @@ def length_bound(spec, *texts):
     """The longest video length, in minutes, the request allows, or None."""
     c = spec.content
     t = " ".join(x for x in [*texts, c.goal or ""] if x)   # a rule's goal ("mini Blender tutorials") counts too
-    if topic_kind(c.goal or "", *c.searches, t) == "food":
-        return None
+    if topic_kind(c.goal or "", *c.searches, t) == "food" or ANY_LENGTH_SAID.search(t):
+        return None   # (fix pass 5, finding 87: "any length", said to the rule, lifts its bound for good)
     found = [int(m.group(1)) for m in UNDER_MINUTES.finditer(t)] + [n for rx, n in LENGTH_WORDS if rx.search(t)]
     return min(found) if found else None
 
@@ -413,7 +414,8 @@ class ExecutorMixin:
             about, level_ok, guessed = self._profile_text(h, spec.content.goal, request_text or "",
                                                           *spec.content.searches)
             hint = getattr(self._tl, "hint", None) or ""
-            bound = length_bound(spec, request_text or "", hint) if kind != "follow_up" else None
+            rule_text = ((self.store.rule(rule_id) or {}).get("text") or "") if rule_id else ""
+            bound = length_bound(spec, request_text or "", hint, rule_text) if kind != "follow_up" else None
             result, c = compose(cands, spec, h, request_text=request_text,
                                 feedback_note=self._feedback_note(rule_id, view), known_lines=known_lines,
                                 extra=extra, profile=about, lang=self._compose_lang(),
@@ -569,7 +571,9 @@ class ExecutorMixin:
                              if finished and cands_override is None else None,
                              # fix pass 4, finding 77: what the rule can draw from, over the whole ranked list
                              "n_supply": self._supply(person, spec, cands, request_text, extra)
-                             if cands_override is None else None}
+                             if cands_override is None else None,
+                             # fix pass 5, finding 87: the closest only because of the length bound ("mini")
+                             "length_only": self._length_only(result)}
         for i, p in enumerate(picks, 1):
             self.store.add_delivery(person["handle"], rule_id if kind in ("scheduled", "manual") else None, run_id,
                                     p["item"].id, i, at=self.clock())
@@ -616,6 +620,19 @@ class ExecutorMixin:
                               [dict(pick_record(p), main=id(p) in main) for p in picks])
             return msg, run_id, len(picks)
         return none_message(result, spec, scheduled=(kind == "scheduled"), lang=self._answer_lang()), run_id, 0
+
+    @staticmethod
+    def _length_only(result):
+        """The length bound in minutes when the answer is the closest only because every fit is longer than it allows
+        (fix pass 5, finding 87); else None."""
+        res = result or {}
+        lead = (res.get("picks") or [None])[0]
+        bound = res.get("max_minutes")
+        if not (res.get("closest") and lead and lead.get("too_long") and bound):
+            return None
+        tag = f"under {bound} minutes"
+        missing = [m[0] if isinstance(m, (list, tuple)) else m for m in res.get("missing") or []]
+        return bound if missing and all(m == tag for m in missing) else None
 
     # ---------- outside picks (outside.py, DESIGN.md section 11) ----------
     def _kind_fits(self, person, spec, cands, request_text, extra):

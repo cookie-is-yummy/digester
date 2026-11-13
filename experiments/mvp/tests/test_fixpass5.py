@@ -402,3 +402,89 @@ def test_85_outside_picks_for_something_to_make_put_whole_videos_before_tips_and
     yt["bot"].store.x("DELETE FROM outside_cache")
     msg = str(say(yt, BLENDER_NEW + " please", blender_form()))
     assert "VIDtips0001" in msg
+
+
+# ======================================= 87. a daily "mini" rule where nothing is that short =======================================
+MINI = "mini blender tutorials to start doing daily"
+
+
+@pytest.fixture()
+def blender(env, tmp_path):
+    lib = tmp_path / "blenderlib"
+    (lib / "corpus").mkdir(parents=True)
+    rows = [("v1", "VIDblend001", "Blender donut tutorial, full project from start to finish", 1077),
+            ("v2", "VIDblend002", "Blender low poly island tutorial", 1500)]
+    with open(lib / "corpus" / "items.jsonl", "w") as f:
+        for iid, vid, title, dur in rows:
+            f.write(json.dumps({"id": iid, "platform": "youtube", "source_url": f"https://www.youtube.com/watch?v={vid}",
+                                "caption": title, "interaction_kinds": ["watch"],
+                                "platform_data": {"video_id": vid, "owner_name": "Synthetic Channel",
+                                                  "owner_relation": "none", "duration_s": dur}}) + "\n")
+    with open(lib / "corpus" / "interactions.jsonl", "w") as f:
+        for iid, *_ in rows:
+            f.write(json.dumps({"item_id": iid, "kind": "watch", "at": "2026-07-01T10:00:00+00:00"}) + "\n")
+    env["bot"].store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    env["bot"].pool = AllPool(str(lib))
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, "donut"), "verdict": "clear", "title": "Blender donut tutorial"}]}
+    return env
+
+
+def mini_form():
+    return {"intent": "new_rule", "spec": {"when": {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI",
+                                                                                 "SAT", "SUN"], "time": "09:00"},
+                                           "content": {"goal": "mini Blender tutorials", "searches": ["blender tutorial"],
+                                                       "criteria": ["mini"], "count": 1}}}
+
+
+def _start_mini(e):
+    preview = say(e, MINI, mini_form())
+    assert "None of what I found is under 10 minutes long, so the closest I have is" in preview
+    return say(e, "yes", CONFIRM)
+
+
+def test_87_the_start_line_says_every_pick_may_be_longer_and_offers_the_ways_out(blender):
+    started = _start_mini(blender)
+    assert started.startswith("Got it: every day at 9am, mini Blender tutorials.")
+    assert "nothing I found is under 10 minutes, so each pick may be longer. Say \"any length\" to drop the limit, " \
+           "or \"include YouTube\" and I'll look for shorter ones there too." in started
+
+
+def test_87_any_length_lifts_the_limit_for_that_rule_and_it_sticks(blender):
+    bot, clock = blender["bot"], blender["clock"]
+    _start_mini(blender)
+    calls = len(blender["calls"])
+    out = say(blender, "any length", CHAT)
+    assert out == "Done: rule 1 now picks any length." and "mvp_interpret" not in blender["calls"][calls:]
+    rule = bot.store.rules(H)[0]
+    assert rule["text"].endswith(" / any length") and "mini" not in rule["spec"]["content"].get("criteria", [])
+    blender["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, "low poly"), "verdict": "clear", "title": "Blender low poly island tutorial"}]}
+    from datetime import datetime, timezone
+    clock[0] = datetime(2026, 11, 13, 14, 1, tzinfo=timezone.utc)   # 9am New York
+    assert bot.tick() == 1
+    sent = last(blender["ch"])
+    assert "I recommend Blender low poly island tutorial" in sent and "under 10 minutes" not in sent
+
+
+def test_87_include_youtube_adds_new_videos_to_that_rule(blender):
+    bot = blender["bot"]
+    _start_mini(blender)
+    out = say(blender, "include YouTube", CHAT)
+    assert out == "Done: rule 1 now looks on YouTube too, for shorter ones."
+    assert bot.store.rules(H)[0]["spec"]["content"]["outside"] == "some"
+
+
+def test_87_both_replies_work_on_the_preview_too(blender):
+    bot = blender["bot"]
+    say(blender, MINI, mini_form())
+    assert say(blender, "ok, any length", CHAT) == "OK, it'll pick any length. Reply YES to start it."
+    started = say(blender, "yes", CONFIRM)
+    assert "each pick may be longer" not in started
+    assert bot.store.rules(H)[0]["text"].endswith(" / any length")
+
+
+def test_87_any_length_with_nothing_offered_goes_the_normal_way(blender):
+    calls = len(blender["calls"])
+    say(blender, "any length", CHAT)
+    assert "mvp_interpret" in blender["calls"][calls:]
