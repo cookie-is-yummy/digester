@@ -509,11 +509,10 @@ def about_lines(store, handle, message=None):
         lines.append(f"Direction, in their words: \"{' '.join(direction.split())[:300]}\".")
     p = pref_words(prefs)
     if lines or p:
-        # fix pass 4, finding 74: what they have and how much time they usually have help choose; only a message that
-        # says them makes them must-haves (the evaluation set's profile, with none given, reads as before)
-        lines.append(("Preferences (to prefer, never must-haves unless the message says them; avoid is a hard limit): "
-                      + "; ".join(p)) if p else "Preferences: none given")
-        lines[-1] += "."
+        # fix pass 4, finding 74: the wording stays as it was (a version that called these "never must-haves" made
+        # the live interpreter read "what should I cook tonight?" as chat); code drops a must-have that restates them
+        # (interpret.profile_guard)
+        lines.append("Preferences: " + ("; ".join(p) if p else "none given") + ".")
     return lines + notes
 
 

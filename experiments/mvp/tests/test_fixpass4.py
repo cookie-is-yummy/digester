@@ -106,13 +106,15 @@ def test_74_a_rule_drops_restated_preferences_and_a_note_and_keeps_its_own_words
     assert {"meat", "fish"} <= set(out.spec.content.avoid)
 
 
-def test_74_the_interpreter_and_the_composer_are_told_preferences_are_soft(env):
+def test_74_the_composer_is_told_preferences_are_soft(env):
     from mvp import profile as P
     bot = env["bot"]
     with_profile(bot, note=None)
     bot.store.set_prefs(H, avoid=["mushroom"])
+    # the interpreter's lines read as before (a "never must-haves" wording turned a live ask into chat); code drops a
+    # restated preference instead (profile_guard, above)
     line = [x for x in P.about_lines(bot.store, H, CHICKEN) if x.startswith("Preferences")][0]
-    assert "never must-haves" in line and "has an Instant Pot" in line
+    assert line == "Preferences: avoid mushroom; has an Instant Pot; usually has 20 minutes on weeknights."
     text, _, _ = P.composer_context(bot.store, H, CHICKEN)
     assert "Leave out: avoid mushroom" in text
     assert "never a reason to call a pick close" in text and "usually has 20 minutes on weeknights" in text
@@ -527,3 +529,22 @@ def test_74_a_reason_names_the_kit_or_the_usual_time_only_when_the_post_says_it(
     assert pref_backed("it takes 20 minutes in an Instant Pot", "Instant Pot chicken, 20 minutes", ["Instant Pot"],
                        "20 minutes on weeknights")
     assert pref_backed("it has lemon and garlic", "Lemon garlic pasta", ["Instant Pot"], "20 minutes on weeknights")
+
+
+def test_80_a_pick_still_the_closest_for_its_length_never_says_it_is_not_a_whole_project():
+    from mvp.executor import finished_by_details
+    from mvp.libview import Item
+    from mvp.schema import RuleSpec
+    spec = RuleSpec.model_validate({"when": {"type": "now"}, "content": {
+        "goal": "mini blender tutorials", "searches": ["blender tutorial"],
+        "criteria": ["walks through one whole project from start to finish"]}})
+    it = Item({"id": "b", "platform": "instagram", "source_url": "https://example.com/b",
+               "caption": "Blender donut tutorial, step by step", "interaction_kinds": ["save"],
+               "platform_data": {"owner_handle": "maker"}})
+    fin = spec.content.criteria[0]
+    p = {"item": it, "verdict": "close", "criteria": ["no"], "too_long": True,
+         "facts": {"steps": ["Add a torus", "Shape the icing"]}}
+    result = {"picks": [p], "wider": [], "closest": True, "missing": [(fin, "no"), ("under 10 minutes", "no")],
+              "dropped": {}, "n_clear": 0, "n_close": 1, "extract": ["steps"]}
+    finished_by_details(result, spec, {})
+    assert p["verdict"] == "close" and result["closest"] and result["missing"] == [("under 10 minutes", "no")]

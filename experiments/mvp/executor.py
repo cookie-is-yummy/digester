@@ -106,18 +106,26 @@ def finished_by_details(result, spec, extra, *texts):
     if not fin or not picks:
         return
     food = topic_kind(c.goal or "", *c.searches, *texts) == "food" or "ingredients" in (result.get("extract") or [])
-    turned = 0
+    turned = met = 0
     for p in picks + (result.get("wider") or []):
         if not makes_whole(p.get("facts"), food) or tips_only(own_text(p["item"], extra or {})):
             continue
+        met += 1
         for i in fin:
             if i < len(p["criteria"]):
                 p["criteria"][i] = "yes"
         if p["verdict"] != "clear" and all(a == "yes" for a in p["criteria"]) and not p.get("too_long"):
             p["verdict"] = "clear"
             turned += 1
-    if not turned:
+    if not met:
         return
+    if result.get("closest") and picks[0]["verdict"] != "clear":
+        # still the closest: what it misses is said from its must-haves as they now stand (never the finished result
+        # it was just found to meet)
+        lead = picks[0]
+        result["missing"] = [(cr, lead["criteria"][i]) for i, cr in enumerate(c.criteria)
+                             if i < len(lead["criteria"]) and lead["criteria"][i] != "yes"] + \
+            [m for m in result.get("missing") or [] if isinstance(m, (list, tuple)) and m[0] not in c.criteria]
     if result.get("closest") and picks[0]["verdict"] == "clear":
         result["picks"] = [p for p in picks if p["verdict"] == "clear"]
         result["closest"], result["missing"], result["from_fallback"] = False, [], False
