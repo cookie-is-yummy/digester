@@ -161,6 +161,10 @@ class OnboardingMixin:
         tz = person["timezone"]
         local = now.astimezone(ZoneInfo(tz)).strftime("%-I:%M%p").lower()
         _, ok = self.store.email_of(h)
+        from .actions.base import outbox_reachable
+        from .actions.email import smtp_settings
+        if not outbox_reachable(self) and not smtp_settings():
+            ok = True   # review fix X8: no email is set up and the outbox is out of reach: the address is not asked
         self._set_onboard(h, "contact", now)
         return self.send(h, T.contact_message(lead, T.zone_name(tz), local, has_email=ok))
 

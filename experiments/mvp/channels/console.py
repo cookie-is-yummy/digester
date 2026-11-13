@@ -9,6 +9,9 @@ from .base import Channel, Inbound
 class ConsoleChannel(Channel):
     name = "console"
     join_seconds = 0.0
+    # review fix X8: the person typing here is a founder at the bot's own computer, who can open its outbox folder
+    # (a code email that was not sent is left there); on Messages and Sendblue nobody can
+    outbox_reachable = True
 
     def __init__(self, printer=print, link_previews=False):
         self.link_previews = link_previews   # True: replies arrive part by part, as on a phone

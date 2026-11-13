@@ -435,6 +435,14 @@ class SchedulerMixin:
         msg, run_id, n = self.run(person, spec, "scheduled", rule_id=rule["id"])
         progress["run_id"] = run_id
         if self._run_failed(run_id):
+            err = self.store.one("SELECT error FROM runs WHERE id=?", (run_id,))["error"] or ""
+            if err.startswith("ComposeCut"):
+                # review fix X7: the answer could not be put together, and the same input fails the same way: no paid
+                # retries of this slot; the person is told once, and the next send comes as planned
+                from .texts import compose_cut_rule
+                self._notice(h, compose_cut_rule(spec.content.goal), now)
+                self._retry_or_skip(rule, now, slot, tries=MAX_RETRIES)
+                return 0
             self._retry_or_skip(rule, now, slot, tries=retries)  # nothing is sent: an error text would be unprompted
             return 0
         # Recorded before the send: the rule moves to its next slot and the run is marked 'sending'. A crash from here

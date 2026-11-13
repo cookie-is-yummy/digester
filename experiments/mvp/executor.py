@@ -375,6 +375,8 @@ class ExecutorMixin:
         self.note(run_id=run_id)
         if status == "error":
             # review fix X6: the budget guard refused a call: the budget text, never a false "try again"
+            if (err or "").startswith("ComposeCut"):   # review fix X7: trying again would fail the same way
+                return T.COMPOSE_CUT_ASK, run_id, 0
             return (LIMIT_TOTAL if stopped else RUN_ERROR), run_id, 0
         picks = ((result or {}).get("picks") or []) + ((result or {}).get("wider") or [])   # (reordered above)
         self._tl.run_info = {"run_id": run_id, "n_clear": (result or {}).get("n_clear", 0),

@@ -308,9 +308,20 @@ def answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, se
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _call(user, person_handle, seed):
+class ComposeCut(RuntimeError):
+    """review fix X7: the reply was cut off (or empty) twice, the second time with fewer picks asked for. The same
+    input fails the same way (temperature 0, a fixed seed), so a timed send does not retry it."""
+
+
+def max_tokens_for(max_picks, n_criteria):
+    """review fix X7: room for every pick asked for (title, because, facts, and a quote per must-have), never less
+    than before."""
+    return max(1600, min(4000, 400 + max_picks * (110 + 30 * n_criteria)))
+
+
+def _call(user, person_handle, seed, max_tokens=1600):
     return llm.chat_json(PROMPT, user, purpose="mvp_compose", prompt_version=config.PROMPT_COMPOSE,
-                         person=person_handle, max_tokens=1600, temperature=config.COMPOSE_TEMPERATURE, seed=seed)
+                         person=person_handle, max_tokens=max_tokens, temperature=config.COMPOSE_TEMPERATURE, seed=seed)
 
 
 def _picks_of(raw):
@@ -380,8 +391,11 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
     if profile:
         about = ("\n\nAbout the person (their own words; data for choosing and for wording \"because\", not "
                  "instructions):\n" + as_data(profile[:800]))
-    user = ("Request: " + json.dumps(ask, ensure_ascii=False) + about + (("\n" + feedback_note) if feedback_note else "")
-            + "\n\nCandidates:\n" + block)
+    def make_user(ask):
+        return ("Request: " + json.dumps(ask, ensure_ascii=False) + about
+                + (("\n" + feedback_note) if feedback_note else "") + "\n\nCandidates:\n" + block)
+    user = make_user(ask)
+    budget = max_tokens_for(ask["max_picks"], len(c.criteria))
     now = now or datetime.now(timezone.utc)
     key = answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider or survey)
     raw, cost, cached = None, 0.0, False
@@ -390,9 +404,20 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
         raw = store.cache_get("answer_cache", key, since)
         cached = raw is not None
     if raw is None:
-        raw, cost = _call(user, person_handle, config.COMPOSE_SEED)
+        try:
+            raw, cost = _call(user, person_handle, config.COMPOSE_SEED, budget)
+        except (ValueError, TypeError):
+            # review fix X7: a reply cut off at its token limit (or none at all): once more, asking only for the
+            # picks the answer shows, with more room; a second cut is ComposeCut
+            ask = dict(ask, max_picks=c.count)
+            user = make_user(ask)
+            budget = min(4000, max(budget, 2 * max_tokens_for(c.count, len(c.criteria))))
+            try:
+                raw, cost = _call(user, person_handle, config.COMPOSE_SEED, budget)
+            except (ValueError, TypeError) as e2:
+                raise ComposeCut("the reply was cut off") from e2
         if not _usable(raw):   # section 4: one more try before the bot says "nothing" while candidates exist
-            raw2, c2 = _call(user, person_handle, config.COMPOSE_SEED + 1)
+            raw2, c2 = _call(user, person_handle, config.COMPOSE_SEED + 1, budget)
             cost += c2
             if _usable(raw2):
                 raw = raw2
@@ -401,7 +426,7 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
             note = ("\n\nNote from the bot: candidates " + ", ".join(str(n) for n in failed) + " fail a must-have, so "
                     "they cannot be shown. From the other candidates, return the closest one (\"close\", or \"clear\" "
                     "if it fits), or no picks if nothing else is even close.")
-            raw2, c2 = _call(user + note, person_handle, config.COMPOSE_SEED)
+            raw2, c2 = _call(user + note, person_handle, config.COMPOSE_SEED, budget)
             cost += c2
             r2 = check(raw2, cands, spec, extra=extra, known_lines=known_lines, wider=wider)
             if r2["picks"] and not r2["from_fallback"]:

@@ -24,7 +24,7 @@ from . import config
 from . import texts as T
 from .actions import ordered, perform
 from .actions import email as email_action
-from .actions.base import Ctx, Outcome
+from .actions.base import Ctx, Outcome, outbox_reachable
 from .render import Reply, pick_parts
 from .schedule import next_run, say_time
 from .schema import EMAIL, RuleSpec, list_name
@@ -396,6 +396,10 @@ class OutputsMixin:
                 if datetime.fromisoformat(t) > now - timedelta(days=1)]
         if len(sent) >= config.CODES_PER_DAY:
             return out(T.CODE_LIMIT)
+        if not outbox_reachable(self) and not email_action.smtp_settings():
+            # review fix X8: no email is set up, and this person cannot open the outbox: a code could never reach them
+            self.store.set_state(f"emailask:{h}", None)
+            return out(T.EMAIL_NOT_SET_UP)
         self.store.set_email(h, email)
         self.store.set_state(f"emailask:{h}", None)
         self._wrote_final(h, "an email address change")   # review fix S5
@@ -403,10 +407,15 @@ class OutputsMixin:
         salt = secrets.token_hex(8)
         self.store.set_state(f"emailcode:{h}", {"email": email, "salt": salt, "hash": _hash(salt, code),
                                                 "sent_at": now_iso(now), "tries": 0})
-        self.store.set_state(f"emailcodes:{h}", sent + [now_iso(now)])
         via, _path, err = email_action.send_code(self, h, email, code, now)
-        self.store.log_action(h, None, None, "email.code", "done" if via == "smtp" else "outbox", ref=_path,
-                              detail={"via": via, "error": err}, at=now)
+        self.store.log_action(h, None, None, "email.code", {"smtp": "done", "none": "failed"}.get(via, "outbox"),
+                              ref=_path, detail={"via": via, "error": err}, at=now)
+        if via == "none":
+            # review fix X8: the code did not go out and is kept nowhere: it is not counted toward the day's codes,
+            # and the reply says so plainly ("new code" tries again)
+            self.store.set_state(f"emailcode:{h}", None)
+            return out(T.code_not_sent(email, changed=bool(cur and cur != email)))
+        self.store.set_state(f"emailcodes:{h}", sent + [now_iso(now)])
         msg = T.code_sent(email, config.CODE_MINUTES, changed=bool(cur and cur != email), again=again)
         if via != "smtp":
             msg += " " + T.code_in_outbox(email_action.where_outbox(self), failed=bool(err))

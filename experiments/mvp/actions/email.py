@@ -19,7 +19,7 @@ from email.utils import formataddr, formatdate, make_msgid
 
 from .. import config
 from ..render import email_bodies, pick_parts
-from .base import Outcome, where_outbox, write_outbox
+from .base import Outcome, outbox_reachable, where_outbox, write_outbox
 
 DOMAIN = "digest-bot.invalid"
 
@@ -72,11 +72,13 @@ def _smtp_send(s, m):
             pass
 
 
-def send(bot, handle, to, subject, text, html=None, attach=(), run_id=None, now=None, keep_sent=True):
+def send(bot, handle, to, subject, text, html=None, attach=(), run_id=None, now=None, keep_sent=True,
+         keep_unsent=True):
     """Sends one email (SMTP when configured) and keeps it in the outbox. Returns (via, path, error): via is "smtp"
     or "outbox"; error is the exception's type name when SMTP failed (nothing else of it is logged). With
     keep_sent=False an email that SMTP sent is only listed (subject "Sent"), not kept: a code that went out is not
-    left in a file."""
+    left in a file. With keep_unsent=False an email that was not sent is not written either, and via is "none"
+    (review fix X8: a code email on a channel whose person cannot open the outbox)."""
     now = now or bot.clock()
     m = build_message(to, subject, text, html, attach)
     via, err = "outbox", None
@@ -91,6 +93,8 @@ def send(bot, handle, to, subject, text, html=None, attach=(), run_id=None, now=
     if via == "smtp" and not keep_sent:
         bot.store.add_outbox(handle, "email", "Your code (sent)", None, via, run_id=run_id, at=now)
         return via, None, err
+    if via != "smtp" and not keep_unsent:
+        return "none", None, err
     path = write_outbox(handle, subject, "eml", m.as_bytes(), now)
     bot.store.add_outbox(handle, "email", m["Subject"], path, via, run_id=run_id, at=now)
     return via, path, err
@@ -138,4 +142,6 @@ def send_code(bot, handle, to, code, now):
     """The 6-digit code that confirms an address, sent to that address."""
     text = (f"Your code is {code}.\n\nText it to {config.BOT_NAME} to confirm this is your email address. It works for "
             f"{config.CODE_MINUTES} minutes.\n\nIf you didn't ask for this, you can ignore this email.")
-    return send(bot, handle, to, f"Your code: {code}", text, now=now, keep_sent=False)
+    # review fix X8: a code that was not sent is left in a file only where the person can open it (the test page)
+    return send(bot, handle, to, f"Your code: {code}", text, now=now, keep_sent=False,
+                keep_unsent=outbox_reachable(bot))

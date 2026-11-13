@@ -76,3 +76,10 @@ def write_outbox(handle, stem, ext, data, now):
 def where_outbox(bot):
     """Where an unsent email is, in the reply: the test page has an Outbox panel."""
     return getattr(bot.channel, "outbox_place", None) or "in the bot's outbox folder"
+
+
+def outbox_reachable(bot):
+    """review fix X8: whether the person can open the outbox: the test page's Outbox panel, or the terminal of the
+    bot's own computer. Not on Messages or Sendblue."""
+    ch = bot.channel
+    return bool(getattr(ch, "outbox_place", None) or getattr(ch, "outbox_reachable", False))

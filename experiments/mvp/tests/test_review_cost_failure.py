@@ -309,3 +309,143 @@ def test_x6_a_budget_stop_from_the_guard_is_the_budget_message(env, monkeypatch)
     bot.store.set_state(f"cap_notice:{H}", None)
     msg, run_id, n = bot.run(bot.store.person(H), RuleSpec.model_validate(pasta_spec({"type": "now"})), "ask")
     assert msg == T.LIMIT_TOTAL and n == 0 and not posted
+
+
+# ---------- X7: a compose reply cut off at its token limit ----------
+def _real_model(monkeypatch, replies):
+    """The real llm.chat_json with a fake HTTP post: `replies(body)` gives each reply; returns the bodies sent."""
+    from mvp import llm
+    monkeypatch.setattr(llm, "chat_json", _orig(monkeypatch, "chat_json"))
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-dummy")
+    bodies = []
+
+    def post(url, body, headers):
+        bodies.append(body)
+        content, reason = replies(body)
+        return {"usage": {"prompt_tokens": 3000, "completion_tokens": 100},
+                "choices": [{"finish_reason": reason, "message": {"content": content}}]}
+    monkeypatch.setattr(llm.ai, "_post", post)
+    return bodies
+
+
+CUT = ('{"picks": [{"n": 1, "verdict": "clear", "title": "Lem', "length")
+GOOD = (json.dumps({"picks": [{"n": 1, "verdict": "clear", "title": "Lemon garlic pasta"}]}), "stop")
+
+
+def _ask_of(body):
+    user = body["messages"][1]["content"]
+    return json.loads(user.split("\n", 1)[0][len("Request: "):])
+
+
+def test_x7_max_tokens_follow_the_picks_and_must_haves_asked_for():
+    from mvp.compose import max_tokens_for
+    assert max_tokens_for(1, 0) == 1600                     # never less than before
+    assert max_tokens_for(13, 5) > 1919                     # 13 picks, 5 quoted must-haves (about 1,919 tokens)
+    assert max_tokens_for(13, 5) <= 4000
+
+
+def test_x7_a_cut_reply_is_tried_once_with_fewer_picks(env, monkeypatch):
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    spec = pasta_spec({"type": "now"})
+    spec["content"].update(count=3, criteria=["one pot", "under 20 minutes"])
+    seen = []
+
+    def replies(body):
+        if "Candidates:" not in body["messages"][1]["content"]:   # the interpreter
+            return json.dumps({"intent": "ask", "spec": spec}), "stop"
+        seen.append(1)
+        return CUT if len(seen) == 1 else GOOD
+    bodies = _real_model(monkeypatch, replies)
+    bot.on_message(H, "three one-pot pastas under 20 minutes")
+    compose = [b for b in bodies if "Candidates:" in b["messages"][1]["content"]]
+    assert len(compose) == 2
+    first, second = _ask_of(compose[0]), _ask_of(compose[1])
+    assert first["max_picks"] > 3 and second["max_picks"] == 3
+    assert compose[0]["max_completion_tokens"] >= 1600
+    assert compose[1]["max_completion_tokens"] >= compose[0]["max_completion_tokens"]
+    from mvp import texts as T
+    reply = str(last(ch))
+    assert T.RUN_ERROR not in reply and T.COMPOSE_CUT_ASK not in reply and "pasta" in reply.lower()
+
+
+def test_x7_a_timed_send_cut_twice_is_not_retried_and_the_person_is_told(env, monkeypatch):
+    bot, ch, clock = env["bot"], env["ch"], env["clock"]
+    from mvp.schema import RuleSpec
+    bodies = _real_model(monkeypatch, lambda body: CUT)
+    rid = bot.store.add_rule(H, "pasta every friday", RuleSpec.model_validate(pasta_spec()).stored(), "active", None)
+    start = clock[0]
+    bot.store.set_slot(rid, start.isoformat(), "active")
+    n0 = len(ch.outbox)
+    for k in range(6):
+        clock[0] = start + timedelta(minutes=15 * k + 1)
+        bot.tick()
+    assert len(bodies) == 2                                 # one try and one with more room: no paid retries
+    runs = [r["status"] for r in bot.store.q("SELECT status FROM runs WHERE rule_id=?", (rid,))]
+    assert runs == ["error"]
+    msgs = [str(m[2]) for m in ch.outbox[n0:]]
+    assert len(msgs) == 1 and "a pasta recipe" in msgs[0] and "skipped" in msgs[0]
+    assert bot.store.rule(rid)["next_run_at"] > (start + timedelta(days=1)).isoformat()   # next Friday
+
+
+def test_x7_an_ask_cut_twice_says_so_without_try_again(env, monkeypatch):
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    from mvp import texts as T
+    _real_model(monkeypatch, lambda body: (None, "content_filter") if "Candidates:" in body["messages"][1]["content"]
+                else (json.dumps({"intent": "ask", "spec": pasta_spec({"type": "now"})}), "stop"))
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
+    bot.on_message(H, "pasta ideas?")
+    assert str(last(ch)).startswith(T.COMPOSE_CUT_ASK)
+
+
+# ---------- X8: the code email where the person cannot open the outbox ----------
+def test_x8_a_code_email_that_was_not_sent_is_not_kept_or_counted(env, monkeypatch):
+    bot, ch, clock = env["bot"], env["ch"], env["clock"]
+    from mvp import texts as T
+    from mvp.actions import email as E
+    from mvp.channels.imessage_mac import MacMessagesChannel
+    from mvp.channels.sendblue import SendblueChannel
+    assert not any(getattr(c, "outbox_place", None) or getattr(c, "outbox_reachable", False)
+                   for c in (MacMessagesChannel, SendblueChannel))
+    ch.outbox_reachable = False   # as on Messages or Sendblue
+    monkeypatch.setenv("MVP_SMTP_HOST", "smtp.example.invalid")
+
+    def refused(s, m):
+        raise ConnectionRefusedError(111, "refused")
+    monkeypatch.setattr(E, "_smtp_send", refused)
+    bot._set_email(bot.store.person(H), "tester@example.com", clock[0])
+    assert last(ch) == T.code_not_sent("tester@example.com")
+    assert "outbox" not in last(ch) and "sent a 6-digit code" not in last(ch)
+    assert bot.store.q("SELECT path FROM outbox WHERE handle=?", (H,)) == []
+    assert not (bot.store.get_state(f"emailcodes:{H}") or [])           # not one of the day's codes
+    assert bot.store.get_state(f"emailcode:{H}") is None
+    assert bot.store.email_of(H) == ("tester@example.com", False)
+    # "new code" tries again; once SMTP works the code goes out as before
+    monkeypatch.setattr(E, "_smtp_send", lambda s, m: None)
+    bot.on_message(H, "new code")
+    assert last(ch).startswith("I sent a new 6-digit code to tester@example.com.")
+    assert len(bot.store.get_state(f"emailcodes:{H}")) == 1
+
+
+def test_x8_without_email_set_up_the_address_is_not_asked_for_a_code(env, monkeypatch):
+    bot, ch, clock = env["bot"], env["ch"], env["clock"]
+    from mvp import texts as T
+    monkeypatch.delenv("MVP_SMTP_HOST", raising=False)
+    ch.outbox_reachable = False
+    bot._set_email(bot.store.person(H), "tester@example.com", clock[0])
+    assert last(ch) == T.EMAIL_NOT_SET_UP
+    assert bot.store.email_of(H)[0] is None and bot.store.q("SELECT path FROM outbox WHERE handle=?", (H,)) == []
+
+
+def test_x8_the_setup_does_not_ask_for_an_address_email_cannot_reach(env, tmp_path, monkeypatch):
+    from mvp.tests import test_slice6 as S6
+    monkeypatch.delenv("MVP_SMTP_HOST", raising=False)
+    lib = S6.write_library(tmp_path / "richlib")   # the slice-6 "rich" fixture's library
+    env["bot"].store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    env["bot"].pool = S6.AllPool(str(lib))
+    env["state"]["answers"]["mvp_profile_guess"] = S6.fake_guess
+    env["lib"] = lib
+    env["ch"].outbox_reachable = False   # as on Messages or Sendblue
+    S6.start(env)
+    env["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "confirm_topics": ["Home cooking"]}
+    third = S6.say(env, "Mostly right.", {"intent": "chat", "reply": "unused"})
+    assert "I have you on New York time" in third and "What's your email address?" not in third

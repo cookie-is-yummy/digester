@@ -347,6 +347,15 @@ def todo_reminder(text):
     return f"Reminder from your list: {text}"
 
 
+def compose_cut_rule(goal):
+    """Review fix X7: a timed send whose answer could not be put together (the same input fails the same way)."""
+    return (f"I couldn't put together your \"{goal}\" send this time, so I skipped it. The next one comes as "
+            "planned.")
+
+
+COMPOSE_CUT_ASK = "I couldn't put that answer together. Please ask for fewer at a time."
+
+
 def missed_once(what, when):
     """Review fix S3: a one-time send the person asked for could not go out on time (the bot was offline)."""
     return f"I was offline and missed a send you asked for {when}: \"{what}\". Ask me again if you still want it."
@@ -550,6 +559,17 @@ def code_sent(email, minutes, changed=False, again=False):
     tail = " Until then I won't email you." if changed else ""
     return (f"{lead} and sent a 6-digit code to it. Text me the code within {minutes} minutes to confirm it's "
             f"yours.{tail}")
+
+
+EMAIL_NOT_SET_UP = ("Email isn't set up on my side yet, so I can't send you a code or any emails. I'll keep "
+                    "answering you here.")
+
+
+def code_not_sent(email, changed=False):
+    """Review fix X8: the code email could not be sent, on a channel where the person cannot open the outbox."""
+    lead = f"I changed your email address to {email}" if changed else f"I saved {email} as your email address"
+    return (f"{lead}, but I couldn't send the code to it just now. Reply \"new code\" in a little while and I'll "
+            "try again.")
 
 
 def code_in_outbox(where, failed=False):
