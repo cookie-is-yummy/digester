@@ -178,9 +178,15 @@ class SchedulerMixin:
             if person["paused"] or self._held_now(person, now) or self._over_cap(person):
                 continue
             with self.lock_for(h):
+                # read again under the lock: a deletion made meanwhile wins, and a held rule is never dropped because
+                # the cap was reached between the check above and the release (final check)
+                person, held = self.store.person(h), self.store.get_state(row["key"])
                 self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                if not person or not held:
+                    continue
                 from .refresh import release_new_items
-                release_new_items(self, self.store.person(h), held, now)
+                if not release_new_items(self, person, held, now):
+                    self.store.set_state(row["key"], held)
 
     def _move_timezone(self, handle, new_tz, now, revert_to=None, revert_at=None):
         """The person's zone changes. Each rule's next send keeps its date and clock time, read in the new zone (so a

@@ -204,7 +204,9 @@ class WebChannel(Channel):
         rules = []
         from ..schedule import describe
         from ..schema import RuleSpec
-        for i, r in enumerate(bot.store.rules(me["handle"]), 1):
+        from ..store import numbered
+        # the number the bot itself uses for the rule ("stop 3"), never its place in this list
+        for i, r in numbered(bot.store.rules(me["handle"])):
             spec = RuleSpec.model_validate(r["spec"])
             nxt = datetime.fromisoformat(r["next_run_at"]) if r.get("next_run_at") else None
             rules.append({"number": i, "goal": spec.content.goal, "when": describe(spec.when), "status": r["status"],
