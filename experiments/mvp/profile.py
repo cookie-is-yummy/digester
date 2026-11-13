@@ -328,6 +328,13 @@ def guess(view, store=None, handle=None, use_cache=True, now=None):
                               prompt_version=config.PROMPT_PROFILE_GUESS, person=handle, max_tokens=1800,
                               temperature=config.PROFILE_TEMPERATURE, seed=config.PROFILE_SEED)
     interests, removed = check_guess(raw, items, chans, view)
+    if not interests:
+        # review fix X11 (section 4): an empty or unusable form is kept for the whole build only after a second try
+        raw, c2 = llm.chat_json(_prompt(config.PROMPT_PROFILE_GUESS), user, purpose="mvp_profile_guess",
+                                prompt_version=config.PROMPT_PROFILE_GUESS, person=handle, max_tokens=1800,
+                                temperature=config.PROFILE_TEMPERATURE, seed=config.PROFILE_SEED + 1)
+        cost += c2
+        interests, removed = check_guess(raw, items, chans, view)
     result = dict(base, interests=interests, removed=removed)
     if store is not None:
         from .store import now_iso

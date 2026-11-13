@@ -30,6 +30,7 @@ class EngineProcess:
         self.state, self.message = "loading", ""
         self.cond = threading.Condition()
         self.replies = {}
+        self.waiting = set()   # review fix X12: ids still waited for; a reply that comes after its time-out is dropped
         self.wlock = threading.Lock()
         self.next_id = 0
         self.busy = 0   # requests in flight: an engine that is answering is never stopped to make room
@@ -54,7 +55,7 @@ class EngineProcess:
                         self.state = "ready"
                     elif msg["event"] == "error":
                         self.state, self.message = "error", msg.get("message", "")
-                else:
+                elif msg.get("id") in self.waiting:
                     self.replies[msg.get("id")] = msg
                 self.cond.notify_all()
         with self.cond:
@@ -74,6 +75,8 @@ class EngineProcess:
             self.next_id += 1
             rid = obj["id"] = self.next_id
             self.busy += 1
+            with self.cond:
+                self.waiting.add(rid)
             self.proc.stdin.write(json.dumps(obj) + "\n")
             self.proc.stdin.flush()
         self.last_used = time.time()
@@ -86,6 +89,9 @@ class EngineProcess:
                     self.cond.wait(1.0)
                 return self.replies.pop(rid)
         finally:
+            with self.cond:
+                self.waiting.discard(rid)
+                self.replies.pop(rid, None)
             with self.wlock:
                 self.busy -= 1
 
@@ -102,12 +108,18 @@ class EnginePool:
         self.engines = {}
         self.budgets = {}  # fixed once per library per process, so restarts do not grant more headroom
         self.lock = threading.Lock()
+        self.failed_at = {}   # review fix X12: when a library's engine last failed to load (no restart before RETRY_S)
+
+    RETRY_S = 300
 
     def get(self, lib):
         lib = os.path.abspath(lib)
         with self.lock:
             eng = self.engines.get(lib)
             if eng is None or eng.state in ("error", "stopped"):
+                if time.time() - self.failed_at.get(lib, 0) < self.RETRY_S and eng is not None:
+                    # a multi-GB load that just failed is not started again by every message and warm-up tick
+                    raise RuntimeError(f"search engine not available: {eng.message or eng.state}")
                 while len(self.engines) >= self.max_resident:
                     idle = [e for e in self.engines.values() if e.busy == 0 and e.state != "loading"]
                     if not idle:
@@ -119,6 +131,8 @@ class EnginePool:
                     self.budgets[lib] = _library_spent(lib) + ENGINE_HEADROOM_USD
                 eng = self.engines[lib] = EngineProcess(lib, self.budgets[lib])
         if not eng.wait_ready():
+            if eng.state in ("error", "stopped"):
+                self.failed_at[lib] = time.time()
             raise RuntimeError(f"search engine not available: {eng.message or eng.state}")
         return eng
 

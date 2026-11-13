@@ -229,8 +229,10 @@ def test_limits_per_person_and_for_everyone_and_the_cache(yt):
     # a search made before is served from the cache without counting
     spec = outside_ask(goal="a pasta recipe", searches=["pasta recipe"])
     assert "Not from your saves" in str(say(yt, "new pasta recipe", spec)) and len(fake.searches()) == 5
-    # after 24 hours the cached results are dropped; a new Pacific day has a fresh count
+    # after 24 hours the cached results are dropped; a new Pacific day has a fresh count (the real day, never the
+    # bot's clock: review fix X10; here the day's rows are moved to yesterday)
     clock[0] += timedelta(hours=25)
+    bot.store.x("UPDATE outside_searches SET day='2000-01-01'")
     assert "Not from your saves" in str(say(yt, "new pasta recipe", spec)) and len(fake.searches()) == 6
     assert bot.store.one("SELECT COUNT(*) n FROM outside_cache")["n"] == 1
     # everyone's daily total: 80

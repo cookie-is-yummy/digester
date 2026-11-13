@@ -132,6 +132,7 @@ def ranked(pool, lib, query, store=None, now=None):
         # when the rewrite failed) is used for this run only; kept, it would stand for days in place of the real one
         return r
     store.cache_put("ranked_cache", key, {"ids": r["ids"], "mode": r.get("mode")}, at=now, library=lib, mode=r.get("mode"))
+    store.x("DELETE FROM ranked_cache WHERE at<?", (since,))   # review fix X12: rows past their use are not kept
     return r
 
 

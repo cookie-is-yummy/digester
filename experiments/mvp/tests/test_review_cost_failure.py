@@ -449,3 +449,124 @@ def test_x8_the_setup_does_not_ask_for_an_address_email_cannot_reach(env, tmp_pa
     env["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "confirm_topics": ["Home cooking"]}
     third = S6.say(env, "Mostly right.", {"intent": "chat", "reply": "unused"})
     assert "I have you on New York time" in third and "What's your email address?" not in third
+
+
+# ---------- low: X9 to X12 ----------
+def test_x9_an_email_smtp_sent_stays_done_when_its_copy_cannot_be_kept(env, monkeypatch):
+    import errno
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    from mvp.actions import email as E
+    monkeypatch.setenv("MVP_SMTP_HOST", "smtp.example.invalid")
+    sent = []
+    monkeypatch.setattr(E, "_smtp_send", lambda s, m: sent.append(m["To"]))
+
+    def full(*a, **k):
+        raise OSError(errno.ENOSPC, "No space left on device")
+    monkeypatch.setattr(E, "write_outbox", full)
+    bot.store.set_email(H, "tester@example.com", verified=True, at=clock[0])
+    spec = pasta_spec({"type": "now"})
+    spec["do"] = [{"action": "email.send"}]
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": spec}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Lemon garlic pasta", "verdict": "clear"}]}
+    bot.on_message(H, "email me a pasta recipe")
+    msg = str(last(ch))
+    assert sent == ["tester@example.com"] and "couldn't email this" not in msg and "I emailed this to you" in msg
+    assert [r["status"] for r in bot.store.q("SELECT status FROM action_log WHERE action='email.send'")] == ["done"]
+
+
+def test_x10_the_test_pages_clock_does_not_open_a_new_quota_day(env, monkeypatch):
+    from mvp import config, outside as O
+    from mvp.schema import RuleSpec
+    monkeypatch.setenv("YOUTUBE_API_KEY", "dummy")
+    monkeypatch.setattr(config, "OUTSIDE_ON", True)
+    store = env["bot"].store
+    real = datetime.now(UTC)
+    day = real.astimezone(O.ZoneInfo(config.OUTSIDE_DAY_TZ)).date().isoformat()
+    for i in range(config.OUTSIDE_PER_DAY):
+        store.x("INSERT INTO outside_searches(handle,day,at,status) VALUES(?,?,?,?)", (f"p{i}", day, "x", "ok"))
+    hits = []
+    o = O.Outside(store, http=lambda url, params, key, timeout=None: hits.append(url) or {"items": []})
+    spec = RuleSpec.model_validate({"when": {"type": "now"}, "content": {"goal": "sourdough bread",
+                                                                         "searches": ["sourdough bread"],
+                                                                         "outside": "some"}})
+    assert o.find(H, spec, ["new sourdough bread videos"], now=real)["status"] == "limit_all"
+    assert o.find(H, spec, ["new sourdough bread videos"], now=real + timedelta(days=1))["status"] == "limit_all"
+    assert hits == []
+
+
+def test_x10_codes_a_day_are_counted_in_real_time(env, monkeypatch):
+    bot, ch, clock = env["bot"], env["ch"], env["clock"]
+    from mvp import config, texts as T
+    for i in range(config.CODES_PER_DAY):
+        bot._set_email(bot.store.person(H), f"x{i}@example.com", clock[0])
+    clock[0] += timedelta(days=2)    # "Forward 1 day" twice on the test page
+    bot._set_email(bot.store.person(H), "z@example.com", clock[0])
+    assert last(ch) == T.CODE_LIMIT
+
+
+def test_x11_an_empty_guess_is_tried_twice_before_it_is_kept(env):
+    bot, st, calls = env["bot"], env["state"], env["calls"]
+    from mvp import profile as P
+    answers = [{}, {"topics": []}]
+    st["answers"]["mvp_profile_guess"] = lambda u: answers.pop(0) if answers else {}
+    r1, _ = P.guess(bot.view(str(env["lib"])), store=bot.store, handle=H)
+    assert r1["sample"] >= 3 and r1["interests"] == [] and calls.count("mvp_profile_guess") == 2
+
+
+def test_x12_a_late_engine_reply_is_dropped():
+    import io
+    import threading
+    from mvp import engines as EN
+    e = EN.EngineProcess.__new__(EN.EngineProcess)
+    e.lib, e.state, e.message = "x", "ready", ""
+    e.cond, e.replies, e.waiting, e.wlock = threading.Condition(), {}, set(), threading.Lock()
+    e.next_id, e.busy, e.last_used = 0, 0, 0
+
+    class P:
+        stdin = io.StringIO()
+        stdout = io.StringIO('{"id": 1, "ok": true}\n')
+    e.proc = P
+    assert e.request({"cmd": "search"}, timeout=0)["ok"] is False   # timed out
+    e._read()                                                       # the reply comes after its time-out
+    assert e.replies == {}
+
+
+def test_x12_an_engine_that_failed_to_load_is_not_restarted_at_once(env, monkeypatch):
+    from mvp import engines as EN
+    starts = []
+
+    class Fake:
+        def __init__(self, lib, budget):
+            starts.append(lib)
+            self.lib, self.state, self.message, self.busy, self.last_used = lib, "error", "boom", 0, 0
+
+        def wait_ready(self, timeout=600):
+            return False
+
+        def stop(self):
+            pass
+    monkeypatch.setattr(EN, "EngineProcess", Fake)
+    pool = EN.EnginePool()
+    for _ in range(3):
+        with pytest.raises(RuntimeError):
+            pool.get(str(env["lib"]))
+    assert len(starts) == 1
+    pool.failed_at[os.path.abspath(str(env["lib"]))] -= pool.RETRY_S + 1   # later: one more try
+    with pytest.raises(RuntimeError):
+        pool.get(str(env["lib"]))
+    assert len(starts) == 2
+
+
+def test_x12_ranked_lists_past_their_use_are_removed(env, monkeypatch):
+    from mvp import config, retrieve
+    monkeypatch.setattr(config, "RANKED_CACHE_HOURS", 24)
+    st = env["bot"].store
+    st.cache_put("ranked_cache", "old", {"ids": ["a"]}, at=datetime(2026, 1, 1, tzinfo=UTC), library="L",
+                 mode="normal")
+
+    class Pool:
+        def search(self, lib, q, depth=300):
+            return {"ids": ["itm_a"], "mode": "normal", "cost_usd": 0.0}
+    retrieve.ranked(Pool(), str(env["lib"]), "pasta", store=st, now=datetime(2026, 11, 12, tzinfo=UTC))
+    assert st.one("SELECT COUNT(*) n FROM ranked_cache WHERE key='old'")["n"] == 0
+    assert st.one("SELECT COUNT(*) n FROM ranked_cache")["n"] == 1

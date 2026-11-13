@@ -244,8 +244,10 @@ class Outside:
         self.searches = 0     # search.list calls made by this object
         self.checks = 0       # videos.list calls made by this object
 
-    def _day(self, now):
-        return now.astimezone(ZoneInfo(config.OUTSIDE_DAY_TZ)).date().isoformat()
+    def _day(self, now=None):
+        """The quota day (YouTube's, Pacific time). Review fix X10: from the real time, never the bot's clock, which
+        the test page can move: a moved clock must not open a new day of real searches."""
+        return datetime.now(timezone.utc).astimezone(ZoneInfo(config.OUTSIDE_DAY_TZ)).date().isoformat()
 
     def used_today(self, now, handle=None):
         """Searches made today: for one person (this store), or for everyone. Everyone's count is the larger of this

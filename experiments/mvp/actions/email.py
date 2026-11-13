@@ -95,7 +95,15 @@ def send(bot, handle, to, subject, text, html=None, attach=(), run_id=None, now=
         return via, None, err
     if via != "smtp" and not keep_unsent:
         return "none", None, err
-    path = write_outbox(handle, subject, "eml", m.as_bytes(), now)
+    try:
+        path = write_outbox(handle, subject, "eml", m.as_bytes(), now)
+    except OSError as e:
+        if via != "smtp":
+            raise
+        # review fix X9: the email went out; a copy that could not be kept (a full disk) never makes it "failed",
+        # which would send it again
+        print(f"email: sent, but the outbox copy failed ({type(e).__name__})", file=sys.stderr)
+        path = None
     bot.store.add_outbox(handle, "email", m["Subject"], path, via, run_id=run_id, at=now)
     return via, path, err
 

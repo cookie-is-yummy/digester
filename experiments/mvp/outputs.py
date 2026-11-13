@@ -18,7 +18,7 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from . import config
 from . import texts as T
@@ -392,8 +392,10 @@ class OutputsMixin:
         cur, ok = self.store.email_of(h)
         if cur == email and ok and not again:
             return out(T.email_already(email) + self._flush_waiting(person, now))
+        # review fix X10: the codes a day are counted in real time (the test page's clock can move; the emails are real)
+        real = datetime.now(timezone.utc)
         sent = [t for t in (self.store.get_state(f"emailcodes:{h}") or [])
-                if datetime.fromisoformat(t) > now - timedelta(days=1)]
+                if datetime.fromisoformat(t) > real - timedelta(days=1)]
         if len(sent) >= config.CODES_PER_DAY:
             return out(T.CODE_LIMIT)
         if not outbox_reachable(self) and not email_action.smtp_settings():
@@ -415,7 +417,7 @@ class OutputsMixin:
             # and the reply says so plainly ("new code" tries again)
             self.store.set_state(f"emailcode:{h}", None)
             return out(T.code_not_sent(email, changed=bool(cur and cur != email)))
-        self.store.set_state(f"emailcodes:{h}", sent + [now_iso(now)])
+        self.store.set_state(f"emailcodes:{h}", sent + [now_iso(real)])
         msg = T.code_sent(email, config.CODE_MINUTES, changed=bool(cur and cur != email), again=again)
         if via != "smtp":
             msg += " " + T.code_in_outbox(email_action.where_outbox(self), failed=bool(err))

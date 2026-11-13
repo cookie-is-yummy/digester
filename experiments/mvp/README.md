@@ -95,7 +95,8 @@ email could not reach the person (no confirmed address yet, a failure, or an out
 channel has no Outbox panel): then the answer comes in the thread too, with that line.
 
 - **Email** goes only to the person's own address, confirmed with a 6-digit code sent to it (15 minutes, 5 wrong tries,
-  "new code" for another, at most 5 codes a day). Set `MVP_SMTP_HOST`, `MVP_SMTP_PORT` (587 STARTTLS, or 465 SSL),
+  "new code" for another, at most 5 codes a day). On Messages and Sendblue, where nobody can open the outbox, a code
+  email that could not be sent is not kept or counted, and without SMTP the address is not asked for. Set `MVP_SMTP_HOST`, `MVP_SMTP_PORT` (587 STARTTLS, or 465 SSL),
   `MVP_SMTP_USER`, `MVP_SMTP_PASSWORD` and `MVP_SMTP_FROM` in the terminal that runs the bot (for example a separate
   Gmail account with an app password). Without them, or when a send fails, each email is written as an `.eml` file under
   `MVP_HOME/outbox/` and the reply says so. Every answer email is kept there; a code email that SMTP sent is only
@@ -139,8 +140,11 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   has not changed for a minute: an Instagram export (JSON, zip or folder) or a Google Takeout zip with YouTube. It is
   imported with the demo's importer into a new library beside the old one (`MVP_LIBRARY_ROOT` to put it elsewhere),
   with the export's `messages` folder left out unread. The search vectors are built by the demo engine's `prepare`
-  (embeddings only); an import whose estimated cost is over `MVP_IMPORT_CAP_USD` (default $1.50) is refused. Only
-  when the build succeeded is the person switched to the new library (the old folder is kept; a restart keeps the
+  (embeddings only); an import whose estimated cost is over `MVP_IMPORT_CAP_USD` (default $1.50) is refused. The same
+  export dropped again is not built again, and a person gets at most `MVP_IMPORTS_PER_DAY` (2) builds in 24 hours; a
+  build's cost counts toward the total budget but not the person's daily limit. Only
+  when the build succeeded is the person switched to the new library (the library the founders set up is kept; one an
+  earlier import built is removed once nobody uses it; a restart keeps the
   switch while `people.json` still names the old one); they get one message with the counts, and their "when I save
   something new" rules run once on the new items. An imported file is deleted; a refused or failed one goes to
   `<inbox>/<person>/.failed/`, and an importer crash is said to the person like a failed build. A Takeout in parts
@@ -250,5 +254,5 @@ still hold the handle (`ledger_rows_with_handle`).
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 409 offline tests (`test_review_privacy.py`: one or more per finding of the privacy review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
+| `tests/` | 457 offline tests (`test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
 the second live run, 38 to 64) |
