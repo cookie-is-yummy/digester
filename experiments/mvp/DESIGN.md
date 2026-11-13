@@ -297,6 +297,20 @@ section and an earlier one differ, this section wins.
   a library search; only its timing, pause, skip and stop change. "Any length" (and "no limit on length", "longer is
   fine") is never a must-have: it lifts the length bound. A time zone, quiet hours, a snooze or a profile update
   carried with a request needs words for it in the message.
+- (Check of fix pass 6.) Words that make a limit one request's only ("no YouTube this time", "just this once") never
+  change a standing preference, even read as a profile update: nothing is stored and the reply says so in one plain
+  sentence. `outside` changes only when the message is also about new things or their saves. A request keeps a kit or
+  a usual time it states ("for my new Instant Pot", "I usually have 30 minutes"), never one it only names ("guitar
+  songs", "under 20 minutes"), and never takes a food off the avoid list because it asks for it (the request's own
+  words already win for that request; "I eat chicken again" still does). A profile update carried with a request is
+  that request's side effect unless it says it is standing. Any profile update drops a topic, sets a style, stops the
+  level guessing, adds a thing to avoid or confirms a topic only in the message's words (a diet it states covers
+  its avoid entries; the setup's read confirms what it showed). The words for a setting carried with a request are
+  read narrowly ("I'm staying in tonight", "before 9", "until golden" say none). "Stop the pasta one" read as all
+  rules stops the rule it names; a resume number the model filled alone needs the rule named, in view, or the only
+  paused one. An export reminder is named by its short name, never by a word of its steps, and a count ("2 picks",
+  "1 a day") never names a rule. "Change 1 to every 6 weeks" moves an export reminder even when the form copies its
+  words loosely; its words stay its own. "Any length" with a new preview waiting is about that preview.
 - Feedback gains `harder`, `easier` (also moves the profile level for that topic), `done` ("made it") and `hide`.
 - A fitness request with an injury is an ordinary topic with avoid words; `because` makes no health claim.
 
