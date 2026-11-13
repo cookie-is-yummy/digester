@@ -1,0 +1,202 @@
+"""Offline tests for the experience review (findings X1 to X12): one or more per finding, each failing without its fix.
+Fakes only: the fake model, a search pool that returns the whole synthetic library, a fake YouTube, the fake clock.
+No network, no real data, no model calls."""
+import json
+import os
+import re
+import sys
+import threading
+from datetime import datetime, timezone
+
+import pytest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+EXP = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, EXP)
+
+from mvp.tests.test_mvp import env  # noqa: E402,F401  (env is a fixture)
+
+H = "+15550001"
+UTC = timezone.utc
+DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+
+# ---------- a small synthetic library (invented captions and creators) ----------
+IG = [
+    ("r1", "Instant pot chicken and rice in 15 minutes\nIngredients:\n- 2 chicken thighs\n- 1 cup jasmine rice\n"
+           "- 1 cup chicken broth\n- 2 cloves garlic\nSteps:\n1. Saute the chicken in the instant pot\n"
+           "2. Add the rice and broth\n3. Pressure cook for 15 minutes", "souschef"),
+    ("r2", "Hainanese chicken rice, the full recipe is in the video", "wokhei"),
+    ("r3", "One pan chicken and rice bake\nIngredients:\n- 300g chicken breast\n- 200g long grain rice\n- 1 onion\n"
+           "- 500ml stock", "trayqueen"),
+    ("r5", "5 tips for fluffier rice every time", "souschef"),
+    ("b1", "Blender donut tutorial for absolute beginners, part 1: modeling the donut", "polyguy"),
+    ("b3", "Low poly island in Blender, full tutorial from start to finish render", "lowpolyjo"),
+    ("b4", "Blender: model a cosy room step by step for beginners", "roomrender"),
+    ("w1", "20 minute full body dumbbell workout\n1. Goblet squats x 12\n2. Reverse lunges x 10\n3. Push ups x 10",
+     "fitwithana"),
+    ("w3", "Morning mobility routine, full routine from start to finish\n1. Cat cow x 10\n2. Hip circles x 10",
+     "bendy"),
+]
+YT = [("y3", "YTcook00001", "Chicken fried rice in 10 minutes", "Fast Wok", 610)]
+
+
+def write_library(path):
+    (path / "corpus").mkdir(parents=True)
+    rows, inter = [], []
+    for iid, cap, who in IG:
+        rows.append({"id": iid, "platform": "instagram", "source_url": f"https://www.instagram.com/p/{iid}SYN/",
+                     "caption": cap, "interaction_kinds": ["save"],
+                     "platform_data": {"owner_handle": who, "owner_relation": "none"}})
+        inter.append({"item_id": iid, "kind": "save", "at": "2026-07-01T10:00:00+00:00"})
+    for iid, vid, title, chan, _secs in YT:
+        rows.append({"id": iid, "platform": "youtube", "source_url": f"https://www.youtube.com/watch?v={vid}",
+                     "caption": title, "interaction_kinds": ["watch"],
+                     "platform_data": {"owner_name": chan, "video_id": vid, "owner_relation": "none"}})
+        inter.append({"item_id": iid, "kind": "watch", "at": "2026-10-02T10:00:00+00:00"})
+    with open(path / "corpus" / "items.jsonl", "w") as f:
+        f.write("\n".join(json.dumps(r) for r in rows) + "\n")
+    with open(path / "corpus" / "interactions.jsonl", "w") as f:
+        f.write("\n".join(json.dumps(r) for r in inter) + "\n")
+    return path
+
+
+def yt_fetch(ids, key, timeout=None):
+    by = {v: (t, s) for _, v, t, _c, s in YT}
+    return {"items": [{"id": i, "snippet": {"title": by[i][0], "description": ""},
+                       "contentDetails": {"duration": f"PT{by[i][1] // 60}M{by[i][1] % 60}S"}} for i in ids if i in by]}
+
+
+def fake_extract(user):
+    kinds = json.loads(re.search(r"^Kinds wanted: (\[.*?\])", user, re.M).group(1))
+    text = re.search(r"<item>(.*)</item>", user, re.S).group(1)
+    out, sec = {k: [] for k in kinds}, None
+    for line in text.splitlines():
+        s = line.strip()
+        if re.match(r"^ingredients?:?$", s, re.I):
+            sec = "ingredients"
+            continue
+        if re.match(r"^steps:?$", s, re.I):
+            sec = "steps"
+            continue
+        m = re.match(r"^(?:-|\d+\.)\s*(.+)$", s)
+        if m:
+            k = sec or "steps"
+            if k in out:
+                out[k].append(m.group(1))
+    return out
+
+
+def cands(user):
+    return [(int(m.group(1)), m.group(2)) for m in re.finditer(r"^(\d+)\. .*?\n<item>(.*?)</item>", user, re.M | re.S)]
+
+
+def composer(*plan):
+    """plan: (needle, verdict, criteria answers): the picks the fake model returns, by caption words."""
+    def f(user):
+        picks = []
+        for needle, verdict, crit in plan:
+            for n, text in cands(user):
+                if needle.lower() in text.lower():
+                    picks.append({"n": n, "verdict": verdict, "title": needle, "because": "", "facts": [],
+                                  "criteria": crit})
+                    break
+        return {"picks": picks, "intro": "I found some for you in your saves."} if picks else \
+            {"picks": [], "none_reason": "The model's own words."}
+    return f
+
+
+def nomodel(u):
+    raise RuntimeError("interpreter not expected")
+
+
+@pytest.fixture()
+def w(env, tmp_path, monkeypatch):
+    from mvp.tests.test_slice5 import KEY, standard_fake
+    from mvp.tests.test_slice6 import AllPool
+    lib = write_library(tmp_path / "synlib")
+    bot = env["bot"]
+    bot.store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    bot.views.clear()
+    bot.pool = AllPool(str(lib))
+    st = env["state"]["answers"]
+    st["mvp_profile_guess"] = lambda u: {"topics": []}
+    st["mvp_extract"] = fake_extract
+    monkeypatch.setenv("YOUTUBE_API_KEY", KEY)
+    from mvp.outside import Outside
+    bot.outside = Outside(bot.store, http=standard_fake())
+    from mvp import ytinfo
+    monkeypatch.setattr(ytinfo, "fetch_batch", yt_fetch)
+    bot.max_per_minute = 0
+    return env
+
+
+def say(w, text, form=None):
+    w["state"]["answers"]["mvp_interpret"] = nomodel if form is None else (
+        form if callable(form) else (lambda u, f=form: json.loads(json.dumps(f))))
+    o0 = len(w["ch"].outbox)
+    w["bot"].on_message(H, text)
+    return "\n".join(str(m[2]) for m in w["ch"].outbox[o0:])
+
+
+def tick_at(w, dt):
+    w["clock"][0] = dt
+    o0 = len(w["ch"].outbox)
+    w["bot"].tick()
+    return "\n".join(str(m[2]) for m in w["ch"].outbox[o0:])
+
+
+def lib(goal, searches, when=None, **c):
+    return {"when": when or {"type": "now"}, "content": {"source": "library", "goal": goal, "searches": searches, **c}}
+
+
+def note(when, text):
+    return {"intent": "new_rule", "spec": {"when": when, "content": {"source": "note", "text": text}}}
+
+
+YES_ING = [{"answer": "yes", "quote": "Ingredients"}]
+CR = {"intent": "ask", "spec": lib("quick chicken and rice dinners", ["chicken and rice"], count=3,
+                                   extract=["ingredients", "steps"], criteria=["ends with a dish you can eat"])}
+
+
+# ---------- X1: a rule keeps the number it was given ----------
+def test_x1_stop_n_stops_the_rule_that_was_given_that_number(w):
+    bot = w["bot"]
+    a = say(w, "remind me to buy rice in 30 minutes", note({"type": "once", "in_minutes": 30}, "buy rice"))
+    b = say(w, "every day at 9am remind me to stretch", note({"type": "schedule", "days": DAYS, "times": ["09:00"]},
+                                                             "stretch"))
+    c = say(w, "every day at 7pm remind me to floss", note({"type": "schedule", "days": DAYS, "times": ["19:00"]},
+                                                           "floss"))
+    assert '"stop 1"' in a and '"stop 2"' in b and '"stop 3"' in c
+    assert "buy rice" in tick_at(w, datetime(2026, 11, 12, 18, 31, tzinfo=UTC))   # the one-time reminder: done
+    foot = tick_at(w, datetime(2026, 11, 13, 0, 0, 30, tzinfo=UTC))                # 7pm New York: floss
+    assert "floss" in foot and '"stop 3"' in foot
+    listed = say(w, "my rules")
+    assert re.search(r"^2\. .*stretch", listed, re.M) and re.search(r"^3\. .*floss", listed, re.M)
+    assert say(w, "stop 2") == "Stopped: stretch."
+    assert [r["spec"]["content"]["text"] for r in bot.store.rules(H)] == ["floss"]
+    # a new rule never takes a number given before
+    d = say(w, "every day at 8am remind me to read", note({"type": "schedule", "days": DAYS, "times": ["08:00"]},
+                                                          "read"))
+    assert '"stop 4"' in d
+    # the interpreter's rule number is the rule's own number too: 1 and 2 are gone, 3 is floss
+    assert say(w, "pause the floss one", {"intent": "pause", "rule_number": 3}) == "Paused: floss."
+    assert say(w, "pause rule 1", {"intent": "pause", "rule_number": 1}) != "Paused: read."
+
+
+def test_x1_a_store_from_an_older_build_keeps_the_numbers_it_showed(tmp_path):
+    import sqlite3
+    from mvp.store import Store
+    path = tmp_path / "old.sqlite"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, text TEXT, "
+               "spec TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT, next_run_at TEXT, last_run_at TEXT)")
+    spec = json.dumps({"when": {"type": "on_request"}, "content": {"source": "note", "text": "x"}})
+    for st in ("done", "active", "paused", "stopped", "active"):
+        db.execute("INSERT INTO rules(handle,text,spec,status) VALUES(?,?,?,?)", (H, st, spec, st))
+    db.commit()
+    db.close()
+    store = Store(str(path))
+    # what an older build showed: active and paused rules by place
+    assert [(r["number"], r["text"]) for r in store.rules(H)] == [(1, "active"), (2, "paused"), (3, "active")]
+    new = store.add_rule(H, "new", json.loads(spec), "active", None)
+    assert store.rule_number(H, new) == 6

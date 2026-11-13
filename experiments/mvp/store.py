@@ -82,7 +82,25 @@ ADDED_COLUMNS = [
     ("people", "imported_from TEXT"),    # slice 5: the people.json library an import replaced (kept at the next start)
     ("imports", "work TEXT"),            # slice 5: an import's working folder, so a restart can put its files back
     ("people", "profile TEXT"),          # slice 6: JSON {"interests": [...], "build", "guessed_at"} (profile.py)
+    ("rules", "number INTEGER"),         # review fix X1 (experience): the rule's number for its person ("stop 3"),
+                                         # given when it is made and never reused, so a finished rule shifts nothing
 ]
+
+
+def numbered(rules):
+    """(number, rule) pairs: each rule's own number (review fix X1, experience), or its place in the list for a rule
+    given without one (the rule evaluation set's made-up rules)."""
+    return [(r.get("number") or i, r) for i, r in enumerate(rules, 1)]
+
+
+def by_number(rules, n):
+    """The rule the person calls number n, or None."""
+    return next((r for k, r in numbered(rules) if k == n), None) if n is not None else None
+
+
+def number_of(rules, rule_id, default=None):
+    """The number the person knows the rule by."""
+    return next((k for k, r in numbered(rules) if r["id"] == rule_id), default)
 
 
 def now_iso(dt=None):
@@ -127,7 +145,24 @@ class Store:
                     self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column}")
                 except sqlite3.OperationalError:
                     pass  # already there
+            self._number_rules()
             self.db.commit()
+
+    def _number_rules(self):
+        """Rules without a number get one (a store from an older build): the person's active and paused rules keep the
+        numbers they were shown (their places in the list), the others come after; later rules continue from the top."""
+        with self.lock:
+            rows = self.db.execute("SELECT id, handle, status FROM rules WHERE number IS NULL ORDER BY id").fetchall()
+            for handle in dict.fromkeys(r["handle"] for r in rows):
+                top = self.db.execute("SELECT COALESCE(MAX(number), 0) FROM rules WHERE handle=?", (handle,)).fetchone()[0]
+                mine = [r for r in rows if r["handle"] == handle]
+                if not top:
+                    mine = [r for r in mine if r["status"] in ("active", "paused")] + \
+                           [r for r in mine if r["status"] not in ("active", "paused")]
+                for k, r in enumerate(mine, top + 1):
+                    self.db.execute("UPDATE rules SET number=? WHERE id=?", (k, r["id"]))
+            if rows:
+                self.db.commit()
 
     def x(self, sql, args=()):
         with self.lock:
@@ -191,9 +226,13 @@ class Store:
 
     # rules
     def add_rule(self, handle, text, spec, status, next_run_at, created_at=None):
-        cur = self.x("INSERT INTO rules(handle,text,spec,status,created_at,next_run_at,slot_at) VALUES(?,?,?,?,?,?,?)",
-                     (handle, text, json.dumps(spec), status, created_at or now_iso(), next_run_at, next_run_at))
-        return cur.lastrowid
+        with self.lock:   # the next number for this person; a stopped or finished rule's number is never given again
+            self._number_rules()
+            top = self.db.execute("SELECT COALESCE(MAX(number), 0) FROM rules WHERE handle=?", (handle,)).fetchone()[0]
+            cur = self.x("INSERT INTO rules(handle,text,spec,status,created_at,next_run_at,slot_at,number) "
+                         "VALUES(?,?,?,?,?,?,?,?)", (handle, text, json.dumps(spec), status, created_at or now_iso(),
+                                                     next_run_at, next_run_at, top + 1))
+            return cur.lastrowid
 
     @staticmethod
     def _rule_row(r):
@@ -205,7 +244,18 @@ class Store:
     def rules(self, handle, statuses=("active", "paused")):
         marks = ",".join("?" * len(statuses))
         rows = self.q(f"SELECT * FROM rules WHERE handle=? AND status IN ({marks}) ORDER BY id", (handle, *statuses))
+        if any(r.get("number") is None for r in rows):   # a row written without one
+            self._number_rules()
+            rows = self.q(f"SELECT * FROM rules WHERE handle=? AND status IN ({marks}) ORDER BY id", (handle, *statuses))
         return [self._rule_row(r) for r in rows]
+
+    def rule_number(self, handle, rule_id):
+        """The number the person knows a rule by (any status)."""
+        r = self.one("SELECT number FROM rules WHERE id=? AND handle=?", (rule_id, handle))
+        if r and r["number"] is None:
+            self._number_rules()
+            r = self.one("SELECT number FROM rules WHERE id=? AND handle=?", (rule_id, handle))
+        return r["number"] if r else None
 
     def rule(self, rule_id):
         r = self.one("SELECT * FROM rules WHERE id=?", (rule_id,))

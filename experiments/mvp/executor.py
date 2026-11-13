@@ -411,7 +411,7 @@ class ExecutorMixin:
                     "text": (request_text or "")[:300], "shown": list(shown) + [p["item"].id for p in picks]})
             footer = None
             if kind == "scheduled":
-                number = next((i for i, r in enumerate(self.store.rules(person["handle"]), 1) if r["id"] == rule_id), 1)
+                number = self.store.rule_number(person["handle"], rule_id) or 1
                 footer = SCHEDULED_FOOTER.format(n=number)
             ex = result.get("extract")
             msg = picks_message(result, spec, footer=footer, now=self.clock(), extract=ex, lang=self._answer_lang(),
@@ -576,7 +576,7 @@ class ExecutorMixin:
             if undone:   # finds from YouTube are never kept, so no email, calendar or list entry is made: say so
                 msg = msg + ("\n\n" + T.outside_only_no_actions(undone))
             if kind == "scheduled":
-                number = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), 1)
+                number = self.store.rule_number(h, rule_id) or 1
                 msg = msg + ("\n\n" + T.REMINDER_FOOTER.format(n=number))
             return msg, run_id, n
         line = res["line"] or T.OUTSIDE_NONE
@@ -599,7 +599,7 @@ class ExecutorMixin:
         if n:   # kept for the rule's outputs ("email me my list every morning")
             self._keep_answer(run_id, h, rule_id, spec.content.goal, spec.content.source, msg)
         if kind == "scheduled" and spec.when.repeating:
-            number = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), 1)
+            number = self.store.rule_number(h, rule_id) or 1
             msg += "\n" + T.REMINDER_FOOTER.format(n=number)
         return msg, run_id, n
 

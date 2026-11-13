@@ -309,7 +309,7 @@ class OutputsMixin:
         nxt = next_run(spec.when, tz, now, anchor=now, seed=rule_id, quiet=self.store.quiet(h))
         self.store.set_slot(rule_id, now_iso(nxt), "active")
         self._wrote_rule(h, f"set up a one-time send of \"{goal}\"", rule_id)
-        n = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), len(self.store.rules(h)))
+        n = self.store.rule_number(h, rule_id)
         verbs = [VERB[a.action] for a in spec.do if a.action in VERB]
         what = f"\"{goal}\"" if len(picks) == 1 else goal
         msg = T.later_set(say_time(nxt, now, spec.when.tz or tz), verbs, what, n)

@@ -297,7 +297,7 @@ def test_plain_reminders_need_no_preview_once_or_repeating(env):
     clock[0] = datetime(2026, 11, 12, 20, 8, tzinfo=UTC)
     assert bot.tick() == 1 and last(env["ch"]) == "Reminder: take the laundry out"
     clock[0] = datetime(2026, 11, 13, 14, 1, tzinfo=UTC)
-    assert bot.tick() == 1 and last(env["ch"]).startswith("Reminder: water the cactus\nReply \"stop 1\"")
+    assert bot.tick() == 1 and last(env["ch"]).startswith("Reminder: water the cactus\nReply \"stop 2\"")
     assert "mvp_compose" not in env["calls"]                                # no search, no model call
 
 

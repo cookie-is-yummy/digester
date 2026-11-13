@@ -14,7 +14,7 @@ from .interpret import interpret
 from .llm import budget_stop
 from .schedule import describe, next_run, resolve_until, say_time, t12
 from .schema import RuleSpec
-from .store import now_iso
+from .store import by_number, now_iso, numbered
 from .texts import (
     AGREE,
     CONSENT,
@@ -845,7 +845,7 @@ class HandlerMixin:
         if spec.when.type in ("on_request", "new_items"):
             rule_id = self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
             self._wrote_rule(h, f"saved a rule, \"{c.goal}\"", rule_id)
-            n = len(self.store.rules(h))
+            n = self.store.rule_number(h, rule_id)
             return self.send(h, T.saved_rule(n, what) + self._do_note(spec) + self._not_yet_notes(spec)
                              + self._email_ask(person, spec, now))
         quiet = self.store.quiet(h)
@@ -870,7 +870,7 @@ class HandlerMixin:
             # 👍, 👎 and "more like 2" given on the preview belong to the rule it became
             self.store.x("UPDATE feedback SET rule_id=? WHERE handle=? AND rule_id IS NULL AND item_id IN "
                          "(SELECT item_id FROM deliveries WHERE run_id=?)", (rule_id, h, preview_run))
-        n = next((i for i, r in enumerate(self.store.rules(h), 1) if r["id"] == rule_id), len(self.store.rules(h)))
+        n = self.store.rule_number(h, rule_id)
         first = say_time(nxt, now, spec.when.tz or tz)
         notes = self._do_note(spec) + self._not_yet_notes(spec) + self._email_ask(person, spec, now)
         if c.source == "note":   # a reminder in their own words
@@ -957,8 +957,9 @@ class HandlerMixin:
 
     # ---------- rule management ----------
     def _pick_rule(self, rules, number):
+        """By the rule's own number (review fix X1, experience: never its place in today's list)."""
         if number is not None:
-            return rules[number - 1] if 1 <= number <= len(rules) else None
+            return by_number(rules, number)
         return rules[0] if len(rules) == 1 else None
 
     def _rules_text(self, person, rules):
@@ -966,7 +967,7 @@ class HandlerMixin:
             return T.NO_RULES_LIST
         lines = [T.RULES_HEAD]
         now = self.clock()
-        for i, r in enumerate(rules, 1):
+        for i, r in numbered(rules):
             spec = RuleSpec.model_validate(r["spec"])
             state = T.RULE_PAUSED if r["status"] == "paused" else ""
             nxt = ""

@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from . import texts as T
 from .channels.base import SendUncertain
 from .schedule import _at, end_of_quiet, in_quiet_hours, say_time
-from .store import now_iso
+from .store import by_number, now_iso
 
 UNDO_WINDOW = timedelta(minutes=10)
 WORD = re.compile(r"[^\W_]+", re.UNICODE)
@@ -170,16 +170,15 @@ class TodoMixin:
     def _answer_for(self, h, answer_ref=None):
         """The answer a person points at: the last one, or with answer_ref a rule number, that rule's latest send."""
         if answer_ref and str(answer_ref).strip().isdigit():
-            rules = self.store.rules(h)
-            n = int(str(answer_ref).strip())
-            if not 1 <= n <= len(rules):
+            r = by_number(self.store.rules(h), int(str(answer_ref).strip()))
+            if r is None:
                 return None
             row = self.store.one("SELECT run_id FROM deliveries WHERE handle=? AND rule_id=? ORDER BY run_id DESC "
-                                 "LIMIT 1", (h, rules[n - 1]["id"]))
+                                 "LIMIT 1", (h, r["id"]))
             if not row:
                 return None
             rows = self.store.items_of_run(row["run_id"])
-            return {"run_id": row["run_id"], "rule_id": rules[n - 1]["id"], "items": [r["item_id"] for r in rows]}
+            return {"run_id": row["run_id"], "rule_id": r["id"], "items": [x["item_id"] for x in rows]}
         return self._answer_seen(h)
 
     def _add_picks(self, person, numbers, name="todo", what="pick", due=None, answer_ref=None, tail=""):

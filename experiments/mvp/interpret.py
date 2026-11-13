@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from . import config, llm
 from .schema import Interpretation, RuleSpec, When, list_name
 from .schedule import complete, describe, resolve_relative, say_time
+from .store import by_number, number_of, numbered
 
 PROMPT = open(os.path.join(config.HERE, "prompts", f"{config.PROMPT_INTERPRET}.md"), encoding="utf-8").read()
 CALENDAR_DAYS = 12
@@ -44,7 +45,7 @@ def _context(person, rules, pending, last, now, todos=(), last_write=None, about
         lines.extend(f"  - {a}" for a in about)
     if rules:
         lines.append("Their rules, as numbered to them:")
-        for i, r in enumerate(rules, 1):
+        for i, r in numbered(rules):
             spec = RuleSpec.model_validate(r["spec"])
             extra = []
             if r.get("created_at"):
@@ -66,7 +67,7 @@ def _context(person, rules, pending, last, now, todos=(), last_write=None, about
         lines.append("They have no open to-dos.")
     if last:
         n = len(last.get("items") or [])
-        from_rule = next((i for i, r in enumerate(rules, 1) if r["id"] == last.get("rule_id")), None)
+        from_rule = number_of(rules, last.get("rule_id"))
         when = ""
         if last.get("at"):
             when = " " + say_time(datetime.fromisoformat(last["at"]), now, person["timezone"]).replace("today at", "today,")
@@ -354,10 +355,10 @@ def _canonical_change(x: Interpretation, rules):
     skip of those dates. One form for one meaning, so the rule keeps its own timing and the reply says the right thing."""
     if x.intent != "change_rule" or x.spec is None:
         return
-    n = x.rule_number or (1 if len(rules) == 1 else None)
-    if not n or not 1 <= n <= len(rules):
+    n = x.rule_number or (numbered(rules)[0][0] if len(rules) == 1 else None)
+    if not n or by_number(rules, n) is None:
         return
-    old, new = RuleSpec.model_validate(rules[n - 1]["spec"]).stored(), x.spec.stored()
+    old, new = RuleSpec.model_validate(by_number(rules, n)["spec"]).stored(), x.spec.stored()
     ow, nw = dict(old["when"]), dict(new["when"])
     added_start = nw.pop("start", None) if nw.get("start") != ow.get("start") else None
     ow.pop("start", None) if added_start else None
@@ -542,7 +543,7 @@ def _rule_by_topic(message, rules):
     if not said:
         return None
     hits = []
-    for i, r in enumerate(rules, 1):
+    for i, r in numbered(rules):
         c = RuleSpec.model_validate(r["spec"]).content
         own = _topic_stems(c.goal or "", *c.searches)
         n = sum(1 for s in said if s in own or difflib.get_close_matches(s, list(own), n=1, cutoff=0.85))
@@ -558,7 +559,7 @@ def _target(x: Interpretation, message, rules):
     rule), else the rule whose topic they name. A skip of "the next two" counts two sends."""
     if x.intent not in ("pause", "resume", "stop", "skip", "run_rule", "change_rule"):
         return
-    if x.rule_number is not None and not 1 <= x.rule_number <= len(rules):
+    if x.rule_number is not None and by_number(rules, x.rule_number) is None:
         x.rule_number = None
     if x.all_rules and x.rule_number is not None:   # both: the words decide
         if ALL_WORDS.search(message):
