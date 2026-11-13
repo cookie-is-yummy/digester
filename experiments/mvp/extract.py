@@ -68,14 +68,33 @@ def fit_extract(extract, *texts):
     return out
 
 
+# fix pass 3, finding 71: default details are for recipes, workouts and make-or-build tutorials only. A "how to" or a
+# guide about something nobody makes ("how to start investing") gets none, and key points come only when asked for.
+MAKING = re.compile(r"\b(tutorials?|build\w*|make|making|model(?:ing|ling)?|draw\w*|paint\w*|knit\w*|sew\w*|"
+                    r"crochet\w*|craft\w*|diy|sculpt\w*|woodwork\w*|carv\w*|pottery|origami|render\w*)\b", re.I)
+# a pick that is a talk, a list of habits or an opinion gets no default Steps, whatever the request
+TALK = re.compile(r"\b(talks?|ted|tedx|podcasts?|interviews?|keynote|lecture|speech|opinions?|my thoughts|reaction|"
+                  r"commentary|rant|habits?|mindset|reasons?|lessons? (?:i|we)(?:'ve)? learned|things i wish|"
+                  r"rules (?:for|of)|secrets? (?:of|to))\b", re.I)
+
+
 def default_extract(spec, *texts):
     """The details a recommended pick gets when the person did not name any (finding 28): a recipe its ingredients
-    and steps, a workout its steps (shown as exercises), a tutorial or how-to its steps or key points."""
+    and steps, a workout its steps (shown as exercises), a make-or-build tutorial its steps."""
     c = spec.content
     if c.extract or c.source not in ("library", "recent"):
         return list(c.extract)
-    kind = topic_kind(c.goal or "", *c.searches, *texts)
-    return {"food": ["ingredients", "steps"], "fitness": ["steps"], "making": ["steps", "key_points"]}.get(kind, [])
+    words = [c.goal or "", *c.searches, *texts]
+    kind = topic_kind(*words)
+    if kind == "making" and not MAKING.search(" ".join(x for x in words if x)):
+        return []
+    return {"food": ["ingredients", "steps"], "fitness": ["steps"], "making": ["steps"]}.get(kind, [])
+
+
+def default_fits(text):
+    """Fix pass 3, finding 71: whether a pick's own text may get the default details (not a talk, a list of habits
+    or an opinion piece)."""
+    return not TALK.search(text or "")
 
 
 def list_like(text):

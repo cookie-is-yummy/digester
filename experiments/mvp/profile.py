@@ -519,7 +519,7 @@ def pref_words(prefs):
     if prefs.get("avoid"):
         out.append("avoid " + ", ".join(prefs["avoid"]))
     if prefs.get("tools"):
-        out.append("has " + ", ".join(prefs["tools"]))
+        out.append("has " + kit_words(prefs["tools"]))
     if prefs.get("time"):
         out.append("usually has " + prefs["time"])
     if prefs.get("style") in ("brief", "full"):
@@ -760,7 +760,7 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False):
         new = [v for v in vals if v.lower() not in {x.lower() for x in prefs.get(key) or []}]
         if new:
             prefs[key] = (list(prefs.get(key) or []) + new)[-10:]
-            changes.append(f"{word} {_and(new)}")
+            changes.append(f"{word} {kit_words(new) if key == 'tools' else _and(new)}")
             other.append(changes[-1])
     if raw.get("style") in ("brief", "full") and prefs.get("style") != raw["style"]:
         prefs["style"] = raw["style"]
@@ -832,6 +832,23 @@ def move_level(store, handle, topic_text, way):
 def _and(xs):
     xs = list(xs)
     return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+
+
+DETERMINER = re.compile(r"^(?:a|an|the|my|our|some|any|two|three|four|five|several|lots?\s+of|a\s+few|\d+)\s", re.I)
+
+
+def with_article(kit):
+    """Fix pass 3, finding 73: "you have an Instant Pot", not "you have Instant Pot". A plural or a name that already
+    has a determiner is kept as it is."""
+    k = " ".join(str(kit).split())
+    last = k.split()[-1].lower() if k else ""
+    if not k or DETERMINER.match(k + " ") or (len(last) > 3 and last.endswith("s") and not last.endswith("ss")):
+        return k
+    return ("an " if k[0].lower() in "aeio" or (k[0].lower() == "u" and not k.lower().startswith("us")) else "a ") + k
+
+
+def kit_words(tools):
+    return _and(with_article(t) for t in tools)
 
 
 def about_count(n):
@@ -914,7 +931,7 @@ def show_text(prof, now=None):
         lines.append(f"You're working toward: \"{prof['direction']}\".")
     p = []
     if prefs.get("tools"):
-        p.append("you have " + _and(prefs["tools"]))
+        p.append("you have " + kit_words(prefs["tools"]))
     if prefs.get("time"):
         p.append("you usually have " + prefs["time"])
     if prefs.get("avoid"):

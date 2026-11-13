@@ -16,8 +16,8 @@ from zoneinfo import ZoneInfo
 from . import config, llm
 from . import texts as T
 from .channels.base import SendUncertain
-from .compose import FINISHED, compose, duration_of
-from .extract import default_extract, details_many, fit_extract, kinds_for, topic_kind
+from .compose import FINISHED, compose, duration_of, own_text
+from .extract import default_extract, default_fits, details_many, fit_extract, kinds_for, topic_kind
 from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
 from .retrieve import candidates
 from .schema import KINDS, PLATFORMS, RuleSpec
@@ -340,6 +340,8 @@ class ExecutorMixin:
             extract = asked or (default_extract(spec, request_text or "", hint) if kind != "follow_up" else [])
             result["extract"] = extract
             main = result.get("picks") or []
+            if main and not asked and not default_fits(own_text(main[0]["item"], extra)):
+                extract = result["extract"] = []   # finding 71: a talk or a list of habits gets no default Steps
             if main and kinds_for(extract):
                 if not asked:   # finding 28: details nobody named, for the recommended pick only
                     targets = main[:1]

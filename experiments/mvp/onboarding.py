@@ -213,9 +213,9 @@ class OnboardingMixin:
         and with it the setup unless the first-requests offer is still open."""
         h = person["handle"]
         self.note(intent="onboarding")
-        started = self._export_yes(person, text, now)
+        started = self._export_yes(person, text, now) or self._export_no(person, text, now)
         if started:
-            text_rest = T.YES_LEAD.sub("", text).strip(" ,.!;:-")
+            text_rest = T.NO_LEAD.sub("", T.YES_LEAD.sub("", text)).strip(" ,.!;:-")
             text_rest = re.sub(r"^(?:and|also|plus|y)\b[\s,]*", "", text_rest, flags=re.I).strip()
             if not text_rest or T.YES.match(text_rest):   # "ok, sure": only the reminders
                 return self.send(h, started)
@@ -274,6 +274,20 @@ class OnboardingMixin:
                                                 say=False) or ""
         finally:
             self._tl.join_write = False
+
+    def _export_no(self, person, text, now):
+        """Fix pass 3, finding 72: "no. I have an instant pot" at the last step: the reminders are not started, the
+        offer is closed, and the reply says so before the rest. "no mushrooms" is about food, not the reminders."""
+        from .handler import EXPORT_REMINDER
+        h = person["handle"]
+        pending = self._live_pending(h, now)
+        if not (pending and pending["kind"] == "confirm_rule"
+                and EXPORT_REMINDER.match(str(pending["payload"].get("text") or ""))):
+            return ""
+        if not (T.NO_LEAD.match(text) or T.NO_REMINDERS.search(text)):
+            return ""
+        self.store.clear_pending(h)
+        return T.EXPORT_DECLINED
 
     def first_requests(self, person, now):
         """Up to FIRST_REQUESTS requests written for the person (one model call), each run through retrieval and

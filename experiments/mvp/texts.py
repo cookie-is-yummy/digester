@@ -808,9 +808,23 @@ def export_more_note(n):
     return f"(Your export {'reminder' if n == 1 else 'reminders'} will start with the same YES.)"
 
 
+# fix pass 3, finding 72: a "no" to the export reminders, with other words beside it, is said back
+EXPORT_DECLINED = "OK, no export reminders. Ask \"how do I export?\" any time for the steps."
+NO_LEAD = re.compile(r"^\s*(?:no|nope|nah|not now|no thanks|no thank you)(?:\s*[.,!;:-]|\s+thanks?\b|\s+thank you\b|"
+                     r"\s+(?:to\s+)?(?:the\s+)?(?:export\s+)?reminders?\b|\s*$)", re.I)
+NO_REMINDERS = re.compile(r"\bno\s+(?:export\s+)?reminders?\b|\bdon'?t\s+remind\b|\bwithout\s+(?:the\s+)?reminders?\b|"
+                          r"\bskip\s+(?:the\s+)?reminders?\b|\bno\s+to\s+the\s+reminders?\b", re.I)
+
+
 def profile_changed(changes, skipped=False):
     """'Noted: Blender: past the basics; you have an air fryer.'"""
-    msg = "Noted: " + "; ".join(changes) + "." if changes else PROFILE_NOTED
+    # fix pass 3, finding 73: one plain sentence ("Noted: you usually have about 20 minutes a day, and you have an
+    # Instant Pot."), not a list joined with semicolons
+    if changes:
+        msg = "Noted: " + (changes[0] if len(changes) == 1 else
+                           ", ".join(changes[:-1]) + ", and " + changes[-1]) + "."
+    else:
+        msg = PROFILE_NOTED
     if skipped:
         msg += " " + PROFILE_SENSITIVE
     return msg + " Say \"what do you know about me\" to see it all."

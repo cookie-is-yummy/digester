@@ -336,14 +336,14 @@ def test_profile_show_and_update(rich):
     msg = say(rich, "I'm past beginner at Blender now", {"intent": "profile_update"})
     assert msg == ("Noted: Blender 3D: past the basics. Say \"what do you know about me\" to see it all.")
     st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "tools": ["air fryer"]}
-    assert say(rich, "I have an air fryer", {"intent": "profile_update"}).startswith("Noted: you have air fryer.")
+    assert say(rich, "I have an air fryer", {"intent": "profile_update"}).startswith("Noted: you have an air fryer.")   # finding 73
     st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "stop_guessing_level": True}
     assert say(rich, "stop guessing my level", {"intent": "profile_update"}).startswith(
         "Noted: I'll stop guessing your level.")
     shown = say(rich, "what do you know about me", {"intent": "profile_show"})
     assert "• Blender 3D (past the basics, you told me, from 5 saved posts and 3 watched videos)" in shown
     assert "• Home cooking (my guess" in shown                         # finding 39: a topic keeps its counts
-    assert "You have air fryer; I don't guess your level." in shown
+    assert "You have an air fryer; I don't guess your level." in shown
     # a statement the form cannot use is kept as a note, as before
     st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me"}
     assert say(rich, "I like rainy days", {"intent": "profile_update"}) == \
@@ -359,7 +359,7 @@ def test_a_profile_note_inside_an_ask_is_merged_and_said(rich):
         "goal": "a dinner idea", "searches": ["pasta"], "avoid": ["meat"]}}}
     msg = say(rich, "I'm vegetarian now, any dinner ideas?", ask)
     assert "I recommend Lemon garlic pasta" in msg
-    assert msg.endswith("Noted: you'd rather avoid meat; noted: vegetarian now. Say \"what do you know about me\" to "
+    assert msg.endswith("Noted: you'd rather avoid meat, and noted: vegetarian now. Say \"what do you know about me\" to "
                         "see it all.")
 
 

@@ -345,3 +345,99 @@ def test_70_the_rule_preview_says_3_picks_for_videos_about_investing(env):
                                                        "searches": ["investing videos"]}}}
     msg = say(env, "every monday send me 3 videos about investing", form)
     assert '3 picks for "videos about investing"' in msg and '"3 videos' not in msg
+
+
+# ======================================= 71. no Steps label under a talk =======================================
+TALK_ITEM = {"id": "itm_talk", "platform": "instagram", "source_url": "https://example.com/talk",
+             "caption": "My TEDx talk on investing\n1. Start early\n2. Spend less than you earn\n3. Buy index funds",
+             "interaction_kinds": ["save"], "platform_data": {"owner_handle": "speaker", "owner_relation": "following"}}
+LIST_LINES = ["1. Start early", "2. Spend less than you earn", "3. Buy index funds"]
+
+
+def _one(env, item):
+    add_items(env, [dict(item)])
+    env["bot"].pool.search = lambda lib, q, depth=300: {"ids": [item["id"]], "mode": "normal", "cost_usd": 0.0}
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": 1, "title": "Investing talk", "verdict": "clear", "lines": LIST_LINES}], "intro": "Here you go."}
+
+
+def test_71_a_talk_or_a_how_to_about_something_nobody_makes_gets_no_steps_label(env):
+    from mvp.extract import default_extract
+    from mvp.schema import RuleSpec
+    _one(env, TALK_ITEM)
+    for text, goal in (("send me an investing tutorial", "an investing tutorial"),
+                       ("how to start investing", "how to start investing")):
+        n = sum(1 for c in env["calls"] if c == "mvp_extract")
+        msg = say(env, text, {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+            "goal": goal, "searches": [goal]}}})
+        assert "Steps" not in msg and "Key points" not in msg, text
+        assert sum(1 for c in env["calls"] if c == "mvp_extract") == n      # no details call at all
+    # what still gets them: recipes, workouts and make-or-build tutorials; key points only when asked
+    def spec(goal):
+        return RuleSpec.model_validate({"when": {"type": "now"}, "content": {"goal": goal, "searches": [goal]}})
+    assert default_extract(spec("a blender donut tutorial")) == ["steps"]
+    assert default_extract(spec("a quick pasta recipe")) == ["ingredients", "steps"]
+    assert default_extract(spec("a leg workout")) == ["steps"]
+    assert default_extract(spec("how to start investing")) == []
+    asked = RuleSpec.model_validate({"when": {"type": "now"}, "content": {"goal": "the investing talk",
+                                                                         "searches": ["investing"],
+                                                                         "extract": ["key_points"]}})
+    assert default_extract(asked) == ["key_points"]
+
+
+# ======================================= 72 and 73. the last setup message =======================================
+from mvp.tests.test_fixpass2 import CHAT, _to_the_last_message  # noqa: E402
+
+KIT = {"kind": "about_me", "tools": ["instant pot"], "time": "about 20 minutes a day"}
+
+
+@pytest.mark.parametrize("text", ["yes. I have an instant pot and about 20 minutes a day",
+                                  "Yes, I have an instant pot and about 20 minutes a day",
+                                  "yeah! i have an instant pot, about 20 minutes a day",
+                                  "sounds good. I have an instant pot and about 20 minutes a day"])
+def test_72_a_yes_with_extra_words_starts_the_export_reminders_and_keeps_the_kit_and_time(rich, text):
+    bot, st = rich["bot"], rich["state"]
+    _to_the_last_message(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: dict(KIT)
+    out = say(rich, text, {"intent": "profile_update"})
+    assert out.startswith("Done. Next Instagram reminder"), out
+    assert "an instant pot" in out and "about 20 minutes a day" in out
+    assert bot.store.rules(H) and bot.store.pending(H) is None
+
+
+@pytest.mark.parametrize("text", ["no. I have an instant pot and about 20 minutes a day",
+                                  "no thanks, I have an instant pot and about 20 minutes a day"])
+def test_72_a_no_with_extra_words_starts_nothing_and_says_so(rich, text):
+    bot, st = rich["bot"], rich["state"]
+    _to_the_last_message(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: dict(KIT)
+    out = say(rich, text, {"intent": "profile_update"})
+    assert "Done. Next" not in out and not bot.store.rules(H) and bot.store.pending(H) is None
+    assert out.startswith("OK, no export reminders.") and "an instant pot" in out
+
+
+def test_72_a_bare_answer_to_the_kit_question_keeps_the_offer_open(rich):
+    bot, st = rich["bot"], rich["state"]
+    _to_the_last_message(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: dict(KIT)
+    out = say(rich, "I have an instant pot and about 20 minutes a day", {"intent": "profile_update"})
+    assert "an instant pot" in out and "Done. Next" not in out
+    assert bot.store.pending(H)["kind"] == "confirm_rule"             # the reminders still wait for a yes
+    assert say(rich, "yes", {"intent": "confirm"}).startswith("Done. Next Instagram reminder")
+
+
+def test_73_kit_and_time_notes_read_as_plain_sentences(rich):
+    from mvp import texts
+    from mvp.profile import kit_words
+    assert kit_words(["Instant Pot"]) == "an Instant Pot"
+    assert kit_words(["air fryer", "rice cooker"]) == "an air fryer and a rice cooker"
+    assert kit_words(["knives", "my wok", "a blender"]) == "knives, my wok and a blender"
+    msg = texts.profile_changed(["you usually have about 20 minutes a day", "you have an Instant Pot"])
+    assert msg.startswith("Noted: you usually have about 20 minutes a day, and you have an Instant Pot.")
+    st = rich["state"]
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "tools": ["Instant Pot"]}
+    out = say(rich, "I have an Instant Pot", {"intent": "profile_update"})
+    assert out.startswith("Noted: you have an Instant Pot.")
+    st["answers"]["mvp_profile_show"] = None
+    shown = say(rich, "what do you know about me", {"intent": "profile_show"})
+    assert "you have an instant pot" in shown.lower()

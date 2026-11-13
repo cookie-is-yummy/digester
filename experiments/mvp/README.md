@@ -122,8 +122,11 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
 - **Outside picks** (`outside.py`): when someone asks for new things ("…and show me a few new ones from outside my
   saves", "only new stuff, not from my saves: sourdough"), the answer gets a block "Not from your saves, but close to
   them:" after the library picks (or only that block). YouTube only: one official `search.list` call with the
-  person's own words (code keeps only words from their message), checked by one `videos.list` call; the first 3 that
-  are public, embeddable, not for kids, not live and not already in their library, in YouTube's order, with YouTube's
+  person's own topic words (code keeps only words from their message, drops words about time, length and words that
+  only say the kind, then adds one fixed word for the kind from a small table: recipe, workout or tutorial; a request
+  with no topic word left gets no outside search), checked by one `videos.list` call; the first 3 that
+  are public, embeddable, not for kids, not live, not in News & Politics (unless they asked for news), with a topic word
+  in the title or channel, and not already in their library, in YouTube's order, with YouTube's
   own title and channel and the length. No model reads or rewords them; they are never kept with the answer or counted
   as sent picks. Never for personal topics (health, relationships, money, religion, politics, sexuality). Limits: 80
   searches a day for everyone, 5 per person, a search text reused for 24 hours. Everyone's count is also kept in
@@ -131,7 +134,8 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   bot share one quota. Needs `YOUTUBE_API_KEY`; `MVP_OUTSIDE=0` switches it off. When it cannot serve a request, the
   reply says why in one line. These finds are shown in the chat only: an answer that goes by email still shows them
   in the thread, and "email me only new ones" says they were not emailed. When someone wants something to do or make
-  and their saves hold fewer than 3 that clearly end with a finished result, the answer says so in the request's terms
+  and their saves hold fewer than 3 that clearly end with a finished result (and fewer than 3 candidates whose own text
+  looks like that kind: a recipe, a workout, a whole tutorial), the answer says so in the request's terms
   ("You only have 2 saved recipes that fit, so here are a few more from YouTube:"), shows the closest from the saves,
   and adds this block without being asked (one search at most, and at most once per topic per day); a rule's preview then offers "Want
   these … from YouTube as well as your saves?", and its YES starts the rule with them.
@@ -208,6 +212,12 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
 
 - Each rule has a number of its own, given when it is made and never given again ("stop 3" always means the rule the
   bot called rule 3, even after a one-time reminder before it has finished). "my rules" lists them by that number.
+- "every 2 days at a random time", "every other day at 7am", "a few times a month", "randomly, about twice a week":
+  code keeps the spacing and the randomness the message states (a random minute inside 9am to 9pm, or the part of the
+  day they named, on each due day; never in quiet hours). "Once in a while" asks how often, and "yes" takes the
+  default it offers (about once a week at a random time).
+- "when I say boost, send me a motivational video" is saved with their word: "boost" (any case) runs it, read by code
+  before any model call.
 - Reminders in the person's own words and their to-do list are what they asked for: they are not counted as
   unanswered sends, never ask "Still useful?" and are not paused when the person is quiet. A rule that, with their
   other daily rules, needs more than the daily limit of timed sends says so when it starts.
@@ -266,5 +276,5 @@ still hold the handle (`ledger_rows_with_handle`).
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 484 offline tests (`test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
+| `tests/` | 514 offline tests (`test_fixpass3.py`: one or more per finding of the third live run, 65 to 73; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
 the second live run, 38 to 64) |

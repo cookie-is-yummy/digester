@@ -286,7 +286,7 @@ def test_46_one_optional_question_last_and_the_whole_setup_within_five_short_mes
     st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "avoid": ["mushrooms"],
                                                     "tools": ["Instant Pot"], "time": "20 minutes a day"}
     reply = say(rich, "no mushrooms, I have an Instant Pot, and usually 20 minutes a day", CHAT)   # 5
-    assert "you usually have 20 minutes a day" in reply and "you have Instant Pot" in reply
+    assert "you usually have 20 minutes a day" in reply and "you have an Instant Pot" in reply   # finding 73
     assert "you'd rather avoid mushrooms" in reply
     prefs = P().get(bot.store, H)["prefs"]
     assert prefs["time"] == "20 minutes a day" and prefs["tools"] == ["Instant Pot"] and prefs["avoid"] == ["mushrooms"]
@@ -779,7 +779,7 @@ def test_46_what_the_last_question_changed_rides_on_the_answer_to_a_request_in_i
     say(rich, "I have an air fryer. a pasta recipe please", {"intent": "ask", "spec": {
         "when": {"type": "now"}, "content": {"goal": "a pasta recipe", "searches": ["pasta"]}}})
     texts = [m[2] for m in ch.outbox[n0:]]
-    assert len(texts) == 1 and "I recommend pasta" in texts[0] and "you have air fryer" in texts[0]
+    assert len(texts) == 1 and "I recommend pasta" in texts[0] and "you have an air fryer" in texts[0]   # finding 73
 
 
 def test_49_for_tonight_and_in_the_morning_are_timing_too():
