@@ -92,7 +92,7 @@ In Derrick's words, shortened: "think of and implement all possible rules"; "it 
 - **YouTube API data** (description, length) is kept at most 30 days and is quoted, not summarised. Whether quoting description lines is "derived data" under YouTube's terms is still the open check in `docs/07`; a human should read that clause before outsiders use it.
 - **The export routine cannot be automatic for US accounts.** Google's data-portability API is not offered in the US and Meta documents repeating exports for the EU only. Onboarding gives links, the choices to tick and a reminder; the person still taps through the export.
 - **Email needs a sending account.** Without SMTP settings, emails go to a local outbox. No sending domain exists.
-- **Size.** The prototype's Python code grew from about 3,700 lines to about 15,600 lines in two days, plus about 10,100 lines of tests (measured on 13 Nov 2026). It was written by agents and checked by other agents and by tests. It is still throwaway code, and nobody has read all of it by hand.
+- **Size.** The prototype's Python code grew from about 3,700 lines to about 17,100 lines in two days, plus about 12,200 lines of tests (measured on 13 Nov 2026). It was written by agents and checked by other agents and by tests. It is still throwaway code, and nobody has read all of it by hand.
 - **Cost per message** rose: interpretation about $0.003, an answer about $0.009.
 
 **Agent's assessment**

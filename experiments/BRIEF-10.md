@@ -359,3 +359,23 @@ Still open:
 - A founders' summary at the top of `STATE.md` at the end of each day.
 
 Commit and push at the end of each day. Personal data stays out of git.
+
+## 16. Version 2 (12 to 13 Nov): what was added after Derrick tried version 1
+
+The design is `mvp/DESIGN.md` (its section 11 wins over this brief where they differ). Results are in `results/r10-mvp-v2.md`. The scope change is recorded as A-009 (Proposed) in `docs/amendments.md`.
+
+| Asked | Built | Limit |
+| --- | --- | --- |
+| Every possible rule, not only timing | Rule = when × what × do, with 13 timing forms, limits, a trigger word and "when new saves arrive" | "mini" is a fixed 10-minute bound |
+| The answer, not a list with "Why" | Opening line, one recommendation with a reason, details from the post, alternatives | Alternatives vary in quality between runs |
+| A finished result | A must-have added by code; tips-only posts never lead | Depends on what the post's text says |
+| The person's own context | A profile guessed from the library, corrected in the setup; preferences, never filters | The guess varies between runs |
+| Outputs | Email, calendar link and file, to-do and grocery lists, through one action registry | No sign-in to outside apps |
+| Related picks from outside | YouTube's official search, shown apart | YouTube only; needs terms and privacy pages before outsiders |
+| An automatic export routine | Reminder rules, an upload box, an inbox folder, automatic import | Not fully automatic for US accounts |
+
+Decisions still open after version 2:
+12. **A-009:** both founders accept or change the wider scope before anyone outside the founders uses it.
+13. **Levels:** a level from the profile now only steers picks. Say so if it should narrow a request.
+14. **The spending cap:** $8.62 of $10 is spent. More live work needs a new cap.
+

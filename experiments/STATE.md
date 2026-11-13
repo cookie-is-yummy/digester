@@ -1,5 +1,19 @@
 # State
 
+## Founders' summary - round 10, MVP version 2 (13 Nov 2026; `BRIEF-10.md` section 16, `results/r10-mvp-v2.md`, `mvp/DESIGN.md`)
+
+How it all works, in one document: "Digest bot MVP: how it works", https://claude.ai/artifact/MbuBQQMjVndxdeUhqvTcJ4
+
+- **Built from Derrick's notes on version 1.** Every kind of rule ("every 2 days", "randomly", "when I say boost", "when I save something new"), reminders and to-do lists, email, calendar and grocery-list outputs, a profile guessed from the library and corrected in a five-message setup, YouTube picks from outside the saves, and export reminders with an upload box.
+- **The answer has the format he asked for:** an opening line, "I recommend … because …", the ingredients and steps copied from the post, "Or try these", then close ones. Requests to make something need a pick that ends in a finished result.
+- **The profile steers and never blocks.** Kit, usual time and level are preferences. Only the avoid list is a hard limit.
+- **Measured:** 755 offline tests pass. Held-out rule phrasings: 84.7% on the first run, 94.1% after one improvement round (target 90%; the set has been used twice, so this is no longer fully blind). Four reviews: 46 of 48 findings confirmed. Six live checks on the real library: 89 defects written down. What is left is listed in `results/r10-mvp-v2.md`.
+- **Cannot be done as asked:** a fully automatic export for US accounts (the bot reminds and imports instead); Instagram images (links and Instagram's own embed only); outside picks are YouTube only.
+- **Never run for real:** the Mac and Sendblue channels, real SMTP, the calendar link on a phone. No person has graded answers yet.
+- **Spend:** $8.62 of the $10 cap. The cap needs a founder's word before any more live work.
+- **Founders, please decide:** A-009 (this scope; Proposed, both founders); whether a level from the profile may ever narrow a request (now it only steers); whether a preview's pick counts as sent (open since day 2).
+- **Derrick, please:** try the test page (`python3 -m mvp.bot --channel web` from `experiments/`, then `http://127.0.0.1:8765`) with your own requests, and say which answers you would not want to receive.
+
 ## Founders' summary - round 10, MVP day 2 (12 Nov 2026, late; `BRIEF-10.md`, `results/r10-mvp-day2.md`)
 
 How it all works, in one document: "Digest bot MVP: how it works", https://claude.ai/artifact/MbuBQQMjVndxdeUhqvTcJ4
