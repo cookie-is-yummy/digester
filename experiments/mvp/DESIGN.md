@@ -286,6 +286,17 @@ section and an earlier one differ, this section wins.
 - `prefs.exclude_kinds`, `prefs.exclude_platforms` ("don't use my likes"): applied in retrieval for every request.
 - `lang`: the reply is in the language the person writes in.
 - `profile_note` on any intent ("I'm vegetarian now, any dinner ideas?"): merged into the profile.
+  (Fix pass 6.) As the side effect of a request it teaches only a level the message states for a topic it names, a
+  kit, a usual time, a diet it states and a plain note in its own words; never `outside`, exclusions, style, topics,
+  the direction, quiet hours, the time zone or the email. For any message, an exclusion needs the message to negate
+  that platform or kind in words, and `outside` as a standing preference needs standing words ("always", "from now
+  on"). A note that restates the profile is not merged again and says no "Noted".
+- (Fix pass 6.) A change lands only on what the message names: with a preview waiting, a change that edits it or
+  names no stored rule changes the preview; with several rules, a rule number the model filled alone is used only
+  when the message names that rule or it is the rule just started, changed or sent. A reminder is never turned into
+  a library search; only its timing, pause, skip and stop change. "Any length" (and "no limit on length", "longer is
+  fine") is never a must-have: it lifts the length bound. A time zone, quiet hours, a snooze or a profile update
+  carried with a request needs words for it in the message.
 - Feedback gains `harder`, `easier` (also moves the profile level for that topic), `done` ("made it") and `hide`.
 - A fitness request with an injury is an ordinary topic with avoid words; `because` makes no health claim.
 
