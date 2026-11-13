@@ -301,8 +301,10 @@ BLENDER_LEVEL = [{"topic": "Blender 3D", "level": "beginner", "confirmed": True,
 @pytest.mark.parametrize("text,crit,want", [
     ("every 2 days send me a calisthenics workout at a random time", "for a beginner", []),
     ("when I say boost, send me a motion design tutorial", "suits a beginner", []),
-    ("mini blender tutorials to start doing daily", "suits a beginner", ["suits a beginner"]),
-    ("a 2d animation exercise for today", "suits a beginner", ["suits an intermediate level"]),
+    # checker: the profile's level for the request's own topic is a preference for the composer, never a must-have
+    # (it opened a live answer with "I couldn't confirm ... suits a beginner"); the composer still gets it
+    ("mini blender tutorials to start doing daily", "suits a beginner", []),
+    ("a 2d animation exercise for today", "suits a beginner", []),
     ("a beginner calisthenics workout", "suits a beginner", ["suits a beginner"]),
 ])
 def test_76_a_level_comes_from_the_message_or_the_profile_for_the_same_topic(text, crit, want):
@@ -557,3 +559,120 @@ def test_74_a_title_never_names_their_kit_when_the_post_does_not(env):
         "n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Instant Pot lemon garlic pasta"}]}
     msg = say(env, "a pasta recipe", ask_form("a pasta recipe", ["pasta recipe"]))
     assert "Instant Pot" not in msg and "I recommend Lemon garlic pasta" in msg
+
+
+# ======================================= checker of fix pass 4: near-variants =======================================
+FULL_PROFILE = {"prefs": {"tools": ["Instant Pot"], "time": "usually has 20 minutes on weeknights", "avoid": ["mushroom"]},
+        "notes": ["I usually cook for two people", "trying to eat more vegetables"],
+        "direction": "making short 3D animations",
+        "interests": [{"topic": "Blender 3D", "level": "beginner", "confirmed": True, "words": ["blender"]},
+                      {"topic": "Calisthenics", "confirmed": True, "words": ["calisthenics"]}]}
+
+
+def guarded(text, criteria, prof=FULL_PROFILE, **content):
+    from mvp.interpret import profile_guard
+    from mvp.schema import Interpretation
+    it = Interpretation.model_validate(ask_form("some things", ["things"], criteria, **content))
+    return profile_guard(it, text, json.loads(json.dumps(prof))).spec.content
+
+
+@pytest.mark.parametrize("text,crit,kept", [
+    ("chicken and rice", "pressure cooker friendly", False),        # their kit in other words
+    ("chicken and rice", "under half an hour", False),              # their usual time in other units
+    ("chicken and rice", "weeknight-fast", False),
+    ("pasta in my pressure cooker", "uses an Instant Pot", True),   # the message names their kit
+    ("something for my Instant Pot", "uses an Instant Pot", True),
+    ("dinner in under half an hour", "under 30 minutes", True),     # the message gives a length of its own
+    ("a quick dinner for a weeknight", "for weeknights", True),
+    ("a quick pasta dinner", "quick to cook", True),                # shares "cook" with a note, "quick" with the message
+    ("a veggie pasta", "has vegetables", True),
+    ("chicken and rice", "serves two", False),                      # restates a note
+    ("a blender tutorial", "helps make short 3D animations", False),  # restates the direction
+])
+def test_checker_74_the_profile_in_other_words_is_a_preference_and_the_message_wins(text, crit, kept):
+    assert (crit in guarded(text, [crit]).criteria) is kept
+
+
+def test_checker_74_an_avoid_entry_restated_as_a_must_have_is_a_hard_limit():
+    c = guarded("chicken and rice", ["mushroom-free"])
+    assert c.criteria == [] and "mushroom" in c.avoid
+    c = guarded("chicken and rice, no mushrooms", ["no mushrooms"])   # said in the message: kept as said
+    assert c.criteria == ["no mushrooms"]
+
+
+@pytest.mark.parametrize("text,crit,want", [
+    ("an easy dinner my kids will eat", "kid-friendly", ["kid-friendly"]),
+    ("an easy dinner", "kid-friendly", []),
+    ("mini blender tutorials", "suits a beginner", []),
+    ("a beginner blender tutorial", "suits a beginner", ["suits a beginner"]),
+])
+def test_checker_76_a_level_must_have_only_from_the_message(text, crit, want):
+    assert guarded(text, [crit]).criteria == want
+
+
+def test_checker_76_the_composer_still_gets_the_level_for_the_requests_topic(env):
+    from mvp import profile as P
+    bot = env["bot"]
+    P.set_interests(bot.store, H, FULL_PROFILE["interests"])
+    text, level_ok, _ = P.composer_context(bot.store, H, "mini blender tutorials")
+    assert "Their level at Blender 3D: a beginner" in text and level_ok
+    text, _, _ = P.composer_context(bot.store, H, "a calisthenics workout")
+    assert "Their level" not in text
+
+
+@pytest.mark.parametrize("text,want", [
+    ("fresh pasta recipes", "none"), ("an outside workout", "none"), ("a blender tutorial beyond the basics", "none"),
+    ("send me my newest saves", "none"), ("pasta recipes, stuff that's new to me", "some"),
+    ("show me new ones too", "some"), ("something fresh to cook", "some"),
+])
+def test_checker_75_outside_words_that_do_not_ask_for_new_things(text, want):
+    assert guarded(text, [], prof={"prefs": {}}, outside="some").outside == want
+
+
+def test_checker_75_no_line_about_new_ones_when_the_message_did_not_ask(yt):
+    yt["bot"].store.set_prefs(H, outside=True)   # their profile turns new picks on: they still come when they can
+    yt["state"]["answers"]["mvp_compose"] = lemon_clear
+    form = ask_form("something to cook tonight", ["cook tonight"], outside="some")
+    msg = str(say(yt, "what should I cook tonight?", form))
+    assert "I recommend Lemon garlic pasta" in msg and "Tell me what kind of thing you want" not in msg
+    msg = str(say(yt, "what should I cook tonight? show me new ones too", form))   # asked: the line comes
+    assert "Tell me what kind of thing you want" in msg
+
+
+@pytest.mark.parametrize("text,kept", [
+    ("I'd like a quick workout", False), ("something to watch tonight", False), ("a recipe to save time", False),
+    ("only from my likes", True), ("videos I watched about blender", True), ("from my saves", True),
+])
+def test_checker_82_like_watch_and_save_as_plain_verbs_name_no_kind(text, kept):
+    c = guarded(text, [], prof={"prefs": {}}, kinds=["watch", "like", "playlist"])
+    assert bool(c.kinds) is kept
+
+
+def _lead_and_one_more(env):
+    from mvp.tests.test_mvp import pasta_spec
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta",
+         "lines": ["200g spaghetti", "2 lemons"]},
+        {"n": number_of(u, "Pasta night"), "verdict": "clear", "title": "Pasta night"}]}
+    spec = pasta_spec({"type": "now"})
+    spec["content"]["count"] = 2
+    msg = say(env, "two pasta recipes", {"intent": "ask", "spec": spec})
+    assert "I recommend Lemon garlic pasta" in msg and "Or try these:" in msg
+
+
+def test_checker_78_add_it_to_my_list_after_a_lead_pick_adds_the_lead(env):
+    bot = env["bot"]
+    _lead_and_one_more(env)
+    msg = say(env, "add it to my to-do list", {"intent": "act_on_last", "actions": [{"action": "todo.add"}]})
+    assert [t["text"] for t in bot.store.todos(H)] == ["Lemon garlic pasta"], msg
+    for t in bot.store.todos(H):
+        bot.store.x("DELETE FROM todos WHERE id=?", (t["id"],))
+    say(env, "add them both to my to-do list", {"intent": "act_on_last", "actions": [{"action": "todo.add"}]})
+    assert [t["text"] for t in bot.store.todos(H)] == ["Lemon garlic pasta", "Pasta night"]
+
+
+def test_checker_78_remind_me_of_it_later_is_the_lead_pick(env):
+    _lead_and_one_more(env)
+    msg = say(env, "remind me of it tonight at 8", {"intent": "act_on_last", "actions": ["message.send"],
+                                                    "when": {"type": "once", "date": "2026-11-12", "time": "20:00"}})
+    assert '"Lemon garlic pasta"' in msg and "2 picks" not in msg

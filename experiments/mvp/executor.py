@@ -685,7 +685,11 @@ class ExecutorMixin:
             return self._outside_parts(res["picks"], before=msg, label=label, lang=lang)
         if auto is not None:
             return msg + ("\n\n" + T.few_finished(n_clear, lang, noun) if n_clear else "")
-        if res["line"]:
+        from .interpret import OUTSIDE_ASKED
+        if res["line"] and OUTSIDE_ASKED.search(" ".join(t for t in (request_text, getattr(self._tl, "own_words", None))
+                                                         if t)):
+            # finding 75 (checker): why there are no new ones is said only after a message that asked for them; new
+            # picks that come from their profile's setting are left out quietly
             from . import lang as L
             return msg + "\n\n" + (L.table(lang)["outside_cant"] or res["line"])
         return msg

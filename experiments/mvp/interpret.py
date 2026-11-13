@@ -1395,8 +1395,12 @@ def _one_list_write(it: Interpretation):
 # the person asks for things from outside their saves (DESIGN.md section 8: "new", "more like these", "what else is out
 # there", "not just what I saved"); "new to Blender" is a level, not a request for new things
 OUTSIDE_ASKED = re.compile(
-    r"\bnew(?:er|est)?\b(?!\s+(?:to|at)\b)(?<!\bi['’]m new)(?<!\bim new)(?<!\bi am new)|\bfresh\b(?!\s+exports?)"
-    r"|\boutside\b|\bbeyond\b|\belsewhere\b|\bdiscover\w*|\bwhat else\b|\bout there\b"
+    # checker of fix pass 4: "new to me" asks for new things; "newest" is an order, "fresh pasta" a food, "an outside
+    # workout" a place and "beyond the basics" a level: none of them asks for things from outside the saves
+    r"\bnew\b(?!\s+(?:to|at)\b(?!\s+me\b))(?<!\bi['’]m new)(?<!\bim new)(?<!\bi am new)"
+    r"|\bfresh\s+(?:ones?|ideas?|stuff|picks?|finds?|content|videos?|things)\b|\bsomething fresh\b"
+    r"|\boutside (?:of )?(?:my|what|the (?:stuff|ones|library|saves))\b|\bbeyond (?:my|what)\b"
+    r"|\belsewhere\b|\bdiscover\w*|\bwhat else\b|\bout there\b"
     r"|\bmore like (?:these|this|that|those|it|them)\b|\bnot (?:just|only) (?:what|stuff|things|the ones|from)\b"
     r"|\b(?:haven['’]?t|have not|never|didn['’]?t|did not) (?:seen|saved|watched|kept)\b|\balready (?:saved|have|kept|seen)\b"
     r"|\bnot (?:from|in) my (?:saves|saved|library|likes)\b"
@@ -1404,12 +1408,12 @@ OUTSIDE_ASKED = re.compile(
     r"|\bnuev[oa]s?\b|\bnouveaux?\b|\bnouvelles?\b|\bneu(?:e|en|er|es)?\b|\bnov[oa]s?\b|\bnuov[oaie]\b"
     r"|\bfuera de\b|\bm[aá]s como (?:estos|estas|esto|este|esta)\b", re.I)
 # the message says how they kept it ("from my saves", "that I liked", "I watched") or where ("on YouTube", "reels")
-KINDS_ASKED = re.compile(r"\b(?:sav(?:e|es|ed|ing)|kept|lik(?:e|es|ed)|watch(?:ed|ing)?|seen|viewed|playlists?|"
-                         r"collections?|bookmark\w*|sent (?:to )?(?:myself|me)|shared (?:with|to) (?:myself|me))\b", re.I)
+# (checker of fix pass 4: "I'd like a workout", "something to watch tonight" and "saves time" name no kind of saving)
+KINDS_ASKED = re.compile(r"\b(?:saved|my saves|from saves|kept|liked|my likes|watched|watch history|watch later|seen|"
+                         r"viewed|playlists?|collections?|bookmark\w*|sent (?:to )?(?:myself|me)|"
+                         r"shared (?:with|to) (?:myself|me))\b", re.I)
 PLATFORMS_ASKED = re.compile(r"\b(?:youtube|yt|instagram|insta|ig|reels?|igtv|shorts)\b", re.I)
 NUMBER = re.compile(r"\d+")
-PROFILE_LEVEL_CRITERION = {"new": "suits a beginner", "beginner": "suits a beginner",
-                           "intermediate": "suits an intermediate level", "advanced": "suits an advanced level"}
 
 
 def _guard_words(x, message, pending, rules):
@@ -1435,39 +1439,113 @@ def _stems_and_numbers(*texts):
     return set(topic_words(*texts)) | {n for t in texts for n in NUMBER.findall(t or "")}
 
 
-def restated_pref(cr, said, prefs, notes):
-    """True when a must-have restates the person's kit, their usual time or one of their notes (shares a word or a
-    number with them) and the message does not say it: 'uses an Instant Pot', 'under 20 minutes on weeknights' for
-    'convenient chicken and rice recipes' (finding 74). The finished result and a level are judged elsewhere."""
+# checker of fix pass 4: the same kit in other words ("pressure cooker friendly" for an Instant Pot)
+KIT_GROUPS = [("instant pot", "instapot", "pressure cooker", "multicooker", "multi-cooker", "multi cooker"),
+              ("air fryer", "airfryer", "air-fryer"), ("slow cooker", "crockpot", "crock pot", "crock-pot"),
+              ("rice cooker",), ("dutch oven",), ("sous vide",), ("waffle maker", "waffle iron"),
+              ("pasta maker", "pasta machine"), ("stand mixer", "kitchenaid")]
+# a length or a time in any unit ("under 30 minutes", "half an hour", "an hour", "45 min")
+DURATION = re.compile(r"\b\d+\s*-?\s*(?:min(?:ute)?s?|hours?|hrs?|h)\b|\b(?:half|quarter of) an hour\b|\ban hour\b"
+                      r"|\bhalf-hour\b|\bminutes?\b|\bhours?\b", re.I)
+# words that carry no meaning of their own in a must-have
+FILLER = set("a an and the of for to in on with by or at it its is are be can has have uses use using needs need "
+             "that this your you their them one only just about around most under over less than more max usually "
+             "fits fit suits suit".split())
+
+
+def kit_phrases(tools):
+    """Every name for the kit the person has: the names they gave, and the other names of the same thing."""
+    out = []
+    for t in tools or []:
+        t = " ".join(str(t).lower().split())
+        group = next((g for g in KIT_GROUPS if any(_has_phrase(t, x) or _has_phrase(x, t) for x in g)), ())
+        for x in (t, *group):
+            if x and x not in out:
+                out.append(x)
+    return out
+
+
+def _has_phrase(text, phrase):
+    """The phrase as whole words, ignoring case, spaces and hyphens between its words."""
+    words = [re.escape(w) for w in re.findall(r"[^\W_]+", str(phrase).lower())]
+    return bool(words) and re.search(r"\b" + r"[\s-]*".join(words) + r"\b", str(text or "").lower()) is not None
+
+
+SAME_WORD = {"veggie": "vegetable", "veg": "vegetable", "veggy": "vegetable"}
+
+
+def _content_words(text):
+    from .retrieve import _stem
+    out = {_stem(w) for w in re.findall(r"[^\W_]+", (text or "").lower()) if len(w) >= 3 and w not in FILLER}
+    return {SAME_WORD.get(w, w) for w in out} | set(NUMBER.findall(text or ""))
+
+
+def restated_pref(cr, message, prof):
+    """True when a must-have restates what the profile holds and the message does not say it (finding 74):
+    - the person's kit, in any of its names ('uses an Instant Pot', 'pressure cooker friendly');
+    - their usual time: a length when the message gives none ('under 20 minutes', 'under half an hour'), or a word of
+      it ('for weeknights', 'weeknight-fast');
+    - one of their notes or their direction, when the must-have shares a word with it and none with the message
+      ('cooked at home' for 'any dinner ideas?'; 'quick to cook' for 'a quick dinner' stays).
+    The finished result and a level are judged elsewhere."""
     from .compose import FINISHED
     if FINISHED.search(cr) or LEVEL_IN_CRITERION.search(cr):
         return False
-    mine = _stems_and_numbers(*[str(t) for t in prefs.get("tools") or []], str(prefs.get("time") or ""),
-                              *[str(n) for n in notes or []])
+    prefs, notes = prof.get("prefs") or {}, prof.get("notes") or []
+    said = _stems_and_numbers(message)
+    kits = kit_phrases(prefs.get("tools"))
+    if any(_has_phrase(cr, k) for k in kits) and not any(_has_phrase(message, k) for k in kits):
+        return True
+    time = str(prefs.get("time") or "")
+    if time:
+        if DURATION.search(cr):
+            return not DURATION.search(message)
+        tw = _stems_and_numbers(time) - FILLER - {"usual", "minute", "hour", "time", "day"}
+        if (_stems_and_numbers(cr) & tw) - said:
+            return True
+    mine = _stems_and_numbers(*[str(t) for t in prefs.get("tools") or []]) - FILLER
+    if any(_has_phrase(message, k) for k in kits):   # "in my pressure cooker" names their Instant Pot
+        said = said | mine
     shared = _stems_and_numbers(cr) & mine
-    return bool(shared) and not (shared & said)
+    if shared and not (shared & said):
+        return True
+    soft = _content_words(" ".join([str(n) for n in notes] + [str(prof.get("direction") or "")]))
+    words = _content_words(cr)
+    return bool(words & soft) and not (words & _content_words(message))
+
+
+def restated_avoid(cr, message, prof):
+    """The person's avoid entries a must-have restates when the message does not say them ('mushroom-free' for
+    'chicken and rice', with mushroom on their avoid list): they belong in avoid, the one hard limit."""
+    from .profile import avoid_for
+    words = _stems_and_numbers(cr)
+    said = _stems_and_numbers(message)
+    return [a for a in avoid_for((prof.get("prefs") or {}).get("avoid"), message)
+            if isinstance(a, str) and (_stems_and_numbers(a) & words) and not (_stems_and_numbers(a) & said)]
+
+
+KIDS_SAID = re.compile(r"\b(?:kids?|child(?:ren)?|toddlers?|my (?:son|daughter|little ones?)|family)\b", re.I)
+KIDS_CRITERION = re.compile(r"\b(?:kids?|children|child|toddlers?)\b", re.I)
 
 
 def _level_ok(cr, message, prof):
-    """A level must-have stays when the message names a level, or when the profile has a level that may be used for
-    the request's own topic (finding 76: never one from another topic or another rule). Returns the must-have to keep
-    (the profile's own level, worded in plain words), or None."""
-    from .profile import LEVEL_ASKED, _about, level_allowed, topic_words
+    """A level must-have stays only when the message names a level ("for beginners", "advanced") or, for one about
+    kids, names the kids ("a dinner my kids will eat"). The profile's level is never a must-have (checker of fix pass
+    4: it made "I couldn't confirm ... suits a beginner" the opening, so what the setup learned blocked an answer):
+    the composer gets it with the topic it belongs to, prefers picks that suit it and may say so (finding 76: never a
+    level from another topic or another rule). Returns the must-have to keep, or None."""
+    from .profile import LEVEL_ASKED
+    if KIDS_CRITERION.search(cr):
+        return cr if KIDS_SAID.search(message) else None
     if any(_level_said_in(rx, message) for rx, _ in LEVEL_WORD) or LEVEL_ASKED.search(message):
         return cr
-    words = set(topic_words(message))
-    for i in prof.get("interests") or []:
-        if i.get("level") and _about(i, words) and level_allowed(i, prof.get("prefs") or {}):
-            return PROFILE_LEVEL_CRITERION.get(i["level"])
     return None
 
 
 def guard_criteria(criteria, avoid, message, prof):
-    """Must-haves the message (or the profile, for the same topic) supports; a diet restated from a note becomes the
-    things it rules out, in avoid (the avoid list is the one hard limit)."""
+    """Must-haves the message supports (and the ones code adds); a diet restated from a note, or an avoid entry
+    restated as a must-have, goes into avoid instead (the avoid list is the one hard limit)."""
     from .profile import DIETS, avoid_for
-    prefs, notes = prof.get("prefs") or {}, prof.get("notes") or []
-    said = _stems_and_numbers(message)
     out = []
     for cr in criteria:
         if LEVEL_IN_CRITERION.search(cr):
@@ -1475,12 +1553,12 @@ def guard_criteria(criteria, avoid, message, prof):
             if cr and cr not in out:
                 out.append(cr)
             continue
-        if restated_pref(cr, said, prefs, notes):
+        moved = restated_avoid(cr, message, prof)
+        if moved or restated_pref(cr, message, prof):
             diet = next((w for w in WORD.findall(cr.lower()) if w in DIETS), None)
-            if diet:
-                for a in avoid_for(list(DIETS[diet]), message):
-                    if a not in avoid and len(avoid) < 8:
-                        avoid.append(a)
+            for a in moved + (avoid_for(list(DIETS[diet]), message) if diet else []):
+                if a not in avoid and len(avoid) < 8:
+                    avoid.append(a)
             continue
         if cr not in out:
             out.append(cr)

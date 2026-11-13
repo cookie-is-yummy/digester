@@ -46,6 +46,20 @@ OTHER_PERSON = re.compile(r"\b(?:my|our)\s+(?:mom|mum|mother|dad|father|parents?
                           r"sister|brother|son|daughter|girlfriend|boyfriend|roommate|colleague|coworker|co-worker|"
                           r"teacher|team|family|grandma|grandpa|aunt|uncle|cousin)s?\b|\b(?:to|cc)\s+(?:him|her|them)\b",
                           re.I)
+# checker of fix pass 4, finding 78: "it", "that one" mean the pick the answer opened with (every library answer leads with
+# one pick, its details shown, and the others one line each); "them", "these", "both" mean them all
+ONE_PICK = re.compile(r"\b(?:it|its|that one|this one|the one you (?:recommended|picked)|th(?:at|is) (?:recipe|video|post|reel|"
+                      r"workout|tutorial|routine|lesson|pick))\b", re.I)
+ALL_PICKS = re.compile(r"\b(?:them|these|those|they|all|both|everything|each|the picks|the others)\b", re.I)
+
+
+def lead_only(text, acts):
+    """True when an act on the last answer with no number points at one pick ("add it to my list", "put that one on my
+    calendar", "remind me of it tonight"): that is the lead pick. An email of "it" is the whole answer, as before."""
+    return bool(ONE_PICK.search(text or "")) and not ALL_PICKS.search(text or "") and \
+        not any(n == "email.send" for n, _ in acts)
+
+
 SEND_WORDS = re.compile(r"\be-?mail\b|\bforward\b|\b(?:send|share)\s+(?:it|this|that|these|those|the\s+\w+\s+one)\b", re.I)
 VERB = {"message.send": "send it to you here", "email.send": "email it to you",
         "calendar.add": "give you a link to put it on your calendar", "todo.add": "add it to your list"}
@@ -271,7 +285,8 @@ class OutputsMixin:
         if plain:   # a reminder or a list: the whole message, as it was sent
             picks, whole, answer, problem = [], True, plain, None
         else:
-            picks, whole, answer, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else None,
+            one = [1] if not it.pick_number and what == "pick" and lead_only(text, acts) else None
+            picks, whole, answer, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else one,
                                                                it.answer_ref, what)
         if problem:
             if problem == T.NO_PICK_TO_ADD and not any(n == "todo.add" for n, _ in acts):
@@ -300,7 +315,8 @@ class OutputsMixin:
         """'Remind me of the 2nd one at 6', 'email me this tomorrow morning': a one-off rule whose content is the
         picks themselves (source items), so it sends them as they were, with no new search."""
         h, tz = person["handle"], person["timezone"]
-        picks, whole, answer, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else None,
+        one = [1] if not it.pick_number and lead_only(text, acts) else None   # "remind me of it tonight"
+        picks, whole, answer, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else one,
                                                            it.answer_ref)
         if problem:
             return self.send(h, T.NOTHING_TO_ACT_ON if problem == T.NO_PICK_TO_ADD else problem)
