@@ -124,7 +124,9 @@ class SchedulerMixin:
         """A short notice that time alone caused; a failed send is recorded, never retried. In quiet hours or a snooze
         it waits, like an import's message, and goes out when they end (checker, finding 21)."""
         person = self.store.person(handle)
-        if person and now is not None and (person["paused"] or self._held_now(person, now)):
+        if not person:   # deleted (or never known): nothing is sent or kept about them (final check)
+            return
+        if now is not None and (person["paused"] or self._held_now(person, now)):
             held = self.store.get_state(f"heldnotice:{handle}") or []
             self.store.set_state(f"heldnotice:{handle}", held + [text])
             return

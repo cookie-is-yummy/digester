@@ -419,7 +419,10 @@ class OutputsMixin:
             return out(T.code_not_sent(email, changed=bool(cur and cur != email)))
         self.store.set_state(f"emailcodes:{h}", sent + [now_iso(real)])
         msg = T.code_sent(email, config.CODE_MINUTES, changed=bool(cur and cur != email), again=again)
-        if via != "smtp":
+        if via != "smtp" and err and not again:
+            msg = T.code_failed_to_outbox(email, config.CODE_MINUTES, email_action.where_outbox(self),
+                                          changed=bool(cur and cur != email))
+        elif via != "smtp":
             msg += " " + T.code_in_outbox(email_action.where_outbox(self), failed=bool(err))
         return out(msg)
 

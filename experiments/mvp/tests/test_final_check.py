@@ -86,3 +86,31 @@ def test_held_notices_and_imports_are_read_again_under_the_lock(env):
     bot.store.set_state(f"heldimport:{H}", held)
     race(bot, lambda: bot.store.set_snooze(H, datetime(2026, 11, 30, tzinfo=timezone.utc)))
     assert len(ch.outbox) == n0 and bot.store.get_state(f"heldimport:{H}") == held
+
+
+def test_a_notice_for_a_person_who_is_gone_is_not_sent(env):
+    """Any notice that time alone caused (a missed send, an ended rule, a cut answer) is sent through _notice; for a
+    person no longer in the store it went out anyway."""
+    bot, ch = env["bot"], env["ch"]
+    bot.store.delete_person_data(H)
+    n0 = len(ch.outbox)
+    bot._notice(H, "I was offline and missed a send you asked for.", bot.clock())
+    assert len(ch.outbox) == n0 and bot.store.get_state(f"heldnotice:{H}") is None
+
+
+def test_a_code_email_that_smtp_refused_is_not_also_said_to_be_sent(env, monkeypatch):
+    """Cost-failure X8 fixed the code email reply on Messages and Sendblue; where the outbox can be opened (the
+    console, the test page) the reply still said "and sent a 6-digit code to it" and then "I couldn't send that
+    email"."""
+    from mvp.tests.test_mvp import last
+    bot, ch = env["bot"], env["ch"]
+    monkeypatch.setenv("MVP_SMTP_HOST", "127.0.0.1")
+    monkeypatch.setenv("MVP_SMTP_PORT", "1")   # refused at once, on this machine
+    monkeypatch.setenv("MVP_SMTP_USER", "u")
+    monkeypatch.setenv("MVP_SMTP_PASSWORD", "p")
+    monkeypatch.setenv("MVP_SMTP_FROM", "bot@example.com")
+    bot._set_email(bot.store.person(H), "tester@example.com", env["clock"][0])
+    msg = last(ch)
+    assert "sent a 6-digit code" not in msg
+    assert msg.startswith("I saved tester@example.com as your email address. I couldn't email the 6-digit code")
+    assert "outbox" in msg and "within 15 minutes" in msg

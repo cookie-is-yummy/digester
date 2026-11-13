@@ -604,6 +604,15 @@ def code_not_sent(email, changed=False):
             "try again.")
 
 
+def code_failed_to_outbox(email, minutes, where, changed=False):
+    """The code email could not be sent and was written to an outbox this person can open (the test page, the
+    console). Never "I sent a code" and "I couldn't send that email" in one reply (final check, cost-failure X8)."""
+    lead = f"I changed your email address to {email}" if changed else f"I saved {email} as your email address"
+    tail = " Until then I won't email you." if changed else ""
+    return (f"{lead}. I couldn't email the 6-digit code to it just now, so the code email is {where} instead. Text me "
+            f"the code within {minutes} minutes to confirm it's yours.{tail}")
+
+
 def code_in_outbox(where, failed=False):
     if failed:
         return f"I couldn't send that email just now, so it's {where} instead."
