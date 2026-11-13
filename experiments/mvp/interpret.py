@@ -1647,7 +1647,9 @@ def profile_guard(it: Interpretation, message, prof, pending=None, rules=()):
 
 # ---------- fix pass 6, finding 89: a change goes to what the message names ----------
 RULE_NUMBER_SAID = r"(?:\brule\s*#?\s*{n}\b|#\s?{n}\b|\bnumber\s+{n}\b|(?<![\d:.$£€])\b{n}\b(?!\s*(?:[:.]\d|am\b|pm\b|a\.m|p\.m|"\
-                   r"h\b|hrs?\b|hours?\b|mins?\b|minutes?\b|days?\b|weeks?\b|months?\b|times?\b|x\b|o['’]?clock|th\b|st\b|nd\b|rd\b|%)))"
+                   r"h\b|hrs?\b|hours?\b|mins?\b|minutes?\b|days?\b|weeks?\b|months?\b|times?\b|x\b|o['’]?clock|th\b|st\b|nd\b|rd\b|%"\
+                   r"|a (?:day|week|month|time)\b|per\b|each\b|at a time\b|picks?\b|videos?\b|ones?\b|recipes?\b|items?\b"\
+                   r"|tutorials?\b|things?\b|more\b|of them\b|songs?\b|links?\b|posts?\b|reels?\b)))"
 RULE_ORDINAL = {1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"}
 
 
@@ -1667,8 +1669,11 @@ def names_rule(message, rules, n):
     except (ValidationError, KeyError, TypeError):
         return False
     from .refresh import reminder_name
-    own = _topic_stems(c.goal or "", *c.searches, c.text or "", reminder_name(c.text) or "" if c.source == "note" else "",
-                       r.get("text") or "") - {"remind", "reminder", "export", "rule", "send", "every", "daily"}
+    name = reminder_name(c.text) if c.source == "note" else None
+    # (checker of fix pass 6) an export reminder is named by its short name, never by a word of its long steps ("make
+    # a .zip" made "no, make it weekly" name it)
+    own = _topic_stems(*((name,) if name else (c.goal or "", *c.searches, c.text or "")), r.get("text") or "") \
+        - {"remind", "reminder", "export", "rule", "send", "every", "daily", "make", "change", "move", "put", "set"}
     said = _topic_stems(message)
     return any(s in own or difflib.get_close_matches(s, list(own), n=1, cutoff=0.85) for s in said)
 

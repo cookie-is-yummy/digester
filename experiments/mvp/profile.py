@@ -768,13 +768,31 @@ def one_time(message):
     return bool(ONE_TIME.search(message or "")) and not STANDING.search(message or "")
 
 
+# (checker of fix pass 6) a kit or a usual time a request states, not one it only names: "for my new air fryer",
+# "I have an Instant Pot", "I usually have 20 minutes"; never "find me guitar songs" or "pasta in under 20 minutes"
+_KIT_LEAD = r"\b(?:my|our|i have|i['’]ve got|ive got|i got|i own|i bought|i just bought|we have|we got|i use|using)\b"
+_TIME_LEAD = r"\b(?:i|we)\s+(?:usually\s+|normally\s+|typically\s+|only\s+|just\s+|always\s+|never\s+)?" \
+             r"(?:have|get|got|['’]ve got)\b|\b(?:my|our)\s+(?:usual|normal)\b"
+
+
+def _stated_with(value, message, lead):
+    words = re.findall(r"[^\W\d_]+", value or "")
+    if not words:
+        return False
+    return bool(re.search(r"(?:" + lead + r")(?:\W+[\w'’-]+){0,4}?\W+" + re.escape(words[-1]) + r"\b", message or "",
+                          re.I))
+
+
 def side_form(raw, message):
     """Finding 88: what a request (an ask, a rule, a change, an action on the last answer, a follow-up) may teach the
     profile as a side effect: a level the message states for a topic it names, a kit, a usual time, a plain note, a
     thing it says they no longer avoid, and a diet it states. Never outside, exclusions, style, topics, the direction or
     confirmations: those change only through a message that is about the person's preferences."""
     raw = raw if isinstance(raw, dict) else {}
-    out = {k: raw[k] for k in ("kind", "tools", "time", "note") if k in raw}
+    out = {k: raw[k] for k in ("kind", "note") if k in raw}
+    out["tools"] = [v for v in _strs(raw.get("tools"), 6, 30) if _stated_with(v, message, _KIT_LEAD)]
+    if isinstance(raw.get("time"), str) and _stated_with(raw["time"], message, _TIME_LEAD):
+        out["time"] = raw["time"]
     # (checker) a thing no longer avoided only when the message says so ("I eat meat again"), never because the
     # request names it ("a chicken recipe"): the request's own words already win over the avoid list for it
     again = set().union(*(_covered(a) for a in allowed_again(message))) if allowed_again(message) else set()

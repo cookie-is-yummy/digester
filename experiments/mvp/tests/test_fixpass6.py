@@ -673,3 +673,64 @@ def test_checker_a_profile_update_adds_a_thing_to_avoid_or_a_confirmation_only_i
     say(rich, "that's right, and I'm vegetarian now", {"intent": "profile_update"})
     prof = P().get(bot.store, H)
     assert prof["prefs"]["avoid"] == ["meat"] and all(i["confirmed"] for i in prof["interests"])
+
+
+def test_checker_a_profile_update_carried_with_a_request_teaches_only_what_a_request_may(rich):
+    bot, st = rich["bot"], rich["state"]
+    before = standing(with_blender(rich))
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "both", "add_topics": ["guitar songs"], "tools": ["guitar"],
+                                                    "direction": "learn guitar songs", "style": "brief"}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": []}
+    msg = str(say(rich, "I want short guitar songs to learn", dict(ask("guitar songs", ["guitar"]),
+                                                                   also={"intent": "profile_update"})))
+    prof = P().get(bot.store, H)
+    assert standing(prof) == before and prof["prefs"]["tools"] == ["air fryer"] and "Noted" not in msg
+    assert prof["notes"] == []
+
+
+@pytest.mark.parametrize("text,tools,time,want", [
+    ("find me guitar songs", ["guitar"], None, ([], None)),
+    ("pasta in under 20 minutes", [], "20 minutes", ([], None)),
+    ("a dinner for my new Instant Pot", ["Instant Pot"], None, (["Instant Pot"], None)),
+    ("I have a wok, I usually have 30 minutes, any stir fry?", ["wok"], "30 minutes", (["wok"], "30 minutes")),
+    ("I got an air fryer, what can I make tonight?", ["air fryer"], None, (["air fryer"], None)),
+])
+def test_checker_a_request_keeps_a_kit_or_a_usual_time_it_states_never_one_it_only_names(text, tools, time, want):
+    form = P().side_form({"kind": "both", "tools": tools, **({"time": time} if time else {})}, text)
+    assert (form["tools"], form.get("time")) == want
+
+
+def test_checker_a_statement_and_a_request_in_one_message_store_the_kit_and_say_noted_once(rich):
+    bot, st = rich["bot"], rich["state"]
+    P().adopt_guess(bot.store, H, P().guess(bot.view(str(rich["lib"])), store=bot.store, handle=H)[0])
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "both", "tools": ["air fryer"], "outside": True}
+    st["answers"]["mvp_compose"] = pick("Lemon garlic pasta")
+    n = len(rich["ch"].outbox)
+    say(rich, "I got an air fryer, what can I make tonight?", ask("a dinner", ["pasta"], note="got an air fryer"))
+    sent = " ".join(str(m) for m in rich["ch"].outbox[n:])
+    prefs = P().get(bot.store, H)["prefs"]
+    assert prefs["tools"] == ["air fryer"] and prefs.get("outside") is None
+    assert sent.count("Noted") == 1 and "Lemon garlic pasta" in sent
+
+
+def test_checker_a_count_or_a_word_of_an_export_reminders_steps_never_names_it(blender):
+    from mvp.interpret import names_rule
+    bot = blender["bot"]
+    exports(blender)
+    rules = bot.store.rules(H)
+    for t in ("no, make it 1 a day", "make it 2 picks", "just 1 video please", "no, make it weekly"):
+        assert not names_rule(t, rules, 1) and not names_rule(t, rules, 2), t
+    assert names_rule("change 2 to 3 picks", rules, 2) and names_rule("move the instagram one", rules, 1)
+
+
+def test_checker_no_make_it_weekly_read_as_a_change_of_rule_1_changes_the_preview(blender):
+    from mvp.tests.test_fixpass6 import live_change
+    bot = blender["bot"]
+    before = exports(blender)
+    say(blender, MINI, mini_form())
+    form = dict(live_change(number=2, criteria=("mini",), when={"type": "schedule", "days": ["MON"], "time": "09:00"}),
+                edits_pending=False)
+    out = say(blender, "no, make it weekly", form)
+    assert snapshot(bot) == before and not out.startswith("Rule 2 is a reminder")
+    kind, payload = pending_spec(bot)
+    assert kind == "confirm_rule" and payload["spec"]["when"]["days"] == ["MON"]

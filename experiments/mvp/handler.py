@@ -99,6 +99,10 @@ def norm_handle(h):
     return h
 
 
+# (checker of fix pass 6) the intents that ask for something rather than state something about the person
+REQUEST_INTENTS = {"ask", "new_rule", "change_rule", "more", "follow_up", "act_on_last", "run_rule", "todo_add"}
+
+
 class HandlerMixin:
     # ---------- messages in ----------
     def on_message(self, handle, text, tapback=None, tapback_ref=None, received=None):
@@ -271,6 +275,8 @@ class HandlerMixin:
                 self._merge_note(person, note, text, now)   # slice 6: merged into the profile
                 said = None   # once per message
         self._tl.lang = it.lang
+        # (checker of fix pass 6) a profile update carried with a request is that request's side effect (finding 88)
+        self._tl.with_request = any(x.intent in REQUEST_INTENTS for x in [it] + ([it.also] if it.also else []))
         self._tl.made_pending = False
         self._tl.chained = False
         self._tl.hint = text          # the message itself, for what code reads from it (a length bound: "mini")
@@ -685,13 +691,18 @@ class HandlerMixin:
         are kept as a note (as before)."""
         h = person["handle"]
         res = None
+        side = getattr(self._tl, "with_request", False) and not P.STANDING.search(text)
         try:
-            res, _ = P.merge(self.store, h, text)
+            # (checker of fix pass 6) carried with a request, only what a request may teach is applied, unless the
+            # message says it is standing ("from now on")
+            res, _ = P.merge(self.store, h, text, side=side)
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
         if res and res["changes"]:
             return self.send(h, T.profile_changed(res["changes"], res["skipped_sensitive"] and self._sensitive_once()))
         note = " ".join(text.split())[:300]
+        if side:
+            return None   # the request's own reply says the rest; its words are not a note about them
         if P.one_time(text):
             # (checker of fix pass 6) "no YouTube this time": a limit on one request, not a standing preference; nothing
             # is stored and the reply never says "Noted" (carried with the request itself: nothing more is said)
