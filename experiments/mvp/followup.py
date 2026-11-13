@@ -163,11 +163,31 @@ class FollowupMixin:
                                       shown=st.get("shown") or [])
         else:
             msg, run_id, n = self.run(person, spec, "more", request_text=request, shown=st.get("shown") or [])
+        block = getattr(self._tl, "outside_block", None)
+        if not n and not self._run_failed(run_id) and c.source == "library" and c.outside == "none" \
+                and not (block and block[0] == run_id):
+            msg = self._more_none(person, spec, request)   # review fix X11 (experience): what is left, not a dead end
         if lead:   # "Here's an easier one:" only above one; above "nothing found" or an error, the feedback line alone
             msg = (lead if n and not self._run_failed(run_id) else (lead_none or "")) + msg
         return self.deliver(person, spec, msg + self._not_yet_notes(spec, sep="\n\n"), run_id,
                             kind="manual" if rule else "more", rule_id=rule["id"] if rule else None,
                             request_text=request)
+
+    def _more_none(self, person, spec, request):
+        """Review fix X11: "another" once everything that fits was shown: say that, and offer new ones from YouTube
+        when that route can serve this request (English only: "new ones" is read in English)."""
+        from . import lang as L
+        lang = self._answer_lang()
+        t = L.table(lang)
+        msg = (t.get("more_none") or L.EN["more_none"]).format(goal=spec.content.goal)
+        if lang is None:
+            try:
+                ok = self._outside().available(person["handle"], spec, [request], now=self.clock())
+            except Exception:  # noqa: BLE001
+                ok = False
+            if ok:
+                msg += L.EN["more_new"]
+        return msg
 
     # ---------- a question about a pick already shown ----------
     def _detail_answer(self, person, last, kinds, n):

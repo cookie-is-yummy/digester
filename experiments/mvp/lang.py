@@ -70,6 +70,9 @@ EN = {
     # review fix X4 (experience): a question about picks already shown that their own text does not answer
     "cant_tell_one": "I can't tell that from what {name} says. Here it is, so you can check:",
     "cant_tell_all": "I can't tell that from what those posts say. Open them to check.",
+    # review fix X11: "another" once everything that fits was shown
+    "more_none": "That's all I have in your saves for \"{goal}\".",
+    "more_new": " Say \"new ones\" and I'll look for some on YouTube.",
 }
 
 ES = {
@@ -113,7 +116,7 @@ ES = {
     "alt_keys": "los consejos están escritos",
     "alt_video": "la receta está en el video",
     "none": "No encontré nada que encaje bien: {reason}.",
-    "none_default": "nada de tu biblioteca encaja bien",
+    "none_default": "no hay nada parecido en lo que guardaste",   # review fix X11: not the same words twice
     "none_lib": "nada de tu biblioteca coincide",
     "none_since": "nada de lo que guardaste desde {date} coincide",
     "outside_head": "No está en lo que guardaste, pero se le parece:",
@@ -129,6 +132,7 @@ ES = {
     "level_tail": "; dime si me equivoco.",
     "cant_tell_one": "No lo puedo saber por lo que dice {name}. Aquí está, para que lo mires:",
     "cant_tell_all": "No lo puedo saber por lo que dicen esas publicaciones. Ábrelas para mirarlo.",
+    "more_none": "Eso es todo lo que tengo en lo que guardaste para \"{goal}\".",
     # checker, round 2 (finding 62): a request the bot will not do, in a sentence picked by code
     "unsupported": ("Eso no lo puedo hacer. Busco cosas en lo que guardaste y viste, ahora o a la hora que elijas, y "
                     "guardo recordatorios y listas de tareas."),

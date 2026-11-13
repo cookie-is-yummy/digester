@@ -137,6 +137,11 @@ class HandlerMixin:
                 ref = self.onboard_start(person, now)   # slice 6: the setup starts with the read of the person
                 self._contact_card(handle)
                 return ref
+            # review fix X12 (experience): the whole consent text once a day; in between, one short line
+            shown = self.store.get_state(f"consent_shown:{handle}")
+            if shown and now - datetime.fromisoformat(shown) < timedelta(hours=24):
+                return self.send(handle, T.CONSENT_AGAIN)
+            self.store.set_state(f"consent_shown:{handle}", now_iso(now))
             return self.send(handle, CONSENT)
         pending = self._live_pending(handle, now)
         if tapback:
@@ -756,7 +761,8 @@ class HandlerMixin:
         # fewer than 3 that fit BEYOND the pick this preview shows: the rule would run dry within a few sends
         low = supply - min(supply, info.get("n_picks", 0)) < 3
         shown = bool(getattr(self._tl, "auto_outside", False))
-        heads = T.supply_note(supply) if low else ""
+        # review fix X10 (experience): with no clear fit, the count is of the ones that come close, as the label says
+        heads = (T.supply_note(supply) if info.get("n_clear", 0) else T.supply_note_close(supply)) if low else ""
         offer = ""
         if (low or shown) and c.outside == "none":
             try:

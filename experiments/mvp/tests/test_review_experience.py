@@ -391,3 +391,58 @@ def test_x9_less_like_that_after_an_ask_promises_nothing(w):
     say(w, "chicken and rice?", CR)
     out = say(w, "less like that", {"intent": "feedback", "feedback": "less"})
     assert out != "Noted: less like that." and "not this creator" in out
+
+
+# ---------- X11: "another" once everything that fits was shown ----------
+def test_x11_another_with_nothing_left_says_so_and_offers_new_ones(w):
+    w["state"]["answers"]["mvp_compose"] = composer(("Instant pot chicken", "clear", YES_ING))
+    say(w, "chicken and rice?", CR)
+    w["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "none_reason": "x"}
+    say(w, "another")
+    out = say(w, "another")
+    assert "nothing in your library fits well" not in out
+    assert out.startswith("That's all I have in your saves for") and '"new ones"' in out
+    say(w, "pollo con arroz", dict(CR, lang="es"))
+    say(w, "otra", {"intent": "more", "lang": "es"})
+    out2 = say(w, "otra", {"intent": "more", "lang": "es"})
+    assert out2.startswith("Eso es todo lo que tengo") and "new ones" not in out2
+
+
+def test_x11_the_spanish_nothing_line_does_not_say_the_same_thing_twice():
+    from mvp import render
+    from mvp.schema import RuleSpec
+    spec = RuleSpec.model_validate(lib("pollo", ["pollo"]))
+    line = render.none_message({}, spec, lang="es")
+    assert line.count("encaj") == 1, line
+
+
+# ---------- X10: one count in a rule preview ----------
+def test_x10_a_preview_with_only_close_fits_counts_them_as_close(w):
+    w["state"]["answers"]["mvp_compose"] = composer(("donut tutorial", "close", [{"answer": "unknown"}]),
+                                                     ("cosy room", "close", [{"answer": "unknown"}]),
+                                                     ("Low poly island", "close", [{"answer": "unknown"}]))
+    out = say(w, "send me a blender project every day at 8am", {"intent": "new_rule", "spec": lib(
+        "a Blender project", ["blender tutorial"], when={"type": "schedule", "days": DAYS, "times": ["08:00"]},
+        count=1, criteria=["ends with a finished model"])})
+    assert "posts in your library that fit," not in out
+    assert "about 3 posts in your library that come close" in out
+
+
+# ---------- X12: a loose or Spanish agreement ----------
+def test_x12_loose_agreement_is_accepted(w):
+    bot = w["bot"]
+    for t in ("ok i agree", "sure, I agree", "si acepto", "I agre"):
+        bot.store.x("UPDATE people SET consent_version=NULL WHERE handle=?", (H,))
+        say(w, t)
+        assert bot.store.person(H)["consent_version"] is not None, t
+
+
+def test_x12_a_repeat_miss_gets_one_short_line(w):
+    bot = w["bot"]
+    from mvp import texts as T
+    bot.store.x("UPDATE people SET consent_version=NULL WHERE handle=?", (H,))
+    first = say(w, "hello?")
+    assert first == T.CONSENT
+    again = say(w, "what is this")
+    assert again == T.CONSENT_AGAIN and len(again) < 100
+    assert bot.store.person(H)["consent_version"] is None

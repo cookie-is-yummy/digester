@@ -10,7 +10,10 @@ CONSENT_VERSION = "mvp-consent-v1"
 YES = re.compile(r"^\s*(yes|y|yep|yeah|yup|sure|ok|okay|go|start|do it|sounds good|👍)[\s.!]*$", re.I)
 NO = re.compile(r"^\s*(no|n|nope|nah|cancel|don'?t)[\s.!]*$", re.I)
 YES_LEAD = re.compile(r"^\s*(yes|yep|yeah|yup|sure|ok|okay|sounds good|go ahead|s[ií]|vale|claro)\b", re.I)
-AGREE = re.compile(r"^\s*(i agree|agree|agreed|i'm in|im in|yes)\b", re.I)
+# review fix X12 (experience): a filler word first ("ok i agree", "sure, I agree"), a typo ("I agre") and Spanish
+AGREE = re.compile(r"^\s*(?:(?:ok|okay|sure|yes|yeah|yep|fine|alright|s[ií]|vale|claro)\b[\s,.!]*)*"
+                   r"(i agree?d?|agree?d?|i'm in|im in|yes|acepto|de acuerdo|estoy de acuerdo)(?!\w)", re.I)
+CONSENT_AGAIN = "To start, reply \"I agree\". My message above says what I keep and why."
 NEGATION = re.compile(r"\b(not|don'?t|do not|no|disagree|never)\b", re.I)
 QUICK_FEEDBACK = re.compile(r"^\s*(👍|👎)\s*(\d)?\s*$")
 # How a reaction reaches a phone that shows it as text (SMS, or a reaction the channel passes on as text).
@@ -890,6 +893,14 @@ def supply_note(n):
         return " Heads up: I don't see anything in your library that clearly fits, so this will run dry quickly."
     return (f" Heads up: I only see about {n} {'post' if n == 1 else 'posts'} in your library that "
             f"{'fits' if n == 1 else 'fit'}, so this will run dry quickly.")
+
+
+def supply_note_close(n):
+    """Review fix X10: nothing fits clearly; the count is of the posts that come close."""
+    if n == 0:
+        return supply_note(0)
+    return (f" Heads up: I only see about {n} {'post' if n == 1 else 'posts'} in your library that "
+            f"{'comes' if n == 1 else 'come'} close, so this will run dry quickly.")
 
 
 def outside_offer(when, shown=False):
