@@ -427,12 +427,20 @@ class HandlerMixin:
                 seen = self._answer_seen(h) or last
                 n = it.pick_number or pick_number(text, len(seen["items"])) or 1
                 return self._detail_answer(person, seen, kinds, n)
+            # review fix X4 (experience): "the third one" after an answer with one pick is asked about first
+            named = it.pick_number or pick_number(text, len(last["items"]))
+            if named and not 1 <= named <= len(last["items"]):
+                return self.send(h, T.which_pick(len(last["items"])))
             view = self.view(person["library"])
             cands = [c for c in (view.get(i) for i in last["items"]) if c]
             spec = self._spec_for_followup(last, it.question, it.avoid, h)
             known = self.store.get_state(f"lines:{h}", {}) or {}
-            msg, run_id, _ = self.run(person, spec, "follow_up", request_text=it.question, cands_override=cands,
-                                      known_lines=known)
+            msg, run_id, n_picks = self.run(person, spec, "follow_up", request_text=it.question, cands_override=cands,
+                                            known_lines=known)
+            if not n_picks and cands and not self._run_failed(run_id):
+                # a question about picks already shown that their own text does not answer ("is the second one
+                # vegetarian?"): one line built by code naming the pick, and its link; never "nothing in your library"
+                msg = self._cant_tell(person, last, named if named else (1 if len(last["items"]) == 1 else None))
             return self.send(h, msg, run_id)
         if it.intent == "feedback":
             return self._feedback(person, it.feedback, it.pick_number, it=it, text=text)
@@ -917,6 +925,26 @@ class HandlerMixin:
         others = sum(self._per_day(RuleSpec.model_validate(r["spec"]).when)
                      for r in self.store.rules(h, statuses=("active",)) if r["id"] != rule_id)
         return T.daily_limit_shared(cap) if mine + others > cap else ""
+
+    def _cant_tell(self, person, last, n):
+        """Review fix X4: the posts shown do not say what was asked. With pick n named: its title and its link."""
+        from . import lang as L
+        from .compose import title_from_item
+        from .render import Reply, by, link_part
+        t = L.table(self._answer_lang())
+        if not n:
+            return t.get("cant_tell_all") or L.EN["cant_tell_all"]
+        it = self.view(person["library"]).get(last["items"][n - 1])
+        if it is None:
+            return t.get("cant_tell_all") or L.EN["cant_tell_all"]
+        snap = self.store.answer(last["run_id"]) or {}
+        rec = next((p for p in snap.get("picks") or [] if p.get("item_id") == it.id), None) or {}
+        title = rec.get("title") or title_from_item(it)
+        parts = [{"type": "text", "text": (t.get("cant_tell_one") or L.EN["cant_tell_one"]).format(
+            name=f"{title}{by(it)}")}]
+        if it.url:
+            parts.append(link_part(it, title))
+        return Reply(parts)
 
     def _plain_send_seen(self, h, last):
         """The rule of the last timed send, when it was a reminder in the person's own words or their list and came

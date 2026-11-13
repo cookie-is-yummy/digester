@@ -227,10 +227,17 @@ class ExecutorMixin:
         if outside and c.outside == "only":
             return self._run_outside_only(person, spec, kind, rule_id, request_text)
         self._tl.run_info = None
+        # review fix X5 (experience): "another" counts the clear fits it already showed, so its label never says "none
+        # of your saved dinners fits" right after three that fit
+        prior = ((self.store.get_state(f"lastspec:{person['handle']}") or {}).get("clear_shown") or 0) \
+            if kind == "more" else 0
+        self._tl.clear_before = prior
         msg, run_id, n = self._run_once(person, spec, kind, rule_id=rule_id, request_text=request_text,
                                         cands_override=cands_override, known_lines=known_lines, shown=shown,
                                         only_ids=only_ids)
-        info = getattr(self._tl, "run_info", None) or {}
+        info = dict(getattr(self._tl, "run_info", None) or {})
+        if prior:
+            info["n_clear"] = info.get("n_clear", 0) + prior
         if outside and c.outside == "some" and not self._run_failed(run_id):
             msg = self._add_outside(person, spec, kind, rule_id, request_text, msg, run_id)
         elif outside and c.outside == "none" and kind in ("ask", "preview", "more") and info.get("run_id") == run_id \
@@ -408,7 +415,9 @@ class ExecutorMixin:
             if kind != "follow_up":  # what "another" repeats: this request, without what has been shown
                 self.store.set_state(f"lastspec:{person['handle']}", {
                     "spec": spec.stored(), "rule_id": rule_id if kind in ("scheduled", "manual") else None,
-                    "text": (request_text or "")[:300], "shown": list(shown) + [p["item"].id for p in picks]})
+                    "text": (request_text or "")[:300], "shown": list(shown) + [p["item"].id for p in picks],
+                    "clear_shown": (getattr(self._tl, "clear_before", 0) if kind == "more" else 0)
+                    + ((result or {}).get("n_clear", 0))})
             footer = None
             if kind == "scheduled":
                 number = self.store.rule_number(person["handle"], rule_id) or 1

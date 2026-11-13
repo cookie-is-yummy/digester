@@ -67,6 +67,9 @@ EN = {
               "intermediate": "I'm guessing you're past the basics with {topic}",
               "advanced": "I'm guessing you're advanced at {topic}"},
     "level_tail": "; tell me if that's wrong.",
+    # review fix X4 (experience): a question about picks already shown that their own text does not answer
+    "cant_tell_one": "I can't tell that from what {name} says. Here it is, so you can check:",
+    "cant_tell_all": "I can't tell that from what those posts say. Open them to check.",
 }
 
 ES = {
@@ -124,6 +127,8 @@ ES = {
               "intermediate": "Supongo que ya dominas lo básico de {topic}",
               "advanced": "Supongo que tienes un nivel avanzado en {topic}"},
     "level_tail": "; dime si me equivoco.",
+    "cant_tell_one": "No lo puedo saber por lo que dice {name}. Aquí está, para que lo mires:",
+    "cant_tell_all": "No lo puedo saber por lo que dicen esas publicaciones. Ábrelas para mirarlo.",
     # checker, round 2 (finding 62): a request the bot will not do, in a sentence picked by code
     "unsupported": ("Eso no lo puedo hacer. Busco cosas en lo que guardaste y viste, ahora o a la hora que elijas, y "
                     "guardo recordatorios y listas de tareas."),

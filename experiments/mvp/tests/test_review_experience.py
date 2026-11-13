@@ -264,3 +264,35 @@ def test_x3_spanish_detail_words_are_read_as_a_detail_question():
     assert detail_kinds("¿cuáles son los ingredientes?", "") == ["ingredients"]
     assert "steps" in detail_kinds("dame los pasos", "")
     assert only_detail_words("ingredientes por favor")
+
+
+# ---------- X4: a yes/no question about a pick already shown ----------
+def test_x4_a_question_the_posts_do_not_answer_names_the_pick(w):
+    w["state"]["answers"]["mvp_compose"] = composer(("Instant pot chicken", "clear", YES_ING),
+                                                     ("One pan chicken", "clear", YES_ING))
+    say(w, "what can I make with chicken and rice?", CR)
+    w["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "none_reason": "The second one has chicken."}
+    out = say(w, "is the second one vegetarian?", {"intent": "follow_up", "question": "Is the second pick vegetarian?",
+                                                    "pick_number": 2})
+    assert "nothing in your library" not in out and "has chicken" not in out
+    assert "I can't tell that from what One pan chicken" in out and "instagram.com/p/r3SYN" in out
+    # one pick shown, a question about "the third one": which one?
+    w["state"]["answers"]["mvp_compose"] = composer(("Instant pot chicken", "clear", YES_ING))
+    say(w, "chicken and rice again?", CR)
+    w["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "none_reason": "x"}
+    out2 = say(w, "is the third one spicy?", {"intent": "follow_up", "question": "Is the third pick spicy?",
+                                              "pick_number": 3})
+    assert out2 == "My last message had 1 pick. Which one?"
+
+
+# ---------- X5: "another" after three clear fits ----------
+def test_x5_another_counts_the_fits_it_already_showed(w):
+    w["state"]["answers"]["mvp_compose"] = composer(("Instant pot chicken", "clear", YES_ING),
+                                                     ("One pan chicken", "clear", YES_ING),
+                                                     ("Hainanese", "clear", [{"answer": "yes", "quote": "full recipe"}]))
+    first = say(w, "what can I make with chicken and rice?", CR)
+    assert "YouTube" not in first
+    w["state"]["answers"]["mvp_compose"] = composer(("Chicken fried rice", "close", [{"answer": "unknown"}]))
+    out = say(w, "another")
+    assert "Chicken fried rice" in out
+    assert not re.search(r"None of your saved \w+ fits", out) and "Nothing you saved fits" not in out
