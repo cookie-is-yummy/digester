@@ -448,6 +448,13 @@ class ExecutorMixin:
             if main and kind != "follow_up":   # fix pass 4, finding 80: a whole recipe written out is a finished result
                 finished_by_details(result, spec, extra, request_text or "", hint)
             for p in (result.get("picks") or []) + (result.get("wider") or []):
+                own = own_text(p["item"], extra)
+                if any(mentions(p.get("title") or "", k) and not mentions(own, k) for k in kits):
+                    # fix pass 4 (live check of finding 74): a title that names their kit the post never names
+                    # ("Instant Pot ..." for a stovetop recipe) is the post's own first words instead
+                    from .compose import title_from_item
+                    p["title"] = title_from_item(p["item"])
+                    result["dropped"]["title_pref"] = result["dropped"].get("title_pref", 0) + 1
                 # finding 47: a reason that promises ingredients or steps the answer does not show is left out
                 b = p.get("because") if p.get("because_backed") else None
                 if b and any(rx.search(b) and not (p.get("facts") or {}).get(k) for k, rx in DETAIL_CLAIM.items()):
@@ -456,7 +463,7 @@ class ExecutorMixin:
                     continue
                 # fix pass 4, finding 74: a reason may name their kit or their usual time only when the post's own
                 # text backs it ("it needs only an Instant Pot" for a post that never names one is left out)
-                if b and not pref_backed(b, own_text(p["item"], extra), kits,
+                if b and not pref_backed(b, own, kits,
                                          (self.store.person_context(h).get("prefs") or {}).get("time")):
                     p["because"], p["because_backed"] = None, False
                     result["dropped"]["because_pref_claim"] = result["dropped"].get("because_pref_claim", 0) + 1

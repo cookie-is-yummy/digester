@@ -206,7 +206,16 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   message names a level itself); the composer gets their level at the request's topic and may say it in the reason only
   when they confirmed it or the guess has a quote behind it; while it is a guess, the answer says once per topic "I'm
   guessing you're new to Blender; tell me if that's wrong." A request to make, cook, build or practise something
-  carries a finished-result must-have, and code answers "no" to it for any item whose own text is only tips.
+  carries a finished-result must-have, and code answers "no" to it for any item whose own text is only tips, and
+  "yes" when code has read the whole thing from the item's own text (a recipe's ingredients and two or more steps; a
+  workout's or a tutorial's two or more steps).
+- **The profile helps and never blocks** (fix pass 4, `interpret.profile_guard`, run on every form): the kit they have,
+  how much time they usually have and their notes are preferences for the composer, never must-haves, unless the
+  message says them (a diet restated from a note becomes avoid); a level must-have comes only from the message or the
+  profile's level at the request's own topic; new picks from YouTube only when the message asks for new things (or
+  their profile says so); and no limit to some kinds or platforms the message does not name. A reason or a title names
+  their kit or their usual time only when the post's own text does. The export reminders are listed to the
+  interpreter, and in "my rules", by short names.
 
 ## Rules, as the person sees them
 
@@ -277,5 +286,5 @@ still hold the handle (`ledger_rows_with_handle`).
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 527 offline tests (`test_fixpass3.py`: one or more per finding of the third live run, 65 to 73, and the checker's near-variants; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
+| `tests/` | 576 offline tests (`test_fixpass4.py`: one or more per finding of the fourth live run, 74 to 83, after a full setup; `test_fixpass3.py`: one or more per finding of the third live run, 65 to 73, and the checker's near-variants; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
 the second live run, 38 to 64) |

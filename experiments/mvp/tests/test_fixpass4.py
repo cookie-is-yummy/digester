@@ -548,3 +548,12 @@ def test_80_a_pick_still_the_closest_for_its_length_never_says_it_is_not_a_whole
               "dropped": {}, "n_clear": 0, "n_close": 1, "extract": ["steps"]}
     finished_by_details(result, spec, {})
     assert p["verdict"] == "close" and result["closest"] and result["missing"] == [("under 10 minutes", "no")]
+
+
+def test_74_a_title_never_names_their_kit_when_the_post_does_not(env):
+    bot, st = env["bot"], env["state"]
+    with_profile(bot, note=None)
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{
+        "n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Instant Pot lemon garlic pasta"}]}
+    msg = say(env, "a pasta recipe", ask_form("a pasta recipe", ["pasta recipe"]))
+    assert "Instant Pot" not in msg and "I recommend Lemon garlic pasta" in msg
