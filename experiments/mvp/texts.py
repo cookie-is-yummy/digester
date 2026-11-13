@@ -263,6 +263,11 @@ INCLUDE_YOUTUBE = re.compile(r"^\W*(?:(?:ok|okay|sure|yes)[\s,.!]+)?(?:include y
                              r"try youtube)(?:\s+too)?(?:[\s,.!]+please)?\W*$", re.I)
 
 
+# checker of fix pass 6: a limit said for one request only, read as a statement about the person
+ONE_TIME_ONLY = ("That sounds like it's for one request, so I haven't changed your settings. Say it with what you "
+                 "want, like \"pasta recipes, no YouTube\".")
+
+
 def reminder_fixed(number):
     """Fix pass 6, finding 89: a reminder keeps its own words; only when it comes can change."""
     return (f"Rule {number} is a reminder, so I can only change when it comes. You can also pause it, skip one or "

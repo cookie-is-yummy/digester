@@ -496,3 +496,138 @@ def test_88_live_a_note_with_more_than_the_level_still_gets_the_form_call_and_on
     assert {i["topic"]: i.get("level") for i in prof["interests"]}["guitar"] == "beginner"
     assert prof["prefs"]["tools"] == ["air fryer", "ukulele"] and prof["prefs"].get("outside") is None
     assert "guitar: a beginner" in msg and "ukulele" in msg
+
+
+# ======================================= checker of fix pass 6 =======================================
+@pytest.mark.parametrize("text,kept", [
+    ("no YouTube this time", False),
+    ("no YouTube today please", False),
+    ("just this once, nothing from Instagram", False),
+    ("from now on skip YouTube", True),
+    ("from today, no YouTube", True),
+    ("never use YouTube", True),
+])
+def test_checker_a_limit_for_this_time_only_is_never_a_standing_exclusion(rich, text, kept):
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich)
+    key = "instagram" if "Instagram" in text else "youtube"
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "exclude_platforms": [key], "outside": False}
+    msg = say(rich, text, {"intent": "profile_update"})
+    prefs = P().get(bot.store, H)["prefs"]
+    assert (prefs.get("exclude_platforms") == [key]) is kept and prefs.get("outside") is None
+    if not kept:   # nothing stored, no "Noted", and a plain sentence that says why
+        assert msg.startswith("That sounds like it's for one request, so I haven't changed your settings.")
+        assert P().get(bot.store, H)["notes"] == []
+
+
+def test_checker_a_request_carrying_a_one_time_profile_update_changes_nothing_and_says_nothing_more(rich):
+    bot, st = rich["bot"], rich["state"]
+    before = standing(with_blender(rich))
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "both", "exclude_platforms": ["youtube"], "outside": False}
+    st["answers"]["mvp_compose"] = pick("Low poly island")
+    n = len(rich["ch"].sent) if hasattr(rich["ch"], "sent") else None
+    msg = str(say(rich, "I want blender tutorials, not from YouTube this time",
+                  dict(ask("blender tutorials", ["blender"], platforms=["instagram"]), also={"intent": "profile_update"})))
+    assert standing(P().get(bot.store, H)) == before and "Noted" not in msg and "one request" not in msg
+    if n is not None:
+        assert not any("one request" in str(m) for m in rich["ch"].sent[n:])
+
+
+def test_checker_a_request_that_names_a_food_never_takes_it_off_the_avoid_list(rich):
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich)
+    bot.store.set_prefs(H, avoid=["chicken"])
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "both", "allow": ["chicken"], "note": "wants chicken"}
+    st["answers"]["mvp_compose"] = pick("chicken")
+    say(rich, "I want a chicken and rice recipe", ask("chicken rice", ["chicken rice"], note="I want chicken"))
+    assert P().get(bot.store, H)["prefs"]["avoid"] == ["chicken"]
+    # said in words, it still goes
+    say(rich, "I eat chicken again, I want a chicken and rice recipe",
+        ask("chicken rice", ["chicken rice"], note="I eat chicken again"))
+    assert P().get(bot.store, H)["prefs"]["avoid"] == []
+
+
+def test_checker_a_profile_update_drops_a_topic_or_sets_a_style_or_the_level_guessing_only_in_words(rich):
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "drop_topics": ["Home cooking"],
+                                                    "style": "brief", "stop_guessing_level": True, "tools": ["oven"]}
+    msg = say(rich, "I have an oven", {"intent": "profile_update"})
+    prof = P().get(bot.store, H)
+    assert "Home cooking" in [i["topic"] for i in prof["interests"]]
+    assert prof["prefs"].get("style") is None and prof["prefs"].get("guess_level", True) is True
+    assert msg.startswith("Noted: you have an oven.") and "brief" not in msg and "off your interests" not in msg
+    msg = say(rich, "I'm done with cooking, keep answers short and stop guessing my level", {"intent": "profile_update"})
+    prof = P().get(bot.store, H)
+    assert "Home cooking" not in [i["topic"] for i in prof["interests"]]
+    assert prof["prefs"]["style"] == "brief" and prof["prefs"]["guess_level"] is False
+
+
+@pytest.mark.parametrize("text,second", [
+    ("I'm staying in tonight, what pasta can I make?", {"intent": "set_timezone", "timezone": "Asia/Tokyo"}),
+    ("I'm at work, find me a lunch", {"intent": "set_timezone", "timezone": "America/Chicago"}),
+    ("a breakfast I can make before 9", {"intent": "set_quiet_hours", "start": "21:00", "end": "09:00"}),
+    ("a breakfast for when I wake up", {"intent": "set_quiet_hours", "start": "22:00", "end": "07:00"}),
+    ("a recipe for the holiday weekend", {"intent": "snooze", "until": "2026-11-16T09:00"}),
+    ("bread I bake until golden", {"intent": "snooze", "until": "2026-11-16T09:00"}),
+])
+def test_checker_a_setting_carried_with_a_request_needs_words_that_say_it(rich, text, second):
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich)
+    st["answers"]["mvp_compose"] = pick("Lemon garlic pasta")
+    p0 = bot.store.person(H)
+    q0 = bot.store.quiet(H)
+    say(rich, text, dict(ask("a recipe", ["pasta"]), also=second))
+    p1 = bot.store.person(H)
+    assert (p1["timezone"], p1.get("snooze_until"), bot.store.quiet(H)) == (p0["timezone"], p0.get("snooze_until"), q0)
+
+
+@pytest.mark.parametrize("text,second", [
+    ("find me tacos, I'm in Chicago now", {"intent": "set_timezone", "timezone": "America/Chicago"}),
+    ("we're flying to London, find me snacks", {"intent": "set_timezone", "timezone": "Europe/London"}),
+    ("I wake up at 6, find me a breakfast", {"intent": "set_quiet_hours", "start": "22:00", "end": "06:00"}),
+    ("no texts after 10pm, and find me a pasta", {"intent": "set_quiet_hours", "start": "22:00", "end": "08:00"}),
+    ("I'm away until Sunday, find me a book", {"intent": "snooze", "until": "2026-11-16T09:00"}),
+])
+def test_checker_a_setting_said_in_words_with_a_request_still_counts(text, second):
+    from mvp.interpret import change_guard
+    from mvp.schema import Interpretation
+    it = Interpretation.model_validate({"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "a recipe", "searches": ["recipe"]}}, "also": second})
+    assert change_guard(it, text).also is not None
+
+
+def test_checker_an_export_reminder_moves_to_a_new_time_even_when_the_form_copies_its_words_loosely(blender):
+    bot = blender["bot"]
+    before = exports(blender)
+    r1 = bot.store.rules(H)[0]
+    when = {k: v for k, v in r1["spec"]["when"].items() if k != "every_days"}
+    when.update(every_weeks=6, days=when.get("days") or ["MON"])
+    loose = dict(r1["spec"]["content"], text="Time for your Instagram export")
+    out = say(blender, "change 1 to every 6 weeks", {"intent": "change_rule", "rule_number": 1,
+                                                    "spec": dict(r1["spec"], when=when, content=loose)})
+    rule = bot.store.rules(H)[0]
+    assert out.startswith("Changed:") and rule["spec"]["content"] == r1["spec"]["content"]
+    assert rule["spec"]["when"]["every_weeks"] == 6
+    # its words alone, with the same timing, are still refused
+    bot.store.x("UPDATE rules SET spec=? WHERE id=?", (json.dumps(r1["spec"]), r1["id"]))
+    out = say(blender, "change rule 1 to remind me to buy milk", {"intent": "change_rule", "rule_number": 1, "spec": dict(
+        r1["spec"], content=dict(r1["spec"]["content"], text="buy milk"))})
+    assert out.startswith("Rule 1 is a reminder") and bot.store.rules(H)[0]["spec"] == json.loads(before[0][2])
+
+
+def test_checker_any_length_with_a_new_preview_waiting_never_changes_the_rule_offered_earlier(blender):
+    from mvp.tests.test_fixpass5 import _start_mini
+    bot = blender["bot"]
+    _start_mini(blender)
+    r1 = dict(bot.store.rules(H)[0])
+    evening = {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "time": "18:00"},
+        "content": {"goal": "Blender projects", "searches": ["blender tutorial"], "count": 1}}}
+    say(blender, "blender projects every evening", evening)
+    assert pending_spec(bot)[0] == "confirm_rule"
+    edit = {"intent": "new_rule", "edits_pending": True, "spec": evening["spec"]}
+    say(blender, "any length", edit)
+    r1_now = bot.store.rules(H)[0]
+    assert (r1_now["text"], r1_now["spec"]) == (r1["text"], r1["spec"])
+    assert pending_spec(bot)[0] == "confirm_rule"

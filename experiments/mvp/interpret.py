@@ -1681,16 +1681,26 @@ def no_limit_only(cr):
 
 # fix pass 6, checker's audit: a setting carried as the second part of a message ('also') needs words for it in the
 # message; a model-filled one alone never changes the time zone, the quiet hours, a pause of all sends or the profile
-TZ_SAID = re.compile(r"\btime ?zones?\b|\b(?:i['’]?m|i am|we['’]?re|we are|i['’]?ll be|i will be|staying|living|"
-                     r"moved|moving|travel\w*|flying|flew|landed|arrived|visiting|back)\b[^.!?]{0,30}?\b(?:in|to|at|"
-                     r"home)\b|\b(?:eastern|pacific|central|mountain|gmt|utc|cet|est|pst|cst|mst|edt|pdt|cdt|mdt)\b"
-                     r"|\b[a-z]+ time\b(?=\s*(?:now|zone|please|$|[.!?,]))", re.I)
+# (checker of fix pass 6) tighter: "I'm staying in tonight", "I'm at work", "a breakfast I can make before 9", "when
+# I wake up", "a recipe for the holiday weekend" and "bake until golden" say no setting
+_NOT_A_PLACE = (r"(?:the|a|an|my|our|your|bed|work|home|tonight|today|class|school|office|kitchen|gym|hurry|mood|"
+                r"charge|line|it|this|that|least|all|first|last|night|town|love|bits|pain|trouble|need|time)\b")
+TZ_SAID = re.compile(r"\btime ?zones?\b|\bback home\b|\b(?:eastern|pacific|central|mountain|gmt|utc|cet|est|pst|cst|"
+                     r"mst|edt|pdt|cdt|mdt)\b|\b(?:i['’]?m|i am|we['’]?re|we are|i['’]?ll be|i will be|staying|living|"
+                     r"moved|moving|travel\w*|flying|flew|landed|arrived|visiting|based)"
+                     r"(?:\s+(?:now|here|currently|still|over|out|staying|living|back|based|going|heading|travel\w*))*"
+                     r"\s+(?:in|to|at)\s+(?!" + _NOT_A_PLACE + r")[a-z]{3,}", re.I)
 QUIET_SAID = re.compile(r"\bquiet\b|\b(?:don['’]?t|do not|never|no)\s+(?:\w+\s+)?(?:message|messages|text|texts|"
-                        r"ping|send|sends|bother|notifications?)\b|\bnot (?:before|after|during|between)\b"
-                        r"|\b(?:before|after) \d|\bwake\b|\bsleep\b", re.I)
-SNOOZE_SAID = re.compile(r"\bsnooze\b|\baway\b|\bvacation\b|\bholiday\b|\boff\b|\bbreak\b|\buntil\b|\bpause\b"
-                         r"|\b(?:don['’]?t|do not|no)\s+(?:\w+\s+)?(?:message|messages|text|texts|send|sends)\b"
-                         r"|\b(?:resume|back on|turn \w+ back on)\b", re.I)
+                        r"ping|bother|notifications?)\b|\b(?:don['’]?t|do not|never)\s+send\s+(?:me\s+)?(?:anything|"
+                        r"messages|texts)\b|\bnot (?:before|after|during|between)\b"
+                        r"|\bi\s+(?:wake(?: up)?|get up|go to (?:bed|sleep)|sleep|am asleep|['’]?m asleep)\s+"
+                        r"(?:at|around|by|until|till|from)\b", re.I)
+SNOOZE_SAID = re.compile(r"\bsnooze\b|\b(?:i['’]?m|i am|i['’]?ll be|i will be|we['’]?re|we are|we['’]?ll be)\s+"
+                         r"(?:\w+\s+)?(?:away|on (?:vacation|holiday|a break|leave)|off (?:work|until|till|for|next|this|tomorrow)|"
+                         r"travel\w*)\b"
+                         r"|\b(?:don['’]?t|do not|no)\s+(?:\w+\s+)?(?:message|messages|text|texts|sends)\b"
+                         r"|\bpause (?:all|everything|messages|texts|sends|it all)\b|\btak(?:e|ing) a break\b"
+                         r"|\bresume\b|\b(?:messages|texts|sends|everything) back on\b|\bturn \w+ back on\b", re.I)
 
 
 def _setting_said(x: Interpretation, message):

@@ -556,7 +556,10 @@ class HandlerMixin:
                 from .refresh import reminder_name
                 if it.spec.content.source != old.content.source or (
                         old.content.source == "note" and reminder_name(old.content.text)
-                        and it.spec.content.text != old.content.text):
+                        and it.spec.content.text != old.content.text
+                        and it.spec.stored()["when"] == old.stored()["when"]):
+                    # (checker of fix pass 6) a new time with the reminder's words copied loosely ("change 1 to every
+                    # 6 weeks") still changes the time; the words stay the reminder's own (below)
                     return self.send(h, T.reminder_fixed(self.store.rule_number(h, r["id"])))
                 it.spec.content = old.content.model_copy(deep=True) if old.content.source == "todos" \
                     or reminder_name(old.content.text) else it.spec.content
@@ -680,6 +683,10 @@ class HandlerMixin:
         if res and res["changes"]:
             return self.send(h, T.profile_changed(res["changes"], res["skipped_sensitive"] and self._sensitive_once()))
         note = " ".join(text.split())[:300]
+        if P.one_time(text):
+            # (checker of fix pass 6) "no YouTube this time": a limit on one request, not a standing preference; nothing
+            # is stored and the reply never says "Noted" (carried with the request itself: nothing more is said)
+            return None if getattr(self._tl, "chained", False) else self.send(h, T.ONE_TIME_ONLY)
         if P.stated_sensitive(note):
             return self.send(h, self._sensitive_once() or T.PROFILE_NOTED)
         if note.lower() not in {n.lower() for n in self.store.profile_notes(h)}:
@@ -1052,6 +1059,10 @@ class HandlerMixin:
         way = "any" if T.ANY_LENGTH.match(text) else ("youtube" if T.INCLUDE_YOUTUBE.match(text) else None)
         st = self.store.get_state(f"lengthout:{h}") if way else None
         waiting = self._live_pending(h, now) if way else None
+        if st and st.get("rule_id") and waiting and waiting["kind"] == "confirm_rule":
+            # (checker of fix pass 6) a new preview is waiting: "any length" is about it, never the rule offered this
+            # earlier
+            st = None
         if way and waiting and waiting["kind"] == "confirm_rule" and waiting["payload"].get("length_only") \
                 and not (st and st.get("run_id") == waiting["payload"].get("run_id")):
             # fix pass 6, finding 89: a preview whose pick is the closest only because of its length answers to

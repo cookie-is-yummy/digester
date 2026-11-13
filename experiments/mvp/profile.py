@@ -749,13 +749,35 @@ def _avoid_stated(v, message):
     return any(words & _covered(m.group(1)) for m in DONT_EAT.finditer(message or ""))
 
 
+# checker of fix pass 6: words that make a limit one request's only ("no YouTube this time"): never a standing change
+ONE_TIME = re.compile(r"\b(?:this time|just this once|this once|this one time|for today|for tonight|"
+                      r"(?<!from )(?<!starting )(?<!as of )(?:today|tonight)|right now|for this (?:one|request|search|ask|answer)|just for (?:this|now|today|tonight))\b", re.I)
+# (checker) the words that say a style, a dropped topic or the level guessing, for a form that sets one
+STYLE_SAID = {"brief": re.compile(r"\b(?:brief|briefer|short|shorter|concise|less detail|fewer words|to the point|"
+                                  r"tl;?dr|keep (?:it|them|answers) (?:short|brief))\b", re.I),
+              "full": re.compile(r"\b(?:full|fuller|longer|long answers|more detail|more details|detailed|in detail|"
+                                 r"all the details|everything)\b", re.I)}
+OUTSIDE_SAID = re.compile(r"\b(?:new|outside|fresh|discover\w*|beyond|saves?|saved|library|kept)\b|"
+                          r"\bhaven['’]?t (?:seen|watched)\b", re.I)
+GUESS_SAID = re.compile(r"\bguess\w*\b|\blevels?\b", re.I)
+
+
+def one_time(message):
+    """True when the message says its limit is for this request only and says nothing standing."""
+    return bool(ONE_TIME.search(message or "")) and not STANDING.search(message or "")
+
+
 def side_form(raw, message):
     """Finding 88: what a request (an ask, a rule, a change, an action on the last answer, a follow-up) may teach the
     profile as a side effect: a level the message states for a topic it names, a kit, a usual time, a plain note, a
     thing it says they no longer avoid, and a diet it states. Never outside, exclusions, style, topics, the direction or
     confirmations: those change only through a message that is about the person's preferences."""
     raw = raw if isinstance(raw, dict) else {}
-    out = {k: raw[k] for k in ("kind", "tools", "time", "allow", "note") if k in raw}
+    out = {k: raw[k] for k in ("kind", "tools", "time", "note") if k in raw}
+    # (checker) a thing no longer avoided only when the message says so ("I eat meat again"), never because the
+    # request names it ("a chicken recipe"): the request's own words already win over the avoid list for it
+    again = set().union(*(_covered(a) for a in allowed_again(message))) if allowed_again(message) else set()
+    out["allow"] = [a for a in _strs(raw.get("allow"), 6, 30) if set(re.findall(r"[a-z]+", a.lower())) & again]
     if level_said(message):
         out["levels"] = raw.get("levels") or []
     out["avoid"] = [v for v in _strs(raw.get("avoid"), 6, 30) if _avoid_stated(v, message)]
@@ -801,7 +823,7 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
     other = []   # the changes short_summary() does not show (onboarding step 3 says these too)
     for name in _strs(raw.get("drop_topics")):
         i = _find(interests, name)
-        if i:
+        if i and _named_in(i, message):   # (checker of fix pass 6) only a topic the message names is dropped
             interests.remove(i)
             changes.append(f"{i['topic']} is off your interests")
             other.append(changes[-1])
@@ -889,18 +911,21 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
             prefs[key] = (list(prefs.get(key) or []) + new)[-10:]
             changes.append(f"{word} {kit_words(new) if key == 'tools' else _and(new)}")
             other.append(changes[-1])
-    if raw.get("style") in ("brief", "full") and prefs.get("style") != raw["style"]:
+    if raw.get("style") in ("brief", "full") and prefs.get("style") != raw["style"] \
+            and STYLE_SAID[raw["style"]].search(message or ""):   # (checker of fix pass 6) said in words
         prefs["style"] = raw["style"]
         changes.append("you like brief answers" if raw["style"] == "brief" else "you like full answers")
         other.append(changes[-1])
     if isinstance(raw.get("outside"), bool) and prefs.get("outside") is not raw["outside"] \
-            and (STANDING.search(message) if raw["outside"] else (STANDING.search(message) or SAVES_ONLY.search(message))):
+            and (STANDING.search(message) if raw["outside"] else (STANDING.search(message) or SAVES_ONLY.search(message))) \
+            and (OUTSIDE_SAID.search(message) or SAVES_ONLY.search(message)) and not one_time(message):
+        # (checker) and it is about new things or their saves at all: "from now on skip YouTube" is not
         # finding 88: a standing yes or no to new things is said as one ("always", "from now on", "only my saves")
         prefs["outside"] = raw["outside"]
         changes.append("I'll add new things from outside your saves" if raw["outside"]
                        else "I'll stick to your own saves")
         other.append(changes[-1])
-    if isinstance(raw.get("stop_guessing_level"), bool):
+    if isinstance(raw.get("stop_guessing_level"), bool) and GUESS_SAID.search(message or ""):
         want = not raw["stop_guessing_level"]
         if prefs.get("guess_level", True) is not want:
             prefs["guess_level"] = want
@@ -908,7 +933,8 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
             other.append(changes[-1])
     for key, allowed in (("exclude_kinds", KINDS), ("exclude_platforms", PLATFORMS)):
         # finding 88: never a platform or kind the message does not say not to use, in words
-        vals = [v for v in _strs(raw.get(key), 7, 20) if v in allowed and negated(v, message)]
+        # (checker) and never a limit the message says is for this request only ("no YouTube this time")
+        vals = [v for v in _strs(raw.get(key), 7, 20) if v in allowed and negated(v, message) and not one_time(message)]
         new = [v for v in vals if v not in (prefs.get(key) or [])]
         if new:
             prefs[key] = list(prefs.get(key) or []) + new
