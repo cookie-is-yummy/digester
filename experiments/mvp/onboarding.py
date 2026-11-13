@@ -302,6 +302,7 @@ class OnboardingMixin:
                                max_tokens=900, temperature=config.PROFILE_TEMPERATURE, seed=config.PROFILE_SEED)
         view = self.view(person["library"])
         ex_kinds, ex_platforms = self._exclusions(h)
+        prof = P.get(self.store, h)
         out = []
         for r in (raw.get("requests") if isinstance(raw, dict) else None) or []:
             if len(out) >= config.FIRST_REQUESTS or not isinstance(r, dict):
@@ -318,6 +319,10 @@ class OnboardingMixin:
             except ValueError:
                 continue
             c = spec.content
+            # checker of fix pass 4: the setup's model writes these with the profile in view; a must-have the request's
+            # own text does not say (their kit, their usual time, their level) is a preference, as for any message
+            from .interpret import guard_criteria
+            c.criteria = guard_criteria(c.criteria, c.avoid, text, prof)
             words = P.topic_words(c.goal, *c.searches)
             if not words or any(x["spec"]["content"]["goal"] == c.goal for x in out):
                 continue

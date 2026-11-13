@@ -1447,6 +1447,8 @@ KIT_GROUPS = [("instant pot", "instapot", "pressure cooker", "multicooker", "mul
 # a length or a time in any unit ("under 30 minutes", "half an hour", "an hour", "45 min")
 DURATION = re.compile(r"\b\d+\s*-?\s*(?:min(?:ute)?s?|hours?|hrs?|h)\b|\b(?:half|quarter of) an hour\b|\ban hour\b"
                       r"|\bhalf-hour\b|\bminutes?\b|\bhours?\b", re.I)
+LENGTH_SAID = re.compile(r"\b(?:mini|short|shorter|bite-?sized|tiny|quick|quicker|fast|brief|little time|no time)\b",
+                         re.I)
 # words that carry no meaning of their own in a must-have
 FILLER = set("a an and the of for to in on with by or at it its is are be can has have uses use using needs need "
              "that this your you their them one only just about around most under over less than more max usually "
@@ -1499,7 +1501,13 @@ def restated_pref(cr, message, prof):
     time = str(prefs.get("time") or "")
     if time:
         if DURATION.search(cr):
-            return not DURATION.search(message)
+            # a length the message gives keeps it; one that repeats their usual time, or comes with no word about
+            # length in the message, restates the profile; "under 10 minutes" for "mini" is the model's reading
+            if DURATION.search(message):
+                return False
+            if set(NUMBER.findall(cr)) & set(NUMBER.findall(time)):
+                return True
+            return not LENGTH_SAID.search(message)
         tw = _stems_and_numbers(time) - FILLER - {"usual", "minute", "hour", "time", "day"}
         if (_stems_and_numbers(cr) & tw) - said:
             return True

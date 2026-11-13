@@ -579,6 +579,8 @@ def guarded(text, criteria, prof=FULL_PROFILE, **content):
 @pytest.mark.parametrize("text,crit,kept", [
     ("chicken and rice", "pressure cooker friendly", False),        # their kit in other words
     ("chicken and rice", "under half an hour", False),              # their usual time in other units
+    ("a quick dinner", "under 20 minutes", False),                  # their usual time again, for "quick"
+    ("mini blender tutorials", "under 10 minutes", True),           # the model's reading of "mini" (code bounds it)
     ("chicken and rice", "weeknight-fast", False),
     ("pasta in my pressure cooker", "uses an Instant Pot", True),   # the message names their kit
     ("something for my Instant Pot", "uses an Instant Pot", True),
@@ -717,3 +719,19 @@ def test_checker_79_a_list_of_tips_never_takes_the_lead_from_the_composers_pick(
     env["state"]["answers"]["mvp_extract"] = lambda u: {}
     msg = say(env, "chicken and rice ideas", ask_form("chicken and rice ideas", ["chicken rice"], count=2))
     assert "I recommend Chicken rice bowl" in msg
+
+
+def test_checker_74_the_setups_first_requests_carry_only_must_haves_their_own_text_says(rich):
+    bot = rich["bot"]
+    bot.store.set_prefs(H, tools=["Instant Pot"], time="20 minutes on weeknights")
+    from mvp import profile as P
+    P.set_interests(bot.store, H, [{"topic": "Home cooking", "level": "beginner", "confirmed": True, "words": ["pasta"]}])
+    rich["state"]["answers"]["mvp_first_requests"] = lambda u: {"requests": [
+        {"text": "a pasta recipe for tonight", "goal": "a pasta recipe", "searches": ["pasta recipe"],
+         "criteria": ["ends with a dish you can eat", "uses an Instant Pot", "suits a beginner"]},
+        {"text": "a beginner pasta recipe in my Instant Pot", "goal": "an Instant Pot pasta recipe",
+         "searches": ["pasta recipe"], "criteria": ["uses an Instant Pot", "suits a beginner"]}]}
+    person = bot.store.person(H)
+    reqs = bot.first_requests(person, rich["clock"][0])
+    assert [r["spec"]["content"]["criteria"] for r in reqs] == [["ends with a dish you can eat"],
+                                                                ["uses an Instant Pot", "suits a beginner"]]
