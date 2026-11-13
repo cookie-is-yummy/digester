@@ -297,6 +297,19 @@ def test_68_email_it_and_add_the_ingredients_adds_one_to_do_per_ingredient_line_
         {"intent": "act_on_last", "actions": ["email.send"],
          "also": {"intent": "todo_add", "todo_text": "the ingredients", "list": "grocery"}})
     assert [t["text"] for t in bot.store.todos(H)] == ["200g spaghetti", "2 lemons"]
+    # found by the live check: both at once (the action and an `also` of the same to-do) writes each line once
+    for t in bot.store.todos(H):
+        bot.store.x("DELETE FROM todos WHERE id=?", (t["id"],))
+    say(env, "email it to me and add the ingredients to my grocery list",
+        {"intent": "act_on_last", "actions": ["email.send", "todo.add"],
+         "also": {"intent": "todo_add", "list": "grocery", "todo_text": "ingredients"}})
+    todos = bot.store.todos(H)
+    assert [t["text"] for t in todos] == ["200g spaghetti", "2 lemons"] and {t["list"] for t in todos} == {"grocery"}
+    # a to-do of its own beside the action stays
+    from mvp.tests.test_interpret_round import S as settle
+    it = settle({"intent": "act_on_last", "actions": ["email.send", "todo.add"],
+                 "also": {"intent": "todo_add", "todo_text": "buy milk"}}, "email it and add it, and add buy milk to my list")
+    assert it.also is not None and it.also.todo_text == "buy milk"
 
 
 # ======================================= 69. the person's own word for a saved rule ==================================

@@ -1297,8 +1297,28 @@ def settle(raw, message, rules, now, tzname, todos=()):
             _recent_week(c, message, now, tzname)
         if x.criteria:
             x.criteria = _negations_to_avoid(x.criteria, x.avoid)
-    it = _now_and_then(it, message)
+    it = _now_and_then(_one_list_write(it), message)
     return finish_all(it, now, tzname)
+
+
+def _one_list_write(it: Interpretation):
+    """Fix pass 3, live check of finding 68: "email it to me and add the ingredients to my grocery list" came back as
+    act_on_last [email.send, todo.add] and also a todo_add of the same ingredients, so each line was added twice. A
+    to-do of the answer itself (its picks or its ingredients, no text of its own) beside a todo.add action is that
+    action, written once."""
+    a = it.also
+    if it.intent != "act_on_last" or a is None or a.intent != "todo_add" or a.todo_text \
+            or a.what not in ("pick", "ingredients"):
+        return it
+    adds = [x for x in it.actions if x.action == "todo.add"]
+    if not adds:
+        return it
+    if a.what == "ingredients":
+        adds[0].params = dict(adds[0].params, what="ingredients")
+    if a.todo_list and not it.todo_list:
+        it.todo_list = a.todo_list
+    it.also = a.also
+    return it
 
 
 # ---------- one message ----------
