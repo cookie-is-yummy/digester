@@ -29,7 +29,7 @@ from .texts import LIMIT, LIMIT_TOTAL, LOADING, RUN_ERROR, SCHEDULED_FOOTER
 LENGTH_WORDS = [(re.compile(r"\b(mini|short|shorter|bite-?sized|tiny)\b", re.I), 10),
                 (re.compile(r"\b(quick|quicker)\b", re.I), 15)]
 UNDER_MINUTES = re.compile(r"\b(?:under|less than|at most|max(?:imum)?|within)\s+(\d{1,3})\s*(?:min|mins|minutes)\b", re.I)
-ANY_LENGTH_SAID = re.compile(r"\bany length\b", re.I)
+ANY_LENGTH_SAID = T.NO_LENGTH_LIMIT   # fix pass 6, finding 89: "no limit on length", "longer is fine" too
 SHORTEST = re.compile(r"\b(shortest|quickest)(?:\s+ones?)?\s+first\b", re.I)
 
 

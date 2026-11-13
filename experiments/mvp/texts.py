@@ -249,12 +249,24 @@ def length_way_out(minutes):
             "drop the limit, or \"include YouTube\" and I'll look for shorter ones there too.")
 
 
-ANY_LENGTH = re.compile(r"^\W*(?:(?:ok|okay|sure|yes|fine)[\s,.!]+)?(?:any length|any length is (?:fine|ok|okay)|"
-                        r"drop the (?:length )?limit|no length limit|length doesn'?t matter|"
-                        r"longer (?:ones )?(?:is|are) (?:fine|ok|okay))(?:[\s,.!]+please)?\W*$", re.I)
+# fix pass 6, finding 89: words that only say there is no length limit ("no, any length", "no limit on length",
+# "length doesn't matter", "longer is fine"); never a must-have: code lifts the length bound instead
+_NO_LIMIT = (r"any (?:length|duration)|drop the (?:length |time )?limit|no (?:length |time |duration )?limit"
+             r"(?: on (?:the )?(?:length|time|duration))?|(?:the )?(?:length|duration) (?:doesn['’]?t|does not) matter"
+             r"|(?:it )?doesn['’]?t matter how long|longer (?:ones )?(?:is|are) (?:fine|ok|okay)"
+             r"|(?:they|it) can be (?:any length|longer)")
+NO_LENGTH_LIMIT = re.compile(r"\b(?:" + _NO_LIMIT + r")\b", re.I)
+ANY_LENGTH = re.compile(r"^\W*(?:(?:no|nah|nope|ok|okay|sure|yes|fine|actually)[\s,.!]+)*(?:" + _NO_LIMIT + r")"
+                        r"(?:\s+(?:is|are|works?)(?:\s+(?:fine|ok|okay|good))?)?(?:[\s,.!]+(?:please|thanks))?\W*$", re.I)
 INCLUDE_YOUTUBE = re.compile(r"^\W*(?:(?:ok|okay|sure|yes)[\s,.!]+)?(?:include youtube|add youtube|youtube too|"
                              r"youtube as well|look on youtube|include youtube too|include youtube as well|"
                              r"try youtube)(?:\s+too)?(?:[\s,.!]+please)?\W*$", re.I)
+
+
+def reminder_fixed(number):
+    """Fix pass 6, finding 89: a reminder keeps its own words; only when it comes can change."""
+    return (f"Rule {number} is a reminder, so I can only change when it comes. You can also pause it, skip one or "
+            "stop it.")
 
 
 def length_changed(way, number=None, pending=False):

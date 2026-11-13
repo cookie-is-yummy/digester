@@ -618,9 +618,9 @@ def _strs(v, n=8, size=40):
     return [s for s in (_clean(x, size) for x in (v or []) if isinstance(x, str)) if s][:n]
 
 
-def merge(store, handle, message, asked=None, person=None, shown=None):
+def merge(store, handle, message, asked=None, person=None, shown=None, side=False):
     """One model call fills the form; apply_merge() checks and applies it. Returns (result, cost); result is
-    apply_merge's."""
+    apply_merge's. side: the message is a request (finding 88: only what a request may teach is applied)."""
     prof = get(store, handle)
     known = {"topics": [{"topic": i["topic"], "level": i.get("level"), "confirmed": bool(i.get("confirmed"))}
                         for i in prof["interests"]],
@@ -633,7 +633,7 @@ def merge(store, handle, message, asked=None, person=None, shown=None):
                               prompt_version=config.PROMPT_PROFILE_MERGE, person=person or handle, max_tokens=700,
                               temperature=config.PROFILE_TEMPERATURE, seed=config.PROFILE_SEED)
     return apply_merge(store, handle, raw, message, shown=shown,
-                       asked_direction=bool(asked and "working toward" in asked)), cost
+                       asked_direction=bool(asked and "working toward" in asked), side=side), cost
 
 
 # fix pass 2, finding 63: a direction is stored only when the person states a goal ("I'm working toward...", "I want to
@@ -677,14 +677,92 @@ def allowed_again(message):
     return out
 
 
-def apply_merge(store, handle, raw, message, shown=None, asked_direction=False):
+# ---------- fix pass 6, finding 88: a request changes no standing preference it did not ask to change ----------
+# a standing preference is said as one: "always", "from now on", "in general", "by default", "every time"
+STANDING = re.compile(r"\b(?:always|from now on|in general|generally|by default|every ?time|each time|going forward|"
+                      r"from here on|for good|in (?:the )?future|all the time)\b", re.I)
+# "only my own saves", "stick to my library", "no new stuff": outside off, in their words
+SAVES_ONLY = re.compile(r"\b(?:only|just|stick to|stay with|keep (?:it )?to)\b[^.!?]{0,30}?\b(?:my|your) (?:own )?"
+                        r"(?:saves|saved|library|stuff)\b|\bno (?:more )?(?:new|outside) (?:things|stuff|picks|videos|ones)\b"
+                        r"|\bstop (?:adding|showing|sending|looking for) (?:me )?(?:new|outside)\b", re.I)
+# the words that name a platform or a kind of their library, and a negation said before it ("no YouTube", "not from
+# YouTube", "don't show me Instagram", "without my watch history", "stop using my likes", "never use my YouTube")
+_NAMES = {"youtube": r"youtube|yt", "instagram": r"instagram|insta|ig",
+          "like": r"likes|liked|liking", "watch": r"watch(?:ing)? history|watched|watches",
+          "save": r"saves|saved", "collection": r"collections?", "playlist": r"playlists?",
+          "share_self": r"(?:posts? |things |stuff )?(?:i )?(?:sent|send|shared|share|dm['’]?d) (?:to )?(?:myself|me)",
+          "view": r"views|viewed|view history"}
+_NEG = r"\b(?:no|not|never|don['’]?t|do not|doesn['’]?t|stop|quit|without|exclude|excluding|leave out|skip|ignore|" \
+       r"avoid|except|minus|nothing from|none from)\b"
+
+
+def negated(key, message):
+    """True when the message says not to use this platform or kind, in words (finding 88)."""
+    rx = _NAMES.get(key)
+    return bool(rx) and bool(re.search(_NEG + r"(?:\W+[\w'’]+){0,4}?\W+(?:" + rx + r")\b", message or "", re.I))
+
+
+LEVEL_WORDS = set("beginner beginners new novice newbie intermediate advanced expert pro level basics basic past "
+                  "total complete absolute just starting started has have got owns own uses use".split())
+DIET_SAID = re.compile(r"\b(vegetarian|vegan|pescatarian)\b", re.I)
+DONT_EAT = re.compile(r"\bi\s+(?:don['’]?t|do not|can['’]?t|cannot|never|no longer)\s+eat\s+([a-z][a-z ,-]{1,40})", re.I)
+
+
+def _avoid_stated(v, message):
+    """A thing to avoid a request may add to the profile: covered by a diet the message states ("I'm vegetarian now")
+    or by "I don't eat ..." in the message (finding 88)."""
+    words = set(re.findall(r"[a-z]+", v.lower()))
+    for d in DIET_SAID.findall(message or ""):
+        if words & _covered(d.lower()):
+            return True
+    return any(words & _covered(m.group(1)) for m in DONT_EAT.finditer(message or ""))
+
+
+def side_form(raw, message):
+    """Finding 88: what a request (an ask, a rule, a change, an action on the last answer, a follow-up) may teach the
+    profile as a side effect: a level the message states for a topic it names, a kit, a usual time, a plain note, a
+    thing it says they no longer avoid, and a diet it states. Never outside, exclusions, style, topics, the direction or
+    confirmations: those change only through a message that is about the person's preferences."""
+    raw = raw if isinstance(raw, dict) else {}
+    out = {k: raw[k] for k in ("kind", "tools", "time", "allow", "note") if k in raw}
+    if level_said(message):
+        out["levels"] = raw.get("levels") or []
+    out["avoid"] = [v for v in _strs(raw.get("avoid"), 6, 30) if _avoid_stated(v, message)]
+    return out
+
+
+def restates(prof, note):
+    """True when a note says only what the profile already holds, in other words ("Blender (beginner)" beside a topic
+    Blender 3D at that level): it is not merged again and never makes a "Noted" line (finding 88)."""
+    words = [w for w in topic_words(note) if w not in LEVEL_WORDS]
+    if not words:
+        return False
+    prefs = prof.get("prefs") or {}
+    have = set(topic_words(*[i["topic"] for i in prof.get("interests") or []], *(prefs.get("tools") or []),
+                           *(prefs.get("avoid") or []), str(prefs.get("time") or ""), prof.get("direction") or "",
+                           *(prof.get("notes") or [])))
+    if not set(words) <= have:
+        return False
+    lv = level_said(note)
+    if lv:
+        i = _find(prof.get("interests") or [], " ".join(words))
+        return bool(i) and i.get("level") == lv
+    return True
+
+
+def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, side=False):
     """Validates the model's form against the message and the stored profile and applies it. Returns {"kind",
     "changes": [plain lines], "other": [the lines short_summary() does not cover], "skipped_sensitive": bool}. Levels and topics must name a stored topic or use the person's
-    own words; direction and tools must be their own words; anything sensitive is left out (and said)."""
+    own words; direction and tools must be their own words; anything sensitive is left out (and said).
+    side: the message is a request and this is its side effect (finding 88); a form that reads the message as only a
+    request is treated the same."""
     from .interpret import own_words, timing_only
     from .schema import KINDS, PLATFORMS
     raw = raw if isinstance(raw, dict) else {}
     kind = raw.get("kind") if raw.get("kind") in ("about_me", "request", "both") else "about_me"
+    if side or kind == "request":
+        raw = side_form(raw, message)
+        side = True
     prof = get(store, handle)
     interests = [dict(i) for i in prof["interests"]]
     prefs = dict(prof["prefs"])
@@ -784,7 +862,9 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False):
         prefs["style"] = raw["style"]
         changes.append("you like brief answers" if raw["style"] == "brief" else "you like full answers")
         other.append(changes[-1])
-    if isinstance(raw.get("outside"), bool) and prefs.get("outside") is not raw["outside"]:
+    if isinstance(raw.get("outside"), bool) and prefs.get("outside") is not raw["outside"] \
+            and (STANDING.search(message) if raw["outside"] else (STANDING.search(message) or SAVES_ONLY.search(message))):
+        # finding 88: a standing yes or no to new things is said as one ("always", "from now on", "only my saves")
         prefs["outside"] = raw["outside"]
         changes.append("I'll add new things from outside your saves" if raw["outside"]
                        else "I'll stick to your own saves")
@@ -796,15 +876,19 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False):
             changes.append("I'll stop guessing your level" if not want else "I'll guess your level again")
             other.append(changes[-1])
     for key, allowed in (("exclude_kinds", KINDS), ("exclude_platforms", PLATFORMS)):
-        vals = [v for v in _strs(raw.get(key), 7, 20) if v in allowed]
+        # finding 88: never a platform or kind the message does not say not to use, in words
+        vals = [v for v in _strs(raw.get(key), 7, 20) if v in allowed and negated(v, message)]
         new = [v for v in vals if v not in (prefs.get(key) or [])]
         if new:
             prefs[key] = list(prefs.get(key) or []) + new
             changes.append(("I won't use your " if key == "exclude_kinds" else "I won't use ") + _and(_plain(key, new)))
             other.append(changes[-1])
     note = _clean(raw.get("note"), 120)
-    if note and (timing_only(note) or kind == "request" or (allow and any(named_against(a, note) for a in allow))):
-        note = ""   # finding 63: words about timing are never a note; a note that repeats what they took back neither
+    if note and (timing_only(note) or kind == "request" or (allow and any(named_against(a, note) for a in allow))
+                 or (side and not own_words(note, message)) or restates(prof, note)):
+        # finding 63: words about timing are never a note; a note that repeats what they took back neither; finding
+        # 88: a request's note is in its own words, and a note that restates the profile is not kept again
+        note = ""
     if note:
         note, cut = keep_stated(note)
         skipped = skipped or cut

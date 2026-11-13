@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from . import config
 from . import profile as P
 from . import texts as T
-from .interpret import interpret, profile_guard
+from .interpret import change_guard, interpret, names_rule, profile_guard
 from .llm import budget_stop
 from .schedule import describe, next_run, resolve_until, say_time, t12
 from .schema import RuleSpec
@@ -219,6 +219,8 @@ class HandlerMixin:
                               store=self.store)
             # fix pass 4 (findings 74 to 76, 82): only what the message (or the profile, for its own topic) supports
             it = profile_guard(it, text, P.get(self.store, handle), pending, rules)
+            # fix pass 6, finding 89: a change lands only on what the message names (a waiting preview, else the rule)
+            it = change_guard(it, text, self._live_pending(handle, now), rules)
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=handle, kind="interpret", status="error", error=type(e).__name__)
             if budget_stop(e):   # review fix X6: ai.py's budget guard refused the call: never a false "try again"
@@ -258,7 +260,10 @@ class HandlerMixin:
         for x in [it] + ([it.also] if it.also else []):
             known = {n.lower() for n in self.store.profile_notes(h)}
             if x.profile_note and x.profile_note.lower() not in known and x.intent != "profile_update" \
-                    and getattr(self._tl, "merged_text", None) != text:   # onboarding merged this message already
+                    and getattr(self._tl, "merged_text", None) != text \
+                    and not P.restates(P.get(self.store, h), x.profile_note):
+                # onboarding merged this message already; a note that says what the profile holds is not merged
+                # again (fix pass 6, finding 88)
                 self._merge_note(person, x.profile_note, text, now)   # slice 6: merged into the profile
         self._tl.lang = it.lang
         self._tl.made_pending = False
@@ -305,14 +310,17 @@ class HandlerMixin:
         res = None
         if not self._over_cap(person):
             try:
-                res, _ = P.merge(self.store, h, text)
+                # fix pass 6, finding 88: the message is a request; only what a request may teach is applied
+                res, _ = P.merge(self.store, h, text, side=True)
             except Exception as e:  # noqa: BLE001
                 self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
         if res and res["changes"]:
             self._tl.profile_said = T.profile_changed(res["changes"],
                                                       res["skipped_sensitive"] and self._sensitive_once())
             return
-        if not P.stated_sensitive(note):
+        from .interpret import own_words
+        if not P.stated_sensitive(note) and own_words(note, text):
+            # kept as it is only in the message's own words (finding 88)
             self.store.add_profile_note(h, note, at=now)
 
     def _profile_tail(self):
@@ -358,6 +366,12 @@ class HandlerMixin:
             # nothing waiting for one, or small talk, gets no reply of its own ("I don't have anything waiting ...")
             return None
         chained = getattr(self._tl, "chained", False)
+        if it.intent == "change_rule" and pending and pending["kind"] == "confirm_rule" and not chained:
+            # fix pass 6, finding 89: with a preview waiting, a change that names no stored rule never lands on one;
+            # the preview stays open
+            r = self._pick_rule(rules, it.rule_number)
+            if r is None or not names_rule(text, rules, self.store.rule_number(h, r["id"])):
+                return self.send(h, T.WHICH_RULE)
         if pending and not chained and pending["kind"] == "clarify" and it.intent == "confirm" \
                 and pending["payload"].get("question") == T.HOW_OFTEN_ASK:
             # fix pass 3, finding 66: a "yes" to "how often?" takes the default the question offered
@@ -498,14 +512,30 @@ class HandlerMixin:
             if status == "done":  # a one-off time that has passed would end the rule without saying so
                 return self.send(h, T.CHANGE_TIME_PASSED)
             old = RuleSpec.model_validate(r["spec"])
+            if old.content.source in ("note", "todos"):
+                # fix pass 6, finding 89: a reminder (an export reminder, their own words, their list) is never turned
+                # into a search of the library; an export reminder keeps its words; only when it comes can change
+                from .refresh import reminder_name
+                if it.spec.content.source != old.content.source or (
+                        old.content.source == "note" and reminder_name(old.content.text)
+                        and it.spec.content.text != old.content.text):
+                    return self.send(h, T.reminder_fixed(self.store.rule_number(h, r["id"])))
+                it.spec.content = old.content.model_copy(deep=True) if old.content.source == "todos" \
+                    or reminder_name(old.content.text) else it.spec.content
             self._wrote(h, "rule_rows", f"changed rule \"{old.content.goal}\"", {"rows": self._rule_rows([r["id"]])})
             # fix pass 2, finding 51: the rule keeps the words it was made with (its outside search and its length
             # bound are read from them); the change is added after them, never in their place
             kept = (r.get("text") or "").strip()
+            words = change_words(old, it.spec)
+            if T.NO_LENGTH_LIMIT.search(text) and not T.NO_LENGTH_LIMIT.search(kept) and it.spec.content.source == "library":
+                # fix pass 6, finding 89: "change 1 to any length": the rule's words lift its length bound
+                from .interpret import length_only
+                it.spec.content.criteria = [cr for cr in it.spec.content.criteria if not length_only(cr)]
+                words = ", ".join(x for x in ["any length", words] if x)
             self.store.update_rule(r["id"], spec=it.spec.stored(),
                                    text=text if not kept else (kept if text in kept else f"{kept} / {text}"))
             self.store.set_slot(r["id"], nxt, status if r["status"] == "active" else r["status"])
-            return self.send(h, T.changed(describe(it.spec.when), it.spec.content.goal, change_words(old, it.spec))
+            return self.send(h, T.changed(describe(it.spec.when), it.spec.content.goal, words)
                              + self._do_note(it.spec) + self._not_yet_notes(it.spec)
                              + self._email_ask(person, it.spec, now))
         if it.intent == "run_rule":
@@ -983,6 +1013,12 @@ class HandlerMixin:
         h = person["handle"]
         way = "any" if T.ANY_LENGTH.match(text) else ("youtube" if T.INCLUDE_YOUTUBE.match(text) else None)
         st = self.store.get_state(f"lengthout:{h}") if way else None
+        waiting = self._live_pending(h, now) if way else None
+        if way and waiting and waiting["kind"] == "confirm_rule" and waiting["payload"].get("length_only") \
+                and not (st and st.get("run_id") == waiting["payload"].get("run_id")):
+            # fix pass 6, finding 89: a preview whose pick is the closest only because of its length answers to
+            # "no, any length" from the moment it is sent, whatever was offered after it
+            st = {"run_id": waiting["payload"].get("run_id"), "at": waiting["at"]}
         if not st or datetime.fromisoformat(st["at"]) < now - timedelta(hours=24):
             return None
         from .interpret import length_only

@@ -1640,6 +1640,75 @@ def profile_guard(it: Interpretation, message, prof, pending=None, rules=()):
     return it
 
 
+# ---------- fix pass 6, finding 89: a change goes to what the message names ----------
+RULE_NUMBER_SAID = r"(?:\brule\s*#?\s*{n}\b|#\s?{n}\b|\bnumber\s+{n}\b|(?<![\d:.$£€])\b{n}\b(?!\s*(?:[:.]\d|am\b|pm\b|a\.m|p\.m|"\
+                   r"h\b|hrs?\b|hours?\b|mins?\b|minutes?\b|days?\b|weeks?\b|months?\b|times?\b|x\b|o['’]?clock|th\b|st\b|nd\b|rd\b|%)))"
+RULE_ORDINAL = {1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"}
+
+
+def names_rule(message, rules, n):
+    """True when the message names stored rule n: its number ("rule 2", "change 1 to ...", "the second rule"), or
+    words of its own text or topic ("the Instagram one", "the pasta rule")."""
+    r = by_number(rules or [], n) if n is not None else None
+    if r is None:
+        return False
+    if re.search(RULE_NUMBER_SAID.format(n=n), message or "", re.I):
+        return True
+    o = RULE_ORDINAL.get(n)
+    if o and re.search(rf"\b{o} (?:rule|reminder)\b|\brule {o}\b", message or "", re.I):
+        return True
+    try:
+        c = RuleSpec.model_validate(r["spec"]).content
+    except (ValidationError, KeyError, TypeError):
+        return False
+    from .refresh import reminder_name
+    own = _topic_stems(c.goal or "", *c.searches, c.text or "", reminder_name(c.text) or "" if c.source == "note" else "",
+                       r.get("text") or "") - {"remind", "reminder", "export", "rule", "send", "every", "daily"}
+    said = _topic_stems(message)
+    return any(s in own or difflib.get_close_matches(s, list(own), n=1, cutoff=0.85) for s in said)
+
+
+def no_limit_only(cr):
+    """A must-have that only says there is no length limit ("any length", "no time limit"): never stored."""
+    from .texts import NO_LENGTH_LIMIT
+    return bool(NO_LENGTH_LIMIT.search(cr or "")) and len(WORD.findall(NO_LENGTH_LIMIT.sub(" ", cr or ""))) <= 2
+
+
+def change_guard(it: Interpretation, message, pending=None, rules=()):
+    """Fix pass 6, finding 89: a model-filled change never lands on lasting state the message does not name.
+    - A must-have that only says "any length" is the absence of a limit: removed (the message's words, kept with the
+      rule, lift the length bound).
+    - With a rule's preview waiting, a change that says it edits the preview, or names no stored rule, is a change to
+      the preview (new_rule with edits_pending): it never touches a stored rule.
+    A reminder keeps its own words; the handler refuses a change of what it sends (see handler)."""
+    live = pending if pending and pending.get("kind") == "confirm_rule" else None
+    for x in [it] + ([it.also] if it.also else []):
+        if x.spec is not None and x.spec.content.criteria:
+            x.spec.content.criteria = [cr for cr in x.spec.content.criteria if not no_limit_only(cr)]
+        if x.criteria:
+            x.criteria = [cr for cr in x.criteria if not no_limit_only(cr)]
+        if x.intent != "change_rule" or live is None:
+            continue
+        if not x.edits_pending and names_rule(message, rules, x.rule_number):
+            continue   # "change 1 to any length": the stored rule it names
+        try:
+            draft = RuleSpec.model_validate(live["payload"]["spec"])
+        except (ValidationError, KeyError, TypeError):
+            continue
+        if draft.content.source != "library" or not draft.when.repeating:
+            continue   # (the export reminders' offer: the handler asks which rule, and the offer stays open)
+        spec = x.spec.model_copy(deep=True) if x.spec is not None else draft.model_copy(deep=True)
+        if spec.content.source != draft.content.source:
+            # the form copied a stored rule's content (an export reminder): the preview keeps its own, with the timing
+            # the message gave
+            spec.content = draft.content.model_copy(deep=True)
+        if not spec.when.repeating:
+            spec.when = draft.when.model_copy(deep=True)   # a preview is of a repeating rule; it stays one
+        spec.content.criteria = [cr for cr in spec.content.criteria if not no_limit_only(cr)]
+        x.intent, x.edits_pending, x.rule_number, x.spec = "new_rule", True, None, spec
+    return it
+
+
 # ---------- one message ----------
 def interpret(text, person, rules, pending, last, now, todos=(), last_write=None, about=(), store=None):
     """Returns (Interpretation, cost_usd). With `store`, the same request reuses the same interpretation (6 hours)."""

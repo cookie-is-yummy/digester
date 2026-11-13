@@ -305,7 +305,9 @@ def test_the_merge_checks_what_it_stores(rich):
     from mvp import profile as P
     bot = rich["bot"]
     P.adopt_guess(bot.store, H, P.guess(bot.view(str(rich["lib"])), store=bot.store, handle=H)[0])
-    msg = "I'm not into cooking any more. Working toward a job in film. Vegetarian. I'm anxious about money."
+    # fix pass 6, finding 88: a kind is left out only when the message says so in words ("don't use my likes")
+    msg = "I'm not into cooking any more. Working toward a job in film. Vegetarian. I'm anxious about money. " \
+          "Don't use my likes."
     res = P.apply_merge(bot.store, H, {
         "kind": "about_me", "drop_topics": ["cooking"], "direction": "a job in film", "avoid": ["meat", "fish"],
         "add_topics": ["origami"], "note": "worries about money", "levels": [{"topic": "Juggling", "level": "advanced"}],
