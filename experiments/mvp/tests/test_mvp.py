@@ -686,9 +686,12 @@ def test_run_loop_journal_dedupe_joining_and_restart(env):
     ch.inbox.put(Inbound(handle=h, text="send me pasta recipes", ref="m1"))    # a webhook retry
     rt.step()
     assert seen == ["send me pasta recipes\nevery friday"] and len(ch.outbox) == 1
-    rows = bot.store.q("SELECT ref, status, intent, text, reply_ref FROM inbound ORDER BY id")
+    rows = bot.store.q("SELECT ref, status, intent, text, reply_ref FROM inbound WHERE status!='duplicate' ORDER BY id")
     assert [(r["ref"], r["status"], r["intent"], r["text"]) for r in rows] == [("m1", "done", "chat", None),
                                                                               ("m2", "done", "chat", None)]
+    # fix pass 3, finding 65: the retry is not answered, but it leaves a row of its own
+    assert bot.store.one("SELECT ref, status, text FROM inbound WHERE status='duplicate'") == \
+        {"ref": None, "status": "duplicate", "text": None}
     assert rows[0]["reply_ref"]
     # a restart: one message arrived 2 minutes ago and was never handled, one a day ago
     bot.store.x("INSERT INTO inbound(channel,ref,handle,text,received_at,status) VALUES('console','m3',?,?,?,'received')",

@@ -504,6 +504,11 @@ def stats_message(total, by_platform, by_kind, words=None, matched=None, by=None
     return "\n".join(lines)
 
 
+# fix pass 3, finding 66: "once in a while" names no frequency, so the bot asks, with a default a "yes" accepts
+HOW_OFTEN_ASK = ("How often would you like it? For example \"every 3 days\" or \"about twice a week\". "
+                 "Or reply \"yes\" for about once a week, at a random time between 9am and 9pm.")
+
+
 def clarify_ask(question):
     return question
 

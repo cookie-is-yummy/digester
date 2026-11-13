@@ -650,6 +650,15 @@ class Store:
         except sqlite3.IntegrityError:
             return None
 
+    def inbound_duplicate(self, channel, msg, at=None):
+        """Fix pass 3, finding 65: a message dropped because its reference was handled before still gets a journal
+        row (status 'duplicate', no text, no reference of its own), so trace shows that it came and why no reply."""
+        first = self.one("SELECT id FROM inbound WHERE channel=? AND ref=?", (channel, msg.ref))
+        self.x("INSERT INTO inbound(channel,ref,handle,text,tapback,tapback_ref,received_at,status,error) "
+               "VALUES(?,NULL,?,NULL,?,?,?,'duplicate',?)",
+               (channel, msg.handle, msg.tapback, msg.tapback_ref, now_iso(at),
+                f"same reference as message {first['id']}" if first else "same reference as an earlier message"))
+
     def inbound_done(self, inbound_id, status, intent=None, run_id=None, reply_ref=None, error=None, seconds=None):
         self.x("UPDATE inbound SET status=?, intent=?, run_id=?, reply_ref=?, error=?, seconds=?, text=NULL WHERE id=?",
                (status, intent, run_id, str(reply_ref) if reply_ref else None, error, seconds, inbound_id))

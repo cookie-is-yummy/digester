@@ -7,8 +7,16 @@ A reply is made of parts (text and link, render.Reply). A channel whose app show
 gets each part as its own message, and a link part through send_link, alone in its message, so the app can show it as
 a card. Others get the parts joined into one text.
 """
+import secrets
+import time
 from dataclasses import dataclass
 from typing import Optional
+
+
+def run_stamp():
+    """A short stamp unique to this process (start time and a random part), for channel references that must not
+    repeat after a restart on the same store (fix pass 3, finding 65)."""
+    return f"{int(time.time() * 1000):x}{secrets.token_hex(2)}"
 
 
 @dataclass

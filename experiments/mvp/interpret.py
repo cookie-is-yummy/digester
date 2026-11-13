@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 from pydantic import ValidationError
 
 from . import config, llm
-from .schema import Interpretation, RuleSpec, When, list_name
+from .schema import RANDOM_DEFAULT_COUNT, RANDOM_WINDOW, Interpretation, RuleSpec, When, list_name
 from .schedule import complete, describe, resolve_relative, say_time
 from .store import by_number, number_of, numbered
 
@@ -253,6 +253,11 @@ def _fill_raw(raw):
     w = spec_.get("when") if isinstance(spec_, dict) else None
     if isinstance(w, dict) and w.get("type") == "schedule" and w.get("window") and (w.get("times") or w.get("time")):
         spec_["when"] = {k: v for k, v in w.items() if k not in ("times", "time")}
+    if isinstance(w, dict) and w.get("type") == "random" and any(w.get(k) for k in INTERVAL_KEYS):
+        # fix pass 3, finding 66: "every 3 days at a random time" came back as random with every_days, was refused
+        # twice and read as unsupported. Random with a cadence is a schedule whose window gives a random minute.
+        spec_["when"] = {k: v for k, v in w.items() if k not in ("count", "per", "times", "time")}
+        spec_["when"].update(type="schedule", window=w.get("window") or list(RANDOM_WINDOW))
     spec = raw.get("spec") if isinstance(raw.get("spec"), dict) else raw
     c = spec.get("content") if isinstance(spec, dict) else None
     if isinstance(c, dict) and c.get("source", "library") == "library" and not c.get("searches") and c.get("goal"):
@@ -609,6 +614,120 @@ def _times_a_day(when, message):
         if len(when.times) in (1, n) and when.times != default:
             when.times = list(default)
         return
+
+
+# ---------- fix pass 3, finding 66: spacing and random minutes, in the person's words ----------
+INTERVAL_KEYS = ("every_days", "every_weeks", "month_days", "month_weeks", "every_months")
+COUNT_WORDS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+               "other": 2, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "couple": 2, "couple of": 2, "few": 3,
+               "once": 1, "twice": 2, "thrice": 3}
+EVERY_N = re.compile(r"\bevery\s+(\d{1,2}|other|second|2nd|third|3rd|two|three|four|five|six|seven|eight|nine|ten)\s+"
+                     r"(day|week)s?\b", re.I)
+RANDOM_TIME = re.compile(r"\b(?:at\s+(?:a\s+)?random(?:\s+(?:times?|moments?|hours?))?|(?:a|some|any)\s+random\s+"
+                         r"(?:time|moment)s?|random\s+times?|randomly|at\s+any\s+time|whenever\s+you\s+(?:like|want))\b",
+                         re.I)
+PART_WINDOWS = {"morning": ["09:00", "12:00"], "afternoon": ["12:00", "17:00"], "evening": ["17:00", "21:00"]}
+SOMETIME_IN = re.compile(r"\b(?:some\s?time|at\s+some\s+point|any\s?time|at\s+(?:a\s+)?random(?:\s+time)?|randomly)\s+"
+                         r"(?:in|during)\s+the\s+(morning|afternoon|evening)\b", re.I)
+TIMES_PER = re.compile(r"\b(?:(?:about|around|roughly|maybe)\s+)?(\d{1,2}|a\s+couple(?:\s+of)?|couple(?:\s+of)?|a\s+few|few|"
+                       r"two|three|four|five|six|seven|eight|nine|ten)\s+times\s+(?:a|per|each|every)\s+(week|wk|month|mo)\b"
+                       r"|\b(once|twice|thrice)\s+(?:a|per|each|every)\s+(week|wk|month|mo)\b", re.I)
+NOW_AND_THEN = re.compile(r"\b(?:once\s+in\s+a\s+while|every\s+(?:now\s+and\s+then|once\s+in\s+a\s+while|so\s+often)|"
+                          r"(?:now\s+and\s+then|from\s+time\s+to\s+time|occasionally|here\s+and\s+there))\b", re.I)
+CLOCK_TIME = re.compile(r"\b\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|\b\d{1,2}:\d{2}\b|\bat\s+\d{1,2}\b|"
+                        r"\b(?:noon|midnight)\b", re.I)
+HOW_OFTEN_WORDS = re.compile(r"\b(?:every|each|daily|weekly|monthly|times?\s+a|a\s+(?:day|week|month)|once\s+a|twice|"
+                             r"per)\b|\d", re.I)
+
+
+def _count_word(word):
+    word = " ".join(str(word).lower().split())
+    word = word[2:] if word.startswith("a ") else word
+    return int(word) if word.isdigit() else COUNT_WORDS.get(word)
+
+
+def _random_window(w, message):
+    """The window a random minute is drawn from: a part of the day they named, else the model's window when it
+    is not a whole day, else 09:00 to 21:00."""
+    m = SOMETIME_IN.search(message)
+    if m:
+        return list(PART_WINDOWS[m.group(1).lower()])
+    if w.window and not w.every_hours:
+        return list(w.window)
+    return list(RANDOM_WINDOW)
+
+
+def _limits_of(w):
+    return {k: getattr(w, k) for k in ("start", "until", "max_sends", "except_dates", "tz") if getattr(w, k)}
+
+
+def _cadence_words(x: Interpretation, message):
+    """Finding 66: what the message says about spacing and randomness is kept, whatever the form says.
+    - "every 2 days" / "every other day" / "every 3 weeks" is the cadence ("once a day at a random time" was stored
+      for "every 2 days at a random time");
+    - "at a random time" / "randomly" / "sometime in the afternoon" beside a cadence is a random minute inside a
+      window on each due day (default 9am to 9pm; quiet hours are never used);
+    - "a few times a month" / "about twice a week" with no clock time is random sends per period;
+    - "at random times" (plural) with no count word is more than one a week (at most one a day on the days named)."""
+    if x.spec is None or x.intent not in ("new_rule", "change_rule"):
+        return
+    w = x.spec.when
+    if w.type not in ("schedule", "random"):
+        return
+    random_time = bool(RANDOM_TIME.search(message) or SOMETIME_IN.search(message))
+    m = EVERY_N.search(message)
+    if m:
+        n, unit = _count_word(m.group(1)), m.group(2).lower()
+        if not n or n < 2:
+            return
+        limits = _limits_of(w)
+        if unit == "day" and not (w.type == "schedule" and w.every_days == n):
+            new = {"type": "schedule", "every_days": n}
+        elif unit == "week" and not (w.type == "schedule" and (w.every_weeks or 1) == n and not w.every_days):
+            days = w.days if w.type == "schedule" and w.days and len(w.days) < 7 else (stated_days(message) or [])
+            new = {"type": "schedule", "every_weeks": n, "days": [] if days == ALL_DAYS else days}
+        elif random_time and w.type == "schedule" and w.times and not CLOCK_TIME.search(message):
+            new = {k: v for k, v in w.model_dump(exclude_none=True).items() if k not in ("times", "time", "window")}
+        else:
+            return
+        if (random_time or w.type == "random") and not CLOCK_TIME.search(message):   # the form's random timing too
+            new["window"] = _random_window(w, message)
+        elif w.type == "schedule" and (w.times or w.window):
+            new.update({"times": list(w.times)} if w.times else {"window": list(w.window)})
+        try:
+            x.spec.when = When.model_validate({**new, **limits})
+        except ValueError:
+            return
+        return
+    t = TIMES_PER.search(message)
+    if t and not CLOCK_TIME.search(message) and (w.type == "random" or stated_days(message) is None):
+        n = _count_word(t.group(1) or t.group(3))
+        per = "week" if (t.group(2) or t.group(4)).lower() in ("week", "wk") else "month"
+        if n and not (w.type == "random" and w.per == per and w.count == n):
+            try:
+                x.spec.when = When.model_validate({"type": "random", "count": n, "per": per,
+                                                   "window": _random_window(w, message),
+                                                   "days": w.days if w.days and len(w.days) < 7 else [],
+                                                   **_limits_of(w)})
+            except ValueError:
+                pass
+        return
+    if w.type == "random" and w.count == 1 and w.per == "week" and re.search(r"\brandom\s+times\b", message, re.I) \
+            and not HOW_OFTEN_WORDS.search(message):
+        w.count = min(RANDOM_DEFAULT_COUNT, len(w.days) if w.days else RANDOM_DEFAULT_COUNT)
+
+
+def _now_and_then(x: Interpretation, message):
+    """Finding 66: "once in a while" names no frequency: the bot asks how often, offering a default (about once a
+    week at a random time) that a bare "yes" accepts. The question is code's, never the model's."""
+    from .texts import HOW_OFTEN_ASK
+    if x.spec is None or x.intent != "new_rule" or not NOW_AND_THEN.search(message) \
+            or HOW_OFTEN_WORDS.search(NOW_AND_THEN.sub(" ", message)):
+        return x
+    draft = x.spec.model_dump(exclude_none=True)
+    draft["when"] = {"type": "random", "count": 1, "per": "week", "window": list(RANDOM_WINDOW)}
+    return Interpretation(intent="clarify", question=HOW_OFTEN_ASK, draft=draft, lang=x.lang,
+                          profile_note=x.profile_note)
 
 
 SURPRISE = re.compile(r"\bsurprise\b|\b(?:some\s?time|at\s+some\s+point|some\s+day|someday|one\s+day)\b", re.I)
@@ -1151,6 +1270,7 @@ def settle(raw, message, rules, now, tzname, todos=()):
         _clarify_keeps(x, message)
         if x.spec is not None:
             _surprise(x, message, now, tzname)
+            _cadence_words(x, message)
             _times_a_day(x.spec.when, message)
             _calendar_end(x.spec.when, message, now, tzname)
             _every_day(x.spec.when, message)
@@ -1163,6 +1283,7 @@ def settle(raw, message, rules, now, tzname, todos=()):
             _recent_week(c, message, now, tzname)
         if x.criteria:
             x.criteria = _negations_to_avoid(x.criteria, x.avoid)
+    it = _now_and_then(it, message)
     return finish_all(it, now, tzname)
 
 

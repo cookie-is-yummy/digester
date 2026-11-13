@@ -79,7 +79,8 @@ class Runtime:
         """Take new messages from the channel into the journal and the buffers."""
         for msg in self.channel.receive():
             inbound_id = self.store.inbound_add(self.channel.name, msg, at=self.bot.clock())
-            if inbound_id is None:  # this reference was already received
+            if inbound_id is None:  # this reference was already received: not answered again, but written down
+                self.store.inbound_duplicate(self.channel.name, msg, at=self.bot.clock())
                 self.channel.done(msg)
                 continue
             self._buffer(inbound_id, msg)

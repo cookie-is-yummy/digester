@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
-from .base import Channel, Inbound
+from .base import Channel, Inbound, run_stamp
 
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web_page.html")
 IG_POST = re.compile(r"^https://www\.instagram\.com/(p|reel|tv)/([A-Za-z0-9_-]+)/")
@@ -63,6 +63,9 @@ class WebChannel(Channel):
         self.bot = None
         self.token = secrets.token_urlsafe(18)
         self._ids = itertools.count(1)
+        # fix pass 3, finding 65: the store drops an inbound reference it has handled before (a webhook sent twice),
+        # so the page's references carry a stamp of this process: after a restart on the same store, "web-1" is new
+        self.stamp = run_stamp()
         self._tick = False
         self.server = None
         if serve:
@@ -100,7 +103,7 @@ class WebChannel(Channel):
 
     def send(self, handle, text, link=None):
         n = next(self._ids)
-        ref = f"web-{n}"
+        ref = f"web-{self.stamp}-{n}"
         with self.lock:
             self.threads.setdefault(handle, []).append(
                 {"id": n, "ref": ref, "dir": "out", "text": text, "at": self.clock().isoformat(), "reaction": None,
@@ -137,11 +140,12 @@ class WebChannel(Channel):
         if not text:
             return
         n = next(self._ids)
+        ref = f"web-{self.stamp}-{n}"
         with self.lock:
             self.threads.setdefault(handle, []).append(
-                {"id": n, "ref": f"web-{n}", "dir": "in", "text": text, "at": self.clock().isoformat(), "reaction": None})
+                {"id": n, "ref": ref, "dir": "in", "text": text, "at": self.clock().isoformat(), "reaction": None})
             self.busy[handle] = self.busy.get(handle, 0) + 1
-        self.inbox.put(("msg", Inbound(handle=handle, text=text, ref=f"web-{n}")))
+        self.inbox.put(("msg", Inbound(handle=handle, text=text, ref=ref)))
 
     def post_tapback(self, handle, ref, kind):
         if kind not in ("up", "down"):

@@ -58,7 +58,7 @@ def main():
         intent = r["intent"] or ("tapback" if r["tapback"] else "")
         print(f"{r['received_at'] or '':<21} {r['channel'] or '':<9} {tail(r['handle']):<6} {r['status'] or '':<8} "
               f"{intent:<13} {(r['seconds'] or 0):<5} {'yes' if r['reply_ref'] else 'no':<8} {run}"
-              + (f"  ERROR {r['error']}" if r["error"] else ""))
+              + (f"  {'NOTE' if r['status'] == 'duplicate' else 'ERROR'} {r['error']}" if r["error"] else ""))
 
 
 if __name__ == "__main__":

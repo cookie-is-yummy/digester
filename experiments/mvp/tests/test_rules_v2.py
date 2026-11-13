@@ -207,7 +207,7 @@ def test_describe_reads_naturally_for_every_form():
         (dict(type="schedule", times=times_a_day(2), until="2026-12-24"),
          "twice a day, at 8am and 8pm, until 24 December"),
         (dict(type="schedule", times=times_a_day(3)), "three times a day, at 8am, 1pm and 7pm"),
-        (dict(type="schedule", window=["18:00", "20:00"]), "every day at a different time between 6pm and 8pm"),
+        (dict(type="schedule", window=["18:00", "20:00"]), "every day at a random time between 6pm and 8pm"),
         (dict(type="schedule", days=["FRI"], every_days=14, times=["17:00"]), "every other Friday at 5pm"),
         (dict(type="schedule", days=["MON", "TUE", "THU", "FRI", "SAT", "SUN"], times=["06:00"]),
          "every day except Wednesday at 6am"),

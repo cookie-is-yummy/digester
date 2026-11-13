@@ -3,7 +3,7 @@ and kept in .outbox."""
 import itertools
 import queue
 
-from .base import Channel, Inbound
+from .base import Channel, Inbound, run_stamp
 
 
 class ConsoleChannel(Channel):
@@ -19,6 +19,7 @@ class ConsoleChannel(Channel):
         self.outbox = []   # (ref, handle, text)
         self.printer = printer
         self._ids = itertools.count(1)
+        self.stamp = run_stamp()   # finding 65: a reference from an earlier run on the same store is never reused
 
     def push(self, handle, text="", tapback=None, tapback_ref=None):
         self.inbox.put(Inbound(handle=handle, text=text, tapback=tapback, tapback_ref=tapback_ref))
@@ -30,7 +31,7 @@ class ConsoleChannel(Channel):
         return out
 
     def send(self, handle, text):
-        ref = f"console-{next(self._ids)}"
+        ref = f"console-{self.stamp}-{next(self._ids)}"
         self.outbox.append((ref, handle, text))
         if self.printer:
             self.printer(f"\n--- to {handle} [{ref}] ---\n{text}\n")

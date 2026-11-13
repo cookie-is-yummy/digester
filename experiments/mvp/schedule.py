@@ -457,7 +457,7 @@ def _at_times(when):
         every = "every hour" if when.every_hours == 1 else f"every {when.every_hours} hours"
         return f"{every} from {t12(when.window[0])} to {t12(when.window[1])}"
     if when.window:
-        return f"at a different time between {t12(when.window[0])} and {t12(when.window[1])}"
+        return f"at a random time between {t12(when.window[0])} and {t12(when.window[1])}"  # finding 66
     return "at " + _join(t12(t) for t in when.times)
 
 

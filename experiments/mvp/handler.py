@@ -345,6 +345,17 @@ class HandlerMixin:
             # own reply (fix pass 2, finding 42)
             return None
         chained = getattr(self._tl, "chained", False)
+        if pending and not chained and pending["kind"] == "clarify" and it.intent == "confirm" \
+                and pending["payload"].get("question") == T.HOW_OFTEN_ASK:
+            # fix pass 3, finding 66: a "yes" to "how often?" takes the default the question offered
+            from .interpret import finish_all
+            from .schema import Interpretation
+            try:
+                it = finish_all(Interpretation(intent="new_rule", spec=pending["payload"]["draft"], lang=it.lang),
+                                now, person["timezone"])
+                self.note(intent=it.intent)
+            except ValueError:
+                pass
         if pending and not chained and (pending["kind"] == "clarify" or it.intent in ENDS_PENDING
                                         or (it.intent == "new_rule" and not it.edits_pending)):
             self.store.clear_pending(h)  # a different request ends the question that was open; an answer uses it up
