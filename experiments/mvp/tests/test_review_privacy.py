@@ -314,3 +314,55 @@ def test_priv9_bare_domains_stay_out_of_the_fallback_title_and_the_details(env):
     msg = last(ch)
     assert "I recommend" in msg and "spaghetti" in msg
     assert "tastyfreerecipes" not in msg and "bakekit" not in msg
+
+
+# ---------- PRIV-10: YouTube API text is gone everywhere after 30 days, even on a quiet bot ----------
+def test_priv10_the_daily_purge_clears_cached_answers_kept_answers_and_emails(env):
+    from datetime import timedelta
+    from mvp import config
+    from mvp.store import now_iso
+    bot, s = env["bot"], env["bot"].store
+    t0 = env["clock"][0]
+    s.x("INSERT OR REPLACE INTO youtube_cache(video_id,ok,duration_s,description,fetched_at) VALUES(?,?,?,?,?)",
+        ("LIBVID00001", 1, 600, "300g rigatoni, 2 cloves garlic", now_iso(t0)))
+    s.cache_put("answer_cache", "k1", {"picks": [{"n": 1, "because": "it uses 300g rigatoni"}]}, at=t0, handle=H)
+    pick = {"item_id": "itm_y", "title": "Rigatoni bake", "url": "https://www.youtube.com/watch?v=LIBVID00001",
+            "platform": "youtube", "video_id": "LIBVID00001", "creator": "Chan",
+            "facts": {"ingredients": ["300g rigatoni"]}, "lines": ["300g rigatoni"], "line_kinds": ["ingredients"]}
+    parts = [{"type": "text", "text": "I recommend Rigatoni bake by Chan (10 minutes), because it uses 300g "
+                                      "rigatoni.\nIngredients (1):\n• 300g rigatoni"},
+             {"type": "link", "url": pick["url"]}]
+    s.put_answer(7, H, None, "a pasta bake", "picks", parts, [pick], at=t0)
+    os.makedirs(config.OUTBOX, exist_ok=True)
+    eml = os.path.join(config.OUTBOX, "a.eml")
+    with open(eml, "w") as f:
+        f.write("Subject: Rigatoni\n\nit uses 300g rigatoni (10 minutes)")
+    s.add_outbox(H, "email", "Rigatoni bake", eml, "outbox", run_id=7, at=t0)
+    env["clock"][0] = t0 + timedelta(days=10)
+    bot.tick()                                                  # day 10: nothing is old enough yet
+    assert s.answer(7)["parts"] == parts and os.path.exists(eml)
+    env["clock"][0] = t0 + timedelta(days=40)
+    bot.tick()                                                  # no YouTube candidate anywhere: the purge still runs
+    assert s.one("SELECT COUNT(*) n FROM youtube_cache")["n"] == 0
+    assert s.one("SELECT COUNT(*) n FROM answer_cache")["n"] == 0
+    a = s.answer(7)
+    text = json.dumps(a["parts"]) + json.dumps(a["picks"])
+    assert "rigatoni" not in text.replace("Rigatoni bake", "") and "minutes" not in text
+    assert "Rigatoni bake" in text and pick["url"] in text            # the pick itself is still there
+    assert not os.path.exists(eml) and s.outbox(H) == []
+
+
+def test_priv10_composed_answers_are_pruned_after_their_reuse_time_and_not_kept_when_never_reused(env, monkeypatch):
+    from datetime import timedelta
+    from mvp import config
+    bot, st = env["bot"], env["state"]
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 2, "title": "Lemon garlic pasta", "verdict": "clear"}]}
+    bot.on_message(H, "pasta ideas?")
+    assert bot.store.one("SELECT COUNT(*) n FROM answer_cache")["n"] == 0      # ANSWER_CACHE_HOURS is 0 here
+    monkeypatch.setattr(config, "ANSWER_CACHE_HOURS", 24)
+    bot.store.cache_put("answer_cache", "old", {"picks": []}, at=env["clock"][0] - timedelta(hours=30), handle=H)
+    bot.on_message(H, "a different pasta question")
+    keys = [r["key"] for r in bot.store.q("SELECT key FROM answer_cache")]
+    assert "old" not in keys and len(keys) == 1
+

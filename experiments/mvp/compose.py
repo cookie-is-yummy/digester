@@ -406,8 +406,9 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
             r2 = check(raw2, cands, spec, extra=extra, known_lines=known_lines, wider=wider)
             if r2["picks"] and not r2["from_fallback"]:
                 raw = raw2
-        if store is not None:
+        if store is not None and config.ANSWER_CACHE_HOURS:   # never kept when it is never reused (PRIV-10)
             store.cache_put("answer_cache", key, raw, at=now, handle=person_handle)
+            store.prune_answer_cache(config.ANSWER_CACHE_HOURS, now)
     result = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider, level_ok=level_ok,
                    max_minutes=max_minutes, request_text=request_text)
     result["cached"] = cached

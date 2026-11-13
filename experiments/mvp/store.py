@@ -9,7 +9,7 @@ import os
 import re
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS people (handle TEXT PRIMARY KEY, name TEXT, library TEXT NOT NULL, timezone TEXT NOT NULL,
@@ -455,6 +455,11 @@ class Store:
         old = set(gone)
         self.x("DELETE FROM youtube_cache WHERE fetched_at<?", (before,))
         self.x("DELETE FROM facts WHERE source='youtube_api' AND at<?", (before,))
+        # review fix PRIV-10: the composer's raw answers (they quote descriptions), the outside search results, and
+        # every kept answer with a YouTube pick (its reason may quote the description, its length came from the API)
+        self.x("DELETE FROM answer_cache WHERE at<?", (before,))
+        self.x("DELETE FROM outside_cache WHERE at<?", (before,))
+        self._expire_youtube_answers(before)
         if not old:
             return
         for row in self.q("SELECT key, value FROM state WHERE key LIKE 'facts:%' OR key LIKE 'lines:%' "
@@ -477,6 +482,36 @@ class Store:
                 parts = _scrub_parts(json.loads(row["parts"] or "[]"), cut)
                 self.x("UPDATE answers SET picks=?, parts=? WHERE run_id=?",
                        (json.dumps(picks), json.dumps(parts), row["run_id"]))
+
+    def _expire_youtube_answers(self, before):
+        """A kept answer older than `before` with a YouTube pick is rebuilt from its kept picks alone (title,
+        creator, link and the details still kept: no reason, no length), and the emails written from it are removed
+        from the outbox."""
+        from .render import pick_parts
+        for row in self.q("SELECT run_id, picks FROM answers WHERE at<? AND picks LIKE '%youtube%'", (before,)):
+            picks = json.loads(row["picks"] or "[]")
+            if not any(p.get("platform") == "youtube" for p in picks) or all(p.get("yt_expired") for p in picks):
+                continue
+            parts = []
+            for p in picks:
+                p["yt_expired"] = True
+                if p.get("platform") == "youtube":   # a video's details can only have come from its description
+                    p["facts"], p["lines"], p["line_kinds"] = {}, [], None
+                parts += pick_parts(p)
+            self.x("UPDATE answers SET picks=?, parts=? WHERE run_id=?", (json.dumps(picks), json.dumps(parts),
+                                                                         row["run_id"]))
+            for o in self.q("SELECT id, path FROM outbox WHERE run_id=? AND kind='email'", (row["run_id"],)):
+                if o["path"]:
+                    try:
+                        os.remove(o["path"])
+                    except OSError:
+                        pass
+                self.x("DELETE FROM outbox WHERE id=?", (o["id"],))
+
+    def prune_answer_cache(self, hours, now=None):
+        """review fix PRIV-10: composed answers are kept only as long as they can be reused."""
+        cut = (now or datetime.now(timezone.utc)).astimezone(timezone.utc) - timedelta(hours=hours)
+        self.x("DELETE FROM answer_cache WHERE at<?", (now_iso(cut),))
 
     # caches keyed by a hash (sections 4 and 11)
     def cache_get(self, table, key, since):

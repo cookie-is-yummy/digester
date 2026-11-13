@@ -86,6 +86,18 @@ class SchedulerMixin:
                 if status == "done":
                     self._notice(person["handle"], T.ended_on_resume([spec.content.goal]), now)
         self._release_held(now)
+        self._daily_purge(now)
+
+    def _daily_purge(self, now):
+        """review fix PRIV-10: once a day, whatever is asked, YouTube data older than 30 days goes (it was purged
+        only when a run looked at a YouTube candidate), and composed answers past their reuse time."""
+        from datetime import timezone
+        day = now.astimezone(timezone.utc).date().isoformat()
+        if self.store.get_state("purge_day") == day:
+            return
+        self.store.purge_youtube(now_iso(now - timedelta(days=config.YOUTUBE_KEEP_DAYS)))
+        self.store.prune_answer_cache(config.ANSWER_CACHE_HOURS, now)
+        self.store.set_state("purge_day", day)
 
     def _notice(self, handle, text, now=None):
         """A short notice that time alone caused; a failed send is recorded, never retried. In quiet hours or a snooze
