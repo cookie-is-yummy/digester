@@ -28,9 +28,9 @@ def rows_for(picks, what="pick", due=None):
     return rows, None
 
 
-def add(bot, person, picks, what="pick", name="todo", due=None):
-    """Writes the to-dos, records the write for "undo", and returns the Outcome with the line that says what was
-    added and where."""
+def add(bot, person, picks, what="pick", name="todo", due=None, undoable=True):
+    """Writes the to-dos, records the write for "undo" (for a timed send, undoable=False, apart from the person's own
+    writes: review fix S4), and returns the Outcome with the line that says what was added and where."""
     h = person["handle"]
     rows, problem = rows_for(picks, what, due)
     if problem:
@@ -39,7 +39,8 @@ def add(bot, person, picks, what="pick", name="todo", due=None):
         return Outcome("skipped", line=T.NO_PICK_TO_ADD)
     now = bot.clock()
     ids = [bot.store.add_todo(h, text, name, item_id=iid, url=url, due_at=d, at=now) for text, iid, url, d in rows]
-    bot._wrote(h, "todo_add", f"added {len(ids)} to-do{'s' if len(ids) > 1 else ''} to the list \"{name}\"", {"ids": ids})
+    bot._wrote(h, "todo_add", f"added {len(ids)} to-do{'s' if len(ids) > 1 else ''} to the list \"{name}\"",
+               {"ids": ids}, timed=not undoable)
     due_text = say_time(due, now, person["timezone"]) if due else None
     return Outcome("done", line=T.todos_added([r[0] for r in rows], name, due_text), ref=",".join(map(str, ids)),
                    detail={"ids": ids, "list": name})
@@ -52,4 +53,4 @@ def run(ctx, params):
     picks = ctx.picks
     if params.what == "ingredients" and ctx.kind != "act_on_last":
         picks = picks[:1]   # a rule's or an ask's do: the recommended pick's ingredients
-    return add(ctx.bot, ctx.person, picks, params.what, name)
+    return add(ctx.bot, ctx.person, picks, params.what, name, undoable=ctx.kind != "scheduled")

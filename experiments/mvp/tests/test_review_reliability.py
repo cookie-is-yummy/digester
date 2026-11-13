@@ -169,3 +169,117 @@ def test_s2_the_kept_day_is_used_in_the_new_zone():
     # counted from the 13th, the next send in Tokyo is Sun 15 at 8am (Sat 14 23:00 UTC), not Mon 16
     assert next_run(w, "Asia/Tokyo", after, anchor=made, base="2026-11-13") == u(2026, 11, 14, 23, 0)
     assert next_run(w, "Asia/Tokyo", after, anchor=made) == u(2026, 11, 15, 23, 0)
+
+
+# ---------- S3: after the bot was off, nothing the person asked for is dropped without a word ----------
+
+DAILY = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+
+
+def test_s3_an_outage_tells_about_missed_reminders_and_records_every_slot(env):
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    weekly(bot, st)                                                         # Fri 19:00 New York
+    d = weekly(bot, st, when={"type": "schedule", "days": DAILY, "time": "08:00"})
+    n = note_rule(bot, st, {"type": "once", "date": "2026-11-13", "time": "16:00"})
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "todo_add", "todo_text": "pay rent", "due": "2026-11-13T10:00"}
+    bot.on_message(H, "add pay rent to my list for tomorrow 10am")
+    n0 = len(ch.outbox)
+    clock[0] = u(2026, 11, 15, 23, 0)          # off from Thu 18:00 UTC to Sun 23:00 UTC (Sun 6pm New York)
+    bot.tick()
+    out = " ".join(m[2] for m in ch.outbox[n0:])
+    assert "Call mum" in out and "pay rent" in out and "offline" in out
+    assert "still on your list" in out
+    assert bot.store.rule(n["id"])["status"] == "done"
+    rr = runs(bot)
+    assert len([x for x in rr if x[0] == d["id"] and x[2] == "missed"]) == 3    # Fri, Sat and Sun at 8am
+    assert [x[2] for x in rr if x[1] == "todo"] == ["missed"]
+
+
+def test_s3_a_missed_reminder_notice_waits_for_quiet_hours_to_end(env):
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    note_rule(bot, st, {"type": "once", "date": "2026-11-13", "time": "16:00"})
+    n0 = len(ch.outbox)
+    clock[0] = u(2026, 11, 14, 4, 0)           # Fri 11pm New York: quiet hours
+    bot.tick()
+    assert len(ch.outbox) == n0
+    clock[0] = u(2026, 11, 14, 13, 5)          # Sat 8:05am
+    bot.tick()
+    assert "Call mum" in " ".join(m[2] for m in ch.outbox[n0:])
+
+
+def test_s3_a_time_zone_switch_back_after_an_outage_records_the_missed_moment(env):
+    from mvp.tests.test_rules_v2 import more_pasta
+    bot, st, clock = env["bot"], env["state"], env["clock"]
+    r = weekly(bot, st, when={"type": "random", "per": "day", "count": 1})
+    more_pasta(bot, 30)
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "set_timezone", "timezone": "America/Chicago",
+                                                "until": "2026-11-14"}
+    bot.on_message(H, "I'm in Chicago until tomorrow")
+    p, rule = bot.store.person(H), bot.store.rule(r["id"])
+    due = datetime.fromisoformat(rule["next_run_at"])
+    clock[0] = max(due, datetime.fromisoformat(p["tz_revert_at"])) + timedelta(hours=3)
+    before = len(runs(bot))
+    bot.tick()
+    assert "missed" in [x[2] for x in runs(bot)[before:] if x[0] == r["id"]]
+
+
+# ---------- S4 and S5: "undo" means what the person just did ----------
+
+def test_s4_undo_after_a_timed_todo_add_reverses_the_persons_own_write(env):
+    from mvp.tests.test_mvp import compose_picks, pasta_spec
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "new_rule", "spec": dict(pasta_spec(), do=[
+        {"action": "message.send"}, {"action": "todo.add"}])}
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
+    bot.on_message(H, "pasta every friday at 7pm and add it to my list")
+    bot.on_message(H, "yes")
+    other = weekly(bot, st, when={"type": "schedule", "days": ["MON"], "time": "08:00"})
+    clock[0] = u(2026, 11, 13, 23, 58)
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "stop", "rule_number": 2}
+    bot.on_message(H, "stop 2")
+    assert bot.store.rule(other["id"])["status"] == "stopped"
+    clock[0] = u(2026, 11, 14, 0, 0, 30)
+    assert bot.tick() == 1
+    n_todos = len(bot.store.todos(H))
+    assert n_todos == 1
+    clock[0] = u(2026, 11, 14, 0, 2)
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "undo"}
+    bot.on_message(H, "undo")
+    assert bot.store.rule(other["id"])["status"] == "active"     # the stop is undone
+    assert len(bot.store.todos(H)) == n_todos                    # the timed send's to-do stays
+
+
+def _ask_then(bot, st, act, words="do it"):
+    from mvp.tests.test_mvp import pasta_spec
+    r = weekly(bot, st)
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
+    bot.on_message(H, "pasta ideas?")
+    st["answers"]["mvp_interpret"] = lambda x: act
+    bot.on_message(H, words)
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "undo"}
+    bot.on_message(H, "undo")
+    return r
+
+
+def test_s5_undo_after_a_calendar_link_leaves_the_rule_alone(env):
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    r = _ask_then(bot, st, {"intent": "act_on_last", "actions": [
+        {"action": "calendar.add", "params": {"time": "19:00"}}], "pick_number": 1})
+    assert bot.store.rule(r["id"])["status"] == "active"
+    assert "can't take back a calendar link" in last(ch)
+
+
+def test_s5_undo_after_feedback_leaves_the_rule_alone(env):
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    r = _ask_then(bot, st, {"intent": "feedback", "feedback": "hide", "pick_number": 1})
+    assert bot.store.rule(r["id"])["status"] == "active"
+    assert "can't take back feedback" in last(ch)
+
+
+def test_s5_undo_after_calendar_and_list_takes_the_todos_off_only(env):
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    r = _ask_then(bot, st, {"intent": "act_on_last", "actions": [
+        {"action": "calendar.add", "params": {"time": "19:00"}}, {"action": "todo.add"}], "pick_number": 1},
+        "put the first one on my calendar for 7 and add it to my list")
+    assert bot.store.rule(r["id"])["status"] == "active"
+    assert not bot.store.todos(H) and "off your list" in last(ch)

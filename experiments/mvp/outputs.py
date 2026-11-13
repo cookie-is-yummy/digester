@@ -269,7 +269,17 @@ class OutputsMixin:
             return self.send(h, problem)
         ctx = Ctx(bot=self, person=person, answer=answer, picks=picks, whole=whole, run_id=answer.get("run_id"),
                   rule_id=answer.get("rule_id"), kind="act_on_last", now=now, tz=person["timezone"], request_text=text)
+        before = self.store.get_state(f"lastwrite:{h}")
         done = self._perform(ctx, acts)
+        # review fix S5: an email or a calendar link cannot be taken back; "undo" after it never reaches back to an
+        # older write. With todo.add as well, "undo" takes those to-dos off and says the rest stays.
+        final = [w for n, w in (("email.send", "an email"), ("calendar.add", "a calendar link"))
+                 if any(a == n and o.status not in ("failed", "skipped") for a, o in done)]
+        if final:
+            todo_write = self.store.get_state(f"lastwrite:{h}")
+            self._wrote_final(h, " or ".join(final))
+            if todo_write and todo_write != before:
+                self._join_writes(h, self.store.get_state(f"lastwrite:{h}"), todo_write)
         if any(n == "message.send" for n, _ in acts):   # "send me the second one again"
             base = Reply(answer["parts"]) if whole else Reply([q for p in picks for q in pick_parts(p)])
             ctx.chat = self._with_lines(base, done)
@@ -388,6 +398,7 @@ class OutputsMixin:
             return out(T.CODE_LIMIT)
         self.store.set_email(h, email)
         self.store.set_state(f"emailask:{h}", None)
+        self._wrote_final(h, "an email address change")   # review fix S5
         code = f"{secrets.randbelow(10 ** 6):06d}"
         salt = secrets.token_hex(8)
         self.store.set_state(f"emailcode:{h}", {"email": email, "salt": salt, "hash": _hash(salt, code),

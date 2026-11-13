@@ -144,8 +144,11 @@ class HandlerMixin:
             if (pending and pending["kind"] == "confirm_rule" and tapback == "up"
                     and run_id is not None and run_id == pending["payload"].get("run_id")):
                 return self._confirm(person, pending)  # 👍 on the preview means yes
-            for d in (self.store.items_of_run(run_id) if run_id else []):
+            rows = self.store.items_of_run(run_id) if run_id else []
+            for d in rows:
                 self.store.add_feedback(handle, d["item_id"], d["rule_id"], tapback)
+            if rows:
+                self._wrote_final(handle, "a reaction")
             return None
         if not text:
             return None
@@ -155,6 +158,8 @@ class HandlerMixin:
             last = self.store.last_answer(handle)
             for iid in (last or {}).get("items", []):
                 self.store.add_feedback(handle, iid, last.get("rule_id"), "down" if down else "up")
+            if (last or {}).get("items"):
+                self._wrote_final(handle, "a reaction")
             return None
         if pending and pending["kind"] == "confirm_rule" and text == "👍":
             return self._confirm(person, pending)
@@ -639,11 +644,12 @@ class HandlerMixin:
         lw = self._last_write(h, now)
         if not lw:
             return self.send(h, T.NOTHING_TO_UNDO)
-        self.store.set_state(f"lastwrite:{h}", None)
+        self.store.set_state(lw.get("key") or f"lastwrite:{h}", None)
         writes = lw["undo"]["writes"] if lw["kind"] == "multi" else [lw]
         said = [x for x in (self._undo_one(h, w, now) for w in reversed(writes)) if x]   # the last write first
         if not said:
-            return self.send(h, T.NOTHING_TO_UNDO)
+            final = [w["say"] for w in writes if w["kind"] == "final"]
+            return self.send(h, T.cant_undo(" or ".join(dict.fromkeys(final))) if final else T.NOTHING_TO_UNDO)
         return self.send(h, T.undone("; ".join(reversed(said))))
 
     def _undo_one(self, h, lw, now):
@@ -907,6 +913,7 @@ class HandlerMixin:
             chosen = items[:1]   # "made it" is about the recommended pick, not every alternative
         for iid in chosen:
             self.store.add_feedback(h, iid, last.get("rule_id"), kind)
+        self._wrote_final(h, "feedback on a pick")
         if kind in ("harder", "easier"):   # slice 6: the level of the answer's topic moves one step, and is said
             spec = (self.store.get_state(f"lastspec:{h}") or {})
             words = " ".join(x for x in [last.get("goal") or "", spec.get("text") or ""] if x)

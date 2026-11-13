@@ -331,6 +331,16 @@ def todo_reminder(text):
     return f"Reminder from your list: {text}"
 
 
+def missed_once(what, when):
+    """Review fix S3: a one-time send the person asked for could not go out on time (the bot was offline)."""
+    return f"I was offline and missed a send you asked for {when}: \"{what}\". Ask me again if you still want it."
+
+
+def missed_todo(text, when):
+    """Review fix S3: a to-do's reminder could not go out on time; the to-do stays on the list."""
+    return f"I was offline and missed your reminder {when}: \"{text}\". It's still on your list."
+
+
 def todo_line(i, t, due_text=None, show_list=False):
     tail = f" (due {due_text})" if due_text else ""
     return f"{i}. {t['text']}{tail}" + (f" [{t['list']}]" if show_list and t.get("list") not in (None, "todo") else "")
@@ -409,6 +419,11 @@ def snoozed(until_text):
 
 def undone(what):
     return f"Undone: {what}."
+
+
+def cant_undo(what):
+    """Review fix S5: the last thing the person did cannot be taken back, and nothing older is undone instead."""
+    return f"I can't take back {what}, so I left everything else as it was."
 
 
 # words that say what kind of thing a post is, not what it is about (fix pass, finding 14): never counted as topics

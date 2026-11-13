@@ -80,14 +80,24 @@ def split_todo(text, lists=()):
 
 class TodoMixin:
     # ---------- the last write, for "undo" (section 11) ----------
-    def _wrote(self, handle, kind, say, undo):
-        self.store.set_state(f"lastwrite:{handle}", {"kind": kind, "say": say, "undo": undo, "at": now_iso(self.clock())})
+    def _wrote(self, handle, kind, say, undo, timed=False):
+        """The last write, for "undo". A write a timed send made (timed=True) is kept apart: "undo" reverses the
+        person's own last write first, and the timed one only when they made none in the last 10 minutes (review fix
+        S4)."""
+        key = f"lastwrite_timed:{handle}" if timed else f"lastwrite:{handle}"
+        self.store.set_state(key, {"kind": kind, "say": say, "undo": undo, "at": now_iso(self.clock())})
+
+    def _wrote_final(self, handle, what):
+        """Review fix S5: something "undo" cannot reverse (an email, a calendar link, feedback, an address) is the last
+        thing the person did, so "undo" says so instead of reaching back to an older write."""
+        self._wrote(handle, "final", what, {})
 
     def _last_write(self, handle, now):
-        lw = self.store.get_state(f"lastwrite:{handle}")
-        if not lw or datetime.fromisoformat(lw["at"]) < now - UNDO_WINDOW:
-            return None
-        return lw
+        for key in (f"lastwrite:{handle}", f"lastwrite_timed:{handle}"):
+            lw = self.store.get_state(key)
+            if lw and datetime.fromisoformat(lw["at"]) >= now - UNDO_WINDOW:
+                return dict(lw, key=key)
+        return None
 
     def _last_write_ctx(self, handle, now):
         lw = self._last_write(handle, now)
@@ -260,7 +270,9 @@ class TodoMixin:
                     record("paused")
                     continue
                 if now - datetime.fromisoformat(t["due_at"]) > MISSED_AFTER:
-                    record("missed")
+                    record("missed")   # review fix S3: and the person is told, once (held through quiet hours)
+                    self._notice(h, T.missed_todo(t["text"], say_time(datetime.fromisoformat(t["due_at"]), now, tz)),
+                                 now)
                     continue
                 snooze = person.get("snooze_until")
                 if snooze and now < datetime.fromisoformat(snooze):

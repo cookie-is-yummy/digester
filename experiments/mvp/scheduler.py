@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 from . import config
 from .channels.base import SendUncertain
-from .schedule import _at, end_of_quiet, in_quiet_hours, next_run
+from .schedule import _at, end_of_quiet, in_quiet_hours, next_run, say_time
 from .schema import RuleSpec
 from .store import now_iso
 from .texts import LAST_SEND, PAUSED_QUIET, STILL_USEFUL
@@ -173,7 +173,14 @@ class SchedulerMixin:
             spec = RuleSpec.model_validate(r["spec"])
             if spec.when.tz:
                 continue
-            kept = datetime.fromisoformat(r["next_run_at"]).astimezone(old_tz).replace(tzinfo=ZoneInfo(new_tz))
+            due = datetime.fromisoformat(r["next_run_at"])
+            if due <= now:   # review fix S3: a send already due is never redrawn without a record
+                slot = datetime.fromisoformat(r.get("slot_at") or r["next_run_at"])
+                if now - max(due, slot) <= MISSED_AFTER:
+                    continue   # not late yet: the next tick sends it as it is
+                self.store.add_run(handle=handle, rule_id=r["id"], kind="scheduled", status="missed", at=now_iso(now))
+                self._record_passed(r, spec, old_tz.key, now, first=slot)
+            kept = due.astimezone(old_tz).replace(tzinfo=ZoneInfo(new_tz))
             if kept > now and spec.when.type != "random":
                 self.store.set_slot(r["id"], now_iso(kept), "active")
                 continue
@@ -261,8 +268,22 @@ class SchedulerMixin:
     def _skip_slot(self, rule, spec, tz, now, status, detail=None):
         self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status=status, error=detail,
                            at=now_iso(now))
+        if status == "missed":   # review fix S3: every slot that passed while the bot was off is recorded
+            self._record_passed(rule, spec, tz, now)
         self._advance(rule, spec, tz, now)
         return 0
+
+    def _record_passed(self, rule, spec, tz, now, first=None):
+        """One 'missed' row for each regular slot after `first` (default: the rule's slot) that has also passed."""
+        person = dict(self.store.person(rule["handle"]) or {"handle": rule["handle"]}, timezone=tz)
+        t = first or datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
+        for _ in range(200):
+            _, nxt = self._next_for(spec, person, now, rule, after=t)
+            if not nxt or datetime.fromisoformat(nxt) > now:
+                return
+            t = datetime.fromisoformat(nxt)
+            self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="missed",
+                               at=now_iso(now))
 
     @staticmethod
     def _moved(rule):
@@ -329,6 +350,10 @@ class SchedulerMixin:
         hold = self.store.get_state(f"hold:{rule['id']}") if moved else None
         late_from = max(slot, datetime.fromisoformat(hold)) if hold else slot
         if now - late_from > MISSED_AFTER:  # e.g. the bot was off on Friday evening: Friday's pick is not sent on Monday
+            if spec.when.type == "once":   # review fix S3: a one-time send they asked for never ends without a word
+                from .texts import missed_once
+                what = spec.content.text if spec.content.source == "note" and spec.content.text else spec.content.goal
+                self._notice(person["handle"], missed_once(what, say_time(slot, now, spec.when.tz or tz)), now)
             return self._skip_slot(rule, spec, tz, now, "missed")
         again = bool(retries or hold)   # this slot already passed the checks below once: a retry or a held send
         if not again:
