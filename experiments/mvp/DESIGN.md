@@ -313,13 +313,17 @@ section and an earlier one differ, this section wins.
 - (Check of fix pass 4.) The same holds for their notes, their direction and their level from the profile: a level
   must-have comes only from the message's words; the profile's level for the request's own topic goes to the
   composer, which prefers picks that suit it (section 5's "fill ... level" is read this way).
-- (Fix pass 5.) Copies of one post take one place among the candidates (the copy that writes out more is kept). An
+- (Fix pass 5.) Copies of one post (the same creator and the same line its name comes from, at least 3 words, never a
+  hook line like "Save this recipe!") take one place among the candidates (the copy that writes out more is kept). An
   ask or a preview that shows fewer picks than asked for (an alternative that is the lead's own dish does not count)
   gets one more composer call on the candidates it did not return that look like the kind asked for; its picks come
   after the first call's and never change the lead (unless the first call had none); a first answer that is only the
   closest is left as it is. With fewer clear picks than asked for, close ones fill the places under their own heading
-  ("Or these, which are close too:"), never as the lead. A reason with one failing part loses that part; a lead whose
-  reason a check removed gets one built by code from the details shown under it ("the ingredients are written out").
+  ("Or these, which are close too:"), never as the lead; a second-look pick with any "no" is never shown. An
+  alternative is the lead's own dish when their title words match once words that only say how it is made or praise it
+  are left out ("easy", "rice cooker", "bowl"); "Hainanese chicken rice" is not "Chicken rice". A reason with one
+  failing part loses that part when the rest is still a whole clause; a lead whose reason a check removed gets one built
+  by code from the details shown under it ("the ingredients are written out").
 - (Fix pass 5.) "that I haven't seen", "not from my saves", "that aren't in my library", "I don't already have" make
   `outside` "only", whatever the model filled ("and some new ones too" stays "some"). A repeating rule whose preview is
   the closest only because of its length bound says so when it starts and offers "any length" (added to the rule's
