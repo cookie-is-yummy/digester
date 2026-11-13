@@ -462,15 +462,34 @@ LEVEL_TALK = re.compile(r"\b(you'?re|you are|you'?ve|you have|your)\b[\w\s'-]{0,
 
 
 def same_key(p):
-    """(creator, title) of a pick, normalised, for finding copies of one post; None when either is unknown. Both the
-    title shown and the item's own first words are tried, so a copy whose model title differs is still found."""
+    """(creator, title) of a pick, normalised, for finding copies of one post; None when either is unknown."""
+    keys = same_keys(p)
+    return min(keys) if keys else None
+
+
+def same_keys(p):
+    """Every (creator, title) a pick goes by, normalised: the item's own first words and the title shown (fix pass 4,
+    finding 79: two posts by one creator with the same title shown are one pick even when their texts start
+    differently). Empty when the creator is unknown."""
     it = p["item"]
     creator = norm(it.creator or "")
-    title = _squash(title_from_item(it))
-    if not creator or not title or title.startswith(_squash(f"A post from {it.creator}")) \
-            or title.startswith(_squash(f"A video from {it.creator}")):
-        return None
-    return creator, title
+    if not creator:
+        return set()
+    out = set()
+    for t in (title_from_item(it), p.get("title") or ""):
+        title = _squash(t)
+        if title and not title.startswith(_squash(f"A post from {it.creator}")) \
+                and not title.startswith(_squash(f"A video from {it.creator}")):
+            out.add((creator, title))
+    return out
+
+
+def written_details(it, extra=None):
+    """How much of a recipe, a workout or the steps the item's own text writes out (fix pass 4, finding 79): a list in
+    it, and how many amounts, sets or step headings code sees. 0 when nothing is written out."""
+    from .extract import WRITTEN_OUT, list_like
+    lines = own_text_lines(it, extra)
+    return (2 if list_like(lines) else 0) + len(WRITTEN_OUT.findall(lines))
 
 
 def tips_only(text):
@@ -566,17 +585,22 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
             dropped["because_" + problem] = dropped.get("because_" + problem, 0) + 1
         kept.append(pick)
     # fix pass 2, finding 48: two copies of one post (the same creator and the same title, normalised) are one pick;
-    # the best-ranked is kept (clear before close, then the model's order)
-    seen_keys, unique = set(), []
+    # the best-ranked is kept (clear before close, then the model's order). Fix pass 4, finding 79: of two with the
+    # same verdict, the one whose own text writes out more of the details is kept, in the first one's place
+    unique = []
     for p in [p for p in kept if p["verdict"] == "clear"] + [p for p in kept if p["verdict"] != "clear"]:
-        key = same_key(p)
-        if key and key in seen_keys:
-            dropped["duplicate"] = dropped.get("duplicate", 0) + 1
+        keys = same_keys(p)
+        hit = next((i for i, u in enumerate(unique) if keys & same_keys(u)), None) if keys else None
+        if hit is None:
+            unique.append(p)
             continue
-        if key:
-            seen_keys.add(key)
-        unique.append(p)
+        dropped["duplicate"] = dropped.get("duplicate", 0) + 1
+        u = unique[hit]
+        if u["verdict"] == p["verdict"] and written_details(p["item"], extra) > written_details(u["item"], extra):
+            unique[hit] = p
+            kept[next(i for i, k in enumerate(kept) if k is u)] = p   # the fuller copy takes the first one's place
     kept = [p for p in kept if any(p is u for u in unique)]
+    kept = [p for i, p in enumerate(kept) if all(p is not q for q in kept[:i])]   # once each
     clear = [p for p in kept if p["verdict"] == "clear"]
     close = sorted([p for p in kept if p["verdict"] == "close"], key=lambda p: p["too_long"])   # stable
     count = max(c.count, 1)

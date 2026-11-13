@@ -160,9 +160,10 @@ def test_41_the_read_shows_every_topic_most_saved_first_and_a_direction_to_corre
     lines = [x for x in read.splitlines() if x.startswith("• ")]
     assert lines == ["• Guitar (8 saved)", "• Sourdough (7 saved)", "• Minecraft builds (6 saved)", "• Pottery (5 saved)",
                      "• Watercolor skies (4 saved)", "• Chess (3 saved)"]                     # all 6, most saved first
-    assert "\nIt looks like you're learning guitar and collecting sourdough.\n" in read   # built by code
+    # fix pass 4, finding 83: a verb that fits any topic ("learning" only where a level says so)
+    assert "\nIt looks like you're into guitar and sourdough.\n" in read   # built by code
     say(many, "yes", CHAT)                                  # a bare yes keeps the direction they were shown
-    assert P().get(many["bot"].store, H)["direction"] == "learning guitar and collecting sourdough"
+    assert P().get(many["bot"].store, H)["direction"] == "into guitar and sourdough"
 
 
 def test_41_what_they_chose_to_keep_outweighs_playlists_and_watch_history(env, tmp_path):
@@ -762,7 +763,7 @@ def test_41_mostly_right_through_the_form_also_keeps_the_guessed_direction(many)
     start(many)
     many["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "confirm_all": True}
     say(many, "mostly right", CHAT)                         # not a bare yes: the form call reads it
-    assert P().get(many["bot"].store, H)["direction"] == "learning guitar and collecting sourdough"
+    assert P().get(many["bot"].store, H)["direction"] == "into guitar and sourdough"
     start(many)
     many["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "confirm_all": True,
                                                                "direction": "learning to fix my bike"}

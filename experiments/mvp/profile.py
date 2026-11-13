@@ -277,10 +277,15 @@ DOING = {"learning": "learning", "making": "making", "collecting": "collecting",
          "following": "following"}
 
 
+def shown_topic(topic):
+    """A topic as it is shown: its words, with "2d" and "3d" written "2D" and "3D" (fix pass 4, finding 83)."""
+    return re.sub(r"\b([234])d\b", r"\1D", " ".join(str(topic).split()), flags=re.I)
+
+
 def topic_in_sentence(topic):
     """'quick dinners', 'Blender 3D': a topic as it reads inside a sentence (a capital only where the name has one
     past its first letter, or the model gave one for a name)."""
-    t = " ".join(str(topic).split())
+    t = shown_topic(topic)
     first = t.split(" ")[0]
     if len(first) > 1 and first[1:].islower() and first.lower() in COMMON_WORDS:
         return first.lower() + t[len(first):]
@@ -293,20 +298,25 @@ COMMON_WORDS = set("""quick easy home street video photo music guitar piano draw
     hair nails cars bikes cycling climbing hiking fishing camping language languages spanish french chess board
     card magic film movie animation animated digital 3d graphic graphics web game games gaming minecraft lego
     interior home plant plants pet pets dog dogs cat cats calligraphy lettering crochet embroidery jewelry
-    origami photography editing writing reading poetry productivity study studying coding programming""".split())
+    origami photography editing writing reading poetry productivity study studying coding programming motion design
+    calisthenics fitness stretching mobility running""".split())
 
 
 def direction_guess(interests, n=2):
     """'learning Blender 3D and collecting quick dinners': what the person seems to be working toward, built by code
     from the top topics the guess backed and what it says they do with each (finding 41). None without two."""
-    parts = []
+    # fix pass 4, finding 83: "making motion design" read badly; a verb that fits any topic ("into"), and "learning"
+    # only where a level says they are learning it
+    learning, into = [], []
     for i in interests:
-        if i.get("source") != "guess" or not i.get("doing") or i["doing"] == "following":
+        if i.get("source") != "guess" or not i.get("doing") or i["doing"] == "following" or i["doing"] not in DOING:
             continue
-        parts.append(f"{DOING[i['doing']]} {topic_in_sentence(i['topic'])}")
-        if len(parts) >= n:
+        (learning if i.get("level") in ("new", "beginner", "intermediate") else into).append(
+            topic_in_sentence(i["topic"]))
+        if len(learning) + len(into) >= n:
             break
-    return _and(parts) if parts else None
+    parts = ([f"learning {_and(learning)}"] if learning else []) + ([f"into {_and(into)}"] if into else [])
+    return " and ".join(parts) if parts else None
 
 
 def guess(view, store=None, handle=None, use_cache=True, now=None):
@@ -897,7 +907,8 @@ def read_lines(prof, limit=None):
         level = {"new": "new to it", "beginner": "a beginner", "intermediate": "past the basics",
                  "advanced": "advanced"}.get(lv)
         n = short_count(i)
-        out.append(f"• {i['topic'][:1].upper() + i['topic'][1:]}" + (f": {level}" if level else "")
+        topic = shown_topic(i["topic"])
+        out.append(f"• {topic[:1].upper() + topic[1:]}" + (f": {level}" if level else "")
                    + (f" ({n})" if n else ""))
     return out
 

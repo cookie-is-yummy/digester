@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from . import config, llm
 from . import texts as T
 from .channels.base import SendUncertain
-from .compose import FINISHED, compose, duration_of, own_text
+from .compose import FINISHED, compose, duration_of, own_text, written_details
 from .extract import default_extract, default_fits, details_many, fit_extract, kinds_for, topic_kind
 from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
 from .retrieve import candidates
@@ -385,6 +385,16 @@ class ExecutorMixin:
             main = result.get("picks") or []
             if main and not asked and not default_fits(own_text(main[0]["item"], extra)):
                 extract = result["extract"] = []   # finding 71: a talk or a list of habits gets no default Steps
+            if main and kinds_for(extract) and not asked and not written_details(main[0]["item"], extra):
+                # fix pass 4, finding 79: with details shown by default, of the picks with the lead's verdict the one
+                # whose own text writes them out leads (the composer's order otherwise)
+                pool = main[1:] + (result.get("wider") or [])
+                better = next((p for p in pool if p["verdict"] == main[0]["verdict"]
+                               and written_details(p["item"], extra)), None)
+                if better is not None:
+                    both = [better] + [p for p in main + (result.get("wider") or []) if p is not better]
+                    result["picks"], result["wider"] = both[:len(main)], both[len(main):]
+                    main = result["picks"]
             if main and kinds_for(extract):
                 if not asked:   # finding 28: details nobody named, for the recommended pick only
                     targets = main[:1]

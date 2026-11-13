@@ -460,3 +460,55 @@ def test_78_equals_with_no_details_shown_still_ask_which_one(env):
     msg = say(env, "add the ingredients to my grocery list", {"intent": "todo_add", "what": "ingredients",
                                                                "list": "grocery"})
     assert "Which one?" in msg
+
+
+# ======================================= 79. two copies by one creator; the fuller one leads ===========================
+POOR = {"id": "itm_p1", "platform": "instagram", "source_url": "https://example.com/p1",
+        "caption": "Chicken rice bowl! The recipe is in the video, save it for later",
+        "interaction_kinds": ["save"], "platform_data": {"owner_handle": "bowlchef", "owner_relation": "none"}}
+FULL = {"id": "itm_p2", "platform": "instagram", "source_url": "https://example.com/p2",
+        "caption": "My chicken rice bowl\nIngredients:\n- 2 cups rice\n- 1 tbsp oil\n- 300g chicken\nSteps:\n"
+                   "1. Cook the rice\n2. Fry the chicken in the oil",
+        "interaction_kinds": ["save"], "platform_data": {"owner_handle": "bowlchef", "owner_relation": "none"}}
+OTHER = dict(FULL, id="itm_p3", source_url="https://example.com/p3",
+             caption=FULL["caption"].replace("My chicken rice bowl", "Sesame chicken and rice"),
+             platform_data={"owner_handle": "ricecook", "owner_relation": "none"})
+
+
+def bowls(env, items, picks):
+    add_items(env, [dict(i) for i in items])
+    env["bot"].pool.search = lambda lib, q, depth=300: {"ids": [i["id"] for i in items], "mode": "normal",
+                                                        "cost_usd": 0.0}
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, needle), "verdict": "clear", "title": title} for needle, title in picks]}
+    env["state"]["answers"]["mvp_extract"] = lambda u: (
+        {"ingredients": ["2 cups rice", "1 tbsp oil", "300g chicken"], "steps": ["Cook the rice", "Fry the chicken in the oil"]}
+        if "300g chicken" in u else {"ingredients": [], "steps": []})
+
+
+def test_79_two_posts_with_the_same_title_by_one_creator_are_one_pick_and_the_fuller_one_is_kept(env):
+    bowls(env, [POOR, FULL], [("The recipe is in the video", "Chicken rice bowl"), ("300g chicken", "Chicken rice bowl")])
+    msg = say(env, "a chicken rice bowl recipe", ask_form("a chicken rice bowl recipe", ["chicken rice bowl"]))
+    assert "example.com/p2" in msg and "example.com/p1" not in msg
+    assert "Ingredients (3):" in msg and "Steps (2):" in msg and "in the video" not in msg
+
+
+def test_79_among_picks_with_the_same_verdict_the_one_with_written_details_leads(env):
+    poor = dict(POOR, platform_data={"owner_handle": "bowlfan", "owner_relation": "none"})
+    bowls(env, [poor, OTHER], [("The recipe is in the video", "Chicken rice bowl"), ("Sesame", "Sesame chicken and rice")])
+    msg = say(env, "chicken and rice recipes", ask_form("chicken and rice recipes", ["chicken and rice"]))
+    assert "I recommend Sesame chicken and rice" in msg and "Ingredients (3):" in msg
+    assert msg.index("example.com/p3") < msg.index("example.com/p1")   # the poorer one is still offered, after it
+
+
+def test_83_the_guessed_direction_uses_a_verb_that_fits_any_topic_and_writes_2d_as_2D():
+    from mvp import profile as P
+
+    def g(topic, doing, level=None):
+        return {"topic": topic, "doing": doing, "level": level, "source": "guess"}
+    assert P.direction_guess([g("motion design", "making"), g("2d animation", "making")]) == \
+        "into motion design and 2D animation"
+    assert P.direction_guess([g("Blender 3D", "learning", "beginner"), g("2d animation", "making")]) == \
+        "learning Blender 3D and into 2D animation"
+    assert P.read_lines({"interests": [{"topic": "2d animation", "saved": 12}], "prefs": {}}) == \
+        ["• 2D animation (12 saved)"]
