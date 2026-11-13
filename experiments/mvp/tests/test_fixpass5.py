@@ -509,3 +509,20 @@ def test_87_any_length_with_nothing_offered_goes_the_normal_way(blender):
     calls = len(blender["calls"])
     say(blender, "any length", CHAT)
     assert "mvp_interpret" in blender["calls"][calls:]
+
+
+def test_84_a_lead_whose_quotes_fail_still_gets_a_reason_code_stands_behind(food):
+    """(live check of fix pass 5) The composer's reason quoted words the post does not have: the lead, with its
+    ingredients shown under it, is not left without a reason."""
+    food["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick_of(
+        u, LEAD, lines=LEAD_LINES, because="it uses a rice cooker", facts=[{"label": "kit", "quote": "an Instant Pot"}])]} \
+        if has(u, LEAD) else {"picks": []}
+    msg = say(food, CHICKEN, chicken_form(count=1))
+    assert "which you sent to yourself in July, because the ingredients are written out, with amounts." in msg
+    # no reason at all from the model, or no details shown: nothing is made up
+    food["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick_of(u, LEAD, lines=LEAD_LINES)]} \
+        if has(u, LEAD) else {"picks": []}
+    assert "because" not in say(food, CHICKEN + " now", chicken_form(count=1))
+    food["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick_of(
+        u, "Teriyaki", because="it uses a rice cooker", facts=[{"label": "kit", "quote": "an Instant Pot"}])]}
+    assert "because" not in say(food, "teriyaki chicken rice", chicken_form(count=1))

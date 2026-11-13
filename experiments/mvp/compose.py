@@ -631,7 +631,8 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
                 "minutes": round(dur / 60) if (max_minutes and dur) else None,
                 # fix pass 5, finding 84 (5): the checked quotes behind the reason, so a part of it can be trimmed
                 "because_quotes": [" ".join(str(f.get("quote") or "").split()) for f in (p.get("facts") or [])
-                                   if isinstance(f, dict)] if backed else []}
+                                   if isinstance(f, dict)] if backed else [],
+                "because_problem": problem}   # why the model's reason was left out (None when it is shown)
         if known_lines is not None and c.extract and known_lines.get(it.id):
             pick["lines"] = list(known_lines[it.id])
             pick["lines_reused"] = True   # the lines found before, not lines for this request

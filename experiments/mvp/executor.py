@@ -511,6 +511,10 @@ class ExecutorMixin:
                 # finding 47: a reason that promises ingredients or steps the answer does not show is left out
                 b = p.get("because") if p.get("because_backed") else None
                 if not b:
+                    if p.get("because_problem") not in (None, "empty"):
+                        # (live check of fix pass 5: a reason a check removed whole, here or in compose, is replaced
+                        # for the lead by one code stands behind, as below)
+                        self._code_reason(p, result, kind)
                     continue
                 pfacts = p.get("facts") or {}
                 time_pref = (self.store.person_context(h).get("prefs") or {}).get("time")
@@ -531,12 +535,8 @@ class ExecutorMixin:
                 key = "because_" + why + ("_trimmed" if trimmed else "")
                 result["dropped"][key] = result["dropped"].get(key, 0) + 1
                 p["because"], p["because_backed"] = (trimmed, True) if trimmed else (None, False)
-                if not trimmed and p is (result.get("picks") or [None])[0] and kind != "follow_up":
-                    from .render import code_reason
-                    own_reason = code_reason(p, result.get("extract"), self._answer_lang())
-                    if own_reason:
-                        p["because"], p["because_backed"] = own_reason, True
-                        result["dropped"]["because_code"] = result["dropped"].get("because_code", 0) + 1
+                if not trimmed:
+                    self._code_reason(p, result, kind)
             if result.get("picks") and kind != "follow_up" and not self._answer_lang():
                 result["picks"][0]["fit"] = self._fit_note(h, result["picks"][0], kits, extra, spec,
                                                            request_text or "", hint)
@@ -669,6 +669,17 @@ class ExecutorMixin:
         except Exception as e:  # noqa: BLE001 - a count only; never lose the answer to it
             print(f"supply count failed: {type(e).__name__}", file=sys.stderr)
             return None
+
+    def _code_reason(self, p, result, kind):
+        """Fix pass 5, finding 84 (5): the lead whose reason a check removed gets one code stands behind, from the
+        details shown under it ("the ingredients are written out, with amounts"); nothing when none are shown."""
+        if p is not (result.get("picks") or [None])[0] or kind == "follow_up":
+            return
+        from .render import code_reason
+        own_reason = code_reason(p, result.get("extract"), self._answer_lang())
+        if own_reason:
+            p["because"], p["because_backed"] = own_reason, True
+            result["dropped"]["because_code"] = result["dropped"].get("because_code", 0) + 1
 
     SECOND_LOOK_MAX = 12   # candidates the second look shows the composer at most
 
