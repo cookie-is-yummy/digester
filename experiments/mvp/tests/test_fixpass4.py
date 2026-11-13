@@ -735,3 +735,25 @@ def test_checker_74_the_setups_first_requests_carry_only_must_haves_their_own_te
     reqs = bot.first_requests(person, rich["clock"][0])
     assert [r["spec"]["content"]["criteria"] for r in reqs] == [["ends with a dish you can eat"],
                                                                 ["uses an Instant Pot", "suits a beginner"]]
+
+
+def test_checker_81_a_recipe_with_long_one_sentence_steps_keeps_them_whole(env):
+    steps = ["Heat the oil in a large pan over medium heat and brown the chicken thighs on both sides for about six "
+             "minutes until golden all over",
+             "Stir in the rice with the garlic and the stock, cover the pan with a lid and simmer gently for twenty "
+             "minutes without lifting it",
+             "Take the pan off the heat and let it rest for five minutes, then fluff the rice with a fork and serve "
+             "it with the lemon wedges"]
+    add_items(env, [{"id": "itm_l", "platform": "instagram", "source_url": "https://example.com/l",
+                     "caption": "One pan chicken and rice\nIngredients:\n- 4 chicken thighs\n- 1 cup rice\n" +
+                                "\n".join(steps), "interaction_kinds": ["save"],
+                     "platform_data": {"owner_handle": "cook", "owner_relation": "none"}}])
+    env["bot"].pool.search = lambda lib, q, depth=300: {"ids": ["itm_l"], "mode": "normal", "cost_usd": 0.0}
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "verdict": "close",
+                                                                   "title": "One pan chicken and rice",
+                                                                   "criteria": [{"answer": "unknown"}]}]}
+    env["state"]["answers"]["mvp_extract"] = lambda u: {"ingredients": ["4 chicken thighs", "1 cup rice"],
+                                                        "steps": list(steps)}
+    msg = say(env, COOK, COOK_FORM)
+    assert "Steps (3):" in msg and steps[1] in msg and "…" not in msg
+    assert "I recommend One pan chicken and rice" in msg

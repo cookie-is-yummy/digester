@@ -220,8 +220,10 @@ def test_key_points_survive_long_lines_hashtags_and_list_marks(env):
                              "and you cannot get them back later in the edit #lightroom",
                              "Warm the white balance a little #tips", "Follow these steps for softer skin tones",
                              "Use a preset for everything"], " ".join(text.split()), "key_points")
-    assert lines[0].startswith("Lower the highlights before you touch the shadows") and lines[0].endswith("…")
-    assert len(lines[0]) <= 110 and "#" not in lines[1] and lines[1] == "Warm the white balance a little"
+    # checker of fix pass 4, finding 81: a cut line is never shown, so a long one is kept whole (up to STEP_LIMIT)
+    assert lines[0] == ("Lower the highlights before you touch the shadows, because bright skies clip first and you "
+                        "cannot get them back later in the edit")
+    assert "#" not in lines[1] and lines[1] == "Warm the white balance a little"
     assert "Follow these steps for softer skin tones" in lines                # "follow" alone is not a call to follow
     assert dropped == 1                                                       # the invented tip
 

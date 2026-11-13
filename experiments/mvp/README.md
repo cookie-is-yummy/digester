@@ -209,13 +209,18 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   carries a finished-result must-have, and code answers "no" to it for any item whose own text is only tips, and
   "yes" when code has read the whole thing from the item's own text (a recipe's ingredients and two or more steps; a
   workout's or a tutorial's two or more steps).
-- **The profile helps and never blocks** (fix pass 4, `interpret.profile_guard`, run on every form): the kit they have,
-  how much time they usually have and their notes are preferences for the composer, never must-haves, unless the
-  message says them (a diet restated from a note becomes avoid); a level must-have comes only from the message or the
-  profile's level at the request's own topic; new picks from YouTube only when the message asks for new things (or
-  their profile says so); and no limit to some kinds or platforms the message does not name. A reason or a title names
-  their kit or their usual time only when the post's own text does. The export reminders are listed to the
-  interpreter, and in "my rules", by short names.
+- **The profile helps and never blocks** (fix pass 4 and its check, `interpret.profile_guard`, run on every form and
+  on the setup's first requests): the kit they have (by any of its names: "pressure cooker" for an Instant Pot), how
+  much time they usually have (in any unit) and their notes and direction are preferences for the composer, never
+  must-haves, unless the message says them (a length the message gives or implies, "mini" or "quick", stays; a diet
+  restated from a note, or an avoid entry restated as a must-have, becomes avoid); a level must-have comes only from
+  the message (the profile's level for the request's topic goes to the composer, which prefers picks that suit it);
+  new picks from YouTube only when the message asks for new things (or their profile says so), and the line saying
+  why there are none only after a message that asked; and no limit to some kinds or platforms the message does not
+  name ("I'd like", "to watch" name none). A reason or a title names their kit (by any of its names) or their usual
+  time only when the post's own text does. A repeating rule with new picks says it won't run dry only while YouTube
+  can serve it. "Add it to my list" or "remind me of it" after an answer means the pick it opened with. The export
+  reminders are listed to the interpreter, and in "my rules", by short names.
 
 ## Rules, as the person sees them
 
@@ -279,12 +284,12 @@ still hold the handle (`ledger_rows_with_handle`).
 | `followup.py` | What code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v4.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |
 | `lang.py` | The answer's fixed phrases in Spanish (with the outside block and the level note that ride on it); any other language gets an all-English answer, and the composer is told to write English. A rule's preview, start line and timed sends are English only for now (their timing words have no Spanish yet), so a rule made in Spanish is set up and sent in English, never in two languages at once |
-| `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table; a recipe, workout or make-or-build tutorial gets its details for the recommended pick even when none were asked for (a talk, a list of habits or an opinion gets none, unless its text writes out a recipe or a workout); when details are asked for, the best of the top 3 that has them all is recommended |
+| `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table (a line is never shown cut off: a step or key point is kept whole up to 260 characters, a sentence that only describes the video is not a step, and steps are shown only when two or more remain); a recipe, workout or make-or-build tutorial gets its details for the recommended pick even when none were asked for (a talk, a list of habits or an opinion gets none, unless its text writes out a recipe or a workout); when details are asked for, the best of the top 3 that has them all is recommended |
 | `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
 | `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
 | `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 576 offline tests (`test_fixpass4.py`: one or more per finding of the fourth live run, 74 to 83, after a full setup; `test_fixpass3.py`: one or more per finding of the third live run, 65 to 73, and the checker's near-variants; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
+| `tests/` | 616 offline tests (`test_fixpass4.py`: one or more per finding of the fourth live run, 74 to 83, after a full setup, and the checker's near-variants; `test_fixpass3.py`: one or more per finding of the third live run, 65 to 73, and the checker's near-variants; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
 the second live run, 38 to 64) |

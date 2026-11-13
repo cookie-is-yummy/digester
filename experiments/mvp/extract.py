@@ -111,6 +111,9 @@ def list_like(text):
     return sum(1 for line in (text or "").splitlines() if LIST_MARK.match(line)) >= 3
 
 
+STEP_LIMIT = 260
+
+
 def _cut(line, limit=105):
     """A long line cut to its first sentence, or to a word boundary, with '…'. Still the item's own words."""
     if len(line) <= limit:
@@ -139,9 +142,12 @@ def verify(raw_lines, text, kind):
                 continue
             line = cl
         line = re.sub(r"(?:\s*#[^\s#]+)+\s*$", "", line).strip()      # hashtags at the end are not the detail
+        limit = 110
         if kind != "ingredients":
-            line = _cut(line)
-        cl = clean_line(line)
+            # checker of fix pass 4, finding 81: a cut line is never shown (usable), so a step is cut only past
+            # STEP_LIMIT; at 105 a recipe's long one-sentence steps were cut and then lost, and with them the recipe
+            line, limit = _cut(line, STEP_LIMIT), STEP_LIMIT
+        cl = clean_line(line, limit)
         if not cl:
             dropped += 1
             continue

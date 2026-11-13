@@ -310,6 +310,9 @@ section and an earlier one differ, this section wins.
 - What the person has and how much time they usually have are preferences, never must-haves: they help choose among
   picks that fit and may be named in the reason when the post's own text backs it. Only the avoid list is a hard
   limit, and the message's own words win over it.
+- (Check of fix pass 4.) The same holds for their notes, their direction and their level from the profile: a level
+  must-have comes only from the message's words; the profile's level for the request's own topic goes to the
+  composer, which prefers picks that suit it (section 5's "fill ... level" is read this way).
 - YouTube items: titles only is too little for "under 10 minutes" or "ends with a finished model". For candidates
   shown to the composer, code fetches the video's length and description from YouTube's official `videos.list`
   (one call per 50 videos, key from `YOUTUBE_API_KEY`), keeps them at most 30 days (YouTube's rule), and treats the

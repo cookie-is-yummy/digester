@@ -35,15 +35,16 @@ NOT_DETAIL = re.compile(r"(link in bio|linkinbio|storefront|amazon|affiliate|fol
 HEADER = re.compile(r"^\W*(ingredients?|method|steps?|instructions?|directions?|recipe|tips?|for the \w+)\W*(\(.*\))?\W*:?\W*$", re.I)
 
 
-def clean_line(line):
-    """Strip list marks; return None for headers and promotional lines, which are not details."""
+def clean_line(line, limit=110):
+    """Strip list marks; return None for headers and promotional lines, which are not details, and for a line longer
+    than `limit` (a step may be longer than an ingredient: extract.STEP_LIMIT)."""
     line = " ".join(str(line).split())
     line = re.sub(r"^(?:\d\ufe0f?\u20e3\s*)+", "", line)  # keycap list numbers
     while line and (unicodedata.category(line[0]) in ("So", "Sk", "Mn", "Me", "Cf", "Co", "Cn") or line[0] == "\ufffd"):
         line = line[1:].lstrip()  # an emoji or symbol used as a list mark is not part of the detail
     line = re.sub(r"^(?:[\-\*•·▪✅✔️]+|\d+[\.\)](?!\d))\s*", "", line).strip()  # list marks, never "1.5 cups"
     line = re.sub(r"^(ingredients?|steps?|method|instructions?|tips?)\s*:\s*", "", line, flags=re.I).strip()
-    if not line or len(line) > 110 or HEADER.match(line) or line.endswith(":") or NOT_DETAIL.search(line) \
+    if not line or len(line) > limit or HEADER.match(line) or line.endswith(":") or NOT_DETAIL.search(line) \
             or UNSAFE_TEXT.search(line):   # review fix PRIV-9: a bare web address is never one of our details
         return None
     return line
