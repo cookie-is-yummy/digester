@@ -255,3 +255,93 @@ def test_67cd_news_and_off_topic_results_are_dropped_unless_news_was_asked_for(e
     from mvp.outside import shares_topic
     assert not shares_topic({"title": "Cooking tonight", "channel": "x"}, ["cook"])   # whole words only
     assert shares_topic({"title": "PASTAS of Rome", "channel": "x"}, ["pasta"])
+
+
+# ======================================= 68. several actions, the ingredients =======================================
+from mvp.tests.test_slice4 import last_code  # noqa: E402
+
+WIDE = lambda u: {"picks": [  # noqa: E731  a recipe answer: one recommended pick and two wider links
+    {"n": 1, "title": "Lemon garlic pasta", "verdict": "clear", "lines": ["200g spaghetti", "2 lemons"]},
+    {"n": 2, "title": "Creamy mushroom pasta", "verdict": "clear"},
+    {"n": 3, "title": "Pasta night", "verdict": "clear"}], "intro": "Here you go."}
+
+
+def test_68_email_it_and_add_the_ingredients_adds_one_to_do_per_ingredient_line_and_the_email_still_goes(env):
+    bot, st = env["bot"], env["state"]
+    st["answers"]["mvp_compose"] = WIDE
+    spec = pasta_spec({"type": "now"})
+    say(env, "a lemon pasta recipe", {"intent": "ask", "spec": spec})
+    assert len(bot.store.last_answer(H)["items"]) > 1          # wider links: still one recommended pick
+    msg = say(env, "email it to me and add the ingredients to my grocery list",
+              {"intent": "act_on_last", "actions": ["email.send", {"action": "todo.add", "params": {"list": "grocery"}}]})
+    todos = bot.store.todos(H)
+    assert [t["text"] for t in todos] == ["200g spaghetti", "2 lemons"] and {t["list"] for t in todos} == {"grocery"}
+    assert "Lemon garlic pasta" not in [t["text"] for t in todos]
+    assert "email" in msg.lower()                              # the address is asked for
+    # the address and its code come later: the held email goes then
+    def answers():
+        return [r for r in outbox_rows(bot, "email") if not r["subject"].startswith("Your code")]
+    say(env, "my email is a@b.co", {"intent": "set_email", "email": "a@b.co"})
+    assert not answers()
+    say(env, last_code(bot), {"intent": "chat"})
+    assert [r["subject"] for r in answers()] == ["Lemon garlic pasta"]     # the held email went once confirmed
+    # the single action reads the same, also with the wider links in the answer
+    for t in list(todos):
+        bot.store.x("DELETE FROM todos WHERE id=?", (t["id"],))
+    say(env, "add its ingredients to my shopping list", {"intent": "todo_add", "what": "ingredients", "list": "shopping"})
+    assert [t["text"] for t in bot.store.todos(H)] == ["200g spaghetti", "2 lemons"]
+    # model variants: the ingredient to-do in `also`, or as the to-do's text
+    for t in bot.store.todos(H):
+        bot.store.x("DELETE FROM todos WHERE id=?", (t["id"],))
+    say(env, "email it to me and add the ingredients to my grocery list",
+        {"intent": "act_on_last", "actions": ["email.send"],
+         "also": {"intent": "todo_add", "todo_text": "the ingredients", "list": "grocery"}})
+    assert [t["text"] for t in bot.store.todos(H)] == ["200g spaghetti", "2 lemons"]
+
+
+# ======================================= 69. the person's own word for a saved rule ==================================
+def test_69_when_i_say_boost_gives_their_word_back_and_the_word_runs_the_rule_before_any_model_call(env):
+    from mvp.core import Bot
+    from mvp.store import Store
+    from mvp import config
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    form = {"intent": "new_rule", "spec": {"when": {"type": "on_request"}, "content": {
+        "goal": "a motivational video", "searches": ["motivational video"]}}}
+    msg = say(env, "when I say boost, send me a motivational video", form)
+    n = bot.store.rule_number(H, bot.store.rules(H)[-1]["id"])
+    assert msg.startswith(f'Saved. Say "boost" whenever you want one (or "run {n}").')
+    assert "Ask for it" not in msg
+    st["answers"]["mvp_compose"] = lemon_pick()
+    calls = sum(1 for c in env["calls"] if c == "mvp_interpret")
+    bot.on_message(H, "Boost!")
+    assert sum(1 for c in env["calls"] if c == "mvp_interpret") == calls     # read by code, no model call
+    assert "I recommend" in last(ch)                                         # the rule ran
+    # after a restart: a new bot on the same store still knows the word
+    bot2 = Bot(ch, store=Store(config.DB), pool=bot.pool, clock=bot.clock)
+    st["answers"]["mvp_interpret"] = lambda u: (_ for _ in ()).throw(AssertionError("model called"))
+    n_out = len(ch.outbox)
+    bot2.on_message(H, "BOOST")
+    assert len(ch.outbox) > n_out and "I recommend" in "\n".join(t for _, _, t in ch.outbox[n_out:])
+    from mvp.followup import trigger_word
+    assert trigger_word('whenever I text "pasta time" send me a pasta recipe') == "pasta time"
+    assert trigger_word("when I say so, remind me") is None
+    assert trigger_word("send me a motivational video") is None
+
+
+# ======================================= 70. the count is said once =======================================
+def test_70_the_goal_shown_does_not_repeat_the_count():
+    from mvp import texts
+    assert texts.picks_for(3, "3 videos about investing") == '3 picks for "videos about investing"'
+    assert texts.picks_for(3, "three videos about investing") == '3 picks for "videos about investing"'
+    assert texts.picks_for(1, "5 minute workouts") == '1 pick for "5 minute workouts"'   # not the count: kept
+    assert texts.picks_for(2, "2") == '2 picks for "2"'
+
+
+def test_70_the_rule_preview_says_3_picks_for_videos_about_investing(env):
+    bot, st = env["bot"], env["state"]
+    st["answers"]["mvp_compose"] = lemon_pick()
+    form = {"intent": "new_rule", "spec": {"when": {"type": "schedule", "days": ["MON"], "times": ["09:00"]},
+                                           "content": {"goal": "3 videos about investing", "count": 3,
+                                                       "searches": ["investing videos"]}}}
+    msg = say(env, "every monday send me 3 videos about investing", form)
+    assert '3 picks for "videos about investing"' in msg and '"3 videos' not in msg

@@ -49,6 +49,27 @@ ACTING = re.compile(r"\b(add|put|jot|stick|throw|pop|save|email|e-mail|send|text
 KIND_WORDS = {"ingredients": "the ingredients", "steps": "the steps", "key_points": "the key points"}
 
 
+# fix pass 3, finding 69: "when I say boost, send me a motivational video": the word is read from the rule's own
+# request text (the person's words, kept with the rule), so it works after a restart with nothing else stored
+TRIGGER = re.compile(r"\bwhen(?:ever)?\s+i\s+(?:say|text|type|write|send(?:\s+you)?)\s+[\"'“‘]?"
+                     r"([^\W\d_][\w'-]{0,24}?(?:\s+[^\W\d_][\w'-]{0,24}?)?)[\"'”’]?"
+                     r"(?=\s*(?:[,.;:!?]|$)|\s+(?:send|give|show|find|get|pick|remind|text|then|you|please|pls)\b)", re.I)
+NOT_A_WORD = set("it that this so yes no ok okay something anything".split())
+
+
+def trigger_word(text):
+    """The word a saved rule is asked for by ("boost"), from the person's own request, lower case; or None."""
+    m = TRIGGER.search((text or "").split(" / ")[0])
+    if not m:
+        return None
+    word = " ".join(m.group(1).lower().split())
+    return None if word in NOT_A_WORD or plain_command(word) is not None else word
+
+
+def _said(text):
+    return " ".join(re.sub(r"[\"'“”‘’.!?,]+", " ", (text or "").lower()).split())
+
+
 def plain_command(text):
     """The Interpretation for a plain command, or None. Code only; no model call."""
     t = " ".join((text or "").lower().split()).rstrip(" .!?")
@@ -127,6 +148,13 @@ class FollowupMixin:
         if it is not None:
             return it, False
         h = person["handle"]
+        said = _said(text)
+        if said and len(said) <= 50:   # finding 69: a saved rule's own word, exact and in any case
+            from .store import numbered
+            for n, r in numbered(self.store.rules(h)):
+                if r["status"] == "active" and (r["spec"].get("when") or {}).get("type") == "on_request" \
+                        and trigger_word(r.get("text")) == said:
+                    return Interpretation(intent="run_rule", rule_number=n), True
         if self.store.get_state(f"lastspec:{h}"):
             it = more_command(text)
             if it is not None:

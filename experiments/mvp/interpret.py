@@ -241,6 +241,11 @@ WATCHED_KINDS = ["watch", "like", "playlist"]
 NAMED_LIST = re.compile(r"\b(?:on|to|onto|in|into|from|off)\s+(?:my|the)\s+([^\W\d_][\w-]*(?:\s[^\W\d_][\w-]*)?)\s+list\b",
                         re.I)
 INGREDIENTS = re.compile(r"\bingredients?\b", re.I)
+# "add the ingredients", "put its ingredients", "add all the ingredients of the first one"
+ADD_INGREDIENTS = re.compile(r"\b(?:add|put|stick|throw|jot(?:\s+down)?|pop)\s+(?:all\s+)?(?:of\s+)?(?:the|its|their|those|"
+                             r"these|that'?s?|this)?\s*ingredients?\b", re.I)
+THE_INGREDIENTS = re.compile(r"(?:(?:all\s+)?(?:of\s+)?(?:the|its|their|those|these)\s+)?ingredients?"
+                             r"(?:\s+(?:of|for|from)\s+(?:it|that|this|the\s+\w+(?:\s+one)?))?", re.I)
 
 
 def _fill_raw(raw):
@@ -356,6 +361,15 @@ def _from_message(x: Interpretation, message):
         x.todo_list = x.todo_list or (list_name(given) if given and list_name(given) != "todo" else None)
     if x.intent == "todo_add" and x.pick_number and x.what == "pick" and INGREDIENTS.search(message):
         x.what = "ingredients"
+    # fix pass 3, finding 68: with several actions in one message ("email it to me and add the ingredients to my
+    # grocery list"), the to-do part adds the ingredient lines, exactly as the single action does
+    if x.intent == "act_on_last" and len(x.actions) > 1 and ADD_INGREDIENTS.search(message):
+        for a in x.actions:
+            if a.action == "todo.add":
+                a.params = dict(a.params, what="ingredients")
+    if x.intent == "todo_add" and x.what != "ingredients" and ADD_INGREDIENTS.search(message) \
+            and (x.pick_number or not x.todo_text or THE_INGREDIENTS.fullmatch(x.todo_text.strip(" .!"))):
+        x.what, x.todo_text = "ingredients", None
 
 
 def _canonical_change(x: Interpretation, rules):

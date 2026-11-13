@@ -162,14 +162,19 @@ class OutputsMixin:
         if not last or not last.get("items"):
             return None, False, None, T.NO_PICK_TO_ADD
         items = last["items"]
+        snap = self.store.answer(last["run_id"]) or {}
+        kept = {p["item_id"]: p for p in snap.get("picks") or []}
         if what == "ingredients" and not numbers and len(items) > 1:
-            return None, False, None, T.which_pick(len(items))   # whose ingredients: one pick at a time
+            # whose ingredients: one pick at a time. Fix pass 3, finding 68: the wider links are not picks with
+            # details, so an answer with one recommended pick and a wider selection means that pick
+            main = [n for n, iid in enumerate(items, 1) if kept.get(iid, {}).get("main", True)] if kept else []
+            if len(main) != 1:
+                return None, False, None, T.which_pick(len(items))
+            numbers = main
         whole = not numbers
         numbers = numbers or list(range(1, len(items) + 1))
         if any(not 1 <= n <= len(items) for n in numbers):
             return None, False, None, T.which_pick(len(items))
-        snap = self.store.answer(last["run_id"]) or {}
-        kept = {p["item_id"]: p for p in snap.get("picks") or []}
         if whole and snap.get("picks"):
             numbers = [n for n in numbers if kept.get(items[n - 1], {}).get("main", True)]   # not the wider links
         cur = self.store.last_answer(h)

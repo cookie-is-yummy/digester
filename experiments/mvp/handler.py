@@ -881,8 +881,9 @@ class HandlerMixin:
             rule_id = self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
             self._wrote_rule(h, f"saved a rule, \"{c.goal}\"", rule_id)
             n = self.store.rule_number(h, rule_id)
+            from .followup import trigger_word
             start = T.new_items_started(describe(spec.when), what, n) if spec.when.type == "new_items" else \
-                T.saved_rule(n, what)   # review fix X8 (experience): it runs when they save something, not on request
+                T.saved_rule(n, what, trigger_word(text))   # review fix X8 (experience): it runs when they save something, not on request
             return self.send(h, start + self._do_note(spec) + self._not_yet_notes(spec)
                              + self._email_ask(person, spec, now))
         quiet = self.store.quiet(h)

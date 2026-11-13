@@ -99,9 +99,25 @@ def cap_first(s):
     return s[0].upper() + s[1:]
 
 
+COUNT_LEAD = re.compile(r"^\s*(?:(\d{1,2})|(one|two|three|four|five|six|seven|eight|nine|ten|a couple of|a few))\s+"
+                        r"(?=[^\W\d_])", re.I)
+COUNT_NAMES = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+               "ten": 10, "a couple of": 2, "a few": 3}
+
+
+def goal_without_count(goal, count):
+    """Fix pass 3, finding 70: '3 videos about investing' with 3 picks is "videos about investing" (the count is said
+    once). A number that is not the count ("5 minute workouts", 1 pick) stays."""
+    m = COUNT_LEAD.match(goal or "")
+    if not m:
+        return goal
+    n = int(m.group(1)) if m.group(1) else COUNT_NAMES[m.group(2).lower()]
+    return goal[m.end():] if n == count and goal[m.end():].strip() else goal
+
+
 def picks_for(count, goal):
     """'1 pick for "a pasta recipe"'."""
-    return f"{count} {'pick' if count == 1 else 'picks'} for \"{goal}\""
+    return f"{count} {'pick' if count == 1 else 'picks'} for \"{goal_without_count(goal, count)}\""
 
 
 def avoid_clause(avoid):
@@ -165,7 +181,9 @@ def new_items_started(when, what, n):
             f"Reply \"stop {n}\" to end it.")
 
 
-def saved_rule(n, what):
+def saved_rule(n, what, word=None):
+    if word:   # fix pass 3, finding 69: their own word back
+        return f"Saved. Say \"{word}\" whenever you want one (or \"run {n}\")."
     return (f"Saved as rule {n}: {what}. Ask for it, or text \"run {n}\", whenever you want it. "
             "I won't repeat picks.")
 
