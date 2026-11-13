@@ -141,8 +141,12 @@ def test_ingredients_come_only_from_lines_that_are_ingredients_alone(env):
     spec = pasta_spec({"type": "now"}, avoid=["cream"])
     spec["content"]["count"] = 2
     say(env, "two pasta ideas", {"intent": "ask", "spec": spec})
+    # fix pass 4, finding 78: with no number, the ingredients are the lead pick's, the one the answer opened with and
+    # showed them for (the alternative under it is one line)
     assert say(env, "add the ingredients to my list", {"intent": "todo_add", "what": "ingredients"}) == \
-        "My last message had 2 picks. Which one?"                           # whose ingredients
+        "Added 2 things to your list: 200g spaghetti; 2 lemons."
+    for t in bot.store.todos(H):
+        bot.store.x("DELETE FROM todos WHERE id=?", (t["id"],))
     assert say(env, "add the ingredients of 2", {"intent": "todo_add", "pick_number": 2, "what": "ingredients"}) \
         .startswith("I don't have the ingredients") and bot.store.todos(H) == []
     # a recipe ask: the details step (extract.py) returns ingredients and steps apart, so "add its ingredients" adds
