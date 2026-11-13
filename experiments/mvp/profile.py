@@ -679,6 +679,12 @@ LEVEL_AT = re.compile(
     r"|\bi(?:['’]?m| am)\s+past (?:the )?(?:beginner stage|beginner|basics) (?:at|in|with|on)\s+" + _TOPIC, re.I)
 
 
+def level_phrase(topic, level):
+    """A level in words level_said() reads back ("new to guitar", "beginner at guitar")."""
+    return {"new": "new to", "beginner": "beginner at", "intermediate": "intermediate at",
+            "advanced": "advanced at"}[level] + " " + topic
+
+
 def level_stated(message):
     """(the words that state it, topic, level) when the message states the person's level at a topic it names, else
     None."""

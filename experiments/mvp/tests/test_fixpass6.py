@@ -466,3 +466,33 @@ def test_88_live_a_level_said_in_a_request_is_read_by_code_when_the_form_has_no_
 def test_88_live_level_stated_reads_only_a_level_said_for_a_named_topic(text, want):
     got = P().level_stated(text)
     assert (got[1:] if got else None) == want
+
+
+def test_88_live_a_level_for_a_guessed_topic_is_stored_even_when_the_forms_note_restates_the_topic(rich):
+    """Live, second run: the guess already held a guitar topic (no level) and the form's note only named the topic
+    ("learning guitar"), so the note restated the profile and nothing was stored. The level the message states is
+    still read by code, and goes to that topic only."""
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich, level="new")
+    prof = P().get(bot.store, H)
+    P().set_interests(bot.store, H, prof["interests"] + [dict(prof["interests"][1], topic="Guitar playing", level=None,
+                                                              confirmed=False, words=["guitar"])])
+    st["answers"]["mvp_compose"] = lambda u: {"picks": []}
+    msg = str(say(rich, "I'm a beginner at guitar, find me a first song to learn",
+                  ask("a first guitar song", ["guitar song"], note="learning guitar")))
+    levels = {i["topic"]: i.get("level") for i in P().get(bot.store, H)["interests"]}
+    assert levels["Guitar playing"] == "beginner" and levels["Blender 3D"] == "new" and "guitar" not in levels
+    assert "mvp_profile_merge" not in rich["calls"] and "Noted: Guitar playing: a beginner." in msg
+
+
+def test_88_live_a_note_with_more_than_the_level_still_gets_the_form_call_and_only_side_effects(rich):
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich, level="new")
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "both", "tools": ["ukulele"], "outside": True}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": []}
+    msg = str(say(rich, "I'm a beginner at guitar and I have a ukulele, find me a first song",
+                  ask("a first song", ["guitar song"], note="beginner at guitar, has a ukulele")))
+    prof = P().get(bot.store, H)
+    assert {i["topic"]: i.get("level") for i in prof["interests"]}["guitar"] == "beginner"
+    assert prof["prefs"]["tools"] == ["air fryer", "ukulele"] and prof["prefs"].get("outside") is None
+    assert "guitar: a beginner" in msg and "ukulele" in msg

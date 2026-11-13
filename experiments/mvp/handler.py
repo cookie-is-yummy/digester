@@ -257,14 +257,19 @@ class HandlerMixin:
         # never said)
         self._tl.profile_said = getattr(self._tl, "carry_said", None)
         self._tl.carry_said = None
+        said = P.level_stated(text)   # fix pass 6, live check of finding 88: "I'm a beginner at guitar, find me ..."
         for x in [it] + ([it.also] if it.also else []):
             known = {n.lower() for n in self.store.profile_notes(h)}
-            if x.profile_note and x.profile_note.lower() not in known and x.intent != "profile_update" \
+            prof = P.get(self.store, h)
+            new_level = bool(said) and not P.restates(prof, P.level_phrase(said[1], said[2]))
+            note = x.profile_note or (said[0] if new_level else None)
+            if note and note.lower() not in known and x.intent != "profile_update" \
                     and getattr(self._tl, "merged_text", None) != text \
-                    and not P.restates(P.get(self.store, h), x.profile_note):
+                    and (new_level or not P.restates(prof, note)):
                 # onboarding merged this message already; a note that says what the profile holds is not merged
                 # again (fix pass 6, finding 88)
-                self._merge_note(person, x.profile_note, text, now)   # slice 6: merged into the profile
+                self._merge_note(person, note, text, now)   # slice 6: merged into the profile
+                said = None   # once per message
         self._tl.lang = it.lang
         self._tl.made_pending = False
         self._tl.chained = False
@@ -325,15 +330,20 @@ class HandlerMixin:
         h = person["handle"]
         res = None
         said = P.level_stated(text)
-        if said and note.lower() == said[0].lower():
-            # fix pass 6, live check of finding 88: a level the message states for a topic it names, read by code: no
-            # form call, and nothing else is changed
+        if said:
+            # fix pass 6, live check of finding 88: a level the message states for a topic it names, read by code
             res = P.apply_merge(self.store, h, {"kind": "both", "levels": [{"topic": said[1], "level": said[2]}]},
                                 text, side=True)
-        elif not self._over_cap(person):
+        rest = set(P.topic_words(note)) - P.LEVEL_WORDS - (set(P.topic_words(said[1])) if said else set())
+        if (not said or rest) and not self._over_cap(person):
+            # the form call only when the note says more than the level code read
             try:
                 # fix pass 6, finding 88: the message is a request; only what a request may teach is applied
-                res, _ = P.merge(self.store, h, text, side=True)
+                more, _ = P.merge(self.store, h, text, side=True)
+                if res and more:
+                    more = dict(more, changes=res["changes"] + [c for c in more["changes"] if c not in res["changes"]],
+                                skipped_sensitive=res["skipped_sensitive"] or more["skipped_sensitive"])
+                res = more or res
             except Exception as e:  # noqa: BLE001
                 self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
         if res and res["changes"]:
