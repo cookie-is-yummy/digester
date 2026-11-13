@@ -676,3 +676,44 @@ def test_checker_78_remind_me_of_it_later_is_the_lead_pick(env):
     msg = say(env, "remind me of it tonight at 8", {"intent": "act_on_last", "actions": ["message.send"],
                                                     "when": {"type": "once", "date": "2026-11-12", "time": "20:00"}})
     assert '"Lemon garlic pasta"' in msg and "2 picks" not in msg
+
+
+def test_checker_74_a_reason_or_title_naming_their_kit_by_another_name_needs_the_post_to_say_it(env):
+    with_profile(env["bot"], note=None)
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [{
+        "n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Pressure cooker lemon pasta",
+        "because": "it needs only a pressure cooker and 2 lemons", "facts": [{"label": "lemons", "quote": "2 lemons"}]}]}
+    msg = say(env, "a pasta recipe", ask_form("a pasta recipe", ["pasta recipe"]))
+    assert "pressure cooker" not in msg.lower() and "I recommend Lemon garlic pasta" in msg
+    from mvp.executor import names_kit
+    assert names_kit("Pressure cooker chicken", "Instant Pot") and not names_kit("Stovetop chicken", "Instant Pot")
+
+
+def test_checker_77_without_youtube_a_rule_with_new_ones_never_says_it_wont_run_dry(env):
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta"}]}
+    form = rule_form("a pasta recipe", ["pasta recipe"], when={"type": "schedule", "days": ["FRI"], "times": ["19:00"]},
+                     outside="some")
+    msg = str(say(env, "every friday a pasta recipe, and new ones from youtube too", form))   # no YouTube key here
+    assert "I can't look for new things outside your saves right now." in msg
+    assert "related videos from YouTube" not in msg and "won't run dry" not in msg
+    assert "Heads up: I only see about 2 posts" in msg
+    msg = str(say(env, "yes", {"intent": "confirm"}))
+    assert "related videos from YouTube" not in msg
+
+
+def test_checker_79_a_list_of_tips_never_takes_the_lead_from_the_composers_pick(env):
+    items = [{"id": "itm_r1", "platform": "instagram", "source_url": "https://example.com/r1",
+              "caption": "Chicken rice bowl! The recipe is in the video", "interaction_kinds": ["save"],
+              "platform_data": {"owner_handle": "a", "owner_relation": "none"}},
+             {"id": "itm_r2", "platform": "instagram", "source_url": "https://example.com/r2",
+              "caption": "5 tips for fluffy rice:\n- rinse the rice\n- use 2 cups water\n- rest 10 minutes",
+              "interaction_kinds": ["save"], "platform_data": {"owner_handle": "b", "owner_relation": "none"}}]
+    add_items(env, items)
+    env["bot"].pool.search = lambda lib, q, depth=300: {"ids": ["itm_r1", "itm_r2"], "mode": "normal", "cost_usd": 0.0}
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, "Chicken rice bowl"), "verdict": "clear", "title": "Chicken rice bowl"},
+        {"n": number_of(u, "fluffy rice"), "verdict": "clear", "title": "Fluffy rice tips"}]}
+    env["state"]["answers"]["mvp_extract"] = lambda u: {}
+    msg = say(env, "chicken and rice ideas", ask_form("chicken and rice ideas", ["chicken rice"], count=2))
+    assert "I recommend Chicken rice bowl" in msg

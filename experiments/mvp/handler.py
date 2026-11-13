@@ -761,6 +761,14 @@ class HandlerMixin:
             "goal": question[:200], "searches": [question[:120]], "count": min(3, len(last["items"])) or 1,
             "extract": extract, "avoid": avoid, "exclude_sent": False}})
 
+    def _outside_serves(self, person, spec, text, now):
+        """True when new videos from YouTube can come with this rule's sends now (a key, the route on, words to search
+        with, quota left): only then may a preview or a start line say so."""
+        try:
+            return bool(self._outside().available(person["handle"], spec, [text or ""], now=now))
+        except Exception:  # noqa: BLE001
+            return False
+
     def _preview_supply(self, person, spec, text, run_id, now):
         """(heads-up, offer) for a repeating library rule's preview (findings 19 and 26): how many fitting items code
         saw (clear and close, from the composer's verdicts), said when under 3; and, when YouTube can serve it, the
@@ -770,8 +778,9 @@ class HandlerMixin:
         if c.source != "library" or not spec.when.repeating or info.get("run_id") != run_id \
                 or spec.when.type == "new_items":   # review fix X8: it sends what they save next, so it never runs dry
             return "", ""
-        if c.outside in ("some", "only"):
+        if c.outside in ("some", "only") and self._outside_serves(person, spec, text, now):
             # fix pass 4, finding 77: new videos from YouTube come with each send, so it never runs dry: said instead
+            # (checker: only while YouTube can serve it; else the preview has already said it cannot)
             return (T.OUTSIDE_RULE_NOTE if c.outside == "some" else T.OUTSIDE_RULE_ONLY), ""
         supply = info.get("n_clear", 0) + info.get("n_close", 0)
         # fix pass 4, finding 77: the composer gives verdicts only for the few it shows (one or two for a rule that
@@ -934,7 +943,8 @@ class HandlerMixin:
             return self.send(h, T.once_set(first, what, n) + notes)
         if spec.when.type == "random" or spec.when.window:
             first = None  # random moments are never shown in advance
-        if c.source == "library" and c.outside in ("some", "only") and spec.when.repeating:
+        if c.source == "library" and c.outside in ("some", "only") and spec.when.repeating \
+                and self._outside_serves(person, spec, text, now):
             # fix pass 4, finding 77: where its picks come from, said when it starts too
             notes = (T.OUTSIDE_RULE_NOTE if c.outside == "some" else T.OUTSIDE_RULE_ONLY) + notes
         return self.send(h, T.rule_started(edited, describe(spec.when), c.goal, avoid, first) + notes)

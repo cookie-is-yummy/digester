@@ -73,12 +73,19 @@ def length_bound(spec, *texts):
     return min(found) if found else None
 
 
+def names_kit(text, kit):
+    """True when the text names this kit by any of its names ("pressure cooker" for an Instant Pot: checker of fix pass
+    4, finding 74)."""
+    from .interpret import _has_phrase, kit_phrases
+    return mentions(text, kit) or any(_has_phrase(text, x) for x in kit_phrases([kit]))
+
+
 def pref_backed(because, own, kits, time_pref):
     """Fix pass 4, finding 74: True unless the reason names the person's kit, or a word of their usual time
     ("weeknights"), that the post's own text does not have (numbers are checked against the text already)."""
     from .profile import topic_words
     for k in kits or []:
-        if mentions(because, k) and not mentions(own, k):
+        if names_kit(because, k) and not names_kit(own, k):
             return False
     said, have = set(topic_words(because)), set(topic_words(own))
     mine = set(topic_words(str(time_pref or ""))) - {"usually", "usual", "has", "have", "got", "minute", "hour", "time",
@@ -410,8 +417,12 @@ class ExecutorMixin:
                 # fix pass 4, finding 79: with details shown by default, of the picks with the lead's verdict the one
                 # whose own text writes them out leads (the composer's order otherwise)
                 pool = main[1:] + (result.get("wider") or [])
+                # (checker: a list of tips is not a recipe written out; it never takes the lead this way)
+                from .compose import tips_only
                 better = next((p for p in pool if p["verdict"] == main[0]["verdict"]
-                               and written_details(p["item"], extra)), None)
+                               and written_details(p["item"], extra)
+                               and not tips_only(own_text(p["item"], extra))
+                               and default_fits(own_text(p["item"], extra))), None)
                 if better is not None:
                     both = [better] + [p for p in main + (result.get("wider") or []) if p is not better]
                     result["picks"], result["wider"] = both[:len(main)], both[len(main):]
@@ -449,7 +460,7 @@ class ExecutorMixin:
                 finished_by_details(result, spec, extra, request_text or "", hint)
             for p in (result.get("picks") or []) + (result.get("wider") or []):
                 own = own_text(p["item"], extra)
-                if any(mentions(p.get("title") or "", k) and not mentions(own, k) for k in kits):
+                if any(names_kit(p.get("title") or "", k) and not names_kit(own, k) for k in kits):
                     # fix pass 4 (live check of finding 74): a title that names their kit the post never names
                     # ("Instant Pot ..." for a stovetop recipe) is the post's own first words instead
                     from .compose import title_from_item
