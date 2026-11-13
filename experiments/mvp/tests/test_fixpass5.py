@@ -611,3 +611,16 @@ def test_check_any_length_said_twice_to_the_preview_never_turns_youtube_on(blend
     payload = json.loads(bot.store.one("SELECT payload FROM pending WHERE handle=?", (H,))["payload"])
     assert payload["spec"]["content"].get("outside", "none") == "none"
     assert payload["text"].count("any length") == 1
+
+
+def test_84_superlatives_and_ratios_do_not_make_a_different_dish():
+    """Final live check: "80/20 Hainanese Chicken and Rice" and "Simplest Hainanese Chicken and Rice" are one dish, so
+    the second one never counts as a different alternative; real different dishes stay different."""
+    from mvp.compose import same_dish
+    a = {"title": "80/20 Hainanese Chicken and Rice"}
+    assert same_dish(a, {"title": "Simplest Hainanese Chicken and Rice"})
+    assert same_dish(a, {"title": "Easiest Hainanese chicken and rice"})
+    assert same_dish({"title": "Quicker one pot chicken and rice"}, {"title": "Chicken and rice"})
+    assert not same_dish(a, {"title": "Chicken fried rice"})
+    assert not same_dish({"title": "Butter chicken"}, {"title": "Chicken"})
+    assert not same_dish({"title": "Oyster mushroom rice"}, {"title": "Mushroom rice"})

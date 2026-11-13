@@ -538,11 +538,26 @@ tasty yummy viral classic cheap budget favorite favourite fav weeknight dinner l
 one pot pan sheet skillet cooker instant fryer air crockpot slow oven dutch bowl style recipe""".split())
 
 
+def _frame_word(w):
+    """A DISH_FRAME word, also as a comparative or superlative ("simplest", "easiest", "quicker"): the final live check
+    showed "80/20 Hainanese Chicken and Rice" and "Simplest Hainanese Chicken and Rice" as two different dishes."""
+    from .retrieve import _stem
+    if w in DISH_FRAME or _stem(w) in DISH_FRAME:
+        return True
+    for end in ("iest", "est", "st", "ier", "er", "r"):
+        if w.endswith(end) and len(w) > len(end) + 2:
+            base = w[:-len(end)]
+            if base in DISH_FRAME or base + "y" in DISH_FRAME or base + "e" in DISH_FRAME:
+                return True
+    return False
+
+
 def dish_words(p):
-    """The words of a pick's title that name the thing itself (stop words, numbers and DISH_FRAME left out), singular."""
+    """The words of a pick's title that name the thing itself (stop words, numbers and ratios like "80/20", and DISH_FRAME
+    left out), singular."""
     from .retrieve import _stem
     return {_stem(w) for w in tokens(p.get("title") or "")
-            if len(w) >= 3 and w not in STOP and not w.isdigit() and _stem(w) not in DISH_FRAME}
+            if len(w) >= 3 and w not in STOP and re.search(r"[^\W\d_]", w) and not _frame_word(w)}
 
 
 def same_dish(a, b):
