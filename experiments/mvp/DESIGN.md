@@ -313,6 +313,17 @@ section and an earlier one differ, this section wins.
 - (Check of fix pass 4.) The same holds for their notes, their direction and their level from the profile: a level
   must-have comes only from the message's words; the profile's level for the request's own topic goes to the
   composer, which prefers picks that suit it (section 5's "fill ... level" is read this way).
+- (Fix pass 5.) Copies of one post take one place among the candidates (the copy that writes out more is kept). An
+  ask or a preview that shows fewer picks than asked for (an alternative that is the lead's own dish does not count)
+  gets one more composer call on the candidates it did not return that look like the kind asked for; its picks come
+  after the first call's and never change the lead (unless the first call had none); a first answer that is only the
+  closest is left as it is. With fewer clear picks than asked for, close ones fill the places under their own heading
+  ("Or these, which are close too:"), never as the lead. A reason with one failing part loses that part; a lead whose
+  reason a check removed gets one built by code from the details shown under it ("the ingredients are written out").
+- (Fix pass 5.) "that I haven't seen", "not from my saves", "that aren't in my library", "I don't already have" make
+  `outside` "only", whatever the model filled ("and some new ones too" stays "some"). A repeating rule whose preview is
+  the closest only because of its length bound says so when it starts and offers "any length" (added to the rule's
+  own words, which lift the bound) and "include YouTube" (`outside` "some"); no field was added.
 - YouTube items: titles only is too little for "under 10 minutes" or "ends with a finished model". For candidates
   shown to the composer, code fetches the video's length and description from YouTube's official `videos.list`
   (one call per 50 videos, key from `YOUTUBE_API_KEY`), keeps them at most 30 days (YouTube's rule), and treats the
