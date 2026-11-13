@@ -37,6 +37,8 @@ MAX_SCHEDULED_PER_DAY = 5
 QUIET_START, QUIET_END = 22, 8   # local hours; scheduled sends are held in this window unless the rule's time is in it
 DAILY_CAP_USD = float(os.environ.get("MVP_DAILY_CAP_USD", "1.00"))     # per person (rule 8)
 TOTAL_CAP_USD = float(os.environ.get("MVP_TOTAL_CAP_USD", "10.00"))    # whole build and test (section 14)
+# review fix X6: more than the worst case of the largest single call (a full compose: about $0.03)
+TOTAL_CAP_MARGIN_USD = float(os.environ.get("MVP_TOTAL_CAP_MARGIN_USD", "0.05"))
 
 # ---------- outputs (DESIGN.md sections 6 and 11, slice 4) ----------
 # SMTP comes from the environment only, read when an email is sent (names only here; values are never printed).

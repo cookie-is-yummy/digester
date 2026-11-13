@@ -102,8 +102,9 @@ def _lib_rows(library):
             mirrored = bool(json.load(f).get("mvp_import"))
     except (OSError, ValueError):
         mirrored = False
-    return [r for r in rows if str(r.get("purpose", "")).startswith("demo_")
-            and not (mirrored and r.get("purpose") in MIRRORED)]
+    # review fix X4: every purpose the library's engine logged counts (its q8 refine calls are "c88_refine"); only a
+    # build already written to the MVP ledger is left out here
+    return [r for r in rows if not (mirrored and r.get("purpose") in MIRRORED)]
 
 
 def spent_today(handle, library):
@@ -151,5 +152,44 @@ def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=120
         out, _ = ai.openai_chat_json(config.MODEL, system, user, max_tokens=max_tokens, purpose=purpose,
                                      prompt_version=prompt_version, **extra)
         return out, _tl.cost
+    except Exception as e:
+        if _cut_after_send(e) and not _tl.cost:
+            # review fix X4: we stopped waiting, but the request was sent and the server may finish and bill it. A
+            # worst-case estimate is written, so both caps see it (ai.py logs only after a reply has come back)
+            _log({"provider": "openai", "model": config.MODEL, "purpose": purpose, "prompt_version": prompt_version,
+                  "n": 1, "in_tokens": int((len(system) + len(user)) / 3.5), "out_tokens": max_tokens,
+                  "cost_usd": estimate_usd(system, user, max_tokens), "estimated": True,
+                  "error": type(e).__name__})
+        raise
     finally:
         _tl.person = None
+
+
+def budget_stop(e):
+    """review fix X6: True for ai.py's refusal of a call that would pass the total budget (nothing was sent)."""
+    return isinstance(e, RuntimeError) and str(e).startswith("budget stop")
+
+
+def estimate_usd(system, user, max_tokens):
+    """The worst case of one call, as ai.py's guard works it out."""
+    p = ai.prices().get(config.MODEL) or {}
+    return round((len(system) + len(user)) / 3.5 / 1e6 * p.get("input_per_m", 0)
+                 + max_tokens / 1e6 * p.get("output_per_m", 0), 6)
+
+
+def _cut_after_send(e):
+    """A time-out or a dropped connection: the request may have reached the server. Not a refusal before sending (the
+    budget guard, a refused connection) and not an HTTP error answer (that came back, unbilled)."""
+    import http.client
+    import socket
+    import urllib.error
+    if isinstance(e, urllib.error.HTTPError):
+        return False
+    if isinstance(e, urllib.error.URLError):
+        e = e.reason if isinstance(e.reason, BaseException) else None
+        if e is None:
+            return False
+    if isinstance(e, ConnectionRefusedError):
+        return False
+    return isinstance(e, (TimeoutError, socket.timeout, ConnectionResetError, ConnectionAbortedError,
+                          http.client.RemoteDisconnected, http.client.IncompleteRead))

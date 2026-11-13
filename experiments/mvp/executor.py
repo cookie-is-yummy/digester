@@ -187,7 +187,9 @@ class ExecutorMixin:
     # ---------- caps ----------
     def _over_cap(self, person):
         libs = [p["library"] for p in self.store.q("SELECT library FROM people")]
-        if llm.spent_total(libs) >= config.TOTAL_CAP_USD:
+        # review fix X6: ai.py refuses a call whose worst case would pass the total, so spend settles just below it;
+        # the room of one large call is kept, so that window reads as "the budget is used up", not "try again"
+        if llm.spent_total(libs) + config.TOTAL_CAP_MARGIN_USD >= config.TOTAL_CAP_USD:
             return "total"
         if llm.spent_today(person["handle"], person["library"]) >= config.DAILY_CAP_USD:
             return "daily"
@@ -248,6 +250,7 @@ class ExecutorMixin:
         t0 = time.time()
         cost = 0.0
         status, err, result, cands, view = "ok", None, None, [], None
+        stopped = False
         steps = {}
         disliked = self.store.disliked(person["handle"])
         kits = self._kits(person["handle"], request_text or "", getattr(self._tl, "hint", None) or "")
@@ -356,6 +359,7 @@ class ExecutorMixin:
                                                            request_text or "", hint)
         except Exception as e:  # noqa: BLE001 - one failed run never stops the bot
             status, err = "error", type(e).__name__ + (": " + str(e)[:120] if isinstance(e, RuntimeError) else "")
+            stopped = llm.budget_stop(e)
         picks = ((result or {}).get("picks") or []) + ((result or {}).get("wider") or [])
         run_id = self.store.add_run(handle=person["handle"], rule_id=rule_id, kind=kind, at=now_iso(self.clock()),
                                     n_candidates=len(cands), n_picks=len(picks),
@@ -370,7 +374,8 @@ class ExecutorMixin:
                                     steps=steps)
         self.note(run_id=run_id)
         if status == "error":
-            return RUN_ERROR, run_id, 0
+            # review fix X6: the budget guard refused a call: the budget text, never a false "try again"
+            return (LIMIT_TOTAL if stopped else RUN_ERROR), run_id, 0
         picks = ((result or {}).get("picks") or []) + ((result or {}).get("wider") or [])   # (reordered above)
         self._tl.run_info = {"run_id": run_id, "n_clear": (result or {}).get("n_clear", 0),
                              "n_close": (result or {}).get("n_close", 0), "n_picks": len(picks),

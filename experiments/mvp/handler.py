@@ -11,6 +11,7 @@ from . import config
 from . import profile as P
 from . import texts as T
 from .interpret import interpret
+from .llm import budget_stop
 from .schedule import describe, next_run, resolve_until, say_time, t12
 from .schema import RuleSpec
 from .store import now_iso
@@ -210,6 +211,9 @@ class HandlerMixin:
                               store=self.store)
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=handle, kind="interpret", status="error", error=type(e).__name__)
+            if budget_stop(e):   # review fix X6: ai.py's budget guard refused the call: never a false "try again"
+                self.note(intent="over_cap")
+                return self._limit_notice(person, "total")
             return self.send(handle, T.INTERPRET_ERROR)
         return self._dispatch(person, it, text, rules, pending, last, now)
 

@@ -123,9 +123,14 @@ def ranked(pool, lib, query, store=None, now=None):
                                      config.SEARCH_DEPTH]).encode()).hexdigest()
     since = (now - timedelta(hours=config.RANKED_CACHE_HOURS)).astimezone(timezone.utc).isoformat(timespec="seconds")
     hit = store.cache_get("ranked_cache", key, since)
-    if hit is not None and hit.get("ids"):   # an empty list kept by an older build is never reused
+    # an empty list kept by an older build is never reused, nor a stand-in ranking kept before review fix X5
+    if hit is not None and hit.get("ids") and hit.get("mode") in (None, "normal"):
         return {"ids": hit["ids"], "mode": hit.get("mode"), "cost_usd": 0.0, "cached": True}
     r = _search(pool, lib, query)
+    if r.get("mode") != "normal" or r.get("degraded"):
+        # review fix X5: a stand-in ranking (the keyword fallback after a failed query embedding, or the raw query
+        # when the rewrite failed) is used for this run only; kept, it would stand for days in place of the real one
+        return r
     store.cache_put("ranked_cache", key, {"ids": r["ids"], "mode": r.get("mode")}, at=now, library=lib, mode=r.get("mode"))
     return r
 

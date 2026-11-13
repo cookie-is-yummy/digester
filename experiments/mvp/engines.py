@@ -135,8 +135,11 @@ class EnginePool:
         if not r.get("ok"):
             raise RuntimeError(r.get("error") or "search failed")
         q8 = r["result"]["q8"]
+        rw = q8["why"].get("rewrite") or {}
+        # review fix X5: a search whose rewrite call failed used the raw query only; the engine still says "normal"
+        degraded = q8["why"].get("path") == "rewrite" and not rw.get("used", True)
         return {"ids": q8.get("ids") or [row["id"] for row in q8["results"]], "mode": q8["why"].get("mode"),
-                "cost_usd": q8["why"].get("cost", {}).get("usd", 0.0)}
+                "cost_usd": q8["why"].get("cost", {}).get("usd", 0.0), "degraded": degraded}
 
     def stop_all(self):
         with self.lock:
