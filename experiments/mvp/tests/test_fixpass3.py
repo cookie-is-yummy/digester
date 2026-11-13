@@ -516,3 +516,45 @@ def test_check71_a_recipe_that_says_lets_talk_still_gets_its_ingredients(env):
     assert "Ingredients" in msg
     assert not default_fits(TALK_ITEM["caption"])                         # the talk still gets none
     assert default_fits("My leg day habits\n3 sets of 12 squats")
+
+
+@pytest.mark.parametrize("model", [
+    {"type": "random", "per": "week", "count": 1, "days": ["MON", "TUE", "WED", "THU", "FRI"]},
+    {"type": "random", "per": "week", "count": 1, "every_weeks": 2, "days": ["MON", "TUE", "WED", "THU", "FRI"]},
+    {"type": "schedule", "every_weeks": 2, "days": ["THU"], "times": ["09:00"]},
+])
+def test_check66_every_other_week_on_a_random_weekday_is_one_send_in_every_second_week(env, model):
+    from zoneinfo import ZoneInfo
+    from mvp.schedule import describe, next_run
+    it = S(note(model, "clean the fridge"), "every other week on a random weekday remind me to clean the fridge")
+    w = it.spec.when
+    assert (w.type, w.per, w.count, w.every_weeks, w.days) == ("random", "week", 1, 2, ["MON", "TUE", "WED", "THU", "FRI"])
+    assert describe(w) == "once every other week at a random time on weekdays"
+    tz = "America/New_York"
+    made = datetime(2026, 11, 12, 18, 0, tzinfo=UTC)
+    monday0 = made.astimezone(ZoneInfo(tz)).date() - timedelta(days=3)
+    t, sends = made, []
+    for _ in range(12):
+        t = next_run(w, tz, t, anchor=made, seed=9)
+        sends.append(t.astimezone(ZoneInfo(tz)))
+    weeks = [(s.date() - monday0).days // 7 for s in sends]
+    assert all(k % 2 == 0 for k in weeks) and len(set(weeks)) == len(weeks)     # one send, in every 2nd week only
+    assert all(s.weekday() < 5 and 9 <= s.hour < 21 for s in sends)
+    assert len({s.weekday() for s in sends}) > 1                               # the day is drawn, not fixed
+    # a time stays a fixed day; random cadence words other than weeks stay refused
+    it = S(note({"type": "random", "per": "week", "count": 1}, "x"), "every other week at a random time remind me")
+    assert it.spec.when.type == "schedule" and it.spec.when.every_weeks == 2
+    from mvp.schema import When
+    with pytest.raises(ValueError):
+        When(type="random", per="day", count=1, every_weeks=2)
+    assert describe(When(type="random", per="week", count=2, every_weeks=3)) == \
+        "about 2 times every 3 weeks at random times"
+
+
+def test_check66_a_window_that_is_all_quiet_hours_is_said_plainly(env):
+    from mvp import texts
+    bot = env["bot"]
+    bot.store.set_quiet(H, [{"start": "17:00", "end": "23:00"}])
+    msg = say(env, "remind me every 2 days sometime in the evening to stretch",
+              note({"type": "random", "per": "day", "count": 1, "window": ["17:00", "21:00"]}))
+    assert texts.ALL_QUIET in msg and not bot.store.rules(H, statuses=("active",))

@@ -651,6 +651,9 @@ EVERY_N = re.compile(r"\bevery\s+(\d{1,2}|other|second|2nd|third|3rd|two|three|f
 RANDOM_TIME = re.compile(r"\b(?:at\s+(?:a\s+)?random(?:\s+(?:times?|moments?|hours?))?|(?:a|some|any)\s+random\s+"
                          r"(?:time|moment)s?|random\s+times?|randomly|at\s+any\s+time|whenever\s+you\s+(?:like|want))\b",
                          re.I)
+RANDOM_DAY = re.compile(r"\b(?:a|some|any|one)\s+random\s+(week(?:end)?\s?)?day\b|\brandom\s+(week(?:end)?\s?)?days\b",
+                        re.I)
+WEEKDAY_SET = ["MON", "TUE", "WED", "THU", "FRI"]
 PART_WINDOWS = {"morning": ["09:00", "12:00"], "afternoon": ["12:00", "17:00"], "evening": ["17:00", "21:00"]}
 SOMETIME_IN = re.compile(r"\b(?:some\s?time|at\s+some\s+point|any\s?time|at\s+(?:a\s+)?random(?:\s+time)?|randomly)\s+"
                          r"(?:in|during)\s+the\s+(morning|afternoon|evening)\b", re.I)
@@ -708,6 +711,20 @@ def _cadence_words(x: Interpretation, message):
         limits = _limits_of(w)
         if unit == "day" and not (w.type == "schedule" and w.every_days == n):
             new = {"type": "schedule", "every_days": n}
+        elif unit == "week" and RANDOM_DAY.search(message):
+            # checker: "every other week on a random weekday" is one send in every 2nd week, on a day drawn at random
+            m_day = RANDOM_DAY.search(message)
+            which = (m_day.group(1) or m_day.group(2) or "").strip().lower()
+            days = WEEKDAY_SET if which == "week" else ["SAT", "SUN"] if which == "weekend" else (
+                w.days if w.days and len(w.days) < 7 else (stated_days(message) or []))
+            count = w.count if w.type == "random" and w.per == "week" and w.count and TIMES_PER.search(message) else 1
+            new = {"type": "random", "per": "week", "count": count, "every_weeks": n,
+                   "days": [] if days == ALL_DAYS else list(days), "window": _random_window(w, message)}
+            try:
+                x.spec.when = When.model_validate({**new, **limits})
+            except ValueError:
+                pass
+            return
         elif unit == "week" and not (w.type == "schedule" and (w.every_weeks or 1) == n and not w.every_days):
             days = w.days if w.type == "schedule" and w.days and len(w.days) < 7 else (stated_days(message) or [])
             new = {"type": "schedule", "every_weeks": n, "days": [] if days == ALL_DAYS else days}

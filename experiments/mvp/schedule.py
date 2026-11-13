@@ -334,10 +334,14 @@ def _next_random(when, tz, tzname, after_utc, anchor_local, seed, quiet):
     d = max(after_utc.astimezone(tz).date(), anchor_local.date())
     if when.start:
         d = max(d, date.fromisoformat(when.start))
-    for _ in range(RANDOM_PERIODS):
+    week0 = anchor_local.date() - timedelta(days=anchor_local.weekday())
+    for _ in range(RANDOM_PERIODS * (when.every_weeks or 1)):
         a, b, _key = _period(when.per, d)
         if when.until and a > date.fromisoformat(when.until):
             return None
+        if (when.every_weeks or 1) > 1 and ((a - week0).days // 7) % when.every_weeks:
+            d = b + timedelta(days=1)   # "every other week": only the weeks counted from the week it was made
+            continue
         for m in random_moments(when, tzname, d, anchor_local, seed, quiet):
             if m > after_utc:
                 return m
@@ -479,10 +483,13 @@ def describe(when: When) -> str:
         per = when.per or "week"
         window = when.window or RANDOM_WINDOW
         between = "" if window == RANDOM_WINDOW else f" between {t12(window[0])} and {t12(window[1])}"
+        every = f"a {per}"
+        if (when.every_weeks or 1) > 1:
+            every = "every other week" if when.every_weeks == 2 else f"every {when.every_weeks} weeks"
         if when.count == 1:
-            core = f"once a {per} at a random time{between}"
+            core = f"once {every} at a random time{between}"
         else:
-            core = f"about {when.count} times a {per} at random times{between}"
+            core = f"about {when.count} times {every} at random times{between}"
         core += _on_days(when.days) + _zone(when)
     else:
         core = _schedule_phrase(when) + _zone(when)

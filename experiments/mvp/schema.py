@@ -231,8 +231,12 @@ class When(BaseModel):
             self._clear(*[n for n in timing if n not in ("date", "in_minutes", "times")], *limits)
             return self
         if t == "random":
-            if self.times or self.every_days or self.every_weeks or self.month_days or self.month_weeks \
-                    or self.every_months or self.every_hours:
+            if self.every_weeks == 1:
+                self.every_weeks = None
+            # checker of fix pass 3, finding 66: "every other week on a random weekday" is random sends per week,
+            # in every 2nd week only (every_weeks 2 to 8, per week); no other cadence goes with random
+            if self.times or self.every_days or (self.every_weeks and self.per not in (None, "week")) \
+                    or self.month_days or self.month_weeks or self.every_months or self.every_hours:
                 raise ValueError("random takes count, per, window and days; it has no fixed times or cadence")
             self.per = self.per or "week"
             if self.count is None:
