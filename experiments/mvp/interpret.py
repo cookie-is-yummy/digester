@@ -246,6 +246,16 @@ ADD_INGREDIENTS = re.compile(r"\b(?:add|put|stick|throw|jot(?:\s+down)?|pop)\s+(
                              r"these|that'?s?|this)?\s*ingredients?\b", re.I)
 THE_INGREDIENTS = re.compile(r"(?:(?:all\s+)?(?:of\s+)?(?:the|its|their|those|these)\s+)?ingredients?"
                              r"(?:\s+(?:of|for|from)\s+(?:it|that|this|the\s+\w+(?:\s+one)?))?", re.I)
+# checker, finding 68: "put what I need to buy on my shopping list" names the ingredients without the word
+NEED_TEXT = (r"(?:what|everything|all\s+(?:that|the\s+stuff))\s+(?:i|we)(?:'d|'ll|\s+would|\s+will)?\s+need"
+             r"(?:\s+to\s+(?:buy|get|pick\s+up|shop\s+for))?(?:\s+(?:for|to\s+make)\s+(?:it|that|this|the\s+\w+))?")
+NEED_TO_BUY = re.compile(r"\b(?:add|put|stick|throw|jot(?:\s+down)?|pop|write(?:\s+down)?)\s+" + NEED_TEXT
+                         + r"(?=\s+(?:on|to|onto|in|into)\b)", re.I)
+NEED_FULL = re.compile(NEED_TEXT, re.I)
+
+
+def _wants_ingredients(message):
+    return bool(ADD_INGREDIENTS.search(message) or NEED_TO_BUY.search(message))
 
 
 def _fill_raw(raw):
@@ -354,7 +364,7 @@ def _from_message(x: Interpretation, message):
         if name and name != "todo":
             x.todo_list = name
     if x.intent == "act_on_last" and {a.action for a in x.actions} == {"todo.add"} and x.when is None \
-            and INGREDIENTS.search(message):
+            and (INGREDIENTS.search(message) or NEED_TO_BUY.search(message)):
         # "add its ingredients to my list" read as "add the pick": the ingredient lines are what they asked for
         given = x.actions[0].params.get("list")
         x.intent, x.what, x.actions = "todo_add", "ingredients", []
@@ -363,12 +373,13 @@ def _from_message(x: Interpretation, message):
         x.what = "ingredients"
     # fix pass 3, finding 68: with several actions in one message ("email it to me and add the ingredients to my
     # grocery list"), the to-do part adds the ingredient lines, exactly as the single action does
-    if x.intent == "act_on_last" and len(x.actions) > 1 and ADD_INGREDIENTS.search(message):
+    if x.intent == "act_on_last" and len(x.actions) > 1 and _wants_ingredients(message):
         for a in x.actions:
             if a.action == "todo.add":
                 a.params = dict(a.params, what="ingredients")
-    if x.intent == "todo_add" and x.what != "ingredients" and ADD_INGREDIENTS.search(message) \
-            and (x.pick_number or not x.todo_text or THE_INGREDIENTS.fullmatch(x.todo_text.strip(" .!"))):
+    if x.intent == "todo_add" and x.what != "ingredients" and _wants_ingredients(message) \
+            and (x.pick_number or not x.todo_text or THE_INGREDIENTS.fullmatch(x.todo_text.strip(" .!"))
+                 or NEED_FULL.fullmatch(x.todo_text.strip(" .!"))):
         x.what, x.todo_text = "ingredients", None
 
 

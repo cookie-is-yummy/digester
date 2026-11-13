@@ -454,3 +454,65 @@ def test_73_kit_and_time_notes_read_as_plain_sentences(rich):
     st["answers"]["mvp_profile_show"] = None
     shown = say(rich, "what do you know about me", {"intent": "profile_show"})
     assert "you have an instant pot" in shown.lower()
+
+
+# ======================================= checker of fix pass 3 =======================================
+@pytest.mark.parametrize("form", [
+    {"intent": "act_on_last", "actions": ["email.send", {"action": "todo.add", "params": {"list": "shopping"}}]},
+    {"intent": "act_on_last", "actions": ["email.send", "todo.add"], "todo_list": "shopping"},
+    {"intent": "act_on_last", "actions": ["email.send"],
+     "also": {"intent": "todo_add", "todo_text": "what I need to buy", "list": "shopping"}},
+])
+def test_check68_put_what_i_need_to_buy_on_my_shopping_list_adds_the_ingredients(env, form):
+    bot, st = env["bot"], env["state"]
+    st["answers"]["mvp_compose"] = WIDE
+    say(env, "a lemon pasta recipe", {"intent": "ask", "spec": pasta_spec({"type": "now"})})
+    say(env, "send it to my email and put what I need to buy on my shopping list", form)
+    todos = bot.store.todos(H)
+    assert [t["text"] for t in todos] == ["200g spaghetti", "2 lemons"] and {t["list"] for t in todos} == {"shopping"}
+
+
+def test_check68_add_it_to_my_shopping_list_is_still_the_pick(env):
+    bot, st = env["bot"], env["state"]
+    st["answers"]["mvp_compose"] = WIDE
+    say(env, "a lemon pasta recipe", {"intent": "ask", "spec": pasta_spec({"type": "now"})})
+    say(env, "email it to me and add it to my shopping list",
+        {"intent": "act_on_last", "actions": ["email.send", {"action": "todo.add", "params": {"list": "shopping"}}]})
+    assert [t["text"] for t in bot.store.todos(H)] == ["Lemon garlic pasta"]
+
+
+@pytest.mark.parametrize("text", ["when I send you a link, save it and send me similar ones",
+                                  "when I write a note send me a pasta recipe",
+                                  "when I text you, send me a workout"])
+def test_check69_an_event_is_not_a_word_to_say(text):
+    from mvp.followup import trigger_word
+    assert trigger_word(text) is None
+    assert trigger_word('when I say "the usual", send me a pasta recipe') == "the usual"   # quoted: their word
+
+
+def test_check69_the_word_inside_a_longer_message_goes_to_the_model(env):
+    st = env["state"]
+    form = {"intent": "new_rule", "spec": {"when": {"type": "on_request"}, "content": {
+        "goal": "a pasta recipe", "searches": ["pasta recipe"]}}}
+    assert say(env, "when I say pasta, send me a pasta recipe", form).startswith('Saved. Say "pasta"')
+    st["answers"]["mvp_compose"] = lemon_pick()
+    calls = sum(1 for c in env["calls"] if c == "mvp_interpret")
+    say(env, "any pasta with mushrooms?", {"intent": "chat", "reply": "ok"})
+    assert sum(1 for c in env["calls"] if c == "mvp_interpret") == calls + 1
+
+
+def test_check71_a_recipe_that_says_lets_talk_still_gets_its_ingredients(env):
+    from mvp.extract import default_fits
+    item = {"id": "itm_tk", "platform": "instagram", "source_url": "https://example.com/tk",
+            "caption": "Let's talk about this lemon pasta, one of the reasons I love lemons\nIngredients:\n"
+                       "- 200g spaghetti\n- 2 lemons\nBoil the pasta",
+            "interaction_kinds": ["save"], "platform_data": {"owner_handle": "chef", "owner_relation": "following"}}
+    add_items(env, [item])
+    env["bot"].pool.search = lambda lib, q, depth=300: {"ids": ["itm_tk"], "mode": "normal", "cost_usd": 0.0}
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": 1, "title": "Lemon pasta", "verdict": "clear", "lines": ["200g spaghetti", "2 lemons"]}], "intro": "x"}
+    msg = say(env, "a lemon pasta recipe", {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "a lemon pasta recipe", "searches": ["lemon pasta recipe"]}}})
+    assert "Ingredients" in msg
+    assert not default_fits(TALK_ITEM["caption"])                         # the talk still gets none
+    assert default_fits("My leg day habits\n3 sets of 12 squats")

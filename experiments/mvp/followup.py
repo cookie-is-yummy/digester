@@ -54,16 +54,22 @@ KIND_WORDS = {"ingredients": "the ingredients", "steps": "the steps", "key_point
 TRIGGER = re.compile(r"\bwhen(?:ever)?\s+i\s+(?:say|text|type|write|send(?:\s+you)?)\s+[\"'“‘]?"
                      r"([^\W\d_][\w'-]{0,24}?(?:\s+[^\W\d_][\w'-]{0,24}?)?)[\"'”’]?"
                      r"(?=\s*(?:[,.;:!?]|$)|\s+(?:send|give|show|find|get|pick|remind|text|then|you|please|pls)\b)", re.I)
-NOT_A_WORD = set("it that this so yes no ok okay something anything".split())
+NOT_A_WORD = set("it that this so yes no ok okay something anything you me".split())
+# checker, finding 69: "when I send you a link", "when I write a note" are events, not a word to say
+NOT_A_LEAD = set("a an the my your this that these those some any one me you him her them us it".split())
 
 
 def trigger_word(text):
     """The word a saved rule is asked for by ("boost"), from the person's own request, lower case; or None."""
-    m = TRIGGER.search((text or "").split(" / ")[0])
+    said = (text or "").split(" / ")[0]
+    m = TRIGGER.search(said)
     if not m:
         return None
     word = " ".join(m.group(1).lower().split())
-    return None if word in NOT_A_WORD or plain_command(word) is not None else word
+    quoted = m.start(1) > 0 and said[m.start(1) - 1] in "\"'“‘"   # 'when I say "the usual"' is a word they chose
+    if word in NOT_A_WORD or (word.split()[0] in NOT_A_LEAD and not quoted) or plain_command(word) is not None:
+        return None
+    return word
 
 
 def _said(text):

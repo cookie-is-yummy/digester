@@ -91,10 +91,17 @@ def default_extract(spec, *texts):
     return {"food": ["ingredients", "steps"], "fitness": ["steps"], "making": ["steps"]}.get(kind, [])
 
 
+# checker, finding 71: a caption that writes out a recipe, a workout or its steps is not a talk, whatever else it says
+# ("let's talk about this pasta", "one of the reasons I love it")
+WRITTEN_OUT = re.compile(r"\b(?:ingredients?|instructions|method|directions|steps?)\s*:|"
+                         r"\b\d+(?:[./]\d+)?\s*(?:g|kg|ml|l|oz|lbs?|tbsp|tsp|cups?|tablespoons?|teaspoons?)\b|"
+                         r"\b\d+\s*(?:reps|sets|rounds)\b|\b\d+\s*x\s*\d+\b", re.I)
+
+
 def default_fits(text):
     """Fix pass 3, finding 71: whether a pick's own text may get the default details (not a talk, a list of habits
-    or an opinion piece)."""
-    return not TALK.search(text or "")
+    or an opinion piece, unless it writes out a recipe, a workout or its steps)."""
+    return not TALK.search(text or "") or bool(WRITTEN_OUT.search(text or ""))
 
 
 def list_like(text):
