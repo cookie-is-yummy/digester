@@ -1008,7 +1008,9 @@ class HandlerMixin:
         h = person["handle"]
         self.note(intent="feedback")
         last = self._answer_seen(h)
-        plain = self._plain_send_seen(h, last) if kind in ("up", "down") and not pick_number else None
+        # "not this creator" is about the last answer's pick even when a reminder came after it (final check)
+        plain = self._plain_send_seen(h, last) if kind in ("up", "down") and not pick_number \
+            and not T.CREATOR_WORDS.search(text or "") else None
         if plain:   # review fix X2: a 👍 or 👎 to a reminder in their own words (it has no picks to attach it to)
             n = self.store.rule_number(h, plain["id"])
             return self.send(h, T.KEEP_COMING if kind == "up" else T.reminder_down(n))

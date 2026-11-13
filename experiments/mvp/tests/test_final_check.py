@@ -54,3 +54,35 @@ def test_a_reminder_in_their_own_words_goes_out_when_they_are_over_the_spending_
     out = tick_at(w, datetime(2026, 11, 13, 14, 0, 30, tzinfo=timezone.utc))   # 9am in New York
     assert "stretch" in out
     assert bot.store.one("SELECT status FROM runs WHERE kind='scheduled' ORDER BY id DESC LIMIT 1")["status"] == "sent"
+
+
+def test_not_this_creator_after_a_reminder_still_leaves_the_creator_out(w):
+    """Experience X2 answers a 👍 or 👎 that follows a reminder in the person's own words as being about that
+    reminder; experience X9 reads "not this creator" (feedback down or less) as about the last answer's pick. With a
+    reminder sent after the answer, "not this creator" (down) got the reminder's stop hint and the creator stayed."""
+    from datetime import datetime, timezone
+    from mvp.tests.test_review_experience import CR, YES_ING, composer
+    w["state"]["answers"]["mvp_compose"] = composer(("Instant pot chicken", "clear", YES_ING))
+    say(w, "chicken and rice?", CR)
+    say(w, "remind me to stretch in 30 minutes", note({"type": "once", "in_minutes": 30}, "stretch"))
+    assert "stretch" in tick_at(w, datetime(2026, 11, 12, 18, 31, tzinfo=timezone.utc))
+    out = say(w, "not this creator please", {"intent": "feedback", "feedback": "down"})
+    assert out == "Got it: I'll leave out posts by @souschef from now on."
+
+
+def test_held_notices_and_imports_are_read_again_under_the_lock(env):
+    """Reliability S1 re-reads the person under their lock for timed sends, to-dos, resumes and zone reverts; the
+    held notices and held import messages still used the person read before the lock, so a deletion or a snooze made
+    while they waited was ignored (a notice went to a deleted person)."""
+    from datetime import datetime, timezone
+    from mvp.tests.test_review_reliability import race
+    bot, ch = env["bot"], env["ch"]
+    bot.store.set_state(f"heldnotice:{H}", ["I was offline and missed your reminder."])
+    n0 = len(ch.outbox)
+    race(bot, lambda: bot.store.delete_person_data(H))
+    assert len(ch.outbox) == n0 and bot.store.get_state(f"heldnotice:{H}") is None
+    bot.load_people()
+    held = {"fresh": [], "by_source": {"instagram": 2}, "totals": {}, "refused": 0}
+    bot.store.set_state(f"heldimport:{H}", held)
+    race(bot, lambda: bot.store.set_snooze(H, datetime(2026, 11, 30, tzinfo=timezone.utc)))
+    assert len(ch.outbox) == n0 and bot.store.get_state(f"heldimport:{H}") == held

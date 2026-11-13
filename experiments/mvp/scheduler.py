@@ -150,6 +150,11 @@ class SchedulerMixin:
             if person and texts and (person["paused"] or self._held_now(person, now)):
                 continue
             with self.lock_for(h):
+                # read again under the lock (as review fix S1 does for timed sends): a deletion or a new snooze made
+                # while this waited wins (final check)
+                person, texts = self.store.person(h), self.store.get_state(row["key"]) or []
+                if person and texts and (person["paused"] or self._held_now(person, now)):
+                    continue
                 self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
                 if person and texts:
                     self._notice(h, "\n\n".join(dict.fromkeys(texts)))
@@ -164,7 +169,12 @@ class SchedulerMixin:
             if person["paused"] or self._held_now(person, now):
                 continue
             with self.lock_for(h):
+                person, held = self.store.person(h), self.store.get_state(row["key"])   # read again (final check)
+                if person and held and (person["paused"] or self._held_now(person, now)):
+                    continue
                 self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                if not person or not held:
+                    continue
                 from .refresh import announce_import
                 announce_import(self, person, held, now)
         for row in self.store.q("SELECT key FROM state WHERE key LIKE 'heldnew:%'"):
