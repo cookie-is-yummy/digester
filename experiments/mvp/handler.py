@@ -770,7 +770,13 @@ class HandlerMixin:
         if c.source != "library" or not spec.when.repeating or info.get("run_id") != run_id \
                 or spec.when.type == "new_items":   # review fix X8: it sends what they save next, so it never runs dry
             return "", ""
+        if c.outside in ("some", "only"):
+            # fix pass 4, finding 77: new videos from YouTube come with each send, so it never runs dry: said instead
+            return (T.OUTSIDE_RULE_NOTE if c.outside == "some" else T.OUTSIDE_RULE_ONLY), ""
         supply = info.get("n_clear", 0) + info.get("n_close", 0)
+        # fix pass 4, finding 77: the composer gives verdicts only for the few it shows (one or two for a rule that
+        # sends one), so the estimate is the ranked list the rule draws from, by the kind and the topic words
+        supply = max(supply, info.get("n_supply") or 0)
         # fewer than 3 that fit BEYOND the pick this preview shows: the rule would run dry within a few sends
         low = supply - min(supply, info.get("n_picks", 0)) < 3
         shown = bool(getattr(self._tl, "auto_outside", False))
@@ -928,6 +934,9 @@ class HandlerMixin:
             return self.send(h, T.once_set(first, what, n) + notes)
         if spec.when.type == "random" or spec.when.window:
             first = None  # random moments are never shown in advance
+        if c.source == "library" and c.outside in ("some", "only") and spec.when.repeating:
+            # fix pass 4, finding 77: where its picks come from, said when it starts too
+            notes = (T.OUTSIDE_RULE_NOTE if c.outside == "some" else T.OUTSIDE_RULE_ONLY) + notes
         return self.send(h, T.rule_started(edited, describe(spec.when), c.goal, avoid, first) + notes)
 
     @staticmethod

@@ -933,6 +933,12 @@ def few_finished(n_clear, lang=None, noun=None):
                                     noun=one if n_clear == 1 else many, fit=t.get("fit", ("", ""))[0 if n_clear == 1 else 1])
 
 
+# fix pass 4, finding 77: a rule with new videos from YouTube as well never runs dry; the preview and the start line say
+# where its picks come from instead of a heads-up
+OUTSIDE_RULE_NOTE = " Picks come from your saves, with related videos from YouTube as well, so it won't run dry."
+OUTSIDE_RULE_ONLY = " Picks come from YouTube, not from your saves."
+
+
 def supply_note(n):
     """Finding 19: a repeating rule whose supply in the library is tiny."""
     if n == 0:

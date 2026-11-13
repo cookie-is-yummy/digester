@@ -168,6 +168,11 @@ class OutputsMixin:
             # whose ingredients: one pick at a time. Fix pass 3, finding 68: the wider links are not picks with
             # details, so an answer with one recommended pick and a wider selection means that pick
             main = [n for n, iid in enumerate(items, 1) if kept.get(iid, {}).get("main", True)] if kept else []
+            lead = kept.get(items[0]) or {}
+            if len(main) > 1 and lead.get("main", True) and (lead.get("facts") or {}).get("ingredients"):
+                # fix pass 4, finding 78: "it", "the ingredients" with no number mean the lead pick, the one the answer
+                # opened with and showed the ingredients of; the alternatives under it were one line each
+                main = [1]
             if len(main) != 1:
                 return None, False, None, T.which_pick(len(items))
             numbers = main

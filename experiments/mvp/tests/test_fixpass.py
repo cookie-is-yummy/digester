@@ -377,7 +377,9 @@ def test_19_a_rule_with_a_tiny_supply_says_so_in_its_preview(yt):
         {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta"}]}
     spec = pasta_spec({"type": "schedule", "days": ["FRI"], "times": ["19:00"]})
     msg = str(say(yt, "a pasta recipe every friday at 7pm", {"intent": "new_rule", "spec": spec}))
-    assert "Heads up: I only see about 1 post in your library that fits, so this will run dry quickly." in msg
+    # fix pass 4, finding 77: the count is the ranked list's posts that look like recipes and name pasta (two here:
+    # "Pasta night! recipe in the video" is one too), not only the composer's one verdict
+    assert "Heads up: I only see about 2 posts in your library that fit, so this will run dry quickly." in msg
     assert "Want me to add related videos from outside your saves? Reply YES to start it that way" in msg
     assert not yt["yt"].searches()                                        # an offer only: nothing searched yet
     say(yt, "yes", {"intent": "confirm"})

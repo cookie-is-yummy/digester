@@ -453,7 +453,10 @@ class ExecutorMixin:
                              "finished": finished,
                              # fix pass 3, finding 67 (a): how many candidates look like the kind asked for
                              "n_fit": self._kind_fits(person, spec, cands, request_text, extra)
-                             if finished and cands_override is None else None}
+                             if finished and cands_override is None else None,
+                             # fix pass 4, finding 77: what the rule can draw from, over the whole ranked list
+                             "n_supply": self._supply(person, spec, cands, request_text, extra)
+                             if cands_override is None else None}
         for i, p in enumerate(picks, 1):
             self.store.add_delivery(person["handle"], rule_id if kind in ("scheduled", "manual") else None, run_id,
                                     p["item"].id, i, at=self.clock())
@@ -514,6 +517,27 @@ class ExecutorMixin:
             return kind_fits(cands, spec, texts, lambda it: own_text(it, extra or {}))
         except Exception as e:  # noqa: BLE001 - a count only; never lose the answer to it
             print(f"kind count failed: {type(e).__name__}", file=sys.stderr)
+            return None
+
+    def _supply(self, person, spec, cands, request_text, extra):
+        """Fix pass 4, finding 77: a real estimate of what a rule can draw from: the ranked candidates (not the few the
+        composer gave verdicts for) that look like the kind asked for (a recipe, a workout, a whole tutorial) and share
+        a topic word with the request. None when it cannot be worked out."""
+        from .compose import own_text
+        from .outside import _tokens, kind_fits, query_words
+        from .retrieve import _stem
+        own = getattr(self._tl, "own_words", None)
+        texts = [request_text or ""] if own is None else [own]
+        try:
+            n = kind_fits(cands, spec, texts, lambda it: own_text(it, extra or {}))
+            if n is not None:
+                return n
+            stems = {_stem(w) for w in query_words(spec, texts)}
+            if not stems:
+                return len(cands)
+            return sum(1 for it in cands if stems & {_stem(t) for t in _tokens(own_text(it, extra or {}))})
+        except Exception as e:  # noqa: BLE001 - a count only; never lose the answer to it
+            print(f"supply count failed: {type(e).__name__}", file=sys.stderr)
             return None
 
     def _outside(self):

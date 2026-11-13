@@ -379,3 +379,84 @@ def test_83_my_rules_lists_the_export_reminders_by_a_short_name(env):
     msg = last(env["ch"])
     assert "Instagram export reminder" in msg and "YouTube export reminder" in msg
     assert "takeout.google.com" not in msg and "accountscenter" not in msg
+
+
+# ======================================= 77. "will run dry" on a topic with many saves =======================================
+DINNERS = [{"id": f"itm_q{i}", "platform": "instagram", "source_url": f"https://example.com/q{i}",
+            "caption": f"{name}, a quick dinner\nIngredients:\n- 2 cups rice\n- 1 tbsp oil\nBake for 20 minutes",
+            "interaction_kinds": ["save"], "platform_data": {"owner_handle": "chef", "owner_relation": "following"}}
+           for i, name in enumerate(["Sheet pan chicken", "Veggie fried rice", "Baked salmon", "Bean chili",
+                                     "Lemon chicken", "Tofu bowl"])]
+DINNER_RULE = rule_form("a quick dinner idea", ["quick dinner", "easy dinner recipe"], ["ends with a dish you can eat"],
+                        when={"type": "random", "per": "week", "count": 2})
+
+
+def one_dinner(u):
+    return {"picks": [{"n": number_of(u, "Sheet pan chicken"), "verdict": "clear", "title": "Sheet pan chicken",
+                       "criteria": [{"answer": "yes", "quote": "Bake for 20 minutes"}]}]}
+
+
+def test_77_a_rule_on_a_topic_with_many_saves_gets_no_run_dry_warning(yt):
+    add_items(yt, [dict(r) for r in DINNERS])
+    yt["bot"].pool.search = lambda lib, q, depth=300: {"ids": [r["id"] for r in DINNERS], "mode": "normal",
+                                                       "cost_usd": 0.0}
+    yt["state"]["answers"]["mvp_compose"] = one_dinner
+    msg = str(say(yt, "randomly surprise me with a quick dinner idea a couple of times a week", DINNER_RULE))
+    assert "Sheet pan chicken" in msg and "Reply YES to start" in msg
+    assert "run dry" not in msg and "Heads up" not in msg and "outside your saves" not in msg
+
+
+def test_77_a_tiny_supply_still_gets_the_warning(yt):
+    add_items(yt, [dict(r) for r in DINNERS[:2]])
+    yt["bot"].pool.search = lambda lib, q, depth=300: {"ids": [r["id"] for r in DINNERS[:2]], "mode": "normal",
+                                                       "cost_usd": 0.0}
+    yt["state"]["answers"]["mvp_compose"] = one_dinner
+    msg = str(say(yt, "randomly surprise me with a quick dinner idea a couple of times a week", DINNER_RULE))
+    assert "Heads up: I only see about 2 posts in your library that fit, so this will run dry quickly." in msg
+
+
+def test_77_a_rule_with_new_videos_says_where_picks_come_from_and_never_run_dry(yt):
+    yt["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta"}]}
+    form = rule_form("a pasta recipe", ["pasta recipe"], when={"type": "schedule", "days": ["FRI"], "times": ["19:00"]},
+                     outside="some")
+    msg = str(say(yt, "every friday a pasta recipe, and new ones from youtube too", form))
+    assert "Picks come from your saves, with related videos from YouTube as well, so it won't run dry." in msg
+    assert "run dry quickly" not in msg and "Heads up" not in msg
+    msg = str(say(yt, "yes", {"intent": "confirm"}))
+    assert "Picks come from your saves, with related videos from YouTube as well" in msg
+    assert yt["bot"].store.rules(H)[-1]["spec"]["content"]["outside"] == "some"
+
+
+# ======================================= 78. "the ingredients" after a lead pick and one close one ====================
+def test_78_the_ingredients_of_the_lead_pick_after_a_closest_answer_with_one_more(env):
+    from mvp.tests.test_mvp import pasta_spec
+    bot, st = env["bot"], env["state"]
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [   # nothing clear: the closest and one more close
+        {"n": number_of(u, "Lemon garlic"), "verdict": "close", "title": "Lemon garlic pasta",
+         "lines": ["200g spaghetti", "2 lemons"]},
+        {"n": number_of(u, "Pasta night"), "verdict": "close", "title": "Pasta night"}]}
+    spec = pasta_spec({"type": "now"})
+    spec["content"]["count"] = 2
+    msg = say(env, "a lemon pasta recipe", {"intent": "ask", "spec": spec})
+    assert "The closest I have is Lemon garlic pasta" in msg and "Or these, which are close too:" in msg
+    msg = say(env, "email it to me and add the ingredients to my grocery list",
+              {"intent": "act_on_last", "actions": ["email.send", {"action": "todo.add", "params": {"list": "grocery"}}]})
+    assert "Which one?" not in msg
+    assert [t["text"] for t in bot.store.todos(H)] == ["200g spaghetti", "2 lemons"]
+
+
+def test_78_equals_with_no_details_shown_still_ask_which_one(env):
+    from mvp.tests.test_mvp import pasta_spec
+    st = env["state"]
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, "Pasta night"), "verdict": "clear", "title": "Pasta night"},
+        {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta",
+         "lines": ["200g spaghetti", "2 lemons"]}]}
+    st["answers"]["mvp_extract"] = lambda u: {}
+    spec = pasta_spec({"type": "now"})
+    spec["content"]["count"], spec["content"]["extract"] = 2, []
+    say(env, "two pasta posts", {"intent": "ask", "spec": spec})
+    msg = say(env, "add the ingredients to my grocery list", {"intent": "todo_add", "what": "ingredients",
+                                                               "list": "grocery"})
+    assert "Which one?" in msg
