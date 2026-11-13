@@ -550,7 +550,7 @@ def test_27_only_new_stuff_after_an_answer_is_more_from_outside_only(yt):
     n = interp_calls(yt)
     yt["bot"].on_message(H, "only new stuff, not from my saves")
     msg = str(yt["replies"][-1])
-    assert interp_calls(yt) == n and msg.startswith("Not from your saves, but close to them:")
+    assert interp_calls(yt) == n and msg.startswith("Here are some new recipes from YouTube, not from your saves:")   # (fix pass 5, finding 85)
     q = yt["yt"].searches()[-1][1]["q"]
     assert "pasta" in q and "new" not in q.split()
 

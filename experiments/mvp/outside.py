@@ -437,6 +437,11 @@ class Outside:
         if max_minutes:   # findings 57 and 59: a video over the length the request allows is never shown
             over = sum(1 for v in left if v["duration_s"] > max_minutes * 60)
             left = [v for v in left if v["duration_s"] <= max_minutes * 60]
+        from .compose import FINISHED, tips_only
+        if any(FINISHED.search(cr) for cr in c.criteria) or request_kind(texts, spec):
+            # fix pass 5, finding 85: for something to make or do, a whole video comes before tips (by YouTube's own
+            # title) and one under 3 minutes; only an order, so never fewer picks because of it
+            left = sorted(left, key=lambda v: (tips_only(v["title"]), 0 < (v.get("duration_s") or 0) < 180))
         picks = left[:config.OUTSIDE_SHOW]
         out["picks"] = picks
         if not picks:

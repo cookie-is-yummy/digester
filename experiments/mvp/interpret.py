@@ -1407,6 +1407,32 @@ OUTSIDE_ASKED = re.compile(
     # the languages the replies may be written in (lang.py) and the ones detect_lang knows
     r"|\bnuev[oa]s?\b|\bnouveaux?\b|\bnouvelles?\b|\bneu(?:e|en|er|es)?\b|\bnov[oa]s?\b|\bnuov[oaie]\b"
     r"|\bfuera de\b|\bm[aá]s como (?:estos|estas|esto|este|esta)\b", re.I)
+# fix pass 5, finding 85: the message asks for things it says must be new to them ("that I haven't seen", "not from my
+# saves", "outside my saves", "that aren't in my library", "I don't already have"): outside "only", whatever the model
+# filled. "a recipe I haven't seen in a while" or "a saved video I haven't watched yet" is about their own saves.
+ONLY_NEW = re.compile(
+    r"\bi\s*(?:haven['’]?t|have not|have never|never|didn['’]?t|did not)\s+(?:already\s+|yet\s+)?"
+    r"(?:seen|watched|saved|kept)\b(?!\s+(?:\w+\s+)?(?:in a while|for a while|lately|recently|in ages|in a long time|"
+    r"in months|yet)\b)"
+    r"|\bnot (?:from|in) my (?:saves|saved|library|likes)\b|\boutside (?:of )?my (?:saves|saved|library)\b"
+    r"|\b(?:aren['’]?t|are not|isn['’]?t|is not|not) (?:already )?(?:in|from) my (?:saves|library|saved)\b"
+    r"|\bi (?:don['’]?t|do not) already have\b|\bi (?:don['’]?t|do not) have (?:already|saved)\b", re.I)
+FROM_SAVES = re.compile(r"\b(?:from|in|among|of) my (?:saves|saved|library|likes|watch later|playlists?|collections?)\b"
+                        r"|\b(?:i|i've|i have) (?:saved|kept|liked)\b|\bsaved\b", re.I)
+
+
+# "pasta recipes, and show me a few new ones from outside my saves": both, so outside stays "some"
+ALSO_NEW = re.compile(r"\b(?:and|plus|also)\s+(?:show me\s+|give me\s+|send me\s+|find me\s+|add\s+)?"
+                      r"(?:a few\s+|some\s+|a couple(?: of)?\s+|few\s+|any\s+)?(?:new|more|other)\b"
+                      r"|\bas well\b|\btoo\b", re.I)
+
+
+def only_new(message):
+    """True when the message's own words ask only for things from outside the saves (finding 85)."""
+    m = ONLY_NEW.search(message or "")
+    return bool(m) and not FROM_SAVES.search(ONLY_NEW.sub(" ", message or "")) and not ALSO_NEW.search(message or "")
+
+
 # the message says how they kept it ("from my saves", "that I liked", "I watched") or where ("on YouTube", "reels")
 # (checker of fix pass 4: "I'd like a workout", "something to watch tonight" and "saves time" name no kind of saving)
 KINDS_ASKED = re.compile(r"\b(?:saved|my saves|from saves|kept|liked|my likes|watched|watch history|watch later|seen|"
@@ -1586,6 +1612,8 @@ def profile_guard(it: Interpretation, message, prof, pending=None, rules=()):
         if x.intent == "more":
             if x.outside in ("some", "only") and not OUTSIDE_ASKED.search(words) and prefs.get("outside") is not True:
                 x.outside = None
+            if only_new(message):   # fix pass 5, finding 85
+                x.outside = "only"
             if x.criteria:
                 x.criteria = guard_criteria(x.criteria, x.avoid, words, prof or {})
             continue
@@ -1595,6 +1623,8 @@ def profile_guard(it: Interpretation, message, prof, pending=None, rules=()):
         if c.outside in ("some", "only") and not OUTSIDE_ASKED.search(words) and prefs.get("outside") is not True \
                 and not (old is not None and old.outside == c.outside):
             c.outside = "none"
+        if x.intent in ("ask", "new_rule") and only_new(message):
+            c.outside = "only"   # fix pass 5, finding 85: "new ... that I haven't seen" is never a pick from the saves
         if c.kinds and not KINDS_ASKED.search(words) and not (old is not None and old.kinds == c.kinds):
             c.kinds = []
         if c.platforms and not PLATFORMS_ASKED.search(words) and not (old is not None and old.platforms == c.platforms):

@@ -259,7 +259,9 @@ def test_75_outside_is_kept_only_when_the_message_asks_for_new_things(text, want
     assert profile_guard(it, text, {"prefs": {}}).spec.content.outside == want
     # their profile says they want new things too: kept
     it = Interpretation.model_validate(ask_form("x things", ["x"], outside="some"))
-    assert profile_guard(it, text, {"prefs": {"outside": True}}).spec.content.outside == "some"
+    # (fix pass 5, finding 85: "not from my saves" is new things only, whatever the model filled)
+    assert profile_guard(it, text, {"prefs": {"outside": True}}).spec.content.outside == \
+        ("only" if want == "only" else "some")
 
 
 def test_75_the_export_reminders_are_listed_to_the_model_by_their_short_names(env):

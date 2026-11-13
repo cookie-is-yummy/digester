@@ -346,6 +346,14 @@ class HandlerMixin:
             # a setup answer the form call merged already: no second "Noted" and no small talk beside the setup's
             # own reply (fix pass 2, finding 42)
             return None
+        if text in (getattr(self._tl, "merged_text", None), getattr(self._tl, "setup_text", None)) \
+                and not getattr(self._tl, "chained", False) and (
+                    it.intent == "chat" and getattr(self._tl, "setup_text", None) == text
+                    or (it.intent == "confirm" and not (pending and pending["kind"] == "confirm_rule"))
+                    or (it.intent == "decline" and not pending)):
+            # fix pass 5, finding 86: the setup answers this message itself; a "yes" or "no" read from it with
+            # nothing waiting for one, or small talk, gets no reply of its own ("I don't have anything waiting ...")
+            return None
         chained = getattr(self._tl, "chained", False)
         if pending and not chained and pending["kind"] == "clarify" and it.intent == "confirm" \
                 and pending["payload"].get("question") == T.HOW_OFTEN_ASK:

@@ -243,6 +243,13 @@ OUTSIDE_ERROR = "I couldn't reach YouTube just now, so I couldn't look for new t
 OUTSIDE_ONLY_TAIL = " Ask without \"new\" and I'll look in your own saves."
 
 
+def outside_only_head(noun=None):
+    """Fix pass 5, finding 85: the opening line of an answer made only of new finds from YouTube."""
+    many = (noun or (None, None))[1]
+    return f"Here are some new {many} from YouTube, not from your saves:" if many else \
+        "Here are some new ones from YouTube, not from your saves:"
+
+
 def outside_none_short(minutes):
     """Findings 57 and 59: every new video found was longer than the request allows."""
     return f"There's no new one on YouTube under {minutes} minutes today, so I didn't send a longer one."
@@ -814,6 +821,38 @@ NO_LEAD = re.compile(r"^\s*(?:no|nope|nah|not now|no thanks|no thank you)(?:\s*[
                      r"\s+(?:to\s+)?(?:the\s+)?(?:export\s+)?reminders?\b|\s*$)", re.I)
 NO_REMINDERS = re.compile(r"\bno\s+(?:export\s+)?reminders?\b|\bdon'?t\s+remind\b|\bwithout\s+(?:the\s+)?reminders?\b|"
                           r"\bskip\s+(?:the\s+)?reminders?\b|\bno\s+to\s+the\s+reminders?\b", re.I)
+
+# fix pass 5, finding 86: replies that only answer the setup's own question, so nothing else may answer them too
+_SETUP_FILLER = set("and but so the a an my it its it's is that's thats this that all fine good ok okay sure yes yep "
+                    "yeah right correct perfect great thanks thank you please for now then just i i'm im am we".split())
+_CONTACT_PARTS = re.compile(
+    r"\b(?:skip|no|without|don'?t need|do not need|no need for|not giving|pass on|leave out|forget)\s+(?:the\s+|an?\s+|my\s+)?"
+    r"e-?mail(?:\s+address)?(?:\s+(?:part|bit|step|one))?\b"
+    r"|\b(?:i\s+)?(?:don'?t|do not)\s+(?:want|need)\s+(?:to\s+give\s+)?(?:an?\s+|my\s+)?e-?mail\b"
+    r"|\b(?:the\s+|my\s+)?time\s?zone(?:'s|\s+is|\s+looks)?\s+(?:is\s+)?(?:fine|right|correct|good|ok|okay|perfect|"
+    r"spot on)\b|\b(?:the\s+|my\s+)?time\s?zone\b|\b(?:the\s+)?time\b(?=.*\b(?:fine|right|correct)\b)", re.I)
+_REMINDER_WORDS = set("set setup up start the export exports reminder reminders remind me them those it that please do "
+                      "go ahead both instagram youtube for and a sure ok okay yes yep yeah thanks thank you sounds good "
+                      "great".split())
+
+
+def _left_words(text):
+    return [w for w in re.findall(r"[a-z']+", text.lower()) if w not in _SETUP_FILLER]
+
+
+def contact_only(text):
+    """'skip the email, time zone is fine', 'no email, the time zone is right': the reply says only that the email can
+    wait and the time zone is right, with nothing else to act on."""
+    if not _CONTACT_PARTS.search(text or ""):
+        return False
+    return not _left_words(_CONTACT_PARTS.sub(" ", text))
+
+
+def reminders_only(text):
+    """'set up the export reminders', 'remind me', 'set them up please': the rest of a yes to the export reminders
+    says nothing more than yes."""
+    words = re.findall(r"[a-z']+", (text or "").lower())
+    return bool(words) and all(w in _REMINDER_WORDS or w in _SETUP_FILLER for w in words)
 
 
 def profile_changed(changes, skipped=False):

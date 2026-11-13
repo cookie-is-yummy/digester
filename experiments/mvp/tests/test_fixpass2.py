@@ -384,7 +384,8 @@ def test_50_51_a_change_says_what_changed_and_the_rule_keeps_its_own_words_for_i
     yt["clock"][0] = datetime(2026, 11, 13, 13, 1, tzinfo=UTC)
     assert bot.tick() == 1
     sent = last(yt["ch"])
-    assert T().OUTSIDE_NO_WORDS not in sent and "Not from your saves, but close to them:" in sent
+    assert T().OUTSIDE_NO_WORDS not in sent
+    assert "Here are some new Blender tutorials from YouTube, not from your saves:" in sent   # (fix pass 5, finding 85)
     q = yt["yt"].searches()[-1][1]["q"]
     assert "blender" in q.lower() and "new" not in q.split()
 

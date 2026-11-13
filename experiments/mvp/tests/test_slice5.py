@@ -178,7 +178,8 @@ def test_outside_only_shows_just_the_block_and_no_model_or_delivery(yt):
     bot = yt["bot"]
     n_compose = sum(1 for c in yt["calls"] if c == "mvp_compose")
     msg = say(yt, "only new pasta stuff, not from my saves", outside_ask(outside="only"))
-    assert str(msg).startswith("Not from your saves, but close to them:\n• One Pot Chicken & Rice")
+    assert str(msg).startswith("Here are some new ")   # fix pass 5, finding 85: an opening line that fits
+    assert "from YouTube, not from your saves:\n• One Pot Chicken & Rice" in str(msg)
     assert sum(1 for c in yt["calls"] if c == "mvp_compose") == n_compose      # no library search, no model
     assert not bot.store.q("SELECT * FROM deliveries") and bot.store.last_answer(H) is None
     assert say(yt, "👎", {"intent": "chat"}) == "Thanks! Nothing to attach that to yet."   # feedback never lands on them
@@ -711,7 +712,7 @@ def test_outside_only_with_an_email_says_it_was_not_emailed(yt):
     a = outside_ask(outside="only")
     a["spec"]["do"] = [{"action": "email.send"}, {"action": "todo.add"}]
     msg = str(say(yt, "email me only new pasta videos, not from my saves, and add them to my list", a))
-    assert msg.startswith("Not from your saves, but close to them:")
+    assert msg.startswith("Here are some new ") and "from YouTube, not from your saves:" in msg   # (finding 85)
     assert msg.endswith("\nNew finds from YouTube only come here in the chat, so I didn't email them or add them to "
                         "your list.")
     assert not yt["bot"].store.q("SELECT * FROM todos") and not yt["bot"].store.outbox(H)

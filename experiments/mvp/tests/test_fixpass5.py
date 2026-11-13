@@ -282,3 +282,123 @@ def test_84_a_timed_send_with_count_one_never_makes_a_second_call(food):
     assert len(seen) == 2   # the one retry before "nothing" (section 4), and no second look
     row = bot.store.one("SELECT steps FROM runs WHERE kind='scheduled' ORDER BY id DESC LIMIT 1")
     assert "second_look" not in json.loads(row["steps"])
+
+
+# ======================================= 86. one setup reply, one bot message =======================================
+from mvp.tests.test_fixpass2 import CHAT, _to_the_last_message  # noqa: E402
+from mvp.tests.test_slice6 import first_requests_answer, rich, start  # noqa: E402,F401
+
+CONFIRM = {"intent": "confirm"}
+
+
+def _to_contact(e):
+    start(e)
+    e["state"]["answers"]["mvp_first_requests"] = first_requests_answer
+    return say(e, "skip", CHAT)                              # the read: the email and time zone question comes next
+
+
+@pytest.mark.parametrize("reply", ["skip the email, time zone is fine", "no email, the time zone is right",
+                                   "Skip the email. The time zone is correct, thanks"])
+def test_86_the_email_and_time_zone_reply_gets_one_message(rich, reply):
+    bot, ch = rich["bot"], rich["ch"]
+    _to_contact(rich)
+    n0, calls = len(ch.outbox), len(rich["calls"])
+    rich["state"]["answers"]["mvp_interpret"] = lambda u: CONFIRM   # what the model read it as, live
+    bot.on_message(H, reply)
+    out = [m[2] for m in ch.outbox[n0:]]
+    assert len(out) == 1 and "waiting for a yes" not in out[0] and "export" in out[0]
+    assert "mvp_interpret" not in rich["calls"][calls:]          # read by code: no paid call
+
+
+def test_86_a_contact_reply_with_more_in_it_still_never_says_nothing_is_waiting(rich):
+    bot, ch = rich["bot"], rich["ch"]
+    _to_contact(rich)
+    n0 = len(ch.outbox)
+    rich["state"]["answers"]["mvp_interpret"] = lambda u: CONFIRM
+    bot.on_message(H, "yes that all sounds fine to me honestly")   # not read by code: the model reads "yes"
+    out = [m[2] for m in ch.outbox[n0:]]
+    assert len(out) == 1 and "waiting for a yes" not in out[0]
+
+
+@pytest.mark.parametrize("reply", ["yes set up the export reminders", "sure, remind me", "ok", "yes please set them up"])
+def test_86_a_yes_to_the_export_reminders_gets_one_message(rich, reply):
+    bot, ch = rich["bot"], rich["ch"]
+    _to_the_last_message(rich)
+    n0 = len(ch.outbox)
+    rich["state"]["answers"]["mvp_interpret"] = lambda u: CONFIRM
+    rich["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "request"}
+    bot.on_message(H, reply)
+    out = [m[2] for m in ch.outbox[n0:]]
+    assert len(out) == 1 and out[0].startswith("Done. Next Instagram reminder") and len(bot.store.rules(H)) == 2
+
+
+def test_86_a_yes_with_a_request_in_it_still_answers_the_request(rich):
+    bot, ch = rich["bot"], rich["ch"]
+    _to_the_last_message(rich)
+    n0 = len(ch.outbox)
+    rich["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "request"}
+    rich["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": number_of(u, "Lemon garlic"), "verdict": "clear",
+                                                                    "title": "Lemon garlic pasta"}]}
+    rich["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "a pasta recipe", "searches": ["pasta"]}}}
+    bot.on_message(H, "yes, and find me a pasta recipe")
+    out = [m[2] for m in ch.outbox[n0:]]
+    assert out[0].startswith("Done. Next Instagram reminder") and any("Lemon garlic pasta" in m for m in out)
+    assert not any("waiting for a yes" in m for m in out)
+
+
+# ======================================= 85. "new ... that I haven't seen" =======================================
+from mvp.tests.test_slice5 import FakeYouTube, video  # noqa: E402
+
+BLENDER_NEW = "find me new blender tutorials on YouTube that I haven't seen"
+
+
+def blender_form(outside="some"):
+    return {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "new Blender tutorials", "searches": ["blender tutorial"], "platforms": ["youtube"],
+        "criteria": ["walks through one whole project from start to finish"], "outside": outside}}}
+
+
+@pytest.mark.parametrize("text,want", [
+    (BLENDER_NEW, "only"),
+    ("new pasta recipes I haven't watched", "only"),
+    ("workouts I don't already have", "only"),
+    ("sourdough videos that aren't in my library", "only"),
+    ("find me new blender tutorials", "some"),                              # a plain "new" stays "some"
+    ("a blender tutorial I haven't seen in a while", "none"),               # their own saves
+    ("a saved video I haven't watched yet", "none"),
+    ("pasta recipes, and show me a few new ones from outside my saves", "some"),   # both
+])
+def test_85_unseen_or_not_from_my_saves_is_new_things_only(text, want):
+    from mvp.interpret import profile_guard
+    from mvp.schema import Interpretation
+    it = Interpretation.model_validate(blender_form(outside="none" if want == "none" else "some"))
+    assert profile_guard(it, text, {"prefs": {}}).spec.content.outside == want
+
+
+def test_85_the_answer_shows_no_pick_from_the_saves_and_no_video_they_have(yt):
+    bot = yt["bot"]
+    seen = []
+    yt["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": [{"n": 1, "verdict": "clear",
+                                                                                   "title": "Already saved video"}]})[1]
+    msg = str(say(yt, BLENDER_NEW, blender_form()))
+    assert not seen and "I recommend" not in msg and "Already saved" not in msg   # no library pick, no library video
+    assert msg.startswith("Here are some new Blender tutorials from YouTube, not from your saves:")
+    assert "LIBVID00001" not in msg and "VIDaaaaaa01" in msg
+
+
+def test_85_outside_picks_for_something_to_make_put_whole_videos_before_tips_and_very_short_ones(yt):
+    order = ["VIDshort001", "VIDtips0001", "VIDwhole001", "VIDwhole002"]
+    yt["bot"].outside.http = FakeYouTube(order, [
+        video("VIDshort001", "Blender donut in 90 seconds", dur="PT1M47S"),
+        video("VIDtips0001", "5 Blender shortcuts you need", dur="PT8M"),
+        video("VIDwhole001", "Blender low poly house, full tutorial", dur="PT22M"),
+        video("VIDwhole002", "Model a chair in Blender", dur="PT12M")])
+    msg = str(say(yt, BLENDER_NEW, blender_form()))
+    shown = sorted([v for v in order if v in msg], key=msg.index)
+    assert shown == ["VIDwhole001", "VIDwhole002", "VIDshort001"]   # a preference: still three picks
+    # with only tips left, they are still shown (never fewer picks because of it)
+    yt["bot"].outside.http = FakeYouTube(["VIDtips0001"], [video("VIDtips0001", "5 Blender shortcuts you need")])
+    yt["bot"].store.x("DELETE FROM outside_cache")
+    msg = str(say(yt, BLENDER_NEW + " please", blender_form()))
+    assert "VIDtips0001" in msg

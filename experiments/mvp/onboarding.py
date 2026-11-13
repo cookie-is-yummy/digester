@@ -170,7 +170,8 @@ class OnboardingMixin:
 
     def _onboard_contact(self, person, text, now):
         self.note(intent="onboarding")
-        if T.SKIP.match(text) or T.RIGHT.match(text):
+        if T.SKIP.match(text) or T.RIGHT.match(text) or T.contact_only(text):
+            # (fix pass 5, finding 86: "skip the email, time zone is fine" is the setup's own answer, never a "yes")
             return self._onboard_final(person, now)
         m = ADDRESS.search(text)
         if m and re.match(EMAIL, m.group(0)) and not self.to_someone_else(text):
@@ -179,10 +180,19 @@ class OnboardingMixin:
                     if w not in FILLER]
             if rest:   # "a@b.co, and I'm in Chicago now": the rest is a request of its own (without the address,
                 #          which is set already)
-                self.answer_normally(person, " ".join((text[:m.start()] + " " + text[m.end():]).split()), now)
+                self._setup_answers(person, " ".join((text[:m.start()] + " " + text[m.end():]).split()), now)
             return self._onboard_final(person, now, lead=line)
-        self.answer_normally(person, text, now)   # a time zone ("I'm in Chicago") or any other request
+        self._setup_answers(person, text, now)   # a time zone ("I'm in Chicago") or any other request
         return self._onboard_final(person, now)
+
+    def _setup_answers(self, person, text, now):
+        """A message the setup answers itself, passed on for the request it may hold: a bare "yes", "no" or small talk
+        read from it gets no reply of its own beside the setup's (fix pass 5, finding 86)."""
+        self._tl.setup_text = text
+        try:
+            return self.answer_normally(person, text, now)
+        finally:
+            self._tl.setup_text = None
 
     # ---------- step 4: the export routine and the first requests ----------
     def _onboard_final(self, person, now, lead=""):
@@ -217,7 +227,8 @@ class OnboardingMixin:
         if started:
             text_rest = T.NO_LEAD.sub("", T.YES_LEAD.sub("", text)).strip(" ,.!;:-")
             text_rest = re.sub(r"^(?:and|also|plus|y)\b[\s,]*", "", text_rest, flags=re.I).strip()
-            if not text_rest or T.YES.match(text_rest):   # "ok, sure": only the reminders
+            if not text_rest or T.YES.match(text_rest) or T.reminders_only(text_rest):
+                # "ok, sure": only the reminders (fix pass 5, finding 86: also "yes set up the export reminders")
                 return self.send(h, started)
             started += "\n\n"
         others = (st.get("others") or 0) + 1

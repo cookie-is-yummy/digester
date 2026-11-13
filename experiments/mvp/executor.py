@@ -879,7 +879,10 @@ class ExecutorMixin:
                                                    "rule_id": rule_id if kind in ("scheduled", "manual") else None,
                                                    "text": (request_text or "")[:300], "shown": []})
         if n:
-            msg = self._outside_parts(res["picks"])
+            # fix pass 5, finding 85: an opening line that fits an answer made only of new finds
+            label = None if self._answer_lang() else T.outside_only_head(
+                T.request_noun(spec.content.goal or "", request_text or "", *spec.content.searches))
+            msg = self._outside_parts(res["picks"], label=label)
             undone = [a.action for a in spec.do if a.action != "message.send"]
             if undone:   # finds from YouTube are never kept, so no email, calendar or list entry is made: say so
                 msg = msg + ("\n\n" + T.outside_only_no_actions(undone))
