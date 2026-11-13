@@ -107,8 +107,8 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
 - **Calendar**: a Google Calendar "add event" link in the reply (no sign-in) and an `.ics` file in the outbox, attached
   when the answer is emailed. One event per send, in the person's zone, 30 minutes unless they say otherwise.
 - **Acting on an answer**: "email it to me", "add the first one to my calendar for Saturday at 10", "add its
-  ingredients to my grocery list", "remind me of the second one tonight at 8" (a one-time rule that sends that pick
-  again, with no new search).
+  ingredients to my grocery list" (also "put what I need to buy on my shopping list"), "remind me of the second one
+  tonight at 8" (a one-time rule that sends that pick again, with no new search).
 - **The bot's contact card** for Messages link previews: `python3 -m mvp.contact_card --out bot.vcf` (name from
   `MVP_BOT_NAME`, number from `SENDBLUE_FROM_NUMBER`, or `--name` and `--number`). Host the file at a public https
   address ending in `.vcf` and set `MVP_CONTACT_CARD_URL`.
@@ -215,9 +215,10 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
 - "every 2 days at a random time", "every other day at 7am", "a few times a month", "randomly, about twice a week":
   code keeps the spacing and the randomness the message states (a random minute inside 9am to 9pm, or the part of the
   day they named, on each due day; never in quiet hours). "Once in a while" asks how often, and "yes" takes the
-  default it offers (about once a week at a random time).
+  default it offers (about once a week at a random time). "Every other week on a random weekday" is one send in every
+  second week, on a day drawn at random ("once every other week at a random time on weekdays").
 - "when I say boost, send me a motivational video" is saved with their word: "boost" (any case) runs it, read by code
-  before any model call.
+  before any model call. "When I send you a link" or "when I text you" is an event, not a word, and gets no word.
 - Reminders in the person's own words and their to-do list are what they asked for: they are not counted as
   unanswered sends, never ask "Still useful?" and are not paused when the person is quiet. A rule that, with their
   other daily rules, needs more than the daily limit of timed sends says so when it starts.
@@ -269,12 +270,12 @@ still hold the handle (`ledger_rows_with_handle`).
 | `followup.py` | What code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v4.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |
 | `lang.py` | The answer's fixed phrases in Spanish (with the outside block and the level note that ride on it); any other language gets an all-English answer, and the composer is told to write English. A rule's preview, start line and timed sends are English only for now (their timing words have no Spanish yet), so a rule made in Spanish is set up and sent in English, never in two languages at once |
-| `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table; a recipe, workout or tutorial gets its details for the recommended pick even when none were asked for; when details are asked for, the best of the top 3 that has them all is recommended |
+| `extract.py`, `prompts/extract_v1.md` | Ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table; a recipe, workout or make-or-build tutorial gets its details for the recommended pick even when none were asked for (a talk, a list of habits or an opinion gets none, unless its text writes out a recipe or a workout); when details are asked for, the best of the top 3 that has them all is recommended |
 | `render.py` | What the person reads, as parts (text and link): a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
 | `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
 | `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 514 offline tests (`test_fixpass3.py`: one or more per finding of the third live run, 65 to 73; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
+| `tests/` | 527 offline tests (`test_fixpass3.py`: one or more per finding of the third live run, 65 to 73, and the checker's near-variants; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
 the second live run, 38 to 64) |
