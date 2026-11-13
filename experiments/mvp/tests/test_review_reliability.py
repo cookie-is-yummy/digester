@@ -334,3 +334,96 @@ def test_s7_auto_pause_keeps_a_one_time_reminder_in_the_persons_words(env):
     assert texts.count("paused your timed sends") == 1   # the daily rule went unanswered and was paused, said once
     assert "dentist" in texts and "Pick up the kids" in texts
     assert bot.store.rule(rem["id"])["status"] == "done"
+
+
+# ---------- S8: "skip the next one" while a send is held skips that send ----------
+
+def test_s8_skip_while_a_send_is_held_skips_the_held_send(env):
+    from zoneinfo import ZoneInfo
+    from mvp.tests.test_mvp import compose_picks
+    from mvp.tests.test_rules_v2 import more_pasta
+    NY = ZoneInfo("America/New_York")
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    rule = weekly(bot, st, when={"type": "schedule", "days": DAILY, "time": "21:50"})
+    more_pasta(bot, 30)
+    st["answers"]["mvp_compose"] = lambda x: (_ for _ in ()).throw(RuntimeError("model down"))
+    clock[0] = u(2026, 11, 13, 2, 51)     # Thu 9:51pm New York (slot 9:50pm): the run fails
+    bot.tick()
+    clock[0] = u(2026, 11, 13, 3, 6)      # 10:06pm: the retry is held to the end of quiet hours
+    bot.tick()
+    assert datetime.fromisoformat(bot.store.rule(rule["id"])["next_run_at"]).astimezone(NY).hour == 8
+    st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "skip", "rule_number": 1, "count": 1}
+    clock[0] = u(2026, 11, 13, 4, 0)      # 11pm
+    bot.on_message(H, "skip the next one")
+    assert "tomorrow at 9:50pm" in last(ch)
+    got = []
+    for t in [u(2026, 11, 13, 13, 1), u(2026, 11, 14, 2, 51), u(2026, 11, 15, 2, 51)]:
+        clock[0] = t
+        bot.store.set_state(f"last_in:{H}", "2099-01-01")
+        got.append(bot.tick())
+    assert got == [0, 1, 1]               # the held one is the one skipped; Friday 9:50pm goes out as promised
+
+
+# ---------- the low ones: S9 to S12 ----------
+
+def test_s9_an_error_before_the_rule_moves_on_does_not_count_the_pick_as_sent(env):
+    import sqlite3
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    r = weekly(bot, st)
+    bot.store.x("DELETE FROM deliveries")   # the preview's pick counts as sent: let the rule send it
+    real, calls = bot.store.set_slot, {"n": 0}
+
+    def flaky(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return real(*a, **k)
+    st["answers"]["mvp_compose"] = lambda user: {"picks": [{"n": 1, "title": "First pick", "why": "x",
+                                                            "verdict": "clear"}], "intro": "Here."}
+    clock[0] = u(2026, 11, 14, 0, 0, 30)
+    bot.store.set_slot = flaky
+    n0 = len(ch.outbox)
+    assert bot.tick() == 0 and len(ch.outbox) == n0
+    bot.store.set_slot = real
+    assert not bot.store.q("SELECT * FROM deliveries WHERE rule_id=?", (r["id"],))
+    clock[0] = u(2026, 11, 14, 0, 16)
+    assert bot.tick() == 1
+    first = bot.store.q("SELECT item_id FROM deliveries WHERE rule_id=?", (r["id"],))
+    assert [d["item_id"] for d in first] == ["itm_b"]   # the same best pick, now really sent
+
+
+def test_s10_send_now_counts_toward_the_number_of_sends(env):
+    from mvp.tests.test_rules_v2 import more_pasta
+    bot, st, clock = env["bot"], env["state"], env["clock"]
+    more_pasta(bot, 30)
+    r = weekly(bot, st, when={"type": "schedule", "days": ["FRI"], "time": "19:00", "max_sends": 2})
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "run_rule", "rule_number": 1, "skip_next": True}
+    bot.on_message(H, "send friday's one now")
+    sends = drive(bot, clock, clock[0], u(2026, 12, 20), step=60)
+    assert len(sends) == 1 and bot.store.rule(r["id"])["status"] == "done"
+
+
+def test_s11_a_date_only_todo_reminds_after_quiet_hours(env):
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    bot.store.set_quiet(H, [{"start": "22:00", "end": "10:00"}])
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "todo_add", "todo_text": "pay rent", "due": "2026-11-13"}
+    bot.on_message(H, "add pay rent to my list for tomorrow")
+    assert "tomorrow at 10am" in last(ch)
+    assert bot.store.todos(H)[0]["due_at"] == "2026-11-13T15:00:00+00:00"
+
+
+def test_s12_reminders_the_person_set_pass_the_daily_limit(env):
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    note_rule(bot, st, {"type": "once", "date": "2026-11-13", "time": "18:00"})
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "todo_add", "todo_text": "water plants",
+                                                "due": "2026-11-13T18:00"}
+    bot.on_message(H, "remind me to water plants at 6pm tomorrow")
+    for i in range(5):                        # five timed sends already went out that day
+        bot.store.add_run(handle=H, rule_id=None, kind="scheduled", status="sent", at=f"2026-11-13T1{i}:00:00+00:00")
+    clock[0] = u(2026, 11, 13, 23, 1)         # 6:01pm New York
+    n0 = len(ch.outbox)
+    bot.tick()
+    out = " ".join(m[2] for m in ch.outbox[n0:])
+    assert "Call mum" in out and "water plants" in out
+    assert bot.store.q("SELECT due_at FROM todos")[0]["due_at"] == "2026-11-13T23:00:00+00:00"

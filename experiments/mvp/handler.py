@@ -463,6 +463,8 @@ class HandlerMixin:
             if it.skip_next and r["status"] == "active" and r["next_run_at"] and not self._run_failed(run_id):
                 rows = self._rule_rows([r["id"]])
                 self.store.skip(r["id"], count=1)  # "send Friday's one now": Friday's is not sent again
+                # and this send counts as Friday's toward "3 times in all" (review fix S10)
+                self.store.set_state(f"replaced:{r['id']}", (self.store.get_state(f"replaced:{r['id']}", 0) or 0) + 1)
                 self._wrote(h, "rule_rows", "skipped the next send of a rule", {"rows": rows})
                 up = self._upcoming(self.store.rule(r["id"]), person, now)
                 msg += "\n\n" + (T.skipped_next(say_time(up, now, person["timezone"])) if up else T.SKIPPED_LAST)

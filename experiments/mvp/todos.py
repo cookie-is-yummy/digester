@@ -11,10 +11,9 @@ from collections import Counter
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import config
 from . import texts as T
 from .channels.base import SendUncertain
-from .schedule import _at, end_of_quiet, say_time
+from .schedule import _at, end_of_quiet, in_quiet_hours, say_time
 from .store import now_iso
 
 UNDO_WINDOW = timedelta(minutes=10)
@@ -116,8 +115,11 @@ class TodoMixin:
         if not it.due:
             return None
         tz = ZoneInfo(person["timezone"])
-        if len(it.due) <= 10:
+        if len(it.due) <= 10:   # no time named: 9am, or the end of their quiet hours if later (review fix S11)
             due = _at(datetime.fromisoformat(it.due).date(), "09:00", tz)
+            quiet = self.store.quiet(person["handle"])
+            if in_quiet_hours(due, person["timezone"], quiet):
+                due = end_of_quiet(due, person["timezone"], quiet)
         else:
             due = datetime.fromisoformat(it.due).replace(tzinfo=tz)
         return due if due > now else None
@@ -278,12 +280,8 @@ class TodoMixin:
                 if snooze and now < datetime.fromisoformat(snooze):
                     record("snoozed")
                     continue
-                local = now.astimezone(ZoneInfo(tz))
-                midnight = _at(local.date(), "00:00", ZoneInfo(tz))
-                if self.store.scheduled_today(h, midnight) >= config.MAX_SCHEDULED_PER_DAY:
-                    tomorrow = _at(local.date() + timedelta(days=1), "00:00", ZoneInfo(tz))
-                    self.store.update_todo(t["id"], due_at=now_iso(end_of_quiet(tomorrow, tz, self.store.quiet(h))))
-                    continue
+                # review fix S12: the person set this time themselves, so the daily limit of timed sends does not
+                # move it to the next morning without a word (it still counts toward that limit)
                 # recorded before the send, as for a rule: a crash from here on can lose this reminder but never
                 # send it twice; a clear failure is tried again next tick, until it is too late (missed)
                 self.store.update_todo(t["id"], reminded_at=now_iso(now))

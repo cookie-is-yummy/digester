@@ -8,8 +8,12 @@ the person asked for (by count or date); their snooze; their quiet hours; the da
 Every slot that does not go out is recorded in `runs` with a status that says why: missed, skipped, snoozed,
 quiet_hours, daily_limit, over_cap.
 
+A one-time send the person set themselves (a reminder in their own words, picks sent later) and a to-do's reminder
+keep the time they named: they pass quiet hours, the daily limit and the unanswered-sends pause. One that comes too late
+after the bot was off is not sent, and the person is told once (review fixes S3, S7, S12).
+
 Holds. A send that cannot go out yet but should still go out (a retry, or a random, window or every_hours moment that
-lands in quiet hours after the person changed them, or a one-time send over the daily limit) is held: next_run_at moves
+lands in quiet hours after the person changed them, or a one-time library send over the daily limit) is held: next_run_at moves
 to the release time and the state key hold:<rule id> remembers it. Lateness is then counted from the release, so a
 hold never turns into a silent 'missed'. A held repeating send whose next regular slot comes before the release is
 skipped and recorded instead, so the person never gets two at once.
@@ -48,6 +52,12 @@ class SchedulerMixin:
             except Exception as e:  # noqa: BLE001 - one rule never blocks the others
                 self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="error",
                                    error=type(e).__name__, at=now_iso(now))
+                if progress.get("run_id") and not progress.get("advanced"):
+                    # review fix S9: the run picked and recorded items, then failed before anything was sent. What was
+                    # never shown is not "sent", nor the person's last answer.
+                    self.store.x("UPDATE runs SET status='error', error=? WHERE id=?", (type(e).__name__,
+                                                                                        progress["run_id"]))
+                    self._unrecord(rule["handle"], progress["run_id"], progress.get("before"))
                 if progress.get("advanced"):
                     # The rule had already moved on to its next slot, and the message may already be out. Trying this
                     # slot again could send it twice, so it is treated like a crash while sending: never sent again.
@@ -263,6 +273,7 @@ class SchedulerMixin:
             marks = ",".join("?" * len(SENT_STATUSES))
             sent = self.store.one(f"SELECT COUNT(*) n FROM runs WHERE rule_id=? AND kind='scheduled' AND status IN "
                                   f"({marks})", (rule["id"], *SENT_STATUSES))["n"] + (1 if sending else 0)
+            sent += self.store.get_state(f"replaced:{rule['id']}", 0) or 0   # "send Friday's one now" (review fix S10)
             if sent >= spec.when.max_sends:
                 status, nxt = "done", None
         self.store.set_slot(rule["id"], nxt, status)
@@ -367,10 +378,12 @@ class SchedulerMixin:
                 self._notice(person["handle"], missed_once(what, say_time(slot, now, spec.when.tz or tz)), now)
             return self._skip_slot(rule, spec, tz, now, "missed")
         again = bool(retries or hold)   # this slot already passed the checks below once: a retry or a held send
-        if not again:
-            why = self.store.consume_skip(rule["id"], slot.astimezone(ZoneInfo(spec.when.tz or tz)).date().isoformat())
-            if why:  # "skip the next two", "not on the 26th"
-                return self._skip_slot(rule, spec, tz, now, "skipped", why)
+        # "skip the next two", "not on the 26th". Checked again for a retry or a held send: a skip found now was asked
+        # for after this slot's first try, and the reply counted this slot as the one skipped (review fix S8; the
+        # first try of a slot that used a skip never comes back).
+        why = self.store.consume_skip(rule["id"], slot.astimezone(ZoneInfo(spec.when.tz or tz)).date().isoformat())
+        if why:
+            return self._skip_slot(rule, spec, tz, now, "skipped", why)
         snooze = person.get("snooze_until")
         if snooze and now < datetime.fromisoformat(snooze):  # "I'm away until the 20th"; asking still works
             return self._skip_slot(rule, spec, tz, now, "snoozed")
@@ -387,7 +400,10 @@ class SchedulerMixin:
             return 0
         local = now.astimezone(ZoneInfo(tz))
         midnight = _at(local.date(), "00:00", ZoneInfo(tz))
-        if self.store.scheduled_today(person["handle"], midnight) >= config.MAX_SCHEDULED_PER_DAY:
+        # review fix S12: a reminder the person set themselves (their words, or picks sent later) goes out at the time
+        # they named, as it does in quiet hours; it is never moved to the next morning without a word
+        if not self._own_once(spec) and \
+                self.store.scheduled_today(person["handle"], midnight) >= config.MAX_SCHEDULED_PER_DAY:
             # A one-time send the person asked for is held to the next morning (lateness counts from then, so it is
             # never turned into a silent 'missed'). A repeating rule's slot is skipped and recorded: its next slot comes
             # anyway, and sending it tomorrow would only push tomorrow over the limit too.
@@ -401,6 +417,7 @@ class SchedulerMixin:
         h = person["handle"]
         before = (self.store.last_answer(h), self.store.get_state(f"lines:{h}"), self.store.get_state(f"linekinds:{h}"),
                   self.store.get_state(f"facts:{h}"))
+        progress["before"] = before
         msg, run_id, n = self.run(person, spec, "scheduled", rule_id=rule["id"])
         progress["run_id"] = run_id
         if self._run_failed(run_id):
@@ -424,16 +441,8 @@ class SchedulerMixin:
             self.store.x("UPDATE runs SET status='unknown', error='SendUncertain' WHERE id=?", (run_id,))
             return 0
         except Exception as e:  # noqa: BLE001 - a clear failure: nothing went out
-            self.store.x("DELETE FROM deliveries WHERE run_id=?", (run_id,))
             self.store.x("UPDATE runs SET status='send_failed', error=? WHERE id=?", (type(e).__name__, run_id))
-            last, lines, kinds, facts = before  # what they never received is not their "last answer": 👎 must not land on it
-            if last:
-                self.store.set_last_answer(h, last["run_id"], last["rule_id"], last["items"], last["goal"])
-            else:
-                self.store.x("DELETE FROM last_answer WHERE handle=?", (h,))
-            self.store.set_state(f"lines:{h}", lines or {})
-            self.store.set_state(f"linekinds:{h}", kinds or {})
-            self.store.set_state(f"facts:{h}", facts or {})
+            self._unrecord(h, run_id, before)
             self._retry_or_skip(rule, now, slot, advanced=True, tries=retries)  # _advance reset the stored count
             return 0
         self.store.x("UPDATE runs SET status=? WHERE id=?", ("sent" if n else "none_sent", run_id))
@@ -444,6 +453,21 @@ class SchedulerMixin:
         """A one-time send the person asked for: a reminder in their own words, or picks sent later ("email me this
         tonight"). Like a to-do's reminder, it is their own time, not a stream they did not answer (review fix S7)."""
         return spec.when.type == "once" and spec.content.source in ("note", "items")
+
+    def _unrecord(self, h, run_id, before):
+        """A run whose message never went out: its deliveries go (so its picks can be sent later), and the person's
+        last answer and its lines are put back as they were (👎 must not land on what they never received)."""
+        self.store.x("DELETE FROM deliveries WHERE run_id=?", (run_id,))
+        if before is None:
+            return
+        last, lines, kinds, facts = before
+        if last:
+            self.store.set_last_answer(h, last["run_id"], last["rule_id"], last["items"], last["goal"])
+        else:
+            self.store.x("DELETE FROM last_answer WHERE handle=?", (h,))
+        self.store.set_state(f"lines:{h}", lines or {})
+        self.store.set_state(f"linekinds:{h}", kinds or {})
+        self.store.set_state(f"facts:{h}", facts or {})
 
     def _unanswered(self, handle):
         """Timed sends that went out since the person last wrote or reacted."""
