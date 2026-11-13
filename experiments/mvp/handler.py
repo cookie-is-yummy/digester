@@ -324,7 +324,13 @@ class HandlerMixin:
         the note is kept as it is (as before)."""
         h = person["handle"]
         res = None
-        if not self._over_cap(person):
+        said = P.level_stated(text)
+        if said and note.lower() == said[0].lower():
+            # fix pass 6, live check of finding 88: a level the message states for a topic it names, read by code: no
+            # form call, and nothing else is changed
+            res = P.apply_merge(self.store, h, {"kind": "both", "levels": [{"topic": said[1], "level": said[2]}]},
+                                text, side=True)
+        elif not self._over_cap(person):
             try:
                 # fix pass 6, finding 88: the message is a request; only what a request may teach is applied
                 res, _ = P.merge(self.store, h, text, side=True)

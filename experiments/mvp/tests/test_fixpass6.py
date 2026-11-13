@@ -431,3 +431,38 @@ def test_audit_a_level_moves_only_when_the_message_says_too_hard_or_too_easy(ric
     say(rich, "too easy", {"intent": "feedback", "feedback": "harder"})
     lv = {i["topic"]: i.get("level") for i in P().get(bot.store, H)["interests"]}
     assert lv["Blender 3D"] == "intermediate"
+
+
+# ======================================= live check of finding 88 =======================================
+def test_88_live_a_level_said_in_a_request_is_read_by_code_when_the_form_has_no_note(rich):
+    """Live: the interpreter's form for "I'm a beginner at guitar, find me a first song to learn" had no note, so
+    nothing was learned. Code reads the level the message states, for the topic it names, with no form call."""
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich, level="new")
+    before = standing(P().get(bot.store, H))
+    st["answers"]["mvp_compose"] = lambda u: {"picks": []}
+    msg = str(say(rich, "I'm a beginner at guitar, find me a first song to learn",
+                  ask("a first guitar song", ["guitar song"])))
+    prof = P().get(bot.store, H)
+    levels = {i["topic"]: i.get("level") for i in prof["interests"]}
+    assert levels["guitar"] == "beginner" and levels["Blender 3D"] == "new"
+    assert "mvp_profile_merge" not in rich["calls"] and "Noted: guitar: a beginner." in msg
+    assert {k: v for k, v in standing(prof).items() if k != "topics"} == \
+        {k: v for k, v in before.items() if k != "topics"}
+    # a level already known is not said again
+    n = len(rich["calls"])
+    msg = str(say(rich, "I'm a beginner at guitar, find me an easy song", ask("an easy guitar song", ["guitar song"])))
+    assert "Noted" not in msg and "mvp_profile_merge" not in rich["calls"][n:]
+
+
+@pytest.mark.parametrize("text,want", [
+    ("I'm a beginner at guitar, find me a first song to learn", ("guitar", "beginner")),
+    ("I am new to sourdough and want a starter recipe", ("sourdough", "new")),
+    ("I'm a total beginner at piano", ("piano", "new")),
+    ("im intermediate at chess", ("chess", "intermediate")),
+    ("find me guitar songs for beginners", None),
+    ("I'm new to it, any tips?", None),
+])
+def test_88_live_level_stated_reads_only_a_level_said_for_a_named_topic(text, want):
+    got = P().level_stated(text)
+    assert (got[1:] if got else None) == want

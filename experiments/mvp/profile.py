@@ -667,6 +667,31 @@ def level_said(message):
     return found[0] if len(found) == 1 else None
 
 
+# fix pass 6, live check of finding 88: "I'm a beginner at guitar, find me a first song" states a level for a topic
+# it names, in so many words; code reads it (the interpreter's form may leave the note out)
+_TOPIC = r"([a-z][a-z0-9+#'’ -]{1,30}?)(?=\s*(?:[,.;!?]|$)|\s+(?:and|so|but|find|send|show|give|any|what|can|" \
+         r"could|please|now|looking|need|want|got|have|help)\b)"
+LEVEL_AT = re.compile(
+    r"\bi(?:['’]?m| am)\s+(?:(?:a|an)\s+)?(?:(?:total|complete|absolute|real)\s+)?(?:beginner|novice|newbie|"
+    r"intermediate|advanced|expert)\s+(?:at|in|with|on)\s+" + _TOPIC +
+    r"|\bi(?:['’]?m| am)\s+(?:brand\s+|totally\s+|completely\s+)?new to\s+" + _TOPIC +
+    r"|\bi(?:['’]?m| am)\s+(?:just\s+)?starting (?:out\s+)?(?:with|at|in|on)\s+" + _TOPIC +
+    r"|\bi(?:['’]?m| am)\s+past (?:the )?(?:beginner stage|beginner|basics) (?:at|in|with|on)\s+" + _TOPIC, re.I)
+
+
+def level_stated(message):
+    """(the words that state it, topic, level) when the message states the person's level at a topic it names, else
+    None."""
+    m = LEVEL_AT.search(message or "")
+    if not m:
+        return None
+    topic = next(g for g in m.groups() if g).strip(" '’-")
+    lv = level_said(m.group(0)) or ("new" if re.search(r"\bnew to\b|\bstarting\b", m.group(0), re.I) else None)
+    if not topic or not lv or stated_sensitive(topic) or not topic_words(topic):   # "I'm new to it" names nothing
+        return None
+    return " ".join(m.group(0).split()), topic, lv
+
+
 def allowed_again(message):
     """The things the person says they no longer avoid, in their words ("meat", "vegetarian")."""
     out = []

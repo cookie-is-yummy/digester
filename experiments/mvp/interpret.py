@@ -1098,6 +1098,11 @@ def _fact_note(it: Interpretation, message):
     m = FACT.search(message)
     if m and not NOT_A_FACT.search(m.group(0)):
         it.profile_note = " ".join(m.group(0).split())[:120]
+        return
+    from .profile import level_stated
+    said = level_stated(message)   # fix pass 6, live check of finding 88: "I'm a beginner at guitar, find me ..."
+    if said:
+        it.profile_note = said[0][:120]
 
 
 TIPS_ONLY = re.compile(r"\b(?:tips?|tricks?|hacks?|advice|theory|inspo|inspiration|recap)\b", re.I)
