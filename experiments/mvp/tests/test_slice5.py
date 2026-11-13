@@ -85,6 +85,10 @@ def yt(env, monkeypatch):
                             "platform_data": {"video_id": "LIBVID00001", "owner_relation": "none"}}) + "\n")
     monkeypatch.setenv("YOUTUBE_API_KEY", KEY)
     fake = standard_fake()
+    from mvp import outside as _outside
+    # this fake returns the same videos for every search; the topic check on results (fix pass 3, finding 67 d) has its
+    # own tests in test_fixpass3.py, which switch it back on
+    monkeypatch.setattr(_outside, "shares_topic", lambda video, topic: True)
     from mvp.outside import Outside
     env["bot"].outside = Outside(env["bot"].store, http=fake)
     from mvp import ytinfo   # the library candidates' own videos.list (slice 3) stays offline too
@@ -122,11 +126,13 @@ def test_query_words_are_the_persons_own_words_only():
         "creators": ["anna"], "avoid": ["cream"], "outside": "some"}})
     msg = "Find me chicken and rice recipes, one pot, no cream, and some new ones from outside my saves @chef_anna"
     words = query_words(spec, [msg])
-    assert words == ["pot", "chicken", "rice", "recipes"]          # "one" is a function word; spec order; own spelling
+    assert words == ["pot", "chicken", "rice"]          # "one" is a function word; spec order; own spelling
+    # fix pass 3, finding 67: words that only say the kind are not topic words; code adds one fixed kind word
+    assert search_text(spec, [msg]) == "pot chicken rice recipe"
     # a word the model added ("dinners", "kitchen") is not in the message: never sent; nor the creator or avoided word
     spec2 = RuleSpec.model_validate({"when": {"type": "now"}, "content": {
         "goal": "cozy dinners", "searches": ["Sam birthday party ideas 555-123-4567 sam@x.co"], "outside": "some"}})
-    assert search_text(spec2, ["ideas for a cozy dinner, new ones please"]) == "ideas cozy dinner"
+    assert search_text(spec2, ["ideas for a cozy dinner, new ones please"]) == "cozy dinner recipe"
     assert search_text(spec2, ["something new"]) is None
     assert sensitive_topic(["workouts for my anxiety"]) == "health"
     assert sensitive_topic(["date night with my girlfriend"]) == "relationships"
@@ -154,7 +160,7 @@ def test_outside_block_after_the_library_picks_with_youtube_titles_as_returned(y
     assert links[0]["url"] == "https://www.youtube.com/watch?v=VIDaaaaaa01" and links[0]["platform"] == "youtube"
     # one search, one check; the key only in the header argument; the words only the person's own
     (_, params, key), = fake.searches()
-    assert key == KEY and KEY not in json.dumps(params) and params["q"] == "pasta recipes"
+    assert key == KEY and KEY not in json.dumps(params) and params["q"] == "pasta recipe"   # finding 67: code's kind word
     assert params["safeSearch"] == "strict" and params["videoEmbeddable"] == "true" and params["type"] == "video"
     assert [c[0] for c in fake.calls] == ["search", "videos"]
     # no model read them: the compose prompt never holds an outside title; nothing became a delivery or the last answer

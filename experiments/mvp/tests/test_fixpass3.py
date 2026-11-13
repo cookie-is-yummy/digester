@@ -168,3 +168,90 @@ def test_66_every_2_days_at_a_random_minute_keeps_the_spacing_across_the_clock_c
     quiet = [{"start": "08:00", "end": "20:00"}]
     q = next_run(w, tz, made, anchor=made, seed=42, quiet=quiet).astimezone(__import__("zoneinfo").ZoneInfo(tz))
     assert q.hour == 20
+
+
+# ======================================= 67. the outside block and its search =======================================
+from mvp.tests.test_slice3 import add_items  # noqa: E402
+from mvp.tests.test_slice5 import FakeYouTube, KEY  # noqa: E402
+
+COOK = "what should I cook tonight?"
+COOK_FORM = {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+    "goal": "something to cook tonight", "searches": ["cook tonight", "easy dinner recipe"],
+    "criteria": ["ends with a dish you can eat"]}}}
+RECIPES = [{"id": f"itm_r{i}", "platform": "instagram", "source_url": f"https://example.com/r{i}",
+            "caption": f"{name}\nIngredients:\n- 2 cups rice\n- 1 tbsp oil\nBake for 20 minutes",
+            "interaction_kinds": ["save"], "platform_data": {"owner_handle": "chef", "owner_relation": "following"}}
+           for i, name in enumerate(["Sheet pan chicken", "Veggie fried rice", "Baked salmon", "Bean chili"])]
+
+
+def test_67a_a_library_with_plenty_of_recipes_gets_no_uninvited_outside_block(yt):
+    add_items(yt, [dict(r) for r in RECIPES])
+    yt["bot"].pool.search = lambda lib, q, depth=300: {"ids": [r["id"] for r in RECIPES], "mode": "normal",
+                                                       "cost_usd": 0.0}
+    # the composer shows one pick and cannot quote "a dish you can eat": a close verdict, so its clear count is 0
+    yt["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": 1, "verdict": "clear", "title": "Sheet pan chicken", "criteria": [{"answer": "unknown"}]}]}
+    msg = say(yt, COOK, COOK_FORM)
+    assert "Sheet pan chicken" in msg
+    assert "Not from your saves" not in msg and "YouTube" not in msg and "You only have" not in msg
+    assert not yt["yt"].searches()
+
+
+def test_67b_the_search_is_topic_words_plus_one_fixed_kind_word_and_time_words_are_dropped():
+    from mvp.outside import request_kind, search_text
+    from mvp.schema import RuleSpec
+
+    def spec(goal, *searches):
+        return RuleSpec.model_validate({"when": {"type": "now"}, "content": {"goal": goal, "searches": list(searches),
+                                                                            "outside": "some"}})
+    assert search_text(spec("something to cook tonight", "cook tonight"), [COOK]) is None     # no topic word: none
+    assert search_text(spec("a dinner to make this week", "dinner this week"),
+                       ["give me something to make for dinner this week"]) == "dinner recipe"
+    assert search_text(spec("lemon pasta for tonight", "lemon pasta tonight"),
+                       ["lemon pasta for tonight, and some new ones"]) == "lemon pasta"   # no kind said: none added
+    assert search_text(spec("a lemon pasta recipe for tonight", "lemon pasta tonight"),
+                       ["a lemon pasta recipe for tonight, and some new ones"]) == "lemon pasta recipe"
+    assert search_text(spec("a short leg workout", "leg workout today"),
+                       ["a short leg workout for today plus new ones"]) == "leg workout"
+    assert search_text(spec("a blender donut tutorial", "blender donut"),
+                       ["show me new blender donut videos to make"]) == "blender donut tutorial"
+    assert search_text(spec("a quick workout", "quick workout"), ["a quick workout for today"]) is None
+    # the kind word is code's, from the person's words: never the model's wording
+    assert request_kind(["I want to cook something with leeks"]) == "recipe"
+    assert request_kind(["leeks"], spec("leek soup recipe", "leek soup")) == "recipe"
+    assert request_kind(["leeks"]) is None
+
+
+def _news_fake():
+    def v(vid, title, channel, cat):
+        return {"id": vid, "snippet": {"title": title, "channelTitle": channel, "liveBroadcastContent": "none",
+                                       "categoryId": cat},
+                "status": {"privacyStatus": "public", "embeddable": True, "madeForKids": False},
+                "contentDetails": {"duration": "PT5M"}}
+    vids = [v("NEWSvid0001", "Chicken curry prices soar, says Cook", "Evening News", "25"),
+            v("NEWSvid0002", "Mr Cook speaks tonight", "World News", "25"),
+            v("FOODvid0001", "Easy Chicken Curry in 30 Minutes", "Home Kitchen", "26"),
+            v("OFFtopic001", "What I eat in a day", "Vlogs", "22"),
+            v("FOODvid0002", "Weeknight curry", "CHICKEN masters", "26")]
+    return FakeYouTube([x["id"] for x in vids], vids)
+
+
+def test_67cd_news_and_off_topic_results_are_dropped_unless_news_was_asked_for(env, monkeypatch):
+    from mvp.outside import Outside
+    from mvp.schema import RuleSpec
+    monkeypatch.setenv("YOUTUBE_API_KEY", KEY)
+    fake = _news_fake()
+    o = Outside(env["bot"].store, http=fake)
+    spec = RuleSpec.model_validate({"when": {"type": "now"}, "content": {
+        "goal": "chicken curry recipes", "searches": ["chicken curry"], "outside": "some"}})
+    res = o.find(H, spec, ["chicken curry recipes, and some new ones from outside my saves"])
+    assert fake.searches()[-1][1]["q"] == "chicken curry recipe"
+    # the news clips (category 25) go; "What I eat in a day" shares no topic word; a channel name may carry it
+    assert [p["video_id"] for p in res["picks"]] == ["FOODvid0001", "FOODvid0002"]
+    news = o.find(H, RuleSpec.model_validate({"when": {"type": "now"}, "content": {
+        "goal": "chicken curry news", "searches": ["chicken curry news"], "outside": "some"}}),
+        ["any news about chicken curry? new videos please"])
+    assert "NEWSvid0001" in [p["video_id"] for p in news["picks"]]
+    from mvp.outside import shares_topic
+    assert not shares_topic({"title": "Cooking tonight", "channel": "x"}, ["cook"])   # whole words only
+    assert shares_topic({"title": "PASTAS of Rome", "channel": "x"}, ["pasta"])

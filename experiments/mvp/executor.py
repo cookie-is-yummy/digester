@@ -8,6 +8,7 @@ reply went out as is recorded, so a reaction on any of them maps to the run. Mix
 import hashlib
 import json
 import re
+import sys
 import time
 from datetime import timedelta
 from zoneinfo import ZoneInfo
@@ -248,7 +249,8 @@ class ExecutorMixin:
         if outside and c.outside == "some" and not self._run_failed(run_id):
             msg = self._add_outside(person, spec, kind, rule_id, request_text, msg, run_id)
         elif outside and c.outside == "none" and kind in ("ask", "preview", "more") and info.get("run_id") == run_id \
-                and info.get("finished") and info.get("n_clear", 0) < 3 and not self._run_failed(run_id):
+                and info.get("finished") and info.get("n_clear", 0) < 3 and not self._run_failed(run_id) \
+                and (info.get("n_fit") is None or info["n_fit"] < 3):
             # fix pass, finding 26: something to do or make, and the saves hold fewer than 3 that clearly end with a
             # finished result: one honest line, the closest library picks, and (when the route is open and the topic
             # is not personal) the YouTube block in the same reply, without being asked. One search at most.
@@ -264,6 +266,7 @@ class ExecutorMixin:
         t0 = time.time()
         cost = 0.0
         status, err, result, cands, view = "ok", None, None, [], None
+        extra = {}
         stopped = False
         steps = {}
         disliked = self.store.disliked(person["handle"])
@@ -397,9 +400,13 @@ class ExecutorMixin:
                 return T.COMPOSE_CUT_ASK, run_id, 0
             return (LIMIT_TOTAL if stopped else RUN_ERROR), run_id, 0
         picks = ((result or {}).get("picks") or []) + ((result or {}).get("wider") or [])   # (reordered above)
+        finished = any(FINISHED.search(cr) for cr in spec.content.criteria)
         self._tl.run_info = {"run_id": run_id, "n_clear": (result or {}).get("n_clear", 0),
                              "n_close": (result or {}).get("n_close", 0), "n_picks": len(picks),
-                             "finished": any(FINISHED.search(cr) for cr in spec.content.criteria)}
+                             "finished": finished,
+                             # fix pass 3, finding 67 (a): how many candidates look like the kind asked for
+                             "n_fit": self._kind_fits(person, spec, cands, request_text, extra)
+                             if finished and cands_override is None else None}
         for i, p in enumerate(picks, 1):
             self.store.add_delivery(person["handle"], rule_id if kind in ("scheduled", "manual") else None, run_id,
                                     p["item"].id, i, at=self.clock())
@@ -448,6 +455,20 @@ class ExecutorMixin:
         return none_message(result, spec, scheduled=(kind == "scheduled"), lang=self._answer_lang()), run_id, 0
 
     # ---------- outside picks (outside.py, DESIGN.md section 11) ----------
+    def _kind_fits(self, person, spec, cands, request_text, extra):
+        """Fix pass 3, finding 67 (a): the candidates whose own text looks like the kind asked for (outside.kind_fits).
+        The composer returns only as many verdicts as it shows, and a recipe caption rarely quotes "a dish you can
+        eat", so its clear count alone said "under 3" for a library full of recipes."""
+        from .compose import own_text
+        from .outside import kind_fits
+        own = getattr(self._tl, "own_words", None)
+        texts = [request_text or ""] if own is None else [own]
+        try:
+            return kind_fits(cands, spec, texts, lambda it: own_text(it, extra or {}))
+        except Exception as e:  # noqa: BLE001 - a count only; never lose the answer to it
+            print(f"kind count failed: {type(e).__name__}", file=sys.stderr)
+            return None
+
     def _outside(self):
         o = getattr(self, "outside", None)
         if o is None:

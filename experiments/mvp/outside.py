@@ -128,10 +128,44 @@ def sensitive_topic(texts):
     return None
 
 
+# ---------- fix pass 3, finding 67: topic words, one fixed kind word, and the checks on what comes back ----------
+# The kind of thing asked for, found by code in the person's words (then the form's), and the one fixed word sent for
+# it. Words that only say the kind ("cook", "recipe", "make", "tutorial", "ideas") are never topic words: "what should I
+# cook tonight?" has no topic, so it gets no outside search (it once searched "cook tonight" and got news about a man
+# called Cook).
+KINDS = (("recipe", re.compile(r"\b(?:cook|cooking|cooked|recipes?|bake|baking|meals?|dinners?|lunch(?:es)?|"
+                               r"breakfasts?|brunch|dish(?:es)?|desserts?|snacks?|food|eat|supper)\b", re.I)),
+         ("workout", re.compile(r"\b(?:workouts?|exercises?|exercising|work\s+out|training|stretch(?:es|ing)?|yoga|"
+                                r"pilates|cardio|hiit|gym)\b", re.I)),
+         ("tutorial", re.compile(r"\b(?:tutorials?|how\s+to|lessons?|learn(?:ing)?|make|making|build|building|"
+                                 r"draw(?:ing)?|paint(?:ing)?|model(?:ing|ling)?|sculpt(?:ing)?|knit(?:ting)?|"
+                                 r"sew(?:ing)?|crafts?|diy|projects?)\b", re.I)))
+KIND_ONLY = set("""cook cooking cooked recipe recipes bake baking make making made build building tutorial tutorials
+    workout workouts exercise exercises lesson lessons learn learning idea ideas project projects inspiration inspo
+    how guide guides tips tip trick tricks hack hacks diy craft crafts should could would
+    short shorter mini tiny long longer easy easier simple""".split())   # length words: the length bound covers them
+# words about time are dropped (STOP has the days and parts of the day)
+TIME_WORDS = set("""weekend weekends month months year years lately recently currently right asap upcoming coming
+    next last this tonight's today's week's""".split())
+NEWS_CATEGORY = "25"    # YouTube's "News & Politics"
+NEWS_ASKED = re.compile(r"\bnews\b|\bheadlines?\b", re.I)
+
+
+def request_kind(texts, spec=None):
+    """'recipe' | 'workout' | 'tutorial' | None: from the person's own words first, then the form's goal and searches.
+    The word sent is code's (this table), never the model's."""
+    for group in ([t for t in texts if t], [spec.content.goal or "", *spec.content.searches] if spec else []):
+        joined = " ".join(group)
+        for kind, rx in KINDS:
+            if rx.search(joined):
+                return kind
+    return None
+
+
 def query_words(spec, texts):
-    """The search words: the spec's search and goal words that also appear in the person's own texts (compared in
-    singular form), in the spec's order, without function words, the spec's creators, collections or avoided words,
-    and at most 8. The form sent is the person's own spelling."""
+    """The topic words: the spec's search and goal words that also appear in the person's own texts (compared in
+    singular form), in the spec's order, without function words, words about time, words that only say the kind,
+    the spec's creators, collections or avoided words, and at most 7. The form sent is the person's own spelling."""
     own = {}
     for text in texts:
         for tok in _tokens(text):
@@ -144,16 +178,66 @@ def query_words(spec, texts):
     for source in [*c.searches, c.goal or ""]:
         for tok in _tokens(source):
             s = _stem(tok)
-            if s in seen or s in blocked or tok in STOP or s in STOP or len(s) < 2 or s not in own:
+            if s in seen or s in blocked or tok in STOP or s in STOP or len(s) < 2 or s not in own \
+                    or tok in KIND_ONLY or s in KIND_ONLY or tok in TIME_WORDS:
                 continue
             seen.add(s)
             out.append(own[s])
-    return out[:MAX_WORDS]
+    return out[:MAX_WORDS - 1]
 
 
 def search_text(spec, texts):
+    """The topic words and one fixed word for the kind ("lemon pasta recipe"); None when no topic word is left."""
     words = query_words(spec, texts)
-    return " ".join(words) if words else None
+    if not words:
+        return None
+    kind = request_kind(texts, spec)
+    if kind and _stem(kind) not in {_stem(w) for w in words}:
+        words = words + [kind]
+    return " ".join(words)
+
+
+def shares_topic(video, topic):
+    """Finding 67 (d): a result is kept only when its title or channel has one of the request's topic words (whole
+    word, any case, singular or plural)."""
+    stems = {_stem(w) for w in topic}
+    have = {_stem(t) for t in _tokens(f"{video.get('title') or ''} {video.get('channel') or ''}")}
+    return bool(stems & have)
+
+
+def keep_results(checked, topic, texts):
+    """The checked results that may be shown: on the topic, and not news unless the person asked for news."""
+    news_ok = any(NEWS_ASKED.search(t or "") for t in texts)
+    return [v for v in checked if shares_topic(v, topic)
+            and (news_ok or str(v.get("category") or "") != NEWS_CATEGORY)]
+
+
+def kind_fits(items, spec, texts, own_text):
+    """Finding 67 (a): how many of the candidates look like the kind asked for in their own text (a recipe, a
+    workout, a whole tutorial; not tips alone) and share a topic word with the request when it has one. None when the
+    request names no kind. The uninvited outside block needs fewer than 3 of these as well as fewer than 3 clear picks."""
+    from .compose import PROJECT, tips_only
+    kind = request_kind(texts, spec)
+    if not kind:
+        return None
+    rx = {"recipe": ITEM_RECIPE, "workout": ITEM_WORKOUT, "tutorial": PROJECT}[kind]
+    stems = {_stem(w) for w in query_words(spec, texts)}
+    n = 0
+    for it in items:
+        text = own_text(it)
+        if not rx.search(text) or tips_only(text):
+            continue
+        if stems and not stems & {_stem(t) for t in _tokens(text)}:
+            continue
+        n += 1
+    return n
+
+
+ITEM_RECIPE = re.compile(r"\b(?:recipes?|ingredients?|tbsp|tsp|tablespoons?|teaspoons?|cups?|bake[ds]?|baking|"
+                         r"roast(?:ed)?|simmer|saut[eé]|stir[- ]?fry|whisk|oven|air ?fryer|instant ?pot|serves|marinade|"
+                         r"dinner|lunch|breakfast|meal)\b", re.I)
+ITEM_WORKOUT = re.compile(r"\b(?:workouts?|reps|sets|exercises?|routine|circuit|squats?|lunges?|plank|stretch(?:es|ing)?|"
+                          r"yoga|hiit|cardio)\b", re.I)
 
 
 # ---------- the HTTP layer (replaced by a fake in tests) ----------
@@ -227,7 +311,8 @@ def check_videos(resp, ids, region=None):
         title, channel = sn.get("title"), sn.get("channelTitle")
         if not (isinstance(title, str) and title.strip() and isinstance(channel, str) and channel.strip()):
             continue
-        got[v["id"]] = {"video_id": v["id"], "title": title, "channel": channel, "duration_s": int(dur)}
+        got[v["id"]] = {"video_id": v["id"], "title": title, "channel": channel, "duration_s": int(dur),
+                        "category": str(sn.get("categoryId") or "")}   # finding 67 (c): News & Politics is "25"
     return [got[i] for i in ids if i in got]
 
 
@@ -339,6 +424,7 @@ class Outside:
             self.store.x("INSERT OR REPLACE INTO outside_cache(key,results,at) VALUES(?,?,?)",
                          (ck, json.dumps(checked), _iso(now)))
         have, skip = set(have_ids), set(skip_ids)
+        checked = keep_results(checked, query_words(spec, texts), texts)   # finding 67: on the topic, no news
         left = [v for v in checked if v["video_id"] not in have and v["video_id"] not in skip]
         over = 0
         if max_minutes:   # findings 57 and 59: a video over the length the request allows is never shown
