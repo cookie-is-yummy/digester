@@ -1052,6 +1052,18 @@ def offer_export_routine(bot, handle, platforms=None, tester=False, now=None):
     return T.export_offer([p for p, _ in specs])
 
 
+REMINDER_NAME = {"instagram": "Instagram export reminder", "youtube": "YouTube export reminder"}
+
+
+def reminder_name(text):
+    """Fix pass 4, finding 83 (and 75): the short name of an export reminder ("YouTube export reminder"), for "my rules"
+    and for the interpreter's list of rules; its steps go out with the reminder itself. None for any other text."""
+    for p, opening in REMINDER_OPENING.items():
+        if str(text or "").startswith(opening):
+            return REMINDER_NAME[p]
+    return None
+
+
 def reminder_message(text, tester=False):
     """The send of an export reminder: its opening line, then that platform's steps (finding 43). None for any other
     reminder."""

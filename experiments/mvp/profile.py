@@ -499,7 +499,11 @@ def about_lines(store, handle, message=None):
         lines.append(f"Direction, in their words: \"{' '.join(direction.split())[:300]}\".")
     p = pref_words(prefs)
     if lines or p:
-        lines.append("Preferences: " + ("; ".join(p) if p else "none given") + ".")
+        # fix pass 4, finding 74: what they have and how much time they usually have help choose; only a message that
+        # says them makes them must-haves (the evaluation set's profile, with none given, reads as before)
+        lines.append(("Preferences (to prefer, never must-haves unless the message says them; avoid is a hard limit): "
+                      + "; ".join(p)) if p else "Preferences: none given")
+        lines[-1] += "."
     return lines + notes
 
 
@@ -554,10 +558,15 @@ def composer_context(store, handle, *texts):
     if ok:
         how = "they told you" if (m.get("confirmed") or m.get("source") != "guess") else "a guess from what they saved"
         lines.append(f"Their level at {m['topic']}: {LEVEL_PLAIN[m['level']]} ({how})")
-    p = pref_words({k: (avoid_for(v, *texts) if k == "avoid" else v) for k, v in prefs.items()
-                    if k in ("avoid", "tools", "time", "style")})   # finding 62: the message wins over the profile
+    hard = pref_words({"avoid": avoid_for(prefs.get("avoid"), *texts)})   # finding 62: the message wins over the profile
+    if hard:
+        lines.append("Leave out: " + "; ".join(hard))
+    p = pref_words({k: v for k, v in prefs.items() if k in ("tools", "time", "style")})
     if p:
-        lines.append("Preferences: " + "; ".join(p))
+        # fix pass 4, finding 74: prefer picks that fit these and say so only when the post's text backs it; never a
+        # reason to call a pick close or to say nothing fits
+        lines.append("Preferences (prefer picks that fit these; never a reason to call a pick close or no): "
+                     + "; ".join(p))
     lines.extend(notes_for(prof["notes"], *texts))
     from .interpret import LEVEL_NEGATED
     said = next((m.group(0) for t in texts for m in ASKED_LEVEL_WORD.finditer(t or "")

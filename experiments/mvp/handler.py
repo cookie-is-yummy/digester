@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from . import config
 from . import profile as P
 from . import texts as T
-from .interpret import interpret
+from .interpret import interpret, profile_guard
 from .llm import budget_stop
 from .schedule import describe, next_run, resolve_until, say_time, t12
 from .schema import RuleSpec
@@ -214,6 +214,8 @@ class HandlerMixin:
             it, _ = interpret(text, person, rules, pending, last, now, todos=self.store.todos(handle),
                               last_write=self._last_write_ctx(handle, now), about=P.about_lines(self.store, handle, text),
                               store=self.store)
+            # fix pass 4 (findings 74 to 76, 82): only what the message (or the profile, for its own topic) supports
+            it = profile_guard(it, text, P.get(self.store, handle), pending, rules)
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=handle, kind="interpret", status="error", error=type(e).__name__)
             if budget_stop(e):   # review fix X6: ai.py's budget guard refused the call: never a false "try again"
@@ -1104,7 +1106,10 @@ class HandlerMixin:
             if r["status"] == "active" and r["next_run_at"] and spec.when.type == "schedule" and not spec.when.window:
                 up = self._upcoming(r, person, now)
                 nxt = T.rule_next(say_time(up, now, person["timezone"])) if up else ""
-            lines.append(T.rule_line(i, spec.content.goal, describe(spec.when), state, nxt))
+            # fix pass 4, finding 83: an export reminder by its short name; its steps go out with the reminder
+            from .refresh import reminder_name
+            name = reminder_name(spec.content.text) if spec.content.source == "note" else None
+            lines.append(T.rule_line(i, name or spec.content.goal, describe(spec.when), state, nxt))
         lines.append(T.RULES_FOOT)
         return "\n".join(lines)
 

@@ -1,0 +1,381 @@
+"""Offline tests for fix pass 4 (live findings of 13 Nov, round 4, after a full setup): one or more tests per finding 74
+to 83, each failing without its fix. The common thread: what the setup taught the bot must make later answers better
+and never block one. Synthetic data, a fake model, a fake search pool, a fake YouTube and a fake clock only; the
+fixtures come from the earlier test files."""
+import json
+import os
+import sys
+
+import pytest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+
+from mvp.tests.test_mvp import env, last  # noqa: E402,F401  (env is a fixture)
+from mvp.tests.test_slice2 import H, say  # noqa: E402
+from mvp.tests.test_slice3 import add_items  # noqa: E402
+from mvp.tests.test_slice5 import yt  # noqa: E402,F401
+from mvp.tests.test_slice6 import number_of, rich  # noqa: E402,F401
+
+CHICKEN = "convenient chicken and rice recipes"
+
+
+def request_of(user):
+    return json.loads(user.split("\n", 1)[0][len("Request: "):])
+
+
+def with_profile(bot, tools=("Instant Pot",), time="20 minutes on weeknights", note="trying to cook at home more",
+                 interests=None):
+    bot.store.set_prefs(H, tools=list(tools), time=time)
+    if note:
+        bot.store.add_profile_note(H, note)
+    if interests is not None:
+        from mvp import profile as P
+        P.set_interests(bot.store, H, interests)
+
+
+def ask_form(goal, searches, criteria=(), **content):
+    return {"intent": "ask", "spec": {"when": {"type": "now"}, "content": dict(
+        {"goal": goal, "searches": list(searches), "criteria": list(criteria)}, **content)}}
+
+
+def rule_form(goal, searches, criteria=(), when=None, **content):
+    return {"intent": "new_rule", "spec": {"when": when or {"type": "schedule", "every_days": 2,
+                                                            "window": ["09:00", "21:00"]},
+                                           "content": dict({"goal": goal, "searches": list(searches),
+                                                            "criteria": list(criteria)}, **content)}}
+
+
+def all_yes(seen):
+    """A composer that picks the lemon pasta and answers every must-have it is given with a backed yes."""
+    def answer(u):
+        req = request_of(u)
+        seen.append(req)
+        return {"picks": [{"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta",
+                           "criteria": [{"answer": "yes", "quote": "Lemon garlic pasta"} for _ in req["criteria"]]}],
+                "intro": "I found a convenient recipe in your saves."}
+    return answer
+
+
+# ======================================= 74. preferences are not must-haves =======================================
+def test_74_the_kit_and_the_usual_time_from_the_profile_are_not_must_haves(env):
+    bot, st = env["bot"], env["state"]
+    with_profile(bot)
+    seen = []
+    st["answers"]["mvp_compose"] = all_yes(seen)
+    msg = say(env, CHICKEN, ask_form("convenient chicken and rice recipes", ["chicken and rice"],
+                                     ["convenient", "uses Instant Pot", "under 20 minutes on weeknights",
+                                      "ends with a dish you can eat"]))
+    assert seen[-1]["criteria"] == ["convenient", "ends with a dish you can eat"]
+    assert "I recommend" in msg and "couldn't confirm" not in msg
+
+
+def test_74_the_same_words_said_in_the_message_stay_must_haves(env):
+    bot, st = env["bot"], env["state"]
+    with_profile(bot)
+    seen = []
+    st["answers"]["mvp_compose"] = all_yes(seen)
+    say(env, "chicken and rice in my instant pot, under 20 minutes",
+        ask_form("chicken and rice", ["chicken and rice"], ["uses Instant Pot", "under 20 minutes"]))
+    assert seen[-1]["criteria"] == ["under 20 minutes"] or "under 20 minutes" in seen[-1]["criteria"]
+    # the kit they have and name is a preference the executor already handles (finding 53); the time they name stays
+    from mvp.interpret import profile_guard
+    from mvp.schema import Interpretation
+    it = Interpretation.model_validate(ask_form("chicken and rice", ["chicken and rice"],
+                                                ["uses Instant Pot", "under 20 minutes", "for weeknights"]))
+    prof = {"prefs": {"tools": ["Instant Pot"], "time": "20 minutes on weeknights"}, "notes": [], "interests": []}
+    out = profile_guard(it, "chicken and rice in my instant pot, under 20 minutes", prof)
+    assert out.spec.content.criteria == ["uses Instant Pot", "under 20 minutes"]   # "weeknights" was not said
+
+
+def test_74_a_rule_drops_restated_preferences_and_a_note_and_keeps_its_own_words(env):
+    from mvp.interpret import profile_guard
+    from mvp.schema import Interpretation
+    prof = {"prefs": {"tools": ["Instant Pot"], "time": "20 minutes on weeknights"},
+            "notes": ["trying to cook at home more", "vegetarian now"], "interests": []}
+    it = Interpretation.model_validate(rule_form(
+        "a quick dinner idea", ["quick dinner"],
+        ["quick", "for weeknights", "uses an Instant Pot", "usually fits 20 minutes", "ends with a dish you can eat"],
+        when={"type": "random", "per": "week", "count": 2}))
+    out = profile_guard(it, "randomly surprise me with a quick dinner idea a couple of times a week", prof)
+    assert out.spec.content.criteria == ["quick", "ends with a dish you can eat"]
+    # a diet restated from a note is not a must-have: it is what the diet rules out, in avoid (the one hard limit)
+    it = Interpretation.model_validate(ask_form("dinner ideas", ["dinner"], ["vegetarian", "cooked at home"]))
+    out = profile_guard(it, "any dinner ideas?", prof)
+    assert out.spec.content.criteria == []
+    assert {"meat", "fish"} <= set(out.spec.content.avoid)
+
+
+def test_74_the_interpreter_and_the_composer_are_told_preferences_are_soft(env):
+    from mvp import profile as P
+    bot = env["bot"]
+    with_profile(bot, note=None)
+    bot.store.set_prefs(H, avoid=["mushroom"])
+    line = [x for x in P.about_lines(bot.store, H, CHICKEN) if x.startswith("Preferences")][0]
+    assert "never must-haves" in line and "has an Instant Pot" in line
+    text, _, _ = P.composer_context(bot.store, H, CHICKEN)
+    assert "Leave out: avoid mushroom" in text
+    assert "never a reason to call a pick close" in text and "usually has 20 minutes on weeknights" in text
+    # the evaluation set's profile ("none given") reads exactly as before
+    bot.store.x("UPDATE people SET prefs='{}' WHERE handle=?", (H,))
+    P.set_interests(bot.store, H, [{"topic": "Pasta", "confirmed": True}])
+    assert P.about_lines(bot.store, H, "a pasta recipe")[-1] == "Preferences: none given."
+
+
+# ======================================= 80. a whole recipe written out is a finished result ==========================
+COOK = "what should I cook tonight?"
+COOK_FORM = ask_form("something to cook tonight", ["cook tonight", "easy dinner recipe"],
+                     ["ends with a dish you can eat"])
+
+
+def close_lemon(u):
+    """The composer cannot quote "a dish you can eat": the lemon pasta comes back close, the must-have unknown."""
+    return {"picks": [{"n": number_of(u, "Lemon garlic"), "verdict": "close", "title": "Lemon garlic pasta",
+                       "criteria": [{"answer": "unknown"}]}], "intro": "Here's something to cook tonight."}
+
+
+def test_80_a_pick_whose_text_holds_the_whole_recipe_is_recommended_not_the_closest(env):
+    st = env["state"]
+    st["answers"]["mvp_compose"] = close_lemon
+    st["answers"]["mvp_extract"] = lambda u: {"ingredients": ["200g spaghetti", "2 lemons"],
+                                              "steps": ["4 cloves garlic", "Lemon garlic pasta"]}
+    msg = say(env, COOK, COOK_FORM)
+    assert "I recommend Lemon garlic pasta" in msg
+    assert "couldn't confirm" not in msg and "closest" not in msg and "couldn't check" not in msg
+    assert "Ingredients (2):" in msg and "Steps (2):" in msg
+
+
+@pytest.mark.parametrize("facts", [{"ingredients": ["200g spaghetti", "2 lemons"], "steps": ["4 cloves garlic"]},
+                                   {"ingredients": ["200g spaghetti", "2 lemons"], "steps": []},
+                                   {"steps": ["4 cloves garlic", "Lemon garlic pasta"]}],
+                         ids=["one step", "no steps", "no ingredients"])
+def test_80_without_the_whole_recipe_the_pick_stays_the_closest(env, facts):
+    st = env["state"]
+    st["answers"]["mvp_compose"] = close_lemon
+    st["answers"]["mvp_extract"] = lambda u: dict(facts)
+    msg = say(env, COOK, COOK_FORM)
+    assert "I couldn't confirm" in msg and "I recommend" not in msg
+
+
+def test_80_a_workout_with_two_steps_meets_its_full_routine_must_have_and_tips_stay_no():
+    from mvp.executor import finished_by_details, makes_whole
+    from mvp.libview import Item
+    from mvp.schema import RuleSpec
+    assert makes_whole({"steps": ["20 squats", "10 push-ups"]}, food=False)
+    assert not makes_whole({"steps": ["20 squats", "10 push-ups"]}, food=True)
+    spec = RuleSpec.model_validate({"when": {"type": "now"}, "content": {
+        "goal": "a leg workout", "searches": ["leg workout"], "criteria": ["a full routine from start to finish"]}})
+
+    def item(cap):
+        return Item({"id": "w", "platform": "instagram", "source_url": "https://example.com/w", "caption": cap,
+                     "interaction_kinds": ["save"], "platform_data": {"owner_handle": "coach"}})
+    for cap, want in [("Leg day routine:\n20 squats\n10 push-ups", "clear"),
+                      ("5 tips for better squats: 20 squats a day, 10 push-ups", "close")]:
+        p = {"item": item(cap), "verdict": "close", "criteria": ["unknown"], "facts": {
+            "steps": ["20 squats", "10 push-ups"]}, "too_long": False}
+        result = {"picks": [p], "wider": [], "closest": True, "missing": [("x", "unknown")], "dropped": {},
+                  "n_clear": 0, "n_close": 1, "extract": ["steps"]}
+        finished_by_details(result, spec, {})
+        assert p["verdict"] == want, cap
+        assert result["closest"] is (want != "clear")
+
+
+# ======================================= 81. one cut-off "step" =======================================
+def test_81_one_line_or_a_sentence_about_the_video_is_never_shown_as_steps():
+    from mvp.extract import usable
+    desc = "This motion design tutorial teach how to create basic, beginner level motion graphics in under 20…"
+    assert usable({"steps": [desc]})["steps"] == []
+    assert usable({"steps": ["In this video I show my workflow", "Open After Effects"]})["steps"] == []
+    assert usable({"steps": ["Open After Effects", "Make a new composition…", "Add a shape layer"]})["steps"] == \
+        ["Open After Effects", "Add a shape layer"]
+    assert usable({"steps": ["Boil the pasta", "Toss with lemon"], "ingredients": ["2 lemons"]}) == \
+        {"steps": ["Boil the pasta", "Toss with lemon"], "ingredients": ["2 lemons"]}
+    assert usable({"key_points": ["Space your reviews", "Test yourself before you reread and then…"]})["key_points"] \
+        == ["Space your reviews"]
+
+
+def test_81_a_youtube_pick_with_one_description_line_says_the_steps_are_in_the_video(env, monkeypatch):
+    from mvp import ytinfo
+    add_items(env, [{"id": "itm_v", "platform": "youtube", "source_url": "https://www.youtube.com/watch?v=MOTvid00001",
+                     "caption": "Motion design for beginners", "interaction_kinds": ["watch"],
+                     "platform_data": {"video_id": "MOTvid00001", "owner_name": "Motion School",
+                                       "owner_relation": "none"}}])
+    env["bot"].pool.search = lambda lib, q, depth=300: {"ids": ["itm_v"], "mode": "normal", "cost_usd": 0.0}
+    desc = ("This motion design tutorial teach how to create basic, beginner level motion graphics in under 20 "
+            "minutes with shapes, keyframes and easing, so you can follow along from the very first frame today")
+    monkeypatch.setattr(ytinfo, "fetch_batch", lambda ids, key, timeout=None: {"items": [
+        {"id": ids[0], "snippet": {"description": desc}, "contentDetails": {"duration": "PT18M"}}]})
+    monkeypatch.setenv("YOUTUBE_API_KEY", "test-key")
+    st = env["state"]
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "verdict": "clear", "title": "Motion design for beginners"}]}
+    st["answers"]["mvp_extract"] = lambda u: {"steps": [desc]}
+    msg = say(env, "a motion design tutorial", ask_form("a motion design tutorial", ["motion design tutorial"]))
+    assert "Steps" not in msg and "teach how to create" not in msg and "…" not in msg
+
+
+# ======================================= 75. outside picks nobody asked for =======================================
+from mvp.tests.test_slice5 import outside_ask  # noqa: E402
+
+
+def lemon_clear(u):
+    return {"picks": [{"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta"}],
+            "intro": "Here's a pasta recipe."}
+
+
+def test_75_outside_some_without_an_ask_for_new_things_is_none(yt):
+    yt["state"]["answers"]["mvp_compose"] = lemon_clear
+    msg = str(say(yt, "a pasta recipe", outside_ask()))
+    assert "Not from your saves" not in msg and "YouTube" not in msg
+    assert not yt["yt"].searches()
+    # the message asks for new ones: the block comes
+    msg = str(say(yt, "a pasta recipe, and some new ones", outside_ask()))
+    assert "Not from your saves, but close to them:" in msg and yt["yt"].searches()
+
+
+def test_75_the_line_about_telling_me_what_kind_follows_only_an_ask_for_new_things(yt):
+    yt["state"]["answers"]["mvp_compose"] = lemon_clear
+    form = ask_form("something to cook tonight", ["cook tonight"], outside="some")
+    msg = str(say(yt, "what should I cook tonight?", form))
+    assert "Tell me what kind of thing you want" not in msg and not yt["yt"].searches()
+
+
+@pytest.mark.parametrize("text,want", [
+    ("mini blender tutorials to start doing daily", "none"),
+    ("every 2 days send me a calisthenics workout at a random time", "none"),
+    ("when I say boost, send me a motion design tutorial", "none"),
+    ("I'm new to Blender, send me a tutorial", "none"),
+    ("anything new like these?", "some"),
+    ("find me new sourdough videos, not just stuff i already saved", "some"),
+    ("every sunday send me something new close to my blender saves", "some"),
+    ("more like these please", "some"),
+    ("only new watercolor stuff pls, not from my saves", "only"),
+])
+def test_75_outside_is_kept_only_when_the_message_asks_for_new_things(text, want):
+    from mvp.interpret import profile_guard
+    from mvp.schema import Interpretation
+    it = Interpretation.model_validate(ask_form("x things", ["x"], outside="only" if want == "only" else "some"))
+    assert profile_guard(it, text, {"prefs": {}}).spec.content.outside == want
+    # their profile says they want new things too: kept
+    it = Interpretation.model_validate(ask_form("x things", ["x"], outside="some"))
+    assert profile_guard(it, text, {"prefs": {"outside": True}}).spec.content.outside == "some"
+
+
+def test_75_the_export_reminders_are_listed_to_the_model_by_their_short_names(env):
+    from datetime import datetime, timezone
+    from mvp.interpret import _context
+    from mvp.refresh import reminder_spec
+    now = datetime(2026, 11, 13, 3, 0, tzinfo=timezone.utc)
+    rules = [{"id": i, "status": "active", "created_at": now.isoformat(), "spec": reminder_spec(p, now, "America/New_York").stored()}
+             for i, p in enumerate(("instagram", "youtube"), 1)]
+    ctx = _context({"timezone": "America/New_York", "handle": H}, rules, None, None, now)
+    assert "Instagram export reminder" in ctx and "YouTube export reminder" in ctx
+    for word in ("Takeout", "history", "Likes", "fresh", "playlists"):
+        assert word not in ctx, word
+
+
+def test_75_a_change_to_an_export_reminder_keeps_its_own_words(env):
+    from datetime import datetime, timezone
+    from mvp.refresh import REMINDER_OPENING, reminder_message, reminder_spec
+    bot = env["bot"]
+    now = datetime(2026, 11, 12, 18, 0, tzinfo=timezone.utc)
+    spec = reminder_spec("youtube", now, "America/New_York").stored()
+    bot.store.add_rule(H, "export reminders (youtube)", spec, "active", None, created_at=now.isoformat())
+    changed = json.loads(json.dumps(spec))
+    changed["content"]["text"] = "YouTube export reminder"
+    changed["when"]["times"] = ["09:00"]
+    say(env, "move the youtube export reminder to 9am", {"intent": "change_rule", "rule_number": 1, "spec": changed})
+    stored = bot.store.rules(H)[0]["spec"]
+    assert stored["when"]["times"] == ["09:00"]
+    assert stored["content"]["text"].startswith(REMINDER_OPENING["youtube"])
+    assert reminder_message(stored["content"]["text"]).startswith(REMINDER_OPENING["youtube"])
+
+
+# ======================================= 76. a level from another topic =======================================
+BLENDER_LEVEL = [{"topic": "Blender 3D", "level": "beginner", "confirmed": True, "words": ["blender"]},
+                 {"topic": "2D animation", "level": "intermediate", "confirmed": True, "words": ["animation"]},
+                 {"topic": "Calisthenics", "confirmed": True, "words": ["calisthenics"]}]
+
+
+@pytest.mark.parametrize("text,crit,want", [
+    ("every 2 days send me a calisthenics workout at a random time", "for a beginner", []),
+    ("when I say boost, send me a motion design tutorial", "suits a beginner", []),
+    ("mini blender tutorials to start doing daily", "suits a beginner", ["suits a beginner"]),
+    ("a 2d animation exercise for today", "suits a beginner", ["suits an intermediate level"]),
+    ("a beginner calisthenics workout", "suits a beginner", ["suits a beginner"]),
+])
+def test_76_a_level_comes_from_the_message_or_the_profile_for_the_same_topic(text, crit, want):
+    from mvp.interpret import profile_guard
+    from mvp.schema import Interpretation
+    it = Interpretation.model_validate(ask_form("some things", ["things"], [crit, "ends with a finished result"]))
+    out = profile_guard(it, text, {"prefs": {}, "interests": BLENDER_LEVEL})
+    assert [c for c in out.spec.content.criteria if "finished" not in c] == want
+
+
+def test_76_a_level_from_another_rule_never_reaches_the_stored_rule(rich):
+    bot = rich["bot"]
+    from mvp import profile as P
+    P.set_interests(bot.store, H, BLENDER_LEVEL)
+    rich["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": 1, "verdict": "clear", "title": "A routine", "criteria": [{"answer": "yes", "quote": "Blender"}] * 2}]}
+    say(rich, "every 2 days send me a calisthenics workout at a random time",
+        rule_form("a calisthenics workout", ["calisthenics workout"], ["for a beginner", "a full routine from start to finish"]))
+    say(rich, "yes", {"intent": "confirm"})
+    spec = bot.store.rules(H)[-1]["spec"]
+    assert spec["content"]["criteria"] == ["a full routine from start to finish"]
+
+
+# ======================================= 82. source limits nobody asked for =======================================
+@pytest.mark.parametrize("text,kinds,platforms", [
+    ("mini blender tutorials to start doing daily", [], []),
+    ("every 2 days send me a calisthenics workout at a random time", [], []),
+    ("the study tips vids i watched on yt, key points only", ["watch", "like", "playlist"], ["youtube"]),
+    ("show me reels i saved about japan travel", ["save", "collection", "share_self", "playlist"], ["instagram"]),
+    ("every other day at 7 a guitar lesson from my youtube", [], ["youtube"]),
+    ("random outfit idea from my saves", ["save", "collection", "share_self", "playlist"], []),
+])
+def test_82_kinds_and_platforms_are_limited_only_when_the_message_says_so(text, kinds, platforms):
+    from mvp.interpret import profile_guard
+    from mvp.schema import Interpretation
+    it = Interpretation.model_validate(ask_form("some things", ["things"], kinds=kinds or ["watch", "like", "playlist"],
+                                                platforms=platforms or ["youtube"]))
+    out = profile_guard(it, text, {"prefs": {}})
+    assert out.spec.content.kinds == kinds and out.spec.content.platforms == platforms
+
+
+def test_82_the_guard_keeps_every_limit_the_development_files_expect():
+    """Every development case that expects a kinds, platforms or outside value says so in its own words, so the guard
+    after the interpreter never undoes an expected value (the guard and the cases agree, case by case)."""
+    from mvp.interpret import KINDS_ASKED, OUTSIDE_ASKED, PLATFORMS_ASKED
+    here = os.path.join(os.path.dirname(HERE), "evalset")
+    n = 0
+    for name in ("rules_dev_timing.jsonl", "rules_dev_content.jsonl", "rules_dev_extra.jsonl"):
+        for line in open(os.path.join(here, name), encoding="utf-8"):
+            if not line.strip():
+                continue
+            case = json.loads(line)
+            content = (case["expect"].get("content") or {})
+            if content.get("outside") in ("some", "only"):
+                assert OUTSIDE_ASKED.search(case["text"]), case["id"]
+                n += 1
+            if content.get("kinds"):
+                assert KINDS_ASKED.search(case["text"]), case["id"]
+                n += 1
+            if content.get("platforms"):
+                assert PLATFORMS_ASKED.search(case["text"]), case["id"]
+                n += 1
+    assert n >= 9
+
+
+# ======================================= 83. wording =======================================
+def test_83_my_rules_lists_the_export_reminders_by_a_short_name(env):
+    from datetime import datetime, timezone
+    from mvp.refresh import reminder_spec
+    bot = env["bot"]
+    now = datetime(2026, 11, 12, 18, 0, tzinfo=timezone.utc)
+    for p in ("instagram", "youtube"):
+        bot.store.add_rule(H, f"export reminders ({p})", reminder_spec(p, now, "America/New_York").stored(), "active",
+                           None, created_at=now.isoformat())
+    bot.on_message(H, "my rules")
+    msg = last(env["ch"])
+    assert "Instagram export reminder" in msg and "YouTube export reminder" in msg
+    assert "takeout.google.com" not in msg and "accountscenter" not in msg

@@ -158,7 +158,39 @@ def _call(kinds, text, person, seed, note=""):
                          max_tokens=1400, temperature=config.EXTRACT_TEMPERATURE, seed=seed)
 
 
+# fix pass 4, finding 81: a line that only says what the video is ("This tutorial teaches how to ...", "In this video
+# ...") is not a step, and one line is not steps
+DESCRIBES = re.compile(r"^\W*(?:in\s+)?(?:this|today'?s)\s+(?:\w+\s+){0,3}?(?:video|tutorial|class|course|lesson|episode|"
+                       r"guide|series|vlog)s?\b|^\W*(?:in\s+this|today\s+(?:i|we)|welcome)\b"
+                       r"|^\W*(?:learn|discover)\s+how\b|^\W*(?:i|we)(?:'ll|\s+will|'m\s+going\s+to|\s+am\s+going\s+to)\s+"
+                       r"(?:show|teach|walk)\b", re.I)
+MIN_STEPS = 2
+
+
+def usable(facts):
+    """The details as they may be shown: never a line cut off with "…" (finding 81), never a sentence about the video
+    under Steps, and steps only when at least two lines are left. Cached lines are read through this too, so a store
+    made before keeps working."""
+    out = dict(facts or {})
+    for k in ("steps", "key_points"):
+        if k not in out:
+            continue
+        lines = [x for x in out[k] or [] if not str(x).rstrip().endswith(("…", "..."))]
+        if k == "steps":
+            lines = [x for x in lines if not DESCRIBES.search(str(x))]
+            if len(lines) < MIN_STEPS:
+                lines = []
+        out[k] = lines
+    return out
+
+
 def details(it, extract, library, store=None, person=None, extra=None, now=None):
+    """({kind: lines}, info) for one item, as they may be shown (usable)."""
+    facts, info = _details(it, extract, library, store=store, person=person, extra=extra, now=now)
+    return usable(facts), info
+
+
+def _details(it, extract, library, store=None, person=None, extra=None, now=None):
     """({kind: lines}, info) for one item. info: cost, calls, dropped, cached (kinds read from the cache), errors. On a
     failed call the kinds not read are left out (nothing is cached, and nothing is said about them)."""
     kinds = kinds_for(extract)

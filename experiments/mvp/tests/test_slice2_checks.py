@@ -149,7 +149,7 @@ def test_ingredients_come_only_from_lines_that_are_ingredients_alone(env):
     # the ingredient lines only, never a step (slice 3; before it, mixed lines were never guessed apart)
     env["state"]["answers"]["mvp_compose"] = lemon_pick()
     env["state"]["answers"]["mvp_extract"] = lambda u: {"ingredients": ["200g spaghetti", "2 lemons"],
-                                                        "steps": ["4 cloves garlic"]}
+                                                        "steps": ["4 cloves garlic", "Lemon garlic pasta"]}
     recipe = pasta_spec({"type": "now"}, avoid=["cream"])
     recipe["content"]["extract"] = ["ingredients", "steps"]
     bot.store.x("DELETE FROM facts")   # the first ask cached itm_a's details (no steps after two tries): start afresh

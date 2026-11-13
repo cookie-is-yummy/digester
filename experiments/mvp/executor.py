@@ -73,6 +73,49 @@ def length_bound(spec, *texts):
     return min(found) if found else None
 
 
+def makes_whole(facts, food):
+    """Fix pass 4, finding 80: the details code read from a pick's own text make a finished result: a recipe's
+    ingredients and at least two steps; a workout's or a tutorial's at least two steps."""
+    facts = facts or {}
+    steps = len(facts.get("steps") or []) >= 2
+    return steps and (bool(facts.get("ingredients")) or not food)
+
+
+def finished_by_details(result, spec, extra, *texts):
+    """Fix pass 4, finding 80: when code has read, from a pick's own text, the details that make a finished result,
+    the finished-result must-have is met ("yes"), whatever the composer said (the opposite of finding 26: tips-only
+    text stays "no"). A pick whose must-haves are then all met is clear; when the lead pick becomes clear the answer is
+    the normal "I recommend ... because ..." and the ones still only close are left out (as when a clear fit exists)."""
+    from .compose import FINISHED, own_text, tips_only
+    c = spec.content
+    fin = [i for i, cr in enumerate(c.criteria) if FINISHED.search(cr)]
+    picks = result.get("picks") or []
+    if not fin or not picks:
+        return
+    food = topic_kind(c.goal or "", *c.searches, *texts) == "food" or "ingredients" in (result.get("extract") or [])
+    turned = 0
+    for p in picks + (result.get("wider") or []):
+        if not makes_whole(p.get("facts"), food) or tips_only(own_text(p["item"], extra or {})):
+            continue
+        for i in fin:
+            if i < len(p["criteria"]):
+                p["criteria"][i] = "yes"
+        if p["verdict"] != "clear" and all(a == "yes" for a in p["criteria"]) and not p.get("too_long"):
+            p["verdict"] = "clear"
+            turned += 1
+    if not turned:
+        return
+    if result.get("closest") and picks[0]["verdict"] == "clear":
+        result["picks"] = [p for p in picks if p["verdict"] == "clear"]
+        result["closest"], result["missing"], result["from_fallback"] = False, [], False
+        result["dropped"]["over_count"] = result["dropped"].get("over_count", 0) + len(picks) - len(result["picks"])
+    result["n_clear"] = result.get("n_clear", 0) + turned
+    result["n_close"] = max(0, result.get("n_close", 0) - turned)
+    shown = result["picks"] + (result.get("wider") or [])
+    result["unknown_criteria"] = [cr for i, cr in enumerate(c.criteria)
+                                  if shown and all(p["criteria"][i] == "unknown" for p in shown)]
+
+
 # the text a morning rule from the setup was stored with before review fix PRIV-7 (onboarding._onboard_rule)
 ONBOARD_RULE_PREFIX = "every morning at 8: "
 
@@ -371,6 +414,8 @@ class ExecutorMixin:
                 steps["extract"], steps["extract_calls"] = round(time.time() - t1, 2), info["calls"]
                 if info.get("errors"):   # a failed details call: the answer goes out without those details
                     steps["extract_errors"] = info["errors"]
+            if main and kind != "follow_up":   # fix pass 4, finding 80: a whole recipe written out is a finished result
+                finished_by_details(result, spec, extra, request_text or "", hint)
             for p in (result.get("picks") or []) + (result.get("wider") or []):
                 # finding 47: a reason that promises ingredients or steps the answer does not show is left out
                 b = p.get("because") if p.get("because_backed") else None

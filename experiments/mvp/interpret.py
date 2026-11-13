@@ -45,8 +45,16 @@ def _context(person, rules, pending, last, now, todos=(), last_write=None, about
         lines.extend(f"  - {a}" for a in about)
     if rules:
         lines.append("Their rules, as numbered to them:")
+        from .refresh import reminder_name
         for i, r in numbered(rules):
             spec = RuleSpec.model_validate(r["spec"])
+            name = reminder_name(spec.content.text) if spec.content.source == "note" else None
+            if name:
+                # fix pass 4, finding 75: the export reminders' steps (Instagram, YouTube, history, likes, a "fresh"
+                # export) made the model limit later requests to YouTube watch history and ask for new videos: the
+                # rule is listed by its short name only
+                spec = spec.model_copy(deep=True)
+                spec.content.text = spec.content.goal = name
             extra = []
             if r.get("created_at"):
                 extra.append("made " + _day(datetime.fromisoformat(r["created_at"]).astimezone(tz)))
@@ -155,12 +163,45 @@ def _adds_from_answer(x):
         (x.intent == "act_on_last" and any(a.action == "todo.add" for a in x.actions))
 
 
-def _grounding(it: Interpretation, message):
+def _kept_text(x, rules):
+    """True when a change keeps a reminder's own stored words (the rule it changes holds that text)."""
+    if x.intent != "change_rule" or x.spec is None:
+        return False
+    for r in rules or []:
+        try:
+            c = RuleSpec.model_validate(r["spec"]).content
+        except (ValidationError, KeyError, TypeError):
+            continue
+        if c.source == "note" and c.text == x.spec.content.text:
+            return True
+    return False
+
+
+def _reminder_text(x: Interpretation, rules):
+    """Fix pass 4, finding 75: an export reminder is listed to the model by its short name; a change to it keeps the
+    reminder's own words (its opening is how its steps are found at each send)."""
+    if x.intent != "change_rule" or x.spec is None or x.spec.content.source != "note" or x.rule_number is None:
+        return
+    from .refresh import reminder_name
+    r = by_number(rules or [], x.rule_number)
+    if not r:
+        return
+    try:
+        old = RuleSpec.model_validate(r["spec"]).content
+    except (ValidationError, KeyError, TypeError):
+        return
+    name = reminder_name(old.text) if old.source == "note" else None
+    if name and x.spec.content.text in (name, old.text, None, ""):
+        x.spec.content.text, x.spec.content.goal = old.text, old.goal
+
+
+def _grounding(it: Interpretation, message, rules=()):
     """Problems with words shown back to the person as theirs, or with a write they did not ask for; or None."""
     for x in [it] + ([it.also] if it.also else []):
         if _adds_from_answer(x) and not ADDING.search(message):
             return "the message does not ask to add anything to a list; a question about the last answer is follow_up"
-        if x.spec is not None and x.spec.content.source == "note" and not own_words(x.spec.content.text, message):
+        if x.spec is not None and x.spec.content.source == "note" and not own_words(x.spec.content.text, message) \
+                and not _kept_text(x, rules):
             return "content.text of a note must use only words from their message"
         if x.intent == "todo_add" and x.todo_text and not own_words(x.todo_text, message):
             return "todo_text must use only words from their message"
@@ -1309,6 +1350,7 @@ def settle(raw, message, rules, now, tzname, todos=()):
         _rule_now(x, rules, message)
         _target(x, message, rules)
         _canonical_change(x, rules)
+        _reminder_text(x, rules)
         _clarify_keeps(x, message)
         if x.spec is not None:
             _surprise(x, message, now, tzname)
@@ -1349,6 +1391,139 @@ def _one_list_write(it: Interpretation):
     return it
 
 
+# ---------- fix pass 4: what the setup taught the bot helps an answer and never blocks one (findings 74 to 76, 82) ----
+# the person asks for things from outside their saves (DESIGN.md section 8: "new", "more like these", "what else is out
+# there", "not just what I saved"); "new to Blender" is a level, not a request for new things
+OUTSIDE_ASKED = re.compile(
+    r"\bnew(?:er|est)?\b(?!\s+(?:to|at)\b)(?<!\bi['’]m new)(?<!\bim new)(?<!\bi am new)|\bfresh\b(?!\s+exports?)"
+    r"|\boutside\b|\bbeyond\b|\belsewhere\b|\bdiscover\w*|\bwhat else\b|\bout there\b"
+    r"|\bmore like (?:these|this|that|those|it|them)\b|\bnot (?:just|only) (?:what|stuff|things|the ones|from)\b"
+    r"|\b(?:haven['’]?t|have not|never|didn['’]?t|did not) (?:seen|saved|watched|kept)\b|\balready (?:saved|have|kept|seen)\b"
+    r"|\bnot (?:from|in) my (?:saves|saved|library|likes)\b"
+    # the languages the replies may be written in (lang.py) and the ones detect_lang knows
+    r"|\bnuev[oa]s?\b|\bnouveaux?\b|\bnouvelles?\b|\bneu(?:e|en|er|es)?\b|\bnov[oa]s?\b|\bnuov[oaie]\b"
+    r"|\bfuera de\b|\bm[aá]s como (?:estos|estas|esto|este|esta)\b", re.I)
+# the message says how they kept it ("from my saves", "that I liked", "I watched") or where ("on YouTube", "reels")
+KINDS_ASKED = re.compile(r"\b(?:sav(?:e|es|ed|ing)|kept|lik(?:e|es|ed)|watch(?:ed|ing)?|seen|viewed|playlists?|"
+                         r"collections?|bookmark\w*|sent (?:to )?(?:myself|me)|shared (?:with|to) (?:myself|me))\b", re.I)
+PLATFORMS_ASKED = re.compile(r"\b(?:youtube|yt|instagram|insta|ig|reels?|igtv|shorts)\b", re.I)
+NUMBER = re.compile(r"\d+")
+PROFILE_LEVEL_CRITERION = {"new": "suits a beginner", "beginner": "suits a beginner",
+                           "intermediate": "suits an intermediate level", "advanced": "suits an advanced level"}
+
+
+def _guard_words(x, message, pending, rules):
+    """The words a form may draw on: the message, and the request it edits (a preview waiting for YES, a half-built
+    form, the rule it changes)."""
+    texts = [message]
+    if pending and (x.edits_pending or pending.get("kind") == "clarify"):
+        texts.append(str((pending.get("payload") or {}).get("text") or ""))
+    old = None
+    if x.intent == "change_rule" and x.rule_number is not None:
+        r = by_number(rules or [], x.rule_number)
+        if r:
+            texts.append(str(r.get("text") or ""))
+            try:
+                old = RuleSpec.model_validate(r["spec"]).content
+            except (ValidationError, KeyError, TypeError):
+                old = None
+    return " / ".join(t for t in texts if t), old
+
+
+def _stems_and_numbers(*texts):
+    from .profile import topic_words
+    return set(topic_words(*texts)) | {n for t in texts for n in NUMBER.findall(t or "")}
+
+
+def restated_pref(cr, said, prefs, notes):
+    """True when a must-have restates the person's kit, their usual time or one of their notes (shares a word or a
+    number with them) and the message does not say it: 'uses an Instant Pot', 'under 20 minutes on weeknights' for
+    'convenient chicken and rice recipes' (finding 74). The finished result and a level are judged elsewhere."""
+    from .compose import FINISHED
+    if FINISHED.search(cr) or LEVEL_IN_CRITERION.search(cr):
+        return False
+    mine = _stems_and_numbers(*[str(t) for t in prefs.get("tools") or []], str(prefs.get("time") or ""),
+                              *[str(n) for n in notes or []])
+    shared = _stems_and_numbers(cr) & mine
+    return bool(shared) and not (shared & said)
+
+
+def _level_ok(cr, message, prof):
+    """A level must-have stays when the message names a level, or when the profile has a level that may be used for
+    the request's own topic (finding 76: never one from another topic or another rule). Returns the must-have to keep
+    (the profile's own level, worded in plain words), or None."""
+    from .profile import LEVEL_ASKED, _about, level_allowed, topic_words
+    if any(_level_said_in(rx, message) for rx, _ in LEVEL_WORD) or LEVEL_ASKED.search(message):
+        return cr
+    words = set(topic_words(message))
+    for i in prof.get("interests") or []:
+        if i.get("level") and _about(i, words) and level_allowed(i, prof.get("prefs") or {}):
+            return PROFILE_LEVEL_CRITERION.get(i["level"])
+    return None
+
+
+def guard_criteria(criteria, avoid, message, prof):
+    """Must-haves the message (or the profile, for the same topic) supports; a diet restated from a note becomes the
+    things it rules out, in avoid (the avoid list is the one hard limit)."""
+    from .profile import DIETS, avoid_for
+    prefs, notes = prof.get("prefs") or {}, prof.get("notes") or []
+    said = _stems_and_numbers(message)
+    out = []
+    for cr in criteria:
+        if LEVEL_IN_CRITERION.search(cr):
+            cr = _level_ok(cr, message, prof)
+            if cr and cr not in out:
+                out.append(cr)
+            continue
+        if restated_pref(cr, said, prefs, notes):
+            diet = next((w for w in WORD.findall(cr.lower()) if w in DIETS), None)
+            if diet:
+                for a in avoid_for(list(DIETS[diet]), message):
+                    if a not in avoid and len(avoid) < 8:
+                        avoid.append(a)
+            continue
+        if cr not in out:
+            out.append(cr)
+    return out
+
+
+def profile_guard(it: Interpretation, message, prof, pending=None, rules=()):
+    """Fix pass 4: a form keeps only what the message's own words (or the profile, for the same topic) support.
+    - finding 74: the person's kit, usual time and notes are preferences for the composer, never must-haves;
+    - finding 75: outside "some" / "only" only when the message asks for new things, or their profile says so;
+    - finding 76: a level must-have only from the message, or the profile's level at the request's own topic;
+    - finding 82: no kinds or platforms limit the message does not ask for (their exclusions still apply in retrieval).
+    A rule change keeps what the rule already had."""
+    prefs = (prof or {}).get("prefs") or {}
+    for x in [it] + ([it.also] if it.also else []):
+        words, old = _guard_words(x, message, pending, rules)
+        if x.intent == "more":
+            if x.outside in ("some", "only") and not OUTSIDE_ASKED.search(words) and prefs.get("outside") is not True:
+                x.outside = None
+            if x.criteria:
+                x.criteria = guard_criteria(x.criteria, x.avoid, words, prof or {})
+            continue
+        if x.spec is None or x.intent not in ("ask", "new_rule", "change_rule") or x.spec.content.source != "library":
+            continue
+        c = x.spec.content
+        if c.outside in ("some", "only") and not OUTSIDE_ASKED.search(words) and prefs.get("outside") is not True \
+                and not (old is not None and old.outside == c.outside):
+            c.outside = "none"
+        if c.kinds and not KINDS_ASKED.search(words) and not (old is not None and old.kinds == c.kinds):
+            c.kinds = []
+        if c.platforms and not PLATFORMS_ASKED.search(words) and not (old is not None and old.platforms == c.platforms):
+            c.platforms = []
+        if c.criteria:
+            out = []
+            for cr in c.criteria:
+                for k in ([cr] if old is not None and cr in old.criteria else
+                          guard_criteria([cr], c.avoid, words, prof or {})):
+                    if k not in out:
+                        out.append(k)
+            c.criteria = out
+    return it
+
+
 # ---------- one message ----------
 def interpret(text, person, rules, pending, last, now, todos=(), last_write=None, about=(), store=None):
     """Returns (Interpretation, cost_usd). With `store`, the same request reuses the same interpretation (6 hours)."""
@@ -1380,7 +1555,7 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
         try:
             it = new_find(later_on_last(settle(raw, text, rules, now, person["timezone"], todos), text, last, now,
                                             person["timezone"]), text, last)
-            err = _grounding(it, text)
+            err = _grounding(it, text, rules)
             if err and attempt == 0:
                 continue
             if err:   # still not their words: their whole message is used instead, never words they did not write

@@ -119,7 +119,7 @@ def test_3_two_things_go_on_the_grocery_list_and_the_list_name_is_never_in_the_t
 
 def _recipe_with_steps(env):
     env["state"]["answers"]["mvp_extract"] = lambda u: {"ingredients": ["200g spaghetti", "2 lemons"],
-                                                        "steps": ["4 cloves garlic"]}
+                                                        "steps": ["4 cloves garlic", "Lemon garlic pasta"]}
     env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
         {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta"},
         {"n": number_of(u, "Pasta night"), "verdict": "clear", "title": "Pasta night"}]}
@@ -129,7 +129,7 @@ def test_4_steps_of_a_shown_pick_are_answered_directly_never_with_i_recommend(en
     bot = env["bot"]
     _recipe_with_steps(env)
     msg = say(env, "pasta recipes with the ingredients and steps", ask(extract=["ingredients", "steps"], count=2))
-    assert "Steps (1):\n1. 4 cloves garlic" in msg
+    assert "Steps (2):\n1. 4 cloves garlic" in msg
     n, c = interp_calls(env), env["calls"].count("mvp_compose")
     bot.on_message(H, "what are the steps for the first one?")
     msg = last(env["ch"])
@@ -308,14 +308,14 @@ def test_15_a_reply_is_all_spanish_or_all_english(env):
 def test_16_with_details_asked_the_recommended_pick_has_them_all(env):
     def extract(u):
         if "200g spaghetti" in u:
-            return {"ingredients": ["200g spaghetti", "2 lemons"], "steps": ["4 cloves garlic"]}
+            return {"ingredients": ["200g spaghetti", "2 lemons"], "steps": ["4 cloves garlic", "Lemon garlic pasta"]}
         return {"ingredients": [], "steps": []}
     env["state"]["answers"]["mvp_extract"] = extract
     env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
         {"n": number_of(u, "Pasta night"), "verdict": "clear", "title": "Pasta night"},
         {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta"}]}
     msg = say(env, "a pasta recipe with the ingredients and steps", ask(extract=["ingredients", "steps"]))
-    assert "I recommend Lemon garlic pasta" in msg and "Steps (1):" in msg and "Ingredients (2):" in msg
+    assert "I recommend Lemon garlic pasta" in msg and "Steps (2):" in msg and "Ingredients (2):" in msg
     # the best one has only the ingredients written out: said plainly
     env["bot"].store.x("DELETE FROM facts")
     env["state"]["answers"]["mvp_extract"] = lambda u: {"ingredients": ["200g spaghetti", "2 lemons"], "steps": []} \
@@ -556,14 +556,14 @@ def test_27_only_new_stuff_after_an_answer_is_more_from_outside_only(yt):
 def test_28_a_recipe_gets_its_details_without_being_asked_and_add_its_ingredients_works(env):
     extracts = []
     env["state"]["answers"]["mvp_extract"] = lambda u: (extracts.append(u), {
-        "ingredients": ["200g spaghetti", "2 lemons"], "steps": ["4 cloves garlic"]} if "200g" in u else {})[1]
+        "ingredients": ["200g spaghetti", "2 lemons"], "steps": ["4 cloves garlic", "Lemon garlic pasta"]} if "200g" in u else {})[1]
     env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
         {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta"},
         {"n": number_of(u, "Pasta night"), "verdict": "clear", "title": "Pasta night"}]}
     spec = pasta_spec({"type": "now"})
     spec["content"].update(extract=[], count=3, goal="easy pasta recipes")
     msg = say(env, "find me 3 easy pasta recipes", {"intent": "ask", "spec": spec})
-    assert "Ingredients (2):\n• 200g spaghetti" in msg and "Steps (1):" in msg
+    assert "Ingredients (2):\n• 200g spaghetti" in msg and "Steps (2):" in msg
     assert len(extracts) == 1                                              # the recommended pick only
     # "add its ingredients" when nothing was read yet: the details step runs now
     env["bot"].store.x("DELETE FROM facts")
@@ -685,7 +685,7 @@ def test_35_personal_topics_still_are(text):
 
 def test_37_an_answer_reads_like_the_founders_target(yt):
     yt["state"]["answers"]["mvp_extract"] = lambda u: {"ingredients": ["200g spaghetti", "2 lemons"],
-                                                       "steps": ["4 cloves garlic"]} if "200g" in u else {}
+                                                       "steps": ["4 cloves garlic", "Lemon garlic pasta"]} if "200g" in u else {}
     yt["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
         {"n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta",
          "because": "I recommend this one, because it needs just 2 lemons",
@@ -696,7 +696,7 @@ def test_37_an_answer_reads_like_the_founders_target(yt):
     msg = str(say(yt, "lemony pasta recipes, and some new ones", a))
     order = ["I found some lemony pasta recipes in your saves.",
              "I recommend Lemon garlic pasta by @chef, which you saved in March, because it needs just 2 lemons.",
-             "https://example.com/itm_a", "Ingredients (2):", "Steps (1):", "Or try these:", "• Pasta night by @chef",
+             "https://example.com/itm_a", "Ingredients (2):", "Steps (2):", "Or try these:", "• Pasta night by @chef",
              "Not from your saves, but close to them:"]
     at = [msg.index(x) for x in order]
     assert at == sorted(at) and clean(msg) and "[" not in msg and "Alternatively" not in msg
