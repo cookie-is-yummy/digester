@@ -481,7 +481,9 @@ class HandlerMixin:
             live = [r["id"] for r in self.store.rules(h, statuses=("active",))]
             self._wrote(h, "timezone", f"switched to {T.zone_name(it.timezone)} time",
                         {"timezone": person["timezone"], "revert_to": person.get("tz_revert_to"),
-                         "revert_at": person.get("tz_revert_at"), "rows": self._rule_rows(live)})
+                         "revert_at": person.get("tz_revert_at"), "rows": self._rule_rows(live),
+                         "todos": [{"id": t["id"], "due_at": t["due_at"]} for t in self.store.todos(h)
+                                   if t.get("due_at") and not t.get("reminded_at")]})
             back = resolve_until(it.until, None, now, it.timezone) if it.until else None
             if back is not None and back <= now:
                 back = None
@@ -693,6 +695,10 @@ class HandlerMixin:
             at = datetime.fromisoformat(u["revert_at"]) if u.get("revert_at") else None
             self._move_timezone(h, u["timezone"], now, revert_to=u.get("revert_to"), revert_at=at)
             self._restore_rows(u.get("rows") or [])   # the sends as they were before the switch
+            for t in u.get("todos") or []:   # and the to-do reminders (review fix S6)
+                row = self.store.todo(t["id"])
+                if row and not row.get("reminded_at"):
+                    self.store.update_todo(t["id"], due_at=t["due_at"])
             return f"I'm back on {T.zone_name(u['timezone'])} time"
         return None
 

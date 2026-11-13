@@ -186,6 +186,15 @@ class SchedulerMixin:
                 continue
             status, nxt = self._next_for(spec, person, now, r)
             self.store.set_slot(r["id"], nxt, status)
+        # review fix S6: a to-do's reminder keeps its date and clock time too ("9am" stays 9am there). One whose moment
+        # has passed, or would have passed read in the new zone, is left as it is.
+        for t in self.store.todos(handle):
+            if not t.get("due_at") or t.get("reminded_at"):
+                continue
+            due = datetime.fromisoformat(t["due_at"])
+            kept = due.astimezone(old_tz).replace(tzinfo=ZoneInfo(new_tz))
+            if due > now and kept > now:
+                self.store.update_todo(t["id"], due_at=now_iso(kept))
 
     def _keep_cadence(self, person):
         """Before the person's zone changes: each every-N-days or every-N-weeks rule keeps the day it counts from, as
@@ -335,8 +344,10 @@ class SchedulerMixin:
             self._advance(rule, spec, tz, now)  # skip this slot rather than fire late after unpausing
             return 0
         quiet_streak = self._unanswered(person["handle"])
-        if quiet_streak >= UNANSWERED_PAUSE:
+        if quiet_streak >= UNANSWERED_PAUSE and not self._own_once(spec):
             for r in self.store.rules(person["handle"]):
+                if self._own_once(RuleSpec.model_validate(r["spec"])):
+                    continue   # review fix S7: a one-time reminder they asked for still goes out, as a to-do's does
                 if r["status"] == "active" and r["next_run_at"]:
                     self.store.update_rule(r["id"], status="paused")
                 if r.get("paused_until"):  # "paused until Monday" must not restart while they are still silent
@@ -428,12 +439,23 @@ class SchedulerMixin:
         self.store.x("UPDATE runs SET status=? WHERE id=?", ("sent" if n else "none_sent", run_id))
         return 1
 
+    @staticmethod
+    def _own_once(spec):
+        """A one-time send the person asked for: a reminder in their own words, or picks sent later ("email me this
+        tonight"). Like a to-do's reminder, it is their own time, not a stream they did not answer (review fix S7)."""
+        return spec.when.type == "once" and spec.content.source in ("note", "items")
+
     def _unanswered(self, handle):
         """Timed sends that went out since the person last wrote or reacted."""
         since = self.store.get_state(f"last_in:{handle}") or ""
         # a to-do's reminder is the person's own time, not a stream they did not answer (fix pass, finding 22)
-        return self.store.one("SELECT COUNT(*) n FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
-                              "('sent','none_sent','unknown') AND at>?", (handle, since))["n"]
+        rows = self.store.q("SELECT rule_id FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
+                            "('sent','none_sent','unknown') AND at>?", (handle, since))
+        own = {}
+        for rid in {r["rule_id"] for r in rows}:
+            rule = self.store.rule(rid) if rid else None
+            own[rid] = bool(rule) and self._own_once(RuleSpec.model_validate(rule["spec"]))
+        return sum(1 for r in rows if not own[r["rule_id"]])
 
     def _run_failed(self, run_id):
         return self.store.one("SELECT status FROM runs WHERE id=?", (run_id,))["status"] == "error"

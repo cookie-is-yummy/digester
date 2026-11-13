@@ -283,3 +283,54 @@ def test_s5_undo_after_calendar_and_list_takes_the_todos_off_only(env):
         "put the first one on my calendar for 7 and add it to my list")
     assert bot.store.rule(r["id"])["status"] == "active"
     assert not bot.store.todos(H) and "off your list" in last(ch)
+
+
+# ---------- S6: to-do reminders keep their clock time when the person changes time zone ----------
+
+def test_s6_a_todo_reminder_moves_with_the_time_zone_and_back_on_undo(env):
+    from zoneinfo import ZoneInfo
+    LA = ZoneInfo("America/Los_Angeles")
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "todo_add", "todo_text": "call the bank",
+                                                "due": "2026-11-13T09:00"}
+    bot.on_message(H, "remind me to call the bank tomorrow at 9am")
+    before = bot.store.todos(H)[0]["due_at"]
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "set_timezone", "timezone": "America/Los_Angeles"}
+    bot.on_message(H, "I'm in LA now")
+    td = bot.store.todos(H)[0]
+    assert datetime.fromisoformat(td["due_at"]).astimezone(LA).hour == 9
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "todo_list"}
+    bot.on_message(H, "what's on my list")
+    assert "tomorrow at 9am" in last(ch)
+    clock[0] = u(2026, 11, 13, 14, 1)          # 6am in LA: nothing yet
+    n0 = len(ch.outbox)
+    bot.tick()
+    assert len(ch.outbox) == n0
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "undo"}
+    clock[0] = u(2026, 11, 12, 18, 5)
+    bot.on_message(H, "undo")
+    assert bot.store.todos(H)[0]["due_at"] == before
+
+
+# ---------- S7: the unanswered-sends pause leaves one-time reminders the person asked for ----------
+
+def test_s7_auto_pause_keeps_a_one_time_reminder_in_the_persons_words(env):
+    from mvp.tests.test_rules_v2 import more_pasta
+    bot, ch, st, clock = env["bot"], env["ch"], env["state"], env["clock"]
+    weekly(bot, st, when={"type": "schedule", "days": DAILY, "time": "08:00"})
+    more_pasta(bot, 30)
+    rem = note_rule(bot, st, {"type": "once", "date": "2026-11-18", "time": "17:00"}, text="Pick up the kids")
+    st["answers"]["mvp_interpret"] = lambda x: {"intent": "todo_add", "todo_text": "dentist", "due": "2026-11-18T17:00"}
+    bot.on_message(H, "remind me dentist on the 18th at 5pm")
+    out = []
+    t = u(2026, 11, 13, 13, 0, 30)
+    while t < u(2026, 11, 19, 12):
+        n0 = len(ch.outbox)
+        clock[0] = t
+        bot.tick()
+        out += [m[2] for m in ch.outbox[n0:]]
+        t += timedelta(minutes=30)
+    texts = " ".join(out)
+    assert texts.count("paused your timed sends") == 1   # the daily rule went unanswered and was paused, said once
+    assert "dentist" in texts and "Pick up the kids" in texts
+    assert bot.store.rule(rem["id"])["status"] == "done"
