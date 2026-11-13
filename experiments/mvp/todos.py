@@ -248,7 +248,8 @@ class TodoMixin:
                 continue
             with self.lock_for(person["handle"]):
                 t = self.store.todo(t["id"])
-                if not t or t["reminded_at"] or t["done_at"] or t["removed_at"] or t["due_at"] > now_iso(now):
+                person = self.store.person(person["handle"])   # review fix S1: a snooze or a stop made meanwhile
+                if not person or not t or t["reminded_at"] or t["done_at"] or t["removed_at"] or t["due_at"] > now_iso(now):
                     continue
                 h, tz = person["handle"], person["timezone"]
 

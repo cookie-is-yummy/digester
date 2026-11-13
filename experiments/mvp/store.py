@@ -670,7 +670,7 @@ class Store:
                             self.db.execute(f"DELETE FROM {t} WHERE library=?", (r["library"],))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
             for rid in rule_ids:   # a timed send's retry count and hold (review fix PRIV-5)
-                for key in (f"retry:{rid}", f"hold:{rid}"):
+                for key in (f"retry:{rid}", f"hold:{rid}", f"cadence:{rid}"):
                     self.db.execute("DELETE FROM state WHERE key=?", (key,))
             # every other state key named after them ("<what>:<handle>"), e.g. outside_auto: with their topic words
             self.db.execute("DELETE FROM state WHERE substr(key, -?) = ?", (len(handle) + 1, ":" + handle))

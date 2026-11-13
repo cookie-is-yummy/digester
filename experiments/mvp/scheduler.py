@@ -68,6 +68,10 @@ class SchedulerMixin:
         for p in self.store.timezone_reverts_due(now):
             h = p["handle"]
             with self.lock_for(h):
+                # review fix S1: read again under the lock; a message handled meanwhile may have changed the zone
+                p = self.store.person(h)
+                if not p or not p.get("tz_revert_at") or not p.get("tz_revert_to") or p["tz_revert_at"] > now_iso(now):
+                    continue
                 live = {r["id"] for r in self.store.rules(h, statuses=("active",))}
                 self._move_timezone(h, p["tz_revert_to"], now)
                 ended = [RuleSpec.model_validate(r["spec"]).content.goal for r in self.store.rules(h, statuses=("done",))
@@ -79,6 +83,13 @@ class SchedulerMixin:
             if not person:
                 continue
             with self.lock_for(person["handle"]):
+                # review fix S1: the row was read before the lock. A "stop", a "resume" or a new pause made meanwhile
+                # wins: go on only if the rule is still paused until a time that has come.
+                r = self.store.rule(r["id"])
+                person = self.store.person(person["handle"])
+                if not r or not person or r["status"] != "paused" or not r.get("paused_until") \
+                        or r["paused_until"] > now_iso(now):
+                    continue
                 spec = RuleSpec.model_validate(r["spec"])
                 status, nxt = self._next_for(spec, person, now, r)
                 self.store.set_slot(r["id"], nxt, status)
@@ -153,6 +164,7 @@ class SchedulerMixin:
         Rules pinned to a zone (when.tz) do not move."""
         person = self.store.person(handle)
         old_tz = ZoneInfo(person["timezone"])
+        self._keep_cadence(person)   # review fix S2: "every 2 days" keeps counting from the same day
         self.store.set_timezone(handle, new_tz, revert_to=revert_to, revert_at=revert_at)
         person = self.store.person(handle)
         for r in self.store.rules(handle, statuses=("active",)):
@@ -168,6 +180,32 @@ class SchedulerMixin:
             status, nxt = self._next_for(spec, person, now, r)
             self.store.set_slot(r["id"], nxt, status)
 
+    def _keep_cadence(self, person):
+        """Before the person's zone changes: each every-N-days or every-N-weeks rule keeps the day it counts from, as
+        worked out in the zone it has been counted in so far (review fix S2). Kept with the rule's timing, so a changed
+        rule counts afresh."""
+        from .schedule import base_day, counts_from_a_day
+        for r in self.store.rules(person["handle"], statuses=("active", "paused")):
+            spec = RuleSpec.model_validate(r["spec"])
+            if spec.when.tz or not counts_from_a_day(spec.when) or self._cadence_base(r, spec):
+                continue
+            day = base_day(spec.when, person["timezone"], datetime.fromisoformat(r["created_at"]), seed=r["id"],
+                           quiet=self.store.quiet(person["handle"]))
+            if day:
+                self.store.set_state(f"cadence:{r['id']}", {"day": day, "when": self._when_key(spec)})
+
+    @staticmethod
+    def _when_key(spec):
+        import json
+        return json.dumps(spec.when.model_dump(mode="json"), sort_keys=True)
+
+    def _cadence_base(self, rule, spec):
+        """The kept day a rule's cadence counts from (ISO date), or None to work it out from its creation."""
+        if not rule or not rule.get("id"):
+            return None
+        kept = self.store.get_state(f"cadence:{rule['id']}")
+        return kept["day"] if isinstance(kept, dict) and kept.get("when") == self._when_key(spec) else None
+
     # ---------- slots ----------
     def _next_for(self, spec, person, now, rule=None, after=None):
         """(status, next_run_at) for a rule: a saved on-request or new-items rule stays active with no time; a timed
@@ -176,7 +214,7 @@ class SchedulerMixin:
             return "active", None
         anchor = datetime.fromisoformat(rule["created_at"]) if rule and rule.get("created_at") else now
         nxt = next_run(spec.when, person["timezone"], after or now, anchor=anchor, seed=rule["id"] if rule else None,
-                       quiet=self.store.quiet(person["handle"]))
+                       quiet=self.store.quiet(person["handle"]), base=self._cadence_base(rule, spec))
         return ("active", now_iso(nxt)) if nxt else ("done", None)
 
     def _upcoming(self, rule, person, now):
@@ -262,7 +300,8 @@ class SchedulerMixin:
             return 0
         with self.lock_for(person["handle"]):  # not while a message from this person is being handled
             rule = self.store.rule(rule["id"])  # it may have been paused, stopped or changed a moment ago
-            if not rule or rule["status"] != "active" or not rule["next_run_at"] or rule["next_run_at"] > now_iso(now):
+            person = self.store.person(person["handle"])  # review fix S1: a snooze, a stop or an import made meanwhile
+            if not person or not rule or rule["status"] != "active" or not rule["next_run_at"] or rule["next_run_at"] > now_iso(now):
                 return 0
             return self._tick_rule_locked(rule, person, now, {} if progress is None else progress)
 
@@ -305,7 +344,7 @@ class SchedulerMixin:
             # and held sends are not: they wait for the end of quiet hours, unless the next regular send comes first.
             release = end_of_quiet(now, tz, quiet)
             regular = next_run(spec.when, tz, slot, anchor=datetime.fromisoformat(rule["created_at"]), seed=rule["id"],
-                               quiet=quiet)
+                               quiet=quiet, base=self._cadence_base(rule, spec))
             if spec.when.type != "once" and regular and regular <= release:
                 return self._skip_slot(rule, spec, tz, now, "quiet_hours")
             self._hold(rule, release)

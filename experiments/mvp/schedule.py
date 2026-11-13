@@ -164,23 +164,48 @@ def _weekly_days(when, anchor_local):
     return {DAYS.index(x) for x in when.days} if when.days else {anchor_local.weekday()}
 
 
-def _cadence(when, tz, anchor_local, day_moments):
+def counts_from_a_day(when):
+    """True for the cadences counted from a first day: every N days, every N weeks (N > 1)."""
+    return when.type == "schedule" and bool(when.every_days or (not (when.month_days or when.month_weeks or
+                                                                     when.every_months) and (when.every_weeks or 1) > 1))
+
+
+def _base_day(when, anchor_local, day_moments):
+    """The first day an every-N-days or every-N-weeks rule counts from: `start` for every N days, else the first
+    matching day after creation (or `start`) with a send moment after creation."""
+    start = date.fromisoformat(when.start) if when.start else None
+    if when.every_days and start:
+        return start
+    base_from = max(anchor_local.date(), start) if start else anchor_local.date()
+    wanted = None if when.every_days else _weekly_days(when, anchor_local)
+    for i in range(HORIZON_DAYS):
+        d = base_from + timedelta(days=i)
+        # except_dates remove sends; they never move the cadence ("every other Friday, but not the 13th")
+        if (wanted is None or d.weekday() in wanted) and _in_span(when, d) \
+                and any(m > anchor_local for m in day_moments(d)):
+            return d
+    return None
+
+
+def base_day(when, tzname, anchor, seed=None, quiet=None):
+    """The day the cadence counts from, worked out in zone `tzname` (ISO date or None). Kept by the scheduler when the
+    person's zone changes, so the count never starts again from a new day (review fix S2)."""
+    if not counts_from_a_day(when):
+        return None
+    tz = ZoneInfo(when.tz or tzname)
+    seed = "preview" if seed is None else seed
+    d = _base_day(when, anchor.astimezone(tz), lambda x: _day_moments(when, tz, x, seed, quiet, tzname))
+    return d.isoformat() if d else None
+
+
+def _cadence(when, tz, anchor_local, day_moments, base=None):
     """A test day -> bool for a schedule. Rules that repeat every N weeks or N days start on the first matching day
     after creation (or `start`); every N months counts from the month of creation (or of `start`). `anchor_local` is
-    the creation moment, and day_moments(d) the send moments of a day."""
+    the creation moment, and day_moments(d) the send moments of a day. `base` (a date) is that first day when it was
+    kept from before a time zone change."""
     start = date.fromisoformat(when.start) if when.start else None
-    base_from = max(anchor_local.date(), start) if start else anchor_local.date()
-
-    def first_after(match):
-        for i in range(HORIZON_DAYS):
-            d = base_from + timedelta(days=i)
-            # except_dates remove sends; they never move the cadence ("every other Friday, but not the 13th")
-            if match(d) and _in_span(when, d) and any(m > anchor_local for m in day_moments(d)):
-                return d
-        return None
-
     if when.every_days:
-        day0 = start or first_after(lambda d: True)
+        day0 = base or _base_day(when, anchor_local, day_moments)
         return lambda d: day0 is not None and d >= day0 and (d - day0).days % when.every_days == 0
     if when.month_days or when.month_weeks or when.every_months:
         anchor_day = date.fromisoformat(when.start).day if start else anchor_local.day
@@ -198,7 +223,7 @@ def _cadence(when, tz, anchor_local, day_moments):
     n = when.every_weeks or 1
     if n == 1:
         return lambda d: d.weekday() in wanted
-    base = first_after(lambda d: d.weekday() in wanted)
+    base = base or _base_day(when, anchor_local, day_moments)
     if base is None:
         return lambda d: False
     base_monday = base - timedelta(days=base.weekday())
@@ -224,13 +249,15 @@ def _day_moments(when, tz, d, seed, quiet, ptz):
 
 
 # ---------- the next send ----------
-def next_run(when: When, tzname: str, after: datetime, anchor: datetime | None = None, seed=None, quiet=None):
+def next_run(when: When, tzname: str, after: datetime, anchor: datetime | None = None, seed=None, quiet=None,
+             base=None):
     """The first send strictly after `after` (aware), as an aware UTC datetime; None for now, on_request, new_items,
     a past once, or a rule whose until has passed.
     tzname: the person's zone (quiet hours are read in it); the rule's clock is `when.tz` or this zone.
     anchor: when the rule was made; repeats counted from creation start there, and random moments for the period it
     falls in are drawn only from what is left of that period. seed: the rule's id (random and window moments).
-    quiet: the person's quiet blocks (None = the default 22:00 to 08:00)."""
+    quiet: the person's quiet blocks (None = the default 22:00 to 08:00). base: the day an every-N cadence counts
+    from (ISO date), kept from before a time zone change; None works it out from the anchor."""
     tz = ZoneInfo(when.tz or tzname)
     after_utc = _utc(after)
     if when.type in ("now", "on_request", "new_items"):
@@ -247,7 +274,7 @@ def next_run(when: When, tzname: str, after: datetime, anchor: datetime | None =
 
     def moments(d):
         return _day_moments(when, tz, d, seed, quiet, tzname)
-    matches = _cadence(when, tz, anchor_local, moments)
+    matches = _cadence(when, tz, anchor_local, moments, date.fromisoformat(base) if base else None)
     first = after_utc.astimezone(tz).date()
     if when.start:
         first = max(first, date.fromisoformat(when.start))
