@@ -631,3 +631,45 @@ def test_checker_any_length_with_a_new_preview_waiting_never_changes_the_rule_of
     r1_now = bot.store.rules(H)[0]
     assert (r1_now["text"], r1_now["spec"]) == (r1["text"], r1["spec"])
     assert pending_spec(bot)[0] == "confirm_rule"
+
+
+def test_checker_stop_the_stretch_one_read_as_all_rules_stops_that_rule_only(blender):
+    bot = blender["bot"]
+    _two_rules(blender)
+    out = say(blender, "stop the stretch one", {"intent": "stop", "all_rules": True})
+    assert [r["text"] for r in bot.store.rules(H)] == [MINI] and out.startswith("Stopped")
+    # words that say every rule still stop them all
+    say(blender, "every morning at 7 remind me to stretch", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "time": "07:00"},
+        "content": {"source": "note", "text": "stretch"}}})
+    say(blender, "stop everything", {"intent": "stop", "all_rules": True})
+    assert bot.store.rules(H) == []
+
+
+def test_checker_a_resume_number_the_model_filled_alone_needs_the_rule_named_or_the_only_paused_one(blender):
+    bot = blender["bot"]
+    _two_rules(blender)
+    for r in bot.store.rules(H):
+        bot.store.pause_rule(r["id"])
+    bot.store.x("DELETE FROM runs")
+    bot.store.set_state(f"lastwrite:{H}", None)
+    assert say(blender, "turn it back on", {"intent": "resume", "rule_number": 1}).startswith("Which rule?")
+    assert [r["status"] for r in bot.store.rules(H)] == ["paused", "paused"]
+    bot.store.x("UPDATE rules SET status='active' WHERE id=?", (bot.store.rules(H)[1]["id"],))
+    assert say(blender, "turn it back on", {"intent": "resume", "rule_number": 1}).startswith("Resumed")
+    assert [r["status"] for r in bot.store.rules(H)] == ["active", "active"]
+
+
+def test_checker_a_profile_update_adds_a_thing_to_avoid_or_a_confirmation_only_in_words(rich):
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich)
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "avoid": ["gluten"], "confirm_all": True,
+                                                    "tools": ["oven"]}
+    say(rich, "I have an oven", {"intent": "profile_update"})
+    prof = P().get(bot.store, H)
+    assert prof["prefs"].get("avoid") is None
+    assert not next(i for i in prof["interests"] if i["topic"] == "Home cooking")["confirmed"]
+    st["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "avoid": ["meat"], "confirm_all": True}
+    say(rich, "that's right, and I'm vegetarian now", {"intent": "profile_update"})
+    prof = P().get(bot.store, H)
+    assert prof["prefs"]["avoid"] == ["meat"] and all(i["confirmed"] for i in prof["interests"])

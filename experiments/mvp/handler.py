@@ -421,9 +421,18 @@ class HandlerMixin:
             if pending["kind"] == "clarify" and it.intent in ("new_rule", "change_rule"):
                 text = pending["payload"].get("text", "") + " / " + text   # the rule keeps the whole request
             pending = None
-        if it.intent in ("change_rule", "pause", "stop", "skip") and it.rule_number is not None and not it.all_rules \
+        if it.intent in ("pause", "stop", "resume") and it.all_rules and len(rules) > 1 and not T.ALL_RULES_SAID.search(text):
+            # (checker of fix pass 6) "stop the pasta one" read as all rules: the one rule the message names, only
+            named = [k for k, _ in numbered(rules) if names_rule(text, rules, k)]
+            if len(named) == 1:
+                it.all_rules, it.rule_number = False, named[0]
+        if it.intent in ("change_rule", "pause", "stop", "skip", "resume") and it.rule_number is not None \
+                and not it.all_rules \
                 and len(rules) > 1 and not names_rule(text, rules, it.rule_number) \
-                and not self._rule_in_view(h, last, it.rule_number, rules):
+                and not self._rule_in_view(h, last, it.rule_number, rules) \
+                and not (it.intent == "resume" and [r["id"] for r in rules if r["status"] == "paused"]
+                         == [(by_number(rules, it.rule_number) or {}).get("id")]):
+            # (checker of fix pass 6: resume too; the only paused rule needs no name)
             # fix pass 6, checker's audit: with several rules, a rule number the model filled alone (the message names
             # no rule, and it is not the rule just started, changed or sent) never changes or stops that rule
             return self.send(h, T.WHICH_RULE)

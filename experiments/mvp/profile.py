@@ -759,6 +759,7 @@ STYLE_SAID = {"brief": re.compile(r"\b(?:brief|briefer|short|shorter|concise|les
                                  r"all the details|everything)\b", re.I)}
 OUTSIDE_SAID = re.compile(r"\b(?:new|outside|fresh|discover\w*|beyond|saves?|saved|library|kept)\b|"
                           r"\bhaven['’]?t (?:seen|watched)\b", re.I)
+CONFIRM_SAID = re.compile(r"\b(?:right|correct|spot on|accurate|true|exactly|yes|yep|yeah|that['’]?s me)\b", re.I)
 GUESS_SAID = re.compile(r"\bguess\w*\b|\blevels?\b", re.I)
 
 
@@ -829,8 +830,12 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
             other.append(changes[-1])
     # "that's right" confirms what the person was shown (the read shows at most 4 topics), never a topic they did not see
     seen = None if shown is None else {t.lower() for t in shown}
-    confirm = [i for i in interests if raw.get("confirm_all") is True and (seen is None or i["topic"].lower() in seen)]
-    confirm += [i for i in (_find(interests, n) for n in _strs(raw.get("confirm_topics"))) if i and i not in confirm]
+    # (checker of fix pass 6) outside the setup's read (nothing shown), a confirmation is said in words or names the topic
+    yes = seen is not None or bool(CONFIRM_SAID.search(message or ""))
+    confirm = [i for i in interests if raw.get("confirm_all") is True and yes
+               and (seen is None or i["topic"].lower() in seen)]
+    confirm += [i for i in (_find(interests, n) for n in _strs(raw.get("confirm_topics")))
+                if i and i not in confirm and (seen is not None or _named_in(i, message))]
     if any(not i.get("confirmed") for i in confirm):
         for i in confirm:
             i["confirmed"] = True
@@ -905,7 +910,8 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
                 *(_covered(a) for a in allow))]
         bad = [v for v in vals if stated_sensitive(v)]
         skipped = skipped or bool(bad)
-        vals = [v for v in vals if v not in bad and (key == "avoid" or own_words(v, message))]
+        # (checker of fix pass 6) a thing to avoid is in their words or covered by a diet they state, as a kit is
+        vals = [v for v in vals if v not in bad and (own_words(v, message) or (key == "avoid" and _avoid_stated(v, message)))]
         new = [v for v in vals if v.lower() not in {x.lower() for x in prefs.get(key) or []}]
         if new:
             prefs[key] = (list(prefs.get(key) or []) + new)[-10:]
