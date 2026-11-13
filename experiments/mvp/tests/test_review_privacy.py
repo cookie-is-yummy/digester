@@ -4,6 +4,8 @@ import json
 import os
 import sys
 
+import pytest
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXP = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, EXP)
@@ -191,3 +193,68 @@ def test_priv3_each_store_keeps_its_own_deletion_list(env):
     assert web.load_people(bot.people_path) == 0                  # the test page's person stays deleted there
     real = Bot(ConsoleChannel(printer=None), store=Store(config.DB), pool=bot.pool, clock=bot.clock)
     assert real.load_people(bot.people_path) == 1 and real.store.rules(H)   # the real bot is untouched
+
+
+# ---------- PRIV-6: a deletion during an import: nothing is sent, kept or moved to .failed ----------
+
+@pytest.mark.parametrize("ok", [False, True])
+def test_priv6_deleted_during_the_build(fresh, ok):
+    bot, ch = fresh["bot"], fresh["ch"]
+    fresh["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "delete_data"}
+    inner = fake_prepare(ok=ok)
+    seen = {}
+
+    def prep(lib, cap):
+        bot.on_message(H, "delete my data")
+        bot.on_message(H, "yes")
+        seen["n"], seen["lib"] = len(ch.outbox), lib
+        return inner(lib, cap)
+    bot.refresher.prepare = prep
+    drop(fresh, fresh["ig_zip"])
+    assert bot.refresher.poll(force=True) == 1
+    assert bot.store.person(H) is None
+    assert ch.outbox[seen["n"]:] == []                                         # nothing sent after the deletion
+    assert bot.store.one("SELECT COUNT(*) n FROM sent WHERE handle=?", (H,))["n"] == 0
+    assert bot.store.one("SELECT COUNT(*) n FROM imports WHERE handle=?", (H,))["n"] == 0
+    assert not os.path.exists(seen["lib"])                                     # the library built from their export
+    assert not os.path.exists(fresh["inbox"])                                  # no .failed copy, no .working copy
+
+
+# ---------- PRIV-7: the outside search never uses words the setup's model wrote ----------
+def _offer(env, outside="none"):
+    from mvp.store import now_iso
+    spec = {"when": {"type": "now"}, "content": {"goal": "a pasta dish you can cook tonight", "outside": outside,
+            "searches": ["easy pasta dinner"], "count": 1, "criteria": ["ends with a dish you can eat"]}}
+    req = "An easy pasta dinner that ends with a dish you can eat"          # written by the first-requests model
+    env["bot"].store.set_state(f"onboard:{H}", {"step": "offer", "at": now_iso(env["clock"][0]),
+                                                "requests": [{"text": req, "spec": spec, "hits": 3}]})
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Lemon garlic pasta",
+                                                                    "verdict": "close"}]}
+
+
+def test_priv7_a_first_request_run_by_number_sends_no_model_words_to_youtube(yt):
+    _offer(yt)
+    yt["bot"].on_message(H, "1")
+    assert "the closest I have is" in last(yt["ch"])                     # the library answer is given
+    assert yt["yt"].searches() == []
+    _offer(yt, outside="some")
+    yt["bot"].on_message(H, "1")
+    assert yt["yt"].searches() == []
+
+
+def test_priv7_the_morning_rule_keeps_the_persons_words_and_searches_with_none_of_the_models(yt):
+    _offer(yt, outside="some")
+    yt["bot"].on_message(H, "every morning")
+    assert yt["yt"].searches() == []
+    yt["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "confirm"}
+    yt["bot"].on_message(H, "yes")
+    rule = yt["bot"].store.rules(H)[0]
+    assert rule["text"] == "every morning"
+    yt["clock"][0] = yt["clock"][0] + __import__("datetime").timedelta(days=1)
+    yt["bot"].tick()
+    assert yt["yt"].searches() == []
+    # a rule stored before the fix, with the setup's sentence as its text: its sends use none of those words
+    yt["bot"].store.update_rule(rule["id"], text="every morning at 8: An easy pasta dinner that ends with a dish")
+    yt["bot"].run(yt["bot"].store.person(H), __import__("mvp.schema", fromlist=["x"]).RuleSpec.model_validate(
+        rule["spec"]), "manual", rule_id=rule["id"], request_text="every morning at 8: An easy pasta dinner")
+    assert yt["yt"].searches() == []

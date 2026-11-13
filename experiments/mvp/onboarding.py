@@ -299,14 +299,16 @@ class OnboardingMixin:
             self.note(intent="ask")
             self._set_onboard(h, "done", now)   # finding 34: the offer is used, so it is closed
             spec = RuleSpec.model_validate(r["spec"])
-            msg, run_id, _ = self.run(person, spec, "ask", request_text=r["text"])
+            # review fix PRIV-7: the request was written by the setup's model, so the outside search gets only what
+            # the person typed ("1"), which holds no search words
+            msg, run_id, _ = self.run(person, spec, "ask", request_text=r["text"], own_words=text)
             return self.deliver(person, spec, msg, run_id, kind="ask", request_text=r["text"])
         if T.ONBOARD_REPEAT.match(text) and reqs:
             self._set_onboard(h, "done", now)
-            return self._onboard_rule(person, reqs[0], now)
+            return self._onboard_rule(person, reqs[0], now, own=text)
         return None
 
-    def _onboard_rule(self, person, req, now):
+    def _onboard_rule(self, person, req, now, own=""):
         h = person["handle"]
         self.note(intent="new_rule")
         stored = dict(req["spec"])
@@ -314,14 +316,14 @@ class OnboardingMixin:
         stored["when"] = {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
                           "times": ["08:00"]}
         spec = RuleSpec.model_validate(stored)
-        text = f"every morning at 8: {req['text']}"
+        text = " ".join(str(own or "every morning").split())[:300]   # the person's own words, never the setup's (PRIV-7)
         pending = self.store.pending(h)
         more = []
         if pending and pending["kind"] == "confirm_rule" and str(pending["payload"].get("text", "")).startswith(
                 "export reminders"):   # the reminders offered in step 4 start with the same YES
             more = [{"text": pending["payload"]["text"], "spec": pending["payload"]["spec"]}] + \
                 (pending["payload"].get("more") or [])
-        msg, run_id, n = self.run(person, spec, "preview", request_text=req["text"])
+        msg, run_id, n = self.run(person, spec, "preview", request_text=req["text"], own_words=text)
         if self._run_failed(run_id):
             return self.send(h, msg, run_id)
         self.store.set_pending(h, "confirm_rule", {"text": text, "spec": spec.stored(), "run_id": run_id,

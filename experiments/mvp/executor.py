@@ -72,6 +72,9 @@ def length_bound(spec, *texts):
     return min(found) if found else None
 
 
+# the text a morning rule from the setup was stored with before review fix PRIV-7 (onboarding._onboard_rule)
+ONBOARD_RULE_PREFIX = "every morning at 8: "
+
 class ExecutorMixin:
     def send(self, handle, text, run_id=None):
         """Sends a reply. A Reply goes out part by part on a channel that shows link previews (each link alone in its
@@ -201,13 +204,22 @@ class ExecutorMixin:
 
     # ---------- one run ----------
     def run(self, person, spec: RuleSpec, kind, rule_id=None, request_text=None, cands_override=None, known_lines=None,
-            shown=(), only_ids=None):
+            shown=(), only_ids=None, own_words=None):
         """kind: preview | scheduled | manual | ask | more | follow_up. Returns (message, run_id, n_picks). 'manual'
         is a rule run because the person asked for it now; 'more' repeats the last question without the picks already
         shown (`shown`). Deliveries are written here; a caller whose send fails removes them (unsend). `only_ids`
         limits the library's candidates to those items (a new_items rule after an import).
         A library request with outside "some" gets the outside block after its picks; "only" shows just that block
-        (outside.py). The block is never kept with the answer, never a delivery and never counted in n_picks."""
+        (outside.py). The block is never kept with the answer, never a delivery and never counted in n_picks.
+        `own_words`: when `request_text` was not written by the person (a first request the setup wrote for them),
+        the person's own message, the only words the outside search may use (review fix PRIV-7)."""
+        self._tl.own_words = own_words
+        try:
+            return self._run(person, spec, kind, rule_id, request_text, cands_override, known_lines, shown, only_ids)
+        finally:
+            self._tl.own_words = None
+
+    def _run(self, person, spec, kind, rule_id, request_text, cands_override, known_lines, shown, only_ids):
         c = spec.content
         outside = c.source == "library" and cands_override is None and kind != "follow_up"
         if outside and c.outside == "only":
@@ -422,11 +434,15 @@ class ExecutorMixin:
         showed in the last 30 days. Returns the result of Outside.find."""
         from . import outside as O
         h = person["handle"]
-        texts = [request_text or ""]
+        own = getattr(self._tl, "own_words", None)
+        texts = [request_text or ""] if own is None else [own]
         if rule_id:
             r = self.store.rule(rule_id)
             if r and r.get("text") and r["text"] != request_text:
                 texts.append(r["text"])
+        # review fix PRIV-7: a morning rule from the setup's first requests made before this fix kept the setup's
+        # sentence as its text; those words were never the person's, so its sends search with none of them
+        texts = [x for x in texts if not str(x).startswith(ONBOARD_RULE_PREFIX)]
         view = self.view(person["library"])
         have = {it.video_id for it in view.items.values() if it.platform == "youtube" and it.video_id}
         q = O.search_text(spec, texts)

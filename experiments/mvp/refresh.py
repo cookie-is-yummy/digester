@@ -497,11 +497,27 @@ class Refresher:
         row["id"] = _add_import(store, row)
 
         def finish(status, message, error=None):
+            with bot.lock_for(handle):   # a deletion of this person waits for it, and it sees one that came first
+                return _finish(status, message, error)
+
+        def _finish(status, message, error=None):
+            # review fix PRIV-6: the person asked for their data to be deleted while this import ran: nothing is kept
+            # or moved to .failed (their export, its copy and the new library are removed) and nothing is sent or
+            # recorded about them
+            gone = store.person(handle) is None
+            if gone:
+                status, message = "deleted", None
             row.update(status=status, error=error, seconds=round(time.time() - t0, 1))
             new_lib = row.get("library")
             if new_lib and status != "done" and os.path.isdir(new_lib) and \
                     os.path.abspath(new_lib) != os.path.abspath(old_lib):
                 shutil.rmtree(new_lib, ignore_errors=True)   # a failed build is derived data: removed, old kept
+            if gone:
+                for f in claimed:
+                    _remove(f)
+                shutil.rmtree(work, ignore_errors=True)
+                print("import: stopped, the person asked for their data to be deleted", file=sys.stderr)
+                return None
             row["id"] = _add_import(store, row)
             for f in claimed:
                 if status == "done":
@@ -512,8 +528,7 @@ class Refresher:
                     os.replace(f, os.path.join(failed, f"{stamp}-{os.path.basename(f)}"))
             shutil.rmtree(work, ignore_errors=True)
             if message is not None:
-                with bot.lock_for(handle):
-                    bot.send(handle, message)
+                bot.send(handle, message)
             print(f"import: {status}, {row.get('n_new', 0)} new items, {row['seconds']} s", file=sys.stderr)
             return row
 
@@ -623,6 +638,8 @@ class Refresher:
                 by_source[it.get("platform") or "other"] += 1
         row.update(counts=json.dumps(totals), new_counts=json.dumps(dict(by_source)), n_new=len(fresh))
         with bot.lock_for(handle):
+            if store.person(handle) is None:   # deleted during the build (PRIV-6): removed, nothing sent
+                return finish("deleted", None)
             store.switch_library(handle, new_lib)
             row.update(status="done", seconds=round(time.time() - t0, 1))
             row["id"] = _add_import(store, row)
