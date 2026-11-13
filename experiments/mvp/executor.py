@@ -73,6 +73,19 @@ def length_bound(spec, *texts):
     return min(found) if found else None
 
 
+def pref_backed(because, own, kits, time_pref):
+    """Fix pass 4, finding 74: True unless the reason names the person's kit, or a word of their usual time
+    ("weeknights"), that the post's own text does not have (numbers are checked against the text already)."""
+    from .profile import topic_words
+    for k in kits or []:
+        if mentions(because, k) and not mentions(own, k):
+            return False
+    said, have = set(topic_words(because)), set(topic_words(own))
+    mine = set(topic_words(str(time_pref or ""))) - {"usually", "usual", "has", "have", "got", "minute", "hour", "time",
+                                                     "about", "around", "most", "day", "days", "only", "max"}
+    return not ((said & mine) - have)
+
+
 def makes_whole(facts, food):
     """Fix pass 4, finding 80: the details code read from a pick's own text make a finished result: a recipe's
     ingredients and at least two steps; a workout's or a tutorial's at least two steps."""
@@ -432,6 +445,13 @@ class ExecutorMixin:
                 if b and any(rx.search(b) and not (p.get("facts") or {}).get(k) for k, rx in DETAIL_CLAIM.items()):
                     p["because"], p["because_backed"] = None, False
                     result["dropped"]["because_detail_claim"] = result["dropped"].get("because_detail_claim", 0) + 1
+                    continue
+                # fix pass 4, finding 74: a reason may name their kit or their usual time only when the post's own
+                # text backs it ("it needs only an Instant Pot" for a post that never names one is left out)
+                if b and not pref_backed(b, own_text(p["item"], extra), kits,
+                                         (self.store.person_context(h).get("prefs") or {}).get("time")):
+                    p["because"], p["because_backed"] = None, False
+                    result["dropped"]["because_pref_claim"] = result["dropped"].get("because_pref_claim", 0) + 1
             if result.get("picks") and kind != "follow_up" and not self._answer_lang():
                 result["picks"][0]["fit"] = self._fit_note(h, result["picks"][0], kits, extra, spec,
                                                            request_text or "", hint)

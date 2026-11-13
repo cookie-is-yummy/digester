@@ -512,3 +512,18 @@ def test_83_the_guessed_direction_uses_a_verb_that_fits_any_topic_and_writes_2d_
         "learning Blender 3D and into 2D animation"
     assert P.read_lines({"interests": [{"topic": "2d animation", "saved": 12}], "prefs": {}}) == \
         ["• 2D animation (12 saved)"]
+
+
+def test_74_a_reason_names_the_kit_or_the_usual_time_only_when_the_post_says_it(env):
+    bot, st = env["bot"], env["state"]
+    with_profile(bot, note=None)
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{
+        "n": number_of(u, "Lemon garlic"), "verdict": "clear", "title": "Lemon garlic pasta",
+        "because": "it suits your weeknights and needs only an Instant Pot",
+        "facts": [{"label": "pasta", "quote": "Lemon garlic pasta"}]}]}
+    msg = say(env, "a pasta recipe", ask_form("a pasta recipe", ["pasta recipe"]))
+    assert "Instant Pot" not in msg and "weeknight" not in msg and "I recommend Lemon garlic pasta" in msg
+    from mvp.executor import pref_backed
+    assert pref_backed("it takes 20 minutes in an Instant Pot", "Instant Pot chicken, 20 minutes", ["Instant Pot"],
+                       "20 minutes on weeknights")
+    assert pref_backed("it has lemon and garlic", "Lemon garlic pasta", ["Instant Pot"], "20 minutes on weeknights")
