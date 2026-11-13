@@ -1,11 +1,15 @@
 """PROTOTYPE ONLY - every model call of the MVP goes through experiments/lib/ai.py (AGENTS.md rule 11).
 
-The MVP's own calls go to MVP_HOME/ai_runs.jsonl, each row tagged with the person it served, so the per-person daily
+The MVP's own calls go to MVP_HOME/ai_runs.jsonl, each row tagged with the person it served (a keyed hash of the
+handle, person_ref), so the per-person daily
 cap (rule 8) and the build cap (section 14) can be checked. Search calls made by a library's engine go to that
 library's own ledger; they are counted too. No prompt text or item text is logged.
 """
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import sys
 import threading
 from datetime import datetime
@@ -29,10 +33,40 @@ _tl = threading.local()
 _orig_log = ai._log
 
 
+_key_lock = threading.Lock()
+
+
+def _person_key():
+    """A random key kept beside the ledger (never in git), made at the first use."""
+    path = os.path.join(LEDGER_HOME, "person_key.txt")
+    with _key_lock:
+        if not os.path.exists(path):
+            os.makedirs(LEDGER_HOME, exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(secrets.token_hex(32))
+        with open(path) as f:
+            return f.read().strip().encode()
+
+
+def person_ref(handle):
+    """review fix PRIV-5: the ledger names a person by a keyed hash of their handle, never the phone number or email
+    itself, so a deletion leaves no handle in the shared ledger. The same handle always gives the same ref (the daily
+    cap counts by it)."""
+    if not handle:
+        return handle
+    return "p-" + hmac.new(_person_key(), str(handle).encode(), hashlib.sha256).hexdigest()[:20]
+
+
+def rows_naming(handle):
+    """Ledger rows written before PRIV-5 that hold the handle itself (counted for the deletion list)."""
+    return sum(1 for r in _rows(ai.LEDGER) if r.get("person") == handle)
+
+
 def _log(row):
     row = dict(row)
     if getattr(_tl, "person", None):
-        row["person"] = _tl.person
+        row["person"] = person_ref(_tl.person)
     _tl.cost = getattr(_tl, "cost", 0.0) + (row.get("cost_usd") or 0.0)  # this thread's calls only
     _orig_log(row)
 
@@ -74,7 +108,8 @@ def _lib_rows(library):
 def spent_today(handle, library):
     """Cost today (local server date) for one person: their MVP calls plus their library's search calls."""
     day = datetime.now().strftime("%Y-%m-%d")
-    mine = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER) if r.get("person") == handle and _today(r, day))
+    refs = {handle, person_ref(handle)}   # rows from before PRIV-5 name the handle itself
+    mine = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER) if r.get("person") in refs and _today(r, day))
     lib = sum(r.get("cost_usd", 0) for r in _lib_rows(library) if _today(r, day))
     return mine + lib
 
@@ -82,7 +117,7 @@ def spent_today(handle, library):
 def log_spend(person, purpose, cost_usd, **extra):
     """A cost made outside this process (a library build), written to the MVP ledger with the person it served."""
     ai._log({"provider": "openai", "purpose": purpose, "prompt_version": None, "cost_usd": round(cost_usd, 6),
-             **extra, "person": person})
+             **extra, "person": person_ref(person)})
 
 
 def started_at():

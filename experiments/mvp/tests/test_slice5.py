@@ -373,14 +373,14 @@ def test_a_synthetic_export_is_imported_and_the_library_switched(fresh, monkeypa
     assert not [f for f in os.listdir(fresh["inbox"]) if not f.startswith(".")]   # the raw export is gone
     assert not os.path.exists(os.path.join(fresh["inbox"], ".working")) or \
         not os.listdir(os.path.join(fresh["inbox"], ".working"))
-    # the build's cost is in the MVP ledger with the person, and counted once
+    # the build's cost is in the MVP ledger with the person (a hashed ref, review fix PRIV-5), and counted once
     from mvp import llm
     # this test's own ledger, never the real data/mvp one (ai.py is imported once per session; llm.py re-points it)
     assert llm.ai.LEDGER == os.path.join(llm.LEDGER_HOME, "ai_runs.jsonl")
     assert llm.LEDGER_HOME.startswith(str(fresh["lib"].parent))
     with open(llm.ai.LEDGER) as f:
         rows = [json.loads(line) for line in f if '"mvp_import"' in line]
-    assert [(r["purpose"], r["person"], r["cost_usd"]) for r in rows] == [("mvp_import", H, 0.0123)]
+    assert [(r["purpose"], r["person"], r["cost_usd"]) for r in rows] == [("mvp_import", llm.person_ref(H), 0.0123)]
     assert llm._lib_rows(new) == []
     # the search now reads the new library; a restart keeps it (people.json still names the old one)
     assert bot.view(new).get("itm_a") is None

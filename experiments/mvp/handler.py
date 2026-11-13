@@ -2,7 +2,6 @@
 follow-ups (BRIEF-10 section 4). The interpreter fills forms (AGENTS.md rule 6); code acts. Mixed into core.Bot.
 """
 import json
-import os
 import re
 import time
 from datetime import datetime, timedelta
@@ -747,10 +746,20 @@ class HandlerMixin:
                                  preview_run=pending["payload"].get("run_id"))
             return self._activate_more(person, pending, ref)
         if pending["kind"] == "confirm_delete":
-            self.store.delete_person_data(h)
-            os.makedirs(config.HOME, exist_ok=True)
-            with open(os.path.join(config.HOME, "deletions.jsonl"), "a") as f:
-                f.write(json.dumps({"handle": h, "library": person["library"], "at": now_iso()}) + "\n")
+            # review fix PRIV-5: the inbox folder (raw exports, the failed ones too) goes with the rows; every library
+            # that was theirs is named in the deletion line for a founder to remove, and so are ledger rows written
+            # with their handle before the ledger used a hashed ref. One deletion list per store (PRIV-3).
+            from . import llm
+            from .refresh import forget_inbox
+            inbox_left = forget_inbox(self.store, h)
+            gone = self.store.delete_person_data(h)
+            line = {"handle": h, "library": person["library"], "libraries": gone["libraries"], "at": now_iso()}
+            if inbox_left:
+                line["inbox_left"] = inbox_left
+            old_rows = llm.rows_naming(h)
+            if old_rows:
+                line["ledger_rows_with_handle"] = old_rows
+            self.store.add_deletion(line)
             # sent through the channel directly, so nothing new is recorded about the person
             return self.channel.send(h, T.DELETED)
         return None

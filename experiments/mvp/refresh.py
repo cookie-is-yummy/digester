@@ -82,6 +82,20 @@ def shared_inboxes(store):
     return {n for n, k in names.items() if k > 1}
 
 
+def forget_inbox(store, handle):
+    """review fix PRIV-5: 'delete my data' removes the person's inbox folder with everything in it (a waiting export,
+    the refused or failed ones in .failed, an import's .working copy). A folder two people map to is left alone (it
+    could hold the other person's export) and its path is returned for the deletion list. Returns None when removed
+    or absent. Call it before the person's row is deleted."""
+    d = inbox_dir(handle)
+    if not os.path.isdir(d):
+        return None
+    if inbox_name(handle) in shared_inboxes(store):
+        return d
+    shutil.rmtree(d, ignore_errors=True)
+    return None
+
+
 def safe_filename(name):
     base = os.path.basename((name or "").replace("\\", "/"))
     # no leading "." or "_": the inbox check skips such names (its own working folders), so the file would wait forever
@@ -225,17 +239,64 @@ def kept_counts(lib):
     return dict(counts), ids
 
 
-def carry_over(old_lib, new_lib, imported):
+def social_graph(ig_zips):
+    """(mutual, following): the handles in the new Instagram export's followers and following lists (the importer's
+    own reading of them; nothing else in the export is opened). None when the export has neither list."""
+    ex = ig_import.Export(list(ig_zips))
+    try:
+        fz, gz = ex.matching(ig_import.FOLLOWERS), ex.matching(ig_import.FOLLOWING)
+        if not (fz or gz):
+            return None
+        followers = set().union(*[ig_import.handles(ex.load(x)) for x in fz]) if fz else set()
+        following = set().union(*[ig_import.handles(ex.load(x)) for x in gz]) if gz else set()
+        return followers & following, following
+    finally:
+        ex.close()
+
+
+def _relation_now(it, graph, new_rel):
+    """review fix PRIV-1: an Instagram item carried over gets its owner's relation from the NEW export (someone who
+    follows back is now a friend), never the relation the old library had."""
+    pd = it.get("platform_data") or {}
+    h = (pd.get("owner_handle") or "").lower()
+    if graph is not None:
+        mutual, following = graph
+        return "mutual" if h in mutual else "following" if h in following else "none"
+    return new_rel.get(h, pd.get("owner_relation"))
+
+
+def carry_over(old_lib, new_lib, imported, graph=None):
     """Items the new export cannot hold come over from the old library: every item of a platform this import did not
     bring (a YouTube-only Takeout keeps the Instagram items, and the other way round), and, when Instagram was
     imported, the send-to-self and sent-to-someone shares (the export's messages are never read). Friends' posts never
-    come over. Returns counts."""
+    come over: a share's owner relation is set again from the new export (`graph`: its (mutual, following) handles,
+    else the relation its own items give that owner), so an owner who is now a friend leaves the library. Returns
+    counts."""
     if not old_lib or not os.path.isfile(LIB.p(old_lib, "corpus", "items.jsonl")):
         return {"items": 0, "shares": 0}
     items = _jsonl(LIB.p(new_lib, "corpus", "items.jsonl"))
     inter = _jsonl(LIB.p(new_lib, "corpus", "interactions.jsonl"))
     by_id = {it["id"]: it for it in items}
+    new_rel = {}
+    for it in items:
+        pd = it.get("platform_data") or {}
+        if it.get("platform") == "instagram" and pd.get("owner_handle"):
+            rel = pd.get("owner_relation")
+            if new_rel.get(pd["owner_handle"].lower()) not in LIB.FRIEND_RELATIONS:
+                new_rel[pd["owner_handle"].lower()] = rel
     old_items = {it["id"]: it for it in _jsonl(LIB.p(old_lib, "corpus", "items.jsonl")) if not LIB.is_friend(it)}
+    if "instagram" in imported:
+        for iid in list(old_items):
+            it = old_items[iid]
+            if it.get("platform") != "instagram":
+                continue
+            rel = _relation_now(it, graph, new_rel)
+            if rel in LIB.FRIEND_RELATIONS:
+                del old_items[iid]   # a friend now: their post is never used again
+                continue
+            if rel != (it.get("platform_data") or {}).get("owner_relation"):
+                it = dict(it, platform_data=dict(it.get("platform_data") or {}, owner_relation=rel))
+                old_items[iid] = it
     old_inter = _jsonl(LIB.p(old_lib, "corpus", "interactions.jsonl"))
     moved, shares = set(), 0
     for iid, it in old_items.items():
@@ -534,7 +595,7 @@ class Refresher:
             return finish("refused", T.IMPORT_NO_FOLLOWERS)
         man["mvp_import"] = True   # its build rows are mirrored in the MVP ledger (llm.py counts them once)
         LIB.write_json(LIB.p(new_lib, "library.json"), man)
-        carried = carry_over(old_lib, new_lib, set(sources))
+        carried = carry_over(old_lib, new_lib, set(sources), graph=social_graph(ig) if ig else None)
         row["carried"] = carried
         est = self.estimate(new_lib)
         row["estimate_usd"] = est

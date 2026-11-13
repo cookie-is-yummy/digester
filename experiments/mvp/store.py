@@ -579,9 +579,40 @@ class Store:
     def set_state(self, key, value):
         self.x("INSERT OR REPLACE INTO state(key,value) VALUES(?,?)", (key, json.dumps(value)))
 
+    @property
+    def deletions_path(self):
+        """review fix PRIV-3: one deletion list per store, beside it. The real store (mvp.sqlite) keeps
+        deletions.jsonl; any other store (the test page's webtest.sqlite) has its own, so a deletion typed on the test
+        page never marks a real person as deleted or asks a founder to remove a real library."""
+        base = os.path.splitext(os.path.basename(self.path))[0]
+        name = "deletions.jsonl" if base == "mvp" else f"deletions-{base}.jsonl"
+        return os.path.join(os.path.dirname(self.path), name)
+
+    def deleted_handles(self):
+        if not os.path.exists(self.deletions_path):
+            return set()
+        with open(self.deletions_path, encoding="utf-8") as f:
+            return {json.loads(line)["handle"] for line in f if line.strip()}
+
+    def add_deletion(self, line):
+        with self.lock, open(self.deletions_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(line) + "\n")
+
+    def person_libraries(self, handle):
+        """Every library folder this store connects to the person: the one in use, and each one an import built for
+        them or switched them away from."""
+        libs = [(self.one("SELECT library FROM people WHERE handle=?", (handle,)) or {}).get("library")]
+        for r in self.q("SELECT library, old_library FROM imports WHERE handle=?", (handle,)):
+            libs += [r.get("library"), r.get("old_library")]
+        return list(dict.fromkeys(os.path.abspath(x) for x in libs if x))
+
     def delete_person_data(self, handle):
-        """'delete my data': everything the MVP holds about the person except a deletion marker."""
+        """'delete my data': everything the MVP holds about the person except a deletion marker. Returns
+        {"libraries": [...]}: every library folder that was theirs (review fix PRIV-5: the imports rows were the only
+        record of the libraries built from their exports, so they are read before those rows go)."""
         with self.lock:
+            libraries = self.person_libraries(handle)
+            rule_ids = [r["id"] for r in self.q("SELECT id FROM rules WHERE handle=?", (handle,))]
             for row in self.q("SELECT path FROM outbox WHERE handle=? AND path IS NOT NULL", (handle,)):
                 try:   # the emails and calendar files written for them
                     os.remove(row["path"])
@@ -591,16 +622,30 @@ class Store:
                       "todos", "profile_notes", "interp_cache", "answer_cache", "answers", "action_log", "outbox",
                       "outside_searches", "imports"):
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
-            lib = (self.one("SELECT library FROM people WHERE handle=?", (handle,)) or {}).get("library")
-            if lib and not self.one("SELECT 1 AS x FROM people WHERE library=? AND handle<>?", (lib, handle)):
-                # the profile guess made from their library (slice 6), unless someone else uses the same library
-                self.db.execute("DELETE FROM profile_guess WHERE library=?", (os.path.abspath(lib),))
+            others = {os.path.abspath(r["library"]) for r in
+                      self.q("SELECT library FROM people WHERE handle<>?", (handle,)) if r.get("library")}
+            for lib in libraries:
+                if lib in others:
+                    continue
+                # what was derived from their libraries (the profile guess, checked detail lines, ranked lists),
+                # unless someone else uses the same library (slice 6; review fix PRIV-5)
+                for t in ("profile_guess", "facts", "ranked_cache"):
+                    for r in self.q(f"SELECT DISTINCT library FROM {t}"):
+                        if r["library"] and os.path.abspath(r["library"]) == lib:
+                            self.db.execute(f"DELETE FROM {t} WHERE library=?", (r["library"],))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
+            for rid in rule_ids:   # a timed send's retry count and hold (review fix PRIV-5)
+                for key in (f"retry:{rid}", f"hold:{rid}"):
+                    self.db.execute("DELETE FROM state WHERE key=?", (key,))
+            # every other state key named after them ("<what>:<handle>"), e.g. outside_auto: with their topic words
+            self.db.execute("DELETE FROM state WHERE substr(key, -?) = ?", (len(handle) + 1, ":" + handle))
             for key in (f"lines:{handle}", f"lastspec:{handle}", f"last_in:{handle}", f"cap_notice:{handle}", f"unknown:{handle}",
                         f"lastwrite:{handle}", f"linekinds:{handle}", f"facts:{handle}",
                         f"card:{handle}", f"emailcode:{handle}", f"emailcodes:{handle}", f"emailwait:{handle}",
                         f"emailask:{handle}", f"outside_shown:{handle}", f"export_reminders:{handle}",
-                        f"onboard:{handle}", f"levelnote:{handle}", f"heldimport:{handle}", f"heldnotice:{handle}"):
+                        f"onboard:{handle}", f"levelnote:{handle}", f"heldimport:{handle}", f"heldnotice:{handle}",
+                        f"outside_auto:{handle}"):
                 self.db.execute("DELETE FROM state WHERE key=?", (key,))
             self.db.commit()
+        return {"libraries": libraries}
 

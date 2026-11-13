@@ -127,11 +127,8 @@ class Bot(HandlerMixin, FollowupMixin, OnboardingMixin, TodoMixin, OutputsMixin,
             return 0
         with open(path, encoding="utf-8") as f:
             people = json.load(f)
-        deleted = set()
-        gone = os.path.join(config.HOME, "deletions.jsonl")
-        if os.path.exists(gone):  # a person who asked for deletion is not added back from people.json
-            with open(gone, encoding="utf-8") as f:
-                deleted = {json.loads(line)["handle"] for line in f if line.strip()}
+        # a person who asked for deletion is not added back from people.json (this store's own list: PRIV-3)
+        deleted = self.store.deleted_handles()
         n = 0
         for i, (handle, p) in enumerate(people.items(), 1):
             handle = norm_handle(handle)

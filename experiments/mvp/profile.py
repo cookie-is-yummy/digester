@@ -56,7 +56,11 @@ SENSITIVE = re.compile(
     r"day trading|stock trading|forex|wealth\w*|millionaires?|retirement (?:savings|planning|fund)|savings|"
     r"side hustles?|passive income|credit (?:cards?|scores?)|real estate|fat[- ]?loss|lose fat|calorie deficit|diets?|"
     r"coming out|my partner|my ex|"
-    r"jesus|christ|allah|torah|mosques?|synagogues?|scriptures?|porn\w*|onlyfans|hook-?ups?|tinder)\b", re.I)
+    r"jesus|christ|allah|torah|mosques?|synagogues?|scriptures?|porn\w*|onlyfans|hook-?ups?|tinder|"
+    # review fix PRIV-4: religious observances, named conditions and gender words the lists above missed
+    r"ramadan|iftar|suhoor|eid|halal|kosher|shabbat|sabbath|passover|hanukkah|lent|hijabi?s?|diwali|"
+    r"pcos|endometriosis|menopaus\w*|perimenopaus\w*|hiv|bipolar|ocd|ptsd|ibs|celiac|coeliac|crohn'?s|"
+    r"non-?binary|genderqueer)\b", re.I)
 
 
 def sensitive(*texts):

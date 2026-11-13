@@ -69,16 +69,18 @@ SENSITIVE = {
     "health": """health diagnosis diagnosed symptom symptoms disease illness cancer diabetes depression depressed
         anxiety adhd autism autistic bipolar ocd ptsd therapist psychiatrist psychiatry medication medications
         prescription pregnant pregnancy fertility ivf surgery addiction sobriety suicide suicidal anorexia bulimia
-        hospital std hiv covid vaccine vaccines chemo chemotherapy menopause miscarriage""",
+        hospital std hiv covid vaccine vaccines chemo chemotherapy menopause miscarriage
+        pcos endometriosis perimenopause ibs celiac coeliac crohn crohns crohn's""",
     "relationships": """relationship relationships dating breakup divorce divorced hookup tinder bumble""",
     "money": """debt debts loan loans salary paycheck investing investment investments crypto bitcoin finances financial
         banking mortgage taxes bankruptcy savings""",
     "religion": """religion religious jesus christ allah church mosque synagogue prayer prayers bible quran koran torah
-        christian christians christianity muslim islam jewish judaism hindu hinduism buddhist buddhism atheist""",
+        christian christians christianity muslim islam jewish judaism hindu hinduism buddhist buddhism atheist
+        ramadan iftar suhoor eid halal kosher shabbat sabbath passover hanukkah lent hijab hijabi diwali""",
     "politics": """politics political election elections voting voter democrat democrats republican republicans trump
         biden harris congress senate abortion immigration immigrant immigrants deportation asylum""",
     "sexuality": """sex sexual sexuality gay lesbian bisexual queer lgbt lgbtq transgender nonbinary porn nsfw kink
-        kinky nude nudes erotic""",
+        kinky nude nudes erotic genderqueer""",
 }
 SENSITIVE_STEMS = {_stem(w): topic for topic, words in SENSITIVE.items() for w in words.split()}
 SENSITIVE_PHRASES = {"self harm": "health", "eating disorder": "health", "mental health": "health",
@@ -93,7 +95,7 @@ SENSITIVE_PHRASES = {"self harm": "health", "eating disorder": "health", "mental
                      "pay off": "money", "credit score": "money", "credit card debt": "money", "day trading": "money",
                      "stock trading": "money", "personal finance": "money", "green card": "politics",
                      "god's word": "religion", "praise god": "religion", "my faith": "religion",
-                     "how to pray": "religion", "vote for": "politics"}
+                     "how to pray": "religion", "vote for": "politics", "non binary": "sexuality"}
 
 
 def _clean(text):

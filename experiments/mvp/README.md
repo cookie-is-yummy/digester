@@ -212,9 +212,14 @@ It prints no message text and only the last 4 characters of a handle.
 ## Kill switch
 
 Stop the bot with Ctrl+C. A timed send that was going out at that moment is marked `unknown` and is not sent again.
-To pause one person: `UPDATE people SET paused=1 WHERE handle=...` in `data/mvp/mvp.sqlite`. "delete my data" requests
-are listed in `data/mvp/deletions.jsonl`; a founder removes that person's library folder and message thread, then
-confirms to them. A person listed there is not added back from `people.json`.
+To pause one person: `UPDATE people SET paused=1 WHERE handle=...` in `data/mvp/mvp.sqlite`. "delete my data" removes
+the person's rows, their inbox folder (waiting, failed and half-imported exports) and what was derived from their
+libraries, and lists the request in `data/mvp/deletions.jsonl` with every library folder that was theirs
+(`libraries`); a founder removes those folders (never a library someone else still uses) and the message thread,
+then confirms to them. A person listed there is not added back from `people.json`. The test page keeps its own list
+(`deletions-webtest.jsonl`), so a deletion typed there never touches the real bot. The cost ledger names a person by a
+keyed hash of their handle (`person_key.txt` beside the ledger); a deletion line counts any older ledger rows that
+still hold the handle (`ledger_rows_with_handle`).
 
 ## What is where
 
