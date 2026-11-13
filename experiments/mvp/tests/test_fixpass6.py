@@ -345,3 +345,89 @@ def test_89_a_must_have_that_only_says_no_limit_is_never_stored():
     it = Interpretation.model_validate({"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
         "goal": "blender tutorials", "searches": ["blender"], "criteria": ["any length", "ends with a finished model"]}}})
     assert change_guard(it, "blender tutorials, any length").spec.content.criteria == ["ends with a finished model"]
+
+
+# ======================================= the checker's audit =======================================
+def _two_rules(e):
+    """Rule 1: a daily reminder in their own words; rule 2: a daily Blender rule (started with a yes)."""
+    say(e, "every morning at 7 remind me to stretch", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], "time": "07:00"},
+        "content": {"source": "note", "text": "stretch"}}})
+    say(e, MINI, mini_form())
+    say(e, "yes", CONFIRM)
+    e["bot"]._wrote_final(H, "feedback on a pick")   # something else was the last write
+    e["bot"].store.set_state(f"lastspec:{H}", None)
+    return snapshot(e["bot"])
+
+
+def test_audit_a_rule_number_the_model_filled_alone_never_stops_or_changes_that_rule(blender):
+    bot = blender["bot"]
+    before = _two_rules(blender)
+    bot.store.x("DELETE FROM runs")   # no last answer from either rule
+    assert say(blender, "stop it", {"intent": "stop", "rule_number": 1}) == "Which rule? Reply \"my rules\" to see their numbers."
+    r1 = bot.store.rules(H)[0]
+    moved = {"intent": "change_rule", "rule_number": 1,
+             "spec": dict(r1["spec"], when=dict({k: v for k, v in r1["spec"]["when"].items() if k != "time"},
+                                                times=["09:00"]))}
+    assert say(blender, "make it 9 instead", moved).startswith("Which rule?")
+    assert snapshot(bot) == before
+    # naming the rule, by its number or its words, works as before
+    assert say(blender, "move the stretch one to 9", moved).startswith("Changed:")
+    assert bot.store.rules(H)[0]["spec"]["when"]["times"] == ["09:00"]
+    assert say(blender, "stop 2", {"intent": "stop", "rule_number": 2}).startswith("Stopped")
+
+
+def test_audit_the_rule_just_started_needs_no_name(blender):
+    bot = blender["bot"]
+    _two_rules(blender)
+    r2 = bot.store.rules(H)[1]
+    bot._wrote_rule(H, "started a rule", r2["id"])
+    moved = {"intent": "change_rule", "rule_number": 2,
+             "spec": dict(r2["spec"], when=dict({k: v for k, v in r2["spec"]["when"].items() if k != "time"},
+                                                times=["10:00"]))}
+    assert say(blender, "make it 10 instead", moved).startswith("Changed:")
+
+
+@pytest.mark.parametrize("text,second,kept", [
+    ("find me tacos in Chicago", {"intent": "set_timezone", "timezone": "America/Chicago"}, False),
+    ("find me tacos, I'm in Chicago now", {"intent": "set_timezone", "timezone": "America/Chicago"}, True),
+    ("a pasta recipe for 8pm", {"intent": "set_quiet_hours", "start": "20:00", "end": "08:00"}, False),
+    ("a pasta recipe, and don't message me before 9", {"intent": "set_quiet_hours", "start": "21:00", "end": "09:00"},
+     True),
+    ("a pasta recipe for the weekend", {"intent": "snooze", "until": "2026-11-16T09:00"}, False),
+    ("a pasta recipe for dinner", {"intent": "profile_update"}, False),
+])
+def test_audit_a_setting_carried_with_a_request_needs_words_for_it(text, second, kept):
+    from mvp.interpret import change_guard
+    from mvp.schema import Interpretation
+    it = Interpretation.model_validate({"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "a recipe", "searches": ["recipe"]}}, "also": second})
+    out = change_guard(it, text)
+    assert out.intent == "ask" and (out.also is not None) is kept
+    # the same with the setting read first
+    first = Interpretation.model_validate(dict(second, also={"intent": "ask", "spec": {"when": {"type": "now"},
+                                                                                       "content": {"goal": "a recipe",
+                                                                                                   "searches": ["recipe"]}}}))
+    assert change_guard(first, text).intent == (second["intent"] if kept else "ask")
+
+
+def test_audit_tacos_in_chicago_leaves_the_time_zone_alone(rich):
+    bot, st = rich["bot"], rich["state"]
+    st["answers"]["mvp_compose"] = lambda u: {"picks": []}
+    zone = bot.store.person(H)["timezone"]
+    say(rich, "find me tacos in Chicago", {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
+        "goal": "tacos", "searches": ["tacos"]}}, "also": {"intent": "set_timezone", "timezone": "America/Chicago"}})
+    assert bot.store.person(H)["timezone"] == zone
+
+
+def test_audit_a_level_moves_only_when_the_message_says_too_hard_or_too_easy(rich):
+    bot, st = rich["bot"], rich["state"]
+    with_blender(rich, level="beginner")
+    st["answers"]["mvp_compose"] = pick("Low poly island")
+    say(rich, "a blender project", ask("a Blender project", ["blender project"]))
+    say(rich, "not this one", {"intent": "feedback", "feedback": "harder"})
+    lv = {i["topic"]: i.get("level") for i in P().get(bot.store, H)["interests"]}
+    assert lv["Blender 3D"] == "beginner"
+    say(rich, "too easy", {"intent": "feedback", "feedback": "harder"})
+    lv = {i["topic"]: i.get("level") for i in P().get(bot.store, H)["interests"]}
+    assert lv["Blender 3D"] == "intermediate"

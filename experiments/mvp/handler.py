@@ -295,6 +295,22 @@ class HandlerMixin:
             ref = self.send(h, said) or ref
         return ref
 
+    def _rule_in_view(self, h, last, number, rules):
+        """True when rule `number` is the one the conversation is on: the last write started or changed it, or the
+        last answer came from it (fix pass 6, checker's audit)."""
+        r = by_number(rules, number)
+        if r is None:
+            return False
+        lw = self.store.get_state(f"lastwrite:{h}") or {}
+        ids = set()
+        for w in (lw.get("undo") or {}).get("writes") or [lw]:
+            u = w.get("undo") or {}
+            ids.update(u.get("rule_ids") or ([u["rule_id"]] if u.get("rule_id") else []))
+            ids.update(row["id"] for row in u.get("rows") or [] if isinstance(row, dict) and "id" in row)
+        if last and last.get("rule_id"):
+            ids.add(last["rule_id"])
+        return r["id"] in ids
+
     def _sensitive_once(self, prefix=""):
         """The line that says a personal detail was left out: the first time in this message only (finding 38)."""
         if getattr(self._tl, "sens_said", False):
@@ -389,6 +405,12 @@ class HandlerMixin:
             if pending["kind"] == "clarify" and it.intent in ("new_rule", "change_rule"):
                 text = pending["payload"].get("text", "") + " / " + text   # the rule keeps the whole request
             pending = None
+        if it.intent in ("change_rule", "pause", "stop", "skip") and it.rule_number is not None and not it.all_rules \
+                and len(rules) > 1 and not names_rule(text, rules, it.rule_number) \
+                and not self._rule_in_view(h, last, it.rule_number, rules):
+            # fix pass 6, checker's audit: with several rules, a rule number the model filled alone (the message names
+            # no rule, and it is not the rule just started, changed or sent) never changes or stops that rule
+            return self.send(h, T.WHICH_RULE)
         if it.intent in ("unsupported", "chat", "help"):
             if it.intent == "unsupported":
                 self.store.log_request(h, text, it.intent)
@@ -1168,7 +1190,11 @@ class HandlerMixin:
         if kind in ("harder", "easier"):   # slice 6: the level of the answer's topic moves one step, and is said
             spec = (self.store.get_state(f"lastspec:{h}") or {})
             words = " ".join(x for x in [last.get("goal") or "", spec.get("text") or ""] if x)
-            interest, level = P.move_level(self.store, h, words, kind)
+            # (checker's audit) the level moves only when the message says the pick was too hard or too easy
+            from .interpret import TOO_EASY, TOO_HARD
+            said = TOO_HARD.search(text or "") or TOO_EASY.search(text or "") or re.search(
+                r"\b(?:harder|easier|simpler|more advanced|less advanced|too (?:hard|easy|basic|simple))\b", text or "", re.I)
+            interest, level = P.move_level(self.store, h, words, kind) if said else (None, None)
             if spec and not self._over_cap(person):
                 # fix pass, finding 6: "too hard, something shorter" records the feedback AND sends one now, in one
                 # reply: the same request without what was shown, easiest first for "easier", with the change it

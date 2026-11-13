@@ -1674,6 +1674,32 @@ def no_limit_only(cr):
     return bool(NO_LENGTH_LIMIT.search(cr or "")) and len(WORD.findall(NO_LENGTH_LIMIT.sub(" ", cr or ""))) <= 2
 
 
+# fix pass 6, checker's audit: a setting carried as the second part of a message ('also') needs words for it in the
+# message; a model-filled one alone never changes the time zone, the quiet hours, a pause of all sends or the profile
+TZ_SAID = re.compile(r"\btime ?zones?\b|\b(?:i['’]?m|i am|we['’]?re|we are|i['’]?ll be|i will be|staying|living|"
+                     r"moved|moving|travel\w*|flying|flew|landed|arrived|visiting|back)\b[^.!?]{0,30}?\b(?:in|to|at|"
+                     r"home)\b|\b(?:eastern|pacific|central|mountain|gmt|utc|cet|est|pst|cst|mst|edt|pdt|cdt|mdt)\b"
+                     r"|\b[a-z]+ time\b(?=\s*(?:now|zone|please|$|[.!?,]))", re.I)
+QUIET_SAID = re.compile(r"\bquiet\b|\b(?:don['’]?t|do not|never|no)\s+(?:\w+\s+)?(?:message|messages|text|texts|"
+                        r"ping|send|sends|bother|notifications?)\b|\bnot (?:before|after|during|between)\b"
+                        r"|\b(?:before|after) \d|\bwake\b|\bsleep\b", re.I)
+SNOOZE_SAID = re.compile(r"\bsnooze\b|\baway\b|\bvacation\b|\bholiday\b|\boff\b|\bbreak\b|\buntil\b|\bpause\b"
+                         r"|\b(?:don['’]?t|do not|no)\s+(?:\w+\s+)?(?:message|messages|text|texts|send|sends)\b"
+                         r"|\b(?:resume|back on|turn \w+ back on)\b", re.I)
+
+
+def _setting_said(x: Interpretation, message):
+    if x.intent == "set_timezone":
+        return bool(TZ_SAID.search(message or ""))
+    if x.intent == "set_quiet_hours":
+        return bool(QUIET_SAID.search(message or ""))
+    if x.intent == "snooze":
+        return bool(SNOOZE_SAID.search(message or ""))
+    if x.intent == "profile_update":
+        return bool(ABOUT_ME.search(message or ""))
+    return True
+
+
 def change_guard(it: Interpretation, message, pending=None, rules=()):
     """Fix pass 6, finding 89: a model-filled change never lands on lasting state the message does not name.
     - A must-have that only says "any length" is the absence of a limit: removed (the message's words, kept with the
@@ -1682,6 +1708,10 @@ def change_guard(it: Interpretation, message, pending=None, rules=()):
       the preview (new_rule with edits_pending): it never touches a stored rule.
     A reminder keeps its own words; the handler refuses a change of what it sends (see handler)."""
     live = pending if pending and pending.get("kind") == "confirm_rule" else None
+    if it.also is not None and not _setting_said(it.also, message):
+        it.also = it.also.also   # (audit) "find me tacos in Chicago" never moves the time zone as a side effect
+    if it.also is not None and not _setting_said(it, message):
+        it = it.also             # the same with the setting read first
     for x in [it] + ([it.also] if it.also else []):
         if x.spec is not None and x.spec.content.criteria:
             x.spec.content.criteria = [cr for cr in x.spec.content.criteria if not no_limit_only(cr)]
