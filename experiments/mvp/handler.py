@@ -992,8 +992,9 @@ class HandlerMixin:
                 and pending["payload"].get("run_id") == st["run_id"]:
             payload = dict(pending["payload"])
             spec = RuleSpec.model_validate(payload["spec"])
-            if way == "any" and not re.search(r"\bany length\b", payload["text"], re.I):
-                payload["text"] = payload["text"] + " / any length"
+            if way == "any":   # (checker of fix pass 5: "any length" said twice never turns YouTube on)
+                if not re.search(r"\bany length\b", payload["text"], re.I):
+                    payload["text"] = payload["text"] + " / any length"
                 spec.content.criteria = [cr for cr in spec.content.criteria if not length_only(cr)]
                 payload.pop("length_only", None)
             else:

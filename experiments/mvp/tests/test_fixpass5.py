@@ -601,3 +601,13 @@ def test_check_a_trimmed_reason_is_never_a_fragment():
     assert trim_reason("it uses a rice cooker and gives ingredients and steps for a quick dinner", no_steps,
                        ["Cook it all in the rice cooker"]) == "it uses a rice cooker and gives ingredients"
     assert trim_reason("the steps are clear, and it uses a rice cooker", no_steps, q) == "it uses a rice cooker"
+
+
+def test_check_any_length_said_twice_to_the_preview_never_turns_youtube_on(blender):
+    bot = blender["bot"]
+    say(blender, MINI, mini_form())
+    say(blender, "any length", CHAT)
+    assert say(blender, "any length", CHAT) == "OK, it'll pick any length. Reply YES to start it."
+    payload = json.loads(bot.store.one("SELECT payload FROM pending WHERE handle=?", (H,))["payload"])
+    assert payload["spec"]["content"].get("outside", "none") == "none"
+    assert payload["text"].count("any length") == 1
