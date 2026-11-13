@@ -114,7 +114,37 @@ def trim_reason(because, bad, quotes):
     out = " ".join(out.split()).strip(" ,;")
     words = {w for w in tokens(out) if len(w) >= 4 and w not in STOP}
     backed = any(words & set(tokens(q)) for q in quotes or [])
+    # (checker of fix pass 5: never a fragment. "the ingredients and steps are written out" with no steps is not "the
+    # ingredients": a part kept right before a dropped part that does not start a new clause or verb phrase must have a
+    # verb of its own, and the reason never ends on a word that needs more after it)
+    for i in keep:
+        nxt = i + 1
+        if nxt < len(parts) and nxt not in keep and not _clause_start(parts[nxt]) and not _has_verb(parts[i]):
+            return None
+    if not _has_verb(out) or (tokens(out) or [""])[-1] in _DANGLING:
+        return None
     return out if _REASON_START.match(out) and backed else None
+
+
+_VERBS = set("""is are was were be been has have had takes take took uses use used needs need gives give shows show lists
+list makes make cooks cook comes come gets get goes go fits fit keeps keep stays stay walks walk teaches teach explains
+explain covers cover builds build ends end starts start finishes finish serves serve adds add works work helps help lets
+let bakes bake can will skips skip turns turn leaves leave says say writes write tells tell spells spell calls call
+""".split())
+_SUBJECTS = set("it its you your the this that they he she".split())
+_DANGLING = set("""and or but with for to of the a an in on at by from into gives give has have uses use needs need takes
+take is are shows show lists list makes make its your their""".split())
+
+
+def _has_verb(part):
+    words = re.findall(r"[a-z]+(?:['’][a-z]+)?", part.lower())
+    return any(w in _VERBS or w.endswith(("'s", "’s", "'re", "’re", "'ll", "’ll")) for w in words)
+
+
+def _clause_start(part):
+    """A part that starts a clause of its own ("it is quick") or a verb phrase ("gives the ingredients")."""
+    words = re.findall(r"[a-z]+(?:['’][a-z]+)?", part.lower())
+    return bool(words) and (words[0] in _VERBS or words[0] in _SUBJECTS and _has_verb(part))
 
 
 def makes_whole(facts, food):
@@ -731,6 +761,10 @@ class ExecutorMixin:
         new = []
         for p in r2.get("picks") or []:
             if any(same_keys(p) & same_keys(q) for q in shown + new):
+                continue
+            if picks and "no" in (p.get("criteria") or []):
+                # (checker of fix pass 5: tips the second call could only offer as the closest, a "no" on the finished
+                # result, are never shown beside a clear lead; a pick with any "no" stays out)
                 continue
             p["second_look"] = True
             new.append(p)

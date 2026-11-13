@@ -526,3 +526,78 @@ def test_84_a_lead_whose_quotes_fail_still_gets_a_reason_code_stands_behind(food
     food["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick_of(
         u, "Teriyaki", because="it uses a rice cooker", facts=[{"label": "kit", "quote": "an Instant Pot"}])]}
     assert "because" not in say(food, "teriyaki chicken rice", chicken_form(count=1))
+
+
+# ======================================= checker of fix pass 5 =======================================
+DISHES = [("d1", "cook_a", "Chicken rice\nIngredients:\n- 2 cups rice\n- 1 lb chicken"),
+          ("d2", "cook_b", "Hainanese chicken rice recipe"),
+          ("d3", "cook_c", "Chicken fried rice recipe"),
+          ("d4", "cook_d", "Cajun chicken rice bowl")]
+
+
+def test_check_different_dishes_one_word_apart_stay_and_read_as_before(env, tmp_path):
+    """'Hainanese chicken rice' and 'Chicken fried rice' are not the dish 'Chicken rice': three clear, different picks
+    are shown as before, with no second composer call."""
+    lib = write_lib(tmp_path / "dishes", DISHES)
+    env["bot"].store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    env["bot"].pool = AllPool(str(lib))
+    seen = []
+    env["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": [
+        {"n": number_of(u, "Chicken rice"), "verdict": "clear", "title": "Chicken rice"},
+        pick_of(u, "Hainanese chicken rice"), pick_of(u, "Chicken fried rice")]})[1]
+    msg = say(env, CHICKEN, chicken_form())
+    assert len(seen) == 1 and "• Hainanese chicken rice" in msg and "• Chicken fried rice" in msg
+    from mvp.compose import same_dish
+    assert same_dish({"title": "Rice cooker chicken and rice"}, {"title": "Easy chicken and rice"})
+    assert same_dish({"title": "One pot chicken and rice"}, {"title": "Chicken & rice bowl"})
+    for other in ("Hainanese chicken rice", "Chicken fried rice", "Cajun chicken and rice"):
+        assert not same_dish({"title": "Chicken rice"}, {"title": other}), other
+
+
+def test_check_one_creators_posts_that_open_alike_are_not_copies(env, tmp_path):
+    rows = [("h1", "cook_a", "Save this recipe!\nTeriyaki chicken and rice bowls"),
+            ("h2", "cook_a", "Save this recipe!\nLemon chicken and rice soup"),
+            ("h3", "cook_a", "Chicken and rice meal prep for the whole week, day 1"),
+            ("h4", "cook_a", "Chicken and rice meal prep for the whole week, day 2"),
+            ("h5", "cook_a", "Dinner tonight\nGarlic butter chicken"),
+            ("h6", "cook_a", "Dinner tonight\nChicken curry with rice")]
+    lib = write_lib(tmp_path / "hooks", rows)
+    from mvp.compose import collapse_copies
+    view = env["bot"].view(str(lib))
+    out, n = collapse_copies([view.get(r[0]) for r in rows])
+    assert n == 0
+    out, n = collapse_copies([view.get("h1"), view.get("h1")])   # a real copy still takes one place
+    assert n == 1
+
+
+def test_check_a_second_look_pick_with_a_no_is_never_shown_beside_a_clear_lead(food):
+    """The second call's only offer is a pick whose finished-result must-have is "no" (the closest-only tips case):
+    it stays out; the first answer goes out as it was."""
+    calls = []
+
+    def answer(u):
+        calls.append(u)
+        if len(calls) == 1:
+            return {"picks": [pick_of(u, LEAD, lines=LEAD_LINES, criteria=[{"answer": "yes", "quote": "Cook it all"}])]}
+        return {"picks": [pick_of(u, "Hainanese chicken rice", criteria=[{"answer": "no"}])]}
+    food["state"]["answers"]["mvp_compose"] = answer
+    msg = say(food, CHICKEN, chicken_form(criteria=["ends with a dish you can eat"]))
+    assert len(calls) == 2 and "Hainanese" not in msg and "I recommend Rice cooker chicken and rice" in msg
+
+
+def test_check_a_trimmed_reason_is_never_a_fragment():
+    from mvp.executor import DETAIL_CLAIM, trim_reason
+
+    def bad_for(facts):
+        return lambda part: any(rx.search(part) and not facts.get(k) for k, rx in DETAIL_CLAIM.items())
+    q = ["Ingredients: 2 cups rice", "Cook it in the rice cooker in 15 minutes"]
+    no_steps, no_ingredients = bad_for({"ingredients": ["x"]}), bad_for({"steps": ["x"]})
+    assert trim_reason("the ingredients and steps are written out", no_steps, q) is None   # not "the ingredients"
+    assert trim_reason("it takes 15 minutes, and the steps and ingredients are written out", no_ingredients, q) is None
+    # a dropped part that is a verb phrase of its own leaves a whole clause before it
+    assert trim_reason("it uses rice, chicken and soy sauce, and gives steps", no_steps, q) == \
+        "it uses rice, chicken and soy sauce"
+    # what the builder's tests keep is still kept
+    assert trim_reason("it uses a rice cooker and gives ingredients and steps for a quick dinner", no_steps,
+                       ["Cook it all in the rice cooker"]) == "it uses a rice cooker and gives ingredients"
+    assert trim_reason("the steps are clear, and it uses a rice cooker", no_steps, q) == "it uses a rice cooker"

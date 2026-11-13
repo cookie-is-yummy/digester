@@ -502,14 +502,16 @@ def tips_only(text):
 
 
 def cand_keys(it):
-    """Fix pass 5, finding 84 (1): every (creator, title) a candidate goes by before the composer has named it: its own
-    first words (as same_keys reads them) and its first line, normalised. Empty when the creator is unknown."""
-    keys = same_keys({"item": it, "title": ""})
+    """Fix pass 5, finding 84 (1): the (creator, first line) a candidate goes by before the composer has named it: the
+    line its name comes from (title_from_item: never a "save this" or "follow me" hook line), whole and normalised, and
+    only when it has at least 3 words. Empty when the creator is unknown. (Checker of fix pass 5: the first line as it
+    stands made one creator's different posts that all open with "Save this recipe!" copies of one post, and an
+    8-word cut made the parts of one series copies.)"""
     creator = norm(it.creator or "")
-    first = _squash(getattr(it, "first_line", "") or "")
-    if creator and first:
-        keys.add((creator, first))
-    return keys
+    line = title_from_item(it, words=1000)
+    if not creator or line.startswith(("A post from", "A video from")) or len(tokens(line)) < 3:
+        return set()
+    return {(creator, _squash(line))}
 
 
 def collapse_copies(cands, extra=None):
@@ -530,19 +532,26 @@ def collapse_copies(cands, extra=None):
     return out, len(cands) - len(out)
 
 
+# words that say how a dish is made or served, or praise it, never which dish it is ("easy", "rice cooker", "bowl")
+DISH_FRAME = set("""easy quick quicker simple best ultimate healthy healthier delicious convenient homemade perfect lazy
+tasty yummy viral classic cheap budget favorite favourite fav weeknight dinner lunch breakfast meal prep minute min
+one pot pan sheet skillet cooker instant fryer air crockpot slow oven dutch bowl style recipe""".split())
+
+
 def dish_words(p):
-    """The words of a pick's title that name the thing itself (stop words and numbers left out), singular."""
+    """The words of a pick's title that name the thing itself (stop words, numbers and DISH_FRAME left out), singular."""
     from .retrieve import _stem
-    return {_stem(w) for w in tokens(p.get("title") or "") if len(w) >= 3 and w not in STOP and not w.isdigit()}
+    return {_stem(w) for w in tokens(p.get("title") or "")
+            if len(w) >= 3 and w not in STOP and not w.isdigit() and _stem(w) not in DISH_FRAME}
 
 
 def same_dish(a, b):
-    """Fix pass 5, finding 84 (4): two picks whose titles name the same thing, give or take one word ("Chicken and
-    rice" and "Easy chicken and rice"); different creators count too."""
+    """Fix pass 5, finding 84 (4): two picks whose titles name the same thing once the words that only say how it is
+    made or praise it are left out ("Rice cooker chicken and rice" and "Easy chicken and rice"); different creators
+    count too. (Checker of fix pass 5: "give or take one word" made "Hainanese chicken rice" and "Chicken fried rice"
+    the same dish as "Chicken rice", and three different dishes became one.)"""
     x, y = dish_words(a), dish_words(b)
-    if not x or not y:
-        return False
-    return (x == y or len(x & y) >= 2) and len(x ^ y) <= 1
+    return bool(x) and x == y
 
 
 def _different_first(rest, lead):
