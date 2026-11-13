@@ -144,7 +144,10 @@ def own_words(text, message):
 
 # a message that puts something from the last answer on a list says so; "what are the ingredients?" does not
 ADDING = re.compile(r"\b(add|adding|put|list|lists|to-?dos?|jot|note|stick|throw|pop|save|keep|remember|track|buy|shop"
-                    r"|shopping)\b", re.I)
+                    r"|shopping"
+                    # review fix X3 (experience): the same in Spanish, the other language the replies are written in
+                    r"|agr[eé]g\w*|a[ñn][aá]d\w*|ap[uú]nt[aeá]\w*|an[oó]t[aeá]\w*|pon(?:lo|la|los|las|me|le|les)?"
+                    r"|listas?)\b", re.I)
 
 
 def _adds_from_answer(x):

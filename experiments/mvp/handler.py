@@ -872,7 +872,8 @@ class HandlerMixin:
                          "(SELECT item_id FROM deliveries WHERE run_id=?)", (rule_id, h, preview_run))
         n = self.store.rule_number(h, rule_id)
         first = say_time(nxt, now, spec.when.tz or tz)
-        notes = self._do_note(spec) + self._not_yet_notes(spec) + self._email_ask(person, spec, now)
+        notes = self._limit_note(h, spec, rule_id) + self._do_note(spec) + self._not_yet_notes(spec) \
+            + self._email_ask(person, spec, now)
         if c.source == "note":   # a reminder in their own words
             if spec.when.type == "once":
                 return self.send(h, T.reminder_once(first, c.text, n) + notes)
@@ -888,6 +889,46 @@ class HandlerMixin:
         if spec.when.type == "random" or spec.when.window:
             first = None  # random moments are never shown in advance
         return self.send(h, T.rule_started(edited, describe(spec.when), c.goal, avoid, first) + notes)
+
+    @staticmethod
+    def _per_day(when):
+        """About how many timed sends a rule makes on a day it sends, for a rule that sends on most days; else 0."""
+        if when.type == "random":
+            return (when.count or 1) if when.per == "day" else 0
+        if when.type != "schedule" or when.every_days or when.month_days or when.month_weeks or \
+                (when.every_weeks or 1) > 1 or (when.days and len(when.days) < 5):
+            return 0
+        if when.every_hours and when.window:
+            span = int(when.window[1][:2]) * 60 + int(when.window[1][3:]) - int(when.window[0][:2]) * 60 \
+                - int(when.window[0][3:])
+            return max(span, 0) // (when.every_hours * 60) + 1
+        return len(when.times) if when.times else 1
+
+    def _limit_note(self, h, spec, rule_id):
+        """Review fix X2 (experience): a rule that, alone or with the person's other daily rules, needs more timed
+        sends a day than the limit is told so when it starts (the preview of a library rule says it for one rule
+        alone), so a send that is left out is never a surprise."""
+        cap = config.MAX_SCHEDULED_PER_DAY
+        mine = self._per_day(spec.when)
+        if not mine:
+            return ""
+        if mine > cap:
+            return T.daily_limit_note(cap) if spec.content.source in ("note", "todos") else ""
+        others = sum(self._per_day(RuleSpec.model_validate(r["spec"]).when)
+                     for r in self.store.rules(h, statuses=("active",)) if r["id"] != rule_id)
+        return T.daily_limit_shared(cap) if mine + others > cap else ""
+
+    def _plain_send_seen(self, h, last):
+        """The rule of the last timed send, when it was a reminder in the person's own words or their list and came
+        after the last answer with picks (review fix X2: a 👍 to "Still useful?" is about it, not an older answer)."""
+        row = self.store.one("SELECT id, rule_id FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
+                             "('sent','unknown') ORDER BY id DESC LIMIT 1", (h,))
+        if not row or not row["rule_id"] or (last and (last.get("run_id") or 0) > row["id"]):
+            return None
+        r = self.store.rule(row["rule_id"])
+        if not r or RuleSpec.model_validate(r["spec"]).content.source not in ("note", "todos"):
+            return None
+        return r
 
     def _never_sends(self, person, spec, now):
         """The reply for a timed rule that would never send, else None. Random, window and every_hours moments never
@@ -921,6 +962,10 @@ class HandlerMixin:
         h = person["handle"]
         self.note(intent="feedback")
         last = self._answer_seen(h)
+        plain = self._plain_send_seen(h, last) if kind in ("up", "down") and not pick_number else None
+        if plain:   # review fix X2: a 👍 or 👎 to a reminder in their own words (it has no picks to attach it to)
+            n = self.store.rule_number(h, plain["id"])
+            return self.send(h, T.KEEP_COMING if kind == "up" else T.reminder_down(n))
         if not last:
             return self.send(h, T.NOTHING_TO_ATTACH)
         items = last["items"]

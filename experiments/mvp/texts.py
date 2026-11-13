@@ -133,6 +133,19 @@ def daily_limit_note(n):
     return f" I send at most {n} timed messages a day, so some of these will be left out."
 
 
+def daily_limit_shared(n):
+    """Review fix X2 (experience): this rule and the person's other daily ones need more sends than the limit."""
+    return (f" With your other timed messages that's more than {n} a day, and {n} is the most I send, so on some days "
+            "a few will be left out.")
+
+
+KEEP_COMING = "Thanks! I'll keep them coming."
+
+
+def reminder_down(n):
+    return f"Noted. Reply \"stop {n}\" to end these reminders, or \"pause {n}\" for a break."
+
+
 def saved_rule(n, what):
     return (f"Saved as rule {n}: {what}. Ask for it, or text \"run {n}\", whenever you want it. "
             "I won't repeat picks.")

@@ -30,9 +30,11 @@ _NEW_PARTS = re.compile(r"\b(?:only|just|please|pls|give me|show me|send me|find
                         r"not (?:what|stuff) i (?:saved|kept))\b", re.I)
 _NEW_NEEDS = re.compile(r"\b(new|outside)\b", re.I)
 
-DETAIL = {"ingredients": re.compile(r"\b(ingredients?|what do i need|what does it need|shopping list)\b", re.I),
+DETAIL = {"ingredients": re.compile(r"\b(ingredients?|what do i need|what does it need|shopping list"
+                                    r"|ingredientes?|qu[eé] necesito)\b", re.I),   # review fix X3: and in Spanish
           "steps": re.compile(r"\b(steps?|method|instructions?|directions|how (?:do|did|can|to) (?:i |you |we )?"
-                              r"(?:make|cook|bake|build|do|prepare)|walk me through|exercises?)\b", re.I),
+                              r"(?:make|cook|bake|build|do|prepare)|walk me through|exercises?"
+                              r"|pasos?|instrucciones|ejercicios?|c[oó]mo (?:se )?(?:hace|prepara|cocina))\b", re.I),
           "key_points": re.compile(r"\b(key points?|main points?|takeaways?|tips|summar\w*|the gist|highlights|"
                                    r"what does it say|what (?:is|are) (?:it|they) about)\b", re.I)}
 POINTER = re.compile(r"\b(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)\s+(?:one|pick|recipe|"
@@ -103,7 +105,10 @@ def points_at_pick(text):
 
 
 _ASK_WORDS = set("what are is the its for of please pls can could you give me show send list all and how about do i "
-                 "tell what's whats them those these".split())
+                 "tell what's whats them those these"
+                 # review fix X3: the same in Spanish
+                 " cuales cuáles son los las el la del de dame dime muestra muéstrame muestrame qué que por favor"
+                 " tiene lleva".split())
 
 
 def only_detail_words(text):

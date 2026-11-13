@@ -200,3 +200,67 @@ def test_x1_a_store_from_an_older_build_keeps_the_numbers_it_showed(tmp_path):
     assert [(r["number"], r["text"]) for r in store.rules(H)] == [(1, "active"), (2, "paused"), (3, "active")]
     new = store.add_rule(H, "new", json.loads(spec), "active", None)
     assert store.rule_number(H, new) == 6
+
+
+# ---------- X2: reminders in the person's own words are not a stream they ignored ----------
+def _water(w):
+    w["clock"][0] = datetime(2026, 11, 12, 13, 30, tzinfo=UTC)   # 8:30am New York
+    return say(w, "remind me to drink water every 2 hours from 9 to 5",
+               note({"type": "schedule", "days": DAYS, "every_hours": 2, "window": ["09:00", "17:00"]}, "drink water"))
+
+
+def test_x2_own_words_reminders_never_pause_the_rules_or_ask_still_useful(w):
+    bot = w["bot"]
+    from mvp import texts as T
+    _water(w)
+    sent = [tick_at(w, datetime(2026, 11, 12, hour, 0, 30, tzinfo=UTC)) for hour in (14, 16, 18, 20, 22)]
+    assert all("drink water" in s for s in sent) and not any(T.STILL_USEFUL in s for s in sent)
+    nxt = tick_at(w, datetime(2026, 11, 13, 14, 0, 30, tzinfo=UTC))
+    assert "drink water" in nxt and T.PAUSED_QUIET not in nxt
+    assert all(r["status"] == "active" for r in bot.store.rules(H))
+
+
+def test_x2_a_rule_that_goes_over_the_daily_limit_with_the_others_says_so(w):
+    from mvp import config
+    _water(w)
+    out = say(w, "every day at 6pm remind me to stretch",
+              note({"type": "schedule", "days": DAYS, "times": ["18:00"]}, "stretch"))
+    assert f"more than {config.MAX_SCHEDULED_PER_DAY} a day" in out
+    # one more reminder well under the limit, with nothing else, says nothing about it
+    bot = w["bot"]
+    for r in bot.store.rules(H):
+        bot.store.set_slot(r["id"], None, "stopped")
+    out2 = say(w, "every day at 7pm remind me to floss",
+               note({"type": "schedule", "days": DAYS, "times": ["19:00"]}, "floss"))
+    assert "a day" not in out2.replace("every day", "")
+
+
+def test_x2_a_thumbs_up_to_a_reminder_is_answered(w):
+    _water(w)
+    tick_at(w, datetime(2026, 11, 12, 14, 0, 30, tzinfo=UTC))
+    w["clock"][0] = datetime(2026, 11, 12, 14, 5, tzinfo=UTC)
+    from mvp import texts as T
+    assert say(w, "👍") == T.KEEP_COMING
+    out = say(w, "👎")
+    assert '"stop 1"' in out and "Nothing to attach" not in out
+
+
+# ---------- X3: adding to a list in Spanish ----------
+def test_x3_spanish_add_the_ingredients_to_my_list_adds_them(w):
+    bot = w["bot"]
+    w["state"]["answers"]["mvp_compose"] = composer(("Instant pot chicken", "clear", YES_ING))
+    say(w, "pollo con arroz", dict(CR, lang="es"))
+    out = say(w, "agrega los ingredientes a mi lista del super",
+              {"intent": "todo_add", "pick_number": 1, "what": "ingredients", "list": "super", "lang": "es"})
+    texts = [t["text"] for t in bot.store.todos(H)]
+    assert "2 chicken thighs" in texts and len(texts) == 4, out
+    out2 = say(w, "agrégalo a mi lista", {"intent": "act_on_last", "actions": [{"action": "todo.add"}],
+                                         "pick_number": 1, "lang": "es"})
+    assert len(bot.store.todos(H)) == 5, out2
+
+
+def test_x3_spanish_detail_words_are_read_as_a_detail_question():
+    from mvp.followup import detail_kinds, only_detail_words
+    assert detail_kinds("¿cuáles son los ingredientes?", "") == ["ingredients"]
+    assert "steps" in detail_kinds("dame los pasos", "")
+    assert only_detail_words("ingredientes por favor")

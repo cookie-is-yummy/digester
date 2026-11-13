@@ -369,10 +369,12 @@ class SchedulerMixin:
             self._advance(rule, spec, tz, now)  # skip this slot rather than fire late after unpausing
             return 0
         quiet_streak = self._unanswered(person["handle"])
-        if quiet_streak >= UNANSWERED_PAUSE and not self._own_once(spec):
+        if quiet_streak >= UNANSWERED_PAUSE and not self._own_once(spec) and not self._own_words(spec):
             for r in self.store.rules(person["handle"]):
-                if self._own_once(RuleSpec.model_validate(r["spec"])):
-                    continue   # review fix S7: a one-time reminder they asked for still goes out, as a to-do's does
+                other = RuleSpec.model_validate(r["spec"])
+                if self._own_once(other) or self._own_words(other):
+                    continue   # review fix S7: a one-time reminder they asked for still goes out, as a to-do's does;
+                    # review fix X2 (experience): so do reminders in their own words and their own list
                 if r["status"] == "active" and r["next_run_at"]:
                     self.store.update_rule(r["id"], status="paused")
                 if r.get("paused_until"):  # "paused until Monday" must not restart while they are still silent
@@ -453,7 +455,7 @@ class SchedulerMixin:
         after = ""
         if spec.when.repeating and self.store.rule(rule["id"])["status"] == "done":
             after = "\n" + LAST_SEND   # max_sends reached, or until has passed
-        elif quiet_streak >= UNANSWERED_CHECK and spec.when.repeating:
+        elif quiet_streak >= UNANSWERED_CHECK and spec.when.repeating and not self._own_words(spec):
             after = "\n" + STILL_USEFUL
         try:
             # the rule's do (email, calendar, to-dos), once per slot, then the message (outputs.py)
@@ -475,6 +477,13 @@ class SchedulerMixin:
         """A one-time send the person asked for: a reminder in their own words, or picks sent later ("email me this
         tonight"). Like a to-do's reminder, it is their own time, not a stream they did not answer (review fix S7)."""
         return spec.when.type == "once" and spec.content.source in ("note", "items")
+
+    @staticmethod
+    def _own_words(spec):
+        """A reminder in the person's own words (an export reminder too) or their own open to-dos: what they asked to
+        be reminded of, not a stream of picks they may have stopped reading (review fix X2, experience). It is not
+        counted as an unanswered send, never asks "still useful?" and is not paused for silence."""
+        return spec.content.source in ("note", "todos")
 
     def _unrecord(self, h, run_id, before):
         """A run whose message never went out: its deliveries go (so its picks can be sent later), and the person's
@@ -500,7 +509,8 @@ class SchedulerMixin:
         own = {}
         for rid in {r["rule_id"] for r in rows}:
             rule = self.store.rule(rid) if rid else None
-            own[rid] = bool(rule) and self._own_once(RuleSpec.model_validate(rule["spec"]))
+            sp = RuleSpec.model_validate(rule["spec"]) if rule else None
+            own[rid] = bool(rule) and (self._own_once(sp) or self._own_words(sp))
         return sum(1 for r in rows if not own[r["rule_id"]])
 
     def _run_failed(self, run_id):
