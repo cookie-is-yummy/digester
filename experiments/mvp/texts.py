@@ -237,6 +237,22 @@ def import_too_costly(est, cap):
             "import. I'm still using your library as it was. The founders can raise the limit.")
 
 
+IMPORT_SAME = ("That's the same export you sent me before, so there's nothing new to add. Your library stays as it "
+               "is.")
+
+
+def import_too_many(n):
+    return (f"I've already added {n} {'export' if n == 1 else 'exports'} for you today, and that's the most I can do "
+            "in a day. Please send this one again tomorrow. Your library stays as it is.")
+
+
+def new_items_over_cap(goals):
+    """review fix X3: a new_items rule held because the person's daily limit is used up, said in the import message."""
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return (f"I've reached today's limit for you, so I didn't check the new items against "
+            f"{'your rule' if len(goals) == 1 else 'your rules'} {names}. I'll do it tomorrow.")
+
+
 def import_over_budget():
     return ("The test budget doesn't have room to add your new export, so I'm still using your library as it was. "
             "The founders need to raise it.")

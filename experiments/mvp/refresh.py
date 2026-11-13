@@ -373,6 +373,62 @@ def prepare_library(lib, cap_usd, timeout=3600):
 PART = re.compile(r"^(.+?)-(\d{3})\.zip$", re.I)
 
 
+def export_hash(paths):
+    """review fix X2: one fingerprint of what the files hold, so the same export dropped again is not built again. A
+    zip is read from its own directory (each member's name, size and CRC, which the zip stores for its content), so a
+    copy or a re-zip of the same content gives the same fingerprint; a folder's files are read in full."""
+    import hashlib
+    parts = []
+    for path in paths:
+        h = hashlib.sha256()
+        if os.path.isdir(path):
+            for name in sorted(_member_names(path) or []):
+                h.update(name.encode() + b"\0")
+                with open(os.path.join(path, *name.split("/")), "rb") as f:
+                    for buf in iter(lambda: f.read(1 << 20), b""):
+                        h.update(buf)
+        elif zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path) as z:
+                for info in sorted(z.infolist(), key=lambda i: i.filename):
+                    if not info.filename.endswith("/"):
+                        h.update(f"{info.filename}\0{info.file_size}\0{info.CRC}\n".encode())
+        else:
+            with open(path, "rb") as f:
+                for buf in iter(lambda: f.read(1 << 20), b""):
+                    h.update(buf)
+        parts.append(h.hexdigest())
+    return hashlib.sha256("\n".join(sorted(parts)).encode()).hexdigest()
+
+
+def _builds_today(store, handle):
+    """review fix X2: the library builds started for this person in the last 24 hours (real time, never the test
+    page's clock)."""
+    cutoff = time.time() - 86400
+    return [t for t in (store.get_state(f"importbuilds:{handle}") or []) if t > cutoff]
+
+
+def prune_old_library(store, old_lib, new_lib):
+    """review fix X2: after a successful switch, the library an earlier import built is removed (derived data; a
+    whole library's vectors each time otherwise). Never the library the founders set up (it has no mvp_import mark),
+    never one someone still uses, never the new one. Returns True when removed."""
+    if not old_lib or not os.path.isdir(old_lib) or os.path.abspath(old_lib) == os.path.abspath(new_lib):
+        return False
+    man = LIB.read_json(LIB.p(old_lib, "library.json"), {}) or {}
+    if not man.get("mvp_import"):
+        return False
+    # only a library this store's own imports built (the test page and the real bot share the library folder's root)
+    if not any(os.path.abspath(r["library"] or "") == os.path.abspath(old_lib)
+               for r in store.q("SELECT library FROM imports WHERE status='done'")):
+        return False
+    used ={os.path.abspath(p["library"]) for p in store.q("SELECT library FROM people") if p.get("library")}
+    used |= {os.path.abspath(p["imported_from"]) for p in store.q("SELECT imported_from FROM people")
+             if p.get("imported_from")}
+    if os.path.abspath(old_lib) in used:
+        return False
+    shutil.rmtree(old_lib, ignore_errors=True)
+    return True
+
+
 # ---------- the import ----------
 class Refresher:
     """Looks at the inboxes (poll), imports what it finds (import_files), switches the library, tells the person and
@@ -520,8 +576,8 @@ class Refresher:
                 return None
             row["id"] = _add_import(store, row)
             for f in claimed:
-                if status == "done":
-                    _remove(f)   # raw export, imported: not kept
+                if status in ("done", "same"):
+                    _remove(f)   # raw export, imported (or imported before): not kept
                 else:
                     failed = os.path.join(inbox_dir(handle), ".failed")
                     os.makedirs(failed, exist_ok=True)
@@ -596,6 +652,14 @@ class Refresher:
         row["sources"] = json.dumps({"instagram": len(ig), "youtube": len(yt), "refused": refused})
         if not sources:
             return finish("refused", T.IMPORT_HTML if html else T.IMPORT_NOT_EXPORT)
+        # review fix X2: the same export again is never built again (a build embeds every item and is paid for), and
+        # a person gets at most IMPORTS_PER_DAY builds a day, whatever they spent otherwise
+        fingerprint = export_hash([f for f in claimed if classify(f)[0]])
+        if fingerprint == store.get_state(f"importhash:{handle}"):
+            return finish("same", T.IMPORT_SAME)
+        builds = _builds_today(store, handle)
+        if len(builds) >= config.IMPORTS_PER_DAY:
+            return finish("too_many", T.import_too_many(len(builds)))
         root = config.LIBRARY_ROOT or os.path.dirname(os.path.abspath(old_lib))
         routers = [old_lib, os.path.join(config.REPO, "data", "all")]
         try:
@@ -619,6 +683,7 @@ class Refresher:
         libs = [p["library"] for p in store.q("SELECT library FROM people")]
         if llm.spent_total(libs) + est > config.TOTAL_CAP_USD:
             return finish("over_budget", T.import_over_budget())
+        store.set_state(f"importbuilds:{handle}", builds + [time.time()])
         try:
             res = self.prepare(new_lib, config.IMPORT_CAP_USD)
         except Exception as e:  # noqa: BLE001
@@ -626,7 +691,10 @@ class Refresher:
         cost = library_spend(new_lib)
         row["cost_usd"] = cost
         if cost:
-            llm.log_spend(handle, "mvp_import", cost, model=EMBED_MODEL, n=man.get("counts", {}).get("items"))
+            # review fix X4: the build's tokens ride on its one row, since a failed build's own ledger is removed
+            rows = _jsonl(os.path.join(new_lib, "ai_runs.jsonl"))
+            llm.log_spend(handle, "mvp_import", cost, model=EMBED_MODEL, n=man.get("counts", {}).get("items"),
+                          in_tokens=sum(int(r.get("in_tokens") or 0) for r in rows), calls=len(rows))
         if not res.get("ok"):
             return finish("failed", T.IMPORT_FAILED, error=(res.get("message") or "")[:200])
         totals, new_ids = kept_counts(new_lib)
@@ -643,6 +711,11 @@ class Refresher:
             store.switch_library(handle, new_lib)
             row.update(status="done", seconds=round(time.time() - t0, 1))
             row["id"] = _add_import(store, row)
+            store.set_state(f"importhash:{handle}", fingerprint)
+            try:
+                prune_old_library(store, old_lib, new_lib)   # review fix X2: the library the last import built
+            except OSError:
+                pass
             person = store.person(handle)
             held = {"fresh": sorted(fresh), "by_source": dict(by_source), "totals": totals, "refused": refused}
             now = bot.clock()
@@ -699,22 +772,48 @@ def _add_import(store, row):
 def announce_import(bot, person, held, now):
     """The import's one message (counts) and the new_items answers on the items it added."""
     h = person["handle"]
-    answers, nothing, ended = run_new_items(bot, person, set(held.get("fresh") or []), now)
+    capped = []
+    answers, nothing, ended = run_new_items(bot, person, set(held.get("fresh") or []), now, capped=capped)
     msg = T.import_done(dict(held.get("by_source") or {}), held.get("totals") or {}, refused=held.get("refused") or 0)
     if nothing:   # at most once per import
         msg += "\n" + T.nothing_new_matched(nothing)
     if ended:
         msg += "\n" + T.new_items_ended(ended)
+    if capped:
+        # review fix X3: a rule held for the budget is said, and it runs on these items once the cap allows
+        msg += "\n" + T.new_items_over_cap([g for _, g in capped])
+        prev = bot.store.get_state(f"heldnew:{h}") or {}
+        bot.store.set_state(f"heldnew:{h}", {
+            "fresh": sorted(set(prev.get("fresh") or []) | set(held.get("fresh") or [])),
+            "rules": sorted(set(prev.get("rules") or []) | {rid for rid, _ in capped})})
     bot.send(h, msg)
     for r, spec, m, run_id, after in answers:
         _deliver_new(bot, person, r, spec, m, run_id, after)
 
 
+def release_new_items(bot, person, held, now):
+    """review fix X3: the new_items rules an import held for the budget run now, on the items it added. Returns False
+    while the person is still over a cap (nothing is run)."""
+    if bot._over_cap(person):
+        return False
+    capped = []
+    answers, nothing, _ = run_new_items(bot, person, set(held.get("fresh") or []), now, capped=capped,
+                                        only_rules=set(held.get("rules") or []))
+    if capped:   # over the cap again part way: those wait for the next release
+        bot.store.set_state(f"heldnew:{person['handle']}", dict(held, rules=sorted({rid for rid, _ in capped})))
+    if nothing:
+        bot.send(person["handle"], T.nothing_new_matched(nothing))
+    for r, spec, m, run_id, after in answers:
+        _deliver_new(bot, person, r, spec, m, run_id, after)
+    return True
+
+
 # ---------- new_items rules ----------
-def run_new_items(bot, person, new_ids, now):
+def run_new_items(bot, person, new_ids, now, capped=None, only_rules=None):
     """Each active new_items rule of the person runs once, on the items the import added. Returns (answers to send,
     goals of the rules where nothing new matched, goals of the rules that ended because their end date passed). Snooze
-    and the budget are respected and recorded."""
+    and the budget are respected and recorded. `capped` (a list) gets (rule id, goal) of each rule held because the
+    person is over a spending cap (review fix X3); `only_rules` limits the run to those rule ids (their release)."""
     from .texts import LAST_SEND
     h = person["handle"]
     answers, nothing, ended = [], [], []
@@ -723,6 +822,8 @@ def run_new_items(bot, person, new_ids, now):
     for r in bot.store.rules(h, statuses=("active",)):
         spec = RuleSpec.model_validate(r["spec"])
         if spec.when.type != "new_items" or spec.content.source not in ("library", "recent"):
+            continue
+        if only_rules is not None and r["id"] not in only_rules:
             continue
         if spec.when.until and now.astimezone(ZoneInfo(person["timezone"])).date().isoformat() > spec.when.until:
             bot.store.set_slot(r["id"], None, "done")
@@ -737,6 +838,8 @@ def run_new_items(bot, person, new_ids, now):
             continue
         if bot._over_cap(person):
             bot.store.add_run(handle=h, rule_id=r["id"], kind="scheduled", status="over_cap", at=now_iso(now))
+            if capped is not None:
+                capped.append((r["id"], spec.content.goal))
             continue
         msg, run_id, n = bot.run(person, spec, "scheduled", rule_id=r["id"], request_text=r.get("text"),
                                  only_ids=set(new_ids))

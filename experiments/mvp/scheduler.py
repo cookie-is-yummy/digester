@@ -167,6 +167,20 @@ class SchedulerMixin:
                 self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
                 from .refresh import announce_import
                 announce_import(self, person, held, now)
+        for row in self.store.q("SELECT key FROM state WHERE key LIKE 'heldnew:%'"):
+            # review fix X3: new_items rules an import held for the budget, once the person's cap allows
+            h = row["key"].split(":", 1)[1]
+            person = self.store.person(h)
+            held = self.store.get_state(row["key"])
+            if not person or not held:
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                continue
+            if person["paused"] or self._held_now(person, now) or self._over_cap(person):
+                continue
+            with self.lock_for(h):
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                from .refresh import release_new_items
+                release_new_items(self, self.store.person(h), held, now)
 
     def _move_timezone(self, handle, new_tz, now, revert_to=None, revert_at=None):
         """The person's zone changes. Each rule's next send keeps its date and clock time, read in the new zone (so a

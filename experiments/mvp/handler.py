@@ -459,6 +459,12 @@ class HandlerMixin:
             if not r:
                 return self.send(h, T.WHICH_RULE if rules else T.NO_RULES_ASK)
             spec = RuleSpec.model_validate(r["spec"])
+            # review fix X1: "run 1" is read by code (no interpreter call), but its run searches and composes, so the
+            # caps are checked here, before any paid call; a reminder or a kept answer costs nothing and still runs
+            over = self._over_cap(person) if spec.content.source in ("library", "recent") else None
+            if over:
+                self.note(intent="over_cap")
+                return self._limit_notice(person, over)
             msg, run_id, _ = self.run(person, spec, "manual", rule_id=r["id"], request_text=text)
             if it.skip_next and r["status"] == "active" and r["next_run_at"] and not self._run_failed(run_id):
                 rows = self._rule_rows([r["id"]])

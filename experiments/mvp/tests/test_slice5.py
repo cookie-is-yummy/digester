@@ -467,9 +467,11 @@ def test_a_file_still_being_copied_waits(fresh):
     assert bot.refresher.waiting(H) == [os.path.join(fresh["inbox"], "instagram-synthetic.zip")]
 
 
-def test_new_items_rules_run_once_on_the_new_items(fresh):
+def test_new_items_rules_run_once_on_the_new_items(fresh, monkeypatch, tmp_path):
     bot, ch, st = fresh["bot"], fresh["ch"], fresh["state"]
+    from mvp import config
     from mvp.schema import RuleSpec
+    monkeypatch.setattr(config, "IMPORTS_PER_DAY", 10)   # three builds in this test (review fix X2 limits them a day)
     for goal in ("a sourdough recipe", "a tiny house tour"):
         spec = RuleSpec.model_validate({"when": {"type": "new_items"}, "content": {"goal": goal, "searches": [goal]}})
         bot.store.add_rule(H, f"when I save {goal}", spec.stored(), "active", None)
@@ -507,8 +509,14 @@ def test_new_items_rules_run_once_on_the_new_items(fresh):
     assert [r["status"] for r in runs] == ["sent", "sent"]
     new_ids = {d["item_id"] for d in bot.store.q("SELECT item_id FROM deliveries")}
     assert not new_ids & {"itm_a", "itm_b", "itm_c", "itm_e"}
-    # the same export again: nothing is new, and that is said once for both rules
-    drop(fresh, fresh["ig_zip"])
+    # an export with nothing new in it (the same items; review fix X2: the very same file is not built again):
+    # nothing is new, and that is said once for both rules
+    def again(k):
+        src = tmp_path / f"ig-again-{k}"
+        shutil.copytree(FIX_IG, src)
+        (src / f"extra{k}.json").write_text("{}")
+        return zip_dir(str(src), str(tmp_path / f"instagram-again-{k}.zip"))
+    drop(fresh, again(1))
     n_out = len(ch.outbox)
     bot.refresher.poll(force=True)
     sent = [m[2] for m in ch.outbox[n_out:]]
@@ -519,7 +527,7 @@ def test_new_items_rules_run_once_on_the_new_items(fresh):
     first = bot.store.rules(H)[0]
     spec = dict(first["spec"], when={"type": "new_items", "until": "2026-11-01"})
     bot.store.update_rule(first["id"], spec=spec)
-    drop(fresh, fresh["ig_zip"])
+    drop(fresh, again(2))
     bot.refresher.poll(force=True)
     assert last(ch).endswith("\nYour rule \"a sourdough recipe\" has ended: its end date has passed.")
     assert bot.store.rule(first["id"])["status"] == "done"

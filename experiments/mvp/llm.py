@@ -92,6 +92,7 @@ def _today(row, day):
 # A library built by an import (refresh.py) records its build in its own ledger; that spend is also written to the
 # MVP ledger (log_spend), so those rows are counted once, from the MVP ledger.
 MIRRORED = ("demo_item_vectors_3l", "demo_key_check")
+BUILD_PURPOSES = ("mvp_import",)
 
 
 def _lib_rows(library):
@@ -109,7 +110,10 @@ def spent_today(handle, library):
     """Cost today (local server date) for one person: their MVP calls plus their library's search calls."""
     day = datetime.now().strftime("%Y-%m-%d")
     refs = {handle, person_ref(handle)}   # rows from before PRIV-5 name the handle itself
-    mine = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER) if r.get("person") in refs and _today(r, day))
+    # review fix X3: a library build has its own limits (refresh.py: its cost cap and builds a day), so its spend is
+    # left out of the person's daily cap; it still counts toward the total
+    mine = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER) if r.get("person") in refs and _today(r, day)
+               and r.get("purpose") not in BUILD_PURPOSES)
     lib = sum(r.get("cost_usd", 0) for r in _lib_rows(library) if _today(r, day))
     return mine + lib
 

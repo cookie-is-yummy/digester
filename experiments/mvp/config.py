@@ -71,6 +71,8 @@ INBOX_MINUTES = float(os.environ.get("MVP_INBOX_MINUTES", "3"))   # the schedule
 INBOX_SETTLE_SECONDS = float(os.environ.get("MVP_INBOX_SETTLE_SECONDS", "60"))  # a file must be unchanged this long
 INBOX_PARTS_MINUTES = float(os.environ.get("MVP_INBOX_PARTS_MINUTES", "10"))   # a Takeout in parts waits for its last part
 IMPORT_CAP_USD = float(os.environ.get("MVP_IMPORT_CAP_USD", "1.50"))   # one library build (its embeddings) at most
+# review fix X2: library builds per person in 24 hours (a build has its own allowance, not the daily chat cap)
+IMPORTS_PER_DAY = int(os.environ.get("MVP_IMPORTS_PER_DAY", "2"))
 UPLOAD_MAX_MB = int(os.environ.get("MVP_UPLOAD_MAX_MB", "2048"))      # the test page's upload box
 INBOX_EMAIL = os.environ.get("MVP_INBOX_EMAIL")     # the bot's inbox account a tester shares a Drive folder with
 EXPORT_EVERY_DAYS = {"instagram": 28, "youtube": 61}   # the reminder's interval: 4 weeks; the Takeout schedule (2 months)
