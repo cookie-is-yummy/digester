@@ -296,3 +296,61 @@ def test_x5_another_counts_the_fits_it_already_showed(w):
     out = say(w, "another")
     assert "Chicken fried rice" in out
     assert not re.search(r"None of your saved \w+ fits", out) and "Nothing you saved fits" not in out
+
+
+# ---------- X6: "ok sure, and I have an instant pot" at the last setup step ----------
+def _to_last_setup_step(w):
+    bot = w["bot"]
+    bot.store.x("UPDATE people SET consent_version=NULL WHERE handle=?", (H,))
+    say(w, "I agree")
+    say(w, "skip", {"intent": "chat", "reply": "unused"})
+    w["state"]["answers"]["mvp_first_requests"] = lambda u: {"requests": []}
+    final = say(w, "skip", {"intent": "chat", "reply": "unused"})
+    assert "OK?" in final and "Anything I should know" in final
+
+
+def test_x6_a_yes_with_a_preference_starts_the_export_reminders_too(w):
+    bot = w["bot"]
+    _to_last_setup_step(w)
+    w["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "tools": ["instant pot"]}
+    out = say(w, "ok sure, and I have an instant pot", {"intent": "profile_update"})
+    assert out.startswith("Done. Next Instagram reminder") and "instant pot" in out.split("\n\n", 1)[1]
+    assert len(bot.store.rules(H)) >= 1 and bot.store.pending(H) is None
+
+
+def test_x6_a_no_with_a_preference_starts_nothing(w):
+    bot = w["bot"]
+    _to_last_setup_step(w)
+    w["state"]["answers"]["mvp_profile_merge"] = lambda u: {"kind": "about_me", "tools": ["instant pot"]}
+    out = say(w, "ok but no reminders, I have an instant pot", {"intent": "profile_update"})
+    assert "Done. Next" not in out and bot.store.rules(H) == []
+
+
+# ---------- X7: a rule made in Spanish is never two languages in one reply ----------
+SPANISH = re.compile(r"\b(Te recomiendo|Lo más parecido|nada de tu biblioteca|Lo que guardaste|Encontré|guardaste)\b")
+
+
+def test_x7_a_spanish_rule_preview_and_its_timed_sends_are_one_language(w):
+    w["state"]["answers"]["mvp_compose"] = composer(
+        ("20 minute full body", "clear", [{"answer": "yes", "quote": "full body"}]),
+        ("Morning mobility", "clear", [{"answer": "yes", "quote": "full routine"}]))
+    prev = say(w, "cada mañana a las 8 mandame un workout", {"intent": "new_rule", "lang": "es", "spec": lib(
+        "un workout", ["workout"], when={"type": "schedule", "days": DAYS, "times": ["08:00"]}, count=1,
+        criteria=["a full routine from start to finish"])})
+    assert "Every day at 8am" in prev and not SPANISH.search(prev), prev
+    say(w, "si", {"intent": "confirm", "lang": "es"})
+    # the same thread, with Spanish left over from the last message, and nothing found: one language
+    w["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "none_reason": "x"}
+    w["bot"]._tl.lang = "es"
+    nothing = tick_at(w, datetime(2026, 11, 13, 13, 0, 30, tzinfo=UTC))
+    assert nothing and not SPANISH.search(nothing), nothing
+    # on the scheduler's own thread too
+    w["state"]["answers"]["mvp_compose"] = composer(("Morning mobility", "clear",
+                                                     [{"answer": "yes", "quote": "full routine"}]))
+    w["clock"][0] = datetime(2026, 11, 14, 13, 0, 30, tzinfo=UTC)
+    o0 = len(w["ch"].outbox)
+    t = threading.Thread(target=w["bot"].tick)
+    t.start()
+    t.join()
+    sent = "\n".join(str(m[2]) for m in w["ch"].outbox[o0:])
+    assert "Morning mobility" in sent and not SPANISH.search(sent)

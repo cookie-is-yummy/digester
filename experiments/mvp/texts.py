@@ -9,6 +9,7 @@ CONSENT_VERSION = "mvp-consent-v1"
 # ---------- patterns that read a message ----------
 YES = re.compile(r"^\s*(yes|y|yep|yeah|yup|sure|ok|okay|go|start|do it|sounds good|👍)[\s.!]*$", re.I)
 NO = re.compile(r"^\s*(no|n|nope|nah|cancel|don'?t)[\s.!]*$", re.I)
+YES_LEAD = re.compile(r"^\s*(yes|yep|yeah|yup|sure|ok|okay|sounds good|go ahead|s[ií]|vale|claro)\b", re.I)
 AGREE = re.compile(r"^\s*(i agree|agree|agreed|i'm in|im in|yes)\b", re.I)
 NEGATION = re.compile(r"\b(not|don'?t|do not|no|disagree|never)\b", re.I)
 QUICK_FEEDBACK = re.compile(r"^\s*(👍|👎)\s*(\d)?\s*$")

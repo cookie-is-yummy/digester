@@ -213,25 +213,34 @@ class OnboardingMixin:
         and with it the setup unless the first-requests offer is still open."""
         h = person["handle"]
         self.note(intent="onboarding")
+        started = self._export_yes(person, text, now)
+        if started:
+            text_rest = T.YES_LEAD.sub("", text).strip(" ,.!;:-")
+            text_rest = re.sub(r"^(?:and|also|plus|y)\b[\s,]*", "", text_rest, flags=re.I).strip()
+            if not text_rest or T.YES.match(text_rest):   # "ok, sure": only the reminders
+                return self.send(h, started)
+            started += "\n\n"
         others = (st.get("others") or 0) + 1
         if not st.get("requests") or others >= 2:
             self._set_onboard(h, "done", now)
         else:
             self.store.set_state(f"onboard:{h}", dict(st, prefs_open=False, others=others))
         if T.SKIP.match(text):
-            return self.send(h, T.PREFS_SKIPPED)
+            return self.send(h, started + T.PREFS_SKIPPED)
         if self._over_cap(person):
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
-            return self.send(h, T.PREFS_THANKS)
+            return self.send(h, started + T.PREFS_THANKS)
         try:
             res, _ = P.merge(self.store, h, text, asked=T.PREFS_QUESTION)
         except Exception as e:  # noqa: BLE001 - their words are kept as a note
             self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
-            return self.send(h, T.PREFS_THANKS)
+            return self.send(h, started + T.PREFS_THANKS)
         said = T.profile_changed(res["changes"], res["skipped_sensitive"] and self._sensitive_once()) \
             if res["changes"] else ""
         if res["kind"] in ("request", "both"):
+            if started:
+                self.send(h, started.strip())
             self._tl.merged_text = text
             self._tl.carry_said = said or None   # what changed rides on the answer (_dispatch takes it up)
             try:
@@ -243,7 +252,28 @@ class OnboardingMixin:
             note = " ".join(text.split())[:300]
             if not P.stated_sensitive(note):
                 self.store.add_profile_note(h, note, at=now)
-        return self.send(h, said or (T.PREFS_THANKS + (self._sensitive_once(" ") if res["skipped_sensitive"] else "")))
+        return self.send(h, started + (said or (T.PREFS_THANKS + (self._sensitive_once(" ") if res["skipped_sensitive"]
+                                                                 else ""))))
+
+    def _export_yes(self, person, text, now):
+        """Review fix X6 (experience): the setup's last message asks "OK?" about the export reminders and asks about
+        their kit. An answer to both ("ok sure, and I have an instant pot") starts the reminders too, and returns the
+        line that says so; else ''."""
+        from .handler import EXPORT_REMINDER
+        h = person["handle"]
+        pending = self._live_pending(h, now)
+        if not (pending and pending["kind"] == "confirm_rule"
+                and EXPORT_REMINDER.match(str(pending["payload"].get("text") or ""))):
+            return ""
+        if not T.YES_LEAD.match(text) or T.NEGATION.search(text):
+            return ""
+        self.store.clear_pending(h)
+        self._tl.join_write = True
+        try:
+            return self._start_export_reminders(person, [pending["payload"]] + list(pending["payload"].get("more") or []),
+                                                say=False) or ""
+        finally:
+            self._tl.join_write = False
 
     def first_requests(self, person, now):
         """Up to FIRST_REQUESTS requests written for the person (one model call), each run through retrieval and

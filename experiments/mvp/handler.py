@@ -381,7 +381,14 @@ class HandlerMixin:
                 return self.send(h, never)
             joined = chained and pending and pending["kind"] == "confirm_rule" and getattr(self._tl, "made_pending", False)
             self._tl.auto_outside = False
-            msg, run_id, n = self.run(person, it.spec, "preview", request_text=text)
+            # review fix X7 (experience): a rule's preview, its start line and its timed sends are written in English
+            # only (their timing words, the heads-up and the offer have no Spanish yet), so the preview's picks are
+            # English too: never one reply in two languages
+            lang, self._tl.lang = getattr(self._tl, "lang", None), None
+            try:
+                msg, run_id, n = self.run(person, it.spec, "preview", request_text=text)
+            finally:
+                self._tl.lang = lang
             offer = self._preview_supply(person, it.spec, text, run_id, now)
             if self._run_failed(run_id):  # no preview, so nothing to say yes to
                 if not joined:
@@ -813,7 +820,7 @@ class HandlerMixin:
             self._tl.join_write = False
         return ref
 
-    def _start_export_reminders(self, person, entries):
+    def _start_export_reminders(self, person, entries, say=True):
         """The export reminders a YES started, said in one line: 'Done. Next Instagram reminder 10 December, next
         YouTube one 12 January.' (finding 44: never their whole text)."""
         h, tz = person["handle"], person["timezone"]
@@ -829,6 +836,8 @@ class HandlerMixin:
             self.store.set_slot(rule_id, now_iso(nxt), "active")
             self._wrote_rule(h, f"started the {EXPORT_REMINDER.match(e['text']).group(1)} export reminder", rule_id)
             nexts.append((EXPORT_REMINDER.match(e["text"]).group(1), nxt.astimezone(ZoneInfo(tz))))
+        if not say:   # the caller says it with its own reply (review fix X6, experience)
+            return T.export_started(nexts) if nexts else ""
         return self.send(h, T.export_started(nexts)) if nexts else None
 
     def _wrote_rule(self, h, say, rule_id):
@@ -1023,7 +1032,12 @@ class HandlerMixin:
                 none = (T.level_moved_only(interest["topic"], P.LEVEL_PLAIN[level], kind) if interest else "Noted.") \
                     + "\n\n"
                 self._tl.ran_more = True
-                return self._more(person, ask, text, lead=lead, easier=(kind == "easier"), lead_none=none)
+                # review fix X7: the feedback line is English, so the one sent with it is too (never a mixed reply)
+                lang, self._tl.lang = getattr(self._tl, "lang", None), None
+                try:
+                    return self._more(person, ask, text, lead=lead, easier=(kind == "easier"), lead_none=none)
+                finally:
+                    self._tl.lang = lang
             if interest:
                 return self.send(h, T.level_moved(interest["topic"], P.LEVEL_PLAIN[level], kind))
         return self.send(h, T.FEEDBACK_REPLIES.get(kind, T.FEEDBACK_OTHER))

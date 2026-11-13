@@ -361,6 +361,9 @@ class SchedulerMixin:
             return self._tick_rule_locked(rule, person, now, {} if progress is None else progress)
 
     def _tick_rule_locked(self, rule, person, now, progress):
+        # review fix X7 (experience): a timed send is written in English, as its rule's preview and start line were,
+        # on any thread: never the language left over from the last message this thread handled
+        self._tl.lang = None
         spec = RuleSpec.model_validate(rule["spec"])
         tz = person["timezone"]
         slot = datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
