@@ -32,7 +32,8 @@ Then open `http://127.0.0.1:8765`. It is a message thread with the bot, on this 
 - Type as any person in `people.json`. Replies appear as they would in Messages.
 - Tap 👍 or 👎 under a reply: that is a tapback. A 👍 on a preview starts the rule.
 - **The bot's clock**: "Jump to the next timed send" fires the next rule now. "Forward 1 hour" and "Forward 1 day" move
-  time on. A jump of more than 2 hours past a send skips it, exactly as if the bot had been switched off.
+  time on. A jump of more than 2 hours past a send skips it, exactly as if the bot had been switched off (a one-time
+  reminder or a to-do's reminder skipped this way gets one short "I was offline and missed ..." notice).
 - **Profile** panel: what the bot knows about the person (interests with the level and whether they confirmed it,
   what they are working toward, preferences, email and whether it is confirmed, time zone, quiet hours, and the setup
   step while one is open).
@@ -43,10 +44,11 @@ Then open `http://127.0.0.1:8765`. It is a message thread with the bot, on this 
 - **Exports** panel: an upload box that puts an Instagram export (JSON zip) or a Google Takeout zip into that person's
   inbox (`data/inbox/<person>/`); the bot adds it within a few minutes and says what's new. The panel lists the last
   imports.
-- "Start over" clears everything the bot holds about that person (rules, history, thread, profile, to-dos, email
-  address, outbox; not their imports or library) and runs the setup from its first message: the consent text, then the
-  read of them once they reply "I agree". "Clear rules, thread, to-dos and outbox" does the same but keeps the consent,
-  so no setup runs.
+- "Start over" clears everything the bot holds about that person in the test page's store (rules, history, thread,
+  profile, to-dos, email address, outbox, the list of imports) and runs the setup from its first message: the consent
+  text, then the read of them once they reply "I agree". It leaves the inbox folder and the library folders on disk,
+  writes no deletion line, and puts the person back on the library `people.json` names. "Clear rules, thread, to-dos
+  and outbox" does the same but keeps the consent, so no setup runs.
 
 It is the same handler, search, checks and scheduler as the iMessage channels; only the transport differs. It keeps its
 own store (`data/mvp/webtest.sqlite`), so nothing you do there touches real testers' rules. The first reply after a
@@ -264,5 +266,5 @@ still hold the handle (`ledger_rows_with_handle`).
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 477 offline tests (`test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
+| `tests/` | 480 offline tests (`test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
 the second live run, 38 to 64) |

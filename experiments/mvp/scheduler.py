@@ -437,7 +437,10 @@ class SchedulerMixin:
                 self._hold(rule, end_of_quiet(tomorrow, tz, quiet))
                 return 0
             return self._skip_slot(rule, spec, tz, now, "daily_limit")
-        if self._over_cap(person):  # this slot is skipped and recorded; it is not held to fire late
+        # this slot is skipped and recorded; it is not held to fire late. Only a send that searches and composes is
+        # paid for: a reminder in their words, their list or a kept answer costs nothing and goes out as a to-do's
+        # reminder does (final check: the same reading as cost-failure fix X1 for "run 1")
+        if spec.content.source in ("library", "recent") and self._over_cap(person):
             return self._skip_slot(rule, spec, tz, now, "over_cap")
         h = person["handle"]
         before = (self.store.last_answer(h), self.store.get_state(f"lines:{h}"), self.store.get_state(f"linekinds:{h}"),

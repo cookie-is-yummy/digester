@@ -40,3 +40,17 @@ def test_a_held_new_items_release_that_meets_the_cap_keeps_waiting(env, monkeypa
     monkeypatch.setattr(type(bot), "_over_cap", lambda self, person: next(answers, "daily"))
     bot._release_held(bot.clock())
     assert bot.store.get_state(key) == {"fresh": ["itm_a"], "rules": [1]}
+
+
+def test_a_reminder_in_their_own_words_goes_out_when_they_are_over_the_spending_cap(w, monkeypatch):
+    """Cost-failure X1 let "run 1" run a reminder over the cap, since it costs nothing; the timed send of the same
+    reminder was still skipped silently for the cap ("over_cap"), unlike a to-do's reminder. A library rule is still
+    skipped."""
+    from datetime import datetime, timezone
+    bot = w["bot"]
+    say(w, "every day at 9am remind me to stretch", note({"type": "schedule", "days": DAYS, "times": ["09:00"]},
+                                                         "stretch"))
+    monkeypatch.setattr(type(bot), "_over_cap", lambda self, person: "daily")
+    out = tick_at(w, datetime(2026, 11, 13, 14, 0, 30, tzinfo=timezone.utc))   # 9am in New York
+    assert "stretch" in out
+    assert bot.store.one("SELECT status FROM runs WHERE kind='scheduled' ORDER BY id DESC LIMIT 1")["status"] == "sent"
