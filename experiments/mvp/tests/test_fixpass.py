@@ -290,9 +290,10 @@ def test_14_generic_words_are_not_counted_as_topics(env):
 def test_15_a_reply_is_all_spanish_or_all_english(env):
     seen = []
     env["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": [
-        {"n": 2, "verdict": "clear", "title": "Lemon garlic pasta"}], "intro": "Encontré una pasta con limón."})[1]
+        {"n": 2, "verdict": "clear", "title": "Lemon garlic pasta"}], "intro": "Encontré una receta de pasta."})[1]
     msg = say(env, "¿una receta de pasta?", dict(ask(), lang="es"))
-    assert msg.startswith("Encontré una pasta con limón.\n\nTe recomiendo Lemon garlic pasta de @chef, que guardaste "
+    # (privacy review PRIV-8: an opening line is shown only when its words are the request's: "con limón" would not be)
+    assert msg.startswith("Encontré una receta de pasta.\n\nTe recomiendo Lemon garlic pasta de @chef, que guardaste "
                           "en marzo.")
     assert "Ingredientes" in msg or "La receta" in msg or "Pasos" in msg or "\n" in msg
     assert "I recommend" not in msg and "which you" not in msg and '"lang": "es"' in seen[-1]

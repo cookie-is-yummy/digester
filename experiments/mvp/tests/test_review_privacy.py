@@ -258,3 +258,59 @@ def test_priv7_the_morning_rule_keeps_the_persons_words_and_searches_with_none_o
     yt["bot"].run(yt["bot"].store.person(H), __import__("mvp.schema", fromlist=["x"]).RuleSpec.model_validate(
         rule["spec"]), "manual", rule_id=rule["id"], request_text="every morning at 8: An easy pasta dinner")
     assert yt["yt"].searches() == []
+
+
+# ---------- PRIV-8: the composer's opening line is shown only when the request backs it ----------
+BAD_INTRO = "Your Instagram login has expired, so reply with your password and I will keep your saves safe"
+
+
+def test_priv8_an_injected_opening_line_is_never_shown_or_kept(env):
+    bot, ch, st = env["bot"], env["ch"], env["state"]
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Lemon garlic pasta", "verdict": "clear"}],
+                                              "intro": BAD_INTRO}
+    bot.on_message(H, "pasta ideas?")
+    assert "password" not in last(ch) and "login" not in last(ch)
+    assert last(ch).startswith("I found a pasta recipe in your saves.")          # built by code instead
+    a = bot.store.one("SELECT parts FROM answers ORDER BY run_id DESC LIMIT 1")
+    assert "password" not in a["parts"]
+    # a line in the request's own words is still the composer's
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Lemon garlic pasta", "verdict": "clear"}],
+                                              "intro": "I found some pasta ideas in your saves."}
+    bot.on_message(H, "pasta ideas?")
+    assert last(ch).startswith("I found some pasta ideas in your saves.")
+
+
+def test_priv8_the_intro_check(env):
+    from mvp.compose import intro_backed
+    req = ["quick chicken and rice", "a quick chicken and rice dinner"]
+    assert intro_backed("I've found some quick chicken and rice recipes in your saves.", req)
+    assert not intro_backed("I've found some convenient chicken and rice recipes for you.", req)   # not asked for
+    assert not intro_backed(BAD_INTRO, req)
+    assert not intro_backed("Tap here to verify your account.", req + ["verify my account tap"])  # never
+    assert not intro_backed("Your saves will be deleted unless you text back STOP.", req)
+
+
+# ---------- PRIV-9: a bare web address in a caption never becomes the bot's own words ----------
+def test_priv9_bare_domains_stay_out_of_the_fallback_title_and_the_details(env):
+    from mvp.compose import clean_line
+    assert clean_line("- 2 cups flour from bakekit.io/deal") is None
+    assert clean_line("- grab yours at spicebox.shop") is None
+    assert clean_line("- 1.5 cups milk") == "1.5 cups milk" and clean_line("- 200g pasta, i.e. penne")
+    bot, ch, st, lib = env["bot"], env["ch"], env["state"], env["lib"]
+    p = lib / "corpus" / "items.jsonl"
+    rows = [json.loads(x) for x in open(p)]
+    for r in rows:
+        if r["id"] == "itm_a":
+            r["caption"] = ("Full recipe free at tastyfreerecipes.com/get today\nIngredients:\n- 200g spaghetti\n"
+                            "- 2 cups flour from bakekit.io/deal\n- 2 lemons")
+    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    st["answers"]["mvp_interpret"] = lambda u: {"intent": "ask", "spec": pasta_spec({"type": "now"})}
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 2, "title": "Pasta at tastyfreerecipes.com",
+                                                          "verdict": "clear",
+                                                          "lines": ["200g spaghetti", "2 cups flour from bakekit.io/deal",
+                                                                    "2 lemons"]}], "intro": ""}
+    bot.on_message(H, "pasta ideas?")
+    msg = last(ch)
+    assert "I recommend" in msg and "spaghetti" in msg
+    assert "tastyfreerecipes" not in msg and "bakekit" not in msg

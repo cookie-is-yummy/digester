@@ -43,13 +43,15 @@ def clean_line(line):
         line = line[1:].lstrip()  # an emoji or symbol used as a list mark is not part of the detail
     line = re.sub(r"^(?:[\-\*•·▪✅✔️]+|\d+[\.\)](?!\d))\s*", "", line).strip()  # list marks, never "1.5 cups"
     line = re.sub(r"^(ingredients?|steps?|method|instructions?|tips?)\s*:\s*", "", line, flags=re.I).strip()
-    if not line or len(line) > 110 or HEADER.match(line) or line.endswith(":") or NOT_DETAIL.search(line):
+    if not line or len(line) > 110 or HEADER.match(line) or line.endswith(":") or NOT_DETAIL.search(line) \
+            or UNSAFE_TEXT.search(line):   # review fix PRIV-9: a bare web address is never one of our details
         return None
     return line
 
 
 TOKEN = re.compile(r"\d+(?:[./,]\d+)*|[^\W\d_]+", re.UNICODE)
-UNSAFE_TEXT = re.compile(r"(https?://|www\.|\b[\w-]+\.(com|net|org|io|co|ly|me|app|link)\b|@\w)", re.I)
+UNSAFE_TEXT = re.compile(r"(https?://|www\.|\b[\w-]+\.(com|net|org|io|co|ly|me|app|link|shop|store|info|biz|site|"
+                         r"online|tv|xyz|uk|gg|ai)\b|@\w)", re.I)
 
 
 def tokens(s):
@@ -83,8 +85,8 @@ def title_from_item(it, words=8):
     for line in [it.first_line] + re.split(r"(?<=[.!?])\s+", it.caption)[:3]:
         line = re.split(r"(?<=[.!?])\s", line, maxsplit=1)[0]
         parts = [w for w in line.split() if not w.startswith(("#", "@", "http"))]
-        if len(parts) < 2 or PROMO_TITLE.search(line) or NOT_DETAIL.search(line):
-            continue
+        if len(parts) < 2 or PROMO_TITLE.search(line) or NOT_DETAIL.search(line) or UNSAFE_TEXT.search(line):
+            continue   # review fix PRIV-9: a line with a bare web address is never the name the bot gives a pick
         out = " ".join(parts[:words]).strip(" -:|,(")
         if len(parts) > words:
             out += "…"
@@ -101,6 +103,40 @@ def title_ok(title, it, own=None):
         return False
     hits = sum(1 for w in words if contains_word(text, w))
     return hits * 2 >= len(words)
+
+
+# review fix PRIV-8: the composer's opening line is free text, so a caption could put words in the bot's mouth. It is
+# shown only when every word that carries content is in the person's request (or the rule's goal, searches and
+# must-haves); the words here only frame it ("I found some … in your saves."). Words that ask for an account, a
+# password, a payment or a reply never pass, and that is the only check on a follow-up's line (it answers the person's
+# question about picks already shown, in words the question need not hold).
+INTRO_FRAME = set("""i i've ive i'm im we found find finding here here's heres are is was were be some a an the few
+couple of in on from your you you've you're for that these those this and or with to it its it's one ones two three
+picks pick ideas idea options option things thing stuff saves saved save kept keep library collection collections what
+asked ask wanted want looking look got have has had hi hello hey ok okay sure great good nice yes no not just all my me
+let's lets take check out try them they there their which both also too as so like
+recipes recipe videos video posts post reels reel tutorials tutorial workouts workout routines routine projects project
+lessons lesson guides guide
+encontré encontre aquí aqui tienes tengo algunas algunos unas unos una un el la los las de del en con para tus tu lo que
+esto esta estas estos este guardaste guardado guardados guardadas recetas receta vídeos ideas sí si""".split())
+INTRO_NEVER = re.compile(r"\b(passwords?|passcodes?|log ?in|logins?|sign ?in|verif\w*|expir\w*|suspend\w*|locked|"
+                         r"accounts?|reply|replies|text (?:me|us|back)|send (?:me|us)|click|payments?|pay|card|bank|"
+                         r"pins?|delet\w*|unsubscrib\w*|urgent\w*|security)\b", re.I)
+INTRO_WORD = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)?", re.UNICODE)
+
+
+def intro_backed(intro, backing):
+    """Whether the opening line may be shown: no word from INTRO_NEVER, and every other word of 3 letters or more is
+    a framing word or is in one of the `backing` texts (whole words, singular or plural)."""
+    if not intro or INTRO_NEVER.search(intro):
+        return False
+    texts = [str(b) for b in backing if b]
+    for w in INTRO_WORD.findall(norm(intro).replace("’", "'")):
+        if len(w) < 3 or w in INTRO_FRAME:
+            continue
+        if not any(contains_word(t, w) for t in texts):
+            return False
+    return True
 
 
 def as_data(text):
@@ -373,7 +409,7 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
         if store is not None:
             store.cache_put("answer_cache", key, raw, at=now, handle=person_handle)
     result = check(raw, cands, spec, extra=extra, known_lines=known_lines, wider=wider, level_ok=level_ok,
-                   max_minutes=max_minutes)
+                   max_minutes=max_minutes, request_text=request_text)
     result["cached"] = cached
     return result, cost
 
@@ -416,7 +452,8 @@ def tips_only(text):
     return bool(TIPS.search(text or "")) and not PROJECT.search(text or "")
 
 
-def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=True, max_minutes=None):
+def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=True, max_minutes=None,
+          request_text=None):
     """The code checks on one composer answer (pure: the same answer always gives the same result). level_ok: whether
     "because" may talk about the person's level (their level is known, or the request names one). max_minutes: a
     length bound code worked out from the request ("mini": 10), checked against YouTube's length where known; a
@@ -536,7 +573,11 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
     if closest and picks and picks[0]["too_long"]:
         missing.append((f"under {max_minutes} minutes", "no"))
     intro = _safe(raw.get("intro"), 160)
-    if re.search(r"\d", intro) or INTERNAL.search(intro):
+    if known_lines is not None:   # a follow-up: the line answers the person's question about these picks
+        unsafe = bool(INTRO_NEVER.search(intro))
+    else:
+        unsafe = not intro_backed(intro, [request_text, c.goal, *c.searches, *c.criteria])
+    if re.search(r"\d", intro) or INTERNAL.search(intro) or unsafe:
         intro = ""
     level_used = any(p["because_backed"] and LEVEL_TALK.search(p["because"] or "") for p in picks[:1])
     # the model's none_reason is never shown (finding 5): the sentence is chosen by code (render.none_message)
