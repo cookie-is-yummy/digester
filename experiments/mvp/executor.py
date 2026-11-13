@@ -177,6 +177,13 @@ class ExecutorMixin:
         platforms = [p for p in prefs.get("exclude_platforms") or [] if p in PLATFORMS]
         return kinds, platforms
 
+    def _avoid_creators(self, handle, spec):
+        """The creators the person said "not this creator" about, except one this request names itself."""
+        from .retrieve import name_matches
+        prefs = self.store.person_context(handle).get("prefs") or {}
+        return [a for a in prefs.get("avoid_creators") or [] if isinstance(a, str)
+                and not any(name_matches(a, c) or name_matches(c, a) for c in spec.content.creators)]
+
     def _youtube(self):
         yt = getattr(self, "yt", None)
         if yt is None:
@@ -267,6 +274,10 @@ class ExecutorMixin:
             spec = spec.model_copy(deep=True)
             spec.content.criteria = [cr for cr in spec.content.criteria if cr not in lengths]
             request_text = " ".join([request_text or "", *lengths]).strip()   # so the bound is still read
+        avoid_who = self._avoid_creators(person["handle"], spec)
+        if avoid_who and cands_override is None:   # review fix X9: "not this creator", kept for the person
+            spec = spec.model_copy(deep=True)
+            spec.content.avoid_creators = list(dict.fromkeys([*spec.content.avoid_creators, *avoid_who]))[:10]
         if kits and any(mentions(cr, k) for cr in spec.content.criteria for k in kits):
             # finding 53: a must-have about kit they HAVE ("uses an instant pot") is a preference, not a must-have
             spec = spec.model_copy(deep=True)

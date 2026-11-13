@@ -354,3 +354,40 @@ def test_x7_a_spanish_rule_preview_and_its_timed_sends_are_one_language(w):
     t.join()
     sent = "\n".join(str(m[2]) for m in w["ch"].outbox[o0:])
     assert "Morning mobility" in sent and not SPANISH.search(sent)
+
+
+# ---------- X8: a "when I save a new workout" rule ----------
+def test_x8_a_new_items_rule_is_started_as_what_it_is(w):
+    w["state"]["answers"]["mvp_compose"] = composer(("20 minute full body", "clear", []))
+    prev = say(w, "when I save a new workout send it to me", {"intent": "new_rule", "spec": lib(
+        "a new workout", ["workout"], when={"type": "new_items"}, count=1)})
+    assert "Whenever you save something new" in prev
+    assert "run dry" not in prev and "outside your saves" not in prev
+    out = say(w, "yes")
+    assert out.startswith("Got it: whenever you save something new that fits") and '"stop 1"' in out
+    assert "whenever you want it" not in out and "run 1" not in out
+    assert w["bot"].store.rules(H)[0]["spec"]["content"]["outside"] == "none"
+
+
+# ---------- X9: "not this creator" after an ask ----------
+def test_x9_not_this_creator_is_left_out_of_the_next_ask(w):
+    w["state"]["answers"]["mvp_compose"] = composer(("Instant pot chicken", "clear", YES_ING))
+    say(w, "chicken and rice?", CR)
+    out = say(w, "not this creator", {"intent": "feedback", "feedback": "less"})
+    assert out == "Got it: I'll leave out posts by @souschef from now on."
+    seen = []
+    w["state"]["answers"]["mvp_compose"] = lambda u: (seen.append(u), {"picks": []})[1]
+    say(w, "rice ideas", {"intent": "ask", "spec": lib("rice ideas", ["rice"], count=3)})
+    assert seen and "Instant pot chicken" not in seen[0] and "5 tips for fluffier rice" not in seen[0]
+    assert "One pan chicken" in seen[0]
+    # a request that names the creator still gets them
+    seen.clear()
+    say(w, "rice from souschef", {"intent": "ask", "spec": lib("rice", ["rice"], count=3, creators=["souschef"])})
+    assert seen and "5 tips for fluffier rice" in seen[0]
+
+
+def test_x9_less_like_that_after_an_ask_promises_nothing(w):
+    w["state"]["answers"]["mvp_compose"] = composer(("Instant pot chicken", "clear", YES_ING))
+    say(w, "chicken and rice?", CR)
+    out = say(w, "less like that", {"intent": "feedback", "feedback": "less"})
+    assert out != "Noted: less like that." and "not this creator" in out

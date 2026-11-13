@@ -749,7 +749,8 @@ class HandlerMixin:
         offer to include new videos from there (YES then stores outside "some")."""
         info = getattr(self._tl, "run_info", None) or {}
         c = spec.content
-        if c.source != "library" or not spec.when.repeating or info.get("run_id") != run_id:
+        if c.source != "library" or not spec.when.repeating or info.get("run_id") != run_id \
+                or spec.when.type == "new_items":   # review fix X8: it sends what they save next, so it never runs dry
             return "", ""
         supply = info.get("n_clear", 0) + info.get("n_close", 0)
         # fewer than 3 that fit BEYOND the pick this preview shows: the rule would run dry within a few sends
@@ -863,7 +864,9 @@ class HandlerMixin:
             rule_id = self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
             self._wrote_rule(h, f"saved a rule, \"{c.goal}\"", rule_id)
             n = self.store.rule_number(h, rule_id)
-            return self.send(h, T.saved_rule(n, what) + self._do_note(spec) + self._not_yet_notes(spec)
+            start = T.new_items_started(describe(spec.when), what, n) if spec.when.type == "new_items" else \
+                T.saved_rule(n, what)   # review fix X8 (experience): it runs when they save something, not on request
+            return self.send(h, start + self._do_note(spec) + self._not_yet_notes(spec)
                              + self._email_ask(person, spec, now))
         quiet = self.store.quiet(h)
         never = self._never_sends(person, spec, now)
@@ -1011,6 +1014,9 @@ class HandlerMixin:
         chosen = [items[pick_number - 1]] if pick_number else items
         if kind == "done" and not pick_number and len(items) > 1:
             chosen = items[:1]   # "made it" is about the recommended pick, not every alternative
+        if kind in ("less", "down") and T.CREATOR_WORDS.search(text or ""):
+            # review fix X9 (experience): "not this creator" is kept for the person and applied to every request
+            return self._avoid_creator(person, last, items[pick_number - 1] if pick_number else items[0])
         for iid in chosen:
             self.store.add_feedback(h, iid, last.get("rule_id"), kind)
         self._wrote_final(h, "feedback on a pick")
@@ -1040,7 +1046,24 @@ class HandlerMixin:
                     self._tl.lang = lang
             if interest:
                 return self.send(h, T.level_moved(interest["topic"], P.LEVEL_PLAIN[level], kind))
+        if kind == "less" and not last.get("rule_id"):   # review fix X9: an ask learns nothing from "less like that"
+            return self.send(h, T.LESS_ON_ASK)
         return self.send(h, T.FEEDBACK_REPLIES.get(kind, T.FEEDBACK_OTHER))
+
+    def _avoid_creator(self, person, last, item_id):
+        """Review fix X9: the creator of the pick is left out of every later answer (prefs.avoid_creators, applied
+        when candidates are drawn), and the reply says so in plain words."""
+        h = person["handle"]
+        it = self.view(person["library"]).get(item_id)
+        if it is None or not it.creator:
+            return self.send(h, T.NO_CREATOR)
+        prefs = self.store.person_context(h)["prefs"]
+        names = [x for x in prefs.get("avoid_creators") or [] if isinstance(x, str)]
+        if it.creator not in names:
+            self.store.set_prefs(h, avoid_creators=(names + [it.creator])[-10:])
+        self.store.add_feedback(h, item_id, last.get("rule_id"), "less")
+        self._wrote_final(h, "feedback on a pick")
+        return self.send(h, T.creator_avoided(it.creator))
 
     # ---------- rule management ----------
     def _pick_rule(self, rules, number):

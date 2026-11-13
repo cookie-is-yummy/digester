@@ -929,6 +929,8 @@ def show_text(prof, now=None):
         p.append("I don't use your " + _and(_plain("exclude_kinds", prefs["exclude_kinds"])))
     if prefs.get("exclude_platforms"):
         p.append("I don't use " + _and(_plain("exclude_platforms", prefs["exclude_platforms"])))
+    if prefs.get("avoid_creators"):   # review fix X9 (experience): "not this creator"
+        p.append("I leave out posts by " + _and([str(x) for x in prefs["avoid_creators"]]))
     if p:
         lines.append(T.cap_first("; ".join(p)) + ".")
     if prof["notes"]:

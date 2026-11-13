@@ -74,6 +74,15 @@ FEEDBACK_REPLIES = {"up": "Noted 👍", "down": "Noted. I won't send that again.
                     "done": "Nice! I've marked it as done, so I won't send it again.",
                     "hide": "Hidden. I won't send that one again."}
 FEEDBACK_OTHER = "Noted."
+# review fix X9 (experience): an ask does not learn from "less like that"; a creator the person names out is left out
+LESS_ON_ASK = "Noted. If it's the creator you'd rather not see, say \"not this creator\" and I'll leave them out."
+NO_CREATOR = "I don't know who made that one, so I can't leave them out."
+CREATOR_WORDS = re.compile(r"\b(creators?|accounts?|channels?|this (?:person|guy|girl|chef)|from (?:them|him|her)|"
+                           r"by (?:them|him|her))\b", re.I)
+
+
+def creator_avoided(name):
+    return f"Got it: I'll leave out posts by {name} from now on."
 NO_RULES_LIST = ("You have no rules yet. Ask me anything now, or tell me when to send something: "
                  "\"tonight at 9…\", \"every Friday at 7pm…\".")
 RULES_HEAD = "Your rules:"
@@ -145,6 +154,12 @@ KEEP_COMING = "Thanks! I'll keep them coming."
 
 def reminder_down(n):
     return f"Noted. Reply \"stop {n}\" to end these reminders, or \"pause {n}\" for a break."
+
+
+def new_items_started(when, what, n):
+    """Review fix X8 (experience): a "when I save a new ..." rule, said as what it is."""
+    return (f"Got it: {when}, I'll send you {what}. I see new saves when a new export of your library comes in. "
+            f"Reply \"stop {n}\" to end it.")
 
 
 def saved_rule(n, what):
