@@ -304,6 +304,12 @@ section and an earlier one differ, this section wins.
   all are `no` does the bot say it found nothing. This removes the flip between "nothing" and an answer that the
   measurement traced to a score hovering around the cutoff.
 - The interpreter and the composer run with temperature 0 and a fixed seed.
+- Changed after the live runs of 12 and 13 Nov: a pick whose only "no" is the finished-result must-have may still be
+  shown as the closest, said as such, when nothing else comes closer. A request to make something then gets a few
+  YouTube picks as well when under 3 saves fit (the outside section below).
+- What the person has and how much time they usually have are preferences, never must-haves: they help choose among
+  picks that fit and may be named in the reason when the post's own text backs it. Only the avoid list is a hard
+  limit, and the message's own words win over it.
 - YouTube items: titles only is too little for "under 10 minutes" or "ends with a finished model". For candidates
   shown to the composer, code fetches the video's length and description from YouTube's official `videos.list`
   (one call per 50 videos, key from `YOUTUBE_API_KEY`), keeps them at most 30 days (YouTube's rule), and treats the
