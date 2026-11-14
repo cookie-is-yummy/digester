@@ -171,7 +171,8 @@ def test_94_an_items_request_reads_the_posts_whose_text_names_things(lib8):
     msg = say(lib8, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
     read = read_posts(lib8)
     # the shown picks first, then the candidates whose text lists named things, on the request's topic, at most 6
-    assert len(read) == 6 and set(read[:3]) == {"UI design vibes", "5 free UI libraries", "Best design systems"}
+    assert sorted(read) == sorted(["UI design vibes", "5 free UI libraries", "Best design systems", "UI icon packs",
+                                   "UI fonts", "UI css frameworks"])     # (the calls run in parallel: any order)
     assert "Best cafes" not in read and "?" not in read           # a list off the topic, a recipe: never read
     # the posts with the most good things come first, at most 3; the next two are named in one line each
     assert msg.startswith("I found 8 UI/UX libraries named in 3 of your saves.")
@@ -288,3 +289,111 @@ def test_94_the_list_score_reads_lists_handles_sites_and_named_lines():
     assert list_score("follow @figma and @framer for more, or see www.example.com") >= 3
     assert list_score("Just a calm morning routine to start the day") == 0
     assert list_score("UI design vibes and calm workspace inspiration") == 0
+
+
+# ---------- finding 96: "something that isn't a donut" and the rest of the donut series ----------
+SERIES = [("s1", "Guru", "Blender Beginner Tutorial - Part 1", None, "2025-11-01", "youtube"),
+          ("s2", "Guru", "Blender Beginner Tutorial - Part 4", None, "2025-10-20", "youtube"),
+          ("s3", "Guru", "Blender Beginner Tutorial - Part 6", None, "2025-10-10", "youtube"),
+          ("s4", "Guru", "Geometry nodes in Blender for beginners", None, "2025-10-05", "youtube"),
+          ("o1", "CG Cookie", "Blender basics: the interface for beginners", None, "2025-09-01", "youtube"),
+          ("o2", "Grant Abbitt", "Low poly sword in Blender for beginners", None, "2025-08-01", "youtube")]
+SERIES_DESC = {"vids1": "We model a donut from start to finish", "vids2": "Adding the icing and sprinkles",
+               "vids3": "Lighting and the final render", "vids4": "Nodes from scratch", "vido1": "Learn the interface",
+               "vido2": "Model a low poly sword"}
+
+
+def series_env(env, tmp_path, monkeypatch, rows=SERIES):
+    use_lib(env, tmp_path, rows, name="series")
+    monkeypatch.setenv("YOUTUBE_API_KEY", "test-key-not-real")
+    from mvp import ytinfo
+    monkeypatch.setattr(ytinfo, "fetch_batch", lambda ids, key, timeout=None: {"items": [
+        {"id": v, "snippet": {"description": SERIES_DESC[v], "publishedAt": "2025-01-01T00:00:00Z"},
+         "contentDetails": {"duration": "PT9M"}} for v in ids if v in SERIES_DESC]})
+    import mvp.config as C
+    monkeypatch.setattr(C, "OUTSIDE_ON", False)
+    env["state"]["answers"]["mvp_extract"] = lambda u: {}
+    env["orders"] = []
+
+    def compose(u):   # every candidate, in the order the composer is shown them; the first ask shows Part 1 first
+        block = u.split("Candidates:")[-1]
+        titles = [r[2] for r in rows if r[2] in block]
+        titles.sort(key=lambda t: block.index(t))
+        env["orders"].append(titles)
+        if len(env["orders"]) == 1:   # the first answer shows the donut video alone
+            titles = titles[:1]
+        return {"picks": [pick(u, t, title=t) for t in titles][:2]}
+    env["state"]["answers"]["mvp_compose"] = compose
+    say(env, "could you find me some basic blender tutorials", ask("basic Blender tutorials", ["blender basics"],
+                                                                   count=2))
+    return env
+
+
+def test_96_the_rest_of_a_passed_on_series_goes_and_its_creator_comes_last(env, tmp_path, monkeypatch):
+    series_env(env, tmp_path, monkeypatch)
+    from mvp.tests.test_round7 import shown_ids
+    assert shown_ids(env)[0] == "s1"
+    msg = say(env, "what about something that isnt a donut.",
+              {"intent": "follow_up", "question": "What about something that isn't a donut?", "avoid": ["donut"]})
+    seen = env["orders"][-1]
+    assert not any("Part 4" in t or "Part 6" in t for t in seen)           # the rest of the series never reaches it
+    assert seen.index("Geometry nodes in Blender for beginners") > seen.index("Low poly sword in Blender for beginners")
+    ids = shown_ids(env)
+    assert ids[:2] == ["o1", "o2"] and "s4" not in ids                     # two others fit: the creator is not shown
+    assert "same creator" not in msg
+
+
+def test_96_one_of_that_creators_posts_is_shown_with_a_note_when_fewer_than_2_others_fit(env, tmp_path, monkeypatch):
+    series_env(env, tmp_path, monkeypatch, rows=SERIES[:5])                 # one other creator only
+    from mvp.tests.test_round7 import shown_ids
+    msg = say(env, "what about something that isnt a donut.", {"intent": "more", "avoid": ["donut"]})
+    ids = shown_ids(env)
+    assert ids[0] == "o1" and "s4" in ids and "s2" not in ids and "s3" not in ids
+    assert "Geometry nodes in Blender for beginners by Guru" in msg and "same creator as the one you passed on" in msg
+
+
+def test_96_a_series_stem_is_read_from_the_title():
+    from mvp.followup import series_key
+    assert series_key("Blender Beginner Tutorial - Part 4") == ("blender beginner tutorial", True)
+    assert series_key("Blender Beginner Tutorial (Part 1)")[0] == series_key("Blender Beginner Tutorial")[0]
+    assert series_key("Donut tutorial #6") == ("donut tutorial", True)
+    assert series_key("Low poly sword in Blender") == ("low poly sword in blender", False)
+    assert series_key("Blender 4.0 for beginners")[1] is False                 # a version is not a part number
+
+
+# ---------- finding 97: a plain question about the saves, read as small talk ----------
+OPPS = ("Summer 2026 programs for students\n- NASA L'SPACE Academy: a free program, apply by December 10, 2026\n"
+        "- Google STEP: a paid summer internship for first and second year students")
+
+
+def test_97_a_question_about_their_own_saves_read_as_chat_is_answered_with_a_search(env, tmp_path):
+    use_lib(env, tmp_path, [("o1", "progs", OPPS, "2026-10-10", "2026-10-11", "instagram")])
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Summer 2026 programs")]}
+    env["state"]["answers"]["mvp_extract"] = items_fake({"Summer 2026": {"items": [
+        {"name": "NASA L'SPACE Academy", "about": "a free program, apply by December 10, 2026", "fit": "yes"},
+        {"name": "Google STEP", "about": "a paid summer internship for first and second year students",
+         "fit": "yes"}]}})
+    chat = {"intent": "chat", "reply": "Sounds like a busy year!"}
+    msg = say(env, "what other opportunities might i have missed for 2026, especially winter or next summer", chat)
+    assert "Sounds like a busy year" not in msg and "1. NASA L'SPACE Academy" in msg
+    q = env["bot"].pool.queries[-1]
+    assert q.startswith("other opportunities i might have missed for 2026")
+    # near-variants that stay small talk: about the bot, thanks, a feeling, too short, nothing asked for
+    for text in ("what can you find for me in there", "thanks, that helps a lot with my plans", "i feel tired of "
+                 "looking for opportunities", "any opportunities?", "my summer was really fun this year honestly"):
+        n = len(env["bot"].pool.queries)
+        msg = say(env, text, chat)
+        assert msg == "Sounds like a busy year!" and len(env["bot"].pool.queries) == n, text
+
+
+def test_97_the_guard_reads_kinds_and_first_person_words():
+    from mvp.interpret import chat_guard
+    from mvp.schema import Interpretation
+
+    def guard(t):
+        return chat_guard(Interpretation(intent="chat", reply="x"), t)
+    assert guard("did i save any good pasta recipes last month").intent == "ask"
+    assert guard("show me other blender tutorials from my saves").intent == "ask"
+    assert guard("hey how are you doing today friend").intent == "chat"
+    assert guard("send me pasta recipes every friday").intent == "chat"      # a rule's words: the reading stands
+    assert chat_guard(Interpretation(intent="help"), "what other opportunities did i miss this year").intent == "help"

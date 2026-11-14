@@ -449,6 +449,11 @@ class ExecutorMixin:
                 cands, n_copies = collapse_copies(cands, extra)
                 if n_copies:
                     steps["copies"] = n_copies
+            gone = getattr(self._tl, "passed_on", None) if cands_override is None else None
+            if gone:   # round 8, finding 96: the rest of a passed-on series goes; its creator's other posts go last
+                cands, n_series = self._after_passed_on(cands, gone)
+                if n_series:
+                    steps["series_left_out"] = n_series
             t1 = time.time()
             about, level_ok, guessed = self._profile_text(h, spec.content.goal, request_text or "",
                                                           *spec.content.searches)
@@ -482,6 +487,8 @@ class ExecutorMixin:
             if getattr(self._tl, "intro_code", None) and kind != "follow_up":
                 result["intro_code"] = self._tl.intro_code   # round 7: a changed request's line, built by code
             post_dates(result, extra, today, ts, year)
+            if gone:
+                self._passed_on_order(result, gone)
             if SHORTEST.search(" ".join([request_text or "", hint])):   # finding 17: "shortest first"
                 for key in ("picks", "wider"):
                     result[key] = sorted(result.get(key) or [],
@@ -770,6 +777,48 @@ class ExecutorMixin:
             result["dropped"]["because_code"] = result["dropped"].get("because_code", 0) + 1
 
     SECOND_LOOK_MAX = 12   # candidates the second look shows the composer at most
+
+    @staticmethod
+    def _after_passed_on(cands, gone):
+        """Round 8, finding 96: (candidates, how many left out): a candidate by the creator of a pick passed on by a
+        word, whose title is the rest of that pick's numbered series, is left out; the creator's other posts come after
+        every other creator's (the search order kept otherwise)."""
+        from .compose import title_from_item
+        from .followup import series_key
+        from .retrieve import name_matches
+        keys = {(c, k) for c, k in gone.get("series") or [] if k}
+        kept = []
+        for it in cands:
+            stem, numbered = series_key(title_from_item(it, words=1000))
+            if numbered and any(name_matches(it.creator or "", c) and stem == k for c, k in keys):
+                continue
+            kept.append(it)
+
+        def by_them(it):
+            return any(name_matches(it.creator or "", c) for c in gone.get("creators") or [])
+        return [it for it in kept if not by_them(it)] + [it for it in kept if by_them(it)], len(cands) - len(kept)
+
+    @staticmethod
+    def _passed_on_order(result, gone):
+        """Round 8, finding 96: in the shown order, picks by the creator passed on come after everyone else's, and one
+        of them is shown only when fewer than 2 picks from other creators fit; it carries a plain note."""
+        from .retrieve import name_matches
+        picks, wider = list(result.get("picks") or []), list(result.get("wider") or [])
+        n_picks = len(picks)
+
+        def by_them(p):
+            return any(name_matches(p["item"].creator or "", c) for c in gone.get("creators") or [])
+        allp = picks + wider
+        other, same = [p for p in allp if not by_them(p)], [p for p in allp if by_them(p)]
+        if not same:
+            return
+        keep = same[:1] if len(other) < 2 else []
+        for p in keep:
+            p["same_creator"] = True
+        result.setdefault("dropped", {})["same_creator"] = len(same) - len(keep)
+        order = other + keep
+        n_picks = max(1, n_picks)
+        result["picks"], result["wider"] = order[:n_picks], order[n_picks:n_picks + len(wider)]
 
     ITEM_READS = 6   # round 8, finding 94: posts the details step reads for an items answer, at most
 

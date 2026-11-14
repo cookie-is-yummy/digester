@@ -499,6 +499,8 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
     lead_date = date_sentence(first, result, lang)
     if lead_date:   # round 7, finding 91: "Its deadline, 14 February 2025, has passed."
         text.append(lead_date)
+    if first.get("same_creator"):   # round 8, finding 96
+        text.append(t["same_creator_lead"])
     flush()
     if it.url:
         parts.append(link_part(it, first["title"]))
@@ -518,6 +520,8 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
             dn = date_words(p, result, lang)
             if dn:
                 note = f"{note.rstrip(' .')}; {dn}" if note else dn
+            if p.get("same_creator"):   # round 8, finding 96
+                note = f"{note.rstrip(' .')}; {t['same_creator']}" if note else t["same_creator"]
             length = L.length(p.get("length_text"), lang)
             text.append(f"• {p['title']}{by(p['item'], lang)}" + (f" ({length})" if length else "") +
                         (f": {end_sentence(note)}" if note else "") + (f" {p['item'].url}" if p["item"].url else ""))

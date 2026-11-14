@@ -1720,6 +1720,47 @@ def _setting_said(x: Interpretation, message):
     return True
 
 
+# round 8, finding 97: a plain question about the person's own saves, read by the model as small talk
+ABOUT_BOT = re.compile(r"\b(?:you|your|yours|you'?re|bot|this app|how do i|what can|who are|help|thanks|thank you|thx|"
+                       r"hi|hello|hey|good (?:morning|night|evening|afternoon)|i feel|i'?m feeling|i am feeling|feel|"
+                       r"sad|happy|tired|bored|stressed|lonely|anxious|excited|upset|angry|lol|haha)\b", re.I)
+OWN_SAVES = re.compile(r"\b(?:i(?:'ve| have)? saved|i (?:might|may|could) have missed|(?:might|may|could) i have missed|"
+                       r"i(?:'ve| have)? missed|my saves|my library|i(?:'ve| have)? liked|i liked|did i|do i have|"
+                       r"have i)\b", re.I)
+# words of a rule or a reminder: never turned into a one-off ask (the model's reading stands)
+RULE_WORDS = re.compile(r"\b(?:every|each|daily|weekly|monthly|remind\w*|schedule\w*|at \d{1,2}|\d{1,2}\s*(?:am|pm)|"
+                        r"(?:mon|tues|wednes|thurs|fri|satur|sun)days?|weekdays?|weekends?)\b", re.I)
+CHAT_KINDS = re.compile(r"\b(?:recipes?|tutorials?|videos?|reels?|posts?|workouts?|routines?|guides?|lessons?)\b", re.I)
+SEARCH_VERB = re.compile(r"\b(?:find|show|send|any|other|more)\b", re.I)
+QUESTION_HEAD = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which|where|are there|is there|can you|"
+                           r"could you|would you|will you|do you have|got)\b\s*", re.I)
+
+
+def chat_guard(it: Interpretation, message):
+    """Round 8, finding 97 (code, no prompt change): a `chat` form whose message is a plain request for things from
+    the person's own saves is an ask. The message: at least 5 words, not about the bot, its feelings or a greeting,
+    with no words of a rule or a reminder ("every friday", "remind me"), and
+    either in the first person about their saves ("I might have missed", "my saves", "did I") or a kind of thing with a
+    search word ("any", "other", "find" ...). The goal is the message without its question words."""
+    from .extract import THINGS
+    if it.intent != "chat":
+        return it
+    t = " ".join((message or "").split())
+    if len(t.split()) < 5 or ABOUT_BOT.search(t) or RULE_WORDS.search(t):
+        return it
+    if not (OWN_SAVES.search(t) or ((THINGS.search(t) or CHAT_KINDS.search(t)) and SEARCH_VERB.search(t))):
+        return it
+    goal = QUESTION_HEAD.sub("", t)
+    goal = re.sub(r"\b(might|may|could|did|do|have) i\b", lambda m: "i " + m.group(1), goal, flags=re.I)
+    goal = goal.strip(" ?!.") or t
+    try:
+        spec = RuleSpec.model_validate({"when": {"type": "now"}, "content": {
+            "goal": goal[:200], "searches": [goal[:120]], "count": 3}})
+    except Exception:  # noqa: BLE001 - the small-talk reply stands
+        return it
+    return Interpretation(intent="ask", spec=spec)
+
+
 def change_guard(it: Interpretation, message, pending=None, rules=()):
     """Fix pass 6, finding 89: a model-filled change never lands on lasting state the message does not name.
     - A must-have that only says "any length" is the absence of a limit: removed (the message's words, kept with the

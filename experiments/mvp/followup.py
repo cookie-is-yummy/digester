@@ -252,6 +252,39 @@ def request_change(it, text):
     return ch
 
 
+# round 8, finding 96: a numbered series ("Blender Beginner Tutorial - Part 4"): its stem, the title without the number
+SERIES = re.compile(r"^(.*?)[\s\-–—:|,(\[]*\b(?:part|pt\.?|episode|ep\.?|lesson|chapter|day|video|no\.?)\s*#?\d+\b.*$|"
+                    r"^(.*?)[\s\-–—:|,(\[]*#\d+\b.*$", re.I)
+
+
+def series_key(title):
+    """The title's numbered-series stem, normalised ("Blender beginner tutorial" for "... Part 4"), and whether it had a
+    number; the whole title, normalised, when it has none (the series' first video)."""
+    t = " ".join((title or "").split())
+    m = SERIES.match(t)
+    stem = (m.group(1) or m.group(2)) if m else t
+    return " ".join(tokens_of(stem)), bool(m)
+
+
+def tokens_of(s):
+    from .compose import tokens
+    return tokens(s or "")
+
+
+def passed_on(shown, words, extra=None):
+    """Round 8, finding 96: the shown picks a follow-up rejects by an avoid word, as {"creators": [...], "series":
+    [[creator, stem]]}: their creators' other posts go after everyone else's, and the rest of their series is left out.
+    None when no shown pick is rejected by a word."""
+    from .compose import own_text, title_from_item
+    from .retrieve import contains_word
+    out = {"creators": [], "series": []}
+    for x in shown:
+        if x.creator and any(contains_word(own_text(x, extra), w) for w in words):
+            out["creators"].append(x.creator)
+            out["series"].append([x.creator, series_key(title_from_item(x, words=1000))[0]])
+    return out if out["creators"] else None
+
+
 class FollowupMixin:
     def _changed_request(self, person, it, text, last, ch):
         """Round 7, finding 92: a new search with the last request's own content plus the change (more avoid words, a
@@ -323,11 +356,14 @@ class FollowupMixin:
             request = (request + " shorter").strip()
         self._tl.intro_code = None if self._answer_lang() else T.changed_intro(c.goal or "", ch, who)
         before = list(st.get("shown") or []) if ch["others"] else []
+        # round 8, finding 96: the creator of a pick passed on by a word goes last, and the rest of its series goes
+        self._tl.passed_on = passed_on(shown, ch["avoid"], extra) if ch["avoid"] else None
         try:
             msg, run_id, n = self.run(person, spec, "ask", request_text=request,
                                       shown=list(dict.fromkeys([*before, *rejected])))
         finally:
             self._tl.intro_code = None
+            self._tl.passed_on = None
         if not n and not self._run_failed(run_id):
             msg = T.changed_none(c.goal or "", ch, who)
             try:
@@ -390,6 +426,16 @@ class FollowupMixin:
             # round 7 check (finding 92): "what about something that isn't a donut" read as "more": the opening line
             # says what changed, built by code from the merged request
             self._tl.intro_code = T.changed_intro(c.goal or "", {"avoid": new_avoid, "others": True}, [])
+        if new_avoid:   # round 8, finding 96: as for a changed request
+            view = self.view(person["library"])
+            last = self.store.last_answer(h) or {}
+            gone = [x for x in (view.get(i) for i in last.get("items") or []) if x]
+            try:   # a video's description is its own text (the word may be only there)
+                extra = self._youtube().details(gone, now=self.clock()) if any(x.platform == "youtube" for x in gone) \
+                    else {}
+            except Exception:  # noqa: BLE001 - the title alone, then
+                extra = {}
+            self._tl.passed_on = passed_on(gone, new_avoid, extra)
         try:
             if rule and rule["status"] in ("active", "paused"):  # one more from a rule counts as sent by that rule
                 msg, run_id, n = self.run(person, spec, "manual", rule_id=rule["id"], request_text=request,
@@ -398,6 +444,7 @@ class FollowupMixin:
                 msg, run_id, n = self.run(person, spec, "more", request_text=request, shown=st.get("shown") or [])
         finally:
             self._tl.intro_code = None
+            self._tl.passed_on = None
         block = getattr(self._tl, "outside_block", None)
         if not n and not self._run_failed(run_id) and c.source == "library" and c.outside == "none" \
                 and not (block and block[0] == run_id):
