@@ -747,6 +747,7 @@ class FollowupMixin(IntegrationReadsMixin):
         if ch["shorter"]:
             request = (request + " shorter").strip()
         self._tl.intro_code = None if self._answer_lang() else T.changed_intro(c.goal or "", ch, who)
+        self._tl.change_what = None if self._answer_lang() else T.changed_what(c.goal or "", ch, who)
         before = list(st.get("shown") or []) if ch["others"] else []
         # round 8, finding 96: the creator of a pick passed on by a word goes last, and the rest of its series goes
         self._tl.passed_on = passed_on(shown, ch["avoid"], extra) if ch["avoid"] else None
@@ -755,6 +756,7 @@ class FollowupMixin(IntegrationReadsMixin):
                                       shown=list(dict.fromkeys([*before, *rejected])))
         finally:
             self._tl.intro_code = None
+            self._tl.change_what = None
             self._tl.passed_on = None
         if not n and not self._run_failed(run_id):
             msg = T.changed_none(c.goal or "", ch, who)
@@ -818,6 +820,8 @@ class FollowupMixin(IntegrationReadsMixin):
             # round 7 check (finding 92): "what about something that isn't a donut" read as "more": the opening line
             # says what changed, built by code from the merged request
             self._tl.intro_code = T.changed_intro(c.goal or "", {"avoid": new_avoid, "others": True}, [])
+            # live fix pass, round 8 (finding 101): the merged request in words, for the nothing-clear line too
+            self._tl.change_what = T.changed_what(c.goal or "", {"avoid": new_avoid}, [])
         if new_avoid:   # round 8, finding 96: as for a changed request
             view = self.view(person["library"])
             last = self.store.last_answer(h) or {}
@@ -836,11 +840,17 @@ class FollowupMixin(IntegrationReadsMixin):
                 msg, run_id, n = self.run(person, spec, "more", request_text=request, shown=st.get("shown") or [])
         finally:
             self._tl.intro_code = None
+            self._tl.change_what = None
             self._tl.passed_on = None
         block = getattr(self._tl, "outside_block", None)
         if not n and not self._run_failed(run_id) and c.source == "library" and c.outside == "none" \
                 and not (block and block[0] == run_id):
             msg = self._more_none(person, spec, request)   # review fix X11 (experience): what is left, not a dead end
+            if new_avoid and not lead and not self._answer_lang():
+                # live fix pass, round 8 (finding 101): nothing left once the change is applied: said with the change
+                from . import lang as L
+                offer = L.EN["more_new"] if msg.endswith(L.EN["more_new"]) else ""
+                msg = T.changed_none(c.goal or "", {"avoid": new_avoid}, []) + offer
         if lead:   # "Here's an easier one:" only above one; above "nothing found" or an error, the feedback line alone
             msg = (lead if n and not self._run_failed(run_id) else (lead_none or "")) + msg
         return self.deliver(person, spec, msg + self._not_yet_notes(spec, sep="\n\n"), run_id,

@@ -1294,6 +1294,15 @@ def changed_intro(goal, ch, who):
     return head + (", " + ", ".join(words) if words else "") + "."
 
 
+def changed_what(goal, ch, who):
+    """Live fix pass, round 8 (finding 101): the merged request in plain words ('basic blender tutorials, leaving out
+    anything about donut'), for the nothing-clear line; 'your request, ...' for a goal of more than 6 words."""
+    words = _change_words(ch, who)
+    g = " ".join((goal or "").split())
+    what = g if g and len(g.split()) <= 6 else "your request"
+    return what + (", " + ", ".join(words) if words else "")
+
+
 def changed_none(goal, ch, who):
     """Nothing is left once the change is applied: said plainly, never a rejected pick again."""
     words = _change_words(ch, who)

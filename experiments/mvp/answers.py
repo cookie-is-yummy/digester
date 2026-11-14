@@ -75,9 +75,21 @@ def post_dates(result, extra, today, ts, year=None):
     if live and passed:   # never the lead and never an alternative while anything not passed fits
         result.setdefault("dropped", {})["passed"] = len(passed)
         allp = live
+    # live fix pass, round 8 (finding 99): a post of an earlier year (its title and text name only years before this
+    # one, and it is more than 12 months old) is not a pick while anything else fits; alone, it says its date
+    for p in allp:
+        if old_year_post(p, extra, today):
+            p["old_year"] = True
+            if not (p.get("date_state") or {}).get("state"):
+                p["date_state"] = dict(p.get("date_state") or {}, state="old_year", **{"from": D._d(p.get("age_from"))})
+    fresh = [p for p in allp if not p.get("old_year")]
+    if fresh and len(fresh) < len(allp):
+        result.setdefault("dropped", {})["old_year"] = len(allp) - len(fresh)
+        allp = fresh
+
     def rank(p):
         st = (p.get("date_state") or {}).get("state")
-        return (2 if st == "passed" else (1 if st == "old" else 0), VERDICT_RANK.get(p.get("verdict"), 1),
+        return (2 if st == "passed" else (1 if st in ("old", "old_year") else 0), VERDICT_RANK.get(p.get("verdict"), 1),
                 0 if p.get("year_hit", True) else 1, -_ord(p.get("posted") or p.get("kept_first")))
     order = sorted(allp, key=rank)
     if order and allp and order[0] is not allp[0]:
@@ -108,6 +120,35 @@ def good(x):
     return bool(x.get("about")) or bool(x.get("listed"))
 
 
+def judged(p):
+    """Live fix pass, round 8 (finding 98): the composer gave this post its verdict (a post read only for its list,
+    finding 94, was never judged: code calls it "close")."""
+    return not p.get("read_for_items")
+
+
+def source_rank(p):
+    """Live fix pass, round 8 (finding 98): the composer's verdict leads the sources: its clear posts, then its close
+    ones, then posts read only for their list (the composer saw them among the candidates and did not pick them)."""
+    if not judged(p):
+        return 2
+    return 0 if p.get("verdict") == "clear" else 1
+
+
+def is_clear_source(p):
+    return source_rank(p) == 0
+
+
+def old_year_post(p, extra, today):
+    """Live fix pass, round 8 (finding 99): for a time-sensitive request, a post more than 12 months old whose own
+    title and text name years, all of them before this one ("Side income plans for 2024", posted in March 2024)."""
+    if not today:
+        return False
+    words = " ".join([p.get("title") or "", own_text(p["item"], extra)])
+    years = [int(y) for y in D.YEAR.findall(words)]
+    n = D.days_old(p.get("age_from"), today)
+    return bool(years) and max(years) < today.year and n is not None and n > D.OLD_DAYS
+
+
 def choose_items(result, extra, today, ts, year=None, notes=True, things=False, reads=None):
     """[(pick, [item, ...], more)] for the items answer, or None when the posts read name fewer than 2 good things.
     Each item: name, about, when, fit, n (its number in the answer), state, note (the date said to the person, for a
@@ -126,11 +167,22 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
     if things and sum(1 for _, its in srcs for x in its if x.get("fit") == "yes") >= 2:
         n = 0
         for s in srcs:
+            if judged(s[0]) and len(s[1]) == 1:
+                # live fix pass, round 8 (finding 98): a post about one thing that the composer judged keeps it: the
+                # composer's verdict on the post is the better judgement of "is it the kind asked for"
+                continue
             n += sum(1 for x in s[1] if x.get("fit") != "yes")
             s[1] = [x for x in s[1] if x.get("fit") == "yes"]
         if n:
             result.setdefault("dropped", {})["items_not_the_kind"] = n
         srcs = [s for s in srcs if s[1]]
+    if ts:   # live fix pass, round 8 (finding 99): a post of an earlier year gives nothing while another post does
+        old = [s for s in srcs if old_year_post(s[0], extra, today)]
+        if old and len(old) < len(srcs):
+            result.setdefault("dropped", {})["items_old_year"] = sum(len(s[1]) for s in old)
+            srcs = [s for s in srcs if not any(s is o for o in old)]
+        for s in old:
+            s[0]["old_year"] = True
     for p, got in srcs:
         for x in got:
             if ts:
@@ -172,6 +224,9 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
         # (for a time-sensitive request a post whose things are all old or passed still comes after the fresher)
         srcs.sort(key=lambda s: (ts and all(x.get("state") in ("old", "passed") for x in s[1]),
                                  -min(len(s[1]), MAX_ITEMS_PER_SOURCE)))
+    # live fix pass, round 8 (finding 98): the composer's verdict leads (clear, close, then posts read only for their
+    # list); inside a verdict the order above stands (a stable sort). A post of an earlier year comes last (99).
+    srcs.sort(key=lambda s: (source_rank(s[0]), bool(s[0].get("old_year"))))
     out, n = [], 0
     for p, its in srcs[:MAX_SOURCES]:
         shown = its[:MAX_ITEMS_PER_SOURCE]

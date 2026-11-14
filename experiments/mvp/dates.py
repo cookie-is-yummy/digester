@@ -86,12 +86,36 @@ TIME_SENSITIVE = re.compile(
     r"grants?|programs?|programmes?|events?|conferences?|hackathons?|competitions?|contests?|awards?|sales?|"
     r"discounts?|deals?|giveaways?|openings?|jobs?|hiring|cohorts?|bootcamps?|summits?|festivals?|tickets?|"
     r"registrations?|register|sign[- ]?ups?|soon|upcoming|coming up|this (?:week|month|year|summer|winter|spring|fall|"
-    r"autumn|weekend)|next (?:week|month|year|summer|winter|spring|fall|autumn|semester)|missed|(?:19|20)\d\d)\b", re.I)
+    r"autumn|weekend)|next (?:week|month|year|summer|winter|spring|fall|autumn|semester)|missed|(?:19|20)\d\d|"
+    r"to pursue|pursue)\b", re.I)   # (live fix pass, round 8, finding 99: "to pursue")
 YEAR = re.compile(r"\b(20\d\d)\b")
 
 
 def time_sensitive(*texts):
     return bool(TIME_SENSITIVE.search(" ".join(t for t in texts if t)))
+
+
+# live fix pass, round 8 (finding 100): a request that asks for deadlines
+DEADLINE_ASK = re.compile(r"\b(deadlines?|due(?!\s+to\b)(?: dates?)?|closes|closing|last day|apply by|expires?|"
+                          r"expiring)\b", re.I)
+
+
+def asks_deadlines(*texts):
+    return bool(DEADLINE_ASK.search(" ".join(t for t in texts if t)))
+
+
+SEASON_START = {"spring": 3, "summer": 6, "fall": 9, "autumn": 9, "winter": 12}
+SEASON = re.compile(r"\b(this|next)\s+(spring|summer|fall|autumn|winter)\b", re.I)
+
+
+def request_years(today, *texts):
+    """Live fix pass, round 8 (finding 102): the years a request's qualifiers name, counted from today: a year it
+    names ("for 2026"), and the year of "this" or "next" season ("next summer" in November 2026 is summer 2027)."""
+    t = " ".join(x for x in texts if x)
+    out = {int(y) for y in YEAR.findall(t)}
+    for _, season in SEASON.findall(t):   # the season's next start, from this month on
+        out.add(today.year if SEASON_START[season.lower()] >= today.month else today.year + 1)
+    return out
 
 
 def request_year(*texts):
@@ -243,6 +267,8 @@ def date_note(st, today):
         return f"from {st['from'].strftime('%B %Y')}; check whether it is still open"
     if st["state"] == "old" and st.get("from"):
         return f"from {st['from'].strftime('%B %Y')}, so this round has probably closed; check whether it runs again"
+    if st["state"] == "old_year" and st.get("from"):   # live fix pass, round 8 (finding 99): an earlier year's post
+        return f"from {st['from'].strftime('%B %Y')}"
     return ""
 
 

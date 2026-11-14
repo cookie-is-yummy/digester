@@ -419,6 +419,7 @@ class ExecutorMixin:
             h = person["handle"]
             now = self.clock()
             sent_before = self.store.delivered(rule_id) if rule_id else set()
+            widen, first_window = False, set()
             if cands_override is not None:
                 cands = [c for c in cands_override if c.id not in disliked]  # rule 9 holds for follow-ups too
             else:
@@ -427,10 +428,16 @@ class ExecutorMixin:
                 weights = self._feedback_weights(rule_id, view)
                 ex_kinds, ex_platforms = self._exclusions(h)
                 seed = f"{rule_id or h}:{now.date().isoformat()}"   # order "random": one draw per run, repeatable
+                # live fix pass, round 8 (finding 101): an avoid word read in descriptions, or a passed-on series, takes
+                # places out of the window after it is cut; a wider window refills them from the next ranks
+                widen = (bool(spec.content.avoid) or bool(getattr(self._tl, "passed_on", None))) \
+                    and spec.content.order in ("best", "easiest_first")
                 cands, meta = candidates(self.pool, view, spec, exclude=exclude, disliked=disliked,
                                          creator_weights=weights, now=now, store=self.store, exclude_kinds=ex_kinds,
-                                         exclude_platforms=ex_platforms, seed=seed, only=only_ids)
+                                         exclude_platforms=ex_platforms, seed=seed, only=only_ids,
+                                         k=config.CANDIDATES + (self.REFILL if widen else 0))
                 cost += meta.get("cost_usd", 0.0)
+                first_window = {x.id for x in cands[:config.CANDIDATES]}
                 if kits:   # finding 53: picks that use their kit come first (the search order kept otherwise)
                     cands = sorted(cands, key=lambda it: not any(mentions(it.caption, k) for k in kits))
             steps["search"] = round(time.time() - t0, 2)
@@ -451,9 +458,13 @@ class ExecutorMixin:
                     steps["copies"] = n_copies
             gone = getattr(self._tl, "passed_on", None) if cands_override is None else None
             if gone:   # round 8, finding 96: the rest of a passed-on series goes; its creator's other posts go last
-                cands, n_series = self._after_passed_on(cands, gone)
+                cands, n_series = self._after_passed_on(cands, gone, limit=config.CANDIDATES if widen else None)
                 if n_series:
                     steps["series_left_out"] = n_series
+            if widen:   # live fix pass, round 8 (finding 101): the window as before, refilled from the next ranks
+                steps["refilled"] = max(0, min(len(cands), config.CANDIDATES) - len(
+                    [x for x in cands[:config.CANDIDATES] if x.id in first_window]))
+                cands = cands[:config.CANDIDATES]
             t1 = time.time()
             about, level_ok, guessed = self._profile_text(h, spec.content.goal, request_text or "",
                                                           *spec.content.searches)
@@ -480,13 +491,19 @@ class ExecutorMixin:
             from .answers import post_dates
             from .dates import request_year, time_sensitive
             today = now.astimezone(ZoneInfo(person["timezone"])).date()
-            ts = kind != "follow_up" and time_sensitive(request_text or "", hint, spec.content.goal or "",
+            in_part = getattr(self._tl, "part", None) is not None
+            # live fix pass, round 8 (finding 99): a part of a message is time-sensitive by its own words only (the
+            # whole message, `hint`, holds the other parts' words too)
+            said = "" if in_part else hint
+            ts = kind != "follow_up" and time_sensitive(request_text or "", said, spec.content.goal or "",
                                                          *spec.content.searches)
-            year = request_year(request_text or "", hint, spec.content.goal or "") if ts else None
+            year = request_year(request_text or "", said, spec.content.goal or "") if ts else None
             result["today"], result["ts"] = today, ts
-            result["no_intro"] = getattr(self._tl, "part", None) is not None   # round 8: a part has its label
+            result["no_intro"] = in_part   # round 8: a part has its label
             if getattr(self._tl, "intro_code", None) and kind != "follow_up":
                 result["intro_code"] = self._tl.intro_code   # round 7: a changed request's line, built by code
+                # live fix pass, round 8 (finding 101): the merged request in words, for the nothing-clear line too
+                result["change_what"] = getattr(self._tl, "change_what", None)
             post_dates(result, extra, today, ts, year)
             if gone:
                 self._passed_on_order(result, gone)
@@ -570,6 +587,10 @@ class ExecutorMixin:
                     result["dropped"]["junk_items"] = info["junk_items"]
                 if info.get("errors"):   # a failed details call: the answer goes out without those details
                     steps["extract_errors"] = info["errors"]
+            if main and kind != "follow_up" and ts:
+                # live fix pass, round 8 (finding 100): a request for deadlines is answered only by a date code reads
+                self._deadline_fit(result, extra, today, request_text or "", said, spec.content.goal or "",
+                                   *spec.content.searches)
             if main and kind != "follow_up":   # fix pass 4, finding 80: a whole recipe written out is a finished result
                 finished_by_details(result, spec, extra, request_text or "", hint)
             if result.get("picks") and not result.get("closest"):
@@ -728,6 +749,42 @@ class ExecutorMixin:
         return none_message(result, spec, scheduled=(kind == "scheduled"), lang=self._answer_lang()), run_id, 0
 
     @staticmethod
+    def _deadline_fit(result, extra, today, *texts):
+        """Live fix pass, round 8 (finding 100): for a request that asks for deadlines, a pick is a clear fit only when
+        code reads a date in its own text (or in one of its things' own words) that has not passed. Applied after the
+        composer's verdicts: it can lower one to "close", never raise one. With no clear pick left the answer is the
+        closest, and says plainly that no deadline it can read is still ahead."""
+        from .answers import item_state
+        from .dates import DEADLINE_ASK, asks_deadlines
+        if not asks_deadlines(*texts):
+            return
+        picks, wider = list(result.get("picks") or []), list(result.get("wider") or [])
+
+        def dated(p):
+            if (p.get("date_state") or {}).get("state") == "open":
+                return True
+            return any(x.get("when") and item_state(x, p, extra, today).get("state") == "open"
+                       for x in (p.get("facts") or {}).get("items") or [])
+        lowered = 0
+        for p in picks + wider:
+            if p.get("verdict") == "clear" and not dated(p):
+                p["verdict"], p["no_deadline"] = "close", True
+                p["because"], p["because_backed"] = None, False   # its reason said it fits; it does not, as code reads it
+                p["mentions_deadline"] = bool(DEADLINE_ASK.search(own_text(p["item"], extra)))
+                lowered += 1
+        if lowered:
+            result.setdefault("dropped", {})["deadline_unread"] = lowered
+            allp = picks + wider
+            order = [p for p in allp if p["verdict"] == "clear"] + [p for p in allp if p["verdict"] != "clear"]
+            result["picks"], result["wider"] = order[:len(picks)], order[len(picks):]
+            result["n_clear"] = sum(1 for p in allp if p["verdict"] == "clear")
+            result["n_close"] = len(allp) - result["n_clear"]
+        if not any(p.get("verdict") == "clear" for p in (result.get("picks") or []) + (result.get("wider") or [])):
+            result["closest"] = True
+            if not any(dated(p) for p in picks + wider):
+                result["deadline_none"], result["missing"] = True, []
+
+    @staticmethod
     def _length_only(result):
         """The length bound in minutes when the answer is the closest only because every fit is longer than it allows
         (fix pass 5, finding 87); else None."""
@@ -856,11 +913,14 @@ class ExecutorMixin:
                                                    rule_id=None))
         return group, last_run, len(ids)
 
+    REFILL = 20   # live fix pass, round 8 (finding 101): candidates past the window that may refill it
+
     @staticmethod
-    def _after_passed_on(cands, gone):
+    def _after_passed_on(cands, gone, limit=None):
         """Round 8, finding 96: (candidates, how many left out): a candidate by the creator of a pick passed on by a
         word, whose title is the rest of that pick's numbered series, is left out; the creator's other posts come after
-        every other creator's (the search order kept otherwise)."""
+        every other creator's (the search order kept otherwise). `limit` (live fix pass, round 8, finding 101): the
+        window is cut to that many before the creator's posts are moved, so they stay in it."""
         from .compose import title_from_item
         from .followup import series_key
         from .retrieve import name_matches
@@ -871,6 +931,8 @@ class ExecutorMixin:
             if numbered and any(name_matches(it.creator or "", c) and stem == k for c, k in keys):
                 continue
             kept.append(it)
+        if limit is not None:
+            kept = kept[:limit]
 
         def by_them(it):
             return any(name_matches(it.creator or "", c) for c in gone.get("creators") or [])
@@ -932,10 +994,17 @@ class ExecutorMixin:
             return bool(stems & {_stem(t) for t in _tokens(own_text(it, extra))})
         rest = [(list_score(own_text_lines(it, extra)), i, it) for i, it in enumerate(cands)
                 if allowed(it) and on_topic(it)]
+        # live fix pass, round 8 (finding 102): a title that names a year the request's qualifiers name ("next
+        # summer" in November 2026: 2027) is read before candidates that only list things
+        from .dates import request_years
+        years = {str(y) for y in request_years(today, *texts)} if today else set()
+
+        def names_year(it):
+            return bool(years) and any(y in title_from_item(it, words=1000) for y in years)
         added = [date_fields({"item": it, "title": title_from_item(it), "verdict": "close", "because": None,
                               "because_backed": False, "criteria": [], "lines": [], "facts": {},
                               "lines_reused": False, "read_for_items": True}, extra, today, ts, year)
-                 for score, _, it in sorted(rest, key=lambda x: (-x[0], x[1])) if score > 0]
+                 for score, _, it in sorted(rest, key=lambda x: (not names_year(x[2]), -x[0], x[1])) if score > 0]
         for p in others:
             date_fields(p, extra, today, ts, year)
         reads = (shown + others + added)[:self.ITEM_READS] if things else shown[:3]

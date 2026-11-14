@@ -379,6 +379,28 @@ def source_head(p, now=None, lang=None):
 
 
 FOUND_NOUN_WORDS = 4   # round 8, finding 94: the goal's noun phrase in "I found 9 UI/UX libraries named in ..."
+# live fix pass, round 8 (finding 98): run-together spellings of a few common words, as they read in a sentence
+SPELLINGS = [(re.compile(r"(?<![\w/])ui\s*[/\-&+]?\s*ux(?![\w/])", re.I), "UI/UX"),
+             (re.compile(r"(?<![\w/])ux\s*[/\-&+]?\s*ui(?![\w/])", re.I), "UX/UI")]
+
+
+def spelled(text):
+    """'uiux libraries', 'ui ux libraries', 'UI-UX libraries': 'UI/UX libraries'. Nothing else is changed."""
+    for rx, word in SPELLINGS:
+        text = rx.sub(word, text or "")
+    return text
+
+
+def one_of(noun):
+    """The singular of the noun phrase's last word, for a count of 1 ('UI/UX libraries': 'UI/UX library')."""
+    head, _, last = (noun or "").rpartition(" ")
+    if re.search(r"[^aeiou]ies$", last, re.I):
+        last = last[:-3] + "y"
+    elif re.search(r"(?:ss|sh|ch|x)es$", last, re.I):
+        last = last[:-2]
+    elif re.search(r"[^s]s$", last, re.I):
+        last = last[:-1]
+    return f"{head} {last}".strip()
 
 
 def found_noun(goal):
@@ -388,6 +410,7 @@ def found_noun(goal):
     # checker, round 8: every leading word that only grades or counts ("the best tools", "any other ui libraries")
     g = re.sub(r"^\s*(?:(?:some|a few|any|the|good|great|other|more|best|top|cool|useful|nice|\d+)\s+)+", "",
                (goal or "").strip(), flags=re.I)
+    g = spelled(g)
     ends = [m for m in THINGS.finditer(g) if m.group(0).lower().endswith("s") and " " not in m.group(0)]
     if not ends:
         return None
@@ -400,13 +423,62 @@ def found_noun(goal):
 def items_intro(result, spec, lang=None):
     """Round 8, finding 94: 'I found 9 UI/UX libraries named in 3 of your saves.', counted by code; a changed
     request keeps its own line (round 7)."""
-    if result.get("intro_code"):
-        return end_sentence(result["intro_code"])
+    from .answers import is_clear_source
     t = L.table(lang)
     srcs = result["items_answer"]
-    n, k = sum(len(its) for _, its, _ in srcs), len(srcs)
+    clear = [s for s in srcs if is_clear_source(s[0])]
+    if not clear:   # live fix pass, round 8 (finding 98): nothing clear: the closest wording, never "I found N ..."
+        return no_clear_line(result, spec, lang) + "\n" + t["items_closest_head"]
+    if result.get("intro_code"):
+        return end_sentence(result["intro_code"])
+    n, k = sum(len(its) for _, its, _ in clear), len(clear)
     noun = (found_noun(spec.content.goal) if not L.code(lang) else None) or t["items_things"]
-    return t["items_found_one" if k == 1 else "items_found"].format(n=n, noun=noun, k=k)
+    if n == 1:
+        noun = one_of(noun)
+    m = len(srcs) - len(clear)
+    if not m:
+        return t["items_found_one" if k == 1 else "items_found"].format(n=n, noun=noun, k=k)
+    # live fix pass, round 8 (finding 98): only the clear posts' things are counted as the kind asked for
+    head = t["items_found_c_one" if k == 1 else "items_found_c"].format(n=n, noun=noun, k=k)
+    return head + (t["and_close_one"] if m == 1 else t["and_close"].format(m=m))
+
+
+def no_clear_line(result, spec, lang=None):
+    """'Nothing I found is a clear fit for "UI/UX libraries".' Live fix pass, round 8 (finding 101): a changed request
+    says the merged request, built by code ('... for basic blender tutorials, leaving out anything about donut.')."""
+    t = L.table(lang)
+    if result.get("change_what") and not L.code(lang):
+        return f"Nothing I found is a clear fit for {result['change_what']}."
+    goal = " ".join((spec.content.goal or "").split())
+    what = (found_noun(goal) if not L.code(lang) else None) or (goal if goal and len(goal.split()) <= INTRO_GOAL_WORDS
+                                                                 else None)
+    return t["no_clear"].format(goal=what) if what else t["no_clear_any"]
+
+
+def negated(phrase):
+    """'is under 10 minutes long': "isn't under 10 minutes long"; 'walks you through ...': "doesn't walk you through
+    ..."; 'clearly fits "x"': "doesn't fit "x"". English only."""
+    p = re.sub(r"^clearly\s+", "", phrase or "")
+    if p.startswith("is "):
+        return "isn't " + p[3:]
+    first, _, rest = p.partition(" ")
+    if first.endswith("s") and len(first) > 2:
+        return f"doesn't {first[:-1]} {rest}".strip()
+    return "doesn't meet this: " + p
+
+
+def close_note(p, spec, lang=None):
+    """Live fix pass, round 8 (finding 98): what a close source misses, from the composer's answers to the request's
+    must-haves (the first one it did not answer "yes"); '' when it gave none (a post read only for its list)."""
+    t = L.table(lang)
+    for cr, ans in zip(spec.content.criteria, p.get("criteria") or []):
+        if ans == "yes":
+            continue
+        phrase = criterion_phrase(cr, lang)
+        if ans == "no":
+            return t["close_no"].format(phrase=phrase if L.code(lang) else negated(phrase))
+        return t["close_unknown"].format(phrase=phrase)
+    return ""
 
 
 def items_message(result, spec, footer=None, now=None, lang=None):
@@ -415,19 +487,31 @@ def items_message(result, spec, footer=None, now=None, lang=None):
     named things follow in one line each. Round 8 (findings 93 and 94): the opening line says what was found, with
     counts; the next posts with things are named under "More in your saves:"; a pick whose title promises a list its
     text does not hold says the names are in its slides."""
+    from .answers import is_clear_source
     t = L.table(lang)
+    srcs = result["items_answer"]
+    any_clear = any(is_clear_source(p) for p, _, _ in srcs)
     parts, text = [], ([] if result.get("no_intro") else [items_intro(result, spec, lang)])
+    if result.get("no_intro") and not any_clear:   # a part of a message: its label, then what comes closest
+        text.append(t["items_closest_head"])
     if result.get("level_note"):
         text.append(result["level_note"])
-    srcs = result["items_answer"]
     used = set()
+    labelled = False
     for p, its, more in srcs:
         used.add(id(p))
         text.append("")
+        if any_clear and not is_clear_source(p) and not labelled:
+            # live fix pass, round 8 (finding 98): things from a close post are never presented as the kind asked for
+            text.append(t["items_close_head"])
+            labelled = True
         text.append(source_head(p, now, lang))
         text.extend(_item_line(x, lang) for x in its)
         if more:
             text.append(t["and_more"].format(n=more))
+        note = close_note(p, spec, lang) if not is_clear_source(p) else ""
+        if note:
+            text.append(note)
         parts.append({"type": "text", "text": "\n".join(text).strip("\n")})
         text = []
         if p["item"].url:
@@ -497,15 +581,26 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
     unknown = list(result.get("unknown_criteria") or [])
     if result.get("closest"):
         missing = result.get("missing") or []
-        if missing:
+        if result.get("deadline_none"):   # live fix pass, round 8 (finding 100)
+            text.append(t["no_deadline"])
+            text.append("")
+            text.append(pick_sentence(t["closest"], first, now, lang))
+            if first.get("mentions_deadline") and (first.get("date_state") or {}).get("state") != "passed":
+                text.append(t["no_date"])
+        elif missing:
             cr, ans = missing[0] if isinstance(missing[0], (list, tuple)) else (missing[0], "unknown")
             if cr in unknown:   # said once, here
                 unknown.remove(cr)
+            if result.get("change_what"):   # live fix pass, round 8 (finding 101): the merged request first
+                text.append(no_clear_line(result, spec, lang))
+                text.append("")
             phrase = criterion_phrase(cr, lang, no=(ans == "no"))
             lead = t["lead_no" if ans == "no" else "lead_unknown"].format(phrase=phrase)
             text.append(pick_sentence(lead, first, now, lang))
         else:
-            text.append(t["no_clear"].format(goal=c.goal))
+            # live fix pass, round 8 (finding 101): a changed request says the merged request, built by code
+            text.append(no_clear_line(result, spec, lang) if result.get("change_what") else
+                        t["no_clear"].format(goal=c.goal))
             text.append("")
             text.append(pick_sentence(t["closest"], first, now, lang))
     elif follow_up:

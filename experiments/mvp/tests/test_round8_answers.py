@@ -175,7 +175,9 @@ def test_94_an_items_request_reads_the_posts_whose_text_names_things(lib8):
                                    "UI fonts", "UI css frameworks"])     # (the calls run in parallel: any order)
     assert "Best cafes" not in read and "?" not in read           # a list off the topic, a recipe: never read
     # the posts with the most good things come first, at most 3; the next two are named in one line each
-    assert msg.startswith("I found 8 UI/UX libraries named in 3 of your saves.")
+    # (live fix pass, round 8, finding 98: no source is a clear pick of the composer, so nothing is counted as the
+    # kind asked for: the closest wording leads)
+    assert msg.startswith('Nothing I found is a clear fit for "UI/UX libraries".\nThese come closest:\n\nFrom ')
     heads = [x for x in msg.split("\n") if x.startswith("From ")]
     assert [h.split('"')[1] for h in heads] == ["Best design systems", "UI icon packs I use", "UI fonts for product design"]
     assert "More in your saves:" in msg

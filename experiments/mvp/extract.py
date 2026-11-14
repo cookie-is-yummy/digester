@@ -434,9 +434,33 @@ def _mostly_lower(text):
 
 def generic_name(name):
     """A name made only of kinds of thing, audiences, counts and small words ("design systems", "underclassmen", "5
-    tools", "FREE PROGRAMS FOR STUDENTS"): never a specific thing."""
+    tools", "FREE PROGRAMS FOR STUDENTS"): never a specific thing. Live fix pass, round 8 (finding 98): a bare file
+    format ("css", "SVG") is a kind word too."""
     ws = [w.lower() for w in re.findall(r"[^\W_]+", name)]
-    return bool(ws) and all(w in GENERIC or w in NAME_STOP or w.isdigit() for w in ws)
+    return bool(ws) and all(w in GENERIC or w in NAME_STOP or w in FORMATS or w.isdigit() for w in ws)
+
+
+# live fix pass, round 8 (finding 98): file formats, never a thing on their own
+FORMATS = set("""css html htm svg png jpg jpeg gif webp pdf json xml csv txt mp4 mp3 mov wav js ts""".split())
+# live fix pass, round 8 (finding 99): words that name a kind of work or activity, not a named thing
+ACTIVITY = set("""commerce ecommerce e digital social media management services service assistance administrative
+administration remote virtual sales business content writing design development research support freelance affiliate
+consultancy strategy operations customer data entry graphic web online courses coaching marketing""".split())
+
+
+def activity_name(name):
+    """Live fix pass, round 8 (finding 99): categories of work joined by "&" or "and" ("Writing & Editing", "Web
+    Design & Development"): every word of every part is a kind word, an activity word or a
+    word in -ing. A named thing with "&" keeps its name ("Procter & Gamble", "Ben & Jerry's")."""
+    parts = [x for x in re.split(r"\s*(?:&|\+|\band\b)\s*", name or "", flags=re.I) if x.strip()]
+    if len(parts) < 2 or not re.search(r"&|\+|\band\b", name or "", re.I):
+        return False
+    for part in parts:
+        ws = [w.lower() for w in re.findall(r"[^\W_]+", part)]
+        if not ws or not all(w in GENERIC or w in NAME_STOP or w in ACTIVITY or (len(w) > 4 and w.endswith("ing"))
+                             for w in ws):
+            return False
+    return True
 
 
 def common_noun(name, text):
@@ -511,6 +535,27 @@ def list_entry(name, text):
         toks = tokens(rest)
         if toks == na or (m and toks[:len(na)] == na):
             return True
+        # live fix pass, round 8 (finding 98): a line that is a web address lists the site by its name
+        # ("01. www.iconpile.xyz" lists "iconpile", as verify_items names it)
+        site = SITE.match(rest.strip())
+        if site and tokens(site.group(1)) == na:
+            return True
+    return False
+
+
+def listed_alone(name, text):
+    """Live fix pass, round 8 (finding 98): the name is a line of its own, after a list mark or none, or the line is
+    its web address ("01. www.iconpile.xyz"); a line that goes on after the name ("- notion is where i keep them")
+    is not."""
+    na = tokens(name)
+    if not na:
+        return False
+    for line in (text or "").splitlines():
+        m = _MARK.match(line)
+        rest = (line[m.end():] if m else line).strip()
+        site = SITE.match(rest)
+        if tokens(rest) == na or (site and tokens(site.group(1)) == na):
+            return True
     return False
 
 
@@ -537,9 +582,14 @@ def clean_items(items, it, extra=None, key_points=None):
     one or two key points as its words. A post that names other things drops a thing with no words."""
     text = own_text_lines(it, extra)
     kept, dropped = [], 0
+    # live fix pass, round 8 (finding 98): names the text lists on lines of their own, three or more of them, are
+    # kept together whatever their case (a list of lower-case site names); the kind-word tests still apply
+    run = sum(1 for x in items or [] if listed_alone(x.get("name") or "", text)) >= 3
     for x in items or []:
         name, about = x.get("name") or "", x.get("about") or ""
-        if generic_name(name) or common_noun(name, text) or restates_headline(name, about, it):
+        listed = run and listed_alone(name, text)
+        if generic_name(name) or activity_name(name) or (not listed and common_noun(name, text)) \
+                or restates_headline(name, about, it):
             dropped += 1
             continue
         x = dict(x)
@@ -586,9 +636,12 @@ def list_score(raw):
 
 # finding 93, rule 5: a title or first line that promises a list ("5 free programs", "best design systems")
 _KINDS = "|".join(sorted({w for w in GENERIC if w.endswith("s") and len(w) > 3}, key=len, reverse=True))
+# live fix pass, round 8 (finding 102): "<kind> list" ("Summer 2027 internship list") promises one too
+_KIND_ONE = "|".join(sorted({w for w in GENERIC if len(w) >= 3 and (w + "s" in GENERIC or w[:-1] + "ies" in GENERIC)},
+                            key=len, reverse=True))
 PROMISES = re.compile(rf"^\W*(?:\d+|three|four|five|six|seven|eight|nine|ten)\s+(?:[\w/-]+\s+){{0,3}}?(?:{_KINDS})\b|"
-                      rf"\b(?:best|top)\s+(?:\d+\s+)?(?:[\w/-]+\s+){{0,3}}?(?:{_KINDS})\b|\b(?:a|my|the) list of\b",
-                      re.I)
+                      rf"\b(?:best|top)\s+(?:\d+\s+)?(?:[\w/-]+\s+){{0,3}}?(?:{_KINDS})\b|\b(?:a|my|the) list of\b|"
+                      rf"\b(?:{_KIND_ONE}|{_KINDS})\s+lists?\b", re.I)
 
 
 def promises_list(*lines):
