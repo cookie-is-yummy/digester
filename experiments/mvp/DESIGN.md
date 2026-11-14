@@ -522,6 +522,44 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
   are some uiux libraries i should use for my next project" came back as chat), never "which one should I pick". On
   the dev files: 0 of 5 chat, help or unsupported cases and 0 of 25 test messages sent with a chat or help form flip.
 
+### Round 8, live fix pass (findings 98 to 102, 14 Nov)
+Code only; no prompt changed (`tests/test_round8_live.py`).
+- (98) The composer's verdict leads an items answer (`answers.source_rank`): its clear posts, then its close ones, then
+  posts read only for their list (finding 94; the composer saw them and did not pick them, so code never calls them
+  more than close); inside a verdict, most good things first as before. A post about one thing that the composer
+  judged keeps that thing whatever the details call's `fit` said. Only things from clear posts are counted as the
+  kind asked for: "I found 1 UI/UX library in your saves, and 2 posts that come close."; the close posts follow under
+  "Close, but not quite what you asked:", one numbering through the whole answer, each with what it misses when the
+  composer answered a must-have other than "yes" (`render.close_note`), else nothing. With no clear post: 'Nothing I
+  found is a clear fit for "UI/UX libraries".' and "These come closest:" (a part of a message: that line alone); never
+  "I found N ...". All-clear answers are unchanged. The noun reads run-together spellings properly (`render.spelled`:
+  "uiux", "ui ux", "UI-UX" are "UI/UX"; nothing else is respelled); a count of 1 takes the singular.
+- (98) A line that is a web address lists the site by its name (`extract.list_entry`: "01. www.example.xyz"; the live
+  drop was here: the line started with "www", not the name). Names alone on lines of their own, three or more
+  (`extract.listed_alone`), skip the capital test; a bare file format ("css") is a kind word (`generic_name`).
+- (99) For a time-sensitive request, a post more than 12 months old whose own title and text name years, all of them
+  before this one (`answers.old_year_post`), gives no things and is not a pick while anything else fits; alone it says
+  "It's from March 2024.". "to pursue" is a time-sensitive word; a part of a message is time-sensitive by its own words
+  only (the whole message holds the other parts'). Categories of work joined by "&" or "and" ("Writing &
+  Editing") are not things (`extract.activity_name`; "Procter & Gamble" stays).
+- (100) A request for deadlines (`dates.asks_deadlines`: deadline, due, closes, closing, last day, apply by, expires)
+  keeps a clear pick only when code reads a date in its own text, or in one of its things' own words, that has not
+  passed (`Executor._deadline_fit`, after the composer; it lowers, never raises). With none left: "Nothing in your saves
+  has a deadline I can read that is still ahead.", the closest, and "It mentions a deadline but gives no date." when
+  its text does; a passed date is said as passed (round 7).
+- (101) A changed request's nothing-clear and closest lines state the merged request, built by code
+  (`texts.changed_what`: "Nothing I found is a clear fit for basic blender tutorials, leaving out anything about
+  donut."), and "another" with a new avoid word and nothing left says "I found nothing else ..., leaving out ...". The
+  closest pick names what it misses only from the composer's must-have answers; on the live path it had none (its
+  answer was "yes", and its reason was removed by the number check), so nothing was missing to say. The candidate
+  window was the cause of the weak fits: the description avoid test and the passed-on series removed 15 of 40
+  candidates after the window was cut. Now a request with avoid words or a passed-on series (best or easiest order) asks
+  for 20 more, applies those removals, then cuts to 40 (`steps.refilled`); the creator's other posts are moved last
+  inside the cut window.
+- (102) A candidate whose title names a year the request's qualifiers name (`dates.request_years`: "for 2026", "next
+  summer" in November 2026 is 2027) is read for things before those that only list things; "<kind> list" in a title
+  promises a list ("Summer 2027 job list": "the names are in its slides, not its text.").
+
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
   "another" after a split answer repeats the whole message as one request.
