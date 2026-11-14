@@ -73,6 +73,10 @@ def topic_words_of(i):
 
 
 def label(recent, before, recent_total, before_total):
+    if not before_total:
+        # checker, round 8: nothing was kept in the 6 months before, so there is no earlier share to compare with
+        # (a library that starts lately): no topic is called rising, it is too few to tell
+        return "few"
     now_part = recent / recent_total if recent_total else 0.0
     old_part = before / before_total if before_total else 0.0
     if recent >= RISING_MIN and (old_part == 0 or now_part >= RISING_TIMES * old_part):

@@ -955,8 +955,11 @@ RECAP_ASK = re.compile(_LEAD + r"(?:(?:(?:send|give|show)\s+me\s+)?(?:my|a|the)\
                        r"(?:\s+(?:this|last)\s+week)?\s*[?.!]*\s*$|"
                        + _LEAD + r"(?:how\s+was\s+)?my\s+week\s*[?.!]*\s*$", re.I)
 # "every sunday at 6pm send me a recap": read after the interpreter, which fills the timing; never "a recap of that"
-RECAP_RULE = re.compile(r"\brecaps?\b(?!\s+of\s+(?:the|that|this|it|those|these|a|an)\b)|"
-                        r"\bhow\s+my\s+rules\s+(?:did|do|are\s+doing)\b", re.I)
+# Checker, round 8: "a recap of new pasta recipes" asks for posts, not for the recap: "of" is read only for the week or
+# the rules ("a recap of my week")
+RECAP_RULE = re.compile(r"\brecaps?\b(?!\s+of\b)|\brecaps?\s+of\s+(?:my|the|this|last)\s+(?:week|rules)\b|"
+                        r"\brecaps?\s+of\s+how\s+my\s+rules\b|\bhow\s+my\s+rules\s+(?:did|do|are\s+doing)\b", re.I)
+RECAP_FROM = ("library", "recent")   # a reminder in their own words ("remind me to recap my week") stays theirs
 
 
 def recap_rule(it, text, rules=()):
@@ -973,7 +976,7 @@ def recap_rule(it, text, rules=()):
             it.spec = RuleSpec.model_validate(dict(stored, content=old["content"], do=old.get("do") or stored.get("do")))
         return it
     if it is None or it.intent != "new_rule" or it.spec is None or not RECAP_RULE.search(text or "") \
-            or it.spec.when.type not in ("schedule", "random"):
+            or it.spec.when.type not in ("schedule", "random") or it.spec.content.source not in RECAP_FROM:
         return it
     stored = it.spec.stored()
     do = [a for a in stored.get("do") or [] if a.get("action") in ("message.send", "email.send")]

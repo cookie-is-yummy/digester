@@ -251,3 +251,134 @@ def test_until_ive_done_it_never_reaches_the_model_and_code_still_sets_it(env):
     assert seen and "until I've done it" not in seen[-1] and "apply to the internship" in seen[-1]
     w = spec_of(rules(env["bot"])[-1])["when"]
     assert w["stop_when"] == "done" and "until" not in w and "until you say done" in msg
+
+
+# ---------- checker, round 8, understanding and integrations (DESIGN.md sections 14 and 15) ----------
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+from mvp.tests.test_round8_understanding import INTERESTS, day, lib8, pasta_asks, send, write_lib  # noqa: E402,F401
+from mvp.tests.test_slice6 import AllPool  # noqa: E402
+
+UTC = timezone.utc
+
+
+def relations(bot):
+    return {i["topic"]: i.get("relation") for i in bot.store.profile_data(H)["interests"]}
+
+
+def test_a_label_lands_on_a_topic_stored_with_another_spelling_of_its_shown_name(lib8):
+    """The theme check lists "blender 3D" for a stored "blender 3d"; '1 practise' used to store nothing and say only
+    the other topics."""
+    from mvp import profile as P
+    bot = lib8["bot"]
+    ints = [dict(i) for i in INTERESTS]
+    ints[0]["topic"] = "blender 3d"
+    P.set_interests(bot.store, H, ints)
+    assert "1. blender 3D" in send(lib8, "what have I been into lately?")
+    msg = send(lib8, "1 practise 2 enjoy")
+    assert msg.startswith("Thanks, noted. blender 3D: a skill you're practising; Guitar: just for fun.")
+    assert relations(bot)["blender 3d"] == "practise" and relations(bot)["Guitar"] == "enjoy"
+    # near-variants: the exact stored name still wins, and a topic that is not stored is not labelled
+    P.set_interests(bot.store, H, ints + [{"topic": "Blender 3D", "words": ["blender"], "source": "person"}])
+    assert P.set_relations(bot.store, H, [("Blender 3D", "someday")]) == [("Blender 3D", "someday")]
+    assert relations(bot)["Blender 3D"] == "someday" and relations(bot)["blender 3d"] is None
+    assert P.set_relations(bot.store, H, [("Knitting", "someday")]) == []
+
+
+def test_a_topic_starting_with_a_digit_can_be_relabelled(lib8):
+    from mvp import profile as P
+    bot = lib8["bot"]
+    P.set_interests(bot.store, H, [{"topic": "3D printing", "words": ["printing"], "source": "guess"}])
+    assert send(lib8, "3D printing is someday now") == "OK: 3D printing is parked for someday now."
+    assert send(lib8, "3d printing is pursue now") == "OK: 3D printing is something you're going for now."
+    assert lib8["calls"] == []
+    lib8["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "chat", "reply": "Hm."}
+    assert send(lib8, "12 is someday now") == "Hm."              # a number alone is not a topic
+
+
+def test_with_nothing_kept_before_no_topic_is_called_rising(env, tmp_path):
+    """A library that starts lately: every topic with 5 posts used to be 'rising' against an empty earlier window."""
+    from mvp import profile as P
+    rows = [(f"a{k}", "instagram", f"Blender study {k}", {"save": day("2026-09-01", k)}, "none") for k in range(8)]
+    rows += [(f"b{k}", "instagram", f"Guitar riff {k}", {"save": day("2026-09-20", k)}, "none") for k in range(6)]
+    lib = write_lib(tmp_path / "new", rows)
+    bot = env["bot"]
+    bot.store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    bot.pool = AllPool(str(lib))
+    P.set_interests(bot.store, H, [{"topic": "Blender", "words": ["blender"], "source": "guess"},
+                                   {"topic": "Guitar", "words": ["guitar"], "source": "guess"}])
+    msg = send(env, "what have I been into lately?")
+    assert "rising" not in msg and "fading" not in msg
+    assert "• Blender: too few to tell (8 posts that mention it lately, 0 before, 0 liked)." in msg
+    # near-variant: one post kept before is enough to compare with, and a topic absent before then rises
+    from mvp.attention import label
+    assert label(8, 0, 14, 0) == "few" and label(8, 0, 14, 1) == "rising" and label(1, 12, 0, 40) == "fading"
+
+
+def asks(e, goals, days=((0, 0), (0, 2), (1, 1))):
+    e["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [{"n": 1, "title": "Pasta", "why": "Good.",
+                                                                 "verdict": "clear"}]}
+    base = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
+    for (d, h), g in zip(days, goals):
+        e["state"]["answers"]["mvp_interpret"] = lambda u, g=g: {"intent": "ask", "spec": {
+            "when": {"type": "now"}, "content": {"goal": g, "searches": [g], "count": 1}}}
+        e["clock"][0] = base + timedelta(days=d, hours=h)
+        e["bot"].on_message(H, g)
+    e["clock"][0] = datetime(2026, 11, 15, 16, 0, tzinfo=UTC)
+    e["bot"]._arrivals.clear()   # many messages in one real minute: not the flood guard
+
+
+def test_no_suggestion_from_asks_on_a_personal_topic_or_sharing_only_a_kind_word(env):
+    """'dating advice' three times was offered as 'You asked about advice'; 'productivity tools', 'design tools' and
+    'AI tools' were offered as one rule about tools."""
+    bot = env["bot"]
+    for goals in (["dating advice"] * 3, ["keto diet meals"] * 3, ["productivity tools", "design tools", "AI tools"],
+                  ["career advice", "study advice", "travel advice"]):
+        bot.store.x("DELETE FROM answers")
+        bot.store.set_state(f"suggested:{H}", None)
+        asks(env, goals)
+        assert "You asked about" not in send(env, "recap"), goals
+    # near-variants: a topic word is still offered, also when a kind word comes with it
+    for goals, word in ((["lisbon cafes", "lisbon restaurants", "things to do in lisbon"], "lisbon"),
+                        (["pasta tools", "pasta recipe", "pasta sauce"], "pasta")):
+        bot.store.x("DELETE FROM answers")
+        bot.store.set_state(f"suggested:{H}", None)
+        asks(env, goals)
+        assert f"• You asked about {word} 3 times since Thursday 12 November." in send(env, "recap"), goals
+
+
+def test_the_suggestion_waits_while_a_rule_preview_waits_for_yes(env):
+    """The handler reads 'yes' as YES to a waiting preview first: 'yes' to the suggestion used to start that other
+    rule."""
+    bot = env["bot"]
+    pasta_asks(env)
+    env["clock"][0] = datetime(2026, 11, 15, 15, 0, tzinfo=UTC)
+    say(env, "every monday at 9 send me a workout", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["MON"], "times": ["09:00"]},
+        "content": {"goal": "a workout", "searches": ["workout"], "count": 1}}})
+    assert bot.store.pending(H)["kind"] == "confirm_rule"
+    env["clock"][0] += timedelta(minutes=5)
+    assert "You asked about" not in send(env, "recap")
+    assert bot.store.get_state(f"suggested:{H}") is None           # not counted as offered: it comes next time
+    send(env, "no")
+    assert bot.store.rules(H) == [] and bot.store.pending(H) is None
+    assert send(env, "recap").endswith("Reply \"yes\" and I'll show you a preview first.")
+    assert send(env, "yes").startswith("Here's what that would look like now:")
+
+
+def test_a_recap_of_posts_or_a_reminder_to_recap_is_not_the_recap_rule(env):
+    from mvp.followup import RECAP_RULE
+    for t in ("every friday send me a recap of new pasta recipes", "every sunday a recap of my saved recipes",
+              "weekly recap of blender tutorials on mondays", "give me a recap of that video"):
+        assert not RECAP_RULE.search(t), t
+    for t in ("every sunday at 6pm send me a recap", "a recap of my week every monday", "recap of the week on sundays",
+              "every week tell me how my rules did", "a weekly recap of my rules on fridays"):
+        assert RECAP_RULE.search(t), t
+    env["clock"][0] = datetime(2026, 11, 15, 15, 0, tzinfo=UTC)
+    msg = say(env, "every sunday at 6pm remind me to recap my week in my journal", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["SUN"], "times": ["18:00"]},
+        "content": {"source": "note", "text": "recap my week in my journal"}}})
+    assert "recap like this one" not in msg
+    stored = [r["spec"]["content"] for r in env["bot"].store.rules(H)]
+    pending = (env["bot"].store.pending(H) or {}).get("payload", {}).get("spec", {}).get("content")
+    assert all(c.get("source") == "note" for c in stored + ([pending] if pending else [])) and (stored or pending)

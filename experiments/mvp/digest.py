@@ -142,6 +142,17 @@ def _label_words(store, handle, prof):
     return out
 
 
+# checker, round 8: a word that names a kind of thing, not a topic ("tools", "advice", "apps"): "productivity tools",
+# "design tools" and "AI tools" are three topics, never one rule
+KIND_WORDS = {"advice", "help", "inspiration", "inspo", "hack", "example", "option", "suggestion", "recommendation",
+              "rec", "review", "piece", "type", "kind"}
+
+
+def _kind_word(w):
+    from .extract import GENERIC
+    return w in KIND_WORDS or w in GENERIC or w + "s" in GENERIC
+
+
 def suggestion(store, prof, handle, now, tz):
     """The one rule to suggest, or None: {"word", "say", "n", "since", "spec"}. Only asks kept with their spec count
     (answers rows from before round 8 have none and are never offered)."""
@@ -156,8 +167,8 @@ def suggestion(store, prof, handle, now, tz):
         except (TypeError, ValueError):
             continue
         content = spec.get("content") or {}
-        if content.get("source", "library") != "library" or not row.get("goal"):
-            continue
+        if content.get("source", "library") != "library" or not row.get("goal") or P.sensitive(row["goal"]):
+            continue   # checker, round 8: an ask on a personal topic is never counted toward a suggestion
         day = datetime.fromisoformat(row["at"]).astimezone(ZoneInfo(tz)).date()
         for w in P.topic_words(row["goal"]):
             by_word.setdefault(w, []).append((row, day, spec))
@@ -169,7 +180,8 @@ def suggestion(store, prof, handle, now, tz):
     offered = store.get_state(f"suggested:{handle}") or {}
     best = None
     for w, asks in by_word.items():
-        if len(asks) < SUGGEST_ASKS or len({d for _, d, _ in asks}) < SUGGEST_DAYS_MIN or w in taken or P.sensitive(w):
+        if len(asks) < SUGGEST_ASKS or len({d for _, d, _ in asks}) < SUGGEST_DAYS_MIN or w in taken or P.sensitive(w) \
+                or _kind_word(w):
             continue
         when = offered.get(w)
         if when and now - datetime.fromisoformat(when) < timedelta(days=SUGGEST_AGAIN_DAYS):
@@ -234,6 +246,11 @@ class DigestMixin:
         h = person["handle"]
         lib = (self.store.person(h) or person)["library"]
         found = {}
+        pending = self._live_pending(h, now)
+        if pending and pending["kind"] == "confirm_rule":
+            # checker, round 8: a rule preview is waiting for YES, and the handler reads "yes" as that YES first: the
+            # suggestion is not offered now, so "yes" can only mean the preview the person saw (it comes next time)
+            suggest = False
         lines = build(self.store, self.view(lib), P.get(self.store, h), h, now - timedelta(days=PERIOD_DAYS), now,
                       suggest=suggest, found=found)
         if found.get("suggestion"):   # offered once per word per 30 days; "yes" to it is read with the next message

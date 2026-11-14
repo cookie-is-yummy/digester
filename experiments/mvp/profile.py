@@ -1178,7 +1178,7 @@ RELATION_WORDS = {
 _LABEL = "(?:" + "|".join(f"(?P<{k}>{v})" for k, v in RELATION_WORDS.items()) + r")(?![\w'])"
 _SEP = r"\s*(?:[:=.)\-–—]\s*|\s+(?:is|are|as)\s+(?:(?:a|an|just)\s+)?|\s+)?"
 _FILLER = re.compile(r"^(?:[\s,;.&+/!]|\b(?:and|then|ok|okay|sure|so|thanks|thank you|please|pls)\b)*$", re.I)
-_RELATION_NOW = re.compile(r"^\s*(?P<topic>[^\W\d_][\w'’ &+-]{1,40}?)\s+(?:is|are)\s+(?:now\s+)?(?:(?:a|an|just)\s+)?"
+_RELATION_NOW = re.compile(r"^\s*(?P<topic>[^\W_][\w'’ &+-]{1,40}?)\s+(?:is|are)\s+(?:now\s+)?(?:(?:a|an|just)\s+)?"
                            + _LABEL + r"(?:\s+now)?\s*[.!]*\s*$", re.I)
 PARKED_ASK = re.compile(r"^\W*(?:what(?:'s|\s+is|\s+have\s+i|\s+did\s+i|\s+do\s+i\s+have)?\s+(?:i\s+)?park(?:ed)?"
                         r"(?:\s+for\s+(?:later|someday))?|(?:show\s+me\s+)?(?:my\s+)?parked(?:\s+topics)?|"
@@ -1255,6 +1255,10 @@ def relation_said(store, handle, text):
     return (topic, _label_of(m)) if topic else None
 
 
+def _same_topic(a, b):
+    return shown_topic(a).lower() == shown_topic(b).lower()
+
+
 def set_relations(store, handle, pairs, now=None):
     """Stores what each topic is to the person ([(topic, label)]). A "not me" topic becomes a marker; a label on a
     marker brings the topic back as an interest. Returns the pairs stored."""
@@ -1265,11 +1269,12 @@ def set_relations(store, handle, pairs, now=None):
     for topic, label in pairs:
         if label not in RELATIONS:
             continue
-        for i in allx:
-            if i["topic"] == topic:
-                i.update(relation=label, relation_at=now_iso(now))
-                done.append((topic, label))
-                break
+        # checker, round 8: the theme check lists topics as shown ("blender 3D" for a stored "blender 3d"), so a label
+        # lands on the stored topic with the same shown name, never silently nowhere
+        same = [i for i in allx if i["topic"] == topic] or [i for i in allx if _same_topic(i["topic"], topic)]
+        if same:
+            same[0].update(relation=label, relation_at=now_iso(now))
+            done.append((topic, label))
     data["interests"] = allx
     store.set_profile_data(handle, data)
     return done
