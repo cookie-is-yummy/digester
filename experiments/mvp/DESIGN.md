@@ -390,7 +390,9 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
 - A details kind `items` (prompt `extract_v2`): the named things a post's own text lists that answer the request, each
   `{name, about, when, fit}`. Code keeps an item only when its name is a whole run of words in the post's text (a site
   named by its address keeps its name alone); `about` and `when` only when they are the text's own words (about: at
-  most about 25 words, the key-point checks); `fit` "no" is left out, "yes" before "unknown". At most 12 per post.
+  most about 25 words, the key-point checks) and, for `about`, only when they are about that thing: they name no
+  other listed thing, and they hold its name or start after it (within 60 words) with no other listed thing between
+  (`extract.about_belongs`); `fit` "no" is left out, "yes" before "unknown". At most 12 per post.
   The details call gets the request, the lines about the person, today's date and the post's date. Items are cached
   per post and per request (the facts table's kind `items:<hash>`); a found list is not asked for again for its key
   points.
@@ -404,13 +406,20 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
   alone. Picks with no things follow under "Also in your saves:". No "I recommend ... because".
 - Kept with the answer (`answers.picks[].items`, with the line as shown). "add the second one to my list", "remind me
   about <name> tomorrow", "put the NASA one in my calendar" act on that thing (its name, its words, its date and the
-  post's link; a calendar entry takes the thing's own date when it has one ahead); a number past them says how many
-  there are. A later reminder is `source: items` with `item_names` (set by code, never by the model). "email it to me"
+  post's link; a calendar entry takes the date code reads in the thing's own words when it is ahead, for any request);
+  a number past them says how many there are. The numbers run across the posts as shown. A later reminder is `source:
+  items` with `item_names` (set by code, never by the model). "remind me about <name> two days before its deadline"
+  ("a week before", "the day before", "on its deadline") is counted back by code from that date, at the time named or
+  9am; with no date in its words, a passed one or one too near, one plain line and nothing is set. "email it to me"
   sends the whole answer.
+- For a year in the request, a thing whose own words name only earlier years ("Design award 2024" for "for 2026") is
+  left out while 2 or more others fit (read by code, not from the model's `fit`).
 
 ### Dates (finding 91)
-- Posted dates: Instagram from the link's shortcode (`dates.instagram_posted`; checked on the founder's library: 20,958
-  of 20,963 items with a kept date decode to a date on or before it); YouTube from `snippet.publishedAt`
+- Posted dates: Instagram from the link's shortcode (`dates.instagram_posted`, any post, reel or tv link, with or
+  without a query string; other Instagram links give none; checked on the founder's library: 20,958 of 20,963 items
+  with a kept date decode to a date on or before it, and 20,496 of 20,500 leaving friends' items out); YouTube from
+  `snippet.publishedAt`
   (`youtube_cache.published_at`). The composer (`compose_v5`) and the details call get today's date and each
   candidate's kept and posted dates.
 - Time-sensitive requests are recognised in code (opportunities, deadlines, applications, programmes, events, sales,
@@ -420,8 +429,11 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
   February 2025, has passed"); more than 12 months old and speaking of now ("now open", "apply now") with no date is
   `old` (after everything fresher: "from May 2024, so this round has probably closed; check whether it runs again");
   among equal verdicts, newer first; a year in the request first prefers posts that name it or were posted in the year
-  before it or in it. A date ahead is said with how far it is: "deadline 1 December (in 19 days)". Rules' sends run
-  the same code.
+  before it or in it. A date ahead is said with how far it is: "deadline 1 December (in 19 days)" ("deadline 1
+  December, in 19 days" inside a thing's own brackets). An old post that says it stays open ("until further notice",
+  "rolling applications", "year-round") is `old` with "from May 2024; check whether it is still open". A lower-case
+  "may" with a day and no year is a date only after a deadline word ("3 may surprise you" is not 3 May). Rules' sends
+  run the same code.
 - No stale claims, for any request: a reason from a post older than 60 days loses a part that says "now open",
   "currently", "this week", "soon", "new" (the reason trimming of fix pass 5; else it goes), and a key point or an
   item's words that say it get "(as of May 2024)" after them. Date phrases are English only: a Spanish answer keeps the
@@ -435,7 +447,16 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
   shown picks the change rejects are left out ("anything else": all shown). The opening line is built by code from the
   merged request ("Here's what else I found in your saves for basic Blender tutorials, leaving out anything about
   donut."). With nothing left: "I found nothing else in your saves for ..., leaving out ..." and, when YouTube can
-  serve it, the "new ones" offer. A question about the picks shown ("how long is the second one?") stays a question.
+  serve it, the "new ones" offer. A question about the picks shown stays a question: one that points at a pick ("the
+  second one", "#2", "is it", "how long", "which one") is a question even with "what about" or "without" in it, unless
+  it also has plain change words ("anything else", "instead", "not from", "something that isn't"). Also read by code:
+  "what about ones from <creator>" (that creator's, by the name the library holds; none: "I found nothing from that
+  creator in your saves."), "ok and for dinner?" (the same request and searches with those words added; the line says
+  "what I found", not "what else"), "not on YouTube" (the other platform, never an avoid word), and "the opposite" (no
+  search: one line asking what to change). A "more" form that carries a new avoid word gets the same code-built line.
+- A message's own words win over an avoid entry only when they ask for the thing: "isn't", "isnt", "aren't", "other
+  than", "except", "rather than", "instead of" before it rule it out (`profile._NEGATING`; live, 14 Nov, the donut
+  follow-up read as "more" lost its avoid word to this).
 - The avoid test reads the item's whole own text, a video's description included, and such a candidate never reaches
   the composer.
 - The opening line code builds never echoes a goal of more than 6 words ("Here's what I found in your saves.").
@@ -443,3 +464,7 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
 ### Not done in this round
 - Several asks in one message ("startup motivation reels, opportunities to pursue soon, or things with deadlines")
   still get one answer for the whole message, not one labelled part per ask.
+- "add them all" after an items answer adds the source posts; a question about a numbered thing ("how long is the
+  second one?") is about the posts shown. A title from an old post that says "now open" is kept as the post's words
+  (for a time-sensitive request the date line after it says it is old).
+- "what about pasta?" (a new topic in a follow-up form) is not turned into a new request by code.

@@ -241,15 +241,23 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   (posted June 2023, saved July 2023):`, then `1. Material UI: <the post's words about it>`. Names and words are the
   post's own, checked by code (`extract.verify_items`); at most 3 posts and 6 things each. Recipes, workouts and
   make-or-build tutorials keep "I recommend ... because" with ingredients and steps. "add the second one to my list",
-  "remind me about <name> tomorrow at 9", "put the NASA one in my calendar" act on that thing.
+  "remind me about <name> tomorrow at 9", "put the NASA one in my calendar" act on that thing (the numbers run across
+  the posts, as the person read them). "remind me about <name> two days before its deadline" counts back from the date
+  in that thing's own words; with none, the bot says so and sets nothing. A thing's words are shown only when they are
+  about it (never a sentence under the next thing's name, never a whole one-line list under each of its names). For "for
+  2026", a thing whose own words name only an earlier year is left out while others fit.
 - **Dates**: the bot knows today's date and when each post was made (Instagram from its link, YouTube from
   `videos.list`). For opportunities, deadlines, events and the like, a passed deadline never leads ("its deadline, 14
   February 2025, has passed" when it is all there is), an old "applications now open" comes last with its month, a
-  date ahead says how far it is ("deadline 1 December (in 19 days)"), and newer comes first. A reason never says
-  "now open", "this week" or "new" about a post older than 60 days.
+  date ahead says how far it is ("deadline 1 December (in 19 days)"; inside a thing's line "deadline 1 December, in 19
+  days"), and newer comes first. An old "open until further notice" says "check whether it is still open", not "probably
+  closed". A reason never says "now open", "this week" or "new" about a post older than 60 days.
 - **Changing the request**: after an answer, "what about something that isn't a donut", "not from that creator",
-  "something shorter", "more recent ones", "anything else?" search again with the change; a question about the picks
-  shown ("how long is the second one?") is answered from them.
+  "something shorter", "more recent ones", "anything else?", "not on YouTube" search again with the change (also when
+  the interpreter reads it as "more"); "what about ones from <creator>" searches that creator's; "ok and for dinner?"
+  searches the same request with those words added; "the opposite" gets a one-line question back. A question about the
+  picks shown ("how long is the second one?", "what about the second one, is it long?", "does the first one work
+  without a GPU?") is answered from them.
 
 ## Rules, as the person sees them
 
@@ -321,5 +329,5 @@ still hold the handle (`ledger_rows_with_handle`).
 | `store.py`, `llm.py` | Records (including each answer as shown, the action log, the outbox, outside searches and imports); model calls, the cost ledger (an import's build is written there too) and the caps |
 | `channels/` | Test page (`web.py`, `web_page.html`: thread, Profile, rules, To-dos, Outbox and Exports panels with the upload box, "Start over" through the setup), terminal, Mac Messages, Sendblue |
 | `trace.py`, `run_requests.py` | What happened to a message; a batch of test requests |
-| `tests/` | 784 offline tests (`test_round7.py`: round 7, findings 90 to 92: the items answer, dates, changed requests; `test_fixpass6.py`: one or more per finding of the sixth live run, 88 and 89 (a message changing lasting state it never asked to change), their near-variants, the builder's audit and its checker's (one-time limits, settings carried with a request, the avoid list, styles, dropped topics, confirmations, all rules, resume, a stated kit or time); `test_fixpass5.py`: one or more per finding of the fifth live run, 84 to 87, their near-variants, and the checker's; `test_fixpass4.py`: one or more per finding of the fourth live run, 74 to 83, after a full setup, and the checker's near-variants; `test_fixpass3.py`: one or more per finding of the third live run, 65 to 73, and the checker's near-variants; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
+| `tests/` | 797 offline tests (`test_round7.py`: round 7, findings 90 to 92: the items answer, dates, changed requests; `test_round7_checks.py`: the checker's near-variants of round 7 (an item's words, loose dates, reminders counted back from a thing's date, follow-ups that ask, add a creator or refine; the live donut case read as "more"); `test_fixpass6.py`: one or more per finding of the sixth live run, 88 and 89 (a message changing lasting state it never asked to change), their near-variants, the builder's audit and its checker's (one-time limits, settings carried with a request, the avoid list, styles, dropped topics, confirmations, all rules, resume, a stated kit or time); `test_fixpass5.py`: one or more per finding of the fifth live run, 84 to 87, their near-variants, and the checker's; `test_fixpass4.py`: one or more per finding of the fourth live run, 74 to 83, after a full setup, and the checker's near-variants; `test_fixpass3.py`: one or more per finding of the third live run, 65 to 73, and the checker's near-variants; `test_final_check.py`: where two review fixes met; `test_review_experience.py`: one or more per finding of the experience review; `test_review_cost_failure.py`: one or more per finding of the cost-failure review; `test_review_privacy.py`: one or more per finding of the privacy review; `test_review_reliability.py`: one or more per finding of the reliability review; `test_interpret_round.py`: the interpreter's improvement round, one or more per kind of misreading; `test_fixpass.py`: one or more per finding of the fix pass after the live run of 12 Nov; `test_fixpass_checks.py`: the checker's near-variants of those findings; `test_fixpass2.py`: one or more per finding of
 the second live run, 38 to 64) |
