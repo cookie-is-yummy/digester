@@ -684,3 +684,45 @@ class FollowupMixin:
             kinds_st[iid] = [k for k in ("ingredients", "steps", "key_points") if facts.get(k)]
             self.store.set_state(f"linekinds:{h}", kinds_st)
         return self.send(h, Reply(parts), run_id)
+
+
+# ---------- round 8 (DESIGN.md section 14): understanding, read by code before any model call ----------
+_LEAD = r"^\W*(?:(?:so|ok|okay|hey|hi|and)[,\s]+)?"
+_LATELY = r"(?:\s+(?:lately|recently|these\s+days|this\s+(?:month|year)|for\s+me|in\s+my\s+saves))*\s*[?.!]*\s*$"
+TRENDS_ASK = re.compile(_LEAD + r"(?:what\s+(?:have|has)\s+i\s+been\s+(?:into|saving|keeping)|"
+                        r"what\s+i(?:'ve|’ve|\s+have)\s+been\s+into|what\s+am\s+i\s+(?:into|saving)|"
+                        r"what(?:'s|’s|s|\s+is|\s+are)\s+(?:rising|fading)|"
+                        r"what(?:'s|’s|s|\s+is)\s+(?:rising|growing)\s+(?:and|or)\s+(?:what(?:'s|’s|s|\s+is)\s+)?"
+                        r"fading)" + _LATELY, re.I)
+EVERY_EXPORT = re.compile(r"^\W*(?:(?:yes|yeah|sure|ok|okay)[,\s]+)?(?:every|each)\s+(?:new\s+)?export"
+                          r"(?:\s+(?:please|pls))?\s*[.!]*\s*$", re.I)
+RECAP_ASK = re.compile(_LEAD + r"(?:(?:(?:send|give|show)\s+me\s+)?(?:my|a|the)\s+)?(?:weekly\s+)?recap"
+                       r"(?:\s+(?:please|pls))?\s*[?.!]*\s*$|"
+                       + _LEAD + r"how\s+(?:did|do|are|were)\s+my\s+rules\s+(?:do|doing|go|going)"
+                       r"(?:\s+(?:this|last)\s+week)?\s*[?.!]*\s*$|"
+                       + _LEAD + r"(?:how\s+was\s+)?my\s+week\s*[?.!]*\s*$", re.I)
+# "every sunday at 6pm send me a recap": read after the interpreter, which fills the timing; never "a recap of that"
+RECAP_RULE = re.compile(r"\brecaps?\b(?!\s+of\s+(?:the|that|this|it|those|these|a|an)\b)|"
+                        r"\bhow\s+my\s+rules\s+(?:did|do|are\s+doing)\b", re.I)
+
+
+def recap_rule(it, text, rules=()):
+    """A new repeating rule whose message asks for a recap becomes a recap rule (content source "recap"): the timing
+    is the interpreter's, the content is code's. A change to a recap or trends rule changes only its timing: its
+    content stays code's ("move the recap to saturdays")."""
+    if it is not None and it.intent == "change_rule" and it.spec is not None:
+        from .store import by_number
+        rules = list(rules)
+        r = by_number(rules, it.rule_number) if it.rule_number is not None else (rules[0] if len(rules) == 1 else None)
+        old = (r or {}).get("spec") or {}
+        if (old.get("content") or {}).get("source") in ("recap", "trends"):
+            stored = it.spec.stored()
+            it.spec = RuleSpec.model_validate(dict(stored, content=old["content"], do=old.get("do") or stored.get("do")))
+        return it
+    if it is None or it.intent != "new_rule" or it.spec is None or not RECAP_RULE.search(text or "") \
+            or it.spec.when.type not in ("schedule", "random"):
+        return it
+    stored = it.spec.stored()
+    do = [a for a in stored.get("do") or [] if a.get("action") in ("message.send", "email.send")]
+    it.spec = RuleSpec.model_validate(dict(stored, content={"source": "recap"}, do=do))
+    return it

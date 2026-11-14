@@ -1,7 +1,7 @@
 """PROTOTYPE ONLY - the bot: message handler, executor and scheduler (docs/06 'Executor', BRIEF-10 sections 4 and 5).
 
 Only this bot sends (AGENTS.md rule 5): retrieve and compose read; the interpreter fills forms (rule 6).
-Bot is assembled from six mixins: handler.py (messages in), onboarding.py (the setup after consent), todos.py (to-dos and library counts), outputs.py (a spec's
+Bot is assembled from mixins: handler.py (messages in), onboarding.py (the setup after consent), todos.py (to-dos and library counts), outputs.py (a spec's
 `do`, acting on an answer, the person's email), executor.py (one run with its outside block, and the send) and
 scheduler.py (timed sends, and the inbox check of refresh.py). What it says is in texts.py. The names below stay
 importable from mvp.core.
@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from . import config
+from .attention import AttentionMixin
+from .digest import DigestMixin
 from .executor import ExecutorMixin
 from .followup import FollowupMixin
 from .handler import (
@@ -91,7 +93,8 @@ __all__ = [
 ]
 
 
-class Bot(HandlerMixin, FollowupMixin, OnboardingMixin, TodoMixin, OutputsMixin, ExecutorMixin, SchedulerMixin):
+class Bot(HandlerMixin, FollowupMixin, OnboardingMixin, TodoMixin, OutputsMixin, ExecutorMixin, SchedulerMixin,
+          AttentionMixin, DigestMixin):   # round 8: trends and the theme check (attention.py), the recap (digest.py)
     def __init__(self, channel, store=None, pool=None, clock=None):
         self.channel = channel
         self.store = store or Store(config.DB)

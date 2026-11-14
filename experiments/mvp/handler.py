@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from . import config
 from . import profile as P
 from . import texts as T
+from .followup import recap_rule
 from .interpret import change_guard, chat_guard, interpret, names_rule, profile_guard
 from .llm import budget_stop
 from .schedule import describe, next_run, resolve_until, say_time, t12
@@ -194,6 +195,11 @@ class HandlerMixin:
         ref = self._email_text(person, text, now)   # a code, "new code", or the address the bot just asked for
         if ref is not None:
             return ref
+        # round 8 (DESIGN.md section 14): trends, the theme check, "what did I park?", the recap and its suggestion,
+        # read by code (digest.py, attention.py); no model call
+        done, ref = self.understanding_reads(person, text, now)
+        if done:
+            return ref
         ref = self._length_way_out(person, text, now)   # fix pass 5, finding 87: "any length", "include YouTube"
         if ref is not None:
             return ref
@@ -233,12 +239,15 @@ class HandlerMixin:
             it = change_guard(it, text, self._live_pending(handle, now), rules)
             # round 8, finding 97: a plain question about their own saves, read as small talk, is an ask
             it = chat_guard(it, text)
+            it = recap_rule(it, text, rules)   # round 8 (BN5): "every sunday at 6pm send me a recap" (content by code)
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=handle, kind="interpret", status="error", error=type(e).__name__)
             if budget_stop(e):   # review fix X6: ai.py's budget guard refused the call: never a false "try again"
                 self.note(intent="over_cap")
                 return self._limit_notice(person, "total")
             return self.send(handle, T.INTERPRET_ERROR)
+        if it.intent == "new_rule" and it.spec.content.source == "recap":
+            return self._recap_preview(person, it.spec, text, now)   # round 8 (BN5): this week's recap, then YES
         return self._dispatch(person, it, text, rules, pending, last, now)
 
     # ---------- round 8 (DESIGN.md section 13): rules beyond timing, read by code ----------

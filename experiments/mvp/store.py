@@ -81,6 +81,7 @@ ADDED_COLUMNS = [
     ("people", "email_verified_at TEXT"),  # when they texted back the code sent to it; NULL = not confirmed
     ("people", "imported_from TEXT"),    # slice 5: the people.json library an import replaced (kept at the next start)
     ("imports", "work TEXT"),            # slice 5: an import's working folder, so a restart can put its files back
+    ("answers", "spec TEXT"),            # round 8 (BN5): the spec an answer ran with (NULL in rows kept before)
     ("people", "profile TEXT"),          # slice 6: JSON {"interests": [...], "build", "guessed_at"} (profile.py)
     ("rules", "number INTEGER"),         # review fix X1 (experience): the rule's number for its person ("stop 3"),
                                          # given when it is made and never reused, so a finished rule shifts nothing
@@ -603,11 +604,12 @@ class Store:
         r = self.one("SELECT email, email_verified_at FROM people WHERE handle=?", (handle,))
         return (r["email"], bool(r["email_verified_at"])) if r and r["email"] else (None, False)
 
-    def put_answer(self, run_id, handle, rule_id, goal, kind, parts, picks, at=None):
+    def put_answer(self, run_id, handle, rule_id, goal, kind, parts, picks, at=None, spec=None):
         """What a run showed, kept so it can be emailed, put on a calendar or sent again later: the rendered parts
-        (without chat footers) and each pick's checked title, link and checked details."""
-        self.x("INSERT OR REPLACE INTO answers(run_id,handle,rule_id,goal,kind,parts,picks,at) VALUES(?,?,?,?,?,?,?,?)",
-               (run_id, handle, rule_id, goal, kind, json.dumps(parts), json.dumps(picks), now_iso(at)))
+        (without chat footers) and each pick's checked title, link and checked details; and (round 8) its spec."""
+        self.x("INSERT OR REPLACE INTO answers(run_id,handle,rule_id,goal,kind,parts,picks,at,spec) "
+               "VALUES(?,?,?,?,?,?,?,?,?)", (run_id, handle, rule_id, goal, kind, json.dumps(parts), json.dumps(picks),
+                                            now_iso(at), json.dumps(spec) if spec is not None else None))
 
     def answer(self, run_id):
         r = self.one("SELECT * FROM answers WHERE run_id=?", (run_id,))

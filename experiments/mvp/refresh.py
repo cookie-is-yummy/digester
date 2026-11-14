@@ -821,7 +821,7 @@ def run_new_items(bot, person, new_ids, now, capped=None, only_rules=None):
         return answers, nothing, ended
     for r in bot.store.rules(h, statuses=("active",)):
         spec = RuleSpec.model_validate(r["spec"])
-        if spec.when.type != "new_items" or spec.content.source not in ("library", "recent"):
+        if spec.when.type != "new_items" or spec.content.source not in ("library", "recent", "trends"):
             continue
         if only_rules is not None and r["id"] not in only_rules:
             continue
@@ -834,9 +834,10 @@ def run_new_items(bot, person, new_ids, now, capped=None, only_rules=None):
             bot.store.add_run(handle=h, rule_id=r["id"], kind="scheduled", status="snoozed", at=now_iso(now))
             continue
         if not new_ids:
-            nothing.append(spec.content.goal)
+            if spec.content.source != "trends":   # round 8 (BN3): nothing new, so the counts have not changed
+                nothing.append(spec.content.goal)
             continue
-        if bot._over_cap(person):
+        if spec.content.source != "trends" and bot._over_cap(person):   # round 8: trends cost nothing
             bot.store.add_run(handle=h, rule_id=r["id"], kind="scheduled", status="over_cap", at=now_iso(now))
             if capped is not None:
                 capped.append((r["id"], spec.content.goal))
@@ -848,7 +849,8 @@ def run_new_items(bot, person, new_ids, now, capped=None, only_rules=None):
             continue
         if not n:
             bot.store.x("UPDATE runs SET status='none' WHERE id=?", (run_id,))
-            nothing.append(spec.content.goal)
+            if spec.content.source != "trends":   # round 8 (BN3): no topics to count is not "nothing new matched"
+                nothing.append(spec.content.goal)
             continue
         after = ""
         if spec.when.max_sends:
@@ -906,9 +908,32 @@ def library_status(bot, person, now, steps=False):
     if dates:
         d = datetime.fromisoformat(max(dates)).date()
         newest = f"The newest thing in it is from {d.strftime('%-d %B %Y')} ({_ago((today - d).days)})."
+    due = _export_due(bot.store, h, tz, today, counts, last_at, dates)
+    next_due = (T.cap_first("; ".join(due)) + ".") if due else "Send me a new export whenever you like."
+    links = [(p, EXPORT_LINKS[p]) for p in counts]
+    msg = T.library_status_message(last, counts, newest, next_due, links)
+    if steps:   # "how do I export?", "how do I get my new saves in?" (findings 43 and 60)
+        msg += "\n\n" + routine_text(export_routine(tuple(counts) or ("instagram", "youtube")))
+    return msg
+
+
+def export_due(bot, person, now):
+    """Round 8 (BN5, the recap): the "next export is due" phrases library_status says, one per platform."""
+    h, tz = person["handle"], person["timezone"]
+    today = now.astimezone(ZoneInfo(tz)).date()
+    imp = bot.store.one("SELECT at FROM imports WHERE handle=? AND status='done' ORDER BY id DESC LIMIT 1", (h,))
+    view = bot.view(person["library"])
+    counts = Counter(it.platform for it in view.items.values())
+    counts = {p: counts[p] for p in ("instagram", "youtube") if counts.get(p)}
+    dates = [max(it.dates.values())[:10] for it in view.items.values() if it.dates]
+    return _export_due(bot.store, h, tz, today, counts, datetime.fromisoformat(imp["at"]) if imp else None, dates)
+
+
+def _export_due(store, h, tz, today, counts, last_at, dates):
+    """Per platform: the reminder rule's next send, else the last import (or the newest item) plus its interval."""
     due = []
     for platform in counts:
-        rule = next((r for r in bot.store.rules(h, statuses=("active",))
+        rule = next((r for r in store.rules(h, statuses=("active",))
                      if (r["spec"].get("content") or {}).get("source") == "note"
                      and str((r["spec"].get("content") or {}).get("text") or "").startswith(REMINDER_OPENING[platform])),
                     None)
@@ -921,12 +946,7 @@ def library_status(bot, person, now, steps=False):
         when = base + timedelta(days=config.EXPORT_EVERY_DAYS[platform])
         word = "was due" if when < today else "is due"
         due.append(f"your next {T.PLATFORM_NAMES[platform]} export {word} around {when.strftime('%A %-d %B')}")
-    next_due = (T.cap_first("; ".join(due)) + ".") if due else "Send me a new export whenever you like."
-    links = [(p, EXPORT_LINKS[p]) for p in counts]
-    msg = T.library_status_message(last, counts, newest, next_due, links)
-    if steps:   # "how do I export?", "how do I get my new saves in?" (findings 43 and 60)
-        msg += "\n\n" + routine_text(export_routine(tuple(counts) or ("instagram", "youtube")))
-    return msg
+    return due
 
 
 # ---------- the export routine (for onboarding) ----------

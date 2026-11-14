@@ -460,6 +460,10 @@ class SchedulerMixin:
         progress["before"] = before
         msg, run_id, n = self.run(person, spec, "scheduled", rule_id=rule["id"])
         progress["run_id"] = run_id
+        if not n and spec.content.source == "recap" and not self._run_failed(run_id):
+            # round 8 (BN5, DESIGN.md section 14): a recap with nothing to report is recorded (status none), not sent
+            self._advance(rule, spec, tz, now)
+            return 0
         if self._run_failed(run_id):
             err = self.store.one("SELECT error FROM runs WHERE id=?", (run_id,))["error"] or ""
             if err.startswith("ComposeCut"):

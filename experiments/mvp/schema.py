@@ -311,7 +311,9 @@ class Content(BaseModel):
     """What a rule sends. source: library (search), note (the person's own words, sent as they are), todos (their
     open to-dos), recent (what they kept in the last since_days, newest first), items (item_ids set by code from pick
     numbers, never by the model)."""
-    source: Literal["library", "note", "todos", "recent", "items"] = "library"
+    # round 8 (DESIGN.md section 14): "trends" (what they have been into lately) and "recap" (what their rules and
+    # to-dos did), both counted by code, set by code only
+    source: Literal["library", "note", "todos", "recent", "items", "trends", "recap"] = "library"
     text: Optional[str] = Field(default=None, max_length=300)   # note: sent as is
     goal: Optional[str] = Field(default=None, min_length=2, max_length=200)  # what the person wants, in a few words
     searches: list[str] = Field(default_factory=list, max_length=4)          # search texts over the library
@@ -416,6 +418,10 @@ class Content(BaseModel):
             if not self.item_ids:
                 raise ValueError("source items needs item_ids")
             self.goal = self.goal or "the picks you asked for"
+        elif s == "trends":
+            self.goal = self.goal or "what you've been into lately"
+        elif s == "recap":
+            self.goal = self.goal or "your recap"
         if s != "items" and (self.item_ids or self.item_names):
             raise ValueError("item_ids go with source items")
         if self.saved_after and self.saved_before and self.saved_before <= self.saved_after:

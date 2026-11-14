@@ -385,7 +385,7 @@ class ExecutorMixin:
 
     def _run_once(self, person, spec: RuleSpec, kind, rule_id=None, request_text=None, cands_override=None,
                   known_lines=None, shown=(), only_ids=None):
-        if spec.content.source in ("note", "todos"):
+        if spec.content.source in ("note", "todos", "trends", "recap"):   # round 8: trends and recap, counted by code
             return self._run_plain(person, spec, kind, rule_id)
         if spec.content.source == "items" and kind in ("scheduled", "manual"):
             return self._run_items(person, spec, kind, rule_id)
@@ -722,7 +722,8 @@ class ExecutorMixin:
                               spec.content.goal, "picks",
                               picks_message(result, spec, now=self.clock(), extract=ex, lang=self._answer_lang())
                               if footer else msg,
-                              [dict(pick_record(p), main=id(p) in main) for p in picks])
+                              [dict(pick_record(p), main=id(p) in main) for p in picks],
+                              spec=spec.stored())   # round 8 (BN5): what a repeated ask can become as a rule
             return msg, run_id, len(picks)
         return none_message(result, spec, scheduled=(kind == "scheduled"), lang=self._answer_lang()), run_id, 0
 
@@ -1205,6 +1206,8 @@ class ExecutorMixin:
         if spec.content.source == "note":
             from .refresh import reminder_message
             msg, n = reminder_message(spec.content.text) or T.reminder(spec.content.text), 1
+        elif spec.content.source in ("trends", "recap"):   # round 8 (DESIGN.md section 14): no search, no model call
+            msg, n = self.understanding_text(person, spec, kind, rule_id)
         else:
             msg, n = self._todos_text(h)
         run_id = self.store.add_run(handle=h, rule_id=rule_id, kind=kind, at=now_iso(self.clock()), n_candidates=0,
