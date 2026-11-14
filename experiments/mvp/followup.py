@@ -959,7 +959,10 @@ RECAP_ASK = re.compile(_LEAD + r"(?:(?:(?:send|give|show)\s+me\s+)?(?:my|a|the)\
 # the rules ("a recap of my week")
 RECAP_RULE = re.compile(r"\brecaps?\b(?!\s+of\b)|\brecaps?\s+of\s+(?:my|the|this|last)\s+(?:week|rules)\b|"
                         r"\brecaps?\s+of\s+how\s+my\s+rules\b|\bhow\s+my\s+rules\s+(?:did|do|are\s+doing)\b", re.I)
-RECAP_FROM = ("library", "recent")   # a reminder in their own words ("remind me to recap my week") stays theirs
+RECAP_FROM = ("library", "recent")
+# a note form is the recap too ("send me a recap" may come back as a note), unless the message asks to be reminded to
+# do the recapping themselves ("remind me to recap my week in my journal")
+OWN_RECAP = re.compile(r"\bremind\b|\bto\s+recap\b", re.I)
 
 
 def recap_rule(it, text, rules=()):
@@ -976,7 +979,9 @@ def recap_rule(it, text, rules=()):
             it.spec = RuleSpec.model_validate(dict(stored, content=old["content"], do=old.get("do") or stored.get("do")))
         return it
     if it is None or it.intent != "new_rule" or it.spec is None or not RECAP_RULE.search(text or "") \
-            or it.spec.when.type not in ("schedule", "random") or it.spec.content.source not in RECAP_FROM:
+            or it.spec.when.type not in ("schedule", "random") or not (
+                it.spec.content.source in RECAP_FROM
+                or (it.spec.content.source == "note" and not OWN_RECAP.search(text or ""))):
         return it
     stored = it.spec.stored()
     do = [a for a in stored.get("do") or [] if a.get("action") in ("message.send", "email.send")]

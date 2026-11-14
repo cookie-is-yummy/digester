@@ -685,9 +685,10 @@ column).
 ### The recap (BN5, `digest.py`)
 - Never offered at setup and never sent unless asked: on request ("recap", "my week", "how did my rules do",
   `followup.RECAP_ASK`), or as a rule the person makes ("every sunday at 6pm send me a recap": the interpreter's
-  timing, then `followup.recap_rule` sets content source `recap`, only over a `library` or `recent` form and never
-  for "a recap of <posts>" (only "of my week" / "of my rules"), so "remind me to recap my week" stays their own
-  reminder and "a recap of new pasta recipes" stays a search (checker); the preview shows this week's recap and YES starts
+  timing, then `followup.recap_rule` sets content source `recap` over a `library`, `recent` or `note` form, but never
+  for "a recap of <posts>" (only "of my week" / "of my rules") and never when the message asks to be reminded
+  (`OWN_RECAP`: "remind me to recap my week" stays their own reminder; "a recap of new pasta recipes" stays a search;
+  checker); the preview shows this week's recap and YES starts
   it; on a week with nothing it says "There's nothing to report this week yet. On a week like that I send nothing.").
 - The last 7 days, at most 6 lines: "Your recap since Sunday 15 November:", then up to 5 of, by importance: the rules
   (per rule: sent, "stayed quiet twice with nothing new" from run status `empty_quiet` when it exists, skipped, held

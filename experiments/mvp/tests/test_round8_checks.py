@@ -382,6 +382,13 @@ def test_a_recap_of_posts_or_a_reminder_to_recap_is_not_the_recap_rule(env):
     stored = [r["spec"]["content"] for r in env["bot"].store.rules(H)]
     pending = (env["bot"].store.pending(H) or {}).get("payload", {}).get("spec", {}).get("content")
     assert all(c.get("source") == "note" for c in stored + ([pending] if pending else [])) and (stored or pending)
+    # near-variant: the recap asked for as a note form (the model may write it so) is still the recap
+    env["bot"].store.clear_pending(H)
+    msg = say(env, "every sunday at 6pm send me a recap", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["SUN"], "times": ["18:00"]}, "content": {"source": "note",
+                                                                                     "text": "send me a recap"}}})
+    assert "recap like this one" in msg
+    assert env["bot"].store.pending(H)["payload"]["spec"]["content"]["source"] == "recap"
 
 
 def test_my_rules_says_a_trends_rule_sends_with_each_export(lib8):
