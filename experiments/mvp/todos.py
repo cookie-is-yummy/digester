@@ -353,8 +353,10 @@ class TodoMixin:
 
     def _overdue_reply(self, person, text, now):
         """The message right after an overdue nudge: "tomorrow" moves the to-do to tomorrow at its own clock time (its
-        reminder comes again), "drop it" takes it off the list. Any other message ends the question (None)."""
-        from .followup import OVERDUE_DROP, OVERDUE_TOMORROW
+        reminder comes again), "drop it" takes it off the list, and a bare "done" ("did it", "finished") ticks it off
+        (merge of round 8: "done" right after the nudge is about that to-do, not feedback on an older answer). Any
+        other message ends the question (None)."""
+        from .followup import DONE_BARE, OVERDUE_DROP, OVERDUE_TOMORROW
         h = person["handle"]
         st = self.store.get_state(f"overdue:{h}")
         if not st:
@@ -373,6 +375,13 @@ class TodoMixin:
                                    "overdue_at": t.get("overdue_at")}]})
             self.store.update_todo(t["id"], due_at=now_iso(new), reminded_at=None, overdue_at=None)
             return self.send(h, T.overdue_moved(t["text"], say_time(new, now, person["timezone"])))
+        if DONE_BARE.match(text) and not self.store.one(
+                "SELECT id FROM runs WHERE handle=? AND kind='scheduled' AND status IN ('sent','unknown') AND at>? "
+                "LIMIT 1", (h, st["at"])):   # a timed send after the nudge: "done" may be about that one
+            self.note(intent="todo_done")
+            self.store.update_todo(t["id"], done_at=now_iso(now))
+            self._wrote(h, "todo_done", f"ticked off \"{t['text']}\"", {"ids": [t["id"]], "col": "done_at"})
+            return self.send(h, T.todos_done([t["text"]], len(self.store.todos(h))))
         if OVERDUE_DROP.match(text):
             self.note(intent="todo_remove")
             self.store.update_todo(t["id"], removed_at=now_iso(now))

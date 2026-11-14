@@ -224,6 +224,9 @@ class DigestMixin:
                     self.store.set_state(f"{key}:{h}", None)
                 return True, self._suggest_preview(person, sug, now)
         if RECAP_ASK.match(text):
+            # merge of round 8: the recap is "anything else", so it ends the theme check and the "every export" offer
+            for key in ("themecheck", "trendsoffer"):
+                self.store.set_state(f"{key}:{h}", None)
             return True, self._recap_answer(person, now)
         return self._attention_reads(person, text, now)
 

@@ -519,6 +519,24 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
 
 ## 13. Rules beyond timing (round 8, slice B, 14 Nov 2026)
 
+How sections 13 to 15 map to the vision (docs/00). **Control** (rules in plain words) is section 13: rules that act
+on a thing's own date, stay quiet when there is nothing, run until the person says done, and nudge once about a
+to-do left past due. **Action** is section 13's reminders and calendar entry plus section 15's export of the lists to
+a to-do app, the message to forward ("share it with the right person", want 5) and the read-only agent access (MCP,
+the paid core). **Understanding** is section 14: what is rising or fading, compared with what they said they want.
+Of the core loop's six steps: step 3 (theme check) is built as one question after the first trends answer, not a
+screen; step 5 (requests and rules) gains the forms above; step 6 (digest) is the recap and its one suggested rule,
+sent only when asked or as a rule they made. Not built: step 1's guided export download and step 2's first report
+after an import (only "what have I been into lately" and "every export"); step 4's live capture (a DM share, a link
+texted to the bot, a YouTube capture playlist); email-in and webhooks to task apps, a calendar feed or reading a
+calendar; MCP writes and a hosted MCP server. Where the three slices meet (merge of 14 Nov): the recap counts quiet
+empty days, past-due to-dos the nudge marked and reminders counted back from a thing's date under "Coming up"; a
+"someday" or "not me" label keeps a topic out of the recap's suggestion; the agent's `what_i_am_into` is the chat's
+trends answer; the export's `profile.json` has every label (the "not me" topics under `not_me`); "delete my data"
+removes the labels, the nudge state, the deadline records, the export folders and the agent's log rows; a bare
+"done" right after a nudge ticks that to-do off (unless a timed send came after the nudge); "recap" ends an open
+theme check and the "every export" offer like any other message. Tests: `tests/test_round8_merge.py`.
+
 The founder's 12 and 13 Nov asks ("not always about timing", "reminders for todos and more", "tie everything back to
 the vision"): act on a thing at the moment it matters, and control over what rules send. Where this section and an
 earlier one differ, this section wins. No interpreter prompt change and no model call in any path below; new fields
@@ -586,7 +604,9 @@ are optional and a stored spec without them reads as before.
   it counts as a timed send of the day (run kind `todo`). A reminder that was missed while the bot was off (its notice
   said it is still listed) gets no nudge.
 - The next message only: "tomorrow" moves it to tomorrow at its own clock time and clears its reminder and nudge (it
-  is reminded again, and nudged once again only if that day passes too); "drop it" removes it. Both can be undone.
+  is reminded again, and nudged once again only if that day passes too); "drop it" removes it; a bare "done" ("did
+  it", "finished": `followup.DONE_BARE`) ticks it off, unless a timed send came after the nudge (merge of round 8).
+  Each can be undone.
 - "no overdue nudges" sets `prefs.overdue_nudges` false; "overdue nudges on" sets it back.
 - Out: rate limits, reaction, idle and count triggers, per-rule back-off, calendar conditions.
 

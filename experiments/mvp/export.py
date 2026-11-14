@@ -34,7 +34,8 @@ todos.csv     Your to-dos as a table a to-do app can import: title, due date, no
               it is not your main list), done.
 todos.md      The same lists, to read or paste into a notes app.
 profile.json  What the bot knows about you: interests and levels, what you're working toward, preferences, email,
-              time zone and quiet hours, and things you told it.
+              time zone and quiet hours, and things you told it. What each topic is to you, when you said it ("for
+              fun", "someday" ...), is with that topic; the topics you said are not you are listed under "not_me".
 answers.md    Every answer the bot kept for you, as you were shown it, with its links.
 saves.csv     Every post you kept that the bot can see (your own saves, likes, playlists and watches): its id, link,
               platform, the date you kept it and how. No post text, and never your friends' posts.
@@ -113,8 +114,14 @@ def rules_json(store, handle):
 
 
 def profile_json(store, handle):
+    """profile.get, plus the topics the person said are not them (merge of round 8: profile.get leaves those markers
+    out, so the theme check's labels would otherwise be lost from the export). The other labels ride on each interest
+    as `relation` and `relation_at`."""
     from . import profile as P
-    return json.dumps(P.get(store, handle), ensure_ascii=False, indent=1, default=str)
+    prof = P.get(store, handle)
+    prof["not_me"] = [{"topic": i["topic"], "relation_at": i.get("relation_at")}
+                      for i in P.not_me_markers(store, handle)]
+    return json.dumps(prof, ensure_ascii=False, indent=1, default=str)
 
 
 def answers_md(store, handle, tz):
