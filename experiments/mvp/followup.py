@@ -408,6 +408,18 @@ def without_until_done(text):
     return " ".join(UNTIL_DONE.sub(" ", text or "").split()).strip(" ,.")
 
 
+def for_interpreter(text):
+    """Checker, round 8 (live, 14 Nov): the message as the model reads it. "Until I've done it" is read by code after
+    the model (handler._rule_words), and the model asked a question instead of making the reminder when it saw those
+    words, so it never sees them ("until Friday, or until I've done it" keeps "until Friday"). Any other message is
+    unchanged."""
+    if not until_done(text):
+        return text
+    t = without_until_done(text)
+    t = re.sub(r"(?:,\s*|\s+)(?:or|and)\s*$", "", t, flags=re.I).strip(" ,.")
+    return t or text
+
+
 DONE_BARE = re.compile(r"^\W*(?:(?:ok(?:ay)?|yes|yep|yay|so)[\s,!.]+)?(?:all\s+)?(?:done|did it|i did it|done it|"
                        r"i'?ve done it|i have done it|it'?s done|applied|i applied|i'?ve applied|i have applied|finished|"
                        r"i finished|i'?m done|ticked it off|i ticked it off)(?:\s+(?:now|today|already))?\W*$", re.I)

@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from . import config
 from . import profile as P
 from . import texts as T
-from .followup import recap_rule
+from .followup import for_interpreter, recap_rule
 from .interpret import change_guard, chat_guard, interpret, names_rule, profile_guard
 from .llm import budget_stop
 from .schedule import describe, next_run, resolve_until, say_time, t12
@@ -236,7 +236,7 @@ class HandlerMixin:
         try:
             it, _ = interpret(text, person, rules, pending, last, now, todos=self.store.todos(handle),
                               last_write=self._last_write_ctx(handle, now), about=P.about_lines(self.store, handle, text),
-                              store=self.store)
+                              store=self.store, shown=for_interpreter(text))
             # fix pass 4 (findings 74 to 76, 82): only what the message (or the profile, for its own topic) supports
             it = profile_guard(it, text, P.get(self.store, handle), pending, rules)
             # fix pass 6, finding 89: a change lands only on what the message names (a waiting preview, else the rule)

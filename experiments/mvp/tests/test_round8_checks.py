@@ -208,3 +208,46 @@ def test_one_marked_line_or_a_quote_bracket_or_dots_is_not_a_list():
     assert list_score("My stack 👇\n🎨 Figma\n⚡ Framer\n🌐 Webflow") >= 3
     assert list_score("Top tools\n1️⃣ Notion\n2️⃣ Linear\n3️⃣ Raycast") >= 3
     assert list_score("Figma\nFramer\nWebflow\nSpline") >= 1
+
+
+# ---------- live, 14 Nov: the two phrasings the model did not take ----------
+def test_what_are_some_kind_of_thing_read_as_small_talk_is_an_ask():
+    """Live: "what are some uiux libraries i should use for my next project" came back as chat (no search word)."""
+    from mvp.interpret import chat_guard
+    from mvp.schema import Interpretation
+
+    def guard(t):
+        return chat_guard(Interpretation(intent="chat", reply="x"), t)
+    got = guard("what are some uiux libraries i should use for my next project")
+    assert got.intent == "ask" and got.spec.content.goal == "some uiux libraries i should use for my next project"
+    for ask in ("What are some UI/UX libraries", "what are the best tools for designers",
+                "which ui library should i use for a dashboard", "suggest some productivity apps for me"):
+        assert guard(ask).intent == "ask", ask
+    # near-variants that stay small talk: a question about a pick, about the bot, or not a kind of thing
+    for chat in ("which one should i pick", "which of these should i try first", "what are some things you can do",
+                 "can you recommend some fonts for my site", "what is the best way to share my saves"):
+        assert guard(chat).intent == "chat", chat
+
+
+def test_until_ive_done_it_never_reaches_the_model_and_code_still_sets_it(env):
+    """Live: with "until I've done it" in the message the model asked a question instead of making the reminder."""
+    from mvp.followup import for_interpreter
+    assert for_interpreter("remind me every morning at 8 to apply to the internship until I've done it") == \
+        "remind me every morning at 8 to apply to the internship"
+    assert for_interpreter("remind me daily to send the form until Friday, or until I've done it") == \
+        "remind me daily to send the form until Friday"
+    assert for_interpreter("every evening remind me to call the bank till I tick it off.") == \
+        "every evening remind me to call the bank"
+    for same in ("remind me every morning to stretch", "until further notice send me a recipe", "done"):
+        assert for_interpreter(same) == same
+    seen = []
+
+    def model(user):
+        seen.append(user)
+        return {"intent": "new_rule", "spec": {"when": {"type": "schedule", "days": ["MON", "TUE", "WED", "THU", "FRI",
+                                                                                   "SAT", "SUN"], "time": "08:00"},
+                                               "content": {"source": "note", "text": "apply to the internship"}}}
+    msg = say(env, "remind me every morning at 8 to apply to the internship until I've done it", model)
+    assert seen and "until I've done it" not in seen[-1] and "apply to the internship" in seen[-1]
+    w = spec_of(rules(env["bot"])[-1])["when"]
+    assert w["stop_when"] == "done" and "until" not in w and "until you say done" in msg

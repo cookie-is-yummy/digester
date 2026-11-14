@@ -1732,6 +1732,11 @@ RULE_WORDS = re.compile(r"\b(?:every|each|daily|weekly|monthly|remind\w*|schedul
                         r"(?:mon|tues|wednes|thurs|fri|satur|sun)days?|weekdays?|weekends?)\b", re.I)
 CHAT_KINDS = re.compile(r"\b(?:recipes?|tutorials?|videos?|reels?|posts?|workouts?|routines?|guides?|lessons?)\b", re.I)
 SEARCH_VERB = re.compile(r"\b(?:find|show|send|any|other|more)\b", re.I)
+# checker, round 8 (live, 14 Nov: "what are some uiux libraries i should use for my next project" was read as small
+# talk): a question that asks for some of a kind of thing asks as plainly as a search word does
+ASK_FOR_SOME = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which)\s+(?:are|were|is)\s+(?:some|a few|"
+                          r"the best|the top|good|great|the)\b|^\W*which\s+(?!ones?\b|of\b)\w+(?:\s+\w+)?\s+(?:should|can|could|do)\s+i\b|"
+                          r"\b(?:recommend|suggest)\b", re.I)
 QUESTION_HEAD = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which|where|are there|is there|can you|"
                            r"could you|would you|will you|do you have|got)\b\s*", re.I)
 # checker, round 8: a question about the app, the person's data or how things work is never a search, though it
@@ -1747,7 +1752,7 @@ NOT_A_REQUEST = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+|ugh)[,\s]+)*(?:h
 SOMETHING = re.compile(r"\b(?:anything|something|stuff|saved (?:about|on|for))\b", re.I)
 # the message asks (a question, or it starts the way a request does), never a statement ("I saved so many reels")
 ASKS = re.compile(r"\?\s*$|^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which|any|are there|is there|did i|do i|"
-                  r"have i|show|find|send|give|get|list)\b", re.I)
+                  r"have i|show|find|send|give|get|list|suggest|recommend)\b", re.I)
 
 
 def chat_guard(it: Interpretation, message):
@@ -1765,10 +1770,14 @@ def chat_guard(it: Interpretation, message):
     # checker, round 8: never a question about the app or the person's data, a how or why question, or a statement
     if ABOUT_APP.search(t) or NOT_A_REQUEST.search(t) or not (ASKS.search(t) or SEARCH_VERB.search(t)):
         return it
-    kind = THINGS.search(t) or CHAT_KINDS.search(t)
-    if not ((OWN_SAVES.search(t) and (kind or SOMETHING.search(t))) or (kind and SEARCH_VERB.search(t))):
+    # a kind of thing named (THINGS' own "which <word> should" is a question about a pick: "which one should i pick")
+    kind = any(not m.group(0).lower().startswith(("which", "what do i know")) for m in THINGS.finditer(t)) or \
+        CHAT_KINDS.search(t)
+    if not ((OWN_SAVES.search(t) and (kind or SOMETHING.search(t))) or
+            (kind and (SEARCH_VERB.search(t) or ASK_FOR_SOME.search(t)))):
         return it
     goal = QUESTION_HEAD.sub("", t)
+    goal = re.sub(r"^(?:are|is|were)\s+(?:there\s+)?", "", goal, flags=re.I)   # "what are some ..." asks "some ..."
     goal = re.sub(r"\b(might|may|could|did|do|have) i\b", lambda m: "i " + m.group(1), goal, flags=re.I)
     goal = goal.strip(" ?!.") or t
     try:
@@ -1819,8 +1828,10 @@ def change_guard(it: Interpretation, message, pending=None, rules=()):
 
 
 # ---------- one message ----------
-def interpret(text, person, rules, pending, last, now, todos=(), last_write=None, about=(), store=None):
-    """Returns (Interpretation, cost_usd). With `store`, the same request reuses the same interpretation (6 hours)."""
+def interpret(text, person, rules, pending, last, now, todos=(), last_write=None, about=(), store=None, shown=None):
+    """Returns (Interpretation, cost_usd). With `store`, the same request reuses the same interpretation (6 hours).
+    shown: the message as the model reads it, when code reads some of its words itself (checker, round 8:
+    followup.for_interpreter); every check of the form is made against the whole message."""
     key = cache_key(text, person, rules, pending, now, todos, about, last_write)
     free_key = cache_key(text, person, rules, pending, now, todos, about, last_write, with_rules=False)
     for k, need_free in ((free_key, True), (key, False)):
@@ -1837,7 +1848,7 @@ def interpret(text, person, rules, pending, last, now, todos=(), last_write=None
         except ValidationError:
             pass   # a form that no longer validates (the rules changed under it) is asked for again
     user = _context(person, rules, pending, last, now, todos, last_write, about) + \
-        "\n\nTheir message:\n" + text.strip()[:1000]
+        "\n\nTheir message:\n" + (shown or text).strip()[:1000]
     cost = 0.0
     err = None
     for attempt in range(2):
