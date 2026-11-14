@@ -569,3 +569,28 @@ def test_92_a_change_with_nothing_left_says_so_and_never_shows_a_rejected_pick(b
     assert msg.startswith("I found nothing else in your saves for basic Blender tutorials, leaving out anything "
                           "about donut, basics, island and sword.")
     assert "youtube.com" not in msg and "I recommend" not in msg
+
+
+# ---------- the short opening line, and dates in timed sends ----------
+def test_round7_the_fallback_opening_line_never_echoes_a_long_request(opp):
+    opp["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Summer research", title="Summer research")]}
+    long_goal = "startup motivation related reels, opportunities to pursue soon, or things with deadlines"
+    msg = say(opp, "send me " + long_goal, ask(long_goal))
+    assert msg.startswith("Here's what I found in your saves.\n") and long_goal not in msg
+    msg = say(opp, "research programs", ask("research programs"))
+    assert msg.startswith("Here's what I found in your saves for research programs.")
+
+
+def test_91_a_rules_timed_send_never_leads_with_a_passed_deadline(opp):
+    bot, clock = opp["bot"], opp["clock"]
+
+    def compose(u):
+        return {"picks": [pick(u, k, title=k) for k in ("Design award", "Summer research") if k in u][:1] +
+                [pick(u, k, title=k) for k in ("Design award", "Summer research") if k in u][1:2]}
+    opp["state"]["answers"]["mvp_compose"] = compose
+    say(opp, "every friday send me opportunities with deadlines", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["FRI"], "time": "19:00"},
+        "content": {"goal": "opportunities with deadlines", "searches": ["opportunities"], "count": 1}}})
+    preview = last(opp["ch"])
+    assert "Summer research" in preview and "Design award" not in preview
+    assert "Deadline 1 December (in 19 days)." in preview

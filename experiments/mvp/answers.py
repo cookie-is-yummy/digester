@@ -53,7 +53,16 @@ def post_dates(result, extra, today, ts, year=None):
             p["year_hit"] = year_hit(own, p["posted"], year)
     if not ts or not allp:
         return
-    n_picks = len(result.get("picks") or [])
+    n_picks, n_wide = len(result.get("picks") or []), len(result.get("wider") or [])
+    for p in result.get("spare") or []:   # clear fits past the count: one may take a passed pick's place
+        if all(p is not q for q in allp):
+            it = p["item"]
+            p["posted"], p["kept_first"] = D.posted_on(it, extra), D.first_kept(it)
+            p["age_from"], p["today"] = p["posted"] or p["kept_first"], today
+            own = own_text(it, extra)
+            p["date_state"] = D.state_of(own, p["posted"], p["kept_first"], today, own=own)
+            p["year_hit"] = year_hit(own, p["posted"], year)
+            allp.append(p)
     passed = [p for p in allp if (p.get("date_state") or {}).get("state") == "passed"]
     live = [p for p in allp if p not in passed]
     if live and passed:   # never the lead and never an alternative while anything not passed fits
@@ -66,7 +75,8 @@ def post_dates(result, extra, today, ts, year=None):
     order = sorted(allp, key=rank)
     if order and allp and order[0] is not allp[0]:
         result.setdefault("dropped", {})["date_reorder"] = 1
-    result["picks"], result["wider"] = order[:max(1, n_picks)], order[max(1, n_picks):]
+    n_picks = max(1, n_picks)
+    result["picks"], result["wider"] = order[:n_picks], order[n_picks:n_picks + n_wide]
 
 
 def item_state(x, p, extra, today):

@@ -706,6 +706,7 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
         more = rest[count - 1:]
         wide = more[:config.WIDER_MAX] if wider else []
         dropped["over_count"] += len(more) - len(wide)
+        spare = more[len(wide):]   # round 7: clear fits past the count, for the date order of a time-sensitive request
         if len(picks) < count and close:
             # fix pass 5, finding 84 (3): fewer clear fits than asked for: close ones fill the places left, after the
             # clear ones and under their own heading (render), never as the lead; a pick with any "no" is never here
@@ -716,10 +717,13 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
     elif close:   # finding 17: up to the number asked for, all shown as the closest
         picks, wide, closest = close[:count], [], True
         dropped["over_count"] += len(close) - len(picks)
+        spare = close[count:]
     elif fallback:   # finding 26: nothing leads to a finished result; the closest tips, said plainly
         picks, wide, closest = fallback[:1], [], True
     else:
         picks, wide, closest = [], [], False
+    if not clear and not close:
+        spare = []
     shown = picks + wide
     unknown = [cr for i, cr in enumerate(c.criteria) if shown and all(p["criteria"][i] == "unknown" for p in shown)]
     missing = [(cr, picks[0]["criteria"][i]) for i, cr in enumerate(c.criteria)
@@ -739,4 +743,5 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
             "intro": intro, "none_reason": "", "dropped": dropped, "level_used": level_used,
             "n_clear": len(clear), "n_close": len(close), "max_minutes": max_minutes,
             "from_fallback": bool(picks) and not clear and not close,
-            "returned": returned}   # fix pass 5, finding 84 (2): every candidate the composer gave a verdict for
+            "returned": returned,   # fix pass 5, finding 84 (2): every candidate the composer gave a verdict for
+            "spare": spare}
