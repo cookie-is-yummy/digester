@@ -359,14 +359,196 @@ def usable(facts):
     return out
 
 
-def details(it, extract, library, store=None, person=None, extra=None, now=None, context=None):
+def details(it, extract, library, store=None, person=None, extra=None, now=None, context=None, once=False):
     """({kind: lines}, info) for one item, as they may be shown (usable). context: the request, the lines about the
-    person and today's date, for the items kind (round 7)."""
-    facts, info = _details(it, extract, library, store=store, person=person, extra=extra, now=now, context=context)
-    return usable(facts), info
+    person and today's date, for the items kind (round 7). Round 8, finding 93: the items as they may be shown
+    (clean_items), also when they were read from the cache of an earlier prompt."""
+    facts, info = _details(it, extract, library, store=store, person=person, extra=extra, now=now, context=context,
+                           once=once)
+    facts = usable(facts)
+    if facts.get("items"):
+        facts["items"], n = clean_items(facts["items"], it, extra, facts.get("key_points"))
+        if n:
+            info["junk_items"] = info.get("junk_items", 0) + n
+    return facts, info
 
 
-def _details(it, extract, library, store=None, person=None, extra=None, now=None, context=None):
+# ---------- round 8, finding 93: what an item is (a specific named thing), enforced where code can ----------
+# a determiner or an adjective before a name that makes it a common noun ("a list of the some best design systems")
+DETERMINERS = set("""a an the some any best right top these those this that your my our their every each such many
+most good great new other perfect ultimate essential favorite favourite cool useful amazing""".split())
+# words that never make a name on their own: kinds of thing, audiences, counts and the words around them
+GENERIC = set("""tool tools library libraries resource resources site sites website websites app apps program programs
+programme programmes opportunity opportunities internship internships scholarship scholarships fellowship fellowships
+grant grants event events course courses class classes book books template templates kit kits framework frameworks
+platform platforms system systems design designs ui ux component components font fonts icon icons idea ideas tip tips
+project projects list lists thing things stuff way ways place places spot spots restaurant restaurants cafe cafes recipe
+recipes deadline deadlines application applications job jobs plugin plugins extension extensions channel channels podcast
+podcasts newsletter newsletters product products brand brands shop shops store stores competition competitions hackathon
+hackathons award awards summer winter spring fall autumn guide guides video videos post posts reel reels series part
+student students underclassmen upperclassmen freshmen freshman sophomores sophomore juniors seniors beginners beginner
+designers designer developers developer devs founders founder creators creator entrepreneurs everyone anyone women men
+kids teens grads graduates people you free best top new great good cool useful amazing essential must have paid online
+open source high quality cheap premium popular favorite favourite ultimate perfect awesome""".split())
+NAME_STOP = set("""a an and the of for to in on with my your our this that is it at by from or as be are was were has have
+its it's so if but not no all any some these those them they we you i me us very just more most much also too here there
+one get got can will""".split())
+
+
+def _occurrences(name, text):
+    """(matched span, the word before it, the characters around it) for each place the name occurs in the text, its
+    words in order (case, and punctuation between them, ignored)."""
+    words = re.findall(r"[^\W_]+", name)
+    if not words:
+        return []
+    pat = r"(?<![^\W_])" + r"[\W_]{1,3}".join(re.escape(w) for w in words) + r"(?![^\W_])"
+    out = []
+    for m in re.finditer(pat, text, re.I):
+        before = re.findall(r"[^\W_']+", text[max(0, m.start() - 40):m.start()])
+        out.append((m.group(0), before[-1].lower() if before else "",
+                    text[max(0, m.start() - 1):m.start()], text[m.end():m.end() + 2]))
+    return out
+
+
+def _mostly_caps(text):
+    letters = [ch for ch in text if ch.isalpha()]
+    return bool(letters) and sum(ch.isupper() for ch in letters) >= 0.8 * len(letters)
+
+
+def generic_name(name):
+    """A name made only of kinds of thing, audiences, counts and small words ("design systems", "underclassmen", "5
+    tools", "FREE PROGRAMS FOR STUDENTS"): never a specific thing."""
+    ws = [w.lower() for w in re.findall(r"[^\W_]+", name)]
+    return bool(ws) and all(w in GENERIC or w in NAME_STOP or w.isdigit() for w in ws)
+
+
+def common_noun(name, text):
+    """True when the name, everywhere it occurs, is used as a common noun: all lower case after a determiner or an
+    adjective ("the best design systems"), or all lower case with no digit, dot, @ or capital anywhere it occurs; or
+    ending in two lower-case kind words after one ("the right Figma design system"). Text in capitals throughout cannot
+    use the capital test (the other tests still apply)."""
+    occ = _occurrences(name, text)
+    if not occ:
+        return False
+    caps = _mostly_caps(text)
+
+    def common(span, prev, left, right):
+        site = left == "@" or bool(re.match(r"\.[A-Za-z]", right))
+        lower = not re.search(r"[A-Z\d.]", span) and not site
+        if not caps and lower:
+            return True
+        tail = re.findall(r"[^\W_]+", span)[-2:]
+        return prev in DETERMINERS and len(re.findall(r"[^\W_]+", span)) >= 3 and \
+            all(w.islower() and w in GENERIC for w in tail)
+    return all(common(*o) for o in occ)
+
+
+def _content(words, skip=()):
+    return [w for w in words if w not in NAME_STOP and w not in skip and not w.isdigit()]
+
+
+def headline_of(it):
+    """The post's headline: its first line, without a leading count or list mark."""
+    line = re.sub(r"^[\W\d_]+", "", getattr(it, "first_line", "") or "")
+    return line
+
+
+def restates_headline(name, about, it):
+    """The name is the post's headline (give or take case and a leading count) and its words say it again (a post
+    about one thing may well open with its name: with no words of its own it is not this test's to drop)."""
+    head = tokens(headline_of(it))
+    na = [t for t in tokens(name) if not t.isdigit()]
+    if not about or not head or not na or na != [t for t in head if not t.isdigit()][:len(na)] or len(na) < len(head) - 1:
+        return False
+    rest = _content(tokens(about or ""), skip=set(head))
+    return len(rest) < 3
+
+
+def own_line_words(name, about, text):
+    """The words are the rest of the thing's own list line ("- Iconoir: free icons", "2. Lucide - clean icons")."""
+    na, ab = tokens(name), tokens(about or "")
+    for line in (text or "").splitlines():
+        m = re.match(r"^\W*(?:\d{1,2}\s*[.)]\s*)?(.+?)\s*(?::|\s[-–—]\s)\s*(.+)$", line.strip())
+        if m and tokens(m.group(1)) == na and tokens(m.group(2))[:len(ab)] == ab:
+            return True
+    return False
+
+
+def thin_about(name, about, text=""):
+    """The words add nothing to the name: fewer than 3 content words once the name's words are left out. (Judgement,
+    round 8: the rest of the thing's own list line is its words when it holds one content word or more: "Iconoir:
+    free icons" is a list's own description, "underclassmen: for underclassmen" is not.)"""
+    n = len(_content(tokens(about or ""), skip=set(tokens(name))))
+    return n < 3 and not (n >= 1 and own_line_words(name, about, text))
+
+
+# "1 YC application. 0 startup experience. 4 hours before the deadline." is a story, not what the thing is
+STORY = re.compile(r"(?:^|(?<=[.!?])\s+)\d+\s+(?:\S+\s+){0,5}?\S+[.!?]")
+
+
+def story_about(about):
+    return len(STORY.findall(about or "")) >= 2
+
+
+def clean_items(items, it, extra=None, key_points=None):
+    """(items, dropped): the items as they may be shown (round 8, finding 93). A name that is a kind of thing, an
+    audience, a count, a common noun or the post's headline is dropped; words that add nothing to the name, or tell a
+    story, are not words about it. A post about one thing (one item left, key points found) gives that thing its best
+    one or two key points as its words. A post that names other things drops a thing with no words."""
+    text = own_text_lines(it, extra)
+    kept, dropped = [], 0
+    for x in items or []:
+        name, about = x.get("name") or "", x.get("about") or ""
+        if generic_name(name) or common_noun(name, text) or restates_headline(name, about, it):
+            dropped += 1
+            continue
+        x = dict(x)
+        if about and (thin_about(name, about, text) or story_about(about)):
+            x["about"] = ""
+        kept.append(x)
+    keys = [k for k in key_points or [] if k and not story_about(k)]
+    if len(kept) == 1 and keys and not kept[0]["about"]:
+        kept[0]["about"] = "; ".join(str(k).rstrip(" .;") for k in keys[:2])
+        kept[0]["from_key_points"] = True
+    if len(items or []) > 1:   # the post names other things: a thing with no words is not shown
+        n = len(kept)
+        kept = [x for x in kept if x.get("about")]
+        dropped += n - len(kept)
+    return kept, dropped
+
+
+# ---------- round 8, finding 94: does a post's text list named things? (a code score, on its own text) ----------
+_BULLET = re.compile(r"^\s*(?:\d{1,2}\s*[.)\-:]|\d️?⃣|[-*•·▪◦➤►▶→⇒➜➡✅✔☑🔸🔹⭐👉]|[^\w\s#@])\s*\S", re.U)
+_NAMED = re.compile(r"^\s*(?:\d{1,2}\s*[.)\-:]\s*)?\W*\s*([A-Z][\w.'&+-]*(?:\s+[A-Z0-9][\w.'&+-]*){0,3})\s*(?::|\s[-–—]\s)\s*\S")
+_URL = re.compile(r"(?:https?://|www\.)\S+|\b[\w-]+\.(?:com|net|org|io|co|app|design|dev|ai|so)\b", re.I)
+
+
+def list_score(raw):
+    """How much a text looks like it lists named things: lines that start with a number, a bullet, a dash, an emoji or
+    an arrow; @handles; web addresses; "Name: words" or "Name - words" lines; capitalised names that start several
+    lines. 0 for a text that lists nothing."""
+    lines = [x for x in (raw or "").splitlines() if x.strip()]
+    score = sum(1 for x in lines if _BULLET.match(x))
+    score += len(re.findall(r"(?<![\w@])@[A-Za-z0-9_.]{2,}", raw or ""))
+    score += len(_URL.findall(raw or ""))
+    score += sum(1 for x in lines if _NAMED.match(x))
+    firsts = [m.group(1) for m in (re.match(r"^\W*([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)", x) for x in lines[1:]) if m]
+    score += max(0, len(set(firsts)) - 2) if len(firsts) >= 3 else 0
+    return score
+
+
+# finding 93, rule 5: a title or first line that promises a list ("5 free programs", "best design systems")
+_KINDS = "|".join(sorted({w for w in GENERIC if w.endswith("s") and len(w) > 3}, key=len, reverse=True))
+PROMISES = re.compile(rf"^\W*(?:\d+|three|four|five|six|seven|eight|nine|ten)\s+(?:[\w/-]+\s+){{0,3}}?(?:{_KINDS})\b|"
+                      rf"\b(?:best|top)\s+(?:\d+\s+)?(?:[\w/-]+\s+){{0,3}}?(?:{_KINDS})\b|\b(?:a|my|the) list of\b",
+                      re.I)
+
+
+def promises_list(*lines):
+    return any(PROMISES.search(x or "") for x in lines)
+
+
+def _details(it, extract, library, store=None, person=None, extra=None, now=None, context=None, once=False):
     """({kind: lines}, info) for one item. info: cost, calls, dropped, cached (kinds read from the cache), errors. On a
     failed call the kinds not read are left out (nothing is cached, and nothing is said about them). "items" are
     objects ({name, about, when, fit}), cached per request (items_cache_kind)."""
@@ -416,7 +598,8 @@ def _details(it, extract, library, store=None, person=None, extra=None, now=None
         ask = [k for k in ask if not got[k]]
         if got.get("items"):   # round 7: the named things were read; their key points are not worth a second call
             ask = [k for k in ask if k != "key_points"]
-        if not ask or not list_like(full):   # retry only when the text looks like it holds a list
+        if not ask or not list_like(full) or once:   # retry only when the text looks like it holds a list (round 8:
+            # never for a post read beyond the shown picks, finding 94)
             break
         note = ("Your last lines were not exact copies of the text. Copy the words exactly as written."
                 if returned_any else "Look again: the text seems to hold a list.")
@@ -428,20 +611,23 @@ def _details(it, extract, library, store=None, person=None, extra=None, now=None
     return {k: (have.get(k) if k in have else got[k]) for k in kinds}, info
 
 
-def details_many(items, extract, library, store=None, person=None, extra=None, now=None, workers=4, context=None):
+def details_many(items, extract, library, store=None, person=None, extra=None, now=None, workers=4, context=None,
+                 once=()):
     """details() for several picked items at once (the calls run in parallel). Returns ({item_id: {kind: lines}},
-    info summed)."""
-    total = {"cost": 0.0, "calls": 0, "dropped": 0, "cached": 0, "errors": 0}
+    info summed). once: ids read with one call and no retry (round 8, finding 94)."""
+    total = {"cost": 0.0, "calls": 0, "dropped": 0, "cached": 0, "errors": 0, "junk_items": 0}
     if not items or not kinds_for(extract):
         return {}, total
+    once = set(once or ())
     if len(items) == 1:
-        res = [details(items[0], extract, library, store, person, extra, now, context)]
+        res = [details(items[0], extract, library, store, person, extra, now, context, once=items[0].id in once)]
     else:
-        with ThreadPoolExecutor(max_workers=min(workers, len(items))) as ex:
-            res = list(ex.map(lambda it: details(it, extract, library, store, person, extra, now, context), items))
+        with ThreadPoolExecutor(max_workers=min(max(workers, 6), len(items))) as ex:
+            res = list(ex.map(lambda it: details(it, extract, library, store, person, extra, now, context,
+                                                 once=it.id in once), items))
     out = {}
     for it, (facts, info) in zip(items, res):
         out[it.id] = facts
         for k in total:
-            total[k] += info[k]
+            total[k] += info.get(k, 0)
     return out, total

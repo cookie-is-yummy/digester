@@ -189,7 +189,7 @@ def test_details_are_extracted_once_checked_and_cached(env):
     rows = env["bot"].store.q("SELECT kind, lines, attempts, prompt_version FROM facts ORDER BY kind")
     assert [(r["kind"], json.loads(r["lines"]), r["attempts"]) for r in rows] == [
         ("ingredients", ["200g spaghetti", "2 lemons"], 1), ("steps", [], 2)]
-    assert rows[0]["prompt_version"] in ("extract_v1", "extract_v2")   # round 7: v2 adds the items kind
+    assert rows[0]["prompt_version"] in ("extract_v1", "extract_v2", "extract_v3")   # v2 items; v3 round 8
     st["answers"]["mvp_extract"] = lambda u: pytest.fail("cached details are reused")
     msg = compose_once(env, pick, extract=["ingredients", "steps"])
     assert "Ingredients (2):" in msg and calls.count("mvp_extract") == first

@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from . import config, llm
 from . import texts as T
 from .channels.base import SendUncertain
-from .compose import FINISHED, collapse_copies, compose, duration_of, own_text, written_details
+from .compose import FINISHED, collapse_copies, compose, duration_of, own_text, own_text_lines, written_details
 from .dates import stale
 from .extract import default_extract, default_fits, details_many, fit_extract, items_default, kinds_for, topic_kind
 from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
@@ -516,8 +516,12 @@ class ExecutorMixin:
                     result["picks"], result["wider"] = both[:len(main)], both[len(main):]
                     main = result["picks"]
             if main and kinds_for(extract):
-                if items_mode:   # round 7: the named things on the top picks (up to 3), in parallel
-                    targets = list({id(p): p for p in main + (result.get("wider") or [])}.values())[:3]
+                if items_mode:   # round 8, finding 94: the shown picks, then posts whose text lists named things
+                    from .extract import asks_for_things
+                    targets = self._items_reads(result, cands, extra, spec, today, ts, year, things=asks_for_things(
+                        request_text or "", spec.content.goal or "", *spec.content.searches),
+                        texts=[request_text or "", hint, spec.content.goal or ""])
+                    steps["items_reads"] = len(targets)
                 elif not asked:   # finding 28: details nobody named, for the recommended pick only
                     targets = main[:1]
                 elif result.get("closest"):
@@ -526,6 +530,7 @@ class ExecutorMixin:
                     targets = list({id(p): p for p in main + (result.get("wider") or [])}.values())[:max(3, len(main))]
                 facts, info = details_many([p["item"] for p in targets], extract, view.lib, store=self.store,
                                            person=h, extra=extra, now=now,
+                                           once={p["item"].id for p in targets if p.get("read_for_items")},
                                            context={"request": request_text or spec.content.goal or "",
                                                     "about": about, "today": today.isoformat()})
                 cost += info["cost"]
@@ -548,6 +553,8 @@ class ExecutorMixin:
                         both.insert(0, best)
                         result["picks"], result["wider"] = both[:len(main)], both[len(main):]
                 steps["extract"], steps["extract_calls"] = round(time.time() - t1, 2), info["calls"]
+                if info.get("junk_items"):   # round 8, finding 93: things code left out (a kind, a headline ...)
+                    result["dropped"]["junk_items"] = info["junk_items"]
                 if info.get("errors"):   # a failed details call: the answer goes out without those details
                     steps["extract_errors"] = info["errors"]
             if main and kind != "follow_up":   # fix pass 4, finding 80: a whole recipe written out is a finished result
@@ -608,14 +615,17 @@ class ExecutorMixin:
                 # round 7, finding 90: two or more named things over the shown picks make the answer those things,
                 # each under its post (decided here, from what the details step read)
                 from .answers import choose_items
+                from .extract import asks_for_things
+                things = asks_for_things(request_text or "", spec.content.goal or "", *spec.content.searches)
                 result["items_answer"] = choose_items(result, extra, today, ts, year,
-                                                      notes=not self._answer_lang())
+                                                      notes=not self._answer_lang(), things=things,
+                                                      reads=result.get("items_reads") if things else None)
                 if result["items_answer"]:
                     steps["items"] = sum(len(x[1]) for x in result["items_answer"])
                     for p, its, _ in result["items_answer"]:
                         p["shown_items"] = its
-                from .extract import asks_for_things
-                things = asks_for_things(request_text or "", spec.content.goal or "", *spec.content.searches)
+                    if things:
+                        self._items_order(result)
                 for p in (result.get("picks") or []) + (result.get("wider") or []):
                     p["things"] = things
         except Exception as e:  # noqa: BLE001 - one failed run never stops the bot
@@ -761,6 +771,62 @@ class ExecutorMixin:
 
     SECOND_LOOK_MAX = 12   # candidates the second look shows the composer at most
 
+    ITEM_READS = 6   # round 8, finding 94: posts the details step reads for an items answer, at most
+
+    def _items_reads(self, result, cands, extra, spec, today, ts, year, things=True, texts=()):
+        """Round 8, finding 94: the posts read for an items answer, at most ITEM_READS: the composer's shown picks first,
+        then its other clear or close picks, then the best-ranked candidates it was shown, by how much their own text
+        lists named things (extract.list_score); beyond the shown picks only a text with a score above zero. Never a
+        candidate with any "no", one with an avoided word or creator (friends' posts never reach here), and a candidate
+        the composer did not pick only when its own text shares a topic word with the request (outside.query_words:
+        a list of cafes is never read for productivity tips). A request that names no kind of thing (not `things`)
+        reads its top 3 shown picks, as in round 7."""
+        from .outside import _tokens, query_words
+        from .retrieve import _stem
+        from .answers import date_fields
+        from .compose import title_from_item
+        from .extract import list_score
+        from .retrieve import contains_word, name_matches
+        c = spec.content
+        shown = list({id(p): p for p in (result.get("picks") or []) + (result.get("wider") or [])}.values())
+        seen = {p["item"].id for p in shown}
+        rejected = set(result.get("rejected") or [])
+
+        def allowed(it):
+            return it.id not in seen and it.id not in rejected \
+                and not any(name_matches(it.creator or "", w) for w in c.avoid_creators) \
+                and not any(contains_word(own_text(it, extra), w) for w in c.avoid)
+        others = [p for p in result.get("others") or [] if allowed(p["item"])
+                  and list_score(own_text_lines(p["item"], extra)) > 0]
+        seen |= {p["item"].id for p in others}
+        stems = {_stem(w) for w in query_words(spec, [t for t in texts if t])}
+
+        def on_topic(it):
+            return bool(stems & {_stem(t) for t in _tokens(own_text(it, extra))})
+        rest = [(list_score(own_text_lines(it, extra)), i, it) for i, it in enumerate(cands)
+                if allowed(it) and on_topic(it)]
+        added = [date_fields({"item": it, "title": title_from_item(it), "verdict": "close", "because": None,
+                              "because_backed": False, "criteria": [], "lines": [], "facts": {},
+                              "lines_reused": False, "read_for_items": True}, extra, today, ts, year)
+                 for score, _, it in sorted(rest, key=lambda x: (-x[0], x[1])) if score > 0]
+        for p in others:
+            date_fields(p, extra, today, ts, year)
+        reads = (shown + others + added)[:self.ITEM_READS] if things else shown[:3]
+        result["items_reads"] = reads
+        return reads
+
+    @staticmethod
+    def _items_order(result):
+        """Round 8, finding 94: the stored and shown order of an items answer: its source posts (most things first),
+        the posts named in "More in your saves:", then the shown picks with no things; read-only posts that gave
+        nothing are left out."""
+        srcs = [p for p, _, _ in result["items_answer"]]
+        more = [p for p, _ in result.get("items_more") or []]
+        used = {id(p) for p in srcs + more}
+        rest = [p for p in result.get("picks") or [] if id(p) not in used]
+        wider = [p for p in result.get("wider") or [] if id(p) not in used]
+        result["picks"], result["wider"] = srcs + more + rest, wider
+
     def _second_look(self, person, spec, cands, result, request_text, extra, about, level_ok, bound, now, steps,
                      sent_count):
         """Fix pass 5, finding 84 (2): when the checked answer shows fewer picks than asked for and candidates remain
@@ -836,6 +902,8 @@ class ExecutorMixin:
         merged = [lead] + [p for p in chosen if p["verdict"] == "clear"] + [p for p in chosen if p["verdict"] != "clear"]
         added = [p for p in merged if p.get("second_look")]
         result = dict(result, picks=merged)
+        # round 8, finding 94: what the second call said "no" to is never read for an items answer either
+        result["rejected"] = list(result.get("rejected") or []) + list(r2.get("rejected") or [])
         result["n_clear"] = result.get("n_clear", 0) + sum(1 for p in added if p["verdict"] == "clear")
         result["n_close"] = result.get("n_close", 0) + sum(1 for p in added if p["verdict"] != "clear")
         info["merged"] = len(added)

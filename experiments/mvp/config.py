@@ -20,8 +20,10 @@ PROMPT_COMPOSE = "compose_v5"  # v4 plus today's date and each candidate's dates
                                # bare clause and no internal words (fix pass, findings 7, 8, 37)
 COMPOSE_TEMPERATURE = 0       # the interpreter's settings, for the same reason
 COMPOSE_SEED = 7
-PROMPT_EXTRACT = "extract_v2"  # v1 plus the "items" kind (named things a post lists, with the request, the person and
-                               # today's date; round 7, finding 90); details on the full text, one call per pick, cached
+PROMPT_EXTRACT = "extract_v3"  # v2 plus what an item is and is not, and "fit" yes only for the kind asked for (round 8,
+                               # finding 93); v2: v1 plus the "items" kind (named things a post lists, with the request,
+                               # the person and today's date; round 7, finding 90); details on the full text, one call
+                               # per pick, cached
 EXTRACT_TEMPERATURE = 0
 EXTRACT_SEED = 7
 ANSWER_CACHE_HOURS = 24       # the same spec and candidates reuse the same composed answer ("another" bypasses it)

@@ -744,4 +744,8 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
             "n_clear": len(clear), "n_close": len(close), "max_minutes": max_minutes,
             "from_fallback": bool(picks) and not clear and not close,
             "returned": returned,   # fix pass 5, finding 84 (2): every candidate the composer gave a verdict for
-            "spare": spare}
+            "spare": spare,
+            # round 8, finding 94: its other clear or close picks (not shown), and every candidate with a "no" (a "no"
+            # verdict, a must-have's "no", an avoided word): an items answer reads the first, never the second
+            "others": [p for p in kept if all(p is not q for q in shown)],
+            "rejected": [i for i in returned if all(p["item"].id != i for p in kept)]}

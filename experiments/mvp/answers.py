@@ -37,6 +37,18 @@ def year_hit(text, posted, year):
     return bool(posted) and str(year - 1) <= str(posted)[:4] <= str(year)
 
 
+def date_fields(p, extra, today, ts, year=None):
+    """One pick's dates (posted, kept), and for a time-sensitive request its state from its own text."""
+    it = p["item"]
+    p["posted"], p["kept_first"] = D.posted_on(it, extra), D.first_kept(it)
+    p["age_from"], p["today"] = p["posted"] or p["kept_first"], today
+    if ts:
+        own = own_text(it, extra)
+        p["date_state"] = D.state_of(own, p["posted"], p["kept_first"], today, own=own)
+        p["year_hit"] = year_hit(own, p["posted"], year)
+    return p
+
+
 def post_dates(result, extra, today, ts, year=None):
     """Sets each pick's "posted", "kept_first" and (time-sensitive) "date_state"; reorders and drops passed picks as
     above. Changes nothing for a request that is not time-sensitive."""
@@ -56,12 +68,7 @@ def post_dates(result, extra, today, ts, year=None):
     n_picks, n_wide = len(result.get("picks") or []), len(result.get("wider") or [])
     for p in result.get("spare") or []:   # clear fits past the count: one may take a passed pick's place
         if all(p is not q for q in allp):
-            it = p["item"]
-            p["posted"], p["kept_first"] = D.posted_on(it, extra), D.first_kept(it)
-            p["age_from"], p["today"] = p["posted"] or p["kept_first"], today
-            own = own_text(it, extra)
-            p["date_state"] = D.state_of(own, p["posted"], p["kept_first"], today, own=own)
-            p["year_hit"] = year_hit(own, p["posted"], year)
+            date_fields(p, extra, today, True, year)
             allp.append(p)
     passed = [p for p in allp if (p.get("date_state") or {}).get("state") == "passed"]
     live = [p for p in allp if p not in passed]
@@ -92,19 +99,39 @@ def item_state(x, p, extra, today):
     return st
 
 
-def choose_items(result, extra, today, ts, year=None, notes=True):
-    """[(pick, [item, ...], more)] for the items answer, or None when the picks' text names fewer than 2 things.
+MAX_MORE = 2   # round 8, finding 94: the next posts with things, one "More in your saves:" line each
+
+
+def good(x):
+    """Round 8, finding 93: a thing that may be counted: it has words of the post's own about it."""
+    return bool(x.get("about"))
+
+
+def choose_items(result, extra, today, ts, year=None, notes=True, things=False, reads=None):
+    """[(pick, [item, ...], more)] for the items answer, or None when the posts read name fewer than 2 good things.
     Each item: name, about, when, fit, n (its number in the answer), state, note (the date said to the person, for a
-    time-sensitive request), stale_from (the post's month when its about says "now" and the post is old)."""
-    allp = list(result.get("picks") or []) + list(result.get("wider") or [])
+    time-sensitive request), stale_from (the post's month when its about says "now" and the post is old).
+    Round 8: `reads` are the posts the details step read (the shown picks first, finding 94); with `things` (the request
+    names a kind of thing) only things the model marked as that kind ("yes") are shown, unless fewer than 2 would be
+    left over all posts (finding 93); only things with words count, and fewer than 2 make no items answer. The posts
+    are shown by how many good things they give (most first; ties keep the composer's order). The next MAX_MORE posts
+    with things are kept as result["items_more"]: [(pick, how many)]."""
+    allp = list(reads) if reads is not None else list(result.get("picks") or []) + list(result.get("wider") or [])
     srcs = []
     for p in allp:
-        got = (p.get("facts") or {}).get("items") or []
-        if not got:
-            continue
-        its = []
+        got = [dict(x) for x in (p.get("facts") or {}).get("items") or [] if good(x)]
+        if got:
+            srcs.append([p, got])
+    if things and sum(1 for _, its in srcs for x in its if x.get("fit") == "yes") >= 2:
+        n = 0
+        for s in srcs:
+            n += sum(1 for x in s[1] if x.get("fit") != "yes")
+            s[1] = [x for x in s[1] if x.get("fit") == "yes"]
+        if n:
+            result.setdefault("dropped", {})["items_not_the_kind"] = n
+        srcs = [s for s in srcs if s[1]]
+    for p, got in srcs:
         for x in got:
-            x = dict(x)
             if ts:
                 st = item_state(x, p, extra, today)
                 x["state"] = st["state"]
@@ -118,8 +145,6 @@ def choose_items(result, extra, today, ts, year=None, notes=True):
                 x["year_off"] = bool(year and named and max(named) < year)
             if x.get("about") and D.stale(x["about"], p.get("age_from"), today):
                 x["stale_from"] = D.month_year(p.get("age_from"))
-            its.append(x)
-        srcs.append([p, its])
     if ts:
         def gone(x):
             return x.get("state") == "passed" or x.get("year_off")
@@ -140,7 +165,12 @@ def choose_items(result, extra, today, ts, year=None, notes=True):
                                  -_ord(s[0].get("posted") or s[0].get("kept_first"))))
     srcs = [s for s in srcs if s[1]]
     if sum(len(its) for _, its in srcs) < 2:
+        result["items_more"] = []
         return None
+    if reads is not None:   # round 8, finding 94: most good things first (a stable sort keeps the order before)
+        # (for a time-sensitive request a post whose things are all old or passed still comes after the fresher)
+        srcs.sort(key=lambda s: (ts and all(x.get("state") in ("old", "passed") for x in s[1]),
+                                 -min(len(s[1]), MAX_ITEMS_PER_SOURCE)))
     out, n = [], 0
     for p, its in srcs[:MAX_SOURCES]:
         shown = its[:MAX_ITEMS_PER_SOURCE]
@@ -148,6 +178,7 @@ def choose_items(result, extra, today, ts, year=None, notes=True):
             n += 1
             x["n"] = n
         out.append((p, shown, len(its) - len(shown)))
+    result["items_more"] = [(p, len(its)) for p, its in srcs[MAX_SOURCES:MAX_SOURCES + MAX_MORE]]
     return out
 
 

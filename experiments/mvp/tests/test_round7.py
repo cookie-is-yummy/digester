@@ -103,9 +103,9 @@ UI_ROWS = [("d1", "designer", DS, "2023-06-20", "2023-07-02", "instagram"),
 UI_ITEMS = {
     "Best design systems": {"items": [
         {"name": "Material UI", "about": "Google's design system with React components", "when": "", "fit": "yes"},
-        {"name": "Ant Design", "about": "an enterprise-class UI design language", "when": "", "fit": "unknown"},
+        {"name": "Ant Design", "about": "an enterprise-class UI design language", "when": "", "fit": "yes"},
         {"name": "Invented Kit", "about": "a library the post never names", "when": "", "fit": "yes"},
-        {"name": "Chakra UI", "about": "simple and accessible components", "when": "", "fit": "unknown"}],
+        {"name": "Chakra UI", "about": "simple and accessible components", "when": "", "fit": "yes"}],
         "key_points": []},
     "High-quality icon sites": {"items": [
         {"name": "Iconoir", "about": "free open source icons", "when": "", "fit": "yes"},
@@ -135,7 +135,9 @@ def ui(env, tmp_path):
 def test_90_a_question_for_things_is_answered_with_the_things_each_under_its_post(ui):
     msg = say(ui, UI_ASK, ask("UI/UX libraries", ["ui ux libraries", "design systems"]))
     assert "I recommend" not in msg and "because" not in msg
-    assert msg.startswith("Here are the UI/UX libraries in your saves.")
+    # (round 8, finding 94: the opening line says what was found, with counts, built by code; finding 93: for a
+    # request that names a kind of thing, only things marked as that kind are shown, so this fixture marks them "yes")
+    assert msg.startswith("I found 5 UI/UX libraries named in 2 of your saves.")
     assert 'From "Best design systems" by @designer (posted June 2023, saved July 2023):' in msg
     assert "1. Material UI: Google's design system with React components" in msg
     assert "2. Ant Design: an enterprise-class UI design language" in msg

@@ -357,12 +357,43 @@ def source_head(p, now=None, lang=None):
     return t["items_from"].format(title=p["title"], by=by(it, lang)) + (f" ({', '.join(when)})" if when else "") + ":"
 
 
+FOUND_NOUN_WORDS = 4   # round 8, finding 94: the goal's noun phrase in "I found 9 UI/UX libraries named in ..."
+
+
+def found_noun(goal):
+    """The goal's noun phrase up to its kind of thing, when it is short ("UI/UX libraries for my next project": "UI/UX
+    libraries"; "opportunities to pursue soon": "opportunities"); None otherwise (then "things")."""
+    from .extract import THINGS
+    g = re.sub(r"^\s*(?:some|a few|any|the|good|great|other|more)\s+", "", (goal or "").strip(), flags=re.I)
+    ends = [m for m in THINGS.finditer(g) if m.group(0).lower().endswith("s") and " " not in m.group(0)]
+    if not ends:
+        return None
+    phrase = g[:ends[-1].end()].strip()
+    if len(phrase.split()) > FOUND_NOUN_WORDS or re.search(r"[^\w\s/&'-]", phrase):
+        return None
+    return phrase
+
+
+def items_intro(result, spec, lang=None):
+    """Round 8, finding 94: 'I found 9 UI/UX libraries named in 3 of your saves.', counted by code; a changed
+    request keeps its own line (round 7)."""
+    if result.get("intro_code"):
+        return end_sentence(result["intro_code"])
+    t = L.table(lang)
+    srcs = result["items_answer"]
+    n, k = sum(len(its) for _, its, _ in srcs), len(srcs)
+    noun = (found_noun(spec.content.goal) if not L.code(lang) else None) or t["items_things"]
+    return t["items_found_one" if k == 1 else "items_found"].format(n=n, noun=noun, k=k)
+
+
 def items_message(result, spec, footer=None, now=None, lang=None):
     """Round 7, finding 90: the answer is the things the posts name, each under the post it came from, with that
     post's link alone after its list. Up to 3 posts, up to 6 things each ("and 2 more in the post"). Picks with no
-    named things follow in one line each."""
+    named things follow in one line each. Round 8 (findings 93 and 94): the opening line says what was found, with
+    counts; the next posts with things are named under "More in your saves:"; a pick whose title promises a list its
+    text does not hold says the names are in its slides."""
     t = L.table(lang)
-    parts, text = [], [intro_line(result, spec, lang)]
+    parts, text = [], [items_intro(result, spec, lang)]
     if result.get("level_note"):
         text.append(result["level_note"])
     srcs = result["items_answer"]
@@ -378,11 +409,24 @@ def items_message(result, spec, footer=None, now=None, lang=None):
         text = []
         if p["item"].url:
             parts.append(link_part(p["item"], p["title"]))
+    more = result.get("items_more") or []
+    if more:
+        text.append("")
+        text.append(t["items_more"])
+        for p, n in more:
+            used.add(id(p))
+            line = t["items_more_line_one" if n == 1 else "items_more_line"].format(title=p["title"],
+                                                                                    by=by(p["item"], lang), n=n)
+            text.append(f"• {line}" + (f" {p['item'].url}" if p["item"].url else ""))
     rest = [p for p in result["picks"] if id(p) not in used]
     if rest:
         text.append("")
         text.append(t["items_also"])
         for p in rest:
+            if p.get("things") and promises_slides(p):
+                text.append(f"• {p['title']}{by(p['item'], lang)}: {t['in_slides']}" +
+                            (f" {p['item'].url}" if p["item"].url else ""))
+                continue
             note = alt_note(p, result.get("extract"), lang)
             dn = date_words(p, result, lang)
             if dn:
@@ -395,6 +439,15 @@ def items_message(result, spec, footer=None, now=None, lang=None):
     if text:
         parts.append({"type": "text", "text": "\n".join(text).strip("\n")})
     return Reply(parts)
+
+
+def promises_slides(p):
+    """Round 8, finding 93 (rule 5): the post's title or first line promises a list ("4 free programs for students",
+    "best design systems") and the details step read it and no named thing of it is shown."""
+    from .extract import promises_list
+    facts = p.get("facts") or {}
+    return "items" in facts and not p.get("shown_items") and \
+        promises_list(p.get("title") or "", getattr(p["item"], "first_line", "") or "")
 
 
 def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, follow_up=False):
