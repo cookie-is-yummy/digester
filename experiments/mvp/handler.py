@@ -525,7 +525,13 @@ class HandlerMixin:
             head = T.PREVIEW_HEAD if n else ""
             return self.send(h, head + msg + tail, run_id)
         if it.intent == "ask":
-            msg, run_id, _ = self.run(person, it.spec, "ask", request_text=text)
+            from .answers import split_asks
+            c = it.spec.content
+            parts = split_asks(text, c.goal) if c.source == "library" and c.outside != "only" else None
+            if parts:   # round 8, finding 95: several asks in one message, one labelled part each
+                msg, run_id, _ = self.ask_parts(person, it.spec, text, parts)
+            else:
+                msg, run_id, _ = self.run(person, it.spec, "ask", request_text=text)
             return self.deliver(person, it.spec, msg + self._not_yet_notes(it.spec, sep="\n\n"), run_id, kind="ask",
                                 request_text=text, after=self._profile_tail())
         if it.intent == "more":

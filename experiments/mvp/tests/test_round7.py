@@ -576,7 +576,9 @@ def test_92_a_change_with_nothing_left_says_so_and_never_shows_a_rejected_pick(b
 # ---------- the short opening line, and dates in timed sends ----------
 def test_round7_the_fallback_opening_line_never_echoes_a_long_request(opp):
     opp["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Summer research", title="Summer research")]}
-    long_goal = "startup motivation related reels, opportunities to pursue soon, or things with deadlines"
+    # (round 8, finding 95: the founder's three-part message is now split into labelled parts, so a long one-part
+    # goal stands in for it here)
+    long_goal = "summer research programs for students who want to keep learning over the break"
     msg = say(opp, "send me " + long_goal, ask(long_goal))
     assert msg.startswith("Here's what I found in your saves.\n") and long_goal not in msg
     msg = say(opp, "research programs", ask("research programs"))

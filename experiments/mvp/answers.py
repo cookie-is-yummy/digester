@@ -186,3 +186,77 @@ def stale_reason(p, today):
     """True when the pick's shown reason states a time-relative claim and the post is older than 60 days."""
     b = p.get("because") if p.get("because_backed") else None
     return bool(b) and D.stale(b, p.get("age_from"), today)
+
+
+# ---------- round 8, finding 95: several asks in one message ----------
+import re  # noqa: E402
+
+MAX_PARTS = 3
+PART_COUNT = 2
+# the head nouns that make a part its own ask: kinds of thing (extract.THINGS) and kinds of post
+_HEADS = (r"reels?|videos?|posts?|tutorials?|recipes?|workouts?|routines?|guides?|lessons?|things|stuff|dish(?:es)?|"
+          r"dinners?|meals?|lunch(?:es)?|breakfasts?|snacks?|desserts?|songs?|movies?|tv shows|quotes?|articles?|reads|"
+          r"librar(?:y|ies)|tools?|resources?|opportunit(?:y|ies)|programs?|programmes?|places?|spots?|books?|apps?|"
+          r"products?|ideas?|tips?|websites?|sites?|courses?|internships?|scholarships?|fellowships?|grants?|events?|"
+          r"restaurants?|cafes?|bars?|shops?|stores?|brands?|frameworks?|plugins?|extensions?|templates?|fonts?|icons?|"
+          r"kits?|channels?|podcasts?|newsletters?|deadlines?|jobs?|hackathons?|competitions?|awards?")
+HEAD = re.compile(rf"\b(?:{_HEADS})\b", re.I)
+SEP_KEEP = re.compile(r"(\s*,\s*(?:(?:or|and|plus|also)\s+)?|\s+(?:or|and|plus|also)\s+)", re.I)
+LEAD_WORDS = re.compile(r"^\W*(?:(?:hey|hi|ok(?:ay)?|so|please|pls)[,\s]+)*(?:(?:can|could|would|will) you\s+)?"
+                        r"(?:please\s+)?(?:send|show|find|give|get|recommend)(?:\s+me)?\s+|^\W*(?:also|some|any)\s+", re.I)
+
+
+def _lead_strip(x):
+    """The words that only ask ("send me", "can you find", "also", "some"), left out from the start."""
+    while True:
+        y = LEAD_WORDS.sub("", x, count=1)
+        if y == x:
+            return x.strip()
+        x = y
+
+
+def _head(seg):
+    """The segment's head noun, singular and lower case, or None."""
+    from .retrieve import _stem
+    found = HEAD.findall(seg)
+    return _stem(found[0].lower()) if found else None
+
+
+def split_asks(*texts):
+    """Round 8, finding 95: the parts of a message (or a goal) that is a list of different kinds of thing ("startup
+    motivation reels, opportunities to pursue soon, or things with deadlines"): at most MAX_PARTS, each with its own
+    head noun, each in its own words; None when it is one ask ("chicken and rice recipes", "quick and easy dinners",
+    "pasta or rice dishes": a part with no head noun of its own belongs to the next one). The person's message is read
+    first, then the goal."""
+    for text in texts:
+        t = _lead_strip(" ".join((text or "").split()).strip(" ?!."))
+        pieces = SEP_KEEP.split(t)   # segment, separator, segment, ...
+        segs = [(pieces[i].strip(" ,.;:?!"), (pieces[i + 1] if i + 1 < len(pieces) else "").strip().lower())
+                for i in range(0, len(pieces), 2)]
+        segs = [(_lead_strip(x), sep) for x, sep in segs]   # "and show me ..."
+        segs = [(x, sep) for x, sep in segs if x]
+        if len(segs) < 2:
+            continue
+        # a segment with no head noun of its own: before "and" / "or" it is a word of the next part ("quick and easy
+        # dinners", "chicken and rice recipes"); before a comma, or last, it ends the part before it ("things with
+        # deadlines and prizes, or ...")
+        parts, carry, last_word = [], "", {}
+        for x, sep in segs:
+            word = sep.replace(",", "").strip() or "and"
+            if _head(x):
+                parts.append(f"{carry} {x}".strip())
+                carry = ""
+            elif parts and (sep.startswith(",") or not sep) and not carry:
+                parts[-1] = f"{parts[-1]} {last_word.get(len(parts) - 1, 'and')} {x}"
+            else:
+                carry = f"{carry} {x} {word}".strip()
+            if _head(x):
+                last_word[len(parts) - 1] = word
+        if carry:
+            continue
+        parts = [_lead_strip(p) for p in parts]
+        heads = [_head(p) for p in parts]
+        if len(parts) < 2 or len(set(heads)) < len(heads) or len(parts) > MAX_PARTS:
+            continue
+        return parts
+    return None

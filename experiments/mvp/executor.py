@@ -484,6 +484,7 @@ class ExecutorMixin:
                                                          *spec.content.searches)
             year = request_year(request_text or "", hint, spec.content.goal or "") if ts else None
             result["today"], result["ts"] = today, ts
+            result["no_intro"] = getattr(self._tl, "part", None) is not None   # round 8: a part has its label
             if getattr(self._tl, "intro_code", None) and kind != "follow_up":
                 result["intro_code"] = self._tl.intro_code   # round 7: a changed request's line, built by code
             post_dates(result, extra, today, ts, year)
@@ -535,12 +536,17 @@ class ExecutorMixin:
                     targets = list(main)
                 else:   # finding 16: the details step on the top 3 clear picks, then the best one that has them all
                     targets = list({id(p): p for p in main + (result.get("wider") or [])}.values())[:max(3, len(main))]
+                part = getattr(self._tl, "part", None)
+                if part is not None:   # round 8, finding 95: the details calls of all parts share one budget
+                    targets = targets[:max(0, part["reads"])]
                 facts, info = details_many([p["item"] for p in targets], extract, view.lib, store=self.store,
                                            person=h, extra=extra, now=now,
                                            once={p["item"].id for p in targets if p.get("read_for_items")},
                                            context={"request": request_text or spec.content.goal or "",
                                                     "about": about, "today": today.isoformat()})
                 cost += info["cost"]
+                if part is not None:
+                    self._tl.details_left = max(0, (getattr(self._tl, "details_left", 0) or 0) - info["calls"])
                 result["dropped"]["lines_not_in_text"] = info["dropped"]
                 for p in targets:
                     p["facts"] = facts.get(p["item"].id) or {}
@@ -629,6 +635,10 @@ class ExecutorMixin:
                                                       reads=result.get("items_reads") if things else None)
                 if result["items_answer"]:
                     steps["items"] = sum(len(x[1]) for x in result["items_answer"])
+                    off = (getattr(self._tl, "part", None) or {}).get("offset") or 0
+                    for _, its, _ in result["items_answer"]:   # round 8, finding 95: numbered across the parts
+                        for x in its:
+                            x["n"] += off
                     for p, its, _ in result["items_answer"]:
                         p["shown_items"] = its
                     if things:
@@ -777,6 +787,73 @@ class ExecutorMixin:
             result["dropped"]["because_code"] = result["dropped"].get("because_code", 0) + 1
 
     SECOND_LOOK_MAX = 12   # candidates the second look shows the composer at most
+
+    PART_DETAILS = 6   # round 8, finding 95: details calls over all the parts of one message, at most
+
+    def ask_parts(self, person, spec, text, parts):
+        """Round 8, finding 95: several asks in one message. Each part runs through the normal ask path as its own
+        request (its own words, PART_COUNT picks; the request's avoid list, platforms and filters; no must-haves of the
+        whole message), with one compose call each and the details calls shared (PART_DETAILS at most). The reply is
+        one group: a label line per part (its own words), its answer in its own format, or one line when nothing
+        clearly fits. The caps are checked before each part after the first; a part stopped by them, or by an error,
+        ends the group with one line that the rest was not searched. The answer kept (and the last answer) holds every
+        part's picks and things in order, numbered across parts. Returns (message, run_id, n)."""
+        from . import lang as L
+        from .answers import PART_COUNT
+        h = person["handle"]
+        t = L.table(self._answer_lang())
+        group, picks, ids, runs = Reply([]), [], [], []
+        state = {k: {} for k in ("lines", "linekinds", "facts")}
+        item_n, stopped, first = 0, False, None
+        self._tl.details_left = self.PART_DETAILS
+        try:
+            for i, words in enumerate(parts):
+                if i and self._over_cap(person):
+                    stopped = True
+                    break
+                sub = spec.model_copy(deep=True)
+                c = sub.content
+                c.goal, c.searches, c.count, c.criteria, c.asked_count = words[:200], [words[:120]], PART_COUNT, [], None
+                self._tl.part = {"offset": item_n, "reads": self._tl.details_left // (len(parts) - i)}
+                try:
+                    msg, run_id, n = self.run(person, sub, "ask", request_text=words)
+                finally:
+                    self._tl.part = None
+                if self._run_failed(run_id):
+                    if not i:   # the first part failed: its own message, as for any ask
+                        return msg, run_id, 0
+                    stopped = True
+                    break
+                first = first or run_id
+                label = words[:1].upper() + words[1:] + ":"
+                group = group + (("\n\n" if group.parts else "") + label + "\n")
+                if not n:
+                    group = group + t["part_none"]
+                    continue
+                group = group + msg
+                runs.append(run_id)
+                ans = self.store.answer(run_id) or {}
+                for p in ans.get("picks") or []:
+                    picks.append(p)
+                    ids.append(p["item_id"])
+                    item_n = max([item_n] + [x.get("n") or 0 for x in p.get("items") or []])
+                for k in state:
+                    state[k].update(self.store.get_state(f"{k}:{h}", {}) or {})
+        finally:
+            self._tl.details_left = None
+        if stopped:
+            group = group + "\n\n" + t["parts_stopped"]
+        if not runs:   # nothing fits any part: the labelled lines alone, kept with the first run
+            return group, first, 0
+        last_run = runs[-1]
+        self._keep_answer(last_run, h, None, spec.content.goal, "picks", group, picks)
+        self.store.set_last_answer(h, last_run, None, ids, spec.content.goal)
+        for k, v in state.items():
+            self.store.set_state(f"{k}:{h}", v)
+        st = self.store.get_state(f"lastspec:{h}") or {}
+        self.store.set_state(f"lastspec:{h}", dict(st, spec=spec.stored(), text=(text or "")[:300], shown=ids,
+                                                   rule_id=None))
+        return group, last_run, len(ids)
 
     @staticmethod
     def _after_passed_on(cands, gone):

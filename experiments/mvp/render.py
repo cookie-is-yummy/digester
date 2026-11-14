@@ -393,7 +393,7 @@ def items_message(result, spec, footer=None, now=None, lang=None):
     counts; the next posts with things are named under "More in your saves:"; a pick whose title promises a list its
     text does not hold says the names are in its slides."""
     t = L.table(lang)
-    parts, text = [], [items_intro(result, spec, lang)]
+    parts, text = [], ([] if result.get("no_intro") else [items_intro(result, spec, lang)])
     if result.get("level_note"):
         text.append(result["level_note"])
     srcs = result["items_answer"]
@@ -491,8 +491,9 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
             text.append("")
         text.append(pick_sentence(t["its"], first, now, lang, colon=True))
     else:
-        text.append(intro_line(result, spec, lang))
-        text.append("")
+        if not result.get("no_intro"):   # round 8, finding 95: a part of a message has its own label instead
+            text.append(intro_line(result, spec, lang))
+            text.append("")
         text.append(pick_sentence(t["recommend"], first, now, lang))
     if result.get("level_note"):   # slice 6: once per topic while the level is a guess
         text.append(result["level_note"])

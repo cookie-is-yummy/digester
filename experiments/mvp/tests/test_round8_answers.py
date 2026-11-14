@@ -397,3 +397,101 @@ def test_97_the_guard_reads_kinds_and_first_person_words():
     assert guard("hey how are you doing today friend").intent == "chat"
     assert guard("send me pasta recipes every friday").intent == "chat"      # a rule's words: the reading stands
     assert chat_guard(Interpretation(intent="help"), "what other opportunities did i miss this year").intent == "help"
+
+
+# ---------- finding 95: several asks in one message ----------
+MIX = [("m1", "coach", "Startup motivation: keep going when it gets hard, every founder doubts", "2026-10-01",
+        "2026-10-02", "instagram"),
+       ("m2", "coach2", "Startup motivation reel for founders who doubt themselves", "2026-09-01", "2026-09-02",
+        "instagram"),
+       ("p1", "progs", OPPS, "2026-10-10", "2026-10-11", "instagram"),
+       ("c1", "cook", "One pot chicken and rice\nIngredients:\n- 2 cups rice\n- 1 lb chicken", "2026-01-01",
+        "2026-01-02", "instagram")]
+MIX_ITEMS = {"Summer 2026": {"items": [
+    {"name": "NASA L'SPACE Academy", "about": "a free program, apply by December 10, 2026", "fit": "yes"},
+    {"name": "Google STEP", "about": "a paid summer internship for first and second year students", "fit": "yes"}]}}
+THREE = "send me startup motivation related reels, opportunities to pursue soon, or things with deadlines"
+
+
+def mix_compose(u):
+    """Each part's request: motivation posts for the reels, the programmes post for the rest."""
+    req = u.split("\n", 1)[0]
+    if "motivation" in req:
+        return {"picks": [pick(u, "Startup motivation:", title="Startup motivation"),
+                          pick(u, "Startup motivation reel", title="Startup motivation reel")]}
+    if "opportunities" in req:
+        return {"picks": [pick(u, "Summer 2026 programs", title="Summer 2026 programs")]}
+    return {"picks": []}
+
+
+@pytest.fixture()
+def mix(env, tmp_path):
+    use_lib(env, tmp_path, MIX, name="mix")
+    env["state"]["answers"]["mvp_compose"] = mix_compose
+    env["state"]["answers"]["mvp_extract"] = items_fake(MIX_ITEMS)
+    return env
+
+
+def test_95_a_message_with_three_asks_gets_one_labelled_part_each(mix):
+    msg = say(mix, THREE, ask("startup motivation reels, opportunities to pursue soon, or things with deadlines"))
+    lines = msg.split("\n")
+    a, b, c = (lines.index(x) for x in ("Startup motivation related reels:", "Opportunities to pursue soon:",
+                                        "Things with deadlines:"))
+    assert a < b < c
+    assert lines[a + 1].startswith("I recommend Startup motivation by @coach")         # its own format
+    assert "1. NASA L'SPACE Academy" in "\n".join(lines[b:c]) and "2. Google STEP" in "\n".join(lines[b:c])
+    assert lines[c + 1] == "Nothing in your saves clearly fits this part."
+    assert "Here's what I found" not in msg                                            # a label, not an opening line
+    calls = mix["calls"]
+    assert calls.count("mvp_compose") >= 3 and calls.count("mvp_extract") <= 6
+    # the answer kept holds every part's picks in order, so follow-ups work
+    bot = mix["bot"]
+    assert bot.store.last_answer(H)["items"][:3] == ["m1", "m2", "p1"]
+    say(mix, "add the second one to my to-do list", {"intent": "todo_add", "pick_number": 2})
+    assert bot.store.todos(H)[-1]["text"] == "Google STEP"
+
+
+def test_95_one_head_noun_is_one_ask():
+    from mvp.answers import split_asks
+    assert split_asks(THREE) == ["startup motivation related reels", "opportunities to pursue soon",
+                                 "things with deadlines"]
+    for one in ("chicken and rice recipes", "quick and easy dinners", "pasta or rice dishes",
+                "convenient chicken and rice recipes", "what should I cook tonight?", "tips and tricks for blender",
+                "pasta recipes, and show me a few new ones from outside my saves"):
+        assert split_asks(one) is None, one
+    assert split_asks("find blender tutorials and also send me some cafes in lisbon") == ["blender tutorials",
+                                                                                          "cafes in lisbon"]
+    assert split_asks("things with deadlines and prizes, or startup reels") == ["things with deadlines and prizes",
+                                                                                "startup reels"]
+    assert split_asks("blender tutorials, ui libraries, startup reels and cafes") is None    # more than 3: one ask
+
+
+def test_95_one_head_noun_keeps_the_answer_it_had(mix):
+    mix["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "One pot chicken", title="One pot")]}
+    mix["state"]["answers"]["mvp_extract"] = lambda u: {"ingredients": ["2 cups rice", "1 lb chicken"]}
+    msg = say(mix, "convenient chicken and rice recipes", ask("chicken and rice recipes"))
+    assert msg.startswith("Here's what I found in your saves for chicken and rice recipes.") and ":\n" not in \
+        msg.split("\n")[0]
+
+
+def test_95_a_part_with_nothing_never_hides_a_part_with_something(mix):
+    msg = say(mix, "send me things with deadlines and startup motivation reels",
+              ask("things with deadlines and startup motivation reels"))
+    lines = msg.split("\n")
+    assert lines[0] == "Things with deadlines:" and lines[1] == "Nothing in your saves clearly fits this part."
+    assert "Startup motivation reels:" in lines and "I recommend Startup motivation by @coach" in msg
+
+
+def test_95_the_cap_reached_after_the_first_part_says_the_rest_was_not_searched(mix):
+    bot = mix["bot"]
+    calls = {"n": 0}
+    real = bot._over_cap
+
+    def over(person):
+        calls["n"] += 1
+        return "daily" if calls["n"] > 1 else real(person)    # the handler's check passes, then the cap is reached
+    bot._over_cap = over
+    msg = say(mix, THREE, ask("startup motivation reels, opportunities to pursue soon, or things with deadlines"))
+    assert msg.startswith("Startup motivation related reels:") and "I recommend Startup motivation" in msg
+    assert "Opportunities to pursue soon:" not in msg
+    assert msg.rstrip().endswith("I stopped there to stay within today's limit, so I didn't search for the rest.")
