@@ -379,3 +379,24 @@ Decisions still open after version 2:
 13. **Levels:** a level from the profile now only steers picks. Say so if it should narrow a request.
 14. **The spending cap:** $8.62 of $10 is spent. More live work needs a new cap.
 
+
+## 17. Version 3 (13 to 14 Nov): what was added after Derrick tried version 2
+
+The design is `mvp/DESIGN.md` sections 12 to 15. Results are in `results/r10-mvp-v3.md`. The scope changes are recorded as A-010 and A-011 (both Proposed) in `docs/amendments.md`.
+
+| Asked | Built | Limit |
+| --- | --- | --- |
+| A concrete answer that cites the link | The named things a post's text lists, in its own words, under the post's title, dates and link | Names that are only in slides or video cannot be read |
+| The exact opportunities in the post | Each thing keeps its name; a follow-up acts on one thing by number or name | "Add them all" adds the posts, not each thing |
+| "It says 2024 but it's 2026" | Today's date and each post's posted date; passed deadlines never lead; old rounds go last with their date | Date wording is English only |
+| A follow-up that keeps its context | A changed request runs a new search and names the change | Good fits can still be few |
+| Rules beyond timing | Deadline reminders, quiet-when-empty, until-done, overdue nudges | No standing "whenever I save something with a deadline" rule |
+| Integrations | A read-only MCP prototype, export, a message to forward | One person, their own machine; nothing is sent to other people |
+| Back to the vision | Trends, the theme check, a recap | No report after an import; no capture between exports |
+
+Decisions still open after version 3:
+15. **A-010:** the recap, quiet-when-empty rules, done-reminders, nudges, trends and the theme check.
+16. **A-011:** the MCP prototype ahead of the query API. Both founders. The design critic advised deferring it.
+17. **The spending cap:** $9.73 of $10 is spent. The UI/UX libraries case needs a prompt change with a before and after run (about $0.40) and live checks.
+18. **Capture between exports:** a link texted to the bot, or a YouTube playlist. Neither is built.
+19. **Outside task apps:** lists live in the bot. Sending them out needs an app registration.

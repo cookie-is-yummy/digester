@@ -51,7 +51,7 @@ def test_93_a_category_a_plural_common_noun_and_a_kind_after_a_determiner_are_no
 def test_93_an_audience_a_count_and_the_headline_are_not_things():
     from mvp.extract import clean_items, generic_name, restates_headline
     assert generic_name("underclassmen") and generic_name("5 tools") and generic_name("FREE PROGRAMS FOR STUDENTS")
-    assert not generic_name("Kitchen") and not generic_name("Ant Design") and not generic_name("NASA Space Apps")
+    assert not generic_name("Lantern") and not generic_name("Ant Design") and not generic_name("NASA Space Apps")
     text = ("4 FREE PROGRAMS FOR STUDENTS\nfor underclassmen especially\nNASA SPACE APPS: A GLOBAL HACKATHON FOR "
             "EVERYONE EACH OCTOBER\nAPPLY EARLY")
     got, dropped = clean_items([
@@ -85,23 +85,23 @@ def test_93_words_that_add_nothing_or_tell_a_story_are_not_words_about_a_thing()
 
 def test_93_a_post_about_one_thing_gives_it_its_best_key_points():
     from mvp.extract import clean_items
-    text = ("Kitchen\nOne of the most premium UI libraries out there. Every component is built to be copied and "
+    text = ("Lantern\nA full set of interface parts in one place. Every component is built to be copied and "
             "pasted. Free for personal use.")
-    keys = ["One of the most premium UI libraries out there", "Every component is built to be copied and pasted",
+    keys = ["A full set of interface parts in one place", "Every component is built to be copied and pasted",
             "Free for personal use"]
-    got, _ = clean_items([{"name": "Kitchen", "about": ""}], It(text), key_points=keys)
-    assert got[0]["about"] == "One of the most premium UI libraries out there; Every component is built to be " \
+    got, _ = clean_items([{"name": "Lantern", "about": ""}], It(text), key_points=keys)
+    assert got[0]["about"] == "A full set of interface parts in one place; Every component is built to be " \
                               "copied and pasted"
     # near-variants: without key points the name has no words; with words of its own they are kept
-    assert clean_items([{"name": "Kitchen", "about": ""}], It(text))[0][0]["about"] == ""
-    got, _ = clean_items([{"name": "Kitchen", "about": "Free for personal use"}], It(text), key_points=keys)
+    assert clean_items([{"name": "Lantern", "about": ""}], It(text))[0][0]["about"] == ""
+    got, _ = clean_items([{"name": "Lantern", "about": "Free for personal use"}], It(text), key_points=keys)
     assert got[0]["about"] == "Free for personal use"
 
 
 # ---------- the answer (findings 93 and 94) ----------
 DS = ("Best design systems for UI/UX designers\n1. Material UI - Google's design system with React components\n"
       "2. Ant Design: an enterprise-class UI design language\n3. Chakra UI, simple and accessible components\n")
-KITCHEN = ("Kitchen UI library\nOne of the most premium UI libraries out there. Every component is built to be copied "
+LANTERN = ("Lantern UI library\nA full set of interface parts in one place. Every component is built to be copied "
            "and pasted.")
 VIBES = "UI design vibes and calm workspace inspiration for designers"
 SLIDES = "5 free UI libraries you need to know\nsave this for your next project"
@@ -115,7 +115,7 @@ LIST_OFF = "Best cafes in Lisbon\n- Fabrica Coffee: great espresso and calm morn
 ROWS = [("v1", "vibes", VIBES, "2024-01-10", "2024-02-01", "instagram"),
         ("s1", "slides", SLIDES, "2025-03-01", "2025-03-02", "instagram"),
         ("d1", "designer", DS, "2023-06-20", "2023-07-02", "instagram"),
-        ("k1", "kitchen", KITCHEN, "2025-05-01", "2025-05-02", "instagram"),
+        ("k1", "kitchen", LANTERN, "2025-05-01", "2025-05-02", "instagram"),
         ("i1", "iconfan", ICONS, "2022-09-01", "2022-09-15", "instagram"),
         ("f1", "fonts", FONTS, "2025-09-01", "2025-09-02", "instagram"),
         ("c1", "css", CSS, "2025-10-01", "2025-10-02", "instagram"),
@@ -127,8 +127,8 @@ TABLE = {
         {"name": "Material UI", "about": "Google's design system with React components", "fit": "yes"},
         {"name": "Ant Design", "about": "an enterprise-class UI design language", "fit": "yes"},
         {"name": "Chakra UI", "about": "simple and accessible components", "fit": "yes"}]},
-    "Kitchen UI library": {"items": [{"name": "Kitchen", "about": "", "fit": "yes"}],
-                           "key_points": ["One of the most premium UI libraries out there",
+    "Lantern UI library": {"items": [{"name": "Lantern", "about": "", "fit": "yes"}],
+                           "key_points": ["A full set of interface parts in one place",
                                           "Every component is built to be copied and pasted"]},
     "UI icon packs": {"items": [
         {"name": "Iconoir", "about": "free open source icons for any UI", "fit": "yes"},
@@ -182,7 +182,7 @@ def test_94_an_items_request_reads_the_posts_whose_text_names_things(lib8):
     assert [h.split('"')[1] for h in heads] == ["Best design systems", "UI icon packs I use", "UI fonts for product design"]
     assert "More in your saves:" in msg
     assert "• UI css frameworks by @css: it names 2 more. https://" in msg
-    assert "Kitchen UI library" not in msg      # its text lists nothing (a score of 0): never read beyond the picks
+    assert "Lantern UI library" not in msg      # its text lists nothing (a score of 0): never read beyond the picks
     # the shown picks with no things follow; the one whose title promises a list says where its names are
     assert "• 5 free UI libraries you need to know by @slides: the names are in its slides, not its text. https://" in msg
     assert "• UI design vibes by @vibes: calm workspace inspiration for designers." in msg
@@ -210,7 +210,7 @@ def test_94_a_post_with_a_no_an_avoided_word_or_off_topic_is_never_read(lib8):
     say(lib8, UI_ASK, ask("UI/UX libraries", ["ui libraries"], avoid=["fonts"]))
     read = read_posts(lib8)
     assert "UI icon packs" not in read and "UI fonts" not in read and "Best cafes" not in read
-    assert "UI css frameworks" in read and "Kitchen UI library" not in read
+    assert "UI css frameworks" in read and "Lantern UI library" not in read
 
 
 def test_94_a_request_that_names_no_kind_of_thing_reads_its_top_3_as_before(lib8):
@@ -253,21 +253,21 @@ def test_93_only_the_kind_asked_for_is_shown_unless_fewer_than_2_would_be_left(e
 
 
 def test_93_fewer_than_2_good_things_make_no_items_answer_but_the_gist(env, tmp_path):
-    use_lib(env, tmp_path, [("k1", "kitchen", KITCHEN, "2025-05-01", "2025-05-02", "instagram")])
-    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Kitchen UI library", title="Kitchen")]}
+    use_lib(env, tmp_path, [("k1", "kitchen", LANTERN, "2025-05-01", "2025-05-02", "instagram")])
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Lantern UI library", title="Lantern")]}
     env["state"]["answers"]["mvp_extract"] = items_fake(TABLE)
     msg = say(env, "what ui libraries should i use", ask("UI libraries"))
-    assert "I recommend Kitchen by @kitchen" in msg and "From \"" not in msg
-    assert "• One of the most premium UI libraries out there" in msg
+    assert "I recommend Lantern by @kitchen" in msg and "From \"" not in msg
+    assert "• A full set of interface parts in one place" in msg
 
 
 def test_93_a_post_about_one_thing_counts_as_one_grounded_item_beside_another(env, tmp_path):
     use_lib(env, tmp_path, [ROWS[3], ROWS[5]])
-    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Kitchen UI library", title="Kitchen"),
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Lantern UI library", title="Lantern"),
                                                                   pick(u, "UI fonts", title="UI fonts")]}
     env["state"]["answers"]["mvp_extract"] = items_fake(TABLE)
     msg = say(env, "what ui libraries should i use", ask("UI libraries"))
-    assert "Kitchen: One of the most premium UI libraries out there; Every component is built to be copied and " \
+    assert "Lantern: A full set of interface parts in one place; Every component is built to be copied and " \
            "pasted" in msg
 
 

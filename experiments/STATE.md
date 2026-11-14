@@ -1,5 +1,21 @@
 # State
 
+## Founders' summary - round 10, MVP version 3 (14 Nov 2026; `BRIEF-10.md` section 17, `results/r10-mvp-v3.md`, `mvp/DESIGN.md` sections 12 to 15)
+
+How it all works, in one document: "Digest bot MVP: how it works", https://claude.ai/artifact/MbuBQQMjVndxdeUhqvTcJ4
+
+- **Built from Derrick's four cases on version 2.** Answers now name the things a post lists (programmes, tools, places), in the post's own words, under the post's link. The bot knows today's date and each post's posted date. A follow-up that changes the request runs a new search.
+- **Three of the four cases are right on the real library.** The 2026 opportunities answer names 6 programmes from one post. The three-part message gets three labelled parts and no 2024 post. The donut follow-up leaves the series out and names the change.
+- **One is honest but not good: "UI/UX libraries".** The small model marks component types as libraries, and the posts that name libraries keep the names in their slides. The fix is a prompt or model change, which needs two runs of the 20 requests. That did not fit under the cap.
+- **Rules beyond timing:** reminders before a thing's own deadline, rules that stay quiet when empty, reminders until done, one nudge for an overdue to-do.
+- **Understanding:** trends (the last 8 weeks against the 26 before), the theme check (pursue, practise, someday, enjoy, not me), a recap on request.
+- **Integrations:** a read-only MCP server for the person's own agent (prototype, one person, their own machine), "export my data", a message ready to forward.
+- **Measured:** 1,043 offline tests pass. The 20 draft requests show no regression (20 handled, 0 errors, 19 with picks, before and after). Recipe answers are byte for byte unchanged.
+- **Not built:** capture between exports, a report after an import, sending to outside task apps, a hosted MCP server.
+- **Spend:** $9.73 of the $10 cap. No more live work is possible without a new cap.
+- **Founders, please decide:** A-010 and A-011 (both Proposed; the design critic advised deferring the MCP prototype); a new cap; whether new rules should stay quiet on empty days by default; A-008 and A-009 are still open.
+- **Derrick, please:** pull the branch and try the same four requests, then say which answers you would not want to receive.
+
 ## Founders' summary - round 10, MVP version 2 (13 Nov 2026; `BRIEF-10.md` section 16, `results/r10-mvp-v2.md`, `mvp/DESIGN.md`)
 
 How it all works, in one document: "Digest bot MVP: how it works", https://claude.ai/artifact/MbuBQQMjVndxdeUhqvTcJ4
