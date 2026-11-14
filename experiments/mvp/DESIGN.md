@@ -380,3 +380,66 @@ unverified for a US account. So a fully automatic routine cannot be promised tod
   typing a command, and `new_items` rules run.
 - A pick-up from a shared Drive folder is later work: it needs its own Google project and a restricted permission.
 - Messages are never part of an export we ask for.
+
+## 12. Answers that answer; dates; changed requests (round 7, 14 Nov 2026)
+
+The founder's four cases of 13 Nov (findings 90 to 92). The vision's second and third wants: the gist without
+rewatching, and the thing inside a post to act on. Where this section and an earlier one differ, this section wins.
+
+### The items answer (finding 90)
+- A details kind `items` (prompt `extract_v2`): the named things a post's own text lists that answer the request, each
+  `{name, about, when, fit}`. Code keeps an item only when its name is a whole run of words in the post's text (a site
+  named by its address keeps its name alone); `about` and `when` only when they are the text's own words (about: at
+  most about 25 words, the key-point checks); `fit` "no" is left out, "yes" before "unknown". At most 12 per post.
+  The details call gets the request, the lines about the person, today's date and the post's date. Items are cached
+  per post and per request (the facts table's kind `items:<hash>`); a found list is not asked for again for its key
+  points.
+- Default details: a recipe, a workout or a make-or-build tutorial keep theirs (section 3). Every other ask, preview
+  or send gets `items` then `key_points` on its top 3 picks (parallel calls). Code decides from what comes back:
+  2 or more items over the shown picks make the items answer; else key points under the lead (an alternative's line is
+  its first key point); else the present answer, plus "The details are in the post's slides or video, not in its
+  text." only when the request asks for things (libraries, tools, opportunities, programmes, places ...).
+- The items answer: the opening line, then per post (at most 3) `From "Title" by @creator (posted May 2024, saved July
+  2023):`, its things numbered through the answer (at most 6 per post, then "and N more in the post"), and its link
+  alone. Picks with no things follow under "Also in your saves:". No "I recommend ... because".
+- Kept with the answer (`answers.picks[].items`, with the line as shown). "add the second one to my list", "remind me
+  about <name> tomorrow", "put the NASA one in my calendar" act on that thing (its name, its words, its date and the
+  post's link; a calendar entry takes the thing's own date when it has one ahead); a number past them says how many
+  there are. A later reminder is `source: items` with `item_names` (set by code, never by the model). "email it to me"
+  sends the whole answer.
+
+### Dates (finding 91)
+- Posted dates: Instagram from the link's shortcode (`dates.instagram_posted`; checked on the founder's library: 20,958
+  of 20,963 items with a kept date decode to a date on or before it); YouTube from `snippet.publishedAt`
+  (`youtube_cache.published_at`). The composer (`compose_v5`) and the details call get today's date and each
+  candidate's kept and posted dates.
+- Time-sensitive requests are recognised in code (opportunities, deadlines, applications, programmes, events, sales,
+  "soon", "this month", "next summer", a year ...). For them, a date written in a post's text (or an item's) is read by
+  code, with the posting year when it gives none: a passed date makes it `passed` (never the lead or an alternative
+  while something not passed fits, a clear fit past the count taking its place; shown alone it says "its deadline, 14
+  February 2025, has passed"); more than 12 months old and speaking of now ("now open", "apply now") with no date is
+  `old` (after everything fresher: "from May 2024, so this round has probably closed; check whether it runs again");
+  among equal verdicts, newer first; a year in the request first prefers posts that name it or were posted in the year
+  before it or in it. A date ahead is said with how far it is: "deadline 1 December (in 19 days)". Rules' sends run
+  the same code.
+- No stale claims, for any request: a reason from a post older than 60 days loses a part that says "now open",
+  "currently", "this week", "soon", "new" (the reason trimming of fix pass 5; else it goes), and a key point or an
+  item's words that say it get "(as of May 2024)" after them. Date phrases are English only: a Spanish answer keeps the
+  order and the drops but not the date words.
+
+### Changed requests (finding 92)
+- After an answer, a follow-up whose form carries `avoid`, or whose words change the request ("what about", "something
+  that isn't", "not from that creator", "shorter", "easier", "more recent", "on Instagram", "anything else",
+  "different") is a new search: the last request's content plus the change (avoid words from the form and from the
+  words after "isn't", "without", "no"; the shown pick's creator left out; a length bound; an order; a platform). The
+  shown picks the change rejects are left out ("anything else": all shown). The opening line is built by code from the
+  merged request ("Here's what else I found in your saves for basic Blender tutorials, leaving out anything about
+  donut."). With nothing left: "I found nothing else in your saves for ..., leaving out ..." and, when YouTube can
+  serve it, the "new ones" offer. A question about the picks shown ("how long is the second one?") stays a question.
+- The avoid test reads the item's whole own text, a video's description included, and such a candidate never reaches
+  the composer.
+- The opening line code builds never echoes a goal of more than 6 words ("Here's what I found in your saves.").
+
+### Not done in this round
+- Several asks in one message ("startup motivation reels, opportunities to pursue soon, or things with deadlines")
+  still get one answer for the whole message, not one labelled part per ask.
