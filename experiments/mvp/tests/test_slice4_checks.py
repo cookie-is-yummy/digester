@@ -42,7 +42,10 @@ def test_sending_to_someone_else_is_offered_to_the_person_instead(env):
     say(env, "pasta", ask_pasta())
     assert say(env, "email this to my mom at mom@x.co", {"intent": "set_email", "email": "mom@x.co"}) == ONLY_YOU
     assert say(env, "email it to my friend", {"intent": "act_on_last", "actions": ["email.send"]}) == ONLY_YOU
-    assert say(env, "forward that to my boss", {"intent": "unsupported", "reply": "I can't do that."}) == ONLY_YOU
+    # round 8, slice B (I3): "forward that to my boss" now gets a message they can forward themselves, then the hint
+    # (test_round8_integrations.py); nothing goes to anyone else and no address is stored
+    assert say(env, "forward that to my boss", {"intent": "unsupported", "reply": "I can't do that."}) == \
+        "Press and hold that message to forward it. I can't send to other people myself."
     assert bot.store.email_of(H) == (None, False) and outbox_rows(bot) == []
     # their own words about their own address still work
     assert say(env, "my work email is me@work.co", {"intent": "set_email", "email": "me@work.co"}).startswith(

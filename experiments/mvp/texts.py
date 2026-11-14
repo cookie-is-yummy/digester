@@ -1397,3 +1397,42 @@ def overdue_dropped(text):
 
 OVERDUE_OFF = "OK. I won't nudge you about to-dos that are past due. Say \"overdue nudges on\" to have them back."
 OVERDUE_ON = "OK. When a to-do is a day past due, I'll nudge you once."
+
+
+# ---------- round 8, slice B: integrations (DESIGN.md section 15): export, share ----------
+def export_where(path):
+    """The export folder as the person reads it: its place under MVP_HOME ("outbox/1a2b3c4d5e6f/export-2026-11-12")."""
+    import os
+    from . import config
+    try:
+        rel = os.path.relpath(path, config.HOME)
+    except ValueError:
+        rel = path
+    return path if rel.startswith("..") else rel
+
+
+def export_done(n_saves, where):
+    return (f"I saved a copy of your data: your rules, your lists, what I know about you, the answers I sent you, and "
+            f"the list of your {n_saves} saves (links and dates only, no post text). It's in the folder {where} on the "
+            f"bot's computer. Say \"email it to me\" and I'll send you the files.")
+
+
+def export_lists_done(n, where):
+    return (f"I saved your lists ({n} to-do{'s' if n != 1 else ''}) as two files: todos.csv, a table a to-do app can "
+            f"import, and todos.md, a page to read. They're in the folder {where} on the bot's computer. Say \"email "
+            f"it to me\" and I'll send them to you.")
+
+
+EXPORT_LISTS_EMPTY = "Your lists are empty, so there's nothing to export yet. Add something with \"add … to my list\"."
+
+
+def export_emailed(to, via, err, where, left=()):
+    if via == "smtp":
+        msg = f"I emailed your files to {to}."
+    elif err:
+        msg = f"I couldn't send the email just now, so I put it {where} instead."
+    else:
+        msg = f"Email isn't connected here, so I didn't send it. The email with your files is {where}."
+    if left:
+        msg += f" {' and '.join(left)} is too big to email (over 5 MB), so it's only in the folder."
+    return msg

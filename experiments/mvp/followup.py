@@ -424,7 +424,248 @@ NUDGES_ON = re.compile(r"^\W*(?:overdue\s+(?:nudges?|reminders?)\s+on|turn on(?:
                        r"nudge me about overdue\s+(?:to-?dos?|things|tasks))(?:\s+please|\s+pls)?\W*$", re.I)
 
 
-class FollowupMixin:
+# ---------- round 8, slice B: integrations (DESIGN.md section 15), read by code with no model call ----------
+# "what did my agent ask": the MCP server's calls, counted per tool and day (mcp_server.agent_asked_text)
+AGENT_ASKED = re.compile(r"^\W*(?:what|which things?)\s+(?:did|has|have)\s+my\s+(?:ai\s+)?(?:agent|assistant)\s+"
+                         r"(?:ask(?:ed)?(?:\s+(?:you|me))?(?:\s+for)?|look(?:ed)?\s+at|looked up|see|seen|read)"
+                         r"(?:\s+(?:today|this week|lately|recently))?\W*$", re.I)
+_POLITE = r"^\W*(?:(?:please|pls|can you|could you|ok|okay)[\s,]+)*"
+_END = r"(?:[\s,]+(?:please|pls))?\W*$"
+EXPORT_DATA = re.compile(_POLITE + r"(?:export|download|give me|send me|get me)\s+(?:a copy of\s+)?(?:all\s+(?:of\s+)?)?"
+                         r"(?:my data|my information|my info|everything you (?:have|know|hold|keep)\s+(?:on|about)\s+me)"
+                         + _END, re.I)
+EXPORT_LISTS = re.compile(_POLITE + r"(?:export|download)\s+(?:all\s+(?:of\s+)?)?my\s+(?:lists?|to-?dos?|to-?do lists?)"
+                          r"(?:\s+as\s+(?:an?\s+)?(?:files?|csv|spreadsheet))?" + _END, re.I)
+EMAIL_EXPORT = re.compile(_POLITE + r"(?:e-?mail|send)\s+(?:me\s+)?(?:it|them|that|those|these|the files?|the export|"
+                          r"my export|my data|my lists?|everything)(?:\s+to\s+(?:me|my email|my inbox))?" + _END, re.I)
+EXPORT_EMAIL_MINUTES = 60    # "email it to me" means the export this long after it, while no answer came after it
+# "share it", "share the second one", "send this to my sister", "forward this": a message they forward themselves
+SHARE = re.compile(_POLITE + r"(?P<verb>share|forward|fwd|send)\s+"
+                   r"(?P<what>.{1,40}?)(?:\s+(?:on|along))?"
+                   r"(?:\s+(?:to|with)\s+(?P<who>[^\W\d_][\w'’ .-]{0,40}?))?" + _END, re.I)
+SHARE_ES = re.compile(r"^\W*(?:por favor\s+)?(?:comp[aá]rte(?:lo|la|los|las)|reenv[ií]a(?:lo|la|los|las)|"
+                      r"env[ií]ase(?:lo|la|los|las)|m[aá]ndase(?:lo|la|los|las)|p[aá]sase(?:lo|la|los|las)|"
+                      r"comparte\s+(?:el|la)\s+(?P<ord>primer[oa]?|segund[oa]|tercer[oa]?|cuart[oa]|quint[oa]|"
+                      r"[uú]ltim[oa]))(?:\s+(?:a|con)\s+[^\W\d_][\w'’ .-]{0,40}?)?(?:\s+por favor)?\W*$", re.I)
+ES_ORDINAL = {"primer": 1, "primero": 1, "primera": 1, "segundo": 2, "segunda": 2, "tercer": 3, "tercero": 3,
+              "tercera": 3, "cuarto": 4, "cuarta": 4, "quinto": 5, "quinta": 5}
+SHARE_ONE = re.compile(r"^(?:it|this|that|this one|that one|the one you (?:recommended|picked)|(?:the|this|that)\s+"
+                       r"(?:recipe|video|post|reel|tutorial|workout|link|pick|answer))$", re.I)
+SHARE_ALL = re.compile(r"^(?:these|those|them|all|all of them|both|everything|the picks|these ones|those ones)$", re.I)
+# "send it to me", "send the second one to my calendar / my grocery list": the person's own places, not a person
+SHARE_TO_SELF = re.compile(r"^(?:me|myself|you|yourself|(?:my|the)\s+(?:[\w-]+\s+)?(?:e-?mail|inbox|phone|account|"
+                           r"calendar|list|lists|to-?dos?|todo|reminders?|notes?|tasks?|outbox))\b", re.I)
+SHARE_ORDINAL = dict(ORDINAL, sixth=6, seventh=7, eighth=8, ninth=9, tenth=10, eleventh=11, twelfth=12)
+SHARE_NUMBER = re.compile(r"^(?:the\s+)?(?:(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|"
+                          r"twelfth|last|1st|2nd|3rd|4th|5th|\d{1,2}th)(?:\s+(?:one|pick|"
+                          r"post|video|reel|recipe|tutorial|workout|thing))?|#\s?(\d{1,2})|number\s+(\d{1,2})|(\d{1,2}))$",
+                          re.I)
+
+
+def share_request(text):
+    """What a share message asks for, read by code: {"one": True} (the pick the answer led with), {"all": True},
+    {"number": n}, {"name": words}, plus "es" for a Spanish one; None when it is not a share request (an email to
+    someone, "send it to me", "send me ...", anything the words do not fit)."""
+    t = " ".join((text or "").split())
+    m = SHARE_ES.match(t)
+    if m:
+        w = (m.group("ord") or "").lower().replace("ú", "u")
+        if w.startswith("ultim"):
+            return {"number": -1, "es": True}
+        return {"number": ES_ORDINAL[w], "es": True} if w else {"one": True, "es": True}
+    if re.search(r"\be-?mail\b|@", t, re.I):
+        return None   # an email to someone else stays the email path (outputs.EMAIL_ONLY_YOU)
+    m = SHARE.match(t)
+    if not m:
+        return None
+    verb, what, who = m.group("verb").lower(), m.group("what").strip(" .,!?"), (m.group("who") or "").strip(" .,!?")
+    if not what or what.lower().split()[0] in ("me", "us", "my", "your", "a", "an", "some", "something", "anything"):
+        return None   # "send me a recipe", "share my rules": not an answer shown
+    if who and SHARE_TO_SELF.match(who):
+        return None   # "send it to me": to them, as before
+    if verb == "send" and not who:
+        return None   # "send this" alone is not about another person
+    if SHARE_ONE.match(what):
+        return {"one": True}
+    if SHARE_ALL.match(what):
+        return {"all": True}
+    n = SHARE_NUMBER.match(what)
+    if n:
+        if n.group(1):
+            w = n.group(1).lower()
+            return {"number": -1 if w == "last" else SHARE_ORDINAL.get(w) or int(re.sub(r"\D", "", w))}
+        return {"number": int(n.group(2) or n.group(3) or n.group(4))}
+    name = re.sub(r"^(?:the\s+)|\s+one$", "", what, flags=re.I).strip()
+    return {"name": name} if len(name) >= 2 else None
+
+
+class IntegrationReadsMixin:
+    """Round 8, slice B (DESIGN.md section 15): "export my data", "export my lists", "email it to me" right after an
+    export, "share it" / "send this to <someone>" / "forward this", and "what did my agent ask". Code only."""
+
+    def integration_reads(self, person, text, now):
+        """(True, reply ref) when code answered the message here, else (False, None)."""
+        t = " ".join((text or "").split())
+        if not t or len(t) > 120:
+            return False, None
+        h = person["handle"]
+        if AGENT_ASKED.match(t):
+            from .mcp_server import agent_asked_text
+            self.note(intent="agent_log")
+            return True, self.send(h, agent_asked_text(self.store, h, now, person["timezone"]))
+        if EXPORT_DATA.match(t):
+            return True, self._export(person, now, lists_only=False)
+        if EXPORT_LISTS.match(t):
+            return True, self._export(person, now, lists_only=True)
+        if EMAIL_EXPORT.match(t):
+            st = self._export_in_view(h, now)
+            if st:
+                return True, self._email_export(person, st, now)
+        ask = share_request(t)
+        if ask is not None:
+            ref = self._share(person, ask, t, now)
+            if ref is not False:
+                return True, ref
+        return False, None
+
+    # ---------- export (I2) ----------
+    def _export(self, person, now, lists_only):
+        from . import export as X
+        from .store import now_iso
+        h = person["handle"]
+        self.note(intent="export")
+        if lists_only and not self.store.all_todos(h):
+            return self.send(h, T.EXPORT_LISTS_EMPTY)
+        res = X.export(self, person, now, lists_only=lists_only)
+        last = self.store.last_answer(h) or {}
+        self.store.set_state(f"export_last:{h}", {"dir": res["dir"], "files": [n for n, _ in res["files"]],
+                                                  "kind": "lists" if lists_only else "data", "at": now_iso(now),
+                                                  "answer_run": last.get("run_id")})
+        self.store.log_action(h, None, None, "export.lists" if lists_only else "export.data", "done",
+                              ref=res["dir"], detail={"files": len(res["files"])}, at=now)
+        where = T.export_where(res["dir"])
+        return self.send(h, T.export_lists_done(res["todos"], where) if lists_only else T.export_done(res["saves"], where))
+
+    def _export_in_view(self, h, now):
+        """The export "email it to me" is about: one made in the last hour, with no answer after it."""
+        import os
+        from datetime import datetime, timedelta
+        st = self.store.get_state(f"export_last:{h}")
+        if not st or not os.path.isdir(st.get("dir") or ""):
+            return None
+        if now - datetime.fromisoformat(st["at"]) > timedelta(minutes=EXPORT_EMAIL_MINUTES):
+            return None
+        if (self.store.last_answer(h) or {}).get("run_id") != st.get("answer_run"):
+            return None
+        return st
+
+    def _email_export(self, person, st, now):
+        import os
+        from . import config
+        from . import export as X
+        from .actions import email as email_action
+        h = person["handle"]
+        self.note(intent="export_email")
+        att, left = X.attachments([(n, os.path.join(st["dir"], n)) for n in st["files"]])
+        names = ", ".join(a[0] for a in att)
+        subject = "Your lists" if st.get("kind") == "lists" else "Your data"
+        text = (f"Here are the files you asked for: {names}." + (" README.txt says what each one is." if
+                                                                 any(a[0] == "README.txt" for a in att) else "")
+                + (f"\n\n{' and '.join(left)} is too big to email, so it's only in the folder on the bot's computer."
+                   if left else "")
+                + f"\n\nSent by {config.BOT_NAME} because you asked for it, to your own address.")
+        content = {"subject": subject, "text": text, "html": None, "attach": [list(a) for a in att]}
+        to, ok = self.store.email_of(h)
+        if not ok:   # the usual flow: the address, its code, then the email goes out
+            o = self.email_waiting(person, content, None, now)
+            return self.send(h, o.line)
+        via, path, err = email_action.send(self, h, to, subject, text, None, att, None, now)
+        self.store.log_action(h, None, None, "email.send", "done" if via == "smtp" else "outbox", ref=path,
+                              detail={"via": via, "error": err, "export": True}, at=now)
+        return self.send(h, T.export_emailed(to, via, err, email_action.where_outbox(self), left))
+
+    # ---------- a message to forward (I3) ----------
+    def _share(self, person, ask, text, now):
+        """The forward-ready message, then the hint, or one plain line. False when the message names nothing in the
+        answer (then it goes on to the model as before)."""
+        from . import lang as L
+        from . import share as S
+        h = person["handle"]
+        last = self._answer_seen(h)
+        run_lang = None
+        if last and last.get("run_id"):
+            row = self.store.one("SELECT lang FROM runs WHERE id=?", (last["run_id"],)) or {}
+            run_lang = row.get("lang")
+        t = L.table("es" if ask.get("es") else run_lang)
+        if not last or not last.get("items"):
+            if ask.get("name"):
+                return False
+            self.note(intent="share")
+            return self.send(h, t.get("share_nothing") or L.EN["share_nothing"])
+        snap = self.store.answer(last["run_id"]) or {}
+        kept = {p["item_id"]: p for p in snap.get("picks") or []}
+        view = self.view(person["library"])
+
+        def rec_of(iid):
+            if iid in kept:
+                return kept[iid]
+            it = view.get(iid)
+            if it is None:
+                return None
+            from .compose import title_from_item
+            return {"item_id": iid, "title": title_from_item(it), "creator": it.creator, "url": it.url, "facts": {}}
+
+        items = last["items"]
+        main = [i for i in items if kept.get(i, {}).get("main", True)] or items
+        blocks = []
+        has_things = any(p.get("items") for p in snap.get("picks") or [])
+        if ask.get("number") is not None and has_things:
+            n = ask["number"] if ask["number"] > 0 else sum(len(p.get("items") or []) for p in snap["picks"])
+            got = self._answer_item(snap, [n])
+            if got and got[3]:
+                return self.send(h, got[3])
+            if got:
+                rec = got[0][0]
+                blocks.append(S.item_block(rec["item"], {"title": rec.get("source_title"), "creator": rec.get("creator"),
+                                                         "url": rec.get("url")}))
+        elif ask.get("number") is not None:
+            n = ask["number"] if ask["number"] > 0 else len(items)
+            if not 1 <= n <= len(items):
+                return self.send(h, T.which_pick(len(items)))
+            rec = rec_of(items[n - 1])
+            if rec:
+                blocks.append(S.pick_block(rec))
+        elif ask.get("name"):
+            self._tl.msg_text = text
+            got = self._answer_item(snap, None) if has_things else None
+            if got and not got[3]:
+                rec = got[0][0]
+                blocks.append(S.item_block(rec["item"], {"title": rec.get("source_title"), "creator": rec.get("creator"),
+                                                         "url": rec.get("url")}))
+            else:
+                said = set(tokens_of(ask["name"])) - set(_ASK_WORDS)
+                scored = sorted(((len(said & set(tokens_of((rec_of(i) or {}).get("title")))), k, i)
+                                 for k, i in enumerate(items)), key=lambda x: (-x[0], x[1]))
+                if not scored or not scored[0][0] or (len(scored) > 1 and scored[1][0] == scored[0][0]):
+                    return False
+                blocks.append(S.pick_block(rec_of(scored[0][2])))
+        elif ask.get("all"):
+            blocks = [S.pick_block(r) for r in (rec_of(i) for i in main[:5]) if r]
+        else:
+            rec = rec_of(main[0])
+            if rec:
+                blocks.append(S.pick_block(rec))
+        blocks = [b for b in blocks if b]
+        self.note(intent="share")
+        if not blocks:
+            return self.send(h, T.ITEMS_GONE)
+        ref = self.send(h, S.share_text(blocks))
+        self.store.log_action(h, last["run_id"], None, "share.text", "done", detail={"blocks": len(blocks)}, at=now)
+        self.send(h, t.get("share_hint") or L.EN["share_hint"])
+        return ref
+
+
+class FollowupMixin(IntegrationReadsMixin):
     def _changed_request(self, person, it, text, last, ch):
         """Round 7, finding 92: a new search with the last request's own content plus the change (more avoid words, a
         creator left out, a length bound, an order, a platform), the shown picks the change rejects left out. The

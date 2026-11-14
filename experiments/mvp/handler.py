@@ -218,6 +218,10 @@ class HandlerMixin:
         pending = self._live_pending(handle, now)
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
+        # round 8, slice B (DESIGN.md section 15): export, share, "what did my agent ask": code only, no model call
+        done, ref = self.integration_reads(person, text, now)
+        if done:
+            return ref
         it, paid = self.code_reads(person, text, self._answer_seen(handle))
         if it is not None and not paid:   # "stop 2", "my rules", "undo": no model call, never misread
             return self._dispatch(person, it, text, rules, pending, last, now)
@@ -1100,6 +1104,8 @@ class HandlerMixin:
             # with their handle before the ledger used a hashed ref. One deletion list per store (PRIV-3).
             from . import llm
             from .refresh import forget_inbox
+            from .export import forget_exports   # round 8, slice B: the export folders go too
+            forget_exports(h)
             inbox_left = forget_inbox(self.store, h)
             gone = self.store.delete_person_data(h)
             line = {"handle": h, "library": person["library"], "libraries": gone["libraries"], "at": now_iso()}
