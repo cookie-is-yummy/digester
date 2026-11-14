@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from mvp.tests.test_mvp import compose_picks, env, last, pasta_spec  # noqa: E402,F401  (env is a fixture)
 from mvp.tests.test_slice2 import H, say  # noqa: E402
-from mvp.tests.test_round7 import ask, ig, items_fake, pick, use_lib  # noqa: E402
+from mvp.tests.test_round7 import ask, ig, pick, use_lib  # noqa: E402
 
 UTC = timezone.utc
 DAILY = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
@@ -537,7 +537,7 @@ def test_bn2_undo_after_tomorrow_brings_the_due_time_back_and_never_nudges_twice
 
 
 def test_bn2_the_nudge_waits_for_quiet_hours_to_end(env):
-    bot, ch = env["bot"], env["ch"]
+    ch = env["ch"]
     tue_todo(env, due="2026-11-17T22:30")
     assert tick_at(env, u(2026, 11, 18, 3, 31)) == 1                          # Tue 10:30pm: a time they named
     assert tick_at(env, u(2026, 11, 19, 3, 31)) == 0                          # Wed 10:31pm: quiet hours
