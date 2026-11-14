@@ -508,6 +508,19 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
   the message without its question words ("what other opportunities might i have missed" asks "other opportunities i
   might have missed"). On the dev files: 0 of 5 chat, help or unsupported cases and 0 of 32 test messages sent with a
   chat or help form flip.
+- Checker (14 Nov, `tests/test_round8_checks.py`). (93) The capital test of `common_noun` is skipped for a name with a
+  slash or hyphen inside a word ("shadcn/ui", "react-hook-form"), for a one-word name that is a list line's name ("-
+  lucide - clean icons", a line of its own) and for a caption of 10 words or more written without capitals (fewer than
+  one word in 50 holds one, "I" aside); "- notion is where i keep them" (a sentence, not a list line's name) is still
+  dropped. (94) `list_score` counts marked lines only when there are 2 or more, and a quote, a bracket or dots is not a
+  mark; `found_noun` drops every leading grading or counting word ("the best tools", "top 5 tools": "tools"). (95) A
+  part that is only its kind word ("tools", "some apps") has no topic of its own: "tools and resources for designers",
+  "cafes and restaurants in lisbon", "recipes and workouts" stay one ask. (97) The guard never fires for a question
+  about the app or the person's data ("who can see my saves", "is my library private", "how many ... did I save"), a
+  how, why, who, where or can-I question, or a statement that asks nothing ("I saved so many reels"); a kind of thing
+  with "what are some", "what are the best", "which <kind> should I", "recommend", "suggest" is an ask (live: "what
+  are some uiux libraries i should use for my next project" came back as chat), never "which one should I pick". On
+  the dev files: 0 of 5 chat, help or unsupported cases and 0 of 25 test messages sent with a chat or help form flip.
 
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
@@ -566,6 +579,10 @@ are optional and a stored spec without them reads as before.
 - State `deadline:<rule id>` = {date, deadline} (removed by "delete my data"). When it fires (`executor._run_items`) the
   head line is "Reminder: X's deadline is 30 November (in 3 days)." instead of "Here's what you asked me to send you:".
 - Undo, `_own_once` (never unanswered, kept through quiet hours and the daily limit) apply as for any later send.
+- Checker: a thing sent later (this reminder, or round 7's "remind me about it on Friday") says how far its date is from
+  the day of the send, not of the answer (`render.renew_note`: "deadline 30 November, in 3 days"; a day gone by "has
+  passed"); the send reads the newest kept answer that holds the thing it names, so two reminders for two things of
+  one post each send their own thing.
 - Round 7's interpreter form ("remind me about <name> two days before its deadline") keeps its replies (a moment
   already passed still says "sooner than that" and sets nothing); it now sets the thing it found by name (it read
   "its" as the first thing) and gets the same head line. A time is taken from its form only when the message names
@@ -589,7 +606,9 @@ are optional and a stored spec without them reads as before.
 ### A reminder that runs until it is done (BN2 b)
 - `when.stop_when`: "done", only on a repeating reminder in the person's own words (`source: note`).
 - Set by code after the model from "until I've done it", "until I've applied", "till I tick it off", "until it's
-  done", "until I say done" (`followup.UNTIL_DONE`). Any `until` the model filled is dropped unless the message names
+  done", "until I say done" (`followup.UNTIL_DONE`). The model reads the message without those words
+  (`followup.for_interpreter`; live, 14 Nov, with them it asked a question instead of making the reminder); every check
+  of its form reads the whole message. Any `until` the model filled is dropped unless the message names
   another end ("until Friday, or until I've done it"); the words leave the reminder's text. describe adds "until you
   say done".
 - A bare "done", "did it", "applied", "finished" (`followup.DONE_BARE`) within 12 hours after that rule's latest send,
@@ -600,6 +619,8 @@ are optional and a stored spec without them reads as before.
 - `todos.overdue_at` (store.ADDED_COLUMNS). A to-do due more than 24 hours ago and at most 7 days ago, not done or
   removed, with no nudge yet, gets one: ""X" was due yesterday. Reply "done N", "tomorrow" or "drop it"." ("was due
   on Tuesday 17 November" when it is older).
+- One at a time: while a nudge waits for its answer (at most 12 hours, `todos.OVERDUE_OPEN`) no other goes out, so
+  "tomorrow" or "drop it" is about the one asked (checker).
 - Quiet hours, a snooze, the person's kill switch and the daily limit make it wait (it goes out when they end, once);
   it counts as a timed send of the day (run kind `todo`). A reminder that was missed while the bot was off (its notice
   said it is still listed) gets no nudge.
