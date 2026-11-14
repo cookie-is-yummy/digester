@@ -147,7 +147,144 @@ def only_detail_words(text):
     return not [w for w in re.findall(r"[^\W\d_]+", t.lower()) if w not in _ASK_WORDS]
 
 
+# ---------- round 7, finding 92: a follow-up that changes the request is a new search ----------
+CHANGE = re.compile(r"\b(what about|how about|what if|something (?:that )?(?:isn'?t|is not|without|other than|not|else|"
+                    r"different)|other than|instead|anything else|any others?|other ones|others|different|more like|"
+                    r"not (?:from|by) (?:that|this|the same|him|her|them|@?\w+)|another creator|someone else|"
+                    r"shorter|quicker|easier|simpler|more recent|newer|newest|latest|older|"
+                    r"(?:on|from) (?:instagram|youtube|insta|ig)(?: instead)?|"
+                    r"(?:that|which|but) (?:isn'?t|is not|aren'?t|are not|doesn'?t|don'?t)|without|except|but not|"
+                    r"no more)\b", re.I)
+AVOID_SAID = re.compile(r"\b(?:isn'?t|is not|aren'?t|are not|not|without|other than|except|no more|no|minus)\s+"
+                        r"(?:(?:a|an|the|any|about|with|another|more|so much)\s+)*"
+                        r"([^\W\d_][\w'-]{2,30}(?:\s+[^\W\d_][\w'-]{2,30})?)", re.I)
+NOT_AVOID = set("""one ones that this those these it them from by sure like really quite very too so much more long
+short hard easy that's what something anything thing things kind sort same creator person guy girl""".split())
+CREATOR_CHANGE = re.compile(r"\bnot (?:from|by) (?:that|this|the same) (?:creator|person|guy|girl|channel|account|one)|"
+                            r"\bnot (?:from|by) (?:him|her|them)\b|\banother creator\b|\bsomeone else\b|"
+                            r"\bdifferent (?:creator|channel|account|person)\b", re.I)
+CREATOR_NAMED = re.compile(r"\bnot (?:from|by) @?([A-Za-z0-9_.]{2,30})\b", re.I)
+OTHER_ONES = re.compile(r"\b(anything else|any others?|other ones|others|something else|something different|"
+                        r"different ones?|more like (?:these|this|that|them))\b", re.I)
+PLATFORM_SAID = {"instagram": re.compile(r"\b(?:on|from) (?:instagram|insta|ig)\b", re.I),
+                 "youtube": re.compile(r"\b(?:on|from) youtube\b", re.I)}
+
+
+def avoid_words(text):
+    """What a change rules out, in the person's words ("something that isn't a donut" -> ["donut"])."""
+    out = []
+    for m in AVOID_SAID.finditer(text or ""):
+        words = [w for w in m.group(1).lower().split() if w not in NOT_AVOID]
+        if words and words[0] not in NOT_AVOID:
+            w = words[0].strip("'")
+            if w not in out and len(w) >= 3:
+                out.append(w)
+    return out[:4]
+
+
+def request_change(it, text):
+    """The change a follow-up makes to the last request, or None when it is a question about the picks shown ("how
+    long is the second one?", "which is easiest?"). Code decides: a form that carries `avoid`, or change wording."""
+    t = " ".join((text or "").split())
+    said = CHANGE.search(t)
+    if not said and not it.avoid:
+        return None
+    from .retrieve import _stem
+    avoid = []
+    for a in [*(a.lower() for a in it.avoid or []), *avoid_words(t)]:
+        if _stem(a) not in {_stem(x) for x in avoid}:   # "donut" and "donuts" are one
+            avoid.append(a)
+    ch = {"avoid": avoid[:6],
+          "creator": bool(CREATOR_CHANGE.search(t)), "creator_named": None,
+          "shorter": bool(re.search(r"\b(shorter|quicker)\b", t, re.I)),
+          "easier": bool(re.search(r"\b(easier|simpler)\b", t, re.I)),
+          "newest": bool(re.search(r"\b(more recent|newer|newest|latest)\b", t, re.I)),
+          "oldest": bool(re.search(r"\bolder\b", t, re.I)),
+          "platform": next((p for p, rx in PLATFORM_SAID.items() if rx.search(t)), None),
+          "others": bool(OTHER_ONES.search(t))}
+    m = CREATOR_NAMED.search(t)
+    if m and m.group(1).lower() not in ("that", "this", "the", "him", "her", "them", "same", "my", "a", "an"):
+        ch["creator_named"] = m.group(1)
+    if ch["creator"] or ch["creator_named"]:
+        ch["avoid"] = [a for a in ch["avoid"] if a not in ("creator", "him", "her", "them")]
+    if not any(ch[k] for k in ("avoid", "creator", "creator_named", "shorter", "easier", "newest", "oldest", "platform",
+                               "others")):
+        ch["others"] = True   # "what about ...?" with nothing code can read: other picks for the same request
+    return ch
+
+
 class FollowupMixin:
+    def _changed_request(self, person, it, text, last, ch):
+        """Round 7, finding 92: a new search with the last request's own content plus the change (more avoid words, a
+        creator left out, a length bound, an order, a platform), the shown picks the change rejects left out. The
+        opening line is built here from the merged request; the person's message is never quoted back as a
+        must-have. With nothing left: said plainly, with the offer of new ones from YouTube; never a rejected pick."""
+        from .compose import own_text
+        from .retrieve import contains_word, name_matches
+        h = person["handle"]
+        st = self.store.get_state(f"lastspec:{h}")
+        if not st:
+            return None
+        spec = RuleSpec.model_validate(st["spec"])
+        c = spec.content
+        c.avoid = list(dict.fromkeys([*c.avoid, *ch["avoid"]]))[:8]
+        view = self.view(person["library"])
+        shown_ids = [i for i in (last.get("items") or [])]
+        shown = [x for x in (view.get(i) for i in shown_ids) if x]
+        who = []
+        if ch["creator_named"]:
+            who.append(ch["creator_named"])
+        if ch["creator"]:
+            n = pick_number(text, len(shown)) or 1
+            if 1 <= n <= len(shown) and shown[n - 1].creator:
+                who.append(shown[n - 1].creator)
+        if who:
+            c.avoid_creators = list(dict.fromkeys([*c.avoid_creators, *who]))[:10]
+            c.creators = [x for x in c.creators if not any(name_matches(x, w) or name_matches(w, x) for w in who)]
+        if ch["platform"]:
+            c.platforms = [ch["platform"]]
+        if ch["easier"]:
+            c.order = "easiest_first"
+        elif ch["newest"]:
+            c.order = "newest"
+        elif ch["oldest"]:
+            c.order = "oldest"
+        extra = {}
+        try:
+            extra = self._youtube().details(shown, now=self.clock()) if any(x.platform == "youtube" for x in shown) \
+                else {}
+        except Exception:  # noqa: BLE001 - the title alone, then
+            extra = {}
+        rejected = []
+        for x in shown:
+            own = own_text(x, extra)
+            if ch["others"] or any(contains_word(own, w) for w in c.avoid) \
+                    or any(name_matches(x.creator or "", w) for w in c.avoid_creators) \
+                    or (c.platforms and x.platform not in c.platforms):
+                rejected.append(x.id)
+        request = st.get("text") or c.goal or ""
+        if ch["shorter"]:
+            request = (request + " shorter").strip()
+        self._tl.intro_code = None if self._answer_lang() else T.changed_intro(c.goal or "", ch, who)
+        before = list(st.get("shown") or []) if ch["others"] else []
+        try:
+            msg, run_id, n = self.run(person, spec, "ask", request_text=request,
+                                      shown=list(dict.fromkeys([*before, *rejected])))
+        finally:
+            self._tl.intro_code = None
+        if not n and not self._run_failed(run_id):
+            msg = T.changed_none(c.goal or "", ch, who)
+            try:
+                ok = self._outside().available(h, spec, [request], now=self.clock()) and not self._answer_lang()
+            except Exception:  # noqa: BLE001
+                ok = False
+            if ok:
+                from . import lang as L
+                msg += L.EN["more_new"]
+            self.store.set_state(f"lastspec:{h}", dict(st, spec=spec.stored(),
+                                                       shown=list(dict.fromkeys([*(st.get("shown") or []), *rejected]))))
+        return self.deliver(person, spec, msg, run_id, kind="ask", request_text=request)
+
     def code_reads(self, person, text, last):
         """(Interpretation, needs_paid_call) for a message code reads by itself, or (None, False)."""
         it = plain_command(text)

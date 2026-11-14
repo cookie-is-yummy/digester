@@ -537,6 +537,11 @@ class HandlerMixin:
                 seen = self._answer_seen(h) or last
                 n = it.pick_number or pick_number(text, len(seen["items"])) or 1
                 return self._detail_answer(person, seen, kinds, n)
+            from .followup import request_change
+            change = request_change(it, text)
+            if change is not None and self.store.get_state(f"lastspec:{h}"):
+                # round 7, finding 92: "what about something that isn't a donut" changes the request: a new search
+                return self._changed_request(person, it, text, last, change)
             # review fix X4 (experience): "the third one" after an answer with one pick is asked about first
             named = it.pick_number or pick_number(text, len(last["items"]))
             if named and not 1 <= named <= len(last["items"]):

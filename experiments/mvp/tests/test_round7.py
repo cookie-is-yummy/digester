@@ -64,8 +64,17 @@ def ask(goal, searches=None, **content):
         {"goal": goal, "searches": searches or [goal], "count": 3}, **content)}}
 
 
+def num(u, needle):
+    """The candidate number of the item whose text (over several lines, for a video's description) holds `needle`."""
+    import re
+    for m in re.finditer(r"^(\d+)\. [^\n]*\n<item>(.*?)</item>", u, re.M | re.S):
+        if needle.lower() in m.group(2).lower():
+            return int(m.group(1))
+    return number_of(u, needle)
+
+
 def pick(u, needle, verdict="clear", title=None, **kw):
-    return dict({"n": number_of(u, needle), "verdict": verdict, "title": title or needle}, **kw)
+    return dict({"n": num(u, needle), "verdict": verdict, "title": title or needle}, **kw)
 
 
 def items_fake(table, seen=None):
@@ -445,3 +454,118 @@ def test_91_items_of_an_old_list_say_their_dates(env, tmp_path):
     assert "1. NASA L'SPACE Academy: prior experience is not required (deadline 1 December (in 19 days))" in msg
     assert "City Lab" not in msg                       # 3 March 2026 has passed, and others have not
     assert "2. Old Grant: applications now open (as of February 2026)" in msg
+
+
+# ---------- a follow-up that changes the request (finding 92) ----------
+BLENDER = [("b1", "Blender Guru", "Beginner Blender 4.0 Tutorial", None, "2025-11-01", "youtube"),
+           ("b2", "CG Cookie", "BLENDER BASICS 1 - Learn Blender", None, "2025-10-01", "youtube"),
+           ("b3", "Blender Guru", "Blender 3.0 Beginner Tutorial - Part 1", None, "2025-09-01", "youtube"),
+           ("b4", "polyfan", "Low poly island in Blender for beginners, a full tutorial", None, "2025-08-01",
+            "instagram"),
+           ("b5", "Grant Abbitt", "Blender beginner sword modelling tutorial", None, "2025-07-01", "youtube")]
+DESC = {"vidb1": ("Part 1 of the donut series: we model a donut from start to finish", "PT17M57S"),
+        "vidb2": ("Learn the interface and the basics", "PT7M18S"),
+        "vidb3": ("Part 1 of making a donut in Blender 3.0", "PT25M"),
+        "vidb5": ("Model a low poly sword", "PT24M")}
+
+
+@pytest.fixture()
+def blender(env, tmp_path, monkeypatch):
+    use_lib(env, tmp_path, BLENDER)
+    monkeypatch.setenv("YOUTUBE_API_KEY", "test-key-not-real")
+    from mvp import ytinfo
+
+    def fetch(ids, key, timeout=None):
+        return {"items": [{"id": v, "snippet": {"description": DESC[v][0], "publishedAt": "2024-01-01T00:00:00Z"},
+                           "contentDetails": {"duration": DESC[v][1]}} for v in ids if v in DESC]}
+    monkeypatch.setattr(ytinfo, "fetch_batch", fetch)
+    import mvp.config as C
+    monkeypatch.setattr(C, "OUTSIDE_ON", False)
+    env["state"]["answers"]["mvp_extract"] = lambda u: {}
+    env["seen"] = []
+
+    def compose(u):   # the beginner videos first, whichever are candidates
+        env["seen"].append(u)
+        order = ["Beginner Blender 4.0", "BLENDER BASICS", "Blender 3.0 Beginner", "Low poly island", "sword"]
+        return {"picks": [pick(u, k, title=k) for k in order if k in u.split("Candidates:")[-1]][:3],
+                "intro": "I found some basic Blender tutorials in your saves."}
+    env["state"]["answers"]["mvp_compose"] = compose
+    say(env, "could you find me some basic blender tutorials", ask("basic Blender tutorials", ["blender basics"]))
+    return env
+
+
+def shown_ids(env):
+    return env["bot"].store.last_answer(H)["items"]
+
+
+def test_92_a_follow_up_that_rules_something_out_is_a_new_search(blender):
+    assert shown_ids(blender)[:3] == ["b1", "b2", "b4"]   # (b3 is the lead's own kind of video: last, left out)
+    n_runs = blender["bot"].store.one("SELECT COUNT(*) n FROM runs WHERE kind='ask'")["n"]
+    msg = say(blender, "what about something that isnt a donut.",
+              {"intent": "follow_up", "question": "What about something that isn't a donut?", "avoid": ["donut"]})
+    assert blender["bot"].store.one("SELECT COUNT(*) n FROM runs WHERE kind='ask'")["n"] == n_runs + 1   # a search
+    assert msg.startswith("Here's what else I found in your saves for basic Blender tutorials, leaving out anything "
+                          "about donut.")
+    assert "isn't a donut" not in msg and "isnt a donut" not in msg   # never the message quoted back
+    ids = shown_ids(blender)
+    assert "b1" not in ids and "b3" not in ids and ids[0] == "b2"   # the donut videos, by their descriptions
+    view = blender["bot"].view(str(blender["lib"]))
+    from mvp.compose import own_text
+    extra = blender["bot"]._youtube().details([view.get(i) for i in ids])
+    assert not any("donut" in own_text(view.get(i), extra).lower() for i in ids)
+    assert "donut" not in blender["seen"][-1].split("Candidates:")[-1].lower()   # never reached the composer
+
+
+def test_92_the_question_reader_and_the_avoid_words():
+    from mvp.followup import avoid_words, request_change
+    from mvp.schema import Interpretation
+    q = Interpretation(intent="follow_up", question="x")
+    assert request_change(q, "how long is the second one?") is None
+    assert request_change(q, "which is easiest?") is None
+    assert request_change(q, "does it need an oven?") is None
+    assert avoid_words("what about something that isnt a donut.") == ["donut"]
+    assert avoid_words("something without any cheese") == ["cheese"]
+    ch = request_change(q, "not from that creator")
+    assert ch["creator"] and not ch["avoid"]
+    assert request_change(q, "something shorter")["shorter"]
+    assert request_change(q, "anything else?")["others"]
+    assert request_change(q, "more recent ones")["newest"]
+    assert request_change(q, "on instagram instead")["platform"] == "instagram"
+    assert request_change(Interpretation(intent="follow_up", question="x", avoid=["cream"]), "any without cream?")
+
+
+def test_92_how_long_is_the_second_one_stays_a_question_about_the_picks_shown(blender):
+    n_runs = blender["bot"].store.one("SELECT COUNT(*) n FROM runs WHERE kind='ask'")["n"]
+    say(blender, "how long is the second one?", {"intent": "follow_up", "question": "how long is the second one?",
+                                                  "pick_number": 2})
+    assert blender["bot"].store.one("SELECT COUNT(*) n FROM runs WHERE kind='ask'")["n"] == n_runs
+    assert blender["bot"].store.one("SELECT kind FROM runs ORDER BY id DESC LIMIT 1")["kind"] == "follow_up"
+
+
+def test_92_not_from_that_creator_leaves_the_creator_out(blender):
+    msg = say(blender, "not from that creator", {"intent": "follow_up", "question": "not from that creator"})
+    ids = shown_ids(blender)
+    assert "b1" not in ids and "b3" not in ids                 # both by the lead's creator
+    assert "not from Blender Guru" in msg
+
+
+def test_92_something_shorter_bounds_the_length(blender):
+    msg = say(blender, "something shorter", {"intent": "follow_up", "question": "something shorter"})
+    ids = shown_ids(blender)
+    assert ids[0] == "b2"                                       # 7 minutes; the 17- and 25-minute ones are not clear
+    assert "shorter ones" in msg.split("\n")[0]
+
+
+def test_92_anything_else_leaves_out_what_was_shown(blender):
+    before = set(shown_ids(blender))
+    say(blender, "anything else?", {"intent": "follow_up", "question": "anything else?"})
+    ids = shown_ids(blender)
+    assert ids and not set(ids) & before
+
+
+def test_92_a_change_with_nothing_left_says_so_and_never_shows_a_rejected_pick(blender):
+    msg = say(blender, "what about something with no donut, no basics, no island and no sword",
+              {"intent": "follow_up", "question": "something else", "avoid": ["donut", "basics", "island", "sword"]})
+    assert msg.startswith("I found nothing else in your saves for basic Blender tutorials, leaving out anything "
+                          "about donut, basics, island and sword.")
+    assert "youtube.com" not in msg and "I recommend" not in msg

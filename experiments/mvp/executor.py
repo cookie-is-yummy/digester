@@ -437,6 +437,14 @@ class ExecutorMixin:
             t1 = time.time()
             extra = self._youtube().details(cands, now=now) if any(c.platform == "youtube" for c in cands) else {}
             steps["youtube"] = round(time.time() - t1, 2)
+            if cands_override is None and spec.content.avoid and extra:
+                # round 7, finding 92: the avoid test reads the item's whole own text (a video's description too), so a
+                # donut tutorial whose short title has no "donut" never reaches the composer
+                from .retrieve import contains_word
+                n0 = len(cands)
+                cands = [x for x in cands if not any(contains_word(own_text(x, extra), w) for w in spec.content.avoid)]
+                if len(cands) < n0:
+                    steps["avoided_by_description"] = n0 - len(cands)
             if cands_override is None:   # fix pass 5, finding 84 (1): copies of one post take one place
                 cands, n_copies = collapse_copies(cands, extra)
                 if n_copies:
@@ -471,6 +479,8 @@ class ExecutorMixin:
                                                          *spec.content.searches)
             year = request_year(request_text or "", hint, spec.content.goal or "") if ts else None
             result["today"], result["ts"] = today, ts
+            if getattr(self._tl, "intro_code", None) and kind != "follow_up":
+                result["intro_code"] = self._tl.intro_code   # round 7: a changed request's line, built by code
             post_dates(result, extra, today, ts, year)
             if SHORTEST.search(" ".join([request_text or "", hint])):   # finding 17: "shortest first"
                 for key in ("picks", "wider"):

@@ -979,6 +979,11 @@ def test_verifier_found_gaps(env):
                                                  {"n": 2, "title": "Lemon garlic pasta", "why": "x", "verdict": "clear"})
     bot.on_message(h, "two pasta recipes?")
     st["answers"]["mvp_interpret"] = lambda u: {"intent": "follow_up", "question": "Any without cream?", "avoid": ["cream"]}
+    # round 7, finding 92 (on purpose): a follow-up that carries avoid is a new search of the last request with the
+    # change, so the fake composer picks by the candidates it is shown, not by the old pick numbers
+    from mvp.tests.test_slice6 import number_of
+    st["answers"]["mvp_compose"] = lambda u: {"picks": [
+        {"n": number_of(u, "Lemon garlic pasta"), "title": "Lemon garlic pasta", "verdict": "clear"}]}
     bot.on_message(h, "any without cream?")
     assert "itm_b" not in last(ch) and "itm_a" in last(ch)             # the cream pasta is not offered as the answer
     # the kill switch for one person stops replies and paid calls

@@ -1071,3 +1071,41 @@ def emails_dropped(expired, over):
 def config_wait_max():
     from . import config
     return config.EMAIL_WAIT_MAX
+
+
+# ---------- round 7, finding 92: a follow-up that changes the request ----------
+def _change_words(ch, who):
+    out = []
+    if ch.get("avoid"):
+        out.append("leaving out anything about " + and_words(ch["avoid"]))
+    if who:
+        out.append("not from " + and_words(who))
+    if ch.get("platform"):
+        out.append("only from " + {"instagram": "Instagram", "youtube": "YouTube"}[ch["platform"]])
+    if ch.get("shorter"):
+        out.append("shorter ones")
+    if ch.get("easier"):
+        out.append("the easiest first")
+    elif ch.get("newest"):
+        out.append("the newest first")
+    elif ch.get("oldest"):
+        out.append("the oldest first")
+    return out
+
+
+def changed_intro(goal, ch, who):
+    """'Here's what I found in your saves for basic Blender tutorials, leaving out anything about donut.' Built from
+    the merged request, never from the person's message."""
+    words = _change_words(ch, who)
+    g = " ".join((goal or "").split())
+    head = f"Here's what else I found in your saves for {g}" if g and len(g.split()) <= 6 else \
+        "Here's what else I found in your saves"
+    return head + (", " + ", ".join(words) if words else "") + "."
+
+
+def changed_none(goal, ch, who):
+    """Nothing is left once the change is applied: said plainly, never a rejected pick again."""
+    words = _change_words(ch, who)
+    g = " ".join((goal or "").split())
+    what = f" for {g}" if g and len(g.split()) <= 6 else ""
+    return f"I found nothing else in your saves{what}" + (", " + ", ".join(words) if words else "") + "."
