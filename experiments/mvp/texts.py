@@ -1180,6 +1180,10 @@ def empty_quiet_line(goal, since, n):
     return f"Nothing new for \"{goal}\"{when}. I'll stay quiet until there is. \"run {n}\" asks now."
 
 
+def empty_quiet_last(goal):
+    return f"Nothing new for \"{goal}\" this time. {LAST_SEND}"
+
+
 def if_empty_changed(way, n=None):
     """BN2: "tell me even if there's nothing" / "don't text me if there's nothing" for a preview or the rule just
     started."""

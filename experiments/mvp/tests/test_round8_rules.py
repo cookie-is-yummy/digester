@@ -331,6 +331,19 @@ def test_bn2_quiet_days_never_count_toward_max_sends_or_the_daily_limit(env):
     assert bot.store.scheduled_today(H, u(2026, 11, 15, 5, 0)) == 0
 
 
+def test_bn2_a_quiet_rules_last_slot_never_ends_it_without_a_word(env):
+    bot, ch = env["bot"], env["ch"]
+    pasta_rule(env, when=dict(NOON, until="2026-11-15"))
+    env["state"]["answers"]["mvp_compose"] = lambda x: EMPTY
+    n0 = len(ch.outbox)
+    for d in (13, 14, 15):
+        env["clock"][0] = noon(d)
+        bot.tick()
+    assert [m[2] for m in ch.outbox[n0:]] == [
+        QUIET_LINE, 'Nothing new for "a pasta recipe" this time. That was the last one of this rule.']
+    assert rules(bot)[-1]["status"] == "done"
+
+
 def test_bn2_a_rule_stored_before_round_8_still_says_nothing_new_byte_for_byte(env):
     from mvp.schema import RuleSpec
     bot, ch = env["bot"], env["ch"]
@@ -575,3 +588,46 @@ def test_bn2_old_todos_and_reminders_missed_while_the_bot_was_off_are_never_nudg
     tick_at(env, u(2026, 11, 19, 16, 0))                                      # the bot was off: "I was offline" only
     assert "offline" in last(env["ch"])
     assert tick_at(env, u(2026, 11, 19, 23, 30)) == 0
+
+
+# ---------- the new phrasings, whatever form the model returns (the live check is the checker's) ----------
+QUIET_FORMS = [pasta_spec(NOON), pasta_spec(dict(NOON, if_empty="say")), pasta_spec(dict(NOON, until="2026-11-30")),
+               pasta_spec({"type": "random", "count": 3, "per": "week"})]
+
+
+@pytest.mark.parametrize("form", QUIET_FORMS)
+@pytest.mark.parametrize("text,way", [
+    ("every day at noon send me a pasta recipe, don't text me if there's nothing", "quiet"),
+    ("every day at noon send me a pasta recipe and tell me even if there's nothing", "say"),
+    ("send me a pasta recipe at noon every day", "quiet"),                    # no words for it: the default
+])
+def test_bn2_what_code_does_with_any_form_for_the_empty_day_phrasings(env, form, text, way):
+    env["state"]["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
+    preview = say(env, text, {"intent": "new_rule", "spec": form})
+    assert env["bot"].store.pending(H)["payload"]["spec"]["when"]["if_empty"] == way
+    assert ("On a day with nothing new I'll stay quiet." in preview) == (way == "quiet")
+
+
+@pytest.mark.parametrize("until", [None, "2026-11-13", "2026-11-30", "2027-11-12"])
+@pytest.mark.parametrize("text", [
+    "remind me every morning at 8 to apply to the NASA internship until I've done it",
+    "every morning at 8 remind me to apply to the NASA internship until I've applied",
+    "remind me to apply to the NASA internship every morning at 8 till I tick it off",
+])
+@pytest.mark.parametrize("keep_phrase", [False, True])
+def test_bn2_what_code_does_with_any_form_for_the_until_done_phrasings(env, until, text, keep_phrase):
+    from mvp.followup import UNTIL_DONE
+    words = "apply to the NASA internship" + (UNTIL_DONE.search(text).group(0) if keep_phrase else "")
+    when = {"type": "schedule", "days": DAILY, "time": "08:00", **({"until": until} if until else {})}
+    msg = say(env, text, {"intent": "new_rule", "spec": {"when": when, "content": {"source": "note", "text": words}}})
+    sp = spec_of(rules(env["bot"])[-1])
+    assert sp["when"].get("stop_when") == "done" and "until" not in sp["when"]   # code overrides any guessed end
+    assert sp["content"]["text"] == "apply to the NASA internship" and "until you say done" in msg
+
+
+@pytest.mark.parametrize("form", [{"intent": "chat", "reply": "ok"}, {"intent": "profile_update"},
+                                  {"intent": "stop", "all_rules": True}])
+def test_bn2_no_overdue_nudges_is_read_by_code_whatever_the_model_would_say(env, form):
+    n_calls = len(env["calls"])
+    assert say(env, "No overdue nudges please", form).startswith("OK. I won't nudge you")
+    assert len(env["calls"]) == n_calls

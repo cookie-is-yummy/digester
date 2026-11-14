@@ -511,14 +511,17 @@ class SchedulerMixin:
                               (rule["id"], run_id))
         self._advance(rule, spec, tz, now)
         self.store.x("UPDATE runs SET status='empty_quiet' WHERE id=?", (run_id,))
-        if prev is not None and prev["status"] in ("empty_quiet", "none_sent"):
+        from .texts import empty_quiet_last, empty_quiet_line
+        if self.store.rule(rule["id"])["status"] == "done":
+            line = empty_quiet_last(spec.content.goal)   # its last slot: the rule never ends without a word
+        elif prev is not None and prev["status"] in ("empty_quiet", "none_sent"):
             return 0   # already said: quiet until there is something
-        from .dates import say_day
-        from .texts import empty_quiet_line
-        newest = self._newest_kept(person)
-        today = now.astimezone(ZoneInfo(tz)).date()
-        line = empty_quiet_line(spec.content.goal, say_day(newest, today) if newest else None,
-                                self.store.rule_number(h, rule["id"]) or 1)
+        else:
+            from .dates import say_day
+            newest = self._newest_kept(person)
+            today = now.astimezone(ZoneInfo(tz)).date()
+            line = empty_quiet_line(spec.content.goal, say_day(newest, today) if newest else None,
+                                    self.store.rule_number(h, rule["id"]) or 1)
         try:
             self.send(h, line, run_id)
         except Exception as e:  # noqa: BLE001 - a line about nothing is never retried
