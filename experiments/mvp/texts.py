@@ -1080,6 +1080,8 @@ def _change_words(ch, who):
         out.append("leaving out anything about " + and_words(ch["avoid"]))
     if who:
         out.append("not from " + and_words(who))
+    if ch.get("wanted_names"):
+        out.append("only from " + and_words(ch["wanted_names"][:3]))
     if ch.get("platform"):
         out.append("only from " + {"instagram": "Instagram", "youtube": "YouTube"}[ch["platform"]])
     if ch.get("shorter"):
@@ -1098,8 +1100,10 @@ def changed_intro(goal, ch, who):
     the merged request, never from the person's message."""
     words = _change_words(ch, who)
     g = " ".join((goal or "").split())
-    head = f"Here's what else I found in your saves for {g}" if g and len(g.split()) <= 6 else \
-        "Here's what else I found in your saves"
+    # checker: "else" only when something shown was ruled out (not for "ok and for dinner?" alone)
+    other = " else" if not ch.get("add") or ch.get("others") or ch.get("avoid") or who else ""
+    head = f"Here's what{other} I found in your saves for {g}" if g and len(g.split()) <= 6 else \
+        f"Here's what{other} I found in your saves"
     return head + (", " + ", ".join(words) if words else "") + "."
 
 
@@ -1109,3 +1113,23 @@ def changed_none(goal, ch, who):
     g = " ".join((goal or "").split())
     what = f" for {g}" if g and len(g.split()) <= 6 else ""
     return f"I found nothing else in your saves{what}" + (", " + ", ".join(words) if words else "") + "."
+
+
+# checker, round 7: "the opposite" names no change code can read; "what about ones from X" with no X in the library
+CHANGE_SAY_HOW = ("I'm not sure what the opposite would be here. Tell me what to change, like \"something shorter\", "
+                  "\"not from that creator\" or \"anything else\".")
+CHANGE_NO_CREATOR = "I found nothing from that creator in your saves."
+
+
+def no_date_for(name):
+    """Checker, round 7: "remind me two days before its deadline" when the post gives no date for it."""
+    return (f"The post gives no date for {name}, so I can't count back from it. Tell me a day, like \"remind me about "
+            f"it on Friday\", and I'll remind you then.")
+
+
+def date_passed_for(name, note):
+    return f"{name}: {note}, so I didn't set a reminder."
+
+
+def date_too_near(name, day):
+    return f"{name}'s date is {day}, sooner than that, so I didn't set a reminder. Tell me when you'd like one."

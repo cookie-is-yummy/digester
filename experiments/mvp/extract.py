@@ -290,8 +290,39 @@ def verify_items(raw, text):
             when = ""
         out.append({"name": name, "about": _about(r.get("about"), name, text), "when": when,
                     "fit": "yes" if fit == "yes" else "unknown"})
+    for x in out:   # checker, round 7: an item's words must be about that item, never another one's
+        if x["about"] and not about_belongs(x["name"], x["about"], [y["name"] for y in out if y is not x], text):
+            x["about"] = ""
     out = [x for x in out if x["fit"] == "yes"] + [x for x in out if x["fit"] != "yes"]
     return out[:MAX_ITEMS], dropped
+
+
+ABOUT_REACH = 60   # tokens: an item's words start at most this far after its name
+
+
+def _runs(a, b):
+    """Start indices of the token run `a` in the tokens `b`."""
+    n = len(a)
+    return [i for i in range(len(b) - n + 1) if n and b[i:i + n] == a]
+
+
+def about_belongs(name, about, others, text):
+    """Checker, round 7 (rule 1: "never put a sentence about one thing under another thing's name"): the words shown
+    for a thing are about that thing. They name no other listed thing (a whole one-line list is not about each of its
+    things), and they hold its name or start after it in the text, with no other listed thing named in between."""
+    a, na, b = tokens(about), tokens(name), tokens(text)
+    other = [t for t in (tokens(o) for o in others) if t and t != na and not _runs(t, na)]
+    if any(_runs(t, a) for t in other):
+        return False
+    if _runs(na, a):
+        return True
+    starts, names = _runs(a, b), _runs(na, b)
+    marks = sorted(i for t in other for i in _runs(t, b))
+    for s in starts:
+        for n0 in names:
+            if n0 + len(na) <= s <= n0 + len(na) + ABOUT_REACH and not any(n0 < m < s for m in marks):
+                return True
+    return False
 
 
 def items_cache_kind(context):

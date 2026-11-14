@@ -42,6 +42,7 @@ EN = {
     # round 7, finding 90: an answer made of the things the posts name
     "items_from": "From \"{title}\"{by}",
     "posted": "posted {when}",
+    "kept_head": "{how} {when}",
     "and_more": "and {n} more in the post",
     "items_also": "Also in your saves:",
     "not_written": {"ingredients": "The ingredients aren't written out in the post; they're in the video.",
@@ -115,6 +116,7 @@ ES = {
                  "items": "Los detalles están en las imágenes o el video de la publicación, no en su texto."},
     "items_from": "De \"{title}\"{by}",
     "posted": "publicado en {when}",
+    "kept_head": "{how} en {when}",
     "and_more": "y {n} más en la publicación",
     "items_also": "También en lo que guardaste:",
     "not_written": {"ingredients": "Los ingredientes no están escritos en la publicación; están en el video.",

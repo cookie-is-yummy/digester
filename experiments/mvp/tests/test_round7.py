@@ -451,7 +451,7 @@ def test_91_items_of_an_old_list_say_their_dates(env, tmp_path):
         {"name": "NASA L'SPACE Academy", "about": "prior experience is not required", "when": "December 1"},
         {"name": "Old Grant", "about": "applications now open"}]}
     msg = say(env, "what opportunities might i have missed for 2026", ask("opportunities for 2026"))
-    assert "1. NASA L'SPACE Academy: prior experience is not required (deadline 1 December (in 19 days))" in msg
+    assert "1. NASA L'SPACE Academy: prior experience is not required (deadline 1 December, in 19 days)" in msg
     assert "City Lab" not in msg                       # 3 March 2026 has passed, and others have not
     assert "2. Old Grant: applications now open (as of February 2026)" in msg
 

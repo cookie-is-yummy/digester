@@ -15,7 +15,7 @@ import re
 
 from . import texts as T
 from .render import Reply, by, kind_lines, link_part
-from .schema import Interpretation, RuleSpec
+from .schema import PLATFORMS, Interpretation, RuleSpec
 
 COMMAND = re.compile(r"^\s*(?:(?:please|pls|plz)[\s,]+)?(stop|pause|resume|skip|run|done|remove)\s+"
                      r"(?:rule\s+|#\s*|number\s+)?(\d{1,2}|all)\s*(?:,?\s*(?:please|pls|plz))?\s*[.!?]*\s*$", re.I)
@@ -159,8 +159,10 @@ AVOID_SAID = re.compile(r"\b(?:isn'?t|is not|aren'?t|are not|not|without|other t
                         r"(?:(?:a|an|the|any|about|with|another|more|so much)\s+)*"
                         r"([^\W\d_][\w'-]{2,30}(?:\s+[^\W\d_][\w'-]{2,30})?)", re.I)
 NOT_AVOID = set("""one ones that this those these it them from by sure like really quite very too so much more long
-short hard easy that's what something anything thing things kind sort same creator person guy girl""".split())
+short hard easy that's what something anything thing things kind sort same creator person guy girl
+the a an any about with""".split())
 CREATOR_CHANGE = re.compile(r"\bnot (?:from|by) (?:that|this|the same) (?:creator|person|guy|girl|channel|account|one)|"
+                            r"\bnot (?:from|by) (?:the |that |this )?\w+ one'?s (?:creator|channel|account|maker)\b|"
                             r"\bnot (?:from|by) (?:him|her|them)\b|\banother creator\b|\bsomeone else\b|"
                             r"\bdifferent (?:creator|channel|account|person)\b", re.I)
 CREATOR_NAMED = re.compile(r"\bnot (?:from|by) @?([A-Za-z0-9_.]{2,30})\b", re.I)
@@ -182,33 +184,70 @@ def avoid_words(text):
     return out[:4]
 
 
+# checker, round 7: a question about a pick shown stays a question, even with "what about" or "without" in it ("what
+# about the second one, is it long?", "does the first one work without a gpu?"); only plain change words override it
+PICK_REF = re.compile(r"\b(?:the\s+)?(?:first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)\s+(?:one|pick|recipe|"
+                      r"video|post|reel|tutorial|workout)\b|#\s?[1-9]\b|\bnumber\s+[1-9]\b", re.I)
+ASKS_ABOUT = re.compile(r"\b(?:is|does|do|did|can|could|will|would|has|have|was|should)\s+(?:it|this one|that one|they|"
+                        r"these|those)\b|\bhow (?:long|hard|easy|many|much)\b|\bwhich (?:one|is|of)\b", re.I)
+STRONG_CHANGE = re.compile(r"\b(something (?:that )?(?:isn'?t|is not|without|other than|not|else|different)|anything else|"
+                           r"any others?|other ones|others|other than|instead|not (?:from|by)|different ones?|"
+                           r"different (?:creator|channel)|more like|another creator|someone else)\b", re.I)
+# "what about ones from Grant Abbitt": that creator's, not a creator left out
+CREATOR_WANTED = re.compile(r"(?<!not )\b(?:(?:what|how) about|only|just|any|anything|something|ones?|videos?|posts?|"
+                            r"reels?|tutorials?|stuff)\s+(?:ones?\s+|videos?\s+|posts?\s+)?(?:from|by)\s+@?"
+                            r"([A-Za-z0-9_.][A-Za-z0-9_. ]{1,40}?)\s*[?.!]*$", re.I)
+NOT_A_CREATOR = re.compile(r"^(?:youtube|instagram|insta|ig|my\b|me\b|last\b|this\b|that\b|the\b|scratch|before|"
+                           r"(?:19|20)\d\d|him|her|them)", re.I)
+PLATFORM_NOT = {"instagram": re.compile(r"\b(?:not (?:on|from)|no|without) (?:instagram|insta|ig)\b", re.I),
+                "youtube": re.compile(r"\b(?:not (?:on|from)|no|without) youtube\b", re.I)}
+# "ok and for dinner?", "what about for beginners?": the same request, with a few more words
+REFINE = re.compile(r"^(?:(?:ok(?:ay)?|so|and|hmm+|cool|nice|great|thanks|alright)[,.!]?\s+)*(?:and\s+)?"
+                    r"(?:(?:what|how) about\s+)?((?:for|with|in|at|under)\s+[^\W\d_][^?.!,;]{1,38}?)\s*[?.!]*$", re.I)
+OPPOSITE = re.compile(r"^\W*(?:(?:ok(?:ay)?|and|so)[,\s]+)*(?:the\s+|what about the\s+)?(?:opposite|reverse)\W*$", re.I)
+
+
 def request_change(it, text):
     """The change a follow-up makes to the last request, or None when it is a question about the picks shown ("how
     long is the second one?", "which is easiest?"). Code decides: a form that carries `avoid`, or change wording."""
     t = " ".join((text or "").split())
+    if (it.pick_number or PICK_REF.search(t) or ASKS_ABOUT.search(t)) and not STRONG_CHANGE.search(t):
+        return None   # checker: a question about a pick shown
+    if OPPOSITE.match(t):
+        return {"opposite": True}
+    refine = REFINE.match(t)
+    refine = refine.group(1).strip() if refine and not re.search(r"\b(instagram|youtube|insta|ig)\b",
+                                                                 refine.group(1), re.I) else None
+    wanted = CREATOR_WANTED.search(t)
+    wanted = wanted.group(1).strip(" .") if wanted and not NOT_A_CREATOR.match(wanted.group(1).strip()) else None
     said = CHANGE.search(t)
-    if not said and not it.avoid:
+    if not said and not it.avoid and not refine:
         return None
     from .retrieve import _stem
     avoid = []
     for a in [*(a.lower() for a in it.avoid or []), *avoid_words(t)]:
+        if a in ("instagram", "insta", "youtube"):
+            continue   # "not on YouTube" is a platform, not a word to avoid
         if _stem(a) not in {_stem(x) for x in avoid}:   # "donut" and "donuts" are one
             avoid.append(a)
+    negated = next((p for p, rx in PLATFORM_NOT.items() if rx.search(t)), None)
     ch = {"avoid": avoid[:6],
-          "creator": bool(CREATOR_CHANGE.search(t)), "creator_named": None,
+          "creator": bool(CREATOR_CHANGE.search(t)), "creator_named": None, "creator_wanted": wanted,
           "shorter": bool(re.search(r"\b(shorter|quicker)\b", t, re.I)),
           "easier": bool(re.search(r"\b(easier|simpler)\b", t, re.I)),
           "newest": bool(re.search(r"\b(more recent|newer|newest|latest)\b", t, re.I)),
           "oldest": bool(re.search(r"\bolder\b", t, re.I)),
-          "platform": next((p for p, rx in PLATFORM_SAID.items() if rx.search(t)), None),
-          "others": bool(OTHER_ONES.search(t))}
+          "platform": (next(p for p in PLATFORMS if p != negated) if negated else
+                       next((p for p, rx in PLATFORM_SAID.items() if rx.search(t)), None)),
+          "others": bool(OTHER_ONES.search(t)), "add": refine if not wanted else None}
     m = CREATOR_NAMED.search(t)
-    if m and m.group(1).lower() not in ("that", "this", "the", "him", "her", "them", "same", "my", "a", "an"):
+    if m and m.group(1).lower() not in ("that", "this", "the", "him", "her", "them", "same", "my", "a", "an") \
+            and not NOT_A_CREATOR.match(m.group(1)):
         ch["creator_named"] = m.group(1)
     if ch["creator"] or ch["creator_named"]:
         ch["avoid"] = [a for a in ch["avoid"] if a not in ("creator", "him", "her", "them")]
-    if not any(ch[k] for k in ("avoid", "creator", "creator_named", "shorter", "easier", "newest", "oldest", "platform",
-                               "others")):
+    if not any(ch[k] for k in ("avoid", "creator", "creator_named", "creator_wanted", "shorter", "easier", "newest",
+                               "oldest", "platform", "others", "add")):
         ch["others"] = True   # "what about ...?" with nothing code can read: other picks for the same request
     return ch
 
@@ -225,12 +264,28 @@ class FollowupMixin:
         st = self.store.get_state(f"lastspec:{h}")
         if not st:
             return None
+        if ch.get("opposite"):   # checker: code cannot tell what "the opposite" of a request is; it asks, plainly
+            return self.send(h, T.CHANGE_SAY_HOW)
         spec = RuleSpec.model_validate(st["spec"])
         c = spec.content
         c.avoid = list(dict.fromkeys([*c.avoid, *ch["avoid"]]))[:8]
         view = self.view(person["library"])
         shown_ids = [i for i in (last.get("items") or [])]
         shown = [x for x in (view.get(i) for i in shown_ids) if x]
+        if ch.get("creator_wanted"):
+            # checker: "what about ones from Grant Abbitt": that creator's, by the name the library holds
+            names = sorted({x.creator for x in view.items.values() if x.creator
+                            and name_matches(x.creator, ch["creator_wanted"])})
+            if not names:
+                return self.send(h, T.CHANGE_NO_CREATOR)
+            c.creators = names[:10]
+            c.avoid_creators = [x for x in c.avoid_creators if not any(name_matches(n, x) for n in names)]
+            ch = dict(ch, wanted_names=names)
+        if ch.get("add"):   # checker: "ok and for dinner?": the same request, with those words added
+            add = " ".join(ch["add"].split()[:5])
+            c.goal = f"{c.goal} {add}".strip()[:200] if c.goal else add
+            c.searches = [f"{x} {add}"[:200] for x in c.searches] or [c.goal]
+            st = dict(st, text=f"{st.get('text') or ''} {add}".strip())
         who = []
         if ch["creator_named"]:
             who.append(ch["creator_named"])
@@ -260,7 +315,8 @@ class FollowupMixin:
             own = own_text(x, extra)
             if ch["others"] or any(contains_word(own, w) for w in c.avoid) \
                     or any(name_matches(x.creator or "", w) for w in c.avoid_creators) \
-                    or (c.platforms and x.platform not in c.platforms):
+                    or (c.platforms and x.platform not in c.platforms) \
+                    or (ch.get("wanted_names") and x.creator not in ch["wanted_names"]):
                 rejected.append(x.id)
         request = st.get("text") or c.goal or ""
         if ch["shorter"]:

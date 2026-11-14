@@ -19,6 +19,7 @@ import hmac
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from . import config
 from . import texts as T
@@ -67,6 +68,14 @@ VERB = {"message.send": "send it to you here", "email.send": "email it to you",
 
 def _hash(salt, code):
     return hashlib.sha256(f"{salt}:{code}".encode()).hexdigest()
+
+
+# checker, round 7: a reminder set relative to a thing's own date ("two days before its deadline", "on its deadline")
+WORD_NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "ten": 10}
+BEFORE_DATE = re.compile(r"\b(?:(\d{1,2}|a|an|one|two|three|four|five|six|seven|ten)\s+(days?|weeks?)|(the day|the week))"
+                         r"\s+before\s+(?:its\s+|the\s+|it\s+)?(?:deadline|due date|due|closes|close|closing date|ends|"
+                         r"end date|starts|start date|date)\b|\b(?:on|the day of)\s+(?:its|the)\s+(deadline|due date)\b",
+                         re.I)
 
 
 class OutputsMixin:
@@ -270,7 +279,7 @@ saves saved post posts link""".split())
         rec = {"item_id": p["item_id"], "title": x.get("name"), "url": p.get("url"), "platform": p.get("platform"),
                "video_id": p.get("video_id"), "creator": p.get("creator"),
                "facts": {"key_points": [x["about"]]} if x.get("about") else {}, "lines": [], "line_kinds": None,
-               "item": dict(x), "source_title": p.get("title"), "main": True}
+               "item": dict(x), "source_title": p.get("title"), "main": True, "posted": p.get("posted")}
         return [rec], False, snap, None
 
     def _ingredients_now(self, h, picks, view, is_last):
@@ -319,6 +328,11 @@ saves saved post posts link""".split())
             if a.action == "todo.add":
                 params["list"] = it.todo_list or list_name(params.get("list")) or "todo"
             acts.append((a.action, params))
+        rel = BEFORE_DATE.search(text or "")
+        if rel:   # checker, round 7: "remind me about the NASA one two days before its deadline": code works out the day
+            got = self._before_date(person, it, acts, text, now, rel)
+            if got is not None:
+                return got
         if it.when is not None:
             return self._act_later(person, it, acts, text, now)
         what = next((p.get("what") for n, p in acts if n == "todo.add"), "pick") or "pick"
@@ -336,9 +350,11 @@ saves saved post posts link""".split())
                 problem = T.NOTHING_TO_ACT_ON
             return self.send(h, problem)
         item = (picks[0].get("item") if picks and len(picks) == 1 else None) or {}
-        if item.get("date") and item.get("state") == "open":
-            # round 7: "put the NASA one in my calendar": on the date its post gives, when none is named
-            acts = [(n, dict(p, date=item["date"]) if n == "calendar.add" and not p.get("date")
+        day = self._thing_date(picks[0], now, person) if item else None
+        if day is not None and day >= now.astimezone(ZoneInfo(person["timezone"])).date():
+            # round 7: "put the NASA one in my calendar": on the date its post gives, when none is named (checker: read
+            # by code from the thing's own words for any request, not only a time-sensitive one)
+            acts = [(n, dict(p, date=day.isoformat()) if n == "calendar.add" and not p.get("date")
                      and not p.get("day_offset") else p) for n, p in acts]
         ctx = Ctx(bot=self, person=person, answer=answer, picks=picks, whole=whole, run_id=answer.get("run_id"),
                   rule_id=answer.get("rule_id"), kind="act_on_last", now=now, tz=person["timezone"], request_text=text)
@@ -358,6 +374,55 @@ saves saved post posts link""".split())
             ctx.chat = self._with_lines(base, done)
             return self._message(ctx)
         return self.send(h, self._with_lines(None, done))
+
+    def _thing_date(self, rec, now, person):
+        """Checker, round 7: the date a thing of an items answer (or a post) gives in its own words, read by code with
+        the post's year for a date that has none; None when its words give no date."""
+        from .dates import deadline_in, first_kept, posted_on
+        x = rec.get("item") or {}
+        if x:
+            if x.get("date"):
+                return datetime.fromisoformat(x["date"]).date()
+            hint = rec.get("posted") or rec.get("kept")
+            return deadline_in(" ".join(t for t in (x.get("when"), x.get("about")) if t), hint)[0]
+        got = self.view(person["library"]).get(rec.get("item_id"))
+        if got is None:
+            return None
+        return deadline_in(got.raw_caption or got.caption, posted_on(got) or first_kept(got))[0]
+
+    def _before_date(self, person, it, acts, text, now, rel):
+        """"Remind me about <name> two days before its deadline": the day is the thing's own date less the days asked
+        for, at the time named (else 9am). With no date in its words, or one that has passed or is too near, it says
+        so in one plain line and sets nothing. None when the message points at no single thing or pick."""
+        from .dates import date_note, say_day
+        from .schema import When
+        h = person["handle"]
+        picks, _, _, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else None, it.answer_ref)
+        if problem or not picks or len(picks) != 1:
+            return None
+        rec = picks[0]
+        name = rec.get("title") or "it"
+        day = self._thing_date(rec, now, person)
+        if day is None:
+            return self.send(h, T.no_date_for(name))
+        n = WORD_NUM.get((rel.group(1) or "").lower(), None)
+        n = int(rel.group(1)) if n is None and (rel.group(1) or "").isdigit() else (n if n is not None else 1)
+        if (rel.group(2) or "").lower().startswith("week") or (rel.group(3) or "").lower() == "the week":
+            n *= 7
+        if rel.group(4):   # "on its deadline"
+            n = 0
+        today = now.astimezone(ZoneInfo(person["timezone"])).date()
+        if day < today:
+            return self.send(h, T.date_passed_for(name, date_note({"state": "passed", "date": day, "deadline": True},
+                                                                  today)))
+        target = day - timedelta(days=n)
+        if target < today or (target == today and n):
+            return self.send(h, T.date_too_near(name, f"{say_day(day, today)}"))
+        time = (it.when.time if it.when is not None and it.when.time else None) or "09:00"
+        acts = [(a, p) for a, p in acts if a != "calendar.add"] or [("message.send", {})]
+        it = it.model_copy(update={"when": When(type="once", date=target.isoformat(), time=time),
+                                   "actions": [x for x in it.actions if x.action != "calendar.add"] or it.actions})
+        return self._act_later(person, it, acts, text, now)
 
     def _act_later(self, person, it, acts, text, now):
         """'Remind me of the 2nd one at 6', 'email me this tomorrow morning': a one-off rule whose content is the

@@ -326,7 +326,8 @@ def _item_line(x, lang=None):
         about = f"{about.rstrip()} (as of {x['stale_from']})"
     if about:
         s += f": {about}"
-    when = x.get("note") or ""
+    # checker: inside the item's own brackets, "deadline 1 December, in 19 days" (never brackets in brackets)
+    when = re.sub(r" \(((?:in |about )[^()]+|today|tomorrow)\)$", r", \1", x.get("note") or "")
     if not when and x.get("when") and not (about and x["when"] in about):
         when = x["when"]
     if when:
@@ -350,7 +351,7 @@ def source_head(p, now=None, lang=None):
     if kind and day:
         try:
             d = datetime.fromisoformat(str(day)[:10])
-            when.append(f"{t['how'][kind]} {L.month(d, lang, True)}")
+            when.append(t["kept_head"].format(how=t["how"][kind], when=L.month(d, lang, True)))
         except ValueError:
             pass
     return t["items_from"].format(title=p["title"], by=by(it, lang)) + (f" ({', '.join(when)})" if when else "") + ":"

@@ -144,6 +144,9 @@ def find_dates(text, year_hint=None):
                     continue
             except (ValueError, KeyError):
                 continue
+            mon_text = m.group(2) if i == 0 else (m.group(1) if i == 1 else "")
+            if mon_text == "may" and not y and (i == 0 or not DEADLINE_WORD.search(t[max(0, m.start() - 30):m.start()])):
+                continue   # checker: "3 may surprise you" is not 3 May
             if 2000 <= day.year <= 2100 and not any(s <= m.start() < e for _, s, e in out):
                 out.append((day, m.start(), m.end()))
     return sorted(out, key=lambda x: x[1])
@@ -181,6 +184,12 @@ def stale(text, day, today):
     return bool(n is not None and n > STALE_DAYS and STALE.search(text or ""))
 
 
+# checker, round 7: words that say a thing stays open with no end date; from an old post they still need checking, but
+# "this round has probably closed" would claim more than the post says
+OPEN_ENDED = re.compile(r"\b(until further notice|rolling (?:basis|applications?|admissions?|deadlines?)|year[- ]round|"
+                        r"all year|always open|open (?:all|any) ?time|no deadline|ongoing)\b", re.I)
+
+
 def state_of(text, posted, kept, today, own=None):
     """{'state': 'passed' | 'old' | 'open' | None, 'date': date or None, 'deadline': bool, 'from': date or None}.
     `text` is what the thing's own words say (an item's when and about, or a post's text); `own` the whole post, for the
@@ -193,8 +202,10 @@ def state_of(text, posted, kept, today, own=None):
     if d is not None:
         out["state"] = "passed" if d < today else "open"
         return out
-    if base is not None and (today - base).days > OLD_DAYS and NOW_TALK.search(" ".join([text or "", own or ""])):
+    words = " ".join([text or "", own or ""])
+    if base is not None and (today - base).days > OLD_DAYS and (NOW_TALK.search(words) or OPEN_ENDED.search(words)):
         out["state"] = "old"
+        out["open_ended"] = bool(OPEN_ENDED.search(words))
     return out
 
 
@@ -228,6 +239,8 @@ def date_note(st, today):
         return f"its {what}, {d.day} {d.strftime('%B')} {d.year}, has passed"
     if st["state"] == "open" and d:
         return f"{'deadline' if st.get('deadline') else 'date'} {say_day(d, today)} ({how_far(d, today)})"
+    if st["state"] == "old" and st.get("from") and st.get("open_ended"):
+        return f"from {st['from'].strftime('%B %Y')}; check whether it is still open"
     if st["state"] == "old" and st.get("from"):
         return f"from {st['from'].strftime('%B %Y')}, so this round has probably closed; check whether it runs again"
     return ""
