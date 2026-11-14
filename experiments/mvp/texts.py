@@ -643,6 +643,7 @@ def trends_message(data, max_lines=7):
 TRENDS_NO_TOPICS = ("I don't know your topics yet, so I can't say what's rising or fading. Tell me what you're into, or "
                     "say \"set me up again\".")
 TRENDS_NO_DATES = "None of what you kept has a date I can read, so I can't say what's rising or fading."
+TRENDS_WHEN = "each time a new export of your library comes in"   # a trends rule's timing, as "my rules" says it
 TRENDS_EVERY_EXPORT = "Reply \"every export\" and I'll send you this each time a new export of your library comes in."
 
 

@@ -1470,7 +1470,9 @@ class HandlerMixin:
             # fix pass 4, finding 83: an export reminder by its short name; its steps go out with the reminder
             from .refresh import reminder_name
             name = reminder_name(spec.content.text) if spec.content.source == "note" else None
-            lines.append(T.rule_line(i, name or spec.content.goal, describe(spec.when), state, nxt))
+            # checker, round 8: a trends rule sends when a new export comes in, not "when something new fits"
+            when = T.TRENDS_WHEN if spec.content.source == "trends" else describe(spec.when)
+            lines.append(T.rule_line(i, name or spec.content.goal, when, state, nxt))
         lines.append(T.RULES_FOOT)
         return "\n".join(lines)
 

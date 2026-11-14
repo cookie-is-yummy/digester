@@ -382,3 +382,25 @@ def test_a_recap_of_posts_or_a_reminder_to_recap_is_not_the_recap_rule(env):
     stored = [r["spec"]["content"] for r in env["bot"].store.rules(H)]
     pending = (env["bot"].store.pending(H) or {}).get("payload", {}).get("spec", {}).get("content")
     assert all(c.get("source") == "note" for c in stored + ([pending] if pending else [])) and (stored or pending)
+
+
+def test_my_rules_says_a_trends_rule_sends_with_each_export(lib8):
+    """'my rules', the export's rules.json and the agent's my_rules said 'whenever you save something new that fits'."""
+    import json as _json
+    from mvp import config
+    from mvp import export as X
+    from mvp.mcp_server import Agent
+    from mvp.tests.test_mcp import Pool
+    send(lib8, "what have I been into lately")
+    send(lib8, "every export")
+    lib8["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "list_rules"}
+    want = "1. what you've been into lately: each time a new export of your library comes in"
+    assert send(lib8, "my rules").split("\n")[1] == want
+    rules, _ = X.rules_json(lib8["bot"].store, H)
+    assert _json.loads(rules)[0]["when"] == "each time a new export of your library comes in"
+    agent = Agent(H, db=config.DB, pool=Pool(), clock=lambda: lib8["clock"][0])
+    assert want in agent.call("my_rules")
+    # near-variant: a library rule that runs on new saves keeps its words
+    lib8["bot"].store.add_rule(H, "new pasta", {"when": {"type": "new_items"}, "content": {
+        "goal": "a pasta recipe", "searches": ["pasta"]}}, "active", None)
+    assert "2. a pasta recipe: whenever you save something new that fits" in send(lib8, "my rules")

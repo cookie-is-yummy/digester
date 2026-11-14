@@ -105,7 +105,9 @@ def rules_json(store, handle):
     for r in store.q("SELECT * FROM rules WHERE handle=? ORDER BY id", (handle,)):
         spec = json.loads(r["spec"])
         try:
-            when = describe(RuleSpec.model_validate(spec).when)
+            from .texts import TRENDS_WHEN
+            rs = RuleSpec.model_validate(spec)
+            when = TRENDS_WHEN if rs.content.source == "trends" else describe(rs.when)
         except Exception:  # noqa: BLE001 - an old spec that no longer validates still goes out as stored
             when = None
         out.append({"number": r.get("number"), "your_words": r.get("text"), "status": r["status"], "when": when,
