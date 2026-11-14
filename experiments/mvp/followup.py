@@ -310,7 +310,8 @@ SHARE_ES = re.compile(r"^\W*(?:por favor\s+)?(?:comp[aá]rte(?:lo|la|los|las)|re
                       r"[uú]ltim[oa]))(?:\s+(?:a|con)\s+[^\W\d_][\w'’ .-]{0,40}?)?(?:\s+por favor)?\W*$", re.I)
 ES_ORDINAL = {"primer": 1, "primero": 1, "primera": 1, "segundo": 2, "segunda": 2, "tercer": 3, "tercero": 3,
               "tercera": 3, "cuarto": 4, "cuarta": 4, "quinto": 5, "quinta": 5}
-SHARE_ONE = re.compile(r"^(?:it|this|that|this one|that one|the one you (?:recommended|picked))$", re.I)
+SHARE_ONE = re.compile(r"^(?:it|this|that|this one|that one|the one you (?:recommended|picked)|(?:the|this|that)\s+"
+                       r"(?:recipe|video|post|reel|tutorial|workout|link|pick|answer))$", re.I)
 SHARE_ALL = re.compile(r"^(?:these|those|them|all|all of them|both|everything|the picks|these ones|those ones)$", re.I)
 # "send it to me", "send the second one to my calendar / my grocery list": the person's own places, not a person
 SHARE_TO_SELF = re.compile(r"^(?:me|myself|you|yourself|(?:my|the)\s+(?:[\w-]+\s+)?(?:e-?mail|inbox|phone|account|"

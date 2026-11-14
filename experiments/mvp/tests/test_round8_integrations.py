@@ -239,7 +239,7 @@ def test_send_this_to_my_sister_never_repeats_or_keeps_who_it_is_for(env):
     env["state"]["answers"]["mvp_compose"] = lemon_pick()
     say(env, "pasta", ask_pasta())
     for t in ("send this to my sister", "forward this", "Forward that to Maria please", "share it with my team",
-              "can you share this one with my roommate?"):
+              "can you share this one with my roommate?", "send the recipe to my sister", "share the link"):
         say(env, t, CHAT)
         share, hint = texts_of(ch, 2)
         assert share.startswith("Lemon garlic pasta by @chef") and hint == HINT, t
