@@ -103,8 +103,9 @@ MAX_MORE = 2   # round 8, finding 94: the next posts with things, one "More in y
 
 
 def good(x):
-    """Round 8, finding 93: a thing that may be counted: it has words of the post's own about it."""
-    return bool(x.get("about"))
+    """Round 8, finding 93: a thing that may be counted: it has words of the post's own about it, or the post lists it
+    on a line of its own (extract.clean_items marks it "listed")."""
+    return bool(x.get("about")) or bool(x.get("listed"))
 
 
 def choose_items(result, extra, today, ts, year=None, notes=True, things=False, reads=None):

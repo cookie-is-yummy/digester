@@ -495,3 +495,22 @@ def test_95_the_cap_reached_after_the_first_part_says_the_rest_was_not_searched(
     assert msg.startswith("Startup motivation related reels:") and "I recommend Startup motivation" in msg
     assert "Opportunities to pursue soon:" not in msg
     assert msg.rstrip().endswith("I stopped there to stay within today's limit, so I didn't search for the rest.")
+
+
+def test_93_live_a_list_of_names_without_words_is_shown_when_the_text_lists_them(env, tmp_path):
+    # live check, 14 Nov: three posts listed 6 to 8 libraries by name alone; dropping every name with no words left
+    # the answer with nothing. A name the text lists on a line of its own counts; one only mentioned in passing does not
+    from mvp.extract import clean_items, list_entry
+    text = "My UI library stack\n1. Shadcn\n2. Aceternity UI\n• Magic UI\nI also tried Radix once in a project"
+    got, dropped = clean_items([{"name": n, "about": ""} for n in ("Shadcn", "Aceternity UI", "Magic UI", "Radix")],
+                               It(text))
+    assert names(got) == ["Shadcn", "Aceternity UI", "Magic UI"] and dropped == 1
+    assert all(x.get("listed") for x in got)
+    assert list_entry("Shadcn", "Shadcn\nthe best") and not list_entry("Radix", "Radix and more in a line")
+    use_lib(env, tmp_path, [("n1", "stack", text, "2025-05-01", "2025-05-02", "instagram")])
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "My UI library stack", title="My stack")]}
+    env["state"]["answers"]["mvp_extract"] = items_fake({"My UI library": {"items": [
+        {"name": n, "about": "", "fit": "unknown"} for n in ("Shadcn", "Aceternity UI", "Magic UI", "Radix")]}})
+    msg = say(env, "what ui libraries should i use", ask("UI libraries"))
+    assert msg.startswith("I found 3 UI libraries named in one of your saves.")
+    assert "1. Shadcn\n2. Aceternity UI\n3. Magic UI" in msg and "Radix" not in msg

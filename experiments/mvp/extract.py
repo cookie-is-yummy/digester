@@ -474,6 +474,25 @@ def own_line_words(name, about, text):
     return False
 
 
+_MARK = re.compile(r"^\s*(?:\d{1,2}\s*[.)\-:]|\d️?⃣|[-*•·▪◦➤►▶→⇒➜➡✅✔☑🔸🔹⭐👉]|[^\w\s#@\"'(])\s*", re.U)
+
+
+def list_entry(name, text):
+    """Judgement, round 8 (live check of finding 93): the text lists the thing: a line of its own that starts with the
+    name after a list mark (a number, a bullet, a dash, an emoji), or that is the name alone. A name the text only
+    mentions in passing is not a list entry."""
+    na = tokens(name)
+    if not na:
+        return False
+    for line in (text or "").splitlines():
+        m = _MARK.match(line)
+        rest = line[m.end():] if m else line
+        toks = tokens(rest)
+        if toks == na or (m and toks[:len(na)] == na):
+            return True
+    return False
+
+
 def thin_about(name, about, text=""):
     """The words add nothing to the name: fewer than 3 content words once the name's words are left out. (Judgement,
     round 8: the rest of the thing's own list line is its words when it holds one content word or more: "Iconoir:
@@ -510,9 +529,13 @@ def clean_items(items, it, extra=None, key_points=None):
     if len(kept) == 1 and keys and not kept[0]["about"]:
         kept[0]["about"] = "; ".join(str(k).rstrip(" .;") for k in keys[:2])
         kept[0]["from_key_points"] = True
-    if len(items or []) > 1:   # the post names other things: a thing with no words is not shown
+    if len(items or []) > 1:   # the post names other things: a thing with no words is not shown, unless the text
+        # lists it on a line of its own (judgement, live check: a list of names is the concrete answer)
         n = len(kept)
-        kept = [x for x in kept if x.get("about")]
+        kept = [x for x in kept if x.get("about") or list_entry(x.get("name") or "", text)]
+        for x in kept:
+            if not x.get("about"):
+                x["listed"] = True
         dropped += n - len(kept)
     return kept, dropped
 
