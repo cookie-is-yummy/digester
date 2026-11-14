@@ -92,6 +92,9 @@ EN = {
     # review fix X11: "another" once everything that fits was shown
     "more_none": "That's all I have in your saves for \"{goal}\".",
     "more_new": " Say \"new ones\" and I'll look for some on YouTube.",
+    # round 8, slice B (I3): after the message to forward, and when there is nothing to share
+    "share_hint": "Press and hold that message to forward it. I can't send to other people myself.",
+    "share_nothing": "I haven't sent you anything to share yet. Ask me for something first.",
 }
 
 ES = {
@@ -174,6 +177,8 @@ ES = {
                     "guardo recordatorios y listas de tareas."),
     "unsupported_event": "No puedo saber cuándo pasa eso. Elige una hora, por ejemplo \"cada día a las 6pm\".",
     "not_caught": "Perdona, no te entendí. ¿Me lo dices de otra forma?",
+    "share_hint": "Mantén pulsado ese mensaje para reenviarlo. Yo no puedo enviar mensajes a otras personas.",
+    "share_nothing": "Todavía no te he enviado nada para compartir. Pídeme algo primero.",
     "months": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
                "noviembre", "diciembre"],
 }
