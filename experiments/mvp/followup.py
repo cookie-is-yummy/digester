@@ -385,11 +385,19 @@ class FollowupMixin:
             c.order = "easiest_first"
         rule = self.store.rule(st["rule_id"]) if st.get("rule_id") else None
         request = st.get("text") or text
-        if rule and rule["status"] in ("active", "paused"):  # one more from a rule counts as sent by that rule
-            msg, run_id, n = self.run(person, spec, "manual", rule_id=rule["id"], request_text=request,
-                                      shown=st.get("shown") or [])
-        else:
-            msg, run_id, n = self.run(person, spec, "more", request_text=request, shown=st.get("shown") or [])
+        new_avoid = [a for a in it.avoid or [] if a in c.avoid]
+        if new_avoid and not lead and not self._answer_lang():
+            # round 7 check (finding 92): "what about something that isn't a donut" read as "more": the opening line
+            # says what changed, built by code from the merged request
+            self._tl.intro_code = T.changed_intro(c.goal or "", {"avoid": new_avoid, "others": True}, [])
+        try:
+            if rule and rule["status"] in ("active", "paused"):  # one more from a rule counts as sent by that rule
+                msg, run_id, n = self.run(person, spec, "manual", rule_id=rule["id"], request_text=request,
+                                          shown=st.get("shown") or [])
+            else:
+                msg, run_id, n = self.run(person, spec, "more", request_text=request, shown=st.get("shown") or [])
+        finally:
+            self._tl.intro_code = None
         block = getattr(self._tl, "outside_block", None)
         if not n and not self._run_failed(run_id) and c.source == "library" and c.outside == "none" \
                 and not (block and block[0] == run_id):

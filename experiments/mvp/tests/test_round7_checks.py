@@ -200,3 +200,17 @@ def test_r7c_a_thing_whose_own_words_name_only_an_earlier_year_is_left_out_for_a
         {"name": "Hack week 2026", "about": "build with mentors", "fit": "yes"}]}
     msg = say(env, "what opportunities might i have missed for 2026", ask("opportunities for 2026"))
     assert "Design award 2024" not in msg and "1. Hack week 2026" in msg and "2. Summer lab" in msg
+
+
+def test_r7c_the_donut_change_read_as_more_still_leaves_the_donut_out(blender):
+    # live, 14 Nov: the interpreter read "what about something that isnt a donut." as "more" with avoid ["donut"]; the
+    # guard that lets a message's own words win over an avoid entry took "isnt a donut" as asking for one
+    msg = say(blender, "what about something that isnt a donut.", {"intent": "more", "avoid": ["donut"]})
+    ids = shown_ids(blender)
+    assert ids and "b1" not in ids and "b3" not in ids
+    assert msg.startswith("Here's what else I found in your saves for basic Blender tutorials, leaving out anything "
+                          "about donut.")
+    from mvp.profile import avoid_for
+    assert avoid_for(["donut"], "something that isn't a donut") == ["donut"]
+    assert avoid_for(["donut"], "anything other than donut") == ["donut"]
+    assert avoid_for(["chicken"], "chicken and rice please") == []          # a message that asks for it still wins

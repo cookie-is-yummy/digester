@@ -437,7 +437,9 @@ AVOID_COVERS = {
 }
 DIETS = {"vegetarian": ("meat", "fish", "seafood"), "pescatarian": ("meat",),
          "vegan": ("meat", "fish", "seafood", "dairy", "egg", "honey")}
-_NEGATING = (r"\b(?:no|not|without|avoid|skip|minus|hold the|free of|never|don['’]?t|do not|can['’]?t|cannot)\s+"
+# round 7 check: "something that isnt a donut" (finding 92) rules donut out; it does not ask for it
+_NEGATING = (r"\b(?:no|not|without|avoid|skip|minus|hold the|free of|never|don['’]?t|do not|can['’]?t|cannot|"
+             r"isn['’]?t|aren['’]?t|wasn['’]?t|doesn['’]?t|other than|except|rather than|instead of)\s+"
              r"(?:any\s+)?(?:\w+\s+){0,2}?")
 
 
