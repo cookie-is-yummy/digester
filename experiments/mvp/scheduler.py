@@ -1,0 +1,596 @@
+"""PROTOTYPE ONLY - the scheduler: tick, the guards before a timed send, retries and recovery (BRIEF-10 section 5,
+DESIGN.md sections 1 and 11).
+
+Mixed into core.Bot.
+
+The order of the guards for a due rule: the person's kill switch; the unanswered-sends pause; too late (missed); a skip
+the person asked for (by count or date); their snooze; their quiet hours; the daily limit of timed sends; the budget.
+Every slot that does not go out is recorded in `runs` with a status that says why: missed, skipped, snoozed,
+quiet_hours, daily_limit, over_cap.
+
+A one-time send the person set themselves (a reminder in their own words, picks sent later) and a to-do's reminder
+keep the time they named: they pass quiet hours, the daily limit and the unanswered-sends pause. One that comes too late
+after the bot was off is not sent, and the person is told once (review fixes S3, S7, S12).
+
+Holds. A send that cannot go out yet but should still go out (a retry, or a random, window or every_hours moment that
+lands in quiet hours after the person changed them, or a one-time library send over the daily limit) is held: next_run_at moves
+to the release time and the state key hold:<rule id> remembers it. Lateness is then counted from the release, so a
+hold never turns into a silent 'missed'. A held repeating send whose next regular slot comes before the release is
+skipped and recorded instead, so the person never gets two at once.
+"""
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from . import config
+from .channels.base import SendUncertain
+from .schedule import _at, end_of_quiet, in_quiet_hours, next_run, say_time
+from .schema import RuleSpec
+from .store import now_iso
+from .texts import LAST_SEND, PAUSED_QUIET, STILL_USEFUL
+
+UNANSWERED_CHECK = 3   # after this many timed sends in a row with no word from the person, the next one asks
+UNANSWERED_PAUSE = 5   # after this many, their timed sends are paused (message services flag unanswered streams)
+MISSED_AFTER = timedelta(hours=2)   # a timed send this late is skipped, not sent (the bot was off, or kept failing)
+RETRY_AFTER = timedelta(minutes=15)
+MAX_RETRIES = 3
+SENT_STATUSES = ("sent", "none_sent", "unknown")
+
+
+class SchedulerMixin:
+    def tick(self):
+        now = self.clock()
+        self._upkeep(now)
+        try:   # new exports in the inboxes (refresh.py); an import runs in its own thread
+            self.refresher.poll(now)
+        except Exception as e:  # noqa: BLE001 - the type only; timed sends go on
+            print(f"inbox check: {type(e).__name__}", file=__import__("sys").stderr)
+        sent = 0
+        for rule in self.store.due_rules(now):
+            progress = {}
+            try:
+                sent += self._tick_rule(rule, now, progress)
+            except Exception as e:  # noqa: BLE001 - one rule never blocks the others
+                self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="error",
+                                   error=type(e).__name__, at=now_iso(now))
+                if progress.get("run_id") and not progress.get("advanced"):
+                    # review fix S9: the run picked and recorded items, then failed before anything was sent. What was
+                    # never shown is not "sent", nor the person's last answer.
+                    self.store.x("UPDATE runs SET status='error', error=? WHERE id=?", (type(e).__name__,
+                                                                                        progress["run_id"]))
+                    self._unrecord(rule["handle"], progress["run_id"], progress.get("before"))
+                if progress.get("advanced"):
+                    # The rule had already moved on to its next slot, and the message may already be out. Trying this
+                    # slot again could send it twice, so it is treated like a crash while sending: never sent again.
+                    if progress.get("run_id"):
+                        self.store.x("UPDATE runs SET status='unknown', error=? WHERE id=? AND status='sending'",
+                                     (type(e).__name__, progress["run_id"]))
+                    continue
+                slot = progress.get("slot") or datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
+                self._retry_or_skip(self.store.rule(rule["id"]) or rule, now, slot)
+        sent += self._tick_todos(now)   # due to-dos remind once (todos.py)
+        return sent
+
+    # ---------- what changes with time alone ----------
+    def _upkeep(self, now):
+        """A temporary time zone switches back, and a rule paused until a time resumes. A rule that this ends (its
+        only send has passed) is never ended silently: the person gets one short notice (fix pass, finding 21)."""
+        from . import texts as T
+        for p in self.store.timezone_reverts_due(now):
+            h = p["handle"]
+            with self.lock_for(h):
+                # review fix S1: read again under the lock; a message handled meanwhile may have changed the zone
+                p = self.store.person(h)
+                if not p or not p.get("tz_revert_at") or not p.get("tz_revert_to") or p["tz_revert_at"] > now_iso(now):
+                    continue
+                live = {r["id"] for r in self.store.rules(h, statuses=("active",))}
+                self._move_timezone(h, p["tz_revert_to"], now)
+                ended = [RuleSpec.model_validate(r["spec"]).content.goal for r in self.store.rules(h, statuses=("done",))
+                         if r["id"] in live]
+                if ended:
+                    self._notice(h, T.ended_by_revert(p["tz_revert_to"], ended), now)
+        for r in self.store.rules_to_resume(now):
+            person = self.store.person(r["handle"])
+            if not person:
+                continue
+            with self.lock_for(person["handle"]):
+                # review fix S1: the row was read before the lock. A "stop", a "resume" or a new pause made meanwhile
+                # wins: go on only if the rule is still paused until a time that has come.
+                r = self.store.rule(r["id"])
+                person = self.store.person(person["handle"])
+                if not r or not person or r["status"] != "paused" or not r.get("paused_until") \
+                        or r["paused_until"] > now_iso(now):
+                    continue
+                spec = RuleSpec.model_validate(r["spec"])
+                status, nxt = self._next_for(spec, person, now, r)
+                self.store.set_slot(r["id"], nxt, status)
+                self.store.update_rule(r["id"], paused_until=None)
+                if status == "done":
+                    self._notice(person["handle"], T.ended_on_resume([spec.content.goal]), now)
+        self._release_held(now)
+        self._daily_purge(now)
+
+    def _daily_purge(self, now):
+        """review fix PRIV-10: once a day, whatever is asked, YouTube data older than 30 days goes (it was purged
+        only when a run looked at a YouTube candidate), and composed answers past their reuse time."""
+        from datetime import timezone
+        day = now.astimezone(timezone.utc).date().isoformat()
+        if self.store.get_state("purge_day") == day:
+            return
+        self.store.purge_youtube(now_iso(now - timedelta(days=config.YOUTUBE_KEEP_DAYS)))
+        self.store.prune_answer_cache(config.ANSWER_CACHE_HOURS, now)
+        self.store.set_state("purge_day", day)
+
+    def _notice(self, handle, text, now=None):
+        """A short notice that time alone caused; a failed send is recorded, never retried. In quiet hours or a snooze
+        it waits, like an import's message, and goes out when they end (checker, finding 21)."""
+        person = self.store.person(handle)
+        if not person:   # deleted (or never known): nothing is sent or kept about them (final check)
+            return
+        if now is not None and (person["paused"] or self._held_now(person, now)):
+            held = self.store.get_state(f"heldnotice:{handle}") or []
+            self.store.set_state(f"heldnotice:{handle}", held + [text])
+            return
+        try:
+            self.send(handle, text)
+        except Exception as e:  # noqa: BLE001
+            self.store.add_run(handle=handle, kind="notice", status="send_failed", error=type(e).__name__)
+
+    def _held_now(self, person, now):
+        """True while a message nobody asked for at this moment must wait: in quiet hours or a snooze (finding 32)."""
+        snooze = person.get("snooze_until")
+        if snooze and now < datetime.fromisoformat(snooze):
+            return True
+        return in_quiet_hours(now, person["timezone"], self.store.quiet(person["handle"]))
+
+    def _release_held(self, now):
+        """An import's message and its new_items answers, and notices, held through quiet hours or a snooze, go out
+        now."""
+        for row in self.store.q("SELECT key FROM state WHERE key LIKE 'heldnotice:%'"):
+            h = row["key"].split(":", 1)[1]
+            person = self.store.person(h)
+            texts = self.store.get_state(row["key"]) or []
+            if person and texts and (person["paused"] or self._held_now(person, now)):
+                continue
+            with self.lock_for(h):
+                # read again under the lock (as review fix S1 does for timed sends): a deletion or a new snooze made
+                # while this waited wins (final check)
+                person, texts = self.store.person(h), self.store.get_state(row["key"]) or []
+                if person and texts and (person["paused"] or self._held_now(person, now)):
+                    continue
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                if person and texts:
+                    self._notice(h, "\n\n".join(dict.fromkeys(texts)))
+        rows = self.store.q("SELECT key FROM state WHERE key LIKE 'heldimport:%'")
+        for row in rows:
+            h = row["key"].split(":", 1)[1]
+            person = self.store.person(h)
+            held = self.store.get_state(row["key"])
+            if not person or not held:
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                continue
+            if person["paused"] or self._held_now(person, now):
+                continue
+            with self.lock_for(h):
+                person, held = self.store.person(h), self.store.get_state(row["key"])   # read again (final check)
+                if person and held and (person["paused"] or self._held_now(person, now)):
+                    continue
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                if not person or not held:
+                    continue
+                from .refresh import announce_import
+                announce_import(self, person, held, now)
+        for row in self.store.q("SELECT key FROM state WHERE key LIKE 'heldnew:%'"):
+            # review fix X3: new_items rules an import held for the budget, once the person's cap allows
+            h = row["key"].split(":", 1)[1]
+            person = self.store.person(h)
+            held = self.store.get_state(row["key"])
+            if not person or not held:
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                continue
+            if person["paused"] or self._held_now(person, now) or self._over_cap(person):
+                continue
+            with self.lock_for(h):
+                # read again under the lock: a deletion made meanwhile wins, and a held rule is never dropped because
+                # the cap was reached between the check above and the release (final check)
+                person, held = self.store.person(h), self.store.get_state(row["key"])
+                self.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+                if not person or not held:
+                    continue
+                from .refresh import release_new_items
+                if not release_new_items(self, person, held, now):
+                    self.store.set_state(row["key"], held)
+
+    def _move_timezone(self, handle, new_tz, now, revert_to=None, revert_at=None):
+        """The person's zone changes. Each rule's next send keeps its date and clock time, read in the new zone (so a
+        skipped or already-sent day stays skipped); only if that moment has passed is the next one worked out afresh.
+        Rules pinned to a zone (when.tz) do not move."""
+        person = self.store.person(handle)
+        old_tz = ZoneInfo(person["timezone"])
+        self._keep_cadence(person)   # review fix S2: "every 2 days" keeps counting from the same day
+        self.store.set_timezone(handle, new_tz, revert_to=revert_to, revert_at=revert_at)
+        person = self.store.person(handle)
+        for r in self.store.rules(handle, statuses=("active",)):
+            if not r["next_run_at"]:
+                continue
+            spec = RuleSpec.model_validate(r["spec"])
+            if spec.when.tz:
+                continue
+            due = datetime.fromisoformat(r["next_run_at"])
+            if due <= now:   # review fix S3: a send already due is never redrawn without a record
+                slot = datetime.fromisoformat(r.get("slot_at") or r["next_run_at"])
+                if now - max(due, slot) <= MISSED_AFTER:
+                    continue   # not late yet: the next tick sends it as it is
+                self.store.add_run(handle=handle, rule_id=r["id"], kind="scheduled", status="missed", at=now_iso(now))
+                self._record_passed(r, spec, old_tz.key, now, first=slot)
+            kept = due.astimezone(old_tz).replace(tzinfo=ZoneInfo(new_tz))
+            if kept > now and spec.when.type != "random":
+                self.store.set_slot(r["id"], now_iso(kept), "active")
+                continue
+            status, nxt = self._next_for(spec, person, now, r)
+            self.store.set_slot(r["id"], nxt, status)
+        # review fix S6: a to-do's reminder keeps its date and clock time too ("9am" stays 9am there). One whose moment
+        # has passed, or would have passed read in the new zone, is left as it is.
+        for t in self.store.todos(handle):
+            if not t.get("due_at") or t.get("reminded_at"):
+                continue
+            due = datetime.fromisoformat(t["due_at"])
+            kept = due.astimezone(old_tz).replace(tzinfo=ZoneInfo(new_tz))
+            if due > now and kept > now:
+                self.store.update_todo(t["id"], due_at=now_iso(kept))
+
+    def _keep_cadence(self, person):
+        """Before the person's zone changes: each every-N-days or every-N-weeks rule keeps the day it counts from, as
+        worked out in the zone it has been counted in so far (review fix S2). Kept with the rule's timing, so a changed
+        rule counts afresh."""
+        from .schedule import base_day, counts_from_a_day
+        for r in self.store.rules(person["handle"], statuses=("active", "paused")):
+            spec = RuleSpec.model_validate(r["spec"])
+            if spec.when.tz or not counts_from_a_day(spec.when) or self._cadence_base(r, spec):
+                continue
+            day = base_day(spec.when, person["timezone"], datetime.fromisoformat(r["created_at"]), seed=r["id"],
+                           quiet=self.store.quiet(person["handle"]))
+            if day:
+                self.store.set_state(f"cadence:{r['id']}", {"day": day, "when": self._when_key(spec)})
+
+    @staticmethod
+    def _when_key(spec):
+        import json
+        return json.dumps(spec.when.model_dump(mode="json"), sort_keys=True)
+
+    def _cadence_base(self, rule, spec):
+        """The kept day a rule's cadence counts from (ISO date), or None to work it out from its creation."""
+        if not rule or not rule.get("id"):
+            return None
+        kept = self.store.get_state(f"cadence:{rule['id']}")
+        return kept["day"] if isinstance(kept, dict) and kept.get("when") == self._when_key(spec) else None
+
+    # ---------- slots ----------
+    def _next_for(self, spec, person, now, rule=None, after=None):
+        """(status, next_run_at) for a rule: a saved on-request or new-items rule stays active with no time; a timed
+        rule whose time has passed is done. `rule` gives the anchor (its creation) and the seed (its id)."""
+        if spec.when.type in ("on_request", "new_items"):
+            return "active", None
+        anchor = datetime.fromisoformat(rule["created_at"]) if rule and rule.get("created_at") else now
+        nxt = next_run(spec.when, person["timezone"], after or now, anchor=anchor, seed=rule["id"] if rule else None,
+                       quiet=self.store.quiet(person["handle"]), base=self._cadence_base(rule, spec))
+        return ("active", now_iso(nxt)) if nxt else ("done", None)
+
+    def _upcoming(self, rule, person, now):
+        """The next send that will really go out, after the skips the person asked for (None if there is none)."""
+        if not rule.get("next_run_at") or rule["status"] != "active":
+            return None
+        spec = RuleSpec.model_validate(rule["spec"])
+        tz = ZoneInfo(spec.when.tz or person["timezone"])
+        t = datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
+        count, dates = rule.get("skip_count") or 0, set(rule.get("skip_dates") or [])
+        for _ in range(200):
+            local = t.astimezone(tz)
+            after = t
+            if local.date().isoformat() in dates:   # every send on a skipped date: go on from the end of that day
+                after = _at(local.date() + timedelta(days=1), "00:00", tz) - timedelta(seconds=1)
+            elif count > 0:
+                count -= 1
+            else:
+                return t
+            _, nxt = self._next_for(spec, person, now, rule, after=after)
+            if not nxt:
+                return None
+            t = datetime.fromisoformat(nxt)
+        return None
+
+    def _advance(self, rule, spec, tz, now, sending=False):
+        person = self.store.person(rule["handle"]) or {"timezone": tz, "handle": rule["handle"]}
+        status, nxt = self._next_for(spec, dict(person, timezone=tz), now, rule)
+        if spec.when.max_sends:  # "stop after three times": counted in messages that went out
+            marks = ",".join("?" * len(SENT_STATUSES))
+            sent = self.store.one(f"SELECT COUNT(*) n FROM runs WHERE rule_id=? AND kind='scheduled' AND status IN "
+                                  f"({marks})", (rule["id"], *SENT_STATUSES))["n"] + (1 if sending else 0)
+            sent += self.store.get_state(f"replaced:{rule['id']}", 0) or 0   # "send Friday's one now" (review fix S10)
+            if sent >= spec.when.max_sends:
+                status, nxt = "done", None
+        self.store.set_slot(rule["id"], nxt, status)
+        self.store.update_rule(rule["id"], last_run_at=now_iso(now))
+        self.store.set_state(f"retry:{rule['id']}", 0)
+        self.store.set_state(f"hold:{rule['id']}", None)
+
+    def _hold(self, rule, release):
+        self.store.set_state(f"hold:{rule['id']}", now_iso(release))
+        self.store.update_rule(rule["id"], next_run_at=now_iso(release), status="active")
+
+    def _skip_slot(self, rule, spec, tz, now, status, detail=None):
+        self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status=status, error=detail,
+                           at=now_iso(now))
+        if status == "missed":   # review fix S3: every slot that passed while the bot was off is recorded
+            self._record_passed(rule, spec, tz, now)
+        self._advance(rule, spec, tz, now)
+        return 0
+
+    def _record_passed(self, rule, spec, tz, now, first=None):
+        """One 'missed' row for each regular slot after `first` (default: the rule's slot) that has also passed."""
+        person = dict(self.store.person(rule["handle"]) or {"handle": rule["handle"]}, timezone=tz)
+        t = first or datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
+        for _ in range(200):
+            _, nxt = self._next_for(spec, person, now, rule, after=t)
+            if not nxt or datetime.fromisoformat(nxt) > now:
+                return
+            t = datetime.fromisoformat(nxt)
+            self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="missed",
+                               at=now_iso(now))
+
+    @staticmethod
+    def _moved(rule):
+        """True when next_run_at was moved off the rule's slot by a retry or a hold. Anything that sets a new slot
+        (a send, a skip, a change, a resume, a time zone move) sets both to the same time, so retry counts and holds
+        left from an earlier slot never apply to a new one."""
+        return bool(rule.get("slot_at")) and rule.get("next_run_at") != rule.get("slot_at")
+
+    def _retry_or_skip(self, rule, now, slot=None, advanced=False, tries=None):
+        """After an error: try this slot again in 15 minutes, up to 3 times; then move to the next scheduled time.
+        `advanced` says the rule was already moved on to its next slot (a send that failed). `tries` is how many
+        retries this slot has had (read before the rule moved on). A retry that lands in quiet hours is held to their
+        end when it comes due."""
+        if tries is None:
+            tries = (self.store.get_state(f"retry:{rule['id']}", 0) or 0) if self._moved(rule) else 0
+        n = tries
+        if n < MAX_RETRIES:
+            self.store.set_state(f"retry:{rule['id']}", n + 1)
+            fields = {"next_run_at": now_iso(now + RETRY_AFTER), "status": "active"}
+            if slot is not None:
+                fields["slot_at"] = now_iso(slot)  # still the same slot: the lateness limit counts from it
+            self.store.update_rule(rule["id"], **fields)
+            return
+        if advanced:
+            self.store.set_state(f"retry:{rule['id']}", 0)
+            return
+        person = self.store.person(rule["handle"])
+        spec = RuleSpec.model_validate(rule["spec"])
+        self._advance(rule, spec, person["timezone"] if person else "UTC", now)
+
+    # ---------- one due rule ----------
+    def _tick_rule(self, rule, now, progress=None):
+        person = self.store.person(rule["handle"])
+        if not person:
+            return 0
+        with self.lock_for(person["handle"]):  # not while a message from this person is being handled
+            rule = self.store.rule(rule["id"])  # it may have been paused, stopped or changed a moment ago
+            person = self.store.person(person["handle"])  # review fix S1: a snooze, a stop or an import made meanwhile
+            if not person or not rule or rule["status"] != "active" or not rule["next_run_at"] or rule["next_run_at"] > now_iso(now):
+                return 0
+            return self._tick_rule_locked(rule, person, now, {} if progress is None else progress)
+
+    def _tick_rule_locked(self, rule, person, now, progress):
+        # review fix X7 (experience): a timed send is written in English, as its rule's preview and start line were,
+        # on any thread: never the language left over from the last message this thread handled
+        self._tl.lang = None
+        spec = RuleSpec.model_validate(rule["spec"])
+        tz = person["timezone"]
+        slot = datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
+        progress["slot"] = slot
+        if person["paused"]:
+            self._advance(rule, spec, tz, now)  # skip this slot rather than fire late after unpausing
+            return 0
+        quiet_streak = self._unanswered(person["handle"])
+        if quiet_streak >= UNANSWERED_PAUSE and not self._own_once(spec) and not self._own_words(spec):
+            for r in self.store.rules(person["handle"]):
+                other = RuleSpec.model_validate(r["spec"])
+                if self._own_once(other) or self._own_words(other):
+                    continue   # review fix S7: a one-time reminder they asked for still goes out, as a to-do's does;
+                    # review fix X2 (experience): so do reminders in their own words and their own list
+                if r["status"] == "active" and r["next_run_at"]:
+                    self.store.update_rule(r["id"], status="paused")
+                if r.get("paused_until"):  # "paused until Monday" must not restart while they are still silent
+                    self.store.update_rule(r["id"], paused_until=None)
+            self.store.add_run(handle=rule["handle"], rule_id=rule["id"], kind="scheduled", status="paused_quiet",
+                               at=now_iso(now))
+            self.send(person["handle"], PAUSED_QUIET)
+            return 0
+        moved = self._moved(rule)   # a retry or a held send of this slot (never one left from an earlier slot)
+        retries = (self.store.get_state(f"retry:{rule['id']}", 0) or 0) if moved else 0
+        hold = self.store.get_state(f"hold:{rule['id']}") if moved else None
+        late_from = max(slot, datetime.fromisoformat(hold)) if hold else slot
+        if now - late_from > MISSED_AFTER:  # e.g. the bot was off on Friday evening: Friday's pick is not sent on Monday
+            if spec.when.type == "once":   # review fix S3: a one-time send they asked for never ends without a word
+                from .texts import missed_once
+                what = spec.content.text if spec.content.source == "note" and spec.content.text else spec.content.goal
+                self._notice(person["handle"], missed_once(what, say_time(slot, now, spec.when.tz or tz)), now)
+            return self._skip_slot(rule, spec, tz, now, "missed")
+        again = bool(retries or hold)   # this slot already passed the checks below once: a retry or a held send
+        # "skip the next two", "not on the 26th". Checked again for a retry or a held send: a skip found now was asked
+        # for after this slot's first try, and the reply counted this slot as the one skipped (review fix S8; the
+        # first try of a slot that used a skip never comes back).
+        why = self.store.consume_skip(rule["id"], slot.astimezone(ZoneInfo(spec.when.tz or tz)).date().isoformat())
+        if why:
+            return self._skip_slot(rule, spec, tz, now, "skipped", why)
+        snooze = person.get("snooze_until")
+        if snooze and now < datetime.fromisoformat(snooze):  # "I'm away until the 20th"; asking still works
+            return self._skip_slot(rule, spec, tz, now, "snoozed")
+        quiet = self.store.quiet(person["handle"])
+        if in_quiet_hours(now, tz, quiet) and not (spec.when.named_time and not again):
+            # A clock time the person named is kept even in quiet hours. Random, window and every_hours moments, retries
+            # and held sends are not: they wait for the end of quiet hours, unless the next regular send comes first.
+            release = end_of_quiet(now, tz, quiet)
+            regular = next_run(spec.when, tz, slot, anchor=datetime.fromisoformat(rule["created_at"]), seed=rule["id"],
+                               quiet=quiet, base=self._cadence_base(rule, spec))
+            if spec.when.type != "once" and regular and regular <= release:
+                return self._skip_slot(rule, spec, tz, now, "quiet_hours")
+            self._hold(rule, release)
+            return 0
+        local = now.astimezone(ZoneInfo(tz))
+        midnight = _at(local.date(), "00:00", ZoneInfo(tz))
+        # review fix S12: a reminder the person set themselves (their words, or picks sent later) goes out at the time
+        # they named, as it does in quiet hours; it is never moved to the next morning without a word
+        if not self._own_once(spec) and \
+                self.store.scheduled_today(person["handle"], midnight) >= config.MAX_SCHEDULED_PER_DAY:
+            # A one-time send the person asked for is held to the next morning (lateness counts from then, so it is
+            # never turned into a silent 'missed'). A repeating rule's slot is skipped and recorded: its next slot comes
+            # anyway, and sending it tomorrow would only push tomorrow over the limit too.
+            if spec.when.type == "once":
+                tomorrow = _at(local.date() + timedelta(days=1), "00:00", ZoneInfo(tz))
+                self._hold(rule, end_of_quiet(tomorrow, tz, quiet))
+                return 0
+            return self._skip_slot(rule, spec, tz, now, "daily_limit")
+        # this slot is skipped and recorded; it is not held to fire late. Only a send that searches and composes is
+        # paid for: a reminder in their words, their list or a kept answer costs nothing and goes out as a to-do's
+        # reminder does (final check: the same reading as cost-failure fix X1 for "run 1")
+        if spec.content.source in ("library", "recent") and self._over_cap(person):
+            return self._skip_slot(rule, spec, tz, now, "over_cap")
+        h = person["handle"]
+        before = (self.store.last_answer(h), self.store.get_state(f"lines:{h}"), self.store.get_state(f"linekinds:{h}"),
+                  self.store.get_state(f"facts:{h}"))
+        progress["before"] = before
+        msg, run_id, n = self.run(person, spec, "scheduled", rule_id=rule["id"])
+        progress["run_id"] = run_id
+        if not n and spec.content.source == "recap" and not self._run_failed(run_id):
+            # round 8 (BN5, DESIGN.md section 14): a recap with nothing to report is recorded (status none), not sent
+            self._advance(rule, spec, tz, now)
+            return 0
+        if self._run_failed(run_id):
+            err = self.store.one("SELECT error FROM runs WHERE id=?", (run_id,))["error"] or ""
+            if err.startswith("ComposeCut"):
+                # review fix X7: the answer could not be put together, and the same input fails the same way: no paid
+                # retries of this slot; the person is told once, and the next send comes as planned
+                from .texts import compose_cut_rule
+                self._notice(h, compose_cut_rule(spec.content.goal), now)
+                self._retry_or_skip(rule, now, slot, tries=MAX_RETRIES)
+                return 0
+            self._retry_or_skip(rule, now, slot, tries=retries)  # nothing is sent: an error text would be unprompted
+            return 0
+        block = getattr(self._tl, "outside_block", None)
+        if not n and spec.when.if_empty == "quiet" and spec.content.outside != "only" \
+                and not (block and block[0] == run_id):
+            return self._empty_quiet(rule, spec, person, tz, now, run_id)
+        # Recorded before the send: the rule moves to its next slot and the run is marked 'sending'. A crash from here
+        # on can lose this one message but can never send the slot twice.
+        self._advance(rule, spec, tz, now, sending=True)
+        progress["advanced"] = True
+        self.store.x("UPDATE runs SET status='sending' WHERE id=?", (run_id,))
+        after = ""
+        if spec.when.repeating and self.store.rule(rule["id"])["status"] == "done":
+            after = "\n" + LAST_SEND   # max_sends reached, or until has passed
+        elif quiet_streak >= UNANSWERED_CHECK and spec.when.repeating and not self._own_words(spec):
+            after = "\n" + STILL_USEFUL
+        try:
+            # the rule's do (email, calendar, to-dos), once per slot, then the message (outputs.py)
+            self.deliver(person, spec, msg, run_id, kind="scheduled", rule_id=rule["id"], slot=now_iso(slot),
+                         request_text=rule.get("text"), after=after)
+        except SendUncertain:  # it may have gone out: keep the deliveries, do not retry
+            self.store.x("UPDATE runs SET status='unknown', error='SendUncertain' WHERE id=?", (run_id,))
+            return 0
+        except Exception as e:  # noqa: BLE001 - a clear failure: nothing went out
+            self.store.x("UPDATE runs SET status='send_failed', error=? WHERE id=?", (type(e).__name__, run_id))
+            self._unrecord(h, run_id, before)
+            self._retry_or_skip(rule, now, slot, advanced=True, tries=retries)  # _advance reset the stored count
+            return 0
+        self.store.x("UPDATE runs SET status=? WHERE id=?", ("sent" if n else "none_sent", run_id))
+        return 1
+
+    def _empty_quiet(self, rule, spec, person, tz, now, run_id):
+        """Round 8, BN2 (a): a repeating library rule set to stay quiet found nothing new. The slot is recorded as
+        'empty_quiet' (not a send: it never counts as unanswered, toward max_sends or toward the daily limit) and
+        nothing is sent, except on the first empty slot after a send (or the rule's first slot): one line that says it
+        will stay quiet until there is something."""
+        h = person["handle"]
+        prev = self.store.one("SELECT status FROM runs WHERE rule_id=? AND kind='scheduled' AND id<? AND status IN "
+                              "('sent','none_sent','unknown','empty_quiet') ORDER BY id DESC LIMIT 1",
+                              (rule["id"], run_id))
+        self._advance(rule, spec, tz, now)
+        self.store.x("UPDATE runs SET status='empty_quiet' WHERE id=?", (run_id,))
+        from .texts import empty_quiet_last, empty_quiet_line
+        if self.store.rule(rule["id"])["status"] == "done":
+            line = empty_quiet_last(spec.content.goal)   # its last slot: the rule never ends without a word
+        elif prev is not None and prev["status"] in ("empty_quiet", "none_sent"):
+            return 0   # already said: quiet until there is something
+        else:
+            from .dates import say_day
+            newest = self._newest_kept(person)
+            today = now.astimezone(ZoneInfo(tz)).date()
+            line = empty_quiet_line(spec.content.goal, say_day(newest, today) if newest else None,
+                                    self.store.rule_number(h, rule["id"]) or 1)
+        try:
+            self.send(h, line, run_id)
+        except Exception as e:  # noqa: BLE001 - a line about nothing is never retried
+            self.store.x("UPDATE runs SET error=? WHERE id=?", (type(e).__name__, run_id))
+            return 0
+        return 1
+
+    def _newest_kept(self, person):
+        """The newest day the person kept something (saved, collected, sent to themselves, a playlist), or None."""
+        from datetime import date
+        best = None
+        for x in self.view(person["library"]).items.values():
+            for k in ("save", "collection", "share_self", "playlist"):
+                v = (x.dates or {}).get(k)
+                if v and (best is None or str(v)[:10] > best):
+                    best = str(v)[:10]
+        try:
+            return date.fromisoformat(best) if best else None
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _own_once(spec):
+        """A one-time send the person asked for: a reminder in their own words, or picks sent later ("email me this
+        tonight"). Like a to-do's reminder, it is their own time, not a stream they did not answer (review fix S7)."""
+        return spec.when.type == "once" and spec.content.source in ("note", "items")
+
+    @staticmethod
+    def _own_words(spec):
+        """A reminder in the person's own words (an export reminder too) or their own open to-dos: what they asked to
+        be reminded of, not a stream of picks they may have stopped reading (review fix X2, experience). It is not
+        counted as an unanswered send, never asks "still useful?" and is not paused for silence."""
+        return spec.content.source in ("note", "todos")
+
+    def _unrecord(self, h, run_id, before):
+        """A run whose message never went out: its deliveries go (so its picks can be sent later), and the person's
+        last answer and its lines are put back as they were (👎 must not land on what they never received)."""
+        self.store.x("DELETE FROM deliveries WHERE run_id=?", (run_id,))
+        if before is None:
+            return
+        last, lines, kinds, facts = before
+        if last:
+            self.store.set_last_answer(h, last["run_id"], last["rule_id"], last["items"], last["goal"])
+        else:
+            self.store.x("DELETE FROM last_answer WHERE handle=?", (h,))
+        self.store.set_state(f"lines:{h}", lines or {})
+        self.store.set_state(f"linekinds:{h}", kinds or {})
+        self.store.set_state(f"facts:{h}", facts or {})
+
+    def _unanswered(self, handle):
+        """Timed sends that went out since the person last wrote or reacted."""
+        since = self.store.get_state(f"last_in:{handle}") or ""
+        # a to-do's reminder is the person's own time, not a stream they did not answer (fix pass, finding 22)
+        rows = self.store.q("SELECT rule_id FROM runs WHERE handle=? AND kind='scheduled' AND status IN "
+                            "('sent','none_sent','unknown') AND at>?", (handle, since))
+        own = {}
+        for rid in {r["rule_id"] for r in rows}:
+            rule = self.store.rule(rid) if rid else None
+            sp = RuleSpec.model_validate(rule["spec"]) if rule else None
+            own[rid] = bool(rule) and (self._own_once(sp) or self._own_words(sp))
+        return sum(1 for r in rows if not own[r["rule_id"]])
+
+    def _run_failed(self, run_id):
+        return self.store.one("SELECT status FROM runs WHERE id=?", (run_id,))["status"] == "error"
+
+    def recover(self):
+        """At start: a run left as 'sending' by a crash may or may not have gone out. It is never sent again."""
+        self.store.x("UPDATE runs SET status='unknown', error='stopped while sending' WHERE status='sending'")

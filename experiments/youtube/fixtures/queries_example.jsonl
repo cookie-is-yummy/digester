@@ -1,0 +1,6 @@
+{"id": "yt_q01", "query": "videos about shaping sourdough", "kinds": ["topic"], "examples": [], "filters": {}}
+{"id": "yt_q02", "query": "that knife skills video from Synthetic Channel 3", "kinds": ["name"], "examples": [], "filters": {}}
+{"id": "yt_q03", "query": "the part where they pre-shape the dough before the bench rest", "kinds": ["moment"], "examples": [], "filters": {}}
+{"id": "yt_q04", "query": "where he explains the rice to water ratio", "kinds": ["moment", "said_shown"], "examples": [], "filters": {}}
+{"id": "yt_q05", "query": null, "kinds": ["more_like_this"], "examples": ["SYNvid00005"], "filters": {}}
+{"id": "yt_q06", "query": "lo-fi music I had on in the evening", "kinds": ["vibe"], "examples": [], "filters": {"before": "2025-03-05", "kinds": ["watch"]}}

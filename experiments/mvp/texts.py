@@ -1,0 +1,1439 @@
+"""PROTOTYPE ONLY - what the bot says, and the patterns that read what people say to it.
+
+Every reply string the handler, executor and scheduler send lives here, so wording can change in one place.
+"""
+import re
+
+CONSENT_VERSION = "mvp-consent-v1"
+
+# ---------- patterns that read a message ----------
+YES = re.compile(r"^\s*(yes|y|yep|yeah|yup|sure|ok|okay|go|start|do it|sounds good|👍)[\s.!]*$", re.I)
+NO = re.compile(r"^\s*(no|n|nope|nah|cancel|don'?t)[\s.!]*$", re.I)
+YES_LEAD = re.compile(r"^\s*(yes|yep|yeah|yup|sure|ok|okay|sounds good|go ahead|s[ií]|vale|claro)\b", re.I)
+# review fix X12 (experience): a filler word first ("ok i agree", "sure, I agree"), a typo ("I agre") and Spanish
+AGREE = re.compile(r"^\s*(?:(?:ok|okay|sure|yes|yeah|yep|fine|alright|s[ií]|vale|claro)\b[\s,.!]*)*"
+                   r"(i agree?d?|agree?d?|i'm in|im in|yes|acepto|de acuerdo|estoy de acuerdo)(?!\w)", re.I)
+CONSENT_AGAIN = "To start, reply \"I agree\". My message above says what I keep and why."
+NEGATION = re.compile(r"\b(not|don'?t|do not|no|disagree|never)\b", re.I)
+QUICK_FEEDBACK = re.compile(r"^\s*(👍|👎)\s*(\d)?\s*$")
+# How a reaction reaches a phone that shows it as text (SMS, or a reaction the channel passes on as text).
+REACTION_TEXT = re.compile(r"^\s*(Liked|Loved|Laughed at|Emphasized|Disliked|Reacted (👍|👎|❤️)( to)?)\s+[“\"]", re.I)
+# a "yes" that also edits an open preview ("yes but at 8pm")
+YES_WITH_EDIT = re.compile(r"^\s*(yes|yep|yeah|ok|okay|sure)\b", re.I)
+# a follow-up question that wants ingredients
+RECIPE_WORDS = re.compile(r"ingredient|recipe|make|cook", re.I)
+
+# ---------- fixed replies ----------
+HELP = ("I find things in what you've saved and watched on Instagram and YouTube. Ask whenever you want something, "
+        "or tell me when to send it.\n"
+        "Now: \"what can I make with chicken and rice?\"\n"
+        "Later: \"tonight at 9 send me something to wind down with\" or \"in two hours…\"\n"
+        "Repeating: \"a pasta recipe every Friday at 7pm\"\n"
+        "Manage: \"my rules\", \"run 1\", \"skip 1\", \"pause 1\", \"stop 1\". Reply 👍 or 👎, or \"👎 2\" for one pick. "
+        "\"delete my data\" removes everything I hold about you.")
+CONSENT = ("Hi! I'm a prototype that finds things in your own saved and watched posts and sends them when you ask. "
+           "Your library stays on the founders' Mac. Your messages to me are stored so I work, and the founders look at "
+           "them only to fix problems. Your requests and the text of posts I consider go to OpenAI to understand them "
+           "(not used for training). You can say "
+           "\"delete my data\" at any time. Reply \"I agree\" to start, and confirm you're 18 or over.")
+WELCOME = "Thanks! " + HELP
+SCHEDULED_FOOTER = "Not for you? Reply 👎. Want one more now? Reply \"another\". To pause these, reply \"pause {n}\"."
+LAST_SEND = "That was the last one of this rule."
+STILL_USEFUL = "Still useful? Reply 👍 to keep these coming."
+PAUSED_QUIET = ("I've paused your timed sends because I haven't heard from you in a while. "
+                "Reply \"resume all\" to restart them, or just ask me for something any time.")
+UNKNOWN = "Hi! I'm a private test bot, and you're not set up with me yet."
+NOTHING_PENDING = "I don't have anything waiting for a yes. Tell me what you'd like and I'll set it up."
+LOADING = "One moment, I'm opening your library…"
+LIMIT = "I've reached today's limit for you. I'll be able to search again tomorrow."
+LIMIT_TOTAL = "The test budget is used up, so I can't search right now. The founders need to raise it."
+
+RUN_ERROR = "Something went wrong on my side; I'll look into it. Please try again in a bit."
+INTERPRET_ERROR = "Something went wrong on my side. Please try again in a bit."
+NOT_DELETED = "OK, nothing is deleted."
+NOT_STARTED = "OK, I won't start it. Tell me what you'd like instead."
+DECLINED = "OK, I won't do that."
+PREVIEW_HEAD = "Here's what that would look like now:\n\n"
+MORE_OF_WHAT = "More of what? Tell me what you're looking for."
+NOTHING_TO_FOLLOW_UP = "I haven't sent you anything to follow up on yet. What are you looking for?"
+WHICH_RULE = "Which rule? Reply \"my rules\" to see their numbers."
+NO_RULES = "You have no rules yet."
+NO_RULES_ASK = "You have no rules yet. Just ask me for what you want."
+CHANGE_TIME_PASSED = "That time has already passed, so I left the rule as it was. When should I send it?"
+NO_SEND_COMING = "That one has no send coming up."
+SKIPPED_LAST = "Skipped. That was its only send, so the rule is finished."
+SKIPPED_RANDOM = "Skipped. The next one comes at a random time as usual."
+DELETE_ASK = "This deletes your library, rules and history with me. Reply YES to delete everything."
+DELETED = ("Done: your rules and history are deleted. A founder will remove your library "
+           "and our message thread within 24 hours and confirm here.")
+TIME_PASSED = "That time has already passed. When should I send it?"
+ALL_QUIET = ("Those hours are all inside your quiet hours, and I only send at a time you name there. "
+             "Pick other hours, or tell me an exact time.")
+NOTHING_TO_ATTACH = "Thanks! Nothing to attach that to yet."
+FEEDBACK_REPLIES = {"up": "Noted 👍", "down": "Noted. I won't send that again.", "more": "Noted: more like that.",
+                    "less": "Noted: less like that.",
+                    "harder": "Noted. Ask for \"a harder one\" and I'll look for one now.",
+                    "easier": "Noted. Ask for \"an easier one\" and I'll look for one now.",
+                    "done": "Nice! I've marked it as done, so I won't send it again.",
+                    "hide": "Hidden. I won't send that one again."}
+FEEDBACK_OTHER = "Noted."
+# review fix X9 (experience): an ask does not learn from "less like that"; a creator the person names out is left out
+LESS_ON_ASK = "Noted. If it's the creator you'd rather not see, say \"not this creator\" and I'll leave them out."
+NO_CREATOR = "I don't know who made that one, so I can't leave them out."
+CREATOR_WORDS = re.compile(r"\b(creators?|accounts?|channels?|this (?:person|guy|girl|chef)|from (?:them|him|her)|"
+                           r"by (?:them|him|her))\b", re.I)
+
+
+def creator_avoided(name):
+    return f"Got it: I'll leave out posts by {name} from now on."
+NO_RULES_LIST = ("You have no rules yet. Ask me anything now, or tell me when to send something: "
+                 "\"tonight at 9…\", \"every Friday at 7pm…\".")
+RULES_HEAD = "Your rules:"
+RULES_FOOT = "Reply \"run 1\" to get one now, or \"skip 1\", \"pause 1\", \"stop 1\", \"change 1 to …\"."
+RULE_PAUSED = " (paused)"
+MANAGE_WORDS = {"pause": "Paused", "stop": "Stopped", "resume": "Resumed"}
+
+
+# ---------- replies built from parts ----------
+def cap_first(s):
+    return s[0].upper() + s[1:]
+
+
+COUNT_LEAD = re.compile(r"^\s*(?:(\d{1,2})|(one|two|three|four|five|six|seven|eight|nine|ten|a couple of|a few))\s+"
+                        r"(?=[^\W\d_])", re.I)
+COUNT_NAMES = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+               "ten": 10, "a couple of": 2, "a few": 3}
+
+
+def goal_without_count(goal, count):
+    """Fix pass 3, finding 70: '3 videos about investing' with 3 picks is "videos about investing" (the count is said
+    once). A number that is not the count ("5 minute workouts", 1 pick) stays."""
+    m = COUNT_LEAD.match(goal or "")
+    if not m:
+        return goal
+    n = int(m.group(1)) if m.group(1) else COUNT_NAMES[m.group(2).lower()]
+    return goal[m.end():] if n == count and goal[m.end():].strip() else goal
+
+
+def picks_for(count, goal):
+    """'1 pick for "a pasta recipe"'."""
+    return f"{count} {'pick' if count == 1 else 'picks'} for \"{goal_without_count(goal, count)}\""
+
+
+def avoid_clause(avoid):
+    return f", nothing with {', '.join(avoid)}" if avoid else ""
+
+
+def changed(when, goal, what=None):
+    """'Changed: every day at 8am, mini Blender tutorials, now from YouTube, outside your saves.' (fix pass 2,
+    finding 50: what changed is said, not only the rule as it now is)"""
+    return f"Changed: {when}, {goal}" + (f", {what}" if what else "") + "."
+
+
+def skipped(next_time, count=1, dates=None):
+    """'Skipped. Next one ...'; 'Skipped the next 2. ...'; 'Skipped Thursday 26 November. ...'"""
+    if dates:
+        head = f"Skipped {dates}."
+    elif count > 1:
+        head = f"Skipped the next {count}."
+    else:
+        head = "Skipped."
+    return f"{head} Next one {next_time}."
+
+
+def zone_name(tz_name):
+    return tz_name.split('/')[-1].replace('_', ' ')
+
+
+def timezone_set(tz_name, local):
+    return (f"OK, I'll use {zone_name(tz_name)} time from now on "
+            f"(it's {local} there). Your send times keep their clock time.")
+
+
+def timezone_back(home, when):
+    return f" I'll switch back to {zone_name(home)} time {when}."
+
+
+def resumes_at(when):
+    return f" It starts again {when}."
+
+
+def daily_limit_note(n):
+    return f" I send at most {n} timed messages a day, so some of these will be left out."
+
+
+def daily_limit_shared(n):
+    """Review fix X2 (experience): this rule and the person's other daily ones need more sends than the limit."""
+    return (f" With your other timed messages that's more than {n} a day, and {n} is the most I send, so on some days "
+            "a few will be left out.")
+
+
+KEEP_COMING = "Thanks! I'll keep them coming."
+
+
+def reminder_down(n):
+    return f"Noted. Reply \"stop {n}\" to end these reminders, or \"pause {n}\" for a break."
+
+
+def new_items_started(when, what, n):
+    """Review fix X8 (experience): a "when I save a new ..." rule, said as what it is."""
+    return (f"Got it: {when}, I'll send you {what}. I see new saves when a new export of your library comes in. "
+            f"Reply \"stop {n}\" to end it.")
+
+
+def saved_rule(n, what, word=None):
+    if word:   # fix pass 3, finding 69: their own word back
+        return f"Saved. Say \"{word}\" whenever you want one (or \"run {n}\")."
+    return (f"Saved as rule {n}: {what}. Ask for it, or text \"run {n}\", whenever you want it. "
+            "I won't repeat picks.")
+
+
+def once_set(first, what, n):
+    return f"OK. {cap_first(first)} I'll send {what}. Reply \"stop {n}\" to cancel."
+
+
+def rule_started(edited, when, goal, avoid, first):
+    """`first` is None for random times, which are never shown in advance."""
+    lead = "Got it" + (" with your change" if edited else "")
+    first = f" First one {first}." if first else ""
+    return (f"{lead}: {when}, {goal}{avoid}.{first} "
+            "Reply \"my rules\" any time to see or change it.")
+
+
+def which_pick(n):
+    return f"My last message had {n} {'pick' if n == 1 else 'picks'}. Which one?"
+
+
+def which_item(n):
+    """Round 7: an items answer numbers its things; a number past them."""
+    return f"My last message listed {n} {'thing' if n == 1 else 'things'}. Which number?"
+
+
+def rule_next(when_text):
+    return f" (next: {when_text})"
+
+
+def rule_line(i, goal, when, state, nxt):
+    return f"{i}. {goal}: {when}{state}{nxt}"
+
+
+def managed(word, names):
+    return f"{word}: {names}."
+
+
+# ---------- slice 2: previews, reminders, to-dos, person-level timing, undo, and what is not ready yet ----------
+WAITING_FOR_ANSWER = "OK, I won't set that up. Tell me what you'd like instead."
+NOTHING_TO_UNDO = "There's nothing from the last 10 minutes to undo."
+NO_TODOS = "Your list is empty. Add something with \"add … to my list\"."
+TODO_NOT_FOUND = "I can't find that on your list. Reply \"my list\" to see the numbers."
+NO_PICK_TO_ADD = "I haven't sent you anything to add yet. Ask me for something first."
+QUIET_RESET = "OK, quiet hours are back to normal: no timed messages from 10pm to 8am."
+SNOOZE_CLEARED = "OK, timed messages are back on."
+SNOOZE_NONE = "Nothing was paused, so nothing changes."
+TODO_DUE_PASSED = "That time has already passed, so I didn't set a reminder for it."
+TODO_LIST_EMPTY_SEND = "Your list is empty right now. Nice work."
+# features that come in later slices: one honest line each (none left after slice 6)
+NOT_YET = {}
+
+# ---------- slice 5: outside picks (YouTube) ----------
+OUTSIDE_HEAD = "Not from your saves, but close to them:"
+OUTSIDE_INSTAGRAM = "I can only look for new things on YouTube, not on Instagram."
+OUTSIDE_SENSITIVE = ("I didn't look for new things on YouTube for this: I keep personal topics like health, money and "
+                     "relationships to your own saves.")
+OUTSIDE_OFF = "I can't look for new things outside your saves right now."
+OUTSIDE_NO_WORDS = "Tell me what kind of thing you want, and I'll look for new ones on YouTube."
+OUTSIDE_LIMIT_ALL = "I've used up today's searches for new things on YouTube. Ask me again tomorrow."
+OUTSIDE_NONE = "I didn't find anything new on YouTube for this that isn't already in your saves."
+OUTSIDE_ERROR = "I couldn't reach YouTube just now, so I couldn't look for new things."
+OUTSIDE_ONLY_TAIL = " Ask without \"new\" and I'll look in your own saves."
+
+
+# fix pass 5, finding 87: a repeating rule whose preview was the closest only because of its length limit
+def length_way_out(minutes):
+    return (f" Heads up: nothing I found is under {minutes} minutes, so each pick may be longer. Say \"any length\" to "
+            "drop the limit, or \"include YouTube\" and I'll look for shorter ones there too.")
+
+
+# fix pass 6, finding 89: words that only say there is no length limit ("no, any length", "no limit on length",
+# "length doesn't matter", "longer is fine"); never a must-have: code lifts the length bound instead
+_NO_LIMIT = (r"any (?:length|duration)|drop the (?:length |time )?limit|no (?:length |time |duration )?limit"
+             r"(?: on (?:the )?(?:length|time|duration))?|(?:the )?(?:length|duration) (?:doesn['’]?t|does not) matter"
+             r"|(?:it )?doesn['’]?t matter how long|longer (?:ones )?(?:is|are) (?:fine|ok|okay)"
+             r"|(?:they|it) can be (?:any length|longer)")
+NO_LENGTH_LIMIT = re.compile(r"\b(?:" + _NO_LIMIT + r")\b", re.I)
+ANY_LENGTH = re.compile(r"^\W*(?:(?:no|nah|nope|ok|okay|sure|yes|fine|actually)[\s,.!]+)*(?:" + _NO_LIMIT + r")"
+                        r"(?:\s+(?:is|are|works?)(?:\s+(?:fine|ok|okay|good))?)?(?:[\s,.!]+(?:please|thanks))?\W*$", re.I)
+INCLUDE_YOUTUBE = re.compile(r"^\W*(?:(?:ok|okay|sure|yes)[\s,.!]+)?(?:include youtube|add youtube|youtube too|"
+                             r"youtube as well|look on youtube|include youtube too|include youtube as well|"
+                             r"try youtube)(?:\s+too)?(?:[\s,.!]+please)?\W*$", re.I)
+
+
+# checker of fix pass 6: words that say every rule ("stop everything", "pause all of them", "stop texting me")
+ALL_RULES_SAID = re.compile(r"\b(?:all|every|everything|both|any more|anymore|them|altogether|texting|messaging|"
+                            r"all of them)\b", re.I)
+# checker of fix pass 6: a limit said for one request only, read as a statement about the person
+ONE_TIME_ONLY = ("That sounds like it's for one request, so I haven't changed your settings. Say it with what you "
+                 "want, like \"pasta recipes, no YouTube\".")
+
+
+def reminder_fixed(number):
+    """Fix pass 6, finding 89: a reminder keeps its own words; only when it comes can change."""
+    return (f"Rule {number} is a reminder, so I can only change when it comes. You can also pause it, skip one or "
+            "stop it.")
+
+
+def length_changed(way, number=None, pending=False):
+    what = "picks any length" if way == "any" else "looks on YouTube too, for shorter ones"
+    if pending:
+        return ("OK, it'll pick any length." if way == "any" else
+                "OK, I'll look on YouTube too, for shorter ones.") + " Reply YES to start it."
+    return f"Done: rule {number} now {what}." if number else f"Done: it now {what}."
+
+
+def outside_only_head(noun=None):
+    """Fix pass 5, finding 85: the opening line of an answer made only of new finds from YouTube."""
+    many = (noun or (None, None))[1]
+    return f"Here are some new {many} from YouTube, not from your saves:" if many else \
+        "Here are some new ones from YouTube, not from your saves:"
+
+
+def outside_none_short(minutes):
+    """Findings 57 and 59: every new video found was longer than the request allows."""
+    return f"There's no new one on YouTube under {minutes} minutes today, so I didn't send a longer one."
+
+
+def outside_only_no_actions(actions):
+    """New finds from YouTube are shown here only: 'so I didn't email them or put them on your calendar.'"""
+    words = {"email.send": "email them", "calendar.add": "put them on your calendar", "todo.add": "add them to your list"}
+    xs = [words.get(a, "do anything else with them") for a in dict.fromkeys(actions)]
+    did_not = xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " or " + xs[-1]   # "didn't ... or ...", not "and"
+    return f"New finds from YouTube only come here in the chat, so I didn't {did_not}."
+
+
+def outside_limit_person(n):
+    return f"You've had today's {n} searches for new things on YouTube. Ask me again tomorrow."
+
+
+def outside_line(it, lang=None):
+    """'• Title by Channel (9 minutes 40 seconds), on YouTube': YouTube's own title and channel, the length from
+    videos.list worked out by code."""
+    from . import lang as L
+    from .ytinfo import minutes_text
+    length = L.length(minutes_text(it.get("duration_s")), lang)
+    return L.table(lang)["outside_line"].format(title=it["title"], channel=it["channel"],
+                                                length=f" ({length})" if length else "")
+
+
+# ---------- slice 5: keeping the library fresh ----------
+PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube"}
+IMPORT_NOT_EXPORT = ("I couldn't use the file you sent: it isn't an Instagram export (JSON) or a Google Takeout zip "
+                     "with YouTube in it. Nothing changed in your library.")
+IMPORT_HTML = ("Your Instagram export is in HTML format, and I can only read JSON. Please request it again and choose "
+               "JSON. Nothing changed in your library.")
+IMPORT_NO_FOLLOWERS = ("Your Instagram export is missing \"Followers and following\", which I need to leave your "
+                       "friends' posts out. Please request it again with that ticked. Nothing changed in your library.")
+IMPORT_FAILED = ("Something went wrong while I was adding your new export, so I'm still using your library as it was. "
+                 "The founders will look into it.")
+
+
+def import_too_costly(est, cap):
+    return (f"Your new export is big: adding it would cost about ${est:.2f}, and I can only spend ${cap:.2f} on one "
+            "import. I'm still using your library as it was. The founders can raise the limit.")
+
+
+IMPORT_SAME = ("That's the same export you sent me before, so there's nothing new to add. Your library stays as it "
+               "is.")
+
+
+def import_too_many(n):
+    return (f"I've already added {n} {'export' if n == 1 else 'exports'} for you today, and that's the most I can do "
+            "in a day. Please send this one again tomorrow. Your library stays as it is.")
+
+
+def new_items_over_cap(goals):
+    """review fix X3: a new_items rule held because the person's daily limit is used up, said in the import message."""
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return (f"I've reached today's limit for you, so I didn't check the new items against "
+            f"{'your rule' if len(goals) == 1 else 'your rules'} {names}. I'll do it tomorrow.")
+
+
+def import_over_budget():
+    return ("The test budget doesn't have room to add your new export, so I'm still using your library as it was. "
+            "The founders need to raise it.")
+
+
+def _by_source(counts):
+    parts = [f"{n} from {PLATFORM_NAMES.get(p, p)}" for p, n in counts.items() if n]
+    return _and(parts) if parts else ""
+
+
+def import_done(new_counts, total_counts, refused=0):
+    """'Your new export is in: 42 new items (12 from Instagram, 30 from YouTube). Your library now has 1,234 items.'"""
+    n = sum(new_counts.values())
+    total = sum(total_counts.values())
+    head = (f"Your new export is in: {n} new {'item' if n == 1 else 'items'}"
+            + (f" ({_by_source(new_counts)})" if n else "") + "." if n else "Your new export is in, with nothing new in it.")
+    msg = f"{head} Your library now has {total:,} {'item' if total == 1 else 'items'}, and I'm using it from now on."
+    if refused:
+        msg += f" I couldn't use {refused} other {'file' if refused == 1 else 'files'} you sent: " + \
+            "they aren't an Instagram export (JSON) or a Google Takeout zip with YouTube in it."
+    return msg
+
+
+def nothing_new_matched(goals):
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return f"Nothing new matched {'your rule' if len(goals) == 1 else 'your rules'} {names}."
+
+
+def new_items_ended(goals):
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return (f"{'Your rule' if len(goals) == 1 else 'Your rules'} {names} "
+            f"{'has' if len(goals) == 1 else 'have'} ended: {'its' if len(goals) == 1 else 'their'} end date has passed.")
+
+
+def library_status_message(last_import, counts, newest, next_due, links):
+    """When the last export came in, items by source, how old the newest item is, when the next export is due, and
+    the export links. Every number is worked out by code."""
+    lines = [last_import or "I haven't added an export for you yet: your library is the one the founders set up."]
+    total = sum(counts.values())
+    lines.append(f"It has {total:,} {'item' if total == 1 else 'items'}" + (f": {_by_source(counts)}." if total else "."))
+    if newest:
+        lines.append(newest)
+    lines.append(next_due)
+    if links:
+        lines.append("To export again: " + "; ".join(f"{PLATFORM_NAMES.get(p, p)}: {u}" for p, u in links) + ".")
+    return "\n".join(lines)
+
+
+def first_send(first):
+    """'The first one would come on Friday 13 November at 7pm.' (None for random moments, never shown in advance)."""
+    return f" The first one would come {first}." if first else ""
+
+
+def when_lead(when):
+    """'every weekday at 7am and 6pm until 20 December,': the schedule as the start of a sentence, with its comma at
+    the end of the whole phrase (fix pass, finding 13), never before "until"."""
+    for word in ("until", "starting", "except on", "just once"):
+        when = when.replace(f", {word} ", f" {word} ").replace(f", {word}", f" {word}")
+    return when.rstrip(",") + ","
+
+
+def preview_tail(when, what, first=None, heads="", offer=""):
+    """`heads`, `offer`: a heads-up and an offer (findings 19 and 26), said before the YES they are answered by."""
+    return (f"\n\n{cap_first(when_lead(when))} I'll send {what} that I haven't sent you before.{first_send(first)}"
+            f"{heads}{offer or ' Reply YES to start'}, or tell me what to change.")
+
+
+def preview_also_tail(when, what, first=None):
+    return (f"\n\nAnd {when_lead(when)} I'll send {what}.{first_send(first)} Reply YES to start both, or tell me what to "
+            "change.")
+
+
+def reminder_once(first, text, n):
+    return f"OK. {cap_first(first)} I'll remind you: \"{text}\". Reply \"stop {n}\" to cancel."
+
+
+def reminder_started(when, text, first, n):
+    first = f" First one {first}." if first else ""
+    return f"Got it: {when}, I'll remind you: \"{text}\".{first} Reply \"stop {n}\" to end it."
+
+
+def todos_rule_started(when, first, n):
+    first = f" First one {first}." if first else ""
+    return f"Got it: {when}, I'll send you your open to-dos.{first} Reply \"stop {n}\" to end it."
+
+
+def reminder(text):
+    return f"Reminder: {text}"
+
+
+def todo_reminder(text):
+    return f"Reminder from your list: {text}"
+
+
+def compose_cut_rule(goal):
+    """Review fix X7: a timed send whose answer could not be put together (the same input fails the same way)."""
+    return (f"I couldn't put together your \"{goal}\" send this time, so I skipped it. The next one comes as "
+            "planned.")
+
+
+COMPOSE_CUT_ASK = "I couldn't put that answer together. Please ask for fewer at a time."
+
+
+def missed_once(what, when):
+    """Review fix S3: a one-time send the person asked for could not go out on time (the bot was offline)."""
+    return f"I was offline and missed a send you asked for {when}: \"{what}\". Ask me again if you still want it."
+
+
+def missed_todo(text, when):
+    """Review fix S3: a to-do's reminder could not go out on time; the to-do stays on the list."""
+    return f"I was offline and missed your reminder {when}: \"{text}\". It's still on your list."
+
+
+def todo_line(i, t, due_text=None, show_list=False):
+    tail = f" (due {due_text})" if due_text else ""
+    return f"{i}. {t['text']}{tail}" + (f" [{t['list']}]" if show_list and t.get("list") not in (None, "todo") else "")
+
+
+def todo_list_head(name=None):
+    return f"Your {name} list:" if name and name != "todo" else "Your list:"
+
+
+TODO_FOOT = "Reply \"done 1\" when one is done, or \"remove 1\"."
+
+
+def todos_added(texts, name, due_text=None):
+    where = "your list" if name in (None, "todo") else f"your {name} list"
+    due = f" I'll remind you {due_text}." if due_text else ""
+    if len(texts) == 1:
+        return f"Added \"{texts[0]}\" to {where}.{due}"
+    return f"Added {len(texts)} things to {where}: " + "; ".join(texts) + "." + due
+
+
+def todos_done(texts, left):
+    return f"Done: {'; '.join(texts)}. {left} left on your list." if left else f"Done: {'; '.join(texts)}. Your list is clear."
+
+
+def todos_removed(texts):
+    return f"Removed: {'; '.join(texts)}."
+
+
+def todo_due_set(text, due_text):
+    return f"OK. I'll remind you about \"{text}\" {due_text}."
+
+
+def which_todo(matches):
+    return "Which one? " + "; ".join(f"{i}. {t['text']}" for i, t in matches)
+
+
+def todo_numbers_unknown(n):
+    return f"Your list has {n} {'thing' if n == 1 else 'things'} on it. Which number?"
+
+
+NO_INGREDIENTS = ("I don't have the ingredients of that one written out, so I can't add them. "
+                  "Ask me for its ingredients first.")
+
+
+def quiet_set(blocks_text):
+    return f"OK, no timed messages {blocks_text}. Times you named yourself still go out."
+
+
+def quiet_ended(goals):
+    """A window or random rule whose hours are now all quiet ends; the reply names it."""
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    one = len(goals) == 1
+    return (f" That leaves no time to send {names}, so I stopped {'that rule' if one else 'those rules'}. "
+            "Reply \"undo\" to keep your old quiet hours.")
+
+
+def ended_on_resume(goals):
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return f"{names} had no send left after its pause, so that rule is finished. Ask me to set it up again with a new time."
+
+
+def ended_by_move(goals):
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return (f" At the same clock time there, {names} has no send left, so I ended "
+            f"{'that rule' if len(goals) == 1 else 'those rules'}. Reply \"undo\" to go back.")
+
+
+SNOOZE_PASSED = "That time has already passed, so nothing changes. Until when should I hold timed messages?"
+
+
+def snoozed(until_text):
+    until_text = until_text[3:] if until_text.startswith("on ") else until_text   # "until Monday 16 November at 12am"
+    return (f"OK, no timed messages until {until_text}. Any sends in that time are skipped, "
+            "and you can still ask me for things.")
+
+
+def undone(what):
+    return f"Undone: {what}."
+
+
+def cant_undo(what):
+    """Review fix S5: the last thing the person did cannot be taken back, and nothing older is undone instead."""
+    return f"I can't take back {what}, so I left everything else as it was."
+
+
+# words that say what kind of thing a post is, not what it is about (fix pass, finding 14): never counted as topics
+GENERIC_WORDS = set("video videos post posts reel reels saved save saves things thing stuff content clip clips "
+                    "item items photo photos pic pics".split())
+
+
+def stats_message(total, by_platform, by_kind, words=None, matched=None, by=None, extra=None):
+    """Counts worked out by code only; friends' posts are not counted."""
+    parts = [f"You've kept {total} {'thing' if total == 1 else 'things'}"]
+    if by_platform:
+        parts[0] += ": " + ", ".join(f"{n} on {p}" for p, n in by_platform)
+    lines = [parts[0] + "."]
+    if by_kind:
+        lines.append("By how you kept them: " + ", ".join(f"{k} {n}" for k, n in by_kind) + ".")
+    if words:
+        lines.append(f"{matched} of them mention " + " or ".join(f"\"{w}\"" for w in words) + ".")
+    if extra:
+        lines.append(extra)
+    lines.append("Posts from friends are not counted.")
+    return "\n".join(lines)
+
+
+# ---------- round 8 (BN3 to BN5, DESIGN.md section 14): trends, the theme check, the recap ----------
+# Every number below is counted by code (attention.py, digest.py). Plain words: no minutes or time spent, and nothing
+# that judges what the person keeps.
+def long_day(d):
+    """'15 October 2026': an anchor date, always with its year."""
+    return f"{d.day} {d.strftime('%B')} {d.year}"
+
+
+def _posts_mention(n):
+    return "no posts that mention it" if not n else f"{n} {'post that mentions' if n == 1 else 'posts that mention'} it"
+
+
+def trend_rows(data, max_lines):
+    """(main, parked, for_fun) rows the trends message shows within `max_lines`: the topics with any count, rising
+    first, then steady, fading and too few to tell; "someday" topics go under Parked and "enjoy" ones under For fun."""
+    order = {"rising": 0, "steady": 1, "fading": 2, "few": 3}
+    rows = [t for t in data["topics"] if t["recent"] or t["before"] or t["liked"]]
+    parked = [t for t in data["topics"] if t.get("relation") == "someday"]
+    fun = [t for t in rows if t.get("relation") == "enjoy"]
+    main = sorted((t for t in rows if t.get("relation") not in ("someday", "enjoy")),
+                  key=lambda t: (order[t["trend"]], -t["recent"], -t["before"], t["topic"].lower()))
+    room = max_lines - 1 - bool(parked) - bool(fun) - bool(data.get("direction"))
+    return main[:max(room, 0)], parked, fun
+
+
+def _trend_line(t):
+    counts = f"{_posts_mention(t['recent'])} lately, {t['before']} before"
+    if t["trend"] == "few":
+        return f"• {t['topic']}: too few to tell ({counts}, {t['liked']} liked)."
+    return f"• {t['topic']} is {t['trend']}: {counts}."
+
+
+def _counted(t):
+    return f"{t['topic']} ({_posts_mention(t['recent'])} lately)"
+
+
+def trends_message(data, max_lines=7):
+    """BN3: what the person kept lately against the 6 months before, topic by topic, at most `max_lines` lines."""
+    anc = data["anchors"]
+    names = {"instagram": "Instagram", "youtube": "YouTube"}
+    plats = [p for p in ("instagram", "youtube") if p in anc] + sorted(p for p in anc if p not in names)
+    if len(plats) == 1:
+        upto = long_day(anc[plats[0]])
+    else:
+        upto = _and([f"{long_day(anc[p])} on {names.get(p, p)}" for p in plats])
+    n, m = data["recent_total"], data["before_total"]
+    lines = [f"What you kept lately: {n} {'post' if n == 1 else 'posts'} in the 8 weeks up to {upto}, and {m} in "
+             "the 6 months before that."]
+    main, parked, fun = trend_rows(data, max_lines)
+    lines += [_trend_line(t) for t in main]
+    if parked:
+        lines.append("Parked for someday: " + ", ".join(_counted(t) for t in parked) + ".")
+    if fun:
+        lines.append("Just for fun: " + ", ".join(_counted(t) for t in fun) + ".")
+    d = data.get("direction")
+    if d:
+        head = f"You said you're working toward \"{d['text']}\"."
+        if d["topic"] and d["recent"]:
+            lines.append(f"{head} {d['topic']}: {_posts_mention(d['recent'])} lately, {d['before']} before.")
+        else:
+            lines.append(f"{head} Nothing you kept lately mentions it, so I can't tell how that's going from your saves.")
+    return "\n".join(lines[:max_lines])
+
+
+TRENDS_NO_TOPICS = ("I don't know your topics yet, so I can't say what's rising or fading. Tell me what you're into, or "
+                    "say \"set me up again\".")
+TRENDS_NO_DATES = "None of what you kept has a date I can read, so I can't say what's rising or fading."
+TRENDS_WHEN = "each time a new export of your library comes in"   # a trends rule's timing, as "my rules" says it
+TRENDS_EVERY_EXPORT = "Reply \"every export\" and I'll send you this each time a new export of your library comes in."
+
+
+def trends_rule_started(n):
+    return (f"Got it: each time a new export of your library comes in, I'll send you what you've been into lately. "
+            f"Reply \"stop {n}\" to end it.")
+
+
+RELATION_SAY = {"pursue": "something you're going for", "practise": "a skill you're practising",
+                "someday": "parked for someday", "enjoy": "just for fun",
+                "not_me": "not you, so I'll leave it out of what I say about you"}
+_EXAMPLE_LABELS = ["practise", "for fun", "someday", "not me", "pursue"]
+
+
+def theme_check_question(topics):
+    """BN4: asked once, after the first trends answer."""
+    listed = "  ".join(f"{i}. {t}" for i, t in enumerate(topics, 1))
+    example = ", ".join(f"{i} {w}" for i, w in enumerate(_EXAMPLE_LABELS[:len(topics)], 1))
+    return ("One question, so I read these right: what is each one to you?\n" + listed + "\n"
+            f"Reply like \"{example}\" (or \"pursue\" for something you're going for). Anything else and I'll drop "
+            "the question.")
+
+
+def theme_check_which(n):
+    return f"Which one? I listed {n}. Reply with their numbers, like \"1 practise\"."
+
+
+def labels_saved(pairs):
+    if not pairs:
+        return "Noted."
+    said = "; ".join(f"{t}: {RELATION_SAY[lb]}" for t, lb in pairs)
+    first, lb = pairs[0]
+    other = "someday" if lb == "pursue" else "pursue"
+    tail = " Asking for it by name still finds those posts." if any(x == "not_me" for _, x in pairs) else ""
+    return f"Thanks, noted. {said}.{tail} To change one, say \"{first} is {other} now\"."
+
+
+def label_changed(topic, label):
+    if label == "not_me":
+        return f"OK: I'll leave {topic} out of what I say about you. Asking for it by name still finds those posts."
+    return f"OK: {topic} is {RELATION_SAY[label]} now."
+
+
+def parked_message(interests):
+    if not interests:
+        return "Nothing is parked yet. Say something like \"climbing is someday now\" to park a topic."
+    from .profile import count_words, shown_topic
+    parts = []
+    for i in interests:
+        n = count_words(i)
+        parts.append(f"{shown_topic(i['topic'])} ({n})" if n else shown_topic(i["topic"]))
+    return "Parked for someday: " + ", ".join(parts) + "."
+
+
+def _times(n):
+    return "once" if n == 1 else "twice" if n == 2 else f"{n} times"
+
+
+def recap_rule_clause(n, name, counts, fb):
+    """'1 "a pasta recipe" sent 3, stayed quiet twice with nothing new (2 made it, 1 👍)'."""
+    parts = []
+    if counts.get("sent"):
+        parts.append(f"sent {counts['sent']}")
+    if counts.get("quiet"):
+        parts.append(f"stayed quiet {_times(counts['quiet'])} with nothing new")
+    if counts.get("skipped"):
+        parts.append(f"{counts['skipped']} skipped")
+    if counts.get("snoozed"):
+        parts.append(f"{counts['snoozed']} held back by a snooze")
+    if counts.get("daily_limit"):
+        parts.append(f"{counts['daily_limit']} past the daily limit")
+    said = []
+    for kind, word in (("done", "made it"), ("up", "👍"), ("harder", "too easy"), ("easier", "too hard")):
+        if fb.get(kind):
+            said.append(f"{fb[kind]} {word}")
+    return f"{n} \"{name}\" " + ", ".join(parts) + (f" ({', '.join(said)})" if said else "")
+
+
+def recap_head(since):
+    return f"Your recap since {since}:"
+
+
+def recap_rules(clauses):
+    return "• Rules: " + "; ".join(clauses) + "."
+
+
+def recap_todos(done, open_, overdue):
+    left = ("none are open" if not open_ else f"{open_} {'is' if open_ == 1 else 'are'} open"
+            + (f", {overdue} of them past {'its' if overdue == 1 else 'their'} due date" if overdue else ""))
+    return "• To-dos: " + (f"you ticked off {done}; {left}" if done else left[:1].upper() + left[1:]) + "."
+
+
+def recap_coming(entries, more=0):
+    return "• Coming up: " + "; ".join(entries) + (f"; and {more} more" if more else "") + "."
+
+
+def recap_calendar(n):
+    return f"• I gave you {n} calendar {'link' if n == 1 else 'links'}."
+
+
+def recap_library(newest, due):
+    head = f"the newest thing you kept is from {newest}" if newest else "I can't date anything you kept yet"
+    return "• Your library: " + head + (f"; {due}" if due else "") + "."
+
+
+def recap_suggest(word, n, since):
+    return (f"• You asked about {word} {n} times since {since}. Want one pick for it every Saturday at 10am? Reply "
+            "\"yes\" and I'll show you a preview first.")
+
+
+RECAP_NOTHING = "Nothing to report for the last 7 days: no rule sent anything and no to-do changed."
+RECAP_PREVIEW_EMPTY = "There's nothing to report this week yet. On a week like that I send nothing."
+
+
+def recap_preview_tail(when, first=None):
+    return (f"\n\n{cap_first(when_lead(when))} I'll send you a recap like this one.{first_send(first)} Reply YES to "
+            "start, or tell me what to change.")
+
+
+# fix pass 3, finding 66: "once in a while" names no frequency, so the bot asks, with a default a "yes" accepts
+HOW_OFTEN_ASK = ("How often would you like it? For example \"every 3 days\" or \"about twice a week\". "
+                 "Or reply \"yes\" for about once a week, at a random time between 9am and 9pm.")
+
+
+def clarify_ask(question):
+    return question
+
+
+def stopped_rule(n_goal):
+    return f"I stopped {n_goal}"
+
+
+CONTACT_CARD = "Save me as a contact, so the links I send show a preview."
+PROFILE_NOTED = "Noted. I'll keep that in mind when I read your requests."
+QUIET_NEEDS_BOTH = "For quiet hours on some days only, tell me both times, for example \"not 9am to 3pm on weekdays\"."
+QUIET_INVALID = "I can keep up to 4 sets of quiet hours, each with a start and a different end. Could you say it another way?"
+
+
+def preview_more_note(n):
+    return f"(Your other {'rule' if n == 1 else f'{n} rules'} from before will start with the same YES.)"
+
+
+def skipped_next(when):
+    return f"The next scheduled one is skipped, so the one after comes {when}."
+
+
+def todos_once(first, n):
+    return f"OK. {cap_first(first)} I'll send you your open to-dos. Reply \"stop {n}\" to cancel."
+
+
+def _hm(hhmm):
+    h, m = map(int, hhmm.split(":"))
+    if (h, m) == (12, 0):
+        return "noon"
+    if (h, m) == (0, 0):
+        return "midnight"
+    return f"{h % 12 or 12}{'' if m == 0 else f':{m:02d}'}{'am' if h < 12 else 'pm'}"
+
+
+DAY_NAMES = {"MON": "Mondays", "TUE": "Tuesdays", "WED": "Wednesdays", "THU": "Thursdays", "FRI": "Fridays",
+             "SAT": "Saturdays", "SUN": "Sundays"}
+
+
+def quiet_words(blocks):
+    """'from 10pm to 10am, and from 9am to 3pm on weekdays'."""
+    out = []
+    for b in blocks:
+        days = b.get("days") or []
+        when = ""
+        if days == ["MON", "TUE", "WED", "THU", "FRI"]:
+            when = " on weekdays"
+        elif days == ["SAT", "SUN"]:
+            when = " on weekends"
+        elif days:
+            when = " on " + ", ".join(DAY_NAMES[d] for d in days)
+        out.append(f"from {_hm(b['start'])} to {_hm(b['end'])}{when}")
+    return ", and ".join(out)
+
+REMINDER_FOOTER = "Reply \"stop {n}\" to end these."
+
+
+# ---------- slice 4: outputs (email, calendar, to-dos) and the email code ----------
+ACTION_FAILED = {"email.send": "I couldn't email this, sorry. Ask me again in a bit.",
+                 "calendar.add": "I couldn't make the calendar entry this time, sorry.",
+                 "todo.add": "I couldn't add it to your list this time, sorry."}
+ACTION_FAILED_OTHER = "One of the things you asked for didn't work this time, sorry."
+EMAIL_ASK = ("What's your email address? I'll send a 6-digit code there to check it's yours, then email this to you.")
+EMAIL_ASK_RULE = ("What's your email address? I'll send a 6-digit code there to check it's yours. Until then I can't "
+                  "email these.")
+CODE_EXPIRED = "That code has expired. Reply \"new code\" and I'll send another."
+CODE_CANCELLED = "That code was cancelled after too many wrong tries. Reply \"new code\" and I'll send another."
+CODE_TOO_MANY = ("That's not it either, so I've cancelled that code. Reply \"new code\" and I'll send another, or send "
+                 "me a different address.")
+CODE_LIMIT = "I've sent enough codes for today. Please try again tomorrow."
+EMAIL_ONLY_YOU = ("I can only email you, at your own address. Say \"email it to me\" and I'll send it to you, so you can "
+                  "forward it.")
+EMAIL_TYPE_IT = "What's your email address? Type it out and I'll send a 6-digit code there to check it's yours."
+NOTHING_TO_ACT_ON = "I haven't sent you anything yet. Ask me for something first."
+
+
+def code_wrong(left):
+    return f"That's not the code. You have {left} {'try' if left == 1 else 'tries'} left."
+
+
+def code_sent(email, minutes, changed=False, again=False):
+    if again:
+        return f"I sent a new 6-digit code to {email}. Text it to me here within {minutes} minutes."
+    lead = f"I changed your email address to {email}" if changed else f"I saved {email} as your email address"
+    tail = " Until then I won't email you." if changed else ""
+    return (f"{lead} and sent a 6-digit code to it. Text me the code within {minutes} minutes to confirm it's "
+            f"yours.{tail}")
+
+
+EMAIL_NOT_SET_UP = ("Email isn't set up on my side yet, so I can't send you a code or any emails. I'll keep "
+                    "answering you here.")
+
+
+def code_not_sent(email, changed=False):
+    """Review fix X8: the code email could not be sent, on a channel where the person cannot open the outbox."""
+    lead = f"I changed your email address to {email}" if changed else f"I saved {email} as your email address"
+    return (f"{lead}, but I couldn't send the code to it just now. Reply \"new code\" in a little while and I'll "
+            "try again.")
+
+
+def code_failed_to_outbox(email, minutes, where, changed=False):
+    """The code email could not be sent and was written to an outbox this person can open (the test page, the
+    console). Never "I sent a code" and "I couldn't send that email" in one reply (final check, cost-failure X8)."""
+    lead = f"I changed your email address to {email}" if changed else f"I saved {email} as your email address"
+    tail = " Until then I won't email you." if changed else ""
+    return (f"{lead}. I couldn't email the 6-digit code to it just now, so the code email is {where} instead. Text me "
+            f"the code within {minutes} minutes to confirm it's yours.{tail}")
+
+
+def code_in_outbox(where, failed=False):
+    if failed:
+        return f"I couldn't send that email just now, so it's {where} instead."
+    return f"Email isn't connected here, so the code email is {where} instead of your inbox."
+
+
+def email_confirmed(email):
+    return f"Thanks, {email} is confirmed."
+
+
+def email_already(email):
+    return f"{email} is already your email address, and it's confirmed."
+
+
+def email_confirm_first(email):
+    return f"Your email isn't confirmed yet. Text me the 6-digit code I sent to {email}, and I'll email it then."
+
+
+def email_new_code_first(email):
+    return (f"Your email isn't confirmed yet, and the code I sent to {email} has run out. Reply \"new code\" and I'll "
+            "send another, then email it.")
+
+
+def waiting_sent(subject, to, via, err, where):
+    if via == "smtp":
+        return f"I emailed you \"{subject}\" at {to}."
+    if err:
+        return f"I couldn't send \"{subject}\" just now, so the email is {where} instead."
+    return f"Email isn't connected here, so I didn't send \"{subject}\". The email is {where}."
+
+
+def waiting_failed(subject):
+    return f"I couldn't email \"{subject}\", sorry. Ask me again in a bit."
+
+
+def _and(xs):
+    xs = list(xs)
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+
+
+def outputs_note(names, repeating=False):
+    """What a rule's do adds, in a preview or when it starts: ' Each time I'll also email it to you.'"""
+    words = {"email.send": "email it to you", "calendar.add": "give you a link to put it on your calendar",
+             "todo.add": "put it on your list"}
+    extra = [words[n] for n in ("todo.add", "calendar.add", "email.send") if n in names]
+    if not extra:
+        return ""
+    if "message.send" not in names:
+        return f" I'll {_and(extra)} instead of sending it here."
+    return f" Each time I'll also {_and(extra)}." if repeating else f" I'll also {_and(extra)}."
+
+
+def later_set(first, verbs, what, n):
+    """'OK. Today at 8pm I'll send it to you here: "One Pot Chicken Rice". Reply "stop 2" to cancel.'"""
+    return f"OK. {cap_first(first)} I'll {_and(verbs or ['send it to you here'])}: {what}. Reply \"stop {n}\" to cancel."
+
+
+SENT_AGAIN_HEAD = "Here's what you asked me to send you:"
+ITEMS_GONE = "The post you asked me to send again isn't in your library any more, so there's nothing to send."
+
+
+# fix pass 2, finding 62: a request the bot will not do gets a sentence picked by code, never the model's own words
+NOT_CAUGHT = "Sorry, I didn't catch that. Could you say it another way?"
+UNSUPPORTED = ("That's not something I can do. I find things in what you've saved and watched, now or at a time you "
+               "pick, and I keep reminders and to-do lists.")
+UNSUPPORTED_EVENT = ("I can't tell when that happens, so I can't send things then. Pick a time instead, like \"every "
+                     "day at 6pm\".")
+EVENT_TRIGGER = re.compile(r"\b(?:when|whenever|once|as soon as|if)\s+(?:i|it|i'm|im|i am|my|the|we)\b[^?]{0,40}"
+                           r"\b(?:get|gets|got|arrive|arrives|leave|leaves|rains?|snows?|wake|wakes|home|work|gym|"
+                           r"office|school|land|lands|done|finish|finishes|start|starts)\b", re.I)
+
+
+def unsupported_reply(text, model_reply=None, lang=None):
+    """The reply to a request the bot will not do: the parse-failure line as it is, an event the bot cannot see
+    ("when I get home") with the offer to pick a time, else one plain line about what the bot does. In the person's
+    language when lang.py has it (checker, round 2: the model's own reply in Spanish was replaced by English)."""
+    from . import lang as L
+    t = L.table(lang)
+    if model_reply == NOT_CAUGHT:
+        return t.get("not_caught") or NOT_CAUGHT
+    if EVENT_TRIGGER.search(text or ""):
+        return t.get("unsupported_event") or UNSUPPORTED_EVENT
+    return t.get("unsupported") or UNSUPPORTED
+
+
+# ---------- slice 6: the person's context and onboarding ----------
+PROFILE_HOW_TO_CORRECT = ("To correct me, just say it: \"I'm past beginner at Blender\", \"I'm not into cooking any more\", "
+                          "\"I have an air fryer\" or \"stop guessing my level\".")
+# fix pass 2, finding 38: said at most once per reply, and it names nothing (not even the kind of thing left out)
+PROFILE_SENSITIVE = "I left out one personal detail; I don't keep those."
+SKIP = re.compile(r"^\W*(skip|skip it|skip this|skip that|next|later|not now|pass|no thanks)\W*$", re.I)
+# a bare "that's right" (with thanks and the like): anything more ("yes, but I'm past beginner", "ok but I'm in
+# Chicago") is an answer of its own and goes to the form call or the interpreter
+_RIGHT_WORDS = (r"yes|yep|yeah|yup|right|correct|that'?s right|thats right|that'?s it|spot on|exactly|ok|okay|sure|"
+                r"sounds right|looks right|all good|good|perfect|great|thanks|thank you|you got it|nailed it|totally|"
+                r"pretty much|it is|yes it is|all correct")
+RIGHT = re.compile(rf"^\W*(?:{_RIGHT_WORDS})(?:[\s!.,]+(?:{_RIGHT_WORDS}))*[\s!.,:)]*$", re.I)
+SET_ME_UP_AGAIN = re.compile(r"^\W*(please\s+)?(set me up again|set up again|redo (my |the )?(setup|set ?up|onboarding)|"
+                             r"start (the |my )?(setup|set ?up|onboarding) (again|over)|run (the )?setup again)\W*$", re.I)
+ONBOARD_PICK = re.compile(r"^\W*(?:(?:number|#|no\.?)\s*)?([1-3])\W*$|^\W*(?:the\s+)?(first|second|third)(?:\s+one)?\W*$", re.I)
+ONBOARD_REPEAT = re.compile(r"^\W*(?:yes,?\s+)?(?:every\s+(?:morning|day)|daily|each morning|repeat it|"
+                            r"make it a rule|send (?:it|that|me one) every (?:morning|day))\W*$", re.I)
+
+
+def read_message(lines, lead="Thanks!", direction=None):
+    """Onboarding step 2: the read of the person (every guessed topic), the direction the bot guesses from it (finding
+    41: built by code from the checked topics), then the two questions."""
+    if lines:
+        head = f"{lead} Here's my read of you from what you've saved and watched:\n" + "\n".join(lines)
+        if direction:
+            head += f"\nIt looks like you're {direction}."
+        ask = ("Did I get that right? And in a sentence or two, what are you working toward right now? "
+               "(Or say \"skip\".)")
+    else:
+        head = f"{lead} I couldn't get a good read of your library yet."
+        ask = "In a sentence or two, what are you working toward right now? (Or say \"skip\".)"
+    return head + "\n\n" + ask
+
+
+READ_AGAIN = ("When you're ready: did I get that right, and what are you working toward right now? "
+              "(Or say \"skip\".)")
+
+
+def contact_message(lead, zone, local, has_email=False):
+    """Onboarding step 3: what the bot now knows (lead), then the email and the time zone check."""
+    email = ("" if has_email else "What's your email address? I use it to email you answers and calendar files, after "
+             "a 6-digit code to check it's yours. ")
+    return (f"{lead}\n\n{email}I have you on {zone} time, where it's {local} now. If that's wrong, tell me the city "
+            f"you're in. (Or say \"skip\".)").strip()
+
+
+def export_offer(platforms):
+    """Finding 43: at setup only the reminder offer; the steps go out with each reminder, and on request."""
+    every = {"instagram": "Instagram every 4 weeks", "youtube": "YouTube every 2 months"}
+    names = ", ".join(every[p] for p in ("instagram", "youtube") if p in platforms)
+    return f"I'll remind you when a fresh export is due ({names}) and send the steps then. OK?"
+
+
+def export_started(nexts):
+    """Finding 44: one line for every export reminder the YES started: [(platform, date)]."""
+    parts = []
+    for i, (p, d) in enumerate(nexts):
+        day = d.strftime("%-d %B")
+        parts.append(f"next {PLATFORM_NAMES.get(p, p)} reminder {day}" if i == 0 else
+                     f"next {PLATFORM_NAMES.get(p, p)} one {day}")
+    return "Done. " + cap_first(", ".join(parts)) + "."
+
+
+# finding 46: the one optional question of the setup's last message, answered in free text or skipped
+PREFS_QUESTION = ("Anything I should know to pick better: food you avoid, kit you have, how much time you usually "
+                  "have? (Or say \"skip\".)")
+PREFS_THANKS = "Thanks, that helps."
+PREFS_SKIPPED = "No problem. Ask me for anything you've saved, any time."
+
+
+def first_requests_block(texts, repeat_first=True):
+    lines = ["Or try one of these, picked from your own saves:"]
+    lines += [f"{i}. \"{t}\"" for i, t in enumerate(texts, 1)]
+    tail = f"Reply {', '.join(str(i) for i in range(1, len(texts)))} or {len(texts)}" if len(texts) > 1 else "Reply 1"
+    tail += " and I'll find it now."
+    if repeat_first:
+        tail += " Or reply \"every morning\" and I'll send you number 1 every morning at 8 (I'll show you one first)."
+    return "\n".join(lines) + "\n" + tail
+
+
+SETUP_DONE = "That's the setup done. Ask me for anything you've saved, any time, or say \"help\"."
+
+
+def export_more_note(n):
+    return f"(Your export {'reminder' if n == 1 else 'reminders'} will start with the same YES.)"
+
+
+# fix pass 3, finding 72: a "no" to the export reminders, with other words beside it, is said back
+EXPORT_DECLINED = "OK, no export reminders. Ask \"how do I export?\" any time for the steps."
+NO_LEAD = re.compile(r"^\s*(?:no|nope|nah|not now|no thanks|no thank you)(?:\s*[.,!;:-]|\s+thanks?\b|\s+thank you\b|"
+                     r"\s+(?:to\s+)?(?:the\s+)?(?:export\s+)?reminders?\b|\s*$)", re.I)
+NO_REMINDERS = re.compile(r"\bno\s+(?:export\s+)?reminders?\b|\bdon'?t\s+remind\b|\bwithout\s+(?:the\s+)?reminders?\b|"
+                          r"\bskip\s+(?:the\s+)?reminders?\b|\bno\s+to\s+the\s+reminders?\b", re.I)
+
+# fix pass 5, finding 86: replies that only answer the setup's own question, so nothing else may answer them too
+_SETUP_FILLER = set("and but so the a an my it its it's is that's thats this that all fine good ok okay sure yes yep "
+                    "yeah right correct perfect great thanks thank you please for now then just i i'm im am we".split())
+_CONTACT_PARTS = re.compile(
+    r"\b(?:skip|no|without|don'?t need|do not need|no need for|not giving|pass on|leave out|forget)\s+(?:the\s+|an?\s+|my\s+)?"
+    r"e-?mail(?:\s+address)?(?:\s+(?:part|bit|step|one))?\b"
+    r"|\b(?:i\s+)?(?:don'?t|do not)\s+(?:want|need)\s+(?:to\s+give\s+)?(?:an?\s+|my\s+)?e-?mail\b"
+    r"|\b(?:the\s+|my\s+)?time\s?zone(?:'s|\s+is|\s+looks)?\s+(?:is\s+)?(?:fine|right|correct|good|ok|okay|perfect|"
+    r"spot on)\b|\b(?:the\s+|my\s+)?time\s?zone\b|\b(?:the\s+)?time\b(?=.*\b(?:fine|right|correct)\b)", re.I)
+_REMINDER_WORDS = set("set setup up start the export exports reminder reminders remind me them those it that please do "
+                      "go ahead both instagram youtube for and a sure ok okay yes yep yeah thanks thank you sounds good "
+                      "great".split())
+
+
+def _left_words(text):
+    return [w for w in re.findall(r"[a-z']+", text.lower()) if w not in _SETUP_FILLER]
+
+
+def contact_only(text):
+    """'skip the email, time zone is fine', 'no email, the time zone is right': the reply says only that the email can
+    wait and the time zone is right, with nothing else to act on."""
+    if not _CONTACT_PARTS.search(text or ""):
+        return False
+    return not _left_words(_CONTACT_PARTS.sub(" ", text))
+
+
+def reminders_only(text):
+    """'set up the export reminders', 'remind me', 'set them up please': the rest of a yes to the export reminders
+    says nothing more than yes."""
+    words = re.findall(r"[a-z']+", (text or "").lower())
+    return bool(words) and all(w in _REMINDER_WORDS or w in _SETUP_FILLER for w in words)
+
+
+def profile_changed(changes, skipped=False):
+    """'Noted: Blender: past the basics; you have an air fryer.'"""
+    # fix pass 3, finding 73: one plain sentence ("Noted: you usually have about 20 minutes a day, and you have an
+    # Instant Pot."), not a list joined with semicolons
+    if changes:
+        msg = "Noted: " + (changes[0] if len(changes) == 1 else
+                           ", ".join(changes[:-1]) + ", and " + changes[-1]) + "."
+    else:
+        msg = PROFILE_NOTED
+    if skipped:
+        msg += " " + PROFILE_SENSITIVE
+    return msg + " Say \"what do you know about me\" to see it all."
+
+
+def level_moved(topic, plain, way):
+    lead = "Noted, I'll aim higher" if way == "harder" else "Noted, I'll keep it simpler"
+    ask = "a harder one" if way == "harder" else "an easier one"
+    return f"{lead} with {topic}: I now have you as {plain}. Ask for \"{ask}\" and I'll look for one now."
+
+
+def level_moved_only(topic, plain, way):
+    """The feedback line alone, when nothing easier (or harder) could be sent with it."""
+    lead = "Noted, I'll aim higher" if way == "harder" else "Noted, I'll keep it simpler"
+    return f"{lead} with {topic}: I now have you as {plain}."
+
+
+def level_guess_note(topic, level, lang=None):
+    """Said at most once per topic while the level is a guess (in the answer's language: lang.py)."""
+    from . import lang as L
+    t = L.table(lang)
+    return t["level"][level].format(topic=topic) + t["level_tail"]
+
+
+# ---------- fix pass (live findings of 12 Nov) ----------
+SHORTER = re.compile(r"\b(short|shorter|quick|quicker|mini|less time|not so long)\b", re.I)
+
+
+def and_words(xs):
+    return _and(xs)
+
+
+def detail_head(kinds, name):
+    """'Here are the steps of One Pot Pasta by @chef:' (finding 4: one line naming the pick, then the lines)."""
+    return f"Here are {_and(kinds)} of {name}:"
+
+
+def detail_missing(kind_words, platform, has_description):
+    """One honest line for a kind the pick does not write out (findings 5 and 16)."""
+    if platform == "youtube":
+        return (f"The video's description doesn't list {kind_words}." if has_description else
+                f"I only have the video's title, so I can't quote {kind_words}.")
+    return f"{cap_first(kind_words)} aren't written out in the post; they're in the video."
+
+
+def detail_none(kind_words, name, platform, has_description):
+    """Nothing of what was asked is written out: say so, then the link (finding 5)."""
+    if platform == "youtube":
+        if has_description:
+            return f"The description of {name} doesn't list {kind_words}, so I can't quote them. Here's the video:"
+        return f"I only have the title of {name}, not its description, so I can't quote {kind_words}. Here's the video:"
+    return f"{name} doesn't write out {kind_words}; they're in the video. Here's the post:"
+
+
+def level_moved_now(topic, plain, way, shorter=False):
+    """The feedback line, then the one sent now (finding 6)."""
+    one = ("a shorter, harder one" if way == "harder" else "a shorter, easier one") if shorter else \
+        ("a harder one" if way == "harder" else "an easier one")
+    if topic:
+        lead = "Noted, I'll aim higher" if way == "harder" else "Noted, I'll keep it simpler"
+        return f"{lead} with {topic}: I now have you as {plain}. Here's {one}:\n\n"
+    return f"Noted. Here's {one}:\n\n"
+
+
+REQUEST_NOUNS = {"recipe": "recipes", "tutorial": "tutorials", "workout": "workouts", "routine": "routines",
+                 "project": "projects", "lesson": "lessons", "dish": "dishes", "meal": "meals", "build": "builds",
+                 "guide": "guides", "craft": "crafts", "drill": "drills", "exercise": "exercises",
+                 "stretch": "stretches", "how-to": "how-tos", "course": "courses", "class": "classes",
+                 "dinner": "dinners", "lunch": "lunches", "breakfast": "breakfasts", "snack": "snacks",
+                 "dessert": "desserts", "bake": "bakes", "video": "videos"}
+_NOUN = re.compile(r"(?:\b([A-Z][\w+#-]*)\s+)?\b(" + "|".join(sorted(map(re.escape, REQUEST_NOUNS), key=len, reverse=True))
+                   + r")(?:s|es)?\b", re.I)
+
+
+def request_noun(*texts):
+    """(singular, plural) of what the request is for, in its own terms ("Blender tutorial", "Blender tutorials";
+    "recipe", "recipes"), or None. A name just before the noun (a capital: "Blender") is kept."""
+    for t in texts:
+        m = _NOUN.search(t or "")
+        if m:
+            one = m.group(2).lower()
+            name = m.group(1) + " " if m.group(1) and m.group(1)[0].isupper() and m.group(1).lower() not in (
+                "a", "an", "the", "some", "any", "my", "new", "mini", "short", "quick", "easy") else ""
+            return name + one, name + REQUEST_NOUNS[one]
+    return None
+
+
+def outside_auto_head(n_clear, lang=None, noun=None):
+    """Findings 26 and 64: the YouTube block that comes without being asked, because the saves hold too few, said in
+    the request's terms: "You only have 2 saved recipes that fit, so here are a few more from YouTube:"."""
+    from . import lang as L
+    t = L.table(lang)
+    one, many = noun or ("one", "ones")
+    if not n_clear:
+        return t["outside_auto0"].format(nouns=many) if noun or "outside_auto0_any" not in t \
+            else t["outside_auto0_any"]
+    return t["outside_autoN"].format(n=n_clear, go=t["go"][0 if n_clear == 1 else 1], noun=one if n_clear == 1 else many,
+                                     fit=t.get("fit", ("", ""))[0 if n_clear == 1 else 1])
+
+
+def few_finished(n_clear, lang=None, noun=None):
+    from . import lang as L
+    t = L.table(lang)
+    one, many = noun or ("one", "ones")
+    return t["few_finished"].format(n=n_clear, go=t["go"][0 if n_clear == 1 else 1],
+                                    noun=one if n_clear == 1 else many, fit=t.get("fit", ("", ""))[0 if n_clear == 1 else 1])
+
+
+# fix pass 4, finding 77: a rule with new videos from YouTube as well never runs dry; the preview and the start line say
+# where its picks come from instead of a heads-up
+OUTSIDE_RULE_NOTE = " Picks come from your saves, with related videos from YouTube as well, so it won't run dry."
+OUTSIDE_RULE_ONLY = " Picks come from YouTube, not from your saves."
+
+
+def supply_note(n):
+    """Finding 19: a repeating rule whose supply in the library is tiny."""
+    if n == 0:
+        return " Heads up: I don't see anything in your library that clearly fits, so this will run dry quickly."
+    return (f" Heads up: I only see about {n} {'post' if n == 1 else 'posts'} in your library that "
+            f"{'fits' if n == 1 else 'fit'}, so this will run dry quickly.")
+
+
+def supply_note_close(n):
+    """Review fix X10: nothing fits clearly; the count is of the posts that come close."""
+    if n == 0:
+        return supply_note(0)
+    return (f" Heads up: I only see about {n} {'post' if n == 1 else 'posts'} in your library that "
+            f"{'comes' if n == 1 else 'come'} close, so this will run dry quickly.")
+
+
+def outside_offer(when, shown=False):
+    """Findings 19 and 26: the offer in a preview; YES starts the rule with new videos from YouTube as well."""
+    if shown:
+        return f" Want these {when} from YouTube as well as your saves? Reply YES to start it that way"
+    return " Want me to add related videos from outside your saves? Reply YES to start it that way"
+
+
+def ended_by_revert(zone, goals):
+    """Finding 21: the temporary time zone ended, and with it a rule's only send."""
+    names = ", ".join(f"\"{g}\"" for g in goals)
+    return (f"I'm back on {zone_name(zone)} time. At the same clock time here, {names} has no send left, so I ended "
+            f"{'that rule' if len(goals) == 1 else 'those rules'}. Ask me to set it up again with a new time.")
+
+
+def emails_dropped(expired, over):
+    """Finding 30: emails that waited for a confirmed address and were dropped."""
+    out = []
+    if expired:
+        out.append(f"{'One email' if expired == 1 else f'{expired} emails'} that waited more than a day for your "
+                   f"address {'was' if expired == 1 else 'were'} dropped; ask me again if you still want "
+                   f"{'it' if expired == 1 else 'them'}.")
+    if over:
+        out.append(f"I can keep only {config_wait_max()} emails waiting, so the oldest "
+                   f"{'one was' if over == 1 else f'{over} were'} dropped.")
+    return " ".join(out)
+
+
+def config_wait_max():
+    from . import config
+    return config.EMAIL_WAIT_MAX
+
+
+# ---------- round 7, finding 92: a follow-up that changes the request ----------
+def _change_words(ch, who):
+    out = []
+    if ch.get("avoid"):
+        out.append("leaving out anything about " + and_words(ch["avoid"]))
+    if who:
+        out.append("not from " + and_words(who))
+    if ch.get("wanted_names"):
+        out.append("only from " + and_words(ch["wanted_names"][:3]))
+    if ch.get("platform"):
+        out.append("only from " + {"instagram": "Instagram", "youtube": "YouTube"}[ch["platform"]])
+    if ch.get("shorter"):
+        out.append("shorter ones")
+    if ch.get("easier"):
+        out.append("the easiest first")
+    elif ch.get("newest"):
+        out.append("the newest first")
+    elif ch.get("oldest"):
+        out.append("the oldest first")
+    return out
+
+
+def changed_intro(goal, ch, who):
+    """'Here's what I found in your saves for basic Blender tutorials, leaving out anything about donut.' Built from
+    the merged request, never from the person's message."""
+    words = _change_words(ch, who)
+    g = " ".join((goal or "").split())
+    # checker: "else" only when something shown was ruled out (not for "ok and for dinner?" alone)
+    other = " else" if not ch.get("add") or ch.get("others") or ch.get("avoid") or who else ""
+    head = f"Here's what{other} I found in your saves for {g}" if g and len(g.split()) <= 6 else \
+        f"Here's what{other} I found in your saves"
+    return head + (", " + ", ".join(words) if words else "") + "."
+
+
+def changed_none(goal, ch, who):
+    """Nothing is left once the change is applied: said plainly, never a rejected pick again."""
+    words = _change_words(ch, who)
+    g = " ".join((goal or "").split())
+    what = f" for {g}" if g and len(g.split()) <= 6 else ""
+    return f"I found nothing else in your saves{what}" + (", " + ", ".join(words) if words else "") + "."
+
+
+# checker, round 7: "the opposite" names no change code can read; "what about ones from X" with no X in the library
+CHANGE_SAY_HOW = ("I'm not sure what the opposite would be here. Tell me what to change, like \"something shorter\", "
+                  "\"not from that creator\" or \"anything else\".")
+CHANGE_NO_CREATOR = "I found nothing from that creator in your saves."
+
+
+def no_date_for(name):
+    """Checker, round 7: "remind me two days before its deadline" when the post gives no date for it."""
+    return (f"The post gives no date for {name}, so I can't count back from it. Tell me a day, like \"remind me about "
+            f"it on Friday\", and I'll remind you then.")
+
+
+def date_passed_for(name, note):
+    return f"{name}: {note}, so I didn't set a reminder."
+
+
+def date_too_near(name, day):
+    return f"{name}'s date is {day}, sooner than that, so I didn't set a reminder. Tell me when you'd like one."
+
+
+# ---------- round 8 (DESIGN.md section 13): rules beyond timing ----------
+def before_words(days):
+    """'the day', 'a week', '3 days': how long before a thing's date a reminder comes."""
+    return "the day" if days == 1 else ("a week" if days == 7 else f"{days} days")
+
+
+def deadline_set(name, first, days, deadline, day, far, n):
+    """BN1: 'OK. I'll remind you about NASA L'SPACE Academy on Friday 27 November at 9am, 3 days before its deadline,
+    30 November (in 16 days).'"""
+    what = "its deadline" if deadline else "the date in its post"
+    return (f"OK. I'll remind you about {name} {first}, {before_words(days)} before {what}, {day} ({far}). "
+            f"Reply \"stop {n}\" to cancel.")
+
+
+def deadline_soon(name, first, days, deadline, day, far, n):
+    """BN1: the moment asked for has passed but the date has not: the next 9am."""
+    what = "deadline" if deadline else "date"
+    return (f"OK. {name}'s {what} is {day} ({far}), less than {before_words(days)} away, so I'll remind you {first}. "
+            f"Reply \"stop {n}\" to cancel.")
+
+
+def deadline_today(name, day):
+    return f"{name}'s date is today, {day}, so it's too late for a reminder before it. I didn't set one."
+
+
+def deadline_ask(name):
+    """BN1: the post gives no date: one question; the next message is read for a date."""
+    return f"The post doesn't say when {name} closes. Tell me the date, like \"dec 5\", and I'll set the reminder."
+
+
+def deadline_head(name, deadline, day, far):
+    """BN1: the head line of the reminder when it comes."""
+    what = "deadline" if deadline else "date"
+    return f"Reminder: {name}'s {what} is {day} ({far})."
+
+
+QUIET_EMPTY_NOTE = " On a day with nothing new I'll stay quiet."
+
+
+def empty_quiet_line(goal, since, n):
+    """BN2: the one line on the first empty day after a send with picks; then nothing until there is something."""
+    when = f" since {since}" if since else ""
+    return f"Nothing new for \"{goal}\"{when}. I'll stay quiet until there is. \"run {n}\" asks now."
+
+
+def empty_quiet_last(goal):
+    return f"Nothing new for \"{goal}\" this time. {LAST_SEND}"
+
+
+def if_empty_changed(way, n=None):
+    """BN2: "tell me even if there's nothing" / "don't text me if there's nothing" for a preview or the rule just
+    started."""
+    said = ("On a day with nothing new I'll tell you so." if way == "say"
+            else "On a day with nothing new I'll stay quiet.")
+    return f"OK. {said}" + (" Reply YES to start it." if n is None else f" (rule {n})")
+
+
+def rule_finished(n):
+    return f"Rule {n} is finished."
+
+
+def overdue_nudge(text, when, n):
+    """BN2: the one nudge about a to-do past its due time."""
+    return f"\"{text}\" was due {when}. Reply \"done {n}\", \"tomorrow\" or \"drop it\"."
+
+
+def overdue_moved(text, when):
+    return f"OK. \"{text}\" is now due {when}."
+
+
+def overdue_dropped(text):
+    return f"OK. I took \"{text}\" off your list."
+
+
+OVERDUE_OFF = "OK. I won't nudge you about to-dos that are past due. Say \"overdue nudges on\" to have them back."
+OVERDUE_ON = "OK. When a to-do is a day past due, I'll nudge you once."
+
+
+# ---------- round 8, slice B: integrations (DESIGN.md section 15): export, share ----------
+def export_where(path):
+    """The export folder as the person reads it: its place under MVP_HOME ("outbox/1a2b3c4d5e6f/export-2026-11-12")."""
+    import os
+    from . import config
+    try:
+        rel = os.path.relpath(path, config.HOME)
+    except ValueError:
+        rel = path
+    return path if rel.startswith("..") else rel
+
+
+def export_done(n_saves, where):
+    return (f"I saved a copy of your data: your rules, your lists, what I know about you, the answers I sent you, and "
+            f"the list of your {n_saves} saves (links and dates only, no post text). It's in the folder {where} on the "
+            f"bot's computer. Say \"email it to me\" and I'll send you the files.")
+
+
+def export_lists_done(n, where):
+    return (f"I saved your lists ({n} to-do{'s' if n != 1 else ''}) as two files: todos.csv, a table a to-do app can "
+            f"import, and todos.md, a page to read. They're in the folder {where} on the bot's computer. Say \"email "
+            f"it to me\" and I'll send them to you.")
+
+
+EXPORT_LISTS_EMPTY = "Your lists are empty, so there's nothing to export yet. Add something with \"add … to my list\"."
+
+
+def export_emailed(to, via, err, where, left=()):
+    if via == "smtp":
+        msg = f"I emailed your files to {to}."
+    elif err:
+        msg = f"I couldn't send the email just now, so I put it {where} instead."
+    else:
+        msg = f"Email isn't connected here, so I didn't send it. The email with your files is {where}."
+    if left:
+        msg += f" {' and '.join(left)} is too big to email (over 5 MB), so it's only in the folder."
+    return msg

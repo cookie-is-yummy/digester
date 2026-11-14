@@ -1,0 +1,391 @@
+{
+ "round": "r4",
+ "date": "2026-10-30",
+ "split": "dev",
+ "n_queries": 16,
+ "experiment": 9,
+ "labels": {
+  "round": "r4",
+  "judge": "claude-evaluator-r4",
+  "pooled": 60,
+  "grades": {
+   "2": 2,
+   "1": 16,
+   "0": 42
+  },
+  "backup": "data/evals/labels/evalset.pre_r4.jsonl",
+  "more_like_this_lines": 7,
+  "pool_rule_note": "main arm unjudged10 on r3 labels 0.150/0.163/0.144 (repeat 2 > 0.15); every unjudged top-10 item of all six e9 runs pooled into one pool; sheet built without enrichment text",
+  "enrichment_shown_to_judge": false
+ },
+ "unjudged10_r3_labels": {
+  "e9_enrich": [
+   0.15,
+   0.163,
+   0.144
+  ],
+  "e9_enrich_bm25only": [
+   0.138,
+   0.144,
+   0.113
+  ]
+ },
+ "delta_ndcg10_r3_labels_per_repeat": {
+  "e9_enrich": [
+   0.036,
+   0.032,
+   0.045
+  ],
+  "e9_enrich_bm25only": [
+   0.039,
+   0.019,
+   0.04
+  ]
+ },
+ "base": {
+  "name": "e1_rewrite_r{1,2,3}",
+  "ndcg10": 0.491,
+  "p10": 0.617,
+  "mrr": 0.821,
+  "r100": 0.496,
+  "success5": 0.896,
+  "unjudged10": 0.0,
+  "ndcg10_per_repeat": [
+   0.497,
+   0.507,
+   0.47
+  ],
+  "ndcg10_ci95": [
+   0.386,
+   0.6
+  ],
+  "ndcg10_range": [
+   0.47,
+   0.507
+  ],
+  "r100_per_repeat": [
+   0.495,
+   0.499,
+   0.495
+  ],
+  "ndcg10_by_kind": {
+   "audio": 0.058,
+   "more_like_this": 0.645,
+   "name": 0.556,
+   "people": 0.62,
+   "place": 0.513,
+   "said_shown": 0.662,
+   "topic": 0.439,
+   "vibe": 0.21
+  },
+  "r100_by_kind": {
+   "audio": 0.5,
+   "more_like_this": 0.433,
+   "name": 0.625,
+   "people": 0.381,
+   "place": 0.173,
+   "said_shown": 0.75,
+   "topic": 0.537,
+   "vibe": 0.279
+  },
+  "kind_counts": {
+   "audio": 1,
+   "more_like_this": 3,
+   "name": 3,
+   "people": 1,
+   "place": 1,
+   "said_shown": 1,
+   "topic": 5,
+   "vibe": 1
+  },
+  "single_ndcg10": 0.333,
+  "single_mrr": 0.47,
+  "single_r100": 0.667,
+  "n_queries": 16,
+  "n_repeats": 3
+ },
+ "experiments": {
+  "e9_enrich": {
+   "log_row": 9,
+   "arm": "base + enrichment BM25 + enrichment dense (RRF)",
+   "pairs": [
+    [
+     "e9_enrich_r1.json",
+     "e1_rewrite_r1.json"
+    ],
+    [
+     "e9_enrich_r2.json",
+     "e1_rewrite_r2.json"
+    ],
+    [
+     "e9_enrich_r3.json",
+     "e1_rewrite_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.551,
+    "p10": 0.673,
+    "mrr": 0.852,
+    "r100": 0.509,
+    "success5": 0.979,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.554,
+     0.564,
+     0.536
+    ],
+    "ndcg10_ci95": [
+     0.431,
+     0.666
+    ],
+    "ndcg10_range": [
+     0.536,
+     0.564
+    ],
+    "r100_per_repeat": [
+     0.519,
+     0.505,
+     0.503
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.057,
+     "more_like_this": 0.693,
+     "name": 0.6,
+     "people": 0.835,
+     "place": 0.374,
+     "said_shown": 0.717,
+     "topic": 0.544,
+     "vibe": 0.236
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.425,
+     "name": 0.629,
+     "people": 0.415,
+     "place": 0.19,
+     "said_shown": 0.75,
+     "topic": 0.568,
+     "vibe": 0.286
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.376,
+    "single_mrr": 0.542,
+    "single_r100": 0.667,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.06,
+    "ci95": [
+     0.019,
+     0.103
+    ],
+    "wins": 13,
+    "losses": 2,
+    "ties": 1
+   },
+   "delta_ndcg10_per_repeat": [
+    0.056,
+    0.057,
+    0.065
+   ],
+   "delta_r100": {
+    "delta": 0.013,
+    "ci95": [
+     -0.003,
+     0.029
+    ],
+    "wins": 8,
+    "losses": 4,
+    "ties": 4
+   },
+   "delta_r100_per_repeat": [
+    0.024,
+    0.005,
+    0.009
+   ],
+   "query_p50_s_per_repeat": [
+    0.271,
+    0.342,
+    0.3
+   ]
+  },
+  "e9_enrich_bm25only": {
+   "log_row": 9,
+   "arm": "base + enrichment BM25 only (RRF)",
+   "pairs": [
+    [
+     "e9_enrich_bm25only_r1.json",
+     "e1_rewrite_r1.json"
+    ],
+    [
+     "e9_enrich_bm25only_r2.json",
+     "e1_rewrite_r2.json"
+    ],
+    [
+     "e9_enrich_bm25only_r3.json",
+     "e1_rewrite_r3.json"
+    ]
+   ],
+   "run": {
+    "ndcg10": 0.538,
+    "p10": 0.65,
+    "mrr": 0.841,
+    "r100": 0.514,
+    "success5": 0.938,
+    "unjudged10": 0.0,
+    "ndcg10_per_repeat": [
+     0.551,
+     0.54,
+     0.522
+    ],
+    "ndcg10_ci95": [
+     0.418,
+     0.651
+    ],
+    "ndcg10_range": [
+     0.522,
+     0.551
+    ],
+    "r100_per_repeat": [
+     0.513,
+     0.516,
+     0.511
+    ],
+    "ndcg10_by_kind": {
+     "audio": 0.017,
+     "more_like_this": 0.696,
+     "name": 0.585,
+     "people": 0.84,
+     "place": 0.491,
+     "said_shown": 0.669,
+     "topic": 0.493,
+     "vibe": 0.275
+    },
+    "r100_by_kind": {
+     "audio": 0.5,
+     "more_like_this": 0.44,
+     "name": 0.625,
+     "people": 0.442,
+     "place": 0.194,
+     "said_shown": 0.75,
+     "topic": 0.57,
+     "vibe": 0.286
+    },
+    "kind_counts": {
+     "audio": 1,
+     "more_like_this": 3,
+     "name": 3,
+     "people": 1,
+     "place": 1,
+     "said_shown": 1,
+     "topic": 5,
+     "vibe": 1
+    },
+    "single_ndcg10": 0.343,
+    "single_mrr": 0.488,
+    "single_r100": 0.667,
+    "n_queries": 16,
+    "n_repeats": 3
+   },
+   "delta_ndcg10": {
+    "delta": 0.046,
+    "ci95": [
+     0.016,
+     0.084
+    ],
+    "wins": 12,
+    "losses": 3,
+    "ties": 1
+   },
+   "delta_ndcg10_per_repeat": [
+    0.054,
+    0.033,
+    0.051
+   ],
+   "delta_r100": {
+    "delta": 0.017,
+    "ci95": [
+     0.004,
+     0.032
+    ],
+    "wins": 9,
+    "losses": 1,
+    "ties": 6
+   },
+   "delta_r100_per_repeat": [
+    0.018,
+    0.017,
+    0.017
+   ],
+   "query_p50_s_per_repeat": [
+    0.22,
+    0.238,
+    0.266
+   ]
+  }
+ },
+ "main_vs_bm25only": {
+  "delta_ndcg10": {
+   "delta": 0.013,
+   "ci95": [
+    -0.011,
+    0.036
+   ],
+   "wins": 10,
+   "losses": 6,
+   "ties": 0
+  },
+  "delta_ndcg10_per_repeat": [
+   0.002,
+   0.024,
+   0.014
+  ],
+  "delta_r100": {
+   "delta": -0.004,
+   "ci95": [
+    -0.013,
+    0.005
+   ],
+   "wins": 3,
+   "losses": 6,
+   "ties": 7
+  }
+ },
+ "base_query_p50_s_per_repeat": [
+  0.221,
+  0.237,
+  0.231
+ ],
+ "cost": {
+  "model": "gemini-3.1-flash-lite",
+  "prompt": "te-v1c",
+  "per_1k_items_usd_standard": 0.356,
+  "per_1k_items_usd_batch": 0.178,
+  "sample_items_enriched": 4978,
+  "sample_cost_usd": 1.774,
+  "corpus_20830_items_usd_standard": 7.4,
+  "corpus_usd_batch": 3.7,
+  "dense_embedding": "local bge-small, ~28 min CPU for full corpus, $0",
+  "gain_per_usd_per_1k_items": {
+   "e9_enrich_standard": 0.169,
+   "e9_enrich_batch": 0.337,
+   "e9_enrich_bm25only_standard": 0.129,
+   "e9_enrich_bm25only_batch": 0.258
+  }
+ },
+ "provisional": "only a label-independent sample of 4,979 items is enriched (base top-200 union for every dev query x3 rewrites + 2,000 random + 3 MLT examples, minus friends); full-corpus run needed to confirm",
+ "verdict": {
+  "e9_enrich": "Adopt (provisional): Δ +0.060 ≥ 0.03, paired 95% CI [+0.019, +0.103] above 0; confirm on full corpus",
+  "e9_enrich_bm25only": "Passes the rule too (Δ +0.046 [+0.016, +0.084]) but main arm is preferred; head-to-head main − bm25only +0.013 [−0.011, +0.036], 10/6/0"
+ }
+}

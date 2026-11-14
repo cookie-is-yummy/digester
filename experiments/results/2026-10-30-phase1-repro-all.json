@@ -1,0 +1,32 @@
+{
+ "run": "baseline.json",
+ "method": "baseline:hybrid_prf",
+ "split": "all",
+ "n_queries": 22,
+ "ndcg10": 0.486,
+ "p10": 0.568,
+ "success5": 0.955,
+ "mrr": 0.896,
+ "r100": 0.411,
+ "unjudged10": 0.218,
+ "ndcg10_ci95": [
+  0.392,
+  0.583
+ ],
+ "ndcg10_by_kind": {
+  "audio": 0.0,
+  "more_like_this": 0.434,
+  "name": 0.516,
+  "people": 0.314,
+  "place": 0.746,
+  "said_shown": 0.765,
+  "task": 0.293,
+  "topic": 0.495,
+  "vibe": 0.534
+ },
+ "meta": {
+  "wall_s": 23.5,
+  "query_p50_s": 0.103,
+  "cost_usd": 0
+ }
+}

@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bot test thread</title>
+<style>
+  :root {
+    --bg: #f4f4f6; --panel: #ffffff; --ink: #16161a; --quiet: #6b6b76; --line: #e2e2e8;
+    --me: #0a84ff; --me-ink: #ffffff; --bot: #e9e9ee; --bot-ink: #16161a; --accent: #0a84ff; --warn: #b25c00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111114; --panel: #1b1b20; --ink: #f1f1f4; --quiet: #9a9aa6; --line: #2c2c34;
+            --bot: #2a2a31; --bot-ink: #f1f1f4; --warn: #ffb454; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { height: 100%; max-width: 1080px; margin: 0 auto; padding: 16px; display: grid; gap: 16px;
+          grid-template-columns: minmax(0, 1fr) 300px; }
+  .chat, .side { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; min-height: 0; }
+  .chat { display: flex; flex-direction: column; }
+  .head { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: baseline; }
+  .head b { font-size: 16px; }
+  .head span { color: var(--quiet); font-size: 13px; }
+  #thread { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+  .row { display: flex; flex-direction: column; max-width: 82%; }
+  .row.in { align-self: flex-end; align-items: flex-end; }
+  .row.out { align-self: flex-start; align-items: flex-start; }
+  .bubble { padding: 9px 13px; border-radius: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .in .bubble { background: var(--me); color: var(--me-ink); border-bottom-right-radius: 5px; }
+  .out .bubble { background: var(--bot); color: var(--bot-ink); border-bottom-left-radius: 5px; }
+  .bubble a { color: inherit; text-decoration: underline; }
+  .meta { font-size: 11.5px; color: var(--quiet); margin: 2px 6px 8px; display: flex; gap: 8px; align-items: center; }
+  .tap { border: 1px solid var(--line); background: none; border-radius: 12px; padding: 0 7px; cursor: pointer;
+         font-size: 13px; line-height: 20px; color: var(--ink); opacity: .55; }
+  .tap:hover, .tap.on { opacity: 1; border-color: var(--accent); }
+  .typing { color: var(--quiet); font-size: 13px; padding: 0 22px 8px; min-height: 24px; }
+  form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+  textarea { flex: 1; resize: none; height: 42px; max-height: 140px; padding: 10px 12px; border-radius: 20px;
+             border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+  button.send { border: 0; background: var(--accent); color: #fff; border-radius: 20px; padding: 0 18px; font: inherit;
+                font-weight: 600; cursor: pointer; }
+  button.send:disabled { opacity: .4; cursor: default; }
+  .side { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+  .side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--quiet); margin: 0 0 8px; }
+  select, .btn { width: 100%; font: inherit; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line);
+                 background: var(--bg); color: var(--ink); }
+  .btn { cursor: pointer; text-align: left; margin-top: 6px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.quiet { color: var(--quiet); }
+  .clock { font-size: 17px; font-weight: 600; }
+  .small { font-size: 12.5px; color: var(--quiet); margin-top: 4px; }
+  .ahead { color: var(--warn); }
+  .rule { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin-bottom: 6px; font-size: 13.5px; }
+  .rule .small { margin-top: 2px; }
+  .try { font-size: 13px; color: var(--accent); cursor: pointer; display: block; margin: 5px 0; background: none;
+         border: 0; padding: 0; text-align: left; font-family: inherit; }
+  .card { background: var(--bot); color: var(--bot-ink); border-radius: 14px; padding: 8px; max-width: 100%;
+          overflow-x: auto; }
+  .card .cap { font-size: 13.5px; margin: 6px 4px 2px; }
+  .card .brand { font-weight: 700; font-size: 12px; letter-spacing: .02em; margin-right: 6px; }
+  .card.yt .brand { color: #ff0000; }
+  .card a { color: inherit; }
+  .card .thumb { position: relative; display: block; border: 0; padding: 0; background: #000; cursor: pointer;
+                 border-radius: 10px; overflow: hidden; width: 320px; height: 180px; }
+  .card .thumb img { width: 320px; height: 180px; object-fit: cover; display: block; }
+  .card .thumb .play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #ff0000;
+                       color: #fff; border-radius: 12px; padding: 6px 16px; font-size: 18px; }
+  .card iframe { display: block; border: 0; border-radius: 10px; }
+  .card .open { display: inline-block; margin: 6px 4px 0; font-weight: 600; }
+  .card .embed { margin: 6px 4px 0; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+                 border-radius: 10px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .card .note { font-size: 12px; color: var(--quiet); margin: 4px; }
+  .list { margin-bottom: 8px; font-size: 13.5px; }
+  .list b { font-size: 12.5px; }
+  .list ol { margin: 4px 0 2px; padding-left: 22px; }
+  .list li { margin: 2px 0; }
+  .list .done { color: var(--quiet); text-decoration: line-through; }
+  .list .due { color: var(--quiet); font-size: 12px; }
+  .list .due.late { color: var(--warn); }
+  .ob { display: block; width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px;
+        margin-bottom: 6px; background: var(--bg); color: var(--ink); font: inherit; font-size: 13.5px; cursor: pointer; }
+  .ob:hover { border-color: var(--accent); }
+  .ob .small { margin-top: 2px; }
+  .reader { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center;
+            padding: 16px; z-index: 10; }
+  .reader.on { display: flex; }
+  .reader .box { background: var(--panel); color: var(--ink); border-radius: 14px; width: min(680px, 100%);
+                 max-height: 90vh; overflow: auto; padding: 16px; }
+  .reader pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 13.5px/1.45 ui-monospace, Menlo, Consolas, monospace;
+                background: var(--bg); border-radius: 9px; padding: 10px; }
+  .reader iframe { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+  .reader .row2 { display: flex; gap: 8px; margin-top: 8px; }
+  .reader .row2 .btn { width: auto; }
+  @media (max-width: 760px) {
+    .wrap { grid-template-columns: minmax(0, 1fr); height: auto; }
+    .chat { height: 78vh; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="chat">
+    <div class="head"><b>Digest bot</b><span id="status">connecting…</span></div>
+    <div id="thread"></div>
+    <div class="typing" id="typing"></div>
+    <form id="form">
+      <textarea id="box" placeholder="Text the bot…" autofocus></textarea>
+      <button class="send" id="send">Send</button>
+    </form>
+  </section>
+  <aside class="side">
+    <div>
+      <h2>Texting as</h2>
+      <select id="who"></select>
+    </div>
+    <div>
+      <h2>The bot's clock</h2>
+      <div class="clock" id="now">–</div>
+      <div class="small" id="ahead"></div>
+      <button class="btn" data-op="to_next">Jump to the next timed send</button>
+      <button class="btn" data-op="add_minutes" data-minutes="60">Forward 1 hour</button>
+      <button class="btn" data-op="add_minutes" data-minutes="1440">Forward 1 day</button>
+      <div class="small">Moving the clock makes timed and repeating rules fire now. It only moves forward.</div>
+    </div>
+    <div>
+      <h2>Profile</h2>
+      <div id="profile"></div>
+    </div>
+    <div>
+      <h2>Rules</h2>
+      <div id="rules"></div>
+    </div>
+    <div>
+      <h2>To-dos</h2>
+      <div id="todos"></div>
+    </div>
+    <div>
+      <h2>Outbox</h2>
+      <div id="outbox"></div>
+      <div class="small">Emails and calendar files the bot wrote for this person. Without email settings nothing leaves
+        this computer: they stay here.</div>
+    </div>
+    <div>
+      <h2>Exports</h2>
+      <input type="file" id="upfile" accept=".zip,application/zip">
+      <button class="btn" id="upbtn">Upload to this person's inbox</button>
+      <div class="small" id="upmsg">An Instagram export (JSON) or a Google Takeout zip with YouTube. The bot adds it
+        within a few minutes and says what's new.</div>
+      <div id="imports"></div>
+    </div>
+    <div>
+      <h2>Things to try</h2>
+      <button class="try">what can I make with chicken and rice?</button>
+      <button class="try">remind me in two hours to watch something that gets me motivated</button>
+      <button class="try">send me a pasta recipe every Friday at 7pm, nothing with cream</button>
+      <button class="try">my rules</button>
+      <button class="try">email it to me</button>
+      <button class="try">add the first one to my calendar for Saturday at 10</button>
+      <button class="try">add its ingredients to my grocery list</button>
+      <button class="try">pasta recipes, and show me a few new ones from outside my saves</button>
+      <button class="try">did my new export come in?</button>
+      <button class="try">what do you know about me</button>
+      <button class="try">I'm past beginner at Blender now</button>
+      <button class="try">set me up again</button>
+    </div>
+    <div>
+      <button class="btn quiet" data-op="start_over" data-welcome="1">Start over (runs the setup from its first message)</button>
+      <button class="btn quiet" data-op="start_over">Clear rules, thread, to-dos and outbox (keeps the setup)</button>
+      <div class="small">This page is a test thread on this computer. Nothing here is sent to a phone.</div>
+    </div>
+  </aside>
+</div>
+<div class="reader" id="reader" role="dialog" aria-modal="true">
+  <div class="box">
+    <div id="readerBody"></div>
+    <div class="row2"><button class="btn" id="asEmail" hidden>Show as the email looks</button><button class="btn" id="closeReader">Close</button></div>
+  </div>
+</div>
+<script>
+const TOKEN = "__TOKEN__";
+const $ = id => document.getElementById(id);
+let me = null, lastCount = -1, lastSig = "";
+
+const esc = s => s.replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+
+async function api(path, body) {
+  const opt = {headers: {"X-Test-Token": TOKEN}};
+  if (body) { opt.method = "POST"; opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+function draw(s) {
+  if (!s.people || !s.people.length) { $("status").textContent = "no people in people.json"; return; }
+  me = s.me;
+  const who = $("who");
+  const opts = s.people.map(p => `<option value="${esc(p.handle)}">${esc(p.name)} (${esc(p.handle)})</option>`).join("");
+  if (who.dataset.sig !== opts) { who.innerHTML = opts; who.dataset.sig = opts; }
+  who.value = me;
+  $("status").textContent = s.problem ? s.problem : s.ready ? "test thread · same bot as iMessage" : "loading the library (about a minute)…";
+  $("now").textContent = s.now;
+  $("ahead").innerHTML = s.ahead_minutes ? `<span class="ahead">${fmtAhead(s.ahead_minutes)} ahead of real time</span> · ${esc(s.timezone)}` : `real time · ${esc(s.timezone)}`;
+  $("typing").textContent = s.busy ? (s.ready ? "typing…" : "waiting for the library to load…") : "";
+  const pr = s.profile || {};
+  $("profile").innerHTML = (pr.interests || []).map(i =>
+    `<div class="rule"><b>${esc(i.topic)}</b><div class="small">${i.level ? esc(i.level) + " · " : ""}${i.confirmed ? "confirmed" : "a guess"}${i.counts ? " · " + esc(i.counts) : ""}</div></div>`).join("")
+    + `<div class="small">${pr.interests && pr.interests.length ? "" : "No interests yet.<br>"}`
+    + `Working toward: ${pr.direction ? esc(pr.direction) : "–"}<br>`
+    + `Preferences: ${(pr.prefs || []).length ? esc(pr.prefs.join("; ")) : "–"}<br>`
+    + ((pr.notes || []).length ? `Told me: ${esc(pr.notes.join("; "))}<br>` : "")
+    + `Email: ${pr.email ? esc(pr.email) + (pr.email_verified ? " (confirmed)" : " (not confirmed)") : "–"}<br>`
+    + `Time zone: ${esc(pr.timezone || "–")} · quiet ${esc(pr.quiet || "")}`
+    + (pr.setup && pr.setup !== "done" ? `<br>Setup: at step "${esc(pr.setup)}"` : "") + `</div>`;
+  $("rules").innerHTML = s.rules.length ? s.rules.map(r =>
+    `<div class="rule"><b>${r.number}.</b> ${esc(r.goal)}<div class="small">${esc(r.when)}${r.status !== "active" ? " · " + esc(r.status) : ""}${r.next ? "<br>next: " + esc(r.next) : ""}</div></div>`).join("")
+    : `<div class="small">None yet.</div>`;
+  $("todos").innerHTML = (s.todos || []).length ? s.todos.map(l => {
+    const open = l.open.map(t => `<li>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">${esc(t.text)}</a>` : esc(t.text)}${t.due ? ` <span class="due ${t.overdue ? "late" : ""}">due ${esc(t.due)}</span>` : ""}</li>`).join("");
+    const firstNo = l.open.length ? l.open[0].number : 1;
+    const done = l.done.map(t => `<li class="done">${esc(t.text)}</li>`).join("");
+    return `<div class="list"><b>${l.list === "todo" ? "To-do" : esc(l.list)}</b>${open ? `<ol start="${firstNo}">${open}</ol>` : `<div class="small">Nothing open.</div>`}${done ? `<div class="small">Done:</div><ul>${done}</ul>` : ""}</div>`;
+  }).join("") : `<div class="small">None yet.</div>`;
+  $("outbox").innerHTML = (s.outbox || []).length ? s.outbox.map(o =>
+    `<button class="ob" data-oid="${o.id}"><b>${o.kind === "email" ? "Email" : "Calendar"}:</b> ${esc(o.subject || "")}<div class="small">${esc(o.time)}${o.kind === "email" ? (o.via === "smtp" ? " · sent" : " · not sent") : " · calendar file"}</div></button>`).join("")
+    : `<div class="small">Nothing yet.</div>`;
+  $("imports").innerHTML = (s.importing ? `<div class="small">Adding an export now…</div>` : "") + (s.imports || []).map(i =>
+    `<div class="small">${esc(i.time)} · ${i.status === "done" ? `added, ${i.new} new` : esc(i.status)}</div>`).join("");
+  const sig = JSON.stringify(s.messages.map(m => [m.id, m.reaction]));
+  if (sig !== lastSig) {
+    lastSig = sig;
+    const t = $("thread");
+    t.innerHTML = s.messages.map(m => {
+      const taps = m.dir === "out"
+        ? `<button class="tap ${m.reaction === "up" ? "on" : ""}" data-ref="${m.ref}" data-kind="up">👍</button><button class="tap ${m.reaction === "down" ? "on" : ""}" data-ref="${m.ref}" data-kind="down">👎</button>` : "";
+      const body = m.link ? card(m) : `<div class="bubble">${linkify(m.text)}</div>`;
+      return `<div class="row ${m.dir}">${body}<div class="meta">${esc(m.time)}${taps}</div></div>`;
+    }).join("");
+    if (s.messages.length !== lastCount) t.scrollTop = t.scrollHeight;
+    lastCount = s.messages.length;
+  }
+}
+// A link part is drawn as a card. YouTube: the thumbnail by its URL with a YouTube label, and the official player
+// (privacy-enhanced, at least 480 by 270) on click. Instagram: a plain card; on click, Instagram's own embed is loaded
+// by this browser, and the plain card stays if it does not render (private posts never do). The bot's server fetches
+// no Instagram or YouTube media: everything below is loaded by the viewer's browser from those sites.
+const playing = new Set();
+const ytPlayer = (vid, auto) => `<iframe width="480" height="270" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(vid)}?playsinline=1${auto ? "&autoplay=1" : ""}" title="YouTube video player" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+function card(m) {
+  const l = m.link, title = esc(l.title || l.url), url = esc(l.url);
+  if (l.platform === "youtube" && l.video_id) {
+    const vid = esc(l.video_id);
+    const media = playing.has(m.id) ? ytPlayer(l.video_id, false)
+      : `<button class="thumb" data-vid="${vid}" data-mid="${m.id}" aria-label="Play on YouTube"><img src="https://i.ytimg.com/vi/${vid}/hqdefault.jpg" alt="${title}" loading="lazy"><span class="play">▶</span></button>`;
+    const from = l.outside ? `<div class="note">Not from your saves · from YouTube</div>` : "";
+    // an outside pick's card carries its channel and length, so no bullet line repeats it (fix pass 2, finding 55)
+    const meta = [l.channel, l.length].filter(Boolean).map(esc).join(" · ");
+    return `<div class="card yt">${media}<div class="cap"><span class="brand">YouTube</span><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div>${meta ? `<div class="note">${meta}</div>` : ""}${from}</div>`;
+  }
+  if (l.platform === "calendar") {
+    // the calendar link as a card, never the raw link (finding 56): the title, the day and time, and the .ics file
+    const ics = l.outbox_id ? `<button class="embed ics" data-oid="${esc(String(l.outbox_id))}">Calendar file (.ics)</button>` : "";
+    return `<div class="card cal"><div class="cap"><span class="brand">Calendar</span>${esc(l.event_title || "")}</div>${l.when ? `<div class="note">${esc(l.when)}</div>` : ""}<a class="open" href="${url}" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a> ${ics}</div>`;
+  }
+  if (l.platform === "instagram") {
+    const btn = l.permalink ? `<button class="embed" data-perm="${esc(l.permalink)}">Show the post here</button>` : "";
+    return `<div class="card ig"><div class="cap"><span class="brand">Instagram</span>${title}</div><a class="open" href="${url}" target="_blank" rel="noopener noreferrer">Open on Instagram</a> ${btn}<div class="slot"></div></div>`;
+  }
+  return `<div class="bubble">${linkify(m.text)}</div>`;
+}
+let igLoading = null;
+function igScript() {
+  if (window.instgrm) return Promise.resolve();
+  if (!igLoading) igLoading = new Promise((ok, bad) => {
+    const s = document.createElement("script");
+    s.src = "https://www.instagram.com/embed.js"; s.async = true; s.onload = ok; s.onerror = bad;
+    document.body.appendChild(s);
+  });
+  return igLoading;
+}
+async function igEmbed(btn) {
+  const slot = btn.parentElement.querySelector(".slot");
+  btn.disabled = true;
+  slot.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${esc(btn.dataset.perm)}" data-instgrm-version="14" style="max-width:480px;min-width:280px"></blockquote>`;
+  const fallback = () => { slot.innerHTML = `<div class="note">Instagram didn't show this post here. Open it on Instagram instead.</div>`; };
+  try { await igScript(); window.instgrm.Embeds.process(); } catch (e) { fallback(); return; }
+  setTimeout(() => { if (!slot.querySelector("iframe")) fallback(); }, 8000);
+}
+const fmtAhead = m => m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor(m % 1440 / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+
+async function poll() {
+  try { draw(await api("/api/state" + (me ? "?as=" + encodeURIComponent(me) : ""))); }
+  catch (e) { $("status").textContent = "the bot is not running (start it again, then reload this page)"; }
+}
+async function send(text) {
+  text = text.trim();
+  if (!text || !me) return;
+  $("box").value = "";
+  await api("/api/send", {handle: me, text});
+  poll();
+}
+$("form").addEventListener("submit", e => { e.preventDefault(); send($("box").value); });
+$("box").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send($("box").value); } });
+$("who").addEventListener("change", e => { me = e.target.value; lastSig = ""; lastCount = -1; poll(); });
+$("thread").addEventListener("click", e => {
+  const th = e.target.closest(".thumb");
+  if (th) { playing.add(Number(th.dataset.mid)); th.outerHTML = ytPlayer(th.dataset.vid, true); return; }
+  const em = e.target.closest(".embed");
+  if (em) { igEmbed(em); return; }
+  const ics = e.target.closest(".ics");
+  if (ics) { openOutbox(ics.dataset.oid); return; }
+  const b = e.target.closest(".tap");
+  if (b) api("/api/tapback", {handle: me, ref: b.dataset.ref, kind: b.dataset.kind}).then(poll);
+});
+// The Outbox panel: click an email or a calendar file to read it. An email's HTML is shown in a sandboxed frame (no
+// scripts); its plain text is shown first.
+let readerHtml = null;
+$("outbox").addEventListener("click", e => {
+  const b = e.target.closest(".ob");
+  if (b) openOutbox(b.dataset.oid);
+});
+async function openOutbox(oid) {
+  if (!me || !oid) return;
+  const o = await api(`/api/outbox?as=${encodeURIComponent(me)}&id=${encodeURIComponent(oid)}`);
+  readerHtml = o.html || null;
+  const att = o.attachments && o.attachments.length ? `<div class="small">Attached: ${o.attachments.map(esc).join(", ")}</div>` : "";
+  $("readerBody").innerHTML = `<b>${esc(o.subject || "")}</b>${o.to ? `<div class="small">To: ${esc(o.to)}</div>` : ""}${att}<pre>${linkify(o.text || "")}</pre>`;
+  $("asEmail").hidden = !readerHtml;
+  $("reader").classList.add("on");
+}
+$("asEmail").addEventListener("click", () => {
+  if (!readerHtml) return;
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+  f.srcdoc = readerHtml.replace(/^<!doctype html>/i, "<!doctype html><base target=\"_blank\">");
+  $("readerBody").appendChild(f);
+  $("asEmail").hidden = true;
+});
+$("closeReader").addEventListener("click", () => $("reader").classList.remove("on"));
+$("reader").addEventListener("click", e => { if (e.target.id === "reader") $("reader").classList.remove("on"); });
+document.querySelectorAll(".btn[data-op]").forEach(b => b.addEventListener("click", () => {
+  if (b.dataset.op === "start_over" && !confirm(b.dataset.welcome ? "Clear everything about this test person and run the setup again from its first message?" : "Clear this test person's rules, history and thread?")) return;
+  api("/api/control", {op: b.dataset.op, handle: me, minutes: Number(b.dataset.minutes || 0), with_welcome: !!b.dataset.welcome}).then(poll);
+}));
+// The upload box: the file is sent as it is to this person's inbox on this computer; the bot imports it from there.
+$("upbtn").addEventListener("click", async () => {
+  const f = $("upfile").files[0];
+  if (!f || !me) return;
+  $("upmsg").textContent = "Uploading…";
+  try {
+    const r = await fetch(`/api/upload?as=${encodeURIComponent(me)}&name=${encodeURIComponent(f.name)}`,
+                          {method: "POST", headers: {"X-Test-Token": TOKEN}, body: f});
+    const j = await r.json();
+    $("upmsg").textContent = r.ok ? `In the inbox as ${j.name}. The bot adds it within a few minutes.` : `Not uploaded: ${j.error}`;
+  } catch (e) { $("upmsg").textContent = "Not uploaded: the bot is not running."; }
+  $("upfile").value = "";
+  poll();
+});
+document.querySelectorAll(".try").forEach(b => b.addEventListener("click", () => { $("box").value = b.textContent; $("box").focus(); }));
+poll();
+setInterval(poll, 800);
+</script>
+</body>
+</html>

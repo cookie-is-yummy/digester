@@ -1,0 +1,38 @@
+"""PROTOTYPE ONLY - a channel for development and tests: messages come from a list or stdin, replies are printed
+and kept in .outbox."""
+import itertools
+import queue
+
+from .base import Channel, Inbound, run_stamp
+
+
+class ConsoleChannel(Channel):
+    name = "console"
+    join_seconds = 0.0
+    # review fix X8: the person typing here is a founder at the bot's own computer, who can open its outbox folder
+    # (a code email that was not sent is left there); on Messages and Sendblue nobody can
+    outbox_reachable = True
+
+    def __init__(self, printer=print, link_previews=False):
+        self.link_previews = link_previews   # True: replies arrive part by part, as on a phone
+        self.inbox = queue.Queue()
+        self.outbox = []   # (ref, handle, text)
+        self.printer = printer
+        self._ids = itertools.count(1)
+        self.stamp = run_stamp()   # finding 65: a reference from an earlier run on the same store is never reused
+
+    def push(self, handle, text="", tapback=None, tapback_ref=None):
+        self.inbox.put(Inbound(handle=handle, text=text, tapback=tapback, tapback_ref=tapback_ref))
+
+    def receive(self):
+        out = []
+        while not self.inbox.empty():
+            out.append(self.inbox.get())
+        return out
+
+    def send(self, handle, text):
+        ref = f"console-{self.stamp}-{next(self._ids)}"
+        self.outbox.append((ref, handle, text))
+        if self.printer:
+            self.printer(f"\n--- to {handle} [{ref}] ---\n{text}\n")
+        return ref
