@@ -19,6 +19,7 @@ from .store import by_number, now_iso
 UNDO_WINDOW = timedelta(minutes=10)
 OVERDUE_AFTER = timedelta(hours=24)   # round 8: a to-do this far past its due time gets one nudge ...
 OVERDUE_LOOK_DAYS = 7                 # ... unless it is older than this (a store's old to-dos are never all nudged)
+OVERDUE_OPEN = timedelta(hours=12)    # checker, round 8: one nudge at a time waits this long for its answer
 WORD = re.compile(r"[^\W_]+", re.UNICODE)
 SMALL = set("a an the my to of for on in at and".split())
 # fix pass, finding 3: "add oat milk and eggs to my grocery list" is two to-dos on the list "grocery". The list's name
@@ -326,6 +327,11 @@ class TodoMixin:
                     continue
                 if self._held_now(person, now):   # quiet hours or a snooze: it waits
                     continue
+                open_q = self.store.get_state(f"overdue:{h}")
+                if open_q and open_q.get("todo_id") != t["id"] and \
+                        datetime.fromisoformat(open_q["at"]) > now - OVERDUE_OPEN:
+                    continue   # checker, round 8: one nudge waits for its answer, so "drop it" is never about the other
+                    # one (the next goes out once they reply, or OVERDUE_OPEN later)
                 midnight = _at(now.astimezone(ZoneInfo(tz)).date(), "00:00", ZoneInfo(tz))
                 if self.store.scheduled_today(h, midnight) >= config.MAX_SCHEDULED_PER_DAY:
                     continue   # it counts toward the daily limit: tomorrow, then

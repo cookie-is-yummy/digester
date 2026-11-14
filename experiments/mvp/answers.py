@@ -259,5 +259,19 @@ def split_asks(*texts):
         heads = [_head(p) for p in parts]
         if len(parts) < 2 or len(set(heads)) < len(heads) or len(parts) > MAX_PARTS:
             continue
+        if any(_bare(p) for p in parts):   # checker, round 8: "tools and resources for designers", "cafes and
+            continue                       # restaurants in lisbon": a bare kind word shares the others' topic (one ask)
         return parts
     return None
+
+
+# the small words a part may hold beside its head noun and still be bare
+_BARE_SKIP = set("a an the some any good best great new more other few nice cool useful".split())
+
+
+def _bare(part):
+    """Checker, round 8: a part that is only its head noun ("tools", "some apps") has no topic of its own: it is a
+    word of the same ask as the parts beside it."""
+    words = [w for w in re.findall(r"[^\W_]+(?:['’/][^\W_]+)*", part.lower()) if w not in _BARE_SKIP]
+    return len(words) <= 1 and bool(_head(part))
+

@@ -335,6 +335,27 @@ def _item_line(x, lang=None):
     return s
 
 
+def renew_note(x, today):
+    """Checker, round 8: a thing kept with an answer and sent again later says how far its date is from the day of
+    the send, never from the day of the answer ("deadline 30 November, in 3 days", not "in 16 days"). Only a note
+    code made from a date ("deadline ..." / "date ..." / "its deadline, ..., has passed") is made again."""
+    from datetime import date as _date
+    from . import dates as D
+    note = x.get("note") or ""
+    if not note or not x.get("date") or not re.match(r"(?:deadline|date|its deadline|its date)\b", note):
+        return x
+    try:
+        day = _date.fromisoformat(str(x["date"])[:10])
+    except ValueError:
+        return x
+    deadline = note.startswith(("deadline", "its deadline"))
+    x = dict(x, state="open" if day >= today else "passed")
+    x["note"] = D.date_note({"state": x["state"], "date": day, "deadline": deadline}, today)
+    if x.get("n"):
+        x["shown"] = _item_line(x)[len(f"{x['n']}. "):]
+    return x
+
+
 def source_head(p, now=None, lang=None):
     """'From "Best design systems" by @creator (posted May 2024, saved July 2023):'."""
     t = L.table(lang)

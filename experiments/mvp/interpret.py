@@ -1734,6 +1734,20 @@ CHAT_KINDS = re.compile(r"\b(?:recipes?|tutorials?|videos?|reels?|posts?|workout
 SEARCH_VERB = re.compile(r"\b(?:find|show|send|any|other|more)\b", re.I)
 QUESTION_HEAD = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which|where|are there|is there|can you|"
                            r"could you|would you|will you|do you have|got)\b\s*", re.I)
+# checker, round 8: a question about the app, the person's data or how things work is never a search, though it
+# names "my saves" ("who can see my saves", "is my library private", "what does the app do with my saves")
+ABOUT_APP = re.compile(r"\b(?:app|does it|can it|will it|is it|tell it|private|privacy|safe|secure|security|"
+                       r"stored|store my|delet\w*|export\w*|share my|sharing my|see my|access|my data|account|the search|"
+                       r"slow|subscription|password|log ?in|sign ?in|upload\w*|import\w*|sync\w*|how many|how much|"
+                       r"count|number of|happens?|happened)\b", re.I)
+# a question that asks how, why, who or whether something can be done, about the person or the bot
+NOT_A_REQUEST = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+|ugh)[,\s]+)*(?:how|why|who|where|when|can i|could i|"
+                           r"should i|is my|are my|is it|does|will)\b", re.I)
+# something asked for: the request's object, beyond the first-person words
+SOMETHING = re.compile(r"\b(?:anything|something|stuff|saved (?:about|on|for))\b", re.I)
+# the message asks (a question, or it starts the way a request does), never a statement ("I saved so many reels")
+ASKS = re.compile(r"\?\s*$|^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which|any|are there|is there|did i|do i|"
+                  r"have i|show|find|send|give|get|list)\b", re.I)
 
 
 def chat_guard(it: Interpretation, message):
@@ -1748,7 +1762,11 @@ def chat_guard(it: Interpretation, message):
     t = " ".join((message or "").split())
     if len(t.split()) < 5 or ABOUT_BOT.search(t) or RULE_WORDS.search(t):
         return it
-    if not (OWN_SAVES.search(t) or ((THINGS.search(t) or CHAT_KINDS.search(t)) and SEARCH_VERB.search(t))):
+    # checker, round 8: never a question about the app or the person's data, a how or why question, or a statement
+    if ABOUT_APP.search(t) or NOT_A_REQUEST.search(t) or not (ASKS.search(t) or SEARCH_VERB.search(t)):
+        return it
+    kind = THINGS.search(t) or CHAT_KINDS.search(t)
+    if not ((OWN_SAVES.search(t) and (kind or SOMETHING.search(t))) or (kind and SEARCH_VERB.search(t))):
         return it
     goal = QUESTION_HEAD.sub("", t)
     goal = re.sub(r"\b(might|may|could|did|do|have) i\b", lambda m: "i " + m.group(1), goal, flags=re.I)

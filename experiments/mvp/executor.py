@@ -1226,9 +1226,15 @@ class ExecutorMixin:
         checked titles and details, and no new search or model call. An item no longer in the library is left out."""
         h = person["handle"]
         view = self.view(person["library"])
-        kept = {}
+        kept, names = {}, set(spec.content.item_names or [])
         for row in self.store.q("SELECT picks FROM answers WHERE handle=? ORDER BY run_id DESC LIMIT 200", (h,)):
             for p in json.loads(row["picks"] or "[]"):
+                # checker, round 8: the newest answer that holds the thing it was set up for (an earlier reminder of
+                # another thing from the same post keeps only that thing)
+                if p["item_id"] in kept and names and not any(x.get("name") in names
+                                                              for x in kept[p["item_id"]].get("items") or []) \
+                        and any(x.get("name") in names for x in p.get("items") or []):
+                    kept[p["item_id"]] = p
                 kept.setdefault(p["item_id"], p)
         from .compose import title_from_item
         recs = []
@@ -1249,6 +1255,11 @@ class ExecutorMixin:
                     rec["items"] = its
                     rec["title"] = its[0]["name"] if len(its) == 1 else rec["title"]
                     rec["facts"], rec["lines"] = {}, []
+            if rec.get("items"):   # checker, round 8: how far a thing's date is, from the day it is sent
+                from zoneinfo import ZoneInfo
+                from .render import renew_note
+                today = self.clock().astimezone(ZoneInfo(person["timezone"])).date()
+                rec["items"] = [renew_note(x, today) for x in rec["items"]]
             recs.append(rec)
         head = T.SENT_AGAIN_HEAD
         dl = self.store.get_state(f"deadline:{rule_id}") if rule_id and len(recs) == 1 else None

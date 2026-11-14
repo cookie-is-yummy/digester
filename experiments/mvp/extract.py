@@ -415,6 +415,23 @@ def _mostly_caps(text):
     return bool(letters) and sum(ch.isupper() for ch in letters) >= 0.8 * len(letters)
 
 
+def _alone_on_line(name, text):
+    """The name is a line of its own (after a list mark or none)."""
+    na = tokens(name)
+    for line in (text or "").splitlines():
+        m = _MARK.match(line)
+        if na and tokens(line[m.end():] if m else line) == na:
+            return True
+    return False
+
+
+def _mostly_lower(text):
+    """Checker, round 8: a text of 10 words or more written (almost) without capitals: fewer than one word in 50
+    holds one ("I" left out)."""
+    words = [w for w in re.findall(r"[^\W\d_]+", text or "") if w != "I"]
+    return len(words) >= 10 and sum(1 for w in words if re.search(r"[A-Z]", w)) <= len(words) // 50
+
+
 def generic_name(name):
     """A name made only of kinds of thing, audiences, counts and small words ("design systems", "underclassmen", "5
     tools", "FREE PROGRAMS FOR STUDENTS"): never a specific thing."""
@@ -430,11 +447,15 @@ def common_noun(name, text):
     occ = _occurrences(name, text)
     if not occ:
         return False
-    caps = _mostly_caps(text)
+    # checker, round 8: a caption written without capitals cannot use the capital test either ("my fav ui libs:
+    # shadcn, lucide"); nor can a one-word name that is a list line's name ("- lucide - clean icons", "2. htmx")
+    caps = _mostly_caps(text) or _mostly_lower(text) or (len(re.findall(r"[^\W_]+", name)) == 1 and (
+        own_line_words(name, "", text) or _alone_on_line(name, text)))
 
     def common(span, prev, left, right):
         site = left == "@" or bool(re.match(r"\.[A-Za-z]", right))
-        lower = not re.search(r"[A-Z\d.]", span) and not site
+        # checker, round 8: a slash or a hyphen inside a word marks a name ("shadcn/ui", "react-hook-form")
+        lower = not re.search(r"[A-Z\d.]|[^\W\d_][/-][^\W\d_]", span) and not site
         if not caps and lower:
             return True
         tail = re.findall(r"[^\W_]+", span)[-2:]
