@@ -576,6 +576,192 @@ def stats_message(total, by_platform, by_kind, words=None, matched=None, by=None
     return "\n".join(lines)
 
 
+# ---------- round 8 (BN3 to BN5, DESIGN.md section 14): trends, the theme check, the recap ----------
+# Every number below is counted by code (attention.py, digest.py). Plain words: no minutes or time spent, and nothing
+# that judges what the person keeps.
+def long_day(d):
+    """'15 October 2026': an anchor date, always with its year."""
+    return f"{d.day} {d.strftime('%B')} {d.year}"
+
+
+def _posts_mention(n):
+    return "no posts that mention it" if not n else f"{n} {'post that mentions' if n == 1 else 'posts that mention'} it"
+
+
+def trend_rows(data, max_lines):
+    """(main, parked, for_fun) rows the trends message shows within `max_lines`: the topics with any count, rising
+    first, then steady, fading and too few to tell; "someday" topics go under Parked and "enjoy" ones under For fun."""
+    order = {"rising": 0, "steady": 1, "fading": 2, "few": 3}
+    rows = [t for t in data["topics"] if t["recent"] or t["before"] or t["liked"]]
+    parked = [t for t in data["topics"] if t.get("relation") == "someday"]
+    fun = [t for t in rows if t.get("relation") == "enjoy"]
+    main = sorted((t for t in rows if t.get("relation") not in ("someday", "enjoy")),
+                  key=lambda t: (order[t["trend"]], -t["recent"], -t["before"], t["topic"].lower()))
+    room = max_lines - 1 - bool(parked) - bool(fun) - bool(data.get("direction"))
+    return main[:max(room, 0)], parked, fun
+
+
+def _trend_line(t):
+    counts = f"{_posts_mention(t['recent'])} lately, {t['before']} before"
+    if t["trend"] == "few":
+        return f"• {t['topic']}: too few to tell ({counts}, {t['liked']} liked)."
+    return f"• {t['topic']} is {t['trend']}: {counts}."
+
+
+def _counted(t):
+    return f"{t['topic']} ({_posts_mention(t['recent'])} lately)"
+
+
+def trends_message(data, max_lines=7):
+    """BN3: what the person kept lately against the 6 months before, topic by topic, at most `max_lines` lines."""
+    anc = data["anchors"]
+    names = {"instagram": "Instagram", "youtube": "YouTube"}
+    plats = [p for p in ("instagram", "youtube") if p in anc] + sorted(p for p in anc if p not in names)
+    if len(plats) == 1:
+        upto = long_day(anc[plats[0]])
+    else:
+        upto = _and([f"{long_day(anc[p])} on {names.get(p, p)}" for p in plats])
+    n, m = data["recent_total"], data["before_total"]
+    lines = [f"What you kept lately: {n} {'post' if n == 1 else 'posts'} in the 8 weeks up to {upto}, and {m} in "
+             "the 6 months before that."]
+    main, parked, fun = trend_rows(data, max_lines)
+    lines += [_trend_line(t) for t in main]
+    if parked:
+        lines.append("Parked for someday: " + ", ".join(_counted(t) for t in parked) + ".")
+    if fun:
+        lines.append("Just for fun: " + ", ".join(_counted(t) for t in fun) + ".")
+    d = data.get("direction")
+    if d:
+        head = f"You said you're working toward \"{d['text']}\"."
+        if d["topic"] and d["recent"]:
+            lines.append(f"{head} {d['topic']}: {_posts_mention(d['recent'])} lately, {d['before']} before.")
+        else:
+            lines.append(f"{head} Nothing you kept lately mentions it, so I can't tell how that's going from your saves.")
+    return "\n".join(lines[:max_lines])
+
+
+TRENDS_NO_TOPICS = ("I don't know your topics yet, so I can't say what's rising or fading. Tell me what you're into, or "
+                    "say \"set me up again\".")
+TRENDS_NO_DATES = "None of what you kept has a date I can read, so I can't say what's rising or fading."
+TRENDS_EVERY_EXPORT = "Reply \"every export\" and I'll send you this each time a new export of your library comes in."
+
+
+def trends_rule_started(n):
+    return (f"Got it: each time a new export of your library comes in, I'll send you what you've been into lately. "
+            f"Reply \"stop {n}\" to end it.")
+
+
+RELATION_SAY = {"pursue": "something you're going for", "practise": "a skill you're practising",
+                "someday": "parked for someday", "enjoy": "just for fun",
+                "not_me": "not you, so I'll leave it out of what I say about you"}
+_EXAMPLE_LABELS = ["practise", "for fun", "someday", "not me", "pursue"]
+
+
+def theme_check_question(topics):
+    """BN4: asked once, after the first trends answer."""
+    listed = "  ".join(f"{i}. {t}" for i, t in enumerate(topics, 1))
+    example = ", ".join(f"{i} {w}" for i, w in enumerate(_EXAMPLE_LABELS[:len(topics)], 1))
+    return ("One question, so I read these right: what is each one to you?\n" + listed + "\n"
+            f"Reply like \"{example}\" (or \"pursue\" for something you're going for). Anything else and I'll drop "
+            "the question.")
+
+
+def theme_check_which(n):
+    return f"Which one? I listed {n}. Reply with their numbers, like \"1 practise\"."
+
+
+def labels_saved(pairs):
+    if not pairs:
+        return "Noted."
+    said = "; ".join(f"{t}: {RELATION_SAY[lb]}" for t, lb in pairs)
+    first, lb = pairs[0]
+    other = "someday" if lb == "pursue" else "pursue"
+    tail = " Asking for it by name still finds those posts." if any(x == "not_me" for _, x in pairs) else ""
+    return f"Thanks, noted. {said}.{tail} To change one, say \"{first} is {other} now\"."
+
+
+def label_changed(topic, label):
+    if label == "not_me":
+        return f"OK: I'll leave {topic} out of what I say about you. Asking for it by name still finds those posts."
+    return f"OK: {topic} is {RELATION_SAY[label]} now."
+
+
+def parked_message(interests):
+    if not interests:
+        return "Nothing is parked yet. Say something like \"climbing is someday now\" to park a topic."
+    from .profile import count_words, shown_topic
+    parts = []
+    for i in interests:
+        n = count_words(i)
+        parts.append(f"{shown_topic(i['topic'])} ({n})" if n else shown_topic(i["topic"]))
+    return "Parked for someday: " + ", ".join(parts) + "."
+
+
+def _times(n):
+    return "once" if n == 1 else "twice" if n == 2 else f"{n} times"
+
+
+def recap_rule_clause(n, name, counts, fb):
+    """'1 "a pasta recipe" sent 3, stayed quiet twice with nothing new (2 made it, 1 👍)'."""
+    parts = []
+    if counts.get("sent"):
+        parts.append(f"sent {counts['sent']}")
+    if counts.get("quiet"):
+        parts.append(f"stayed quiet {_times(counts['quiet'])} with nothing new")
+    if counts.get("skipped"):
+        parts.append(f"{counts['skipped']} skipped")
+    if counts.get("snoozed"):
+        parts.append(f"{counts['snoozed']} held back by a snooze")
+    if counts.get("daily_limit"):
+        parts.append(f"{counts['daily_limit']} past the daily limit")
+    said = []
+    for kind, word in (("done", "made it"), ("up", "👍"), ("harder", "too easy"), ("easier", "too hard")):
+        if fb.get(kind):
+            said.append(f"{fb[kind]} {word}")
+    return f"{n} \"{name}\" " + ", ".join(parts) + (f" ({', '.join(said)})" if said else "")
+
+
+def recap_head(since):
+    return f"Your recap since {since}:"
+
+
+def recap_rules(clauses):
+    return "• Rules: " + "; ".join(clauses) + "."
+
+
+def recap_todos(done, open_, overdue):
+    left = ("none are open" if not open_ else f"{open_} {'is' if open_ == 1 else 'are'} open"
+            + (f", {overdue} of them past {'its' if overdue == 1 else 'their'} due date" if overdue else ""))
+    return "• To-dos: " + (f"you ticked off {done}; {left}" if done else left[:1].upper() + left[1:]) + "."
+
+
+def recap_coming(entries, more=0):
+    return "• Coming up: " + "; ".join(entries) + (f"; and {more} more" if more else "") + "."
+
+
+def recap_calendar(n):
+    return f"• I gave you {n} calendar {'link' if n == 1 else 'links'}."
+
+
+def recap_library(newest, due):
+    head = f"the newest thing you kept is from {newest}" if newest else "I can't date anything you kept yet"
+    return "• Your library: " + head + (f"; {due}" if due else "") + "."
+
+
+def recap_suggest(word, n, since):
+    return (f"• You asked about {word} {n} times since {since}. Want one pick for it every Saturday at 10am? Reply "
+            "\"yes\" and I'll show you a preview first.")
+
+
+RECAP_NOTHING = "Nothing to report for the last 7 days: no rule sent anything and no to-do changed."
+RECAP_PREVIEW_EMPTY = "There's nothing to report this week yet. On a week like that I send nothing."
+
+
+def recap_preview_tail(when, first=None):
+    return (f"\n\n{cap_first(when_lead(when))} I'll send you a recap like this one.{first_send(first)} Reply YES to "
+            "start, or tell me what to change.")
+
+
 # fix pass 3, finding 66: "once in a while" names no frequency, so the bot asks, with a default a "yes" accepts
 HOW_OFTEN_ASK = ("How often would you like it? For example \"every 3 days\" or \"about twice a week\". "
                  "Or reply \"yes\" for about once a week, at a random time between 9am and 9pm.")

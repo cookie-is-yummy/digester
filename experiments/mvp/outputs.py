@@ -80,8 +80,9 @@ BEFORE_DATE = re.compile(r"\b(?:(\d{1,2}|a|an|one|two|three|four|five|six|seven|
 
 class OutputsMixin:
     # ---------- the answer each run showed (store.answers) ----------
-    def _keep_answer(self, run_id, handle, rule_id, goal, kind, parts, picks=()):
-        self.store.put_answer(run_id, handle, rule_id, goal, kind, Reply.of(parts).parts, list(picks), at=self.clock())
+    def _keep_answer(self, run_id, handle, rule_id, goal, kind, parts, picks=(), spec=None):
+        self.store.put_answer(run_id, handle, rule_id, goal, kind, Reply.of(parts).parts, list(picks), at=self.clock(),
+                              spec=spec)
 
     # ---------- the executor's do list ----------
     def deliver(self, person, spec, msg, run_id, kind="ask", rule_id=None, slot=None, request_text=None, after=""):

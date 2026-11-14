@@ -360,26 +360,33 @@ def get(store, handle):
     data = store.profile_data(handle)
     p = store.person(handle) or {}
     email, ok = store.email_of(handle)
-    return {"interests": [i for i in data.get("interests") or [] if isinstance(i, dict) and i.get("topic")],
+    # round 8 (BN4): a topic the person said is not them is kept only as a marker, never shown or used as an interest
+    return {"interests": [i for i in data.get("interests") or [] if isinstance(i, dict) and i.get("topic")
+                          and i.get("relation") != "not_me"],
             "direction": ctx.get("direction"), "prefs": ctx.get("prefs") or {}, "notes": ctx.get("notes") or [],
             "email": email, "email_verified": ok, "timezone": p.get("timezone"), "quiet": store.quiet(handle),
             "build": data.get("build"), "guessed": bool(data.get("guessed_at"))}
 
 
 def set_interests(store, handle, interests, **extra):
+    """The person's interests. Round 8 (BN4): the "not me" markers stored before are kept unless the new list holds
+    that topic again (the person's own words then win)."""
     data = store.profile_data(handle)
     data.update(extra)
-    data["interests"] = interests
+    names = {str(i.get("topic") or "").lower() for i in interests}
+    markers = [i for i in data.get("interests") or [] if isinstance(i, dict) and i.get("relation") == "not_me"
+               and str(i.get("topic") or "").lower() not in names]
+    data["interests"] = list(interests) + markers
     store.set_profile_data(handle, data)
 
 
 def adopt_guess(store, handle, result, now=None):
     """The guess becomes the person's interests (unconfirmed), unless they already confirmed or told the bot more:
-    what they said is never overwritten by a guess."""
+    what they said is never overwritten by a guess. Round 8 (BN4): a topic they said is not them is never added back."""
     from .store import now_iso
     have = get(store, handle)["interests"]
     mine = [i for i in have if i.get("confirmed") or i.get("source") != "guess"]
-    names = {i["topic"].lower() for i in mine}
+    names = {i["topic"].lower() for i in mine} | {i["topic"].lower() for i in not_me_markers(store, handle)}
     new = mine + [dict(i) for i in result.get("interests") or [] if i["topic"].lower() not in names
                   and not sensitive(i["topic"], i.get("why"), " ".join(i.get("words") or []))]   # an older cached guess
     set_interests(store, handle, new, build=result.get("build"), guessed_at=now_iso(now))
@@ -842,10 +849,12 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
     prefs = dict(prof["prefs"])
     changes, skipped = [], False
     other = []   # the changes short_summary() does not show (onboarding step 3 says these too)
+    dropped = []   # round 8 (BN4): kept as "not me" markers, so a new guess never brings them back
     for name in _strs(raw.get("drop_topics")):
         i = _find(interests, name)
         if i and _named_in(i, message):   # (checker of fix pass 6) only a topic the message names is dropped
             interests.remove(i)
+            dropped.append(_marker(i))
             changes.append(f"{i['topic']} is off your interests")
             other.append(changes[-1])
     # "that's right" confirms what the person was shown (the read shows at most 4 topics), never a topic they did not see
@@ -979,7 +988,8 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
             store.add_profile_note(handle, note)
             changes.append(f"noted: {note}")
             other.append(changes[-1])
-    set_interests(store, handle, interests)
+    names = {i["topic"].lower() for i in interests}
+    set_interests(store, handle, interests + [d for d in dropped if d["topic"].lower() not in names])
     store.x("UPDATE people SET prefs=? WHERE handle=?", (json.dumps(prefs), handle))
     return {"kind": kind, "changes": changes, "other": other, "skipped_sensitive": skipped,
             "confirmed_all": raw.get("confirm_all") is True}
@@ -1146,3 +1156,121 @@ def show_text(prof, now=None):
         lines.append(f"Time zone: {T.zone_name(prof['timezone'])}. Quiet hours: {T.quiet_words(prof['quiet'])}.")
     lines.append(T.PROFILE_HOW_TO_CORRECT)
     return "\n".join(lines)
+
+
+# ---------- round 8 (BN4, DESIGN.md section 14): what a topic is to the person ----------
+# The theme check (docs/00, core loop step 3): the person says what each topic means to them, read by code only. Stored
+# on the interest as `relation` and `relation_at`; no new table, and "delete my data" removes them with the profile.
+# A "not me" topic stays as a marker (get() leaves it out), so a later guess never brings it back. Themes never gate
+# search (decision 18 Oct): a request that names the topic still finds those posts.
+RELATIONS = ("pursue", "practise", "someday", "enjoy", "not_me")
+RELATION_WORDS = {
+    "not_me": r"not\s+(?:really\s+)?(?:me|mine|for\s+me|my\s+thing)|not\s+into\s+(?:it|that)|nope|nah",
+    "enjoy": r"(?:just\s+|only\s+)?for\s+fun|enjoy(?:ing|ment)?|fun|hobby",
+    "someday": r"some\s?day|one\s+day|later|park(?:ed|\s+it)?|not\s+now|maybe\s+later",
+    "practise": r"practi[sc](?:e|es|ed|ing)|a\s+skill|skill|learning|learn",
+    "pursue": r"pursu(?:e|ing)|go(?:ing)?\s+for\s+it|a\s+goal|goal",
+}
+_LABEL = "(?:" + "|".join(f"(?P<{k}>{v})" for k, v in RELATION_WORDS.items()) + r")(?![\w'])"
+_SEP = r"\s*(?:[:=.)\-–—]\s*|\s+(?:is|are|as)\s+(?:(?:a|an|just)\s+)?|\s+)?"
+_FILLER = re.compile(r"^(?:[\s,;.&+/!]|\b(?:and|then|ok|okay|sure|so|thanks|thank you|please|pls)\b)*$", re.I)
+_RELATION_NOW = re.compile(r"^\s*(?P<topic>[^\W\d_][\w'’ &+-]{1,40}?)\s+(?:is|are)\s+(?:now\s+)?(?:(?:a|an|just)\s+)?"
+                           + _LABEL + r"(?:\s+now)?\s*[.!]*\s*$", re.I)
+PARKED_ASK = re.compile(r"^\W*(?:what(?:'s|\s+is|\s+have\s+i|\s+did\s+i|\s+do\s+i\s+have)?\s+(?:i\s+)?park(?:ed)?"
+                        r"(?:\s+for\s+(?:later|someday))?|(?:show\s+me\s+)?(?:my\s+)?parked(?:\s+topics)?|"
+                        r"what(?:'s|\s+is)\s+parked|my\s+someday\s+list)\W*$", re.I)
+
+
+def _label_of(m):
+    return next(k for k in RELATION_WORDS if m.group(k))
+
+
+def _marker(i):
+    from .store import now_iso
+    return dict(i, relation="not_me", relation_at=now_iso())
+
+
+def not_me_markers(store, handle):
+    return [i for i in store.profile_data(handle).get("interests") or [] if isinstance(i, dict)
+            and i.get("relation") == "not_me" and i.get("topic")]
+
+
+def _name_forms(topics):
+    """{surface form: topic}: each topic's whole name, and each of its own words that no other topic shares."""
+    forms, words = {}, {}
+    for t in topics:
+        forms[" ".join(t.lower().split())] = t
+        for w in re.findall(r"[^\W\d_]+", t.lower()):
+            if len(w) >= 3 and w not in STOP:
+                words.setdefault(w, set()).add(t)
+    for w, ts in words.items():
+        if len(ts) == 1 and w not in forms:
+            forms[w] = next(iter(ts))
+    return forms
+
+
+def parse_labels(text, shown):
+    """The theme check's answer, read by code only: numbers ("1 practise 2 enjoy 3 someday 4 not me") or names
+    ("climbing someday, guitar not me") with one of the five labels in common words. Returns {"pairs": [(topic,
+    label)], "bad": [numbers past the list]}, or None when the message is anything else ("find me a pasta recipe")."""
+    t = " ".join(str(text or "").split())
+    if not t or not shown:
+        return None
+    forms = _name_forms(shown)
+    names = "|".join(re.escape(f) for f in sorted(forms, key=len, reverse=True))
+    rx = re.compile(r"(?<![\w])(?:#?(?P<num>\d{1,2})|(?P<name>" + names + r"))(?![\w])" + _SEP + _LABEL, re.I)
+    pairs, bad, rest, at = [], [], [], 0
+    for m in rx.finditer(t):
+        rest.append(t[at:m.start()])
+        at = m.end()
+        label = _label_of(m)
+        if m.group("num"):
+            n = int(m.group("num"))
+            if not 1 <= n <= len(shown):
+                bad.append(n)
+                continue
+            topic = shown[n - 1]
+        else:
+            topic = forms[" ".join(m.group("name").lower().split())]
+        pairs = [p for p in pairs if p[0] != topic] + [(topic, label)]
+    rest.append(t[at:])
+    if (not pairs and not bad) or not all(_FILLER.match(r) for r in rest):
+        return None
+    return {"pairs": pairs, "bad": bad}
+
+
+def relation_said(store, handle, text):
+    """'climbing is pursue now', 'guitar is not me now': (topic, label) for a stored topic (a "not me" one too), read
+    by code at any time; else None."""
+    m = _RELATION_NOW.match(str(text or ""))
+    if not m or "now" not in re.findall(r"[a-z]+", m.group(0).lower()):
+        return None
+    topics = [i["topic"] for i in store.profile_data(handle).get("interests") or [] if isinstance(i, dict)
+              and i.get("topic")]
+    topic = _name_forms(topics).get(" ".join(m.group("topic").lower().split()))
+    return (topic, _label_of(m)) if topic else None
+
+
+def set_relations(store, handle, pairs, now=None):
+    """Stores what each topic is to the person ([(topic, label)]). A "not me" topic becomes a marker; a label on a
+    marker brings the topic back as an interest. Returns the pairs stored."""
+    from .store import now_iso
+    data = store.profile_data(handle)
+    allx = [dict(i) for i in data.get("interests") or [] if isinstance(i, dict) and i.get("topic")]
+    done = []
+    for topic, label in pairs:
+        if label not in RELATIONS:
+            continue
+        for i in allx:
+            if i["topic"] == topic:
+                i.update(relation=label, relation_at=now_iso(now))
+                done.append((topic, label))
+                break
+    data["interests"] = allx
+    store.set_profile_data(handle, data)
+    return done
+
+
+def parked(prof):
+    """The topics the person parked for someday, in the order they are stored."""
+    return [i for i in prof["interests"] if i.get("relation") == "someday"]
