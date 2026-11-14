@@ -559,6 +559,18 @@ Code only; no prompt changed (`tests/test_round8_live.py`).
 - (102) A candidate whose title names a year the request's qualifiers name (`dates.request_years`: "for 2026", "next
   summer" in November 2026 is 2027) is read for things before those that only list things; "<kind> list" in a title
   promises a list ("Summer 2027 job list": "the names are in its slides, not its text.").
+- Check of the live fix pass (14 Nov, `tests/test_round8_checks.py`). (98 and 99) For a time-sensitive request a post
+  whose things are all old or passed, or a post of an earlier year, is never a clear source (`answers.source_rank`,
+  `stale_source`): it is not counted in the opening line and never leads a fresher post (the verdict order had undone
+  round 7's "old after everything fresher"); shown alone it is the closest, under its posted date. (100) The deadline
+  words make a request time-sensitive on their own (`dates.time_sensitive`: "stuff that expires", "what's due"); an
+  items answer with no clear post and no thing or post with a date ahead opens "Nothing in your saves has a deadline I
+  can read that is still ahead." then "These come closest:" (`render.no_deadline_shown`; a part of a message says it
+  under its label). (101) The refilled window is the first 40 candidates left in search order, shown in the order code
+  set (the kit sort used to pull ranks 41 to 60 in when nothing was removed), and `series_left_out` counts only the
+  series (it held the window cut too: the live run's 12 were 8 and 4). (102) "this summer" said in July is this year's
+  (`dates.request_years`); a reel or a video whose title promises a list says "the names are in its video, not its
+  text." (`render.is_video`), so case 2's two "Also" lines now say "video".
 
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);

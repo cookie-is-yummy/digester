@@ -598,3 +598,34 @@ def test_a_video_whose_title_promises_a_list_says_the_names_are_in_its_video(env
             self.url, self.platform = url, platform
     assert is_video(Item("https://www.instagram.com/reel/abc/")) and is_video(Item("https://www.instagram.com/tv/x/"))
     assert not is_video(Item("https://www.instagram.com/p/abc/")) and is_video(Item("https://y.be/x", "youtube"))
+
+
+def test_the_series_count_is_only_the_series_left_out_never_the_window_cut(env, tmp_path, monkeypatch):
+    """With the refilled window, `series_left_out` counted every candidate cut back to 40 as well (the live run's
+    '12 by the series rule' held 4 cut by the window)."""
+    rows = [(f"s{i}", "Guru", f"Beginner series Part {i}", None, "2025-01-01", "youtube") for i in range(1, 6)]
+    rows += [(f"o{i:02d}", f"maker{i}", f"Blender basics lesson {i}", None, "2025-01-01", "youtube") for i in range(60)]
+    use_lib(env, tmp_path, rows, name="libs")
+    monkeypatch.setenv("YOUTUBE_API_KEY", "test-key-not-real")
+    from mvp import ytinfo
+    monkeypatch.setattr(ytinfo, "fetch_batch", lambda ids, key, timeout=None: {"items": [
+        {"id": v, "snippet": {"description": "we model a donut" if v == "vids1" else "learn the basics",
+                              "publishedAt": "2025-01-01T00:00:00Z"}, "contentDetails": {"duration": "PT9M"}}
+        for v in ids]})
+    import mvp.config as C
+    monkeypatch.setattr(C, "OUTSIDE_ON", False)
+    env["state"]["answers"]["mvp_extract"] = lambda u: {}
+    env["seen"] = []
+
+    def compose(u):
+        env["seen"].append(u.split("Candidates:")[-1])
+        body = env["seen"][-1]
+        return {"picks": [pick(u, "Beginner series Part 1", title="Part 1")] if "Part 1" in body else
+                [pick(u, "Blender basics lesson 0", title="Lesson 0")]}
+    env["state"]["answers"]["mvp_compose"] = compose
+    say(env, "blender basics", ask7("blender basics"))
+    say(env, "what about something that isnt a donut.",
+        {"intent": "follow_up", "question": "What about something that isn't a donut?", "avoid": ["donut"]})
+    steps = json.loads(env["bot"].store.one("SELECT steps FROM runs WHERE kind='ask' ORDER BY id DESC")["steps"])
+    assert steps["series_left_out"] == 4
+    assert not any(f"Beginner series Part {i}" in env["seen"][-1] for i in range(2, 6))
