@@ -57,6 +57,65 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-011 · A read-only MCP server prototype for the person's own agent, ahead of the query API
+- **Date:** 2026-11-14
+- **Requested by:** Derrick (13 Nov: "think more carefully about the rules, integrations and tie everything back to the original first vision"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `docs/00-vision.md` › Out of scope for the MVP ("MCP server. Designed, built after the query API is stable"); `docs/02-tech-stack.md` (the MCP surface sits on the query API); `docs/07-privacy-and-safety.md` › sensitive categories ("hidden from agents … unless the user opts in").
+
+**What is requested**
+A local, read-only MCP server on the prototype code (`experiments/mvp/mcp_server.py`), started by hand, for one person's own agent on their own machine. It exposes search over their saves, one item's text, recent saves, their profile, rules and to-dos.
+
+**Why the requester wants it**
+The vision calls agent access "the paid core". Version 2 has outputs (message, email, calendar link, lists) but nothing an agent can read. The founder asked for integrations tied back to the vision.
+
+**Why it is better than the current approach**
+It lets the founders try the paid core on a real library now, at no model cost per call beyond the search embedding. It reuses the engine and the library view, so friends' posts stay out by construction.
+
+**Costs and risks**
+- The prototype has no stable query API. The tool shapes are not the contract and will change.
+- Captions the agent reads go to that agent's provider. `docs/07` covers our providers, not the person's.
+- The sensitive filter is the prototype's word list, not the tagger `docs/07` describes. Default is hidden.
+- A second process loads the library (memory).
+- Post text can carry instructions. Every result is marked as data, and no tool changes anything.
+
+**Agent's assessment**
+Agree as a prototype for the founders' own use only. Do not ship it to testers before the query API, the sensitive tagger and consent wording for the agent's provider exist. The design critic advised deferring it; this entry records that the build went ahead on the experiments branch because the founder asked for it.
+
+**Affected**
+Docs: `00-vision.md` (scope), `02-tech-stack.md`, `07-privacy-and-safety.md` · Code: `experiments/mvp/mcp_server.py`, its tests, `experiments/mvp/README.md` · Contract change: no (prototype) · Needs both founders: yes
+
+### A-010 · A recap the person asks for or schedules, and rules that stay quiet when empty
+- **Date:** 2026-11-14
+- **Requested by:** Derrick (12 and 13 Nov: rules beyond timing; tie back to the vision); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `experiments/BRIEF-10.md` section 15 item 7 ("Timing: not a weekly digest. A message goes out when the person asks or at a time they chose."); `experiments/mvp/DESIGN.md` (an empty timed send says "nothing new" every time).
+
+**What is requested**
+1. "How did my rules do?" and a recap rule the person makes themselves ("every Sunday at 6pm send me a recap"). Never offered at setup and never sent unasked.
+2. New repeating rules stay quiet on a day with nothing new, after one line the first time. Rules stored earlier keep their behaviour.
+3. Reminders that end when the person says "done", one nudge for an overdue to-do, and "remind me N days before it closes" for a thing in an answer.
+4. "What have I been into lately?" (rising, steady, fading, counted by code) and the theme check (pursue, practise, someday, enjoy, not me).
+
+**Why the requester wants it**
+`docs/00-vision.md` core loop steps 3 and 6 and the Understanding promise had no code. Empty sends could pause every rule through the unanswered-messages guard.
+
+**Why it is better than the current approach**
+- `docs/06` Executor step 3 already says "Nothing found → record and stop".
+- The recap is opt-in, so it fits "at a time they chose".
+- Every number in the recap and the trends answer is counted by code; no model call.
+
+**Costs and risks**
+- New prototype rule fields (`if_empty`, `stop_when`, content sources `trends` and `recap`) and profile labels. They are not in `docs/03` or `docs/06`.
+- Theme labels are new personal statements; "delete my data" must remove them.
+- Trend labels on a library that is refreshed only by exports can mislead. The answer names its anchor dates.
+
+**Agent's assessment**
+Agree. Item 1 changes a decision Derrick made on 12 Nov, so he should confirm it. Items 2 to 4 implement what the docs already describe, on prototype code.
+
+**Affected**
+Docs: `06-rules-and-actions.md` (RuleSpec fields, when ported), `experiments/BRIEF-10.md` · Code: `experiments/mvp/` (scheduler, schema, followup, profile, new `attention.py` and `digest.py`) · Contract change: no (prototype) · Needs both founders: no for item 1 (requester); yes when the fields are ported to `scrolldigest/schema/`
+
 ### A-009 · MVP v2: every kind of rule, a guessed-then-confirmed profile, outputs beyond chat, and YouTube picks from outside the library
 - **Date:** 2026-11-12
 - **Requested by:** Derrick, on 12 Nov 2026 after trying the first skeleton; written up by the agent
