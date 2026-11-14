@@ -385,7 +385,9 @@ def found_noun(goal):
     """The goal's noun phrase up to its kind of thing, when it is short ("UI/UX libraries for my next project": "UI/UX
     libraries"; "opportunities to pursue soon": "opportunities"); None otherwise (then "things")."""
     from .extract import THINGS
-    g = re.sub(r"^\s*(?:some|a few|any|the|good|great|other|more)\s+", "", (goal or "").strip(), flags=re.I)
+    # checker, round 8: every leading word that only grades or counts ("the best tools", "any other ui libraries")
+    g = re.sub(r"^\s*(?:(?:some|a few|any|the|good|great|other|more|best|top|cool|useful|nice|\d+)\s+)+", "",
+               (goal or "").strip(), flags=re.I)
     ends = [m for m in THINGS.finditer(g) if m.group(0).lower().endswith("s") and " " not in m.group(0)]
     if not ends:
         return None

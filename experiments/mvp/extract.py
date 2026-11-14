@@ -562,7 +562,9 @@ def clean_items(items, it, extra=None, key_points=None):
 
 
 # ---------- round 8, finding 94: does a post's text list named things? (a code score, on its own text) ----------
-_BULLET = re.compile(r"^\s*(?:\d{1,2}\s*[.)\-:]|\d️?⃣|[-*•·▪◦➤►▶→⇒➜➡✅✔☑🔸🔹⭐👉]|[^\w\s#@])\s*\S", re.U)
+# checker, round 8: a quote, a bracket or dots at a line's start are not list marks
+_BULLET = re.compile(r"^\s*(?:\d{1,2}\s*[.)\-:]|\d️?⃣|[-*•·▪◦➤►▶→⇒➜➡✅✔☑🔸🔹⭐👉]|[^\w\s#@\"'“”‘’(\[.…!?,;:])\s*\S",
+                     re.U)
 _NAMED = re.compile(r"^\s*(?:\d{1,2}\s*[.)\-:]\s*)?\W*\s*([A-Z][\w.'&+-]*(?:\s+[A-Z0-9][\w.'&+-]*){0,3})\s*(?::|\s[-–—]\s)\s*\S")
 _URL = re.compile(r"(?:https?://|www\.)\S+|\b[\w-]+\.(?:com|net|org|io|co|app|design|dev|ai|so)\b", re.I)
 
@@ -572,7 +574,8 @@ def list_score(raw):
     an arrow; @handles; web addresses; "Name: words" or "Name - words" lines; capitalised names that start several
     lines. 0 for a text that lists nothing."""
     lines = [x for x in (raw or "").splitlines() if x.strip()]
-    score = sum(1 for x in lines if _BULLET.match(x))
+    marked = sum(1 for x in lines if _BULLET.match(x))
+    score = marked if marked >= 2 else 0   # checker, round 8: one marked line ("🔥 new video") is not a list
     score += len(re.findall(r"(?<![\w@])@[A-Za-z0-9_.]{2,}", raw or ""))
     score += len(_URL.findall(raw or ""))
     score += sum(1 for x in lines if _NAMED.match(x))

@@ -188,3 +188,23 @@ def test_two_reminders_for_two_things_of_one_post_each_send_their_own_thing(env,
     env["clock"][0] = u(2026, 11, 28, 15, 1)
     assert bot.tick() == 1
     assert last(ch).endswith("1. Design Jam: a weekend event for beginners") and "NASA" not in last(ch)
+
+
+# ---------- finding 94: the opening line and the list score ----------
+def test_the_opening_line_drops_every_grading_or_counting_word_before_the_kind():
+    from mvp.render import found_noun
+    assert found_noun("the best tools") == "tools"
+    assert found_noun("top 5 tools") == "tools"
+    assert found_noun("any other ui libraries in my saves") == "ui libraries"
+    assert found_noun("some UI/UX libraries for my next project") == "UI/UX libraries"   # as before
+
+
+def test_one_marked_line_or_a_quote_bracket_or_dots_is_not_a_list():
+    from mvp.extract import list_score
+    for none in ('"quote of the day"\n(not mine)', "...wait for it", "🔥 new video out now",
+                 "[ad] my morning routine\nso calm"):
+        assert list_score(none) == 0, none
+    # emoji bullets and number emoji still count; a list of names on lines still counts
+    assert list_score("My stack 👇\n🎨 Figma\n⚡ Framer\n🌐 Webflow") >= 3
+    assert list_score("Top tools\n1️⃣ Notion\n2️⃣ Linear\n3️⃣ Raycast") >= 3
+    assert list_score("Figma\nFramer\nWebflow\nSpline") >= 1
