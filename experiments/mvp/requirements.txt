@@ -1,2 +1,4 @@
 # MVP skeleton (experiments/mvp). Also needs experiments/demo/requirements.txt for the search engine.
 pydantic>=2,<3
+# round 8, slice B: the read-only MCP server (mcp_server.py) and its tests; 2.x names the server MCPServer
+mcp==2.3.0
