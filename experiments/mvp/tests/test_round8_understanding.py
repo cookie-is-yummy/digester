@@ -563,7 +563,8 @@ def test_bn5_a_recap_rule_previews_starts_on_yes_and_sends_sunday(env):
     env["clock"][0] = SUN + timedelta(minutes=1)
     n0 = len(env["ch"].outbox)
     bot.tick()
-    sent = [m[2] for m in env["ch"].outbox[n0:]]
+    # (slice B's overdue nudge for the planted to-do may go out in the same tick once the two slices are merged)
+    sent = [m[2] for m in env["ch"].outbox[n0:] if not m[2].startswith("\"call the bank\" was due")]
     assert len(sent) == 1 and sent[0].startswith("Your recap since Sunday 15 November:")
     assert sent[0].endswith(f"\nReply \"stop {bot.store.rule_number(H, rule['id'])}\" to end these.")
     assert "mvp_compose" not in env["calls"]
