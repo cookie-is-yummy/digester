@@ -92,7 +92,10 @@ YEAR = re.compile(r"\b(20\d\d)\b")
 
 
 def time_sensitive(*texts):
-    return bool(TIME_SENSITIVE.search(" ".join(t for t in texts if t)))
+    """Checker of the live fix pass, round 8: a request that asks for deadlines ("stuff that expires", "what's due")
+    is time-sensitive too, so the deadline rule of finding 100 reads it."""
+    t = " ".join(t for t in texts if t)
+    return bool(TIME_SENSITIVE.search(t) or DEADLINE_ASK.search(t))
 
 
 # live fix pass, round 8 (finding 100): a request that asks for deadlines
@@ -113,8 +116,11 @@ def request_years(today, *texts):
     names ("for 2026"), and the year of "this" or "next" season ("next summer" in November 2026 is summer 2027)."""
     t = " ".join(x for x in texts if x)
     out = {int(y) for y in YEAR.findall(t)}
-    for _, season in SEASON.findall(t):   # the season's next start, from this month on
-        out.add(today.year if SEASON_START[season.lower()] >= today.month else today.year + 1)
+    for which, season in SEASON.findall(t):   # the season's next start, from this month on
+        start = SEASON_START[season.lower()]
+        # (checker: "this summer" said in July is the summer we are in, never next year's)
+        inside = which.lower() == "this" and start != 12 and start <= today.month <= start + 2
+        out.add(today.year if inside or start >= today.month else today.year + 1)
     return out
 
 

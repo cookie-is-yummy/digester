@@ -411,3 +411,190 @@ def test_my_rules_says_a_trends_rule_sends_with_each_export(lib8):
     lib8["bot"].store.add_rule(H, "new pasta", {"when": {"type": "new_items"}, "content": {
         "goal": "a pasta recipe", "searches": ["pasta"]}}, "active", None)
     assert "2. a pasta recipe: whenever you save something new that fits" in send(lib8, "my rules")
+
+
+# ---------- checker of the round 8 live fix pass (findings 98 to 102; DESIGN.md section 12) ----------
+import json  # noqa: E402
+from datetime import date  # noqa: E402
+
+from mvp.tests.test_round7 import ask as ask7, items_fake, pick, use_lib  # noqa: E402
+
+OLDNOW = ("Programs open now\n- Cedar Lab: applications are open now for first year students\n"
+          "- Birch Fund: apply now for a small grant")
+FRESH = ("Programs for students\n- Maple Grant: closes December 20 2026, for any major\n"
+         "- Aspen Lab: closes January 10 2027, for builders")
+OLD_TABLE = {
+    "Programs open now": {"items": [
+        {"name": "Cedar Lab", "about": "applications are open now for first year students", "fit": "yes"},
+        {"name": "Birch Fund", "about": "apply now for a small grant", "fit": "yes"}]},
+    "Programs for students": {"items": [
+        {"name": "Maple Grant", "about": "closes December 20 2026, for any major", "when": "December 20 2026",
+         "fit": "yes"},
+        {"name": "Aspen Lab", "about": "closes January 10 2027, for builders", "when": "January 10 2027",
+         "fit": "yes"}]}}
+
+
+def old_and_fresh(env, tmp_path, fresh_verdict="close"):
+    use_lib(env, tmp_path, [("o1", "oldies", OLDNOW, "2024-04-01", "2024-04-02", "instagram"),
+                            ("f1", "fresh", FRESH, "2026-10-20", "2026-10-21", "instagram")], name="libold")
+    env["state"]["answers"]["mvp_extract"] = items_fake(OLD_TABLE)
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        pick(u, "Programs open now", title="Programs open now"),
+        pick(u, "Programs for students", fresh_verdict, title="Programs for students")]}
+    return env
+
+
+def test_a_clear_post_whose_things_are_all_old_rounds_never_leads_a_fresh_post_or_is_counted(env, tmp_path):
+    """Finding 98 put the composer's verdict before round 7's 'old after everything fresher': a clear post of 2024
+    whose things all 'have probably closed' led, was counted as 'I found 2 student programs', and the post with two
+    deadlines ahead went under 'Close, but not quite what you asked:'."""
+    old_and_fresh(env, tmp_path)
+    msg = say(env, "student programs to apply for", ask7("student programs to apply for", ["student programs"]))
+    assert msg.startswith('Nothing I found is a clear fit for "student programs".\nThese come closest:\n')
+    assert "I found 2" not in msg and "Close, but not quite" not in msg
+    assert msg.index("1. Maple Grant") < msg.index("3. Cedar Lab")          # fresher first, one numbering
+    assert "probably closed" in msg.split("3. Cedar Lab")[1]
+    # near-variant: with the fresh post clear too, it is the one counted, and the old one comes close
+    old_and_fresh(env, tmp_path / "b", fresh_verdict="clear")
+    msg = say(env, "student programs to apply for", ask7("student programs to apply for", ["student programs"]))
+    assert msg.startswith("I found 2 student programs in your saves, and one post that comes close.\n")
+    assert msg.index("1. Maple Grant") < msg.index("Close, but not quite what you asked:") < msg.index("Cedar Lab")
+    # near-variant: a request that is not time-sensitive keeps the composer's verdicts (the old post is clear)
+    old_and_fresh(env, tmp_path / "c")
+    msg = say(env, "student club ideas", ask7("student club ideas"))
+    assert msg.startswith("I found 2 student club ideas in your saves, and one post that comes close.\n")
+    assert msg.index("1. Cedar Lab") < msg.index("Close, but not quite") < msg.index("3. Maple Grant")
+
+
+def test_an_earlier_years_post_alone_is_the_closest_never_counted_as_found(env, tmp_path):
+    """Finding 99 left a 2024 post shown alone as 'I found 2 opportunities named in one of your saves.'."""
+    cap = ("Side income plans for 2024? Side opportunities\n- Gigboard: find freelance clients for your skills\n"
+           "- Taskly: sell small gigs to buyers online")
+    use_lib(env, tmp_path, [("y1", "hustle", cap, "2024-03-15", "2024-05-01", "instagram")], name="liby")
+    env["state"]["answers"]["mvp_extract"] = items_fake({"Side income plans": {"items": [
+        {"name": "Gigboard", "about": "find freelance clients for your skills", "fit": "yes"},
+        {"name": "Taskly", "about": "sell small gigs to buyers online", "fit": "yes"}]}})
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Side income plans", title="Side income")]}
+    msg = say(env, "opportunities to pursue soon", ask7("opportunities to pursue soon"))
+    assert msg.startswith('Nothing I found is a clear fit for "opportunities".\nThese come closest:\n')
+    assert "(posted March 2024, saved May 2024):\n1. Gigboard" in msg
+    # near-variant: not time-sensitive, unchanged
+    msg = say(env, "side hustle ideas", ask7("side hustle ideas"))
+    assert msg.startswith("I found 2 side hustle ideas named in one of your saves.\n")
+
+
+STORY = "Late night form\n3 friends. 1 form. 0 sleep. 2 hours before the deadline. All in."
+
+
+def test_a_request_for_deadlines_without_a_time_word_still_needs_a_date(env, tmp_path):
+    """Finding 100 ran only for a request code already called time-sensitive: 'stuff that expires' or 'things that
+    are due' recommended a story with no date."""
+    use_lib(env, tmp_path, [("t1", "storyteller", STORY, "2026-05-12", "2026-05-13", "instagram")], name="libd")
+    env["state"]["answers"]["mvp_extract"] = lambda u: {}
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Late night form", title="Late night form")]}
+    for text in ("stuff that expires", "things that are due", "anything closing"):
+        msg = say(env, text, ask7(text))
+        assert msg.startswith("Nothing in your saves has a deadline I can read that is still ahead.\n"), text
+        assert "It mentions a deadline but gives no date." in msg and "I recommend" not in msg
+    from mvp.dates import time_sensitive
+    assert time_sensitive("stuff that expires") and time_sensitive("what's due")
+    assert not time_sensitive("workouts due to my knee") and not time_sensitive("startup stories")
+    msg = say(env, "startup stories", ask7("startup stories"))
+    assert "I recommend Late night form" in msg
+
+
+def test_an_items_answer_for_deadlines_with_no_date_says_so(env, tmp_path):
+    """An items answer whose things name no date read as 'Nothing I found is a clear fit for "design awards with
+    deadlines".' instead of finding 100's line."""
+    cap = ("Design awards\n- Kite Award: a prize for student designers, deadline soon\n"
+           "- Lumen Prize: for interface work, mind the deadline")
+    use_lib(env, tmp_path, [("a1", "awards", cap, "2026-10-01", "2026-10-02", "instagram")], name="liba")
+    table = {"Design awards": {"items": [
+        {"name": "Kite Award", "about": "a prize for student designers, deadline soon", "fit": "yes"},
+        {"name": "Lumen Prize", "about": "for interface work, mind the deadline", "fit": "yes"}]}}
+    env["state"]["answers"]["mvp_extract"] = items_fake(table)
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Design awards", title="Design awards")]}
+    msg = say(env, "design awards with deadlines", ask7("design awards with deadlines"))
+    assert msg.startswith("Nothing in your saves has a deadline I can read that is still ahead.\nThese come "
+                          "closest:\n")
+    assert "1. Kite Award" in msg and "2. Lumen Prize" in msg
+    # inside a split message the part says it too
+    msg = say(env, "startup reels, or design awards with deadlines",
+              ask7("startup reels, design awards with deadlines"))
+    part = msg.split("Design awards with deadlines:")[1]
+    assert part.lstrip("\n").startswith("Nothing in your saves has a deadline I can read that is still ahead.\n"
+                                        "These come closest:")
+    # near-variant: a thing with a date ahead keeps the post a clear fit
+    table["Design awards"]["items"][0]["about"] = "a prize for student designers, deadline December 3"
+    env["state"]["answers"]["mvp_extract"] = items_fake(table)
+    cap2 = cap.replace("deadline soon", "deadline December 3")
+    use_lib(env, tmp_path / "b", [("a1", "awards", cap2, "2026-10-01", "2026-10-02", "instagram")], name="liba2")
+    msg = say(env, "design awards with deadlines", ask7("design awards with deadlines"))
+    assert msg.startswith("I found 2 design awards with deadlines named in one of your saves.\n")
+    assert "1. Kite Award: a prize for student designers, deadline December 3 (deadline 3 December, in 21 days)" in msg
+
+
+def test_the_refilled_window_takes_no_candidate_when_nothing_was_removed(env, tmp_path):
+    """Finding 101 widened the search to 60 when the request has an avoid word, and the kit sort ran over all 60
+    before the cut: posts ranked 41 to 45 that name the person's kit took places no removal had freed."""
+    rows = [(f"r{i:02d}", f"cook{i}", f"Pasta dinner number {i}", None, "2026-01-01", "instagram") for i in range(40)]
+    rows += [(f"k{i:02d}", f"kit{i}", f"Instant Pot pasta dinner {i}", None, "2026-01-01", "instagram")
+             for i in range(5)]
+    use_lib(env, tmp_path, rows, name="libk")
+    env["bot"].store.set_prefs(H, tools=["Instant Pot"])
+    env["state"]["answers"]["mvp_extract"] = lambda u: {}
+    env["seen"] = []
+
+    def compose(u):
+        env["seen"].append(u.split("Candidates:")[-1])
+        return {"picks": [pick(u, "Pasta dinner number 0", title="Pasta 0")]}
+    env["state"]["answers"]["mvp_compose"] = compose
+    say(env, "pasta dinners without mushrooms", ask7("pasta dinners", avoid=["mushrooms"]))
+    assert "Instant Pot pasta dinner" not in env["seen"][0] and "Pasta dinner number 39" in env["seen"][0]
+    steps = json.loads(env["bot"].store.one("SELECT steps FROM runs WHERE kind='ask' ORDER BY id DESC")["steps"])
+    assert steps["refilled"] == 0
+    # near-variant: a post removed by the avoid word frees a place, and the next rank takes it (the kit sort still
+    # puts what names their kit first inside the window)
+    rows[3] = ("r03", "cook3", "Pasta dinner number 3 with mushrooms", None, "2026-01-01", "instagram")
+    use_lib(env, tmp_path / "b", rows, name="libk2")
+    env["seen"].clear()
+    say(env, "pasta dinners without mushrooms", ask7("pasta dinners", avoid=["mushrooms"]))
+    seen = env["seen"][0]
+    assert "number 3 " not in seen and "Instant Pot pasta dinner 0" in seen and "Instant Pot pasta dinner 1" not in seen
+    assert seen.index("Instant Pot pasta dinner 0") < seen.index("Pasta dinner number 0")
+
+
+def test_this_season_said_inside_it_is_this_years():
+    from mvp.dates import request_years
+    assert request_years(date(2026, 7, 10), "this summer") == {2026}
+    assert request_years(date(2026, 10, 1), "this fall") == {2026}
+    assert request_years(date(2026, 7, 10), "next summer") == {2027}
+    assert request_years(date(2026, 11, 14), "this spring") == {2027}
+    assert request_years(date(2026, 11, 14), "this winter") == {2026}
+
+
+def test_a_video_whose_title_promises_a_list_says_the_names_are_in_its_video(env, tmp_path):
+    """A reel or a video has no slides: 'the names are in its slides' was said of two reels in the live check."""
+    from mvp.render import is_video
+    progs = ("Student programmes worth a look\n- Northwind Lab: for students who build software\n"
+             "- Orbit Fellows: a paid summer program for students")
+    rows = [("m1", "chances", progs, "2026-08-20", "2026-08-21", "instagram"),
+            ("v1", "lists", "Summer 2027 job list", None, "2026-07-03", "youtube"),
+            ("p1", "lists2", "Summer 2027 internship list", "2026-07-02", "2026-07-03", "instagram")]
+    use_lib(env, tmp_path, rows, name="libv")
+    env["state"]["answers"]["mvp_extract"] = items_fake({"Student programmes worth a look": {"items": [
+        {"name": "Northwind Lab", "about": "for students who build software", "fit": "yes"},
+        {"name": "Orbit Fellows", "about": "a paid summer program for students", "fit": "yes"}]}})
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [
+        pick(u, "Student programmes worth a look", title="Student programmes"),
+        pick(u, "Summer 2027 job list", "close", title="Summer 2027 job list"),
+        pick(u, "Summer 2027 internship list", "close", title="Summer 2027 internship list")]}
+    msg = say(env, "jobs for next summer", ask7("jobs for next summer", ["summer jobs"]))
+    assert "• Summer 2027 job list by lists: the names are in its video, not its text." in msg
+    assert "• Summer 2027 internship list by @lists2: the names are in its slides, not its text." in msg
+
+    class Item:
+        def __init__(self, url, platform="instagram"):
+            self.url, self.platform = url, platform
+    assert is_video(Item("https://www.instagram.com/reel/abc/")) and is_video(Item("https://www.instagram.com/tv/x/"))
+    assert not is_video(Item("https://www.instagram.com/p/abc/")) and is_video(Item("https://y.be/x", "youtube"))

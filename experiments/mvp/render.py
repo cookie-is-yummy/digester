@@ -428,7 +428,9 @@ def items_intro(result, spec, lang=None):
     srcs = result["items_answer"]
     clear = [s for s in srcs if is_clear_source(s[0])]
     if not clear:   # live fix pass, round 8 (finding 98): nothing clear: the closest wording, never "I found N ..."
-        return no_clear_line(result, spec, lang) + "\n" + t["items_closest_head"]
+        # (checker: a request for deadlines with no date ahead in what is shown says that, as the picks answer does)
+        head = t["no_deadline"] if no_deadline_shown(result) else no_clear_line(result, spec, lang)
+        return head + "\n" + t["items_closest_head"]
     if result.get("intro_code"):
         return end_sentence(result["intro_code"])
     n, k = sum(len(its) for _, its, _ in clear), len(clear)
@@ -441,6 +443,16 @@ def items_intro(result, spec, lang=None):
     # live fix pass, round 8 (finding 98): only the clear posts' things are counted as the kind asked for
     head = t["items_found_c_one" if k == 1 else "items_found_c"].format(n=n, noun=noun, k=k)
     return head + (t["and_close_one"] if m == 1 else t["and_close"].format(m=m))
+
+
+def no_deadline_shown(result):
+    """Checker of the live fix pass, round 8 (finding 100): a request for deadlines (Executor._deadline_fit) whose
+    items answer shows no thing and no post with a date ahead that code reads."""
+    if not result.get("deadline_none"):
+        return False
+    srcs = result.get("items_answer") or []
+    return not any(x.get("state") == "open" for _, its, _ in srcs for x in its) and \
+        not any((p.get("date_state") or {}).get("state") == "open" for p, _, _ in srcs)
 
 
 def no_clear_line(result, spec, lang=None):
@@ -493,6 +505,8 @@ def items_message(result, spec, footer=None, now=None, lang=None):
     any_clear = any(is_clear_source(p) for p, _, _ in srcs)
     parts, text = [], ([] if result.get("no_intro") else [items_intro(result, spec, lang)])
     if result.get("no_intro") and not any_clear:   # a part of a message: its label, then what comes closest
+        if no_deadline_shown(result):   # (checker: a deadlines part says it has no date ahead, as for picks)
+            text.append(t["no_deadline"])
         text.append(t["items_closest_head"])
     if result.get("level_note"):
         text.append(result["level_note"])
@@ -531,7 +545,9 @@ def items_message(result, spec, footer=None, now=None, lang=None):
         text.append(t["items_also"])
         for p in rest:
             if p.get("things") and promises_slides(p):
-                text.append(f"• {p['title']}{by(p['item'], lang)}: {t['in_slides']}" +
+                # (checker of the live fix pass: a reel or a video has no slides; its names are in the video)
+                where = t["in_its_video" if is_video(p["item"]) else "in_slides"]
+                text.append(f"• {p['title']}{by(p['item'], lang)}: {where}" +
                             (f" {p['item'].url}" if p["item"].url else ""))
                 continue
             note = alt_note(p, result.get("extract"), lang)
@@ -546,6 +562,12 @@ def items_message(result, spec, footer=None, now=None, lang=None):
     if text:
         parts.append({"type": "text", "text": "\n".join(text).strip("\n")})
     return Reply(parts)
+
+
+def is_video(it):
+    """A reel, an Instagram TV link or a YouTube video: it has no slides."""
+    return getattr(it, "platform", None) == "youtube" or bool(re.search(r"instagram\.com/(?:reels?|tv)/",
+                                                                        getattr(it, "url", "") or ""))
 
 
 def promises_slides(p):

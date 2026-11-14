@@ -128,10 +128,13 @@ def judged(p):
 
 def source_rank(p):
     """Live fix pass, round 8 (finding 98): the composer's verdict leads the sources: its clear posts, then its close
-    ones, then posts read only for their list (the composer saw them among the candidates and did not pick them)."""
+    ones, then posts read only for their list (the composer saw them among the candidates and did not pick them).
+    Checker of the live fix pass: for a time-sensitive request a post whose things are all old or passed, or a post of
+    an earlier year, is never a clear source (code lowers the verdict, never raises it), so it is not counted as the
+    kind asked for and never leads a fresher post."""
     if not judged(p):
         return 2
-    return 0 if p.get("verdict") == "clear" else 1
+    return 0 if p.get("verdict") == "clear" and not p.get("stale_source") else 1
 
 
 def is_clear_source(p):
@@ -216,6 +219,8 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
         srcs.sort(key=lambda s: (all(x.get("state") in ("old", "passed") for x in s[1]),
                                  all(not x.get("year_hit", True) for x in s[1]),
                                  -_ord(s[0].get("posted") or s[0].get("kept_first"))))
+        for p, its in srcs:   # checker of the live fix pass: an old round is never a clear source (source_rank)
+            p["stale_source"] = bool(p.get("old_year")) or all(x.get("state") in ("old", "passed") for x in its)
     srcs = [s for s in srcs if s[1]]
     if sum(len(its) for _, its in srcs) < 2:
         result["items_more"] = []

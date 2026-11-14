@@ -438,6 +438,7 @@ class ExecutorMixin:
                                          k=config.CANDIDATES + (self.REFILL if widen else 0))
                 cost += meta.get("cost_usd", 0.0)
                 first_window = {x.id for x in cands[:config.CANDIDATES]}
+                search_rank = {x.id: i for i, x in enumerate(cands)}
                 if kits:   # finding 53: picks that use their kit come first (the search order kept otherwise)
                     cands = sorted(cands, key=lambda it: not any(mentions(it.caption, k) for k in kits))
             steps["search"] = round(time.time() - t0, 2)
@@ -458,13 +459,16 @@ class ExecutorMixin:
                     steps["copies"] = n_copies
             gone = getattr(self._tl, "passed_on", None) if cands_override is None else None
             if gone:   # round 8, finding 96: the rest of a passed-on series goes; its creator's other posts go last
-                cands, n_series = self._after_passed_on(cands, gone, limit=config.CANDIDATES if widen else None)
+                cands, n_series = self._after_passed_on(cands, gone)
                 if n_series:
                     steps["series_left_out"] = n_series
             if widen:   # live fix pass, round 8 (finding 101): the window as before, refilled from the next ranks
-                steps["refilled"] = max(0, min(len(cands), config.CANDIDATES) - len(
-                    [x for x in cands[:config.CANDIDATES] if x.id in first_window]))
-                cands = cands[:config.CANDIDATES]
+                # (checker: the window is the first CANDIDATES left in search order, then shown in the order above,
+                # so a kit sort or the passed-on creator moved last never pulls in a candidate when no place was freed)
+                window = set(sorted((x.id for x in cands), key=lambda i: search_rank.get(i, 10 ** 9))
+                             [:config.CANDIDATES])
+                cands = [x for x in cands if x.id in window]
+                steps["refilled"] = sum(1 for x in cands if x.id not in first_window)
             t1 = time.time()
             about, level_ok, guessed = self._profile_text(h, spec.content.goal, request_text or "",
                                                           *spec.content.searches)
@@ -916,11 +920,11 @@ class ExecutorMixin:
     REFILL = 20   # live fix pass, round 8 (finding 101): candidates past the window that may refill it
 
     @staticmethod
-    def _after_passed_on(cands, gone, limit=None):
+    def _after_passed_on(cands, gone):
         """Round 8, finding 96: (candidates, how many left out): a candidate by the creator of a pick passed on by a
         word, whose title is the rest of that pick's numbered series, is left out; the creator's other posts come after
-        every other creator's (the search order kept otherwise). `limit` (live fix pass, round 8, finding 101): the
-        window is cut to that many before the creator's posts are moved, so they stay in it."""
+        every other creator's (the search order kept otherwise). (Live fix pass, finding 101: a refilled window is cut
+        after this by search rank, so the creator's posts that were in it stay in it.)"""
         from .compose import title_from_item
         from .followup import series_key
         from .retrieve import name_matches
@@ -931,8 +935,6 @@ class ExecutorMixin:
             if numbered and any(name_matches(it.creator or "", c) and stem == k for c, k in keys):
                 continue
             kept.append(it)
-        if limit is not None:
-            kept = kept[:limit]
 
         def by_them(it):
             return any(name_matches(it.creator or "", c) for c in gone.get("creators") or [])

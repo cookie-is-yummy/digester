@@ -53,6 +53,7 @@ EN = {
     "items_more_line": "{title}{by}: it names {n} more.",
     "items_more_line_one": "{title}{by}: it names one more.",
     "in_slides": "the names are in its slides, not its text.",
+    "in_its_video": "the names are in its video, not its text.",
     # live fix pass, round 8 (findings 98, 100, 101): what is a clear fit and what only comes close
     "items_found_c": "I found {n} {noun} named in {k} of your saves",
     "items_found_c_one": "I found {n} {noun} in your saves",
@@ -153,6 +154,7 @@ ES = {
     "items_more_line": "{title}{by}: nombra {n} más.",
     "items_more_line_one": "{title}{by}: nombra una más.",
     "in_slides": "los nombres están en sus imágenes, no en su texto.",
+    "in_its_video": "los nombres están en su video, no en su texto.",
     "items_found_c": "Encontré {n} {noun} en {k} de lo que guardaste",
     "items_found_c_one": "Encontré {n} {noun} en lo que guardaste",
     "and_close": ", y {m} publicaciones que se acercan.",
