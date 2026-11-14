@@ -461,9 +461,57 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
   the composer.
 - The opening line code builds never echoes a goal of more than 6 words ("Here's what I found in your saves.").
 
+### Round 8, slice A2: the items answer holds real named things (findings 93 to 97)
+- (93) An item is a specific named thing a person could look up or act on (prompt `extract_v3`; `extract_v2` stays).
+  Code (`extract.clean_items`, also on items cached by an earlier prompt) drops a name made only of kind words,
+  audiences, counts and small words (`generic_name`: "design systems", "underclassmen", "5 tools"); a name used as a
+  common noun everywhere it occurs (`common_noun`: all lower case after a determiner or adjective, or all lower case with
+  no digit, dot, @ or capital; or ending in two lower-case kind words after one, "the right Figma design system"; text
+  in capitals throughout skips the capital tests); and the post's headline whose words say it again
+  (`restates_headline`, first line without a leading count; never for a name with no words). Words with fewer than 3
+  content words beyond the name (`thin_about`), or a story ("1 YC application. 0 startup experience."), are not its
+  words; judgement: the rest of the thing's own "Name: words" line counts with one content word or more ("Iconoir: free
+  icons"). One thing left and key points found: its words are its first two key points. A post that names other things
+  drops a thing with no words, unless the text lists it on a line of its own (judgement after the live check: three
+  posts listed 6 to 8 libraries by name alone and the answer had nothing). For a request that names a kind of thing
+  (`extract.asks_for_things`) only fit "yes" is shown, unless fewer than 2 "yes" over all posts; a thing counts only with
+  words or listed; fewer than 2 make no items answer (the recommend format with key points). A shown pick whose title or
+  first line promises a list (`extract.promises_list`: a count before a kind word, "best/top ... <kinds>", "a list of")
+  and shows no thing reads "<title> by <creator>: the names are in its slides, not its text." with its link.
+- (94) For a request that names a kind of thing, the details calls run on up to 6 posts (`Executor._items_reads`): the
+  shown picks, then the composer's other clear or close picks (`check()` returns `others` and `rejected`), then the
+  other candidates by `extract.list_score` on their own text (list marks, @handles, web addresses, "Name: words"
+  lines, repeated capitalised line starts); beyond the shown picks only a score above zero and a topic word of the
+  request (`outside.query_words`), never a "no", an avoided word or creator; one call each, no retry; `steps.items_reads`.
+  Other requests read their top 3 shown picks as in round 7. Sources by how many good things (a time-sensitive
+  request keeps all-old posts last), at most 3; the next two are `items_more`: "More in your saves:" / "• Title by
+  @creator: it names N more. <link>". The stored picks follow that order. Opening line by code: "I found 9 UI/UX
+  libraries named in 3 of your saves." (`render.found_noun`: the goal up to its kind word, at most 4 words; else
+  "things"); a changed request keeps its own line.
+- (95) `answers.split_asks(message, goal)`: a list of different kinds of thing joined by commas, "or", "and", "plus",
+  "also", each part with its own head noun (distinct), at most 3; a part with no head noun joins the next before
+  "and"/"or" and the one before after a comma or at the end ("chicken and rice recipes", "quick and easy dinners",
+  "pasta or rice dishes" stay one). `Executor.ask_parts`: each part is an ask of its own words with count 2, no
+  must-haves of the whole message, the request's avoid list and filters; at most 6 details calls over the parts (each
+  part gets its share); caps checked before each later part ("I stopped there to stay within today's limit, so I didn't
+  search for the rest."). One reply: "<Part words>:" then its answer without an opening line, or "Nothing in your saves
+  clearly fits this part." The answer kept and the last answer hold every part's picks and things, numbered across
+  parts.
+- (96) A follow-up that rejects shown picks by an avoid word (`followup.passed_on`, the change path and the "more"
+  path, descriptions read): a candidate by that creator whose title is the rest of that pick's numbered series
+  (`followup.series_key`: "... Part 4" for "... Part 1" or the unnumbered first) is left out; the creator's other posts go
+  after every other creator's, before the composer and again in the shown order; one is shown only when fewer than 2
+  picks from other creators fit, with "same creator as the one you passed on".
+- (97) `interpret.chat_guard` after interpretation (no prompt change): a `chat` form whose message has 5 words or more,
+  is not about the bot, a greeting, thanks or a feeling, has no rule or reminder words, and either speaks of their own
+  saves in the first person or names a kind of thing with "find", "show", "send", "any", "other", "more", is an ask of
+  the message without its question words ("what other opportunities might i have missed" asks "other opportunities i
+  might have missed"). On the dev files: 0 of 5 chat, help or unsupported cases and 0 of 32 test messages sent with a
+  chat or help form flip.
+
 ### Not done in this round
-- Several asks in one message ("startup motivation reels, opportunities to pursue soon, or things with deadlines")
-  still get one answer for the whole message, not one labelled part per ask.
+- A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
+  "another" after a split answer repeats the whole message as one request.
 - "add them all" after an items answer adds the source posts; a question about a numbered thing ("how long is the
   second one?") is about the posts shown. A title from an old post that says "now open" is kept as the post's words
   (for a time-sensitive request the date line after it says it is old).
