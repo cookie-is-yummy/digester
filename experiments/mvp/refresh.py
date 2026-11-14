@@ -837,7 +837,7 @@ def run_new_items(bot, person, new_ids, now, capped=None, only_rules=None):
             if spec.content.source != "trends":   # round 8 (BN3): nothing new, so the counts have not changed
                 nothing.append(spec.content.goal)
             continue
-        if bot._over_cap(person):
+        if spec.content.source != "trends" and bot._over_cap(person):   # round 8: trends cost nothing
             bot.store.add_run(handle=h, rule_id=r["id"], kind="scheduled", status="over_cap", at=now_iso(now))
             if capped is not None:
                 capped.append((r["id"], spec.content.goal))

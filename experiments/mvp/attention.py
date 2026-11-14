@@ -226,3 +226,47 @@ class AttentionMixin:
                                       created_at=now_iso(now))
         self._wrote_rule(h, f"saved a rule, \"{spec.content.goal}\"", rule_id)   # "undo" stops it
         return self.send(h, T.trends_rule_started(self.store.rule_number(h, rule_id)))
+
+
+def main(argv=None):
+    """The live check, counts only: python3 -m mvp.attention <library> [--store PATH] [--person N]. Prints the anchor
+    dates, the totals, and per stored topic (by its number, never its name) its label and counts, then the seconds the
+    counting took once the library is loaded. The store is opened read-only; nothing is written."""
+    import argparse
+    import json
+    import sqlite3
+    import time
+    from . import config
+    from .libview import LibraryView
+    ap = argparse.ArgumentParser(description=main.__doc__)
+    ap.add_argument("library")
+    ap.add_argument("--store", default=config.DB)
+    ap.add_argument("--person", type=int, default=1, help="the person's place in the store (1 = the first)")
+    a = ap.parse_args(argv)
+    t0 = time.time()
+    view = LibraryView(a.library)
+    loaded = time.time() - t0
+    db = sqlite3.connect(f"file:{a.store}?mode=ro", uri=True)
+    rows = db.execute("SELECT profile, direction FROM people ORDER BY rowid").fetchall()
+    db.close()
+    profile, direction = rows[a.person - 1] if len(rows) >= a.person else (None, None)
+    interests = [i for i in (json.loads(profile or "{}").get("interests") or []) if isinstance(i, dict)
+                 and i.get("topic") and i.get("relation") != "not_me"]
+    t1 = time.time()
+    data = trends(view, {"interests": interests}, direction)
+    took = time.time() - t1
+    print("anchors: " + ", ".join(f"{p} {d.isoformat()}" for p, d in sorted(data["anchors"].items())))
+    print(f"kept lately: {data['recent_total']}, in the 182 days before: {data['before_total']}")
+    names = {t["topic"]: k for k, t in enumerate(data["topics"], 1)}
+    for k, t in enumerate(data["topics"], 1):
+        print(f"topic {k}: {t['trend']}, lately {t['recent']}, before {t['before']}, liked {t['liked']}, "
+              f"label {t['relation'] or '-'}")
+    d = data["direction"]
+    if d:
+        print(f"direction: topic {names.get(d['topic'], '-')}, lately {d['recent']}, before {d['before']}")
+    print(f"library loaded in {loaded:.1f} s; counted in {took:.2f} s ({len(view.items)} items, "
+          f"{len(view.items) / max(took, 1e-9):.0f} items/s)")
+
+
+if __name__ == "__main__":
+    main()

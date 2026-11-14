@@ -468,3 +468,75 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
   second one?") is about the posts shown. A title from an old post that says "now open" is kept as the post's words
   (for a time-sensitive request the date line after it says it is old).
 - "what about pasta?" (a new topic in a follow-up form) is not turned into a new request by code.
+
+## 14. Understanding: trends, theme check, recap (round 8, slice B, 14 Nov 2026)
+
+The vision's Understanding promise and core loop steps 3 and 6 (docs/00). Code only: no model call, no interpreter
+prompt change, every number counted by code. It adds to sections 5 and 11; where they differ, this section wins.
+Stored specs and stores from before load as they were (new sources are optional values; `answers.spec` is an added
+column).
+
+### What you have been into lately (BN3, `attention.py`)
+- Asked by code, whole message: "what have I been into (lately)", "what am I into lately", "what's rising", "what's
+  fading" (`followup.TRENDS_ASK`).
+- Kept = a save, collection, share to self or playlist, dated by the latest of those. Likes are counted apart and
+  always said as "liked". Watches never count. Friends' posts are never in the view.
+- A topic's posts: its guess's support lines plus kept posts whose text has one of its checked words
+  (`retrieve.contains_word`). Sensitive topics (`profile.sensitive`) and "not me" topics are never shown.
+- Windows end at the newest date of any kind per platform in the library, never today: lately = the 56 days up to it,
+  before = the 182 days before that. Compared by share of all kept posts in each window: rising (at least 5 lately and
+  at least 2 times the earlier share), fading (at least 10 before and at most 0.4 times), steady (at least 3 lately),
+  else "too few to tell" with its likes count.
+- The message (`texts.trends_message`, at most 7 lines): the totals with the anchor dates and their years, one line per
+  topic ("• Blender 3D is rising: 6 posts that mention it lately, 1 before."), "Parked for someday: ..." and "Just for
+  fun: ..." (counts only, no trend word), and the direction against `profile.match_topic` (never an "enjoy" topic):
+  its counts, or "Nothing you kept lately mentions it, so I can't tell how that's going from your saves."
+- On request it ends with "Reply "every export" ..." while no trends rule exists. "every export" as the next message
+  makes a `new_items` rule with content source `trends` (no preview: the answer just shown is what it sends; "undo"
+  and "stop N" end it). `refresh.run_new_items` runs it on the library the import switched to, past the cost cap (it
+  costs nothing); an import with nothing new sends nothing for it.
+- Live check: `python3 -m mvp.attention <library> [--store PATH] [--person N]` prints anchors, totals, and per topic
+  number its label and counts and the seconds; no names, captions or handles; the store is opened read-only.
+
+### The theme check (BN4, `profile.py`)
+- Profile interests gain `relation` (pursue | practise | someday | enjoy | not_me) and `relation_at`. "delete my data"
+  removes them with the profile.
+- Asked once (`themecheck_asked:<handle>`), appended to the first trends answer that shows unlabelled topics (at most
+  5), never while the setup is open. The list is held in `themecheck:<handle>` for the next message only.
+- `profile.parse_labels`: numbers or the topics' names, each with a label in common words ("practise", "for fun",
+  "someday", "later", "not me", "nope", "pursue", "goal"), and nothing else but commas and "and"; else None and the
+  message goes the normal way (the question ends). A number past the list: "Which one? I listed 4. ..." and the
+  question stays open.
+- Any time, read by code: "<topic> is <label> now" (a stored topic, a "not me" one too), "what did I park?" (someday
+  topics with their saved counts).
+- "not me" (also a topic dropped by a profile update) stays as a marker: `profile.get` leaves it out, so the
+  interpreter's and composer's lines, "what do you know about me", the setup's read and its first requests never
+  hold it, and `adopt_guess` never adds it back. Their own words ("I'm into sourdough again") bring it back. Search
+  is never gated: naming the topic still finds those posts.
+- "what do you know about me" shows the other labels ("parked for someday", "just for fun").
+
+### The recap (BN5, `digest.py`)
+- Never offered at setup and never sent unless asked: on request ("recap", "my week", "how did my rules do",
+  `followup.RECAP_ASK`), or as a rule the person makes ("every sunday at 6pm send me a recap": the interpreter's
+  timing, then `followup.recap_rule` sets content source `recap`; the preview shows this week's recap and YES starts
+  it; on a week with nothing it says "There's nothing to report this week yet. On a week like that I send nothing.").
+- The last 7 days, at most 6 lines: "Your recap since Sunday 15 November:", then up to 5 of, by importance: the rules
+  (per rule: sent, "stayed quiet twice with nothing new" from run status `empty_quiet` when it exists, skipped, held
+  by a snooze, past the daily limit, and 👍, made it, too easy, too hard on its picks); to-dos (ticked off in the
+  period, open, past their due date, `todos.overdue_at` when the column exists); coming up in the next 7 days (a
+  one-time reminder about a thing, content source `items`, with its date from `deadline:<rule id>` when kept; to-dos
+  due); one suggestion; "I gave you N calendar links" (never "you added"); the library (newest kept date and
+  `refresh.export_due`'s phrases). The library line alone is not news: with nothing else the recap is empty.
+- An empty recap on request: "Nothing to report for the last 7 days: no rule sent anything and no to-do changed." A
+  timed one records run status `none` and sends nothing. A recap rule is not the person's own words: it counts as
+  unanswered and brings "Still useful?"; quiet hours, snooze, pause and the kill switch apply as to any rule.
+- The suggestion: 3 asks or more (runs of kind `ask` with `answers.spec`, kept by `outputs._keep_answer`) whose goals
+  share a topic word, on 2 days or more within 21 days, with no active or paused rule on that word, no "not me" or
+  "someday" label on it and nothing sensitive; offered once per word per 30 days (`suggested:<handle>`). "yes" as the
+  next message builds that ask's spec as a rule every Saturday at 10am (one pick, no outside picks), through the
+  standard preview; nothing starts without YES. Rows kept before this round have no spec and are never offered.
+
+### Out
+- Vector membership for topics, a model call to name new topics, minutes or time spent, the post-import report line,
+  `StatsQuery.by = "trend"` through the interpreter; labels used in `executor._supply` or outside picks; free-text
+  labels; a recap offered at setup, an unrequested weekly pick, counts of what was never opened.

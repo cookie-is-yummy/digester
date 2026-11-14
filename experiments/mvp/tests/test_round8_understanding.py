@@ -729,3 +729,43 @@ def test_bn5_the_recap_rule_regex_and_on_request_phrases():
         assert RECAP_ASK.match(t), t
     for t in ("recap the second one", "my week was long", "how did my rules do with pasta"):
         assert not RECAP_ASK.match(t), t
+
+
+# ---------- the checker's live script, the profile view, a trends rule over the cap ----------
+def test_bn3_live_script_prints_counts_only(lib8, capsys):
+    from mvp import attention, config
+    from mvp import profile as P
+    P.set_relations(lib8["bot"].store, H, [("Climbing", "not_me")])
+    attention.main([str(lib8["lib"]), "--store", config.DB])
+    out = capsys.readouterr().out
+    assert "anchors: instagram 2026-10-15, youtube 2026-10-30" in out
+    assert "kept lately: 20, in the 182 days before: 40" in out
+    assert "topic 1: rising, lately 6, before 1, liked 0, label -" in out
+    assert "direction: topic 1, lately 6, before 1" in out and "counted in" in out
+    for name in ("Blender", "Guitar", "Sourdough", "Climbing", "Mental", "render", "getting better", H):
+        assert name not in out                               # no topic names, captions, words or handles
+    assert len([x for x in out.split("\n") if x.startswith("topic ")]) == 3   # not me and sensitive left out
+
+
+def test_bn4_what_do_you_know_about_me_shows_the_labels(lib8):
+    from mvp import profile as P
+    bot = lib8["bot"]
+    P.set_relations(bot.store, H, [("Sourdough", "someday"), ("Guitar", "enjoy"), ("Blender 3D", "practise"),
+                                   ("Climbing", "not_me")])
+    text = P.show_text(P.get(bot.store, H))
+    assert "• Sourdough (my guess, parked for someday, from 13 saved posts)" in text
+    assert "• Guitar (my guess, just for fun, from 12 saved posts)" in text
+    assert "• Blender 3D (my guess, you're practising it, from 7 saved posts)" in text
+    assert "Climbing" not in text
+
+
+def test_bn3_a_trends_rule_runs_on_an_import_over_the_cap(lib8, monkeypatch):
+    from mvp.refresh import run_new_items
+    bot = lib8["bot"]
+    bot.store.add_rule(H, "every export", {"when": {"type": "new_items"}, "content": {"source": "trends"}},
+                       "active", None)
+    monkeypatch.setattr(type(bot), "_over_cap", lambda self, person: "day")
+    answers, nothing, _ = run_new_items(bot, bot.store.person(H), {"i001"}, lib8["clock"][0])
+    assert len(answers) == 1 and answers[0][2].startswith(HEAD) and nothing == []
+    answers, nothing, _ = run_new_items(bot, bot.store.person(H), set(), lib8["clock"][0])
+    assert answers == [] and nothing == []                    # nothing new: the counts have not changed, and no line

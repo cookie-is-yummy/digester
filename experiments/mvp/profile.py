@@ -1120,6 +1120,8 @@ def show_text(prof, now=None):
             how = "you told me" if i.get("source") != "guess" else ("you confirmed it" if i.get("confirmed")
                                                                     else "my guess")
         n = count_words(i)   # finding 39: a topic keeps its counts when its level changes
+        if i.get("relation") in RELATION_SHOWN:   # round 8 (BN4): what they said the topic is to them
+            how += ", " + RELATION_SHOWN[i["relation"]]
         lines.append(f"• {i['topic']} ({how}" + (f", from {n}" if n else "") + ")")
     if not prof["interests"]:
         lines.append("• No interests yet.")
@@ -1164,6 +1166,8 @@ def show_text(prof, now=None):
 # A "not me" topic stays as a marker (get() leaves it out), so a later guess never brings it back. Themes never gate
 # search (decision 18 Oct): a request that names the topic still finds those posts.
 RELATIONS = ("pursue", "practise", "someday", "enjoy", "not_me")
+RELATION_SHOWN = {"pursue": "you're going for it", "practise": "you're practising it", "someday": "parked for someday",
+                  "enjoy": "just for fun"}
 RELATION_WORDS = {
     "not_me": r"not\s+(?:really\s+)?(?:me|mine|for\s+me|my\s+thing)|not\s+into\s+(?:it|that)|nope|nah",
     "enjoy": r"(?:just\s+|only\s+)?for\s+fun|enjoy(?:ing|ment)?|fun|hobby",
