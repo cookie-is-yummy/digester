@@ -520,9 +520,19 @@ RECAP_RULE = re.compile(r"\brecaps?\b(?!\s+of\s+(?:the|that|this|it|those|these|
                         r"\bhow\s+my\s+rules\s+(?:did|do|are\s+doing)\b", re.I)
 
 
-def recap_rule(it, text):
+def recap_rule(it, text, rules=()):
     """A new repeating rule whose message asks for a recap becomes a recap rule (content source "recap"): the timing
-    is the interpreter's, the content is code's."""
+    is the interpreter's, the content is code's. A change to a recap or trends rule changes only its timing: its
+    content stays code's ("move the recap to saturdays")."""
+    if it is not None and it.intent == "change_rule" and it.spec is not None:
+        from .store import by_number
+        rules = list(rules)
+        r = by_number(rules, it.rule_number) if it.rule_number is not None else (rules[0] if len(rules) == 1 else None)
+        old = (r or {}).get("spec") or {}
+        if (old.get("content") or {}).get("source") in ("recap", "trends"):
+            stored = it.spec.stored()
+            it.spec = RuleSpec.model_validate(dict(stored, content=old["content"], do=old.get("do") or stored.get("do")))
+        return it
     if it is None or it.intent != "new_rule" or it.spec is None or not RECAP_RULE.search(text or "") \
             or it.spec.when.type not in ("schedule", "random"):
         return it

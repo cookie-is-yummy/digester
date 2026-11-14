@@ -731,6 +731,26 @@ def test_bn5_the_recap_rule_regex_and_on_request_phrases():
         assert not RECAP_ASK.match(t), t
 
 
+def test_bn5_changing_a_recap_rule_changes_its_timing_only(env):
+    bot = env["bot"]
+    rid = bot.store.add_rule(H, "every sunday at 6pm send me a recap", {
+        "when": {"type": "schedule", "days": ["SUN"], "times": ["18:00"]}, "content": {"source": "recap"}},
+        "active", at(SUN))
+    say(env, "move my recap to saturdays at 10", {"intent": "change_rule", "rule_number": 1, "spec": {
+        "when": {"type": "schedule", "days": ["SAT"], "times": ["10:00"]},
+        "content": {"goal": "a recap", "searches": ["recap"]}}})
+    spec = bot.store.rule(rid)["spec"]
+    assert spec["content"]["source"] == "recap" and spec["when"]["days"] == ["SAT"]
+    # near-variant: a library rule's change is the interpreter's, as before
+    lib = bot.store.add_rule(H, "pasta", {"when": {"type": "schedule", "days": ["FRI"], "times": ["19:00"]},
+                                          "content": {"goal": "a pasta recipe", "searches": ["pasta"]}}, "active", at(SUN))
+    n = bot.store.rule_number(H, lib)
+    say(env, "change the pasta one to a curry recipe", {"intent": "change_rule", "rule_number": n, "spec": {
+        "when": {"type": "schedule", "days": ["FRI"], "times": ["19:00"]},
+        "content": {"goal": "a curry recipe", "searches": ["curry"]}}})
+    assert bot.store.rule(lib)["spec"]["content"]["goal"] == "a curry recipe"
+
+
 # ---------- the checker's live script, the profile view, a trends rule over the cap ----------
 def test_bn3_live_script_prints_counts_only(lib8, capsys):
     from mvp import attention, config

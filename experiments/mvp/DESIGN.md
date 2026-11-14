@@ -529,7 +529,8 @@ column).
   `refresh.export_due`'s phrases). The library line alone is not news: with nothing else the recap is empty.
 - An empty recap on request: "Nothing to report for the last 7 days: no rule sent anything and no to-do changed." A
   timed one records run status `none` and sends nothing. A recap rule is not the person's own words: it counts as
-  unanswered and brings "Still useful?"; quiet hours, snooze, pause and the kill switch apply as to any rule.
+  unanswered and brings "Still useful?"; quiet hours, snooze, pause and the kill switch apply as to any rule. A change
+  to a recap or trends rule ("move my recap to saturdays") changes its timing only; its content stays code's.
 - The suggestion: 3 asks or more (runs of kind `ask` with `answers.spec`, kept by `outputs._keep_answer`) whose goals
   share a topic word, on 2 days or more within 21 days, with no active or paused rule on that word, no "not me" or
   "someday" label on it and nothing sensitive; offered once per word per 30 days (`suggested:<handle>`). "yes" as the

@@ -231,7 +231,7 @@ class HandlerMixin:
             it = profile_guard(it, text, P.get(self.store, handle), pending, rules)
             # fix pass 6, finding 89: a change lands only on what the message names (a waiting preview, else the rule)
             it = change_guard(it, text, self._live_pending(handle, now), rules)
-            it = recap_rule(it, text)   # round 8 (BN5): "every sunday at 6pm send me a recap" (content by code)
+            it = recap_rule(it, text, rules)   # round 8 (BN5): "every sunday at 6pm send me a recap" (content by code)
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=handle, kind="interpret", status="error", error=type(e).__name__)
             if budget_stop(e):   # review fix X6: ai.py's budget guard refused the call: never a false "try again"
