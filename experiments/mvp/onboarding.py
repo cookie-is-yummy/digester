@@ -381,6 +381,7 @@ class OnboardingMixin:
                           "times": ["08:00"]}
         spec = RuleSpec.model_validate(stored)
         text = " ".join(str(own or "every morning").split())[:300]   # the person's own words, never the setup's (PRIV-7)
+        self._rule_words(spec, text)   # round 8: a new morning rule stays quiet on a day with nothing new, unless told
         pending = self.store.pending(h)
         more = []
         if pending and pending["kind"] == "confirm_rule" and str(pending["payload"].get("text", "")).startswith(
@@ -394,7 +395,8 @@ class OnboardingMixin:
                                                    "more": more}, at=self.clock())
         first = next_run(spec.when, person["timezone"], now, anchor=now, quiet=self.store.quiet(h))
         tail = T.preview_tail(describe(spec.when), T.picks_for(1, spec.content.goal),
-                              say_time(first, now, person["timezone"]) if first else None)
+                              say_time(first, now, person["timezone"]) if first else None,
+                              heads=T.QUIET_EMPTY_NOTE if spec.when.if_empty == "quiet" else "")
         if more:
             tail += " " + T.export_more_note(len(more))
         return self.send(h, (T.PREVIEW_HEAD if n else "") + msg + tail, run_id)

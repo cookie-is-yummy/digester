@@ -557,4 +557,6 @@ def _limits(when):
         out += f", until {_day_month(when.until)}"
     if when.max_sends:
         out += ", just once" if when.max_sends == 1 else f", {when.max_sends} times in all"
+    if getattr(when, "stop_when", None) == "done":   # round 8: a reminder that ends when they say done
+        out += " until you say done"
     return out

@@ -374,7 +374,9 @@ def test_quiet_blocks_validate_and_read():
 def weekly(bot, st, h="+15550001", when=None):
     st["answers"]["mvp_interpret"] = lambda u_: {"intent": "new_rule", "spec": pasta_spec(when)}
     st["answers"]["mvp_compose"] = compose_picks({"n": 1, "title": "Pasta", "why": "x", "verdict": "clear"})
-    bot.on_message(h, "pasta rule")
+    # round 8 (DESIGN.md section 13): a new repeating library rule stays quiet on an empty day unless told; these
+    # tests are about a rule that says so, as every rule did before
+    bot.on_message(h, "pasta rule, tell me even if there's nothing")
     bot.on_message(h, "yes")
     return bot.store.rules(h)[-1]
 
@@ -656,7 +658,8 @@ def test_every_hours_preview_says_the_daily_limit_applies(env):
     bot.on_message("+15550001", "pasta every 2 hours")
     assert "every 2 hours from 9am to 9pm" in last(ch).lower() and "at most 5 timed messages a day" in last(ch)
     assert bot.store.pending("+15550001")["payload"]["spec"]["when"] == {
-        "type": "schedule", "days": DAILY, "every_weeks": 1, "every_hours": 2, "window": ["09:00", "21:00"]}
+        "type": "schedule", "days": DAILY, "every_weeks": 1, "every_hours": 2, "window": ["09:00", "21:00"],
+        "if_empty": "quiet"}   # round 8: a new repeating library rule stays quiet on an empty day
 
 
 # ---------- found by the checker ----------

@@ -516,3 +516,76 @@ rewatching, and the thing inside a post to act on. Where this section and an ear
   second one?") is about the posts shown. A title from an old post that says "now open" is kept as the post's words
   (for a time-sensitive request the date line after it says it is old).
 - "what about pasta?" (a new topic in a follow-up form) is not turned into a new request by code.
+
+## 13. Rules beyond timing (round 8, slice B, 14 Nov 2026)
+
+The founder's 12 and 13 Nov asks ("not always about timing", "reminders for todos and more", "tie everything back to
+the vision"): act on a thing at the moment it matters, and control over what rules send. Where this section and an
+earlier one differ, this section wins. No interpreter prompt change and no model call in any path below; new fields
+are optional and a stored spec without them reads as before.
+
+### A reminder counted back from a thing's own date (BN1)
+- Read by code before any model call (`followup.deadline_request`): "remind me [N days | N weeks | a week | the day]
+  before (it | its | the <name> one | <name> | number N | the second one) (closes | is due | ends | deadline | due
+  date)", optionally ", and put it on my calendar". No number: 3 days (`DEFAULT_BEFORE_DAYS`).
+- The thing is in the last answer: a number, a name (one of an items answer's things), or the only one ("it" with
+  several things asks "Which number?"). A name that is none of the things shown, or no answer at all: not this form
+  (the model reads the message).
+- Its date: the date its own words give (round 7: `date`, else `when` and `about`, with the post's year; for a post
+  with no things, the post's own text); a date with no year more than a week before the post's day is the next year's.
+- A one-time rule (content `source: items`, `item_ids`, `item_names`) at 9am local, N days before. When that moment has
+  passed and the date has not: the next 9am ("less than 3 days away, so I'll remind you tomorrow at 9am"); when the
+  next 9am is after the date: one line, nothing set. A passed date: one line with the date and "has passed".
+- The reply gives both dates and how far: "OK. I'll remind you about NASA L'SPACE Academy on Friday 27 November at
+  9am, 3 days before its deadline, 30 November (in 16 days). Reply "stop 1" to cancel." ("its deadline" when a
+  deadline word stands next to the date, else "the date in its post".)
+- No date in its words: one question ("The post doesn't say when X closes. Tell me the date, like "dec 5", and I'll
+  set the reminder."), held in state `deadline_ask:<handle>` for 24 hours. The next message only is read
+  (`followup.date_answer`: one date, `dates.find_dates` with today's year, and nothing but a few words about it); any
+  other message ends the question and is answered as usual.
+- "... and put it on my calendar": calendar.add now, in the same reply, with `date` = the thing's date and no time
+  (an all-day entry, `.ics` DTSTART;VALUE=DATE). The reminder itself is a message.
+- State `deadline:<rule id>` = {date, deadline} (removed by "delete my data"). When it fires (`executor._run_items`) the
+  head line is "Reminder: X's deadline is 30 November (in 3 days)." instead of "Here's what you asked me to send you:".
+- Undo, `_own_once` (never unanswered, kept through quiet hours and the daily limit) apply as for any later send.
+- Round 7's interpreter form ("remind me about <name> two days before its deadline") keeps its replies (a moment
+  already passed still says "sooner than that" and sets nothing); it now sets the thing it found by name (it read
+  "its" as the first thing) and gets the same head line. A time is taken from its form only when the message names
+  one.
+- Out: a When.type "deadline"; "whenever I save something with a deadline"; scanning the library for dates.
+
+### A repeating rule on a day with nothing new (BN2 a)
+- `when.if_empty`: "say" | "quiet", only on `schedule` and `random` rules whose source is library or recent (cleared
+  elsewhere). None (every rule stored before this round) means "say": `render.none_message` as before.
+- A new repeating library or recent rule (asked, or the setup's morning rule) is "quiet" unless the request says
+  "tell me even if there's nothing" (say) or "don't text me if there's nothing" (quiet). A changed rule keeps its own.
+- The preview and the start line add "On a day with nothing new I'll stay quiet."
+- Quiet and nothing found (no picks and no YouTube block): run status `empty_quiet` (not in SENT_STATUSES: never
+  unanswered, never toward max_sends or the daily limit), the rule moves on, nothing is sent. Exceptions: the first
+  empty slot after a send or with no send before (one line: "Nothing new for "X" since 1 March. I'll stay quiet until
+  there is. "run N" asks now.", the date is the newest save, collection, share or playlist date in the library), and
+  the rule's last slot ("Nothing new for "X" this time. That was the last one of this rule.").
+- Read by code as a whole message: "tell me even if there's nothing" / "don't text me if there's nothing" change the
+  preview waiting for YES, else the repeating library rule the person started in the last 10 minutes.
+
+### A reminder that runs until it is done (BN2 b)
+- `when.stop_when`: "done", only on a repeating reminder in the person's own words (`source: note`).
+- Set by code after the model from "until I've done it", "until I've applied", "till I tick it off", "until it's
+  done", "until I say done" (`followup.UNTIL_DONE`). Any `until` the model filled is dropped unless the message names
+  another end ("until Friday, or until I've done it"); the words leave the reminder's text. describe adds "until you
+  say done".
+- A bare "done", "did it", "applied", "finished" (`followup.DONE_BARE`) within 12 hours after that rule's latest send,
+  with no answer with picks after that send, ends it: "Rule N is finished." (undo brings it back). Otherwise "done" is
+  read as before; "done 2" stays the to-do command; "made it" stays feedback.
+
+### One nudge for a to-do past due (BN2 c)
+- `todos.overdue_at` (store.ADDED_COLUMNS). A to-do due more than 24 hours ago and at most 7 days ago, not done or
+  removed, with no nudge yet, gets one: ""X" was due yesterday. Reply "done N", "tomorrow" or "drop it"." ("was due
+  on Tuesday 17 November" when it is older).
+- Quiet hours, a snooze, the person's kill switch and the daily limit make it wait (it goes out when they end, once);
+  it counts as a timed send of the day (run kind `todo`). A reminder that was missed while the bot was off (its notice
+  said it is still listed) gets no nudge.
+- The next message only: "tomorrow" moves it to tomorrow at its own clock time and clears its reminder and nudge (it
+  is reminded again, and nudged once again only if that day passes too); "drop it" removes it. Both can be undone.
+- "no overdue nudges" sets `prefs.overdue_nudges` false; "overdue nudges on" sets it back.
+- Out: rate limits, reaction, idle and count triggers, per-rule back-off, calendar conditions.

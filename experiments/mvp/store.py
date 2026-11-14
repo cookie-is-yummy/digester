@@ -85,6 +85,7 @@ ADDED_COLUMNS = [
     ("rules", "number INTEGER"),         # review fix X1 (experience): the rule's number for its person ("stop 3"),
                                          # given when it is made and never reused, so a finished rule shifts nothing
     ("youtube_cache", "published_at TEXT"),   # round 7, finding 91: snippet.publishedAt (NULL in rows fetched before)
+    ("todos", "overdue_at TEXT"),        # round 8: when the one nudge about a to-do past its due time went out
 ]
 
 
@@ -407,6 +408,12 @@ class Store:
     def update_todo(self, todo_id, **fields):
         sets = ", ".join(f"{k}=?" for k in fields)
         self.x(f"UPDATE todos SET {sets} WHERE id=?", (*fields.values(), todo_id))
+
+    def overdue_todos(self, due_before, due_after):
+        """Round 8: open to-dos due between `due_after` and `due_before` (UTC) that have had no overdue nudge."""
+        return self.q("SELECT * FROM todos WHERE due_at IS NOT NULL AND due_at<=? AND due_at>=? AND overdue_at IS NULL "
+                      "AND done_at IS NULL AND removed_at IS NULL ORDER BY due_at",
+                      (now_iso(due_before), now_iso(due_after)))
 
     def due_todos(self, now):
         return self.q("SELECT * FROM todos WHERE due_at IS NOT NULL AND due_at<=? AND reminded_at IS NULL "
@@ -735,7 +742,7 @@ class Store:
                             self.db.execute(f"DELETE FROM {t} WHERE library=?", (r["library"],))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
             for rid in rule_ids:   # a timed send's retry count and hold (review fix PRIV-5)
-                for key in (f"retry:{rid}", f"hold:{rid}", f"cadence:{rid}", f"replaced:{rid}"):
+                for key in (f"retry:{rid}", f"hold:{rid}", f"cadence:{rid}", f"replaced:{rid}", f"deadline:{rid}"):
                     self.db.execute("DELETE FROM state WHERE key=?", (key,))
             # every other state key named after them ("<what>:<handle>"), e.g. outside_auto: with their topic words
             self.db.execute("DELETE FROM state WHERE substr(key, -?) = ?", (len(handle) + 1, ":" + handle))

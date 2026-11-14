@@ -17,6 +17,8 @@ from .schedule import _at, end_of_quiet, in_quiet_hours, say_time
 from .store import by_number, now_iso
 
 UNDO_WINDOW = timedelta(minutes=10)
+OVERDUE_AFTER = timedelta(hours=24)   # round 8: a to-do this far past its due time gets one nudge ...
+OVERDUE_LOOK_DAYS = 7                 # ... unless it is older than this (a store's old to-dos are never all nudged)
 WORD = re.compile(r"[^\W_]+", re.UNICODE)
 SMALL = set("a an the my to of for on in at and".split())
 # fix pass, finding 3: "add oat milk and eggs to my grocery list" is two to-dos on the list "grocery". The list's name
@@ -296,7 +298,87 @@ class TodoMixin:
                     continue
                 self.store.x("UPDATE runs SET status='sent' WHERE id=?", (run_id,))
                 sent += 1
+        return sent + self._tick_overdue(now)
+
+    # ---------- round 8, BN2 (c): one nudge for a to-do a day past due ----------
+    def _tick_overdue(self, now):
+        """A to-do due more than 24 hours ago (and at most OVERDUE_LOOK_DAYS ago), not done or removed, gets one nudge.
+        Quiet hours, a snooze, the person's kill switch and the daily limit make it wait (it goes out once they end,
+        never lost and never twice); "no overdue nudges" stops them. The reply to it is read by code
+        (_overdue_reply)."""
+        from . import config
+        from .scheduler import MISSED_AFTER
+        sent = 0
+        for t in self.store.overdue_todos(now - OVERDUE_AFTER, now - timedelta(days=OVERDUE_LOOK_DAYS)):
+            person = self.store.person(t["handle"])
+            if not person:
+                continue
+            with self.lock_for(person["handle"]):
+                t = self.store.todo(t["id"])
+                person = self.store.person(person["handle"])
+                if not person or not t or t["done_at"] or t["removed_at"] or t.get("overdue_at"):
+                    continue
+                if t.get("reminded_at") and datetime.fromisoformat(t["reminded_at"]) - \
+                        datetime.fromisoformat(t["due_at"]) > MISSED_AFTER:
+                    continue   # its reminder was missed while the bot was off, and that notice said it is still listed
+                h, tz = person["handle"], person["timezone"]
+                if person["paused"] or self.store.person_context(h)["prefs"].get("overdue_nudges") is False:
+                    continue
+                if self._held_now(person, now):   # quiet hours or a snooze: it waits
+                    continue
+                midnight = _at(now.astimezone(ZoneInfo(tz)).date(), "00:00", ZoneInfo(tz))
+                if self.store.scheduled_today(h, midnight) >= config.MAX_SCHEDULED_PER_DAY:
+                    continue   # it counts toward the daily limit: tomorrow, then
+                numbers = [x["id"] for x in self.store.todos(h)]
+                if t["id"] not in numbers:
+                    continue
+                due = datetime.fromisoformat(t["due_at"]).astimezone(ZoneInfo(tz))
+                days = (now.astimezone(ZoneInfo(tz)).date() - due.date()).days
+                when = "yesterday" if days == 1 else f"on {due.strftime('%A %-d %B')}"
+                self.store.update_todo(t["id"], overdue_at=now_iso(now))   # before the send: never twice
+                run_id = self.store.add_run(handle=h, kind="todo", status="sending", at=now_iso(now))
+                try:
+                    self.send(h, T.overdue_nudge(t["text"], when, numbers.index(t["id"]) + 1), run_id)
+                except SendUncertain:
+                    self.store.x("UPDATE runs SET status='unknown', error='SendUncertain' WHERE id=?", (run_id,))
+                    continue
+                except Exception as e:  # noqa: BLE001 - tried again at the next tick
+                    self.store.x("UPDATE runs SET status='send_failed', error=? WHERE id=?", (type(e).__name__, run_id))
+                    self.store.update_todo(t["id"], overdue_at=None)
+                    continue
+                self.store.x("UPDATE runs SET status='sent' WHERE id=?", (run_id,))
+                self.store.set_state(f"overdue:{h}", {"todo_id": t["id"], "at": now_iso(now)})
+                sent += 1
         return sent
+
+    def _overdue_reply(self, person, text, now):
+        """The message right after an overdue nudge: "tomorrow" moves the to-do to tomorrow at its own clock time (its
+        reminder comes again), "drop it" takes it off the list. Any other message ends the question (None)."""
+        from .followup import OVERDUE_DROP, OVERDUE_TOMORROW
+        h = person["handle"]
+        st = self.store.get_state(f"overdue:{h}")
+        if not st:
+            return None
+        self.store.set_state(f"overdue:{h}", None)
+        t = self.store.todo(st["todo_id"])
+        if not t or t["handle"] != h or t["done_at"] or t["removed_at"]:
+            return None
+        tz = ZoneInfo(person["timezone"])
+        if OVERDUE_TOMORROW.match(text):
+            self.note(intent="todo_due")
+            due = datetime.fromisoformat(t["due_at"]).astimezone(tz)
+            new = _at(now.astimezone(tz).date() + timedelta(days=1), due.strftime("%H:%M"), tz)
+            self._wrote(h, "todo_due", f"moved \"{t['text']}\" to tomorrow",
+                        {"rows": [{"id": t["id"], "due_at": t["due_at"], "reminded_at": t["reminded_at"],
+                                   "overdue_at": t.get("overdue_at")}]})
+            self.store.update_todo(t["id"], due_at=now_iso(new), reminded_at=None, overdue_at=None)
+            return self.send(h, T.overdue_moved(t["text"], say_time(new, now, person["timezone"])))
+        if OVERDUE_DROP.match(text):
+            self.note(intent="todo_remove")
+            self.store.update_todo(t["id"], removed_at=now_iso(now))
+            self._wrote(h, "todo_remove", f"removed \"{t['text']}\"", {"ids": [t["id"]], "col": "removed_at"})
+            return self.send(h, T.overdue_dropped(t["text"]))
+        return None
 
     # ---------- library counts (section 11) ----------
     def _library_stats(self, person, it):

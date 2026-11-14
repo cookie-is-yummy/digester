@@ -285,6 +285,145 @@ def passed_on(shown, words, extra=None):
     return out if out["creators"] else None
 
 
+# ---------- round 8 (DESIGN.md section 13): what code reads for rules beyond timing ----------
+# BN1: "remind me 3 days before the NASA one closes", "remind me before it closes", "remind me a week before its
+# deadline, and put it on my calendar". With no number the reminder comes 3 days before.
+_N = r"\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten"
+DEADLINE_REMIND = re.compile(
+    r"^\W*(?:(?:please|pls|can you|could you|ok(?:ay)?|and)[\s,]+)*remind me\s+"
+    rf"(?:(?P<n>{_N})\s+(?P<unit>days?|weeks?)\s+|(?P<the>the day|the week)\s+)?"
+    r"before\s+(?P<target>[^\W_][\w'’.#& -]{0,60}?)\s*"
+    r"(?P<verb>closes|close|is due|'s due|’s due|ends|is over|deadline|due date|closing date)"
+    r"(?P<cal>\s*,?\s*(?:and|&)\s+(?:also\s+)?(?:put|add)\s+(?:it|that|the deadline|the date|its deadline|its date)\s+"
+    r"(?:on|in|to|into)\s+my\s+calendar)?\s*[.!]*\s*$", re.I)
+DEFAULT_BEFORE_DAYS = 3
+_WORD_N = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+           "nine": 9, "ten": 10}
+_GENERIC_TARGET = {"it", "its", "it's", "it’s", "the", "that", "this", "that one", "this one", "the one", "that one's",
+                   "this one's", "the one's"}
+
+
+def deadline_request(text):
+    """{days, calendar, number, name} for a reminder counted back from a thing's own date, or None. `name` is the
+    words naming the thing ("NASA" from "the NASA one"), None for "it"; `number` a pick or thing number."""
+    m = DEADLINE_REMIND.match(" ".join((text or "").split()))
+    if not m:
+        return None
+    if m.group("the"):
+        days = 7 if m.group("the").lower().endswith("week") else 1
+    elif m.group("n"):
+        g = m.group("n").lower()
+        days = int(g) if g.isdigit() else _WORD_N[g]
+        if m.group("unit").lower().startswith("week"):
+            days *= 7
+    else:
+        days = DEFAULT_BEFORE_DAYS
+    if not 1 <= days <= 60:
+        return None
+    target = re.sub(r"['’]s$", "", m.group("target").strip(" ,")).strip()
+    low = target.lower()
+    number = pick_number(target, 99) if not re.fullmatch(r"(?:it|its|that|this)", low) else None
+    name = None
+    if low not in _GENERIC_TARGET and number is None:
+        name = re.sub(r"^(?:the|that|this)\s+", "", target, flags=re.I)
+        name = re.sub(r"\s+(?:one|thing|program|programme)$", "", name, flags=re.I).strip()
+        if not name or name.lower() in _GENERIC_TARGET:
+            name = None
+    return {"days": days, "calendar": bool(m.group("cal")), "number": number, "name": name}
+
+
+# BN1: the answer to "Tell me the date": a date and nothing else but a few words about it ("dec 5", "it closes Dec 5")
+_DATE_ANSWER_FILLER = set("""it its it's closes close closing is the on by deadline due ends applications apply until
+date ok okay oh sure yes yep th st nd rd of""".split())
+
+
+def date_answer(text, today):
+    """The date a short reply gives ("dec 5", "5 December 2026"), read with today's year (a day more than a week ago is
+    next year's); None when the message says anything more than a date."""
+    from .dates import find_dates
+    found = find_dates(text or "", year_hint=today.isoformat())
+    if len(found) != 1:
+        return None
+    d, s, e = found[0]
+    rest = re.findall(r"[^\W\d_]+", ((text or "")[:s] + " " + (text or "")[e:]).lower())
+    if any(w not in _DATE_ANSWER_FILLER for w in rest):
+        return None
+    return d
+
+
+# BN2 (a): a repeating library rule on a day with nothing new
+IF_EMPTY_QUIET = re.compile(
+    r"\b(?:don'?t|do not|no need to|never|please don'?t)\s+(?:text|message|send|bother|ping|tell|write)\s+(?:me\s+)?"
+    r"(?:anything\s+)?(?:if|when|on days?(?: when)?)\s+(?:there'?s|there is|there are|you have|you'?ve got|you find)\s+"
+    r"(?:nothing|none)\b"
+    r"|\b(?:stay|keep|be)\s+quiet\s+(?:if|when|on days?(?: when)?)\s+(?:there'?s|there is)\s+nothing\b"
+    r"|\bskip\s+(?:it|the day|days)\s+(?:if|when)\s+(?:there'?s|there is)\s+nothing\b", re.I)
+IF_EMPTY_SAY = re.compile(
+    r"\b(?:tell|text|message|let)\s+me(?:\s+know)?\s+even\s+(?:if|when|on days?(?: when)?)\s+(?:there'?s|there is|"
+    r"there are|you have|you find)\s+(?:nothing|none)\b"
+    r"|\beven\s+(?:if|when)\s+there'?s\s+nothing,?\s+(?:tell|text|let)\s+me\b", re.I)
+_IF_EMPTY_FILLER = set("""ok okay please pls and also actually oh then but new good that fits found to send for it this
+one rule just""".split())
+
+
+def if_empty_said(text):
+    """'quiet', 'say' or None: what the message says a rule does on a day with nothing new."""
+    t = text or ""
+    if IF_EMPTY_SAY.search(t):
+        return "say"
+    if IF_EMPTY_QUIET.search(t):
+        return "quiet"
+    return None
+
+
+def if_empty_only(text):
+    """True when the whole message is that phrase (plus a few filler words)."""
+    t = IF_EMPTY_SAY.sub(" ", IF_EMPTY_QUIET.sub(" ", text or ""))
+    return if_empty_said(text) is not None and all(w in _IF_EMPTY_FILLER for w in re.findall(r"[^\W\d_]+", t.lower()))
+
+
+# BN2 (b): a reminder that repeats until the person says it is done
+UNTIL_DONE = re.compile(
+    r",?\s*\b(?:until|till|til|'?til)\s+(?:"
+    r"(?:i(?:'ve| have)?|i'?m|i am)\s+(?:done|did|do|finished|finish|applied|apply|completed|complete|submitted|"
+    r"submit|ticked|tick|checked|check|sent|send|called|call|booked|book|paid|pay)(?:\s+(?:it|that|this|them|off|"
+    r"with it|it off))*"
+    r"|it'?s\s+(?:done|finished|sent|submitted)"
+    r"|i\s+say\s+(?:done|it'?s done|i'?m done)"
+    r")\b", re.I)
+_UNTIL_OTHER = re.compile(r"\b(?:until|till|til|through|thru|ending|by)\b", re.I)
+
+
+def until_done(text):
+    """True when the message says the reminder repeats until they have done it."""
+    return bool(UNTIL_DONE.search(text or ""))
+
+
+def other_until(text):
+    """True when the message also names an end of its own ("until Friday, or until I've done it")."""
+    return bool(_UNTIL_OTHER.search(UNTIL_DONE.sub(" ", text or "")))
+
+
+def without_until_done(text):
+    return " ".join(UNTIL_DONE.sub(" ", text or "").split()).strip(" ,.")
+
+
+DONE_BARE = re.compile(r"^\W*(?:(?:ok(?:ay)?|yes|yep|yay|so)[\s,!.]+)?(?:all\s+)?(?:done|did it|i did it|done it|"
+                       r"i'?ve done it|i have done it|it'?s done|applied|i applied|i'?ve applied|i have applied|finished|"
+                       r"i finished|i'?m done|ticked it off|i ticked it off)(?:\s+(?:now|today|already))?\W*$", re.I)
+
+# BN2 (c): the answer to an overdue nudge, and switching the nudges off or on
+OVERDUE_TOMORROW = re.compile(r"^\W*(?:(?:ok(?:ay)?|sure)[\s,]+)?(?:(?:move it|do it|push it|make it)\s+(?:to\s+)?)?"
+                              r"tomorrow(?:\s+please|\s+pls)?\W*$", re.I)
+OVERDUE_DROP = re.compile(r"^\W*(?:(?:ok(?:ay)?|sure)[\s,]+)?(?:drop|remove|delete|forget)(?:\s+(?:it|that|this))?"
+                          r"(?:\s+please|\s+pls)?\W*$", re.I)
+NUDGES_OFF = re.compile(r"^\W*(?:no|stop(?: the)?|turn off(?: the)?|disable(?: the)?|no more|stop sending(?: me)?)\s+"
+                        r"overdue\s+(?:nudges?|reminders?)(?:\s+please|\s+pls)?\W*$"
+                        r"|^\W*(?:don'?t|do not)\s+nudge me about overdue\s+(?:to-?dos?|things|tasks)\W*$", re.I)
+NUDGES_ON = re.compile(r"^\W*(?:overdue\s+(?:nudges?|reminders?)\s+on|turn on(?: the)?\s+overdue\s+(?:nudges?|reminders?)|"
+                       r"nudge me about overdue\s+(?:to-?dos?|things|tasks))(?:\s+please|\s+pls)?\W*$", re.I)
+
+
 class FollowupMixin:
     def _changed_request(self, person, it, text, last, ch):
         """Round 7, finding 92: a new search with the last request's own content plus the change (more avoid words, a
