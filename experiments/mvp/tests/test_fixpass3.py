@@ -383,15 +383,16 @@ def test_71_a_talk_or_a_how_to_about_something_nobody_makes_gets_no_steps_label(
         n = sum(1 for c in env["calls"] if c == "mvp_extract")
         msg = say(env, text, {"intent": "ask", "spec": {"when": {"type": "now"}, "content": {
             "goal": goal, "searches": [goal]}}})
-        assert "Steps" not in msg and "Key points" not in msg, text
-        assert sum(1 for c in env["calls"] if c == "mvp_extract") == n      # no details call at all
-    # what still gets them: recipes, workouts and make-or-build tutorials; key points only when asked
+        # round 7 (finding 90) changes this on purpose: a request that is not a recipe, a workout or a make-or-build
+        # tutorial now gets the named things its picks list, then their key points (the gist); never Steps
+        assert "Steps" not in msg, text
+    # what still gets steps: recipes, workouts and make-or-build tutorials; every other request: items, key points
     def spec(goal):
         return RuleSpec.model_validate({"when": {"type": "now"}, "content": {"goal": goal, "searches": [goal]}})
     assert default_extract(spec("a blender donut tutorial")) == ["steps"]
     assert default_extract(spec("a quick pasta recipe")) == ["ingredients", "steps"]
     assert default_extract(spec("a leg workout")) == ["steps"]
-    assert default_extract(spec("how to start investing")) == []
+    assert default_extract(spec("how to start investing")) == ["items", "key_points"]   # round 7
     asked = RuleSpec.model_validate({"when": {"type": "now"}, "content": {"goal": "the investing talk",
                                                                          "searches": ["investing"],
                                                                          "extract": ["key_points"]}})

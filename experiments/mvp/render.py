@@ -132,7 +132,8 @@ def in_video(pick, extract):
     if not extract or it.platform != "instagram":
         return None
     asked = [k for k in ("ingredients", "steps", "key_points") if k in extract]
-    if not asked or any(facts.get(k) for k in facts) or not all(k in facts for k in asked):
+    if not asked or any(facts.get(k) for k in facts) or not all(k in facts for k in asked + [k for k in ("items",)
+                                                                                           if k in extract]):
         return None
     from .extract import list_like
     if list_like(getattr(it, "raw_caption", "") or it.caption):
@@ -146,12 +147,12 @@ def end_sentence(s):
     return s if _ENDED.search(s) else s + "."
 
 
-def kind_lines(kind, lines, label=True, lang=None):
+def kind_lines(kind, lines, label=True, lang=None, pick=None):
     out = [f"{L.table(lang)['label'][kind]} ({len(lines)}):"] if label else []
     if kind == "steps":
         out.extend(f"{i}. {line}" for i, line in enumerate(lines, 1))
     else:
-        out.extend(f"• {line}" for line in lines)
+        out.extend(f"• {stale_suffix(pick, line, lang) if pick and kind == 'key_points' else line}" for line in lines)
     return out
 
 
@@ -173,12 +174,16 @@ def details_lines(pick, extract, asked=None, lang=None):
         if not lines:
             continue
         shown = True
-        out.extend(kind_lines(kind, lines, lang=lang))
+        out.extend(kind_lines(kind, lines, lang=lang, pick=pick))
     if not shown and pick.get("lines"):   # lines found before (a follow-up), kind unknown
         out.append(f"{t['label']['details']} ({len(pick['lines'])}):")
         out.extend(f"• {line}" for line in pick["lines"])
         shown = True
     kind = None if shown else in_video(pick, extract)
+    if kind and list(extract or []) == ["items", "key_points"]:
+        # round 7: the default details for a request that asks for things: the plain line only then (a request that
+        # asks for nothing in particular keeps the answer it had)
+        kind = "items" if pick.get("things") else None
     if kind:
         out.append(t["in_video"][kind])
     elif shown and pick["item"].platform == "instagram":
@@ -188,11 +193,27 @@ def details_lines(pick, extract, asked=None, lang=None):
     return out
 
 
+def stale_suffix(pick, line, lang=None):
+    """Round 7, finding 91: a line that speaks of now ("applications are open") from a post older than 60 days gets
+    the post's month after it, so it never reads as true today."""
+    from .dates import STALE_DAYS, days_old, month_year, STALE
+    today = pick.get("today")
+    if not today or not pick.get("age_from") or L.code(lang):
+        return line
+    n = days_old(pick["age_from"], today)
+    if n is None or n <= STALE_DAYS or not STALE.search(line or ""):
+        return line
+    return f"{line.rstrip()} (as of {month_year(pick['age_from'])})"
+
+
 def alt_note(pick, extract, lang=None):
-    """The one line after an alternative: what is written out (counted from checked lines), else its reason."""
+    """The one line after an alternative: what is written out (counted from checked lines), else its reason. Round 7:
+    with the default details (items, then key points) an alternative says what is in it, its first key point."""
     t = L.table(lang)
     facts = pick.get("facts") or {}
     ing, steps, keys = facts.get("ingredients") or [], facts.get("steps") or [], facts.get("key_points") or []
+    if keys and list(extract or []) == ["items", "key_points"]:
+        return stale_suffix(pick, keys[0], lang)
     if ing and "ingredients" in (extract or []):
         amounts = sum(any(ch.isdigit() for ch in line) for line in ing) * 2 >= len(ing)
         return (t["alt_ing_steps"] if steps else t["alt_ing"]) + (t["amounts"] if amounts else "")
@@ -257,15 +278,122 @@ def criterion_phrase(cr, lang=None, no=False):
     return t["ph_fits_no" if no else "ph_fits"].format(cr=cr)
 
 
+INTRO_GOAL_WORDS = 6   # round 7, rule 7: a longer goal is never echoed in the opening line code builds
+
+
 def intro_line(result, spec, lang=None):
-    """The opening line: the composer's, when it passed the checks, else one built here (finding 37)."""
+    """The opening line: the composer's, when it passed the checks, else one built here (finding 37). A changed
+    request's line is built by code from the merged request (round 7, finding 92). A goal longer than a few words is
+    not echoed back (round 7): "Here's what I found in your saves."."""
     t = L.table(lang)
+    if result.get("intro_code"):
+        return end_sentence(result["intro_code"])
     if result.get("intro"):
         return end_sentence(result["intro"])
     goal = (spec.content.goal or "").strip()
+    if len(goal.split()) > INTRO_GOAL_WORDS:
+        return t["intro_plain"]
     if re.match(r"^(a|an|some)\s", goal, re.I):
         return t["intro_a"].format(goal=goal)
     return t["intro_plain"] if not goal else t["intro_for"].format(goal=goal)
+
+
+def date_words(p, result, lang=None):
+    """Round 7, finding 91: the few words about a pick's date for a time-sensitive request ("its deadline, 14
+    February 2025, has passed"), worked out by code; '' otherwise (and in a language without these phrases)."""
+    if not result.get("ts") or L.code(lang) or not result.get("today"):
+        return ""
+    from .dates import date_note
+    return date_note(p.get("date_state"), result["today"])
+
+
+def date_sentence(p, result, lang=None):
+    w = date_words(p, result, lang)
+    if not w:
+        return ""
+    if w.startswith("its "):
+        return end_sentence("I" + w[1:])
+    if w.startswith("from "):
+        return end_sentence("It's " + w)
+    return end_sentence(w[0].upper() + w[1:])
+
+
+def _item_line(x, lang=None):
+    """'3. Name: what the post says about it (deadline 1 December (in 17 days)).'"""
+    s = f"{x['n']}. {x['name']}"
+    about = x.get("about") or ""
+    if about and x.get("stale_from") and not L.code(lang):
+        about = f"{about.rstrip()} (as of {x['stale_from']})"
+    if about:
+        s += f": {about}"
+    when = x.get("note") or ""
+    if not when and x.get("when") and not (about and x["when"] in about):
+        when = x["when"]
+    if when:
+        s += f" ({when})"
+    return s
+
+
+def source_head(p, now=None, lang=None):
+    """'From "Best design systems" by @creator (posted May 2024, saved July 2023):'."""
+    t = L.table(lang)
+    it = p["item"]
+    when = []
+    if p.get("posted"):
+        try:
+            d = datetime.fromisoformat(str(p["posted"])[:10])
+            when.append(t["posted"].format(when=L.month(d, lang, True)))
+        except ValueError:
+            pass
+    kind = next((k for k in HOW_ORDER if k in it.kinds), None)
+    day = (it.dates.get(kind) if kind else None) or it.kept_on()
+    if kind and day:
+        try:
+            d = datetime.fromisoformat(str(day)[:10])
+            when.append(f"{t['how'][kind]} {L.month(d, lang, True)}")
+        except ValueError:
+            pass
+    return t["items_from"].format(title=p["title"], by=by(it, lang)) + (f" ({', '.join(when)})" if when else "") + ":"
+
+
+def items_message(result, spec, footer=None, now=None, lang=None):
+    """Round 7, finding 90: the answer is the things the posts name, each under the post it came from, with that
+    post's link alone after its list. Up to 3 posts, up to 6 things each ("and 2 more in the post"). Picks with no
+    named things follow in one line each."""
+    t = L.table(lang)
+    parts, text = [], [intro_line(result, spec, lang)]
+    if result.get("level_note"):
+        text.append(result["level_note"])
+    srcs = result["items_answer"]
+    used = set()
+    for p, its, more in srcs:
+        used.add(id(p))
+        text.append("")
+        text.append(source_head(p, now, lang))
+        text.extend(_item_line(x, lang) for x in its)
+        if more:
+            text.append(t["and_more"].format(n=more))
+        parts.append({"type": "text", "text": "\n".join(text).strip("\n")})
+        text = []
+        if p["item"].url:
+            parts.append(link_part(p["item"], p["title"]))
+    rest = [p for p in result["picks"] if id(p) not in used]
+    if rest:
+        text.append("")
+        text.append(t["items_also"])
+        for p in rest:
+            note = alt_note(p, result.get("extract"), lang)
+            dn = date_words(p, result, lang)
+            if dn:
+                note = f"{note.rstrip(' .')}; {dn}" if note else dn
+            text.append(f"• {p['title']}{by(p['item'], lang)}" + (f": {end_sentence(note)}" if note else "") +
+                        (f" {p['item'].url}" if p["item"].url else ""))
+    if footer:
+        text.append("")
+        text.append(footer)
+    if text:
+        parts.append({"type": "text", "text": "\n".join(text).strip("\n")})
+    return Reply(parts)
 
 
 def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, follow_up=False):
@@ -274,6 +402,8 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
     recommend", and no opening line built from the question; the composer's own line when it passed the checks."""
     t = L.table(lang)
     lang = lang if L.supported(lang) else None
+    if result.get("items_answer") and not follow_up:
+        return items_message(result, spec, footer=footer, now=now, lang=lang)
     c = spec.content
     extract = list(c.extract if extract is None else extract)
     picks, wider = result["picks"], result.get("wider") or []
@@ -312,6 +442,9 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
         text.append(pick_sentence(t["recommend"], first, now, lang))
     if result.get("level_note"):   # slice 6: once per topic while the level is a guess
         text.append(result["level_note"])
+    lead_date = date_sentence(first, result, lang)
+    if lead_date:   # round 7, finding 91: "Its deadline, 14 February 2025, has passed."
+        text.append(lead_date)
     flush()
     if it.url:
         parts.append(link_part(it, first["title"]))
@@ -328,6 +461,9 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
         text.append(head)
         for p in group:
             note = alt_note(p, extract, lang)
+            dn = date_words(p, result, lang)
+            if dn:
+                note = f"{note.rstrip(' .')}; {dn}" if note else dn
             length = L.length(p.get("length_text"), lang)
             text.append(f"• {p['title']}{by(p['item'], lang)}" + (f" ({length})" if length else "") +
                         (f": {end_sentence(note)}" if note else "") + (f" {p['item'].url}" if p["item"].url else ""))
@@ -370,9 +506,17 @@ def pick_record(p):
     it = p["item"]
     facts = p.get("facts") or {}
     kinds = [k for k in ("ingredients", "steps", "key_points") if facts.get(k)]
-    return {"item_id": it.id, "title": p["title"], "url": it.url, "platform": it.platform,
-            "video_id": getattr(it, "video_id", None), "creator": it.creator, "facts": facts,
-            "lines": list(p.get("lines") or []), "line_kinds": kinds if p.get("lines") and not p.get("lines_reused") else None}
+    rec = {"item_id": it.id, "title": p["title"], "url": it.url, "platform": it.platform,
+           "video_id": getattr(it, "video_id", None), "creator": it.creator, "facts": facts,
+           "lines": list(p.get("lines") or []), "line_kinds": kinds if p.get("lines") and not p.get("lines_reused") else None}
+    if p.get("shown_items"):   # round 7: the things an items answer showed from this post, as it showed them
+        rec["items"] = [{k: x.get(k) for k in ("n", "name", "about", "when", "note", "date", "state", "stale_from")}
+                        for x in p["shown_items"]]
+        for x in rec["items"]:
+            x["shown"] = _item_line(x)[len(f"{x['n']}. "):]
+    if p.get("posted"):
+        rec["posted"] = p["posted"]
+    return rec
 
 
 def pick_parts(rec, lead=""):
@@ -384,6 +528,8 @@ def pick_parts(rec, lead=""):
                       "video_id": rec.get("video_id")})
     lines = []
     facts = rec.get("facts") or {}
+    for x in rec.get("items") or []:   # round 7: the things an items answer showed from this post
+        lines.append(f"{x.get('n') or len(lines) + 1}. {x.get('shown') or x.get('name')}")
     for kind in ("ingredients", "steps", "key_points"):
         got = facts.get(kind) or []
         if got:

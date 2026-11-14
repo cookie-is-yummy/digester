@@ -17,7 +17,8 @@ from . import config, llm
 from . import texts as T
 from .channels.base import SendUncertain
 from .compose import FINISHED, collapse_copies, compose, duration_of, own_text, written_details
-from .extract import default_extract, default_fits, details_many, fit_extract, kinds_for, topic_kind
+from .dates import stale
+from .extract import default_extract, default_fits, details_many, fit_extract, items_default, kinds_for, topic_kind
 from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
 from .retrieve import candidates
 from .schema import KINDS, PLATFORMS, RuleSpec
@@ -461,6 +462,16 @@ class ExecutorMixin:
             if result.get("picks") and kind != "follow_up":
                 self._level_note(h, result, guessed)
             steps["compose"], steps["answer_cached"] = round(time.time() - t1, 2), result.get("cached", False)
+            # round 7, finding 91: today's date (the person's), each pick's dates, and for a time-sensitive request
+            # the order by what has passed, what is old and what is new
+            from .answers import post_dates
+            from .dates import request_year, time_sensitive
+            today = now.astimezone(ZoneInfo(person["timezone"])).date()
+            ts = kind != "follow_up" and time_sensitive(request_text or "", hint, spec.content.goal or "",
+                                                         *spec.content.searches)
+            year = request_year(request_text or "", hint, spec.content.goal or "") if ts else None
+            result["today"], result["ts"] = today, ts
+            post_dates(result, extra, today, ts, year)
             if SHORTEST.search(" ".join([request_text or "", hint])):   # finding 17: "shortest first"
                 for key in ("picks", "wider"):
                     result[key] = sorted(result.get(key) or [],
@@ -475,9 +486,12 @@ class ExecutorMixin:
             extract = asked or (default_extract(spec, request_text or "", hint) if kind != "follow_up" else [])
             result["extract"] = extract
             main = result.get("picks") or []
-            if main and not asked and not default_fits(own_text(main[0]["item"], extra)):
+            items_mode = items_default(extract, asked)   # round 7, finding 90: named things, then the gist
+            result["items_mode"] = items_mode
+            if main and not asked and not items_mode and not default_fits(own_text(main[0]["item"], extra)):
                 extract = result["extract"] = []   # finding 71: a talk or a list of habits gets no default Steps
-            if main and kinds_for(extract) and not asked and not written_details(main[0]["item"], extra):
+            if main and kinds_for(extract) and not asked and not items_mode \
+                    and not written_details(main[0]["item"], extra):
                 # fix pass 4, finding 79: with details shown by default, of the picks with the lead's verdict the one
                 # whose own text writes them out leads (the composer's order otherwise)
                 pool = main[1:] + (result.get("wider") or [])
@@ -492,14 +506,18 @@ class ExecutorMixin:
                     result["picks"], result["wider"] = both[:len(main)], both[len(main):]
                     main = result["picks"]
             if main and kinds_for(extract):
-                if not asked:   # finding 28: details nobody named, for the recommended pick only
+                if items_mode:   # round 7: the named things on the top picks (up to 3), in parallel
+                    targets = list({id(p): p for p in main + (result.get("wider") or [])}.values())[:3]
+                elif not asked:   # finding 28: details nobody named, for the recommended pick only
                     targets = main[:1]
                 elif result.get("closest"):
                     targets = list(main)
                 else:   # finding 16: the details step on the top 3 clear picks, then the best one that has them all
                     targets = list({id(p): p for p in main + (result.get("wider") or [])}.values())[:max(3, len(main))]
                 facts, info = details_many([p["item"] for p in targets], extract, view.lib, store=self.store,
-                                           person=h, extra=extra, now=now)
+                                           person=h, extra=extra, now=now,
+                                           context={"request": request_text or spec.content.goal or "",
+                                                    "about": about, "today": today.isoformat()})
                 cost += info["cost"]
                 result["dropped"]["lines_not_in_text"] = info["dropped"]
                 for p in targets:
@@ -556,12 +574,18 @@ class ExecutorMixin:
                     # fix pass 4, finding 74: a reason may name their kit or their usual time only when the post's own
                     # text backs it ("it needs only an Instant Pot" for a post that never names one is left out)
                     return not pref_backed(part, own, kits, time_pref)
-                why = "detail_claim" if claims(b) else ("pref_claim" if unbacked(b) else None)
+
+                def stale_part(part, p=p):
+                    # round 7, finding 91: "an application now open" from a post older than 60 days is not said
+                    return stale(part, p.get("age_from"), today)
+                why = "detail_claim" if claims(b) else ("pref_claim" if unbacked(b) else
+                                                        ("stale_claim" if stale_part(b) else None))
                 if why is None:
                     continue
                 # fix pass 5, finding 84 (5): the failing part is trimmed; the rest stays when it is still a clause
                 # with a backed fact; with nothing left the reason is gone (the lead then gets one code stands behind)
-                trimmed = trim_reason(b, lambda part: claims(part) or unbacked(part), p.get("because_quotes"))
+                trimmed = trim_reason(b, lambda part: claims(part) or unbacked(part) or stale_part(part),
+                                      p.get("because_quotes"))
                 key = "because_" + why + ("_trimmed" if trimmed else "")
                 result["dropped"][key] = result["dropped"].get(key, 0) + 1
                 p["because"], p["because_backed"] = (trimmed, True) if trimmed else (None, False)
@@ -570,6 +594,20 @@ class ExecutorMixin:
             if result.get("picks") and kind != "follow_up" and not self._answer_lang():
                 result["picks"][0]["fit"] = self._fit_note(h, result["picks"][0], kits, extra, spec,
                                                            request_text or "", hint)
+            if items_mode and result.get("picks"):
+                # round 7, finding 90: two or more named things over the shown picks make the answer those things,
+                # each under its post (decided here, from what the details step read)
+                from .answers import choose_items
+                result["items_answer"] = choose_items(result, extra, today, ts, year,
+                                                      notes=not self._answer_lang())
+                if result["items_answer"]:
+                    steps["items"] = sum(len(x[1]) for x in result["items_answer"])
+                    for p, its, _ in result["items_answer"]:
+                        p["shown_items"] = its
+                from .extract import asks_for_things
+                things = asks_for_things(request_text or "", spec.content.goal or "", *spec.content.searches)
+                for p in (result.get("picks") or []) + (result.get("wider") or []):
+                    p["things"] = things
         except Exception as e:  # noqa: BLE001 - one failed run never stops the bot
             status, err = "error", type(e).__name__ + (": " + str(e)[:120] if isinstance(e, RuntimeError) else "")
             stopped = llm.budget_stop(e)
@@ -996,6 +1034,14 @@ class ExecutorMixin:
                                          "platform": it.platform, "video_id": it.video_id, "creator": it.creator,
                                          "facts": {}, "lines": [], "line_kinds": None})
             rec["main"] = True
+            if spec.content.item_names:   # round 7: the things of an items answer it was set up for, by name
+                its = [x for x in rec.get("items") or [] if x.get("name") in spec.content.item_names]
+                if its:
+                    for i, x in enumerate(its, 1):
+                        x["n"] = i
+                    rec["items"] = its
+                    rec["title"] = its[0]["name"] if len(its) == 1 else rec["title"]
+                    rec["facts"], rec["lines"] = {}, []
             recs.append(rec)
         parts = [{"type": "text", "text": T.SENT_AGAIN_HEAD}] if recs else []
         for i, rec in enumerate(recs):

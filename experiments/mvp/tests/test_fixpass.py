@@ -215,7 +215,7 @@ def test_7_a_leading_i_recommend_because_is_stripped_from_the_clause(env):
         assert msg.count("because") == 1 and "I recommend this" not in msg and clean(msg)
     from mvp import config
     prompt = open(os.path.join(config.HERE, "prompts", f"{config.PROMPT_COMPOSE}.md")).read()
-    assert config.PROMPT_COMPOSE == "compose_v4" and 'never start it with "I recommend", "because"' in prompt
+    assert config.PROMPT_COMPOSE in ("compose_v4", "compose_v5") and 'never start it with "I recommend", "because"' in prompt
 
 
 def test_8_a_clause_without_a_subject_follows_a_colon(env):

@@ -328,6 +328,8 @@ class Content(BaseModel):
     exclude_sent: bool = True
     style: Literal["full", "brief"] = "full"
     item_ids: list[str] = Field(default_factory=list, max_length=10)
+    # round 7: things of an items answer sent again ("remind me about <name> next week"), set by code like item_ids
+    item_names: list[str] = Field(default_factory=list, max_length=10)
 
     @field_validator("saved_after", "saved_before")
     @classmethod
@@ -408,7 +410,7 @@ class Content(BaseModel):
             if not self.item_ids:
                 raise ValueError("source items needs item_ids")
             self.goal = self.goal or "the picks you asked for"
-        if s != "items" and self.item_ids:
+        if s != "items" and (self.item_ids or self.item_names):
             raise ValueError("item_ids go with source items")
         if self.saved_after and self.saved_before and self.saved_before <= self.saved_after:
             raise ValueError("saved_before must be after saved_after")
@@ -742,7 +744,7 @@ class Interpretation(BaseModel):
         i = self.intent
         if i in ("new_rule", "ask", "change_rule") and self.spec is None:
             raise ValueError(f"{i} needs a spec")
-        if self.spec is not None and self.spec.content.item_ids:
+        if self.spec is not None and (self.spec.content.item_ids or self.spec.content.item_names):
             raise ValueError("item_ids are set by code from pick numbers; give pick_number instead")
         if i == "change_rule" and self.spec.when.type == "now":
             self.intent, self.spec = "run_rule", None   # "send the pasta one now" runs the rule; it never ends it

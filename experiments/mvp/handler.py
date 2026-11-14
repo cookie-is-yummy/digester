@@ -391,6 +391,7 @@ class HandlerMixin:
     def _dispatch_one(self, person, it, text, rules, pending, last, now):
         h = person["handle"]
         self.note(intent=it.intent)
+        self._tl.msg_text = text   # round 7: "remind me about <name>" picks a thing of an items answer by its name
         if it.intent in ("profile_update", "chat") and getattr(self._tl, "merged_text", None) == text:
             # a setup answer the form call merged already: no second "Noted" and no small talk beside the setup's
             # own reply (fix pass 2, finding 42)

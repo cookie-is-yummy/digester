@@ -286,12 +286,16 @@ VERDICTS = ("clear", "close", "no")
 
 
 def _candidate_block(cands, extra=None):
+    from .dates import posted_on
     rows = []
     for i, it in enumerate(cands, 1):
         how = ", ".join(it.how()) or "in their library"
         meta = f"{it.platform}{' ' + it.media if it.media else ''}; by {it.creator or 'unknown'}; {how}"
-        if it.kept_on():
-            meta += f" ({it.kept_on()[:7]})"
+        if it.kept_on():   # round 7, finding 91: whole dates, kept and posted, so the composer can tell old from new
+            meta += f" (kept {it.kept_on()[:10]})"
+        posted = posted_on(it, extra)
+        if posted:
+            meta += f"; posted {posted}"
         length = length_line(it, extra)
         if length:
             meta += f"; {length} (from YouTube)"
@@ -300,12 +304,15 @@ def _candidate_block(cands, extra=None):
     return "\n".join(rows)
 
 
-def answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider=False):
+def answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider=False, day=None):
     parts = {"v": config.PROMPT_COMPOSE, "m": config.MODEL, "content": spec.content.model_dump(), "ids": [it.id for it in cands],
              "len": {it.id: duration_of(it, extra) for it in cands if duration_of(it, extra)},
              "desc": {it.id: len(((extra or {}).get(it.id) or {}).get("description") or "") for it in cands},
              "known": known_lines, "fb": feedback_note, "profile": profile, "lang": lang,
-             "sent": sent_count if spec.content.order == "easiest_first" else None, "wider": wider}
+             "sent": sent_count if spec.content.order == "easiest_first" else None, "wider": wider,
+             # round 7: the candidates' dates and today's date are in what the composer reads
+             "posted": {it.id: (extra or {}).get(it.id, {}).get("published_at") for it in cands
+                        if (extra or {}).get(it.id, {}).get("published_at")}, "day": day}
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -371,7 +378,8 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
         reason = (f"nothing you kept since {c.saved_after} matched" if c.saved_after else
                   "nothing in your library matched")
         return dict(empty, none_reason=reason), 0.0
-    ask = {"request": request_text or c.goal, "goal": c.goal, "count": c.count,
+    now = now or datetime.now(timezone.utc)
+    ask = {"request": request_text or c.goal, "goal": c.goal, "count": c.count, "today": now.date().isoformat(),
            "max_picks": c.count + (config.WIDER_MAX if wider or survey else 0), "criteria": c.criteria,
            "avoid": c.avoid,
            "order": c.order}
@@ -398,8 +406,8 @@ def compose(cands, spec, person_handle, request_text=None, feedback_note="", kno
                 + (("\n" + feedback_note) if feedback_note else "") + "\n\nCandidates:\n" + block)
     user = make_user(ask)
     budget = max_tokens_for(ask["max_picks"], len(c.criteria))
-    now = now or datetime.now(timezone.utc)
-    key = answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider or survey)
+    key = answer_key(cands, spec, extra, known_lines, feedback_note, profile, lang, sent_count, wider or survey,
+                     day=ask["today"])
     raw, cost, cached = None, 0.0, False
     if store is not None and use_cache and config.ANSWER_CACHE_HOURS:
         since = (now - timedelta(hours=config.ANSWER_CACHE_HOURS)).astimezone(timezone.utc).isoformat(timespec="seconds")

@@ -204,6 +204,11 @@ def which_pick(n):
     return f"My last message had {n} {'pick' if n == 1 else 'picks'}. Which one?"
 
 
+def which_item(n):
+    """Round 7: an items answer numbers its things; a number past them."""
+    return f"My last message listed {n} {'thing' if n == 1 else 'things'}. Which number?"
+
+
 def rule_next(when_text):
     return f" (next: {when_text})"
 

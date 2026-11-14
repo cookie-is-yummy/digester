@@ -16,10 +16,12 @@ PROMPT_INTERPRET = "interpret_v5"   # v3 plus the improvement round's rules (rul
 INTERPRET_TEMPERATURE = 0     # the most deterministic settings the model accepts (DESIGN.md sections 4 and 11)
 INTERPRET_SEED = 7
 INTERPRET_CACHE_HOURS = 6     # the same request from the same person reuses its interpretation (section 4)
-PROMPT_COMPOSE = "compose_v4"  # v3 with "because" as a bare clause and no internal words (fix pass, findings 7, 8, 37)
+PROMPT_COMPOSE = "compose_v5"  # v4 plus today's date and each candidate's dates (round 7, finding 91); v4: "because" as a
+                               # bare clause and no internal words (fix pass, findings 7, 8, 37)
 COMPOSE_TEMPERATURE = 0       # the interpreter's settings, for the same reason
 COMPOSE_SEED = 7
-PROMPT_EXTRACT = "extract_v1"  # details on the full text, one call per picked item, cached (section 4)
+PROMPT_EXTRACT = "extract_v2"  # v1 plus the "items" kind (named things a post lists, with the request, the person and
+                               # today's date; round 7, finding 90); details on the full text, one call per pick, cached
 EXTRACT_TEMPERATURE = 0
 EXTRACT_SEED = 7
 ANSWER_CACHE_HOURS = 24       # the same spec and candidates reuse the same composed answer ("another" bypasses it)

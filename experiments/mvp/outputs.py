@@ -178,6 +178,10 @@ class OutputsMixin:
         items = last["items"]
         snap = self.store.answer(last["run_id"]) or {}
         kept = {p["item_id"]: p for p in snap.get("picks") or []}
+        if what == "pick":   # round 7, finding 90: an items answer: a number or a name means one of its things
+            got = self._answer_item(snap, numbers)
+            if got is not None:
+                return got
         if what == "ingredients" and not numbers and len(items) > 1:
             # whose ingredients: one pick at a time. Fix pass 3, finding 68: the wider links are not picks with
             # details, so an answer with one recommended pick and a wider selection means that pick
@@ -229,6 +233,45 @@ class OutputsMixin:
         if not answer.get("parts"):
             whole = False   # nothing kept to send whole: the picks one by one
         return picks, whole, answer, None
+
+    ITEM_NAME_SKIP = set("""add put the a an to my me list lists todo to-do calendar remind reminder about one ones next
+week tomorrow tonight that this it its on in for of and or please pls can you could would email send text at from
+saves saved post posts link""".split())
+
+    def _answer_item(self, snap, numbers):
+        """(picks, whole, answer, problem) for the one thing of an items answer the person points at (its number, or
+        its name in their message), each as a pick record: the thing's name, its words, its date, and the link of the
+        post it came from. None when the answer names no things, or the message points at none of them."""
+        from .compose import tokens
+        its = [(x, p) for p in snap.get("picks") or [] for x in p.get("items") or []]
+        if not its:
+            return None
+        chosen = None
+        if numbers and len(numbers) == 1:
+            chosen = next(((x, p) for x, p in its if x.get("n") == numbers[0]), None)
+            if chosen is None:
+                return None, False, None, T.which_item(len(its))
+        elif not numbers:
+            said = {w for w in tokens(getattr(self._tl, "msg_text", "") or "") if w not in self.ITEM_NAME_SKIP}
+            scored = []
+            for x, p in its:
+                words = [w for w in tokens(x.get("name") or "") if w not in self.ITEM_NAME_SKIP
+                         and (len(w) >= 3 or w.isupper())]
+                hits = sum(1 for w in words if w in said)
+                if hits:
+                    scored.append((hits, x["n"], x, p))
+            if scored:
+                scored.sort(key=lambda r: (-r[0], r[1]))
+                if len(scored) == 1 or scored[0][0] > scored[1][0]:
+                    chosen = (scored[0][2], scored[0][3])
+        if chosen is None:
+            return None
+        x, p = chosen
+        rec = {"item_id": p["item_id"], "title": x.get("name"), "url": p.get("url"), "platform": p.get("platform"),
+               "video_id": p.get("video_id"), "creator": p.get("creator"),
+               "facts": {"key_points": [x["about"]]} if x.get("about") else {}, "lines": [], "line_kinds": None,
+               "item": dict(x), "source_title": p.get("title"), "main": True}
+        return [rec], False, snap, None
 
     def _ingredients_now(self, h, picks, view, is_last):
         """Fix pass, finding 28: "add its ingredients to my list" when no ingredient lines were found yet (the answer
@@ -292,6 +335,11 @@ class OutputsMixin:
             if problem == T.NO_PICK_TO_ADD and not any(n == "todo.add" for n, _ in acts):
                 problem = T.NOTHING_TO_ACT_ON
             return self.send(h, problem)
+        item = (picks[0].get("item") if picks and len(picks) == 1 else None) or {}
+        if item.get("date") and item.get("state") == "open":
+            # round 7: "put the NASA one in my calendar": on the date its post gives, when none is named
+            acts = [(n, dict(p, date=item["date"]) if n == "calendar.add" and not p.get("date")
+                     and not p.get("day_offset") else p) for n, p in acts]
         ctx = Ctx(bot=self, person=person, answer=answer, picks=picks, whole=whole, run_id=answer.get("run_id"),
                   rule_id=answer.get("rule_id"), kind="act_on_last", now=now, tz=person["timezone"], request_text=text)
         before = self.store.get_state(f"lastwrite:{h}")
@@ -325,9 +373,12 @@ class OutputsMixin:
         when = it.when.model_dump(exclude_none=True)
         if when.get("date") and when.get("times"):   # "in 2 hours", resolved by code: the moment is what is kept
             when.pop("in_minutes", None)            # (validation would otherwise drop it and the send never comes)
+        names = [p["item"]["name"] for p in picks if p.get("item") and p["item"].get("name")]
         spec = RuleSpec.model_validate({"when": when,
                                         "content": {"source": "items", "item_ids": [p["item_id"] for p in picks][:10],
-                                                    "goal": goal[:200], "count": min(len(picks), 10)}, "do": do})
+                                                    "goal": goal[:200], "count": min(len(picks), 10),
+                                                    # round 7: one thing of an items answer, by its name
+                                                    **({"item_names": names[:10]} if names else {})}, "do": do})
         never = self._never_sends(person, spec, now)
         if never:
             return self.send(h, never)

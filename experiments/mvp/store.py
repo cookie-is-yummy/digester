@@ -84,6 +84,7 @@ ADDED_COLUMNS = [
     ("people", "profile TEXT"),          # slice 6: JSON {"interests": [...], "build", "guessed_at"} (profile.py)
     ("rules", "number INTEGER"),         # review fix X1 (experience): the rule's number for its person ("stop 3"),
                                          # given when it is made and never reused, so a finished rule shifts nothing
+    ("youtube_cache", "published_at TEXT"),   # round 7, finding 91: snippet.publishedAt (NULL in rows fetched before)
 ]
 
 
@@ -499,7 +500,8 @@ class Store:
         gone = {}   # item -> the lines read from its description: also cut from the kept answer's text (checker)
         for r in self.q("SELECT item_id, lines FROM facts WHERE source='youtube_api' AND at<?", (before,)):
             try:
-                gone.setdefault(r["item_id"], set()).update(str(x) for x in json.loads(r["lines"] or "[]"))
+                gone.setdefault(r["item_id"], set()).update(str(x) for x in json.loads(r["lines"] or "[]")
+                                                            if not isinstance(x, dict))
             except ValueError:
                 gone.setdefault(r["item_id"], set())
         old = set(gone)
@@ -520,14 +522,17 @@ class Store:
                 continue
             if isinstance(val, dict) and old & set(val):
                 self.set_state(row["key"], {k: v for k, v in val.items() if k not in old})
-        for row in self.q("SELECT run_id, picks, parts FROM answers WHERE picks LIKE '%\"facts\"%'"):
+        for row in self.q("SELECT run_id, picks, parts FROM answers WHERE picks LIKE '%\"facts\"%'"):  # (and items)
             picks = json.loads(row["picks"] or "[]")
             cut = set()
             for p in picks:
-                if p.get("item_id") in old and (p.get("facts") or p.get("lines")):
+                if p.get("item_id") in old and (p.get("facts") or p.get("lines") or p.get("items")):
                     cut |= gone.get(p["item_id"], set()) | {str(x) for x in p.get("lines") or []}
-                    cut |= {str(x) for v in (p.get("facts") or {}).values() for x in (v or [])}
+                    cut |= {str(x) for v in (p.get("facts") or {}).values() for x in (v or []) if not isinstance(x, dict)}
+                    # round 7: the things an items answer showed from a video's description, as they were shown
+                    cut |= {str(x.get("shown") or x.get("name")) for x in p.get("items") or [] if isinstance(x, dict)}
                     p["facts"], p["lines"], p["line_kinds"] = {}, [], None
+                    p.pop("items", None)
             if cut:
                 parts = _scrub_parts(json.loads(row["parts"] or "[]"), cut)
                 self.x("UPDATE answers SET picks=?, parts=? WHERE run_id=?",
@@ -547,6 +552,7 @@ class Store:
                 p["yt_expired"] = True
                 if p.get("platform") == "youtube":   # a video's details can only have come from its description
                     p["facts"], p["lines"], p["line_kinds"] = {}, [], None
+                    p.pop("items", None)
                 parts += pick_parts(p)
             self.x("UPDATE answers SET picks=?, parts=? WHERE run_id=?", (json.dumps(picks), json.dumps(parts),
                                                                          row["run_id"]))

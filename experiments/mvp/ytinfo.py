@@ -37,7 +37,8 @@ def fetch_batch(ids, key, timeout=None):
 
 
 def parse(resp, ids):
-    """videos.list response -> {video_id: (ok, duration_s, description)}; ids not returned are unavailable."""
+    """videos.list response -> {video_id: (ok, duration_s, description, published_at)}; ids not returned are
+    unavailable. published_at is snippet.publishedAt ('YYYY-MM-DDTHH:MM:SSZ'), or None (round 7, finding 91)."""
     out = {}
     if not isinstance(resp, dict) or not isinstance(resp.get("items") or [], list):
         raise ValueError("unexpected videos.list response")
@@ -49,14 +50,17 @@ def parse(resp, ids):
         dur = parse_duration(cd.get("duration"))
         if not dur:
             dur = None   # live and upcoming streams report P0D
-        out[vid] = (1, dur, (sn.get("description") or "")[:5000])
+        pub = sn.get("publishedAt")
+        pub = pub if isinstance(pub, str) and len(pub) >= 10 and pub[:4].isdigit() else None
+        out[vid] = (1, dur, (sn.get("description") or "")[:5000], pub)
     for vid in ids:
-        out.setdefault(vid, (0, None, ""))
+        out.setdefault(vid, (0, None, "", None))
     return out
 
 
 class YouTubeInfo:
-    """details(items, now) -> {item_id: {"duration_s", "description"}} for the YouTube items among `items`."""
+    """details(items, now) -> {item_id: {"duration_s", "description", "published_at"}} for the YouTube items among
+    `items`."""
 
     def __init__(self, store, fetch=None, key_env=None):
         self.store = store
@@ -87,16 +91,17 @@ class YouTubeInfo:
                     self.errors += 1   # the type only; the request URL and headers are never logged
                     break
                 at = _iso(now)
-                for vid, (ok, dur, desc) in got.items():
-                    self.store.x("INSERT OR REPLACE INTO youtube_cache(video_id,ok,duration_s,description,fetched_at) "
-                                 "VALUES(?,?,?,?,?)", (vid, ok, dur, desc, at))
-                    rows[vid] = {"video_id": vid, "ok": ok, "duration_s": dur, "description": desc, "fetched_at": at}
+                for vid, (ok, dur, desc, pub) in got.items():
+                    self.store.x("INSERT OR REPLACE INTO youtube_cache(video_id,ok,duration_s,description,fetched_at,"
+                                 "published_at) VALUES(?,?,?,?,?,?)", (vid, ok, dur, desc, at, pub))
+                    rows[vid] = {"video_id": vid, "ok": ok, "duration_s": dur, "description": desc, "fetched_at": at,
+                                 "published_at": pub}
         out = {}
         for vid, it in want.items():
             r = rows.get(vid)
             if r and r["ok"]:
                 out[it.id] = {"duration_s": r["duration_s"], "description": r["description"] or "",
-                              "fetched_at": r["fetched_at"]}
+                              "fetched_at": r["fetched_at"], "published_at": r.get("published_at")}
         return out
 
 
