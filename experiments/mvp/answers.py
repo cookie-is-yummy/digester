@@ -110,19 +110,25 @@ def choose_items(result, extra, today, ts, year=None, notes=True):
                 x["state"] = st["state"]
                 x["date"] = st["date"].isoformat() if st.get("date") else None
                 x["note"] = D.date_note(st, today) if notes else ""
-                x["year_hit"] = year_hit(" ".join([x.get("name") or "", x.get("about") or "", x.get("when") or ""]),
-                                         p.get("posted"), year) if year else True
+                words = " ".join([x.get("name") or "", x.get("about") or "", x.get("when") or ""])
+                x["year_hit"] = year_hit(words, p.get("posted"), year) if year else True
+                # checker (rule 3 of finding 90): its own words name only years before the one asked for ("Design
+                # award 2024" for "for 2026"): it contradicts the request, read by code, not by the model's "fit"
+                named = [int(y) for y in D.YEAR.findall(words)]
+                x["year_off"] = bool(year and named and max(named) < year)
             if x.get("about") and D.stale(x["about"], p.get("age_from"), today):
                 x["stale_from"] = D.month_year(p.get("age_from"))
             its.append(x)
         srcs.append([p, its])
     if ts:
-        live = sum(1 for _, its in srcs for x in its if x.get("state") != "passed")
-        if live >= 2:   # a passed thing is never shown while 2 or more that have not passed fit
+        def gone(x):
+            return x.get("state") == "passed" or x.get("year_off")
+        live = sum(1 for _, its in srcs for x in its if not gone(x))
+        if live >= 2:   # a passed thing (or one of an earlier year) is never shown while 2 or more others fit
             n = 0
             for s in srcs:
-                n += sum(1 for x in s[1] if x.get("state") == "passed")
-                s[1] = [x for x in s[1] if x.get("state") != "passed"]
+                n += sum(1 for x in s[1] if gone(x))
+                s[1] = [x for x in s[1] if not gone(x)]
             if n:
                 result.setdefault("dropped", {})["items_passed"] = n
         for s in srcs:

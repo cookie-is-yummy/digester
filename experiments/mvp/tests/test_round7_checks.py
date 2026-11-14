@@ -187,3 +187,16 @@ def test_r7c_ok_and_for_dinner_refines_the_request_and_the_opposite_is_asked_abo
     msg = say(env, "the opposite", {"intent": "follow_up", "question": "the opposite"})
     assert msg.startswith("I'm not sure what the opposite would be here.")
     assert env["bot"].store.one("SELECT COUNT(*) n FROM runs")["n"] == n_runs
+
+
+def test_r7c_a_thing_whose_own_words_name_only_an_earlier_year_is_left_out_for_a_years_request(env, tmp_path):
+    cap = ("Opportunities for students\n- Design award 2024: for student designers\n- Summer lab: paid research for "
+           "undergrads\n- Hack week 2026: build with mentors")
+    use_lib(env, tmp_path, [("y1", "opps", cap, "2026-08-01", "2026-08-02", "instagram")])
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Opportunities for students")]}
+    env["state"]["answers"]["mvp_extract"] = lambda u: {"items": [
+        {"name": "Design award 2024", "about": "for student designers", "fit": "unknown"},
+        {"name": "Summer lab", "about": "paid research for undergrads", "fit": "unknown"},
+        {"name": "Hack week 2026", "about": "build with mentors", "fit": "yes"}]}
+    msg = say(env, "what opportunities might i have missed for 2026", ask("opportunities for 2026"))
+    assert "Design award 2024" not in msg and "1. Hack week 2026" in msg and "2. Summer lab" in msg
