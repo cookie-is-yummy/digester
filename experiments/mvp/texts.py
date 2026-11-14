@@ -1133,3 +1133,77 @@ def date_passed_for(name, note):
 
 def date_too_near(name, day):
     return f"{name}'s date is {day}, sooner than that, so I didn't set a reminder. Tell me when you'd like one."
+
+
+# ---------- round 8 (DESIGN.md section 13): rules beyond timing ----------
+def before_words(days):
+    """'the day', 'a week', '3 days': how long before a thing's date a reminder comes."""
+    return "the day" if days == 1 else ("a week" if days == 7 else f"{days} days")
+
+
+def deadline_set(name, first, days, deadline, day, far, n):
+    """BN1: 'OK. I'll remind you about NASA L'SPACE Academy on Friday 27 November at 9am, 3 days before its deadline,
+    30 November (in 16 days).'"""
+    what = "its deadline" if deadline else "the date in its post"
+    return (f"OK. I'll remind you about {name} {first}, {before_words(days)} before {what}, {day} ({far}). "
+            f"Reply \"stop {n}\" to cancel.")
+
+
+def deadline_soon(name, first, days, deadline, day, far, n):
+    """BN1: the moment asked for has passed but the date has not: the next 9am."""
+    what = "deadline" if deadline else "date"
+    return (f"OK. {name}'s {what} is {day} ({far}), less than {before_words(days)} away, so I'll remind you {first}. "
+            f"Reply \"stop {n}\" to cancel.")
+
+
+def deadline_today(name, day):
+    return f"{name}'s date is today, {day}, so it's too late for a reminder before it. I didn't set one."
+
+
+def deadline_ask(name):
+    """BN1: the post gives no date: one question; the next message is read for a date."""
+    return f"The post doesn't say when {name} closes. Tell me the date, like \"dec 5\", and I'll set the reminder."
+
+
+def deadline_head(name, deadline, day, far):
+    """BN1: the head line of the reminder when it comes."""
+    what = "deadline" if deadline else "date"
+    return f"Reminder: {name}'s {what} is {day} ({far})."
+
+
+QUIET_EMPTY_NOTE = " On a day with nothing new I'll stay quiet."
+
+
+def empty_quiet_line(goal, since, n):
+    """BN2: the one line on the first empty day after a send with picks; then nothing until there is something."""
+    when = f" since {since}" if since else ""
+    return f"Nothing new for \"{goal}\"{when}. I'll stay quiet until there is. \"run {n}\" asks now."
+
+
+def if_empty_changed(way, n=None):
+    """BN2: "tell me even if there's nothing" / "don't text me if there's nothing" for a preview or the rule just
+    started."""
+    said = ("On a day with nothing new I'll tell you so." if way == "say"
+            else "On a day with nothing new I'll stay quiet.")
+    return f"OK. {said}" + (" Reply YES to start it." if n is None else f" (rule {n})")
+
+
+def rule_finished(n):
+    return f"Rule {n} is finished."
+
+
+def overdue_nudge(text, when, n):
+    """BN2: the one nudge about a to-do past its due time."""
+    return f"\"{text}\" was due {when}. Reply \"done {n}\", \"tomorrow\" or \"drop it\"."
+
+
+def overdue_moved(text, when):
+    return f"OK. \"{text}\" is now due {when}."
+
+
+def overdue_dropped(text):
+    return f"OK. I took \"{text}\" off your list."
+
+
+OVERDUE_OFF = "OK. I won't nudge you about to-dos that are past due. Say \"overdue nudges on\" to have them back."
+OVERDUE_ON = "OK. When a to-do is a day past due, I'll nudge you once."

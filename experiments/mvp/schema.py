@@ -100,6 +100,10 @@ class When(BaseModel):
     max_sends: Optional[int] = Field(default=None, ge=1, le=100)
     except_dates: list[str] = Field(default_factory=list, max_length=60)
     tz: Optional[str] = None                             # an IANA zone that pins this rule ("7pm New York time")
+    # round 8 (DESIGN.md section 13), both set by code only, never by the model; a stored spec without them reads as
+    # before: a send that finds nothing says so ("say"), and the rule runs until its own limits end it
+    if_empty: Optional[Literal["say", "quiet"]] = None   # schedule / random: "quiet" sends nothing on an empty day
+    stop_when: Optional[Literal["done"]] = None          # schedule / random reminder (note): ends when they say done
 
     @field_validator("date", "start", "until")
     @classmethod
@@ -217,6 +221,8 @@ class When(BaseModel):
         timing = ("date", "in_minutes", "days", "every_weeks", "every_days", "month_days", "month_weeks", "every_months",
                   "every_hours", "times", "window", "per", "count")
         limits = ("start", "until", "max_sends", "except_dates")
+        if t not in ("schedule", "random"):   # round 8: only a timed repeating rule can stay quiet or end on "done"
+            self._clear("if_empty", "stop_when")
         if t in ("now", "on_request"):
             self._clear(*timing, *limits, "tz")
             return self
@@ -474,6 +480,10 @@ class RuleSpec(BaseModel):
                 do.append(a)
         self.do = do
         c = self.content
+        if c.source != "note":   # round 8: "until you say done" is for a reminder in the person's own words only
+            self.when.stop_when = None
+        if c.source not in ("library", "recent"):   # and only a send that searches can come up empty
+            self.when.if_empty = None
         if self.when.type != "now" and c.count > MAX_RULE_PICKS:
             c.asked_count, c.count = c.asked_count or c.count, MAX_RULE_PICKS
         return self

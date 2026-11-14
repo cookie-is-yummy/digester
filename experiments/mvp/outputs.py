@@ -397,7 +397,7 @@ saves saved post posts link""".split())
         from .dates import date_note, say_day
         from .schema import When
         h = person["handle"]
-        picks, _, _, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else None, it.answer_ref)
+        picks, _, answer, problem = self._answer_picks(h, [it.pick_number] if it.pick_number else None, it.answer_ref)
         if problem or not picks or len(picks) != 1:
             return None
         rec = picks[0]
@@ -418,11 +418,21 @@ saves saved post posts link""".split())
         target = day - timedelta(days=n)
         if target < today or (target == today and n):
             return self.send(h, T.date_too_near(name, f"{say_day(day, today)}"))
-        time = (it.when.time if it.when is not None and it.when.time else None) or "09:00"
+        # the time named in the message (When folds `time` into `times`), never one the model guessed; else 9am
+        named = re.search(r"\b\d{1,2}(?::\d\d)?\s*(?:am|pm)\b|\bnoon\b|\bat \d{1,2}(?::\d\d)?\b", text or "", re.I)
+        time = (it.when.times[0] if named and it.when is not None and it.when.times else None) or "09:00"
         acts = [(a, p) for a, p in acts if a != "calendar.add"] or [("message.send", {})]
-        it = it.model_copy(update={"when": When(type="once", date=target.isoformat(), time=time),
-                                   "actions": [x for x in it.actions if x.action != "calendar.add"] or it.actions})
-        return self._act_later(person, it, acts, text, now)
+        # round 8: the thing found above is the one set (re-reading the message could take "its" for the first one)
+        got = self._later_rule(person, picks, answer or {}, acts, When(type="once", date=target.isoformat(), time=time),
+                               text, now)
+        if isinstance(got, str):
+            return self.send(h, got)
+        rule_id, nxt, spec, goal = got
+        self.store.set_state(f"deadline:{rule_id}", {"date": day.isoformat(), "deadline": self._is_deadline(rec, person)})
+        msg = T.later_set(say_time(nxt, now, spec.when.tz or person["timezone"]),
+                          [VERB[a.action] for a in spec.do if a.action in VERB], f"\"{goal}\"",
+                          self.store.rule_number(h, rule_id))
+        return self.send(h, msg + self._email_ask(person, spec, now))
 
     def _act_later(self, person, it, acts, text, now):
         """'Remind me of the 2nd one at 6', 'email me this tomorrow morning': a one-off rule whose content is the
@@ -433,9 +443,23 @@ saves saved post posts link""".split())
                                                            it.answer_ref)
         if problem:
             return self.send(h, T.NOTHING_TO_ACT_ON if problem == T.NO_PICK_TO_ADD else problem)
+        got = self._later_rule(person, picks, answer, acts, it.when, text, now)
+        if isinstance(got, str):
+            return self.send(h, got)
+        rule_id, nxt, spec, goal = got
+        n = self.store.rule_number(h, rule_id)
+        verbs = [VERB[a.action] for a in spec.do if a.action in VERB]
+        what = f"\"{goal}\"" if len(picks) == 1 else goal
+        msg = T.later_set(say_time(nxt, now, spec.when.tz or tz), verbs, what, n)
+        return self.send(h, msg + self._email_ask(person, spec, now))
+
+    def _later_rule(self, person, picks, answer, acts, when_model, text, now):
+        """The one-off rule that sends `picks` again at `when_model` (source items, no new search): (rule_id, next
+        send, spec, goal), or the reply's text when it would never send. Written for 'undo'."""
+        h, tz = person["handle"], person["timezone"]
         goal = picks[0]["title"] if len(picks) == 1 else f"the {len(picks)} picks for \"{answer.get('goal') or 'that'}\""
         do = [{"action": n, "params": p} for n, p in acts] or ["message.send"]
-        when = it.when.model_dump(exclude_none=True)
+        when = when_model.model_dump(exclude_none=True)
         if when.get("date") and when.get("times"):   # "in 2 hours", resolved by code: the moment is what is kept
             when.pop("in_minutes", None)            # (validation would otherwise drop it and the send never comes)
         names = [p["item"]["name"] for p in picks if p.get("item") and p["item"].get("name")]
@@ -446,16 +470,132 @@ saves saved post posts link""".split())
                                                     **({"item_names": names[:10]} if names else {})}, "do": do})
         never = self._never_sends(person, spec, now)
         if never:
-            return self.send(h, never)
+            return never
         rule_id = self.store.add_rule(h, text, spec.stored(), "active", None, created_at=now_iso(now))
         nxt = next_run(spec.when, tz, now, anchor=now, seed=rule_id, quiet=self.store.quiet(h))
         self.store.set_slot(rule_id, now_iso(nxt), "active")
         self._wrote_rule(h, f"set up a one-time send of \"{goal}\"", rule_id)
+        return rule_id, nxt, spec, goal
+
+    # ---------- round 8, BN1: a reminder counted back from a thing's own date (DESIGN.md section 13) ----------
+    def _deadline_text(self, person, text, now):
+        """'remind me 3 days before the NASA one closes', 'remind me before it closes' (3 days), '... and put it on my
+        calendar': read by code, before any model call. The thing is the one the message names in the last answer (a
+        number, a name, or the only one); its date is the one its own words give. None when the message is not this
+        form, or names nothing in the last answer (the model reads it then)."""
+        from .followup import deadline_request
+        req = deadline_request(text)
+        if not req:
+            return None
+        h = person["handle"]
+        last = self._answer_for(h)
+        if not last or not last.get("items"):
+            return None
+        snap = self.store.answer(last["run_id"]) or {}
+        its = [x for p in snap.get("picks") or [] for x in p.get("items") or []]
+        main = [p for p in snap.get("picks") or [] if p.get("main", True)] or [{}] * len(last["items"])
+        if req["name"]:
+            if not its:
+                return None
+            self._tl.msg_text = req["name"]
+            got = self._answer_item(snap, None)
+            if got is None:
+                return None   # the name is none of the things shown: not about that answer
+        elif req["number"]:
+            got = self._answer_picks(h, [req["number"]])
+        elif its:
+            got = self._answer_item(snap, [its[0]["n"]]) if len(its) == 1 else \
+                (None, False, None, T.which_item(len(its)))
+        else:
+            got = self._answer_picks(h, [1]) if len(main) == 1 else (None, False, None, T.which_pick(len(main)))
+        self.note(intent="act_on_last")
+        picks, _, answer, problem = got
+        if problem or not picks:
+            return self.send(h, problem or T.NOTHING_TO_ACT_ON)
+        rec = picks[0]
+        day = self._thing_date(rec, now, person)
+        if day is None:   # one question; the next message is read for the date (handler._asked_reads)
+            self.store.set_state(f"deadline_ask:{h}", {"rec": rec, "run_id": (answer or {}).get("run_id"),
+                                                      "days": req["days"], "calendar": req["calendar"],
+                                                      "text": " ".join(text.split())[:300], "at": now_iso(now)})
+            return self.send(h, T.deadline_ask(rec.get("title") or "it"))
+        return self._deadline_set(person, rec, answer, day, req["days"], req["calendar"], text, now,
+                                  deadline=self._is_deadline(rec, person))
+
+    def _deadline_answer(self, person, text, now):
+        """The message right after "Tell me the date": a date (and nothing more) sets the reminder; anything else
+        ends the question (None: it is answered as usual)."""
+        from .followup import date_answer
+        h = person["handle"]
+        st = self.store.get_state(f"deadline_ask:{h}")
+        if not st:
+            return None
+        self.store.set_state(f"deadline_ask:{h}", None)   # asked once: any other message ends the question
+        if datetime.fromisoformat(st["at"]) < now - timedelta(hours=24):
+            return None
+        today = now.astimezone(ZoneInfo(person["timezone"])).date()
+        day = date_answer(text, today)
+        if day is None:
+            return None
+        self.note(intent="act_on_last")
+        answer = self.store.answer(st["run_id"]) if st.get("run_id") else None
+        answer = answer or {"run_id": st.get("run_id"), "rule_id": None, "kind": "picks", "goal": None, "parts": [],
+                            "picks": [st["rec"]]}
+        return self._deadline_set(person, st["rec"], answer, day, st["days"], st["calendar"],
+                                  f"{st['text']} / {' '.join(text.split())}"[:300], now, deadline=True)
+
+    def _is_deadline(self, rec, person):
+        """True when the date the thing's words give stands next to a deadline word ("apply by", "closes")."""
+        from .dates import deadline_in, first_kept, posted_on
+        x = rec.get("item") or {}
+        if x:
+            words = " ".join(t for t in (x.get("when"), x.get("about")) if t)
+            return deadline_in(words, rec.get("posted") or rec.get("kept"))[1]
+        got = self.view(person["library"]).get(rec.get("item_id"))
+        return bool(got) and deadline_in(got.raw_caption or got.caption, posted_on(got) or first_kept(got))[1]
+
+    def _deadline_set(self, person, rec, answer, day, days, calendar, text, now, deadline=True):
+        """The one-time rule at 9am, `days` before `day` (or the next 9am when that has passed but the day has not),
+        the reply with both dates and how far away they are, and with `calendar` an all-day entry on `day`. A day
+        that has passed sets nothing and says so."""
+        from .dates import date_note, how_far, say_day
+        from .schedule import _at
+        from .schema import When
+        h, tz = person["handle"], person["timezone"]
+        zone = ZoneInfo(tz)
+        today = now.astimezone(zone).date()
+        name = rec.get("title") or "it"
+        if day < today:
+            return self.send(h, T.date_passed_for(name, date_note({"state": "passed", "date": day,
+                                                                   "deadline": deadline}, today)))
+        at = _at(day - timedelta(days=days), "09:00", zone)
+        soon = at <= now
+        if soon:   # the moment asked for has passed: the next 9am, while it is before the day itself
+            at = _at(today, "09:00", zone)
+            if at <= now:
+                at = _at(today + timedelta(days=1), "09:00", zone)
+            if at.astimezone(zone).date() > day:
+                return self.send(h, T.deadline_today(name, say_day(day, today)))
+        when = When(type="once", date=at.astimezone(zone).date().isoformat(), time="09:00")
+        got = self._later_rule(person, [rec], answer or {}, [("message.send", {})], when, text, now)
+        if isinstance(got, str):
+            return self.send(h, got)
+        rule_id, nxt, _, _ = got
+        self.store.set_state(f"deadline:{rule_id}", {"date": day.isoformat(), "deadline": deadline})
         n = self.store.rule_number(h, rule_id)
-        verbs = [VERB[a.action] for a in spec.do if a.action in VERB]
-        what = f"\"{goal}\"" if len(picks) == 1 else goal
-        msg = T.later_set(say_time(nxt, now, spec.when.tz or tz), verbs, what, n)
-        return self.send(h, msg + self._email_ask(person, spec, now))
+        say = T.deadline_soon if soon else T.deadline_set
+        msg = Reply.of(say(name, say_time(nxt, now, tz), days, deadline, say_day(day, today), how_far(day, today), n))
+        if calendar:   # "... and put it on my calendar": an all-day entry on the day itself, in the same reply
+            ctx = Ctx(bot=self, person=person, answer=answer or {}, picks=[rec], whole=False,
+                      run_id=(answer or {}).get("run_id"), rule_id=(answer or {}).get("rule_id"), kind="act_on_last",
+                      now=now, tz=tz, request_text=text)
+            rule_write = self.store.get_state(f"lastwrite:{h}")
+            done = self._perform(ctx, [("calendar.add", {"date": day.isoformat()})])
+            if any(o.status not in ("failed", "skipped") for _, o in done):
+                self._wrote_final(h, "a calendar link")
+                self._join_writes(h, rule_write, self.store.get_state(f"lastwrite:{h}"))
+            msg = self._with_lines(msg, done)
+        return self.send(h, msg)
 
     # ---------- what a spec's do means, in the replies that start or show a rule ----------
     @staticmethod

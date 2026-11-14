@@ -471,6 +471,10 @@ class SchedulerMixin:
                 return 0
             self._retry_or_skip(rule, now, slot, tries=retries)  # nothing is sent: an error text would be unprompted
             return 0
+        block = getattr(self._tl, "outside_block", None)
+        if not n and spec.when.if_empty == "quiet" and spec.content.outside != "only" \
+                and not (block and block[0] == run_id):
+            return self._empty_quiet(rule, spec, person, tz, now, run_id)
         # Recorded before the send: the rule moves to its next slot and the run is marked 'sending'. A crash from here
         # on can lose this one message but can never send the slot twice.
         self._advance(rule, spec, tz, now, sending=True)
@@ -495,6 +499,46 @@ class SchedulerMixin:
             return 0
         self.store.x("UPDATE runs SET status=? WHERE id=?", ("sent" if n else "none_sent", run_id))
         return 1
+
+    def _empty_quiet(self, rule, spec, person, tz, now, run_id):
+        """Round 8, BN2 (a): a repeating library rule set to stay quiet found nothing new. The slot is recorded as
+        'empty_quiet' (not a send: it never counts as unanswered, toward max_sends or toward the daily limit) and
+        nothing is sent, except on the first empty slot after a send (or the rule's first slot): one line that says it
+        will stay quiet until there is something."""
+        h = person["handle"]
+        prev = self.store.one("SELECT status FROM runs WHERE rule_id=? AND kind='scheduled' AND id<? AND status IN "
+                              "('sent','none_sent','unknown','empty_quiet') ORDER BY id DESC LIMIT 1",
+                              (rule["id"], run_id))
+        self._advance(rule, spec, tz, now)
+        self.store.x("UPDATE runs SET status='empty_quiet' WHERE id=?", (run_id,))
+        if prev is not None and prev["status"] in ("empty_quiet", "none_sent"):
+            return 0   # already said: quiet until there is something
+        from .dates import say_day
+        from .texts import empty_quiet_line
+        newest = self._newest_kept(person)
+        today = now.astimezone(ZoneInfo(tz)).date()
+        line = empty_quiet_line(spec.content.goal, say_day(newest, today) if newest else None,
+                                self.store.rule_number(h, rule["id"]) or 1)
+        try:
+            self.send(h, line, run_id)
+        except Exception as e:  # noqa: BLE001 - a line about nothing is never retried
+            self.store.x("UPDATE runs SET error=? WHERE id=?", (type(e).__name__, run_id))
+            return 0
+        return 1
+
+    def _newest_kept(self, person):
+        """The newest day the person kept something (saved, collected, sent to themselves, a playlist), or None."""
+        from datetime import date
+        best = None
+        for x in self.view(person["library"]).items.values():
+            for k in ("save", "collection", "share_self", "playlist"):
+                v = (x.dates or {}).get(k)
+                if v and (best is None or str(v)[:10] > best):
+                    best = str(v)[:10]
+        try:
+            return date.fromisoformat(best) if best else None
+        except ValueError:
+            return None
 
     @staticmethod
     def _own_once(spec):

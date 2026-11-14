@@ -1053,7 +1053,18 @@ class ExecutorMixin:
                     rec["title"] = its[0]["name"] if len(its) == 1 else rec["title"]
                     rec["facts"], rec["lines"] = {}, []
             recs.append(rec)
-        parts = [{"type": "text", "text": T.SENT_AGAIN_HEAD}] if recs else []
+        head = T.SENT_AGAIN_HEAD
+        dl = self.store.get_state(f"deadline:{rule_id}") if rule_id and len(recs) == 1 else None
+        if dl:   # round 8, BN1: a reminder counted back from a thing's date names that date and how far away it is
+            from zoneinfo import ZoneInfo
+            from .dates import how_far, say_day
+            from datetime import date as _date
+            day = _date.fromisoformat(dl["date"])
+            today = self.clock().astimezone(ZoneInfo(person["timezone"])).date()
+            if day >= today:
+                head = T.deadline_head(recs[0]["title"], dl.get("deadline", True), say_day(day, today),
+                                       how_far(day, today))
+        parts = [{"type": "text", "text": head}] if recs else []
         for i, rec in enumerate(recs):
             parts += pick_parts(rec, lead="\n" if i else "")
         run_id = self.store.add_run(handle=h, rule_id=rule_id, kind=kind, at=now_iso(self.clock()),

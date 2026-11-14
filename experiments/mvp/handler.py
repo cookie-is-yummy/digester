@@ -162,6 +162,9 @@ class HandlerMixin:
             return None
         if not text:
             return None
+        ref = self._asked_reads(person, text, now)   # round 8: the answer to "tell me the date" or to an overdue nudge
+        if ref is not None:
+            return ref
         r = REACTION_TEXT.match(text)
         if r:
             down = r.group(1).lower().startswith("disliked") or (r.group(2) == "👎")
@@ -203,6 +206,9 @@ class HandlerMixin:
         """The normal path for a message: what code reads by itself (plain commands, "another", a question about a
         shown pick: followup.py), the caps, the interpreter, then the dispatch."""
         handle = person["handle"]
+        ref = self._rule_reads(person, text, now)   # round 8 (DESIGN.md section 13): read by code, no model call
+        if ref is not None:
+            return ref
         pending = self._live_pending(handle, now)
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
@@ -232,6 +238,127 @@ class HandlerMixin:
                 return self._limit_notice(person, "total")
             return self.send(handle, T.INTERPRET_ERROR)
         return self._dispatch(person, it, text, rules, pending, last, now)
+
+    # ---------- round 8 (DESIGN.md section 13): rules beyond timing, read by code ----------
+    def _asked_reads(self, person, text, now):
+        """The message right after a question code asked: "Tell me the date" (BN1) or an overdue nudge (BN2). Each
+        question is answered by the next message only; any other message ends it and is handled as usual."""
+        ref = self._deadline_answer(person, text, now)
+        if ref is not None:
+            return ref
+        return self._overdue_reply(person, text, now)
+
+    def _rule_reads(self, person, text, now):
+        """Plain messages about rules that code reads before any model call: "no overdue nudges", a bare "done" for a
+        reminder that runs until done, "tell me even if there's nothing" for the preview or rule just made, and
+        "remind me 3 days before it closes". None when the message is none of these."""
+        from .followup import NUDGES_OFF, NUDGES_ON
+        h = person["handle"]
+        if NUDGES_OFF.match(text) or NUDGES_ON.match(text):
+            on = bool(NUDGES_ON.match(text))
+            self.note(intent="profile_update")
+            self.store.set_prefs(h, overdue_nudges=on)
+            return self.send(h, T.OVERDUE_ON if on else T.OVERDUE_OFF)
+        for read in (self._done_reminder, self._if_empty_text, self._deadline_text):
+            ref = read(person, text, now)
+            if ref is not None:
+                return ref
+        return None
+
+    def _done_reminder(self, person, text, now):
+        """BN2 (b): a bare "done", "did it" or "applied" within 12 hours of a send of a reminder that runs until done,
+        with no answer with picks after that send, finishes that rule. Else None ("done" stays feedback, "done 2" the
+        to-do command)."""
+        from .followup import DONE_BARE
+        if not DONE_BARE.match(text):
+            return None
+        h = person["handle"]
+        last = self.store.last_answer(h)
+        best = None
+        for r in self.store.rules(h, statuses=("active",)):
+            if RuleSpec.model_validate(r["spec"]).when.stop_when != "done":
+                continue
+            row = self.store.one("SELECT id, at FROM runs WHERE rule_id=? AND kind='scheduled' AND status IN "
+                                 "('sent','unknown') ORDER BY id DESC LIMIT 1", (r["id"],))
+            if not row or datetime.fromisoformat(row["at"]) < now - timedelta(hours=12):
+                continue
+            if last and (last.get("run_id") or 0) > row["id"]:
+                continue   # an answer with picks came after it: "done" is about that answer
+            if best is None or row["id"] > best[1]:
+                best = (r, row["id"])
+        if best is None:
+            return None
+        r = best[0]
+        self.note(intent="stop")
+        self._wrote(h, "rule_rows", f"finished rule \"{RuleSpec.model_validate(r['spec']).content.goal}\"",
+                    {"rows": self._rule_rows([r["id"]])})
+        self.store.set_slot(r["id"], None, "done")
+        return self.send(h, T.rule_finished(self.store.rule_number(h, r["id"])))
+
+    def _if_empty_text(self, person, text, now):
+        """BN2 (a): "tell me even if there's nothing" / "don't text me if there's nothing" as the whole message, for
+        the preview waiting for YES, else the repeating library rule this person just started (within 10 minutes)."""
+        from .followup import if_empty_only, if_empty_said
+        if not if_empty_only(text):
+            return None
+        h = person["handle"]
+        way = if_empty_said(text)
+        pending = self._live_pending(h, now)
+        if pending and pending["kind"] == "confirm_rule":
+            payload = dict(pending["payload"])
+            spec = RuleSpec.model_validate(payload["spec"])
+            if not self._can_be_quiet(spec):
+                return None
+            spec.when.if_empty = way
+            payload["spec"] = spec.stored()
+            self.note(intent="change_rule")
+            self.store.set_pending(h, "confirm_rule", payload, at=datetime.fromisoformat(pending["at"]))
+            return self.send(h, T.if_empty_changed(way))
+        lw = self._last_write(h, now) or {}
+        rid = (lw.get("undo") or {}).get("rule_id") if lw.get("kind") == "rule_add" else None
+        r = self.store.rule(rid) if rid else None
+        if not r or r["handle"] != h or r["status"] not in ("active", "paused"):
+            return None
+        spec = RuleSpec.model_validate(r["spec"])
+        if not self._can_be_quiet(spec):
+            return None
+        spec.when.if_empty = way
+        self.note(intent="change_rule")
+        self.store.update_rule(r["id"], spec=spec.stored())
+        return self.send(h, T.if_empty_changed(way, self.store.rule_number(h, r["id"])))
+
+    @staticmethod
+    def _can_be_quiet(spec):
+        return spec.when.type in ("schedule", "random") and spec.content.source in ("library", "recent")
+
+    def _rule_words(self, spec, text, old=None):
+        """BN2: what a new or changed rule's words say, read by code after the model: on a day with nothing new
+        ("don't text me if there's nothing": quiet; "tell me even if there's nothing": say; a new repeating library
+        rule stays quiet unless told; a changed rule keeps its own), and "until I've done it" for a reminder in the
+        person's own words (no end date guessed from those words; the words leave the reminder's text)."""
+        from .followup import if_empty_said, other_until, until_done, without_until_done
+        w, c = spec.when, spec.content
+        if self._can_be_quiet(spec):
+            said = if_empty_said(text)
+            w.if_empty = said or (old.when.if_empty if old is not None and self._can_be_quiet(old) else
+                                  ("quiet" if old is None else None))
+        else:
+            w.if_empty = None
+        if c.source == "note" and w.type in ("schedule", "random"):
+            if until_done(text):
+                w.stop_when = "done"
+                if not other_until(text):
+                    w.until = None   # the model's guess of an end date from "until I've done it"
+                left = without_until_done(c.text)
+                if left and left != c.text and len(left) >= 2:
+                    if c.goal == c.text[:200]:
+                        c.goal = left[:200]
+                    c.text = left
+            elif old is not None and old.content.source == "note":
+                w.stop_when = old.when.stop_when
+        else:
+            w.stop_when = None
+        return spec
 
     def _contact_card(self, handle):
         """Once, after the person's first replies: our contact card, so their phone shows previews of our links
@@ -461,6 +588,10 @@ class HandlerMixin:
                 self.store.clear_pending(h)
             return self.send(h, T.DECLINED)
         if it.intent == "new_rule":
+            # round 8: on a day with nothing new, and "until I've done it", read by code from the whole request
+            said = (pending["payload"].get("text", "") + " / " + text) if pending and it.edits_pending \
+                and pending["kind"] == "confirm_rule" else text
+            self._rule_words(it.spec, said)
             if it.spec.when.type in ("once", "on_request") or it.spec.content.source in ("note", "todos"):
                 # one send at a stated time, a saved request, or a reminder in their own words: nothing from the
                 # library repeats, so no preview is needed; the reply states what will happen and how to stop it
@@ -510,7 +641,9 @@ class HandlerMixin:
                 if length_only:   # fix pass 5, finding 87: "any length" or "include YouTube" may answer it
                     self.store.set_state(f"lengthout:{h}", {"run_id": run_id, "at": now_iso(self.clock())})
                 self._tl.made_pending = True
-                tail = T.preview_tail(describe(it.spec.when), what, first, heads=offer[0], offer=offer[1])
+                quiet_note = T.QUIET_EMPTY_NOTE if it.spec.when.if_empty == "quiet" else ""
+                tail = T.preview_tail(describe(it.spec.when), what, first, heads=(offer[0] or "") + quiet_note,
+                                      offer=offer[1])
                 if more:
                     tail += " " + T.preview_more_note(len(more))
             w = it.spec.when
@@ -567,10 +700,11 @@ class HandlerMixin:
             r = self._pick_rule(rules, it.rule_number)
             if not r:
                 return self.send(h, T.WHICH_RULE)
+            old = RuleSpec.model_validate(r["spec"])
+            self._rule_words(it.spec, text, old=old)   # round 8: a changed rule keeps its own quiet and "until done"
             status, nxt = self._next_for(it.spec, person, now, r)
             if status == "done":  # a one-off time that has passed would end the rule without saying so
                 return self.send(h, T.CHANGE_TIME_PASSED)
-            old = RuleSpec.model_validate(r["spec"])
             if old.content.source in ("note", "todos"):
                 # fix pass 6, finding 89: a reminder (an export reminder, their own words, their list) is never turned
                 # into a search of the library; an export reminder keeps its words; only when it comes can change
@@ -830,7 +964,9 @@ class HandlerMixin:
             return "it's back on your list"
         if k == "todo_due":
             for row in u["rows"]:
-                self.store.update_todo(row["id"], due_at=row["due_at"], reminded_at=row["reminded_at"])
+                # round 8: a to-do moved after its overdue nudge gets that nudge back, so it is never nudged twice
+                self.store.update_todo(row["id"], due_at=row["due_at"], reminded_at=row["reminded_at"],
+                                       **({"overdue_at": row["overdue_at"]} if "overdue_at" in row else {}))
             return "the reminder is off"
         if k == "rule_add":
             ids = u.get("rule_ids") or [u["rule_id"]]
@@ -1050,7 +1186,7 @@ class HandlerMixin:
         n = self.store.rule_number(h, rule_id)
         first = say_time(nxt, now, spec.when.tz or tz)
         notes = self._limit_note(h, spec, rule_id) + self._do_note(spec) + self._not_yet_notes(spec) \
-            + self._email_ask(person, spec, now)
+            + self._email_ask(person, spec, now) + (T.QUIET_EMPTY_NOTE if spec.when.if_empty == "quiet" else "")
         if c.source == "note":   # a reminder in their own words
             if spec.when.type == "once":
                 return self.send(h, T.reminder_once(first, c.text, n) + notes)
