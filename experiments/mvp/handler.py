@@ -427,6 +427,8 @@ class HandlerMixin:
                                               and _repeats(it.spec.content.text or "", text)):
                 self.note(intent="draft_change")
                 ref = self._draft_change(person, d, phrasing.normalize(text), now)
+                if ref is None:   # W7: the errand form may still read the change; else the plain line
+                    ref = self._errand(person, None, text, now)
                 return ref if ref is not None else self.send(h, T.DRAFT_CHANGE_HOW)
             if it.intent == "act_on_last" and [a.action for a in it.actions] == ["email.send"] \
                     and not self._answer_seen(h) and not self._plain_answer(h):
@@ -434,10 +436,13 @@ class HandlerMixin:
         if it.intent == "todo_done" and not DOIT_DONE_WORD.search(text) and self._todos_in_view(h, now) \
                 and self.store.get_state(f"todoview:{h}"):
             ref = self.do_it(person, text, now)
+            if ref is None:   # W7: the errand form may read which one ("haz la segunda"); never a tick-off
+                ref = self._errand(person, None, text, now)
             self.note(intent="do_it")
             return ref if ref is not None else self.send(h, T.DOIT_WHICH)
         if it.intent == "chat" and it.reply and CHAT_INSIDE.search(it.reply):
-            return self.send(h, T.CHAT_INSIDE)
+            ref = self._errand(person, it, text, now)   # W7: the errand may read what was asked
+            return ref if ref is not None else self.send(h, T.CHAT_INSIDE)
         if it.intent == "new_rule" and getattr(it.spec, "place", None) is None \
                 and it.spec.content.source in ("library", "recent"):
             from .places import named
@@ -445,6 +450,14 @@ class HandlerMixin:
             if p is not None:   # slice G replaces this line with the place preview (W-13)
                 self.send(h, T.app_rule_line(p.app, describe(it.spec.when)))
         return None
+
+    def _errand(self, person, it, text, now):
+        """W7: the errand form (errand.py) for a message the interpreter could not place; never for the setup's own
+        answer, a code-only part or a chained second request. The helper's reply's reference, or None."""
+        if text in (getattr(self._tl, "merged_text", None), getattr(self._tl, "setup_text", None)):
+            return None
+        from .errand import try_errand
+        return try_errand(self, person, it, text, now)
 
     # ---------- end round 10, slice W ----------
 
@@ -804,6 +817,13 @@ class HandlerMixin:
                     ref = self.draft_from_request(person, text, now)
                     if ref is not None:
                         return ref
+            # ---------- round 10, slice W (W7): the errand form, when every code read missed ----------
+            if not chained:
+                ref = self._errand(person, it, text, now)
+                if ref is not None:
+                    return ref
+            # ---------- end round 10, slice W ----------
+            if it.intent == "unsupported":
                 if self.to_someone_else(text):   # sending to others stays out; offer to send it to them (section 11)
                     return self.send(h, T.EMAIL_ONLY_YOU)
                 # fix pass 2, finding 62: never the model's own words for a request it would not do: code picks the

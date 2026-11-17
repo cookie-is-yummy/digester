@@ -69,6 +69,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(_config, "RANKED_CACHE_HOURS", 0)
     # round 9, slice U2: the fakes hold no judge answer; the judge has its own tests (test_round9_judge.py)
     monkeypatch.setattr(_config, "JUDGE_MODEL", "")
+    # round 10, slice W: the errand form (errand.py) is off unless a test turns it on (test_round10_errand.py)
+    monkeypatch.setenv("MVP_ERRAND_PER_DAY", "0")
 
     class FakePool:
         max_resident = 4

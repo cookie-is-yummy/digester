@@ -2155,3 +2155,49 @@ No reply changes except the build lines; no read, no connector, no model call.
   phrasings (tester and operator, with and without an answer): 0 taken by any read, the new ones wrapped; the 20 draft
   requests: 0 taken in all four settings.
 
+**W-c: the errand form** (`errand.py`, `prompts/errand_v2.md`; `errand_v1.md` kept; design A6). One small model call
+(`purpose="mvp_errand"`, `max_tokens=120`, temperature 0, seed 7; `MVP_ERRAND_MODEL`, else `config.MODEL`), logged in
+ai_runs by `llm.chat_json` and as an action_log row `errand.form` (the errand's name, whether it was used, the state
+word; never a word of the message).
+- **When it runs** (`errand.wanted`, `handler._errand`): every code read missed and the interpreter answered
+  `unsupported` (NOT_CAUGHT included), `help` with no help word, or `chat` that is not small talk; also from
+  `screen_guard` when code could not settle a clash (a draft change read as a reminder, a todo_done with no done word,
+  a chat about the bot's insides). Never: a message with a time or repeat word (`phrasing.TIME_WORDS`, now also
+  Spanish "cada", "todos los días", "mañana", ...; W-3), over 400 characters, a chained second request, the setup's
+  own answer, a code-only part, over the caps, or past `MVP_ERRAND_PER_DAY` (30) calls a person a day (0: off; the
+  tests' `env` fixture sets 0). Cached 6 hours by version, state and text (state `errandc:<hash>:<handle>`).
+- **Input**: `<state>fresh | answer N | draft | todos N | setup</state>` and `<message>...</message>`; nothing else
+  (no caption, title, to-do text, rule text or profile line).
+- **The checks** (`errand.built`; any failure → the interpreter's answer as before): each copied field must occur in
+  the message (casefolded, accents aside, or in its normalised form); an address only when typed in the message; a
+  number (pick, to-do) only when the message says it (a digit or an English or Spanish ordinal: `said_number`), or
+  "it / this / that / esto / ese" for the first one where the request reads do the same; the state each errand needs
+  (a draft, an answer of N picks, the to-do list); the enums; an app that `places.named` knows; draft words to replace
+  or remove must be in the draft. Spanish role words are said back in English ("mi jefe" → "your boss").
+- **Where it goes** (`errand.act`, the helpers' existing entries with a message built by code): email_other →
+  `_new_draft_row` / `draft_start` (a card; no address → "Who should it go to?"); email_self → `_draft_to_self` or
+  act_on_last email.send; save_draft → `_save_to_drafts`; send_draft → the card's send line (**it never sends**);
+  change_draft → `_draft_tone` / `_draft_change` ("make it shorter", "say X instead of Y", ...); cancel →
+  `cancel.merchant_in` or the unknown-merchant path, `_cancel_start`; post_act → `postact_reads` ("book the first
+  one", the words named, then "book that one" when the message points); add_to_app / app_connection → `place_reads`;
+  what_did_you_do → `receipts_reads`; do_todo → `do_it` / `_do_todo` (never a tick-off); exports → `export_text` /
+  `library_status`. A helper that does not take it → the interpreter's answer.
+- **errand_v2** (v1 plus: an errand marked "(state ... only)" is "none" in any other state; a number only when the
+  message says one; "fresh | email me that" → none). Found live: v1 read 4 of the 159 rule texts as errands with
+  nothing on screen ("email me that", "can u email me this one too", t-dev-040, "book me a table somewhere nice for
+  saturday"; code refused all 4, so no outcome changed), and read "ese restaurante" as pick 5.
+- **Measured live** (the real interpreter and errand form, everything else the fakes; tester; ledger
+  `data/mvp/ai_runs.jsonl`, `MVP_TOTAL_CAP_USD=30`): before (the design's baseline at head: 27 of 100 by code, 6 of
+  40 fell-through lines rescued live); after, of the 66 development lines code still misses (26 helper lines, 40
+  "none"), 25 of 26 helper lines reach the right helper in the end (the one left: "put the workouts in my calendar mon
+  wed fri at 7am", read as a search; the 8 rules that name an app count as the rule helper: 5 say the app line, the
+  Spanish one drops TickTick silently because `places.named` reads English prepositions), so 98 of 100 helper lines
+  with code; **0 wrong actions** (no tick-off, no rule from a draft change, no send, no cancel done); Spanish 12 of
+  13 helper lines (13 with the rule); 0 of the 40 none lines taken (3 errand calls, all "none"). The 159 rule texts
+  through the interpreter: 17 errand calls (10.7 per 100 messages); v2 on those texts: 0 forms other than none, 0 used,
+  0 outcomes changed. The 20 draft requests (counts only): 2 errand calls, 0 forms other than none, 0 used. Cost: 64
+  errand calls in all, $0.0605 ($0.00095 a call); the W-c evaluation spent about $0.96 (interpreter calls included).
+  The held-out set was not run (checker 2 runs it once).
+- Tests: `tests/test_round10_errand.py` (fake forms: every check, every helper, the cap, the cache, the input, a send
+  that never sends, a number never said, a form that names a rule).
+

@@ -73,7 +73,10 @@ def variants(text):
 TIME_WORDS = re.compile(
     r"\b(?:every|each|daily|weekly|monthly|nightly|whenever|once a|twice a|"
     r"on (?:mon|tues|wednes|thurs|fri|satur|sun)days?|tomorrow|tonight|next (?:mon|tues|wednes|thurs|fri|satur|sun)day|"
-    r"next (?:week|month)|at \d|in \d+ (?:min\w*|hours?|days?|weeks?)|from now on|until)\b", re.I)
+    r"next (?:week|month)|at \d|in \d+ (?:min\w*|hours?|days?|weeks?)|from now on|until"
+    # Spanish, so a rule in Spanish never reaches the errand form (W-3)
+    r"|cada|todos los d[ií]as|todas las (?:semanas|mañanas|noches)|diariamente|semanalmente|mensualmente|"
+    r"mañana|esta noche|el pr[oó]ximo|a las \d|desde ahora)\b", re.I)
 
 ADDR = r"[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"
 REQ_START = re.compile(rf"^\W*(?:{HARD}\b|{VERBS}\b|i want\b|i'?d like\b|remind me\b)", re.I)
