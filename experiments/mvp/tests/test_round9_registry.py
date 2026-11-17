@@ -358,3 +358,22 @@ def test_the_published_entry_points_import_and_do_nothing():
     assert callable(drafts.start) and callable(drafts.open_draft) and callable(drafts.from_todo)
     # slice B built cancel.from_todo (test_round9_cancel.py): a to-do that is not a cancel is still not handled there
     assert cancel.from_todo({"handle": H}, {"text": "Buy milk"}, None) is None
+
+
+# ---------- the round 9 merge: importing mvp/llm.py again never chains its ledger wrapper ----------
+def test_importing_llm_again_wraps_ai_log_once_and_writes_one_row(tmp_path, monkeypatch):
+    import mvp.llm  # noqa: F401 - the module as the rest of the suite holds it
+    ai = sys.modules["ai"]
+    for name in ("_log", "DATA", "LEDGER", "TIMEOUT"):   # put back after the test
+        monkeypatch.setattr(ai, name, getattr(ai, name))
+    monkeypatch.setitem(sys.modules, "mvp.llm", sys.modules["mvp.llm"])
+    monkeypatch.setenv("MVP_LEDGER_HOME", str(tmp_path))
+    for _ in range(5):
+        del sys.modules["mvp.llm"]
+        llm = importlib.import_module("mvp.llm")
+    assert ai._log is llm._log
+    under = llm._orig_log
+    assert getattr(under, "__module__", None) == "ai" and not hasattr(under, "_mvp_orig")
+    ai._log({"provider": "test", "purpose": "merge", "cost_usd": 0.0})
+    rows = (tmp_path / "ai_runs.jsonl").read_text().splitlines()
+    assert len(rows) == 1

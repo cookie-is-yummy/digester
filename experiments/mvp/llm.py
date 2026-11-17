@@ -30,7 +30,10 @@ ai.DATA = LEDGER_HOME
 ai.LEDGER = os.path.join(LEDGER_HOME, "ai_runs.jsonl")
 ai.TIMEOUT = float(os.environ.get("MVP_MODEL_TIMEOUT", "60"))  # a person is waiting: fail in a minute, not five
 _tl = threading.local()
-_orig_log = ai._log
+# ai.py's own _log. A second import of this module (the tests drop and import every mvp module again, many times) finds
+# the wrapper an earlier import set and takes the function under it, so the wrappers never chain (round 9 merge: about
+# a thousand imports in one pytest process passed Python's recursion limit).
+_orig_log = getattr(ai._log, "_mvp_orig", ai._log)
 
 
 _key_lock = threading.Lock()
@@ -71,6 +74,7 @@ def _log(row):
     _orig_log(row)
 
 
+_log._mvp_orig = _orig_log
 ai._log = _log
 
 
