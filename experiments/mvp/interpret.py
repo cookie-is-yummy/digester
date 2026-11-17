@@ -1734,9 +1734,13 @@ CHAT_KINDS = re.compile(r"\b(?:recipes?|tutorials?|videos?|reels?|posts?|workout
 SEARCH_VERB = re.compile(r"\b(?:find|show|send|any|other|more)\b", re.I)
 # checker, round 8 (live, 14 Nov: "what are some uiux libraries i should use for my next project" was read as small
 # talk): a question that asks for some of a kind of thing asks as plainly as a search word does
+# round 9, slice U (kinds evaluation: "what apps should i use to edit photos" came back as a question back): "what
+# <kind> should I ..." asks as plainly as "which <kind> should I ..." (never "what should I ...", "what do I ...")
 ASK_FOR_SOME = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which)\s+(?:are|were|is)\s+(?:some|a few|"
                           r"the best|the top|good|great|the)\b|^\W*which\s+(?!ones?\b|of\b)\w+(?:\s+\w+)?\s+(?:should|can|could|do)\s+i\b|"
-                          r"\b(?:recommend|suggest)\b", re.I)
+                          r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*what\s+(?!(?:ones?|of|do|does|did|is|are|was|were|should|"
+                          r"can|could|would|will|kind|sort|type|time|else|about|if|happens?)\b)\w+(?:\s+\w+)?\s+(?:should|can|could)"
+                          r"\s+i\b|\b(?:recommend|suggest)\b", re.I)
 QUESTION_HEAD = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which|where|are there|is there|can you|"
                            r"could you|would you|will you|do you have|got)\b\s*", re.I)
 # checker, round 8: a question about the app, the person's data or how things work is never a search, though it
@@ -1778,6 +1782,9 @@ def chat_guard(it: Interpretation, message):
         return it
     goal = QUESTION_HEAD.sub("", t)
     goal = re.sub(r"^(?:are|is|were)\s+(?:there\s+)?", "", goal, flags=re.I)   # "what are some ..." asks "some ..."
+    # round 9, slice U: "apps should i use to edit photos" asks for "apps to edit photos"
+    goal = re.sub(r"^((?:[\w/-]+\s+){0,2}?[\w/-]+)\s+(?:should|can|could)\s+i\s+(?:use|try|get|look at|watch|read|join|"
+                  r"download|install|follow|listen to|check out)\b\s*", r"\1 ", goal, flags=re.I)
     goal = re.sub(r"\b(might|may|could|did|do|have) i\b", lambda m: "i " + m.group(1), goal, flags=re.I)
     goal = goal.strip(" ?!.") or t
     try:

@@ -144,21 +144,26 @@ def spent_total(libraries):
     return total
 
 
-def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=1200, temperature=None, seed=None):
-    """One JSON call. Returns (parsed, cost_usd). temperature and seed are sent only when given."""
+def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=1200, temperature=None, seed=None,
+              model=None, reasoning_effort=None):
+    """One JSON call. Returns (parsed, cost_usd). temperature and seed are sent only when given. Round 9, slice U:
+    `model` names another priced model for one call (a measurement; config.MODEL otherwise), with its
+    `reasoning_effort` when given."""
     _tl.person, _tl.cost = person, 0.0
-    extra = {k: v for k, v in (("temperature", temperature), ("seed", seed)) if v is not None}
+    extra = {k: v for k, v in (("temperature", temperature), ("seed", seed), ("reasoning_effort", reasoning_effort))
+             if v is not None}
+    model = model or config.MODEL
     try:
-        out, _ = ai.openai_chat_json(config.MODEL, system, user, max_tokens=max_tokens, purpose=purpose,
+        out, _ = ai.openai_chat_json(model, system, user, max_tokens=max_tokens, purpose=purpose,
                                      prompt_version=prompt_version, **extra)
         return out, _tl.cost
     except Exception as e:
         if _cut_after_send(e) and not _tl.cost:
             # review fix X4: we stopped waiting, but the request was sent and the server may finish and bill it. A
             # worst-case estimate is written, so both caps see it (ai.py logs only after a reply has come back)
-            _log({"provider": "openai", "model": config.MODEL, "purpose": purpose, "prompt_version": prompt_version,
+            _log({"provider": "openai", "model": model, "purpose": purpose, "prompt_version": prompt_version,
                   "n": 1, "in_tokens": int((len(system) + len(user)) / 3.5), "out_tokens": max_tokens,
-                  "cost_usd": estimate_usd(system, user, max_tokens), "estimated": True,
+                  "cost_usd": estimate_usd(system, user, max_tokens, model), "estimated": True,
                   "error": type(e).__name__})
         raise
     finally:
@@ -170,9 +175,9 @@ def budget_stop(e):
     return isinstance(e, RuntimeError) and str(e).startswith("budget stop")
 
 
-def estimate_usd(system, user, max_tokens):
+def estimate_usd(system, user, max_tokens, model=None):
     """The worst case of one call, as ai.py's guard works it out."""
-    p = ai.prices().get(config.MODEL) or {}
+    p = ai.prices().get(model or config.MODEL) or {}
     return round((len(system) + len(user)) / 3.5 / 1e6 * p.get("input_per_m", 0)
                  + max_tokens / 1e6 * p.get("output_per_m", 0), 6)
 
