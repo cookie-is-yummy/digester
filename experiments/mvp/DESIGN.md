@@ -1016,7 +1016,37 @@ an MCP server for testers (hosted, with sign-in); captions in `saves.csv`.
 ## 16. Doing the work (round 9, 17 Nov 2026)
 
 The founder, 17 Nov: draft and send the email, cancel the subscription, more connectors; "Always show, then wait for
-yes". Amendments A-012 to A-014 (Proposed). Each slice adds its own subsection below.
+yes". Amendments A-012 to A-014 (Proposed). Built as five branches (C1, then slices A, B, C and D) and merged in that
+order onto slice U2.
+
+**Hook order** (`handler.py`; the first read that answers a message owns it, so this order decides who answers):
+
+| Where | Order | Read | Slice |
+| --- | --- | --- | --- |
+| `_on_message`, after the `confirm_delete` branch, before `confirm_rule` + YES | 1 | `draft_reads` (an open draft card) | A |
+| | 2 | `offer_reads` (numbered offers) | C |
+| `_asked_reads` (next message only), after `_overdue_reply` | 3 | `_cancel_answer` | B |
+| | 4 | `places.asked_reads` (yes/no to a Mac preview, REMOVE/KEEP) | D |
+| `answer_normally`, after `_rule_reads`, before `integration_reads` | 5 | `email_reads` (with `mailbox_reads` first) | A |
+| | 6 | `cancel_reads` (the password line, "I cancelled it", a cancel request) | B |
+| | 7 | `postact_reads` (apply, book, buy; "add them all") | C |
+| | 8 | `places.place_reads` (connect, check, disconnect, "what are you connected to") | D |
+| `_dispatch_one`, a model `stop`/`pause`, before the pending row is cleared and `_manage` | - | `cancel_stop_guard` | B |
+
+Slice D had put `place_reads` above the request reads; the merge moved it to 8, as the verdict's map orders them.
+`tests/test_round9_merge.py` checks this order in the source.
+
+**The merge** (17 Nov): every conflict kept both sides. Then: the cancellation notice became slice A's card (16.B);
+`mvp/llm.py` wraps `ai._log` once however often it is imported (`_log._mvp_orig`; the chain of wrappers had passed the
+recursion limit in a long pytest run), so slice A's `tests/conftest.py` workaround was removed; "what are you connected
+to" says what the merged code does (16.D, C3); "export my data" has `connections.json`. Checks on the merged tree
+(`tests/test_round9_merge.py`, end to end, every round 9 hook wrapped): the 159 rule-eval texts, as a tester and as
+the operator with a mailbox and a Mac, with and without an answer kept, are taken by no round 9 read but t-dev-040
+(slice C, allowed); 123 stop, pause, resume and change phrasings from the earlier test files are taken by none; the 20
+draft requests (counted locally, never in the repo): 0 taken in all four settings. The round 7 probe (`probe_same`)
+gives the same bytes as round 8's `same_head.json` on the merged tree and on U2's head (eabc177): the fakes' paths it
+checks did not change. A store made by the code at 1cb3179 loads and gains `drafts`, `cancellations`, `connections`
+and `placements`, with its rows kept.
 
 ### 16.A Slice A: email to other people (W1 to W4, A5, A6; amendments A-012, A-013)
 Where this subsection and sections 6, 11 and 15 differ ("only to the person's own address", "sending to someone else
@@ -1084,7 +1114,11 @@ replaced by `T.CHAT_NO_CLAIM`.
   email address, and I'll write the email.` (who it is for is never repeated: section 15).
 - For slices B and D (methods of the bot; module functions take the bot first): `Bot.draft_start(person, kind, to=None,
   to_name=None, subject=None, paragraphs=(), post=None, placeholders=(), job=None, now=None)` (kind "notice": `Hello,`
-  / `Thank you,`, paragraphs used as they are, never rewritten by the model), `Bot.open_draft(handle)`,
+  / `Thank you,`, paragraphs used as they are, never rewritten by the model; added at the merge: `sign` (a sign-off not
+  asked for), `head` (the card's first line), `to_hint` (the To line while blank); a placeholder line may sit inside a
+  paragraph; "send" with a placeholder left gives the fill-in line on the link route too; a notice's `action_log` rows
+  carry no recipient domain; a draft whose `job` is `cancel:<id>` marks that row `person_sent` or `dropped`),
+  `Bot.open_draft(handle)`,
   `Bot.draft_from_todo(person, todo, now)` ("Email landlord about sink"), `drafts.start(bot, ...)`,
   `drafts.open_draft(bot, handle)`, `drafts.from_todo(bot, person, todo, now)`.
 
@@ -1147,35 +1181,6 @@ out again from here, ...`). A failure says what failed, then the link. For every
 **Out.** Cc and Bcc; a contact book; Gmail or Outlook compose links; reading the mailbox in any way; sends in rules,
 from `act_on_last` or MCP; sends for anyone but the operator; a "send without asking" setting.
 
-### 16.D Slice D, C1: registry fields and the operator setting
-- `ActionDef` (`actions/__init__.py`) gains, each defaulting to today's behaviour (the four existing actions are
-  unchanged): `outside` (False: reaches another person or an outside account), `undo` ("delete" / "hold" / "none"),
-  `confirm` ("never" / "send_word"), `max_per_day` (None, else 1 or more), `in_rules` (True), `who` ("anyone" /
-  "operator"), `from_model` (True), `connector` (None: the place it writes to), `fallback` (None: the action to offer
-  when it cannot run). Out: `supports_sync`, `tier_required` (docs/06; no sync, no tiers in the prototype).
-- `validate_action(name, params=None, by="model", where="form")`: refuses a `from_model=False` action when
-  `by="model"`, and an `in_rules=False` action when `where` is "rule" or "act" (even `by="code"`). `schema.Action` (any
-  model form) calls it with `by="model"`; `RuleSpec` checks each `do` entry with `where="rule"`; `act_on_last` checks
-  each of its `actions` with `where="act"`. A form naming such an action fails validation: nothing runs or is stored.
-- `perform(name, ctx, params=None, yes_token=None)`, in this order: `who="operator"` and not
-  `config.is_operator(handle)`: raises `Refused`. `confirm="send_word"`: runs only when `yes_token` equals what the
-  action module's `yes_token(ctx, params)` makes from what it is about to send (a module without one never runs);
-  else raises `Refused`. The token is `make_yes_token(draft_id, version, text_hash(exact text))` (sha256 of the parts,
-  kept apart). Daily cap: when `max_per_day` is set, `action_log` rows of that action for that person on their local
-  day (their `people.timezone`; rows `skipped` or `failed` are not counted); when `outside` is set, all outside
-  actions together against `config.OUTSIDE_WRITES_PER_DAY` (40). Over it: `Outcome("skipped",
-  line=T.over_action_cap(T.ACTION_CAP_LABEL.get(name), cap))`, not run. An action with no cap and not outside never
-  reads the log. Whoever calls `perform` logs the outcome (`outputs._perform` does). `over_cap(name, ctx)` lets a
-  slice show its own line first. `outputs._perform` turns `Refused` into a `failed` outcome like any other error.
-- Lines: `I've reached my limit of {n} {label} a day for you. I can do more tomorrow.`; with no label: `I've reached
-  my limit for this today ({n} a day). I can do it again tomorrow.`
-- `config.OPERATOR` from `MVP_OPERATOR` (one handle; unset or empty: nobody), `config.is_operator(handle)` compares in
-  the handler's one spelling (`norm_handle`).
-- Stubs published for the other slices (replaced by their owners): `drafts.start(...)` raises `NotImplementedError`,
-  `drafts.open_draft(handle)` and `drafts.from_todo(person, todo, now)` return None, `cancel.from_todo(person, todo,
-  now)` returns None.
-- Store: `Store.actions_in(handle, actions, start, end)` (no new table or column).
-
 ### 16.B Slice B, W5 and W6: cancelling a subscription
 Code only (`cancel.py`, `CancelMixin` in `core.Bot`; no model call, no prompt). The bot finds the way out, writes
 what is needed and reminds; it never signs in as the person, never takes a password, and never says a subscription
@@ -1219,9 +1224,16 @@ is cancelled, canceled, done or "all set" (only the merchant can say that).
     (`cancel.notice_text`): `Hello,` / `Please cancel my membership effective immediately and stop all future
     charges. Please confirm the cancellation in writing.` / `Name on the membership: <their words>` / `Email on the
     account: <their confirmed address>` (only when confirmed) / `Member number: (fill this in)` / `Thank you,` / `<the
-    name>`. To: the entry's `notice_email` only from a read page, else `(type their email address; their website or
-    your contract has it)`. Until slice A merges it is shown as text to copy, with no link (`_cancel_notice`: the one
-    function the merge replaces with `drafts.start(person, "notice", ...)` given notice_text's fields).
+    name>`. To: the entry's `notice_email` only from a read page, else blank with `(type their email address; their
+    website or your contract has it)`. Since the merge `_cancel_notice` opens slice A's card,
+    `drafts.start(bot, person, "notice", to=<address or "">, subject, paragraphs, placeholders, job="cancel:<id>",
+    sign=<the name on the membership>, head="Here's a cancellation notice you can send to <Name>. Nothing has been
+    sent.", to_hint=...)`, and keeps the draft's id on the row. While `Member number: (fill this in)` is there, no link
+    and no "send" (`Fill in the member number first: reply "member number 12345", or "remove it".`); "member number
+    4471" fills it, "remove it" takes the line out; then the tap-to-send link (testers) or, for the operator's mailbox,
+    "send" under W4's rules (the 2-minute hold; any change voids the yes). "sent" after the link, or the mail server
+    taking it: status `person_sent` and `That doesn't end it yet: it ends when they confirm in writing.`; "cancel" on
+    the card: `dropped`.
   - unknown merchant: `I don't have a checked way out of <Name> yet. These usually work:` / the Apple and Google Play
     links / `The account or billing page of their website.` / `A cancellation email: type their support address and
     I'll write it.` Logged to `requests` as `cancel: unknown merchant` (never the name; the row has no merchant key).
@@ -1254,7 +1266,7 @@ is cancelled, canceled, done or "all set" (only the merchant can say that).
   is the gym question), else None; `Bot.cancel_todo(person, todo, now)` sends the first reply.
 - **Out**: logging in, any browser driving, stored passwords; reading the inbox for a confirmation; a library search to
   find the merchant; a follow-up the bot sets by itself; legal lines about cancel laws; a link checker; reply handling
-  on the check reminder; the notice's `mailto:` link and "send" (slice A's card); money in the recap.
+  on the check reminder; money in the recap.
 
 ### 16.C Slice C, W7, W8, V1: acting on a saved post
 All read by code before the model, English only, 0 model calls (the details step still runs for a recipe whose
@@ -1344,7 +1356,38 @@ answers a numbered thing from its words when the person said a number).
   person types the email request; slice A reads it). Changed on purpose: "book me a table" with `unsupported` now gets
   `UNSUPPORTED_BOOK` (two asserts in `test_fixpass2.py`).
 
-### 16.D Slice D, C2: lists named after an app
+### 16.D Slice D: the registry and the Mac (C1, C2, C3)
+
+#### C1: registry fields and the operator setting
+- `ActionDef` (`actions/__init__.py`) gains, each defaulting to today's behaviour (the four existing actions are
+  unchanged): `outside` (False: reaches another person or an outside account), `undo` ("delete" / "hold" / "none"),
+  `confirm` ("never" / "send_word"), `max_per_day` (None, else 1 or more), `in_rules` (True), `who` ("anyone" /
+  "operator"), `from_model` (True), `connector` (None: the place it writes to), `fallback` (None: the action to offer
+  when it cannot run). Out: `supports_sync`, `tier_required` (docs/06; no sync, no tiers in the prototype).
+- `validate_action(name, params=None, by="model", where="form")`: refuses a `from_model=False` action when
+  `by="model"`, and an `in_rules=False` action when `where` is "rule" or "act" (even `by="code"`). `schema.Action` (any
+  model form) calls it with `by="model"`; `RuleSpec` checks each `do` entry with `where="rule"`; `act_on_last` checks
+  each of its `actions` with `where="act"`. A form naming such an action fails validation: nothing runs or is stored.
+- `perform(name, ctx, params=None, yes_token=None)`, in this order: `who="operator"` and not
+  `config.is_operator(handle)`: raises `Refused`. `confirm="send_word"`: runs only when `yes_token` equals what the
+  action module's `yes_token(ctx, params)` makes from what it is about to send (a module without one never runs);
+  else raises `Refused`. The token is `make_yes_token(draft_id, version, text_hash(exact text))` (sha256 of the parts,
+  kept apart). Daily cap: when `max_per_day` is set, `action_log` rows of that action for that person on their local
+  day (their `people.timezone`; rows `skipped` or `failed` are not counted); when `outside` is set, all outside
+  actions together against `config.OUTSIDE_WRITES_PER_DAY` (40). Over it: `Outcome("skipped",
+  line=T.over_action_cap(T.ACTION_CAP_LABEL.get(name), cap))`, not run. An action with no cap and not outside never
+  reads the log. Whoever calls `perform` logs the outcome (`outputs._perform` does). `over_cap(name, ctx)` lets a
+  slice show its own line first. `outputs._perform` turns `Refused` into a `failed` outcome like any other error.
+- Lines: `I've reached my limit of {n} {label} a day for you. I can do more tomorrow.`; with no label: `I've reached
+  my limit for this today ({n} a day). I can do it again tomorrow.`
+- `config.OPERATOR` from `MVP_OPERATOR` (one handle; unset or empty: nobody), `config.is_operator(handle)` compares in
+  the handler's one spelling (`norm_handle`).
+- The stubs C1 published for the other slices are gone: slices A and B replaced them. The entry points take the bot
+  first: `drafts.start(bot, person, kind, ...)`, `drafts.open_draft(bot, handle)`, `drafts.from_todo(bot, person,
+  todo, now)`; `cancel.from_todo(person, todo, now)` (16.B).
+- Store: `Store.actions_in(handle, actions, start, end)` (no new table or column).
+
+#### C2: lists named after an app
 - `places.py`: `PLACES` (one entry per app: key, name in replies, kind `todo` / `calendar`, connector or None, the
   words that name it after "to / in / into / onto / on (my|the)", and the list names that mean it); `named(text,
   list_name, kind)`. Apps with no connector: Notion, Todoist, TickTick, Things ("Things 3", "Things app"), Trello,
@@ -1357,7 +1400,7 @@ answers a numbered thing from its words when the person said a number).
 - Kept as today: "my reminders", "my reminders list", "show / stop my reminders", an app word inside a to-do ("add
   cancel notion subscription to my list"), "I have a notion that ...".
 
-### 16.D Slice D, C3: Reminders and Calendar on the operator's Mac (A-014, Proposed)
+#### C3: Reminders and Calendar on the operator's Mac (A-014, Proposed)
 - `actions/mac.py`: `run_script(script, *argv, runner=None, app=None)` runs `osascript -e SCRIPT value ...` (as the
   Messages channel does): every value (title, note, list name, date numbers, ids) is an argument, never pasted into a
   script. Dates are 5 numbers (local wall time); each script sets the day to 1 before the month. 20-second timeout.
@@ -1376,7 +1419,9 @@ answers a numbered thing from its words when the person said a number).
   for `unreachable`, `no_calendar`), `worked` (back to 0).
 - Store: `connections(handle, connector, status connected|broken|off, fails, last_error, created_at, checked_at)` and
   `placements(id, handle, connector, action, remote_id, run_id, idem, created_at, removed_at)`; no title or body in
-  either. "delete my data" deletes both (what is on the Mac stays; the confirm text says so).
+  either. "delete my data" deletes both (what is on the Mac stays; the confirm text says so). "export my data" adds
+  `connections.json` when there is a row: each connection's connector, state and dates, each placement's id,
+  connector, action, remote id, run and dates (`Store.connections_of`).
 - `places.route` / `route_todo`: a place named in the message ("to my apple reminders", "in the reminders app", "put
   it in reminders", "in my mac calendar", "apple calendar", "calendar app") or `prefs.place_todo` /
   `prefs.place_calendar = "mac"`. Only the operator, only `connected`, only with osascript, calendar only while the
@@ -1404,11 +1449,14 @@ answers a numbered thing from its words when the person said a number).
 - "undo" (10 minutes, `lastwrite` kind `placed`, the placement ids and titles): `Undone: I took those 2 out of
   Reminders on your Mac.`; a failed delete: `I couldn't take it out of Reminders just now. It's "milk"; delete it
   there.`; deleted on the phone already counts as gone.
-- By text, no model call (`places.place_reads`, in `answer_normally` after `_rule_reads`): "connect my mac / reminders
+- By text, no model call (`places.place_reads`, hook 8 in `answer_normally`, after `postact_reads`): "connect my mac / reminders
   / calendar" (the two steps); "check my mac" (count lists, find "Digest": connected, or connected without the
   calendar, or the blocked / timeout line; a failing check marks a connected Mac broken); "what are you connected to"
-  (your list, email to you and its state, calendar links, email to other people as a draft, the Mac's state; a tester
-  gets the Mac-only line); "disconnect my mac", "stop using reminders": `off`, the "from now on" choices cleared, `I've
+  (your list; email to you: the address and its state with SMTP, `not connected here, so emails wait <where>` where
+  the person can open the outbox, else `not connected here, so I give you a link that opens an email to yourself`;
+  calendar links; email to other people: for the operator with a mailbox `a draft I show you first, and I send it from
+  <address> only after you reply "send"` (plus the Drafts line when IMAP is known), else `a draft you send from your
+  mail app`; the Mac's state; a tester gets the Mac-only line); "disconnect my mac", "stop using reminders": `off`, the "from now on" choices cleared, `I've
   stopped using Reminders and Calendar. I added 2 reminders and 1 event in the last 30 days. Reply REMOVE to delete
   those, or KEEP to leave them.` (state `macremove:<handle>`, next message, 30 minutes): REMOVE deletes only placement
   ids and ends with the System Settings line; KEEP, another message or no answer leave them. "put my lists in
