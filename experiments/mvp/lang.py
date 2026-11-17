@@ -63,6 +63,8 @@ EN = {
     "items_closest_head": "These come closest:",
     # round 9, slice U: clear picks whose text names nothing lead; the things other posts name follow
     "items_named_close": "Named in other saves, close to what you asked:",
+    # round 9, slice U2: a thing two shown posts name, shown once
+    "also_in": " (also in \"{title}\")",
     "names_in_slides": "The names are in its slides, not its text.",
     "names_in_video": "The names are in its video, not its text.",
     "no_clear_any": "Nothing I found is a clear fit for what you asked.",
@@ -166,6 +168,7 @@ ES = {
     "items_close_head": "Se acercan, pero no son justo lo que pediste:",
     "items_closest_head": "Esto es lo que más se acerca:",
     "items_named_close": "Nombrados en otras cosas que guardaste, cerca de lo que pediste:",
+    "also_in": " (también en \"{title}\")",
     "names_in_slides": "Los nombres están en sus imágenes, no en su texto.",
     "names_in_video": "Los nombres están en su video, no en su texto.",
     "no_clear_any": "No encontré nada que encaje del todo con lo que pediste.",

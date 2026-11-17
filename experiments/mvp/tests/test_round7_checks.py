@@ -40,7 +40,10 @@ def test_r7c_a_one_line_list_is_not_the_words_about_each_of_its_things():
     assert all(x["about"] == "" for x in items)
 
 
-def test_r7c_two_posts_naming_the_same_thing_show_it_under_each_post_in_its_own_words(env, tmp_path):
+def test_r7c_two_posts_naming_the_same_thing_show_it_once_under_the_first(env, tmp_path):
+    """Round 9, slice U2 (point 4) replaces the round 7 checker's rule (the thing under each post, in its own words):
+    it is shown once, under the first source that names it, with "(also in ...)" when the other post is shown too;
+    follow-ups by number and by name land on it."""
     a = "Best icon sets\n- Lucide: clean icons\n- Iconoir: free icons"
     b = "Icons I use daily\n- Lucide: my favourite set\n- Phosphor: flexible icon family"
     use_lib(env, tmp_path, [("a1", "x", a, "2025-01-01", "2025-01-02", "instagram"),
@@ -52,7 +55,22 @@ def test_r7c_two_posts_naming_the_same_thing_show_it_under_each_post_in_its_own_
         "Icons I use": {"items": [{"name": "Lucide", "about": "my favourite set"},
                                   {"name": "Phosphor", "about": "flexible icon family"}]}})
     msg = say(env, "what icon libraries should i use", ask("icon libraries"))
-    assert "1. Lucide: clean icons" in msg and "3. Lucide: my favourite set" in msg and msg.count("Lucide") == 2
+    assert '1. Lucide: clean icons (also in "Icons I use")' in msg and msg.count("Lucide") == 1
+    assert "2. Iconoir: free icons" in msg and "3. Phosphor: flexible icon family" in msg   # its other things
+    assert msg.startswith("I found 3 icon libraries named in 2 of your saves.")
+    bot = env["bot"]
+    say(env, "add the third one to my list", {"intent": "todo_add", "pick_number": 3})
+    assert bot.store.todos(H)[-1]["text"] == "Phosphor"
+    say(env, "add lucide to my list", {"intent": "act_on_last", "actions": [{"action": "todo.add", "params": {}}]})
+    t = bot.store.todos(H)[-1]
+    assert t["text"] == "Lucide" and t["url"] == ig("2025-01-01", 1)
+    # near variant: a post whose only thing is the one shown above is not a source of its own
+    env["state"]["answers"]["mvp_extract"] = items_fake({
+        "Best icon sets": {"items": [{"name": "Lucide", "about": "clean icons"},
+                                     {"name": "Iconoir", "about": "free icons"}]},
+        "Icons I use": {"items": [{"name": "Lucide", "about": "my favourite set"}]}})
+    msg = say(env, "what icon sets should i use", ask("icon sets"))
+    assert msg.count("Lucide") == 1 and "also in" not in msg and 'From "Icons I use"' not in msg
 
 
 def test_r7c_the_numbers_run_across_posts_as_the_person_read_them_and_spanish_reads_naturally(ui):

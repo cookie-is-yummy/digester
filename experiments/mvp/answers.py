@@ -292,6 +292,29 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
     # (round 9, slice U2: with the judge, the composer's own verdict orders the posts that count as the kind)
     srcs.sort(key=lambda s: (source_rank(s[0]), (2 if not judged(s[0]) else VERDICT_RANK.get(s[0].get("verdict"), 1))
                              if ran else 0, bool(s[0].get("old_year"))))
+    # round 9, slice U2 (point 4): a thing two posts name is shown once, under the first source that names it (live:
+    # one brand was numbered 1 and 2); the other post's block lists its other things
+    from .retrieve import norm
+    first_of = {}
+    for s in srcs:
+        keep = []
+        for x in s[1]:
+            k = norm(x.get("name") or "")
+            if k in first_of:
+                first_of[k].setdefault("_also", []).append(s[0])
+                continue
+            first_of[k] = x
+            keep.append(x)
+        s[1] = keep
+    srcs = [s for s in srcs if s[1]]
+    if sum(len(its) for _, its in srcs) < 2:
+        result["items_more"] = []
+        return None
+    shown_src = {id(p) for p, _ in srcs[:MAX_SOURCES]}
+    for x in first_of.values():   # "(also in "<title>")" only when that post is shown as a source too
+        also = [p for p in x.pop("_also", []) if id(p) in shown_src]
+        if also:
+            x["also_in"] = also[0].get("title") or ""
     out, n = [], 0
     for p, its in srcs[:MAX_SOURCES]:
         shown = its[:MAX_ITEMS_PER_SOURCE]

@@ -301,3 +301,84 @@ def test_j2_the_kinds_evaluation_counts_the_judge():
     s = summary([row, dict(row, judge={}, cost_by_purpose={}, seconds=5.0)])
     assert s["judge"]["calls"] == 1 and s["judge"]["things"] == 7 and s["judge_cost_usd"] == 0.005
     assert s["seconds_per_request"] == 4.0
+
+
+# ---------- point 4: a thing two posts name is shown once ----------
+def test_j4_the_also_in_note_is_in_the_persons_language():
+    from mvp.render import _item_line
+    x = {"n": 1, "name": "Lanternfall", "about": "a calm puzzle game", "also_in": "Games we play"}
+    assert _item_line(x) == '1. Lanternfall: a calm puzzle game (also in "Games we play")'
+    assert _item_line(x, "es") == '1. Lanternfall: a calm puzzle game (también en "Games we play")'
+    assert _item_line(dict(x, also_in=None)) == "1. Lanternfall: a calm puzzle game"
+
+
+# ---------- point 5: the kind read from the request's grammar ----------
+def test_j5_the_kind_is_read_from_the_requests_grammar():
+    from mvp.extract import asks_for_things, grammar_kind, kind_phrase
+    assert grammar_kind("what are some movies i should watch this weekend") == "movies"
+    assert grammar_kind("what games should i play with friends online") == "games"
+    assert grammar_kind("any good chrome extensions for productivity") == "chrome extensions"
+    assert grammar_kind("board games i saved") == "board games"
+    assert grammar_kind("games for a rainy day") == "games"
+    assert grammar_kind("minecraft servers worth joining") is None   # none of the four forms
+    # never a recipe, a workout or a tutorial request, a kind of post, or a word for anything
+    for t in ("what are some easy pasta recipes", "any good workouts for abs", "blender tutorials for beginners",
+              "what are some calisthenics exercises i can do at home", "startup motivation reels for mornings",
+              "what day should i post my reels", "studio vibes for my room", "what should i cook tonight",
+              "any updates on my rules", "what are some things to do"):
+        assert grammar_kind(t) is None, t
+    assert asks_for_things("what are some movies i should watch") and not asks_for_things("what should i cook")
+    # the word list first, as before; the grammar where it has no word, the person's message before the goal
+    assert kind_phrase("free textures for renders", "what websites have free textures for my renders") == "websites"
+    assert kind_phrase("games to play with friends online", "what games should i play with friends online") == \
+        "games"
+    assert kind_phrase("movies for the weekend", "") == "movies"
+    assert kind_phrase("studio vibes", "studio vibes please") is None
+
+
+GAMES1 = ("Co-op picks for a rainy night\n- Lanternfall: a calm puzzle game for two players\n"
+          "- Harbor Run: race your friends across the docks")
+GAMES2 = ("What we play every weekend\n- Mossy Keep: build a castle together online\n"
+          "- Lanternfall: still the best two player puzzle")
+GAMES_TABLE = {
+    "rainy night": {"items": [{"name": "Lanternfall", "about": "a calm puzzle game for two players", "fit": "yes"},
+                              {"name": "Harbor Run", "about": "race your friends across the docks", "fit": "yes"}]},
+    "every weekend": {"items": [{"name": "Mossy Keep", "about": "build a castle together online", "fit": "yes"},
+                                {"name": "Lanternfall", "about": "still the best two player puzzle", "fit": "yes"}]}}
+
+
+def test_j5_a_kind_not_in_the_word_list_gets_its_kind_line_and_its_own_word(env, tmp_path):
+    use_lib(env, tmp_path, [("g1", "coopfan", GAMES1, "2026-09-01", "2026-09-02", "instagram"),
+                            ("g2", "weekender", GAMES2, "2026-08-01", "2026-08-02", "instagram")], name="libg")
+    seen = []
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "rainy night", title="Co-op picks"),
+                                                                  pick(u, "every weekend", title="What we play")]}
+    env["state"]["answers"]["mvp_extract"] = items_fake(GAMES_TABLE, seen)
+    msg = say(env, "what games should i play with friends online", ask("games to play with friends online"))
+    assert seen and all('\nKind asked for: "games"\n' in u for u in seen)
+    assert msg.startswith("I found 3 games named in 2 of your saves.\n")   # never "3 things"
+    # point 4 on the way: the game both posts name is shown once
+    assert '1. Lanternfall: a calm puzzle game for two players (also in "What we play")' in msg
+    assert msg.count("Lanternfall") == 1 and "3. Mossy Keep" in msg
+
+
+# ---------- point 6: the title fallback names the creator once ----------
+def test_j6_a_neutral_title_says_the_creator_once():
+    from mvp.render import by, names_creator, pick_parts, pick_sentence, source_head
+
+    class Item:
+        id, platform, creator, url, kinds, dates, first_line = "n1", "instagram", "@maker", "u", ["save"], {}, ""
+
+        def kept_on(self):
+            return None
+    it = Item()
+    assert by(it, title="A post from @maker") == "" and by(it, title="Calm desk tour") == " by @maker"
+    assert by(it) == " by @maker" and not names_creator("A post from @makerx", "@maker")
+    p = {"item": it, "title": "A post from @maker", "because": None}
+    assert pick_sentence("I recommend", p) == "I recommend A post from @maker, which you saved."
+    assert source_head(p) == 'From "A post from @maker":'
+    assert source_head(dict(p, title="Calm desk tour")) == 'From "Calm desk tour" by @maker:'
+    head = pick_parts({"title": "A post from @maker", "creator": "@maker", "url": "u"})[0]["text"]
+    assert head == "A post from @maker."
+    assert pick_parts({"title": "Calm desk tour", "creator": "@maker", "url": "u"})[0]["text"] == \
+        "Calm desk tour by @maker."

@@ -115,8 +115,17 @@ def when_kept(it, now=None, lang=None):
     return t["kept"].format(how=t["how"][kind], when=L.month(d, lang, not this_year))
 
 
-def by(it, lang=None):
-    return L.table(lang)["by"].format(creator=it.creator) if it.creator else ""
+def by(it, lang=None, title=None):
+    """' by @creator'. Round 9, slice U2 (point 6): '' when the title already ends with the creator (the neutral
+    title "A post from @x"), so the creator is said once, never "A post from @x by @x"."""
+    if not it.creator or names_creator(title, it.creator):
+        return ""
+    return L.table(lang)["by"].format(creator=it.creator)
+
+
+def names_creator(title, creator):
+    return bool(title and creator) and bool(re.search(r"(?:^|\s)(?:from|by|de)\s+" + re.escape(creator) + r"$",
+                                                      title.strip(), re.I))
 
 
 def link_part(it, title):
@@ -242,7 +251,7 @@ def pick_sentence(lead, p, now=None, lang=None, colon=False):
     it = p["item"]
     kept = when_kept(it, now, lang)
     length = L.length(p.get("length_text"), lang)
-    s = f"{lead} {p['title']}{by(it, lang)}" + (f" ({length})" if length else "")
+    s = f"{lead} {p['title']}{by(it, lang, p['title'])}" + (f" ({length})" if length else "")
     if kept:
         s += f", {kept}"
     b = p["because"] if p.get("because_backed") and p.get("because") else None
@@ -332,6 +341,8 @@ def _item_line(x, lang=None):
         when = x["when"]
     if when:
         s += f" ({when})"
+    if x.get("also_in"):   # round 9, slice U2 (point 4): a thing another shown post names too, shown once
+        s += L.table(lang)["also_in"].format(title=x["also_in"])
     return s
 
 
@@ -375,7 +386,8 @@ def source_head(p, now=None, lang=None):
             when.append(t["kept_head"].format(how=t["how"][kind], when=L.month(d, lang, True)))
         except ValueError:
             pass
-    return t["items_from"].format(title=p["title"], by=by(it, lang)) + (f" ({', '.join(when)})" if when else "") + ":"
+    return t["items_from"].format(title=p["title"], by=by(it, lang, p["title"])) + \
+        (f" ({', '.join(when)})" if when else "") + ":"
 
 
 FOUND_NOUN_WORDS = 4   # round 8, finding 94: the goal's noun phrase in "I found 9 UI/UX libraries named in ..."
@@ -413,17 +425,20 @@ def _one_word_of(noun):
     return f"{head} {last}".strip()
 
 
-def found_noun(goal):
+def found_noun(goal, grammar=True):
     """The goal's noun phrase up to its kind of thing, when it is short ("UI/UX libraries for my next project": "UI/UX
-    libraries"; "opportunities to pursue soon": "opportunities"); None otherwise (then "things")."""
-    from .extract import THINGS
+    libraries"; "opportunities to pursue soon": "opportunities"); None otherwise (then "things"). Round 9, slice U2
+    (point 5): a kind the word list does not hold is read from the goal's grammar ("games to play with friends":
+    "games"; extract.grammar_kind), unless `grammar` is False."""
+    from .extract import THINGS, grammar_kind
     # checker, round 8: every leading word that only grades or counts ("the best tools", "any other ui libraries")
     g = re.sub(r"^\s*(?:(?:some|a few|any|the|good|great|other|more|best|top|cool|useful|nice|\d+)\s+)+", "",
                (goal or "").strip(), flags=re.I)
     g = spelled(g)
     ends = [m for m in THINGS.finditer(g) if m.group(0).lower().endswith("s") and " " not in m.group(0)]
     if not ends:
-        return None
+        kind = grammar_kind(g) if grammar else None
+        return spelled(kind) if kind and len(kind.split()) <= FOUND_NOUN_WORDS else None
     phrase = g[:ends[-1].end()].strip()
     if len(phrase.split()) > FOUND_NOUN_WORDS or re.search(r"[^\w\s/&'-]", phrase):
         return None
@@ -531,14 +546,14 @@ def items_message(result, spec, footer=None, now=None, lang=None):
             if p.get("things") and promises_slides(p):
                 # (checker of the live fix pass: a reel or a video has no slides; its names are in the video)
                 where = t["in_its_video" if is_video(p["item"]) else "in_slides"]
-                text.append(f"• {p['title']}{by(p['item'], lang)}: {where}" +
+                text.append(f"• {p['title']}{by(p['item'], lang, p['title'])}: {where}" +
                             (f" {p['item'].url}" if p["item"].url else ""))
                 continue
             note = alt_note(p, result.get("extract"), lang)
             dn = date_words(p, result, lang)
             if dn:
                 note = f"{note.rstrip(' .')}; {dn}" if note else dn
-            text.append(f"• {p['title']}{by(p['item'], lang)}" + (f": {end_sentence(note)}" if note else "") +
+            text.append(f"• {p['title']}{by(p['item'], lang, p['title'])}" + (f": {end_sentence(note)}" if note else "") +
                         (f" {p['item'].url}" if p["item"].url else ""))
     if footer:
         text.append("")
@@ -581,7 +596,8 @@ def source_blocks(srcs, spec, parts, text, used, now=None, lang=None, label=None
         for p, n in more:
             used.add(id(p))
             line = t["items_more_line_one" if n == 1 else "items_more_line"].format(title=p["title"],
-                                                                                    by=by(p["item"], lang), n=n)
+                                                                                    by=by(p["item"], lang, p["title"]),
+                                                                                    n=n)
             text.append(f"• {line}" + (f" {p['item'].url}" if p["item"].url else ""))
     return text
 
@@ -709,7 +725,7 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
             if p.get("same_creator"):   # round 8, finding 96
                 note = f"{note.rstrip(' .')}; {t['same_creator']}" if note else t["same_creator"]
             length = L.length(p.get("length_text"), lang)
-            text.append(f"• {p['title']}{by(p['item'], lang)}" + (f" ({length})" if length else "") +
+            text.append(f"• {p['title']}{by(p['item'], lang, p['title'])}" + (f" ({length})" if length else "") +
                         (f": {end_sentence(note)}" if note else "") + (f" {p['item'].url}" if p["item"].url else ""))
     if wider:
         text.append("")
@@ -759,7 +775,8 @@ def pick_record(p):
            "video_id": getattr(it, "video_id", None), "creator": it.creator, "facts": facts,
            "lines": list(p.get("lines") or []), "line_kinds": kinds if p.get("lines") and not p.get("lines_reused") else None}
     if p.get("shown_items"):   # round 7: the things an items answer showed from this post, as it showed them
-        rec["items"] = [{k: x.get(k) for k in ("n", "name", "about", "when", "note", "date", "state", "stale_from")}
+        rec["items"] = [{k: x.get(k) for k in ("n", "name", "about", "when", "note", "date", "state", "stale_from",
+                                               "also_in")}
                         for x in p["shown_items"]]
         for x in rec["items"]:
             x["shown"] = _item_line(x)[len(f"{x['n']}. "):]
@@ -770,7 +787,8 @@ def pick_record(p):
 
 def pick_parts(rec, lead=""):
     """One kept pick as parts: its title (and creator), its link alone, and its checked details."""
-    head = f"{lead}{rec['title']}" + (f" by {rec['creator']}" if rec.get("creator") else "") + "."
+    head = f"{lead}{rec['title']}" + (f" by {rec['creator']}" if rec.get("creator") and
+                                       not names_creator(rec["title"], rec["creator"]) else "") + "."
     parts = [{"type": "text", "text": head}]
     if rec.get("url"):
         parts.append({"type": "link", "url": rec["url"], "title": rec["title"], "platform": rec.get("platform"),

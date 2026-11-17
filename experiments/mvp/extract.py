@@ -115,7 +115,71 @@ THINGS = re.compile(r"\b(librar(?:y|ies)|tools?|resources?|opportunit\w*|program
 
 
 def asks_for_things(*texts):
-    return bool(THINGS.search(" ".join(t for t in texts if t)))
+    """Round 9, slice U2 (point 5): a word of the list (THINGS), or a kind read from the request's own grammar
+    (grammar_kind: "what are some movies ...", "what games should I play ...")."""
+    return bool(THINGS.search(" ".join(t for t in texts if t))) or any(grammar_kind(t) for t in texts if t)
+
+
+# ---------- round 9, slice U2 (point 5): the kind of thing a request asks for, read from its grammar ----------
+# words that end a noun phrase ("movies i should watch", "chrome extensions for productivity")
+_NP_STOP = set("""i i'd i'll i'm i've you we they he she it that which who whom whose to for about in on at with from by
+of should could can would will might must may worth like my your our their his her its this these those me us them is
+are was were be been being do does did have has had and or but so if when where while than as into onto near around
+under over without within during before after since until right now today tonight this next last ever also too very
+really just please pls what which where how who why when whats""".split())
+# plurals that are not a kind of thing: kinds of post (a request for reels wants posts, not the things they name), and
+# words for anything at all
+_NOT_KINDS = set("""reels videos posts clips shorts stories photos pictures pics memes edits saves things stuff ones
+ways options examples suggestions news updates questions answers problems issues results details changes reminders rules
+notes lists plans thoughts goals days weeks months years minutes hours times others thanks guys folks friends vibes
+aesthetics moods feelings feels looks""".split())
+_GRAMMAR = [
+    re.compile(r"^(?:what|which)\s+are\s+(?:some|the|a\s+few)?\s*(?:of\s+the\s+)?(?:best|good|great|top|cool|nice|"
+               r"favou?rite|must[- ]have)?\s*(?P<np>.+)$", re.I),
+    re.compile(r"^any\s+(?:good|great|cool|nice|other|more|new|fun)?\s*(?P<np>.+)$", re.I),
+    re.compile(r"^(?:what|which)\s+(?P<np>.+?)\s+(?:should|could|can|would|do|might)\s+(?:i|we)\b", re.I),
+    re.compile(r"^(?:some|the|my)?\s*(?P<np>.+?)\s+(?:i|i've|i\s+have)\s+(?:saved|kept|liked)\b", re.I),
+    re.compile(r"^(?:some|any|good|great|best|top|the\s+best)?\s*(?P<np>.+?)\s+(?:for|to|about|in|on)\s+\w", re.I),
+]
+_PLURAL = re.compile(r"^[a-z][a-z0-9'’/-]*[a-rt-z]s$|^[a-z][a-z0-9'’/-]*ies$", re.I)   # "movies", "games"; not "glass"
+
+
+def _noun_phrase(text):
+    """The words from the start of `text` up to the first word that ends a noun phrase, when they are 1 to 4 words
+    and the last is a plural; None otherwise."""
+    words = []
+    for w in re.findall(r"[^\s,.;:!?()\"]+", text or ""):
+        if w.lower() in _NP_STOP:
+            break
+        words.append(w)
+    if not words or len(words) > 4:
+        return None
+    last = words[-1].lower()
+    if not _PLURAL.match(last) or last in _NOT_KINDS or re.search(r"(?:ss|us|is)$", last):
+        return None
+    return " ".join(words)
+
+
+def grammar_kind(text):
+    """Round 9, slice U2 (point 5): the kind of thing a request asks for, read from its own grammar ("what are some
+    movies i should watch": "movies"; "what games should i play with friends": "games"; "any good chrome extensions
+    for productivity": "chrome extensions"; "<kinds> I saved"; "<kinds> for <x>"), so a kind that is not in the word
+    list (THINGS) is still named. Never a recipe, a workout or a tutorial request (topic_kind), never a kind of post
+    ("reels", "videos") or a word for anything ("things", "ideas" is in THINGS). None otherwise."""
+    t = " ".join((text or "").split()).strip(" ?!.")
+    t = re.sub(r"^(?:(?:so|ok(?:ay)?|hey|hi|um+|please|pls)[,\s]+)*(?:(?:can|could|would) you\s+)?"
+               r"(?:(?:find|show|send|give|get|recommend)(?:\s+me)?\s+)?", "", t, flags=re.I)
+    if not t:
+        return None
+    for rx in _GRAMMAR:
+        for x in dict.fromkeys([t, ASK_HEAD.sub("", t)]):   # "what websites have ...": "websites have ..."
+            m = rx.match(x)
+            if not m:
+                continue
+            np = _noun_phrase(m.group("np"))
+            if np and not topic_kind(np) and not FOOD.search(np):
+                return np
+    return None
 
 
 # checker, finding 71: a caption that writes out a recipe, a workout or its steps is not a talk, whatever else it says
@@ -359,13 +423,19 @@ ASK_HEAD = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|hey|um+)[,\s]+)*(?:(?:what|which|
 def kind_phrase(goal, *texts):
     """Round 9, slice U: the kind of thing a request asks for, in its own words ("UI/UX libraries", "fonts"), for the
     details call's "Kind asked for" line; None when the request names no kind of thing (extract.THINGS)."""
-    from .render import found_noun
+    from .render import found_noun, spelled
     for t in (goal, *texts):
         # a message's own question words are never part of the kind ("what websites have ...": "websites")
         t = ASK_HEAD.sub("", t or "")
-        n = found_noun(t)
+        n = found_noun(t, grammar=False)
         if n:
             return n
+    # round 9, slice U2 (point 5): a kind the word list does not hold, read from the grammar of the person's message
+    # first, then the goal ("what games should i play with friends": "games"); the word list stays the fallback
+    for t in (*texts[:1], goal, *texts[1:]):
+        g = grammar_kind(t)
+        if g:
+            return spelled(g)
     for t in (goal, *texts):
         for m in THINGS.finditer(t or ""):
             w = m.group(0).lower()
