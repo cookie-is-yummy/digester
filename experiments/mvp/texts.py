@@ -1457,3 +1457,90 @@ def over_action_cap(label, n):
     if label:
         return f"I've reached my limit of {n} {label} a day for you. I can do more tomorrow."
     return f"I've reached my limit for this today ({n} a day). I can do it again tomorrow."
+
+
+# ---------- round 9, slice B (W5, W6, DESIGN.md section 16.B): the cancel helper ----------
+# The bot never signs in as the person, never says a subscription is cancelled or done, and never sets a follow-up
+# by itself: it offers one and the person says when.
+CANCEL_OFFER_CHECK = "Want a reminder to check it went through? Tell me when, like \"friday\"."
+CANCEL_OFFER_CALL = "Want a reminder to call? Tell me when, like \"tomorrow at 10am\"."
+CANCEL_WHICH = "Which one? Tell me the name, like \"cancel my Spotify\"."
+CANCEL_WHICH_COMPANY = "Which company is it? Tell me the name and I'll find the way out."
+CANCEL_WHICH_GYM = "Which gym?"
+CANCEL_MEMBER_NAME = "What name is the membership under? I only use it for the notice."
+CANCEL_CARD = "I can't help cancel a card or a bank account. Call the number on the back of the card."
+CANCEL_PASSWORD = ("No. I never sign in as you and I never need your password. If you sent a real password here, please "
+                   "change it. I find the way out, write what's needed, and remind you.")
+CANCEL_WHEN_AGAIN = "When should I remind you? Tell me a day, like \"friday\" or \"tomorrow at 6pm\"."
+CANCEL_NO_REMINDER = "OK, no reminder."
+CANCEL_SAID_DONE = "Good. I've stopped the check reminder."
+CANCEL_SAID_DONE_NO_RULE = "Good, thanks for telling me."
+CANCEL_LEFT = "OK, I've left it."
+CANCEL_OTHER_BILLING = "If you pay for it through Apple, Google Play or another company, you end it there instead."
+CANCEL_TO_HINT = "(type their email address; their website or your contract has it)"
+CANCEL_FILL = "(fill this in)"
+
+
+def cancel_web(name, steps, checked):
+    lines = [f"{name} cancels on its website. I can't do it for you, because I never sign in as you. Here's where it is:"]
+    lines += [f"{i}. {s}" for i, s in enumerate(steps, 1)]
+    if checked:
+        lines.append(f"(From {name}'s help page, checked {checked}.)")
+    return lines
+
+
+def cancel_store(store_name, path, url, note):
+    where = "in your Apple account" if store_name == "Apple" else "in the Play Store"
+    msg = f"{store_name} subscriptions cancel {where}: {path}."
+    if url:
+        msg += f" Or open {url} ."
+    if note:
+        msg += f" {note}"
+    return msg
+
+
+def cancel_phone(name, phone, checked):
+    return (f"{name} cancels by phone. Call {phone} (checked {checked}). You can say: \"I'm calling to cancel my "
+            f"subscription, effective today. Please give me a confirmation number.\"")
+
+
+def cancel_ask_billing(name):
+    return f"How do you pay for {name}: through Apple (iPhone), Google Play (Android), or their website?"
+
+
+def cancel_web_unchecked(name):
+    return (f"I don't have a checked page for {name}'s website yet. Look for the account or billing page on their "
+            f"website, and the cancel button there. If you can't find it, type their support address and I'll write a "
+            f"cancellation email.")
+
+
+def cancel_unknown(name, apple_url, play_url):
+    links = " ".join(u for u in (apple_url, play_url) if u)
+    first = "1. If you pay through Apple or Google Play: " + (links + "." if links else
+                                                             "your phone's Settings, or the Play Store's Subscriptions.")
+    return "\n".join([f"I don't have a checked way out of {name} yet. These usually work:", first,
+                      "2. The account or billing page of their website.",
+                      "3. A cancellation email: type their support address and I'll write it."])
+
+
+def cancel_check_text(name):
+    return f"Check that {name} confirmed your cancellation (look for their email)."
+
+
+def cancel_call_text(name):
+    return f"Call {name} to end your subscription."
+
+
+def cancel_reminder_set(when, n):
+    return f"OK. {cap_first(when)} I'll remind you to check. Reply \"stop {n}\" to drop it."
+
+
+def cancel_call_reminder_set(when, n):
+    return f"OK. {cap_first(when)} I'll remind you to call. Reply \"stop {n}\" to drop it."
+
+
+def cancel_notice_card(merchant, to_line, subject, body):
+    # until slice A's draft card is merged (DESIGN.md section 16.B): the notice as text to copy, with no link
+    return (f"Here's a cancellation notice you can send to {merchant}. Nothing has been sent.\nTo: {to_line}\n"
+            f"Subject: {subject}\n\n{body}\n\nFill in your member number before you send it. Copy it into an email "
+            f"from your own address.")

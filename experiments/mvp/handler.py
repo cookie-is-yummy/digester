@@ -218,6 +218,10 @@ class HandlerMixin:
         pending = self._live_pending(handle, now)
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
+        # round 9 (DESIGN.md section 16): what the doing-the-work slices read by code, before the model
+        ref = self.cancel_reads(person, text, now)   # slice B: "cancel my netflix", a password, "I cancelled it"
+        if ref is not None:
+            return ref
         # round 8, slice B (DESIGN.md section 15): export, share, "what did my agent ask": code only, no model call
         done, ref = self.integration_reads(person, text, now)
         if done:
@@ -261,7 +265,14 @@ class HandlerMixin:
         ref = self._deadline_answer(person, text, now)
         if ref is not None:
             return ref
-        return self._overdue_reply(person, text, now)
+        ref = self._overdue_reply(person, text, now)
+        if ref is not None:
+            return ref
+        # round 9 (DESIGN.md section 16): the answer to a question a round-9 helper asked, next message only
+        ref = self._cancel_answer(person, text, now)   # slice B: how they pay, which one, the name, when to remind
+        if ref is not None:
+            return ref
+        return None
 
     def _rule_reads(self, person, text, now):
         """Plain messages about rules that code reads before any model call: "no overdue nudges", a bare "done" for a
@@ -564,6 +575,12 @@ class HandlerMixin:
                 self.note(intent=it.intent)
             except ValueError:
                 pass
+        # round 9, slice B (DESIGN.md section 16.B, W5): "cancel my netflix subscription" read as a stop or pause of
+        # rules never stops one; the cancel helper answers (and a waiting preview stays open)
+        if it.intent in ("pause", "stop") and not T.ALL_RULES_SAID.search(text):
+            ref = self.cancel_stop_guard(person, text, rules, now)
+            if ref is not None:
+                return ref
         if pending and not chained and (pending["kind"] == "clarify" or it.intent in ENDS_PENDING
                                         or (it.intent == "new_rule" and not it.edits_pending)):
             self.store.clear_pending(h)  # a different request ends the question that was open; an answer uses it up

@@ -358,4 +358,5 @@ def test_the_published_entry_points_import_and_do_nothing():
         drafts.start({"handle": H}, "email", to="sam@example.com", paragraphs=("Hi",), now=None)
     assert drafts.open_draft(H) is None
     assert drafts.from_todo({"handle": H}, {"text": "Email landlord about sink"}, None) is None
-    assert cancel.from_todo({"handle": H}, {"text": "Cancel the gym"}, None) is None
+    # slice B built cancel.from_todo (test_round9_cancel.py): a to-do that is not a cancel is still not handled there
+    assert cancel.from_todo({"handle": H}, {"text": "Buy milk"}, None) is None
