@@ -1030,7 +1030,11 @@ order onto slice U2.
 | `answer_normally`, after `_rule_reads`, before `integration_reads` | 5 | `email_reads` (with `mailbox_reads` first) | A |
 | | 6 | `cancel_reads` (the password line, "I cancelled it", a cancel request) | B |
 | | 7 | `postact_reads` (apply, book, buy; "add them all") | C |
-| | 8 | `places.place_reads` (connect, check, disconnect, "what are you connected to") | D |
+| | 8 | `places.place_reads` (connect, check, disconnect, "what are you connected to"; E: the task apps, the webhook) | D, E |
+| | 8 | `receipts_reads` ("what did you do for me", "did you send the email to Maria") | W9 |
+| | 8 | `do_it` ("do 2 for me" on the to-do list) | W10 |
+| `_asked_reads`, after `places.asked_reads` | - | `_doit_answer` (the time after "I can remind you if you tell me when") | W10 |
+| `_on_message`, after the tapback branch, before `_asked_reads` and the setup's questions | - | `secret_reads` (the password line of W6 and E's key guard) | B, E |
 | `_dispatch_one`, a model `stop`/`pause`, before the pending row is cleared and `_manage` | - | `cancel_stop_guard` | B |
 
 Slice D had put `place_reads` above the request reads; the merge moved it to 8, as the verdict's map orders them.
@@ -1466,3 +1470,156 @@ answers a numbered thing from its words when the person said a number).
   `ConnectorError(code)`); one `CONNECTORS` entry; its words in `PLACES` with `connector="<key>"` instead of None.
 - Out: Notes, Mail, Contacts; any secret; Todoist and the other apps (C2 only); sync back from Reminders; the Mac's own
   time zone is assumed to be the operator's.
+
+### 16.E Connectors by token: TickTick, Todoist and a webhook (the addendum's item E; amendment A-014, Proposed)
+
+Built on the merged tree, on slice D's interfaces, with no second copy of the preview: `places.route_todo` →
+`_ask_todo` (the preview and the yes token) → `asked_reads` (the yes) → `run_plan` → `actions.perform`, the same code
+as the Mac. Every add shows the exact rows and waits for "yes" (the founder's "Always show, then wait for yes"); a
+tapback never says yes; "no" leaves everything.
+
+- **Settings, from the environment only** (a 0600 file outside git that the operator sources; never typed in the chat,
+  never in the store, a log, an error line, a test or git): `MVP_TICKTICK_TOKEN` (and `MVP_TICKTICK_PROJECT`, default
+  the Inbox), `MVP_TODOIST_TOKEN` (and `MVP_TODOIST_PROJECT`, default the Inbox), `MVP_WEBHOOK_URL` (https only; any
+  other address is never used and "check my webhook" says so). Operator only (`MVP_OPERATOR`).
+- **Registry** (`actions/__init__.py`): `ticktick.add`, `todoist.add` (outside, undo delete, confirm send_word, 40 a
+  day, in_rules False, who operator, from_model False, fallback `todo.add`) and `webhook.post` (the same, undo none).
+  All take `PlaceTodoParams`. `connectors.CONNECTORS` gains three entries with the new fields `kind` (mac | token |
+  webhook), `where` ("in TickTick"), `needs_check` (False: a token set by the operator is the setup, so no check is
+  needed before the first use) and `env` (the names it reads). `places.PLACES`: TickTick and Todoist now name their
+  connector; a new place `webhook` ("webhook", "automation", "ifttt", "zapier", "n8n"). A tester still gets C2's honest
+  line (`I can't reach TickTick, so I added ...`), and the ask is logged as `wanted:<app>`.
+- **Modules**: `actions/web.py` (the one HTTP helper: `call(method, url, token, body, app)`; 10-second timeout; a
+  redirect is followed only to the same host over https; 401/403 `refused`, 429 `rate`, 404/410 `gone`, 5xx `server`,
+  `timeout`, anything else `failed`; the error keeps only that code, raised `from None`, never the URL, a header, the
+  token or the body; tests set `web.OPENER`). `actions/_tasks.py` (the yes token of the exact rows, a local due time
+  in UTC, all-or-nothing for a batch: when a later task fails the ones made are deleted again, and `partial` when one
+  of those could not be). `actions/ticktick.py`, `actions/todoist.py`, `actions/webhook.py` (`run`, `yes_token`,
+  `remove`, `check`, `reachable`).
+- **Request shapes checked on the services' own pages (17 Nov 2026)**. TickTick (developer.ticktick.com/docs/openapi.md):
+  verified `POST https://api.ticktick.com/open/v1/task` with `title`, `projectId` (marked required), `content`,
+  `dueDate` (`yyyy-MM-dd'T'HH:mm:ssZ`, sent in UTC as `+0000`), `timeZone`, `isAllDay`; the answer's `id` and
+  `projectId`; `DELETE /open/v1/project/{projectId}/task/{taskId}`; `GET /open/v1/project`; the personal token
+  (avatar › Settings › Account › API Token, "for personal use or testing") sent as `Authorization: Bearer`. Not
+  verified: that `"inbox"` is accepted as the `projectId` when creating a task (the page documents `inbox` only for
+  searching, and "omitted or empty means the inbox" only for completing tasks), so the founder's trial checks it
+  first, or sets `MVP_TICKTICK_PROJECT`; no rate limit is stated. Todoist (developer.todoist.com/api/v1): verified
+  `POST https://api.todoist.com/api/v1/tasks` with `content` (the only required field), `description`, `project_id`
+  ("If omitted or null, the task will be added to the user's Inbox"), `due_datetime` (example
+  `2025-02-12T12:00:00Z`); the answer's `id`; `DELETE /api/v1/tasks/{task_id}`; `GET /api/v1/projects`;
+  `Authorization: Bearer` with the token from the integrations settings. Not verified: a rate limit for these calls
+  (the page gives limits for the sync endpoint: 1,000 partial syncs per 15 minutes) and any idempotency header for
+  them (an `X-Request-Id` appears only in one example; the bot does not send it and keeps its own key). `due_string`
+  is never sent, so Todoist never reads the person's words its own way. Webhook: no service's page could be read for
+  the address form today (IFTTT's Webhooks page gives no URL form or plan line), so the connector is generic: one JSON
+  POST to the operator's own https address, and the founder's trial checks it with his own automation.
+- **What is sent**: TickTick and Todoist get each to-do's checked title, its link (the post's own link, or nothing) and
+  its due time; nothing else (not the post's own words: they are third-party text and the preview would have to show
+  them; left out on purpose). The webhook gets `{"kind": "todo", "title", "text", "link", "due", "list"}` and nothing
+  else.
+- **What the person types → what the bot does** (code reads, no model call; `places.token_reads` after the Mac's
+  reads in `place_reads`):
+  - "add it to my ticktick", "push the second one to my automation", "put the ingredients in todoist", "add them all
+    to todoist": the picks (or the checked ingredient lines) of the answer in view, through `_add_picks` → the
+    preview (`I'll add these 2 to TickTick: • ... Reply "yes" to add them, or "no" to leave them.`) → "yes" → `Added 2
+    tasks to TickTick. Reply "undo" within 10 minutes to remove them.` A task with a due time: `It's due tomorrow at
+    9am there; I won't send my own reminder.` (the bot keeps no copy). A to-do the person types ("add milk to my
+    ticktick") goes the usual way (the form's `todo_add`), then the same preview.
+  - The webhook's preview says, before the yes: `I can't see what your automation does with it, and I can't undo
+    it.`; after the yes: `I sent it to your webhook. I can't see what it did there, and I can't undo it.`; "undo" says
+    it can't take it back.
+  - "send my list to ticktick" (or "my shopping list"): every open to-do of that list, previewed; after the yes the
+    copies here are taken off (`They are off your list here now.`), and "undo" takes the tasks out there and puts the
+    list back here. When it cannot: `I can't reach TickTick yet. Your list stays here.` and nothing is written twice.
+  - "put my to-dos in ticktick from now on" / "use todoist for my lists" (`prefs.place_todo`), "use my list here
+    again".
+  - "connect my ticktick" (the steps: where the token is made, the variable name, chmod 600, restart, "check my
+    ticktick"; never "send me the token"), the same for todoist and "set up a webhook". "check my ticktick" (a
+    harmless `GET` of the projects; connected, or the plain line for the code; it turns a broken or turned-off
+    connector back on). "check my webhook" sends nothing (a test would reach the automation without a yes): it only
+    checks that an https address is set. "what are you connected to" lists each one that is set up, with its state.
+    "disconnect my ticktick": off, the "from now on" choice cleared, then `Reply REMOVE to delete those, or KEEP to
+    leave them.` (state `placeremove:<handle>`, next message, 30 minutes; REMOVE deletes only the placement ids). The
+    webhook's disconnect says it can't undo what the automation did. "delete my data" adds `This also stops TickTick.
+    What I added there stays there.`
+- **Failures** (each falls back to the list here with one plain line): `TickTick refused my key, so I added "milk" to
+  your list here ... Text me "connect my ticktick" to see how to make a new one.`; `asked me to slow down`; `had a
+  problem on its side`; `didn't answer in time`; `said that address doesn't exist`; `gave an error`; `took only part
+  of it, and I couldn't take that part out again (check TickTick)`; the cap (`I've reached my limit of 40 tasks a day
+  for TickTick`); 3 failures in a row (`refused`, `server`, `gone`, `timeout`, `failed`, `partial`) mark it broken: no
+  more calls until "check my ticktick". Idempotency: `idem = sha256(handle, action, run id, item ids or texts)`; the
+  same things asked again within 24 hours, or a repeated yes, add nothing (`I already added that to TickTick today.`).
+- **The narrow secret guard** (`connectors.secret_said`, `CancelMixin.secret_reads`): a message that names
+  `MVP_TICKTICK_TOKEN`, `MVP_TODOIST_TOKEN`, `MVP_WEBHOOK_URL` or `MVP_MAILBOX_APP_PASSWORD`, or says "token", "api
+  key", "app password", "password" or "passcode" then "is", ":" or "=" then a run of 16 or more non-space characters,
+  or holds an IFTTT, Zapier or Make webhook address, gets the fixed line `I never take passwords, keys or webhook
+  addresses in the chat, so I didn't keep that message. ...`. Same forget path as W6's password line
+  (`store.forget_last_inbound`), no model call, no `requests` or `interp_cache` row; `action_log` `secret.refused` with
+  no detail. Both lines now run in `_on_message` before `_asked_reads` and the setup's questions, so they are reached
+  while onboarding asks something and while a helper waits for an answer (slice B's known issue, fixed for both).
+  Ordinary sentences ("the token is valid until friday", "my password is too short", "what time does that open", a
+  long post link) do not fire it (tested).
+- Tests: `tests/test_round9_tokens.py` (a fake opener; every status, the idempotency key, undo, the daily cap, operator
+  only, the fallback lines, the setup lines, the guard's positives and negatives, the guard during onboarding, and that
+  no token or address appears in any reply, log row, state row or exception). The merge checks
+  (`tests/test_round9_merge.py`) now run with the three connectors set up for the operator: the 159 rule-eval texts are
+  taken by no round 9 read but t-dev-040; the 20 draft requests: 0 taken in all four settings (counted locally).
+- Out: OAuth, Notion, Linear, Things; a test send to the webhook; reading anything back from the apps (no sync: a task
+  ticked in TickTick stays as it is here); the post's own words in a task; the TickTick and Todoist calls have run only
+  against the fake opener.
+
+### 16.F "What did you do for me" and to-do hand-offs (W9, W10)
+
+**W9** (`receipts.py`, `ReceiptsMixin.receipts_reads`, hook 8, code only). "what have you done for me", "what did you
+do for me", "what did you do today" (today only), "what did you send today", "show my activity", "my receipts", "what
+have you sent", "what's still waiting". From `action_log`, `drafts`, `placements`, `cancellations` and `todos`, the
+last 7 days, one line per kind, newest first:
+- email to the person: `emailed you 3 times (last yesterday)`; `kept ... in the outbox here, because email isn't set
+  up`; `gave you 1 link that opens an email to yourself (...; I can't see whether you sent it)`;
+- emails and notices to other people: `sent the email to Maria from me@example.com yesterday at 6:04pm, after your
+  "send" (the mail server took it)` only for a draft whose status is `sent`; `wrote the email to Jo, and you told me
+  you sent it` for `person_sent`; `prepared the email to your landlord (today; a link you open in your mail app; I
+  can't see whether you sent it)` for a link shown; a dropped connection: `I can't tell whether it went. Check your
+  Sent folder before sending it again`; a draft never shown or cancelled is not listed;
+- `saved 1 draft in your Drafts folder (nothing was sent)`; `gave you 2 calendar links (I can't see whether you added
+  them)`; `added 3 things to your lists here (you ticked off 1)`;
+- placements by connector, in its own words: `added 6 reminders on your Mac, and removed 1 again`, `added 2 tasks in
+  TickTick`, `sent 1 thing to your webhook (I can't see what it did with it)`;
+- `helped with 2 cancellations (you said 1 is done, 1 still open)`: no merchant named, never "cancelled".
+
+Then `Waiting for you:` (an email in its 2-minute hold: `goes at 1:02pm. Say "undo" to stop it`; the open draft;
+a preview waiting for "yes"), the undo line while the last write can still be undone, and a count line for the
+person's agent (the agent's own log stays "what did my agent ask"). Nothing: `I haven't done anything for you in the
+last 7 days.` "did you send the email to Maria" answers from the newest draft to that name, word ("my landlord") or
+address: `Yes. I sent ...` only after the server took it; `Not yet ... waiting to go out`; `I didn't send it: ... I
+can't see whether you sent it. Tell me "sent" if you did.`; `I haven't written an email to Maria for you.`
+
+**W10** (`todos.do_it`, hook 8 after `receipts_reads`; `todos.doit_request` reads the words). "do it for me", "do 3
+for me", "can you do number 2", "do the first one", "help me with 2", "handle the landlord one", "take care of the
+first one". Never a bare "do it" (a yes) or a bare "do 2" (a numbered offer's choice), and nothing at all while a rule
+preview waits. A number means a to-do when the list (or an overdue nudge) was the last thing shown, with no newer answer
+(state `todoview:<handle>`), or when no answer was ever shown, or when the message says "to-do"; else the usual path
+reads it (it may be a pick). "it" is the one to-do just added; with none in view: `Which one? Say "do 2 for me"`.
+
+| The to-do | Goes to | What happens |
+| --- | --- | --- |
+| "Email landlord about sink" | `drafts.from_todo` (job `todo:<id>`) | `Who should it go to? Reply with your landlord's email address ...` |
+| "Cancel netflix" | `cancel.from_todo` → `Bot.cancel_todo` | the merchant's route |
+| "Book a table at ..." from a pick | the book menu (W8) | Maps link, hold |
+| "Apply to ..." from a pick, or a pick whose post gives a deadline | the apply menu (W8) | deadline, checklist |
+| "Buy gochujang" | none | `I can't buy things for you. It's on your list; tick it off with "done 1" when you have it. Want a reminder? Tell me when.` |
+| "Call the dentist" | none | `I can't make calls. Want a reminder? Tell me when, like "tomorrow at 10am".` |
+| anything else | none | `I can't do "Renew passport" for you. I can remind you if you tell me when, like "friday".` |
+
+After a hand-off: `Tick it off once it's done: "done 2".` After "tell me when", the next message only
+(`_doit_answer`, state `doitask:<handle>`, 24 hours) sets the to-do's due time (it reminds through the scheduler, as
+any due to-do; "undo" takes it back). A to-do is ticked off only on a real outcome: the email's draft hears "sent"
+(the mail server took it, or the person says "sent") through `_draft_job_done`; a cancellation made after the hand-off
+hears "I cancelled netflix" (state `doit:<handle>`, 7 days). A link or a menu alone never ticks it.
+
+HELP gains one line: `Errands: "email my landlord that the sink is broken", "cancel my netflix", "apply to the second
+one", "do 2 for me" on your list, "what did you do for me". I always show you an email first.`
+
+Tests: `tests/test_round9_receipts.py`, `tests/test_round9_doit.py`; the merge checks wrap `receipts_reads`, `do_it`,
+`_doit_answer` and `secret_reads` too. No model call, no new table (state keys `todoview:`, `doit:`, `doitask:`,
+`placeremove:` end in `:<handle>`, so "delete my data" removes them).

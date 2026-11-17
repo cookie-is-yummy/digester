@@ -4,8 +4,6 @@ exact rows and waits for "yes" (the founder's rule), through the same code as th
 for the services: no test opens a network connection. Synthetic data only; made-up tokens and example addresses."""
 import json
 import os
-import re
-import sqlite3
 import sys
 from datetime import timedelta
 from types import SimpleNamespace

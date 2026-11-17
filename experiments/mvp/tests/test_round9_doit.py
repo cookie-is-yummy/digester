@@ -5,7 +5,6 @@ outcome is real (the person's "sent", the mail server taking it, "I cancelled it
 in any message the code must answer (the fake interpreter fails the test if it is reached)."""
 import os
 import sys
-from datetime import timedelta
 
 import pytest
 
