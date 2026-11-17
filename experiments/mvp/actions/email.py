@@ -136,9 +136,25 @@ def sent_line(bot, to, via, err, with_file=False):
     return f"Email isn't connected here, so I didn't send it. The email is {where}."
 
 
+def self_link(ctx, c, to):
+    """Round 9, slice A (W3): with no email set up, on a channel whose person cannot open the outbox, a one-off ask
+    or "email me that" is a mailto: link to themselves (their address in To when they gave one, else blank). Nothing
+    is sent; the answer is in the thread too. The body is cut at a section, never mid-line."""
+    from ..drafts import cut_at_section, mailto
+    from .. import texts as T
+    footer = f"Sent by {config.BOT_NAME} because you asked for it, to your own address."
+    body, cut = cut_at_section(c["text"].replace(footer, "").rstrip())   # the bot sends nothing here
+    if cut:
+        body += "\n\n(The rest is in my message.)"
+    url = mailto(to or "", c["subject"], body)
+    return Outcome("link", line=T.SELF_LINK + "\n" + url, detail={"via": "link"})
+
+
 def run(ctx, params):
     c = content(ctx)
     to, confirmed = ctx.store.email_of(ctx.handle)
+    if ctx.kind in ("ask", "act_on_last") and not smtp_settings() and not outbox_reachable(ctx.bot):
+        return self_link(ctx, c, to)   # round 9, slice A (W3)
     if not confirmed:
         return ctx.bot.email_waiting(ctx.person, c, ctx.run_id, ctx.now)
     via, path, err = send(ctx.bot, ctx.handle, to, c["subject"], c["text"], c["html"], c["attach"], ctx.run_id, ctx.now)

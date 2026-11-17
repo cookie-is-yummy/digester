@@ -98,6 +98,21 @@ REGISTRY = {
 }
 
 
+# ---------- round 9, slice A (DESIGN.md section 16.A): emails to other people; only the bot's own code runs these ----
+class DraftParams(BaseModel):
+    """A draft card (drafts.py) by its id; cut_note ends a body cut for the link."""
+    model_config = ConfigDict(extra="forbid")
+    draft_id: int
+    cut_note: Optional[str] = Field(default=None, max_length=300)
+
+
+REGISTRY.update({
+    "email.draft_link": ActionDef(name="email.draft_link", params=DraftParams, module="email_link", order=40,
+                                  does="A mailto: link that opens one draft in the person's own mail app",
+                                  max_per_day=20, in_rules=False, from_model=False),
+})
+
+
 def validate_action(name, params=None, by="model", where="form"):
     """(name, params as a plain dict with defaults left out). Raises ValueError for anything not in the registry.
     Round 9, C1: `by` is who names it ("model": a form the model filled, the default; "code"); `where` is where it is

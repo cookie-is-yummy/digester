@@ -42,3 +42,13 @@ def item_block(x, source):
 
 def share_text(blocks):
     return "\n\n".join(b for b in blocks if b)
+
+
+# ---------- round 9, slice A (DESIGN.md section 16.A): the offer to write the email ----------
+def email_offer(text):
+    """'send this to my mom': after the hint, the offer to write the email. Only when the message names who it is
+    for with a word code knows; who it is for is never repeated (DESIGN.md section 15)."""
+    import re
+    from . import texts as T
+    from .drafts import PEOPLE_WORDS
+    return T.SHARE_EMAIL_OFFER if re.search(rf"\b(?:my|our)\s+(?:{PEOPLE_WORDS})s?\b", text or "", re.I) else ""

@@ -354,8 +354,6 @@ def test_the_operator_comes_from_the_environment(monkeypatch):
 # ---------- the stubs other slices import before their owners merge ----------
 def test_the_published_entry_points_import_and_do_nothing():
     from mvp import cancel, drafts
-    with pytest.raises(NotImplementedError):
-        drafts.start({"handle": H}, "email", to="sam@example.com", paragraphs=("Hi",), now=None)
-    assert drafts.open_draft(H) is None
-    assert drafts.from_todo({"handle": H}, {"text": "Email landlord about sink"}, None) is None
+    # round 9, slice A replaced the drafts stub: the entry points take the bot first (tests/test_round9_drafts.py)
+    assert callable(drafts.start) and callable(drafts.open_draft) and callable(drafts.from_todo)
     assert cancel.from_todo({"handle": H}, {"text": "Cancel the gym"}, None) is None

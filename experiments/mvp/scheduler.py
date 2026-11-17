@@ -68,6 +68,7 @@ class SchedulerMixin:
                 slot = progress.get("slot") or datetime.fromisoformat(rule.get("slot_at") or rule["next_run_at"])
                 self._retry_or_skip(self.store.rule(rule["id"]) or rule, now, slot)
         sent += self._tick_todos(now)   # due to-dos remind once (todos.py)
+        sent += self.drafts_tick(now)   # round 9, slice A: a held send that is due (W4); old drafts cleared
         return sent
 
     # ---------- what changes with time alone ----------

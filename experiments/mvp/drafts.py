@@ -1,22 +1,947 @@
-"""PROTOTYPE ONLY - the draft card (round 9, slice A: W2, W3, W4; DESIGN.md section 16.A). STUB published by C1.
+"""PROTOTYPE ONLY - an email to someone else, written by the bot and sent by the person (round 9, slice A: W2, W3,
+W4, A5, A6; DESIGN.md section 16.A; amendments A-012 and A-013, Proposed). Mixed into core.Bot.
 
-The entry points other slices call are fixed here so they can import them before slice A merges. Slice A replaces
-this file. Until then: `start` raises NotImplementedError (a caller must not pretend a card was shown), and
-`open_draft` and `from_todo` return None (no draft is open; the to-do is not handled here).
+"email my landlord that the kitchen sink is broken" is read here by code, before the model. The bot writes the email
+(its words: the person's own, a checked post block, and, when draft_v1 is on, a model's text that code checked), shows
+it whole as a three-message card, and gives a mailto: link. The person sends it from their own mail app: on this route
+the bot sends nothing. For the operator only, with their own mailbox in the environment, the word "send" on the exact
+version last shown sends it from their address after a two-minute hold (actions/mailbox.py).
+
+Rules that hold everywhere here:
+- The recipient is only ever an address the person typed in this draft's exchange. Never one from a post, a caption,
+  an answer or the model.
+- Every change makes a new version with a new text hash; a yes given to an older version is void.
+- A reply never says "sent" unless the mail server accepted it; a link is "a link you tap", never "sent".
+- action_log rows hold the recipient's domain and counts, never the address, the subject or the body.
+
+Public entry points other slices call (C1 published their names; the bot is the first argument here because these
+are methods of the bot): Bot.draft_start(person, kind, to=None, to_name=None, subject=None, paragraphs=(), post=None,
+placeholders=(), job=None, now=None) -> the first message's ref; Bot.open_draft(handle) -> dict or None;
+Bot.draft_from_todo(person, todo, now=None) -> ref or None. Module-level start(bot, ...), open_draft(bot, handle) and
+from_todo(bot, person, todo, now) call them.
 """
+import json
+import re
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
+
+from . import config
+from . import texts as T
+from .store import now_iso
+
+OPEN_HOURS = 24               # a draft card stays open this long after it was last shown or asked about
+CLEAR_DAYS = 7                # the address, subject and words of a finished draft are cleared after this
+MAX_CHANGES = 5               # changes per draft; then "tell me the whole text"
+LINK_MAX = 1500               # the body in a mailto: link is cut at a line boundary past this
+FRESH_MINUTES = 30            # W4: "send" more than this long after the version was shown shows it again
+REQUEST_MAX = 600             # an email request is read by code up to this many characters
+
+ADDR = r"[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"
+ADDR_RE = re.compile(ADDR)
+# the people a message can name (outputs.OTHER_PERSON keeps the same words; "agent" and "assistant" stay out: F10)
+PEOPLE_WORDS = (r"mom|mum|mother|dad|father|parents?|wife|husband|partner|friends?|boss|sister|brother|son|daughter|"
+                r"girlfriend|boyfriend|roommate|colleague|coworker|co-worker|teacher|team|family|grandma|grandpa|aunt|"
+                r"uncle|cousin|landlord|landlady|neighbou?r|client|doctor|dentist|professor|tutor|coach|manager|"
+                r"recruiter|lawyer|accountant|plumber|contractor|therapist")
+# places that are the person's own ("send it to my gmail"): never a recipient
+SELF_WORDS = re.compile(r"^(?:me|myself|us|my\s+(?:own\s+)?(?:e-?mail|inbox|gmail|icloud|outlook|hotmail|yahoo|"
+                        r"proton(?:mail)?|mail(?:\s+app)?|mailbox|drafts?|address|account))\b", re.I)
+_LEAD = (r"^\W*(?:(?:hey|hi|ok(?:ay)?|so|please|pls|plz|can you|could you|would you|will you|can u|could u|"
+         r"i (?:need|want|have) to|i'?d like (?:you )?to|help me|i need you to|go ahead and)[\s,]+)*")
+_NAME = r"[A-Z][a-z][A-Za-z'’-]*"
+NOT_NAMES = set("""I Me My It This That The A An And Hi Hey Ok Okay Monday Tuesday Wednesday Thursday Friday Saturday
+Sunday January February March April May June July August September October November December Gmail Icloud
+Outlook Hotmail Yahoo Proton Email Mail Instagram Youtube YouTube Tomorrow Today Tonight Please Them Him Her""".split())
+_RCPT = (rf"(?P<addr>{ADDR})"
+         rf"|(?P<my>(?:my|our)\s+(?P<word>(?:{PEOPLE_WORDS})s?))(?:\s+(?P<wname>{_NAME}))?(?:\s+at\s+(?P<waddr>{ADDR}))?"
+         rf"|(?P<name>{_NAME}(?:\s+{_NAME})?)(?:\s+at\s+(?P<naddr>{ADDR}))?"
+         r"|(?P<pron>him|her|them)")
+# "email ...": what follows the verb
+_EMAIL_VERB = (r"(?:e-?mail|draft(?:\s+and\s+send)?\s+(?:an?\s+)?e-?mail\s+(?:to|for)|write\s+(?:an?\s+)?e-?mail\s+(?:to|for)|"
+               r"send\s+(?:an?\s+)?e-?mail\s+to|compose\s+(?:an?\s+)?e-?mail\s+to|write\s+to|"
+               r"(?:draft|write)\s+(?:an?\s+)?(?:reply|note|letter)\s+to)")
+VERB_FIRST = re.compile(_LEAD + rf"(?P<verb>{_EMAIL_VERB})\s+(?P<rest>.+)$", re.I | re.S)
+# "send the pasta recipe to sam@example.com": an object, then an address (a send with no address is a share)
+SEND_TO_ADDR = re.compile(_LEAD + rf"(?:send|forward|share)\s+(?P<obj>.{{1,60}}?)\s+to\s+(?P<rest>{ADDR}.*)$", re.I | re.S)
+POINTS = re.compile(r"^(?:it|this|that|these|those|them|both|all of them|this one|that one|the\s+(?:\w+\s+){0,3}?"
+                    r"(?:one|ones|recipe|recipes|video|post|reel|tutorial|workout|pick|link|thing|programme|program|"
+                    r"opportunity|place|event|answer)|the\s+(?:first|second|third|fourth|fifth|last)\b.*|#\s?\d|"
+                    r"number\s+\d)\b", re.I)
+PLURAL = re.compile(r"^(?:these|those|them|both|all of them|the\s+(?:\w+\s+)?(?:ones|recipes|picks|posts|videos))\b",
+                    re.I)
+CC = re.compile(r"\b(?:cc|bcc|cc'?d|copy in|everyone|everybody|all of them at|the whole team)\b", re.I)
+REPEATING = re.compile(r"\b(?:every|each)\s+(?:day|morning|evening|night|week|month|weekday|weekend|"
+                       r"(?:mon|tues|wednes|thurs|fri|satur|sun)day)s?\b|\b(?:daily|weekly|monthly)\b|"
+                       r"\bon\s+(?:mon|tues|wednes|thurs|fri|satur|sun)days\b", re.I)
+EMAIL_WORD = re.compile(r"\be-?mail", re.I)
+OTHER_RE = re.compile(rf"\b(?:my|our)\s+(?:{PEOPLE_WORDS})s?\b", re.I)
+
+# ---------- the draft reader's words (whole message only) ----------
+SEND_WORDS = re.compile(r"^\W*(?:(?:yes|ok(?:ay)?|go ahead and|please)[\s,]+)?send(?:\s+(?:it|the email|it now|now))?"
+                        r"(?:\s+now)?(?:\s+please)?\W*$", re.I)
+CANCEL_WORDS = re.compile(r"^\W*(?:cancel(?:\s+(?:it|that|the (?:email|draft)))?|don'?t send(?:\s+it)?|do not send(?:\s+it)?|"
+                          r"never\s?mind|scrap(?:\s+it|\s+that)?|no|nope|drop it|forget it|delete (?:it|the draft))\W*$",
+                          re.I)
+YES_WORDS = re.compile(r"^\s*(?:yes|y|yep|yeah|yup|sure|ok|okay|go|do it|sounds good|looks good|perfect|great|👍)"
+                       r"[\s.!]*$", re.I)
+SHOW_WORDS = re.compile(r"^\W*(?:show|see)\s+(?:me\s+)?(?:it|the (?:draft|email)|my draft)(?:\s+again)?\W*$", re.I)
+SENT_WORDS = re.compile(r"^\W*(?:(?:ok|okay|done)[\s,]+)?(?:sent|i sent it|i'?ve sent it|i have sent it|sent it|"
+                        r"i sent the email)\W*$", re.I)
+BLANK = re.compile(r"^\W*(?:blank|leave it blank|no address|i'?ll (?:pick|add) (?:it|them)(?: myself)?)\W*$", re.I)
+NO_NAME = re.compile(r"^\W*(?:no name|none|nothing|don'?t sign(?: it)?|no sign[- ]?off)\W*$", re.I)
+SIGN_NAME = re.compile(r"^\W*(?:(?:sign it|it'?s|i'?m|call me|use)\s+)?([^\W\d_][\w'’ .-]{0,30}?)\W*$", re.I)
+CH_ADD = re.compile(r"^\W*(?:also\s+)?(?:say|add|mention|also mention|tell (?:him|her|them))\s+(?:that\s+)?(?P<x>.+?)\W*$",
+                    re.I | re.S)
+CH_INSTEAD = re.compile(r"^\W*(?:instead,?\s+say|say instead|change it to say|make it say)\s+(?:that\s+)?(?P<x>.+?)\W*$"
+                        r"|^\W*say\s+(?:that\s+)?(?P<y>.+?)\s+instead\W*$", re.I | re.S)
+CH_SUBJECT = re.compile(r"^\W*(?:subject(?:\s+line)?\s*[:\-]\s*|(?:change|make|set)\s+the\s+subject(?:\s+line)?\s+"
+                        r"(?:to\s+)?|subject\s+line\s+)[\"“]?(?P<x>.+?)[\"”]?\W*$", re.I)
+CH_TO = re.compile(rf"^\W*(?:to\s*:\s*|send it to\s+|change (?:the )?(?:recipient|address|to)\s+(?:to\s+)?)(?P<a>{ADDR})"
+                   r"(?:\s+instead)?\W*$", re.I)
+CH_SIGN = re.compile(r"^\W*sign it\s+(?:as\s+|with\s+)?(?P<x>[^\W\d_][\w'’ .-]{0,30}?)\W*$", re.I)
+CH_NOSIGN = re.compile(r"^\W*(?:don'?t|do not) sign it\W*$", re.I)
+CH_NOLINK = re.compile(r"^\W*(?:remove|take out|drop|delete|leave out)\s+the\s+link\W*$", re.I)
+CH_NOPOST = re.compile(r"^\W*(?:remove|take out|drop|delete|leave out)\s+the\s+post\W*$", re.I)
+CH_LINKBACK = re.compile(r"^\W*(?:add|put)\s+the\s+(?:link|post)\s+back(?:\s+in)?\W*$", re.I)
+TONE = re.compile(r"\b(?:shorter|longer|more formal|less formal|formal|informal|friendlier|friendly|warmer|nicer|"
+                  r"politer|more polite|polite|casual|professional|firmer|kinder|softer|in (?:spanish|french|german|"
+                  r"italian|portuguese|english))\b", re.I)
+TONE_ASK = re.compile(r"^\W*(?:can you\s+|could you\s+|please\s+)?(?:make it|make this|rewrite it|write it|reword it|"
+                      r"translate it|put it)\b", re.I)
+REMOVE_IT = re.compile(r"^\W*(?:remove it|remove that line|take it out|leave it out)\W*$", re.I)
+SAVE_DRAFT = re.compile(r"^\W*(?:(?:please|can you)\s+)?(?:save|put)\s+(?:it|that|this|that email|the email|the draft)?\s*"
+                        r"(?:as a draft|in(?:to)? my drafts?(?: folder)?|in my (?:gmail|icloud|mailbox)(?: drafts)?)\W*$",
+                        re.I)
+NOT_A_CHANGE = re.compile(r"\b(?:to|on|onto|in|into)\s+(?:my|the)\s+(?:[\w-]+\s+){0,2}(?:list|calendar|reminders?|"
+                          r"to-?dos?)\b", re.I)
 
 
-def start(person, kind, to=None, to_name=None, subject=None, paragraphs=(), post=None, placeholders=(), job=None,
-          now=None):
-    """Opens a draft card (kind "email" or "notice") for this person and returns its ref. Slice A builds it."""
-    raise NotImplementedError("drafts.start is built by round 9, slice A")
+def addresses(text):
+    return list(dict.fromkeys(m.group(0).rstrip(".").lower() for m in ADDR_RE.finditer(text or "")))
 
 
-def open_draft(handle):
-    """The person's open draft (a dict), or None. Stub: None."""
-    return None
+def domain_of(addr):
+    return addr.rsplit("@", 1)[1].lower() if addr and "@" in addr else None
 
 
-def from_todo(person, todo, now=None):
-    """A Reply that starts a draft for an "email ..." to-do, or None when it is not one. Stub: None."""
-    return None
+def cap(s):
+    s = " ".join(str(s or "").split()).strip(" ,;:-")
+    return (s[:1].upper() + s[1:]) if s else s
+
+
+def sentence(s, end="."):
+    s = cap(s)
+    if s and s[-1] not in ".!?…":
+        s += end
+    return s
+
+
+def _you(rest):
+    """'ask if she can come' -> 'if you can come': only (he|she|they) + a modal right after the question word."""
+    return re.sub(r"^(he|she|they)\s+(can|could|will|would|should|might)\b", r"you \2", rest, count=1, flags=re.I)
+
+
+def clause_paragraph(rest):
+    """The request paragraph from the person's own words after the recipient, by fixed patterns only (no other
+    rewording). Returns (paragraph or None, subject words or None, points-at-post words or None)."""
+    r = " ".join((rest or "").split()).strip(" ,")
+    subj = None
+    m = re.search(r"[,\s]+(?:with\s+)?(?:the\s+)?subject(?:\s+line)?\s*[:\-]?\s*[\"“](?P<s>[^\"”]+)[\"”]\s*$", r, re.I)
+    if m:
+        subj, r = m.group("s").strip(), r[:m.start()].strip(" ,")
+    if not r:
+        return None, subj, None
+    m = re.match(r"^(?:and\s+)?(?:ask(?:ing)?|to ask)\s+(?:(?:him|her|them)\s+)?(?P<w>if|whether|when|what|where|how|why|"
+                 r"who)\s+(?P<c>.+)$", r, re.I)
+    if m:
+        return f"Can you let me know {m.group('w').lower()} {_you(m.group('c')).rstrip(' .?!')}?", subj, None
+    m = re.match(r"^(?:and\s+)?(?:ask(?:ing)?|to ask)\s+(?:(?:him|her|them)\s+)?for\s+(?P<c>.+)$", r, re.I)
+    if m:
+        return sentence(f"I'd like to ask for {m.group('c').rstrip(' .')}"), subj, None
+    m = re.match(r"^(?:and\s+)?(?:tell|let)\s+(?:him|her|them)\s+(?:know\s+)?(?:that\s+)?(?P<c>.+)$", r, re.I)
+    if m:
+        return sentence(m.group("c")), subj, None
+    m = re.match(r"^(?:that|saying|to say|and say|and say that)\s+(?P<c>.+)$", r, re.I)
+    if m:
+        return sentence(m.group("c")), subj, None
+    m = re.match(r"^(?:about|regarding|re:?)\s+(?P<c>.+)$", r, re.I)
+    if m:
+        c = m.group("c").strip(" .")
+        if POINTS.match(c):
+            return None, subj, c
+        return sentence(f"I'm writing about {c}"), subj, None
+    if POINTS.match(r):
+        return None, subj, r
+    return None, subj, None
+
+
+def _recipient(rest, original):
+    """(recipient dict, the words after it) from the start of `rest`, or (None, rest)."""
+    m = re.match(rf"^(?:{_RCPT})(?=$|[\s,.;:!?])", rest)
+    if not m:
+        return None, rest
+    if m.group("name"):
+        first = m.group("name").split()[0]
+        if first in NOT_NAMES or first.lower() in ("me", "my"):
+            return None, rest
+    if m.group("pron"):
+        return {"pron": m.group("pron").lower()}, rest[m.end():]
+    addr = m.group("addr") or m.group("waddr") or m.group("naddr")
+    who = {"to": addr.lower() if addr else None,
+           "word": m.group("word").lower() if m.group("word") else None,
+           "name": m.group("wname") or m.group("name")}
+    tail = rest[m.end():]
+    m2 = re.match(rf"^\s*(?:and|or|,)\s*({ADDR})", tail)
+    if m2 and addr:
+        who["two"] = [addr.lower(), m2.group(1).lower()]
+    return who, tail
+
+
+def email_request(text):
+    """An email to someone other than the person, read by code: {"to", "word", "name", "request", "subject",
+    "post" (the words that point at a shown post, or None), "two", "cc", "pron"}; None when the message is not one
+    (an email to the person themselves, a share with no email word or address, a change of their own address)."""
+    t = " ".join((text or "").split())
+    if not t or len(t) > REQUEST_MAX:
+        return None
+    if re.search(r"\b(?:my|change|update|set)\s+(?:my\s+)?e-?mail(?:\s+address)?\s+(?:is|to)\b", t, re.I):
+        return None
+    m = VERB_FIRST.match(t)
+    obj = None
+    if m:
+        rest = m.group("rest").strip()
+        verb = m.group("verb").lower()
+        if verb.startswith(("e-mail", "email")) and verb in ("email", "e-mail"):
+            if SELF_WORDS.match(rest):
+                return None
+            # "email this to my sister", "email the second one to sam@example.com": the object first, then "to"
+            mo = re.match(r"^(?P<obj>.{1,60}?)\s+to\s+(?P<r>.+)$", rest, re.I)
+            if mo and POINTS.match(mo.group("obj").strip()):
+                obj, rest = mo.group("obj").strip(), mo.group("r").strip()
+    else:
+        m = SEND_TO_ADDR.match(t)
+        if not m:
+            return None
+        obj, rest = m.group("obj").strip(), m.group("rest").strip()
+    if SELF_WORDS.match(rest):
+        return None
+    who, tail = _recipient(rest, t)
+    if who is None:
+        return None
+    if who.get("pron") and not tail.strip() and not obj:
+        who["bare_pron"] = True
+    para, subj, points = clause_paragraph(tail)
+    if obj and not points:
+        points = obj
+    out = dict(who, request=para, subject=subj, post=points, cc=bool(CC.search(t)))
+    if not obj and not para and not points and tail.strip() and not who.get("pron"):
+        # "email my mom a recipe": the words after the recipient are kept as they are, as the request
+        out["request"] = sentence(tail.strip(" ,"))
+    return out
+
+
+def repeating_email(text):
+    """'every friday email my mom a recipe': an email to someone else on a schedule (refused by code)."""
+    t = " ".join((text or "").split())
+    if not REPEATING.search(t) or not EMAIL_WORD.search(t):
+        return None
+    if not (OTHER_RE.search(t) or ADDR_RE.search(t)):
+        return None
+    if re.search(r"\be-?mail\s+(?:it\s+|them\s+|this\s+)?(?:to\s+)?me\b", t, re.I):
+        return None
+    return REPEATING.search(t).group(0)
+
+
+def mailto(to, subject, body, cut_note=None):
+    """A mailto: link (RFC 6068): the address percent-encoded, subject and body UTF-8 percent-encoded, spaces as %20,
+    line breaks as %0D%0A. A body over LINK_MAX characters is cut at a line boundary and ends with `cut_note`."""
+    b = body or ""
+    if len(b) > LINK_MAX:
+        lines, kept, n = b.split("\n"), [], 0
+        for line in lines:
+            if n + len(line) + 1 > LINK_MAX - 80:
+                break
+            kept.append(line)
+            n += len(line) + 1
+        while kept and not kept[-1].strip():
+            kept.pop()
+        b = "\n".join(kept) + "\n\n" + (cut_note or "(The rest is in my message above.)")
+    q = "subject=" + quote(subject or "", safe="") + "&body=" + quote(b.replace("\r\n", "\n").replace("\n", "\r\n"),
+                                                                     safe="")
+    return "mailto:" + quote(to or "", safe="@") + "?" + q
+
+
+def cut_at_section(text, limit=LINK_MAX):
+    """W3: a long answer for a link to self, cut at a blank line (a section) when one is near, else at a line;
+    never mid-line."""
+    if len(text) <= limit:
+        return text, False
+    head = text[:limit]
+    i = head.rfind("\n\n")
+    if i < limit // 2:
+        i = head.rfind("\n")
+    return text[:max(i, 0)].rstrip(), True
+
+
+def render_body(p, sign):
+    """The body from the draft's parts: greeting, the words, the post block, extra paragraphs, the sign-off."""
+    greet = p.get("greeting") or (f"Hi {p['greet_name']}," if p.get("greet_name") else "Hi,")
+    paras = []
+    if p.get("model_body"):
+        paras.append(p["model_body"].strip())
+    elif p.get("request"):
+        paras.append(p["request"])
+    paras += [x for x in p.get("paragraphs") or [] if x]
+    post = p.get("post")
+    if post and not p.get("no_post"):
+        lines = []
+        if not p.get("model_body") or not (post.get("title") and post["title"] in p["model_body"]):
+            head = post.get("title") or "A post"
+            lines.append(head + (f" by {post['creator']}" if post.get("creator") else ""))
+            if not post.get("sensitive"):
+                lines += [x for x in (post.get("points") or [])[:2]]
+        if post.get("url") and p.get("link", True) and not (p.get("model_body") and post["url"] in p["model_body"]):
+            lines.append(post["url"])
+        if lines:
+            paras.append("\n".join(lines))
+        for x in post.get("more") or []:   # "email them to ...": the other posts, each its title and link
+            paras.append("\n".join([x["title"] + (f" by {x['creator']}" if x.get("creator") else "")]
+                                   + ([x["url"]] if x.get("url") and p.get("link", True) else [])))
+    paras += [x for x in p.get("extra") or [] if x]
+    closing = p.get("closing") or "Thanks,"
+    end = closing + ("\n" + sign if sign else "")
+    body = "\n\n".join([greet] + paras + [end])
+    if p.get("model_body") and post and post.get("url") and not p.get("link", True):
+        body = body.replace(post["url"], "").replace("\n\n\n", "\n\n")
+    return body
+
+
+def exact_text(to, subject, body):
+    """What one version is: the recipient, the subject and the body, exactly (its hash is the version's text_hash)."""
+    return f"{to or ''}\n{subject or ''}\n{body or ''}"
+
+
+def placeholders_left(row):
+    p = row.get("parts")
+    p = p if isinstance(p, dict) else json.loads(p or "{}")
+    return [x for x in (p.get("placeholders") or []) if T.PLACEHOLDER in (row.get("body") or "")]
+
+
+class DraftsMixin:
+    # ---------- the store's rows ----------
+    def _draft(self, draft_id):
+        return self.store.draft(draft_id)
+
+    def open_draft(self, handle, now=None):
+        """The person's open draft (a dict with its parts), or None: one shown or asked about in the last 24 hours
+        that was not cancelled, sent or marked sent by them."""
+        st = self.store.get_state(f"draft_open:{handle}")
+        if not st:
+            return None
+        now = now or self.clock()
+        if now - datetime.fromisoformat(st["at"]) > timedelta(hours=OPEN_HOURS):
+            row = self._draft(st["id"])
+            if row and row["status"] in ("open", "link_shown"):
+                self.store.update_draft(st["id"], status="expired", done_at=now_iso(now))
+            self.store.set_state(f"draft_open:{handle}", None)
+            return None
+        row = self._draft(st["id"])
+        if not row or row["status"] not in ("open", "link_shown", "held"):
+            return None
+        row["parts"] = json.loads(row.get("parts") or "{}")
+        row["state"] = st
+        return row
+
+    def _draft_touch(self, h, draft_id, now, **st):
+        cur = self.store.get_state(f"draft_open:{h}") or {}
+        if cur.get("id") != draft_id:
+            cur = {}
+        cur.update(st, id=draft_id, at=now_iso(now))
+        self.store.set_state(f"draft_open:{h}", cur)
+
+    def _log_draft(self, h, action, row, status="done", now=None, **more):
+        p = row["parts"] if isinstance(row.get("parts"), dict) else json.loads(row.get("parts") or "{}")
+        detail = {"kind": row.get("kind"), "route": row.get("route"), "version": row.get("version"),
+                  "recipient_domain": domain_of(row.get("to_addr")) or row.get("to_domain"),
+                  "body_from": p.get("body_from") or "words", **more}
+        self.store.log_action(h, None, None, action, status, ref=str(row["id"]), detail=detail, at=now or self.clock())
+
+    # ---------- starting a draft ----------
+    def draft_start(self, person, kind, to=None, to_name=None, subject=None, paragraphs=(), post=None,
+                    placeholders=(), job=None, now=None, to_word=None, request=None, greeting=None, closing=None,
+                    sources=None, note=None, text=None):
+        """Opens a draft card and returns the first message's reference. kind: "email" (W2) or "notice" (W6's
+        cancellation notice: greeting "Hello,", closing "Thank you,"). to: an address the person typed; None asks for
+        one; "" leaves To blank. paragraphs: the body's words, used as they are. post: a checked post block
+        ({title, creator, points, url, sensitive, stale}). placeholders: labels of "(fill this in)" lines ("member
+        number"); while one is left the link and "send" are held back. job: who started it ("cancel:3")."""
+        h = person["handle"]
+        now = now or self.clock()
+        route = "mailbox" if self._mailbox_route(h) else "link"
+        p = {"greet_name": to_name, "to_word": to_word, "request": request, "paragraphs": list(paragraphs or []),
+             "post": post, "link": True, "extra": [], "changes": 0, "placeholders": list(placeholders or []),
+             "greeting": greeting or ("Hello," if kind == "notice" else None),
+             "closing": closing or ("Thank you," if kind == "notice" else None),
+             "subject_set": bool(subject), "body_from": "pick" if post and not request and not paragraphs else "words",
+             "note": note, "text": (text or "")[:REQUEST_MAX]}
+        subj = subject or self._draft_subject_of(p)
+        draft_id = self.store.add_draft(h, kind, route, to if to else None, to_name, subj, p, job=job,
+                                        sources=sources, at=now)
+        self._log_draft(h, "draft.made", {"id": draft_id, "kind": kind, "route": route, "version": 0, "to_addr": to,
+                                          "parts": p}, now=now)
+        if to is None:
+            return self._draft_ask_to(person, draft_id, p, now)
+        self._draft_touch(h, draft_id, now, waiting=None)
+        return self._draft_after_to(person, draft_id, now)
+
+    def _draft_subject_of(self, p):
+        if p.get("post") and p["post"].get("title") and not p.get("request"):
+            return p["post"]["title"][:150]
+        words = p.get("request") or next((x for x in p.get("paragraphs") or [] if x), "") or ""
+        words = words.split("\n")[0].rstrip(".")
+        if len(words) > 60:
+            words = words[:60].rsplit(" ", 1)[0]
+        return words or (p["post"]["title"][:150] if p.get("post") and p["post"].get("title") else "Hello")
+
+    def _draft_ask_to(self, person, draft_id, p, now, lead=""):
+        h = person["handle"]
+        self._draft_touch(h, draft_id, now, waiting="to", asked_at=now_iso(now))
+        whose = (f"{p['greet_name']}'s" if p.get("greet_name") else
+                 f"your {p['to_word']}'s" if p.get("to_word") else "their")
+        return self.send(h, lead + T.draft_who(whose))
+
+    def _draft_after_to(self, person, draft_id, now):
+        """Once the recipient is known: the sign-off name (asked once), the words (asked when there are none), then
+        the card."""
+        h = person["handle"]
+        row = self._draft(draft_id)
+        p = json.loads(row["parts"])
+        if self._draft_sign_name(person) is None:
+            self._draft_touch(h, draft_id, now, waiting="sign", asked_at=now_iso(now))
+            return self.send(h, T.DRAFT_SIGN_ASK)
+        if not (p.get("request") or p.get("paragraphs") or p.get("post") or p.get("model_body")):
+            self._draft_touch(h, draft_id, now, waiting="say", asked_at=now_iso(now))
+            return self.send(h, T.DRAFT_SAY_ASK)
+        if row["version"] == 0 and row["kind"] == "email":
+            self._draft_model_body(person, draft_id, now)   # A6: the model writes it when draft_v1 is on; code checks it
+        return self._draft_show(person, draft_id, now, new=False)
+
+    def _draft_sign_name(self, person):
+        """The sign-off name: prefs.sign_as (empty: no name), else the first word of people.name, else None."""
+        prefs = json.loads(person.get("prefs") or "{}") if isinstance(person.get("prefs"), str) else \
+            (person.get("prefs") or {})
+        if "sign_as" in prefs:
+            return prefs["sign_as"] or ""
+        name = (person.get("name") or "").strip()
+        return name.split()[0] if name else None
+
+    def _draft_render(self, person, row, p=None):
+        p = p if p is not None else json.loads(row["parts"])
+        sign = p["sign"] if "sign" in p else (self._draft_sign_name(person) or "")
+        return render_body(p, sign)
+
+    # ---------- the card ----------
+    def _draft_show(self, person, draft_id, now, new=False, lead=""):
+        """Renders the version, stores it with its hash, and sends the card: (1) what it is, To, Subject; (2) the
+        body alone; (3) the link (or, for the operator's mailbox, "send"), and how to change it. Returns the first
+        message's reference."""
+        from .actions import Refused, perform, text_hash
+        h = person["handle"]
+        person = self.store.person(h) or person
+        row = self._draft(draft_id)
+        p = json.loads(row["parts"])
+        body = self._draft_render(person, row, p)
+        to = row.get("to_addr") or ""
+        version = (row.get("version") or 0) + 1
+        th = text_hash(exact_text(to, row["subject"], body))
+        self.store.update_draft(draft_id, body=body, version=version, text_hash=th, shown_at=now_iso(now),
+                                status="link_shown")
+        row = self._draft(draft_id)
+        self._draft_touch(h, draft_id, now, waiting=None, shown_version=version)
+        head = (T.DRAFT_NEW_VERSION if new else T.DRAFT_HEAD) + "\n" + T.draft_to_line(to) + "\n" + \
+            f"Subject: {row['subject']}"
+        if p.get("post") and p["post"].get("sensitive") and not p.get("no_post"):
+            head += "\n" + T.DRAFT_SENSITIVE
+        if p.get("note"):
+            head += "\n" + p["note"]
+        ref = self.send(h, lead + head)
+        refs = [ref, self.send(h, body)]
+        left = placeholders_left(row)
+        if left:
+            refs.append(self.send(h, T.fill_first(left[0])))
+            self._draft_touch(h, draft_id, now, refs=refs)
+            if new:
+                self._log_draft(h, "draft.changed", row, now=now)
+            return ref
+        cut = (T.DRAFT_REST_IN_POST.format(url=p["post"]["url"]) if p.get("post") and p["post"].get("url")
+               and p.get("link", True) and not p.get("no_post") else None)
+        o = None
+        try:
+            from .actions.base import Ctx
+            ctx = Ctx(bot=self, person=person, answer={}, picks=[], kind="draft", now=now, tz=person["timezone"])
+            o = perform("email.draft_link", ctx, {"draft_id": draft_id, "cut_note": cut})
+        except Refused:
+            o = None
+        except Exception as e:  # noqa: BLE001 - the body is in message 2 either way
+            print(f"draft link: {type(e).__name__}", file=__import__("sys").stderr)
+        link = (o.detail or {}).get("url") if o and o.status == "done" else None
+        self._log_draft(h, "email.draft_link", row, status=o.status if o else "failed", now=now,
+                        **({"cap": (o.detail or {}).get("cap")} if o and o.status == "skipped" else {}))
+        if new:
+            self._log_draft(h, "draft.changed", row, now=now)
+        if link is None:
+            refs.append(self.send(h, (o.line + " " if o and o.line else "") + T.DRAFT_COPY_IT))
+        else:
+            sender = self._mailbox_sender(h) if row["route"] == "mailbox" else None
+            refs.append(self.send(h, T.draft_link_message(link, sender)))
+        self._draft_touch(h, draft_id, now, refs=refs)
+        return ref
+
+    # ---------- the person's next messages while a draft is open ----------
+    def draft_reads(self, person, text, pending, now):
+        """Round 9, slice A: the messages a draft card owns. Runs in _on_message right after the confirm_delete
+        branch (verdict section 4, hook 1). Returns a reply reference, or None for anything it does not own."""
+        h = person["handle"]
+        d = self.open_draft(h, now)
+        t = " ".join((text or "").split())
+        if d is None:
+            if SEND_WORDS.match(t) and self._draft_just_finished(h, now):
+                return self._draft_send_again(person, now)
+            return None
+        st = d["state"]
+        waiting = st.get("waiting")
+        draft_at = datetime.fromisoformat(st["at"])
+        pend_at = datetime.fromisoformat(pending["at"]) if pending and pending.get("at") else None
+        draft_newer = pend_at is None or draft_at >= pend_at
+        # a recipient typed in answer to "Who should it go to?" (F6: only when that question is newer than the
+        # bot's own "what's your email address?")
+        if waiting == "to":
+            got = addresses(t)
+            asked_self = self.store.get_state(f"emailask:{h}")
+            ours = datetime.fromisoformat(st.get("asked_at") or st["at"])
+            newer = not asked_self or ours > datetime.fromisoformat(asked_self)
+            bare = re.match(rf"^\W*(?:(?:it'?s|its|it is|use|send it to|to:?|their (?:email|address) is|"
+                            rf"(?:his|her) (?:email|address) is)\s+)?({ADDR})\s*[.!]?\s*$", t, re.I)
+            if bare and newer:
+                return self._draft_set_to(person, d, bare.group(1).lower(), now)
+            if len(got) >= 2 and newer and not CANCEL_WORDS.match(t):
+                return self.send(h, T.draft_which_address(got[:2]))
+            if CC.search(t) and newer:
+                return self.send(h, T.DRAFT_ONE_AT_A_TIME)
+            if BLANK.match(t):
+                return self._draft_set_to(person, d, "", now)
+        if waiting == "sign" and not CANCEL_WORDS.match(t) and not SEND_WORDS.match(t):
+            if NO_NAME.match(t):
+                self.store.set_prefs(h, sign_as="")
+                return self._draft_after_to(self.store.person(h), d["id"], now)
+            m = SIGN_NAME.match(t)
+            if m and len(m.group(1).split()) <= 3 and not YES_WORDS.match(t):
+                self.store.set_prefs(h, sign_as=cap(m.group(1).strip()))
+                return self._draft_after_to(self.store.person(h), d["id"], now)
+        if waiting == "say" and not CANCEL_WORDS.match(t) and not SEND_WORDS.match(t) and not YES_WORDS.match(t):
+            m = CH_INSTEAD.match(t) or CH_ADD.match(t)
+            words = (m.group("x") or m.groupdict().get("y") or t) if m else t
+            p = d["parts"]
+            p["request"] = sentence(words)
+            self.store.update_draft(d["id"], parts=p,
+                                    subject=d["subject"] if p.get("subject_set") else self._draft_subject_of(p))
+            return self._draft_after_to(person, d["id"], now)
+        if SEND_WORDS.match(t):
+            self.note(intent="draft_send")
+            if waiting in ("to", "sign", "say"):
+                return self.send(h, T.DRAFT_NOT_READY)
+            return self._draft_send_word(person, d, now)
+        if CANCEL_WORDS.match(t):
+            if not draft_newer and pending:
+                self.store.clear_pending(h)
+                return self.send(h, (T.NOT_STARTED if pending["kind"] == "confirm_rule" else T.WAITING_FOR_ANSWER)
+                                 + " " + T.DRAFT_STILL_OPEN)
+            return self._draft_cancel(person, d, pending, now)
+        if YES_WORDS.match(t) and waiting is None:
+            if pending and pending["kind"] == "confirm_rule":
+                return None   # the rule preview takes its yes, as today
+            if self._draft_card_in_view(h, d):
+                self.note(intent="draft_yes")
+                return self.send(h, T.DRAFT_YES_MAILBOX if d["route"] == "mailbox" else T.DRAFT_YES)
+            return None
+        if SHOW_WORDS.match(t):
+            self.note(intent="draft_show")
+            return self._draft_show(person, d["id"], now, new=False)
+        if SENT_WORDS.match(t) and d["status"] == "link_shown":
+            self.store.update_draft(d["id"], status="person_sent", done_at=now_iso(now))
+            self.store.set_state(f"draft_open:{h}", None)
+            self._log_draft(h, "draft.person_sent", d, now=now)
+            self.note(intent="draft_sent")
+            return self.send(h, T.DRAFT_THANKS)
+        if SAVE_DRAFT.match(t):
+            return self._save_to_drafts(person, d, now)
+        return self._draft_change(person, d, t, now)
+
+    def _draft_card_in_view(self, h, d):
+        """The card is the newest thing the bot sent this person (so a bare "yes" or "ok" is about it)."""
+        row = self.store.one("SELECT channel_ref FROM sent WHERE handle=? ORDER BY rowid DESC LIMIT 1", (h,))
+        refs = d["state"].get("refs") or []
+        return bool(row and row["channel_ref"] in refs) or not refs
+
+    def _draft_set_to(self, person, d, addr, now):
+        h = person["handle"]
+        self.store.update_draft(d["id"], to_addr=addr or None)
+        self._draft_touch(h, d["id"], now, waiting=None)
+        if d["version"]:
+            return self._draft_changed(person, d["id"], now)
+        return self._draft_after_to(person, d["id"], now)
+
+    def _draft_cancel(self, person, d, pending, now):
+        h = person["handle"]
+        self.note(intent="draft_cancel")
+        self._draft_stop_hold(h, d, now)
+        self.store.update_draft(d["id"], status="cancelled", done_at=now_iso(now))
+        self.store.set_state(f"draft_open:{h}", None)
+        self._log_draft(h, "draft.cancelled", d, now=now)
+        line = T.DRAFT_DROPPED if d["version"] else T.DRAFT_DROPPED_UNSHOWN
+        if pending and pending["kind"] == "confirm_rule":
+            line += " " + T.PREVIEW_STILL_OPEN
+        return self.send(h, line)
+
+    def _draft_change(self, person, d, t, now):
+        """One change by code: a new version, and the whole card again. None when the message is not a change."""
+        h = person["handle"]
+        p = d["parts"]
+        left = placeholders_left(d)
+        if left:
+            if REMOVE_IT.match(t):
+                lab = left[0]
+                p["paragraphs"] = [ln for ln in p.get("paragraphs") or []
+                                   if not (ln.lower().startswith(lab.lower()) and T.PLACEHOLDER in ln)]
+                p["placeholders"] = [x for x in p["placeholders"] if x != lab]
+                return self._draft_apply(person, d, p, now)
+            for lab in left:
+                m = re.match(rf"^\W*{re.escape(lab)}\s*(?:is\s+)?[:\-]?\s*(?P<v>\S.{{0,80}}?)\W*$", t, re.I)
+                if m:
+                    p["paragraphs"] = [ln.replace(T.PLACEHOLDER, m.group("v"), 1)
+                                       if ln.lower().startswith(lab.lower()) and T.PLACEHOLDER in ln else ln
+                                       for ln in p.get("paragraphs") or []]
+                    p["placeholders"] = [x for x in p["placeholders"] if x != lab]
+                    return self._draft_apply(person, d, p, now)
+        m_to = CH_TO.match(t)
+        if TONE.search(t) and (TONE_ASK.match(t) or len(t.split()) <= 4):
+            return self._draft_tone(person, d, t, now)
+        kind = None
+        if m_to:
+            kind = "to"
+        elif CH_SUBJECT.match(t):
+            kind = "subject"
+        elif CH_NOSIGN.match(t):
+            kind = "nosign"
+        elif CH_SIGN.match(t):
+            kind = "sign"
+        elif CH_NOLINK.match(t):
+            kind = "nolink"
+        elif CH_NOPOST.match(t):
+            kind = "nopost"
+        elif CH_LINKBACK.match(t):
+            kind = "linkback"
+        elif CH_INSTEAD.match(t):
+            kind = "instead"
+        elif CH_ADD.match(t) and not NOT_A_CHANGE.search(t):
+            kind = "add"
+        if kind is None:
+            return None
+        if (p.get("changes") or 0) >= MAX_CHANGES:
+            return self.send(h, T.DRAFT_TOO_MANY_CHANGES)
+        if kind == "to":
+            a = m_to.group("a").lower()
+            self.store.update_draft(d["id"], to_addr=a)
+        elif kind == "subject":
+            p["subject_set"] = True
+            self.store.update_draft(d["id"], subject=cap(CH_SUBJECT.match(t).group("x"))[:150])
+        elif kind == "nosign":
+            p["sign"] = ""
+        elif kind == "sign":
+            p["sign"] = cap(CH_SIGN.match(t).group("x"))
+        elif kind == "nolink":
+            p["link"] = False
+        elif kind == "nopost":
+            p["no_post"] = True
+        elif kind == "linkback":
+            p["link"], p["no_post"] = True, False
+        elif kind == "instead":
+            m = CH_INSTEAD.match(t)
+            p["request"] = sentence(m.group("x") or m.group("y"))
+            p["model_body"] = None
+            p["body_from"] = "words"
+        elif kind == "add":
+            p.setdefault("extra", []).append(sentence(CH_ADD.match(t).group("x")))
+        return self._draft_apply(person, d, p, now)
+
+    def _draft_apply(self, person, d, p, now):
+        p["changes"] = (p.get("changes") or 0) + 1
+        self.store.update_draft(d["id"], parts=p)
+        return self._draft_changed(person, d["id"], now)
+
+    def _draft_changed(self, person, draft_id, now):
+        """A new version: any send waiting for the old one stops (its yes was for other words)."""
+        h = person["handle"]
+        row = self._draft(draft_id)
+        stopped = self._draft_stop_hold(h, row, now)
+        return self._draft_show(person, draft_id, now, new=True, lead=(T.HOLD_STOPPED_BY_CHANGE + "\n\n") if stopped else "")
+
+    def _draft_tone(self, person, d, t, now):
+        """'make it shorter', 'more formal', 'in Spanish': with draft_v1 on, the model rewrites the last shown version
+        under the same checks (A6); otherwise, or when that fails, the fixed line."""
+        h = person["handle"]
+        p = d["parts"]
+        if (p.get("changes") or 0) >= MAX_CHANGES:
+            return self.send(h, T.DRAFT_TOO_MANY_CHANGES)
+        got = self._draft_model_rewrite(person, d, t, now)
+        if not got:
+            return self.send(h, T.DRAFT_NO_TONE)
+        return self._draft_apply(person, d, got, now)
+
+    # ---------- the email request, read before the model (hook 5 in answer_normally) ----------
+    def email_reads(self, person, text, now):
+        """'email my landlord that the sink is broken' and the other forms of email_request: a draft card, with no
+        model call. 'every friday email my mom a recipe': refused. None for anything else."""
+        h = person["handle"]
+        when = repeating_email(text)
+        if when:
+            self.note(intent="unsupported")
+            self.store.log_request(h, "email someone on a schedule", "unsupported")
+            return self.send(h, T.draft_no_schedule(when))
+        req = email_request(text)
+        if req is None:
+            return None
+        return self.draft_from_request(person, text, now, req)
+
+    def draft_from_request(self, person, text, now, req=None):
+        """Starts a draft from an email request (read by code, or as the backstop for a model form that would have
+        emailed the person themselves or refused). Returns the reply's reference, or None when the message names
+        nobody else after all."""
+        h = person["handle"]
+        req = req or email_request(text) or self._draft_loose_request(text)
+        if req is None:
+            return None
+        self.note(intent="draft")
+        if req.get("cc"):
+            return self.send(h, T.DRAFT_ONE_AT_A_TIME)
+        own, _ = self.store.email_of(h)
+        if req.get("to") and own and req["to"] == own.lower() and not req.get("word") and not req.get("name"):
+            return None   # their own address: the email to them, as before
+        post = None
+        if req.get("post"):
+            post = self._draft_post_for(person, req["post"], text)
+            if isinstance(post, str):   # nothing shown to point at, or a number past the answer
+                return self.send(h, post)
+        elif req.get("pron") and req.get("bare_pron"):
+            post = self._draft_post_for(person, "it", text)
+            if isinstance(post, str) or not post or not post.get("has_address"):
+                return None   # "email them" with no post giving an address: not about someone else
+        if req.get("two"):   # two addresses typed: which one (one person at a time)
+            p_post = {k: v for k, v in post.items() if k != "has_address"} if post else None
+            draft_id = self._new_draft_row(person, dict(req, to=None), p_post, now, text)
+            self._draft_touch(h, draft_id, now, waiting="to", asked_at=now_iso(now))
+            return self.send(h, T.draft_which_address(req["two"]))
+        lead = ""
+        to = req.get("to")
+        if to is None and post and post.get("has_address"):
+            lead = T.DRAFT_POST_ADDRESS + " "
+        return self._draft_start_from(person, req, post, to, lead, now, text)
+
+    def _draft_start_from(self, person, req, post, to, lead, now, text):
+        h = person["handle"]
+        p_post = dict(post) if post else None
+        if p_post:
+            p_post.pop("has_address", None)
+        if to is None:
+            draft_id = self._new_draft_row(person, req, p_post, now, text)
+            p = json.loads(self._draft(draft_id)["parts"])
+            return self._draft_ask_to(person, draft_id, p, now, lead=lead)
+        return self.draft_start(person, "email", to=to, to_name=req.get("name"), to_word=req.get("word"),
+                                request=req.get("request"), subject=req.get("subject"), post=p_post,
+                                sources=self._draft_sources(p_post), now=now, text=text)
+
+    def _new_draft_row(self, person, req, post, now, text):
+        h = person["handle"]
+        route = "mailbox" if self._mailbox_route(h) else "link"
+        p = {"greet_name": req.get("name"), "to_word": req.get("word"), "request": req.get("request"),
+             "paragraphs": [], "post": post, "link": True, "extra": [], "changes": 0, "placeholders": [],
+             "subject_set": bool(req.get("subject")),
+             "body_from": "pick" if post and not req.get("request") else "words", "text": (text or "")[:REQUEST_MAX]}
+        subj = req.get("subject") or self._draft_subject_of(p)
+        draft_id = self.store.add_draft(h, "email", route, None, req.get("name"), subj, p,
+                                        sources=self._draft_sources(post), at=now)
+        self._log_draft(h, "draft.made", {"id": draft_id, "kind": "email", "route": route, "version": 0,
+                                          "to_addr": None, "parts": p}, now=now)
+        return draft_id
+
+    @staticmethod
+    def _draft_sources(post):
+        return {"run_id": post.get("run_id"), "items": [post.get("item_id")]} if post else None
+
+    def _draft_loose_request(self, text):
+        """The backstop for a model form: an email verb and someone named anywhere in the message."""
+        t = " ".join((text or "").split())
+        if not EMAIL_WORD.search(t) and not ADDR_RE.search(t):
+            return None
+        word = OTHER_RE.search(t)
+        name = re.search(rf"\bto\s+({_NAME})\b", t)
+        if name and name.group(1) in NOT_NAMES:
+            name = None
+        addr = [a for a in addresses(t)]
+        if not (word or name or addr):
+            return None
+        rest = t[word.end():] if word else ""
+        para, subj, points = clause_paragraph(rest.strip())
+        if points is None and re.search(r"\b(?:it|this|that|them|these)\b", t, re.I):
+            points = "it"
+        return {"to": addr[0] if len(addr) == 1 else None, "two": addr[:2] if len(addr) >= 2 else None,
+                "word": re.sub(r"^(?:my|our)\s+", "", word.group(0), flags=re.I).lower() if word else None,
+                "name": name.group(1) if name else None, "request": para, "subject": subj, "post": points,
+                "cc": bool(CC.search(t))}
+
+    def _draft_post_for(self, person, words, text):
+        """The checked post block for the pick the words point at, by the existing rules (a number, "it", "them",
+        a thing's name). A string is a reply line (nothing shown, a number past the answer)."""
+        from . import profile as P
+        from .followup import pick_number
+        from .outputs import lead_only
+        h = person["handle"]
+        last = self._answer_seen(h) if hasattr(self, "_answer_seen") else self.store.last_answer(h)
+        if not last or not last.get("items"):
+            return T.DRAFT_NOTHING_SHOWN
+        n = pick_number(words, len(last["items"])) if not re.match(r"^(?:it|this|that|them|these|those)$", words,
+                                                                    re.I) else None
+        self._tl.msg_text = words
+        numbers = [n] if n else ([1] if not PLURAL.match(words) and lead_only(words, []) else None)
+        picks, whole, answer, problem = self._answer_picks(h, numbers, None, "pick")
+        if problem:
+            return problem
+        picks = picks[:1] if not PLURAL.match(words) else picks[:3]
+        rec = picks[0]
+        view = self.view(person["library"])
+        item = view.get(rec.get("item_id"))
+        own = (item.raw_caption if item else "") or ""
+        points = []
+        if rec.get("item"):
+            about = (rec["item"].get("about") or "").strip()
+            if about:
+                points.append(about + (f" (as of {rec['item']['stale_from']})" if rec["item"].get("stale_from")
+                                       else ""))
+        else:
+            points = [x for x in ((rec.get("facts") or {}).get("key_points") or []) if isinstance(x, str)][:2]
+        title = rec.get("title") if not rec.get("item") else f"{rec['title']} (from \"{rec.get('source_title')}\")" \
+            if rec.get("source_title") else rec.get("title")
+        sens = P.sensitive(title, own, *points)
+        block = {"title": " ".join(str(title or "").split())[:150], "creator": rec.get("creator"),
+                 "points": [] if sens else points[:2], "url": rec.get("url"), "sensitive": bool(sens),
+                 "item_id": rec.get("item_id"), "run_id": (answer or {}).get("run_id"),
+                 "has_address": bool(ADDR_RE.search(own))}
+        if len(picks) > 1:   # "email them to sam@example.com": up to three posts, each its title and link
+            block["more"] = [{"title": " ".join(str(x.get("title") or "").split())[:150], "url": x.get("url"),
+                              "creator": x.get("creator")} for x in picks[1:]]
+        return block
+
+    # ---------- W1: a model form that would email the person, or refuse, when the message names someone else ----------
+    def email_to_other(self, text, handle=None):
+        """True when an email message names someone other than the person (a recipient word, a name after "to",
+        or an address that is not theirs)."""
+        t = " ".join((text or "").split())
+        if not EMAIL_WORD.search(t) and not ADDR_RE.search(t):
+            return False
+        own = (self.store.email_of(handle)[0] or "").lower() if handle else ""
+        mine = re.search(r"\b(?:to\s+me|me\s+at|myself|my\s+(?:own\s+)?(?:e-?mail|address))\b", t, re.I)
+        if not mine and any(a != own for a in addresses(t)):
+            return True
+        if email_request(t) and not (own and addresses(t) == [own]):
+            return True
+        return bool(OTHER_RE.search(t) or re.search(rf"\bto\s+(?!(?:{'|'.join(NOT_NAMES)})\b){_NAME}\b", t))
+
+    # ---------- W4: the operator's own mailbox (actions/mailbox.py) ----------
+    def _mailbox_route(self, h):
+        from .actions import mailbox
+        return config.is_operator(h) and mailbox.settings() is not None and mailbox.refused_domain() is None
+
+    def _mailbox_sender(self, h):
+        from .actions import mailbox
+        s = mailbox.settings()
+        return s["address"] if s else None
+
+    def _draft_just_finished(self, h, now):
+        return False
+
+    def _draft_send_again(self, person, now):
+        return None
+
+    def _draft_stop_hold(self, h, row, now):
+        """Stops a send waiting in its hold for this draft. True when one was stopped."""
+        hold = self.store.get_state(f"sendhold:{h}")
+        if not hold or (row and hold.get("draft_id") != row["id"]):
+            return False
+        self.store.set_state(f"sendhold:{h}", None)
+        if row:
+            self.store.update_draft(row["id"], status="link_shown")
+        return True
+
+    def _draft_send_word(self, person, d, now):
+        """'send' on route L: the bot cannot send from the person's address. On the mailbox route (W4): the yes for
+        the exact version last shown, then the hold."""
+        h = person["handle"]
+        if d["route"] != "mailbox" or not self._mailbox_route(h):
+            return self.send(h, T.DRAFT_SEND_LINK)
+        return self._mailbox_send_word(person, d, now)
+
+    def _mailbox_send_word(self, person, d, now):
+        return self.send(person["handle"], T.DRAFT_SEND_LINK)
+
+    def _save_to_drafts(self, person, d, now):
+        return self.send(person["handle"], T.DRAFT_SAVE_LINK)
+
+    # ---------- A6: the model writes the words (off unless config.DRAFT_MODEL) ----------
+    def _draft_model_body(self, person, draft_id, now):
+        return None
+
+    def _draft_model_rewrite(self, person, d, t, now):
+        return None
+
+    # ---------- W10 and slice B ----------
+    def draft_from_todo(self, person, todo, now=None):
+        """A to-do that is an email ("Email landlord about sink"): the draft starts, asking for the address. None
+        when the to-do is not an email."""
+        now = now or self.clock()
+        text = (todo or {}).get("text") or ""
+        m = re.match(rf"^\W*e-?mail\s+(?:(?:my|the)\s+)?(?P<who>(?:{PEOPLE_WORDS})s?|{_NAME})\b\s*(?P<rest>.*)$",
+                     text, re.I)
+        if not m:
+            return None
+        who = m.group("who")
+        is_word = bool(re.fullmatch(rf"(?:{PEOPLE_WORDS})s?", who, re.I))
+        para, subj, _ = clause_paragraph(m.group("rest"))
+        req = {"to": None, "word": who.lower() if is_word else None, "name": None if is_word else cap(who),
+               "request": para, "subject": subj}
+        return self._draft_start_from(person, req, None, None, "", now, text)
+
+    # ---------- upkeep (Bot.tick) ----------
+    def drafts_tick(self, now):
+        """Every tick: a send whose hold is over goes out (W4), and the address and words of a draft finished more
+        than 7 days ago are cleared (the row keeps the domain and status). Returns the number sent."""
+        self.store.clear_old_drafts(now - timedelta(days=CLEAR_DAYS))
+        return self._draft_tick_holds(now)
+
+    def _draft_tick_holds(self, now):
+        return 0
+
+
+# ---------- module-level entry points for the other slices (the bot is the first argument) ----------
+def start(bot, person, kind, to=None, to_name=None, subject=None, paragraphs=(), post=None, placeholders=(), job=None,
+          now=None, **more):
+    return bot.draft_start(person, kind, to=to, to_name=to_name, subject=subject, paragraphs=paragraphs, post=post,
+                           placeholders=placeholders, job=job, now=now, **more)
+
+
+def open_draft(bot, handle):
+    return bot.open_draft(handle)
+
+
+def from_todo(bot, person, todo, now=None):
+    return bot.draft_from_todo(person, todo, now)
