@@ -1012,3 +1012,37 @@ no prompt. Where this section and an earlier one differ, this section wins.
 A link texted to the bot as capture (D1), a YouTube capture playlist (D2), email-in to task apps, automation
 webhooks, a calendar feed, reading a calendar, any registered-app integration (D4, D5, D6, D11); MCP writes (phase 2);
 an MCP server for testers (hosted, with sign-in); captions in `saves.csv`.
+
+## 16. Doing the work (round 9, 17 Nov 2026)
+
+The founder, 17 Nov: draft and send the email, cancel the subscription, more connectors; "Always show, then wait for
+yes". Amendments A-012 to A-014 (Proposed). Each slice adds its own subsection below.
+
+### 16.D Slice D, C1: registry fields and the operator setting
+- `ActionDef` (`actions/__init__.py`) gains, each defaulting to today's behaviour (the four existing actions are
+  unchanged): `outside` (False: reaches another person or an outside account), `undo` ("delete" / "hold" / "none"),
+  `confirm` ("never" / "send_word"), `max_per_day` (None, else 1 or more), `in_rules` (True), `who` ("anyone" /
+  "operator"), `from_model` (True), `connector` (None: the place it writes to), `fallback` (None: the action to offer
+  when it cannot run). Out: `supports_sync`, `tier_required` (docs/06; no sync, no tiers in the prototype).
+- `validate_action(name, params=None, by="model", where="form")`: refuses a `from_model=False` action when
+  `by="model"`, and an `in_rules=False` action when `where` is "rule" or "act" (even `by="code"`). `schema.Action` (any
+  model form) calls it with `by="model"`; `RuleSpec` checks each `do` entry with `where="rule"`; `act_on_last` checks
+  each of its `actions` with `where="act"`. A form naming such an action fails validation: nothing runs or is stored.
+- `perform(name, ctx, params=None, yes_token=None)`, in this order: `who="operator"` and not
+  `config.is_operator(handle)`: raises `Refused`. `confirm="send_word"`: runs only when `yes_token` equals what the
+  action module's `yes_token(ctx, params)` makes from what it is about to send (a module without one never runs);
+  else raises `Refused`. The token is `make_yes_token(draft_id, version, text_hash(exact text))` (sha256 of the parts,
+  kept apart). Daily cap: when `max_per_day` is set, `action_log` rows of that action for that person on their local
+  day (their `people.timezone`; rows `skipped` or `failed` are not counted); when `outside` is set, all outside
+  actions together against `config.OUTSIDE_WRITES_PER_DAY` (40). Over it: `Outcome("skipped",
+  line=T.over_action_cap(T.ACTION_CAP_LABEL.get(name), cap))`, not run. An action with no cap and not outside never
+  reads the log. Whoever calls `perform` logs the outcome (`outputs._perform` does). `over_cap(name, ctx)` lets a
+  slice show its own line first. `outputs._perform` turns `Refused` into a `failed` outcome like any other error.
+- Lines: `I've reached my limit of {n} {label} a day for you. I can do more tomorrow.`; with no label: `I've reached
+  my limit for this today ({n} a day). I can do it again tomorrow.`
+- `config.OPERATOR` from `MVP_OPERATOR` (one handle; unset or empty: nobody), `config.is_operator(handle)` compares in
+  the handler's one spelling (`norm_handle`).
+- Stubs published for the other slices (replaced by their owners): `drafts.start(...)` raises `NotImplementedError`,
+  `drafts.open_draft(handle)` and `drafts.from_todo(person, todo, now)` return None, `cancel.from_todo(person, todo,
+  now)` returns None.
+- Store: `Store.actions_in(handle, actions, start, end)` (no new table or column).

@@ -67,6 +67,20 @@ EMAIL_WAIT_HOURS = 24        # an email waiting for a confirmed address is dropp
 EMAIL_WAIT_MAX = 3           # emails kept waiting at most
 CALENDAR_MINUTES = 30        # an event's length when none is named
 
+# ---------- round 9, C1 (DESIGN.md section 16.D): the operator and the cap on outside writes ----------
+# The operator is the one person who runs this bot on their own machine (their handle, as people.json spells it).
+# Actions with who="operator" (their own mailbox, their Mac) run only for them. Unset: nobody is the operator.
+OPERATOR = os.environ.get("MVP_OPERATOR") or None
+OUTSIDE_WRITES_PER_DAY = 40   # outside actions (outside=True) per person per local day, all of them together
+
+
+def is_operator(handle):
+    """True only when MVP_OPERATOR is set and names this handle (both in the handler's one spelling)."""
+    if not OPERATOR or not handle:
+        return False
+    from .handler import norm_handle   # here, not at the top: handler imports this module
+    return norm_handle(str(OPERATOR)) == norm_handle(str(handle))
+
 # ---------- outside picks (DESIGN.md section 11 "Outside picks", slice 5) ----------
 # YouTube only, official API only: one search.list per answer, checked by one videos.list. Off when MVP_OUTSIDE is "0"
 # or YOUTUBE_API_KEY is unset (the key is read by name when a search is made, never printed).

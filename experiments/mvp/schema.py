@@ -458,7 +458,8 @@ class Action(BaseModel):
 
     @model_validator(mode="after")
     def _registry(self):
-        self.action, self.params = validate_action(self.action, self.params)
+        # round 9, C1: an Action is a form the model filled, so an action only code may run is refused here
+        self.action, self.params = validate_action(self.action, self.params, by="model")
         return self
 
 
@@ -479,6 +480,8 @@ class RuleSpec(BaseModel):
     @model_validator(mode="after")
     def _v2(self):
         self.v = 2   # a v1 spec is read as v 2: every v1 field means the same thing here
+        for a in self.do:   # round 9, C1: an action with in_rules=False is never part of a rule
+            validate_action(a.action, a.params, by="model", where="rule")
         seen, do = set(), []
         for a in self.do:
             if a.action not in seen:
@@ -800,6 +803,8 @@ class Interpretation(BaseModel):
         if i == "act_on_last":
             if not self.actions:
                 raise ValueError("act_on_last needs actions")
+            for a in self.actions:   # round 9, C1: nor of a later action on the last answer
+                validate_action(a.action, a.params, by="model", where="act")
             if self.params:   # top-level params belong to the calendar entry
                 cal = next((a for a in self.actions if a.action == "calendar.add"), None)
                 if cal is not None:
