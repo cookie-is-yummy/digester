@@ -540,7 +540,6 @@ def test_c3_the_same_run_asked_again_adds_nothing_twice(env, mac):
     assert len(mac.adds()) == 1
     # a replayed yes (the same plan kept from before) adds nothing either
     from mvp import places
-    plan = {"plans": []}
     say(env, "add milk to my apple reminders", {"intent": "todo_add", "todo_text": "milk", "list": "apple reminders"})
     plan = env["bot"].store.get_state(f"placeask:{H}")
     say(env, "yes", no_model(env))
@@ -553,7 +552,6 @@ def test_c3_the_same_run_asked_again_adds_nothing_twice(env, mac):
 def test_c3_the_41st_reminder_in_a_day_falls_back_with_the_cap_line(env, mac):
     bot = env["bot"]
     connect(env)
-    from mvp.store import now_iso
     for i in range(40):   # 40 made today (local day), whatever happened to them since
         bot.store.add_placement(H, "mac", "mac.reminder", f"R-old-{i}", at=env["clock"][0])
     bot.store.add_placement(H, "mac", "mac.reminder", "R-yesterday", at=env["clock"][0] - timedelta(days=1))
@@ -565,7 +563,6 @@ def test_c3_the_41st_reminder_in_a_day_falls_back_with_the_cap_line(env, mac):
     env["clock"][0] = datetime(2026, 11, 13, 5, 1, tzinfo=UTC)               # 00:01 in New York
     assert say(env, "add milk to my apple reminders",
                {"intent": "todo_add", "todo_text": "milk", "list": "apple reminders"}).startswith("I'll add \"milk\"")
-    assert now_iso   # imported for the clock arithmetic above
 
 
 def test_c3_events_have_their_own_limit_of_10(env, mac):

@@ -400,7 +400,7 @@ def _remove_answer(bot, person, text, now):
 def run_plan(bot, person, plan, now):
     """Does one previewed thing after the yes, through the registry with the yes token of what was shown. Returns the
     Reply: what was added (and how to undo it), or why not and what was done instead."""
-    from .actions import Refused, perform, validate_action
+    from .actions import perform, validate_action
     from .actions.base import Ctx
     h = person["handle"]
     key, action, place = plan["connector"], plan["action"], BY_KEY[plan["place"]]
@@ -422,7 +422,7 @@ def run_plan(bot, person, plan, now):
         C.failed(bot.store, h, key, e.code, now)
         bot.store.log_action(h, plan.get("run_id"), None, action, "failed", detail={"error": e.code}, at=now)
         return _fallback(bot, person, plan, e.code, now)
-    except (Refused, ValueError, Exception) as e:  # noqa: BLE001 - never lost: today's action instead
+    except Exception as e:  # noqa: BLE001 - Refused (a token that is not the rows shown), a bad form: today's action
         bot.store.log_action(h, plan.get("run_id"), None, action, "failed", detail={"error": type(e).__name__}, at=now)
         return _fallback(bot, person, plan, "failed", now)
     if o.status != "done":   # perform's own daily cap (all outside writes together)
