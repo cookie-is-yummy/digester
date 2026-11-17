@@ -1035,7 +1035,12 @@ class ExecutorMixin:
                                                                  x[1])) if score > 0]
         for p in others:
             date_fields(p, extra, today, ts, year)
-        reads = (shown + others + added)[:self.ITEM_READS] if things else shown[:3]
+        # (round 9, slice U, live check: the composer's other picks filled every place before a post that names the
+        # kind; now, after the shown picks, the posts that name the kind come first, the composer's before the rest)
+        extra_reads = others + added
+        extra_reads = [p for p in extra_reads if names_kind(p["item"])] + \
+            [p for p in extra_reads if not names_kind(p["item"])]
+        reads = (shown + extra_reads)[:self.ITEM_READS] if things else shown[:3]
         result["items_reads"] = reads
         return reads
 

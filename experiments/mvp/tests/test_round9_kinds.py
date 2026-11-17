@@ -329,3 +329,30 @@ def test_u4_what_kind_should_i_is_an_ask_from_the_guard():
               "what else should i try", "which one should i pick", "what cameras should i look at as a beginner",
               "what apps should i delete from my phone"):
         assert chat_guard(chat(), t).intent == "chat", t
+
+
+def test_u1_one_call_may_name_another_priced_model_and_is_logged_with_it(monkeypatch):
+    from mvp import config, llm
+    seen = []
+
+    def fake(model, system, user, max_tokens=0, purpose="", prompt_version="", **extra):
+        seen.append((model, extra))
+        return {"items": []}, {}
+    monkeypatch.setattr(llm.ai, "openai_chat_json", fake)
+    llm.chat_json("s", "u", "mvp_extract_ab", "extract_v4", model="gpt-5.5", reasoning_effort="low", seed=7)
+    llm.chat_json("s", "u", "mvp_extract", "extract_v4", temperature=0)
+    assert seen[0] == ("gpt-5.5", {"seed": 7, "reasoning_effort": "low"})
+    assert seen[1] == (config.MODEL, {"temperature": 0})   # the default model, nothing extra sent
+
+
+def test_u3_a_post_naming_the_kind_is_read_before_the_composers_other_picks(env, tmp_path, monkeypatch):
+    from mvp.executor import ExecutorMixin
+    monkeypatch.setattr(ExecutorMixin, "ITEM_READS", 2)
+    seen = u3_lib(env, tmp_path, ONE)
+    # the composer returns a list post as a close pick past the count: before, it took the one place left
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "7 UI kits", title="7 UI kits"),
+                                                                  pick(u, "UI goodies", "close", title="UI goodies")]}
+    say(env, U3_ASK, ask("ui libraries for my next project", ["ui libraries"], count=1))
+    texts = read_texts(seen)
+    assert len(texts) == 2 and any("Larder is the UI library" in t for t in texts)
+    assert not any("UI goodies" in t for t in texts)
