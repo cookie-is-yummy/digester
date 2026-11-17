@@ -215,6 +215,12 @@ class HandlerMixin:
         ref = self._rule_reads(person, text, now)   # round 8 (DESIGN.md section 13): read by code, no model call
         if ref is not None:
             return ref
+        # round 9, slice D (C3, DESIGN.md section 16.D): connect / check / disconnect the Mac, "what are you connected
+        # to", "put my lists in reminders from now on": code only, no model call
+        from .places import place_reads
+        ref = place_reads(self, person, text, now)
+        if ref is not None:
+            return ref
         pending = self._live_pending(handle, now)
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
@@ -261,7 +267,12 @@ class HandlerMixin:
         ref = self._deadline_answer(person, text, now)
         if ref is not None:
             return ref
-        return self._overdue_reply(person, text, now)
+        ref = self._overdue_reply(person, text, now)
+        if ref is not None:
+            return ref
+        # round 9, slice D (C3, DESIGN.md section 16.D): yes / no to a Mac preview; REMOVE / KEEP after "disconnect"
+        from .places import asked_reads as place_answer
+        return place_answer(self, person, text, now)
 
     def _rule_reads(self, person, text, now):
         """Plain messages about rules that code reads before any model call: "no overdue nudges", a bare "done" for a
@@ -811,7 +822,8 @@ class HandlerMixin:
             return self.send(h, msg)
         if it.intent == "delete_data":
             self.store.set_pending(h, "confirm_delete", {}, at=self.clock())
-            return self.send(h, T.DELETE_ASK)
+            from .places import delete_data_line   # round 9, slice D (C3): the Mac stops; what it added stays there
+            return self.send(h, T.DELETE_ASK + delete_data_line(self.store, h))
         if it.intent == "set_quiet_hours":
             return self._set_quiet(person, it, now)
         if it.intent == "snooze":
@@ -965,6 +977,9 @@ class HandlerMixin:
         if not lw:
             return self.send(h, T.NOTHING_TO_UNDO)
         self.store.set_state(lw.get("key") or f"lastwrite:{h}", None)
+        if lw["kind"] == "placed":   # round 9, slice D (C3): what the last yes added on the Mac, taken out there
+            from .places import undo_text
+            return self.send(h, undo_text(self, h, lw["undo"], now))
         writes = lw["undo"]["writes"] if lw["kind"] == "multi" else [lw]
         said = [x for x in (self._undo_one(h, w, now) for w in reversed(writes)) if x]   # the last write first
         if not said:

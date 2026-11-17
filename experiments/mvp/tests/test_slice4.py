@@ -556,7 +556,9 @@ def test_the_registry_runs_each_action_through_its_own_module():
     for name, d in REGISTRY.items():
         mod = importlib.import_module(f"mvp.actions.{d.module}")
         assert callable(mod.run), name
-    assert [a.action for a in ordered([type("A", (), {"action": n}) for n in REGISTRY][::-1])] == \
+    # round 9 (C3): the actions a form can name keep their order (code-only ones, from_model=False, sit beside them)
+    named = [n for n, d in REGISTRY.items() if d.from_model]
+    assert [a.action for a in ordered([type("A", (), {"action": n}) for n in named][::-1])] == \
         ["todo.add", "calendar.add", "email.send", "message.send"]
     assert validate_action("todo.add", {"what": "ingredients"}) == ("todo.add", {"what": "ingredients"})
     with pytest.raises(Exception):

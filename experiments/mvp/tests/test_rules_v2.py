@@ -310,7 +310,9 @@ def test_do_is_validated_against_the_action_registry():
                                                {"action": "todo.add"}]))
     assert s.do[0].params == {"time": "07:00", "day_offset": 2} and s.do[1].params == {}
     assert RuleSpec.model_validate(base).stored()["do"] == [{"action": "message.send"}]
-    assert set(REGISTRY) == {"message.send", "email.send", "calendar.add", "todo.add"} and needs("email.send") == "verified_email"
+    # round 9 (C3): actions only code runs (from_model=False) are in the registry too; a form can name only these four
+    assert {n for n, d in REGISTRY.items() if d.from_model} == {"message.send", "email.send", "calendar.add", "todo.add"} \
+        and needs("email.send") == "verified_email"
     for do in [["sms.send"], [{"action": "calendar.add", "params": {"time": "25:00"}}],
                [{"action": "calendar.add", "params": {"date": "2026-11-20", "day_offset": 1}}],
                [{"action": "email.send", "params": {"to": "someone@example.com"}}], "sms.send"]:

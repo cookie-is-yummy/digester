@@ -1457,3 +1457,213 @@ def over_action_cap(label, n):
     if label:
         return f"I've reached my limit of {n} {label} a day for you. I can do more tomorrow."
     return f"I've reached my limit for this today ({n} a day). I can do it again tomorrow."
+
+
+# ---------- round 9, slice D (C2, C3; DESIGN.md section 16.D): lists named after an app, the operator's Mac ----------
+ACTION_CAP_LABEL.update({"mac.reminder": "reminders on your Mac", "mac.event": "events on your Mac"})
+SETTINGS_PATH = "System Settings › Privacy & Security › Automation"
+# why a to-do or an event did not go to the place the person named; each is the start of a sentence
+PLACE_CLAUSE = {
+    "no_connector": "I can't reach {app}",
+    "operator": "{short} on my Mac only works for the person who runs me",
+    "unreachable": "I can't reach a Mac from where I'm running",
+    "not_connected": "{short} on your Mac isn't connected yet",
+    "off": "{short} on your Mac is turned off",
+    "broken": "I've stopped using {short} on your Mac after 3 failures in a row",
+    "blocked": "Your Mac blocked me from {short}",
+    "timeout": "{short} didn't answer in time",
+    "failed": "{short} on your Mac gave an error",
+    "no_calendar": "I couldn't find a calendar called \"Digest\" on this Mac",
+    "scheduled": "I only add to {short} on your Mac after you say yes",
+    "cap": "I've reached my limit of {n} {nouns} a day on your Mac",
+}
+PLACE_AFTER = {
+    "not_connected": " Text me \"connect my mac\" to set it up.",
+    "off": " Text me \"check my mac\" to turn it back on.",
+    "broken": " Text me \"check my mac\" when it's ready.",
+    "blocked": f" Turn it on in {SETTINGS_PATH}.",
+    "no_calendar": " Make one in Calendar, then text me \"check my mac\".",
+}
+
+
+def place_clause(code, app, short, n=None, nouns=None):
+    return PLACE_CLAUSE.get(code, PLACE_CLAUSE["failed"]).format(app=app, short=short, n=n, nouns=nouns)
+
+
+def added_here(texts, name, due_text=None):
+    """What went on the bot's own list instead: 'I added "milk" to your list here, called "notion".'"""
+    called = "" if name in (None, "todo") else f", called \"{name}\""
+    due = f" I'll remind you {due_text}." if due_text else ""
+    if len(texts) == 1:
+        return f"I added \"{texts[0]}\" to your list here{called}.{due}"
+    return f"I added {len(texts)} things to your list here{called}: " + "; ".join(texts) + "." + due
+
+
+def place_fell_back(clause, texts, name, due_text=None, after=""):
+    return f"{clause}, so {added_here(texts, name, due_text)}{after}"
+
+
+def place_link_instead(clause, after=""):
+    return f"{clause}, so here's a link instead.{after}"
+
+
+def place_ask_todo(titles, notes, list_name, due_text):
+    """The preview of reminders: every title (and its link) exactly as it will be added."""
+    where = f"your Reminders list \"{list_name}\"" if list_name else "Reminders"
+    due = f", due {due_text}" if due_text else ""
+    if len(titles) == 1:
+        head = f"I'll add \"{titles[0]}\" to {where} on your Mac{due}."
+        if notes[0]:
+            head += f"\nWith its link: {notes[0]}"
+        return head + "\nReply \"yes\" to add it, or \"no\" to leave it."
+    lines = [f"I'll add these {len(titles)} to {where} on your Mac{due}:"]
+    lines += [f"• {t}" + (f" ({u})" if u else "") for t, u in zip(titles, notes)]
+    return "\n".join(lines) + "\nReply \"yes\" to add them, or \"no\" to leave them."
+
+
+def place_ask_event(title, when, notes, calendar):
+    out = f"I'll put \"{title}\" in your \"{calendar}\" calendar on your Mac, {when}."
+    if notes:
+        out += f"\nWith the note: {notes}"
+    return out + "\nReply \"yes\" to add it, or \"no\" to leave it."
+
+
+PLACE_LEFT = "OK, I didn't add anything."
+
+
+def place_already(short):
+    return f"I already added that to {short} on your Mac today."
+
+
+def place_done_todo(titles, list_name, due_text):
+    where = f"your Reminders list \"{list_name}\"" if list_name else "Reminders"
+    n = len(titles)
+    what = f"\"{titles[0]}\"" if n == 1 else f"{n} items"
+    due = f" Reminders will remind you {due_text}; I won't send my own reminder." if due_text else ""
+    return (f"Added {what} to {where}.{due} Reply \"undo\" within 10 minutes to remove "
+            f"{'it' if n == 1 else 'them'}.")
+
+
+def place_done_event(title, calendar, when):
+    return (f"Added \"{title}\" to your \"{calendar}\" calendar, {when}. Reply \"undo\" within 10 minutes to remove "
+            f"it.")
+
+
+def place_undone(n, short, title=None):
+    if n == 1 and title:
+        return f"I took \"{title}\" out of {short} on your Mac"
+    return f"I took {'that' if n == 1 else f'those {n}'} out of {short} on your Mac"
+
+
+def place_undo_failed(short, titles):
+    if len(titles) == 1:
+        return f"I couldn't take it out of {short} just now. It's \"{titles[0]}\"; delete it there."
+    return (f"I couldn't take {len(titles)} of them out of {short} just now: "
+            + ", ".join(f"\"{t}\"" for t in titles) + ". Delete them there.")
+
+
+PLACE_UNDO_GONE = "Those are already gone from your Mac, so there was nothing to take out."
+
+# the Mac, by text: connect, check, what are you connected to, disconnect, from now on
+MAC_ONLY_OPERATOR = "Reminders and Calendar on my Mac are only for the person who runs me."
+MAC_TESTER_INSTEAD = " I keep your lists here, and I give you a calendar link you tap, with no sign-in."
+MAC_UNREACHABLE = "I can't reach a Mac from where I'm running. Run me on your Mac to use Reminders and Calendar."
+MAC_CONNECT = ("I can add to Reminders and Calendar on this Mac, with no password.\n"
+               "1. In Calendar on the Mac, make a calendar called \"Digest\" in your iCloud account, so it reaches your "
+               "phone.\n"
+               "2. Text me \"check my mac\". The Mac may ask \"Terminal wants to control Reminders\" (and Calendar): "
+               "click OK on the Mac.\n"
+               "I'll always show you what I'm about to add and wait for your yes.")
+MAC_CONNECTED = "Reminders and Calendar are connected on this Mac. Events go to your \"Digest\" calendar."
+MAC_CONNECTED_NO_CALENDAR = ("Reminders is connected on this Mac. I couldn't find a calendar called \"Digest\", so "
+                             "events still come as a link. Make one in Calendar, then text me \"check my mac\" again.")
+
+
+def mac_check_failed(code, app):
+    app = app or "Reminders"
+    if code == "blocked":
+        return (f"Your Mac blocked me from {app}. Turn it on in {SETTINGS_PATH}, then text me \"check my mac\" "
+                f"again.")
+    if code == "timeout":
+        return f"{app} didn't answer in time. Make sure the Mac is awake, then text me \"check my mac\" again."
+    if code == "unreachable":
+        return MAC_UNREACHABLE
+    return f"{app} on the Mac gave an error. Text me \"check my mac\" to try again."
+
+
+MAC_NOT_ON = "Reminders and Calendar on the Mac aren't connected, so there's nothing to stop."
+MAC_SETTINGS_TAIL = f"To take back my access completely, go to {SETTINGS_PATH}."
+
+
+def _made(reminders, events):
+    parts = []
+    if reminders:
+        parts.append(f"{reminders} {'reminder' if reminders == 1 else 'reminders'}")
+    if events:
+        parts.append(f"{events} {'event' if events == 1 else 'events'}")
+    return " and ".join(parts)
+
+
+def mac_off(reminders, events):
+    made = _made(reminders, events)
+    if not made:
+        return (f"I've stopped using Reminders and Calendar. I hadn't added anything there in the last 30 days. "
+                f"{MAC_SETTINGS_TAIL}")
+    return (f"I've stopped using Reminders and Calendar. I added {made} in the last 30 days. Reply REMOVE to delete "
+            f"those, or KEEP to leave them.")
+
+
+def mac_removed(reminders, events, failed):
+    made = _made(reminders, events)
+    out = f"I deleted the {made} I'd added." if made else ""
+    if failed:
+        out += (" " if out else "") + (f"I couldn't delete {failed} {'thing' if failed == 1 else 'things'} just now; "
+                                       f"{'it is' if failed == 1 else 'they are'} still there.")
+    return (out or "There was nothing left to delete.") + " " + MAC_SETTINGS_TAIL
+
+
+MAC_REMOVE_UNREACHABLE = ("I can't reach a Mac from where I'm running, so I couldn't delete them. They're still there. "
+                          + MAC_SETTINGS_TAIL)
+MAC_KEPT = "OK, they stay where they are. " + MAC_SETTINGS_TAIL
+MAC_DELETE_DATA = " This also stops Reminders and Calendar on the Mac. What I added there stays there."
+
+
+def place_pref_set(kind, connected):
+    if kind == "todo":
+        out = ("OK. From now on I'll offer to put new things for your lists in Reminders on your Mac, and show you "
+               "each one first. Say \"use my list here again\" to go back.")
+    else:
+        out = ("OK. From now on I'll offer to put events straight in your \"Digest\" calendar on your Mac, and show "
+               "you each one first. Say \"use calendar links again\" to go back.")
+    return out if connected else out + " It isn't connected yet: text me \"connect my mac\" to set it up."
+
+
+PLACE_PREF_TODO_OFF = "OK. New things for your lists stay on your list here."
+PLACE_PREF_CAL_OFF = "OK. Calendar entries come as a link you tap again."
+
+
+def connected_lines(email_status, mac_line):
+    lines = ["Here's where I can put things for you:", "• Your list here: always on.",
+             f"• Email to you: {email_status}.", "• Calendar: a link you tap, no sign-in.",
+             "• Email to other people: a draft you send from your mail app."]
+    if mac_line:
+        lines.append(f"• Reminders and Calendar on this Mac: {mac_line}.")
+    return "\n".join(lines)
+
+
+MAC_STATUS = {
+    "connected": "connected",
+    "not_connected": "not connected yet (say \"connect my mac\")",
+    "off": "turned off (say \"check my mac\" to turn it back on)",
+    "broken": "stopped after 3 failures in a row (say \"check my mac\")",
+    "unreachable": "I can't reach a Mac from where I'm running",
+}
+MAC_DISCONNECT_HINT = "Say \"disconnect my mac\" to stop."
+
+
+def email_status(address, confirmed):
+    if address and confirmed:
+        return f"on, to {address}"
+    if address:
+        return f"waiting for the 6-digit code I sent to {address}"
+    return "not set up yet (tell me your email address)"

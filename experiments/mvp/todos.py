@@ -164,6 +164,14 @@ class TodoMixin:
         if named and named != "todo" and name == "todo":
             name = named
         texts = texts or [it.todo_text]
+        # round 9, slice D (C2, C3; DESIGN.md section 16.D): a list named after an app ("add milk to my notion",
+        # "add call mum to my apple reminders"): a preview for the Mac that waits for a yes, or the list here with a
+        # line that says why. None: today's write below.
+        from .places import route_todo
+        got = route_todo(self, person, [(x, None, None, due) for x in texts], name, getattr(self._tl, "msg_text", ""),
+                         now)
+        if got is not None:
+            return self.send(h, got[0] + tail)
         ids = [self.store.add_todo(h, x, name, due_at=due, at=now) for x in texts]
         self._wrote(h, "todo_add", f"added to-do{'s' if len(ids) > 1 else ''} " + "; ".join(f"\"{x}\"" for x in texts)
                     + f" to the list \"{name}\"", {"ids": ids})
@@ -190,9 +198,18 @@ class TodoMixin:
         the same code a rule's or an ask's `do: todo.add` runs."""
         from .actions import todo as todo_action
         h = person["handle"]
-        picks, _, _, problem = self._answer_picks(h, numbers, answer_ref, what)
+        picks, _, answer, problem = self._answer_picks(h, numbers, answer_ref, what)
         if problem:
             return self.send(h, problem + tail)
+        # round 9, slice D (C2, C3; DESIGN.md section 16.D): the same for picks and their ingredients
+        rows, missing = todo_action.rows_for(picks, what, due)
+        if not missing and rows:
+            from .places import route_todo
+            got = route_todo(self, person, rows, name, getattr(self._tl, "msg_text", ""), self.clock(),
+                             run_id=(answer or {}).get("run_id"),
+                             app_list=picks[0]["title"] if what == "ingredients" else None)
+            if got is not None:
+                return self.send(h, got[0] + tail)
         out = todo_action.add(self, person, picks, what, name, due)
         return self.send(h, out.line + tail)
 

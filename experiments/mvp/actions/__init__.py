@@ -8,12 +8,14 @@ executor calls once per answer (outputs.py). A new output is one new module plus
     email.send    email.py     the same answer as an email to the person's own confirmed address
     calendar.add  calendar.py  a Google Calendar "add event" link in the reply and an .ics file (attached to the email)
     todo.add      todo.py      each main pick (checked title and link), or its checked ingredient lines, on a list
+    mac.reminder  mac.py       round 9 (C3): reminders on the operator's Mac, after a yes to the exact rows (places.py)
+    mac.event     mac.py       round 9 (C3): one event in the "Digest" calendar on the operator's Mac, the same way
 """
 import hashlib
 import hmac
 import importlib
 from datetime import date, datetime, time as _time, timedelta, timezone
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -66,6 +68,61 @@ class TodoParams(BaseModel):
     what: Literal["pick", "ingredients"] = "pick"
 
 
+# ---------- round 9, slice D (C3, DESIGN.md section 16.D): what an outside place is given, exactly ----------
+def _local(v, with_time):
+    """A local wall time 'YYYY-MM-DDTHH:MM' (or a date 'YYYY-MM-DD' when with_time is False)."""
+    s = str(v).strip()
+    if with_time:
+        datetime.strptime(s, "%Y-%m-%dT%H:%M")
+    else:
+        date.fromisoformat(s)
+    return s
+
+
+class PlaceItem(BaseModel):
+    """One thing to put in an outside list: its title (the checked title or the person's own words), its notes (the
+    post's link, or nothing) and a local due time."""
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+    notes: str = Field(default="", max_length=1000)
+    due: Optional[str] = None                                   # local 'YYYY-MM-DDTHH:MM'
+
+    @field_validator("due")
+    @classmethod
+    def _due(cls, v):
+        return None if v is None else _local(v, True)
+
+
+class PlaceTodoParams(BaseModel):
+    """mac.reminder (and later task-app connectors): exactly the rows the person was shown."""
+    model_config = ConfigDict(extra="forbid")
+    list: Optional[str] = Field(default=None, min_length=1, max_length=60)   # None: the app's default list
+    items: List[PlaceItem] = Field(min_length=1, max_length=40)   # List: `list` is a field name here
+
+
+class MacEventParams(BaseModel):
+    """mac.event: exactly the event the person was shown, in local wall time (an all-day event runs midnight to
+    midnight)."""
+    model_config = ConfigDict(extra="forbid")
+    calendar: str = Field(default="Digest", min_length=1, max_length=60)
+    title: str = Field(min_length=1, max_length=200)
+    notes: str = Field(default="", max_length=1000)
+    all_day: bool = False
+    start: str                                                  # local 'YYYY-MM-DDTHH:MM'
+    end: str
+
+    @field_validator("start", "end")
+    @classmethod
+    def _when(cls, v):
+        return _local(v, True)
+
+    @model_validator(mode="after")
+    def _order(self):
+        if self.end <= self.start:
+            raise ValueError("mac.event ends after it starts")
+        return self
+
+
 class ActionDef(BaseModel):
     name: str
     params: type
@@ -95,6 +152,16 @@ REGISTRY = {
                             does="The same answer as an email to the person's own verified address"),
     "message.send": ActionDef(name="message.send", params=NoParams, module="message", order=90,
                               does="The reply in the thread"),
+    # round 9, slice D (C3, DESIGN.md section 16.D): the operator's Mac. Only code runs them (places.py), only after
+    # the person's yes to the exact rows shown; never named by the model, never in a rule's do.
+    "mac.reminder": ActionDef(name="mac.reminder", params=PlaceTodoParams, module="mac", order=11,
+                              does="Reminders in a Reminders list on the operator's Mac",
+                              outside=True, undo="delete", confirm="send_word", max_per_day=40, in_rules=False,
+                              who="operator", from_model=False, connector="mac", fallback="todo.add"),
+    "mac.event": ActionDef(name="mac.event", params=MacEventParams, module="mac", order=21,
+                           does="One event in the \"Digest\" calendar on the operator's Mac",
+                           outside=True, undo="delete", confirm="send_word", max_per_day=10, in_rules=False,
+                           who="operator", from_model=False, connector="mac", fallback="calendar.add"),
 }
 
 

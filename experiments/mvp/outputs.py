@@ -137,11 +137,17 @@ class OutputsMixin:
                 ctx.done.append((a.action, o))
                 out.append((a.action, o))
                 continue
-            try:
-                o = perform(a.action, ctx, a.params)
-            except Exception as e:  # noqa: BLE001 - one failed action never loses the answer or the other actions
-                o = Outcome("failed", line=T.ACTION_FAILED.get(a.action, T.ACTION_FAILED_OTHER),
-                            detail={"error": type(e).__name__})
+            # round 9, slice D (C2, C3; DESIGN.md section 16.D): a list or calendar named after an outside place
+            # ("to my apple reminders", "in my notion") goes through places.route: a preview that waits for a yes, or
+            # today's action with a line that says why. None: nothing names a place, today's path below.
+            from .places import route as place_route
+            o = place_route(self, ctx, a.action, a.params)
+            if o is None:
+                try:
+                    o = perform(a.action, ctx, a.params)
+                except Exception as e:  # noqa: BLE001 - one failed action never loses the answer or the other actions
+                    o = Outcome("failed", line=T.ACTION_FAILED.get(a.action, T.ACTION_FAILED_OTHER),
+                                detail={"error": type(e).__name__})
             ctx.done.append((a.action, o))
             self.store.log_action(ctx.handle, ctx.run_id, ctx.rule_id, a.action, o.status, ref=o.ref,
                                   detail=dict(o.detail or {}, line=o.line, link_part=o.link), slot=slot, at=ctx.now)
