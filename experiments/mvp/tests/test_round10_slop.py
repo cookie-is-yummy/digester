@@ -157,6 +157,13 @@ def test_near_variants_of_the_signals():
     one = cm.build_rows([{"id": "a", "platform": "instagram", "caption": BROWNIES + "\n**Enjoy**",
                           "platform_data": {"owner_handle": "plain_kitchen"}}])
     assert (one.get("a") or [None])[0] in (None, "weak")
+    # the narrow echo list alone makes a strong mark; a creator's "Here's the full breakdown" never does by itself
+    assert cm.ECHO.search("Here's a simple and tasty recipe for banana bread:")
+    assert not cm.ECHO.search("Here's the full breakdown of the edit") and cm.OPENER.search("Here's the full breakdown")
+    tut = ("Here's the full breakdown of this edit:\n1. Cut on the beat of the song\n2. Add a zoom on every drop\n"
+           "3. Match the colours of each clip\n4. Export at the highest bitrate\n5. Post it with the original sound")
+    assert (cm.build_rows([{"id": "t", "platform": "instagram", "caption": tut,
+                            "platform_data": {"owner_handle": "edit_school"}}]).get("t") or [None])[0] == "weak"
 
 
 def test_the_marks_file_is_derived_versioned_and_never_built_by_the_view(tmp_path):

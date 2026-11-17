@@ -75,6 +75,14 @@ OPENER = re.compile(
     r"|\bhow about (?:a|an) recipe\b"
     r"|\bhere(?:'|’)s the information (?:about|on)\b)", re.I | re.M)
 MARKUP = re.compile(r"(\*\*[^*\n]{2,60}\*\*|^\s*#{2,4}\s+\w)", re.M)
+# the assistant's own words, which alone make a strong mark (the narrow echo list of the diagnosis's v3): a creator's
+# "Here's the full breakdown" of their own tutorial is chatbot-like evidence (above), never enough on its own
+ECHO = re.compile(
+    r"(^\s*here(?:'|’)s\s+(?:a|an)\s+(?:[\w-]+\s+(?:and\s+)?){0,3}recipe\s+for\b"
+    r"|^\s*(?:no problem|certainly|sure|absolutely|of course)[!,.]\s*(?:here|below)\b"
+    r"|\benjoy your (?:delicious|creamy|homemade|tasty|flavorful|flavourful)\b"
+    r"|\bhow about (?:a|an) recipe\b"
+    r"|\bhere(?:'|’)s the information (?:about|on)\b)", re.I | re.M)
 
 # C: a meme account by its handle or display name (whole words)
 MEMEW = re.compile(r"(?:^|[^a-z])(memes?|memez|funny|funnies|lol|lmao|humou?r|comedy|jokes?|shitpost\w*|dank|fails|"
@@ -199,7 +207,7 @@ def build_rows(rows):
         level = None
         if says:
             level, reasons = "strong", ["says_unrelated"] + reasons
-        elif (h or long_) and not own_voice(c) and (OPENER.search(c) or len(reasons) >= 2):
+        elif (h or long_) and not own_voice(c) and (ECHO.search(c) or len(reasons) >= 2):
             level = "strong"
         else:
             filler = any(ev[k] for k in ("chatbot_text", "pasted_elsewhere", "same_caption_repeated",
@@ -244,9 +252,9 @@ def build_file(lib):
               "weak": sum(1 for v in items.values() if v[0] == "weak")}
     data = {"version": SIGNAL_VERSION, "stamp": stamp, "built_at": datetime.now(timezone.utc).isoformat(
         timespec="seconds"), "counts": counts, "items": items}
-    d = os.path.join(lib, "marks")
-    os.makedirs(d, exist_ok=True)
     path = marks_path(lib)
+    d = os.path.dirname(path)
+    os.makedirs(d, exist_ok=True)
     tmp = path + f".tmp{os.getpid()}"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f)
