@@ -139,7 +139,8 @@ _GRAMMAR = [
     re.compile(r"^any\s+(?:good|great|cool|nice|other|more|new|fun)?\s*(?P<np>.+)$", re.I),
     re.compile(r"^(?:what|which)\s+(?P<np>.+?)\s+(?:should|could|can|would|do|might)\s+(?:i|we)\b", re.I),
     re.compile(r"^(?:some|the|my)?\s*(?P<np>.+?)\s+(?:i|i've|i\s+have)\s+(?:saved|kept|liked)\b", re.I),
-    re.compile(r"^(?:some|any|good|great|best|top|the\s+best)?\s*(?P<np>.+?)\s+(?:for|to|about|in|on)\s+\w", re.I),
+    re.compile(r"^(?:some|any|good|great|best|top|the\s+best)?\s*(?P<np>.+?)\s+(?:for|to|about|in|on|with|worth)\s+\w",
+               re.I),
 ]
 _PLURAL = re.compile(r"^[a-z][a-z0-9'’/-]*[a-rt-z]s$|^[a-z][a-z0-9'’/-]*ies$", re.I)   # "movies", "games"; not "glass"
 

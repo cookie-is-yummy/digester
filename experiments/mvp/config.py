@@ -34,7 +34,8 @@ EXTRACT_SEED = 7
 # (47 of 56 with "low"), at $0.0028 more per kind request ("low": $0.0054) and about 1.3 seconds per judged answer
 JUDGE_MODEL = os.environ.get("MVP_JUDGE_MODEL", "gpt-5.5")
 JUDGE_EFFORT = os.environ.get("MVP_JUDGE_EFFORT", "none")   # the reasoning effort sent with it ("" sends none)
-PROMPT_JUDGE = "judge_kind_v1"
+PROMPT_JUDGE = "judge_kind_v2"   # v1 plus: a pack of assets made for such a thing is "no", and each thing is judged on
+                                 # its own (live: a list made only of asset packs was judged "yes")
 ANSWER_CACHE_HOURS = 24       # the same spec and candidates reuse the same composed answer ("another" bypasses it)
 RANKED_CACHE_HOURS = 24 * 7   # the same search text on the same library build reuses its ranked list
 WIDER_MAX = 3                 # "Or here's a wider selection:" (asks only)

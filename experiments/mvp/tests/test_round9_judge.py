@@ -68,7 +68,7 @@ def test_j1_on_by_default_with_the_stronger_model_and_no_reasoning(monkeypatch):
     monkeypatch.delenv("MVP_JUDGE_EFFORT", raising=False)
     from mvp import config
     fresh = importlib.reload(config)
-    assert fresh.JUDGE_MODEL == "gpt-5.5" and fresh.JUDGE_EFFORT == "none" and fresh.PROMPT_JUDGE == "judge_kind_v1"
+    assert fresh.JUDGE_MODEL == "gpt-5.5" and fresh.JUDGE_EFFORT == "none" and fresh.PROMPT_JUDGE == "judge_kind_v2"
     monkeypatch.setenv("MVP_JUDGE_MODEL", "")
     assert importlib.reload(config).JUDGE_MODEL == ""   # an empty name turns it off
     monkeypatch.delenv("MVP_JUDGE_MODEL")
@@ -175,7 +175,7 @@ def test_j1_the_cache_key_holds_the_items_key_the_prompt_and_the_model(monkeypat
     a = cache_kind(base)
     assert a.startswith("judge:") and a == cache_kind(dict(base))
     assert a != cache_kind(dict(base, kind="tools")) and a != cache_kind(dict(base, about="likes serif"))
-    monkeypatch.setattr(config, "PROMPT_JUDGE", "judge_kind_v2")
+    monkeypatch.setattr(config, "PROMPT_JUDGE", "judge_kind_v9")
     b = cache_kind(base)
     monkeypatch.setattr(config, "JUDGE_EFFORT", "high")
     assert len({a, b, cache_kind(base)}) == 3
@@ -216,12 +216,16 @@ def test_j1_a_caption_that_gives_orders_stays_inside_the_data():
     assert "‹item›" in out and "‹/item›" in out
 
 
-def test_j1_the_prompt_file_is_generic():
+def test_j1_the_prompt_files_are_generic_and_v1_stays():
     from mvp import config
-    path = os.path.join(os.path.dirname(HERE), "prompts", f"{config.PROMPT_JUDGE}.md")
-    text = open(path, encoding="utf-8").read()
-    assert '"is_kind"' in text and "yes" in text and "unsure" in text and "data" in text
-    assert not any(w in text.lower() for w in ("ui/ux", "uiux", "component", "icon", "figma", "library", "libraries"))
+    assert config.PROMPT_JUDGE == "judge_kind_v2"
+    for v in ("judge_kind_v1", "judge_kind_v2"):
+        text = open(os.path.join(os.path.dirname(HERE), "prompts", f"{v}.md"), encoding="utf-8").read()
+        assert '"is_kind"' in text and "yes" in text and "unsure" in text and "data" in text
+        assert not any(w in text.lower() for w in ("ui/ux", "uiux", "component", "icon", "figma", "library",
+                                                   "libraries"))
+    # v2: a pack of assets made for such a thing is "no", and each thing is judged on its own
+    assert "a pack or a set of assets" in text and "Judge each thing on its own" in text
 
 
 # ---------- point 3: with the judge, its verdicts decide which posts count as the kind ----------
@@ -320,7 +324,9 @@ def test_j5_the_kind_is_read_from_the_requests_grammar():
     assert grammar_kind("any good chrome extensions for productivity") == "chrome extensions"
     assert grammar_kind("board games i saved") == "board games"
     assert grammar_kind("games for a rainy day") == "games"
-    assert grammar_kind("minecraft servers worth joining") is None   # none of the four forms
+    assert grammar_kind("minecraft servers worth joining") == "minecraft servers"
+    assert grammar_kind("online games with friends") == "online games"
+    assert grammar_kind("minecraft servers") is None   # a bare noun phrase is none of the forms
     # never a recipe, a workout or a tutorial request, a kind of post, or a word for anything
     for t in ("what are some easy pasta recipes", "any good workouts for abs", "blender tutorials for beginners",
               "what are some calisthenics exercises i can do at home", "startup motivation reels for mornings",
