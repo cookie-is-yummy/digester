@@ -284,6 +284,154 @@ def cut_at_section(text, limit=LINK_MAX):
     return text[:max(i, 0)].rstrip(), True
 
 
+# ---------- A6: the checks on what draft_v1 wrote (drafts.grounded) ----------
+_PROMPT = {}
+
+
+def PROMPT_TEXT():   # noqa: N802 - read once, when first used
+    if "t" not in _PROMPT:
+        import os
+        with open(os.path.join(config.HERE, "prompts", f"{config.PROMPT_DRAFT}.md"), encoding="utf-8") as f:
+            _PROMPT["t"] = f.read()
+    return _PROMPT["t"]
+
+
+# Capitalised words that are never a fact: greetings, sign-offs and the usual words a sentence starts with (English
+# and Spanish). Any other capitalised word, at a sentence's start or not, must be in the sources (a name, a day).
+_OK_CAPS = set("""I I'm I'll I've I'd Hi Hello Hey Dear Thanks Thank Best Regards Cheers Please Sorry Sincerely Kind
+Warm Hope Could Can Would Will Should May Might Must Let Let's Just Also Hola Gracias Saludos Querido Querida Estimado
+Estimada Bonjour Merci Hallo Danke Ciao Grazie Olá Obrigado Obrigada OK Ok Okay PS The This That These Those It It's Its
+We We're We'll You You're Your My Our Their They He She His Her There There's Here Here's What What's Which Who How Why
+Where When While If As Since Because So But And Or Nor Yet Is Are Was Were Do Does Did Have Has Had Any Anything Is
+Not No Yes Sure Happy Glad Great Good Quick Wanted Writing Following Regarding About Thought Saw Found That's Feel One
+All Some Each Every Both Once After Before Until Unfortunately Apologies Looking Hoping Just Thanks Many Much More
+Also Hopefully Otherwise Meanwhile Please Today Tomorrow Tonight Again Still Right Now Well Lovely Nice Sounds Would
+Unless Either Neither Even Really Actually Maybe Perhaps Probably Definitely Of In On At For From With To By Into
+El La Los Las Un Una Lo Me Te Se Le Les Nos Mi Mis Tu Tus Su Sus Nuestro Nuestra Que Qué Por Para Con Sin Si Sí Es
+Está Estoy Estamos Hay Quería Quiero Queremos Puedes Podrías Podemos Puede Espero Muchas Ya También Solo Cuando Como
+Pero Muy Al Del Este Esta Ese Esa Te Avísame Dime Gracias Buenas Buenos Disculpa Lamento Siento Saludos""".split())
+CLAIMS = re.compile(r"\b(sent|emailed|paid|cancell?ed|canceled|booked|ordered|bought|applied|attached|enclosed|"
+                    r"transferred|wired|signed up|registered|submitted|confirmed|returned|reserved|scheduled|fixed|"
+                    r"repaired)\b", re.I)
+_CLOSING_LINE = re.compile(r"^(?:thanks|thank you|many thanks|best|best wishes|regards|kind regards|cheers|sincerely|"
+                           r"gracias|saludos|un saludo|merci|danke|grazie|obrigad[oa])\b[\w ,!.]*$", re.I)
+URL_RE = re.compile(r"(?:https?://|www\.)\S+", re.I)
+
+
+def _words_in(word, low):
+    return re.search(rf"(?<!\w){re.escape(word.lower())}(?!\w)", low) is not None
+
+
+_GREET_WORDS = set("hi hello hey dear good morning afternoon evening hola querido querida estimado estimada buenos buenas "
+                   "días dias tardes bonjour hallo ciao olá".split())
+
+
+def grounded(form, sources, name=None):
+    """What is wrong with a draft_v1 form, as short reasons (an empty list: it passes). Every number, address,
+    link and capitalised name must be in the sources (the person's message, the recipient word or name, the
+    sign-off name, the checked post lines; for a rewrite, the version they saw and the change); nothing may be
+    said to be done unless their message says it; no placeholder; at most 1,200 characters."""
+    if not isinstance(form, dict):
+        return ["the answer was not a form"]
+    subj, greet, body, close = (" ".join(str(form.get(k) or "").split()) if k != "body" else str(form.get(k) or "")
+                                .strip() for k in ("subject", "greeting", "body", "closing"))
+    out = []
+    if not body:
+        out.append("the body is empty")
+    if len(body) > 1200:
+        out.append("the body is over 1,200 characters")
+    if len(subj) > 120 or len(greet) > 60 or len(close) > 40:
+        out.append("the subject, greeting or closing is too long")
+    src = "\n".join(s for s in sources if s)
+    low = src.lower()
+    every = "\n".join([subj, greet, body, close])
+    for u in URL_RE.findall(every):
+        if u.rstrip(".,);:!?") not in src:
+            out.append("a link that is not the post's")
+    for a in ADDR_RE.findall(every):
+        if a.lower().rstrip(".") not in low:
+            out.append(f"the address {a} is not in their message")
+    src_nums = set(re.findall(r"\d+", src))
+    for n in re.findall(r"\d+", URL_RE.sub(" ", every)):
+        if n not in src_nums:
+            out.append(f"the number {n} is not in their message")
+    for w in re.findall(r"[^\W\d_][\w'’-]*", URL_RE.sub(" ", every)):
+        w = w.replace("’", "'")
+        if w[0].isupper() and w not in _OK_CAPS and len(w) > 1 and not _words_in(w, low.replace("’", "'")):
+            out.append(f"the name {w} is not in their message")
+    for m in CLAIMS.finditer(body + "\n" + subj):
+        if not _words_in(m.group(1), low):
+            out.append(f"it says something was {m.group(1).lower()}, which their message does not say")
+    if name is not None:   # "Hi <name>," only with the name the person typed; never "Hi landlord,"
+        allowed = _GREET_WORDS | {w.lower() for w in re.findall(r"[^\W\d_]+", name)}
+        if any(w.lower() not in allowed for w in re.findall(r"[^\W\d_]+", greet)):
+            out.append("the greeting must be \"Hi,\"" + (f" or \"Hi {name},\"" if name else ""))
+    if re.search(r"\[[^\]]*\]|\(your |\bXX+\b|_{3,}|\{[^}]*\}", every, re.I):
+        out.append("a placeholder")
+    return list(dict.fromkeys(out))
+
+
+def clean_form(raw):
+    """The checked form, trimmed: no greeting or sign-off inside the body (code adds them)."""
+    body = str(raw.get("body") or "").strip().replace("\r\n", "\n")
+    lines = body.split("\n")
+    if lines and re.match(r"^(?:hi|hello|hey|dear|hola|bonjour|hallo|ciao)\b[^\n.!?]{0,40},\s*$", lines[0], re.I):
+        lines = lines[1:]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    for i in range(len(lines) - 1, max(len(lines) - 3, -1), -1):
+        if _CLOSING_LINE.match(lines[i].strip()):
+            lines = lines[:i]
+            break
+    body = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+    greet = " ".join(str(raw.get("greeting") or "").split()) or "Hi,"
+    close = " ".join(str(raw.get("closing") or "").split()) or "Thanks,"
+    return {"subject": " ".join(str(raw.get("subject") or "").split())[:120], "greeting": greet, "body": body,
+            "closing": close}
+
+
+def draft_user(p, sign, change=None, current=None):
+    """(the user text for draft_v1, the sources its words are checked against). The post's own text never goes in:
+    only the checked lines code would have used (title, creator, at most two checked points, the link)."""
+    post = p.get("post") if p.get("post") and not p.get("no_post") else None
+    post_lines = []
+    if post:
+        post_lines = [post.get("title") or "", post.get("creator") or ""] + list(post.get("points") or [])[:2] + \
+            [post.get("url") or ""]
+    name, role = p.get("greet_name") or "", p.get("to_word") or ""
+    message = p.get("text") or p.get("request") or ""
+    user = (f"<request>{message}</request>\n<to_name>{name}</to_name>\n<to_role>{role}</to_role>\n"
+            f"<sign_as>{sign or ''}</sign_as>\n"
+            + ("<post>\n" + "\n".join(x for x in post_lines if x) + "\n</post>\n" if post else "")
+            + (f"<current>{current}</current>\n<change>{change}</change>\n" if change else ""))
+    return user, [message, name, sign or "", *post_lines, current or "", change or ""]
+
+
+def model_write(p, sign, handle, change=None, current=None):
+    """One draft_v1 call through llm.py (logged with its cost, purpose "draft") and, when a check fails, one retry
+    that names the failure. Returns (the checked form or None, attempts, the first try's problems)."""
+    from . import llm
+    user, sources = draft_user(p, sign, change, current)
+    why, first, attempts = None, [], 0
+    for attempt in range(2):
+        attempts = attempt + 1
+        try:
+            raw, _cost = llm.chat_json(PROMPT_TEXT(), user + (f"\nYour last answer failed a check: {why}. Fix only "
+                                                              "that." if why else ""),
+                                       purpose="draft", prompt_version=config.PROMPT_DRAFT, person=handle,
+                                       max_tokens=600)
+        except Exception as e:  # noqa: BLE001 - a failed call: the code-built words stand
+            print(f"draft_v1: {type(e).__name__}", file=__import__("sys").stderr)
+            return None, attempts, first or ["the call failed"]
+        problems = grounded(raw, sources, name=p.get("greet_name") or "")
+        if not problems:
+            return clean_form(raw), attempts, first
+        if attempt == 0:
+            first = problems
+        why = "; ".join(problems[:3])
+    return None, attempts, first
+
+
 def render_body(p, sign):
     """The body from the draft's parts: greeting, the words, the post block, extra paragraphs, the sign-off."""
     greet = p.get("greeting") or (f"Hi {p['greet_name']}," if p.get("greet_name") else "Hi,")
@@ -897,12 +1045,59 @@ class DraftsMixin:
     def _save_to_drafts(self, person, d, now):
         return self.send(person["handle"], T.DRAFT_SAVE_LINK)
 
-    # ---------- A6: the model writes the words (off unless config.DRAFT_MODEL) ----------
+    # ---------- A6: the model writes the words (config.DRAFT_MODEL); code checks every word before it is shown ----
+    def _draft_model_ok(self, person, now):
+        """The model may write for this person now: on, under the spend caps, and under 6 drafts or rewrites today."""
+        if not config.DRAFT_MODEL:
+            return False
+        from .actions import local_day_bounds
+        start, end = local_day_bounds(now, person.get("timezone") or "America/New_York")
+        if self.store.actions_in(person["handle"], ["draft.model"], start, end) >= config.DRAFT_MODEL_PER_DAY:
+            return False
+        return not self._over_cap(person)
+
+    def _draft_model_call(self, person, p, row, sign, now, change=None, current=None):
+        """One draft_v1 call and, if a check fails, one retry naming the failure. Returns the checked form or None
+        (then the code-built words stand and nobody is told about the model)."""
+        h = person["handle"]
+        form, attempts, first = model_write(p, sign, h, change=change, current=current)
+        self.store.log_action(h, None, None, "draft.model", "done" if form else "fallback", ref=str(row["id"]),
+                              detail={"attempts": attempts, "used": bool(form), "rewrite": bool(change),
+                                      "first_try": not first}, at=now)
+        return form
+
     def _draft_model_body(self, person, draft_id, now):
-        return None
+        """A new draft: the model writes the words, under the checks; else the code-built words stand."""
+        if not self._draft_model_ok(person, now):
+            return None
+        row = self._draft(draft_id)
+        p = json.loads(row["parts"])
+        if p.get("paragraphs"):   # words given as they are (a notice): never rewritten
+            return None
+        form = self._draft_model_call(person, p, row, self._draft_sign_name(person), now)
+        if not form:
+            return None
+        p.update(model_body=form["body"], greeting=form["greeting"], closing=form["closing"], body_from="model")
+        fields = {"parts": p}
+        if not p.get("subject_set") and form["subject"] and not (p.get("post") and not p.get("request")):
+            # (an email that only passes on a post keeps the post's checked title as its subject)
+            fields["subject"] = form["subject"]
+        self.store.update_draft(draft_id, **fields)
+        return True
 
     def _draft_model_rewrite(self, person, d, t, now):
-        return None
+        """'make it shorter', 'in Spanish': the model rewrites the last shown version under the same checks. Returns
+        the new parts, or None (then the fixed line)."""
+        if not self._draft_model_ok(person, now) or d["kind"] != "email":
+            return None
+        p = dict(d["parts"])
+        current = render_body(p, "")
+        form = self._draft_model_call(person, p, d, self._draft_sign_name(person), now, change=t, current=current)
+        if not form:
+            return None
+        p.update(model_body=form["body"], greeting=form["greeting"], closing=form["closing"], body_from="model",
+                 request=None, extra=[])
+        return p
 
     # ---------- W10 and slice B ----------
     def draft_from_todo(self, person, todo, now=None):

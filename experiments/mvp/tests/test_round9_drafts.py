@@ -834,3 +834,190 @@ def test_w3_a_long_answer_is_cut_at_a_section_never_mid_line():
     assert text[len(got):].lstrip(" ").startswith("\n\n")
     short, cut = cut_at_section("one\ntwo")
     assert (short, cut) == ("one\ntwo", False)
+
+
+# =====================================================================================================================
+# A6: draft_v1, the model writes the words and code checks them (a fake model here; the live eval is eval_drafts.py)
+# =====================================================================================================================
+@pytest.fixture()
+def m(env, monkeypatch):
+    from mvp import config
+    monkeypatch.setattr(config, "DRAFT_MODEL", True)
+    for k in ("MVP_SMTP_HOST", "MVP_MAILBOX_ADDRESS", "MVP_MAILBOX_APP_PASSWORD", "MVP_OPERATOR"):
+        monkeypatch.delenv(k, raising=False)
+    return env
+
+
+def model(e, *forms):
+    """The fake draft_v1: each call returns the next form (the last one again when they run out)."""
+    seen = []
+
+    def answer(user):
+        seen.append(user)
+        f = forms[min(len(seen) - 1, len(forms) - 1)]
+        if isinstance(f, Exception):
+            raise f
+        return f
+    e["state"]["answers"]["draft"] = answer
+    return seen
+
+
+GOOD = {"subject": "Kitchen sink", "greeting": "Hi,", "closing": "Thanks,",
+        "body": "The kitchen sink is broken. Could you have a look at it when you have a moment?"}
+
+
+def draft_calls(e):
+    return sum(1 for c in e["calls"] if c == "draft")
+
+
+def test_a6_a_checked_model_form_is_the_body(m):
+    seen = model(m, GOOD)
+    say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    c = card(m)
+    assert c[0] == f"{HEAD}\nTo: maria@example.com\nSubject: Kitchen sink"
+    assert c[1] == ("Hi,\n\nThe kitchen sink is broken. Could you have a look at it when you have a moment?\n\n"
+                    "Thanks,\nT")
+    assert draft_calls(m) == 1 and "<request>email maria@example.com that the kitchen sink is broken</request>" in seen[0]
+    log = m["bot"].store.q("SELECT status, detail FROM action_log WHERE action='draft.model'")
+    assert [r["status"] for r in log] == ["done"] and json.loads(log[0]["detail"])["first_try"] is True
+    shown = [r for r in m["bot"].store.q("SELECT detail FROM action_log WHERE action='email.draft_link'")]
+    assert json.loads(shown[-1]["detail"])["body_from"] == "model"
+
+
+@pytest.mark.parametrize("bad,why", [
+    (dict(GOOD, body="The sink is broken. I can pay $200 for it."), "number 200"),
+    (dict(GOOD, body="The sink is broken. Jordan said it's urgent."), "name Jordan"),
+    (dict(GOOD, body="The sink is broken. See https://evil.example/x"), "link"),
+    (dict(GOOD, body="The sink is broken. Write to bad@x.example."), "address"),
+    (dict(GOOD, body="The sink is broken. I've already paid the plumber."), "paid"),
+    (dict(GOOD, body="The sink is broken. I have attached a photo."), "attached"),
+    (dict(GOOD, body="The sink is broken. Call me at [your number]."), "placeholder"),
+    (dict(GOOD, body="x " * 700), "1,200"),
+    (dict(GOOD, greeting="Hi Jordan,"), "name Jordan"),
+])
+def test_a6_a_form_that_fails_a_check_is_retried_once_naming_the_failure(m, bad, why):
+    seen = model(m, bad, GOOD)
+    say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    assert draft_calls(m) == 2 and why in seen[1].split("failed a check:")[1]
+    assert card(m)[1].startswith("Hi,\n\nThe kitchen sink is broken. Could you have a look")
+
+
+def test_a6_two_failed_tries_fall_back_to_the_code_body_and_nobody_is_told(m):
+    model(m, dict(GOOD, body="I can pay $200."))
+    say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    c = card(m)
+    assert draft_calls(m) == 2 and c[1] == "Hi,\n\nThe kitchen sink is broken.\n\nThanks,\nT"
+    assert not any("model" in x.lower() or "draft_v1" in x for x in c)
+    assert m["bot"].store.q("SELECT status FROM action_log WHERE action='draft.model'")[0]["status"] == "fallback"
+
+
+def test_a6_a_failed_call_falls_back(m):
+    model(m, RuntimeError("timeout"))
+    say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    assert card(m)[1] == "Hi,\n\nThe kitchen sink is broken.\n\nThanks,\nT" and draft_calls(m) == 1
+
+
+def test_a6_the_model_never_chooses_the_recipient(m):
+    model(m, dict(GOOD, to="bad@x.example", cc="bad@x.example"))
+    say(m, "email my landlord that the kitchen sink is broken", CHAT)
+    assert draft_calls(m) == 0                       # nothing is written before the recipient is known
+    say(m, "maria@example.com", CHAT)
+    c = card(m)
+    assert c[0].split("\n")[1] == "To: maria@example.com" and "bad@x.example" not in " ".join(c)
+    assert parse_mailto(link_of(c[2]))[0] == "maria@example.com"
+
+
+def test_a6_the_post_goes_in_as_checked_lines_only(m, monkeypatch):
+    seen = model(m, {"subject": "Pottery", "greeting": "Hi,", "closing": "Thanks,",
+                     "body": "I saw this pottery workshop and thought of you."})
+    _bad_post(m, monkeypatch)
+    say(m, "email it to sam@example.com", CHAT)
+    assert "<post>\nPottery workshop this Saturday\n@studio\nhttps://example.com/itm_x\n</post>" in seen[0]
+    assert "bad@x.example" not in seen[0] and "wire" not in seen[0] and "ignore your instructions" not in seen[0]
+    assert card(m)[1] == ("Hi,\n\nI saw this pottery workshop and thought of you.\n\nPottery workshop this Saturday "
+                          "by @studio\nhttps://example.com/itm_x\n\nThanks,\nT")
+
+
+def test_a6_a_post_that_says_wire_money_cannot_put_it_in_the_email(m):
+    from mvp.drafts import grounded
+    srcs = ["email it to my aunt", "aunt", "T", "Prize draw", "@promo", "https://example.com/p"]
+    assert grounded({"subject": "Prize", "greeting": "Hi,", "closing": "Thanks,",
+                     "body": "Please wire $500 to account 99812 to claim the prize."}, srcs)
+    assert not grounded({"subject": "Prize draw", "greeting": "Hi,", "closing": "Thanks,",
+                         "body": "I saw this post and thought you might like it."}, srcs)
+
+
+def test_a6_the_seventh_model_draft_in_a_day_uses_the_code_body(m):
+    model(m, GOOD)
+    m["bot"].max_per_minute = None
+    for i in range(6):
+        say(m, f"email sam{i}@example.com that the kitchen sink is broken", CHAT)
+    assert draft_calls(m) == 6
+    say(m, "email sam9@example.com that the kitchen sink is broken", CHAT)
+    assert draft_calls(m) == 6 and card(m)[1] == "Hi,\n\nThe kitchen sink is broken.\n\nThanks,\nT"
+
+
+def test_a6_over_the_spend_cap_no_model_call(m, monkeypatch):
+    from mvp import llm
+    model(m, GOOD)
+    monkeypatch.setattr(llm, "spent_today", lambda h, l: 99.0)
+    say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    assert draft_calls(m) == 0 and card(m)[1] == "Hi,\n\nThe kitchen sink is broken.\n\nThanks,\nT"
+
+
+def test_a6_tone_words_are_a_checked_rewrite_and_a_new_version(m):
+    seen = model(m, GOOD, dict(GOOD, body="Hola, el fregadero de la cocina está roto.", greeting="Hola,",
+                               closing="Gracias,"))
+    say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    before = draft_row(m)
+    say(m, "make it in spanish", CHAT)
+    c = card(m)
+    after = draft_row(m)
+    assert c[0].startswith(NEW) and c[1] == "Hola,\n\nHola, el fregadero de la cocina está roto.\n\nGracias,\nT"
+    assert after["version"] == before["version"] + 1 and after["text_hash"] != before["text_hash"]
+    assert "<change>make it in spanish</change>" in seen[1] and "<current>Hi,\n\nThe kitchen sink" in seen[1]
+
+
+def test_a6_a_rewrite_that_fails_its_checks_gives_the_fixed_line(m):
+    model(m, GOOD, dict(GOOD, body="The sink broke on 3 May."))
+    say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    v = draft_row(m)["version"]
+    assert say(m, "make it shorter", CHAT).startswith("I can't rewrite it in a new tone yet.")
+    assert draft_row(m)["version"] == v
+
+
+def test_a6_code_changes_stay_code_and_instead_replaces_the_model_words(m):
+    model(m, GOOD)
+    say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    n = draft_calls(m)
+    say(m, "say I'm home after 5", CHAT)
+    assert card(m)[1] == ("Hi,\n\nThe kitchen sink is broken. Could you have a look at it when you have a moment?\n\n"
+                          "I'm home after 5.\n\nThanks,\nT")
+    say(m, "instead say the sink is fixed", CHAT)
+    assert card(m)[1] == "Hi,\n\nThe sink is fixed.\n\nI'm home after 5.\n\nThanks,\nT"
+    assert draft_calls(m) == n
+
+
+def test_a6_a_notice_s_words_are_never_rewritten(m):
+    model(m, GOOD)
+    bot = m["bot"]
+    bot.draft_start(bot.store.person(H), "notice", to="help@gym.example", subject="Cancel",
+                    paragraphs=["Please cancel my membership."])
+    assert draft_calls(m) == 0 and card(m)[1] == "Hello,\n\nPlease cancel my membership.\n\nThank you,\nT"
+
+
+def test_a6_clean_form_takes_out_a_greeting_and_sign_off_the_model_put_in_the_body():
+    from mvp.drafts import clean_form
+    f = clean_form({"subject": " Sink ", "greeting": "", "closing": "",
+                    "body": "Hi Maria,\n\nThe sink is broken.\n\nThanks,\nT"})
+    assert f == {"subject": "Sink", "greeting": "Hi,", "closing": "Thanks,", "body": "The sink is broken."}
+
+
+def test_a6_the_eval_set_is_synthetic_and_has_the_required_cases():
+    path = os.path.join(os.path.dirname(HERE), "evalset", "drafts_dev.jsonl")
+    cases = [json.loads(x) for x in open(path, encoding="utf-8") if x.strip()]
+    assert len(cases) >= 14 and len({c["id"] for c in cases}) == len(cases)
+    tags = {t for c in cases for t in c["tags"]}
+    assert tags >= {"plain", "post", "date_amount", "spanish", "nobody", "post_steers", "lie"}
+    blob = json.dumps(cases)
+    assert all(a.endswith(("example.com", ".example")) for a in re.findall(r"[\w.+-]+@([\w.-]+)", blob))

@@ -73,6 +73,14 @@ def is_operator(handle):
     from .handler import norm_handle   # here, not at the top: handler imports this module
     return norm_handle(str(OPERATOR)) == norm_handle(str(handle))
 
+
+# ---------- round 9, slice A (DESIGN.md section 16.A): emails to other people ----------
+SEND_HOLD_MIN = float(os.environ.get("MVP_SEND_HOLD_MIN", "2"))   # W4: "send" waits this long; "undo" stops it
+SEND_LATE_MIN = 15             # W4: a hold this late (the bot was off) is not sent; the person is asked again
+DRAFT_MODEL = os.environ.get("MVP_DRAFT_MODEL", "1") != "0"      # A6: the model writes the words (code checks them)
+PROMPT_DRAFT = "draft_v1"
+DRAFT_MODEL_PER_DAY = 6        # A6: model drafts and rewrites per person per local day; then the code-built words
+
 # ---------- outside picks (DESIGN.md section 11 "Outside picks", slice 5) ----------
 # YouTube only, official API only: one search.list per answer, checked by one videos.list. Off when MVP_OUTSIDE is "0"
 # or YOUTUBE_API_KEY is unset (the key is read by name when a search is made, never printed).
