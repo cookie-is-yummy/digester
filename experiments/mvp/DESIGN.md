@@ -2025,3 +2025,80 @@ No reply changes except the build lines; no read, no connector, no model call.
   `fake_merchant` (the practice merchant "Streamly", 9 flows, by Playwright routing).
 - `tests/test_round9_merge.py`'s rule phrasings skip `test_round10_*` files, so the set stays the round 9 one.
   `test_round9_mac.py` lists the two new `placements` columns.
+
+### 17.D Sending and notices (slice D)
+
+The path the founder walks: switch sending on (the Connections panel), a draft, "send", the 2-minute hold, the
+receipt; and the notice that cancels by email with its follow-up. Code only: no model call, no prompt. No new hook:
+the reads live inside `draft_reads` (1), `_cancel_answer` (3), `cancel_reads` (6) and `place_reads` (8).
+
+- **D1, the send route** (`DraftsMixin._send_route(h)`: `mailbox` for the operator with A-013's settings, else
+  `link`; `SEND_ROUTES` names `send_as`, whose `_send_as` raises `drafts.NotBuilt`, round 11). Read when the card is
+  made, when it is shown again (the card shows the route as it is now) and at "send". A "send" whose route differs
+  from the card's shows the card again and takes no yes: `Your mail connection changed, so here's the email again.
+  Reply "send" if it's still right.` (to the link: `... I can't send it from here now: tap the link to send it
+  yourself.`). A send in its hold when sending is switched off does not go: `Your mail connection changed before it
+  went, so nothing was sent.` and the card with the link. Card cases: operator mailbox ("send"), the link, a
+  placeholder (no link, no "send").
+- **D4, the switch-on line.** Read only while a card is open: `SEND_FOR_ME` ("send it for me", "please send it
+  for me", "send it yourself", "send it from my email") is the send word on the exact version shown; `SEND_ASK` ("can
+  you send it (for me)", "could you send the email", "can't you send it yourself?") and any "?" is a question, never
+  the yes. A tester: `I can't send from your address yet. Tap the link above and press Send in your mail app.` The
+  operator without sending (also for "send" and "send it?"): `To let me send from your own address, the person who
+  runs me sets MVP_MAILBOX_ADDRESS and an app password (never in this chat).`; on the test page: `... add your email
+  address and an app password in the Connections panel on this page (never in this chat). Then say "send" again.`;
+  an Outlook.com address or a provider with no known server says that instead. With sending on, the question gets
+  `Nothing has been sent yet. Reply "send" when you want it to go.`
+- **D2, the notice's follow-up** (`cancel.py`). The mailbox's receipt for a notice names the merchant:
+  `Your mail server accepted your cancellation notice to Fitco (cancel@fitco.example) at 9:03 am. I can't unsend
+  it.`; then, and after "sent" on the link route (`Thanks. ...`): `That doesn't end it yet: it ends when they confirm
+  in writing. Keep their reply. Want a reminder on Wednesday 25 November to check they confirmed? Reply "yes", or give
+  another day.` The date: the route file's `notice_days` (business days when `notice_business_days`), else 7 days,
+  9am (`cancel.check_date`). "yes" takes it; a day replaces it (`when_answer`); "no" → `OK, no reminder.`; anything
+  else ends the offer and nothing is set. Status `notice_sent` (the bot sent it after "send") beside `person_sent`
+  ("sent" after the link); "what did you do for me" counts `notice_sent` as `I sent 1 notice after your "send"`. The
+  check reminder for a notice: `Check that Fitco confirmed your cancellation (look for their email). If they did, say
+  "they confirmed". If not, I can write a second notice.` Its answers are read only while that reminder is the bot's
+  newest message to the person and fired in the last 72 hours (`_cancel_after_check`, through `sent` → `runs.rule_id`
+  → `cancellations.check_rule_id`): "they confirmed / they did / got their email / it's cancelled" →
+  `person_says_done` (`Good. I've stopped the check reminder.` while it waits, `Good, thanks for telling me.` after it
+  ran); "no / they didn't / not yet / nothing yet" → `Want me to write a second notice? It says you asked on 18
+  November and asks them to confirm within 7 days.` (state `cancelask` step `second`, next message only). "yes" (or
+  "write a second notice" any time within 60 days of a notice that went) makes a code-written card: subject `Second
+  notice: cancel my membership`, first paragraph `I asked you to cancel my membership on 18 November and have not had
+  a confirmation. Please cancel my membership effective immediately, stop all future charges, and confirm the
+  cancellation in writing within 7 days.`; the name, member number and To come from the first notice while its words
+  are kept (7 days), else the name is asked again and the member number is `(fill this in)`. It is a new
+  `cancellations` row and goes only after its own "send". "they confirmed it" / "got their confirmation" are read any
+  time while a notice is open. The merchant's name for the receipt and the follow-up is kept in the draft's parts
+  (cleared with its words); an unknown gym's name for a second notice after that comes from the check reminder's own
+  words. The bot's words never say the membership is cancelled.
+- **D3, the route file** (facts read 17 Nov, research_cancel_do 2.1 and 2.2; each with `source_url` and
+  `checked_on`): Amazon Prime `route: web` with `https://www.amazon.com/mm/pipeline/cancellation`; Audible `route:
+  web` (its steps, `final_names: ["Confirm cancellation"]`); Netflix, Spotify, YouTube Premium, Amazon, Audible gain
+  `final_names` and `domains` (for slice V; never shown as links); Peacock's chat as a fallback step; Microsoft's
+  Germany note (data only); HelloFresh's `deadline`; Planet Fitness `notice_post` (your home club), `notice_deadline`
+  (at least 7 days before billing), `notice_days` 7; new LA Fitness (`notice`, `notice_post` P.O. Box 54170, Irvine,
+  CA 92619, never the payments box 51355; postmarked at least 5 business days before billing, certified mail
+  suggested; `notice_days` 5 business days). A notice card for an entry with `notice_post` / `notice_deadline` (read
+  page, at most 60 days old) adds `LA Fitness takes a written notice by post to P.O. Box 54170, Irvine, CA 92619 (from
+  their help page, checked 17 Nov).` and `They ask for it postmarked at least 5 business days ...`.
+- **The Connections panel** (the addendum, section 2; `panel.py`, the test page only). Fields: the mailbox address and
+  app password, the TickTick token and project, the Todoist token and project, the webhook address, the YouTube client
+  id and secret (`settings.SEALABLE`). `GET /api/connections` (states only) and `POST /api/connections` (`{name,
+  value}` seals through `settings.seal`; `{name, remove: true}` unseals), behind the page's token. A saved value is
+  never shown again (the panel says `set`, `not set`, `set in this computer's settings`, or `set, but I can't read it
+  with this key`), never in a reply, a log line, a store table, an export, an error (`PanelError(code)`, words in
+  `T.PANEL_ERRORS`) or the page's state. Refused: a name outside the list, an empty or over-500-character value,
+  spaces in a token, a bad address, an Outlook.com address, a webhook not on https, a name already set in the
+  environment (it would win anyway), no key (`MVP_TOKEN_KEY_AUTO=0` with no key). A Gmail app password's spaces are
+  taken out. The panel says whether sending is on and why not (`panel.sending_state()`), and where the key is.
+  Sending reads the sealed values at once (no restart). The values are the computer's settings, not a person's: not in
+  "export my data"; "delete my data" leaves them (the panel's Remove does it). The chat still refuses secrets; on the
+  test page its line adds ` On the test page, use the Connections panel.` ("my app password is ..." too), and
+  "connect my ticktick / todoist / webhook" there names the panel's field in step 2 instead of a settings file.
+- **Out**: `email.send_as`, `email.draft_as`, "connect my gmail"; sends from a rule or from the bot's own address to
+  others; reading the inbox for the merchant's confirmation; a follow-up the bot sets by itself.
+- **Tests**: `tests/test_round10_sending.py` (64). Changed round 9 expectations, each for a fact or a line this slice
+  adds: `test_round9_cancel.py` (the Planet Fitness card's post and deadline lines, the "sent" reply's offer, the
+  mailbox notice's `notice_sent`, 16 entries, Amazon's host, "no" after Amazon's new offer).

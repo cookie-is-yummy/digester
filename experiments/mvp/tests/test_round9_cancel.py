@@ -192,7 +192,11 @@ def test_the_gym_way_asks_which_gym_and_the_name_then_writes_a_notice_card(c):
     out = card_after(c, "Alex Rivera")
     assert out == ("Here's a cancellation notice you can send to Planet Fitness. Nothing has been sent.\n"
                    "To: (type their email address; their website or your contract has it)\n"
-                   "Subject: Cancel my membership\n\n" + NOTICE_BODY.format(n="(fill this in)") + "\n\n"
+                   "Subject: Cancel my membership\n"
+                   # round 10, slice D: the post route and the deadline, from Planet Fitness's own page (read 17 Nov)
+                   "Planet Fitness takes a written notice by post to your home club (from their help page, checked "
+                   "17 Nov).\nThey ask for it at least 7 days before your next billing date.\n\n"
+                   + NOTICE_BODY.format(n="(fill this in)") + "\n\n"
                    "Fill in the member number first: reply \"member number 12345\", or \"remove it\".")
     # no link of any kind while the placeholder is there
     assert "mailto:" not in out and "http" not in out
@@ -221,7 +225,9 @@ def test_a_tester_fills_the_member_number_and_gets_the_tap_to_send_link(c):
     assert msg(c, "send") == "I can't send from your address. Tap the link above and press Send in your mail app."
     # "sent" after the link: the row says the person sent it, and the reply never says it is over
     out = msg(c, "sent")
-    assert out == "Thanks. That doesn't end it yet: it ends when they confirm in writing."
+    # round 10, slice D: the follow-up names a check date (Planet Fitness: 7 days)
+    assert out == ("Thanks. That doesn't end it yet: it ends when they confirm in writing. Keep their reply. Want a "
+                   "reminder on Wednesday 25 November to check they confirmed? Reply \"yes\", or give another day.")
     assert not NEVER_SAID.search(out)
     assert bot.store.cancellations(H)[0]["status"] == "person_sent"
     no_model(c)
@@ -363,7 +369,7 @@ def test_a_cancel_reply_never_says_it_is_cancelled_or_done(c):
     bot = c["bot"]
     n = len(c["ch"].outbox)
     for text in ["cancel my netflix", "friday", "cancel my duolingo", "apple", "cancel my hulu", "google play",
-                 "cancel my amazon prime", "their website", "cancel my gym", "Planet Fitness", "Alex Rivera",
+                 "cancel my amazon prime", "no", "cancel my gym", "Planet Fitness", "Alex Rivera",
                  "cancel my brightbox subscription", "cancel my subscription", "spotify", "next week",
                  "cancel my chase card", "can you just log in and do it?", "cancel my peacock", "cancel microsoft 365",
                  "cancel my hellofresh", "end my youtube premium", "cancel my audible", "I cancelled audible",
@@ -642,7 +648,7 @@ def _texts_in_tests():
     word = re.compile(r"\b(?:cancel\w*|stop|stopped|pause|end|quit|close|unsubscribe)\b", re.I)
     out = set()
     for path in glob.glob(os.path.join(HERE, "*.py")):
-        if os.path.basename(path).startswith("test_round9_"):
+        if os.path.basename(path).startswith(("test_round9_", "test_round10_")):   # round 10, slice D: the same
             continue   # the round 9 slices' own fixtures (a notice card's "Please cancel my membership" is one) are not
             #            phrasings from before; each of those files checks its own reads
         for node in ast.walk(ast.parse(open(path, encoding="utf-8").read())):
@@ -708,7 +714,7 @@ def test_the_route_file_follows_the_rules():
     from mvp import cancel
     data = cancel.load_routes()
     ms = data["merchants"]
-    assert 10 <= len(ms) <= 15
+    assert 10 <= len(ms) <= 16   # round 10, slice D: LA Fitness (its page read 17 Nov)
     assert data["stores"]["apple"]["url"] == "https://account.apple.com/account/manage/section/subscriptions"
     assert data["stores"]["google_play"]["url"] == "https://play.google.com/store/account/subscriptions"
     assert len({m["key"] for m in ms}) == len(ms)
@@ -720,7 +726,7 @@ def test_the_route_file_follows_the_rules():
             assert not any(w in m["url"].lower() for w in ("login", "signin", "sign-in", "sign_in")), m
             host = urlparse(m["url"]).hostname
             assert host.endswith((".netflix.com", ".spotify.com", ".youtube.com", ".peacocktv.com", ".microsoft.com",
-                                  ".apple.com", ".google.com")), m
+                                  ".apple.com", ".google.com", ".amazon.com")), m   # round 10, slice D: Amazon
         if m.get("checked_on"):
             assert m.get("source_url", "").startswith("https://") and m["checked_on"] == "2026-11-17"
     for m in ms:
@@ -786,8 +792,9 @@ def test_send_on_the_notice_follows_the_mailbox_rules(opc):
     (m,) = opc["sends"]()
     mail = message_from_bytes(m, policy=policy.default)
     assert mail["To"] == "cancel@fitco.example" and "Member number: 4471" in mail.get_content()
-    assert last(opc["ch"]).endswith(" That doesn't end it yet: it ends when they confirm in writing.")
-    assert bot.store.cancellations(H)[0]["status"] == "person_sent"
+    # round 10, slice D: the receipt names the gym, the follow-up offers a check date, and the row says the bot sent it
+    assert " That doesn't end it yet: it ends when they confirm in writing." in last(opc["ch"])
+    assert bot.store.cancellations(H)[0]["status"] == "notice_sent"
     rows = sqlite3.connect(bot.store.path).execute("SELECT action, detail, ref FROM action_log").fetchall()
     assert rows and not any("fitco" in json.dumps(r).lower() for r in rows)
     no_model(opc)

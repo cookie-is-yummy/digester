@@ -2567,3 +2567,102 @@ def page_status_line(build, switches):
     """The line under the test page: the build, then each switch by name ("TickTick: off"). Never a value."""
     return " · ".join([f"Build {build}"] + [f"{k}: {v}" for k, v in switches.items()])
 # ---------- end round 10, slice K ----------
+
+
+# ---------- round 10, slice D (DESIGN.md section 17.D): sending, the notice's follow-up, the Connections panel ----------
+# D1: the route read at "send" differs from the one the card showed: the card again, and no yes is taken
+SEND_ROUTE_CHANGED = "Your mail connection changed, so here's the email again. Reply \"send\" if it's still right."
+SEND_ROUTE_GONE = ("Your mail connection changed, so here's the email again. I can't send it from here now: tap the link "
+                   "to send it yourself.")
+SEND_ROUTE_GONE_HELD = "Your mail connection changed before it went, so nothing was sent."
+# D4: "can you send it for me"
+SEND_FOR_ME_TESTER = "I can't send from your address yet. Tap the link above and press Send in your mail app."
+SEND_SWITCH_ON = ("To let me send from your own address, the person who runs me sets MVP_MAILBOX_ADDRESS and an app "
+                  "password (never in this chat).")
+SEND_SWITCH_ON_PAGE = ("To let me send from your own address, add your email address and an app password in the "
+                       "Connections panel on this page (never in this chat). Then say \"send\" again.")
+PANEL_TAIL = " On the test page, use the Connections panel."
+_PANEL_FIELD = {"ticktick": "TickTick API token", "todoist": "Todoist API token", "webhook": "Webhook address"}
+
+
+def token_setup_page(key):
+    """'connect my ticktick' on the test page: step 2 is the Connections panel, not a settings file."""
+    step = (f"2. Paste it into \"{_PANEL_FIELD[key]}\" in the Connections panel beside this chat and press Save. It's "
+            f"sealed on this computer and never shown again.")
+    return re.sub(r"\n2\. On the computer I run on,.*?(?=\n3\. )", "\n" + step, TOKEN_SETUP[key], flags=re.S)
+
+
+def notice_accepted(merchant, to, when):
+    """The receipt for a cancellation notice the operator's mailbox sent (never "cancelled")."""
+    whom = f"{merchant} ({to})" if merchant and to else (merchant or to or "them")
+    return f"Your mail server accepted your cancellation notice to {whom} at {when}. I can't unsend it."
+
+
+def notice_offer(day_words):
+    """D2: after a notice went (the bot's send, or "sent" after the link): not over yet, and a check date offered."""
+    return (f"That doesn't end it yet: it ends when they confirm in writing. Keep their reply. Want a reminder on "
+            f"{day_words} to check they confirmed? Reply \"yes\", or give another day.")
+
+
+def notice_check_text(name):
+    """The check reminder for a notice (the words the person sees when it fires)."""
+    return (f"Check that {name} confirmed your cancellation (look for their email). If they did, say \"they "
+            f"confirmed\". If not, I can write a second notice.")
+
+
+def second_notice_offer(asked_on):
+    return (f"Want me to write a second notice? It says you asked on {asked_on} and asks them to confirm within 7 "
+            f"days.")
+
+
+SECOND_NOTICE_SUBJECT = "Second notice: cancel my membership"
+
+
+def second_notice_paragraph(asked_on):
+    return (f"I asked you to cancel my membership on {asked_on} and have not had a confirmation. Please cancel my "
+            f"membership effective immediately, stop all future charges, and confirm the cancellation in writing "
+            f"within 7 days.")
+
+
+def second_notice_head(merchant):
+    return f"Here's a second notice you can send to {merchant}. Nothing has been sent."
+
+
+SECOND_NOTICE_NO = "OK, I've left it. If you want one later, say \"write a second notice\"."
+
+
+def notice_post_line(name, where, checked):
+    """D3: a merchant that takes written notice by post (from its own page)."""
+    return f"{name} takes a written notice by post to {where} (from their help page, checked {checked})."
+
+
+def notice_deadline_line(deadline):
+    return f"They ask for it {deadline}."
+
+
+# the Connections panel (test page only): names and states, never a value
+PANEL_STATE = {"setting": "set in this computer's settings", "sealed": "set",
+               "unreadable": "set, but I can't read it with this key", None: "not set"}
+PANEL_ERRORS = {
+    "name": "That isn't one of the fields here.",
+    "empty": "Type a value first.",
+    "too_long": "That's too long to be a key or an address.",
+    "address": "That doesn't look like an email address.",
+    "outlook": "Outlook.com doesn't allow app passwords any more, so I can't send from it.",
+    "https": "The webhook address must start with https://.",
+    "spaces": "That has spaces in it. Copy it again.",
+    "no_key": "I can't keep it safely: set MVP_TOKEN_KEY on this computer first.",
+    "in_setting": "This one is set in this computer's settings. Change it there, then restart me.",
+    "failed": "I couldn't save it. Nothing was kept.",
+}
+
+
+def panel_sending(state):
+    return {"on": "Sending is on: say \"send\" on an email card and I'll send it from your address after a 2-minute "
+                  "wait.",
+            "need_both": "Sending is off: add your email address and its app password.",
+            "outlook": "Sending is off: Outlook.com doesn't allow app passwords any more.",
+            "host": "Sending is off: I don't know the mail server for that address. Set MVP_MAILBOX_SMTP_HOST on this "
+                    "computer.",
+            "nobody": "Sending is off: MVP_OPERATOR is set to none, so I send for nobody."}.get(state, "Sending is off.")
+# ---------- end round 10, slice D ----------

@@ -45,6 +45,17 @@
   button.send:disabled { opacity: .4; cursor: default; }
   .side { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
   .side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--quiet); margin: 0 0 8px; }
+  /* round 10, slice D: the Connections panel */
+  .conn { margin-bottom: 10px; }
+  .conn label { display: block; font-size: 13px; font-weight: 600; }
+  .conn .st { font-size: 12px; color: var(--quiet); }
+  .conn .st.set { color: var(--accent); }
+  .conn .row2 { display: flex; gap: 6px; margin-top: 4px; }
+  .conn input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px;
+                border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .conn button { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line);
+                 background: var(--bg); color: var(--ink); cursor: pointer; }
+  .conn .err { font-size: 12px; color: #c0392b; }
   select, .btn { width: 100%; font: inherit; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line);
                  background: var(--bg); color: var(--ink); }
   .btn { cursor: pointer; text-align: left; margin-top: 6px; }
@@ -128,6 +139,14 @@
     <div>
       <h2>Profile</h2>
       <div id="profile"></div>
+    </div>
+    <div>
+      <h2>Connections</h2>
+      <div class="small" id="connSending"></div>
+      <div id="conn"></div>
+      <div class="small" id="connKey"></div>
+      <div class="small">For the person who runs the bot. A saved value is sealed on this computer and never shown
+        again, here or in the chat. Never type these into the chat.</div>
     </div>
     <div>
       <h2>Rules</h2>
@@ -362,6 +381,31 @@ $("upbtn").addEventListener("click", async () => {
   $("upfile").value = "";
   poll();
 });
+// round 10, slice D: the Connections panel. A value goes to the bot once (sealed there); the page only ever gets back
+// "set" or "not set", and the field is emptied at once.
+async function loadConn() {
+  try { drawConn(await api("/api/connections")); } catch (e) { $("connSending").textContent = ""; }
+}
+function drawConn(c) {
+  $("connSending").textContent = c.sending || "";
+  $("connKey").textContent = c.key || "";
+  $("conn").innerHTML = (c.rows || []).map(r =>
+    `<div class="conn" data-name="${esc(r.name)}"><label>${esc(r.label)}${r.optional ? " (optional)" : ""}</label>`
+    + `<div class="st ${r.state === "unset" ? "" : "set"}">${esc(r.words)}</div>`
+    + (r.state === "setting" ? "" : `<div class="row2"><input type="${r.secret ? "password" : "text"}" autocomplete="off" spellcheck="false" placeholder="${esc(r.help)}"><button data-act="save">Save</button>${r.removable ? `<button data-act="remove">Remove</button>` : ""}</div>`)
+    + `<div class="err"></div></div>`).join("");
+}
+$("conn").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const box = b.closest(".conn"), input = box.querySelector("input");
+  const body = b.dataset.act === "remove" ? {name: box.dataset.name, remove: true} : {name: box.dataset.name, value: input ? input.value : ""};
+  if (input) input.value = "";
+  const r = await fetch("/api/connections", {method: "POST", headers: {"X-Test-Token": TOKEN, "Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (r.ok) drawConn(j); else box.querySelector(".err").textContent = j.words || "Not saved.";
+});
+loadConn();
 document.querySelectorAll(".try").forEach(b => b.addEventListener("click", () => { $("box").value = b.textContent; $("box").focus(); }));
 poll();
 setInterval(poll, 800);

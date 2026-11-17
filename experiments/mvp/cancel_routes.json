@@ -1,5 +1,5 @@
 {
-  "about": "Round 9, slice B (DESIGN.md section 16.B). How a subscription or membership is ended, per merchant. An entry gives a link ('url') only when its own help page ('source_url') was read on 'checked_on'; a link older than 60 days is not given, the steps are. Entries without source_url give no link and no merchant steps: the bot asks how the person pays, then gives the Apple or Google Play page, or the general steps. Aliases are distinctive names only (never 'max', 'calm', 'prime', 'plan' or 'premium' alone).",
+  "about": "Round 9, slice B (DESIGN.md section 16.B). How a subscription or membership is ended, per merchant. An entry gives a link ('url') only when its own help page ('source_url') was read on 'checked_on'; a link older than 60 days is not given, the steps are. Entries without source_url give no link and no merchant steps: the bot asks how the person pays, then gives the Apple or Google Play page, or the general steps. Aliases are distinctive names only (never 'max', 'calm', 'prime', 'plan' or 'premium' alone). Round 10, slice D (DESIGN.md section 17.D), facts read on 17 Nov 2026 (research_cancel_do sections 2.1 and 2.2): 'final_names' (the merchant's own words on its last button) and 'domains' (where its cancel pages are) are for the browser of slice V and are never shown as links; 'notice_post' (where a written notice goes by post), 'notice_deadline' (the merchant's own deadline, in plain words), 'notice_days' (the check date offered after a notice went; 'notice_business_days' when the merchant counts business days) and 'deadline' are shown only from an entry whose page was read.",
   "stores": {
     "apple": {
       "name": "Apple",
@@ -30,7 +30,9 @@
       "notice_email": null,
       "phone": null,
       "source_url": "https://help.netflix.com/en/node/407",
-      "checked_on": "2026-11-17"
+      "checked_on": "2026-11-17",
+      "final_names": ["Finish Cancellation"],
+      "domains": ["www.netflix.com"]
     },
     {
       "key": "spotify",
@@ -43,7 +45,9 @@
       "notice_email": null,
       "phone": null,
       "source_url": "https://support.spotify.com/us/article/cancel-premium/",
-      "checked_on": "2026-11-17"
+      "checked_on": "2026-11-17",
+      "final_names": ["Cancel subscription"],
+      "domains": ["www.spotify.com"]
     },
     {
       "key": "youtube_premium",
@@ -56,7 +60,9 @@
       "notice_email": null,
       "phone": null,
       "source_url": "https://support.google.com/youtube/answer/6308278?hl=en",
-      "checked_on": "2026-11-17"
+      "checked_on": "2026-11-17",
+      "final_names": ["Yes, cancel"],
+      "domains": ["www.youtube.com"]
     },
     {
       "key": "peacock",
@@ -64,7 +70,7 @@
       "names": ["peacock", "peacock tv"],
       "route": "web",
       "url": "https://www.peacocktv.com/account/plans",
-      "steps": ["Go to Plans in your Peacock account and sign in if it asks.", "Press \"Cancel All Subscriptions\" and follow the steps. Peacock says it emails you to confirm."],
+      "steps": ["Go to Plans in your Peacock account and sign in if it asks.", "Press \"Cancel All Subscriptions\" and follow the steps. Peacock says it emails you to confirm.", "If you can't sign in, Peacock says you can cancel through its help chat."],
       "billed_via": ["web", "partner"],
       "notice_email": null,
       "phone": null,
@@ -82,7 +88,8 @@
       "notice_email": null,
       "phone": null,
       "source_url": "https://support.microsoft.com/en-us/accounts-billing/subscriptions/cancel-your-microsoft-subscription",
-      "checked_on": "2026-11-17"
+      "checked_on": "2026-11-17",
+      "germany": "Microsoft says a subscription bought in Germany can be cancelled without signing in."
     },
     {
       "key": "dropbox",
@@ -108,7 +115,8 @@
       "notice_email": null,
       "phone": null,
       "source_url": "https://www.hellofresh.com/about/how-to-cancel-hellofresh-subscription",
-      "checked_on": "2026-11-17"
+      "checked_on": "2026-11-17",
+      "deadline": "by 11:59 pm Pacific time, 5 days before your next delivery"
     },
     {
       "key": "apple_subscriptions",
@@ -166,14 +174,16 @@
       "key": "amazon_prime",
       "name": "Amazon Prime",
       "names": ["amazon prime", "prime video", "prime membership"],
-      "route": "ask",
-      "url": null,
-      "steps": [],
-      "billed_via": ["web", "partner"],
+      "route": "web",
+      "url": "https://www.amazon.com/mm/pipeline/cancellation",
+      "steps": ["Go to the Prime membership page on Amazon's website and sign in if it asks.", "Follow the steps there to end your membership. Amazon says members who haven't used their benefits may get a full refund."],
+      "billed_via": ["web", "google_play", "partner"],
       "notice_email": null,
       "phone": null,
-      "source_url": null,
-      "checked_on": null
+      "source_url": "https://www.amazon.com/gp/help/customer/display.html?nodeId=GTJQ7QZY7QL2HK4Y",
+      "checked_on": "2026-11-17",
+      "final_names": [],
+      "domains": ["www.amazon.com"]
     },
     {
       "key": "duolingo",
@@ -192,14 +202,16 @@
       "key": "audible",
       "name": "Audible",
       "names": ["audible"],
-      "route": "ask",
+      "route": "web",
       "url": null,
-      "steps": [],
+      "steps": ["Sign in on audible.com.", "Click your name, then \"Membership details\".", "Click \"Cancel membership\", then \"Confirm cancellation\". Audible says credits you haven't used are lost."],
       "billed_via": ["web", "apple", "google_play"],
       "notice_email": null,
       "phone": null,
-      "source_url": null,
-      "checked_on": null
+      "source_url": "https://www.audible.com/help/article/cancel-membership",
+      "checked_on": "2026-11-17",
+      "final_names": ["Confirm cancellation"],
+      "domains": ["www.audible.com"]
     },
     {
       "key": "planet_fitness",
@@ -212,8 +224,29 @@
       "billed_via": ["club"],
       "notice_email": null,
       "phone": null,
-      "source_url": null,
-      "checked_on": null
+      "source_url": "https://www.planetfitness.com/about-planet-fitness/customer-service",
+      "checked_on": "2026-11-17",
+      "notice_post": "your home club",
+      "notice_deadline": "at least 7 days before your next billing date",
+      "notice_days": 7
+    },
+    {
+      "key": "la_fitness",
+      "name": "LA Fitness",
+      "names": ["la fitness", "lafitness", "l\\.a\\. fitness"],
+      "route": "notice",
+      "kind": "gym",
+      "url": null,
+      "steps": [],
+      "billed_via": ["club"],
+      "notice_email": null,
+      "notice_post": "P.O. Box 54170, Irvine, CA 92619",
+      "notice_deadline": "postmarked at least 5 business days before your next billing date, and suggest certified mail",
+      "notice_days": 5,
+      "notice_business_days": true,
+      "phone": null,
+      "source_url": "https://lafitness.com/Pages/MembershipQuestions.aspx",
+      "checked_on": "2026-11-17"
     }
   ]
 }

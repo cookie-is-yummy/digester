@@ -90,6 +90,47 @@ _TIME = re.compile(r"\b(?:at\s+)?(\d{1,2})(?::(\d\d))?\s*(am|pm|a\.m\.|p\.m\.)|\
 _WHEN_FILLER = set("""ok okay sure yes yep yeah please pls remind me on this coming next at in the morning by around
 then""".split())
 
+# ---------- round 10, slice D: the notice's follow-up (DESIGN.md section 17.D) ----------
+CHECK_DAYS = 7           # the check date offered after a notice went, when the route file gives no notice_days
+AFTER_CHECK_HOURS = 72   # an answer to the check reminder ("they confirmed", "no") is read this long after it fired
+NOTICE_OPEN_DAYS = 60    # "write a second notice" / "they confirmed" refer to a notice that went this recently
+# the answer right after the check reminder (the bot's newest message is that reminder)
+CONFIRMED = re.compile(r"^\W*(?:(?:yes|yep|yeah|ok)[\s,!.]+)?(?:they(?:'ve| have)?\s+(?:did|confirmed)(?:\s+it)?|"
+                       r"(?:i\s+)?got\s+their\s+(?:email|e-mail|confirmation|reply|letter)|confirmed|"
+                       r"it'?s\s+cancell?ed|it\s+is\s+cancell?ed|it'?s\s+canceled|they\s+cancell?ed\s+it)"
+                       r"(?:\s+(?:already|now|today|yesterday))?\W*$", re.I)
+NOT_CONFIRMED = re.compile(r"^\W*(?:no|nope|nah|not yet|nothing yet|no reply(?: yet)?|no confirmation(?: yet)?|"
+                           r"(?:no[\s,]+)?(?:they\s+)?(?:didn'?t|haven'?t|have not|did not|hasn'?t)(?:\s+(?:yet|"
+                           r"confirmed|replied|answered))?(?:\s+yet)?)\W*$", re.I)
+# any time while a notice is open (the words name the merchant's confirmation, so no reminder is needed first)
+CONFIRMED_ANY = re.compile(r"^\W*(?:(?:ok(?:ay)?|so|good news)[\s,!.]+)?(?:they(?:'ve| have)?\s+confirmed\s+(?:it|the "
+                           r"cancell?ation|my cancell?ation)|(?:i\s+)?got\s+their\s+confirmation)\W*$", re.I)
+SECOND_ASK = re.compile(r"^\W*(?:(?:please|pls|can you|could you)\s+)?(?:write|draft|make|do)\s+(?:me\s+)?(?:a|the)\s+"
+                        r"second\s+notice(?:\s+please)?\W*$", re.I)
+_MEMBER_LINE = re.compile(r"^Member number: (.+)$", re.M)
+
+
+def check_date(now, tz, entry=None):
+    """The check date offered after a notice went: the route file's notice_days (business days when it says so),
+    else 7 days, at 9am in the person's zone."""
+    days = (entry or {}).get("notice_days") or CHECK_DAYS
+    d = now.astimezone(ZoneInfo(tz)).date()
+    if (entry or {}).get("notice_business_days"):
+        left = int(days)
+        while left:
+            d += timedelta(days=1)
+            if d.weekday() < 5:
+                left -= 1
+    else:
+        d += timedelta(days=int(days))
+    return datetime(d.year, d.month, d.day, 9, 0, tzinfo=ZoneInfo(tz))
+
+
+def day_words(at, tz):
+    """'Wednesday 25 November'."""
+    return at.astimezone(ZoneInfo(tz)).strftime("%A %-d %B")
+# ---------- end round 10, slice D ----------
+
 
 def load_routes(path=None):
     """The route file as a dict ({"stores": {...}, "merchants": [...]})."""
@@ -300,21 +341,28 @@ def when_answer(text, now, tz):
     return at if at > now else None
 
 
-def notice_text(merchant, member_name, email=None, sign_name=None):
+def notice_text(merchant, member_name, email=None, sign_name=None, second_on=None, member_number=None,
+                member_line=True):
     """The written notice (W6), built by code from the person's own words. The merge seam: slice A's
     drafts.start(person, "notice", to=..., subject=..., paragraphs=..., placeholders=...) takes these fields as they
-    are. {"to": None (the person types it), "subject", "paragraphs", "placeholders", "body"}."""
+    are. {"to": None (the person types it), "subject", "paragraphs", "placeholders", "body"}.
+    Round 10, slice D: second_on ("17 November") makes the second notice (its subject and first paragraph);
+    member_number fills the line (from the first notice); member_line=False leaves it out (they removed it)."""
     paras = ["Please cancel my membership effective immediately and stop all future charges. Please confirm the "
              "cancellation in writing."]
+    if second_on:
+        paras = [T.second_notice_paragraph(second_on)]
     facts = [f"Name on the membership: {member_name}"]
     if email:
         facts.append(f"Email on the account: {email}")
-    facts.append(f"Member number: {T.CANCEL_FILL}")
+    if member_line:
+        facts.append(f"Member number: {member_number or T.CANCEL_FILL}")
     paras.append("\n".join(facts))
     sign = sign_name or member_name
     body = "\n\n".join(["Hello,", *paras, f"Thank you,\n{sign}"])
-    return {"to": None, "merchant": merchant, "subject": "Cancel my membership", "paragraphs": paras,
-            "placeholders": ["member number"], "body": body, "sign": sign}
+    return {"to": None, "merchant": merchant, "subject": T.SECOND_NOTICE_SUBJECT if second_on else
+            "Cancel my membership", "paragraphs": paras,
+            "placeholders": ["member number"] if member_line and not member_number else [], "body": body, "sign": sign}
 
 
 def from_todo(person, todo, now=None):
@@ -349,6 +397,14 @@ class CancelMixin:
         ref = self._cancel_said_done(person, t, now)
         if ref is not None:
             return ref
+        # ---------- round 10, slice D: "they confirmed it" and "write a second notice" while a notice is open -------
+        if CONFIRMED_ANY.match(t) or SECOND_ASK.match(t):
+            row = self._cancel_open_notice(h, now)
+            if row is not None:
+                if SECOND_ASK.match(t):
+                    return self._cancel_second(person, row, now)
+                return self._cancel_mark_done(h, row, now)
+        # ---------- end round 10, slice D ----------
         # the helper's own check reminders name the merchant; "cancel my netflix" again is still a cancel (a stop or
         # pause of "the netflix one" goes through cancel_stop_guard, which keeps them)
         mine = {r["check_rule_id"] for r in self.store.cancellations(h) if r.get("check_rule_id")}
@@ -368,15 +424,17 @@ class CancelMixin:
         if not t or len(t) > 1000:
             return None
         h = person["handle"]
+        # round 10, slice D: on the test page, the line says where such a value goes (the Connections panel)
+        page = T.PANEL_TAIL if getattr(getattr(self, "channel", None), "name", "") == "web" else ""
         if password_said(t):
             self.note(intent="cancel_password")
             self.store.forget_last_inbound(h)
-            return self.send(h, T.CANCEL_PASSWORD)
+            return self.send(h, T.CANCEL_PASSWORD + (page if re.search(r"\bapp\s+password\b", t, re.I) else ""))
         if secret_said(t):
             self.note(intent="secret_refused")
             self.store.forget_last_inbound(h)
             self.store.log_action(h, None, None, "secret.refused", "done", at=now)
-            return self.send(h, T.SECRET_IN_CHAT)
+            return self.send(h, T.SECRET_IN_CHAT + page)
         return None
 
     def cancel_stop_guard(self, person, text, rules, now):
@@ -474,18 +532,34 @@ class CancelMixin:
         h = person["handle"]
         st = self.store.get_state(f"cancelask:{h}")
         if not st:
-            return None
+            return self._cancel_after_check(person, text, now)   # round 10, slice D: the check reminder's answer
         self.store.set_state(f"cancelask:{h}", None)
         if datetime.fromisoformat(st["at"]) < now - timedelta(hours=ASK_HOURS):
             return None
         t = " ".join((text or "").split())
         step = st.get("step")
+        # ---------- round 10, slice D: "Want me to write a second notice?" ----------
+        if step == "second":
+            row = next((r for r in self.store.cancellations(h) if r["id"] == st.get("cid")), None)
+            if row is None:
+                return None
+            if STOP_ASKING.match(t):
+                self.note(intent="cancel")
+                return self.send(h, T.SECOND_NOTICE_NO)
+            if T.YES.match(t) or SECOND_ASK.match(t) or re.match(r"^\W*(?:yes|ok|sure)?[\s,]*please\W*$", t, re.I):
+                return self._cancel_second(person, row, now)
+            return None
+        # ---------- end round 10, slice D ----------
         if step == "when":
             if STOP_ASKING.match(t):
                 self.note(intent="cancel")
                 return self.send(h, T.CANCEL_NO_REMINDER)
             if T.YES.match(t):
-                self._cancel_ask(h, "when", now, **{k: st.get(k) for k in ("key", "name", "cid", "call")})
+                # round 10, slice D: after a notice went, the offer named a date: "yes" takes it
+                offer = datetime.fromisoformat(st["offer_at"]) if st.get("offer_at") else None
+                if offer is not None and offer > now:
+                    return self._cancel_reminder(person, st, offer, t, now)
+                self._cancel_ask(h, "when", now, **{k: st.get(k) for k in ("key", "name", "cid", "call", "notice")})
                 self.note(intent="cancel")
                 return self.send(h, T.CANCEL_WHEN_AGAIN)
             at = when_answer(t, now, person["timezone"])
@@ -529,35 +603,166 @@ class CancelMixin:
             if not name or len(name) > 60 or len(name.split()) > 5 or len(t) > 80:
                 return None
             self.note(intent="cancel")
-            return self._cancel_notice(person, st, name, now)
+            return self._cancel_notice(person, st, name, now, second=st.get("second"))
         return None
 
-    def _cancel_notice(self, person, st, member_name, now):
+    def _cancel_notice(self, person, st, member_name, now, second=None):
         """The written notice as slice A's draft card (drafts.start, kind "notice"): the whole text shown, the link
         (or, for the operator's mailbox, "send") held back while the member number is "(fill this in)". The To line
         is the merchant's address only from an entry whose own help page was read; else it stays blank with a hint.
-        The draft's id is kept on the cancellation row."""
+        The draft's id is kept on the cancellation row.
+        Round 10, slice D: a merchant that takes notice by post (and its deadline) gets that line on the card, from
+        its read page; `second` ({asked_on, member_number, member_line, to}) makes the second notice; the merchant's
+        name is kept in the draft's parts (cleared with its words) for the receipt and the follow-up."""
         from . import drafts
         h = person["handle"]
         addr, ok = self.store.email_of(h)
-        n = notice_text(st["name"], member_name, addr if ok else None)   # signed with the name on the membership
+        second = second or {}
+        n = notice_text(st["name"], member_name, addr if ok else None,   # signed with the name on the membership
+                        second_on=second.get("asked_on"), member_number=second.get("member_number"),
+                        member_line=second.get("member_line", True))
         e = next((x for x in load_routes()["merchants"] if st.get("key") and x["key"] == st["key"]), None) or {}
         # the merchant's address only from an entry whose own page was read (never from a post or a guess)
         # (round 9 checks) and, like a link, only while that check is at most 60 days old
         today = now.astimezone(ZoneInfo(person["timezone"])).date()
-        to = e.get("notice_email") if e.get("source_url") and e.get("notice_email") and \
-            link_fresh(e.get("checked_on"), today) else None
+        fresh = bool(e.get("source_url")) and link_fresh(e.get("checked_on"), today)
+        to = second.get("to") or (e.get("notice_email") if fresh and e.get("notice_email") else None)
+        note = []
+        if fresh and e.get("notice_post"):
+            note.append(T.notice_post_line(e["name"], e["notice_post"], checked_words(e["checked_on"])))
+        if fresh and e.get("notice_deadline"):
+            note.append(T.notice_deadline_line(e["notice_deadline"]))
         cid = st.get("cid")
         self._cancel_update(cid, route="notice", status="notice_drafted", now=now)
         job = f"cancel:{cid}" if cid else None
         ref = drafts.start(self, person, "notice", to=to or "", subject=n["subject"], paragraphs=n["paragraphs"],
                            placeholders=n["placeholders"], job=job, now=now, sign=n["sign"],
-                           head=T.cancel_notice_head(st["name"]), to_hint=T.CANCEL_TO_HINT)
+                           head=T.second_notice_head(st["name"]) if second.get("asked_on") else
+                           T.cancel_notice_head(st["name"]), to_hint=T.CANCEL_TO_HINT,
+                           note="\n".join(note) or None)
         if cid:
             row = next((r for r in reversed(self.store.drafts_of(h)) if r["job"] == job), None)
             if row is not None:
                 self._cancel_update(cid, draft_id=row["id"], now=now)
+                p = json.loads(row["parts"] or "{}")
+                p["merchant"] = st["name"]
+                self.store.update_draft(row["id"], parts=p)
         return ref
+
+    # ---------- round 10, slice D: after the notice went (DESIGN.md section 17.D) ----------
+    def _cancel_entry_of(self, key):
+        return next((x for x in load_routes()["merchants"] if key and x["key"] == key), None)
+
+    def _cancel_notice_went(self, cid, draft_row, by_bot, now):
+        """drafts._draft_job_done for a notice that went: the bot sent it after "send" (`notice_sent`) or the person
+        says they sent it after the link (`person_sent`). Returns the follow-up: not over until they confirm, and a
+        check date offered (the route file's notice_days, else 7 days, 9am). The bot never sets it by itself."""
+        h = draft_row["handle"]
+        self._cancel_update(cid, status="notice_sent" if by_bot else "person_sent", now=now)
+        person = self.store.person(h) or {"timezone": "America/New_York"}
+        row = next((r for r in self.store.cancellations(h) if r["id"] == cid), None) or {}
+        e = self._cancel_entry_of(row.get("merchant_key"))
+        p = draft_row.get("parts")
+        p = p if isinstance(p, dict) else json.loads(p or "{}")
+        name = p.get("merchant") or (e or {}).get("name") or "them"
+        at = check_date(now, person["timezone"], e)
+        from .store import now_iso
+        self._cancel_ask(h, "when", now, key=row.get("merchant_key"), name=name, cid=cid, notice=True,
+                         offer_at=now_iso(at))
+        return T.notice_offer(day_words(at, person["timezone"]))
+
+    def _cancel_open_notice(self, h, now, cid=None):
+        """The person's newest notice that went (notice_sent or person_sent) in the last 60 days, or None."""
+        from .store import now_iso
+        rows = self.store.cancellations(h, since=now_iso(now - timedelta(days=NOTICE_OPEN_DAYS)))
+        rows = [r for r in rows if r["status"] in ("notice_sent", "person_sent") and r.get("route") == "notice"
+                and (cid is None or r["id"] == cid)]
+        return rows[0] if rows else None
+
+    def _cancel_mark_done(self, h, row, now):
+        """The person says it ended (or that the merchant confirmed): person_says_done, and the check reminder
+        stopped if it is still waiting."""
+        self.note(intent="cancel")
+        self._cancel_update(row["id"], status="person_says_done", now=now)
+        ticked = self._doit_cancel_done(h, row["id"], now)   # round 9, W10: the to-do it came from, if any
+        r = self.store.rule(row["check_rule_id"]) if row.get("check_rule_id") else None
+        if r and r["status"] in ("active", "paused"):
+            self.store.set_slot(r["id"], None, "stopped")
+            return self.send(h, T.CANCEL_SAID_DONE + ticked)
+        return self.send(h, T.CANCEL_SAID_DONE_NO_RULE + ticked)
+
+    def _cancel_after_check(self, person, text, now):
+        """The answer to a notice's check reminder: the bot's newest message to the person is that reminder (fired
+        in the last 72 hours). "they confirmed" ends it; "no" / "they didn't" offers a second notice. None for
+        anything else (handled as usual)."""
+        t = " ".join((text or "").split())
+        yes, no = CONFIRMED.match(t), NOT_CONFIRMED.match(t)
+        if not (yes or no) or len(t) > 80:
+            return None
+        h = person["handle"]
+        last = self.store.one("SELECT run_id FROM sent WHERE handle=? ORDER BY rowid DESC LIMIT 1", (h,))
+        run = self.store.one("SELECT rule_id, at FROM runs WHERE id=?", (last["run_id"],)) \
+            if last and last.get("run_id") else None
+        if not run or not run.get("rule_id") or not run.get("at"):
+            return None
+        if now - datetime.fromisoformat(run["at"]) > timedelta(hours=AFTER_CHECK_HOURS):
+            return None
+        row = next((r for r in self.store.cancellations(h) if r.get("check_rule_id") == run["rule_id"]
+                    and r.get("route") == "notice" and r["status"] in ("notice_sent", "person_sent")), None)
+        if row is None:
+            return None
+        if yes:
+            return self._cancel_mark_done(h, row, now)
+        self.note(intent="cancel")
+        asked = self._cancel_asked_on(row, person)
+        self._cancel_ask(h, "second", now, cid=row["id"])
+        return self.send(h, T.second_notice_offer(asked))
+
+    def _cancel_asked_on(self, row, person):
+        """The day the first notice went ('17 November'), from its draft row (sent_at, else done_at)."""
+        d = self.store.draft(row["draft_id"]) if row.get("draft_id") else None
+        at = (d or {}).get("sent_at") or (d or {}).get("done_at") or row.get("updated_at")
+        return datetime.fromisoformat(at).astimezone(ZoneInfo(person["timezone"])).strftime("%-d %B")
+
+    def _cancel_second(self, person, row, now):
+        """The second notice: code-written, the same card and rules as the first (nothing goes without "send").
+        Its name, member number and address come from the first notice while its words are still kept (7 days);
+        else the name is asked again and the member number is "(fill this in)"."""
+        h = person["handle"]
+        self.note(intent="cancel")
+        first = self.store.draft(row["draft_id"]) if row.get("draft_id") else None
+        p = json.loads((first or {}).get("parts") or "{}")
+        e = self._cancel_entry_of(row.get("merchant_key"))
+        name = p.get("merchant") or (e or {}).get("name") or self._cancel_name_from_rule(row)
+        second = {"asked_on": self._cancel_asked_on(row, person), "to": (first or {}).get("to_addr")}
+        body = (first or {}).get("body")
+        if body:
+            m = _MEMBER_LINE.search(body)
+            second["member_line"] = m is not None
+            if m and T.CANCEL_FILL not in m.group(1):
+                second["member_number"] = m.group(1).strip()
+        cid = self.store.add_cancellation(h, row.get("merchant_key"), "notice", "prepared", at=now)
+        self.store.log_action(h, None, None, "cancel.help", "done", detail={"route": "notice", "known":
+                                                                           row.get("merchant_key") is not None,
+                                                                           "second": True}, at=now)
+        st = {"key": row.get("merchant_key"), "name": name or "them", "cid": cid}
+        member = p.get("sign")
+        if not member or not name:
+            self._cancel_ask(h, "member_name", now, second=second, **st)
+            return self.send(h, T.CANCEL_MEMBER_NAME)
+        return self._cancel_notice(person, st, member, now, second=second)
+
+    def _cancel_name_from_rule(self, row):
+        """The merchant's name as the check reminder says it (an unknown gym's name is kept nowhere else)."""
+        r = self.store.rule(row["check_rule_id"]) if row.get("check_rule_id") else None
+        try:
+            text = json.loads(r["spec"])["content"]["text"] if r and isinstance(r["spec"], str) else \
+                (r["spec"]["content"]["text"] if r else "")
+        except (KeyError, TypeError, ValueError):
+            return None
+        m = re.match(r"^Check that (.{1,60}?) confirmed your cancellation", text or "")
+        return m.group(1) if m else None
+    # ---------- end round 10, slice D ----------
 
     def _cancel_reminder(self, person, st, at, text, now):
         """The check reminder the person timed: a one-time note rule ("stop N" or "undo" drops it)."""
@@ -566,7 +771,8 @@ class CancelMixin:
         from .store import now_iso
         h, tz = person["handle"], person["timezone"]
         local = at.astimezone(ZoneInfo(tz))
-        words = T.cancel_call_text(st["name"]) if st.get("call") else T.cancel_check_text(st["name"])
+        words = T.cancel_call_text(st["name"]) if st.get("call") else \
+            T.notice_check_text(st["name"]) if st.get("notice") else T.cancel_check_text(st["name"])   # round 10, D
         spec = RuleSpec.model_validate({"when": {"type": "once", "date": local.date().isoformat(),
                                                  "time": local.strftime("%H:%M")},
                                         "content": {"source": "note", "text": words, "goal": "a check you asked for"},
