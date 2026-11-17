@@ -279,16 +279,16 @@ class OnboardingMixin:
 
     # ---------- round 10, slice W (W3, design B1): a setup answer that holds a request ----------
     def _setup_code_read(self, person, part, now):
-        """True when a code read (hooks 5a to 8 of answer_normally) answered this part (it sent its own reply); no
-        model call either way."""
+        """(taken, reply's reference): whether a code read (hooks 5a to 8 of answer_normally) answered this part (it
+        sent its own reply); no model call either way. Also used by split_reads (hook 8z)."""
         self._tl.code_only, self._tl.code_missed = True, False
         try:
-            self.answer_normally(person, part, now)
+            ref = self.answer_normally(person, part, now)
         finally:
             self._tl.code_only = False
         missed = getattr(self._tl, "code_missed", False)
         self._tl.code_missed = False
-        return not missed
+        return not missed, ref
 
     def _setup_requests(self, person, text, now):
         """The answer split into parts (phrasing.parts; in the setup only a quote or a time word stops it). Each
@@ -309,7 +309,7 @@ class OnboardingMixin:
                 if export:
                     taken += 1
                     continue
-            if self._setup_code_read(person, p, now):
+            if self._setup_code_read(person, p, now)[0]:
                 taken += 1
             else:
                 left.append(p)

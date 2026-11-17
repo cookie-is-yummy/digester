@@ -27,7 +27,7 @@ BOT_HOOKS = ("draft_reads", "offer_reads", "_cancel_answer", "email_reads", "can
 PLACE_HOOKS = ("place_reads", "asked_reads")
 # round 10, slice W: hook 5a (refresh.export_reads) and the bot's new reads
 W_MODULE_HOOKS = ("export_reads",)
-W_BOT_HOOKS = ("split_reads",)
+W_BOT_HOOKS = ("split_reads", "self_email_reads")
 ALLOWED = {"buy the ingredients for the first one"}   # the rule eval's t-dev-040: slice C puts them on the list
 CHAT = {"intent": "chat", "reply": "OK."}
 

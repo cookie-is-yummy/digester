@@ -113,7 +113,7 @@
     {
       "key": "apple_subscriptions",
       "name": "Apple",
-      "names": ["apple music", "apple tv\\+", "apple tv plus", "apple one", "apple arcade", "icloud\\+", "icloud storage", "apple subscription"],
+      "names": ["apple music", "apple tv\\+", "apple tv plus", "apple tv", "apple one", "apple arcade", "icloud\\+", "icloud storage", "apple subscription"],
       "route": "store",
       "url": null,
       "steps": [],

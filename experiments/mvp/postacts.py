@@ -42,14 +42,17 @@ DAYS = {"monday": 0, "mon": 0, "tuesday": 1, "tue": 1, "tues": 1, "wednesday": 2
 _DAYW = r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues|tue|wed|thurs|thur|thu|fri|sat|sun|" \
         r"today|tonight|tomorrow"
 _ORD = r"first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|[4-9]th|10th"
-_LEAD = r"^\W*(?:(?:please|pls|can you|could you|would you|will you|ok|okay|so|and|hey|now)[,\s]+)*"
+# round 10, slice W (W5): "can i buy the first one"
+_LEAD = (r"^\W*(?:(?:please|pls|can you|could you|would you|will you|ok|okay|so|and|hey|now"
+         r"|can i|could i|i want to|i'd like to)[,\s]+)*")
 _END = r"(?:\s+(?:for (?:me|us)|please|pls|thanks))*\s*[.!?]*\s*$"
 
 APPLY = re.compile(_LEAD + r"(?:help me(?: to)?\s+|i (?:want|would like|'d like) to\s+)?"
                    r"(?P<verb>apply|sign me up|sign up|register me|enrol me|enroll me|get me ready)\b"
                    r"(?P<target>.*?)" + _END, re.I)
 BOOK = re.compile(_LEAD + r"(?:help me\s+|i (?:want|would like|'d like) to\s+)?"
-                  r"(?P<verb>book|reserve|make a reservation|make a booking|get (?:us|me) a table|grab (?:us|me) a table)"
+                  r"(?P<verb>book|reserve|make a reservation|make a booking|get (?:us|me) a table|grab (?:us|me) a table"
+                  r"|get (?:us|me) (?:some\s+)?tickets?(?:\s+for)?|buy (?:us|me) tickets?(?:\s+for)?)"   # W5
                   r"\b(?P<target>.*?)" + _END, re.I)
 BUY = re.compile(_LEAD + r"(?P<verb>buy|order|purchase|shop for|where can i (?:buy|get|order)|where do i (?:buy|get)|"
                  r"get me the (?:ingredients|stuff|groceries))\b(?P<target>.*?)" + _END, re.I)
@@ -71,7 +74,10 @@ _WHEN = re.compile(rf"\s*(?:\b(?:on|this|next|for)\s+)*\b(?:{_DAYW})\b(?:\s+(?:a
                    rf"|\s*\b(?:at\s+)?\d{{1,2}}(?::\d\d)?\s*(?:am|pm)\b(?:\s+(?:on\s+)?(?:{_DAYW}))?"
                    rf"|\s*\bfor\s+(?:\d{{1,2}}|two|three|four|five|six)\s+(?:people|of us|persons)\b"
                    # (round 9 checks) "a table for 2" is how many people, never pick 2
-                   rf"|\s*\b(?:a\s+)?table\s+for\s+(?:\d{{1,2}}|two|three|four|five|six)\b(?!\s*(?:st|nd|rd|th)\b)", re.I)
+                   rf"|\s*\b(?:a\s+)?table\s+for\s+(?:\d{{1,2}}|two|three|four|five|six)\b(?!\s*(?:st|nd|rd|th)\b)"
+                   # round 10, slice W (W5): "at that place for 2 on friday": how many people, never pick 2
+                   rf"|\s*\bfor\s+(?:\d{{1,2}}|two|three|four|five|six)\b(?=\s*(?:on\b|at\b|this\b|next\b|tonight\b|"
+                   rf"tomorrow\b))", re.I)
 
 
 # ---------- reading the message (code only) ----------

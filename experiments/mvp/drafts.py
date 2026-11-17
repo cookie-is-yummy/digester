@@ -71,7 +71,13 @@ _RCPT = (rf"(?P<addr>{ADDR})"
          rf"|\s+(?P<lname>(?:{_TITLE_LOW}\s+)?{_LOW_NAME}(?:\s+{_LOW_NAME})?)(?={_ADDR_NEXT}))?"
          rf"(?:{_AT_ADDR}(?P<waddr>{ADDR})(?:\s*[)>])?)?"
          rf"|(?P<name>(?:{_TITLE}\s+)?{_NAME}(?:\s+{_NAME})?)(?:{_AT_ADDR}(?P<naddr>{ADDR})(?:\s*[)>])?)?"
-         r"|(?P<pron>him|her|them)")
+         r"|(?P<pron>him|her|them)"
+         # ---------- round 10, slice W (W5): "coach dan", "ms rivera (rivera@example.com)", "sam that ..." ----------
+         rf"|(?P<bword>(?:{PEOPLE_WORDS}))\s+(?P<bname>{_NAME}|{_LOW_NAME})(?=\s+(?:that|saying|about|an?\s+e-?mail)\b|$)"
+         rf"|(?P<tname>{_TITLE_LOW}\s+{_LOW_NAME}){_AT_ADDR}(?P<taddr>{ADDR})(?:\s*[)>])?"
+         rf"|(?P<lone>(?!(?:{PEOPLE_WORDS}|me|us|you|everyone|someone|somebody|people|them|him|her)\b){_LOW_NAME})"
+         r"(?=\s+(?:that|saying|to say|about|asking)\b|\s+an?\s+(?:quick\s+|short\s+)?e-?mail\b|$)")
+         # ---------- end round 10, slice W ----------
 # "email ...": what follows the verb
 _EMAIL_VERB = (r"(?:e-?mail|draft(?:\s+and\s+send)?\s+(?:an?\s+)?e-?mail\s+(?:to|for)|"
                r"write\s+(?:an?\s+)?e-?mail\s+(?:to|for)|"
@@ -86,6 +92,12 @@ SEND_TO_ADDR = re.compile(_LEAD + rf"(?:send|forward|share)\s+(?P<obj>.{{1,60}}?
 SEND_RCPT_EMAIL = re.compile(_LEAD + r"(?:send|shoot|drop|write)\s+(?P<r>.{1,80}?)\s+an?\s+(?:quick\s+|short\s+)?"
                              r"e-?mail(?:\s+(?P<tail>(?:saying|that|to say|about|regarding|asking|and\s+(?:ask|tell|say)|"
                              r"telling)\b.*))?\s*[.!]?$", re.I | re.S)
+# ---------- round 10, slice W (W5): "let my professor know by email that ...", "drop sam a line saying ..." ----------
+LET_KNOW = re.compile(_LEAD + r"(?:let|tell)\s+(?P<r>.{1,60}?)\s+(?:know\s+)?(?:by|via|over|in\s+an?)\s+e-?mail"
+                      r"(?:\s+(?P<tail>.+))?\s*[.!]?$", re.I | re.S)
+DROP_LINE = re.compile(_LEAD + r"(?:drop|send|shoot)\s+(?P<r>.{1,60}?)\s+a\s+(?:quick\s+)?(?:line|note)"
+                       r"(?:\s+(?P<tail>(?:saying|that|to say|about|asking)\b.*))?\s*[.!]?$", re.I | re.S)
+# ---------- end round 10, slice W ----------
 POINTS = re.compile(r"^(?:it|this|that|these|those|them|both|all of them|this one|that one|the\s+(?:\w+\s+){0,3}?"
                     r"(?:one|ones|recipe|recipes|video|post|reel|tutorial|workout|pick|link|thing|programme|program|"
                     r"opportunity|place|event|answer)|the\s+(?:first|second|third|fourth|fifth|last)\b.*|#\s?\d|"
@@ -102,15 +114,21 @@ OTHER_RE = re.compile(rf"\b(?:my|our)\s+(?:{PEOPLE_WORDS})s?\b", re.I)
 
 # ---------- the draft reader's words (whole message only) ----------
 # (round 9 checks: a question, "send it?", is never the yes, so the end allows only spaces, "." and "!")
-SEND_WORDS = re.compile(r"^\W*(?:(?:yes|ok(?:ay)?|go ahead and|please)[\s,]+)?send(?:\s+(?:it|the email|it now|now))?"
-                        r"(?:\s+now)?(?:\s+please)?[\s.!]*$", re.I)
+SEND_WORDS = re.compile(r"^\W*(?:(?:yes|ok(?:ay)?|go ahead and|please"
+                        # round 10, slice W (W5): "looks good, send", "perfect send it now pls"; never normalize (W-2)
+                        r"|looks good|sounds good|perfect|great|cool|alright|all good|yep|yeah)[\s,!.]+)?"
+                        r"send(?:\s+(?:it|the email|it now|now))?"
+                        r"(?:\s+now)?(?:\s+(?:please|pls))?[\s.!]*$"
+                        r"|^\W*(?:s[ií][\s,!.]+)?(?:env[ií]alo|m[aá]ndalo)(?:\s+ya)?[\s.!]*$", re.I)
 SEND_QUESTION = re.compile(r"^\W*(?:(?:should|shall|can|could|do|will)\s+(?:i|you|we)\s+)?send(?:\s+(?:it|the email))?"
                            r"(?:\s+now)?\s*\?[\s?!]*$", re.I)
 CANCEL_WORDS = re.compile(r"^\W*(?:cancel(?:\s+(?:it|that|the (?:email|draft)))?|don'?t send(?:\s+it)?|"
                           r"do not send(?:\s+it)?|never\s?mind|scrap(?:\s+it|\s+that)?|no|nope|drop it|forget it|"
                           r"delete (?:it|the draft))\W*$",
                           re.I)
-YES_WORDS = re.compile(r"^\s*(?:yes|y|yep|yeah|yup|sure|ok|okay|go|do it|sounds good|looks good|perfect|great|👍)"
+YES_WORDS = re.compile(r"^\s*(?:yes|y|yep|yeah|yup|sure|ok|okay|go|do it|sounds good|looks good|perfect|great|👍"
+                       # round 10, slice W (W5): "go ahead", "ok go ahead": the card's yes line (it never sends)
+                       r"|(?:(?:ok|okay|yes|yeah|sure)[\s,]+)?go\s+ahead)"
                        r"[\s.!]*$", re.I)
 SHOW_WORDS = re.compile(r"^\W*(?:show|see)\s+(?:me\s+)?(?:it|the (?:draft|email)|my draft)(?:\s+again)?\W*$", re.I)
 SENT_WORDS = re.compile(r"^\W*(?:(?:ok|okay|done)[\s,]+)?(?:sent|i sent it|i'?ve sent it|i have sent it|sent it|"
@@ -141,11 +159,27 @@ TONE_ASK = re.compile(r"^\W*(?:can you\s+|could you\s+|please\s+)?(?:make it|mak
 REMOVE_IT = re.compile(r"^\W*(?:remove it|remove that line|take it out|leave it out)\W*$", re.I)
 # (round 9 live fix pass, finding 107) with a card open, "put this in my email", "put it in my drafts", "save it as a
 # draft", "stick it in my inbox" mean the card (a number, "the second one", is about the answer: mailbox_reads)
-SAVE_DRAFT = re.compile(r"^\W*(?:(?:please|can you|could you|pls)\s+)?(?:save|put|stick|keep)\s+"
+SAVE_DRAFT = re.compile(r"^\W*(?:(?:please|can you|could you|pls|just|ok|okay)\s+)*"
+                        # round 10, slice W (W5): "dont send yet, keep it in drafts", "put it in my gmail drafts pls"
+                        r"(?:(?:don'?t|do not)\s+send(?:\s+it)?(?:\s+yet)?[\s,.;]+(?:just\s+)?)?"
+                        r"(?:save|put|stick|keep)\s+"
                         r"(?:it|that|this|this one|that one|that email|this email|the email|the draft|my draft)?\s*"
-                        r"(?:as\s+an?\s+(?:e-?mail\s+)?draft|in(?:to)?\s+my\s+(?:e-?mail|drafts?(?:\s+folder)?|gmail|"
+                        r"(?:as\s+an?\s+(?:e-?mail\s+)?draft|in(?:to)?\s+(?:my\s+|the\s+)?drafts?(?:\s+folder)?"
+                        r"|in(?:to)?\s+my\s+(?:e-?mail|drafts?(?:\s+folder)?|gmail|"
                         r"icloud|outlook|mailbox|inbox|mail(?:\s+app)?)(?:\s+drafts?(?:\s+folder)?)?)"
-                        r"(?:\s+please)?\W*$", re.I)
+                        r"(?:\s+(?:please|pls|for now))?\W*$", re.I)
+# round 10, slice W (W5): "save it, i'll send it myself" with the card in view
+SAVE_IT = re.compile(r"^\W*(?:just\s+|ok\s+|okay\s+)?(?:save|keep)\s+it(?:\s+for\s+now)?(?:[\s,.;]+(?:i'?ll|i will)\s+send"
+                     r"\s+it\s+(?:myself|later|from my (?:phone|mail|email|gmail)))?\W*$", re.I)
+# "(no,) say tuesday not monday", "say X instead of Y": X in place of Y where Y is in the draft
+CH_REPLACE = re.compile(r"^\W*(?:no[\s,.!]+)?(?:say|make it|put|change it to)\s+(?P<x>[^,]{1,60}?)\s*,?\s+"
+                        r"(?:not|instead of|rather than)\s+(?P<y>[^,]{1,60}?)\W*$"
+                        r"|^\W*(?:no[\s,.!]+)?(?:change|replace)\s+(?P<y2>[^,]{1,60}?)\s+(?:to|with)\s+(?P<x2>[^,]{1,60}?)\W*$",
+                        re.I)
+# "take out the part about the doctor": the sentences of the words that hold it
+CH_DROP_PART = re.compile(r"^\W*(?:(?:can you|please|pls|just)\s+)?(?:take out|remove|drop|delete|leave out|cut)\s+"
+                          r"(?:the\s+)?(?:part|bit|line|sentence|stuff)\s+(?:about|on|with|where i say|that says)\s+"
+                          r"(?P<x>.{1,60}?)\W*$", re.I)
 # A5: "put this in my email", "save it as a draft", "put the second one in my drafts", "draft it in my gmail"
 MAILBOX_SAVE = re.compile(r"^\W*(?:(?:please|can you|could you|pls)\s+)?(?:put|save|draft|stick)\s+"
                           r"(?P<what>it|this|that|them|these|this one|that one|"
@@ -248,6 +282,14 @@ def _recipient(rest, original):
             return None, rest
     if m.group("pron"):
         return {"pron": m.group("pron").lower()}, rest[m.end():]
+    # ---------- round 10, slice W (W5): a bare role word with a name, a lowercase title, a lone lowercase name ------
+    if m.group("bword") or m.group("tname") or m.group("lone"):
+        addr = m.group("taddr")
+        nm = m.group("bname") or m.group("tname") or m.group("lone")
+        who = {"to": addr.lower() if addr else None, "word": m.group("bword").lower() if m.group("bword") else None,
+               "name": " ".join(cap(w) for w in nm.split())}
+        return who, rest[m.end():]
+    # ---------- end round 10, slice W ----------
     addr = m.group("addr") or m.group("waddr") or m.group("naddr")
     who = {"to": addr.lower() if addr else None,
            "word": m.group("word").lower() if m.group("word") else None,
@@ -281,6 +323,16 @@ def email_request(text):
             mo = re.match(r"^(?P<obj>.{1,60}?)\s+to\s+(?P<r>.+)$", rest, re.I)
             if mo and POINTS.match(mo.group("obj").strip()):
                 obj, rest = mo.group("obj").strip(), mo.group("r").strip()
+    elif (LET_KNOW.match(t) or DROP_LINE.match(t)) and not SEND_RCPT_EMAIL.match(t):   # round 10, slice W (W5)
+        m = LET_KNOW.match(t) or DROP_LINE.match(t)
+        r = m.group("r").strip()
+        who, left = _recipient(r, t)
+        if who is None or who.get("pron") or left.strip(" ,"):
+            return None
+        tail = (m.group("tail") or "").strip()
+        if tail and not re.match(r"^(?:that|saying|to say|about|asking|re:?)\b", tail, re.I):
+            tail = "that " + tail
+        rest = r + " " + tail
     elif SEND_RCPT_EMAIL.match(t):
         m = SEND_RCPT_EMAIL.match(t)
         r = m.group("r").strip()
@@ -610,6 +662,84 @@ def _fill_line(paragraphs, label, value):
     return out
 
 
+# ---------- round 10, slice W (W5): a word swapped or a sentence taken out, only where the draft's words hold it ----------
+def _text_fields(p):
+    """(key, index or None) of each of the draft's own text fields, the words first."""
+    out = [("model_body", None)] if p.get("model_body") else ([("request", None)] if p.get("request") else [])
+    out += [("paragraphs", i) for i, x in enumerate(p.get("paragraphs") or []) if x]
+    out += [("extra", i) for i, x in enumerate(p.get("extra") or []) if x]
+    return out
+
+
+def _get(p, key, i):
+    return p[key] if i is None else p[key][i]
+
+
+def _set(p, key, i, v):
+    if i is None:
+        p[key] = v
+    else:
+        p[key][i] = v
+
+
+def _replace_words(t):
+    """The words "say X not Y" would replace, or "take out the part about X" would take out; None when neither."""
+    m = CH_REPLACE.match(t)
+    if m:
+        return (m.group("y") or m.group("y2") or "").strip(" .\"'") or None
+    m = CH_DROP_PART.match(t)
+    return m.group("x").strip(" .\"'") if m else None
+
+
+def _replace_in_parts(p, t):
+    """New parts for "say X not Y" (Y must be a whole word or phrase in the words; each place it is becomes X) or
+    "take out the part about X" (the sentences holding X go; at least one sentence is left). None when the message is
+    neither, or the words do not hold Y / X."""
+    import copy
+    m = CH_REPLACE.match(t)
+    if m:
+        x = (m.group("x") or m.group("x2") or "").strip(" .\"'")
+        y = (m.group("y") or m.group("y2") or "").strip(" .\"'")
+        if not x or not y or x.lower() == y.lower():
+            return None
+        q, hit = copy.deepcopy(p), False
+        rx = re.compile(r"(?<![\w])" + re.escape(y) + r"(?![\w])", re.I)
+        for key, i in _text_fields(q):
+            old = _get(q, key, i)
+
+            def keep_case(mm):
+                w = mm.group(0)
+                return x[:1].upper() + x[1:] if w[:1].isupper() else x
+            new = rx.sub(keep_case, old)
+            if new != old:
+                _set(q, key, i, new)
+                hit = True
+        return q if hit else None
+    m = CH_DROP_PART.match(t)
+    if m:
+        x = m.group("x").strip(" .\"'")
+        x = re.sub(r"^(?:the|my|a|an)\s+", "", x, flags=re.I)
+        if len(x) < 3:
+            return None
+        rx = re.compile(r"(?<![\w])" + re.escape(x) + r"(?![\w])", re.I)
+        q, hit = copy.deepcopy(p), False
+        for key, i in _text_fields(q):
+            old = _get(q, key, i)
+            sents = re.split(r"(?<=[.!?])\s+", old)
+            kept = [z for z in sents if not rx.search(z)]
+            if len(kept) != len(sents):
+                hit = True
+                _set(q, key, i, " ".join(kept))
+        left = " ".join(_get(q, k, i) for k, i in _text_fields(q) if _get(q, k, i).strip())
+        if not hit or not left.strip():
+            return None
+        if q.get("model_body") is not None and not q["model_body"].strip():
+            q["model_body"] = None
+        return q
+    return None
+# ---------- end round 10, slice W ----------
+
+
 def placeholders_left(row):
     p = row.get("parts")
     p = p if isinstance(p, dict) else json.loads(p or "{}")
@@ -675,7 +805,7 @@ class DraftsMixin:
              "greeting": greeting or ("Hello," if kind == "notice" else None),
              "closing": closing or ("Thank you," if kind == "notice" else None),
              "subject_set": bool(subject), "body_from": "pick" if post and not request and not paragraphs else "words",
-             "note": note, "text": (text or "")[:REQUEST_MAX]}
+             "note": note, "text": (getattr(self._tl, "norm_of", None) or text or "")[:REQUEST_MAX]}
         if sign is not None:
             p["sign"] = sign
         if head:
@@ -918,6 +1048,9 @@ class DraftsMixin:
             # (check of the live fix pass, fix9) "put this in my email" is about the newest thing shown: with a newer
             # answer after the card, it is that answer's (as before finding 107); a word "draft" means the card
             return self._save_to_drafts(person, d, now)
+        # round 10, slice W (W5): "save it, i'll send it myself" with the card in view
+        if SAVE_IT.match(t) and waiting is None and self._draft_card_in_view(h, d):
+            return self._save_to_drafts(person, d, now)
         return self._draft_change(person, d, t, now)
 
     def _draft_card_in_view(self, h, d):
@@ -1019,8 +1152,19 @@ class DraftsMixin:
             kind = "instead"
         elif CH_ADD.match(t) and not NOT_A_CHANGE.search(t):
             kind = "add"
-        if kind is None:
-            return None
+        # ---------- round 10, slice W (W5): "say tuesday not monday", "take out the part about the doctor" -------
+        edited = None
+        if kind is None or kind == "add":
+            edited = _replace_in_parts(p, t)
+            if edited is not None:
+                kind = "edited"
+            elif _replace_words(t) and self._draft_card_in_view(h, d):
+                # the words to change are not in the draft: said plainly, nothing changed (never a reminder)
+                self.note(intent="draft_change")
+                return self.send(h, T.draft_words_not_found(_replace_words(t)))
+            elif kind is None:
+                return None
+        # ---------- end round 10, slice W ----------
         if (p.get("changes") or 0) >= MAX_CHANGES:
             return self.send(h, T.DRAFT_TOO_MANY_CHANGES)
         if kind == "to":
@@ -1046,6 +1190,8 @@ class DraftsMixin:
             p["body_from"] = "words"
         elif kind == "add":
             p.setdefault("extra", []).append(sentence(CH_ADD.match(t).group("x")))
+        elif kind == "edited":   # round 10, slice W (W5)
+            p = edited
         return self._draft_apply(person, d, p, now)
 
     def _draft_same(self, person, d, p):
@@ -1178,7 +1324,7 @@ class DraftsMixin:
         p = {"greet_name": req.get("name"), "to_word": req.get("word"), "request": req.get("request"),
              "paragraphs": [], "post": post, "link": True, "extra": [], "changes": 0, "placeholders": [],
              "subject_set": bool(req.get("subject")),
-             "body_from": "pick" if post and not req.get("request") else "words", "text": (text or "")[:REQUEST_MAX]}
+             "body_from": "pick" if post and not req.get("request") else "words", "text": (getattr(self._tl, "norm_of", None) or text or "")[:REQUEST_MAX]}
         subj = req.get("subject") or self._draft_subject_of(p)
         draft_id = self.store.add_draft(h, "email", route, None, req.get("name"), subj, p,
                                         sources=self._draft_sources(post), at=now, job=job)

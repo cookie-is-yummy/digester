@@ -206,7 +206,13 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   really, i don't have much time. but can you set it up so my exports come to you regularly") is read part by part:
   the request goes to the helper by code (a yes to the export reminders offered), the rest to the profile, and the
   reply says "Noted: you don't have much time." "where do i upload my new export", "remind me every month to send my
-  youtube takeout" and "sync my saves" are read by code. Tests: `tests/test_round10_wording.py`.
+  youtube takeout" and "sync my saves" are read by code. Everyday wording reaches the helpers by code: openers,
+  closers and texting shorthand ("hey can u cancel my hulu thx"), "coach dan", "let my professor know by email",
+  "looks good, send", "keep it in drafts", "say thursday not wednesday", "get rid of my hulu", "can i buy the first
+  one", "is ticktick connected?", "connect my gmail" (an honest line), "go ahead with the netflix one", "do all of them"
+  (one at a time, nothing ticked off), and two asks in one message ("cancel my hulu and also email my landlord").
+  A model reading that clashes with what is on screen (a draft change read as a reminder, "yes" read as nothing
+  waiting, a to-do ticked off with no done word) is settled by code. Tests: `tests/test_round10_wording.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 

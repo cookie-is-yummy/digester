@@ -402,3 +402,325 @@ def test_clauses_takes_off_the_joining_words():
     from mvp.phrasing import parts
     assert parts("looks right. can you also email my landlord that the sink is broken") == [
         ("looks right.", False), ("can you email my landlord that the sink is broken", True)]
+
+
+# ======================================= W-b: everyday wording read by code (W4 to W6) =======================================
+from mvp.tests.test_round9_postacts import NASA_POST, TACOS, seed  # noqa: E402
+
+POSTS = [("r1", "eats", TACOS, "2026-09-01", "Tacos El Gordo"), NASA_POST,
+         ("c4", "venue", "Live concert Dec 12 at the Hall\nTickets at https://example.com/tickets", "2026-10-22",
+          "Live concert Dec 12")]
+
+
+def _draft(e, text="email sam@example.com that the meeting moved to wednesday. my doctor said to rest."):
+    say(e, text, FELL)
+    d = e["bot"].open_draft(H)
+    assert d is not None
+    return d
+
+
+def _todos(e, items=("Email landlord about the sink", "Cancel Netflix", "Buy basil")):
+    for t in items:
+        e["bot"].store.add_todo(H, t, at=e["clock"][0])
+    say(e, "my list", {"intent": "todo_list"})
+
+
+# ---------- the card's words (draft_reads: never the normalised text, W-2) ----------
+@pytest.mark.parametrize("text", ["looks good, send", "perfect send it now pls", "sí, envíalo", "mándalo", "yes send it"])
+def test_send_words_in_everyday_shapes(tester, text):
+    from mvp import texts as T
+    e = tester
+    _draft(e)
+    c0 = len(e["calls"])
+    out = say(e, text, FELL)
+    assert out == T.DRAFT_SEND_LINK and calls_since(e, c0) == []
+
+
+@pytest.mark.parametrize("text", ["ok go ahead", "go ahead", "yeah go ahead"])
+def test_go_ahead_is_the_cards_yes_line_and_never_sends(tester, text):
+    from mvp import texts as T
+    e = tester
+    _draft(e)
+    assert say(e, text, FELL) == T.DRAFT_YES
+
+
+@pytest.mark.parametrize("text", ["go ahead and send it to my boss instead", "send it tomorrow"])
+def test_send_near_variants_are_not_the_send_word(tester, text):
+    from mvp import texts as T
+    e = tester
+    _draft(e)
+    assert say(e, text, FELL) != T.DRAFT_SEND_LINK
+
+
+@pytest.mark.parametrize("text", ["dont send yet, keep it in drafts", "keep it in drafts", "just save it as a draft",
+                                  "put it in my gmail drafts pls", "save it, i'll send it myself"])
+def test_save_as_draft_shapes(tester, text):
+    e = tester
+    _draft(e)
+    out = say(e, text, FELL)
+    assert out.startswith("I can't save it in your mail myself.") and "mailto:" in out
+
+
+def test_say_x_instead_of_y_changes_only_where_the_draft_says_y(tester):
+    e = tester
+    _draft(e)
+    n0 = len(e["ch"].outbox)
+    say(e, "no say thursday not wednesday", FELL)
+    out = "\n".join(replies_of(e, n0))
+    assert "new version" in out.lower(), out
+    body = e["bot"].open_draft(H)["body"]
+    assert "thursday" in body and "wednesday" not in body.lower()
+    # a word the draft doesn't hold: said plainly, nothing changed, never a reminder
+    v = e["bot"].open_draft(H)["version"]
+    out = say(e, "say tuesday instead of monday", FELL)
+    assert out.startswith("The draft doesn't say \"monday\", so I didn't change it.")
+    assert e["bot"].open_draft(H)["version"] == v and not e["bot"].store.rules(H)
+
+
+def test_take_out_the_part_about_drops_that_sentence_only(tester):
+    e = tester
+    _draft(e)
+    say(e, "take out the part about the doctor", FELL)
+    body = e["bot"].open_draft(H)["body"]
+    assert "doctor" not in body.lower() and "wednesday" in body.lower()
+
+
+# ---------- email to someone else ----------
+@pytest.mark.parametrize("text,whose", [
+    ("could u send coach dan an email that i cant make practice tonight", "Dan's"),
+    ("can you let my professor know by email that my essay will be a day late", "your professor's"),
+    ("shoot sam an email saying thanks for the dinner rec", "Sam's"),
+    ("drop sam a line saying thanks for the dinner rec", "Sam's"),
+])
+def test_email_requests_in_everyday_shapes(tester, text, whose):
+    e = tester
+    c0 = len(e["calls"])
+    out = say(e, text, FELL)
+    assert out.startswith(f"Who should it go to? Reply with {whose} email address"), out
+    assert calls_since(e, c0) == []
+
+
+def test_a_lowercase_title_and_name_before_the_address(tester):
+    e = tester
+    say(e, "can you email ms rivera (rivera@example.com) that i'll miss class today, feeling sick", FELL)
+    d = e["bot"].open_draft(H)
+    assert d["to_addr"] == "rivera@example.com" and d["parts"]["greet_name"] == "Ms Rivera"
+
+
+@pytest.mark.parametrize("text", ["let my mom know i'm on my way", "tell my boss im late", "shoot me an email",
+                                  "email me that", "email marketing tips please"])
+def test_email_near_variants_are_not_a_card(tester, text):
+    e = tester
+    say(e, text, FELL)
+    assert e["bot"].open_draft(H) is None
+
+
+def test_the_draft_keeps_the_message_itself_never_its_normalised_form(tester):
+    e = tester
+    say(e, "hey could u pls email my landlord that the heater is broken again thx", FELL)
+    d = e["bot"].open_draft(H)
+    assert d["parts"]["text"] == "hey could u pls email my landlord that the heater is broken again thx"
+
+
+# ---------- email to self with an answer in view (the message itself only) ----------
+@pytest.mark.parametrize("text", ["email it to me", "pls email me the list", "mail me the recipe pls",
+                                  "can you send me this by email", "send it to my email so i dont lose it"])
+def test_email_to_self_after_an_answer_by_code(tester, text):
+    from mvp import texts as T
+    e = tester
+    e["state"]["answers"]["mvp_compose"] = lemon_pick()
+    say(e, "pasta, no cream", ask_pasta())
+    c0 = len(e["calls"])
+    out = say(e, text, FELL)
+    assert "mvp_interpret" not in calls_since(e, c0)
+    assert out == T.EMAIL_ASK or "email" in out.lower(), out
+
+
+@pytest.mark.parametrize("text", ["email me that", "can u email me this one too", "email me these tonight at 8",
+                                  "yes but also email it to me", "email me 3 easy pasta recipes"])
+def test_rule_eval_email_texts_still_reach_the_interpreter(tester, text):
+    e = tester
+    e["state"]["answers"]["mvp_compose"] = lemon_pick()
+    say(e, "pasta, no cream", ask_pasta())
+    c0 = len(e["calls"])
+    say(e, text, FELL)
+    assert "mvp_interpret" in calls_since(e, c0)
+
+
+# ---------- cancel ----------
+@pytest.mark.parametrize("text,name", [("pls get rid of my hulu subscription", "Hulu"),
+                                       ("im paying for apple tv and never watch it, cancel it", "Apple"),
+                                       ("how do i stop paying for disney plus", "Disney"),
+                                       ("hey can u cancel my hulu thx", "Hulu")])
+def test_cancel_in_everyday_shapes(tester, text, name):
+    e = tester
+    c0 = len(e["calls"])
+    out = say(e, text, FELL)
+    assert name in out and calls_since(e, c0) == [], out
+
+
+@pytest.mark.parametrize("text", ["any videos on how to cancel subscriptions you dont use",
+                                  "im thinking of cancelling netflix, did i save anything worth watching on it first",
+                                  "show me the reel about cancelling gym memberships", "drop it",
+                                  "find the video about how to cancel subscriptions"])
+def test_library_questions_are_never_a_cancel(text):
+    from mvp import cancel
+    assert cancel.request(text) is None
+
+
+def test_how_do_i_cancel_my_netflix_is_still_a_cancel():
+    from mvp import cancel
+    assert cancel.request("how do i cancel my netflix")["kind"] == "merchant"
+
+
+# ---------- apply, book, buy ----------
+@pytest.mark.parametrize("text,start", [("can i buy the first one", "I can't buy things for you."),
+                                        ("get me tickets for that concert", "I can't book"),
+                                        ("reserve a table at that place for 2 on friday", "I can't book tables.")])
+def test_post_acts_in_everyday_shapes(env, tmp_path, text, start):
+    seed(env, tmp_path, POSTS)
+    c0 = len(env["calls"])
+    out = say(env, text, FELL)
+    assert out.startswith(start) and calls_since(env, c0) == [], out
+    assert "NASA" not in out   # "for 2" is how many people, never pick 2
+
+
+# ---------- connectors and outside apps ----------
+@pytest.mark.parametrize("text,start", [
+    ("connect my gmail", "I can't connect to Gmail yet."),
+    ("can you hook up my google calendar", "I can't connect to Google Calendar yet."),
+    ("disconnect notion pls", "I'm not connected to Notion"),
+    ("stop using my gmail", "I'm not connected to Gmail"),
+])
+def test_apps_with_no_connector_get_the_honest_line(tester, text, start):
+    e = tester
+    c0 = len(e["calls"])
+    out = say(e, text, FELL)
+    assert out.startswith(start) and calls_since(e, c0) == [], out
+
+
+@pytest.mark.parametrize("text", ["is ticktick connected?", "i want to link my todoist", "what apps are you connected to"])
+def test_connector_questions_in_everyday_shapes_are_read_by_code(tester, text):
+    e = tester
+    c0 = len(e["calls"])
+    out = say(e, text, FELL)
+    assert out != "<<FELL-THROUGH>>" and calls_since(e, c0) == []
+
+
+@pytest.mark.parametrize("text", ["show me the ticktick setup video", "i use ticktick for everything",
+                                  "the notion template reel pls", "what was that video about gmail shortcuts"])
+def test_app_names_in_library_questions_are_not_taken(tester, text):
+    c0 = len(tester["calls"])
+    say(tester, text, FELL)
+    assert "mvp_interpret" in calls_since(tester, c0)
+
+
+def test_add_these_to_my_ticktick_and_save_the_first_one_to_my_notion(tester):
+    e = tester
+    e["state"]["answers"]["mvp_compose"] = lemon_pick()
+    say(e, "pasta, no cream", ask_pasta())
+    assert "TickTick" in say(e, "add these to my ticktick", FELL)
+    assert "Notion" in say(e, "save the first one to my notion", FELL)
+
+
+# ---------- what did you do ----------
+def test_what_did_you_do_only_when_something_was_done(tester):
+    e = tester
+    assert say(e, "what did you do", FELL) == "<<FELL-THROUGH>>"
+    e["state"]["answers"]["mvp_compose"] = lemon_pick()
+    say(e, "pasta, no cream", ask_pasta())
+    say(e, "add it to my list", {"intent": "act_on_last", "actions": ["todo.add"]})
+    assert say(e, "what did you do", FELL) != "<<FELL-THROUGH>>"
+    assert say(e, "show me what you've done for me this week", FELL) != "<<FELL-THROUGH>>"
+    assert say(e, "what did u add to my calendar", FELL) != "<<FELL-THROUGH>>"
+
+
+# ---------- do it ----------
+def test_go_ahead_with_the_netflix_one(tester):
+    e = tester
+    _todos(e)
+    n0 = len(e["ch"].outbox)
+    say(e, "go ahead with the netflix one", FELL)
+    assert "Netflix cancels on its website" in "\n".join(replies_of(e, n0))
+
+
+def test_do_all_of_them_does_one_and_never_ticks_anything_off(tester):
+    e = tester
+    _todos(e)
+    n0 = len(e["ch"].outbox)
+    say(e, "do all of them", FELL)
+    out = "\n".join(replies_of(e, n0))
+    assert "One at a time: next is \"Cancel Netflix\"" in out
+    assert len(e["bot"].store.todos(H)) == 3   # nothing ticked off
+
+
+def test_a_model_todo_done_without_a_done_word_is_a_do_it(tester):
+    """Live harm replayed with a fake form: "do all of them" read as todo_done never ticks off."""
+    e = tester
+    _todos(e)
+    say(e, "please sort them all out", {"intent": "todo_done", "todo_number": 1})
+    assert len(e["bot"].store.todos(H)) == 3
+    say(e, "done 1", {"intent": "todo_done", "todo_number": 1})
+    assert len(e["bot"].store.todos(H)) == 2   # a done word still ticks off
+
+
+# ---------- what is on screen (screen_guard, W6) ----------
+def test_a_draft_change_read_as_a_reminder_makes_no_rule(tester):
+    e = tester
+    _draft(e)
+    say(e, "no say tuesday not monday", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["MON"], "time": "09:00"},
+        "content": {"source": "note", "text": "say tuesday not monday"}}})
+    assert not e["bot"].store.rules(H)
+
+
+def test_a_model_confirm_with_the_card_open_gives_the_cards_line(tester):
+    from mvp import texts as T
+    e = tester
+    _draft(e)
+    assert say(e, "looks great to me, thank you", {"intent": "confirm"}) == T.DRAFT_YES
+
+
+def test_a_chat_reply_about_the_bots_insides_is_replaced(tester):
+    from mvp import texts as T
+    out = say(tester, "what did you do", {"intent": "chat", "reply": "I turned your message into structured JSON."})
+    assert out == T.CHAT_INSIDE and "JSON" not in out
+
+
+def test_a_rule_naming_an_app_says_it_cant_add_there_yet(tester):
+    e = tester
+    e["state"]["answers"]["mvp_compose"] = lemon_pick()
+    n0 = len(e["ch"].outbox)
+    say(e, "every sunday put the recipes you find in my ticktick", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": ["SUN"], "time": "09:00"},
+        "content": {"source": "library", "goal": "recipes", "searches": ["recipes"]}}})
+    out = replies_of(e, n0)
+    assert out[0].startswith("I can't add to TickTick on a schedule yet. I can send them to you every Sunday"), out
+
+
+# ---------- two asks in one message (split_reads, hook 8z) ----------
+def test_cancel_and_email_in_one_message_reach_both_helpers(tester):
+    e = tester
+    n0, c0 = len(e["ch"].outbox), len(e["calls"])
+    say(e, "cancel my hulu and also email my landlord about the rent", FELL)
+    out = "\n".join(replies_of(e, n0))
+    assert "Hulu" in out and "Who should it go to? Reply with your landlord's email address" in out
+    assert calls_since(e, c0) == []
+
+
+def test_a_third_ask_is_said_back(tester):
+    e = tester
+    n0 = len(e["ch"].outbox)
+    say(e, "cancel my hulu. email my landlord about the rent. also book a table", FELL)
+    out = "\n".join(replies_of(e, n0))
+    assert "You also asked: \"book a table\". Send it on its own and I'll do it." in out
+
+
+@pytest.mark.parametrize("text", ["put oat milk on my shopping list and find me a smoothie recipe",
+                                  "add tortillas to my grocery list and find me a taco recipe",
+                                  "every sunday cancel my hulu reminder and email me"])
+def test_two_asks_with_no_doing_helper_stay_whole(tester, text):
+    e = tester
+    c0 = len(e["calls"])
+    say(e, text, FELL)
+    assert calls_since(e, c0).count("mvp_interpret") == 1

@@ -2649,6 +2649,35 @@ def you_also_asked(part):
     return f"You also asked: \"{part}\". Send it on its own and I'll do it."
 
 
+# W6: what code says instead of a model reading that clashes with what is on screen
+CHAT_INSIDE = "I keep a list of what I did for you: say \"what did you do for me\"."
+DRAFT_CHANGE_HOW = ("I didn't change the draft or make a reminder from that. Tell me the change, like \"say Tuesday "
+                    "instead of Monday\" or \"take out the part about the doctor\".")
+
+
+def draft_words_not_found(words):
+    return (f"The draft doesn't say \"{words}\", so I didn't change it. Tell me the words to change, like \"say "
+            f"Tuesday instead of Monday\".")
+
+
+def app_rule_line(app, cadence):
+    """W6 (slice G replaces it with the place preview): a rule that names an app the bot can't add to on a schedule."""
+    return f"I can't add to {app} on a schedule yet. I can send them to you {cadence} instead: say yes."
+
+
+def doit_next(n, text):
+    """'do all of them': one at a time; the next one is named, never done without being asked."""
+    return f"One at a time: next is \"{text}\". Say \"do {n} for me\" when you're ready."
+
+
+def app_cant_connect(app):
+    return f"I can't connect to {app} yet. Say \"what are you connected to\" to see what I can reach."
+
+
+def app_not_connected(app):
+    return f"I'm not connected to {app}, so there's nothing to check or disconnect."
+
+
 _KNOW_TAIL = " Say \"what do you know about me\" to see it all."
 
 

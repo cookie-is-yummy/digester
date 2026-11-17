@@ -2086,3 +2086,72 @@ No reply changes except the build lines; no read, no connector, no model call.
   the 159 rule-eval texts and 123 rule phrasings: 0 taken. `probe_same`: the same bytes as `same_head.json`.
   Tests: `tests/test_round10_wording.py`.
 
+**W-b: everyday wording read by code** (no model call added).
+- **Hooks 5a to 8 try the message, then `phrasing.normalize(text)`** (`answer_normally`: one loop over
+  `phrasing.variants`; `text` is the message itself again after the loop). Nothing above hook 5 sees the normalised
+  form (secret_reads, _asked_reads, draft_reads, offer_reads, the confirm yes: W-2). What a read keeps is the message
+  itself: `_tl.norm_of` holds it while the normalised form is tried, and the draft row's `text` uses it.
+- **New words, per read** (design A3; dev ids in brackets):
+  - `drafts._RCPT`: a role word with a name and no "my" ("coach dan", d004), a lowercase title and name before a typed
+    address ("ms rivera (rivera@example.com)", d002), a lone lowercase name before "that / saying / about / an email"
+    ("shoot sam an email saying", d010). `LET_KNOW` ("let my professor know by email that ...", "tell ... by email",
+    d008) and `DROP_LINE` ("drop sam a line saying ..."): the recipient between the verb and "by email" / "a line".
+  - The card's words (whole message, never normalised): `SEND_WORDS` gains the leads "looks good, / sounds good /
+    perfect / great / cool / alright / yep / yeah" and a tail "pls", and Spanish "envíalo", "mándalo", "sí, envíalo"
+    (d038, d041, d042); `YES_WORDS` gains "go ahead", "ok go ahead" (the card's yes line; it never sends, d039);
+    `SAVE_DRAFT` gains "just", "keep it in drafts" (no "my"), a leading "don't send (it) yet," and a tail "pls / for now"
+    (d024 to d026); `SAVE_IT` "save it, i'll send it myself" with the card in view (d027); `CH_REPLACE` "(no,) say X not
+    Y", "say X instead of Y", "change Y to X": X in place of Y only where the draft's own words hold Y (case kept);
+    `CH_DROP_PART` "take out the part about X": the sentences holding X go, at least one sentence stays. When Y or X is
+    not in the draft and the card is in view: `The draft doesn't say "monday", so I didn't change it. ...` (d033, d034;
+    never a reminder).
+  - `handler.self_email_reads` (hook 5, the message itself only, never its normalised form; no card open; an answer or
+    a reminder / list in view; no time word): "email it to me", "send it to my email so ...", "email me the list / the
+    recipe", "send me this by email" are act_on_last email.send by code (to their own address only, as before). "email
+    me that", "can u email me this one too", "email me these tonight at 8", "yes but also email it to me" are rule-eval
+    texts and stay the interpreter's.
+  - `cancel.CANCEL_VERB`: "get rid of my", "drop my ... subscription" (d046); `cancel_routes.json`: "apple tv" (d052;
+    "disney plus" and "apple tv+" were there). `cancel.LIBRARY_ASK` / `HOW_TO_CANCEL_ANY`: "did i save", "any videos
+    on", "show me", "find ...", "reels / videos / posts about", "how to cancel ..." without "my" are never a cancel
+    (d102, d118); "how do i cancel my netflix" still is.
+  - `postacts._LEAD`: "can i", "could i", "i want to" (d054); `BOOK`: "get me tickets (for)", "buy me tickets" (d058);
+    `_WHEN`: "for 2" before a day or the end is how many people (d056: "reserve a table at that place for 2 on friday").
+  - `places`: `_THEM` gains "these", "those" (d061); `w_place_reads` after `token_reads`: `W_CONNECTED` ("what apps are
+    you connected to", d072), `W_APP_CONNECT` / `W_APP_CHECK` / `W_APP_DISCONNECT` with leads "can you / i want to /
+    let me" and the shapes "is X connected?", "are you connected to X", "stop using my X" (d069 to d075): a task app goes
+    to round 9's flow; Gmail, Google Calendar, Notion, Google Tasks, Google Keep, Trello, Evernote, OneNote, Apple Notes,
+    Things 3, Microsoft To Do, Outlook get `I can't connect to Gmail yet. Say "what are you connected to" ...` or `I'm
+    not connected to Notion, so there's nothing to check or disconnect.` `W_APP_SEND` "save the first one to my
+    notion", "add it to google tasks" (a to-do app with no connector) goes to `_add_picks` with that app's list name, so
+    the reply is round 9's honest "I can't reach Notion, so I added ... to your list here" (d064, d065). "add the
+    shopping list to ticktick" right after a recipe, with no such list of theirs, is the recipe's ingredients.
+  - `receipts`: "show me what you've done (for me) this week", "what did you add to my X" (d078, d080); a bare "what
+    did you do" only when something was done for them in the last 7 days (d077 falls through on a fresh store).
+  - `todos._DOIT`: "go ahead with the X one" (d084); "do all of them" / "all" / "everything on my list" (only with the
+    list in view): the first to-do's helper, then `One at a time: next is "Cancel Netflix". Say "do 2 for me" when
+    you're ready.`; nothing is ticked off (d085).
+- **`handler.split_reads`, hook 8z** (after `do_it`, below the code-only cut): `phrasing.parts`; acted on only when no
+  read took the whole message and one of the first two request parts goes to a doing helper (`_doing_part`: an email
+  to someone else, `cancel.request`, `postacts.request`, the connect / check / disconnect patterns, or an add to an
+  outside app). Each of the two request parts goes through hooks 5a to 8 in code-only mode (`_setup_code_read`); one no
+  read takes goes alone to the normal path; a third is said back (`You also asked: ...`). Each helper sends its own
+  reply. d050 "cancel my hulu and also email my landlord about the rent": the cancel question and the card.
+- **`handler.screen_guard(person, it, text, now)`**, after `chat_guard` and `recap_rule` in `answer_normally`: with a
+  card open (not waiting for an answer, no rule preview waiting): a model `confirm` with the card newest → the card's
+  yes line (never "nothing waiting for a yes"); `change_rule`, or `new_rule` of a note repeating 60% or more of the
+  message's words → no rule: `_draft_change(normalize(text))`, else `T.DRAFT_CHANGE_HOW`; act_on_last email.send with
+  nothing shown → `_draft_to_self`. With the to-do list in view: `todo_done` without a done word (`todos.DOIT_DONE_WORD`)
+  → `do_it`, else `T.DOIT_WHICH` (live: "do all of them" ticked everything off). A `chat` reply naming JSON,
+  structured, prompt, form, schema, interpreter or model → `T.CHAT_INSIDE`. A library rule whose message names an app
+  (`places.named`) the spec has no place for: first `I can't add to TickTick on a schedule yet. I can send them to you
+  every Sunday at 9am instead: say yes.`, then the preview as before (slice G replaces this line, W-13).
+- **Measured** (the development set, offline with the fakes, the harness of `phr_build` with export_reads,
+  split_reads and self_email_reads wrapped; tester and operator the same): r10/k **27 of 100 helper lines right by
+  code, 3 wrong (d007 by design; d102, d118 none lines taken), 106 fell through**; after W-b **73 of 100 right, 1 wrong
+  (d007, by design), 0 of 40 none lines taken**. The 27 left: 13 Spanish (the errand form), 7 English rules that
+  write to an app (the interpreter, then slice G), "email me that" and "could u email that to me tonight" (rule-eval
+  shapes and a time word), "send me an email with the workouts i saved this week" and three calendar or own-list adds
+  (the interpreter's act_on_last by design), "what did you do" on a fresh store. The 159 rule texts and 123 rule
+  phrasings (tester and operator, with and without an answer): 0 taken by any read, the new ones wrapped; the 20 draft
+  requests: 0 taken in all four settings.
+
