@@ -758,3 +758,13 @@ class Store:
             self.db.commit()
         return {"libraries": libraries}
 
+    # ---------- round 9, C1 (DESIGN.md section 16.D): the daily cap of an action, read from action_log ----------
+    def actions_in(self, handle, actions, start, end):
+        """How many action_log rows of these actions this person has between start and end (UTC datetimes), not
+        counting the ones that were skipped or failed (what was really done or is waiting to be done)."""
+        if not actions:
+            return 0
+        marks = ",".join("?" * len(actions))
+        r = self.one(f"SELECT COUNT(*) AS n FROM action_log WHERE handle=? AND action IN ({marks}) AND at>=? AND at<? "
+                     "AND status NOT IN ('skipped','failed')", (handle, *actions, now_iso(start), now_iso(end)))
+        return int(r["n"]) if r else 0

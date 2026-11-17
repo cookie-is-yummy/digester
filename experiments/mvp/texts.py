@@ -1446,3 +1446,14 @@ def export_emailed(to, via, err, where, left=()):
     if left:
         msg += f" {' and '.join(left)} is too big to email (over 5 MB), so it's only in the folder."
     return msg
+
+
+# ---------- round 9, slice D (C1, DESIGN.md section 16.D): an action past its daily limit ----------
+# A slice adds its action's plain words here ("mailbox.send": "emails"); with none, the line says "this".
+ACTION_CAP_LABEL = {}
+
+
+def over_action_cap(label, n):
+    if label:
+        return f"I've reached my limit of {n} {label} a day for you. I can do more tomorrow."
+    return f"I've reached my limit for this today ({n} a day). I can do it again tomorrow."
