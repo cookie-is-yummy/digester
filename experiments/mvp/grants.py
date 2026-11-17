@@ -443,8 +443,8 @@ def run_place(bot, ctx, name, params):
         picks = [x for x in ctx.picks if not _strong(bot, ctx.person, x)]
         if not picks:
             return Outcome("skipped", line="", detail={"grant_id": g["id"], "why": "none"})
-        ctx.picks = picks[:1]
-        ev = cal.event_for(ctx, CalendarParams.model_validate(params or {}))
+        from dataclasses import replace as _with
+        ev = cal.event_for(_with(ctx, picks=picks[:1]), CalendarParams.model_validate(params or {}))   # ctx unchanged
         if ev is None:
             return Outcome("skipped", line="", detail={"grant_id": g["id"], "why": "passed"})
         if added_today(store, h, rule["id"], action, now, tz) + 1 > int(g["per_day"]):

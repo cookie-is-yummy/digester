@@ -144,6 +144,7 @@ def test_the_preview_names_the_app_the_kind_the_list_and_both_caps_and_the_same_
     msg = make_rule(tok, yes=False)
     assert msg.endswith(PREVIEW_LINES)
     assert "put it on your list" not in msg             # the app line replaces the bot-list note
+    assert "on a schedule yet" not in msg                # W-13: slice W's stop-gap line never shows with a grant
     assert all_grants(bot) == [] and rules(bot) == []
     start = say(tok, "yes", boom)
     assert start.endswith(" Each time I'll add them to TickTick and tell you here what I added.")
@@ -740,7 +741,13 @@ def test_an_event_on_the_mac_calendar_under_a_grant(tok, mac):
     _, sent = tick_at(tok, datetime(2026, 11, 13, 2, 0, 30, tzinfo=UTC))   # 9pm in New York
     assert "Added 1 event to Calendar on your Mac (rule 1): " in sent
     assert bot.store.placements(H)[0]["action"] == "mac.event"
-    assert "add to calendar" not in sent.lower() or "calendar.google.com" not in sent
+    assert "calendar.google.com" not in sent             # added, so no link instead
+    # the event's run leaves the run's picks as they were for the actions after it (an email of the answer)
+    from mvp.places import route
+    ctx = ctx_for(tok, rules(bot)[0]["id"], [pick(5), pick(6)], datetime(2026, 11, 14, 2, 0, 30, tzinfo=UTC))
+    ctx.now = ctx.slot_at
+    o = route(bot, ctx, "calendar.add", {"day_offset": 1, "time": "07:00"})
+    assert o.status == "done" and [p["item_id"] for p in ctx.picks] == ["p5", "p6"]
 
 
 def test_todoist_under_a_grant(tok):
