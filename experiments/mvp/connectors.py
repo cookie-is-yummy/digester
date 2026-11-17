@@ -39,6 +39,11 @@ class Connector:
     actions: dict = field(default_factory=dict)  # kind -> action name
     apps: dict = field(default_factory=dict)     # kind -> the app's own short name, for the reply lines
     nouns: dict = field(default_factory=dict)    # action name -> (one, many): ("reminder", "reminders")
+    # round 9, E (DESIGN.md section 16.E): connectors by token and a webhook ride on the same code
+    kind: str = "mac"                            # mac | token | webhook: which reply lines it uses (texts.py)
+    where: str = "on your Mac"                   # where things land, in a reply: "in TickTick", "to your webhook"
+    needs_check: bool = True                     # True: unusable until "check my ..." passes once (the Mac's prompts)
+    env: tuple = ()                              # the settings it reads (names only; the values never leave os.environ)
 
 
 CONNECTORS = {

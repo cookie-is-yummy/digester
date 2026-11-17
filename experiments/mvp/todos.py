@@ -39,6 +39,48 @@ VERBS = set("""call buy get pick email text book pay clean fix send make finish 
     submit prepare plan schedule book review practise practice study learn find look""".split())
 
 
+# ---------- round 9, W10 (DESIGN.md section 16.F): "do 2 for me" on the to-do list ----------
+DOIT_VIEW = timedelta(hours=24)   # a list shown this long ago (with no newer answer) is still "in view"
+DOIT_ASK = timedelta(hours=24)    # "tell me when" after a to-do the bot can't do: the next message only
+_ORD = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5,
+        "sixth": 6, "6th": 6, "seventh": 7, "7th": 7, "eighth": 8, "8th": 8, "ninth": 9, "9th": 9, "tenth": 10,
+        "10th": 10}
+_DOIT = re.compile(
+    r"^\W*(?:(?:please|ok|okay|so|hey)[\s,]+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:please\s+)?"
+    r"(?P<verb>do|handle|take\s+care\s+of|help\s+(?:me\s+)?with|deal\s+with|sort\s+out)\s+"
+    r"(?:(?P<it>it|that|this|that\s+one|this\s+one)"
+    r"|(?P<todo>(?:my\s+)?(?:to-?do|todo|task)\s+(?:number\s+|#\s*)?)?(?:number\s+|#\s*)?(?P<n>\d{1,2})"
+    r"|the\s+(?P<ord>" + "|".join(_ORD) + r")(?:\s+(?:one|to-?do|todo|task))?"
+    r"|the\s+(?P<words>[^\W\d_][\w' -]{1,40}?)\s+(?:one|to-?do|todo|task))"
+    r"(?P<forme>\s+for\s+me)?(?:[\s,]+(?:please|pls|thanks))?\W*$", re.I)
+EMAIL_TODO = re.compile(r"^\W*e-?mail\b", re.I)
+BUY_TODO = re.compile(r"^\W*(?:buy|get|pick\s+up|order|grab)\b", re.I)
+CALL_TODO = re.compile(r"^\W*(?:call|ring|phone|text)\b", re.I)
+APPLY_TODO = re.compile(r"\b(?:apply|application|sign\s+up|register|enrol+)\b", re.I)
+BOOK_TODO = re.compile(r"\b(?:book|reserve|reservation|table\s+(?:at|for))\b", re.I)
+
+
+def doit_request(text):
+    """{"number", "words", "said_todo"} for a W10 message, else None. A bare "do it" is never one (it is a yes), nor is
+    "do 2" (a numbered offer's choice): "do" needs "for me", a to-do word or an ordinal."""
+    t = " ".join((text or "").split())
+    if not t or len(t) > 80:
+        return None
+    m = _DOIT.match(t)
+    if not m:
+        return None
+    verb = m.group("verb").lower()
+    if verb == "do" and not (m.group("forme") or m.group("todo") or m.group("ord") or m.group("words")
+                             or re.search(r"\b(?:number|#)", t, re.I)):
+        return None
+    if m.group("it") and verb == "do" and not m.group("forme"):
+        return None
+    if m.group("words") and m.group("words").lower().split()[0] in ("first", "last", "next", "other", "same", "whole"):
+        return None
+    number = int(m.group("n")) if m.group("n") else _ORD.get((m.group("ord") or "").lower())
+    return {"number": number, "words": None if number else m.group("words"), "said_todo": bool(m.group("todo"))}
+
+
 # lists people name without "my ... list" ("add eggs to groceries"); the person's own list names count too
 COMMON_LISTS = ("groceries", "grocery", "shopping", "packing")
 
@@ -226,6 +268,7 @@ class TodoMixin:
             due = say_time(datetime.fromisoformat(t["due_at"]), now, person["timezone"]) if t.get("due_at") else None
             lines.append(T.todo_line(i, t, due, show_list=len(lists) > 1))
         lines.append(T.TODO_FOOT)
+        self._todo_view_mark(h, now)   # round 9, W10: "do 2 for me" now means to-do 2
         return self.send(h, "\n".join(lines))
 
     def _todo_change(self, person, it, now):
@@ -371,6 +414,7 @@ class TodoMixin:
                     continue
                 self.store.x("UPDATE runs SET status='sent' WHERE id=?", (run_id,))
                 self.store.set_state(f"overdue:{h}", {"todo_id": t["id"], "at": now_iso(now)})
+                self._todo_view_mark(h, now)   # round 9, W10: the nudge says the to-do's number
                 sent += 1
         return sent
 
@@ -411,6 +455,153 @@ class TodoMixin:
             self._wrote(h, "todo_remove", f"removed \"{t['text']}\"", {"ids": [t["id"]], "col": "removed_at"})
             return self.send(h, T.overdue_dropped(t["text"]))
         return None
+
+    # ---------- round 9, W10 (DESIGN.md section 16.F): "do 2 for me" hands a to-do to the helper that fits ----------
+    def _todo_view_mark(self, h, now):
+        """The to-do list was just shown: a number in "do 2 for me" means a to-do while no newer answer came."""
+        last = self.store.last_answer(h) or {}
+        self.store.set_state(f"todoview:{h}", {"at": now_iso(now), "run_id": last.get("run_id")})
+
+    def _todos_in_view(self, h, now):
+        st = self.store.get_state(f"todoview:{h}")
+        last = self.store.last_answer(h)
+        if st and now - datetime.fromisoformat(st["at"]) <= DOIT_VIEW and (last or {}).get("run_id") == st.get("run_id"):
+            return True
+        return last is None   # no answer was ever shown: a number can only mean a to-do
+
+    def do_it(self, person, text, now):
+        """W10: "do it for me", "do 3 for me", "can you do number 2", "do the first one", "help me with 2", "handle the
+        landlord one", "take care of the first one". Code only, no model call. None when the message is not one of
+        these (or a rule preview waits: its "do it" is a yes, as today)."""
+        h = person["handle"]
+        req = doit_request(text)
+        if req is None:
+            return None
+        pending = self._live_pending(h, now)
+        if pending and pending["kind"] == "confirm_rule":
+            return None
+        todos = self.store.todos(h)
+        n, row = None, None
+        if req["number"] is not None:
+            if not req["said_todo"] and not self._todos_in_view(h, now):
+                return None   # "do 2 for me" right after an answer: the number may be a pick; the usual path reads it
+            self.note(intent="do_it")
+            if not todos:
+                return self.send(h, T.NO_TODOS)
+            if not 1 <= req["number"] <= len(todos):
+                return self.send(h, T.todo_numbers_unknown(len(todos)))
+            n, row = req["number"], todos[req["number"] - 1]
+        elif req["words"]:
+            from .retrieve import _stem
+            want = {_stem(w) for w in WORD.findall(req["words"].lower()) if w not in SMALL}
+            hits = [(i, t) for i, t in enumerate(todos, 1)
+                    if want and want <= {_stem(x) for x in WORD.findall(t["text"].lower())}]
+            if not hits:
+                return None   # "handle the landlord one" with no such to-do: not about the list
+            self.note(intent="do_it")
+            if len(hits) > 1:
+                return self.send(h, T.which_todo(hits))
+            n, row = hits[0]
+        else:   # "it": the one to-do just added, or the only one on a list just shown
+            self.note(intent="do_it")
+            lw = self._last_write(h, now)
+            ids = (lw or {}).get("undo", {}).get("ids") if (lw or {}).get("kind") == "todo_add" else None
+            if ids and len(ids) == 1:
+                n, row = next(((i, t) for i, t in enumerate(todos, 1) if t["id"] == ids[0]), (None, None))
+            elif len(todos) == 1 and self._todos_in_view(h, now) and self.store.get_state(f"todoview:{h}"):
+                n, row = 1, todos[0]
+            if row is None:
+                return self.send(h, T.DOIT_WHICH)
+        return self._do_todo(person, n, row, now)
+
+    def _do_todo(self, person, n, row, now):
+        """The to-do's helper by what its words say: an email (drafts), a cancel (cancel), a programme or a place from a
+        pick (the apply or book menu); else a plain line that says what the bot can't do and offers a reminder."""
+        from . import cancel as cancel_mod
+        h = person["handle"]
+        text = row["text"]
+        tail = T.doit_tick(n)
+        ref = self.draft_from_todo(person, row, now, job=f"todo:{row['id']}") if EMAIL_TODO.match(text) else None
+        if ref is not None:
+            self.send(h, tail)
+            return ref
+        if cancel_mod.from_todo(person, row, now) is not None:
+            last = self.store.one("SELECT MAX(id) AS n FROM cancellations WHERE handle=?", (h,))
+            self.store.set_state(f"doit:{h}", {"todo_id": row["id"], "kind": "cancel", "after": (last or {}).get("n") or 0,
+                                               "at": now_iso(now)})
+            ref = self.cancel_todo(person, row, now)
+            if ref is not None:
+                self.send(h, tail)
+                return ref
+        if row.get("item_id"):
+            rec = self._todo_rec(person, row)
+            if rec is not None:
+                snap = {"run_id": None, "picks": []}
+                if BOOK_TODO.search(text):
+                    ref = self._book_menu(person, rec, snap, text, now)
+                    self.send(h, tail)
+                    return ref
+                if APPLY_TODO.search(text) or (not BUY_TODO.match(text) and self._thing_date(rec, now, person)
+                                               and self._is_deadline(rec, person)):
+                    ref = self._apply_menu(person, rec, snap, text, now)
+                    self.send(h, tail)
+                    return ref
+        self.store.set_state(f"doitask:{h}", {"todo_id": row["id"], "at": now_iso(now)})
+        if BUY_TODO.match(text):
+            return self.send(h, T.doit_buy(n))
+        if CALL_TODO.match(text):
+            return self.send(h, T.DOIT_CALL)
+        return self.send(h, T.doit_none(text))
+
+    def _todo_rec(self, person, row):
+        """A to-do that came from a pick, as the menus read a pick: its title, link and creator from the item."""
+        it = self.view(person["library"]).get(row["item_id"])
+        if it is None:
+            return None
+        return {"item_id": row["item_id"], "title": row["text"], "url": row.get("url") or it.url,
+                "platform": it.platform, "video_id": it.video_id, "creator": it.creator, "facts": {}, "lines": [],
+                "line_kinds": None}
+
+    def _doit_answer(self, person, text, now):
+        """The next message after "I can't do X for you. I can remind you if you tell me when.": a time sets the
+        to-do's reminder (it reminds through the scheduler, as any due to-do). Any other message ends the offer."""
+        from .cancel import when_answer
+        h = person["handle"]
+        st = self.store.get_state(f"doitask:{h}")
+        if not st:
+            return None
+        self.store.set_state(f"doitask:{h}", None)
+        if now - datetime.fromisoformat(st["at"]) > DOIT_ASK:
+            return None
+        t = self.store.todo(st["todo_id"])
+        if not t or t["handle"] != h or t["done_at"] or t["removed_at"]:
+            return None
+        at = when_answer(text, now, person["timezone"])
+        if at is None:
+            return None
+        self.note(intent="todo_due")
+        self._wrote(h, "todo_due", f"set a reminder for \"{t['text']}\"",
+                    {"rows": [{"id": t["id"], "due_at": t["due_at"], "reminded_at": t["reminded_at"]}]})
+        self.store.update_todo(t["id"], due_at=now_iso(at), reminded_at=None)
+        return self.send(h, T.todo_due_set(t["text"], say_time(at, now, person["timezone"])))
+
+    def _doit_ticked(self, h, todo_id, now):
+        """A to-do handed to a helper is ticked off only when the outcome is real (an email the server took, or the
+        person's "sent" / "I cancelled it"). Returns the line to add, or ""."""
+        t = self.store.todo(todo_id)
+        if not t or t["handle"] != h or t["done_at"] or t["removed_at"]:
+            return ""
+        self.store.update_todo(todo_id, done_at=now_iso(now))
+        return " " + T.doit_ticked(t["text"])
+
+    def _doit_cancel_done(self, h, cancel_id, now):
+        st = self.store.get_state(f"doit:{h}")
+        if not st or st.get("kind") != "cancel" or cancel_id <= (st.get("after") or 0):
+            return ""
+        if now - datetime.fromisoformat(st["at"]) > timedelta(days=7):
+            return ""
+        self.store.set_state(f"doit:{h}", None)
+        return self._doit_ticked(h, st["todo_id"], now)
 
     # ---------- library counts (section 11) ----------
     def _library_stats(self, person, it):

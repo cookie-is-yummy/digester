@@ -694,6 +694,8 @@ class DraftsMixin:
         """A draft another helper started (job "cancel:<id>", the cancel helper's notice) hears how it ended: "sent"
         (the mail server took it, or the person says they sent it) or "dropped". Returns a line to add to the reply."""
         job = row.get("job") or ""
+        if job.startswith("todo:") and job[5:].isdigit():   # round 9, W10: a to-do handed to the draft
+            return self._doit_ticked(row["handle"], int(job[5:]), now) if how == "sent" else ""
         if not job.startswith("cancel:") or not job[7:].isdigit():
             return ""
         self.store.update_cancellation(int(job[7:]), at=now, status="person_sent" if how == "sent" else "dropped")
@@ -952,19 +954,19 @@ class DraftsMixin:
             lead = T.DRAFT_POST_ADDRESS + " "
         return self._draft_start_from(person, req, post, to, lead, now, text)
 
-    def _draft_start_from(self, person, req, post, to, lead, now, text):
+    def _draft_start_from(self, person, req, post, to, lead, now, text, job=None):
         p_post = dict(post) if post else None
         if p_post:
             p_post.pop("has_address", None)
         if to is None:
-            draft_id = self._new_draft_row(person, req, p_post, now, text)
+            draft_id = self._new_draft_row(person, req, p_post, now, text, job=job)
             p = json.loads(self._draft(draft_id)["parts"])
             return self._draft_ask_to(person, draft_id, p, now, lead=lead)
         return self.draft_start(person, "email", to=to, to_name=req.get("name"), to_word=req.get("word"),
                                 request=req.get("request"), subject=req.get("subject"), post=p_post,
-                                sources=self._draft_sources(p_post), now=now, text=text)
+                                sources=self._draft_sources(p_post), now=now, text=text, job=job)
 
-    def _new_draft_row(self, person, req, post, now, text):
+    def _new_draft_row(self, person, req, post, now, text, job=None):
         h = person["handle"]
         route = "mailbox" if self._mailbox_route(h) else "link"
         p = {"greet_name": req.get("name"), "to_word": req.get("word"), "request": req.get("request"),
@@ -973,7 +975,7 @@ class DraftsMixin:
              "body_from": "pick" if post and not req.get("request") else "words", "text": (text or "")[:REQUEST_MAX]}
         subj = req.get("subject") or self._draft_subject_of(p)
         draft_id = self.store.add_draft(h, "email", route, None, req.get("name"), subj, p,
-                                        sources=self._draft_sources(post), at=now)
+                                        sources=self._draft_sources(post), at=now, job=job)
         self._log_draft(h, "draft.made", {"id": draft_id, "kind": "email", "route": route, "version": 0,
                                           "to_addr": None, "parts": p}, now=now)
         return draft_id
@@ -1410,9 +1412,9 @@ class DraftsMixin:
         return p
 
     # ---------- W10 and slice B ----------
-    def draft_from_todo(self, person, todo, now=None):
+    def draft_from_todo(self, person, todo, now=None, job=None):
         """A to-do that is an email ("Email landlord about sink"): the draft starts, asking for the address. None
-        when the to-do is not an email."""
+        when the to-do is not an email. job "todo:<id>" (W10): the to-do is ticked off once the email is sent."""
         now = now or self.clock()
         text = (todo or {}).get("text") or ""
         m = re.match(rf"^\W*e-?mail\s+(?:(?:my|the)\s+)?(?P<who>(?:{PEOPLE_WORDS})s?|{_NAME})\b\s*(?P<rest>.*)$",
@@ -1424,7 +1426,7 @@ class DraftsMixin:
         para, subj, _ = clause_paragraph(m.group("rest"))
         req = {"to": None, "word": who.lower() if is_word else None, "name": None if is_word else cap(who),
                "request": para, "subject": subj}
-        return self._draft_start_from(person, req, None, None, "", now, text)
+        return self._draft_start_from(person, req, None, None, "", now, text, job=job)
 
     # ---------- upkeep (Bot.tick) ----------
     def drafts_tick(self, now):
@@ -1453,5 +1455,5 @@ def open_draft(bot, handle):
     return bot.open_draft(handle)
 
 
-def from_todo(bot, person, todo, now=None):
-    return bot.draft_from_todo(person, todo, now)
+def from_todo(bot, person, todo, now=None, job=None):
+    return bot.draft_from_todo(person, todo, now, job=job)

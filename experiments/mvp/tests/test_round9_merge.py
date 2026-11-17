@@ -23,7 +23,7 @@ from mvp.tests.test_slice2 import H, ask_pasta, lemon_pick, say  # noqa: E402
 
 MVP = os.path.dirname(HERE)
 BOT_HOOKS = ("draft_reads", "offer_reads", "_cancel_answer", "email_reads", "cancel_reads", "postact_reads",
-             "cancel_stop_guard")
+             "cancel_stop_guard", "receipts_reads", "do_it", "_doit_answer")
 PLACE_HOOKS = ("place_reads", "asked_reads")
 ALLOWED = {"buy the ingredients for the first one"}   # the rule eval's t-dev-040: slice C puts them on the list
 CHAT = {"intent": "chat", "reply": "OK."}
@@ -138,7 +138,8 @@ def test_every_rule_phrasing_from_before_round_9_still_goes_the_old_way(rec, mon
     assert taken == [], taken
     # the wrappers see what they should: each round 9 request read answers its own phrasing
     for text, hook in (("cancel my netflix", "cancel_reads"), ("what are you connected to", "place_reads"),
-                       ("email sam@example.com that the sink is broken", "email_reads")):
+                       ("email sam@example.com that the sink is broken", "email_reads"),
+                       ("what did you do for me", "receipts_reads"), ("do it for me", "do_it")):
         rec["claimed"].clear()
         say(rec, text, CHAT)
         assert [h for h, _ in rec["claimed"]][-1:] == [hook], (text, rec["claimed"])
@@ -157,5 +158,7 @@ def test_the_hooks_run_in_the_order_of_the_map():
           'pending["kind"] == "confirm_rule" and YES.match(text)', "self._email_text(")
     order("self._overdue_reply(person, text, now)", "self._cancel_answer(", "place_answer(self, person, text, now)")
     order("ref = self._rule_reads(person, text, now)", "self.email_reads(", "self.cancel_reads(",
-          "self.postact_reads(", "ref = place_reads(self, person, text, now)", "self.integration_reads(")
+          "self.postact_reads(", "ref = place_reads(self, person, text, now)", "self.receipts_reads(", "self.do_it(",
+          "self.integration_reads(")
+    order("place_answer(self, person, text, now)", "self._doit_answer(")
     order("self.cancel_stop_guard(", "self._manage(")

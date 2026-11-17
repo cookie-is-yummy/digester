@@ -242,6 +242,12 @@ class HandlerMixin:
         ref = place_reads(self, person, text, now)
         if ref is not None:
             return ref
+        ref = self.receipts_reads(person, text, now)   # W9: "what did you do for me" (receipts.py)
+        if ref is not None:
+            return ref
+        ref = self.do_it(person, text, now)   # W10: "do 2 for me" on the to-do list (todos.py)
+        if ref is not None:
+            return ref
         # ---------- end of the round 9 request reads ----------
         # round 8, slice B (DESIGN.md section 15): export, share, "what did my agent ask": code only, no model call
         done, ref = self.integration_reads(person, text, now)
@@ -295,7 +301,10 @@ class HandlerMixin:
             return ref
         # round 9, slice D (C3, DESIGN.md section 16.D): yes / no to a Mac preview; REMOVE / KEEP after "disconnect"
         from .places import asked_reads as place_answer
-        return place_answer(self, person, text, now)
+        ref = place_answer(self, person, text, now)
+        if ref is not None:
+            return ref
+        return self._doit_answer(person, text, now)   # W10: "tell me when" after a to-do the bot can't do
 
     def _rule_reads(self, person, text, now):
         """Plain messages about rules that code reads before any model call: "no overdue nudges", a bare "done" for a

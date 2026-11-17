@@ -29,6 +29,8 @@ HELP = ("I find things in what you've saved and watched on Instagram and YouTube
         "Now: \"what can I make with chicken and rice?\"\n"
         "Later: \"tonight at 9 send me something to wind down with\" or \"in two hours…\"\n"
         "Repeating: \"a pasta recipe every Friday at 7pm\"\n"
+        "Errands: \"email my landlord that the sink is broken\", \"cancel my netflix\", \"apply to the second one\", "
+        "\"do 2 for me\" on your list, \"what did you do for me\". I always show you an email first.\n"
         "Manage: \"my rules\", \"run 1\", \"skip 1\", \"pause 1\", \"stop 1\". Reply 👍 or 👎, or \"👎 2\" for one pick. "
         "\"delete my data\" removes everything I hold about you.")
 CONSENT = ("Hi! I'm a prototype that finds things in your own saved and watched posts and sends them when you ask. "
@@ -2107,3 +2109,156 @@ def email_status(address, confirmed):
     if address:
         return f"waiting for the 6-digit code I sent to {address}"
     return "not set up yet (tell me your email address)"
+
+
+# ---------- round 9, W9 (DESIGN.md section 16.F): "what did you do for me" ----------
+# Only what the bot can see: "I sent" only for an email the mail server took; "you sent" only when the person said so.
+RECEIPTS_HEAD = "In the last 7 days I:"
+RECEIPTS_HEAD_TODAY = "Today I:"
+RECEIPTS_NOTHING = "I haven't done anything for you in the last 7 days."
+RECEIPTS_NOTHING_TODAY = "I haven't done anything for you today."
+RECEIPTS_WAITING = "Waiting for you:"
+RECEIPTS_NOTHING_WAITING = "Nothing is waiting for you."
+RECEIPT_PREVIEW_WAITING = "something I showed you to add, waiting for your \"yes\""
+
+
+def _count(n, one, many=None):
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+def receipt_emailed_you(n, day):
+    return f"emailed you {_count(n, 'time')} (last {day})"
+
+
+def receipt_outbox(n, day):
+    return f"kept {_count(n, 'email')} for you in the outbox here, because email isn't set up (last {day})"
+
+
+def receipt_self_link(n, day):
+    return (f"gave you {_count(n, 'link')} that {'opens' if n == 1 else 'open'} an email to yourself (last {day}; I "
+            f"can't see whether you sent "
+            f"{'it' if n == 1 else 'them'})")
+
+
+def receipt_sent(what, who, sender, when):
+    frm = f" from {sender}" if sender else ""
+    return f"sent the {what} to {who}{frm} {when}, after your \"send\" (the mail server took it)"
+
+
+def receipt_person_sent(what, who, day):
+    return f"wrote the {what} to {who}, and you told me you sent it ({day})"
+
+
+def receipt_unknown(what, who):
+    return (f"tried to send the {what} to {who}, but the connection dropped, so I can't tell whether it went. Check your "
+            f"Sent folder before sending it again")
+
+
+def receipt_prepared(what, who, mailbox, day):
+    tail = "you haven't said \"send\"" if mailbox else "a link you open in your mail app; I can't see whether you sent it"
+    return f"prepared the {what} to {who} ({day}; {tail})"
+
+
+def receipt_drafts_folder(n, gone):
+    out = f"saved {_count(n, 'draft')} in your Drafts folder (nothing was sent)"
+    return out + (f", and removed {gone} again" if gone else "")
+
+
+def receipt_calendar_links(n):
+    return f"gave you {_count(n, 'calendar link')} (I can't see whether you added {'it' if n == 1 else 'them'})"
+
+
+def receipt_todos(n, done, gone):
+    out = f"added {_count(n, 'thing')} to your lists here"
+    extra = []
+    if done:
+        extra.append(f"you ticked off {done}")
+    if gone:
+        extra.append(f"{gone} {'was' if gone == 1 else 'were'} removed")
+    return out + (f" ({', '.join(extra)})" if extra else "")
+
+
+def receipt_placed(n, gone, one, many, where, kind):
+    if kind == "webhook":
+        out = f"sent {_count(n, one, many)} {where} (I can't see what it did with {'it' if n == 1 else 'them'})"
+        return out
+    out = f"added {_count(n, one, many)} {where}"
+    return out + (f", and removed {gone} again" if gone else "")
+
+
+def receipt_cancellations(n, said_done, sent, open_):
+    parts = []
+    if said_done:
+        parts.append(f"you said {said_done} {'is' if said_done == 1 else 'are'} done")
+    if sent:
+        parts.append(f"you sent {_count(sent, 'notice')}")
+    if open_:
+        parts.append(f"{open_} still open")
+    return f"helped with {_count(n, 'cancellation')}" + (f" ({', '.join(parts)})" if parts else "")
+
+
+def receipt_held(what, who, clock):
+    at = f" at {clock}" if clock else ""
+    return f"the {what} to {who} goes{at}. Say \"undo\" to stop it"
+
+
+def receipt_open_draft(what, who):
+    return f"the {what} to {who} (say \"show the draft\")"
+
+
+def receipts_undo(say):
+    return f"You can still undo the last thing ({say}): say \"undo\" within 10 minutes."
+
+
+def receipts_agent(n):
+    return f"Your agent asked me for things {_count(n, 'time')}. Say \"what did my agent ask\" to see them."
+
+
+def receipt_no_draft(who):
+    return f"I haven't written an email to {who} for you. To start one, say \"email {who} that ...\"."
+
+
+def did_sent(what, who, sender, when):
+    frm = f" from {sender}" if sender else ""
+    return f"Yes. I sent the {what} to {who}{frm} {when}, after your \"send\". The mail server took it."
+
+
+def did_person_sent(what, who, day):
+    return f"I wrote it, and you told me you sent the {what} to {who} ({day}). I can't see your mail myself."
+
+
+def did_held(what, who):
+    return f"Not yet. The {what} to {who} is waiting to go out. Say \"undo\" to stop it."
+
+
+def did_prepared(what, who, mailbox):
+    if mailbox:
+        return f"No. I wrote the {what} to {who}, but you haven't said \"send\". Say \"show the draft\" to see it."
+    return (f"I didn't send it: I wrote the {what} to {who} and gave you a link to send it from your mail app. I can't "
+            f"see whether you sent it. Tell me \"sent\" if you did.")
+
+
+def did_not_yet(what, who):
+    return f"No. I started the {what} to {who}, but it isn't finished. Say \"show the draft\" to see it."
+
+
+# ---------- round 9, W10 (DESIGN.md section 16.F): "do 2 for me" on the to-do list ----------
+DOIT_WHICH = "Which one? Say \"do 2 for me\" (\"my list\" shows the numbers)."
+DOIT_CALL = "I can't make calls. Want a reminder? Tell me when, like \"tomorrow at 10am\"."
+
+
+def doit_tick(n):
+    return f"Tick it off once it's done: \"done {n}\"."
+
+
+def doit_buy(n):
+    return (f"I can't buy things for you. It's on your list; tick it off with \"done {n}\" when you have it. Want a "
+            f"reminder? Tell me when.")
+
+
+def doit_none(text):
+    return f"I can't do \"{text}\" for you. I can remind you if you tell me when, like \"friday\"."
+
+
+def doit_ticked(text):
+    return f"I ticked \"{text}\" off your list."

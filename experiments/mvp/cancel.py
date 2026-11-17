@@ -564,11 +564,12 @@ class CancelMixin:
         row = rows[0]
         self.note(intent="cancel")
         self._cancel_update(row["id"], status="person_says_done", now=now)
+        ticked = self._doit_cancel_done(h, row["id"], now)   # round 9, W10: the to-do it came from, if any
         r = self.store.rule(row["check_rule_id"]) if row.get("check_rule_id") else None
         if r and r["status"] in ("active", "paused"):
             self.store.set_slot(r["id"], None, "stopped")
-            return self.send(h, T.CANCEL_SAID_DONE)
-        return self.send(h, T.CANCEL_SAID_DONE_NO_RULE)
+            return self.send(h, T.CANCEL_SAID_DONE + ticked)
+        return self.send(h, T.CANCEL_SAID_DONE_NO_RULE + ticked)
 
     # ---------- rows, questions, the log ----------
     def _cancel_ask(self, h, step, now, **kw):
