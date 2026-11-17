@@ -57,6 +57,78 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-016 · A browser the bot drives for the person: cancelling on merchants' own pages (operator first); no browser on social media
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "it should also cancel the subscription FOR YOU after you confirm"; "we should have a virtual machine which will execute stuff for them once permission is granted ... see how instinct does it ... we HAVE to be able to interact with their social media because thats the most important part of it. so cancelling subscriptions to a media is a part of it"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `AGENTS.md` rule 7 ("No logged-in bot accounts, no evading rate limits or blocks") and `docs/07-privacy-and-safety.md` › Platform terms (same words): a browser acting inside the person's signed-in session is logged-in automation, and most large merchants' terms forbid "automated means". `docs/10-decisions.md` (Sep): "Official Instagram API only for capture; no logged-in automation". A-012 ("Signing in to sites as the person ... considered and rejected") and `experiments/mvp/DESIGN.md` 16.B ("Out: logging in, any browser driving"). `docs/06-rules-and-actions.md` › Safety limits ("Every created object is reversible"): a pressed cancel button cannot be undone. `docs/02-tech-stack.md` (new dependency: Playwright). `docs/09-roadmap-and-ownership.md` (output actions are Eason's area).
+
+**What is requested**
+1. A browser the bot drives to cancel a subscription on the merchant's own website: the person signs in themselves in a window the bot opens; the bot follows the merchant's published cancel path, stops before the last button, shows that page's words, and presses it only after "yes cancel <merchant>".
+2. The same browser as a cloud "virtual machine" for every person, keeping their sign-ins between tasks.
+3. The same browser acting on the person's social media where no official route exists (Instagram: unfollow, mute, organise saves).
+
+**Why the requester wants it**
+Links and steps still leave the work to the person. The product's promise is "instinct but for social media": once permission is given, the bot does the errand. Big streaming and software merchants cancel only on their websites, so a written notice cannot reach them.
+
+**Why it is better than the current approach**
+- Part 1 does the errand where nothing else can. In version 1 no model is in the loop: code follows the merchant's own help-page path and refuses typing, fields, other sites, and buy, upgrade, pause or offer buttons; the final press needs a yes bound to a hash of the exact page shown. On a 9-flow fake merchant (retention offer, required reason, "pause instead", login wall, captcha, an upsell styled as the confirm, instructions aimed at agents) it completed every flow it should, stopped at every wall, and made 0 wrong presses; a hostile picker and 600 random walks got 0 wrong presses past code.
+- The window opens on the operator's own machine (or, in the virtual machine prototype, inside the bot's machine with a take-over view), the person signs in by hand, and nothing of the session is kept after the run: no password, cookie or picture is held by us.
+
+**Costs and risks**
+- **The person's account.** Netflix, Spotify, Disney+ and Microsoft forbid automated access in general words; a merchant can flag or close the account. Nobody has measured how often this happens to a declared, slow agent. Instinct's user lost a Resy account.
+- **A wrong press is ours.** Word lists are a floor, not a classifier; a merchant that renames its offer button "Continue" outside an offer box could beat them. The per-merchant path and the person reading the final card are the main defence. A cancelled plan or an accepted offer cannot be undone by the bot.
+- **It will often stop.** Roughly 1 in 5 popular sites put up a wall for a plain browser from a datacentre address (vendor studies); Google refuses sign-in from automated browsers. At any wall the bot stops and hands back; it never solves or hides.
+- **Part 2 (cloud)** means holding live sessions that open people's accounts without their password or second factor, keystrokes passing through our servers during sign-in, a new subprocessor if a vendor runs it (and vendors turn captcha solving on by default), a public web page of ours, and a security review. One breach is every saved account.
+- **Part 3 (Instagram)** breaks Instagram's terms "regardless of whether ... logged-in"; Meta won a terms ruling and a permanent injunction against a tool working inside users' own sessions with their consent (BrandTotal, 2022); it risks the person's account (action blocks, checkpoints, a disabled account) and the Meta app we will need to receive shared reels. Bulk organising of saves is exactly the pattern that triggers blocks. Nothing about it can be tested without breaking the rule.
+
+**Agent's assessment**
+- Part 1: **agree with limits, as a prototype.** Operator only; off unless `MVP_BROWSER=operator`; only merchants named in `MVP_BROWSER_MERCHANTS` whose path was read from their own help page; a headed window on the operator's machine; no session, picture or page text kept beyond a 200-character quote; no model in the loop; never from a timed rule; Amazon only after its Agent Terms are implemented. After a month of operator runs, write down completed, stopped and flagged counts before anything else.
+- Part 2: **not yet for testers; a prototype now, by the requester's decision.** Asked on 17 Nov to choose between a browser on his own computer and written notices only, Derrick chose neither and asked for the virtual machine. So this branch also carries a prototype of it, off unless `MVP_BROWSER=vm`: a headless browser inside the bot's own machine, shown to the person on the test page's take-over view, where they sign in themselves. It keeps nothing after a run (no sign-in, cookie or picture), is for the operator only, and refuses social media sites in code. The design critic advised leaving even this out: during sign-in the person's keystrokes pass through the bot's memory, and a hosted version would hold live keys to people's accounts. Before it is offered to anyone but the operator it needs (a) a record of operator runs (completed, stopped, flagged), (b) a security review of the take-over path and of any session storage, (c) a choice between a vendor and our own VM made on security grounds, with captcha solving and stealth off, (d) a public take-over page on a domain of ours, (e) both founders accepting this part.
+- Part 3: **disagree.** Offer the outcomes as one-tap links with "done" tracking and the bot's own collections; act on YouTube through its official API (A-015). Not built, not even off by default.
+- Still refused whatever is accepted: passwords typed in the chat or kept by the bot; typing into any field; solving, retrying past or hiding from a captcha, a code prompt, a sign-in challenge or a block; pressing the final button without "yes cancel <merchant>" on that page; buying, upgrading, pausing or accepting an offer; reading the inbox; any of it from a timed rule.
+
+**Affected**
+Docs: `AGENTS.md` rule 7 (a sentence on supervised merchant pages, if accepted), `02-tech-stack.md`, `06-rules-and-actions.md`, `07-privacy-and-safety.md` (Platform terms, Security), `09-roadmap-and-ownership.md`, `10-decisions.md` (a row superseding Sep's "no logged-in automation" for part 1 only), `experiments/mvp/DESIGN.md` 16.B · Code: `experiments/mvp/browser_guard.py`, `browser_host.py`, `browser_vm.py`, `browser.py`, `actions/browser.py`, `cancel.py`, `cancel_routes.json`, `handler.py`, `store.py`, `requirements.txt` · Contract change: no (prototype); yes when ported · Needs both founders: **yes** (platform terms, architecture boundary, stack, ownership)
+
+### A-015 · Connectors through official APIs and MCP, rules that write through them with one yes per rule, and acting on the person's YouTube
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "start building the rules that will call the MCPs for the connectors"; "it should do it for you when given the permission"; "or use like netflixs mcp or something like idk. api calls or something ... they can pick connectors, which might be their gmail or netflix or different media. but we HAVE to be able to interact with their social media"; his decision of 17 Nov on timed rules that add to the person's own apps: "Once per rule": one yes when the rule is made; the preview names the app and the kind of thing; every run reports what it added, with undo; an email to another person from a rule still waits for a yes on its exact text each time); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `docs/07-privacy-and-safety.md` › Security ("least-privilege scopes (e.g. read-only YouTube, calendar events only)": this asks for the `youtube` write scope; "OAuth tokens encrypted at rest": met, with a key held in the operator's environment file rather than a managed key store). `docs/06-rules-and-actions.md` › Action registry ("first run of a rule always needs a confirmed preview"; no standing permission is described) and › Executor (sync promised; none here). `docs/04-intake.md` › YouTube › Ongoing capture (read-only scope). `docs/03-data-contract.md` (new `grants` table; `placements.route`, `placements.rule_id`; a code-only `RuleSpec.place`). A-014 ("Do not offer any of these to testers before OAuth with narrow scopes, encrypted tokens and sync exist": YouTube is offered to testers with OAuth and encrypted tokens, without sync). `experiments/mvp/DESIGN.md` 16.D/16.E (`in_rules=False` for every outside action). `docs/02-tech-stack.md` (`cryptography` pinned; `mcp` used as a client). `docs/09-roadmap-and-ownership.md` (output actions are Eason's area).
+
+**What is requested**
+1. The bot as an MCP client: one client that calls vendor MCP servers through a mapping table in code, each server's tools pinned at the person's yes, starting with Todoist for the operator.
+2. A standing permission per rule ("grant"): a timed rule may add to the person's own apps (task lists, the Mac's Reminders and Calendar, a private YouTube playlist) after one yes on a preview that names the app, the kind of thing, the place, the cadence and the caps; every run reports what it added, with undo; any change to the rule, the app's tools or the account ends the grant.
+3. A YouTube connector on Google's official Data API (scope `youtube`), linked by a code typed at google.com/device: unsubscribe, private playlists, each after a yes to the exact change, with undo; open to testers.
+4. Instagram stays share-in and tap-out: one-tap links for unfollow and mute; no write route exists for a personal account.
+5. Later, not now: sending email from the person's own mailbox through a connector. Google's Gmail MCP server is a preview whose terms forbid giving testers access, and its `gmail.compose` scope is restricted; a plain Gmail API client with `gmail.send` on our own Google project is the likelier route (not verified).
+
+**Why the requester wants it**
+"The idea is to make it easier for them to do the work and do the work for them." "We want to be the second brain which controls their social media, specifically turning their social media into action." Today rules can only message the person, a rule that names an app drops it silently, and the bot cannot change anything on YouTube.
+
+**Why it is better than the current approach**
+- One client and one table replace a module per app; code picks the tool and builds its arguments from the bot's validated forms, so the model still only fills forms (AGENTS rule 6). Tool descriptions and results never reach a prompt.
+- Pins stop a server that changes its tools after consent (tested on a fake: a changed tool is not called, a new tool is never called).
+- Rules do what people ask ("every Sunday put recipes in my TickTick") within limits they saw, with a report and undo every run.
+- YouTube writes run on the official API with the person's consent per change, no password and no browser; Google's device flow lets a tester link YouTube with no web page of ours.
+- Tokens are encrypted at rest, bound to person, app and issuer, refreshed without a browser, revoked on disconnect.
+
+**Costs and risks**
+- A standing permission is weaker than a yes per run: a wrong pick lands in the person's app without a look first. Bounded by per-run and per-day caps, the run's report, undo, and voiding on any change.
+- MCP sign-in needs a public HTTPS page of ours for anyone not at the bot's machine; until a domain exists, MCP apps are operator only.
+- TickTick's MCP server issues no refresh token, and Todoist's tool takes only a free-text due date whose parsing is untested: the token routes stay for the operator, and the MCP route sends no due times.
+- Tool lists change after consent (Asana says its authorisations reach future tools); pins void grants on any change, which may mean frequent re-approvals until measured.
+- YouTube: a 10,000-unit daily quota shared by all users (unsubscribing from 30 channels uses 1,500); a lifetime cap of 100 new users while the consent screen is unverified; Google verification beyond that; YouTube's policy that every write be "clearly initiated by the user", which rules out timed unsubscribes (a rule may only propose a list); deletion within 7 days of a revoke.
+- The encryption key lives in the operator's environment file: a stolen machine with that file exposes the tokens.
+- A contract change when ported; more code in the other founder's area.
+
+**Agent's assessment**
+Agree, with changes: (1) operator first, Todoist only, no Google preview servers; (2) grants on the token, Mac, MCP and YouTube-playlist routes only, never for anything that reaches another person, never for webhooks (no undo) or YouTube unsubscribes; (3) YouTube to testers once the founder's consent screen exists, no daily sync until its retention duties are built; (4) as stated; (5) deferred. Disagree with any browser route on Instagram (A-016 part 3).
+
+**Affected**
+Docs: `02`, `03`, `04`, `06`, `07`, `09`, `10`, `experiments/mvp/DESIGN.md` 16 and 17 · Code: `experiments/mvp/tokens.py`, `mcp_client.py`, `oauth.py`, `mcp_mappings.py`, `grants.py`, `yt_auth.py`, `ytreads.py`, `actions/mcp.py`, `actions/youtube.py`, `actions/link.py`, `actions/__init__.py`, `connectors.py`, `places.py`, `schema.py`, `interpret.py`, `store.py`, `receipts.py`, `texts.py`, `requirements.txt` · Contract change: yes when ported (prototype now) · Needs both founders: **yes**
+
 ### A-014 · Connectors: registry fields, placements, Reminders and Calendar on the operator's Mac, and token connectors
 - **Date:** 2026-11-17
 - **Requested by:** Derrick (17 Nov: "see if you can add more connectors, not just email"); written by the coding agent
