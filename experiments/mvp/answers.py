@@ -185,9 +185,10 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
     if things and not fallback:
         n = 0
         for s in srcs:
-            if judged(s[0]) and len(s[1]) == 1:
+            if judged(s[0]) and len(s[1]) == 1 and s[1][0].get("judge") != "no":
                 # live fix pass, round 8 (finding 98): a post about one thing that the composer judged keeps it: the
-                # composer's verdict on the post is the better judgement of "is it the kind asked for"
+                # composer's verdict on the post is the better judgement of "is it the kind asked for" (round 9,
+                # slice U2: unless the stronger judge said its thing is not of the kind)
                 continue
             n += sum(1 for x in s[1] if x.get("fit") != "yes")
             s[1] = [x for x in s[1] if x.get("fit") == "yes"]
@@ -205,6 +206,22 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
             for s in srcs:
                 if is_clear_source(s[0]) and not yes_in(s):
                     s[0]["kind_unsure"] = True
+        # round 9, slice U2: a thing the stronger judge said is not of the kind is never shown or counted as the kind:
+        # a clear post keeps only its other things, and one with nothing else is not a clear source (its things may
+        # still be shown under the close wording)
+        n = 0
+        for s in srcs:
+            if not is_clear_source(s[0]) or not any(x.get("judge") == "no" for x in s[1]):
+                continue
+            rest = [x for x in s[1] if x.get("judge") != "no"]
+            if rest:
+                n += len(s[1]) - len(rest)
+                s[1] = rest
+            else:
+                s[0]["kind_unsure"] = True
+        if n:
+            result.setdefault("dropped", {})["items_not_the_kind"] = \
+                result.get("dropped", {}).get("items_not_the_kind", 0) + n
     if ts:   # live fix pass, round 8 (finding 99): a post of an earlier year gives nothing while another post does
         old = [s for s in srcs if old_year_post(s[0], extra, today)]
         if old and len(old) < len(srcs):

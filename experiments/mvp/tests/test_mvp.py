@@ -67,6 +67,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(_config, "INTERPRET_CACHE_HOURS", 0)
     monkeypatch.setattr(_config, "ANSWER_CACHE_HOURS", 0)    # the same for the composed answer (test_slice3.py)
     monkeypatch.setattr(_config, "RANKED_CACHE_HOURS", 0)
+    # round 9, slice U2: the fakes hold no judge answer; the judge has its own tests (test_round9_judge.py)
+    monkeypatch.setattr(_config, "JUDGE_MODEL", "")
 
     class FakePool:
         max_resident = 4

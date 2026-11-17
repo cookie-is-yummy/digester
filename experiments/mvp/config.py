@@ -28,6 +28,13 @@ PROMPT_EXTRACT = "extract_v4"  # v3 plus the kind asked for on its own line and 
                                # date; round 7, finding 90); details on the full text, one call per pick, cached
 EXTRACT_TEMPERATURE = 0
 EXTRACT_SEED = 7
+# round 9, slice U2: one batched call to a stronger model judges, for a request that names a kind of thing, whether each
+# thing the posts name is itself of that kind (judge.py). An empty model name turns it off. On by default after the
+# kinds evaluation (22 requests): things shown that are truly of the kind 46 of 60 off, 51 of 60 with effort "none"
+# (47 of 56 with "low"), at $0.0028 more per kind request ("low": $0.0054) and about 1.3 seconds per judged answer
+JUDGE_MODEL = os.environ.get("MVP_JUDGE_MODEL", "gpt-5.5")
+JUDGE_EFFORT = os.environ.get("MVP_JUDGE_EFFORT", "none")   # the reasoning effort sent with it ("" sends none)
+PROMPT_JUDGE = "judge_kind_v1"
 ANSWER_CACHE_HOURS = 24       # the same spec and candidates reuse the same composed answer ("another" bypasses it)
 RANKED_CACHE_HOURS = 24 * 7   # the same search text on the same library build reuses its ranked list
 WIDER_MAX = 3                 # "Or here's a wider selection:" (asks only)

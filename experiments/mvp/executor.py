@@ -561,15 +561,15 @@ class ExecutorMixin:
                 part = getattr(self._tl, "part", None)
                 if part is not None:   # round 8, finding 95: the details calls of all parts share one budget
                     targets = targets[:max(0, part["reads"])]
+                context = {"request": request_text or spec.content.goal or "", "about": about,
+                           "today": today.isoformat(),
+                           # round 9, slice U: the kind asked for (extract_v4)
+                           "kind": kind_phrase(spec.content.goal or "", request_text or "", *spec.content.searches)
+                           if items_mode else None}
                 facts, info = details_many([p["item"] for p in targets], extract, view.lib, store=self.store,
                                            person=h, extra=extra, now=now,
                                            once={p["item"].id for p in targets if p.get("read_for_items")},
-                                           context={"request": request_text or spec.content.goal or "",
-                                                    "about": about, "today": today.isoformat(),
-                                                    # round 9, slice U: the kind asked for (extract_v4)
-                                                    "kind": kind_phrase(spec.content.goal or "", request_text or "",
-                                                                        *spec.content.searches)
-                                                    if items_mode else None})
+                                           context=context)
                 cost += info["cost"]
                 if part is not None:
                     self._tl.details_left = max(0, (getattr(self._tl, "details_left", 0) or 0) - info["calls"])
@@ -599,6 +599,19 @@ class ExecutorMixin:
                         steps["items_" + k if k == "why" else k] = info[k]
                 if info.get("errors"):   # a failed details call: the answer goes out without those details
                     steps["extract_errors"] = info["errors"]
+                from .extract import asks_for_things
+                if items_mode and context.get("kind") and asks_for_things(
+                        request_text or "", spec.content.goal or "", *spec.content.searches):
+                    # round 9, slice U2: one call to a stronger model judges whether each thing read is itself of
+                    # the kind asked for (judge.py); off, failed or invalid: the answer is today's
+                    from .judge import judge_things
+                    t2 = time.time()
+                    jinfo = judge_things(targets, context["kind"], context, view.lib, store=self.store, person=h,
+                                         extra=extra, now=now)
+                    if jinfo:
+                        cost += jinfo.get("cost", 0.0)
+                        steps["judge"] = {k: v for k, v in jinfo.items() if k != "cost"}
+                        steps["judge"]["seconds"] = round(time.time() - t2, 2)
             if main and kind != "follow_up" and ts:
                 # live fix pass, round 8 (finding 100): a request for deadlines is answered only by a date code reads
                 self._deadline_fit(result, extra, today, request_text or "", said, spec.content.goal or "",

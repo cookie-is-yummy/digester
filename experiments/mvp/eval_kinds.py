@@ -172,6 +172,8 @@ def main(argv=None):
             "searches": _h(content.get("searches") or []), "goal_words": len((content.get("goal") or "").split()),
             "composer": [{k: v for k, v in c.items() if k != "handle"} for c in seen["calls"][c0:]],
             "cost_usd": round(cost, 6), "cost_by_purpose": {k: round(v, 6) for k, v in by_purpose.items()},
+            # round 9, slice U2: the stronger model's judgement of each thing (judge.py), counted
+            "judge": _judge_counts(steps),
             "seconds": secs})
         transcript.append(f"### {r['n']} ({r.get('kind')})\n>>> {r['text']}\n\n" + "\n---\n".join(replies) + "\n")
         bot.store.clear_pending(h)
@@ -185,6 +187,19 @@ def main(argv=None):
             f.write(f"{x['n']},{x['kind_asked']},{x['answer']},{x['shown_things']},\n")
     print(json.dumps(summary(rows), indent=1))
     bot.pool.stop_all()
+
+
+def _judge_counts(steps_list):
+    """The judge's counts over a request's runs: things, yes, no, unsure, cached, calls, errors, seconds."""
+    out = Counter()
+    for s in steps_list:
+        j = (s or {}).get("judge") or {}
+        for k in ("things", "yes", "no", "unsure", "cached", "calls"):
+            out[k] += j.get(k) or 0
+        out["errors"] += 1 if j.get("error") else 0
+        out["seconds"] += j.get("seconds") or 0
+    out["seconds"] = round(out["seconds"], 2)
+    return dict(out)
 
 
 def summary(rows):
@@ -201,7 +216,12 @@ def summary(rows):
             "dropped_not_the_kind": sum(x["dropped_not_the_kind"] for x in rows),
             "sources_clear": sum(x["sources_clear"] for x in rows), "sources_close": sum(x["sources_close"] for x in rows),
             "nothing_clear_beside_clear": sum(bool(x["nothing_clear_beside_clear"]) for x in rows),
-            "cost_usd": round(sum(costs), 4), "cost_per_request": round(sum(costs) / max(1, len(rows)), 5)}
+            "cost_usd": round(sum(costs), 4), "cost_per_request": round(sum(costs) / max(1, len(rows)), 5),
+            # round 9, slice U2: the judge's calls, verdicts, cost and seconds (rows of an older run hold none)
+            "judge": {k: round(sum((x.get("judge") or {}).get(k) or 0 for x in rows), 2)
+                      for k in ("things", "yes", "no", "unsure", "cached", "calls", "errors", "seconds")},
+            "judge_cost_usd": round(sum((x.get("cost_by_purpose") or {}).get("mvp_judge", 0) for x in rows), 4),
+            "seconds_per_request": round(sum(x.get("seconds") or 0 for x in rows) / max(1, len(rows)), 2)}
 
 
 if __name__ == "__main__":
