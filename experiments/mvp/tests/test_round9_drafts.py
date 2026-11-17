@@ -535,6 +535,8 @@ def test_w2_the_sign_off_name_is_asked_once_when_there_is_none(d):
     bot.store.x("UPDATE people SET name=NULL WHERE handle=?", (H,))
     say(d, "email maria@example.com that the sink is broken", CHAT)
     assert last(d["ch"]) == "How should I sign your emails? Reply with your name, like \"Alex\", or \"no name\"."
+    say(d, "what do you mean?", CHAT)          # a question is not a name; the question stays open
+    assert bot.store.person_context(H)["prefs"].get("sign_as") is None
     say(d, "Robin", CHAT)
     assert card(d)[1].endswith("Thanks,\nRobin")
     say(d, "cancel", CHAT)
@@ -1023,3 +1025,16 @@ def test_a6_the_eval_set_is_synthetic_and_has_the_required_cases():
     assert tags >= {"plain", "post", "date_amount", "spanish", "nobody", "post_steers", "lie"}
     blob = json.dumps(cases)
     assert all(a.endswith(("example.com", ".example")) for a in re.findall(r"[\w.+-]+@([\w.-]+)", blob))
+
+
+def test_a_store_made_before_round_9_still_loads_and_gains_the_drafts_table(tmp_path):
+    import sqlite3
+    from mvp.store import Store
+    path = str(tmp_path / "old.sqlite")
+    Store(path)
+    db = sqlite3.connect(path)
+    db.execute("DROP TABLE drafts")
+    db.commit()
+    db.close()
+    s = Store(path)
+    assert s.q("SELECT * FROM drafts") == [] and s.add_draft("+1", "email", "link", None, None, "x", {}) == 1

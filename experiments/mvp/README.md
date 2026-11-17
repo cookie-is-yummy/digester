@@ -103,7 +103,7 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   Gmail account with an app password). Without them, or when a send fails, each email is written as an `.eml` file under
   `MVP_HOME/outbox/` and the reply says so. Every answer email is kept there; a code email that SMTP sent is only
   listed, so the code is not left in a file. The address must be typed by the person (the model never supplies one),
-  and "email this to my mom" gets the offer to email it to them so they can forward it.
+  and "email this to my mom" is a draft the person sends themselves (round 9, below), never their own address.
 - **Calendar**: a Google Calendar "add event" link in the reply (no sign-in) and an `.ics` file in the outbox, attached
   when the answer is emailed. One event per send, in the person's zone, 30 minutes unless they say otherwise.
 - **Acting on an answer**: "email it to me", "add the first one to my calendar for Saturday at 10", "add its
@@ -121,6 +121,21 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   limit (`max_per_day`), whether a rule or the model may name it (`in_rules`, `from_model`) and whether only the
   operator may run it (`who`). Set `MVP_OPERATOR` to your own handle (as in `people.json`) to be the operator;
   unset, nobody is. Tests: `tests/test_round9_registry.py`.
+- **Round 9, emails to other people** (DESIGN.md section 16.A, `drafts.py`): "email my landlord that the kitchen sink
+  is broken", "send the second one to sam@example.com", "draft an email to Sam about the second one" are read by code.
+  The bot writes the email (the model writes it when `MVP_DRAFT_MODEL` is not `0`, and code checks every name, number,
+  date and link against the person's own words and the checked post), shows it whole in three messages, and gives a
+  `mailto:` link: the person checks it and presses Send in their own mail app. The recipient is only ever an address
+  the person typed. "say ...", "subject: ...", "to: ...", "remove the link", "cancel", "show the draft", "sent".
+  With no email set up, "put this in my email" on Messages gives a link to yourself.
+- **The operator's own mailbox** (amendment A-013, Proposed): set `MVP_OPERATOR`, `MVP_MAILBOX_ADDRESS` and
+  `MVP_MAILBOX_APP_PASSWORD` (an app password, in a 0600 file outside git that you source; never in the chat), and
+  optionally `MVP_MAILBOX_SMTP_HOST`/`_PORT` and `MVP_MAILBOX_IMAP_HOST`/`_PORT` (Gmail, iCloud and Fastmail are
+  known). Then the card says Reply "send": "send" on the version you were shown sends it from your address over SMTP
+  after a 2-minute hold (`MVP_SEND_HOLD_MIN`; "undo" stops it), at most 5 a day; any change needs a new "send".
+  "save it as a draft" puts it in your Drafts folder (IMAP: only LIST, APPEND, and for "undo" deleting that one
+  message). Outlook.com cannot be used. Live eval of the draft prompt: `python3 -m mvp.eval_drafts --out <folder>`.
+  Tests: `tests/test_round9_drafts.py`, `tests/test_round9_mailbox.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 

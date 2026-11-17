@@ -687,7 +687,8 @@ class DraftsMixin:
                 return self.send(h, T.DRAFT_ONE_AT_A_TIME)
             if BLANK.match(t):
                 return self._draft_set_to(person, d, "", now)
-        if waiting == "sign" and not CANCEL_WORDS.match(t) and not SEND_WORDS.match(t):
+        if waiting == "sign" and not CANCEL_WORDS.match(t) and not SEND_WORDS.match(t) and "?" not in t \
+                and not re.search(r"\b(?:what|why|how|who|when|where|help|stop|undo|show|draft|email)\b", t, re.I):
             if NO_NAME.match(t):
                 self.store.set_prefs(h, sign_as="")
                 return self._draft_after_to(self.store.person(h), d["id"], now)
