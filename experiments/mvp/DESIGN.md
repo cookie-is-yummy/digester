@@ -721,6 +721,26 @@ part and an earlier one differ, this part wins.
   fakes' recipe, workout and tutorial paths are byte for byte the same (`probe_same` against `same_head.json`).
 - (6) A title that ends with its creator (the neutral "A post from @x") says the creator once: no " by @x" after it
   (`render.by(..., title)`, `pick_parts`). The two follow-up lines built in `followup.py` and `handler.py` still add it.
+- Check of slice U2 (17 Nov, `tests/test_round9_checks2.py`). With the judge, the posts of one rank were ordered by the
+  composer's verdict before round 7's "old after everything fresher": a 2024 post the composer judged clear, whose rounds
+  have probably closed, led a post with two deadlines ahead when the judge said "yes" to neither; a stale post now
+  comes after every fresher post of its rank, then the composer's verdict. The opening line and the closest line name
+  the kind the things were read and judged against (`render.kind_noun`: the goal's word-list phrase, then
+  `result["kind"]`, then the goal's grammar): "what websites have free textures for my renders" said "I found 2 free
+  textures", and live a goal of only "anime shows" said "I found 4 things". A number the judge's form leaves out is
+  read as unsure for this answer but no longer cached, so a repeat asks for it again (it was cached as unsure for
+  good). The prompt holds no wording or post of the founder's case, its examples are from other topics, it judged a
+  tip, a technique, a habit and a pack sensibly when the kind asked for is that (6 synthetic lists) and ignored
+  instructions written in a thing's words. Numbers (counts only; "truly of the kind" is the checker's reading): six
+  requests of the checker's own (anime shows, keyboards, museums, art competitions, guitar songs, drawing tablets), as
+  fresh test people: items answers 3, recommend 1, refused by the interpreter as shopping 2 (not this slice); things
+  shown 9, truly of the kind 7 (the same 9 with the judge off on the same store; with it on, the anime answer counts
+  its 4 shows instead of putting them under the close wording); $0.016 a request, the judge $0.0047 a call. The
+  founder's message twice with fresh stores and his profile: "I recommend" a design-systems post whose names are in
+  its slides, then 5 icon sets under "Named in other saves, close to what you asked"; clear sources 0 and 0; truly UI
+  libraries or kits 0 and 0; no icon pack or component type shown as a library; the same things both times; $0.027 an
+  answer. The 20 draft requests were not run again: the builder's stores show no judge call in either run. Recipes,
+  workouts and tutorials are byte for byte the same on the fakes.
 
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
