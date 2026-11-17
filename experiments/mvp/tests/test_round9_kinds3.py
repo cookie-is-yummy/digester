@@ -27,16 +27,16 @@ ICONS = ("Where to find great icons?\n01. www.iconpile.xyz\n02. www.glyphbox.com
          "04. iconfarm.app")
 GOODIES = ("UI goodies for your next build\n1. Bolt - fast and small\n2. Nimbus - light and airy\n"
            "3. Quill - tidy forms\n4. Reed - quiet tables")
-KITCHEN = ("Kitchen\nOne of the most premium UI libraries I have come across\n- copy the code on each page\n"
-           "- every part feels like a real object")
-PANTRY = "Pantry\nA calm UI library I keep coming back to\nEvery part feels like a real object"   # lists nothing
+BURROW = ("Burrow\nA polished UI library with parts that look hand made\n- copy the code on each page\n"
+          "- every part has its own small motion")
+PANTRY = "Pantry\nA calm UI library I keep coming back to\nSoft colours on every part"   # lists nothing
 SOUNDS = ("Studio notes\nMy library of sounds for every UI click\nAll free to download")
 
 ROWS = [("d1", "systemsfan", DESIGNS, "2026-09-01", "2026-09-02", "instagram"),
         ("r1", "uiteacher", RESOURCES, "2026-08-01", "2026-08-02", "instagram"),
         ("i1", "iconfan", ICONS, "2026-07-01", "2026-07-02", "instagram"),
         ("g1", "lister", GOODIES, "2026-06-01", "2026-06-02", "instagram"),
-        ("k1", "kitchenfan", KITCHEN, "2026-05-01", "2026-05-02", "instagram")]
+        ("k1", "burrowfan", BURROW, "2026-05-01", "2026-05-02", "instagram")]
 
 TABLE = {
     "Best design systems": {"items": [{"name": n, "about": "", "fit": "unknown"} for n in ("Harbor", "Lantern",
@@ -45,11 +45,10 @@ TABLE = {
     "Where to find great icons": {"items": [{"name": n, "about": "", "fit": "unknown"}
                                             for n in ("iconpile", "glyphbox", "svgden", "iconfarm")]},
     "UI goodies": {"items": [{"name": n, "about": "", "fit": "unknown"} for n in ("Bolt", "Nimbus", "Quill", "Reed")]},
-    "Kitchen\nOne of the most": {"items": [{"name": "Kitchen", "about": "One of the most premium UI libraries",
-                                            "fit": "yes"}]},
+    "Burrow\nA polished": {"items": [{"name": "Burrow", "about": "A polished UI library", "fit": "yes"}]},
     "Studio notes": {"items": [{"name": "Studio notes", "about": "", "fit": "unknown"}]},
 }
-VERDICTS = {"Kitchen": "yes", "Harbor": "no", "Lantern": "no", "Meadow": "no", "iconpile": "no", "glyphbox": "no",
+VERDICTS = {"Burrow": "yes", "Harbor": "no", "Lantern": "no", "Meadow": "no", "iconpile": "no", "glyphbox": "no",
             "svgden": "no", "iconfarm": "no", "Bolt": "no", "Nimbus": "no", "Quill": "no", "Reed": "no"}
 
 
@@ -126,9 +125,9 @@ def test_k3_only_a_request_for_a_kind_of_thing_is_a_kind_request():
 # ---------- (b) a post that names the kind is read, however the request was worded ----------
 def test_k3_the_long_wording_reads_the_post_that_names_the_kind_and_counts_its_library(lib):
     msg = say(lib, LONG_ASK, long_form())
-    assert any("Kitchen\nOne of the most" in t for t in read_texts(lib))
+    assert any("Burrow\nA polished" in t for t in read_texts(lib))
     assert msg.startswith("I found 1 UI/UX library in your saves")
-    assert "1. Kitchen" in msg and "I recommend" not in msg
+    assert "1. Burrow" in msg and "I recommend" not in msg
     assert "iconpile" not in msg.split("\n")[1]   # never an icon site as the first thing
 
 
@@ -140,7 +139,7 @@ def test_k3_both_wordings_show_the_same_things(lib):
     def things(msg):
         import re
         return [m for m in re.findall(r"^\d+\. ([^\s:]+)", msg, re.M)]
-    assert things(long_msg) == things(short_msg) and "Kitchen" in things(long_msg)
+    assert things(long_msg) == things(short_msg) and "Burrow" in things(long_msg)
 
 
 def test_k3_near_variant_a_post_that_names_the_kind_but_lists_nothing_is_not_read_beyond_the_picks(env, tmp_path):
@@ -179,7 +178,7 @@ def test_k3_a_one_word_kind_reads_as_before(env, tmp_path, monkeypatch):
     env["state"]["answers"]["mvp_extract"] = items_fake(TABLE, seen)
     say(env, "what are some libraries", ask("libraries", ["libraries"]))
     texts = [u.split("<item>", 1)[-1] for u in seen]
-    assert not any("Kitchen\nOne of the most" in t for t in texts)   # the three shown picks take the three places
+    assert not any("Burrow\nA polished" in t for t in texts)   # the three shown picks take the three places
 
 
 def test_k3_a_run_together_spelling_is_on_topic_for_the_posts_that_spell_it_apart(lib, monkeypatch):

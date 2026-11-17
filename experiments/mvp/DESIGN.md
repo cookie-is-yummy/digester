@@ -801,6 +801,35 @@ gave "I recommend" on a design-systems post and icon sets under "Named in other 
   long wording of one pair ("... i could use for my next app") came back as a question from the interpreter (no
   interpreter change in this part); icon packs the judge said "no" to are still shown under "Close, but not quite what
   you asked" when fewer than 2 things are of the kind (slice U2's rule).
+- Check of the live fix (17 Nov; `tests/test_round9_fixcheck.py`, merged with group A's branch, 16.H). Confirmed: the
+  diagnosis (the read step's topic test knew only "uiux", and the second library post is reached only by the
+  interpreter's other searches), the 7 of 14 new tests that fail on the original executor, and recipes, workouts and
+  tutorials byte for byte the same on the fakes (`probe_same` against `same_head.json`, before and after this check's
+  fixes). A caption that repeats the kind words many times over a list of other things is read first once the kind
+  search makes it a candidate, but nothing of it is counted as the kind unless the judge says "yes" (judge "no", off,
+  or failing: its things are shown only under the close wording). Two defects, fixed:
+  (1) the run-together fix knew only the spellings `render.spelled` has (UI/UX, UX/UI): "gamedev channels" left a list
+  that says "Game dev channels" unread the same way ("library", "channel" and "shows" are stop words, so the modifier is
+  the only topic word). `Executor._items_reads` now also reads two neighbouring words of a post joined ("game dev",
+  "no-code") as one; a post on another topic is still not read. (2) Nothing of the fix acted on a Spanish request: the
+  interpreter keeps the goal and the searches in Spanish ("herramientas de IA para un proyecto"), and the kind words are
+  English. `extract.kind_es` reads "<kind word> de <what>" from a closed Spanish list (never with a recipe, workout or
+  tutorial word, and `kind_request` is then None as for "recipe apps"); `purpose_only` knows Spanish purposes ("para mi
+  próximo proyecto", "que debería usar") and more verbs of use ("i should read", "i could follow"). The "Kind asked
+  for" line, the judge and the counted noun stay English-only (a Spanish items answer says "cosas"): not changed here.
+  Numbers (counts only; "truly of the kind" is the checker's reading). The founder's wording and the short wording,
+  each twice with fresh stores and his profile: items answers 4 of 4; one UI library counted in each, the same one in
+  all four (the builder's three fresh founder runs: 3 of 3); icon packs counted as libraries 0; the posts shown under
+  the close wording differ between all four; cost per answer $0.0307 and $0.0304 for the founder's wording (the
+  builder's before and after: $0.0290, $0.0291; within the +$0.01 limit). Four pairs of the checker's own (gamedev
+  channels, startup books, resume templates, AI tools in Spanish; short and with a trailing purpose; fresh test
+  people): same answer kind 1 of 4, the same things 0 of 4 (the builder's six: 4 and 0 of 6); things shown 16, truly of
+  the kind about 4, counted as found though not of the kind 1 (the Spanish short form's one "cosa"); $0.0195 a request.
+  The differences come from the composer's verdicts on the same kind of candidates (the short form "Nothing I found is
+  a clear fit", the purpose form "I recommend" for 2 pairs) and the interpreter's search words; the kind search acted on
+  none of the 8 (each interpretation already searched the kind phrase), the purpose rule on 1. The Spanish pair before
+  this check's fix: items both, the same things no. Also fixed: `tests/test_round9_kinds3.py` held a post's name and
+  wording close to a real saved post's; they are replaced by made-up ones (the tests are otherwise the same).
 
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
@@ -1883,3 +1912,44 @@ Tests: `python3 -m pytest mvp/tests -q`: 2005 passed; `demo`: 10 passed. The rec
 not touched by this pass (no change to `executor.py`, `extract.py`, `answers.py` or `render.py`). Ledger (shared with
 the other group's work running at the same time): $14.5473 before, $15.0890 after; this pass's own model calls were
 the draft evaluation's, $0.306 by the runs (live budget $0.40).
+
+**Check of group A (17 Nov; merged with `--no-ff` onto the kinds live fix, no conflicts; `tests/test_round9_fixcheck.py`).**
+Confirmed with the fakes: every near-variant of the findings file reads as the builder says; an address in a caption
+or a title never fills To (the bot says so and asks); an address typed in an earlier message is never reused (after
+"cancel", after "sent", or with the card still open); "make it friendlier" twice (the second, unchanged, is one line
+and no version); a rewrite that differs only in spacing; seven unchanged rewrites in a row do not use up the 5 changes;
+an unchanged rewrite keeps a waiting send (the words did not change); the apply menu with "1", "2", "all", "yes",
+"none", "3", a date as the answer, a tapback, and a newer to-do list replacing it; routing: the 20 draft requests are
+taken by no new read (0 of 20, counted locally) and the merge tests pass. Defects found and fixed, each with tests that
+fail without the fix:
+- 104: a title or a full name before the typed address was not read ("my boss Mr Smith at <address>", "my teacher Ms
+  Lee (<address>)", "my friend Maya Lopez <address>", "my friend maya (<address>)", "my friend: <address>", "Dr. Ruiz
+  at <address>"): the address stayed in the email's words and the bot asked "Who should it go to?". `drafts._RCPT`
+  takes a title, and a second name or a lowercase name of two words only when the address comes right after it; a day
+  is never a second name; filler words ("asap", "now", "at") are never a lowercase name.
+- 105: an unchanged rewrite while a send of the same words waits in its hold kept the hold (right) but said only "the
+  email is the same as before": it now adds `It's already waiting to go at <time>. Reply "undo" to stop it.`
+  (`DraftsMixin._draft_same_line`; also after a code change that changes nothing). A real change still stops the send.
+- 106: a brief that says its own claim is untrue ("... that the report is done even though it isn't, say i sent it
+  yesterday") was written as asked by draft_v2. Such a brief (`drafts.ADMITS_FALSE`: "even though it isn't" and the
+  like with nothing after it, "and pretend I ...", "lie to ...") now gets one line and no card: `I can't write something
+  you've told me isn't true, so I didn't write this one. Tell me what you'd like to say instead, like: email my boss that
+  I need one more day.` "even though it wasn't my fault" and "make up a good excuse" (draft_v2 leaves the made-up part
+  out) are unchanged. No prompt was changed.
+- 107: with a card still open but a newer answer shown after it, "put this in my email" gave the old card's link; the
+  save words without the word "draft" now mean the card only while it is the newest thing shown (`_draft_card_in_view`),
+  else they go the answer's way as before finding 107. "save it as a draft" still means the card.
+- 108: "none", a number past the menu, or a number already done ended the date question, so "dec 5" next went to the
+  model; the date question now waits for the next message after any reply to the menu while the menu is open
+  (`OffersMixin._offers_date_again`). Any other message still ends it. Left as it was: "yes" to a menu of two offers
+  goes to the model (as for a dated menu), and "12/1" is not read as a date.
+Live (the checker's reading; counts only): `eval_drafts` with draft_v2 on the 25 cases: forms valid 25, first try 24,
+fell back 0, must words missing 0, must-not hits 0, 2 to 5 sentences 23 (the builder's: 25 and 25, 25 and 25, 0, 0, 0,
+22 and 23); every draft read for an invented fact, reason, promise or claim: 0; a feeling beyond the request: 3
+("I really appreciate it" in two thank-yous, "thanks for understanding" on a party note); complete emails a person
+would send as they are: 23 of 25 (one asks the same thing twice, one odd closing line). Tone: a landlord and a
+professor got "Hello," and a polite question; a friend got the name and a relaxed ask; a professor named in the request
+got "Hi <name>," (a little casual). Eight briefs of the checker's own: of three that ask to lie, two had the made-up
+part left out and one was written as asked (fixed above, in code); two posts telling the reader to wire money or send
+a password gave only the friendly intro (no money, address or password); landlord, professor and friend tones as
+above; $0.033 for the evaluation and about $0.01 for the eight.
