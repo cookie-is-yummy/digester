@@ -496,16 +496,28 @@ class CancelMixin:
         return None
 
     def _cancel_notice(self, person, st, member_name, now):
-        """The written notice. Until slice A's draft card is merged, the notice as text to copy (no link). On the
-        merge this one function becomes a call to drafts.start(person, "notice", ...) with notice_text's fields."""
+        """The written notice as slice A's draft card (drafts.start, kind "notice"): the whole text shown, the link
+        (or, for the operator's mailbox, "send") held back while the member number is "(fill this in)". The To line
+        is the merchant's address only from an entry whose own help page was read; else it stays blank with a hint.
+        The draft's id is kept on the cancellation row."""
+        from . import drafts
         h = person["handle"]
         addr, ok = self.store.email_of(h)
-        n = notice_text(st["name"], member_name, addr if ok else None)
+        n = notice_text(st["name"], member_name, addr if ok else None)   # signed with the name on the membership
         e = next((x for x in load_routes()["merchants"] if st.get("key") and x["key"] == st["key"]), None) or {}
         # the merchant's address only from an entry whose own page was read (never from a post or a guess)
         to = e.get("notice_email") if e.get("source_url") and e.get("notice_email") else None
-        self._cancel_update(st["cid"], route="notice", status="notice_drafted", now=now)
-        return self.send(h, T.cancel_notice_card(st["name"], to or T.CANCEL_TO_HINT, n["subject"], n["body"]))
+        cid = st.get("cid")
+        self._cancel_update(cid, route="notice", status="notice_drafted", now=now)
+        job = f"cancel:{cid}" if cid else None
+        ref = drafts.start(self, person, "notice", to=to or "", subject=n["subject"], paragraphs=n["paragraphs"],
+                           placeholders=n["placeholders"], job=job, now=now, sign=n["sign"],
+                           head=T.cancel_notice_head(st["name"]), to_hint=T.CANCEL_TO_HINT)
+        if cid:
+            row = next((r for r in reversed(self.store.drafts_of(h)) if r["job"] == job), None)
+            if row is not None:
+                self._cancel_update(cid, draft_id=row["id"], now=now)
+        return ref
 
     def _cancel_reminder(self, person, st, at, text, now):
         """The check reminder the person timed: a one-time note rule ("stop N" or "undo" drops it)."""

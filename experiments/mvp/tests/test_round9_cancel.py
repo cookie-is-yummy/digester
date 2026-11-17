@@ -170,25 +170,77 @@ def test_a_store_billed_subscription_goes_straight_to_the_store(c):
     no_model(c)
 
 
-def test_the_gym_way_asks_which_gym_and_the_name_then_writes_a_notice(c):
+def card_after(e, text):
+    """The person sends `text`; every message the bot sent back, joined (a draft card is three messages)."""
+    n = len(e["ch"].outbox)
+    msg(e, text)
+    return "\n\n".join(sent_since(e, n))
+
+
+NOTICE_BODY = ("Hello,\n\nPlease cancel my membership effective immediately and stop all future charges. Please confirm "
+               "the cancellation in writing.\n\nName on the membership: Alex Rivera\nMember number: {n}\n\n"
+               "Thank you,\nAlex Rivera")
+
+
+def test_the_gym_way_asks_which_gym_and_the_name_then_writes_a_notice_card(c):
+    """The merge seam (slice B to slice A): the notice is one drafts.start(kind="notice") card, its words as they
+    are, the To line blank with a hint (the file has no read address for this gym), no link while the member number
+    is "(fill this in)", and the draft's id kept on the cancellation row."""
     bot = c["bot"]
     assert msg(c, "how do I get out of my gym membership") == "Which gym?"
     assert msg(c, "Planet Fitness") == "What name is the membership under? I only use it for the notice."
-    out = msg(c, "Alex Rivera")
+    out = card_after(c, "Alex Rivera")
     assert out == ("Here's a cancellation notice you can send to Planet Fitness. Nothing has been sent.\n"
                    "To: (type their email address; their website or your contract has it)\n"
-                   "Subject: Cancel my membership\n\nHello,\n\nPlease cancel my membership effective immediately and "
-                   "stop all future charges. Please confirm the cancellation in writing.\n\n"
-                   "Name on the membership: Alex Rivera\nMember number: (fill this in)\n\nThank you,\nAlex Rivera\n\n"
-                   "Fill in your member number before you send it. Copy it into an email from your own address.")
-    # no link of any kind while the placeholder is there (slice A's card gives the link once it is filled)
+                   "Subject: Cancel my membership\n\n" + NOTICE_BODY.format(n="(fill this in)") + "\n\n"
+                   "Fill in the member number first: reply \"member number 12345\", or \"remove it\".")
+    # no link of any kind while the placeholder is there
     assert "mailto:" not in out and "http" not in out
-    assert bot.store.cancellations(H)[0]["status"] == "notice_drafted"
+    (row,) = bot.store.cancellations(H)
+    (d,) = bot.store.drafts_of(H)
+    assert row["status"] == "notice_drafted" and row["draft_id"] == d["id"]
+    assert d["kind"] == "notice" and d["job"] == f"cancel:{row['id']}" and d["to_addr"] is None
     # "cancel my gym" asks the same; a gym the file doesn't know gets the notice too
+    msg(c, "cancel")
     assert msg(c, "cancel my gym") == "Which gym?"
     assert msg(c, "Iron Temple") == "What name is the membership under? I only use it for the notice."
-    assert "send to Iron Temple." in msg(c, "Sam Lee")
+    assert "send to Iron Temple." in card_after(c, "Sam Lee")
     no_model(c)
+
+
+def test_a_tester_fills_the_member_number_and_gets_the_tap_to_send_link(c):
+    bot = c["bot"]
+    msg(c, "cancel my planet fitness membership")
+    msg(c, "Alex Rivera")
+    # "send" while the placeholder is there: the same fill-in line, never "tap the link above"
+    assert msg(c, "send") == "Fill in the member number first: reply \"member number 12345\", or \"remove it\"."
+    out = card_after(c, "member number 4471")
+    assert NOTICE_BODY.format(n="4471") in out and "(fill this in)" not in out
+    link = out.split("\n")[[k for k, x in enumerate(out.split("\n")) if x.startswith("mailto:")][0]]
+    assert link.startswith("mailto:?subject=Cancel%20my%20membership&body=") and "4471" in link
+    assert msg(c, "send") == "I can't send from your address. Tap the link above and press Send in your mail app."
+    # "sent" after the link: the row says the person sent it, and the reply never says it is over
+    out = msg(c, "sent")
+    assert out == "Thanks. That doesn't end it yet: it ends when they confirm in writing."
+    assert not NEVER_SAID.search(out)
+    assert bot.store.cancellations(H)[0]["status"] == "person_sent"
+    no_model(c)
+
+
+def test_remove_it_takes_the_member_number_line_out_and_gives_the_link(c):
+    msg(c, "cancel my planet fitness membership")
+    msg(c, "Alex Rivera")
+    out = card_after(c, "remove it")
+    assert "Member number" not in out and "Name on the membership: Alex Rivera\n\nThank you," in out
+    assert "\nmailto:?subject=" in out
+
+
+def test_cancelling_the_notice_card_drops_the_row(c):
+    bot = c["bot"]
+    msg(c, "cancel my planet fitness membership")
+    msg(c, "Alex Rivera")
+    assert msg(c, "cancel").startswith("OK, I've dropped it. Nothing was sent.")
+    assert bot.store.cancellations(H)[0]["status"] == "dropped" and bot.store.rules(H) == []
 
 
 def test_the_notice_says_their_confirmed_address_only(c):
@@ -199,10 +251,11 @@ def test_the_notice_says_their_confirmed_address_only(c):
     assert n["to"] is None and n["subject"] == "Cancel my membership"
     bot.store.set_email(H, "alex@example.com", verified=False)
     msg(c, "cancel my planet fitness membership")
-    assert "Email on the account" not in msg(c, "Alex Rivera")    # not confirmed: left out
+    assert "Email on the account" not in card_after(c, "Alex Rivera")    # not confirmed: left out
+    msg(c, "cancel")
     bot.store.set_email(H, "alex@example.com", verified=True)
     msg(c, "cancel my planet fitness membership")
-    assert "Email on the account: alex@example.com" in msg(c, "Alex Rivera")
+    assert "Email on the account: alex@example.com" in card_after(c, "Alex Rivera")
 
 
 def test_an_unknown_merchant_gets_the_general_ways_and_is_logged_without_its_name(c):
@@ -390,9 +443,10 @@ def test_a_notice_address_only_from_a_read_page(c, tmp_path, monkeypatch):
         entry("fitco", "Fitco", route="notice", notice_email="cancel@fitco.example"),
         entry("gymco", "Gymco", route="notice", notice_email="cancel@gymco.example", source=False)])
     msg(c, "cancel my fitco membership")
-    assert "To: cancel@fitco.example\n" in msg(c, "Alex Rivera")
+    assert "To: cancel@fitco.example\n" in card_after(c, "Alex Rivera")
+    msg(c, "cancel")
     msg(c, "cancel my gymco membership")
-    out = msg(c, "Alex Rivera")
+    out = card_after(c, "Alex Rivera")
     assert "gymco.example" not in out and "To: (type their email address" in out
 
 
@@ -685,3 +739,82 @@ def test_merchant_names_are_matched_as_whole_names():
     assert cancel.merchant_in("cancel prime") is None and cancel.merchant_in("amazon prime")["key"] == "amazon_prime"
     assert cancel.merchant_in("netflixandchill") is None
     assert cancel.request("cancel my max subscription") == {"kind": "unknown", "name": "Max"}
+
+
+# ======================================= the notice on the operator's mailbox (W4's rules) =======================================
+@pytest.fixture()
+def opc(c, monkeypatch, tmp_path):
+    """The operator with their own mailbox (slice A's fake SMTP), and a gym whose own page gave its address."""
+    from mvp.tests import test_round9_mailbox as M
+    from mvp import config
+    from mvp.actions import mailbox
+    monkeypatch.setattr(config, "DRAFT_MODEL", False)
+    monkeypatch.setattr(config, "OPERATOR", H)
+    monkeypatch.setenv("MVP_MAILBOX_ADDRESS", M.ME)
+    monkeypatch.setenv("MVP_MAILBOX_APP_PASSWORD", M.PASSWORD)
+    monkeypatch.setenv("MVP_MAILBOX_SMTP_HOST", "smtp.example.invalid")
+    monkeypatch.setenv("MVP_MAILBOX_SMTP_PORT", "465")
+    monkeypatch.delenv("MVP_SMTP_HOST", raising=False)
+    monkeypatch.setattr(mailbox.smtplib, "SMTP_SSL", M.FakeMailSMTP)
+    monkeypatch.setattr(mailbox.smtplib, "SMTP", M.FakeMailSMTP)
+    M.FakeMailSMTP.made, M.FakeMailSMTP.fail = [], None
+    routes_file(tmp_path, monkeypatch, [entry("fitco", "Fitco", route="notice", notice_email="cancel@fitco.example")])
+    c["sends"] = M.sends
+    return c
+
+
+def test_send_on_the_notice_follows_the_mailbox_rules(opc):
+    """W4 on a notice: a placeholder blocks "send"; filled, "send" holds it 2 minutes, then it goes once to the
+    address from the read page; the receipt adds that it is not over until they confirm; the row says the person
+    sent it; the action log never names the gym (no domain on a notice's rows)."""
+    from email import message_from_bytes, policy
+    bot = opc["bot"]
+    msg(opc, "cancel my fitco membership")
+    out = card_after(opc, "Alex Rivera")
+    assert "To: cancel@fitco.example\n" in out and "mailto:" not in out
+    assert msg(opc, "send") == "Fill in the member number first: reply \"member number 12345\", or \"remove it\"."
+    opc["clock"][0] += timedelta(minutes=3)
+    bot.tick()
+    assert opc["sends"]() == []
+    out = card_after(opc, "member number 4471")
+    assert 'Reply "send" to send it from' in out
+    held = msg(opc, "send")
+    assert "cancel@fitco.example" in held and not NEVER_SAID.search(held)
+    assert opc["sends"]() == []   # the hold: nothing has left yet
+    opc["clock"][0] += timedelta(minutes=3)
+    bot.tick()
+    (m,) = opc["sends"]()
+    mail = message_from_bytes(m, policy=policy.default)
+    assert mail["To"] == "cancel@fitco.example" and "Member number: 4471" in mail.get_content()
+    assert last(opc["ch"]).endswith(" That doesn't end it yet: it ends when they confirm in writing.")
+    assert bot.store.cancellations(H)[0]["status"] == "person_sent"
+    rows = sqlite3.connect(bot.store.path).execute("SELECT action, detail, ref FROM action_log").fetchall()
+    assert rows and not any("fitco" in json.dumps(r).lower() for r in rows)
+    no_model(opc)
+
+
+@pytest.mark.parametrize("change", ["say please reply today", "subject: Ending my membership",
+                                    "to: help@fitco.example"])
+def test_a_change_to_the_notice_after_send_stops_the_hold(opc, change):
+    bot = opc["bot"]
+    msg(opc, "cancel my fitco membership")
+    msg(opc, "Alex Rivera")
+    msg(opc, "member number 4471")
+    msg(opc, "send")
+    assert card_after(opc, change).startswith("That stopped the send I had waiting.")
+    opc["clock"][0] += timedelta(minutes=3)
+    bot.tick()
+    assert opc["sends"]() == [] and bot.store.cancellations(H)[0]["status"] == "notice_drafted"
+
+
+def test_remove_it_on_the_mailbox_route_then_send_sends_without_the_line(opc):
+    from email import message_from_bytes, policy
+    bot = opc["bot"]
+    msg(opc, "cancel my fitco membership")
+    msg(opc, "Alex Rivera")
+    msg(opc, "remove it")
+    assert "cancel@fitco.example" in msg(opc, "send")
+    opc["clock"][0] += timedelta(minutes=3)
+    bot.tick()
+    (m,) = opc["sends"]()
+    assert "Member number" not in message_from_bytes(m, policy=policy.default).get_content()

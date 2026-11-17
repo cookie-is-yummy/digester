@@ -1683,11 +1683,13 @@ def cancel_call_reminder_set(when, n):
     return f"OK. {cap_first(when)} I'll remind you to call. Reply \"stop {n}\" to drop it."
 
 
-def cancel_notice_card(merchant, to_line, subject, body):
-    # until slice A's draft card is merged (DESIGN.md section 16.B): the notice as text to copy, with no link
-    return (f"Here's a cancellation notice you can send to {merchant}. Nothing has been sent.\nTo: {to_line}\n"
-            f"Subject: {subject}\n\n{body}\n\nFill in your member number before you send it. Copy it into an email "
-            f"from your own address.")
+def cancel_notice_head(merchant):
+    """The first line of the notice's draft card (slice A's card, kind "notice")."""
+    return f"Here's a cancellation notice you can send to {merchant}. Nothing has been sent."
+
+
+# after the person sends the notice (W4's mailbox, or "sent" after the link): it is not over until they confirm
+NOTICE_NOT_YET = "That doesn't end it yet: it ends when they confirm in writing."
 
 
 # ---------- round 9, slice C (W7, W8, V1; DESIGN.md section 16.C): offers, acting on a saved post, the things ----------

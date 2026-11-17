@@ -485,6 +485,23 @@ def exact_text(to, subject, body):
     return f"{to or ''}\n{subject or ''}\n{body or ''}"
 
 
+def _fill_line(paragraphs, label, value):
+    """The paragraphs with the line that starts with `label` and holds the placeholder filled with `value`, or taken
+    out when `value` is None. A line inside a paragraph counts (a notice's facts are lines of one paragraph)."""
+    out = []
+    for para in paragraphs:
+        lines = []
+        for ln in para.split("\n"):
+            if ln.lower().startswith(label.lower()) and T.PLACEHOLDER in ln:
+                if value is None:
+                    continue
+                ln = ln.replace(T.PLACEHOLDER, value, 1)
+            lines.append(ln)
+        if lines:
+            out.append("\n".join(lines))
+    return out
+
+
 def placeholders_left(row):
     p = row.get("parts")
     p = p if isinstance(p, dict) else json.loads(p or "{}")
@@ -526,19 +543,22 @@ class DraftsMixin:
     def _log_draft(self, h, action, row, status="done", now=None, **more):
         p = row["parts"] if isinstance(row.get("parts"), dict) else json.loads(row.get("parts") or "{}")
         detail = {"kind": row.get("kind"), "route": row.get("route"), "version": row.get("version"),
-                  "recipient_domain": domain_of(row.get("to_addr")) or row.get("to_domain"),
+                  "recipient_domain": None if row.get("kind") == "notice" else
+                  (domain_of(row.get("to_addr")) or row.get("to_domain")),
                   "body_from": p.get("body_from") or "words", **more}
         self.store.log_action(h, None, None, action, status, ref=str(row["id"]), detail=detail, at=now or self.clock())
 
     # ---------- starting a draft ----------
     def draft_start(self, person, kind, to=None, to_name=None, subject=None, paragraphs=(), post=None,
                     placeholders=(), job=None, now=None, to_word=None, request=None, greeting=None, closing=None,
-                    sources=None, note=None, text=None):
+                    sources=None, note=None, text=None, sign=None, head=None, to_hint=None):
         """Opens a draft card and returns the first message's reference. kind: "email" (W2) or "notice" (W6's
         cancellation notice: greeting "Hello,", closing "Thank you,"). to: an address the person typed; None asks for
         one; "" leaves To blank. paragraphs: the body's words, used as they are. post: a checked post block
         ({title, creator, points, url, sensitive, stale}). placeholders: labels of "(fill this in)" lines ("member
-        number"); while one is left the link and "send" are held back. job: who started it ("cancel:3")."""
+        number"); while one is left the link and "send" are held back. job: who started it ("cancel:3"). sign: the
+        sign-off name, not asked for (a notice signs with the name on the membership). head: the card's first line in
+        place of "Here's the email." to_hint: what the To line says while it is blank."""
         h = person["handle"]
         now = now or self.clock()
         route = "mailbox" if self._mailbox_route(h) else "link"
@@ -548,6 +568,12 @@ class DraftsMixin:
              "closing": closing or ("Thank you," if kind == "notice" else None),
              "subject_set": bool(subject), "body_from": "pick" if post and not request and not paragraphs else "words",
              "note": note, "text": (text or "")[:REQUEST_MAX]}
+        if sign is not None:
+            p["sign"] = sign
+        if head:
+            p["head"] = head
+        if to_hint:
+            p["to_hint"] = to_hint
         subj = subject or self._draft_subject_of(p)
         draft_id = self.store.add_draft(h, kind, route, to if to else None, to_name, subj, p, job=job,
                                         sources=sources, at=now)
@@ -580,7 +606,7 @@ class DraftsMixin:
         h = person["handle"]
         row = self._draft(draft_id)
         p = json.loads(row["parts"])
-        if self._draft_sign_name(person) is None:
+        if "sign" not in p and self._draft_sign_name(person) is None:
             self._draft_touch(h, draft_id, now, waiting="sign", asked_at=now_iso(now))
             return self.send(h, T.DRAFT_SIGN_ASK)
         if not (p.get("request") or p.get("paragraphs") or p.get("post") or p.get("model_body")):
@@ -624,7 +650,8 @@ class DraftsMixin:
                                 status=status)
         row = self._draft(draft_id)
         self._draft_touch(h, draft_id, now, waiting=None, shown_version=version)
-        head = (T.DRAFT_NEW_VERSION if new else T.DRAFT_HEAD) + "\n" + T.draft_to_line(to) + "\n" + \
+        to_line = T.draft_to_line(to) if to or not p.get("to_hint") else f"To: {p['to_hint']}"
+        head = (T.DRAFT_NEW_VERSION if new else (p.get("head") or T.DRAFT_HEAD)) + "\n" + to_line + "\n" + \
             f"Subject: {row['subject']}"
         if p.get("post") and p["post"].get("sensitive") and not p.get("no_post"):
             head += "\n" + T.DRAFT_SENSITIVE
@@ -662,6 +689,15 @@ class DraftsMixin:
             refs.append(self.send(h, T.draft_link_message(link, sender)))
         self._draft_touch(h, draft_id, now, refs=refs)
         return ref
+
+    def _draft_job_done(self, row, how, now):
+        """A draft another helper started (job "cancel:<id>", the cancel helper's notice) hears how it ended: "sent"
+        (the mail server took it, or the person says they sent it) or "dropped". Returns a line to add to the reply."""
+        job = row.get("job") or ""
+        if not job.startswith("cancel:") or not job[7:].isdigit():
+            return ""
+        self.store.update_cancellation(int(job[7:]), at=now, status="person_sent" if how == "sent" else "dropped")
+        return " " + T.NOTICE_NOT_YET if how == "sent" else ""
 
     # ---------- the person's next messages while a draft is open ----------
     def draft_reads(self, person, text, pending, now):
@@ -739,7 +775,7 @@ class DraftsMixin:
             self.store.set_state(f"draft_open:{h}", None)
             self._log_draft(h, "draft.person_sent", d, now=now)
             self.note(intent="draft_sent")
-            return self.send(h, T.DRAFT_THANKS)
+            return self.send(h, T.DRAFT_THANKS + self._draft_job_done(d, "sent", now))
         if SAVE_DRAFT.match(t):
             return self._save_to_drafts(person, d, now)
         return self._draft_change(person, d, t, now)
@@ -765,6 +801,7 @@ class DraftsMixin:
         self.store.update_draft(d["id"], status="cancelled", done_at=now_iso(now))
         self.store.set_state(f"draft_open:{h}", None)
         self._log_draft(h, "draft.cancelled", d, now=now)
+        self._draft_job_done(d, "dropped", now)
         line = T.DRAFT_DROPPED if d["version"] else T.DRAFT_DROPPED_UNSHOWN
         if pending and pending["kind"] == "confirm_rule":
             line += " " + T.PREVIEW_STILL_OPEN
@@ -778,16 +815,13 @@ class DraftsMixin:
         if left:
             if REMOVE_IT.match(t):
                 lab = left[0]
-                p["paragraphs"] = [ln for ln in p.get("paragraphs") or []
-                                   if not (ln.lower().startswith(lab.lower()) and T.PLACEHOLDER in ln)]
+                p["paragraphs"] = _fill_line(p.get("paragraphs") or [], lab, None)
                 p["placeholders"] = [x for x in p["placeholders"] if x != lab]
                 return self._draft_apply(person, d, p, now)
             for lab in left:
                 m = re.match(rf"^\W*{re.escape(lab)}\s*(?:is\s+)?[:\-]?\s*(?P<v>\S.{{0,80}}?)\W*$", t, re.I)
                 if m:
-                    p["paragraphs"] = [ln.replace(T.PLACEHOLDER, m.group("v"), 1)
-                                       if ln.lower().startswith(lab.lower()) and T.PLACEHOLDER in ln else ln
-                                       for ln in p.get("paragraphs") or []]
+                    p["paragraphs"] = _fill_line(p.get("paragraphs") or [], lab, m.group("v"))
                     p["placeholders"] = [x for x in p["placeholders"] if x != lab]
                     return self._draft_apply(person, d, p, now)
         m_to = CH_TO.match(t)
@@ -1101,6 +1135,9 @@ class DraftsMixin:
         h = person["handle"]
         if config.is_operator(h) and mailbox.refused_domain():
             return self.send(h, T.MAILBOX_OUTLOOK)
+        left = placeholders_left(d)
+        if left:   # no link was given and nothing can be sent while one is left, on either route
+            return self.send(h, T.fill_first(left[0]))
         if d["route"] != "mailbox" or not self._mailbox_route(h):
             return self.send(h, T.DRAFT_SEND_LINK)
         return self._mailbox_send_word(person, d, now)
@@ -1188,8 +1225,8 @@ class DraftsMixin:
             return 0   # one send per yes
         p = json.loads(row["parts"] or "{}")
         detail = {"kind": row["kind"], "route": "mailbox", "version": row["version"],
-                  "recipient_domain": row["to_domain"], "body_from": p.get("body_from") or "words",
-                  "token": hold["token"]}
+                  "recipient_domain": None if row["kind"] == "notice" else row["to_domain"],
+                  "body_from": p.get("body_from") or "words", "token": hold["token"]}
         self.store.update_draft(row["id"], status="sending", sent_at=now_iso(now))   # before SMTP: never twice
         # logged before SMTP as an attempt (not counted against the day's cap until it has a result)
         log_id = self.store.log_action(h, None, None, "mailbox.attempt", "sending", ref=str(row["id"]),
@@ -1222,7 +1259,8 @@ class DraftsMixin:
         self.store.update_draft(row["id"], status="sent", done_at=now_iso(now))
         self.store.update_action(log_id, "done", detail, action="mailbox.send")
         self.store.set_state(f"draft_open:{h}", None)
-        self.send(h, T.mailbox_accepted(row["to_addr"], self._clock(now, person)))
+        self.send(h, T.mailbox_accepted(row["to_addr"], self._clock(now, person)) + self._draft_job_done(row, "sent",
+                                                                                                         now))
         return 1
 
     # ---------- A5: a real draft in the operator's Drafts folder (actions/mailbox_imap.py) ----------
