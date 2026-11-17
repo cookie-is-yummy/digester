@@ -139,3 +139,8 @@ FIRST_REQUESTS = 3             # offered at the end of onboarding, each with at 
 FIRST_REQUEST_MIN = 3
 ONBOARD_OFFER_HOURS = 24       # "1", "2", "3" and "every morning" pick from the offer this long
 ONBOARD_STEP_HOURS = 24        # steps 2 and 3 wait this long for an answer; after that the setup ends quietly
+
+# ---------- round 9, live fix (kinds; DESIGN.md section 12, "Round 9, live fix (kinds)", finding 103) ----------
+# a request for a kind of thing whose kind has a modifier ("UI/UX libraries", "design tools") also searches the kind
+# phrase itself, as spelled by code, when no search of the interpreter's already says it ("0" turns it off)
+KIND_SEARCH = os.environ.get("MVP_KIND_SEARCH", "1") != "0"

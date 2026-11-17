@@ -480,6 +480,25 @@ def names_kind_with_modifier(text, kind, between=1):
                for i, t in enumerate(toks))
 
 
+def kind_search(kind, searches):
+    """Round 9, live fix (finding 103): the kind phrase as code spells it ("UI/UX libraries" for "uiux libraries"), to
+    search beside the interpreter's searches, so the short and the long wording of one request share their
+    candidates; None for a kind of one word ("apps" alone would find any app post), or when one of the searches
+    already says it (compared in singular form, after spelling)."""
+    from .render import spelled
+    from .retrieve import _stem
+    head, mods = kind_parts(kind)
+    if not head or not mods:
+        return None
+
+    def key(s):
+        return " ".join(_stem(t) for t in _KIND_WORD.findall(norm(spelled(s or ""))) if t not in _NOT_MODIFIERS)
+    phrase = " ".join(spelled(kind).split())
+    if key(phrase) in {key(s) for s in searches}:
+        return None
+    return phrase
+
+
 def head_of_post(it, extra=None):
     """The post's title and first lines, where it says what it is about (KIND_HEAD_LINES lines, KIND_HEAD_CHARS)."""
     lines = [x.strip() for x in own_text_lines(it, extra).split("\n") if x.strip()]

@@ -445,7 +445,18 @@ class ExecutorMixin:
                 # places out of the window after it is cut; a wider window refills them from the next ranks
                 widen = (bool(spec.content.avoid) or bool(getattr(self._tl, "passed_on", None))) \
                     and spec.content.order in ("best", "easiest_first")
-                cands, meta = candidates(self.pool, view, spec, exclude=exclude, disliked=disliked,
+                searched = spec
+                if kind_asked and config.KIND_SEARCH:
+                    # round 9, live fix (kinds, finding 103): the kind phrase itself is searched too, so the short and
+                    # the long wording of one request ("... for my next project") share their candidates; for this
+                    # search only (the stored request keeps the interpreter's searches)
+                    from .extract import kind_search
+                    more = kind_search(kind_asked, spec.content.searches)
+                    if more:
+                        searched = spec.model_copy(deep=True)
+                        searched.content.searches = list(spec.content.searches) + [more]
+                        steps["kind_search"] = 1
+                cands, meta = candidates(self.pool, view, searched, exclude=exclude, disliked=disliked,
                                          creator_weights=weights, now=now, store=self.store, exclude_kinds=ex_kinds,
                                          exclude_platforms=ex_platforms, seed=seed, only=only_ids,
                                          k=config.CANDIDATES + (self.REFILL if widen else 0))

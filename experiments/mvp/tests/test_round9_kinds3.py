@@ -216,3 +216,46 @@ def test_k3_near_variants_keep_their_must_haves(lib):
                                                       criteria=["for beginners"]))
     assert '"for beginners"' in lib["state"]["composed"][-1]
     assert "purpose_left_out" not in json.loads(runs(lib)[-1]["steps"])
+
+
+# ---------- (a) the kind phrase itself is searched too ----------
+def test_k3_the_kind_phrase_is_searched_when_no_search_says_it():
+    from mvp.extract import kind_search
+    assert kind_search("design tools", ["design tools portfolio", "portfolio design tools"]) == "design tools"
+    assert kind_search("chrome extensions", ["chrome extensions for school"]) == "chrome extensions"
+    # near-variants: a search already says it (grading words, spelling and plural do not count), or one word
+    assert kind_search("chrome extensions", ["some chrome extensions"]) is None
+    assert kind_search("UI/UX libraries", ["uiux libraries"]) is None
+    assert kind_search("UI/UX libraries", ["UI UX library"]) is None
+    assert kind_search("apps", ["apps to edit photos"]) is None
+    assert kind_search("UI/UX libraries", ["ui design libraries"]) == "UI/UX libraries"
+
+
+def test_k3_a_long_wording_searches_the_kind_phrase_beside_the_interpreters(lib):
+    say(lib, "what are some ui libraries i should use for my portfolio",
+        ask("ui libraries for a portfolio", ["ui libraries portfolio", "portfolio ui kits"]))
+    assert lib["bot"].pool.queries[-3:] == ["ui libraries portfolio", "portfolio ui kits", "ui libraries"]
+    assert json.loads(runs(lib)[-1]["steps"])["kind_search"] == 1
+    # the stored request keeps the interpreter's searches
+    kept = lib["bot"].store.get_state(f"lastspec:{H}")["spec"]["content"]["searches"]
+    assert kept == ["ui libraries portfolio", "portfolio ui kits"]
+
+
+def test_k3_near_variants_search_only_the_interpreters_words(lib, monkeypatch):
+    # the short wording already says it
+    n = len(lib["bot"].pool.queries)
+    say(lib, "what are some ui libraries", ask("ui libraries", ["ui libraries"]))
+    assert lib["bot"].pool.queries[n:] == ["ui libraries"]
+    assert "kind_search" not in json.loads(runs(lib)[-1]["steps"])
+    # a recipe request, and the setting turned off
+    lib["bot"].store.clear_pending(H)
+    n = len(lib["bot"].pool.queries)
+    say(lib, "easy pasta recipes for my next dinner party", ask("pasta recipes for a dinner party", ["pasta dinner party"]))
+    assert lib["bot"].pool.queries[n:] == ["pasta dinner party"]
+    from mvp import config
+    monkeypatch.setattr(config, "KIND_SEARCH", False)
+    lib["bot"].store.clear_pending(H)
+    n = len(lib["bot"].pool.queries)
+    say(lib, "what are some ui libraries i should use for my portfolio",
+        ask("ui libraries for a portfolio", ["ui libraries portfolio"]))
+    assert lib["bot"].pool.queries[n:] == ["ui libraries portfolio"]
