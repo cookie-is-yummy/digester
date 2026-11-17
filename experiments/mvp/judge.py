@@ -148,11 +148,11 @@ def judge_things(reads, kind, context, library, store=None, person=None, extra=N
             info.update(error="invalid", seconds=round(time.time() - t0, 2))
             return info
         for i, (p, x) in enumerate(need, 1):
-            v = got.get(i, "unsure")
-            verdicts[id(x)] = v
-            have[p["item"].id][norm(x["name"])] = v
+            verdicts[id(x)] = got.get(i, "unsure")
+            if i in got:   # (check of slice U2) only a verdict the form gave is cached: one it left out is asked again
+                have[p["item"].id][norm(x["name"])] = got[i]
         if store is not None:
-            for iid in {p["item"].id for p, _ in need}:
+            for iid in {p["item"].id for i, (p, _) in enumerate(need, 1) if i in got}:
                 store.facts_put(library, iid, ck, have[iid], config.PROMPT_JUDGE, source=source[iid], at=now)
     for _, x in todo:
         apply(x, verdicts[id(x)])

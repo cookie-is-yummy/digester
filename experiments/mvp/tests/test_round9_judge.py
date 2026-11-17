@@ -155,7 +155,9 @@ def test_j1_a_failed_call_or_an_invalid_form_leaves_todays_answer(lib98, monkeyp
 
 def test_j1_the_verdicts_are_cached_with_the_items(lib98, monkeypatch):
     seen = []
-    judge_on(lib98, monkeypatch, {"Pantry": "yes", "Slider": "no"}, seen)
+    # (check of slice U2: every number answered; a number the form leaves out is asked again, test_round9_checks2)
+    judge_on(lib98, monkeypatch, {"Pantry": "yes", "Slider": "no", "Toggle": "no", "Stepper": "no",
+                                  "iconpile": "unsure", "glyphbox": "no", "iconfarm": "no"}, seen)
     first = say(lib98, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
     second = say(lib98, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
     assert len(seen) == 1 and first == second

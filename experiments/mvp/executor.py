@@ -566,6 +566,8 @@ class ExecutorMixin:
                            # round 9, slice U: the kind asked for (extract_v4)
                            "kind": kind_phrase(spec.content.goal or "", request_text or "", *spec.content.searches)
                            if items_mode else None}
+                # check of slice U2: the opening line counts the kind the things were read and judged against
+                result["kind"] = context["kind"]
                 facts, info = details_many([p["item"] for p in targets], extract, view.lib, store=self.store,
                                            person=h, extra=extra, now=now,
                                            once={p["item"].id for p in targets if p.get("read_for_items")},

@@ -459,7 +459,7 @@ def items_intro(result, spec, lang=None):
     if result.get("intro_code"):
         return end_sentence(result["intro_code"])
     n, k = sum(len(its) for _, its, _ in clear), len(clear)
-    noun = (found_noun(spec.content.goal) if not L.code(lang) else None) or t["items_things"]
+    noun = (kind_noun(result, spec) if not L.code(lang) else None) or t["items_things"]
     if n == 1:
         noun = one_of(noun)
     m = len(srcs) - len(clear)
@@ -468,6 +468,18 @@ def items_intro(result, spec, lang=None):
     # live fix pass, round 8 (finding 98): only the clear posts' things are counted as the kind asked for
     head = t["items_found_c_one" if k == 1 else "items_found_c"].format(n=n, noun=noun, k=k)
     return head + (t["and_close_one"] if m == 1 else t["and_close"].format(m=m))
+
+
+def kind_noun(result, spec):
+    """The kind counted in "I found 2 websites ..." and named in 'Nothing I found is a clear fit for "websites".'.
+    Check of round 9, slice U2: the goal's own word-list phrase first (as before), then the kind the posts were read
+    and judged against (result["kind"], extract.kind_phrase), and only then the goal's grammar: "what websites have
+    free textures for my renders" said "I found 2 free textures" while its things were judged as websites, and a goal
+    of only "anime shows" said "I found 4 things"."""
+    goal = " ".join((spec.content.goal or "").split())
+    kind = " ".join(str(result.get("kind") or "").split())
+    return found_noun(goal, grammar=False) or (kind if kind and len(kind.split()) <= FOUND_NOUN_WORDS else None) or \
+        found_noun(goal)
 
 
 def no_deadline_shown(result):
@@ -487,8 +499,8 @@ def no_clear_line(result, spec, lang=None):
     if result.get("change_what") and not L.code(lang):
         return f"Nothing I found is a clear fit for {result['change_what']}."
     goal = " ".join((spec.content.goal or "").split())
-    what = (found_noun(goal) if not L.code(lang) else None) or (goal if goal and len(goal.split()) <= INTRO_GOAL_WORDS
-                                                                 else None)
+    what = (kind_noun(result, spec) if not L.code(lang) else None) or (
+        goal if goal and len(goal.split()) <= INTRO_GOAL_WORDS else None)
     return t["no_clear"].format(goal=what) if what else t["no_clear_any"]
 
 

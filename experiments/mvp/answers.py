@@ -290,8 +290,12 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
     # live fix pass, round 8 (finding 98): the composer's verdict leads (clear, close, then posts read only for their
     # list); inside a verdict the order above stands (a stable sort). A post of an earlier year comes last (99).
     # (round 9, slice U2: with the judge, the composer's own verdict orders the posts that count as the kind)
-    srcs.sort(key=lambda s: (source_rank(s[0]), (2 if not judged(s[0]) else VERDICT_RANK.get(s[0].get("verdict"), 1))
-                             if ran else 0, bool(s[0].get("old_year"))))
+    # (check of slice U2: a stale post, all old rounds or an earlier year's, still comes after every fresher post of its
+    # rank, before the composer's verdict is read: the verdict order had a clear 2024 post lead a post with deadlines
+    # ahead when the judge said "yes" to neither)
+    srcs.sort(key=lambda s: (source_rank(s[0]), (bool(s[0].get("stale_source")),
+                                                 2 if not judged(s[0]) else VERDICT_RANK.get(s[0].get("verdict"), 1))
+                             if ran else (False, 0), bool(s[0].get("old_year"))))
     # round 9, slice U2 (point 4): a thing two posts name is shown once, under the first source that names it (live:
     # one brand was numbered 1 and 2); the other post's block lists its other things
     from .retrieve import norm
