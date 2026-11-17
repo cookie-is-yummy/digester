@@ -412,6 +412,18 @@ class ExecutorMixin:
             # finding 53: a must-have about kit they HAVE ("uses an instant pot") is a preference, not a must-have
             spec = spec.model_copy(deep=True)
             spec.content.criteria = [cr for cr in spec.content.criteria if not any(mentions(cr, k) for k in kits)]
+        from .extract import kind_request, purpose_only
+        kind_asked = kind_request(spec.content.goal or "", request_text or "", *spec.content.searches) \
+            if spec.content.source == "library" and kind != "follow_up" else None
+        purposes = [cr for cr in spec.content.criteria if purpose_only(cr)] if kind_asked else []
+        if purposes:
+            # round 9, live fix (kinds, finding 103): for a request for a kind of thing, a must-have that only says
+            # what the things are for ("for my next project", "for beginners") is the person's purpose, not a test:
+            # it never makes a post that names the kind fail, and it never turns an items answer into "I recommend"
+            # (the composer still reads it in the request's own words)
+            spec = spec.model_copy(deep=True)
+            spec.content.criteria = [cr for cr in spec.content.criteria if cr not in purposes]
+            steps["purpose_left_out"] = len(purposes)
         try:
             view = self.view(person["library"])
             ready = getattr(self.pool, "is_ready", None)
@@ -995,6 +1007,7 @@ class ExecutorMixin:
         result["picks"], result["wider"] = order[:n_picks], order[n_picks:n_picks + len(wider)]
 
     ITEM_READS = 6   # round 8, finding 94: posts the details step reads for an items answer, at most
+    NAMED_READS = 3  # round 9, live fix (finding 103): of them, kept for posts that name the kind with its modifier
 
     def _items_reads(self, result, cands, extra, spec, today, ts, year, things=True, texts=()):
         """Round 8, finding 94: the posts read for an items answer, at most ITEM_READS: the composer's shown picks first,
@@ -1008,7 +1021,7 @@ class ExecutorMixin:
         from .retrieve import _stem
         from .answers import date_fields
         from .compose import title_from_item
-        from .extract import list_score
+        from .extract import head_of_post, list_score, names_kind_with_modifier
         from .retrieve import contains_word, name_matches
         c = spec.content
         shown = list({id(p): p for p in (result.get("picks") or []) + (result.get("wider") or [])}.values())
@@ -1022,12 +1035,25 @@ class ExecutorMixin:
         others = [p for p in result.get("others") or [] if allowed(p["item"])
                   and list_score(own_text_lines(p["item"], extra)) > 0]
         seen |= {p["item"].id for p in others}
-        stems = {_stem(w) for w in query_words(spec, [t for t in texts if t])}
+        from .render import spelled
+        words = query_words(spec, [t for t in texts if t])
+        # round 9, live fix (kinds, finding 103): a run-together spelling is also read as its parts ("uiux": "ui",
+        # "ux"), so a post that says "UI library" is on the topic of "uiux libraries"
+        stems = {_stem(w) for w in words} | {_stem(t) for w in words for t in _tokens(spelled(w))}
 
         def on_topic(it):
             return bool(stems & {_stem(t) for t in _tokens(own_text(it, extra))})
+        # round 9, live fix (kinds, finding 103): a candidate whose title or first lines name the kind with one of its
+        # own modifiers ("premium UI library" for "UI/UX libraries") is read whatever its list score
+        kind = kind_phrase(c.goal or "", *texts) if things else None
+
+        def named(it):
+            return bool(kind) and names_kind_with_modifier(head_of_post(it, extra), kind)
+        others = others + [p for p in result.get("others") or [] if allowed(p["item"]) and p["item"].id not in seen
+                           and named(p["item"])]
+        seen |= {p["item"].id for p in others}
         rest = [(list_score(own_text_lines(it, extra)), i, it) for i, it in enumerate(cands)
-                if allowed(it) and on_topic(it)]
+                if allowed(it) and (on_topic(it) or named(it))]
         # live fix pass, round 8 (finding 102): a title that names a year the request's qualifiers name ("next
         # summer" in November 2026: 2027) is read before candidates that only list things
         from .dates import request_years
@@ -1038,7 +1064,6 @@ class ExecutorMixin:
         # round 9, slice U (point 3): a candidate whose own text names the kind asked for ("library" for "UI/UX
         # libraries") is read before one that only lists things, so the posts read do not hang on which close
         # posts the composer happened to return (live: a post about one library was read in one run, not the next)
-        kind = kind_phrase(c.goal or "", *texts) if things else None
         kind_stem = _stem(_tokens(kind)[-1]) if kind and _tokens(kind) else None
 
         def names_kind(it):
@@ -1046,8 +1071,9 @@ class ExecutorMixin:
         added = [date_fields({"item": it, "title": title_from_item(it), "verdict": "close", "because": None,
                               "because_backed": False, "criteria": [], "lines": [], "facts": {},
                               "lines_reused": False, "read_for_items": True}, extra, today, ts, year)
-                 for score, _, it in sorted(rest, key=lambda x: (not names_year(x[2]), not names_kind(x[2]), -x[0],
-                                                                 x[1])) if score > 0]
+                 for score, _, it in sorted(rest, key=lambda x: (not names_year(x[2]), not named(x[2]),
+                                                                 not names_kind(x[2]), -x[0], x[1]))
+                 if score > 0 or named(it)]
         for p in others:
             date_fields(p, extra, today, ts, year)
         # (round 9, slice U, live check: the composer's other picks filled every place before a post that names the
@@ -1059,7 +1085,20 @@ class ExecutorMixin:
             return names_kind(p["item"]) or (p.get("read_for_items") and names_year(p["item"]))
         extra_reads = others + added
         extra_reads = [p for p in extra_reads if first(p)] + [p for p in extra_reads if not first(p)]
-        reads = (shown + extra_reads)[:self.ITEM_READS] if things else shown[:3]
+        if not things:
+            reads = shown[:3]
+        else:
+            # round 9, live fix (kinds, finding 103): the posts that name the kind with its modifier in their title or
+            # first lines (up to NAMED_READS) always get a place, whatever the composer picked and however the request
+            # was worded; the other places go as before (the shown picks, then the rest); the order read stays
+            pool = shown + extra_reads
+            sure = [p for p in pool if named(p["item"])][:self.NAMED_READS]
+            keep = {id(p) for p in sure}
+            for p in pool:
+                if len(keep) >= self.ITEM_READS:
+                    break
+                keep.add(id(p))
+            reads = [p for p in pool if id(p) in keep]
         result["items_reads"] = reads
         return reads
 

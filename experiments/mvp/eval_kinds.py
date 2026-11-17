@@ -76,6 +76,9 @@ def main(argv=None):
     # round 9, slice U2 (point 3): each request several times as the same person, the composer called afresh each time
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--fresh-composer", action="store_true")
+    # round 9, live fix (kinds): a fixed clock (ISO time), so a second run on a copy of a first run's store reuses its
+    # interpretations and answers (a paired run: only the code differs)
+    ap.add_argument("--at", default=None)
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
@@ -127,7 +130,7 @@ def main(argv=None):
     seen["sources"] = []
 
     ch = ConsoleChannel(printer=None)
-    clock = [datetime.now(timezone.utc).replace(microsecond=0)]
+    clock = [datetime.fromisoformat(a.at) if a.at else datetime.now(timezone.utc).replace(microsecond=0)]
     bot = Bot(ch, store=Store(config.DB), clock=lambda: clock[0])
     bot.max_per_minute = None
     lib = os.path.abspath(a.library)
@@ -199,6 +202,10 @@ def main(argv=None):
             "searches": _h(content.get("searches") or []), "goal_words": len((content.get("goal") or "").split()),
             "composer": [{k: v for k, v in c.items() if k != "handle"} for c in seen["calls"][c0:]],
             "run": r.get("run", 0), "sources": seen["sources"][s0:],
+            # round 9, live fix (kinds): the paired requests (kinds_pairs.jsonl) compare what each form showed
+            "pair": r.get("pair"), "form": r.get("form"),
+            "things_shown": (seen["sources"][s0:] or [{}])[-1].get("things") if seen["sources"][s0:] else None,
+            "posts_shown": _h(sorted(lastspec.get("shown") or [])),
             "cost_usd": round(cost, 6), "cost_by_purpose": {k: round(v, 6) for k, v in by_purpose.items()},
             # round 9, slice U2: the stronger model's judgement of each thing (judge.py), counted
             "judge": _judge_counts(steps),
@@ -208,7 +215,8 @@ def main(argv=None):
     with open(os.path.join(out, "transcript.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(transcript))
     with open(os.path.join(out, "counts.json"), "w", encoding="utf-8") as f:
-        json.dump({"prompt_extract": config.PROMPT_EXTRACT, "model": config.MODEL, "rows": rows}, f, indent=1)
+        json.dump({"prompt_extract": config.PROMPT_EXTRACT, "model": config.MODEL, "at": clock[0].isoformat(),
+                   "rows": rows}, f, indent=1)
     with open(os.path.join(out, "judge.csv"), "w", encoding="utf-8") as f:
         f.write("n,kind_asked,answer,shown_things,truly_of_the_kind\n")
         for x in rows:
@@ -249,7 +257,26 @@ def summary(rows):
             "judge": {k: round(sum((x.get("judge") or {}).get(k) or 0 for x in rows), 2)
                       for k in ("things", "yes", "no", "unsure", "cached", "calls", "errors", "seconds")},
             "judge_cost_usd": round(sum((x.get("cost_by_purpose") or {}).get("mvp_judge", 0) for x in rows), 4),
-            "seconds_per_request": round(sum(x.get("seconds") or 0 for x in rows) / max(1, len(rows)), 2)}
+            "seconds_per_request": round(sum(x.get("seconds") or 0 for x in rows) / max(1, len(rows)), 2),
+            "pairs": pairs(rows)}
+
+
+def pairs(rows):
+    """Round 9, live fix (finding 103): for paired requests (the same kind asked short, and with a trailing purpose),
+    how many pairs gave the same answer kind, showed the same things (both showing some), and the same posts."""
+    by = {}
+    for x in rows:
+        if x.get("pair") is not None:
+            by.setdefault(x["pair"], []).append(x)
+    full = [v for v in by.values() if len(v) == 2]
+    if not full:
+        return None
+    return {"pairs": len(full),
+            "same_answer_kind": sum(1 for a, b in full if a["answer"] == b["answer"]),
+            "same_things": sum(1 for a, b in full if a["things_shown"] and a["things_shown"] == b["things_shown"]
+                               and a["shown_things"] and b["shown_things"]),
+            "both_show_things": sum(1 for a, b in full if a["shown_things"] and b["shown_things"]),
+            "same_posts": sum(1 for a, b in full if a["posts_shown"] == b["posts_shown"])}
 
 
 if __name__ == "__main__":

@@ -445,6 +445,75 @@ def kind_phrase(goal, *texts):
     return None
 
 
+# ---------- round 9, live fix (kinds, finding 103): two wordings of one kind request read the same posts ----------
+_KIND_WORD = re.compile(r"[^\W_]+", re.UNICODE)
+# words of a kind phrase that only grade it: never the modifier that makes a post name the kind ("good libraries")
+_NOT_MODIFIERS = set("""a an the some any good great best top cool nice new free other more useful favourite favorite
+    must have and or of for""".split())
+KIND_HEAD_LINES = 3      # a post names the kind in its title or first lines: its first 3 lines, at most 300 characters
+KIND_HEAD_CHARS = 300
+
+
+def kind_parts(kind):
+    """(head, modifiers) of a kind phrase, compared in singular form after spelling: "UI/UX libraries" gives
+    ("library", {"ui", "ux"}); "chrome extensions" ("extension", {"chrome"}); a kind of one word has no modifier."""
+    from .render import spelled
+    from .retrieve import _stem
+    toks = [_stem(t) for t in _KIND_WORD.findall(norm(spelled(kind or "")))]
+    if not toks:
+        return None, set()
+    return toks[-1], {t for t in toks[:-1] if t not in _NOT_MODIFIERS and len(t) >= 2}
+
+
+def names_kind_with_modifier(text, kind, between=1):
+    """Round 9, live fix (finding 103): True when the text names the kind asked for by its head noun with one of the
+    kind's own modifiers just before it (at most `between` other words between them), after spelling and in singular
+    or plural: "premium UI library", "a UX component library", "the best uiux libraries" for "UI/UX libraries";
+    never for a kind of one word, and never for the head noun alone ("a library of sounds")."""
+    from .render import spelled
+    from .retrieve import _stem
+    head, mods = kind_parts(kind)
+    if not head or not mods:
+        return False
+    toks = [_stem(t) for t in _KIND_WORD.findall(norm(spelled(text or "")))]
+    return any(t == head and any(toks[j] in mods for j in range(max(0, i - 1 - between), i))
+               for i, t in enumerate(toks))
+
+
+def head_of_post(it, extra=None):
+    """The post's title and first lines, where it says what it is about (KIND_HEAD_LINES lines, KIND_HEAD_CHARS)."""
+    lines = [x.strip() for x in own_text_lines(it, extra).split("\n") if x.strip()]
+    return "\n".join(lines[:KIND_HEAD_LINES])[:KIND_HEAD_CHARS]
+
+
+# a must-have that only says what the things are for ("for my next project", "for beginners", "i should use"): for a
+# request that names a kind of thing it is the person's purpose, not a test each post must pass
+PURPOSE = re.compile(
+    r"^\W*(?:(?:that\s+)?(?:i|we)\s+(?:should|could|can|would|might|will)\s+(?:use|get|try|install|download|add|"
+    r"pick|choose)\s*)?(?:(?:to|i\s+can)\s+use\s*)?(?:(?:good|useful|great|ideal|perfect)\s+)?"
+    r"(?:(?:for|in|on)\s+(?:a|an|my|the|our|your|one)?\s*(?:next|new|upcoming|own|first|future|current|personal|side|"
+    r"coming|big|little|small)?\s*(?:project|projects|portfolio|startup|business|app|apps|website|site|work|job|team|"
+    r"class|classes|school|college|uni|university|beginners?|newbies?|starters?|students?|starting\s+out|"
+    r"getting\s+started)|(?:i|we)\s+(?:should|could|can|would|might)\s+(?:use|get|try|install))\W*$", re.I)
+
+
+def purpose_only(criterion):
+    """Round 9, live fix (finding 103): True for a must-have that only says what the things are for."""
+    return bool(PURPOSE.match(" ".join(str(criterion or "").split())))
+
+
+def kind_request(goal, *texts):
+    """Round 9, live fix (finding 103): the kind phrase of a request for a kind of thing (asks_for_things), never of a
+    recipe, a workout or a make-or-build tutorial request (topic_kind); None otherwise."""
+    texts = [t for t in texts if t]
+    topic = topic_kind(goal or "", *texts)
+    # (as default_extract: "my next project" alone is not a make-or-build tutorial)
+    if topic in ("food", "fitness") or (topic == "making" and MAKING.search(" ".join([goal or "", *texts]))) or \
+            not asks_for_things(goal or "", *texts):
+        return None
+    return kind_phrase(goal or "", *texts)
+
+
 # fix pass 4, finding 81: a line that only says what the video is ("This tutorial teaches how to ...", "In this video
 # ...") is not a step, and one line is not steps
 DESCRIBES = re.compile(r"^\W*(?:in\s+)?(?:this|today'?s)\s+(?:\w+\s+){0,3}?(?:video|tutorial|class|course|lesson|episode|"
