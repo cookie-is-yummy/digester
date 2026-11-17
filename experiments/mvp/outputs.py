@@ -272,6 +272,8 @@ saves saved post posts link""".split())
         if not its:
             return None
         chosen = None
+        if numbers and self._numbered_twice(its):
+            return None, False, None, T.THINGS_BY_POST   # (round 9 checks) "2" could be either post's second thing
         if numbers and len(numbers) == 1:
             chosen = next(((x, p) for x, p in its if x.get("n") == numbers[0]), None)
             if chosen is None:
@@ -295,6 +297,13 @@ saves saved post posts link""".split())
         return [self._thing_rec(x, p)], False, snap, None
 
     @staticmethod
+    def _numbered_twice(its):
+        """(round 9 checks) A timed send of things from several posts numbers each post's things from 1
+        (executor._run_items), so one number can name two things: the bot asks rather than guess."""
+        ns = [x.get("n") for x, _ in its]
+        return len(set(ns)) < len(ns)
+
+    @staticmethod
     def _thing_rec(x, p):
         """One thing of an items answer as a pick record: its name, its words, its date, the post's link."""
         return {"item_id": p["item_id"], "title": x.get("name"), "url": p.get("url"), "platform": p.get("platform"),
@@ -310,6 +319,8 @@ saves saved post posts link""".split())
         if not its:
             return None
         if not all_things:
+            if self._numbered_twice(its):
+                return None, False, None, T.THINGS_BY_POST   # (round 9 checks) never the wrong post's thing
             by_n = {x.get("n"): (x, p) for x, p in its}
             if any(n not in by_n for n in numbers or []):
                 return None, False, None, T.which_item(len(its))

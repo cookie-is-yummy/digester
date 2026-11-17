@@ -2169,7 +2169,9 @@ def receipt_unknown(what, who):
 
 
 def receipt_prepared(what, who, mailbox, day):
-    tail = "you haven't said \"send\"" if mailbox else "a link you open in your mail app; I can't see whether you sent it"
+    # (round 9 checks) "not sent", never "you haven't said send": after "send" then "undo", or a hold the bot missed
+    # while offline, the person did say it
+    tail = "not sent" if mailbox else "a link you open in your mail app; I can't see whether you sent it"
     return f"prepared the {what} to {who} ({day}; {tail})"
 
 
@@ -2249,7 +2251,7 @@ def did_held(what, who):
 
 def did_prepared(what, who, mailbox):
     if mailbox:
-        return f"No. I wrote the {what} to {who}, but you haven't said \"send\". Say \"show the draft\" to see it."
+        return f"No. I wrote the {what} to {who}, and it hasn't been sent. Say \"show the draft\" to see it."
     return (f"I didn't send it: I wrote the {what} to {who} and gave you a link to send it from your mail app. I can't "
             f"see whether you sent it. Tell me \"sent\" if you did.")
 
@@ -2484,3 +2486,29 @@ SECRET_IN_CHAT = ("I never take passwords, keys or webhook addresses in the chat
 
 def token_moved(n):
     return f" {'It is' if n == 1 else 'They are'} off your list here now."
+
+
+# ---------- round 9 checks of acting, connectors and receipts (DESIGN.md section 16.G) ----------
+# a timed send of things from several posts numbers each post's things from 1 (executor._run_items): a number alone
+# could mean two things, so the bot asks instead of guessing
+THINGS_BY_POST = ("Those were numbered post by post, so that number could mean more than one thing. Say its name "
+                  "instead, or \"add them all\".")
+
+
+def place_maybe_there(app):
+    """After a time-out: the outside place may have taken it anyway (the request may have arrived)."""
+    return f" It may have reached {app} anyway, so check there before you ask me again."
+
+
+def place_maybe_twice(app):
+    """In the preview, when the same thing timed out in the last 24 hours."""
+    return f"Last time {app} didn't answer in time, so this may be there already. Check {app} before you say yes."
+
+
+def receipt_failed(what, who):
+    return f"tried to send the {what} to {who} after your \"send\", but it didn't go (nothing was sent)"
+
+
+def did_failed(what, who):
+    return (f"No. I tried to send the {what} to {who} after your \"send\", but it didn't go, so nothing was sent. Say "
+            f"\"show the draft\" to try again.")

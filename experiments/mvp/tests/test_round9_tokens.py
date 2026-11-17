@@ -284,7 +284,8 @@ def test_a_due_to_do_carries_its_time_and_the_bot_keeps_no_copy(tok):
     (429, "TickTick asked me to slow down, so I added \"milk\" to your list here, called \"ticktick\"."),
     (500, "TickTick had a problem on its side, so I added \"milk\" to your list here, called \"ticktick\"."),
     (503, "TickTick had a problem on its side, so I added \"milk\" to your list here, called \"ticktick\"."),
-    ("timeout", "TickTick didn't answer in time, so I added \"milk\" to your list here, called \"ticktick\"."),
+    ("timeout", "TickTick didn't answer in time, so I added \"milk\" to your list here, called \"ticktick\". It may "
+                "have reached TickTick anyway, so check there before you ask me again."),   # (round 9 checks)
     (400, "TickTick gave an error, so I added \"milk\" to your list here, called \"ticktick\"."),
     (404, "TickTick said that address doesn't exist, so I added \"milk\" to your list here, called \"ticktick\".")])
 def test_each_failure_falls_back_to_the_list_here_with_a_plain_line(tok, status, line):

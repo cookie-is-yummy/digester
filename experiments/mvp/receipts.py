@@ -215,6 +215,8 @@ class ReceiptsMixin:
                 out.append((at, T.receipt_person_sent(what, who, day_words(at, now, tz))))
             elif st == "unknown":
                 out.append((at, T.receipt_unknown(what, who)))
+            elif st == "failed":   # (round 9 checks) the mail server refused it or could not be reached: not sent
+                out.append((at, T.receipt_failed(what, who)))
             elif st in ("link_shown", "expired") and d.get("version"):
                 out.append((at, T.receipt_prepared(what, who, d.get("route") == "mailbox", day_words(at, now, tz))))
             # open (never shown), held and sending are waiting; cancelled was dropped by the person
@@ -286,6 +288,8 @@ class ReceiptsMixin:
             return T.did_held(what, name)
         if st == "unknown":
             return "I " + T.receipt_unknown(what, name) + "."
-        if d.get("version") and st in ("link_shown", "expired", "failed"):
+        if st == "failed":   # (round 9 checks) never "you haven't said send": they did, and it didn't go
+            return T.did_failed(what, name)
+        if d.get("version") and st in ("link_shown", "expired"):
             return T.did_prepared(what, name, d.get("route") == "mailbox")
         return T.did_not_yet(what, name)

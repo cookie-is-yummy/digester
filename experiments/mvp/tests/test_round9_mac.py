@@ -473,7 +473,9 @@ def test_c3_no_digest_calendar_gives_the_link_and_says_so(env, mac):
                 "Turn it on in System Settings › Privacy & Security › Automation.",
      "Your Mac blocked me from Calendar, so here's a link instead. Turn it on in System Settings › Privacy & Security "
      "› Automation."),
-    ("timeout", "Reminders didn't answer in time, so I added \"milk\" to your list here, called \"apple reminders\".",
+    # (round 9 checks) a time-out may still have added it on the Mac: the line says so
+    ("timeout", "Reminders didn't answer in time, so I added \"milk\" to your list here, called \"apple reminders\". "
+                "It may have reached Reminders anyway, so check there before you ask me again.",
      "Calendar didn't answer in time, so here's a link instead."),
 ])
 def test_c3_blocked_and_timeout_fall_back_with_their_lines(env, mac, fail, reminders_line, calendar_line):

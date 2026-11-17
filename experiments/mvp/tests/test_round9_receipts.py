@@ -210,7 +210,7 @@ def test_a_mailbox_send_is_waiting_then_sent_and_only_then_says_sent(env, monkey
     monkeypatch.setattr(mailbox.smtplib, "SMTP_SSL", FakeMailSMTP)
     FakeMailSMTP.made, FakeMailSMTP.fail = [], None
     say(env, "email maria@example.com that the kitchen sink is broken", CHAT)
-    assert "you haven't said \"send\"" in ask(env, "what did you do for me")
+    assert "(today; not sent)" in ask(env, "what did you do for me")   # (round 9 checks) "not sent", plainly
     assert ask(env, "did you send the email to maria").startswith("No. I wrote the email to someone at example.com")
     say(env, "send", CHAT)
     msg = ask(env, "what's still waiting")

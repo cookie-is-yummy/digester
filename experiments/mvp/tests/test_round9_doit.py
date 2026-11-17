@@ -60,7 +60,8 @@ def open_texts(e):
     ("do it for me", None, None), ("can you do number 2", 2, None), ("do 3 for me", 3, None),
     ("do the first one", 1, None), ("help me with 2", 2, None), ("handle the landlord one", None, "landlord"),
     ("take care of the first one", 1, None), ("Can you please do to-do 4 for me?", 4, None),
-    ("help me with the second one please", 2, None), ("do #2 for me", 2, None), ("take care of it", None, None)])
+    ("help me with the second one please", 2, None), ("do #2 for me", 2, None),
+    ("take care of it for me", None, None)])
 def test_the_phrasings_are_read(text, number, words):
     from mvp.todos import doit_request
     r = doit_request(text)
@@ -69,7 +70,8 @@ def test_the_phrasings_are_read(text, number, words):
 
 @pytest.mark.parametrize("text", ["do it", "do 2", "Do it!", "do the dishes", "help me with my homework",
                                   "take care of yourself", "do you have pasta recipes", "do it again",
-                                  "help me with something", "handle it later", "do the last one", "2", "yes"])
+                                  "help me with something", "handle it later", "do the last one", "2", "yes",
+                                  "handle it", "take care of it", "deal with that"])   # (round 9 checks) no "for me"
 def test_near_variants_are_not_read(text):
     from mvp.todos import doit_request
     assert doit_request(text) is None, text
@@ -162,7 +164,7 @@ def test_buy_call_and_anything_else_say_plainly_and_offer_a_reminder(d):
 def test_it_with_no_to_do_in_view_asks_which(d):
     assert ask(d, "do it for me") == 'Which one? Say "do 2 for me" ("my list" shows the numbers).'
     todos(d, "Renew passport", "Buy milk")
-    assert ask(d, "take care of it") == 'Which one? Say "do 2 for me" ("my list" shows the numbers).'
+    assert ask(d, "take care of it for me") == 'Which one? Say "do 2 for me" ("my list" shows the numbers).'
 
 
 def test_it_means_the_to_do_just_added(d):

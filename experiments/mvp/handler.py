@@ -775,6 +775,7 @@ class HandlerMixin:
         if it.intent == "feedback":
             return self._feedback(person, it.feedback, it.pick_number, it=it, text=text)
         if it.intent == "list_rules":
+            self.store.set_state(f"offers:{h}", None)   # (round 9 checks) a newer numbered list: no older menu's "2"
             return self.send(h, self._rules_text(person, rules))
         if it.intent in ("pause", "resume", "stop"):
             return self._manage(person, rules, it.intent, it.rule_number, it.all_rules, it.until, it.in_minutes)

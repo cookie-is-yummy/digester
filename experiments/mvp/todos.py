@@ -73,7 +73,9 @@ def doit_request(text):
     if verb == "do" and not (m.group("forme") or m.group("todo") or m.group("ord") or m.group("words")
                              or re.search(r"\b(?:number|#)", t, re.I)):
         return None
-    if m.group("it") and verb == "do" and not m.group("forme"):
+    if m.group("it") and not m.group("forme"):
+        # "do it" is a yes; (round 9 checks) "handle it" and "take care of it" are ordinary words about whatever was
+        # just shown (an answer, a draft): only "<verb> it for me" asks W10 to do a to-do
         return None
     if m.group("words") and m.group("words").lower().split()[0] in ("first", "last", "next", "other", "same", "whole"):
         return None
@@ -129,7 +131,10 @@ class TodoMixin:
         person's own last write first, and the timed one only when they made none in the last 10 minutes (review fix
         S4)."""
         key = f"lastwrite_timed:{handle}" if timed else f"lastwrite:{handle}"
-        self.store.set_state(key, {"kind": kind, "say": say, "undo": undo, "at": now_iso(self.clock())})
+        # (round 9 checks) "answer": the answer in view when it was written, so W10's "do it for me" can tell whether
+        # a newer answer came after the to-do (then "it" is that answer's, not the to-do's)
+        self.store.set_state(key, {"kind": kind, "say": say, "undo": undo, "at": now_iso(self.clock()),
+                                   "answer": (self.store.last_answer(handle) or {}).get("run_id")})
 
     def _wrote_final(self, handle, what):
         """Review fix S5: something "undo" cannot reverse (an email, a calendar link, feedback, an address) is the last
@@ -461,6 +466,9 @@ class TodoMixin:
         """The to-do list was just shown: a number in "do 2 for me" means a to-do while no newer answer came."""
         last = self.store.last_answer(h) or {}
         self.store.set_state(f"todoview:{h}", {"at": now_iso(now), "run_id": last.get("run_id")})
+        # (round 9 checks, acts) a newer numbered list replaces an open offer menu, as a new answer does
+        # (outputs._keep_answer): "2" or "do 2" now means the list's number, never an older menu's offer
+        self.store.set_state(f"offers:{h}", None)
 
     def _todos_in_view(self, h, now):
         st = self.store.get_state(f"todoview:{h}")
@@ -506,15 +514,17 @@ class TodoMixin:
             self.note(intent="do_it")
             lw = self._last_write(h, now)
             ids = (lw or {}).get("undo", {}).get("ids") if (lw or {}).get("kind") == "todo_add" else None
+            if ids and lw.get("answer") != (self.store.last_answer(h) or {}).get("run_id"):
+                return None   # (round 9 checks) an answer came after the to-do: "it" is about that answer
             if ids and len(ids) == 1:
                 n, row = next(((i, t) for i, t in enumerate(todos, 1) if t["id"] == ids[0]), (None, None))
             elif len(todos) == 1 and self._todos_in_view(h, now) and self.store.get_state(f"todoview:{h}"):
                 n, row = 1, todos[0]
             if row is None:
                 return self.send(h, T.DOIT_WHICH)
-        return self._do_todo(person, n, row, now)
+        return self._do_todo(person, n, row, now, said=text)
 
-    def _do_todo(self, person, n, row, now):
+    def _do_todo(self, person, n, row, now, said=""):
         """The to-do's helper by what its words say: an email (drafts), a cancel (cancel), a programme or a place from a
         pick (the apply or book menu); else a plain line that says what the bot can't do and offers a reminder."""
         from . import cancel as cancel_mod
@@ -538,7 +548,8 @@ class TodoMixin:
             if rec is not None:
                 snap = {"run_id": None, "picks": []}
                 if BOOK_TODO.search(text):
-                    ref = self._book_menu(person, rec, snap, text, now)
+                    # (round 9 checks) the to-do's words came from a post: never its day or time for the hold
+                    ref = self._book_menu(person, rec, snap, text, now, when_text=said)
                     self.send(h, tail)
                     return ref
                 if APPLY_TODO.search(text) or (not BUY_TODO.match(text) and self._thing_date(rec, now, person)

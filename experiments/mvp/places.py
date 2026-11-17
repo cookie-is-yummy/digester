@@ -143,8 +143,10 @@ def clause(place, reason, cap=None):
         cap = REGISTRY[action].max_per_day
     nouns = con.nouns[action][1] if con else None
     if con and con.kind != "mac":   # round 9, E: a task app by token, or the webhook
-        return T.token_clause(reason, con.apps[place.kind], cap, nouns)
-    return T.place_clause(reason, place.app, _short(place), cap, nouns)
+        out = T.token_clause(reason, con.apps[place.kind], cap, nouns)
+    else:
+        out = T.place_clause(reason, place.app, _short(place), cap, nouns)
+    return out[:1].upper() + out[1:]   # (round 9 checks) it starts a sentence: "Your webhook didn't answer ..."
 
 
 def after(place, reason):
@@ -322,9 +324,10 @@ def _ask_todo(bot, person, place, rows, name, app_list, run_id, due_text, now, m
         plan["move_ids"] = list(move_ids)        # "send my list to ticktick": the copies here go once it is there
         plan["fallback"] = {"kind": "keep"}
     _save_ask(bot, h, plan, now)
+    warn = _maybe_twice(bot, h, idem, con.apps["todo"], now)
     if con.kind != "mac":
-        return "ask", T.token_ask(con.kind, con.apps["todo"], titles, notes, due_text)
-    return "ask", T.place_ask_todo(titles, notes, lst, due_text)
+        return "ask", warn + T.token_ask(con.kind, con.apps["todo"], titles, notes, due_text)
+    return "ask", warn + T.place_ask_todo(titles, notes, lst, due_text)
 
 
 def _ask_event(bot, ctx, place, ev, cal_params):
@@ -357,7 +360,25 @@ def _ask_event(bot, ctx, place, ev, cal_params):
                          "answer": {"kind": answer.get("kind"), "goal": answer.get("goal")},
                          "rule_id": ctx.rule_id, "request_text": ctx.request_text}}
     _save_ask(bot, h, plan, ctx.now)
-    return "ask", T.place_ask_event(params.title, when, notes, params.calendar)
+    warn = _maybe_twice(bot, h, idem, con.apps["calendar"], ctx.now)
+    return "ask", warn + T.place_ask_event(params.title, when, notes, params.calendar)
+
+
+# ---------- (round 9 checks) a time-out: the place may have taken it anyway ----------
+def _unsure_mark(bot, h, idem, now):
+    """After a time-out the request may have arrived: the idempotency key is kept for 24 hours, so asking for the same
+    thing again shows a warning in the preview (no service here takes an idempotency key the bot could send)."""
+    st = {k: v for k, v in (bot.store.get_state(f"placeunsure:{h}") or {}).items()
+          if now - datetime.fromisoformat(v) <= SAME_ASK}
+    st[idem] = now_iso(now)
+    bot.store.set_state(f"placeunsure:{h}", st)
+
+
+def _maybe_twice(bot, h, idem, app, now):
+    at = (bot.store.get_state(f"placeunsure:{h}") or {}).get(idem)
+    if at and now - datetime.fromisoformat(at) <= SAME_ASK:
+        return T.place_maybe_twice(app) + "\n"
+    return ""
 
 
 # ---------- the yes (or no) to a preview; REMOVE or KEEP after "disconnect my mac" ----------
@@ -472,7 +493,11 @@ def run_plan(bot, person, plan, now):
     except C.ConnectorError as e:
         C.failed(bot.store, h, key, e.code, now)
         bot.store.log_action(h, plan.get("run_id"), None, action, "failed", detail={"error": e.code}, at=now)
-        return _fallback(bot, person, plan, e.code, now)
+        out = _fallback(bot, person, plan, e.code, now)
+        if e.code == "timeout":   # (round 9 checks) it may have arrived: never "not there", and a repeat is warned
+            _unsure_mark(bot, h, plan["idem"], now)
+            out = out + T.place_maybe_there(_short(place))
+        return out
     except Exception as e:  # noqa: BLE001 - Refused (a token that is not the rows shown), a bad form: today's action
         bot.store.log_action(h, plan.get("run_id"), None, action, "failed", detail={"error": type(e).__name__}, at=now)
         return _fallback(bot, person, plan, "failed", now)

@@ -67,7 +67,9 @@ _FILLER = re.compile(r"^(?:(?:me|us|a table|a spot|a seat|a reservation|a bookin
                      r"(?:at|for|to|in|into|with|on)\s+)+", re.I)
 _WHEN = re.compile(rf"\s*(?:\b(?:on|this|next|for)\s+)*\b(?:{_DAYW})\b(?:\s+(?:at\s+)?\d{{1,2}}(?::\d\d)?\s*(?:am|pm)?)?"
                    rf"|\s*\b(?:at\s+)?\d{{1,2}}(?::\d\d)?\s*(?:am|pm)\b(?:\s+(?:on\s+)?(?:{_DAYW}))?"
-                   rf"|\s*\bfor\s+(?:\d{{1,2}}|two|three|four|five|six)\s+(?:people|of us|persons)\b", re.I)
+                   rf"|\s*\bfor\s+(?:\d{{1,2}}|two|three|four|five|six)\s+(?:people|of us|persons)\b"
+                   # (round 9 checks) "a table for 2" is how many people, never pick 2
+                   rf"|\s*\b(?:a\s+)?table\s+for\s+(?:\d{{1,2}}|two|three|four|five|six)\b(?!\s*(?:st|nd|rd|th)\b)", re.I)
 
 
 # ---------- reading the message (code only) ----------
@@ -115,7 +117,7 @@ def target_of(raw, verb=None):
     # "the workshop" is tried as a name first (a thing called "Design Workshop"), then as "it"
     name = s if num is None and any(w not in PRONOUNS for w in words) else None
     return {"number": num, "name": name, "generic": generic,
-            "all": bool(re.fullmatch(r"(?:these|those|them|all of them)", low))}
+            "all": bool(re.fullmatch(r"(?:these|those|them|all of them)", low)), "said": bool(words)}
 
 
 def day_time(text, today):
@@ -172,6 +174,11 @@ def when_only(text):
 CUE = re.compile(r"\b(?:requirements?|you(?:'ll)? need|you must|eligibility|eligible|to apply|submit|must)\b", re.I)
 BULLET = re.compile(r"^\s*(?:[-•*·▪●◦–—✅✔☑️➡️👉🔹🔸]+|\d{1,2}[.)])\s*")
 NOT_A_LINE = re.compile(r"@|https?://|www\.|\w\.[a-z]{2,}\b|\bdm\b|\bcomment\b|link in bio|\bfollow\b", re.I)
+# (round 9 checks) a caption's line that asks the reader to pay, or to like, share, tag or text for the creator, is an
+# instruction from the post, never a step of the person's own checklist
+NOT_A_STEP = re.compile(r"[$€£]\s?\d|\d\s?(?:usd|eur|gbp|dollars?|euros?|bucks)\b|\b(?:pay|venmo|cash\s?app|paypal|"
+                        r"zelle|wire|crypto|bitcoin|gift\s?cards?|tag|tagging|share|repost|retweet|like\s+(?:and|&|\+)|"
+                        r"subscribe|giveaway|text\s+\S+\s+to|reply\s+\S+|message\s+me|inbox\s+me|click)\b", re.I)
 
 
 def checklist_lines(text):
@@ -203,7 +210,8 @@ def checklist_lines(text):
     clean = []
     for x in out:
         x = x.strip().rstrip(".,;:!").strip()
-        if 3 <= len(x) <= 120 and not NOT_A_LINE.search(x) and x in (text or "") and x not in clean:
+        if 3 <= len(x) <= 120 and not NOT_A_LINE.search(x) and not NOT_A_STEP.search(x) and x in (text or "") \
+                and x not in clean:
             clean.append(x)
     return clean[:8]
 
@@ -212,10 +220,18 @@ _NOT_PLACE = set("""January February March April May June July July August Septe
 Tuesday Wednesday Thursday Friday Saturday Sunday The This That My Your Our Bio Stories Reels""".split())
 
 
+# (round 9 checks) what follows 📍 is used only when it looks like a place name: at most 4 capitalised words (small
+# joining words allowed), no digits; "📍 Click my bio for the address and call ..." is an instruction, not a place
+PLACE_SHAPE = re.compile(r"^(?:[A-ZÀ-Þ][\w'’.-]*|de|del|da|do|la|le|les|los|las|el|di|du|of|on|upon|the|y|e|am|an|"
+                         r"im|sur|in)(?:\s+(?:[A-ZÀ-Þ][\w'’.-]*|de|del|da|do|la|le|les|los|las|el|di|du|of|on|upon|the|"
+                         r"y|e|am|an|im|sur|in)){0,3}$")
+
+
 def place_word(text):
     """One place word of the post's own text: what follows 📍 (to the first comma), or "in <Capitalised>"."""
     m = re.search(r"📍\s*([^\n,|•]{2,40})", text or "")
-    if m and m.group(1).strip() and not NOT_A_LINE.search(m.group(1)):
+    if m and m.group(1).strip() and not NOT_A_LINE.search(m.group(1)) and PLACE_SHAPE.match(m.group(1).strip()) \
+            and not re.search(r"\d", m.group(1)):
         return m.group(1).strip()
     for m in re.finditer(r"\bin ([A-Z][a-zA-Z]+(?: [A-Z][a-zA-Z]+)?)", text or ""):
         if m.group(1).split()[0] not in _NOT_PLACE:
@@ -305,6 +321,10 @@ class PostactsMixin:
                 return self.thing_reply(person, snap, n)
         req = request(text)
         if not req:
+            return None
+        if not req["target"].get("said", True) and not (req["verb"] == "buy" and req["ingredients"]):
+            # (round 9 checks) "book me a table", "book a table for 2": nothing shown is pointed at ("it", a number, a
+            # name), so it is not about the answer (a pasta recipe is never a place to book); the usual path reads it
             return None
         got = self._postact_target(h, last, snap, things, req)
         if got is None:
@@ -453,7 +473,9 @@ class PostactsMixin:
         return checklist_lines(self._post_text(person, rec))
 
     # ---------- W8: book ----------
-    def _book_menu(self, person, rec, snap, text, now):
+    def _book_menu(self, person, rec, snap, text, now, when_text=None):
+        """`when_text`: the person's own message when `text` is not theirs (W10 passes a to-do's words, which came
+        from a post's title): a hold's day and time are only ever read from what the person typed."""
         from .schedule import _at
         h, tz = person["handle"], person["timezone"]
         zone = ZoneInfo(tz)
@@ -464,7 +486,7 @@ class PostactsMixin:
         url = maps_link(name, place)
         offers = [{"kind": "maps", "text": T.maps_offer(url), "params": {"name": name, "url": url}}]
         notes = [] if place else [T.MAPS_NAME_ONLY]
-        day, hhmm = day_time(text, today)   # the person's words only: never a time from the post
+        day, hhmm = day_time(text if when_text is None else when_text, today)   # the person's words only
         ask = None
         if day and hhmm:
             start = _at(day, hhmm, zone)
@@ -685,6 +707,8 @@ class PostactsMixin:
         h = person["handle"]
         its = sorted(((x, p) for p in snap.get("picks") or [] for x in p.get("items") or []),
                      key=lambda r: r[0].get("n") or 0)
+        if self._numbered_twice(its):
+            return self.send(h, T.THINGS_BY_POST)   # (round 9 checks) "number 2" could be either post's
         hit = next(((x, p) for x, p in its if x.get("n") == n), None)
         if hit is None:
             return self.send(h, T.which_item(len(its)))
