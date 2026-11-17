@@ -993,5 +993,100 @@
    },
    "judge_calls_after": 0
   }
+ },
+ "round9_live_fix_kinds": {
+  "about": "Round 9, live fix (kinds), finding 103 (17 Nov 2026). Counts only; 'truly_of_the_kind' is the builder's reading (the answers stay outside git). k22: the 22 requests replayed on a copy of slice U2's last store (same interpretations, fixed clock). pairs: kinds_pairs.jsonl, fresh before, replayed on a copy of the before store after. founder: his wording 3 times, fresh stores, his profile.",
+  "k22": {
+   "before": {
+    "answers": {
+     "items": 13,
+     "closest": 5,
+     "recommend": 3,
+     "other": 1
+    },
+    "shown_things": 54,
+    "truly_of_the_kind": 46,
+    "wrong_counted_as_the_kind": 0
+   },
+   "after": {
+    "answers": {
+     "items": 12,
+     "recommend_named": 1,
+     "closest": 5,
+     "recommend": 3,
+     "other": 1
+    },
+    "shown_things": 56,
+    "truly_of_the_kind": 47,
+    "wrong_counted_as_the_kind": 0
+   }
+  },
+  "pairs": {
+   "before": {
+    "same_answer_kind": 4,
+    "same_things": 0,
+    "pairs_sharing_a_thing": 3,
+    "things_shared": 9,
+    "shown_things": 40,
+    "truly_of_the_kind": 34,
+    "wrong_counted_as_the_kind": 4,
+    "cost_per_request": 0.0242
+   },
+   "after": {
+    "same_answer_kind": 4,
+    "same_things": 0,
+    "pairs_sharing_a_thing": 4,
+    "things_shared": 11,
+    "shown_things": 41,
+    "truly_of_the_kind": 37,
+    "wrong_counted_as_the_kind": 2
+   }
+  },
+  "shared_candidates_of_40_per_pair_at_0_usd": {
+   "interpreter_searches_only": [
+    35,
+    24,
+    18,
+    4,
+    20
+   ],
+   "with_the_kind_phrase_searched": [
+    38,
+    34,
+    22,
+    25,
+    27
+   ]
+  },
+  "founder_three_fresh_runs": {
+   "before": {
+    "items_answers": 3,
+    "library_post_counted": 1,
+    "icon_pack_counted_as_library": 1,
+    "same_library_in_all_three": false,
+    "same_things_in_all_three": false,
+    "cost_per_answer": 0.029
+   },
+   "after": {
+    "items_answers": 3,
+    "library_post_counted": 3,
+    "icon_pack_counted_as_library": 0,
+    "same_library_in_all_three": true,
+    "same_things_in_all_three": false,
+    "cost_per_answer": 0.0291
+   }
+  },
+  "not_kept": {
+   "named_places_paired_runs": "same counts with and without, on all three sets; pushed a list of 3 servers out of one request",
+   "kind_searches_as_first_written": "1 post that names the kind added to the window in 31 kind requests"
+  },
+  "draft_requests_after": {
+   "handled": 20,
+   "errors": 0,
+   "with_picks": 18,
+   "items_answers": 1,
+   "i_recommend": 14,
+   "cost_usd": 0.195
+  }
  }
 }

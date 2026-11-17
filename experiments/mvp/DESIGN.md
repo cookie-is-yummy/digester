@@ -742,6 +742,66 @@ part and an earlier one differ, this part wins.
   answer. The 20 draft requests were not run again: the builder's stores show no judge call in either run. Recipes,
   workouts and tutorials are byte for byte the same on the fakes.
 
+### Round 9, live fix (kinds)
+Finding 103 (17 Nov): two wordings of one request gave different answers. "What are some UI/UX libraries" gave the
+items answer with 2 libraries; the founder's own wording ("... uiux libraries i should use for my next project")
+gave "I recommend" on a design-systems post and icon sets under "Named in other saves". Tests:
+`tests/test_round9_kinds3.py`. Where this part and an earlier one differ, this part wins.
+- Diagnosis, from the two runs in the live store at $0 (their candidates rebuilt from the store's cached rankings,
+  the posts read from its facts rows). The short wording: the post about one library was candidate 3 of 40, the
+  composer judged it clear, it was read, the judge said "yes"; the second library post (a guide whose text never says
+  "library") was candidate 17 and a clear pick. The long wording: the interpreter searched "uiux libraries", "ui design
+  libraries" and "ux design libraries" with a must-have "for a next project". The library post was candidate 10, the
+  composer did not pick it, and it was never read: beyond the shown picks only posts that share a topic word with the
+  request are read, and the request's only topic word was "uiux", which the post spells "UI". The guide was not a
+  candidate at all: only the interpreter's "design system" and "component" searches reach it. The composer's 3 clear
+  picks (design systems, resources, icon sites) gave no thing the judge called a library, so the clear picks led.
+- Built: the topic words of the read step are also read as their spelled parts (`render.spelled`: "uiux" is "ui" and
+  "ux"; `Executor._items_reads`). Replayed on a copy of the live store (same interpretation, fixed clock): the items
+  answer, 1 UI/UX library counted, never "I recommend".
+- Built (idea c): for a request for a kind of thing (`extract.kind_request`: it asks for things, and is not a recipe,
+  a workout or a make-or-build tutorial), a must-have that only says what the things are for ("for my next project",
+  "for beginners", "i should use", "for my portfolio"; `extract.purpose_only`, a closed list; "for android", "for kids",
+  "free" stay) is left out of the composer's must-haves; the composer still reads it in the person's words. The run's
+  steps say `purpose_left_out`. It acted on 1 of 12 pair requests and on the live run's replay, and changed no count:
+  kept because it closes the path the finding names (a "no" on a purpose lowering a post of the kind), at no cost.
+- Built (idea a, narrowed): a kind with a modifier ("UI/UX libraries", "design tools", "chrome extensions"; never one
+  word such as "apps") is also searched as code spells it, when none of the interpreter's searches already says it
+  (compared in singular, after spelling, without grading words; `extract.kind_search`; the stored request keeps the
+  interpreter's searches; steps `kind_search`; `MVP_KIND_SEARCH=0` turns it off). Measured at $0 on the pairs'
+  stores: candidates the two wordings share, of 40, went from 35, 24, 18, 4, 20 to 38, 34, 22, 25, 27. A search costs
+  an embedding (about $0.000001) and, the first time a text is searched, about 2 seconds. Idea a as first written
+  (the spelled phrase, its singular and each modifier with the head noun) added a post that names the kind to the
+  window once in 31 kind requests: not built.
+- Measured and not kept (idea b): up to 3 of the 6 places kept for candidates whose title or first lines name the
+  kind with its modifier, read even with no list. Paired runs with and without it gave the same counts on the
+  founder's three stores, the 22 requests and the pairs, and reading such posts with no list pushed a list of 3
+  servers out of request 5 (slice U2 found the same: reading a post that names the kind but lists nothing changed
+  nothing). Not kept; the round 8 tests that say so stand unchanged.
+- Measured (counts only; "truly of the kind" is the builder's reading; the answers stay outside git). The kinds
+  evaluation (`eval_kinds.py`, new `--at` for a fixed clock), the 22 requests replayed on a copy of slice U2's last
+  store so the interpretations are the same, before / after: items 13 / 12, recommend with named things after 0 / 1,
+  closest 5 / 5, recommend 3 / 3, a question back 1 / 1; things shown 54 / 56, truly of the kind 46 / 47, wrongly
+  counted in "I found N" 0 / 0 (the "AI tools" request gained a tool; "chrome extensions" now leads with a post about
+  apps and extensions whose names are in its video, instead of "Nothing I found is a clear fit" over coding-editor
+  extensions; nothing is counted as the kind in either). Six new paired requests (`evalset/kinds_pairs.jsonl`: the
+  same kind asked short, and with a trailing purpose), fresh before, paired after: pairs with the same answer kind
+  4 / 4; pairs showing exactly the same things 0 / 0; pairs sharing a thing 3 / 4, things shared 9 / 11; things shown
+  40 / 41, truly of the kind 34 / 37, wrongly counted 4 / 2. The founder's wording 3 times with fresh stores and his
+  profile, before / after: items answers 3 / 3; the one library post read and counted in 1 / 3 runs (an icon pack was
+  counted as a UI library in 1 / 0); the same library counted in all three: no / yes; the same things in all three,
+  close ones included: no / no (the close icon lists still differ). Cost per founder answer $0.0290 / $0.0291; the
+  read limit is unchanged (6), so no request reads more posts. The 20 draft requests once after (a raised daily cap
+  for that run only, `MVP_DAILY_CAP_USD=3`: the fixed handle had spent its day in earlier runs): handled 20, errors 0,
+  with picks 18, items answers 1, "I recommend" 14, $0.195 (slice U2's two runs: 17 and 19 with picks, 1 and 0 items,
+  14 and 17 "I recommend", $0.158 and $0.179); one of them took the kind search. Recipes, workouts and tutorials are
+  byte for byte the same on the fakes (`probe_same` against `same_head.json`).
+- Not fixed here: the two wordings still differ where the interpreter's search words or the composer differ (the
+  guide whose text never says "library" is found by the interpreter's "design system" searches alone); a
+  long wording of one pair ("... i could use for my next app") came back as a question from the interpreter (no
+  interpreter change in this part); icon packs the judge said "no" to are still shown under "Close, but not quite what
+  you asked" when fewer than 2 things are of the kind (slice U2's rule).
+
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
   "another" after a split answer repeats the whole message as one request.
