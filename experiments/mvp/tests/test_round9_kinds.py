@@ -99,3 +99,56 @@ def test_u4_the_kinds_set_holds_invented_requests_only():
     assert 12 <= len(rows) <= 20 and len({r["n"] for r in rows}) == len(rows)
     assert all(set(r) == {"n", "kind", "text"} and r["text"] == r["text"].lower() for r in rows)
     assert not any("@" in r["text"] or "http" in r["text"] for r in rows)
+
+
+# ---------- point 1: the details call is told the kind asked for (extract_v4) ----------
+def test_u1_config_points_at_extract_v4_and_v3_stays():
+    from mvp import config
+    here = os.path.join(os.path.dirname(HERE), "prompts")
+    assert config.PROMPT_EXTRACT == "extract_v4"
+    assert os.path.exists(os.path.join(here, "extract_v3.md"))
+    v4 = open(os.path.join(here, "extract_v4.md"), encoding="utf-8").read()
+    assert "Kind asked for" in v4 and "ITSELF one of the kind asked for" in v4
+    # the contrast examples are about other topics, never interface libraries
+    assert "hiking trails" in v4 and "budgeting apps" in v4
+    assert not any(w in v4.lower() for w in ("ui/ux", "component", "uiux", "icon", "figma", "material ui"))
+
+
+def test_u1_the_kind_phrase_is_the_requests_own_noun():
+    from mvp.extract import kind_phrase
+    assert kind_phrase("uiux libraries for my next project") == "UI/UX libraries"
+    assert kind_phrase("fonts for motion graphics titles") == "fonts"
+    assert kind_phrase("AI tools for designers") == "AI tools"
+    assert kind_phrase("", "any podcasts about startups i should listen to") == "podcasts"
+    assert kind_phrase("a quick dinner", "what should i cook") is None
+    assert kind_phrase("which one should i pick") is None
+
+
+def test_u1_the_details_call_gets_the_kind_on_its_own_line(lib98):
+    seen = []
+    lib98["state"]["answers"]["mvp_extract"] = items_fake(TABLE98, seen)
+    say(lib98, UI_ASK, ask("uiux libraries for my next project", ["ui libraries"]))
+    assert seen and all('\nKind asked for: "UI/UX libraries"\n' in u for u in seen)
+
+
+def test_u1_a_request_that_names_no_kind_gets_no_kind_line(env, tmp_path):
+    rows = [("v1", "maker", "Calm studio vibes\nA slow morning in the studio with tea and plants", "2026-10-01",
+             "2026-10-02", "instagram")]
+    use_lib(env, tmp_path, rows, name="libv")
+    seen = []
+    env["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [pick(u, "Calm studio", title="Calm studio vibes")]}
+    env["state"]["answers"]["mvp_extract"] = items_fake({"Calm studio": {"items": [], "key_points": [
+        "A slow morning in the studio with tea and plants"]}}, seen)
+    say(env, "studio vibes please", ask("studio vibes", ["studio vibes"]))
+    assert seen and not any("Kind asked for" in u for u in seen)
+
+
+def test_u1_a_kind_and_the_prompt_are_part_of_the_items_cache_key(monkeypatch):
+    from mvp import config
+    from mvp.extract import items_cache_kind
+    base = {"request": "fonts for titles", "about": ""}
+    assert items_cache_kind(base) == items_cache_kind(dict(base, kind=None))   # unchanged without a kind
+    a = items_cache_kind(dict(base, kind="fonts"))
+    assert a != items_cache_kind(base) and a != items_cache_kind(dict(base, kind="tools"))
+    monkeypatch.setattr(config, "PROMPT_EXTRACT", "extract_v3")
+    assert items_cache_kind(dict(base, kind="fonts")) != a

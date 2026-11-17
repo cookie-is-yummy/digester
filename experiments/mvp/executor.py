@@ -18,7 +18,8 @@ from . import texts as T
 from .channels.base import SendUncertain
 from .compose import FINISHED, collapse_copies, compose, duration_of, own_text, own_text_lines, written_details
 from .dates import stale
-from .extract import default_extract, default_fits, details_many, fit_extract, items_default, kinds_for, topic_kind
+from .extract import default_extract, default_fits, details_many, fit_extract, items_default, kind_phrase, kinds_for, \
+    topic_kind
 from .render import Reply, joined, none_message, pick_parts, pick_record, picks_message
 from .retrieve import candidates
 from .schema import KINDS, PLATFORMS, RuleSpec
@@ -564,7 +565,11 @@ class ExecutorMixin:
                                            person=h, extra=extra, now=now,
                                            once={p["item"].id for p in targets if p.get("read_for_items")},
                                            context={"request": request_text or spec.content.goal or "",
-                                                    "about": about, "today": today.isoformat()})
+                                                    "about": about, "today": today.isoformat(),
+                                                    # round 9, slice U: the kind asked for (extract_v4)
+                                                    "kind": kind_phrase(spec.content.goal or "", request_text or "",
+                                                                        *spec.content.searches)
+                                                    if items_mode else None})
                 cost += info["cost"]
                 if part is not None:
                     self._tl.details_left = max(0, (getattr(self._tl, "details_left", 0) or 0) - info["calls"])

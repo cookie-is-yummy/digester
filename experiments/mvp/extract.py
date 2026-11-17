@@ -192,6 +192,8 @@ def _context_lines(context, posted):
     out = []
     if c.get("request"):
         out.append("Request: " + json.dumps(" ".join(str(c["request"]).split())[:300], ensure_ascii=False))
+    if c.get("kind"):   # round 9, slice U (extract_v4): the kind of thing the request asks for, on its own line
+        out.append("Kind asked for: " + json.dumps(" ".join(str(c["kind"]).split())[:80], ensure_ascii=False))
     if c.get("today"):
         out.append("Today: " + str(c["today"]))
     if posted:
@@ -340,10 +342,30 @@ def about_belongs(name, about, others, text):
 
 def items_cache_kind(context):
     """The facts table's kind for one request's items: the items that answer a request depend on the request and the
-    person (round 7), so they are cached per request, not per post alone."""
+    person (round 7), so they are cached per request, not per post alone. Round 9, slice U: with a kind asked for, the
+    kind and the prompt that judged "fit" are part of the key (a list judged by an earlier prompt is read again)."""
     c = context or {}
-    key = json.dumps([c.get("request") or "", c.get("about") or ""], ensure_ascii=False)
+    parts = [c.get("request") or "", c.get("about") or ""]
+    if c.get("kind"):
+        parts += [c["kind"], config.PROMPT_EXTRACT]
+    key = json.dumps(parts, ensure_ascii=False)
     return "items:" + hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def kind_phrase(goal, *texts):
+    """Round 9, slice U: the kind of thing a request asks for, in its own words ("UI/UX libraries", "fonts"), for the
+    details call's "Kind asked for" line; None when the request names no kind of thing (extract.THINGS)."""
+    from .render import found_noun
+    for t in (goal, *texts):
+        n = found_noun(t or "")
+        if n:
+            return n
+    for t in (goal, *texts):
+        for m in THINGS.finditer(t or ""):
+            w = m.group(0).lower()
+            if not w.startswith(("which", "what do i know")):
+                return w
+    return None
 
 
 # fix pass 4, finding 81: a line that only says what the video is ("This tutorial teaches how to ...", "In this video
