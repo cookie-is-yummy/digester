@@ -141,6 +141,14 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   "save it as a draft" puts it in your Drafts folder (IMAP: only LIST, APPEND, and for "undo" deleting that one
   message). Outlook.com cannot be used. Live eval of the draft prompt: `python3 -m mvp.eval_drafts --out <folder>`.
   Tests: `tests/test_round9_drafts.py`, `tests/test_round9_mailbox.py`.
+- **Round 9, cancelling a subscription** (DESIGN.md section 16.B): "cancel my netflix", "I want to cancel my
+  duolingo", "how do I get out of my gym membership". Code only (`cancel.py`, no model call): the merchant's own page
+  and steps from `cancel_routes.json` (a link only when its help page was read on the date the file records, and for
+  60 days after), the Apple or Google Play page, or a written notice to copy; then a check reminder at the time the
+  person names. It never signs in, never takes a password ("here's my password ..." gets a fixed line and the message
+  is not kept) and never says it is cancelled. "Cancel my ... subscription" read by the model as "stop" stops no rule.
+  To add a merchant, read its own help page and add an entry with `source_url` and `checked_on` (today's date). Tests:
+  `tests/test_round9_cancel.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -480,6 +488,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `refresh.py` | The inbox per person, the import (demo importer, without the messages folder), the cost cap, the library switch, recovery of an import cut off by a stop, new_items rules, library_status, and the export routine with its reminders |
 | `mcp_server.py` | Round 8, slice B: the read-only MCP server for the person's own agent (stdio, one person, seven tools, the store opened read-only, the data line, personal topics left out and counted, one `action_log` row per call); "what did my agent ask" |
 | `export.py`, `share.py` | Round 8, slice B: "export my data" / "export my lists" (the files, the email of them, removal on deletion); the message to forward for "share it" / "send this to <someone>" |
+| `cancel.py`, `cancel_routes.json` | Round 9, slice B: the cancel helper (the trigger, the guard before a rule stop, the replies, the check reminder, the `cancellations` rows) and the checked ways out per merchant |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |
 | `lang.py` | The answer's fixed phrases in Spanish (with the outside block and the level note that ride on it); any other language gets an all-English answer, and the composer is told to write English. A rule's preview, start line and timed sends are English only for now (their timing words have no Spanish yet), so a rule made in Spanish is set up and sent in English, never in two languages at once |

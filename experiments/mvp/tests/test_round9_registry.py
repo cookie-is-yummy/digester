@@ -356,4 +356,5 @@ def test_the_published_entry_points_import_and_do_nothing():
     from mvp import cancel, drafts
     # round 9, slice A replaced the drafts stub: the entry points take the bot first (tests/test_round9_drafts.py)
     assert callable(drafts.start) and callable(drafts.open_draft) and callable(drafts.from_todo)
-    assert cancel.from_todo({"handle": H}, {"text": "Cancel the gym"}, None) is None
+    # slice B built cancel.from_todo (test_round9_cancel.py): a to-do that is not a cancel is still not handled there
+    assert cancel.from_todo({"handle": H}, {"text": "Buy milk"}, None) is None

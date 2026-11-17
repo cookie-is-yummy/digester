@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from . import config
 from .attention import AttentionMixin
+from .cancel import CancelMixin   # round 9, slice B
 from .digest import DigestMixin
 from .drafts import DraftsMixin   # round 9, slice A
 from .executor import ExecutorMixin
@@ -96,7 +97,8 @@ __all__ = [
 
 class Bot(HandlerMixin, FollowupMixin, OnboardingMixin, TodoMixin, OutputsMixin, ExecutorMixin, SchedulerMixin,
           AttentionMixin, DigestMixin,   # round 8: trends and the theme check (attention.py), the recap (digest.py)
-          DraftsMixin):   # round 9, slice A: emails to other people (drafts.py)
+          DraftsMixin,   # round 9, slice A: emails to other people (drafts.py)
+          CancelMixin):   # round 9, slice B: the cancel helper (cancel.py)
     def __init__(self, channel, store=None, pool=None, clock=None):
         self.channel = channel
         self.store = store or Store(config.DB)

@@ -177,7 +177,15 @@ def export(bot, person, now, lists_only=False):
     files.append(("answers.md", _write(d, "answers.md", answers_md(bot.store, h, tz))))
     text, n = saves_csv(bot.view(person["library"]))
     files.append(("saves.csv", _write(d, "saves.csv", text)))
-    files.append(("README.txt", _write(d, "README.txt", README.format(day=day))))
+    readme = README.format(day=day)
+    # round 9, slice B (DESIGN.md section 16.B): what the cancel helper kept, only when there is something
+    gone = [{k: r[k] for k in ("merchant_key", "route", "status", "check_rule_id", "created_at", "updated_at")}
+            for r in bot.store.cancellations(h)]
+    if gone:
+        files.append(("cancellations.json", _write(d, "cancellations.json", json.dumps(gone, indent=1))))
+        readme += ("\ncancellations.json  The subscriptions you asked the bot to help you end: which one, how, and what "
+                   "you told it. No amounts, no account numbers.\n")
+    files.append(("README.txt", _write(d, "README.txt", readme)))
     files.append(("drafts.json", _write(d, "drafts.json", drafts_json(bot.store, h))))   # round 9, slice A
     out.update(saves=n, rules=n_rules)
     return out

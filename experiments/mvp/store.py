@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, handle 
   route TEXT, to_addr TEXT, to_name TEXT, to_domain TEXT, subject TEXT, body TEXT, version INTEGER DEFAULT 0,
   text_hash TEXT, sources TEXT, parts TEXT, status TEXT NOT NULL, ref TEXT, shown_at TEXT, created_at TEXT,
   done_at TEXT, job TEXT, sent_at TEXT);
+-- round 9, slice B (DESIGN.md section 16.B): the cancel helper; no amounts, no account numbers
+CREATE TABLE IF NOT EXISTS cancellations (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, merchant_key TEXT,
+  route TEXT, status TEXT NOT NULL, check_rule_id INTEGER, draft_id INTEGER, created_at TEXT, updated_at TEXT);
 """
 
 
@@ -738,6 +741,7 @@ class Store:
                       "outside_searches", "imports",
                       "drafts"):   # round 9, slice A
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
+            self.db.execute("DELETE FROM cancellations WHERE handle=?", (handle,))   # round 9, slice B
             others = {os.path.abspath(r["library"]) for r in
                       self.q("SELECT library FROM people WHERE handle<>?", (handle,)) if r.get("library")}
             for lib in libraries:
@@ -810,6 +814,29 @@ class Store:
         self.x("UPDATE drafts SET to_addr=NULL, to_name=NULL, subject=NULL, body=NULL, parts=NULL WHERE done_at IS NOT "
                "NULL AND done_at<? AND (to_addr IS NOT NULL OR body IS NOT NULL OR parts IS NOT NULL OR subject IS NOT "
                "NULL)", (now_iso(before),))
+
+    # ---------- round 9, slice B (DESIGN.md section 16.B): the cancel helper's rows, and a message not kept ----------
+    def add_cancellation(self, handle, merchant_key, route, status, at=None):
+        cur = self.x("INSERT INTO cancellations(handle,merchant_key,route,status,created_at,updated_at) "
+                     "VALUES(?,?,?,?,?,?)", (handle, merchant_key, route, status, now_iso(at), now_iso(at)))
+        return cur.lastrowid
+
+    def update_cancellation(self, cancel_id, at=None, **fields):
+        fields = {k: v for k, v in fields.items() if k in ("route", "status", "check_rule_id", "draft_id")}
+        sets = "".join(f"{k}=?, " for k in fields)
+        self.x(f"UPDATE cancellations SET {sets}updated_at=? WHERE id=?", (*fields.values(), now_iso(at), cancel_id))
+
+    def cancellations(self, handle, since=None):
+        """The person's cancel rows; with `since` (an ISO time, on updated_at) the most recently updated first."""
+        if since:
+            return self.q("SELECT * FROM cancellations WHERE handle=? AND updated_at>=? "
+                          "ORDER BY updated_at DESC, id DESC", (handle, since))
+        return self.q("SELECT * FROM cancellations WHERE handle=? ORDER BY id", (handle,))
+
+    def forget_last_inbound(self, handle):
+        """W6: the person's message is not kept (it may hold a password). The text of their inbound rows not yet
+        handled is cleared now, before anything else could read it."""
+        self.x("UPDATE inbound SET text=NULL WHERE handle=? AND text IS NOT NULL", (handle,))
 
 
 def _domain(addr):
