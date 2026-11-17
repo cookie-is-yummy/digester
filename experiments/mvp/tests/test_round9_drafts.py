@@ -986,7 +986,9 @@ def test_a6_a_rewrite_that_fails_its_checks_gives_the_fixed_line(m):
     model(m, GOOD, dict(GOOD, body="The sink broke on 3 May."))
     say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
     v = draft_row(m)["version"]
-    assert say(m, "make it shorter", CHAT).startswith("I can't rewrite it in a new tone yet.")
+    # (round 9 live fix pass, finding 105: the model was asked, so the reply says it couldn't, not "not yet")
+    assert say(m, "make it shorter", CHAT).startswith("I couldn't make it shorter without adding things you didn't "
+                                                      "say, so the email is the same as before.")
     assert draft_row(m)["version"] == v
 
 

@@ -1803,3 +1803,83 @@ as the merge found. The 20 draft requests live on this tree, as a fresh test per
 "I recommend"); the same kind of reply for all 20, and no round 9 read took any of them. A first try stopped at the
 person's daily cap ($1.00; the test handle had spent it in today's earlier runs) after 5 requests, so it was run again
 with `MVP_DAILY_CAP_USD=5` for that run only. Ledger: $13.6831 before, $14.0010 after ($0.318, both runs).
+
+### 16.H Live fix pass, group A: doing the work (findings 104 to 108, 17 Nov)
+
+The main agent's own check of the merged build on the real library (findings 104 to 108; tests
+`tests/test_round9_live.py`; 43 of its first 59 tests failed on the code before this pass, the others are near-variants
+that must hold either way). Where
+this part and an earlier one differ, this part wins.
+
+- **104, a typed address after the role word.** "email my friend maya@example.com that ..." asked "Who should it go to?"
+  with the address in the message. The recipient (`drafts._RCPT`) now takes an address typed right after the role word
+  or the name, in the usual ways: `my friend <address>`, `my landlord (<address>)` or `<...>`, `my sister, <address>,`,
+  `my friend Maya at <address>`, a lowercase name only before "at <address>" (`Hi Maya,`). "send <recipient> an email
+  saying / that / about / asking ..." is read too (`SEND_RCPT_EMAIL`), only when the words before "an email" are the
+  recipient and nothing else ("send them an email ...", "send my mom an email with the recipe" go the old way). The lock
+  stays: only an address the person typed in this message or as the answer; an address inside the words ("email my
+  friend that <address> is her new address") is never the recipient, and the bot asks. "that X and ask if Y" is now
+  the statement, then the question (`I can't make it on saturday. Can you let me know if sunday works?`), and the
+  subject is the statement alone. The 20 draft requests: 0 taken by the new reads (counted locally).
+- **105, the same text is not a new version.** "make it friendlier" on an email that passes on a post said "Here's the
+  new version" over the same words. Now a rewrite whose words come back the same as the version shown (spacing aside),
+  or that fails the checks twice, gets one line and no card: `I couldn't make it friendlier without adding things you
+  didn't say, so the email is the same as before. Tell me the words to use, like: say "hope you're well", or instead
+  say ...` ("put it in Spanish" for a language); a failed call: `I couldn't rewrite it just now ...`; with the model off
+  the old fixed line stays. A code change that changes nothing ("remove the link" twice, the same subject) says
+  `That's already how the email reads, so nothing changed.` Neither counts as a change or makes a version
+  (`DraftsMixin._draft_same`). Changed on purpose: two tests that expected `I can't rewrite it in a new tone yet.` with
+  the model on (`test_round9_drafts.py`, `test_round9_checks_email.py`). Found by this pass's evaluation: a body
+  sentence that starts with thanks ("Thanks for watering my plants.") was cut as a sign-off and the card showed an empty
+  email; `_CLOSING_LINE` now takes only a sign-off alone, and a form whose body is empty after cleaning is retried, then
+  falls back.
+- **106, draft_v2** (`prompts/draft_v2.md`; `draft_v1` stays; `config.PROMPT_DRAFT = "draft_v2"`). A complete, short,
+  courteous email in the person's voice: why they are writing, the ask as a polite question (only the ask they made;
+  a reported problem may ask the person who looks after it to take a look), a closing line of thanks when it fits, 2 to
+  5 sentences, the tone fitting the recipient word; still no fact, day, number, reason, promise or claim of something
+  done that the person did not give; "fixed" only when they said it; the whole email in the request's language;
+  "Hello," or "Hi," with no name. `drafts.grounded` is the same and stricter: "Dear," (or "Querida,", "Estimado,") with
+  no name is refused. `eval_drafts.py` takes `--prompt` and counts sentences; `evalset/drafts_dev.jsonl` gains 8
+  completeness cases (a complaint, a professor, a reschedule with a day, a thank-you, a decline, a saved post, Spanish,
+  a one-word request: d-dev-18 to 25), and two must-not patterns of d-dev-13 now match whole words ("ill" had matched
+  "will"). Numbers on the 25 cases (counts only; "complete" is the builder's reading: would a person send it as it is):
+
+  | | draft_v1 (2 runs) | draft_v2 (2 runs, final prompt) |
+  | --- | --- | --- |
+  | forms valid (passed the checks) | 24, 24 | 25, 25 |
+  | passed on the first try | 24, 24 | 25, 25 |
+  | fell back to the code words | 1, 1 (the one-word thank-you) | 0, 0 |
+  | must words missing / must-not hits | 1, 1 / 0, 0 | 0, 0 / 0, 0 |
+  | 2 to 5 sentences | 4, 3 | 22, 23 |
+  | complete emails by my reading | 16 (second run) | 25, 24 |
+
+  v1's misses: a bare clause to a landlord or a professor with no ask ("The kitchen sink is broken."), a question with
+  no context, one draft that wrote about its instructions ("I can't make up an excuse ..."). v2's: one Spanish email
+  closed "Best,"; one added an ask the request did not make ("let me know anything I should catch up on"), still
+  counted complete. While the prompt was written, 6 earlier v2 runs showed what the final wording fixes ("Dear," with
+  no name, "¿Podría" at a sentence start failing the capitalised-word check, English for a Spanish request, the post's
+  lines copied into the body, "fixed" avoided when the person had said it). Cost: about $0.0013 a case with v2 against
+  $0.0007 with v1; this pass's evaluation runs together $0.306 (11 runs of 25 cases).
+- **107, "put this in my email" with a card open.** It reached the model and asked for the person's own address and
+  a code. With a card open, "put this in my email", "put it in my drafts", "save it as a draft", "save this email as a
+  draft", "stick it in my inbox", "put it in my mail app" mean the card (`drafts.SAVE_DRAFT`, also not taken as the
+  words while the card waits for them). The operator with a mailbox: the card's version as shown goes to their Drafts
+  folder (before, the answer did). Everyone else: `I can't save it in your mail myself. This link opens it as a new
+  message in your mail app; close it there without sending, and your mail app keeps it as a draft (some ask you
+  first):` and the version's link again (the same `mailto:` the card gave); while a question is open, `The email isn't
+  finished yet ...`; with a placeholder left, the fill-in line and no link. With no card nothing changes. Changed on
+  purpose: `test_a5_a_non_operator_keeps_the_old_way` expects the new line.
+- **108, apply with no date.** "apply to the first one" on a thing whose post gives no date only asked for the date,
+  and a bare "1" after it found nothing waiting. Now the apply menu (`postacts._apply_menu`) offers what the bot can do
+  now: `1. "Apply to <name>" on your to-do list, with the post's link.` (not when an apply to-do from the same post is
+  open already: W10 hands that to-do to this menu), then the checklist when the post has one, `Reply 1, ...`, and the
+  date question as the last line: `The post doesn't say when it closes. Tell me the date, like "dec 5", and I'll set a
+  reminder too.` "1", "yes", "do 1", "the first one", "all" take the offers; after a choice the date question waits for
+  the next message once more (`offers:<handle>.date_ask`), so "1" then "dec 5" sets the reminder too. A dated post is
+  unchanged. Changed on purpose: two tests of `test_round9_postacts.py` (the date question alone; "1" for the checklist,
+  now "2").
+
+Tests: `python3 -m pytest mvp/tests -q`: 2005 passed; `demo`: 10 passed. The recipes, workouts and tutorials paths are
+not touched by this pass (no change to `executor.py`, `extract.py`, `answers.py` or `render.py`). Ledger (shared with
+the other group's work running at the same time): $14.5473 before, $15.0890 after; this pass's own model calls were
+the draft evaluation's, $0.306 by the runs (live budget $0.40).

@@ -63,6 +63,8 @@ GENERIC = set("""it this that these those them one ones the a an restaurant rest
 program workshop fellowship course class event thing things recipe product scholarship internship camp competition
 contest job opportunity post video reel item""".split())
 PRONOUNS = set("it its this that these those them one ones the a an".split())
+# (round 9 live fix pass) a to-do that already says to apply (the menu's own "Apply to ..." or the person's words)
+APPLY_ON_LIST = re.compile(r"^\W*(?:apply|sign\s+up|register|enrol+)\b", re.I)
 _FILLER = re.compile(r"^(?:(?:me|us|a table|a spot|a seat|a reservation|a booking|a room|tickets?|a ticket|up)\b\s*|"
                      r"(?:at|for|to|in|into|with|on)\s+)+", re.I)
 _WHEN = re.compile(rf"\s*(?:\b(?:on|this|next|for)\s+)*\b(?:{_DAYW})\b(?:\s+(?:at\s+)?\d{{1,2}}(?::\d\d)?\s*(?:am|pm)?)?"
@@ -398,14 +400,14 @@ class PostactsMixin:
         return {"type": "link", "url": rec["url"], "title": rec.get("source_title") or rec.get("title"),
                 "platform": rec.get("platform"), "video_id": rec.get("video_id")}
 
-    def _menu(self, h, verb, head, offers, notes, rec, snap, text, now, tail=(), ask=None):
-        """Sends a numbered menu and keeps its offers (offers.py)."""
+    def _menu(self, h, verb, head, offers, notes, rec, snap, text, now, tail=(), ask=None, last=()):
+        """Sends a numbered menu and keeps its offers (offers.py). `last`: lines after the reply line."""
         lines = [head] + [f"{i}. {o['text']}" for i, o in enumerate(offers, 1)] + list(notes)
         parts = [{"type": "text", "text": "\n".join(lines)}]
         link = self._post_link(rec)
         if link:
             parts += [{"type": "text", "text": T.POST_LINK_HEAD}, link]
-        end = list(tail) + ([T.offers_reply_line(len(offers))] if offers else [])
+        end = list(tail) + ([T.offers_reply_line(len(offers))] if offers else []) + list(last)
         if end:
             parts.append({"type": "text", "text": "\n".join(end)})
         self.offers_open(h, verb, [dict(o, verb=verb) for o in offers], text, now, run_id=snap.get("run_id"), ask=ask)
@@ -442,15 +444,26 @@ class PostactsMixin:
                 "params": {"rec": rec, "day": day.isoformat(), "deadline": deadline, "days": 3}})
         elif day is not None:
             notes.append(T.apply_passed(deadline, say_day(day, today)))
+        last = []
+        if day is None and not self._apply_on_list(h, rec):
+            # (round 9 live fix pass, finding 108) no date: still what the bot can do now, as a numbered menu like the
+            # dated case: the to-do "Apply to <name>" with the post's link first (not when it is on the list already:
+            # W10 hands such a to-do to this menu)
+            offers.append({"kind": "todo", "text": T.apply_todo_offer(name),
+                           "params": {"rec": dict(rec, title=T.apply_todo_text(name))}})
         lines = self._checklist_for(person, rec, snap)
         if lines:
             offers.append({"kind": "checklist", "text": T.apply_checklist_offer(lines),
                            "params": {"rec": dict(rec, checklist=lines), "list": name}})
+        date_ask = None
         if day is None:   # the existing question; the next message's date sets the reminder (handler._asked_reads)
-            self.store.set_state(f"deadline_ask:{h}", {"rec": rec, "run_id": snap.get("run_id"), "days": 3,
-                                                      "calendar": True, "text": " ".join(text.split())[:300],
-                                                      "at": now_iso(now)})
-            notes.append(T.deadline_ask(name))
+            date_ask = {"rec": rec, "run_id": snap.get("run_id"), "days": 3, "calendar": True,
+                        "text": " ".join(text.split())[:300], "at": now_iso(now)}
+            self.store.set_state(f"deadline_ask:{h}", date_ask)
+            if offers:   # the date question is the menu's last line
+                last.append(T.APPLY_ASK_DATE)
+            else:
+                notes.append(T.deadline_ask(name))
         if not offers:
             msg = Reply([{"type": "text", "text": T.APPLY_CANT + " " + " ".join(notes)}])
             link = self._post_link(rec)
@@ -461,7 +474,19 @@ class PostactsMixin:
             return self.send(h, msg)
         src = f"from \"{rec['source_title']}\"" + (f" by {rec['creator']}" if rec.get("creator") else "") \
             if rec.get("source_title") else "from your saves"
-        return self._menu(h, "apply", T.apply_head(name, src), offers, notes, rec, snap, text, now)
+        ref = self._menu(h, "apply", T.apply_head(name, src), offers, notes, rec, snap, text, now, last=last)
+        if date_ask:
+            # the date question stays open after a choice from the menu ("1", then "dec 5"): offers.offer_reads asks
+            # it again once the choice has run (handler._asked_reads reads only the next message)
+            st = self.store.get_state(f"offers:{h}")
+            if st:
+                self.store.set_state(f"offers:{h}", dict(st, date_ask=date_ask))
+        return ref
+
+    def _apply_on_list(self, h, rec):
+        """An open to-do from the same post that says apply ("Apply to <name>"), already on the person's list."""
+        return any(t.get("item_id") == rec.get("item_id") and APPLY_ON_LIST.match(t.get("text") or "")
+                   for t in self.store.todos(h)) if rec.get("item_id") else False
 
     def _checklist_for(self, person, rec, snap):
         """Checklist lines from the post's own text, only when the post is about this one thing (a post naming several

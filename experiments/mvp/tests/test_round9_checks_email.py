@@ -273,8 +273,9 @@ def test_a_rewrite_that_adds_a_day_is_not_shown(m):
     model(m, GOOD, dict(GOOD, body="The kitchen sink is broken, sorry to bother you! I can come by on monday."))
     say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
     say(m, "make it friendlier", CHAT)
-    assert last(m["ch"]) == ("I can't rewrite it in a new tone yet. Tell me the words to use, like: instead say I'll be "
-                             "late on Friday.")
+    # (round 9 live fix pass, finding 105: the model was asked, so the reply says it couldn't without adding things)
+    assert last(m["ch"]).startswith("I couldn't make it friendlier without adding things you didn't say, so the email "
+                                    "is the same as before.")
     assert "monday" not in card(m)[1]
 
 

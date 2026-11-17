@@ -86,7 +86,7 @@ def is_operator(handle):
 SEND_HOLD_MIN = float(os.environ.get("MVP_SEND_HOLD_MIN", "2"))   # W4: "send" waits this long; "undo" stops it
 SEND_LATE_MIN = 15             # W4: a hold this late (the bot was off) is not sent; the person is asked again
 DRAFT_MODEL = os.environ.get("MVP_DRAFT_MODEL", "1") != "0"      # A6: the model writes the words (code checks them)
-PROMPT_DRAFT = "draft_v1"
+PROMPT_DRAFT = "draft_v2"      # round 9 live fix pass (finding 106): a complete, courteous email; draft_v1 stays
 DRAFT_MODEL_PER_DAY = 6        # A6: model drafts and rewrites per person per local day; then the code-built words
 
 # ---------- outside picks (DESIGN.md section 11 "Outside picks", slice 5) ----------
