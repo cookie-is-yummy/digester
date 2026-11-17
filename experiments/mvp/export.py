@@ -193,10 +193,17 @@ def export(bot, person, now, lists_only=False):
     # ---------- round 10, slice K: standing permissions (grants) and the apps with a sign-in kept, names only ------
     grants, sign_ins = grants_rows(bot.store, h), sealed_sign_ins(h)
     # ---------- end round 10, slice K ----------
+    # ---------- round 10, slice C: the app tools pinned when you connected by sign-in (tool names only) ----------
+    from .connectors import MCP_ROUTES
+    pinned = {k: sorted((bot.store.get_state(f"pins:{k}:{h}") or {}).get("tools") or {}) for k in MCP_ROUTES}
+    pinned = {k: v for k, v in pinned.items() if v}
+    # ---------- end round 10, slice C ----------
     if conns or made or grants or sign_ins:
         body = {"connections": conns, "placements": made}
         if grants or sign_ins:   # round 10, slice K
             body.update(standing_permissions=grants, sign_ins_kept=sign_ins)
+        if pinned:   # round 10, slice C
+            body.update(pinned_tools=pinned)
         files.append(("connections.json", _write(d, "connections.json", json.dumps(body, indent=1))))
         readme += ("\nconnections.json  The outside places you connected (like Reminders and Calendar on a Mac), and "
                    "each thing the bot\n                  added there: its id there, when, and when it was taken out. No "

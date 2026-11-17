@@ -42,7 +42,9 @@ def _key():
 def test_every_registry_entry_has_rule_grant_false():
     from mvp.actions import REGISTRY, ActionDef
     assert ActionDef.model_fields["rule_grant"].default is False
-    assert [n for n, a in REGISTRY.items() if a.rule_grant] == []
+    # round 10, slice C: the verdict's G2 list is the only set a slice may turn on (C: todoist.mcp_add)
+    allowed = {"ticktick.add", "todoist.add", "mac.reminder", "mac.event", "todoist.mcp_add", "youtube.playlist_add"}
+    assert {n for n, a in REGISTRY.items() if a.rule_grant} <= allowed
 
 
 def test_a_model_form_carrying_place_validates_with_place_none():

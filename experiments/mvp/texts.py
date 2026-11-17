@@ -2567,3 +2567,130 @@ def page_status_line(build, switches):
     """The line under the test page: the build, then each switch by name ("TickTick: off"). Never a value."""
     return " · ".join([f"Build {build}"] + [f"{k}: {v}" for k, v in switches.items()])
 # ---------- end round 10, slice K ----------
+
+
+# ---------- round 10, slice C (DESIGN.md section 17.C): Todoist through its own MCP server, signed in with "Allow" ---
+ACTION_CAP_LABEL.update({"todoist.mcp_add": "tasks in Todoist"})
+TOKEN_CLAUSE.update({
+    "needs_signin": "{app} needs you to sign in again",
+    "changed": "{app} changed how adding a task works",
+    "unpinned": "{app} no longer offers adding a task the way I know",
+    "input_required": "{app} wants you to confirm this in {app} itself",
+    "no_due": "I can't give {app} a due time yet",
+})
+_token_after_r9, _token_status_r9 = token_after, token_status
+
+
+def token_after(code, key):   # noqa: F811 - round 10, slice C: two more reasons, then round 9's
+    if code == "needs_signin":
+        return f" Say \"connect {key}\"."
+    if code == "changed":
+        return f" Say \"yes {key}\" to keep using it, or \"disconnect {key}\"."
+    return _token_after_r9(code, key)
+
+
+def token_status(key, why):   # noqa: F811 - round 10, slice C: two more states, then round 9's
+    if why == "needs_signin":
+        return f"needs you to sign in again (say \"connect {key}\")"
+    if why == "changed":
+        return f"stopped, because it changed how adding a task works (say \"yes {key}\" or \"disconnect {key}\")"
+    return _token_status_r9(key, why)
+
+
+def mcp_connect_link(app, link, word):
+    return (f"To let me add tasks to your {app}, open this link and press Allow: {link}\n"
+            f"I'll only add things after you say yes to them, and you can say \"disconnect {word}\" any time. The link "
+            f"works for 10 minutes.")
+
+
+def mcp_connected(app, word):
+    return (f"{app} is connected. Try \"add it to my {word}\" after an answer, or make a rule like \"every sunday put 3 "
+            f"recipes in my {word}\".")
+
+
+def mcp_tester(app):
+    return f"Connecting {app} from a phone isn't ready yet. I'll keep your list here; say \"my list\" to see it."
+
+
+MCP_NO_KEY = "I can't keep sign-ins safely yet: the person who runs me needs to set a key first."
+
+
+def mcp_changed(app, word):
+    return (f"{app} changed how adding a task works, so I stopped adding there. Say \"yes {word}\" to keep using it, or "
+            f"\"disconnect {word}\".")
+
+
+def mcp_needs_signin(app, word):
+    return f"{app} needs you to sign in again: say \"connect {word}\"."
+
+
+def mcp_revoke_failed(app):
+    return f"I couldn't reach {app} to cancel my access; remove it in {app} under Settings › Integrations."
+
+
+def mcp_maybe_arrived(app):
+    return f" It may have arrived in {app} anyway; check before asking again."
+
+
+def mcp_already(app, word):
+    return f"{app} is already connected. Say \"check my {word}\" to test it, or \"disconnect {word}\" to stop."
+
+
+def mcp_connect_failed(app, code, word):
+    if code == "port":
+        return "I can't open the sign-in page on the computer I run on right now. Try again in a few minutes."
+    if code == "unreachable":
+        return f"I couldn't reach {app} to sign you in just now. Try \"connect {word}\" again in a few minutes."
+    return f"{app}'s sign-in didn't look the way I expect, so I stopped. Nothing was connected."
+
+
+def mcp_signin_failed(app, code, word):
+    """After the person came back from the sign-in page and it did not work."""
+    if code == "denied":
+        return f"{app} didn't let me in, so nothing changed. Say \"connect {word}\" to try again."
+    if code == "expired":
+        return f"That sign-in link had run out, so nothing changed. Say \"connect {word}\" for a new one."
+    if code == "key":
+        return MCP_NO_KEY
+    return f"Signing in to {app} didn't work, so nothing changed. Say \"connect {word}\" to try again."
+
+
+def mcp_pin_failed(app):
+    return f"{app} doesn't offer adding a task the way I know, so I cancelled my access there. Nothing was added."
+
+
+def mcp_checked(app):
+    return f"{app} is connected. New tasks go to your Inbox there."
+
+
+def mcp_off(app, revoked, rules):
+    out = f"I've disconnected {app}." + (" I cancelled my access there." if revoked else "")
+    if rules:
+        out += " Rules that added there keep sending here."
+    return out + ("" if revoked else " " + mcp_revoke_failed(app))
+
+
+def mcp_off_ask(app, n):
+    return (f"I've stopped adding to {app}. I added {_count(n, 'task')} there in the last 30 days. Reply REMOVE to "
+            f"delete those, or KEEP to leave them. Then I'll cancel my access there.")
+
+
+def mcp_off_done(app, removed, failed, revoked):
+    """After REMOVE (removed: how many went) or KEEP (removed None), the disconnect is finished."""
+    if removed is None:
+        out = f"OK, they stay in {app}."
+    else:
+        out = f"I deleted the {_count(removed, 'task')} I'd added to {app}." if removed else ""
+        if failed:
+            out += (" " if out else "") + (f"I couldn't delete {failed} just now; "
+                                           f"{'it is' if failed == 1 else 'they are'} still there.")
+    out = (out + f" I've disconnected {app}" + (" and cancelled my access there." if revoked else ".")).strip()
+    return out + ("" if revoked else " " + mcp_revoke_failed(app))
+
+
+def mcp_yes_again(app, word, rules):
+    out = f"OK, I'll use {app} again. I'll still show you what I add first."
+    if rules:
+        out += f" Rules that added there keep things here until you say \"use {word} for rule\" and its number."
+    return out
+# ---------- end round 10, slice C ----------
