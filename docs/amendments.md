@@ -57,6 +57,98 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-014 · Connectors: registry fields, placements, Reminders and Calendar on the operator's Mac, and token connectors
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "see if you can add more connectors, not just email"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `docs/06-rules-and-actions.md` › Action registry ("Later: Google Tasks …, Notion, Apple Reminders (native app only)") and › Executor (placements with sync: "Done or deleted in any connected tool → … marked done … everywhere"); `docs/03-data-contract.md` (no `connections` or `placements` tables in the prototype's store); `docs/07-privacy-and-safety.md` › Security ("OAuth tokens encrypted at rest"; here a personal token sits in an environment file); `docs/09-roadmap-and-ownership.md` (output actions are Eason's area).
+
+**What is requested**
+The prototype's action registry gains fields that say whether an action changes something outside the bot, whether that can be undone, whether it needs a fresh yes, and who may use it. On that, the first connectors: Apple Reminders and Calendar on the Mac that runs the bot (AppleScript, no account), a task app by personal token (TickTick, Todoist), and one generic webhook. Each is off unless the person who runs the bot sets it up, and each falls back to the bot's own list with a plain line.
+
+**Why the requester wants it**
+"The idea is to make it easier for them to do the work and do the work for them." Today lists and events stay inside the bot or behind a link the person must tap each time.
+
+**Why it is better than the current approach**
+A reminder or event lands where the person already looks, with no tap. No registered app or hosted sign-in is needed, so one person can try it this week. Every placement is recorded, so "undo" and "disconnect" can remove what the bot made.
+
+**Costs and risks**
+- Only the person whose machine runs the bot can use these (operator only). Testers get the fallback.
+- No sync back: a reminder ticked on the phone is not ticked in the bot. `docs/06` promises sync.
+- A personal token in an environment file is weaker than encrypted OAuth tokens. It is never typed in the chat, stored in the database, logged or committed.
+- A webhook's effect cannot be seen or undone by the bot. The reply says so.
+- AppleScript behaviour is medium confidence until tried on a real Mac. One "Don't Allow" needs System Settings to fix.
+- The two tables become a contract change when this is ported to product code.
+- More code in the other founder's area.
+
+**Agent's assessment**
+Agree, for the prototype and the operator only. Do not offer any of these to testers before OAuth with narrow scopes, encrypted tokens and sync exist. The design critic wanted the token connectors deferred until a person asks for one; they are built now because the founder asked for more connectors and uses one of these apps.
+
+**Affected**
+Docs: `06-rules-and-actions.md`, `03-data-contract.md`, `07-privacy-and-safety.md` · Code: `experiments/mvp/actions/`, `places.py`, `connectors.py`, `store.py` · Contract change: no (prototype); yes when ported · Needs both founders: yes
+
+### A-013 · The operator's own mailbox: save a draft, and send after the word "send"
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "say the user wants to put something in their email. it should do that for them too. draft and send the email, it should do that for them too"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `docs/06-rules-and-actions.md` › Safety limits ("Every created object is reversible"); `docs/07-privacy-and-safety.md` › Security ("least-privilege scopes"); `experiments/mvp/DESIGN.md` §6 ("Only to the person's own verified address"), §11 ("Sending to someone else stays out"), §15 ("The bot never sends to anyone but the person"); ownership of output actions.
+
+**What is requested**
+For the person who runs the bot, with their own mail account's app password in an environment file: the bot can save a draft into their Drafts folder, and can send one email to one recipient from their own address. A send happens only after the person replies "send" to the exact final text. Any change voids that yes. The send is held for 2 minutes, during which "undo" stops it.
+
+**Why the requester wants it**
+The founder wants the bot to do the work, in the manner of the Instinct assistant, and chose "always show, then wait for yes" for anything that reaches other people (17 Nov).
+
+**Why it is better than the current approach**
+The person no longer copies text into a mail app. The reply still comes to the person, because the mail is from their own address.
+
+**Costs and risks**
+- A sent email cannot be undone after the hold. This breaks the reversibility rule in `docs/06`.
+- An app password opens the whole mailbox. The code only appends to Drafts and sends; it never reads mail. That is a promise in code, not a scope the provider enforces.
+- The person's name is on text the bot assembled. A wrong draft that is approved is still sent.
+- A leaked environment file leaks the mailbox.
+- Outlook.com accounts cannot be used (basic sign-in is off).
+- Public reports on Instinct describe two sends before approval and one case of following instructions inside an email. Hence: the yes is bound to a hash of the final text, the bot never reads the inbox, and no post text can name a recipient.
+
+**Agent's assessment**
+Agree with limits: operator only, off unless the environment is set, one recipient, 5 sends a day, never from a rule, a follow-up shortcut or the MCP server. For testers the route is a registered app with a send-only scope, which needs both founders and Google's review.
+
+**Affected**
+Docs: `06-rules-and-actions.md` (reversibility), `07-privacy-and-safety.md` · Code: `experiments/mvp/actions/mailbox.py`, `drafts.py` · Contract change: no · Needs both founders: yes
+
+### A-012 · Doing the work: emails to other people as drafts, a cancel helper, acting on a saved post
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "Say that a user says they want to cancel their subscription. you should be able to do that for them … draft and send the email … the idea is to make it easier for them to do the work and do the work for them. the idea is instinct but for social media"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `experiments/mvp/DESIGN.md` §6, §11, §15 (email only to the person; the bot never sends to anyone else); `docs/00-vision.md` (the product starts from saved media; a subscription is often not a saved post); `docs/07-privacy-and-safety.md` › sensitive categories (money: a list of the person's subscriptions); `docs/09-roadmap-and-ownership.md` (output actions).
+
+**What is requested**
+1. "Email my landlord that …", "draft an email to Sam about the second one": the bot shows a full draft (recipient, subject, body). The person changes it in words, then opens it in their own mail app with one tap (a `mailto:` link) and presses Send there.
+2. "Cancel my X subscription": the bot finds the route (the merchant's own cancel page, the app store's subscription page, a written notice, or a phone number), gives the steps or drafts the notice, and offers a reminder to check that it went through. It never signs in as the person and never says "cancelled" itself.
+3. "Apply to the second one", "book it", "buy the ingredients": the bot prepares what it honestly can (the deadline on the calendar, a checklist from the post's own words, a maps link, the shopping list) and says what it did not do.
+4. "What did you do for me": a list built from the action log.
+
+**Why the requester wants it**
+Answers and reminders still leave the work to the person. The founder wants the saved post to end in a finished outcome.
+
+**Why it is better than the current approach**
+The step from "here is the post" to "it is done" shrinks to one tap or one word. The bot still sends nothing itself in this entry: the mail app sends, the merchant cancels.
+
+**Costs and risks**
+- A draft may read stiffly or wrongly. Model-written wording is checked against the person's own words and the post's text, and the person sees all of it before anything leaves.
+- Cancel links rot. Each one carries the help page it came from and the date it was checked; old ones are withheld.
+- A list of the person's subscriptions is money data. It stays out of models, logs, the recap and the MCP server.
+- Another person's email address is held while a draft is open.
+- The bot cannot see whether the person pressed Send or whether a merchant cancelled. Receipts say only what the bot knows.
+- Signing in to sites as the person, reading the inbox, phone calls and payments were considered and rejected (terms, safety, and the public reports on Instinct).
+- The scope moves beyond saved media.
+
+**Agent's assessment**
+Agree. It serves the vision's "act on it" and keeps every rule about who acts: the model fills forms, code builds links, the person sends. The risk to watch is scope: a general assistant is a different product. Keep the saved post as the usual starting point.
+
+**Affected**
+Docs: `00-vision.md` (scope), `06-rules-and-actions.md` (new actions), `07-privacy-and-safety.md` · Code: `experiments/mvp/drafts.py`, `cancel.py`, `postacts.py`, `offers.py`, `receipts.py`, `actions/email_link.py` · Contract change: no (prototype) · Needs both founders: yes (ownership)
+
 ### A-011 · A read-only MCP server prototype for the person's own agent, ahead of the query API
 - **Date:** 2026-11-14
 - **Requested by:** Derrick (13 Nov: "think more carefully about the rules, integrations and tie everything back to the original first vision"); written by the coding agent
