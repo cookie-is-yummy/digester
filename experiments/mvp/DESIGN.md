@@ -2099,6 +2099,6 @@ the reads live inside `draft_reads` (1), `_cancel_answer` (3), `cancel_reads` (6
   "connect my ticktick / todoist / webhook" there names the panel's field in step 2 instead of a settings file.
 - **Out**: `email.send_as`, `email.draft_as`, "connect my gmail"; sends from a rule or from the bot's own address to
   others; reading the inbox for the merchant's confirmation; a follow-up the bot sets by itself.
-- **Tests**: `tests/test_round10_sending.py` (64). Changed round 9 expectations, each for a fact or a line this slice
+- **Tests**: `tests/test_round10_sending.py` (65). Changed round 9 expectations, each for a fact or a line this slice
   adds: `test_round9_cancel.py` (the Planet Fitness card's post and deadline lines, the "sent" reply's offer, the
   mailbox notice's `notice_sent`, 16 entries, Amazon's host, "no" after Amazon's new offer).

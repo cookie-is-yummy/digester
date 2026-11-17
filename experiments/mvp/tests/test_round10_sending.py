@@ -677,6 +677,29 @@ def test_connect_my_ticktick_on_the_page_names_the_panel(b, monkeypatch):
     assert out.startswith("I can add tasks to your TickTick") and "3. Text me \"check my ticktick\"." in out
 
 
+def test_the_founders_path_on_the_test_page_end_to_end(b, monkeypatch):
+    """The page's own person is the operator (MVP_OPERATOR unset); sending is off; a draft; "send" says how to switch
+    it on; the panel takes the address and the app password; "send" shows the card again; "send" holds; it goes once;
+    the receipt says the mail server accepted it."""
+    from mvp import config
+    from mvp.channels.web import connections_post
+    monkeypatch.setattr(config, "OPERATOR", None)
+    monkeypatch.setattr(config, "PAGE_OPERATOR", True)
+    monkeypatch.setenv("MVP_MAILBOX_SMTP_HOST", "smtp.example.invalid")
+    as_web(b)
+    draft(b)
+    assert "Connections panel on this page" in msg(b, "send")
+    for name, value in (("MVP_MAILBOX_ADDRESS", ME), ("MVP_MAILBOX_APP_PASSWORD", PASSWORD)):
+        code, out = connections_post({"name": name, "value": value})
+        assert code == 200 and value not in json.dumps(out)
+    assert msg(b, "send").startswith("Your mail connection changed")
+    assert msg(b, "send").startswith("Sending to maria@example.com")
+    out = tick(b, 3)
+    assert out[-1].startswith("Your mail server accepted the email to maria@example.com at ")
+    assert len(b["sends"]()) == 1
+    no_model(b)
+
+
 # =====================================================================================================================
 # What the new words never take (the verdict's common checks; end to end, test_round9_merge runs these hooks too)
 # =====================================================================================================================
