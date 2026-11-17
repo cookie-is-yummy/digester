@@ -78,11 +78,32 @@ STOP = set("a an and the of for to in on with my your our this that is it at by 
 PROMO_TITLE = re.compile(r"\b(comment|links?|giveaway|follow|dm|subscribe|shop|discount|code|sale|tap|click)\b", re.I)
 
 
-# ---------- round 10, slice K: a stub slice S fills (S4: the title shown for a pick; W-9 lists its call sites) -------
-def display_title(it, model_title=None):
-    """The title shown for a pick. Stub until slice S: the model's title when given, else title_from_item (today)."""
-    return model_title or title_from_item(it)
-# ---------- end round 10, slice K ----------
+# ---------- round 10, slice S (S4, design C4): the title shown for a pick, one rule for every display use (W-9) ----
+# (slice K published the stub; this replaces it. The internal uses, series keys and year matching, keep
+# title_from_item(it, words=1000).) Cards, receipts, to-dos, calendar entries and connector placements all go through
+# it, so a to-do titled with a pasted recipe's name never reaches the person's apps.
+NEUTRAL_TITLES = ("A post from", "A video from", "A reel from")
+
+
+def neutral_title(it):
+    """'A reel from @x' / 'A video from X': a name that claims nothing about what the video shows."""
+    kind = "video" if it.platform == "youtube" else ("reel" if (it.media or "").lower() in ("reel", "reels", "clips",
+                                                                                         "video") else "post")
+    return f"A {kind} from {it.creator}" if it.creator else f"A {kind} from your library"
+
+
+def display_title(it, model_title=None, level=...):
+    """The title shown. A strong caption mark (the library's, or `level` when the caller worked it out for the
+    person): the neutral name, whatever the model wrote. Otherwise the model's title when given, else the item's own
+    first usable line, never one that starts like an assistant's reply ("Here's a delicious recipe for ...")."""
+    from . import captionmark
+    if (captionmark.mark(it) if level is ... else level) == "strong":
+        return neutral_title(it)
+    if model_title:
+        return model_title
+    title = title_from_item(it)
+    return neutral_title(it) if captionmark.opener_line(title) else title
+# ---------- end round 10, slice S ----------
 
 
 def title_from_item(it, words=8):
@@ -497,8 +518,7 @@ def same_keys(p):
     out = set()
     for t in (title_from_item(it), p.get("title") or ""):
         title = _squash(t)
-        if title and not title.startswith(_squash(f"A post from {it.creator}")) \
-                and not title.startswith(_squash(f"A video from {it.creator}")):
+        if title and not any(title.startswith(_squash(f"{n} {it.creator}")) for n in NEUTRAL_TITLES):   # + slice S
             out.add((creator, title))
     return out
 
@@ -635,12 +655,13 @@ def check(raw, cands, spec, extra=None, known_lines=None, wider=False, level_ok=
             continue
         if not title or not title_ok(title, it, own):  # rule 2: a name the item's own text does not support
             dropped["title_replaced"] += 1
-            title = title_from_item(it)
+            title = display_title(it)   # round 10, slice S (W-9)
         else:  # a number in a title ("10-Minute", "3-Ingredient") must be in the post's text, or that word goes
             have = set(tokens(own))
             words = [w for w in title.split() if all(t in have for t in tokens(w) if t[0].isdigit())]
             if len(words) != len(title.split()):
-                title = " ".join(words).strip(" -:|,") or title_from_item(it)
+                title = " ".join(words).strip(" -:|,") or display_title(it)   # round 10, slice S (W-9)
+            title = display_title(it, title)   # round 10, slice S: a strong mark's title is the neutral name
         text = check_text(it, extra)
         answers = []
         given = p.get("criteria") if isinstance(p.get("criteria"), list) else []

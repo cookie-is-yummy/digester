@@ -233,7 +233,7 @@ class OutputsMixin:
         extract = (self.store.get_state(f"lastspec:{h}") or {}).get("spec", {}).get("content", {}).get("extract") or []
         extract = [extract] if isinstance(extract, str) else extract
         view = self.view(self.store.person(h)["library"])
-        from .compose import title_from_item
+        from .compose import display_title   # round 10, slice S (W-9: a display use)
         picks = []
         for n in numbers:
             iid = items[n - 1]
@@ -242,7 +242,7 @@ class OutputsMixin:
                 it = view.get(iid)
                 if it is None:
                     continue
-                rec = {"item_id": iid, "title": title_from_item(it), "url": it.url, "platform": it.platform,
+                rec = {"item_id": iid, "title": display_title(it), "url": it.url, "platform": it.platform,
                        "video_id": it.video_id, "creator": it.creator, "facts": {}, "lines": [], "line_kinds": None}
             if is_last:
                 rec["facts"] = (facts.get(iid) if isinstance(facts, dict) else None) or {}

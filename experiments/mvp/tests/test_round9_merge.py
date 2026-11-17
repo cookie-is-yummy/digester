@@ -25,6 +25,9 @@ MVP = os.path.dirname(HERE)
 BOT_HOOKS = ("draft_reads", "offer_reads", "_cancel_answer", "email_reads", "cancel_reads", "postact_reads",
              "cancel_stop_guard", "receipts_reads", "do_it", "_doit_answer", "secret_reads")
 PLACE_HOOKS = ("place_reads", "asked_reads")
+# ---------- round 10, slice S: its two reads are checked the same way (hook 0 and hook 4b) ----------
+BOT_HOOKS += ("fit_reads", "_mismatch_answer")
+# ---------- end round 10, slice S ----------
 ALLOWED = {"buy the ingredients for the first one"}   # the rule eval's t-dev-040: slice C puts them on the list
 CHAT = {"intent": "chat", "reply": "OK."}
 
@@ -172,3 +175,7 @@ def test_the_hooks_run_in_the_order_of_the_map():
     order("place_answer(self, person, text, now)", "self._doit_answer(")
     order("self.secret_reads(person, text, now)", "self._asked_reads(person, text, now)", "self.onboard_step(")
     order("self.cancel_stop_guard(", "self._manage(")
+    # ---------- round 10, slice S ----------
+    order('pending["kind"] == "confirm_delete"', "ref = self.fit_reads(person, text, now)", "self.draft_reads(")
+    order("place_answer(self, person, text, now)", "self._mismatch_answer(person, text, now, ask)", "self._doit_answer(")
+    # ---------- end round 10, slice S ----------

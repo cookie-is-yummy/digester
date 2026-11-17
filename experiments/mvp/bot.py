@@ -68,6 +68,16 @@ def main():
                 channel.problem = "A library did not load. Look at the terminal that runs the bot."
         channel.ready = True
         print("A library did not load." if getattr(channel, "problem", None) else "Libraries loaded.", file=sys.stderr)
+        # ---------- round 10, slice S: each library's caption marks, after the libraries are ready (until a file
+        # exists no item is marked, today's behaviour; a first answer never waits for this) ----------
+        if config.CM_BUILD_AT_START:
+            from . import captionmark
+            for lib in libs:
+                try:
+                    captionmark.ensure(bot.view(lib))
+                except Exception as e:  # noqa: BLE001
+                    print(f"caption marks not built ({type(e).__name__})", file=sys.stderr)
+        # ---------- end round 10, slice S ----------
     threading.Thread(target=_load, daemon=True).start()
     if a.channel == "console":
         rt = Runtime(bot, channel, workers=0)

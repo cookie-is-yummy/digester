@@ -205,6 +205,14 @@ def export(bot, person, now, lists_only=False):
             readme += ("                  Also: the rules you let add to your apps on their own (rule number, app, "
                        "the most per run\n                  and per day, and whether it is on), and the apps whose "
                        "sign-in I keep (names only).\n")
+    # ---------- round 10, slice S: what they said about reels whose video did not match the caption (no words) ------
+    said = [{k: r[k] for k in ("item_id", "kind", "source", "at")} for r in bot.store.caption_feedback(h)]
+    if said:
+        files.append(("reel_feedback.json", _write(d, "reel_feedback.json", json.dumps(said, indent=1))))
+        readme += ("\nreel_feedback.json  The reels you told me did not match their caption (or were fine): which "
+                   "one, when, and\n                    whether you said it in words or with a thumbs-down. No "
+                   "captions.\n")
+    # ---------- end round 10, slice S ----------
     files.append(("README.txt", _write(d, "README.txt", readme)))
     files.append(("drafts.json", _write(d, "drafts.json", drafts_json(bot.store, h))))   # round 9, slice A
     out.update(saves=n, rules=n_rules)

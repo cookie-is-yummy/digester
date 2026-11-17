@@ -79,6 +79,11 @@ CREATE TABLE IF NOT EXISTS grants (id INTEGER PRIMARY KEY AUTOINCREMENT, handle 
   connector TEXT NOT NULL, action TEXT NOT NULL, target TEXT, per_run INTEGER NOT NULL, per_day INTEGER NOT NULL,
   scope_hash TEXT NOT NULL, status TEXT NOT NULL, fails INTEGER DEFAULT 0, created_at TEXT, ended_at TEXT,
   end_reason TEXT);
+-- round 10, slice S (DESIGN.md section 17.S): what the person said about a reel's caption and its video (core data,
+-- never regenerated). kind: mismatch | match_ok; source: words | thumbs. creator: the account (a public handle);
+-- fp: the caption's fingerprint (a hash, never its words).
+CREATE TABLE IF NOT EXISTS caption_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL,
+  item_id TEXT NOT NULL, creator TEXT, fp TEXT, kind TEXT NOT NULL, source TEXT, at TEXT);
 """
 
 
@@ -370,9 +375,14 @@ class Store:
                (handle, item_id, rule_id, kind, now_iso()))
 
     def disliked(self, handle):
-        """Items never to be sent again: 👎, 'hide' and 'done' ("made it": slice 6)."""
-        return {r["item_id"] for r in self.q("SELECT item_id FROM feedback WHERE handle=? AND kind IN "
-                                             "('down','hide','done')", (handle,))}
+        """Items never to be sent again: 👎, 'hide' and 'done' ("made it": slice 6); round 10, slice S: and a reel the
+        person said had nothing to do with its caption (unless they later said it was fine)."""
+        out = {r["item_id"] for r in self.q("SELECT item_id FROM feedback WHERE handle=? AND kind IN "
+                                            "('down','hide','done')", (handle,))}
+        said = {}
+        for r in self.caption_feedback(handle):
+            said[r["item_id"]] = r["kind"]
+        return out | {i for i, k in said.items() if k == "mismatch"}
 
     def feedback_for_rule(self, rule_id):
         return self.q("SELECT item_id, kind FROM feedback WHERE rule_id=? ORDER BY id", (rule_id,))
@@ -774,6 +784,7 @@ class Store:
             for t in ("connections", "placements"):   # round 9, slice D (C3): what was made on the Mac stays there
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM grants WHERE handle=?", (handle,))   # round 10, slice K
+            self.db.execute("DELETE FROM caption_feedback WHERE handle=?", (handle,))   # round 10, slice S
             for rid in rule_ids:   # a timed send's retry count and hold (review fix PRIV-5)
                 for key in (f"retry:{rid}", f"hold:{rid}", f"cadence:{rid}", f"replaced:{rid}", f"deadline:{rid}"):
                     self.db.execute("DELETE FROM state WHERE key=?", (key,))
@@ -973,6 +984,18 @@ class Store:
         """A paused grant is active again ("check my ticktick" worked); an ended one stays ended."""
         self.x("UPDATE grants SET status='active', fails=0 WHERE id=? AND status='paused'", (int(grant_id),))
     # ---------- end round 10, slice K ----------
+
+    # ---------- round 10, slice S (DESIGN.md section 17.S): caption feedback, core data ----------
+    def add_caption_feedback(self, handle, item_id, creator, fp, kind, source, at=None):
+        assert kind in ("mismatch", "match_ok") and source in ("words", "thumbs")
+        return self.x("INSERT INTO caption_feedback(handle,item_id,creator,fp,kind,source,at) VALUES(?,?,?,?,?,?,?)",
+                      (handle, item_id, creator, fp, kind, source, now_iso(at))).lastrowid
+
+    def caption_feedback(self, handle):
+        """This person's rows, oldest first (captionmark.index reads them)."""
+        return self.q("SELECT id, item_id, creator, fp, kind, source, at FROM caption_feedback WHERE handle=? "
+                      "ORDER BY id", (handle,))
+    # ---------- end round 10, slice S ----------
 
 
 def _domain(addr):

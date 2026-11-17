@@ -190,3 +190,11 @@ ONBOARD_STEP_HOURS = 24        # steps 2 and 3 wait this long for an answer; aft
 # a request for a kind of thing whose kind has a modifier ("UI/UX libraries", "design tools") also searches the kind
 # phrase itself, as spelled by code, when no search of the interpreter's already says it ("0" turns it off)
 KIND_SEARCH = os.environ.get("MVP_KIND_SEARCH", "1") != "0"
+
+# ---------- round 10, slice S (DESIGN.md section 17.S): a reel whose caption may not match its video ----------
+# The doubt line names every reason by default. When the founder's labels put the strong mark's precision under 85%,
+# set MVP_CM_DOUBT_ALL=0: demotion stays, and the line names only "the caption itself says so" and "you told me".
+CM_DOUBT_ALL = os.environ.get("MVP_CM_DOUBT_ALL", "1") != "0"
+# The marks are built at bot start in a background thread ("0" turns that off; the file is still read when it exists)
+CM_BUILD_AT_START = os.environ.get("MVP_CM_BUILD_AT_START", "1") != "0"
+# ---------- end round 10, slice S ----------

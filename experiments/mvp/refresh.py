@@ -697,6 +697,13 @@ class Refresher:
                           in_tokens=sum(int(r.get("in_tokens") or 0) for r in rows), calls=len(rows))
         if not res.get("ok"):
             return finish("failed", T.IMPORT_FAILED, error=(res.get("message") or "")[:200])
+        # ---------- round 10, slice S: the new library's caption marks, before the person is switched to it ----------
+        try:
+            from . import captionmark
+            captionmark.ensure_lib(new_lib)
+        except Exception as e:  # noqa: BLE001 - without the file no item is marked (today's answers); never a failed import
+            print(f"import: caption marks not built ({type(e).__name__})", file=sys.stderr)
+        # ---------- end round 10, slice S ----------
         totals, new_ids = kept_counts(new_lib)
         _, old_ids = kept_counts(old_lib)
         fresh = new_ids - old_ids

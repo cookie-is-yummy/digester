@@ -175,7 +175,7 @@ def in_period(kept, saved_after, saved_before):
 
 
 def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, k=config.CANDIDATES, now=None,
-               store=None, exclude_kinds=(), exclude_platforms=(), seed=None, only=None):
+               store=None, exclude_kinds=(), exclude_platforms=(), seed=None, only=None, caption_fb=None):
     """Candidates for one spec, best first (or in the order the spec asks for). `seed` makes order "random" repeatable
     for one run (a rule's slot, or an ask's day). `only` (a set of item ids) keeps just those items: the items an
     import added, for a new_items rule (slice 5)."""
@@ -212,6 +212,10 @@ def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, 
         for rank, iid in enumerate(r["ids"]):
             scores[iid] = scores.get(iid, 0.0) + 1.0 / (60 + rank)
     creator_weights = creator_weights or {}
+    # ---------- round 10, slice S: the caption mark (captionmark.py), with what this person said (caption_fb) -------
+    from . import captionmark
+    howto_req = captionmark.howto_request(spec)
+    # ---------- end round 10, slice S ----------
     out = []
     for iid, s in scores.items():
         it = view.get(iid)
@@ -224,9 +228,11 @@ def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, 
         if any(contains_word(it.caption, w) for w in c.avoid):
             continue
         boost = max((KIND_BOOST.get(kd, 1.0) for kd in it.kinds), default=1.0)
-        if c.extract and len(it.caption) >= 200:
+        level = captionmark.effective(it, caption_fb)[0]   # round 10, slice S
+        if c.extract and len(it.caption) >= 200 and not level:   # slice S: never for a caption that may be pasted
             boost *= 1.2  # details are only usable when the item's own text holds them
         boost *= creator_weights.get(it.creator, 1.0)
+        boost *= captionmark.rank_factor(level, howto_req)   # round 10, slice S: strong x0.4 on a how-to, else x0.8
         out.append((s * boost, iid, it))
     out.sort(key=lambda x: (-x[0], x[1]))
     top = [it for *_, it in out[:k]]
