@@ -813,5 +813,185 @@
    "gpt-5.4-mini": 0.01,
    "gpt-5.5": 0.1
   }
+ },
+ "round9_u2": {
+  "about": "Round 9, slice U2 (17 Nov 2026): the kinds evaluation on 22 invented requests (kinds_dev.jsonl and six of the checker's: movies, chrome extensions, sneaker brands, games, newsletters, hackathons), each a fresh test person with no profile. Counts only; 'truly_of_the_kind' is the builder's reading (the answers stay outside git). 'paired' runs reuse the first run's store, so the interpretation, the candidates, the composer's answer and the posts' things are the same and only the judge differs.",
+  "off_at_head": {
+   "answers": {
+    "items": 13,
+    "closest": 5,
+    "recommend": 3,
+    "other": 1
+   },
+   "errors": 0,
+   "shown_things": 57,
+   "truly_of_the_kind": 44,
+   "wrong_counted_as_the_kind": 5,
+   "cost_per_request": 0.01917,
+   "seconds_per_request": 7.2
+  },
+  "paired_off": {
+   "shown_things": 60,
+   "truly_of_the_kind": 46,
+   "wrong_counted_as_the_kind": 5
+  },
+  "paired_judge_v1_effort_low": {
+   "shown_things": 56,
+   "truly_of_the_kind": 47,
+   "wrong_counted_as_the_kind": 1,
+   "judge_calls": 13,
+   "judge_cost_usd": 0.1177,
+   "judge_cost_per_request": 0.0054,
+   "judge_seconds_per_call": 3.4
+  },
+  "paired_judge_v1_effort_none": {
+   "shown_things": 60,
+   "truly_of_the_kind": 51,
+   "wrong_counted_as_the_kind": 1,
+   "judge_calls": 13,
+   "judge_cost_usd": 0.0626,
+   "judge_cost_per_request": 0.0028,
+   "judge_seconds_per_call": 1.3
+  },
+  "after_all_points_judge_v1": {
+   "answers": {
+    "items": 14,
+    "closest": 5,
+    "recommend": 2,
+    "other": 1
+   },
+   "shown_things": 56,
+   "truly_of_the_kind": 47
+  },
+  "after_all_points_judge_v2": {
+   "answers": {
+    "items": 13,
+    "closest": 5,
+    "recommend": 3,
+    "other": 1
+   },
+   "errors": 0,
+   "shown_things": 54,
+   "truly_of_the_kind": 46,
+   "wrong_counted_as_the_kind": 0,
+   "judge_calls": 15,
+   "judge_cost_per_request": 0.0035,
+   "judge_seconds_per_call": 1.2
+  },
+  "steadiness_3_runs_each_5_requests": {
+   "about": "the founder's case (his profile) and 4 kind requests, the composer called afresh 3 times on the same candidates; how many of the 5 gave the same set in all 3 runs",
+   "composer_clear_picks_same": "2 of 5 (a second set: 1 of 5)",
+   "clear_sources_by_composer_same": "2 of 5",
+   "sources_with_a_judge_yes_same": "3 of 5",
+   "answer_kind_same_before": "3 of 5",
+   "answer_kind_same_with_judge_sources": "4 of 5",
+   "requests_without_a_profile_that_differ": "3 of 4"
+  },
+  "founder_three_fresh_runs": {
+   "judge_v1": [
+    {
+     "answer": "items",
+     "clear": 1,
+     "close": 1,
+     "things": 6,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": false,
+     "cost": 0.0266
+    },
+    {
+     "answer": "items",
+     "clear": 2,
+     "close": 0,
+     "things": 6,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": true,
+     "cost": 0.0281
+    },
+    {
+     "answer": "items",
+     "clear": 2,
+     "close": 0,
+     "things": 11,
+     "truly_ui_libraries_or_kits": 0,
+     "icon_pack_shown_as_library": true,
+     "cost": 0.0282
+    }
+   ],
+   "judge_v2_replay_of_those": [
+    {
+     "answer": "items",
+     "clear": 1,
+     "close": 1,
+     "things": 6,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": false
+    },
+    {
+     "answer": "items",
+     "clear": 1,
+     "close": 1,
+     "things": 6,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": false
+    },
+    {
+     "answer": "recommend_named",
+     "clear": 0,
+     "close": 2,
+     "things": 11,
+     "truly_ui_libraries_or_kits": 0,
+     "icon_pack_shown_as_library": false
+    }
+   ],
+   "judge_v2": [
+    {
+     "answer": "recommend_named",
+     "clear": 0,
+     "close": 2,
+     "things": 11,
+     "truly_ui_libraries_or_kits": 0,
+     "icon_pack_shown_as_library": false,
+     "cost": 0.0296
+    },
+    {
+     "answer": "items",
+     "clear": 1,
+     "close": 2,
+     "things": 8,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": false,
+     "cost": 0.0302
+    },
+    {
+     "answer": "recommend_named",
+     "clear": 0,
+     "close": 2,
+     "things": 11,
+     "truly_ui_libraries_or_kits": 0,
+     "icon_pack_shown_as_library": false,
+     "cost": 0.0289
+    }
+   ],
+   "same_things_in_all_three": false
+  },
+  "drafts_20": {
+   "before": {
+    "handled": 20,
+    "errors": 0,
+    "with_picks": 17,
+    "items_answers": 1,
+    "i_recommend": 14,
+    "cost": 0.1583
+   },
+   "after": {
+    "handled": 20,
+    "errors": 0,
+    "with_picks": 19,
+    "items_answers": 0,
+    "i_recommend": 17,
+    "cost": 0.1789
+   },
+   "judge_calls_after": 0
+  }
  }
 }

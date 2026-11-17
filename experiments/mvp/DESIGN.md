@@ -665,6 +665,63 @@ Requests for a kind of thing ("what are some UI/UX libraries ..."; `tests/test_r
   both times, different verdicts, so not the same picks; $0.023 an answer. Recipes, workouts and tutorials are byte
   for byte the same on the fakes.
 
+### Round 9, slice U2
+A second, stronger judgement of "is this thing one of the kind asked for" (`tests/test_round9_judge.py`). Where this
+part and an earlier one differ, this part wins.
+- (1) `judge.py`: the small model still reads each post (names, words, dates) and code checks and cleans what it read.
+  Then, only for a request that names a kind of thing and only when 2 or more things are left over the posts read, ONE
+  call to a stronger model (`config.JUDGE_MODEL`, env `MVP_JUDGE_MODEL`, default `gpt-5.5`; `MVP_JUDGE_EFFORT`, default
+  "none"; an empty model name turns it off) gets the request, `Kind asked for: "..."` on its own line and a numbered
+  list (each thing's name, the post's own words about it cut to 14 words, the post's title cut to 9), inside `<item>`
+  tags as data. Prompt `judge_kind_v2` (`judge_kind_v1` stays): the form `{"is_kind": {"1": "yes|no|unsure", ...}}`;
+  "no" for a part or a feature, a different kind beside it in the post, a pack of assets made for such a thing, a
+  category, a term, a technique, a step, a setting, a tip, the post's topic; each thing judged on its own; contrast
+  examples from other topics. Code validates the form (a number outside the list or another word is read as unsure; no
+  valid entry is invalid): "yes" makes a thing the kind, "no" is never counted or shown as the kind (a clear post keeps
+  its other things; a post whose things are all "no" may still be shown under the close wording), "unsure" keeps the
+  small model's `fit`. A failed call or an invalid form leaves today's answer and the run's steps say so
+  (`steps.judge.error`). The call goes through `llm.chat_json` (purpose `mvp_judge`, logged with its cost). Verdicts
+  are cached per post in the facts table under the items' key plus the judge's prompt, model and effort; a repeat
+  costs nothing. A name the text writes only as an account's handle ("@pix.kit") is not a thing (`extract.handle_only`;
+  live: six handles without their "@" were shown as UI libraries).
+- (2) Measured (`evalset/kinds_results.json`, counts only; "truly of the kind" is the builder's reading). The kinds
+  evaluation on 22 requests (the 16 of slice U and the checker's six), paired on one store so only the judge differs:
+  things shown truly of the kind 46 of 60 off, 47 of 56 with effort "low", 51 of 60 with effort "none"; things wrongly
+  counted in "I found N <kind>" 5 off, 1 with either (a request whose kind no word named, so no judge). The judge costs
+  $0.0028 more per kind request with "none" ($0.0054 with "low") and about 1.3 seconds per judged answer (3.4 with
+  "low"); on the founder's case "none" and "low" gave the same answers. So it is on by default with "none". The founder's
+  message three times live then showed "yes" for a list made only of icon packs (counted as UI libraries in 2 of 3
+  runs): `judge_kind_v2`, on the same stores, judged them "no" in all three; on the 22 requests v2 shows 54 things, 46
+  truly of the kind, none wrongly counted as the kind, at $0.0035 more per kind request. The 20 draft requests before
+  and after: handled 20 and 20, errors 0 and 0, with picks 17 and 19, items answers 1 and 0, "I recommend" 14 and 17,
+  cost $0.158 and $0.179; no draft reached the judge, so the differences are the interpreter's and the composer's run
+  to run variation.
+- (3) Steadier verdicts. The founder's case (his profile) and 4 other kind requests, 3 runs each with the composer
+  called afresh on the same candidates: (a) the composer's set of clear picks was the same in all 3 runs for 2 of 5
+  (1 of 5 in a second set). (b) 3 of the 4 requests with no profile at all still differed, so the profile text in the
+  cache key is not what makes runs differ: the composer varies at temperature 0 with a seed; caching it without the
+  profile would only hide that (not built). (c) The posts with a thing the judge said "yes" to were the same in 3 of 5
+  (the composer's clear sources: 2 of 5), and the kind of answer in 4 of 5 (3 of 5 before). Built: with the judge, a
+  post counts as the kind when the judge said "yes" to one of its things (cached per post), whatever the composer's
+  clear or close, unless the composer answered "no" to a must-have; a stale or old post is still lowered; among the
+  posts that count, the composer's clear ones come first (`answers.source_rank`, `choose_items`). Which posts are read
+  still follows the composer's picks: reading a post that names the kind but lists nothing, and preferring posts that
+  name the kind more fully, changed nothing in 6 measured runs and were not kept. No voting.
+- (4) A thing two posts name is shown once, under the first source that names it, with `(also in "<title>")` when the
+  other post is shown as a source too (`lang.also_in`, English and Spanish); the other post's block lists its other
+  things, and a post left with none is not a source. Numbers run over what is shown, so a follow-up by number or by
+  name lands on it. This replaces the round 7 checker's rule; its test is now
+  `test_r7c_two_posts_naming_the_same_thing_show_it_once_under_the_first`.
+- (5) `extract.grammar_kind`: a kind the word list (THINGS) lacks is read from the request's grammar: "what are some
+  <kinds> ...", "any good <kinds> ...", "what <kinds> should I ...", "<kinds> I saved", "<kinds> for / to / about / in /
+  on / with / worth <x>"; 1 to 4 words ending in a plural; never a recipe, workout or tutorial request (`topic_kind`),
+  a kind of post ("reels", "videos") or a word for anything ("things", "ways", "vibes"). `kind_phrase` keeps the word
+  list first (its noun phrase from the goal or the message), then the grammar of the message, then of the goal, then
+  the bare word; `found_noun` falls back to the goal's grammar ("I found 3 online games named in 3 of your saves."). The
+  fakes' recipe, workout and tutorial paths are byte for byte the same (`probe_same` against `same_head.json`).
+- (6) A title that ends with its creator (the neutral "A post from @x") says the creator once: no " by @x" after it
+  (`render.by(..., title)`, `pick_parts`). The two follow-up lines built in `followup.py` and `handler.py` still add it.
+
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
   "another" after a split answer repeats the whole message as one request.
