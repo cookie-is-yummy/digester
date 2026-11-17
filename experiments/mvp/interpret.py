@@ -1738,9 +1738,24 @@ SEARCH_VERB = re.compile(r"\b(?:find|show|send|any|other|more)\b", re.I)
 # <kind> should I ..." asks as plainly as "which <kind> should I ..." (never "what should I ...", "what do I ...")
 ASK_FOR_SOME = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which)\s+(?:are|were|is)\s+(?:some|a few|"
                           r"the best|the top|good|great|the)\b|^\W*which\s+(?!ones?\b|of\b)\w+(?:\s+\w+)?\s+(?:should|can|could|do)\s+i\b|"
-                          r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*what\s+(?!(?:ones?|of|do|does|did|is|are|was|were|should|"
-                          r"can|could|would|will|kind|sort|type|time|else|about|if|happens?)\b)\w+(?:\s+\w+)?\s+(?:should|can|could)"
-                          r"\s+i\b|\b(?:recommend|suggest)\b", re.I)
+                          r"\b(?:recommend|suggest)\b", re.I)
+# (checker of slice U: the words between "what" and "should I" must name the kind: "what day should i post my reels"
+# asks for advice, not for reels; was read as an ask of "day should i post my reels")
+WHAT_KIND_SHOULD = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*what\s+(?!(?:ones?|of|do|does|did|is|are|was|"
+                              r"were|should|can|could|would|will|kind|sort|type|time|else|about|if|happens?)\b)(\w+(?:\s+\w+)?)"
+                              r"\s+(?:should|can|could)\s+i\b", re.I)
+# the words that only ask, after the kind: "should i use", "can i take", "could i listen to" (checker of slice U: "can
+# i take" and "should i do" were left in the goal: "courses can i take for free")
+SHOULD_I = re.compile(r"^((?:[\w/-]+\s+){0,2}?[\w/-]+)\s+(?:should|can|could)\s+i\s+(?:look at|listen to|check out|sign up for|"
+                      r"apply (?:to|for)|[a-z]+)\b\s*", re.I)
+
+
+def what_kind_should(t):
+    """'what <kind> should I ...': the one or two words after "what" name a kind of thing ("what apps should i use",
+    "what productivity apps should i try"), never "what day should i ...", "what color should i ..."."""
+    from .extract import THINGS
+    m = WHAT_KIND_SHOULD.search(t or "")
+    return bool(m) and bool(THINGS.search(m.group(1)) or CHAT_KINDS.search(m.group(1)))
 QUESTION_HEAD = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|and|hey|um+)[,\s]+)*(?:what|which|where|are there|is there|can you|"
                            r"could you|would you|will you|do you have|got)\b\s*", re.I)
 # checker, round 8: a question about the app, the person's data or how things work is never a search, though it
@@ -1778,13 +1793,12 @@ def chat_guard(it: Interpretation, message):
     kind = any(not m.group(0).lower().startswith(("which", "what do i know")) for m in THINGS.finditer(t)) or \
         CHAT_KINDS.search(t)
     if not ((OWN_SAVES.search(t) and (kind or SOMETHING.search(t))) or
-            (kind and (SEARCH_VERB.search(t) or ASK_FOR_SOME.search(t)))):
+            (kind and (SEARCH_VERB.search(t) or ASK_FOR_SOME.search(t) or what_kind_should(t)))):
         return it
     goal = QUESTION_HEAD.sub("", t)
     goal = re.sub(r"^(?:are|is|were)\s+(?:there\s+)?", "", goal, flags=re.I)   # "what are some ..." asks "some ..."
     # round 9, slice U: "apps should i use to edit photos" asks for "apps to edit photos"
-    goal = re.sub(r"^((?:[\w/-]+\s+){0,2}?[\w/-]+)\s+(?:should|can|could)\s+i\s+(?:use|try|get|look at|watch|read|join|"
-                  r"download|install|follow|listen to|check out)\b\s*", r"\1 ", goal, flags=re.I)
+    goal = SHOULD_I.sub(r"\1 ", goal)
     goal = re.sub(r"\b(might|may|could|did|do|have) i\b", lambda m: "i " + m.group(1), goal, flags=re.I)
     goal = goal.strip(" ?!.") or t
     try:

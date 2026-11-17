@@ -392,7 +392,17 @@ def spelled(text):
 
 
 def one_of(noun):
-    """The singular of the noun phrase's last word, for a count of 1 ('UI/UX libraries': 'UI/UX library')."""
+    """The singular of the noun phrase's last word, for a count of 1 ('UI/UX libraries': 'UI/UX library'). Check of
+    slice U: each kind in 'places or cafes' ('place or cafe', never 'places or cafe')."""
+    from .extract import THINGS
+    parts = re.split(r"(\s+(?:or|and|&)\s+)", noun or "", flags=re.I)
+    if len(parts) > 1:   # a part before the last one changes only when it ends in a kind word ("rice and beans")
+        return "".join(p if i % 2 else _one_word_of(p) if i == len(parts) - 1 or
+                       THINGS.fullmatch(p.rpartition(" ")[2]) else p for i, p in enumerate(parts))
+    return _one_word_of(noun or "")
+
+
+def _one_word_of(noun):
     head, _, last = (noun or "").rpartition(" ")
     if re.search(r"[^aeiou]ies$", last, re.I):
         last = last[:-3] + "y"

@@ -1037,9 +1037,13 @@ class ExecutorMixin:
             date_fields(p, extra, today, ts, year)
         # (round 9, slice U, live check: the composer's other picks filled every place before a post that names the
         # kind; now, after the shown picks, the posts that name the kind come first, the composer's before the rest)
+        # (check of slice U: a candidate whose title names the request's year (finding 102) stays with them, first
+        # among the candidates, whether or not its text names the kind: "Summer 2027 job list" for "opportunities for
+        # next summer" was pushed behind six lists that say "opportunities" and never read)
+        def first(p):
+            return names_kind(p["item"]) or (p.get("read_for_items") and names_year(p["item"]))
         extra_reads = others + added
-        extra_reads = [p for p in extra_reads if names_kind(p["item"])] + \
-            [p for p in extra_reads if not names_kind(p["item"])]
+        extra_reads = [p for p in extra_reads if first(p)] + [p for p in extra_reads if not first(p)]
         reads = (shown + extra_reads)[:self.ITEM_READS] if things else shown[:3]
         result["items_reads"] = reads
         return reads

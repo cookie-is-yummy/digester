@@ -647,6 +647,23 @@ Requests for a kind of thing ("what are some UI/UX libraries ..."; `tests/test_r
   only): handled 20 and 20, errors 0 and 0, answers with picks 19 and 19, items
   answers 1 and 1, "I recommend" answers 14 and 14, cost $0.177 and $0.175. Recipes, workouts and tutorials are byte
   for byte the same on the fakes.
+- Check of slice U (17 Nov, `tests/test_round9_checks.py`). The read order of point 3 put a candidate whose title names
+  the request's year (finding 102) behind every post whose text names the kind: "Summer 2027 job list" was never read
+  for "opportunities for next summer" when six lists said "opportunities"; such a candidate now goes with the posts that
+  name the kind, first among the candidates. A count of 1 takes the singular of each kind in the phrase ("I found 1 place
+  or cafe", never "1 places or cafe"; a part that is not a kind word stays: "rice and beans recipe"). A thing two
+  sources name is still shown under each, in its own words (round 7's checker; live, one brand twice in one answer). The
+  chat guard's "what <kind> should I ..." needs a kind
+  word in the one or two words after "what" ("what day should i post my reels" stays small talk; it was searched), and
+  any one asking verb after "should/can/could I" leaves the goal ("courses can i take for free": "courses for free";
+  "workout should i do today": "workout today"); dev files: 0 of 5 chat, help or unsupported cases flip. Numbers
+  (counts only; "truly of the kind" is the checker's reading): six requests of the checker's own (movies, browser
+  extensions, sneaker brands, games, newsletters, hackathons), as fresh test people: items answers 4, recommend 2;
+  things shown 11, truly of the kind 9; $0.020 a request. The founder's message twice with fresh stores and his
+  profile: items answers both; clear sources 1 and 2; things shown 7 and 8; truly UI libraries or kits 2 and 1; no
+  component type shown; never "Nothing I found is a clear fit" beside a clear post; the same 40 candidates and searches
+  both times, different verdicts, so not the same picks; $0.023 an answer. Recipes, workouts and tutorials are byte
+  for byte the same on the fakes.
 
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
