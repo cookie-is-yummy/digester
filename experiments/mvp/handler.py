@@ -163,6 +163,11 @@ class HandlerMixin:
             return None
         if not text:
             return None
+        # round 9 (W6, E; DESIGN.md section 16.E): a password or a key typed here is never kept or read further, also
+        # while the setup or a helper is waiting for an answer
+        ref = self.secret_reads(person, text, now)
+        if ref is not None:
+            return ref
         ref = self._asked_reads(person, text, now)   # round 8: the answer to "tell me the date" or to an overdue nudge
         if ref is not None:
             return ref

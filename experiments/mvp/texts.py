@@ -2262,3 +2262,209 @@ def doit_none(text):
 
 def doit_ticked(text):
     return f"I ticked \"{text}\" off your list."
+
+
+# ---------- round 9, E (DESIGN.md section 16.E): TickTick, Todoist and a webhook, by a setting in the environment ----
+ACTION_CAP_LABEL.update({"ticktick.add": "tasks in TickTick", "todoist.add": "tasks in Todoist",
+                         "webhook.post": "things sent to your webhook"})
+# why a to-do did not go to the app the person named; each is the start of a sentence ({app}: "TickTick")
+TOKEN_CLAUSE = {
+    "no_connector": "I can't reach {app}",
+    "operator": "I can't reach {app}",          # a tester: the same honest line as an app with no connector
+    "unreachable": "I can't reach {app} yet",
+    "off": "{app} is turned off",
+    "broken": "I've stopped using {app} after 3 failures in a row",
+    "refused": "{app} refused my key",
+    "rate": "{app} asked me to slow down",
+    "server": "{app} had a problem on its side",
+    "gone": "{app} said that address doesn't exist",
+    "timeout": "{app} didn't answer in time",
+    "failed": "{app} gave an error",
+    "partial": "{app} took only part of it, and I couldn't take that part out again (check {app})",
+    "scheduled": "I only add to {app} after you say yes",
+    "cap": "I've reached my limit of {n} {nouns} a day for {app}",
+}
+
+
+def token_after(code, key):
+    word = {"ticktick": "ticktick", "todoist": "todoist", "webhook": "webhook"}.get(key, key)
+    return {
+        "unreachable": f" Text me \"connect my {word}\" to see how to set it up.",
+        "off": f" Text me \"check my {word}\" to turn it back on.",
+        "broken": f" Text me \"check my {word}\" when it's ready.",
+        "refused": f" Text me \"connect my {word}\" to see how to make a new one.",
+    }.get(code, "")
+
+
+def token_clause(code, app, n=None, nouns=None):
+    return TOKEN_CLAUSE.get(code, TOKEN_CLAUSE["failed"]).format(app=app, n=n, nouns=nouns)
+
+
+TOKEN_NO_UNDO = "I can't see what your automation does with it, and I can't undo it."
+
+
+def token_ask(kind, app, titles, notes, due_text):
+    """The preview of tasks for a task app, or of what goes to a webhook: every title (and its link) exactly as it will
+    be sent. A webhook says before the yes that it can't be undone."""
+    due = f", due {due_text}" if due_text else ""
+    if len(titles) == 1:
+        if kind == "webhook":
+            head = f"I'll send \"{titles[0]}\" to your webhook{due}."
+        else:
+            head = f"I'll add \"{titles[0]}\" to {app}{due}."
+        if notes[0]:
+            head += f"\nWith its link: {notes[0]}"
+    else:
+        verb = f"send these {len(titles)} to your webhook" if kind == "webhook" else f"add these {len(titles)} to {app}"
+        head = "\n".join([f"I'll {verb}{due}:"] + [f"• {t}" + (f" ({u})" if u else "") for t, u in zip(titles, notes)])
+    if kind == "webhook":
+        head += "\n" + TOKEN_NO_UNDO
+        return head + "\nReply \"yes\" to send " + ("it" if len(titles) == 1 else "them") + ", or \"no\" to leave " + \
+            ("it." if len(titles) == 1 else "them.")
+    return head + "\nReply \"yes\" to add " + ("it" if len(titles) == 1 else "them") + ", or \"no\" to leave " + \
+        ("it." if len(titles) == 1 else "them.")
+
+
+def token_done(kind, app, titles, due_text):
+    n = len(titles)
+    what = f"\"{titles[0]}\"" if n == 1 else f"{n} tasks"
+    if kind == "webhook":
+        return "I sent it to your webhook. I can't see what it did there, and I can't undo it."
+    due = f" It's due {due_text} there; I won't send my own reminder." if due_text else ""
+    return f"Added {what} to {app}.{due} Reply \"undo\" within 10 minutes to remove {'it' if n == 1 else 'them'}."
+
+
+def token_already(kind, app):
+    return "I already sent that to your webhook today." if kind == "webhook" else f"I already added that to {app} today."
+
+
+def token_undone(n, app, title=None):
+    if n == 1 and title:
+        return f"I took \"{title}\" out of {app}"
+    return f"I took {'that' if n == 1 else f'those {n}'} out of {app}"
+
+
+def token_undo_failed(app, titles):
+    if len(titles) == 1:
+        return f"I couldn't take it out of {app} just now. It's \"{titles[0]}\"; delete it there."
+    return (f"I couldn't take {len(titles)} of them out of {app} just now: " + ", ".join(f"\"{t}\"" for t in titles)
+            + ". Delete them there.")
+
+
+def token_undo_gone(app):
+    return f"Those are already gone from {app}, so there was nothing to take out."
+
+
+LIST_STAYS = " Your list stays here."
+
+# connect, check, disconnect, by text. A key or an address is never asked for in the chat.
+TOKEN_SETUP = {
+    "ticktick": ("I can add tasks to your TickTick with a personal API token. Never send the token here.\n"
+                 "1. In TickTick on the web: your avatar › Settings › Account › API Token. Make one and copy it.\n"
+                 "2. On the computer I run on, put MVP_TICKTICK_TOKEN=<the token> in the settings file only you can "
+                 "read (chmod 600), then restart me. New tasks go to your Inbox (or set MVP_TICKTICK_PROJECT to a "
+                 "project's id).\n"
+                 "3. Text me \"check my ticktick\".\n"
+                 "I'll always show you what I'm about to add and wait for your yes."),
+    "todoist": ("I can add tasks to your Todoist with a personal API token. Never send the token here.\n"
+                "1. In Todoist: Settings › Integrations › Developer › API token. Copy it.\n"
+                "2. On the computer I run on, put MVP_TODOIST_TOKEN=<the token> in the settings file only you can read "
+                "(chmod 600), then restart me. New tasks go to your Inbox (or set MVP_TODOIST_PROJECT to a project's "
+                "id).\n"
+                "3. Text me \"check my todoist\".\n"
+                "I'll always show you what I'm about to add and wait for your yes."),
+    "webhook": ("I can send things to an automation you make in IFTTT, Make, Zapier or n8n. Its web address works like "
+                "a password, so never send it here.\n"
+                "1. Make an automation that starts with a web request that takes JSON (in IFTTT: Webhooks, \"Receive a "
+                "web request with a JSON payload\"; in Make: a custom webhook). Copy its address; it must start with "
+                "https://.\n"
+                "2. On the computer I run on, put MVP_WEBHOOK_URL=<the address> in the settings file only you can read "
+                "(chmod 600), then restart me.\n"
+                "3. Text me \"check my webhook\".\n"
+                "I'll always show you what I'm about to send and wait for your yes. I can't see or undo what your "
+                "automation does with it."),
+}
+TOKEN_ONLY_OPERATOR = "{app} is only for the person who runs me. I keep your lists here."
+
+
+def token_set_already(word):
+    return f"It's already set up here. Text me \"check my {word}\" to test it."
+
+
+def token_checked(key, app):
+    if key == "webhook":
+        return ("Your webhook's address is set. I haven't sent anything to it: the first time you send something "
+                "there, I'll show it to you first.")
+    return f"{app} is connected. New tasks go to your Inbox there, unless you set a project."
+
+
+def token_check_failed(code, app, word):
+    if code == "unreachable":
+        return f"{app} isn't set up on the computer I run on yet. Text me \"connect my {word}\" to see how."
+    if code == "refused":
+        return (f"{app} refused my key. Make a new one, put it in the settings file, restart me, then text me \"check "
+                f"my {word}\" again.")
+    if code == "timeout":
+        return f"{app} didn't answer in time. Text me \"check my {word}\" to try again."
+    if code == "rate":
+        return f"{app} asked me to slow down. Try \"check my {word}\" again in a minute."
+    return f"{app} gave an error. Text me \"check my {word}\" to try again."
+
+
+WEBHOOK_NOT_HTTPS = ("The webhook address on the computer I run on doesn't start with https://, so I won't use it. Put "
+                     "the https address in the settings file and restart me.")
+
+
+def token_not_on(app):
+    return f"{app} isn't connected, so there's nothing to stop."
+
+
+def token_off(key, app, n, word):
+    if key == "webhook":
+        tail = (f" I can't undo what your automation did with the {_count(n, 'thing')} I sent it." if n else "")
+        return (f"I've stopped using your webhook.{tail} To stop it completely, take MVP_WEBHOOK_URL out of the "
+                f"settings file and restart me.")
+    if not n:
+        return (f"I've stopped using {app}. I hadn't added anything there in the last 30 days. To stop it completely, "
+                f"delete the token in {app} and take it out of the settings file.")
+    return (f"I've stopped using {app}. I added {_count(n, 'task')} there in the last 30 days. Reply REMOVE to delete "
+            f"those, or KEEP to leave them.")
+
+
+def token_removed(app, n, failed):
+    out = f"I deleted the {_count(n, 'task')} I'd added to {app}." if n else ""
+    if failed:
+        out += (" " if out else "") + (f"I couldn't delete {failed} just now; {'it is' if failed == 1 else 'they are'} "
+                                       f"still there.")
+    return (out or "There was nothing left to delete.") + (f" To stop it completely, delete the token in {app} and "
+                                                           f"take it out of the settings file.")
+
+
+def token_kept(app):
+    return f"OK, they stay in {app}. To stop it completely, delete the token in {app} and take it out of the settings file."
+
+
+def token_pref_set(app, ready, word):
+    out = (f"OK. From now on I'll offer to put new things for your lists in {app}, and show you each one first. Say "
+           f"\"use my list here again\" to go back.")
+    return out if ready else out + f" It isn't set up yet: text me \"connect my {word}\" to see how."
+
+
+def token_status(key, why):
+    word = "webhook" if key == "webhook" else key
+    return {None: "connected", "broken": f"stopped after 3 failures in a row (say \"check my {word}\")",
+            "off": f"turned off (say \"check my {word}\" to turn it back on)"}.get(why, "not set up")
+
+
+def token_delete_data(names):
+    return f" This also stops {' and '.join(names)}. What I added there stays there."
+
+
+# a password, a key or an address typed into the chat (the narrow guard; the message is not kept)
+SECRET_IN_CHAT = ("I never take passwords, keys or webhook addresses in the chat, so I didn't keep that message. It's "
+                  "still on your phone, so please make a new one and delete the old one. Keys go in the settings file "
+                  "on the computer I run on: say \"connect my ticktick\" (or todoist, or webhook) to see how.")
+
+
+def token_moved(n):
+    return f" {'It is' if n == 1 else 'They are'} off your list here now."

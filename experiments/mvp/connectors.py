@@ -16,6 +16,7 @@ Adding a connector later (a task app by token, a webhook) is:
 """
 from dataclasses import dataclass, field
 import importlib
+import re
 
 
 class ConnectorError(Exception):
@@ -27,7 +28,9 @@ class ConnectorError(Exception):
         self.code, self.app = code, app
 
 
-COUNTS_AS_FAILURE = ("blocked", "timeout", "failed")   # 3 of these in a row mark the connector broken
+# 3 of these in a row mark the connector broken (round 9, E adds the HTTP codes: a refused token, the service's own
+# error, an address that is gone, a batch only partly taken)
+COUNTS_AS_FAILURE = ("blocked", "timeout", "failed", "refused", "server", "gone", "partial")
 BREAK_AFTER = 3
 
 
@@ -51,7 +54,19 @@ CONNECTORS = {
                      actions={"todo": "mac.reminder", "calendar": "mac.event"},
                      apps={"todo": "Reminders", "calendar": "Calendar"},
                      nouns={"mac.reminder": ("reminder", "reminders"), "mac.event": ("event", "events")}),
+    # round 9, E (DESIGN.md section 16.E): a token or an address in the environment is the whole setup, so no check
+    # is needed before the first use ("check my ticktick" still tests it, and turns it back on after a failure)
+    "ticktick": Connector(key="ticktick", name="TickTick", module="ticktick", actions={"todo": "ticktick.add"},
+                          apps={"todo": "TickTick"}, nouns={"ticktick.add": ("task", "tasks")}, kind="token",
+                          where="in TickTick", needs_check=False, env=("MVP_TICKTICK_TOKEN", "MVP_TICKTICK_PROJECT")),
+    "todoist": Connector(key="todoist", name="Todoist", module="todoist", actions={"todo": "todoist.add"},
+                         apps={"todo": "Todoist"}, nouns={"todoist.add": ("task", "tasks")}, kind="token",
+                         where="in Todoist", needs_check=False, env=("MVP_TODOIST_TOKEN", "MVP_TODOIST_PROJECT")),
+    "webhook": Connector(key="webhook", name="your webhook", module="webhook", actions={"todo": "webhook.post"},
+                         apps={"todo": "your webhook"}, nouns={"webhook.post": ("thing", "things")}, kind="webhook",
+                         where="to your webhook", needs_check=False, env=("MVP_WEBHOOK_URL",)),
 }
+SECRET_ENV = ("MVP_TICKTICK_TOKEN", "MVP_TODOIST_TOKEN", "MVP_WEBHOOK_URL", "MVP_MAILBOX_APP_PASSWORD")
 
 
 def module(key):
@@ -74,7 +89,7 @@ def unavailable(store, handle, key):
         return "unreachable"
     st = status(store, handle, key)
     if st is None:
-        return "not_connected"
+        return "not_connected" if CONNECTORS[key].needs_check else None
     if st in ("off", "broken"):
         return st
     return None
@@ -98,3 +113,21 @@ def worked(store, handle, key, now):
     if row.get("fails") or row.get("last_error") in COUNTS_AS_FAILURE:
         keep = row.get("last_error") if row.get("last_error") not in COUNTS_AS_FAILURE else ""
         store.set_connection(handle, key, fails=0, last_error=keep, at=now)
+
+
+# ---------- round 9, E (DESIGN.md section 16.E): a secret typed into the chat (the narrow guard) ----------
+# Fires on the name of a secret setting, on "token is" / "api key is" / "app password is" / "password is" (or ":" /
+# "=") followed by a run of 16 or more non-space characters, and on an automation service's own webhook address.
+# Nothing broader (the critic rejected "four groups of four letters" and "any 32-character run": they hit ordinary
+# messages and link tokens).
+_SECRET_NAME = re.compile(r"\bMVP_(?:TICKTICK_TOKEN|TODOIST_TOKEN|WEBHOOK_URL|MAILBOX_APP_PASSWORD)\b", re.I)
+_SECRET_SAID = re.compile(r"\b(?:token|api[\s-]?key|app\s+password|password|passcode)\s*(?:is|=|:)\s*[\"'“‘]?\S{16,}",
+                          re.I)
+_HOOK_URL = re.compile(r"\bhttps?://(?:maker\.ifttt\.com/(?:trigger|use)/|hooks\.zapier\.com/hooks/|"
+                       r"hook\.[a-z0-9-]+\.make\.com/)\S+", re.I)
+
+
+def secret_said(text):
+    """True when a chat message holds (or names) a secret the bot must never take there."""
+    t = " ".join((text or "").split())
+    return bool(_SECRET_NAME.search(t) or _SECRET_SAID.search(t) or _HOOK_URL.search(t))

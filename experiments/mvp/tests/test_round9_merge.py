@@ -23,7 +23,7 @@ from mvp.tests.test_slice2 import H, ask_pasta, lemon_pick, say  # noqa: E402
 
 MVP = os.path.dirname(HERE)
 BOT_HOOKS = ("draft_reads", "offer_reads", "_cancel_answer", "email_reads", "cancel_reads", "postact_reads",
-             "cancel_stop_guard", "receipts_reads", "do_it", "_doit_answer")
+             "cancel_stop_guard", "receipts_reads", "do_it", "_doit_answer", "secret_reads")
 PLACE_HOOKS = ("place_reads", "asked_reads")
 ALLOWED = {"buy the ingredients for the first one"}   # the rule eval's t-dev-040: slice C puts them on the list
 CHAT = {"intent": "chat", "reply": "OK."}
@@ -88,6 +88,13 @@ def operator(env, monkeypatch):
     monkeypatch.setenv("MVP_MAILBOX_APP_PASSWORD", "fake-app-pass-1234")
     monkeypatch.setenv("MVP_MAILBOX_SMTP_HOST", "smtp.example.invalid")
     monkeypatch.setenv("MVP_MAILBOX_IMAP_HOST", "imap.example.invalid")
+    # round 9, E: TickTick, Todoist and a webhook set up too (a fake opener: no network)
+    from mvp.actions import web
+    from mvp.tests.test_round9_tokens import FakeOpener
+    monkeypatch.setattr(web, "OPENER", FakeOpener())
+    monkeypatch.setenv("MVP_TICKTICK_TOKEN", "tt-fake-merge-0000000000000000")
+    monkeypatch.setenv("MVP_TODOIST_TOKEN", "td-fake-merge-0000000000000000")
+    monkeypatch.setenv("MVP_WEBHOOK_URL", "https://hooks.example.com/catch/fake")
     say(env, "check my mac", CHAT)
 
 
@@ -139,7 +146,8 @@ def test_every_rule_phrasing_from_before_round_9_still_goes_the_old_way(rec, mon
     # the wrappers see what they should: each round 9 request read answers its own phrasing
     for text, hook in (("cancel my netflix", "cancel_reads"), ("what are you connected to", "place_reads"),
                        ("email sam@example.com that the sink is broken", "email_reads"),
-                       ("what did you do for me", "receipts_reads"), ("do it for me", "do_it")):
+                       ("what did you do for me", "receipts_reads"), ("do it for me", "do_it"),
+                       ("connect my ticktick", "place_reads"), ("MVP_TODOIST_TOKEN=x", "secret_reads")):
         rec["claimed"].clear()
         say(rec, text, CHAT)
         assert [h for h, _ in rec["claimed"]][-1:] == [hook], (text, rec["claimed"])
@@ -161,4 +169,5 @@ def test_the_hooks_run_in_the_order_of_the_map():
           "self.postact_reads(", "ref = place_reads(self, person, text, now)", "self.receipts_reads(", "self.do_it(",
           "self.integration_reads(")
     order("place_answer(self, person, text, now)", "self._doit_answer(")
+    order("self.secret_reads(person, text, now)", "self._asked_reads(person, text, now)", "self.onboard_step(")
     order("self.cancel_stop_guard(", "self._manage(")

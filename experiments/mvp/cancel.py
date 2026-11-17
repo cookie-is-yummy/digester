@@ -344,6 +344,28 @@ class CancelMixin:
             return None
         return self._cancel_start(person, req, t, now)
 
+    def secret_reads(self, person, text, now):
+        """Round 9 (W6 and E): a password handed over or a request to sign in as the person (W6's line), and a key,
+        token or webhook address typed into the chat (E's line). The message is not kept (its text is cleared from
+        the inbound journal at once), no model call, no requests or interpretation-cache row. Read in _on_message
+        before every next-message read and before the setup's questions, so it is reached while onboarding asks
+        something too. None for anything else."""
+        from .connectors import secret_said
+        t = " ".join((text or "").split())
+        if not t or len(t) > 1000:
+            return None
+        h = person["handle"]
+        if password_said(t):
+            self.note(intent="cancel_password")
+            self.store.forget_last_inbound(h)
+            return self.send(h, T.CANCEL_PASSWORD)
+        if secret_said(t):
+            self.note(intent="secret_refused")
+            self.store.forget_last_inbound(h)
+            self.store.log_action(h, None, None, "secret.refused", "done", at=now)
+            return self.send(h, T.SECRET_IN_CHAT)
+        return None
+
     def cancel_stop_guard(self, person, text, rules, now):
         """W5: a model stop or pause on a message about a subscription (and naming no rule) is never a stop: the
         helper answers. None when the message is not about one (the stop goes on as before)."""

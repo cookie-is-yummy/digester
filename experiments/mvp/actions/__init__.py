@@ -10,6 +10,9 @@ executor calls once per answer (outputs.py). A new output is one new module plus
     todo.add      todo.py      each main pick (checked title and link), or its checked ingredient lines, on a list
     mac.reminder  mac.py       round 9 (C3): reminders on the operator's Mac, after a yes to the exact rows (places.py)
     mac.event     mac.py       round 9 (C3): one event in the "Digest" calendar on the operator's Mac, the same way
+    ticktick.add  ticktick.py  round 9 (E): tasks in TickTick by the operator's token, after a yes to the exact rows
+    todoist.add   todoist.py   round 9 (E): the same in Todoist
+    webhook.post  webhook.py   round 9 (E): one JSON to the operator's automation address, after a yes; no undo
 """
 import hashlib
 import hmac
@@ -195,6 +198,24 @@ REGISTRY.update({
                                does="Saves one email as a draft in the operator's own Drafts folder",
                                outside=True, undo="delete", confirm="never", max_per_day=20, in_rules=False,
                                who="operator", from_model=False, connector="mailbox", fallback="email.send"),
+})
+
+
+# round 9, E (DESIGN.md section 16.E): task apps by a token and one webhook, for the operator only. Only code runs them
+# (places.py), only after the person's yes to the exact rows shown; never named by the model, never in a rule's do.
+REGISTRY.update({
+    "ticktick.add": ActionDef(name="ticktick.add", params=PlaceTodoParams, module="ticktick", order=12,
+                              does="Tasks in the operator's TickTick (a personal API token)",
+                              outside=True, undo="delete", confirm="send_word", max_per_day=40, in_rules=False,
+                              who="operator", from_model=False, connector="ticktick", fallback="todo.add"),
+    "todoist.add": ActionDef(name="todoist.add", params=PlaceTodoParams, module="todoist", order=13,
+                             does="Tasks in the operator's Todoist (a personal API token)",
+                             outside=True, undo="delete", confirm="send_word", max_per_day=40, in_rules=False,
+                             who="operator", from_model=False, connector="todoist", fallback="todo.add"),
+    "webhook.post": ActionDef(name="webhook.post", params=PlaceTodoParams, module="webhook", order=14,
+                              does="One small JSON to the operator's own automation address; it cannot be undone",
+                              outside=True, undo="none", confirm="send_word", max_per_day=40, in_rules=False,
+                              who="operator", from_model=False, connector="webhook", fallback="todo.add"),
 })
 
 

@@ -64,8 +64,10 @@ PLACES = (
           r"(?:(?:apple|mac|icloud|iphone)\s+calendar|calendar\s+app|calendar\s+on\s+(?:my|the)\s+(?:mac|iphone|phone)|"
           r"ical|digest\s+calendar)"),
     Place("notion", "Notion", "todo", None, r"notion", ("notion",)),
-    Place("todoist", "Todoist", "todo", None, r"todoist", ("todoist",)),
-    Place("ticktick", "TickTick", "todo", None, r"tick\s?tick", ("ticktick", "tick tick")),
+    Place("todoist", "Todoist", "todo", "todoist", r"todoist", ("todoist",)),           # round 9, E: by a token
+    Place("ticktick", "TickTick", "todo", "ticktick", r"tick\s?tick", ("ticktick", "tick tick")),
+    Place("webhook", "your webhook", "todo", "webhook", r"(?:webhook|automation|ifttt|zapier|n8n)",
+          ("webhook", "automation")),
     Place("things", "Things", "todo", None, r"things\s+(?:3|app)", ("things 3", "things app")),
     Place("trello", "Trello", "todo", None, r"trello", ("trello",)),
     Place("google_tasks", "Google Tasks", "todo", None, r"google\s+tasks", ("google tasks",)),
@@ -140,7 +142,22 @@ def clause(place, reason, cap=None):
         from .actions import REGISTRY
         cap = REGISTRY[action].max_per_day
     nouns = con.nouns[action][1] if con else None
+    if con and con.kind != "mac":   # round 9, E: a task app by token, or the webhook
+        return T.token_clause(reason, con.apps[place.kind], cap, nouns)
     return T.place_clause(reason, place.app, _short(place), cap, nouns)
+
+
+def after(place, reason):
+    """The hint after a clause ("Text me ... to set it up.")."""
+    con = C.CONNECTORS.get(place.connector) if place.connector else None
+    if con and con.kind != "mac":
+        return T.token_after(reason, con.key)
+    return T.PLACE_AFTER.get(reason, "")
+
+
+def _kind(place):
+    con = C.CONNECTORS.get(place.connector) if place.connector else None
+    return con.kind if con else None
 
 
 def _local(dt, tz):
@@ -204,10 +221,11 @@ def route_todo(bot, person, rows, name, text, now, scheduled=False, run_id=None,
             return got[1], [], {"asked": C.CONNECTORS[d.place.connector].actions["todo"], "wanted": d.place.key}
         d = replace(d, use=False, reason="cap")
     ids = write_here(bot, person, rows, name, now, undoable)
-    if d.reason == "no_connector":   # the backlog of places people want
-        bot.store.log_request(h, text or name or "", f"wanted:{d.place.key}")
+    if d.reason == "no_connector" or (_kind(d.place) in ("token", "webhook") and d.reason in ("operator",
+                                                                                            "unreachable")):
+        bot.store.log_request(h, text or name or "", f"wanted:{d.place.key}")   # the backlog of places people want
     line = T.place_fell_back(clause(d.place, d.reason), [r[0] for r in rows], name, due_text,
-                             T.PLACE_AFTER.get(d.reason, ""))
+                             after(d.place, d.reason))
     return line, ids, {"ids": ids, "list": name, "wanted": d.place.key, "why": d.reason}
 
 
@@ -253,7 +271,7 @@ def route(bot, ctx, name, params):
         d, cap = replace(d, use=False, reason="cap"), got[1]
     o = _today("calendar.add", ctx, params)
     if o.status == "done":
-        o.line = T.place_link_instead(clause(d.place, d.reason, cap), T.PLACE_AFTER.get(d.reason, "")) + " " + o.line
+        o.line = T.place_link_instead(clause(d.place, d.reason, cap), after(d.place, d.reason)) + " " + o.line
         o.detail = dict(o.detail or {}, wanted=d.place.key, why=d.reason)
     return o
 
@@ -268,7 +286,14 @@ def _today(name, ctx, params):
         return Outcome("failed", line=T.ACTION_FAILED.get(name, T.ACTION_FAILED_OTHER), detail={"error": type(e).__name__})
 
 
-def _ask_todo(bot, person, place, rows, name, app_list, run_id, due_text, now):
+def _already(place):
+    con = C.CONNECTORS[place.connector]
+    if con.kind != "mac":
+        return T.token_already(con.kind, con.apps[place.kind])
+    return T.place_already(con.apps[place.kind])
+
+
+def _ask_todo(bot, person, place, rows, name, app_list, run_id, due_text, now, move_ids=None):
     """("ask", preview) | ("already", line) | ("cap", n)."""
     from .actions import PlaceTodoParams
     h, tz = person["handle"], person["timezone"]
@@ -281,8 +306,10 @@ def _ask_todo(bot, person, place, rows, name, app_list, run_id, due_text, now):
         return "cap", cap
     idem = _idem(h, action, run_id, [r[1] or r[0] for r in rows])
     if bot.store.placement_idem(h, idem, now - SAME_ASK):
-        return "already", T.place_already(con.apps["todo"])
+        return "already", _already(place)
     lst = _app_list(name, app_list, place)
+    if con.kind == "token":
+        lst = None   # tasks go to the Inbox (or the project in the settings); the preview names no list there
     params = PlaceTodoParams(list=lst, items=[{"title": t[:200], "notes": url or "", "due": _local(due, tz) if due else None}
                                               for t, iid, url, due in rows])
     titles, notes = [i.title for i in params.items], [i.notes for i in params.items]
@@ -291,7 +318,12 @@ def _ask_todo(bot, person, place, rows, name, app_list, run_id, due_text, now):
             "token": C.module(place.connector).yes_token(SimpleNamespace(handle=h), params),
             "fallback": {"kind": "todo", "list": name,
                          "rows": [[t, iid, url, now_iso(due) if due else None] for t, iid, url, due in rows]}}
+    if move_ids:
+        plan["move_ids"] = list(move_ids)        # "send my list to ticktick": the copies here go once it is there
+        plan["fallback"] = {"kind": "keep"}
     _save_ask(bot, h, plan, now)
+    if con.kind != "mac":
+        return "ask", T.token_ask(con.kind, con.apps["todo"], titles, notes, due_text)
     return "ask", T.place_ask_todo(titles, notes, lst, due_text)
 
 
@@ -315,7 +347,7 @@ def _ask_event(bot, ctx, place, ev, cal_params):
     pick = ctx.picks[0] if ctx.picks else None
     idem = _idem(h, action, ctx.run_id, [(pick or {}).get("item_id") or ev["title"], start])
     if bot.store.placement_idem(h, idem, ctx.now - SAME_ASK):
-        return "already", T.place_already(con.apps["calendar"])
+        return "already", _already(place)
     when = cal.when_words(ev, ctx.now)
     answer = ctx.answer or {}
     plan = {"action": action, "connector": place.connector, "place": place.key, "kind": "calendar",
@@ -376,6 +408,9 @@ def _remove_answer(bot, person, text, now):
     h = person["handle"]
     st = _open(bot, f"macremove:{h}", now, REMOVE_OPEN)
     if not st:
+        st = _open(bot, f"placeremove:{h}", now, REMOVE_OPEN)   # round 9, E: after "disconnect my ticktick"
+        if st:
+            return _token_remove_answer(bot, person, st, text, now)
         return None
     if KEEP.match(text):
         bot.note(intent="mac_keep")
@@ -397,6 +432,22 @@ def _remove_answer(bot, person, text, now):
                                      sum(r["action"] == "mac.event" for r in gone), len(failed)))
 
 
+def _token_remove_answer(bot, person, st, text, now):
+    h, key = person["handle"], st["connector"]
+    app = C.CONNECTORS[key].apps["todo"]
+    if KEEP.match(text):
+        bot.note(intent="place_keep")
+        return bot.send(h, T.token_kept(app))
+    if not REMOVE.match(text):
+        return None
+    bot.note(intent="place_remove")
+    rows = bot.store.placements(h, ids=st.get("ids") or [])
+    mod = C.module(key)
+    res = mod.remove(rows) if rows and mod.reachable() else {"removed": [], "failed": [r["id"] for r in rows]}
+    bot.store.remove_placements(res["removed"], now)
+    return bot.send(h, T.token_removed(app, len(res["removed"]), len(res["failed"])))
+
+
 def run_plan(bot, person, plan, now):
     """Does one previewed thing after the yes, through the registry with the yes token of what was shown. Returns the
     Reply: what was added (and how to undo it), or why not and what was done instead."""
@@ -408,7 +459,7 @@ def run_plan(bot, person, plan, now):
     if why:
         return _fallback(bot, person, plan, why, now)
     if bot.store.placement_idem(h, plan["idem"], now - SAME_ASK):
-        return Reply.of(T.place_already(_short(place)))
+        return Reply.of(_already(place))
     n = len(plan["params"].get("items") or [1])
     cap = _over_cap(bot.store, h, person["timezone"], action, n, now)
     if cap:
@@ -437,10 +488,19 @@ def run_plan(bot, person, plan, now):
     p = plan["params"]
     titles = [i["title"] for i in p["items"]] if plan["kind"] == "todo" else [p["title"]]
     named_ids = [i for i, x in zip(ids, placed) if x["action"] != "mac.list"]
-    one, many = C.CONNECTORS[key].nouns[action]
-    bot._wrote(h, "placed", f"added {len(named_ids)} {one if len(named_ids) == 1 else many} on your Mac",
-               {"ids": ids, "connector": key, "app": _short(place),
-                "titles": {str(i): t for i, t in zip(named_ids, titles)}})
+    con = C.CONNECTORS[key]
+    one, many = con.nouns[action]
+    for i in plan.get("move_ids") or []:   # the list moved there: the copies here are taken off (no double nudges)
+        bot.store.update_todo(i, removed_at=now_iso(now))
+    if con.kind == "webhook":   # nothing to take back: "undo" says so
+        bot._wrote_final(h, "something sent to your webhook")
+    else:
+        bot._wrote(h, "placed", f"added {len(named_ids)} {one if len(named_ids) == 1 else many} {con.where}",
+                   {"ids": ids, "connector": key, "app": _short(place), "moved": plan.get("move_ids") or [],
+                    "titles": {str(i): t for i, t in zip(named_ids, titles)}})
+    if con.kind != "mac":
+        return Reply.of(T.token_done(con.kind, con.apps[place.kind], titles, plan.get("due_text"))
+                        + (T.token_moved(len(plan["move_ids"])) if plan.get("move_ids") else ""))
     if plan["kind"] == "todo":
         return Reply.of(T.place_done_todo(titles, p.get("list"), plan.get("due_text")))
     return Reply.of(T.place_done_event(p["title"], p["calendar"], plan.get("when")))
@@ -450,11 +510,13 @@ def _fallback(bot, person, plan, reason, now, cap=None):
     """What runs instead of the outside place: the to-dos on the bot's list, or the calendar link."""
     place = BY_KEY[plan["place"]]
     fb = plan["fallback"]
+    if fb["kind"] == "keep":   # the to-dos are on the list here already: nothing to write
+        return Reply.of(clause(place, reason, cap) + "." + T.LIST_STAYS + after(place, reason))
     if fb["kind"] == "todo":
         rows = [(t, iid, url, datetime.fromisoformat(d) if d else None) for t, iid, url, d in fb["rows"]]
         write_here(bot, person, rows, fb["list"], now)
         return Reply.of(T.place_fell_back(clause(place, reason, cap), [r[0] for r in rows], fb["list"],
-                                          plan.get("due_text"), T.PLACE_AFTER.get(reason, "")))
+                                          plan.get("due_text"), after(place, reason)))
     from .actions.base import Ctx
     from .outputs import OutputsMixin
     ctx = Ctx(bot=bot, person=person, answer=dict(fb.get("answer") or {}, parts=[], picks=fb.get("picks") or []),
@@ -464,33 +526,45 @@ def _fallback(bot, person, plan, reason, now, cap=None):
     bot.store.log_action(person["handle"], plan.get("run_id"), fb.get("rule_id"), "calendar.add", o.status, ref=o.ref,
                          detail=dict(o.detail or {}, line=o.line, link_part=o.link, wanted=place.key, why=reason),
                          at=now)
-    head = T.place_link_instead(clause(place, reason, cap), T.PLACE_AFTER.get(reason, ""))
+    head = T.place_link_instead(clause(place, reason, cap), after(place, reason))
     return head + ("\n\n" if o.line else "") + OutputsMixin._with_lines(None, [("calendar.add", o)])
 
 
 # ---------- "undo" (handler._undo) and "delete my data" ----------
 def undo_text(bot, handle, u, now):
     """Takes out what the last yes added (within 10 minutes), by the ids kept; says what it could not take out."""
+    con = C.CONNECTORS.get(u.get("connector") or "mac") or C.CONNECTORS["mac"]
+    token = con.kind != "mac"
+    gone_line = T.token_undo_gone(con.apps["todo"]) if token else T.PLACE_UNDO_GONE
     rows = bot.store.placements(handle, ids=u.get("ids") or [])
     if not rows:
-        return T.PLACE_UNDO_GONE
-    mod = C.module(u["connector"])
+        return gone_line
+    mod = C.module(con.key)
     res = mod.remove(rows) if mod.reachable() else {"removed": [], "failed": [r["id"] for r in rows]}
     bot.store.remove_placements(res["removed"], now)
+    if res["removed"] and u.get("moved"):   # "send my list to ticktick" taken back: the list is here again
+        for i in u["moved"]:
+            bot.store.update_todo(i, removed_at=None)
     titles = u.get("titles") or {}
     gone = [r for r in rows if r["id"] in res["removed"] and r["action"] != "mac.list"]
     left = [titles.get(str(r["id"]), "") for r in rows if r["id"] in res["failed"] and r["action"] != "mac.list"]
     parts = []
+    app = u.get("app") or "Reminders"
     if gone:
-        parts.append(T.undone(T.place_undone(len(gone), u.get("app") or "Reminders", titles.get(str(gone[0]["id"])))))
+        say = T.token_undone if token else T.place_undone
+        parts.append(T.undone(say(len(gone), app, titles.get(str(gone[0]["id"])))))
     if left:
-        parts.append(T.place_undo_failed(u.get("app") or "Reminders", left))
-    return " ".join(parts) or T.PLACE_UNDO_GONE
+        parts.append((T.token_undo_failed if token else T.place_undo_failed)(app, left))
+    return " ".join(parts) or gone_line
 
 
 def delete_data_line(store, handle):
-    """The line "delete my data" adds when the Mac is in use: it stops, and what it added stays there."""
-    return T.MAC_DELETE_DATA if C.status(store, handle, "mac") in ("connected", "broken") else ""
+    """The line "delete my data" adds when the Mac (or a connector by token) is in use: it stops, and what it added
+    stays there."""
+    out = T.MAC_DELETE_DATA if C.status(store, handle, "mac") in ("connected", "broken") else ""
+    names = [c.name for k, c in C.CONNECTORS.items() if k != "mac" and c.kind == "token"
+             and (store.placements(handle, k) or C.status(store, handle, k) in ("connected", "broken"))]
+    return out + (T.token_delete_data(names) if names else "")
 
 
 # ---------- by text: connect, check, what are you connected to, disconnect, from now on ----------
@@ -519,6 +593,35 @@ PREF_CAL_OFF = re.compile(r"^(?:please\s+)?(?:use|send\s+me|give\s+me)\s+calenda
                           r"|^(?:please\s+)?stop\s+putting\s+events\s+(?:straight\s+)?in\s+my\s+(?:mac\s+)?calendar$")
 
 
+# round 9, E (DESIGN.md section 16.E): the same for TickTick, Todoist and the webhook
+_TOK = r"(?P<app>tick\s?tick|todoist|webhook|automation|ifttt|zapier|n8n)"
+_TOK_KEY = {"ticktick": "ticktick", "tick tick": "ticktick", "todoist": "todoist"}
+T_CONNECT = re.compile(r"^(?:please\s+)?(?:connect|link|set\s*up|hook\s+up)\s+(?:my\s+|the\s+|a\s+)?" + _TOK +
+                       r"(?:\s+account)?$")
+T_CHECK = re.compile(r"^(?:please\s+)?(?:check|test)\s+(?:my\s+|the\s+)?" + _TOK + r"(?:\s+again)?$")
+T_DISCONNECT = re.compile(r"^(?:please\s+)?(?:disconnect|unlink|stop\s+using)\s+(?:my\s+|the\s+)?" + _TOK + r"$")
+T_PREF_ON = re.compile(r"^(?:please\s+)?(?:put|add|send|save)\s+" + _LISTS + r"\s+(?:in|into|to|on)\s+(?:my\s+|the\s+)?"
+                       + _TOK + r"\s+from\s+now\s+on$")
+T_PREF_USE = re.compile(r"^(?:please\s+)?use\s+(?:my\s+)?" + _TOK + r"\s+for\s+" + _LISTS + r"(?:\s+from\s+now\s+on)?$")
+T_SEND = re.compile(r"^(?:please\s+)?(?:can\s+you\s+)?(?:add|put|send|push|move|save)\s+(?P<what>.+?)\s+"
+                    r"(?:to|in|into|on|onto)\s+(?:my\s+|the\s+)?" + _TOK + r"(?:\s+(?:app|list|inbox|account))?"
+                    r"(?:\s+please)?$")
+_IT = re.compile(r"^(?:it|this|that|this one|that one)$")
+_THEM = re.compile(r"^(?:them|them all|all of them|both|all)$")
+_NTH = re.compile(r"^(?:the\s+)?(?:(?P<ord>first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)(?:\s+one)?|"
+                  r"(?:number\s+|#\s*)(?P<n>\d{1,2})|(?P<bare>\d{1,2}))$")
+_INGR = re.compile(r"^(?:the\s+|its\s+|their\s+)?(?:ingredients|shopping list|groceries)(?:\s+for\s+(?:it|the\s+(?P<ord>first|"
+                   r"second|third|fourth|fifth)\s+one))?$")
+_MYLIST = re.compile(r"^(?:my|the|our)\s+(?:(?P<name>[a-z][\w-]*)\s+)?(?:list|lists|to-?dos|todos|tasks|to-?do list)$")
+_ORDN = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5,
+         "5th": 5}
+
+
+def _tok_key(word):
+    w = " ".join(word.lower().split())
+    return _TOK_KEY.get(w, "webhook")
+
+
 def _norm(text):
     t = " ".join((text or "").lower().replace("’", "'").split())
     return re.sub(r"^[\s\"'“”]+|[\s\"'“”.!?]+$", "", t)
@@ -538,7 +641,150 @@ def place_reads(bot, person, text, now):
         if rx.match(t):
             bot.note(intent="places")
             return _pref(bot, person, kind, on)
+    return token_reads(bot, person, text, t, now)
+
+
+def token_reads(bot, person, text, t, now):
+    """Round 9, E: connect / check / disconnect a task app or the webhook, "put my to-dos in ticktick from now on",
+    and "add it / the ingredients / my list to ticktick". None when the message is none of these."""
+    for rx, fn in ((T_CONNECT, _t_connect), (T_CHECK, _t_check), (T_DISCONNECT, _t_disconnect),
+                   (T_PREF_ON, _t_pref), (T_PREF_USE, _t_pref)):
+        m = rx.match(t)
+        if m:
+            bot.note(intent="places")
+            return fn(bot, person, _tok_key(m.group("app")), now)
+    m = T_SEND.match(t)
+    if m:
+        return _t_send(bot, person, text, m.group("what"), _tok_key(m.group("app")), now)
     return None
+
+
+def _t_send(bot, person, text, what, key, now):
+    """'add it to my ticktick', 'push the second one to my automation', 'put the ingredients in todoist', 'send my
+    list to ticktick'. Each goes through the same preview and yes as the Mac (route_todo); a tester gets the list here
+    with the honest line."""
+    h = person["handle"]
+    place = next(p for p in PLACES if p.connector == key)
+    bot._tl.msg_text = text
+    m = _MYLIST.match(what)
+    if m:
+        bot.note(intent="places")
+        return _t_send_list(bot, person, place, m.group("name"), text, now)
+    numbers, kind = None, "pick"
+    if _IT.match(what):
+        numbers = [1]
+    elif _THEM.match(what):
+        numbers = None
+    elif _NTH.match(what):
+        n = _NTH.match(what)
+        numbers = [_ORDN[n.group("ord").lower()] if n.group("ord") else int(n.group("n") or n.group("bare"))]
+    elif _INGR.match(what):
+        kind = "ingredients"
+        o = _INGR.match(what).group("ord")
+        numbers = [_ORDN[o]] if o else None
+    else:
+        return None   # "add milk to my ticktick": a to-do typed by the person goes the usual way (todo_add)
+    if not bot.store.last_answer(h):
+        return None
+    bot.note(intent="todo_add")
+    return bot._add_picks(person, numbers, place.names[0], kind)
+
+
+def _t_send_list(bot, person, place, name, text, now):
+    from .schema import list_name
+    h = person["handle"]
+    todos = bot.store.todos(h)
+    if name and name not in ("todo", "to-do"):
+        todos = [t for t in todos if (t.get("list") or "todo") == list_name(name)]
+    if not todos:
+        return bot.send(h, T.NO_TODOS)
+    d = decide(bot.store, person, "todo", None, text)
+    if d is None:
+        return None
+    if not d.use:
+        return bot.send(h, clause(d.place, d.reason) + "." + T.LIST_STAYS + after(d.place, d.reason))
+    rows = [(t["text"], t.get("item_id"), t.get("url"), datetime.fromisoformat(t["due_at"]) if t.get("due_at") else None)
+            for t in todos]
+    due = rows[0][3] if rows and all(r[3] == rows[0][3] for r in rows) else None
+    due_text = None
+    if due:
+        from .schedule import say_time
+        due_text = say_time(due, now, person["timezone"])
+    got = _ask_todo(bot, person, d.place, rows, None, None, None, due_text, now, move_ids=[t["id"] for t in todos])
+    if got[0] == "cap":
+        return bot.send(h, clause(d.place, "cap", got[1]) + "." + T.LIST_STAYS)
+    return bot.send(h, got[1])
+
+
+def _only_operator(app):
+    line = T.TOKEN_ONLY_OPERATOR.format(app=app)
+    return line[:1].upper() + line[1:]
+
+
+def _t_app(key):
+    return C.CONNECTORS[key].apps["todo"]
+
+
+def _t_word(key):
+    return key
+
+
+def _t_connect(bot, person, key, now):
+    h = person["handle"]
+    if not config.is_operator(h):
+        return bot.send(h, _only_operator(_t_app(key)))
+    out = T.TOKEN_SETUP[key]
+    if C.module(key).reachable():
+        out += "\n" + T.token_set_already(_t_word(key))
+    return bot.send(h, out)
+
+
+def _t_check(bot, person, key, now):
+    import os
+    h = person["handle"]
+    app = _t_app(key)
+    if not config.is_operator(h):
+        return bot.send(h, _only_operator(app))
+    mod = C.module(key)
+    if key == "webhook" and (os.environ.get("MVP_WEBHOOK_URL") or "").strip() and not mod.reachable():
+        return bot.send(h, T.WEBHOOK_NOT_HTTPS)
+    if not mod.reachable():
+        return bot.send(h, T.token_check_failed("unreachable", app, _t_word(key)))
+    try:
+        mod.check()
+    except C.ConnectorError as e:
+        row = bot.store.connection(h, key)
+        bot.store.set_connection(h, key, status="broken" if row and row["status"] == "connected" else
+                                 (None if row else "broken"), last_error=e.code, at=now, checked=True)
+        return bot.send(h, T.token_check_failed(e.code, app, _t_word(key)))
+    bot.store.set_connection(h, key, status="connected", fails=0, last_error="", at=now, checked=True)
+    return bot.send(h, T.token_checked(key, app))
+
+
+def _t_disconnect(bot, person, key, now):
+    h = person["handle"]
+    app = _t_app(key)
+    if not config.is_operator(h):
+        return bot.send(h, _only_operator(app))
+    row = bot.store.connection(h, key)
+    if (row is None and not C.module(key).reachable()) or (row and row["status"] == "off"):
+        return bot.send(h, T.token_not_on(app))
+    bot.store.set_connection(h, key, status="off", at=now)
+    if bot.store.person_context(h)["prefs"].get("place_todo") == key:
+        bot.store.set_prefs(h, place_todo=None)
+    rows = bot.store.placements(h, key, since=now - LOOK_BACK)
+    if rows and C.CONNECTORS[key].kind == "token":
+        bot.store.set_state(f"placeremove:{h}", {"at": now_iso(now), "connector": key, "ids": [r["id"] for r in rows]})
+    return bot.send(h, T.token_off(key, app, len(rows), _t_word(key)))
+
+
+def _t_pref(bot, person, key, now):
+    h = person["handle"]
+    app = _t_app(key)
+    if not config.is_operator(h):
+        return bot.send(h, _only_operator(app))
+    bot.store.set_prefs(h, place_todo=key)
+    return bot.send(h, T.token_pref_set(app, C.unavailable(bot.store, h, key) is None, _t_word(key)))
 
 
 def _email_lines(bot, h):
@@ -570,6 +816,9 @@ def _connected(bot, person, now):
     if not why and (bot.store.connection(h, "mac") or {}).get("last_error") == "no_calendar":
         line += " (events still come as a link: there's no \"Digest\" calendar)"
     out = T.connected_lines(email, line, others)
+    for key, con in C.CONNECTORS.items():   # round 9, E: a task app or the webhook set up here, with its state
+        if con.kind != "mac" and (C.module(key).reachable() or bot.store.connection(h, key)):
+            out += f"\n• {con.name[:1].upper() + con.name[1:]}: {T.token_status(key, C.unavailable(bot.store, h, key))}."
     if why in (None, "broken"):
         out += "\n" + T.MAC_DISCONNECT_HINT
     return bot.send(h, out)
