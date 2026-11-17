@@ -30,8 +30,8 @@ def parts_of(case):
     """The draft parts the bot would hold for this brief (a name in "to" is a greeting name, a word is a role)."""
     to = case.get("to") or ""
     is_name = bool(to) and to[:1].isupper()
-    return {"text": case["message"], "greet_name": to if is_name else None, "to_word": None if is_name else (to or None),
-            "post": case.get("post"), "request": None}
+    return {"text": case["message"], "greet_name": to if is_name else None,
+            "to_word": None if is_name else (to or None), "post": case.get("post"), "request": None}
 
 
 def word_checks(case, form):

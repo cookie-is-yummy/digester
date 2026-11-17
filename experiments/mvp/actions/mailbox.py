@@ -1,8 +1,8 @@
 """PROTOTYPE ONLY - mailbox.send: the operator's own mailbox sends one draft after the word "send" (round 9, slice A,
 W4; DESIGN.md section 16.A; amendment A-013, Proposed).
 
-SMTP only: this module never imports an IMAP library, so it cannot open a folder or read a message. Settings come from the
-environment only, read at each send and never printed or logged: MVP_MAILBOX_ADDRESS, MVP_MAILBOX_APP_PASSWORD,
+SMTP only: this module never imports an IMAP library, so it cannot open a folder or read a message. Settings come
+from the environment only, read at each send and never printed or logged: MVP_MAILBOX_ADDRESS, MVP_MAILBOX_APP_PASSWORD,
 MVP_MAILBOX_SMTP_HOST and MVP_MAILBOX_SMTP_PORT (defaults by the address's domain). Off unless the address and the app
 password are both set; only for config.is_operator(handle) (the registry's who="operator").
 """

@@ -22,7 +22,7 @@ from_todo(bot, person, todo, now) call them.
 """
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -58,12 +58,14 @@ _RCPT = (rf"(?P<addr>{ADDR})"
          rf"|(?P<name>{_NAME}(?:\s+{_NAME})?)(?:\s+at\s+(?P<naddr>{ADDR}))?"
          r"|(?P<pron>him|her|them)")
 # "email ...": what follows the verb
-_EMAIL_VERB = (r"(?:e-?mail|draft(?:\s+and\s+send)?\s+(?:an?\s+)?e-?mail\s+(?:to|for)|write\s+(?:an?\s+)?e-?mail\s+(?:to|for)|"
+_EMAIL_VERB = (r"(?:e-?mail|draft(?:\s+and\s+send)?\s+(?:an?\s+)?e-?mail\s+(?:to|for)|"
+               r"write\s+(?:an?\s+)?e-?mail\s+(?:to|for)|"
                r"send\s+(?:an?\s+)?e-?mail\s+to|compose\s+(?:an?\s+)?e-?mail\s+to|write\s+to|"
                r"(?:draft|write)\s+(?:an?\s+)?(?:reply|note|letter)\s+to)")
 VERB_FIRST = re.compile(_LEAD + rf"(?P<verb>{_EMAIL_VERB})\s+(?P<rest>.+)$", re.I | re.S)
 # "send the pasta recipe to sam@example.com": an object, then an address (a send with no address is a share)
-SEND_TO_ADDR = re.compile(_LEAD + rf"(?:send|forward|share)\s+(?P<obj>.{{1,60}}?)\s+to\s+(?P<rest>{ADDR}.*)$", re.I | re.S)
+SEND_TO_ADDR = re.compile(_LEAD + rf"(?:send|forward|share)\s+(?P<obj>.{{1,60}}?)\s+to\s+(?P<rest>{ADDR}.*)$",
+                          re.I | re.S)
 POINTS = re.compile(r"^(?:it|this|that|these|those|them|both|all of them|this one|that one|the\s+(?:\w+\s+){0,3}?"
                     r"(?:one|ones|recipe|recipes|video|post|reel|tutorial|workout|pick|link|thing|programme|program|"
                     r"opportunity|place|event|answer)|the\s+(?:first|second|third|fourth|fifth|last)\b.*|#\s?\d|"
@@ -80,8 +82,9 @@ OTHER_RE = re.compile(rf"\b(?:my|our)\s+(?:{PEOPLE_WORDS})s?\b", re.I)
 # ---------- the draft reader's words (whole message only) ----------
 SEND_WORDS = re.compile(r"^\W*(?:(?:yes|ok(?:ay)?|go ahead and|please)[\s,]+)?send(?:\s+(?:it|the email|it now|now))?"
                         r"(?:\s+now)?(?:\s+please)?\W*$", re.I)
-CANCEL_WORDS = re.compile(r"^\W*(?:cancel(?:\s+(?:it|that|the (?:email|draft)))?|don'?t send(?:\s+it)?|do not send(?:\s+it)?|"
-                          r"never\s?mind|scrap(?:\s+it|\s+that)?|no|nope|drop it|forget it|delete (?:it|the draft))\W*$",
+CANCEL_WORDS = re.compile(r"^\W*(?:cancel(?:\s+(?:it|that|the (?:email|draft)))?|don'?t send(?:\s+it)?|"
+                          r"do not send(?:\s+it)?|never\s?mind|scrap(?:\s+it|\s+that)?|no|nope|drop it|forget it|"
+                          r"delete (?:it|the draft))\W*$",
                           re.I)
 YES_WORDS = re.compile(r"^\s*(?:yes|y|yep|yeah|yup|sure|ok|okay|go|do it|sounds good|looks good|perfect|great|👍)"
                        r"[\s.!]*$", re.I)
@@ -91,13 +94,15 @@ SENT_WORDS = re.compile(r"^\W*(?:(?:ok|okay|done)[\s,]+)?(?:sent|i sent it|i'?ve
 BLANK = re.compile(r"^\W*(?:blank|leave it blank|no address|i'?ll (?:pick|add) (?:it|them)(?: myself)?)\W*$", re.I)
 NO_NAME = re.compile(r"^\W*(?:no name|none|nothing|don'?t sign(?: it)?|no sign[- ]?off)\W*$", re.I)
 SIGN_NAME = re.compile(r"^\W*(?:(?:sign it|it'?s|i'?m|call me|use)\s+)?([^\W\d_][\w'’ .-]{0,30}?)\W*$", re.I)
-CH_ADD = re.compile(r"^\W*(?:also\s+)?(?:say|add|mention|also mention|tell (?:him|her|them))\s+(?:that\s+)?(?P<x>.+?)\W*$",
+CH_ADD = re.compile(r"^\W*(?:also\s+)?(?:say|add|mention|also mention|tell (?:him|her|them))\s+(?:that\s+)?"
+                    r"(?P<x>.+?)\W*$",
                     re.I | re.S)
 CH_INSTEAD = re.compile(r"^\W*(?:instead,?\s+say|say instead|change it to say|make it say)\s+(?:that\s+)?(?P<x>.+?)\W*$"
                         r"|^\W*say\s+(?:that\s+)?(?P<y>.+?)\s+instead\W*$", re.I | re.S)
 CH_SUBJECT = re.compile(r"^\W*(?:subject(?:\s+line)?\s*[:\-]\s*|(?:change|make|set)\s+the\s+subject(?:\s+line)?\s+"
                         r"(?:to\s+)?|subject\s+line\s+)[\"“]?(?P<x>.+?)[\"”]?\W*$", re.I)
-CH_TO = re.compile(rf"^\W*(?:to\s*:\s*|send it to\s+|change (?:the )?(?:recipient|address|to)\s+(?:to\s+)?)(?P<a>{ADDR})"
+CH_TO = re.compile(r"^\W*(?:to\s*:\s*|send it to\s+|change (?:the )?(?:recipient|address|to)\s+(?:to\s+)?)"
+                   rf"(?P<a>{ADDR})"
                    r"(?:\s+instead)?\W*$", re.I)
 CH_SIGN = re.compile(r"^\W*sign it\s+(?:as\s+|with\s+)?(?P<x>[^\W\d_][\w'’ .-]{0,30}?)\W*$", re.I)
 CH_NOSIGN = re.compile(r"^\W*(?:don'?t|do not) sign it\W*$", re.I)
@@ -110,12 +115,14 @@ TONE = re.compile(r"\b(?:shorter|longer|more formal|less formal|formal|informal|
 TONE_ASK = re.compile(r"^\W*(?:can you\s+|could you\s+|please\s+)?(?:make it|make this|rewrite it|write it|reword it|"
                       r"translate it|put it)\b", re.I)
 REMOVE_IT = re.compile(r"^\W*(?:remove it|remove that line|take it out|leave it out)\W*$", re.I)
-SAVE_DRAFT = re.compile(r"^\W*(?:(?:please|can you)\s+)?(?:save|put)\s+(?:it|that|this|that email|the email|the draft)?\s*"
-                        r"(?:as a draft|in(?:to)? my drafts?(?: folder)?|in my (?:gmail|icloud|mailbox)(?: drafts)?)\W*$",
+SAVE_DRAFT = re.compile(r"^\W*(?:(?:please|can you)\s+)?(?:save|put)\s+"
+                        r"(?:it|that|this|that email|the email|the draft)?\s*(?:as a draft|in(?:to)? my drafts?"
+                        r"(?: folder)?|in my (?:gmail|icloud|mailbox)(?: drafts)?)\W*$",
                         re.I)
 # A5: "put this in my email", "save it as a draft", "put the second one in my drafts", "draft it in my gmail"
 MAILBOX_SAVE = re.compile(r"^\W*(?:(?:please|can you|could you|pls)\s+)?(?:put|save|draft|stick)\s+"
-                          r"(?P<what>it|this|that|them|these|this one|that one|the\s+(?:first|second|third|fourth|fifth|"
+                          r"(?P<what>it|this|that|them|these|this one|that one|"
+                          r"the\s+(?:first|second|third|fourth|fifth|"
                           r"last)\s+one|the\s+\w+\s+one|#\s?\d|number\s+\d)?\s*(?:as\s+an?\s+(?:e-?mail\s+)?draft|"
                           r"in(?:to)?\s+my\s+(?:e-?mail|drafts?(?:\s+folder)?|gmail|icloud|mailbox|inbox)"
                           r"(?:\s+drafts?)?)(?:\s+please)?\W*$", re.I)
@@ -158,7 +165,8 @@ def clause_paragraph(rest):
         subj, r = m.group("s").strip(), r[:m.start()].strip(" ,")
     if not r:
         return None, subj, None
-    m = re.match(r"^(?:and\s+)?(?:ask(?:ing)?|to ask)\s+(?:(?:him|her|them)\s+)?(?P<w>if|whether|when|what|where|how|why|"
+    m = re.match(r"^(?:and\s+)?(?:ask(?:ing)?|to ask)\s+(?:(?:him|her|them)\s+)?"
+                 r"(?P<w>if|whether|when|what|where|how|why|"
                  r"who)\s+(?P<c>.+)$", r, re.I)
     if m:
         return f"Can you let me know {m.group('w').lower()} {_you(m.group('c')).rstrip(' .?!')}?", subj, None
@@ -328,7 +336,8 @@ def _words_in(word, low):
     return re.search(rf"(?<!\w){re.escape(word.lower())}(?!\w)", low) is not None
 
 
-_GREET_WORDS = set("hi hello hey dear good morning afternoon evening hola querido querida estimado estimada buenos buenas "
+_GREET_WORDS = set("hi hello hey dear good morning afternoon evening hola querido querida estimado estimada "
+                   "buenos buenas "
                    "días dias tardes bonjour hallo ciao olá".split())
 
 
@@ -578,7 +587,7 @@ class DraftsMixin:
             self._draft_touch(h, draft_id, now, waiting="say", asked_at=now_iso(now))
             return self.send(h, T.DRAFT_SAY_ASK)
         if row["version"] == 0 and row["kind"] == "email":
-            self._draft_model_body(person, draft_id, now)   # A6: the model writes it when draft_v1 is on; code checks it
+            self._draft_model_body(person, draft_id, now)   # A6: the model writes it (when on); code checks it
         return self._draft_show(person, draft_id, now, new=False)
 
     def _draft_sign_name(self, person):
@@ -842,7 +851,8 @@ class DraftsMixin:
         h = person["handle"]
         row = self._draft(draft_id)
         stopped = self._draft_stop_hold(h, row, now)
-        return self._draft_show(person, draft_id, now, new=True, lead=(T.HOLD_STOPPED_BY_CHANGE + "\n\n") if stopped else "")
+        return self._draft_show(person, draft_id, now, new=True,
+                                lead=(T.HOLD_STOPPED_BY_CHANGE + "\n\n") if stopped else "")
 
     def _draft_tone(self, person, d, t, now):
         """'make it shorter', 'more formal', 'in Spanish': with draft_v1 on, the model rewrites the last shown version
@@ -909,7 +919,6 @@ class DraftsMixin:
         return self._draft_start_from(person, req, post, to, lead, now, text)
 
     def _draft_start_from(self, person, req, post, to, lead, now, text):
-        h = person["handle"]
         p_post = dict(post) if post else None
         if p_post:
             p_post.pop("has_address", None)
@@ -974,7 +983,7 @@ class DraftsMixin:
                                                                     re.I) else None
         self._tl.msg_text = words
         numbers = [n] if n else ([1] if not PLURAL.match(words) and lead_only(words, []) else None)
-        picks, whole, answer, problem = self._answer_picks(h, numbers, None, "pick")
+        picks, _whole, answer, problem = self._answer_picks(h, numbers, None, "pick")
         if problem:
             return problem
         picks = picks[:1] if not PLURAL.match(words) else picks[:3]
