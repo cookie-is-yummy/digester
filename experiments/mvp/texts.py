@@ -1457,3 +1457,142 @@ def over_action_cap(label, n):
     if label:
         return f"I've reached my limit of {n} {label} a day for you. I can do more tomorrow."
     return f"I've reached my limit for this today ({n} a day). I can do it again tomorrow."
+
+
+# ---------- round 9, slice A (DESIGN.md section 16.A): emails to other people, a link to yourself ----------
+ACTION_CAP_LABEL.update({"email.draft_link": "email links", "mailbox.send": "emails", "mailbox.draft": "drafts"})
+# W1: a model's small talk that claims an outcome the bot cannot see is never shown
+CHAT_CLAIM = re.compile(r"\b(?:I'?ve|I have|I)\s+(?:just\s+|already\s+)?(?:sent|emailed|cancell?ed|canceled|booked|"
+                        r"ordered|bought|paid|applied|signed you up|unsubscribed you|reserved|purchased)\b", re.I)
+CHAT_NO_CLAIM = "I haven't sent, booked or bought anything. Tell me what you'd like and I'll show you what I can do."
+PLACEHOLDER = "(fill this in)"
+DRAFT_HEAD = "Here's the email. Nothing has been sent."
+DRAFT_NEW_VERSION = "Here's the new version. Nothing has been sent."
+DRAFT_SIGN_ASK = "How should I sign your emails? Reply with your name, like \"Alex\", or \"no name\"."
+DRAFT_SAY_ASK = "What should it say? Tell me in your own words, like \"the kitchen sink is broken\"."
+DRAFT_SENSITIVE = "I left out the post's words because it's on a personal topic."
+DRAFT_REST_IN_POST = "(The rest is in the post: {url})"
+DRAFT_COPY_IT = "You can copy the email above into your mail app."
+DRAFT_CHANGE_HINT = "To change it: \"say ...\", \"subject: ...\", \"to: ...\", \"remove the link\", or \"cancel\"."
+DRAFT_ONE_AT_A_TIME = "I can write to one person at a time. Who first?"
+DRAFT_NOT_READY = "The email isn't finished yet. Answer my question above first, or say \"cancel\"."
+DRAFT_STILL_OPEN = "Your email draft is still open: say \"show the draft\" to see it."
+DRAFT_YES = "To send it, tap the link above and press Send in your mail app. Or tell me what to change."
+DRAFT_YES_MAILBOX = "To send it, reply \"send\". Or tell me what to change."
+DRAFT_THANKS = "Thanks."
+DRAFT_DROPPED = "OK, I've dropped it. Nothing was sent. The link I sent still opens it, so just don't press Send."
+DRAFT_DROPPED_UNSHOWN = "OK, I've dropped it. Nothing was sent."
+PREVIEW_STILL_OPEN = "Your rule preview is still waiting: reply YES to start it."
+DRAFT_TOO_MANY_CHANGES = "That's 5 changes. Tell me the whole text you want, like: instead say ..."
+DRAFT_NO_TONE = ("I can't rewrite it in a new tone yet. Tell me the words to use, like: instead say I'll be late on "
+                 "Friday.")
+DRAFT_POST_ADDRESS = "The post gives an address. I only write to an address you type yourself."
+DRAFT_NOTHING_SHOWN = ("I haven't sent you anything to put in an email yet. Ask me for something first, or tell me what "
+                       "the email should say.")
+DRAFT_SEND_LINK = "I can't send from your address. Tap the link above and press Send in your mail app."
+DRAFT_SAVE_LINK = ("I can't save to your Drafts folder. Tap the link above: it opens the email in your mail app, where "
+                   "you can save it as a draft.")
+HOLD_STOPPED_BY_CHANGE = "That stopped the send I had waiting. Reply \"send\" to send this version."
+# (who it is for is never repeated: DESIGN.md section 15)
+SHARE_EMAIL_OFFER = "Or say \"email it to\" and their email address, and I'll write the email."
+SELF_LINK = ("Here it is as an email to yourself. Tap to open it in your mail app, then send it to yourself or save it "
+             "as a draft:")
+
+
+def draft_who(whose):
+    return f"Who should it go to? Reply with {whose} email address, or \"blank\" to pick them in your mail app."
+
+
+def draft_to_line(to):
+    return f"To: {to}" if to else "To: (you pick them in your mail app)"
+
+
+def draft_which_address(two):
+    return f"Who should it go to: {two[0]} or {two[1]}?"
+
+
+def fill_first(label):
+    return f"Fill in the {label} first: reply \"{label} 12345\", or \"remove it\"."
+
+
+def draft_link_message(link, sender=None):
+    if sender:
+        return f"Reply \"send\" to send it from {sender}. Or tap to send it yourself:\n{link}\n{DRAFT_CHANGE_HINT}"
+    return f"Tap to open it in your mail app, check it, and press Send there:\n{link}\n{DRAFT_CHANGE_HINT}"
+
+
+_DAY_NAMES = {d.lower(): d for d in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")}
+
+
+# W4: the operator's own mailbox (amendment A-013). Times are the person's local clock ("6:04 pm").
+MAILBOX_STOPPED = "Stopped. Nothing was sent. Reply \"send\" when you're ready."
+MAILBOX_NEEDS_TO = "I need an address to send it to. Say \"to:\" and their email address."
+MAILBOX_OUTLOOK = ("Outlook.com doesn't allow app passwords any more, so I can't send from it. Tap the link to send it "
+                   "yourself.")
+MAILBOX_ERRORS = {
+    "auth": "Your mailbox refused my sign-in, so nothing was sent. Tap the link to send it yourself.",
+    "address": "The address was refused, so nothing was sent. Check it and say \"to: <address>\".",
+    "reach": "I couldn't reach your mailbox, so nothing was sent.",
+    "unknown": "I may or may not have sent it. Check your Sent folder before you ask me again.",
+}
+
+
+# A5: a draft in the operator's own Drafts folder
+MAILBOX_DRAFT_FAILED = {
+    "auth": "I couldn't save it to your Drafts folder: your mailbox refused my sign-in.",
+    "reach": "I couldn't save it to your Drafts folder: I couldn't reach your mailbox.",
+    "folder": "I couldn't save it: I couldn't find your Drafts folder.",
+    "server": "I couldn't save it to your Drafts folder: your mailbox said no.",
+}
+MAILBOX_DRAFT_USE_LINK = "Tap the link above to open it in your mail app instead."
+MAILBOX_UNDRAFTED = "I deleted the draft from your Drafts folder"
+MAILBOX_UNDRAFT_FAILED = "I couldn't delete the draft from your Drafts folder just now, so please delete it there"
+
+
+def mailbox_drafted(to, can_undo):
+    head = (f"I saved it in your Drafts folder ({to} is filled in). Nothing has been sent." if to else
+            "I saved it in your Drafts folder. Nothing has been sent.")
+    return head + (" Reply \"undo\" within 10 minutes to take it out again." if can_undo else
+                   " I can't take it out again from here, so delete it in Drafts if you change your mind.")
+
+
+def mailbox_held(to, when):
+    return f"Sending to {to} at {when}. Reply \"undo\" before then to stop it."
+
+
+def mailbox_already_held(when):
+    return f"It's already waiting to go at {when}. Reply \"undo\" to stop it."
+
+
+def mailbox_already_sent(when):
+    return f"I already sent that one at {when}."
+
+
+def mailbox_stale(when):
+    return f"That draft is from {when}. Reply \"send\" if it's still right."
+
+
+def mailbox_cap(n, link):
+    return f"I've sent {n} emails for you today, which is my limit. Tap to send this one yourself:\n{link}"
+
+
+def mailbox_accepted(to, when):
+    return f"Your mail server accepted the email to {to} at {when}. I can't unsend it."
+
+
+def mailbox_cant_unsend(to, when):
+    return f"I can't unsend an email. It went to {to} at {when}."
+
+
+def mailbox_offline(who, when):
+    return f"I didn't send your email to {who} at {when} because I was offline. Reply \"send\" to send it now."
+
+
+def mailbox_restarted(masked):
+    return (f"I may or may not have sent the email to {masked} before I restarted. Check your Sent folder before you "
+            "ask me again.")
+
+
+def draft_no_schedule(when):
+    w = " ".join(_DAY_NAMES.get(x.lower().rstrip("s"), x.lower()) for x in str(when or "").split())
+    return f"I can't email other people on a schedule. I can send it to you {w or 'then'}, so you can forward it."

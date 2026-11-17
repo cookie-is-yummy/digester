@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS profile_guess (key TEXT PRIMARY KEY, library TEXT, re
 CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, at TEXT, status TEXT,
   sources TEXT, library TEXT, old_library TEXT, counts TEXT, new_counts TEXT, estimate_usd REAL, cost_usd REAL,
   error TEXT, seconds REAL);
+-- round 9, slice A (DESIGN.md section 16.A): an email the bot wrote for the person to someone else. to_addr, to_name,
+-- subject, body and parts are cleared 7 days after done_at; to_domain and status stay (for "what did you do for me").
+CREATE TABLE IF NOT EXISTS drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, kind TEXT NOT NULL,
+  route TEXT, to_addr TEXT, to_name TEXT, to_domain TEXT, subject TEXT, body TEXT, version INTEGER DEFAULT 0,
+  text_hash TEXT, sources TEXT, parts TEXT, status TEXT NOT NULL, ref TEXT, shown_at TEXT, created_at TEXT,
+  done_at TEXT, job TEXT, sent_at TEXT);
 """
 
 
@@ -729,7 +735,8 @@ class Store:
                     pass
             for t in ("rules", "runs", "deliveries", "feedback", "pending", "last_answer", "sent", "requests", "inbound",
                       "todos", "profile_notes", "interp_cache", "answer_cache", "answers", "action_log", "outbox",
-                      "outside_searches", "imports"):
+                      "outside_searches", "imports",
+                      "drafts"):   # round 9, slice A
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             others = {os.path.abspath(r["library"]) for r in
                       self.q("SELECT library FROM people WHERE handle<>?", (handle,)) if r.get("library")}
@@ -768,3 +775,42 @@ class Store:
         r = self.one(f"SELECT COUNT(*) AS n FROM action_log WHERE handle=? AND action IN ({marks}) AND at>=? AND at<? "
                      "AND status NOT IN ('skipped','failed')", (handle, *actions, now_iso(start), now_iso(end)))
         return int(r["n"]) if r else 0
+
+    # ---------- round 9, slice A (DESIGN.md section 16.A): the email drafts the bot wrote for the person ----------
+    def add_draft(self, handle, kind, route, to_addr, to_name, subject, parts, job=None, sources=None, at=None):
+        cur = self.x("INSERT INTO drafts(handle,kind,route,to_addr,to_name,to_domain,subject,parts,version,status,"
+                     "sources,created_at,job) VALUES(?,?,?,?,?,?,?,?,0,'open',?,?,?)",
+                     (handle, kind, route, to_addr or None, to_name, _domain(to_addr), subject, json.dumps(parts),
+                      json.dumps(sources) if sources is not None else None, now_iso(at), job))
+        return cur.lastrowid
+
+    def draft(self, draft_id):
+        return self.one("SELECT * FROM drafts WHERE id=?", (draft_id,))
+
+    def update_draft(self, draft_id, **fields):
+        if "parts" in fields and not isinstance(fields["parts"], (str, type(None))):
+            fields["parts"] = json.dumps(fields["parts"])
+        if "to_addr" in fields:
+            fields["to_domain"] = _domain(fields["to_addr"])
+        cols = ", ".join(f"{k}=?" for k in fields)
+        self.x(f"UPDATE drafts SET {cols} WHERE id=?", (*fields.values(), draft_id))
+
+    def update_action(self, row_id, status, detail=None, action=None):
+        """W4: a send logged before SMTP (action mailbox.attempt, status sending) gets its result after: its action
+        and status (done, failed or unknown) and detail."""
+        self.x("UPDATE action_log SET status=?, detail=COALESCE(?, detail), action=COALESCE(?, action) WHERE id=?",
+               (status, json.dumps(detail) if detail is not None else None, action, row_id))
+
+    def drafts_of(self, handle):
+        return self.q("SELECT * FROM drafts WHERE handle=? ORDER BY id", (handle,))
+
+    def clear_old_drafts(self, before):
+        """The address, name, subject and words of drafts finished before `before` (the row keeps its domain and
+        status)."""
+        self.x("UPDATE drafts SET to_addr=NULL, to_name=NULL, subject=NULL, body=NULL, parts=NULL WHERE done_at IS NOT "
+               "NULL AND done_at<? AND (to_addr IS NOT NULL OR body IS NOT NULL OR parts IS NOT NULL OR subject IS NOT "
+               "NULL)", (now_iso(before),))
+
+
+def _domain(addr):
+    return addr.rsplit("@", 1)[1].lower() if addr and "@" in addr else None

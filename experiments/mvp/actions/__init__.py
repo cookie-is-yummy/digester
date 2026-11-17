@@ -98,6 +98,38 @@ REGISTRY = {
 }
 
 
+# ---------- round 9, slice A (DESIGN.md section 16.A): emails to other people; only the bot's own code runs these ----
+class DraftParams(BaseModel):
+    """A draft card (drafts.py) by its id; cut_note ends a body cut for the link."""
+    model_config = ConfigDict(extra="forbid")
+    draft_id: int
+    cut_note: Optional[str] = Field(default=None, max_length=300)
+
+
+class MailboxDraftParams(BaseModel):
+    """A5: an open draft card by its id, or none (the answer, as an email to the operator)."""
+    model_config = ConfigDict(extra="forbid")
+    draft_id: Optional[int] = None
+
+
+REGISTRY.update({
+    "email.draft_link": ActionDef(name="email.draft_link", params=DraftParams, module="email_link", order=40,
+                                  does="A mailto: link that opens one draft in the person's own mail app",
+                                  max_per_day=20, in_rules=False, from_model=False),
+    # W4 (amendment A-013): the operator's own mailbox sends one draft after "send" on the exact version shown
+    "mailbox.send": ActionDef(name="mailbox.send", params=DraftParams, module="mailbox", order=41,
+                              does="Sends one draft from the operator's own address over SMTP, after the hold",
+                              outside=True, undo="hold", confirm="send_word", max_per_day=5, in_rules=False,
+                              who="operator", from_model=False, connector="mailbox", fallback="email.draft_link"),
+    # A5: a real draft in the operator's Drafts folder (IMAP: LIST, APPEND; for undo SELECT that folder, UID STORE and
+    # UID EXPUNGE of its own UID). It sends nothing, so no "send" is needed. Fallback: email.send's link to self
+    "mailbox.draft": ActionDef(name="mailbox.draft", params=MailboxDraftParams, module="mailbox_imap", order=42,
+                               does="Saves one email as a draft in the operator's own Drafts folder",
+                               outside=True, undo="delete", confirm="never", max_per_day=20, in_rules=False,
+                               who="operator", from_model=False, connector="mailbox", fallback="email.send"),
+})
+
+
 def validate_action(name, params=None, by="model", where="form"):
     """(name, params as a plain dict with defaults left out). Raises ValueError for anything not in the registry.
     Round 9, C1: `by` is who names it ("model": a form the model filled, the default; "code"); `where` is where it is

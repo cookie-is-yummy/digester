@@ -4,6 +4,7 @@ fake model, a fake search pool and a fake clock (12 Nov 2026, New York); no netw
 import csv
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +16,7 @@ from mvp.tests.test_slice2 import H, ask_pasta, lemon_pick, say  # noqa: E402
 from mvp.tests.test_slice4 import confirmed, last_code, outbox_rows, read_eml  # noqa: E402
 
 HINT = "Press and hold that message to forward it. I can't send to other people myself."
+OFFER = "Or say \"email it to\" and their email address, and I'll write the email."   # round 9, slice A
 HINT_ES = "Mantén pulsado ese mensaje para reenviarlo. Yo no puedo enviar mensajes a otras personas."
 CHAT = {"intent": "chat", "reply": "Sure."}
 
@@ -67,7 +69,7 @@ def test_export_my_data_writes_every_file_in_its_shape(env):
     assert msg == T.export_done(4, os.path.relpath(d, os.environ["MVP_HOME"]))
     assert msg.startswith("I saved a copy of your data:") and "outbox/" in msg and "export-2026-11-12" in msg
     assert sorted(os.listdir(d)) == sorted(["rules.json", "todos.csv", "todos.md", "profile.json", "answers.md",
-                                            "saves.csv", "README.txt"])
+                                            "saves.csv", "README.txt", "drafts.json"])   # round 9, slice A
     with open(os.path.join(d, "todos.csv"), encoding="utf-8") as f:
         rows = list(csv.reader(f))
     assert rows[0] == ["title", "due date", "notes", "done"]
@@ -149,7 +151,8 @@ def test_email_it_to_me_after_an_export_sends_the_files(env):
     m = read_eml(row["path"])
     assert m["To"] == "a@b.co" and m["Subject"] == "Your data"
     assert sorted(a.get_filename() for a in m.iter_attachments()) == sorted(
-        ["rules.json", "todos.csv", "todos.md", "profile.json", "answers.md", "saves.csv", "README.txt"])
+        ["rules.json", "todos.csv", "todos.md", "profile.json", "answers.md", "saves.csv", "README.txt",
+         "drafts.json"])   # round 9, slice A
     assert "README.txt says what each one is." in m.get_body(("plain",)).get_content()
 
 
@@ -242,7 +245,9 @@ def test_send_this_to_my_sister_never_repeats_or_keeps_who_it_is_for(env):
               "can you share this one with my roommate?", "send the recipe to my sister", "share the link"):
         say(env, t, CHAT)
         share, hint = texts_of(ch, 2)
-        assert share.startswith("Lemon garlic pasta by @chef") and hint == HINT, t
+        # round 9, slice A (W2): with a person word, the hint offers to write the email (never naming who)
+        want = HINT + " " + OFFER if re.search(r"\bmy (?:sister|team|roommate)\b", t) else HINT
+        assert share.startswith("Lemon garlic pasta by @chef") and hint == want, t
     blob = json.dumps([bot.store.q(f"SELECT * FROM {t}") for t in ("requests", "inbound", "state", "action_log")])
     for who in ("sister", "Maria", "roommate"):
         assert who not in blob and not any(who in m for _, _, m in ch.outbox)
@@ -278,7 +283,7 @@ def test_share_a_thing_of_an_items_answer_by_number_and_by_name(ui):
     want = f"Iconoir: free open source icons\nFrom \"High-quality icon sites\" by @iconfan\n{ig('2022-09-01', 2)}"
     assert texts_of(ch, 2) == [want, HINT]
     say(ui, "send iconoir to my brother", CHAT)
-    assert texts_of(ch, 2) == [want, HINT]
+    assert texts_of(ch, 2) == [want, HINT + " " + OFFER]   # round 9, slice A (W2)
     say(ui, "share the Ant Design one", CHAT)
     assert texts_of(ch, 2)[0].startswith("Ant Design: an enterprise-class UI design language\nFrom \"Best design")
     from mvp import texts as T
@@ -318,7 +323,10 @@ def test_what_is_not_a_share_goes_on_as_before(env):
     env["state"]["answers"]["mvp_compose"] = lemon_pick()
     say(env, "pasta", ask_pasta())
     from mvp.tests.test_slice4_checks import ONLY_YOU
-    assert say(env, "email it to my friend", {"intent": "act_on_last", "actions": ["email.send"]}) == ONLY_YOU
+    # round 9, slice A (W2): an email to someone else is a draft card, read by code; it asks for the address
+    assert ONLY_YOU and say(env, "email it to my friend", {"intent": "act_on_last", "actions": ["email.send"]}) == (
+        "Who should it go to? Reply with your friend's email address, or \"blank\" to pick them in your mail app.")
+    say(env, "cancel", CHAT)
     n = model_calls(env)
     say(env, "share the zucchini one", CHAT)                       # names nothing shown: the model reads it
     assert model_calls(env) == n + 1

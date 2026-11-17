@@ -39,6 +39,8 @@ profile.json  What the bot knows about you: interests and levels, what you're wo
 answers.md    Every answer the bot kept for you, as you were shown it, with its links.
 saves.csv     Every post you kept that the bot can see (your own saves, likes, playlists and watches): its id, link,
               platform, the date you kept it and how. No post text, and never your friends' posts.
+drafts.json   The emails the bot wrote for you to send to other people: who to, subject, the words, and what
+              happened to each. After 7 days a finished one keeps only the address's domain and what happened.
 
 Saying "delete my data" to the bot removes this folder too.
 """
@@ -176,6 +178,7 @@ def export(bot, person, now, lists_only=False):
     text, n = saves_csv(bot.view(person["library"]))
     files.append(("saves.csv", _write(d, "saves.csv", text)))
     files.append(("README.txt", _write(d, "README.txt", README.format(day=day))))
+    files.append(("drafts.json", _write(d, "drafts.json", drafts_json(bot.store, h))))   # round 9, slice A
     out.update(saves=n, rules=n_rules)
     return out
 
@@ -195,6 +198,15 @@ def attachments(files):
         main, sub = types.get(os.path.splitext(name)[1], ("application", "octet-stream"))
         att.append((name, path, main, sub))
     return att, left
+
+
+# ---------- round 9, slice A (DESIGN.md section 16.A) ----------
+def drafts_json(store, h):
+    """Every email draft the bot wrote for them: what they saw (recipient, subject, words) while it is kept, and
+    what happened to it."""
+    keep = ("id", "kind", "route", "to_addr", "to_name", "to_domain", "subject", "body", "version", "status",
+            "created_at", "shown_at", "done_at", "sent_at")
+    return json.dumps([{k: r.get(k) for k in keep} for r in store.drafts_of(h)], ensure_ascii=False, indent=1)
 
 
 def forget_exports(handle):

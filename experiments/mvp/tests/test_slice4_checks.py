@@ -40,12 +40,18 @@ def test_sending_to_someone_else_is_offered_to_the_person_instead(env):
     bot = env["bot"]
     env["state"]["answers"]["mvp_compose"] = lemon_pick()
     say(env, "pasta", ask_pasta())
-    assert say(env, "email this to my mom at mom@x.co", {"intent": "set_email", "email": "mom@x.co"}) == ONLY_YOU
-    assert say(env, "email it to my friend", {"intent": "act_on_last", "actions": ["email.send"]}) == ONLY_YOU
+    # round 9, slice A (W2): an email to someone else is a draft card the person sends from their own mail app; the
+    # address is never saved as theirs and no code goes to it
+    say(env, "email this to my mom at mom@x.co", {"intent": "set_email", "email": "mom@x.co"})
+    card = [m for _, _, m in env["ch"].outbox[-3:]]
+    assert card[0].startswith("Here's the email. Nothing has been sent.\nTo: mom@x.co") and "mailto:mom@x.co?" in card[2]
+    assert ONLY_YOU and say(env, "email it to my friend", {"intent": "act_on_last", "actions": ["email.send"]}) == (
+        "Who should it go to? Reply with your friend's email address, or \"blank\" to pick them in your mail app.")
     # round 8, slice B (I3): "forward that to my boss" now gets a message they can forward themselves, then the hint
     # (test_round8_integrations.py); nothing goes to anyone else and no address is stored
     assert say(env, "forward that to my boss", {"intent": "unsupported", "reply": "I can't do that."}) == \
-        "Press and hold that message to forward it. I can't send to other people myself."
+        "Press and hold that message to forward it. I can't send to other people myself. Or say \"email it to\" and " \
+        "their email address, and I'll write the email."
     assert bot.store.email_of(H) == (None, False) and outbox_rows(bot) == []
     # their own words about their own address still work
     assert say(env, "my work email is me@work.co", {"intent": "set_email", "email": "me@work.co"}).startswith(

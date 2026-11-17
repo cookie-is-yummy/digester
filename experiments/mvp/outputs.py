@@ -45,7 +45,10 @@ BARE_EMAIL = re.compile(r"^\s*(?:(?:it'?s|it is|my email is|my email'?s|email:?|
 # someone other than the person ("email this to my mom"): sending to others stays out (DESIGN.md section 11)
 OTHER_PERSON = re.compile(r"\b(?:my|our)\s+(?:mom|mum|mother|dad|father|parents?|wife|husband|partner|friends?|boss|"
                           r"sister|brother|son|daughter|girlfriend|boyfriend|roommate|colleague|coworker|co-worker|"
-                          r"teacher|team|family|grandma|grandpa|aunt|uncle|cousin)s?\b|\b(?:to|cc)\s+(?:him|her|them)\b",
+                          r"teacher|team|family|grandma|grandpa|aunt|uncle|cousin|"
+                          # round 9, slice A (W1): more people (never "agent" or "assistant": "my agent" is the MCP log)
+                          r"landlord|landlady|neighbou?r|client|doctor|dentist|professor|tutor|coach|manager|recruiter|"
+                          r"lawyer|accountant|plumber|contractor|therapist)s?\b|\b(?:to|cc)\s+(?:him|her|them)\b",
                           re.I)
 # checker of fix pass 4, finding 78: "it", "that one" mean the pick the answer opened with (every library answer leads with
 # one pick, its details shown, and the others one line each); "them", "these", "both" mean them all
@@ -321,7 +324,12 @@ saves saved post posts link""".split())
 
     def _act_on_last(self, person, it, text, now):
         h = person["handle"]
-        if any(a.action == "email.send" for a in it.actions) and self.to_someone_else(text):
+        if any(a.action == "email.send" for a in it.actions) and (self.email_to_other(text, h)
+                                                                   or self.to_someone_else(text)):
+            # round 9, slice A (W1): an email that names someone else is a draft card, never an email to the person
+            ref = self.draft_from_request(person, text, now)
+            if ref is not None:
+                return ref
             return self.send(h, T.EMAIL_ONLY_YOU)
         acts = []
         for a in it.actions:
@@ -364,7 +372,7 @@ saves saved post posts link""".split())
         # review fix S5: an email or a calendar link cannot be taken back; "undo" after it never reaches back to an
         # older write. With todo.add as well, "undo" takes those to-dos off and says the rest stays.
         final = [w for n, w in (("email.send", "an email"), ("calendar.add", "a calendar link"))
-                 if any(a == n and o.status not in ("failed", "skipped") for a, o in done)]
+                 if any(a == n and o.status not in ("failed", "skipped", "link") for a, o in done)]   # W3: a link
         if final:
             todo_write = self.store.get_state(f"lastwrite:{h}")
             self._wrote_final(h, " or ".join(final))
@@ -639,6 +647,13 @@ saves saved post posts link""".split())
         """set_email from the interpreter: the address must be written in the person's own message (the model never
         supplies one), and it must be theirs: sending to someone else stays out."""
         h = person["handle"]
+        from .drafts import email_request
+        if email_request(text) or (OTHER_PERSON.search(text) and "@" in text):
+            # round 9, slice A (W1): an address for someone else is never saved as theirs, and no code goes to it:
+            # the email to that person is a draft card
+            ref = self.draft_from_request(person, text, now)
+            if ref is not None:
+                return ref
         if self.to_someone_else(text) or (OTHER_PERSON.search(text) and "@" in text):
             return self.send(h, T.EMAIL_ONLY_YOU)
         if not email or email.lower() not in text.lower():

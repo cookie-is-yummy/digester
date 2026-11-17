@@ -187,7 +187,12 @@ class HandlerMixin:
             if NO.match(text):
                 return self.send(handle, T.NOT_DELETED)
             pending = None
-        elif pending and pending["kind"] == "confirm_rule" and YES.match(text):
+        # ---------- round 9: the reads of an open card or offer (verdict section 4, hooks 1 and 2) ----------
+        ref = self.draft_reads(person, text, pending, now)   # slice A: an email draft card (drafts.py)
+        if ref is not None:
+            return ref
+        # ---------- end of the round 9 card reads ----------
+        if pending and pending["kind"] == "confirm_rule" and YES.match(text):
             return self._confirm(person, pending)
         elif pending and NO.match(text):
             self.store.clear_pending(handle)
@@ -218,6 +223,11 @@ class HandlerMixin:
         pending = self._live_pending(handle, now)
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
+        # ---------- round 9: requests read by code before the model (verdict section 4, hooks 5 to 8) ----------
+        ref = self.email_reads(person, text, now)   # slice A: "email my landlord that ..." (drafts.py)
+        if ref is not None:
+            return ref
+        # ---------- end of the round 9 request reads ----------
         # round 8, slice B (DESIGN.md section 15): export, share, "what did my agent ask": code only, no model call
         done, ref = self.integration_reads(person, text, now)
         if done:
@@ -588,11 +598,18 @@ class HandlerMixin:
         if it.intent in ("unsupported", "chat", "help"):
             if it.intent == "unsupported":
                 self.store.log_request(h, text, it.intent)
+                if self.email_to_other(text, h):   # round 9, slice A (W2): an email to someone else is a draft card
+                    ref = self.draft_from_request(person, text, now)
+                    if ref is not None:
+                        return ref
                 if self.to_someone_else(text):   # sending to others stays out; offer to send it to them (section 11)
                     return self.send(h, T.EMAIL_ONLY_YOU)
                 # fix pass 2, finding 62: never the model's own words for a request it would not do: code picks the
                 # sentence (the model's "reply" is not shown)
                 return self.send(h, T.unsupported_reply(text, it.reply, lang=it.lang))
+            if it.intent == "chat" and it.reply and T.CHAT_CLAIM.search(it.reply):
+                # round 9, slice A (W1): small talk never claims an outcome the bot cannot see ("I've sent ...")
+                return self.send(h, T.CHAT_NO_CLAIM)
             return self.send(h, HELP if it.intent == "help" and not it.reply else (it.reply or HELP))
         if it.intent == "confirm":
             if pending and pending["kind"] == "confirm_rule":
@@ -961,6 +978,9 @@ class HandlerMixin:
         """Reverses the last write within 10 minutes: a to-do added, ticked off, removed or given a time; a rule
         started, changed, paused, resumed, stopped or skipped; quiet hours; a snooze; a time zone."""
         h = person["handle"]
+        ref = self.draft_undo(person, now)   # round 9, slice A (W4): an email waiting in its hold is stopped first
+        if ref is not None:
+            return ref
         lw = self._last_write(h, now)
         if not lw:
             return self.send(h, T.NOTHING_TO_UNDO)
@@ -1020,6 +1040,8 @@ class HandlerMixin:
                 if row and not row.get("reminded_at"):
                     self.store.update_todo(t["id"], due_at=t["due_at"])
             return f"I'm back on {T.zone_name(u['timezone'])} time"
+        if k == "mailbox_draft":   # round 9, slice A (A5): the draft the bot put in their Drafts folder
+            return self.mailbox_undraft(h, u)
         return None
 
     def _spec_for_followup(self, last, question, avoid=(), handle=None):

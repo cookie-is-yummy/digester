@@ -466,7 +466,9 @@ SHARE_ONE = re.compile(r"^(?:it|this|that|this one|that one|the one you (?:recom
 SHARE_ALL = re.compile(r"^(?:these|those|them|all|all of them|both|everything|the picks|these ones|those ones)$", re.I)
 # "send it to me", "send the second one to my calendar / my grocery list": the person's own places, not a person
 SHARE_TO_SELF = re.compile(r"^(?:me|myself|you|yourself|(?:my|the)\s+(?:[\w-]+\s+)?(?:e-?mail|inbox|phone|account|"
-                           r"calendar|list|lists|to-?dos?|todo|reminders?|notes?|tasks?|outbox))\b", re.I)
+                           r"calendar|list|lists|to-?dos?|todo|reminders?|notes?|tasks?|outbox|"
+                           # round 9, slice A (W1): their own mailbox by its brand ("send it to my gmail")
+                           r"gmail|icloud|outlook|hotmail|yahoo|proton|protonmail|mail app|mail))\b", re.I)
 SHARE_ORDINAL = dict(ORDINAL, sixth=6, seventh=7, eighth=8, ninth=9, tenth=10, eleventh=11, twelfth=12)
 SHARE_NUMBER = re.compile(r"^(?:the\s+)?(?:(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|"
                           r"twelfth|last|1st|2nd|3rd|4th|5th|\d{1,2}th)(?:\s+(?:one|pick|"
@@ -673,7 +675,8 @@ class IntegrationReadsMixin:
             return self.send(h, T.ITEMS_GONE)
         ref = self.send(h, S.share_text(blocks))
         self.store.log_action(h, last["run_id"], None, "share.text", "done", detail={"blocks": len(blocks)}, at=now)
-        self.send(h, t.get("share_hint") or L.EN["share_hint"])
+        offer = "" if (ask.get("es") or run_lang) else S.email_offer(text)   # round 9, slice A (W2): English only
+        self.send(h, (t.get("share_hint") or L.EN["share_hint"]) + (" " + offer if offer else ""))
         return ref
 
 

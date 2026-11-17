@@ -1018,6 +1018,135 @@ an MCP server for testers (hosted, with sign-in); captions in `saves.csv`.
 The founder, 17 Nov: draft and send the email, cancel the subscription, more connectors; "Always show, then wait for
 yes". Amendments A-012 to A-014 (Proposed). Each slice adds its own subsection below.
 
+### 16.A Slice A: email to other people (W1 to W4, A5, A6; amendments A-012, A-013)
+Where this subsection and sections 6, 11 and 15 differ ("only to the person's own address", "sending to someone else
+stays out"), this subsection wins while A-012 and A-013 are Proposed.
+
+**W1, four fixes.** `outputs.OTHER_PERSON` gains landlord, landlady, neighbo(u)r, client, doctor, dentist, professor,
+tutor, coach, manager, recruiter, lawyer, accountant, plumber, contractor, therapist (never "agent", "assistant").
+`followup.SHARE_TO_SELF` gains gmail, icloud, outlook, hotmail, yahoo, proton(mail), "mail app", "mail": "send it to my
+gmail" is an email to the person. `set_email_from` never saves an address for someone else and sends it no code: the
+message becomes a draft card. `_act_on_last` with `email.send` and someone else named becomes a draft card, never an
+email to the person. A `chat` reply that claims an outcome (`T.CHAT_CLAIM`: "I've sent / booked / cancelled ...") is
+replaced by `T.CHAT_NO_CLAIM`.
+
+**W2, the draft card** (`drafts.py`, a mixin; no model call unless A6 is on).
+- Read by code before the model (`email_reads`, hook 5 in `answer_normally`; up to 600 characters):
+  `email <recipient> [that|saying|to say|about|and ask if/when/whether|asking for|and tell him ...]`, `draft (and
+  send) an email to ...`, `write (an email) to ...`, `send/forward <a shown post> to <address>`, `email this/it/the
+  second one to <recipient>`. A recipient is an address, `my <person word> [Name] [at address]`, or a capitalised name.
+  Not read: anything to the person themselves ("email it to me", "send it to my gmail", "change my email to ...").
+  Every rule-eval text and every one of the 20 draft requests is left alone (tested; claimed: 0).
+- "every friday email my mom a recipe": `I can't email other people on a schedule. I can send it to you every
+  Friday, so you can forward it.` No preview, no model call.
+- The body, by code: `Hi <Name>,` only for a typed name, else `Hi,`; the request paragraph from the person's words
+  (only "ask if X" -> "Can you let me know if X?", "(he|she|they) can" -> "you can", "asking for X" -> "I'd like to ask
+  for X.", "about X" -> "I'm writing about X."); the post block (checked title by creator, at most 2 checked key points
+  or the thing's own words with "(as of ...)", the link; a post on a personal topic: title and link only and the card
+  line `I left out the post's words because it's on a personal topic.`); extra paragraphs; `Thanks,` and the sign-off
+  name (`prefs.sign_as`, else the first word of `people.name`, else asked once: `How should I sign your emails?`).
+  Subject: the person's quoted subject, else the post's title, else the request cut at 60 characters.
+- Asked in order when missing: `Who should it go to? Reply with your landlord's email address, or "blank" to pick
+  them in your mail app.`, the sign-off name, `What should it say?`. Two addresses: `Who should it go to: a or b?`;
+  cc, bcc, everyone: `I can write to one person at a time. Who first?`.
+- The recipient is only an address the person typed in this exchange. A post's address is never used: `The post gives
+  an address. I only write to an address you type yourself.` A bare address is the draft's only when "Who should it go
+  to?" is newer than the bot's own `emailask:` question (else it is the person's own, as before).
+- The card is three messages: (1) `Here's the email. Nothing has been sent.` / `To: ...` / `Subject: ...`; (2) the body
+  alone; (3) `Tap to open it in your mail app, check it, and press Send there:` / the `mailto:` link / `To change it:
+  "say ...", "subject: ...", "to: ...", "remove the link", or "cancel".` With a `(fill this in)` placeholder, (3) is
+  `Fill in the member number first: reply "member number 12345", or "remove it".` and no link.
+- `mailto:` (RFC 6068): address, subject and body percent-encoded (UTF-8, `%20`, `%0D%0A`); a body over 1,500
+  characters is cut at a line and ends `(The rest is in the post: <link>)` or `(The rest is in my message above.)`.
+- The draft reader (`draft_reads`, hook 1 in `_on_message`, after `confirm_delete`), whole message only, while a draft
+  is open (24 hours from the last time it was shown or asked about): "send" words (route link: `I can't send from your
+  address. Tap the link above and press Send in your mail app.`); "yes", "ok", "go", "do it" when the card is the
+  newest thing sent and no rule preview waits: `To send it, tap the link above ...` (with a preview waiting, the yes is
+  the preview's; 👍 as text stays quick feedback); "cancel", "don't send it", "never mind", "scrap it", "no": to the
+  newer of the draft and a waiting row, saying which stays open; "show the draft"; "sent", "I sent it": `Thanks.`;
+  changes by code: "say/add/mention/tell him X", "instead say X", "subject: X", "change the subject to X", "to: addr",
+  "send it to addr instead", "sign it X", "don't sign it", "remove the link", "take out the post", "add the link back",
+  "<placeholder label> <value>", "remove it". Each change that changes the text is a new version with a new
+  `text_hash` and the whole card again (`Here's the new version. Nothing has been sent.`). At most 5 changes. Tone
+  words ("shorter", "more formal", "in Spanish") are A6's rewrite, else `I can't rewrite it in a new tone yet. ...`.
+- `drafts` table (end of the schema): `id, handle, kind (email|notice), route (link|mailbox), to_addr, to_name,
+  to_domain, subject, body, version, text_hash, sources {run_id, items}, parts (the words), status (open | link_shown |
+  held | sending | sent | failed | unknown | person_sent | cancelled | expired), ref, shown_at, created_at, done_at, job,
+  sent_at`. State `draft_open:<handle>`. `to_addr`, `to_name`, `subject`, `body` and `parts` are cleared 7 days after
+  `done_at` (`drafts_tick`); `to_domain` and the status stay. "delete my data" removes the rows; "export my data" writes
+  `drafts.json`. `action_log`: `draft.made`, `email.draft_link`, `draft.changed`, `draft.cancelled`,
+  `draft.person_sent`, `draft.model`, `mailbox.send`, `mailbox.draft`, detail `{kind, route, version,
+  recipient_domain, body_from}`: never the address, subject or words.
+- Registry: `email.draft_link` (from_model False, in_rules False, 20 a day; over it the card says the cap line and
+  `You can copy the email above into your mail app.`).
+- Backstops: the `unsupported` branch and `_act_on_last` start a draft when the message names someone else.
+  "send this to my mom" (no email word) stays the message to forward; its hint adds `Or say "email it to" and their
+  email address, and I'll write the email.` (who it is for is never repeated: section 15).
+- For slices B and D (methods of the bot; module functions take the bot first): `Bot.draft_start(person, kind, to=None,
+  to_name=None, subject=None, paragraphs=(), post=None, placeholders=(), job=None, now=None)` (kind "notice": `Hello,`
+  / `Thank you,`, paragraphs used as they are, never rewritten by the model), `Bot.open_draft(handle)`,
+  `Bot.draft_from_todo(person, todo, now)` ("Email landlord about sink"), `drafts.start(bot, ...)`,
+  `drafts.open_draft(bot, handle)`, `drafts.from_todo(bot, person, todo, now)`.
+
+**W3, a link to yourself.** No `MVP_SMTP_HOST` and a channel whose person cannot open the outbox (Messages, Sendblue):
+an ask or `act_on_last` with `email.send` gives `Here it is as an email to yourself. Tap to open it in your mail app,
+then send it to yourself or save it as a draft:` and a `mailto:` link (their address in To when they gave one, else
+blank; the bot's "Sent by" footer left out; cut at a section past 1,500 characters). Outcome status `link` (not "an
+email" for "undo"). With SMTP, on the test page and in scheduled rules: as before.
+
+**A6, draft_v1** (`prompts/draft_v1.md`, purpose `draft`, through `llm.py`; `MVP_DRAFT_MODEL=0` turns it off). For a
+new email draft (not a notice) and for tone changes, the model gets the request, the recipient's name and role apart,
+the sign-off name, and only the checked post lines as data; it returns `{subject, greeting, body, closing}`. It never
+chooses the recipient. `drafts.grounded` checks: every number, address, link and capitalised word (other than greeting
+and sentence-start words) is in those sources; nothing is said to be done (sent, paid, booked, attached, ...) unless
+the request says it; no placeholder; at most 1,200 characters; the greeting names only a typed name. One retry naming
+the failure, then the code-built words (nobody is told). A post-only email keeps the post's title as subject. At most
+6 model drafts or rewrites a person a day, and none over the spend caps. Eval: `evalset/drafts_dev.jsonl` (17
+synthetic cases: plain, a post, a date and an amount, Spanish, nobody named, posts that try to steer, asks to make
+something up, rewrites) and `eval_drafts.py`. Live, 17 Nov: 17 of 17 passed the checks on the first try, 0 fell back,
+0 must-not words; my reading: 16 say only what the brief asked, 1 adds an apology ("I'm sorry I missed class") to a
+brief that asked for an excuse. Cost: $0.039 in all (58 calls over four runs while the prompt was set).
+
+**W4, the operator's own mailbox sends** (`actions/mailbox.py`, `mailbox.send`: outside, undo hold, confirm send_word,
+5 a day, never in rules or from the model, operator only, fallback the link). Settings only from the environment:
+`MVP_MAILBOX_ADDRESS`, `MVP_MAILBOX_APP_PASSWORD`, `MVP_MAILBOX_SMTP_HOST`/`_PORT` (gmail.com 465, icloud/me/mac
+587, fastmail 465); Outlook.com, Hotmail, Live: `Outlook.com doesn't allow app passwords any more, so I can't send from
+it. Tap the link to send it yourself.` Card (3): `Reply "send" to send it from <address>. Or tap to send it yourself:`.
+- Send words, whole message: send, send it, send it now, send now, yes send it, ok send it, go ahead and send it, send
+  the email. Never yes, ok, go, do it, 👍, a tapback or a model `confirm`.
+- The yes token is `make_yes_token(draft id, version, text_hash)` of the version last shown; the module makes it again
+  from the row it is about to send, so any change voids it. Blocked: a placeholder (`Fill in ...`), no address (`I need
+  an address to send it to. ...`), shown more than 30 minutes ago (the card again and `That draft is from 2:10 pm.
+  Reply "send" if it's still right.`), the day's 5 (`I've sent 5 emails for you today, which is my limit. Tap to send
+  this one yourself:` and the link), already held (`It's already waiting to go at ...`), already sent (`I already sent
+  that one at ...`).
+- The hold: status `held`, state `sendhold:<handle>`, `Sending to <address> at 6:04 pm. Reply "undo" before then to
+  stop it.` (`MVP_SEND_HOLD_MIN`, 2). "undo" in the hold (`handler._undo` asks `draft_undo` first): `Stopped. Nothing
+  was sent. ...`; after: `I can't unsend an email. It went to <address> at 6:04 pm.` A change or "cancel" stops it (`That
+  stopped the send I had waiting. ...`). `drafts_tick` (in `Bot.tick`) sends when due: status `sending` and an
+  `action_log` attempt row are written before SMTP; one send per token. More than 15 minutes late: not sent, `I didn't
+  send your email to Maria at 6:04 pm because I was offline. ...`. A `sending` row found later (a restart): never
+  resent, `I may or may not have sent the email to m***@example.com before I restarted. ...`.
+- SMTP step by step (login, MAIL, RCPT, DATA by hand). The receipt only after 250 to the message: `Your mail server
+  accepted the email to <address> at 6:04 pm. I can't unsend it.` Errors: 535 `Your mailbox refused my sign-in, so
+  nothing was sent. ...`; 550 `The address was refused, so nothing was sent. ...`; no connection or a time-out before
+  the message is handed over `I couldn't reach your mailbox, so nothing was sent.`; a time-out after `I may or may not
+  have sent it. ...` (status `unknown`). A failed draft stays open for a new "send". The module never imports an IMAP
+  library; the app password is in no table, file, reply or log (tested).
+
+**A5, a draft in the Drafts folder** (`actions/mailbox_imap.py`, `mailbox.draft`: outside, undo delete, confirm never,
+20 a day, operator only; same settings, `MVP_MAILBOX_IMAP_HOST`/`_PORT`, Gmail/iCloud/Fastmail known). Commands: LOGIN,
+LIST (the folder flagged `\Drafts`, else a usual name), APPEND with `\Draft`, LOGOUT; for "undo" SELECT of that folder,
+UID STORE `\Deleted` and UID EXPUNGE of the UID from APPENDUID. Never FETCH, SEARCH, EXAMINE or another folder (a fake
+server checks it). Read by code: "save it as a draft", "save that email as a draft" (an open card, kept open, "send"
+still works), and with no card "put this in my email", "save it as a draft", "put the second one in my drafts", "draft
+it in my gmail" (the answer, To the operator). Reply only on OK: `I saved it in your Drafts folder (<address> is filled
+in). Nothing has been sent. Reply "undo" within 10 minutes to take it out again.` (without APPENDUID: `I can't take it
+out again from here, ...`). A failure says what failed, then the link. For everyone else these keep their old meaning.
+
+**Out.** Cc and Bcc; a contact book; Gmail or Outlook compose links; reading the mailbox in any way; sends in rules,
+from `act_on_last` or MCP; sends for anyone but the operator; a "send without asking" setting.
+
 ### 16.D Slice D, C1: registry fields and the operator setting
 - `ActionDef` (`actions/__init__.py`) gains, each defaulting to today's behaviour (the four existing actions are
   unchanged): `outside` (False: reaches another person or an outside account), `undo` ("delete" / "hold" / "none"),
