@@ -30,8 +30,9 @@ def _domain(addr):
 def settings():
     """{address, password, host, port} from the environment, or None when the address or the app password is not
     set, or no host is known for the address's domain."""
-    addr = (os.environ.get("MVP_MAILBOX_ADDRESS") or "").strip()
-    pw = os.environ.get("MVP_MAILBOX_APP_PASSWORD") or ""
+    from ..settings import secret   # round 10, slice K: the environment first, then the sealed store
+    addr = secret("MVP_MAILBOX_ADDRESS") or ""
+    pw = secret("MVP_MAILBOX_APP_PASSWORD") or ""
     if not addr or not pw or "@" not in addr:
         return None
     host, port = SMTP_DEFAULTS.get(_domain(addr), (None, None))
@@ -44,7 +45,8 @@ def settings():
 
 def refused_domain():
     """The address's domain when it is one that cannot be used (Outlook.com and friends), else None."""
-    d = _domain(os.environ.get("MVP_MAILBOX_ADDRESS") or "")
+    from ..settings import secret   # round 10, slice K
+    d = _domain(secret("MVP_MAILBOX_ADDRESS") or "")
     return d if d in REFUSED else None
 
 

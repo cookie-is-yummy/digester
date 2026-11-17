@@ -170,6 +170,7 @@
       <button class="btn quiet" data-op="start_over" data-welcome="1">Start over (runs the setup from its first message)</button>
       <button class="btn quiet" data-op="start_over">Clear rules, thread, to-dos and outbox (keeps the setup)</button>
       <div class="small">This page is a test thread on this computer. Nothing here is sent to a phone.</div>
+      <div class="small" id="build"></div>
     </div>
   </aside>
 </div>
@@ -196,6 +197,7 @@ async function api(path, body) {
 }
 
 function draw(s) {
+  $("build").textContent = s.build || "";
   if (!s.people || !s.people.length) { $("status").textContent = "no people in people.json"; return; }
   me = s.me;
   const who = $("who");

@@ -98,6 +98,11 @@ SENSITIVE_PHRASES = {"self harm": "health", "eating disorder": "health", "mental
                      "how to pray": "religion", "vote for": "politics", "non binary": "sexuality"}
 
 
+def _secret(name):
+    from .settings import secret   # round 10, slice K: every secret is read through settings.secret
+    return secret(name)
+
+
 def _clean(text):
     """The text without links, emails, @handles, phone numbers and digits."""
     t = URL.sub(" ", text or "")
@@ -358,7 +363,7 @@ class Outside:
         c = spec.content
         texts = [t for t in texts if t]
         if c.source != "library" or c.platforms == ["instagram"] or not config.OUTSIDE_ON \
-                or not os.environ.get(self.key_env):
+                or not _secret(self.key_env):
             return False
         if sensitive_topic(texts + [c.goal or "", *c.searches, *c.criteria]) or not search_text(spec, texts):
             return False
@@ -381,7 +386,7 @@ class Outside:
             return stop("instagram_only", T.OUTSIDE_INSTAGRAM)
         if sensitive_topic(texts + [c.goal or "", *c.searches, *c.criteria]):
             return stop("sensitive", T.OUTSIDE_SENSITIVE)
-        key = os.environ.get(self.key_env)
+        key = _secret(self.key_env)
         if not config.OUTSIDE_ON or not key:
             return stop("off", T.OUTSIDE_OFF)
         q = search_text(spec, texts)

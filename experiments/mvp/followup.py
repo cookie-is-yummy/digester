@@ -438,6 +438,12 @@ NUDGES_ON = re.compile(r"^\W*(?:overdue\s+(?:nudges?|reminders?)\s+on|turn on(?:
 
 # ---------- round 8, slice B: integrations (DESIGN.md section 15), read by code with no model call ----------
 # "what did my agent ask": the MCP server's calls, counted per tool and day (mcp_server.agent_asked_text)
+# ---------- round 10, slice K: "version", "what version are you", "which build are you on" (no model call) ----------
+VERSION_ASKED = re.compile(r"^\W*(?:(?:hey|hi|ok|so)[\s,]+)?(?:(?:what|which)(?:'s|’s|s|\s+is)?\s+(?:the\s+|your\s+|this\s+)?"
+                           r"(?:version|build)(?:\s+(?:are\s+you|is\s+this|of\s+the\s+bot|do\s+you\s+run|"
+                           r"is\s+running)(?:\s+(?:on|running|using))?)?|(?:your\s+)?(?:version|build)(?:\s+number)?)"
+                           r"\s*[?.!]*\s*$", re.I)
+# ---------- end round 10, slice K ----------
 AGENT_ASKED = re.compile(r"^\W*(?:what|which things?)\s+(?:did|has|have)\s+my\s+(?:ai\s+)?(?:agent|assistant)\s+"
                          r"(?:ask(?:ed)?(?:\s+(?:you|me))?(?:\s+for)?|look(?:ed)?\s+at|looked up|see|seen|read)"
                          r"(?:\s+(?:today|this week|lately|recently))?\W*$", re.I)
@@ -523,6 +529,10 @@ class IntegrationReadsMixin:
         if not t or len(t) > 120:
             return False, None
         h = person["handle"]
+        if VERSION_ASKED.match(t):   # round 10, slice K: the build this bot runs
+            from . import config
+            self.note(intent="version")
+            return True, self.send(h, T.build_line(config.BUILD))
         if AGENT_ASKED.match(t):
             from .mcp_server import agent_asked_text
             self.note(intent="agent_log")

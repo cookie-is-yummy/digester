@@ -1335,9 +1335,24 @@ def _took_back(it: Interpretation, message):
     return it
 
 
+# ---------- round 10, slice K: a rule's place is set by code only ----------
+def _drop_model_place(raw):
+    """A model's form never sets a rule's place (schema.RulePlace): "place" is dropped from its spec, its draft and its
+    second part. Stored specs keep theirs (they are loaded with RuleSpec.model_validate, not here)."""
+    if not isinstance(raw, dict):
+        return raw
+    for k in ("spec", "draft"):
+        if isinstance(raw.get(k), dict):
+            raw[k].pop("place", None)
+    if isinstance(raw.get("also"), dict):
+        _drop_model_place(raw["also"])
+    return raw
+# ---------- end round 10, slice K ----------
+
+
 def settle(raw, message, rules, now, tzname, todos=()):
     """A raw form from the model (or the cache) to a validated, completed Interpretation. Raises ValidationError."""
-    it = Interpretation.model_validate(_fill_raw(_drop_model_moment(merge_todo_adds(raw))))
+    it = Interpretation.model_validate(_fill_raw(_drop_model_moment(merge_todo_adds(_drop_model_place(raw)))))
     it = _library_question(_level_feedback(it, message), message)
     if not it.lang:
         it.lang = detect_lang(message)

@@ -78,6 +78,13 @@ STOP = set("a an and the of for to in on with my your our this that is it at by 
 PROMO_TITLE = re.compile(r"\b(comment|links?|giveaway|follow|dm|subscribe|shop|discount|code|sale|tap|click)\b", re.I)
 
 
+# ---------- round 10, slice K: a stub slice S fills (S4: the title shown for a pick; W-9 lists its call sites) -------
+def display_title(it, model_title=None):
+    """The title shown for a pick. Stub until slice S: the model's title when given, else title_from_item (today)."""
+    return model_title or title_from_item(it)
+# ---------- end round 10, slice K ----------
+
+
 def title_from_item(it, words=8):
     """A name made only of the item's own words (used when the model's title is not supported by the item): its first
     line that is not a call to comment, follow or shop; otherwise a neutral name with the creator."""

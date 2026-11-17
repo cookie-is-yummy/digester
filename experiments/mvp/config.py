@@ -72,14 +72,60 @@ CALENDAR_MINUTES = 30        # an event's length when none is named
 # Actions with who="operator" (their own mailbox, their Mac) run only for them. Unset: nobody is the operator.
 OPERATOR = os.environ.get("MVP_OPERATOR") or None
 OUTSIDE_WRITES_PER_DAY = 40   # outside actions (outside=True) per person per local day, all of them together
+# ---------- round 10, slice K: the test page's own person is the operator ----------
+# The test page runs on the computer of whoever runs the bot, so with `--channel web` and MVP_OPERATOR unset every
+# person typed as on that page is the operator (bot.main sets this through use_page_operator). MVP_OPERATOR still wins
+# when set; MVP_OPERATOR=none makes nobody the operator, also on the page (to try what a tester sees).
+PAGE_OPERATOR = False
+# ---------- end round 10, slice K ----------
 
 
 def is_operator(handle):
-    """True only when MVP_OPERATOR is set and names this handle (both in the handler's one spelling)."""
-    if not OPERATOR or not handle:
+    """True when MVP_OPERATOR names this handle (both in the handler's one spelling), or, with MVP_OPERATOR unset,
+    when the bot runs the test page (round 10, slice K)."""
+    if not handle:
+        return False
+    if not OPERATOR:
+        return bool(PAGE_OPERATOR)
+    if str(OPERATOR).strip().lower() == "none":
         return False
     from .handler import norm_handle   # here, not at the top: handler imports this module
     return norm_handle(str(OPERATOR)) == norm_handle(str(handle))
+
+
+# ---------- round 10, slice K: who the operator is, and the build shown ----------
+def use_page_operator(channel):
+    """Called once at start by bot.main: on the test page with MVP_OPERATOR unset, the page's person is the operator."""
+    global PAGE_OPERATOR
+    PAGE_OPERATOR = channel == "web" and not OPERATOR
+    return PAGE_OPERATOR
+
+
+def operator_source():
+    """'setting' (MVP_OPERATOR names someone), 'page' (the test page's person), or None (nobody)."""
+    if OPERATOR:
+        return None if str(OPERATOR).strip().lower() == "none" else "setting"
+    return "page" if PAGE_OPERATOR else None
+
+
+def _build():
+    """MVP_BUILD when set; else the short commit and its date from git ("1a2b3c4 (17 Nov 2026)"); else "unknown"."""
+    b = " ".join((os.environ.get("MVP_BUILD") or "").split())
+    if b:
+        return b[:60]
+    try:
+        import subprocess
+        from datetime import datetime
+        out = subprocess.run(["git", "-C", HERE, "log", "-1", "--format=%h %cs"], capture_output=True, text=True,
+                             timeout=5, check=False)
+        short, day = out.stdout.split()
+        return f"{short} ({datetime.strptime(day, '%Y-%m-%d').strftime('%-d %b %Y')})"
+    except Exception:  # noqa: BLE001 - no git, not a checkout, an odd answer: the page says "unknown"
+        return "unknown"
+
+
+BUILD = _build()   # read once at start: restart the bot to show a new build
+# ---------- end round 10, slice K ----------
 
 
 # ---------- round 9, slice A (DESIGN.md section 16.A): emails to other people ----------

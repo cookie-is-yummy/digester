@@ -463,11 +463,25 @@ class Action(BaseModel):
         return self
 
 
+# ---------- round 10, slice K: where a timed rule adds what it sends (DESIGN.md section 17.K) ----------
+class RulePlace(BaseModel):
+    """The person's own app a rule adds to, under one yes when the rule is made (slice G). Set by code only (from the
+    request's words, places.rule_place), never read from a model form: interpret.settle drops a model's "place"."""
+    model_config = {"extra": "forbid"}
+    connector: str = Field(pattern=r"^[a-z][a-z0-9_]{0,30}$")   # a connectors.CONNECTORS key (checked where it is used)
+    kind: Literal["todo", "calendar", "playlist"]
+    target: Optional[str] = Field(default=None, max_length=80)  # the list, calendar or playlist name; None: the default
+    per_run: int = Field(default=3, ge=1, le=10)                # the most it adds in one run
+    per_day: int = Field(default=10, ge=1, le=40)               # the most it adds in one local day
+# ---------- end round 10, slice K ----------
+
+
 class RuleSpec(BaseModel):
     v: Literal[1, 2] = 2
     when: When
     content: Content
     do: list[Action] = Field(default_factory=lambda: [Action()], min_length=1, max_length=4)
+    place: Optional[RulePlace] = None   # round 10, slice K: code-only; a spec without it reads as before
 
     @field_validator("do", mode="before")
     @classmethod

@@ -145,6 +145,9 @@ class ActionDef(BaseModel):
     from_model: bool = True                                 # False: no model form may name it; only code calls it
     connector: Optional[str] = None                         # the outside place it writes to ("mailbox", "mac")
     fallback: Optional[str] = None                          # the action to offer when it cannot run
+    # ---------- round 10, slice K: a timed rule may run it under the person's standing yes (a grant, slice G) ----
+    rule_grant: bool = False
+    # ---------- end round 10, slice K ----------
 
 
 REGISTRY = {
