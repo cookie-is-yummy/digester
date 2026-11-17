@@ -185,6 +185,17 @@ def export(bot, person, now, lists_only=False):
         files.append(("cancellations.json", _write(d, "cancellations.json", json.dumps(gone, indent=1))))
         readme += ("\ncancellations.json  The subscriptions you asked the bot to help you end: which one, how, and what "
                    "you told it. No amounts, no account numbers.\n")
+    # the round 9 merge (slice D, C3): the outside places the bot was connected to and what it made there: ids,
+    # connector, action and dates only, as they are stored (never a title or a body), only when there is something
+    conns = [{k: r[k] for k in ("connector", "status", "created_at", "checked_at")} for r in bot.store.connections_of(h)]
+    made = [{k: r[k] for k in ("id", "connector", "action", "remote_id", "run_id", "created_at", "removed_at")}
+            for r in bot.store.placements(h, open_only=False)]
+    if conns or made:
+        files.append(("connections.json", _write(d, "connections.json",
+                                                 json.dumps({"connections": conns, "placements": made}, indent=1))))
+        readme += ("\nconnections.json  The outside places you connected (like Reminders and Calendar on a Mac), and "
+                   "each thing the bot\n                  added there: its id there, when, and when it was taken out. No "
+                   "titles.\n")
     files.append(("README.txt", _write(d, "README.txt", readme)))
     files.append(("drafts.json", _write(d, "drafts.json", drafts_json(bot.store, h))))   # round 9, slice A
     out.update(saves=n, rules=n_rules)

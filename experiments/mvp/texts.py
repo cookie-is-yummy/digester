@@ -2068,10 +2068,10 @@ PLACE_PREF_TODO_OFF = "OK. New things for your lists stay on your list here."
 PLACE_PREF_CAL_OFF = "OK. Calendar entries come as a link you tap again."
 
 
-def connected_lines(email_status, mac_line):
+def connected_lines(email_status, mac_line, others=None):
     lines = ["Here's where I can put things for you:", "• Your list here: always on.",
              f"• Email to you: {email_status}.", "• Calendar: a link you tap, no sign-in.",
-             "• Email to other people: a draft you send from your mail app."]
+             f"• Email to other people: {others or OTHERS_LINK}."]
     if mac_line:
         lines.append(f"• Reminders and Calendar on this Mac: {mac_line}.")
     return "\n".join(lines)
@@ -2085,6 +2085,20 @@ MAC_STATUS = {
     "unreachable": "I can't reach a Mac from where I'm running",
 }
 MAC_DISCONNECT_HINT = "Say \"disconnect my mac\" to stop."
+
+
+# the round 9 merge: "what are you connected to" says what the merged code does (slice A's card, link and mailbox)
+OTHERS_LINK = "a draft you send from your mail app"
+EMAIL_SELF_LINK = "not connected here, so I give you a link that opens an email to yourself"
+
+
+def others_mailbox(sender, drafts_on):
+    line = f"a draft I show you first, and I send it from {sender} only after you reply \"send\""
+    return line + (". \"save it as a draft\" puts it in your Drafts folder" if drafts_on else "")
+
+
+def email_waits(where):
+    return f"not connected here, so emails wait {where}"
 
 
 def email_status(address, confirmed):

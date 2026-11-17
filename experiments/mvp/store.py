@@ -864,6 +864,10 @@ class Store:
                     row["last_error"] if last_error is None else (last_error or None),
                     now_iso(at) if checked else row["checked_at"], handle, connector))
 
+    def connections_of(self, handle):
+        """Every connection row of this person (for "export my data")."""
+        return self.q("SELECT * FROM connections WHERE handle=? ORDER BY connector", (handle,))
+
     def add_placement(self, handle, connector, action, remote_id, run_id=None, idem=None, at=None):
         cur = self.x("INSERT INTO placements(handle,connector,action,remote_id,run_id,idem,created_at) "
                      "VALUES(?,?,?,?,?,?,?)", (handle, connector, action, str(remote_id), run_id, idem, now_iso(at)))

@@ -586,7 +586,8 @@ def test_c3_connect_check_and_what_are_you_connected_to(env, mac):
     msg = say(env, "what are you connected to?", no_model(env))
     assert msg.splitlines() == [
         "Here's where I can put things for you:", "• Your list here: always on.",
-        "• Email to you: not set up yet (tell me your email address).", "• Calendar: a link you tap, no sign-in.",
+        "• Email to you: not connected here, so emails wait in the bot's outbox folder.",   # no SMTP in the tests
+        "• Calendar: a link you tap, no sign-in.",
         "• Email to other people: a draft you send from your mail app.",
         "• Reminders and Calendar on this Mac: not connected yet (say \"connect my mac\")."]
     mac.calendar = False
@@ -774,3 +775,64 @@ def test_no_eval_text_is_taken_by_the_new_reads():
                 assert not rx.match(t), text
             assert places.named(text, None) is None, text
     assert n == 159
+
+
+# ---------- the round 9 merge: "what are you connected to" is true for what is merged ----------
+def _email_lines(env):
+    return [x for x in say(env, "what are you connected to", no_model(env)).splitlines() if x.startswith("• Email")]
+
+
+def test_connected_to_says_how_email_to_you_works_here(env, monkeypatch):
+    bot = env["bot"]
+    monkeypatch.delenv("MVP_SMTP_HOST", raising=False)
+    # no SMTP, on a channel whose person cannot open the outbox (Messages): a link to themselves (slice A, W3)
+    monkeypatch.setattr(bot.channel, "outbox_reachable", False, raising=False)
+    monkeypatch.setattr(bot.channel, "outbox_place", None, raising=False)
+    assert _email_lines(env)[0] == ("• Email to you: not connected here, so I give you a link that opens an email to "
+                                    "yourself.")
+    # with SMTP: the address and its state, as before
+    monkeypatch.setenv("MVP_SMTP_HOST", "smtp.example.invalid")
+    assert _email_lines(env)[0] == "• Email to you: not set up yet (tell me your email address)."
+    bot.store.set_email(H, "alex@example.com", verified=True)
+    assert _email_lines(env)[0] == "• Email to you: on, to alex@example.com."
+
+
+def test_connected_to_says_the_operator_s_mailbox_sends_only_after_send(env, mac, monkeypatch):
+    monkeypatch.setenv("MVP_MAILBOX_ADDRESS", "me@example.com")
+    monkeypatch.setenv("MVP_MAILBOX_APP_PASSWORD", "fake-app-pass-1234")
+    monkeypatch.setenv("MVP_MAILBOX_SMTP_HOST", "smtp.example.invalid")
+    monkeypatch.delenv("MVP_MAILBOX_IMAP_HOST", raising=False)
+    line = "• Email to other people: a draft I show you first, and I send it from me@example.com only after you reply \"send\""
+    assert _email_lines(env)[1] == line + "."
+    monkeypatch.setenv("MVP_MAILBOX_IMAP_HOST", "imap.example.invalid")
+    assert _email_lines(env)[1] == line + ". \"save it as a draft\" puts it in your Drafts folder."
+    out = say(env, "what are you connected to", no_model(env))
+    assert "fake-app-pass" not in out
+    # a tester never sees the operator's mailbox
+    from mvp import config
+    monkeypatch.setattr(config, "OPERATOR", "+15559999")
+    assert _email_lines(env)[1] == "• Email to other people: a draft you send from your mail app."
+
+
+def test_export_my_data_has_the_connections_and_placements_without_titles(env, mac):
+    import json as _json
+    from mvp import export as X
+    bot = env["bot"]
+    out = X.export(bot, bot.store.person(H), env["clock"][0])
+    assert "connections.json" not in [n for n, _ in out["files"]]           # nothing connected: as before
+    _two_added(env, mac)
+    say(env, "undo", {"intent": "undo"})
+    out = X.export(bot, bot.store.person(H), env["clock"][0])
+    path = dict(out["files"])["connections.json"]
+    data = _json.load(open(path))
+    assert [c["connector"] for c in data["connections"]] == ["mac"] and data["connections"][0]["status"] == "connected"
+    assert set(data["connections"][0]) == {"connector", "status", "created_at", "checked_at"}
+    acts = [p["action"] for p in data["placements"]]   # 2 reminders, their list, the event ("undo" took it out)
+    assert sorted(acts) == ["mac.event", "mac.list", "mac.reminder", "mac.reminder"]
+    assert [p["action"] for p in data["placements"] if p["removed_at"]] == ["mac.event"]
+    assert set(data["placements"][0]) == {"id", "connector", "action", "remote_id", "run_id", "created_at",
+                                          "removed_at"}
+    raw = open(path).read().lower()
+    for title in (x["title"].lower() for x in mac.items.values() if isinstance(x, dict) and x.get("title")):
+        assert title not in raw
+    assert "connections.json" in open(dict(out["files"])["README.txt"]).read()

@@ -541,17 +541,35 @@ def place_reads(bot, person, text, now):
     return None
 
 
+def _email_lines(bot, h):
+    """The two email lines of "what are you connected to", true for what runs: with no SMTP here a person on
+    Messages gets a link to themselves (slice A, W3) and the test page's outbox holds the rest; the operator's own
+    mailbox (W4, A5) sends a draft only after "send"."""
+    from .actions import email as E, mailbox, mailbox_imap
+    from .actions.base import outbox_reachable, where_outbox
+    addr, ok = bot.store.email_of(h)
+    if E.smtp_settings():
+        email = T.email_status(addr, ok)
+    elif outbox_reachable(bot):
+        email = T.email_waits(where_outbox(bot))
+    else:
+        email = T.EMAIL_SELF_LINK
+    others = None
+    if bot._mailbox_route(h):
+        others = T.others_mailbox(mailbox.settings()["address"], mailbox_imap.settings() is not None)
+    return email, others
+
+
 def _connected(bot, person, now):
     h = person["handle"]
-    addr, ok = bot.store.email_of(h)
-    email = T.email_status(addr, ok)
+    email, others = _email_lines(bot, h)
     if not config.is_operator(h):
-        return bot.send(h, T.connected_lines(email, None) + "\n" + T.MAC_ONLY_OPERATOR)
+        return bot.send(h, T.connected_lines(email, None, others) + "\n" + T.MAC_ONLY_OPERATOR)
     why = C.unavailable(bot.store, h, "mac")
     line = T.MAC_STATUS[why or "connected"]
     if not why and (bot.store.connection(h, "mac") or {}).get("last_error") == "no_calendar":
         line += " (events still come as a link: there's no \"Digest\" calendar)"
-    out = T.connected_lines(email, line)
+    out = T.connected_lines(email, line, others)
     if why in (None, "broken"):
         out += "\n" + T.MAC_DISCONNECT_HINT
     return bot.send(h, out)
