@@ -1,5 +1,23 @@
 # State
 
+## Founders' summary - round 10, MVP version 4 (17 Nov 2026; `BRIEF-10.md` section 18, `results/r10-mvp-v4.md`, `mvp/DESIGN.md` sections 12 and 16)
+
+How it all works, in one document: "Digest bot MVP: how it works", https://claude.ai/artifact/MbuBQQMjVndxdeUhqvTcJ4
+
+- **Asked for:** "Instinct but for social media": a bot that does the work. Draft and send an email, put something in the person's email, cancel a subscription, more connectors.
+- **The rule Derrick chose:** always show, then wait for yes. Nothing reaches another person or an outside account before a yes on the exact final text.
+- **Email:** a draft card written as a complete short email, then a tap-to-send link. For the operator with their own mailbox set up, "send" sends it after a 2-minute hold, and "put this in my email" makes a real draft.
+- **Cancelling:** the merchant's own checked steps and link, the Apple or Google Play route, or a written notice as a draft. Then an offered reminder to check. The bot never signs in and never says "cancelled".
+- **Acting on a saved post:** apply (deadline reminder, calendar, checklist), book (Maps link, calendar hold), buy (shopping list), "add them all", "do 2 for me", "what did you do for me".
+- **Connectors:** Apple Reminders and Calendar on the operator's Mac, TickTick and Todoist by token, a webhook. Each add shows a preview first. Tokens never go in the chat.
+- **The UI/UX libraries case:** now a list of named things in 4 of 4 fresh runs, with the same real library first. The close posts under it still differ between runs.
+- **Measured:** 2,086 offline tests pass. Two adversarial checks ran 82 attacks; 30 broke something and were fixed. The 20 draft requests: 20 handled, 0 errors at every step.
+- **Never run for real:** the mailbox, the Mac, TickTick, Todoist, the webhook, the email link on a phone. Each needs Derrick's own machine, app password or token.
+- **Rejected on purpose:** signing in as the person, reading the inbox, phone calls, payments, sends from timed rules or from the agent server.
+- **Spend:** $16.16 of the $20 cap.
+- **Founders, please decide:** A-012, A-013 and A-014 (all Proposed; A-013 and A-014 need both founders); whether an add to the person's own task app should need a yes each time.
+- **Derrick, please:** try the test page with "email my landlord that …", "cancel my netflix subscription", "apply to the first one", "what did you do for me". Then set up one connector on your own machine (steps in the document).
+
 ## Founders' summary - round 10, MVP version 3 (14 Nov 2026; `BRIEF-10.md` section 17, `results/r10-mvp-v3.md`, `mvp/DESIGN.md` sections 12 to 15)
 
 How it all works, in one document: "Digest bot MVP: how it works", https://claude.ai/artifact/MbuBQQMjVndxdeUhqvTcJ4

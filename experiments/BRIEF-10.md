@@ -400,3 +400,26 @@ Decisions still open after version 3:
 17. **The spending cap:** $9.73 of $10 is spent. The UI/UX libraries case needs a prompt change with a before and after run (about $0.40) and live checks.
 18. **Capture between exports:** a link texted to the bot, or a YouTube playlist. Neither is built.
 19. **Outside task apps:** lists live in the bot. Sending them out needs an app registration.
+
+## 18. Version 4 (17 Nov): the bot does the work
+
+The design is `mvp/DESIGN.md` section 16, and section 12 for answers that name things. Results are in `results/r10-mvp-v4.md`. The scope changes are recorded as A-012, A-013 and A-014 (all Proposed) in `docs/amendments.md`.
+
+Derrick asked for "Instinct but for social media". Instinct is a personal assistant that acts for the person by driving a browser with their logins. This bot takes its order of work (ask for the one missing thing, show what will change, wait for yes, report the real outcome) and none of its logins.
+
+| Asked | Built | Limit |
+| --- | --- | --- |
+| Draft and send an email | A draft card, a tap-to-send link, and for the operator a send from their own mailbox after "send" | The mailbox has only run against a fake server |
+| Put something in my email | A link that opens a new message; for the operator a real draft | The bot never reads the inbox |
+| Cancel my subscription | Checked steps and link, the app-store route, or a notice as a draft; a reminder to check | 7 of 15 merchants have a checked link; the bot never signs in |
+| Act on a saved post | Apply, book and buy menus; "add them all"; "do 2 for me" | No form filling, booking or payment |
+| More connectors | Apple Reminders and Calendar, TickTick, Todoist, a webhook | Operator only; none tried for real |
+| A record of what was done | "what did you do for me" | Says "prepared" where it cannot see the outcome |
+| The UI/UX libraries case | A judge call by a stronger model; searches and reads by the kind asked for | Close posts still differ between runs |
+
+Decisions still open after version 4:
+20. **A-012:** emails to other people as drafts, the cancel helper, acting on a post.
+21. **A-013:** the operator's own mailbox (a draft, and a send after "send"). Both founders.
+22. **A-014:** connectors (registry fields, the Mac, token connectors, the webhook). Both founders.
+23. **Yes on every outside add:** it is the rule now. An add to the person's own task app could instead happen at once, with undo.
+24. **A real trial:** each connector needs Derrick's own machine, app password or token. None has run for real.
