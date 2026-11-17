@@ -234,6 +234,81 @@ def test_105_a_code_change_that_changes_nothing_is_not_a_new_version(d, first, s
 
 
 # =====================================================================================================================
+# 106: draft_v2 writes a complete email; the checks are the same or stricter
+# =====================================================================================================================
+def test_106_config_points_at_draft_v2_and_v1_stays():
+    from mvp import config, drafts
+    assert config.PROMPT_DRAFT == "draft_v2"
+    for v in ("draft_v1", "draft_v2"):
+        assert os.path.exists(os.path.join(config.HERE, "prompts", f"{v}.md"))
+    drafts._PROMPT.clear()
+    text = drafts.PROMPT_TEXT()
+    assert "2 to 5 short sentences" in text and "<post>" in text and "JSON only." in text
+
+
+def test_106_the_model_call_is_logged_under_draft_v2(m):
+    from mvp import llm
+    seen = []
+    real = llm.chat_json
+
+    def spy(system, user, purpose, prompt_version, **kw):
+        seen.append((purpose, prompt_version))
+        return real(system, user, purpose, prompt_version, **kw)
+    llm.chat_json = spy
+    try:
+        model(m, GOOD)
+        say(m, "email maria@example.com that the kitchen sink is broken", CHAT)
+    finally:
+        llm.chat_json = real
+    assert ("draft", "draft_v2") in seen
+
+
+@pytest.mark.parametrize("greeting,name,bad", [
+    ("Dear,", "", True), ("Querida,", "", True), ("Dear Maria,", "Maria", False), ("Hello,", "", False),
+    ("Hi,", "", False), ("Dear Professor,", "", True), ("Hola,", "", False),
+])
+def test_106_dear_with_no_name_is_refused_by_the_checks(greeting, name, bad):
+    from mvp.drafts import grounded
+    srcs = ["email my landlord that the sink is broken", name, "T"]
+    got = grounded({"subject": "Sink", "greeting": greeting, "closing": "Thanks,",
+                    "body": "I'm writing to let you know that the sink is broken."}, srcs, name=name)
+    assert bool(got) is bad
+
+
+@pytest.mark.parametrize("body", [
+    "I'm writing to let you know that the heating is broken again. Could you let me know when it can be fixed?",
+    "I'm writing to let you know that the kitchen sink is broken. Could you take a look at it? Thank you for your help.",
+])
+def test_106_the_complete_shape_passes_the_checks(body):
+    from mvp.drafts import grounded
+    srcs = ["email my landlord that the heating is broken again and ask when it can be fixed", "", "landlord", "T"]
+    subject = "Heating"
+    if "sink" in body:
+        srcs[0], subject = "email my landlord that the kitchen sink is broken", "Kitchen sink"
+    assert grounded({"subject": subject, "greeting": "Hello,", "closing": "Best,", "body": body}, srcs, name="") == []
+
+
+@pytest.mark.parametrize("body", [
+    "I'm writing to let you know that the heating is broken again. It has been cold since Monday.",
+    "I'm writing to let you know that the heating is broken again. I already called a plumber.",
+    "I'm writing to let you know that the heating is broken again. I've paid for the repair.",
+    "I'm writing to let you know that the heating broke three days ago.",
+])
+def test_106_the_checks_still_refuse_an_invented_fact(body):
+    from mvp.drafts import grounded
+    srcs = ["email my landlord that the heating is broken again and ask when it can be fixed", "", "landlord", "T"]
+    assert grounded({"subject": "Heating", "greeting": "Hello,", "closing": "Best,", "body": body}, srcs, name="")
+
+
+def test_106_the_eval_counts_sentences():
+    from mvp.eval_drafts import sentences
+    assert sentences("I'm writing about the sink. Could you take a look?\n\nThank you for your help.") == 3
+    assert sentences("Le escribo. ¿Puede echarle un vistazo?") == 2
+    assert sentences("I saw this. https://example.com/p/1") == 1
+    assert sentences("") == 0
+
+
+# =====================================================================================================================
 # 107: with a draft card open, "put this in my email" means the card
 # =====================================================================================================================
 SAVE_LINE = ("I can't save it in your mail myself. This link opens it as a new message in your mail app; close it there "

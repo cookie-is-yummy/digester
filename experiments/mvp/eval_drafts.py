@@ -1,4 +1,5 @@
-"""PROTOTYPE ONLY - the live eval of draft_v1 (round 9, slice A, A6; DESIGN.md section 16.A).
+"""PROTOTYPE ONLY - the live eval of the draft prompt (round 9, slice A, A6; DESIGN.md sections 16.A and 16.H): the
+prompt config.PROMPT_DRAFT names (draft_v2 since the live fix pass), or another with --prompt draft_v1.
 
 Runs every synthetic case of evalset/drafts_dev.jsonl through the same call and the same checks the bot uses
 (drafts.model_write: one call, one retry when a check fails, else the code-built words), and counts: forms that

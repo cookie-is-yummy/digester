@@ -452,6 +452,9 @@ def grounded(form, sources, name=None):
         allowed = _GREET_WORDS | {w.lower() for w in re.findall(r"[^\W\d_]+", name)}
         if any(w.lower() not in allowed for w in re.findall(r"[^\W\d_]+", greet)):
             out.append("the greeting must be \"Hi,\"" + (f" or \"Hi {name},\"" if name else ""))
+        elif re.fullmatch(r"\W*(?:dear|querid[oa]|estimad[oa])\W*", greet, re.I):
+            # (round 9 live fix pass) "Dear," with no name is not a greeting anyone writes
+            out.append("\"Dear\" needs a name: write \"Hello,\"")
     if re.search(r"\[[^\]]*\]|\(your |\bXX+\b|_{3,}|\{[^}]*\}", every, re.I):
         out.append("a placeholder")
     return list(dict.fromkeys(out))
@@ -507,7 +510,7 @@ def model_write(p, sign, handle, change=None, current=None):
                                        purpose="draft", prompt_version=config.PROMPT_DRAFT, person=handle,
                                        max_tokens=600)
         except Exception as e:  # noqa: BLE001 - a failed call: the code-built words stand
-            print(f"draft_v1: {type(e).__name__}", file=__import__("sys").stderr)
+            print(f"{config.PROMPT_DRAFT}: {type(e).__name__}", file=__import__("sys").stderr)
             return None, attempts, first or ["the call failed"]
         problems = grounded(raw, sources, name=p.get("greet_name") or "")
         if not problems:
