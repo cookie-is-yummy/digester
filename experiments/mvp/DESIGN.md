@@ -2025,3 +2025,64 @@ No reply changes except the build lines; no read, no connector, no model call.
   `fake_merchant` (the practice merchant "Streamly", 9 flows, by Playwright routing).
 - `tests/test_round9_merge.py`'s rule phrasings skip `test_round10_*` files, so the set stays the round 9 one.
   `test_round9_mac.py` lists the two new `placements` columns.
+
+### 17.W Wording, the setup answer, the screenshot failures (slice W)
+
+**W-a: the three screenshot failures, the time line, the setup answer** (no model call added; probe_same unchanged).
+- **"email my coach that ..."** was already read by code (round 9); the test page ran older code. Pinned with a made-up
+  sentence (`test_teacher_card`). `T.EMAIL_ONLY_YOU` now says `Tell me who it's for and what to say, like "email my
+  teacher that I'm sick today", and I'll write it for you to check.` and never offers "email it to me".
+- **"email it to me" with a card open** (`drafts.SELF_COPY`, read in `draft_reads` right after the "to" answers, also
+  while the card waits for "to", before the sign-off, words and send reads): `_draft_to_self`. With a confirmed address
+  and SMTP set up, `email.send` (only ever to their own address; `email.content` gains the answer kind `draft_copy`
+  with the draft's own subject) and `I emailed the draft to you at m•••@example.com, so you can forward it. The draft
+  to your coach is still open.`; else a `mailto:` link with their own address in To (blank when unknown) and the
+  card's exact subject and body: `Here's the draft as an email to yourself (tap to open it in your mail app): <link>`
+  + `The draft to your coach is still open. Send me their address when you have it.` The card stays open; nothing goes
+  to the other person; action_log `draft.self_copy` (route only).
+- **Nothing written, nothing shown**: "email it to me", "send it to me" (`drafts.SELF_COPY_TO_ME`) get
+  `T.NOTHING_TO_EMAIL` by code, never NOT_CAUGHT or "I haven't sent you anything yet". "email me that" stays the
+  interpreter's (it is a rule-eval text); `outputs._act_on_last` gives the same line when an email.send-only
+  act_on_last has nothing to act on.
+- **The time line** (`profile.time_line(t, who)`): "usually / normally / typically / generally / most days / in
+  general" dropped; little time → `you don't have much time`; an amount → `you usually have {t}`; else `time you
+  have: {t}`. Used in apply_merge's change line, `show_text`, and `pref_words` (the interpreter's and composer's
+  form: `doesn't have much time` / `usually has {t}` / `time they have: {t}`; an amount reads as before).
+- **A request-shaped note is never kept** (`profile.REQUEST_NOTE`, in apply_merge): "wants ...", "would like ...",
+  "needs you to ...", "help ...", "set up ...". `merge(..., no_note=True)` keeps no note at all and reads a form's
+  `kind: request` as about_me (the setup's request parts were taken out by code).
+- **`phrasing.py`** replaces the stub (W4): `normalize`, `variants`, `clauses` (strings) and `parts` ([(part,
+  is_request)]), `is_request`, `TIME_WORDS`. "for me" stays when cancel, do, handle, send, email or add is in the
+  message (W-1). A later part loses a leading "and / also / but / plus / then"; "can you also X" is read "also can you
+  X"; a part of 1 or 2 words that asks nothing joins the one before; at most 3 parts; never split with a time word
+  (checked on the normalised text too) or two quote marks.
+- **The setup answer** (`onboarding._setup_requests`, used by `_onboard_read` and `_onboard_prefs` before the form
+  call): the answer's parts; each request part (or one `refresh.export_kind` reads) goes to `refresh.export_text` (its
+  reply kept for the setup's own message) or to the code reads (hooks 5a to 8 through `answer_normally` in a code-only
+  mode: `_tl.code_only`, cut right after `do_it`; no model call). When code answered no part, the whole answer goes
+  the old way, byte for byte. Otherwise: the other parts, unless only a bare "not really / no / nope / nah / nothing",
+  a yes or "set up the reminders", go to one `P.merge(..., no_note=True)`; `_export_yes` / `_export_no` are tried on
+  each other part only when no export part was taken (W-4: an export request in any part wins over a no-word); one
+  message: `Noted: you don't have much time.` (no "what do you know about me" tail) + the export reply. A request
+  part no read took goes alone to the normal path after it (one interpreter call); a second one is said back with
+  `You also asked: "<part>". Send it on its own and I'll do it.` At the read step the card (or other code reply) comes
+  first, then the setup's next question.
+- **`refresh.export_reads`** (hook 5a in `answer_normally`, after `_rule_reads`; no model call). Kinds by
+  `export_kind`: `how` ("where do i upload my new export", "how do i send you a new instagram export", "how do i set it
+  up so ...": `library_status(steps=True)`), `remind` ("remind me every month to send my youtube takeout": an export
+  reminder at that interval, one yes, `T.export_remind_offer`), `regular` ("... export to you regularly",
+  "sync my saves", "my saves to sync automatically"; an export word needs Instagram, YouTube, Takeout, saves, library,
+  data or "to you" in the message). The `regular` reply (`T.export_facts`): `About regular exports: Instagram doesn't
+  let any app pull your saves, so here's the closest I can do.`, the YouTube bullet (Takeout repeats every 2 months;
+  `say "steps"`; plus the `connect youtube` line once `yt_auth.connectable` and not connected: slice Y), the Instagram
+  bullet (a reminder every 4 weeks), `• Each new file goes in the upload box on this page` (web channel; else "on the
+  test page"). Then: the setup's offer waiting (a pending confirm_rule `export reminders (...)`) is said yes to:
+  `Done: next Instagram reminder 10 December, next YouTube one 12 January. Say "undo" to stop the reminders.`;
+  reminders already on: `Your export reminders are on: next Instagram one ..., next YouTube one .... Say "steps" for
+  how to do it.`; else the offer through `offer_export_routine` and `Want me to remind you? Say yes.` "steps" alone is
+  read only within a day of that reply with no newer answer (state `exportsteps:<handle>`, removed by "delete my
+  data").
+- Checks: `tests/test_round9_merge.py` wraps `refresh.export_reads` (and later `split_reads`) like the round 9 reads;
+  the 159 rule-eval texts and 123 rule phrasings: 0 taken. `probe_same`: the same bytes as `same_head.json`.
+  Tests: `tests/test_round10_wording.py`.
+

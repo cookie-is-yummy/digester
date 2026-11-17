@@ -441,13 +441,14 @@ def test_the_published_stubs_give_todays_behaviour():
     from types import SimpleNamespace
 
     from mvp import browser, captionmark, compose, connectors, phrasing, yt_auth
-    for m in (browser, captionmark, phrasing, yt_auth):
+    for m in (browser, captionmark, yt_auth):
         assert m.STUB is True
+    assert phrasing.STUB is False   # round 10, slice W replaced this stub (W4); its names and today's takes stay
     assert captionmark.mark(SimpleNamespace()) is None and captionmark.SIGNAL_VERSION == "cm-v1"
     assert browser.available(None, {"handle": H}, "netflix") is False and browser.run_open(None, H) is False
     assert phrasing.normalize("cancel it for me") == "cancel it for me"
-    assert phrasing.variants("x") == ["x"] and phrasing.clauses("a. b") == ["a. b"]
-    assert not phrasing.TIME_WORDS.search("every friday at 7pm")
+    assert phrasing.variants("x") == ["x"] and phrasing.clauses("a b") == ["a b"]
+    assert phrasing.TIME_WORDS.search("every friday at 7pm")   # round 10, slice W: the list is filled
     assert yt_auth.connectable(None, H) is False and yt_auth.connected(None, H) is False
     assert connectors.route_for(None, H, "todoist", "todo") == "todoist.add"
     assert connectors.route_for(None, H, "mac", "calendar") == "mac.event"

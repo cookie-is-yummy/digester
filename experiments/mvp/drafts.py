@@ -155,6 +155,19 @@ MAILBOX_SAVE = re.compile(r"^\W*(?:(?:please|can you|could you|pls)\s+)?(?:put|s
                           r"(?:\s+drafts?)?)(?:\s+please)?\W*$", re.I)
 NOT_A_CHANGE = re.compile(r"\b(?:to|on|onto|in|into)\s+(?:my|the)\s+(?:[\w-]+\s+){0,2}(?:list|calendar|reminders?|"
                           r"to-?dos?)\b", re.I)
+# ---------- round 10, slice W (W1): "email it to me", read with a card open (also while it waits for "to") ----------
+_SELF_LEAD = r"^\W*(?:(?:ok(?:ay)?|so|just|please|pls|can you|could you|can u|could u|actually)[\s,]+)*"
+SELF_COPY = re.compile(
+    _SELF_LEAD + r"(?:(?:e-?mail|send|mail|forward)\s+(?:it|this|that|this one|that one|the (?:draft|email)|a copy)\s+"
+    r"to\s+(?:me|myself|my (?:own )?(?:e-?mail|inbox|address))(?:\s+instead)?"
+    r"|(?:e-?mail|mail|send)\s+me\s+(?:it|that|this|a copy|the draft|a copy of (?:it|the draft))(?:\s+instead)?)"
+    r"(?:\s+(?:please|pls|first|too))?[\s.!]*$", re.I)
+# with nothing open: only the "... to me" shapes are read by code ("email me that" stays the interpreter's
+# act_on_last, whose reply with nothing to send is the same NOTHING_TO_EMAIL: outputs._act_on_last)
+SELF_COPY_TO_ME = re.compile(
+    _SELF_LEAD + r"(?:e-?mail|send|mail|forward)\s+(?:it|this|that|this one|that one|the (?:draft|email)|a copy)\s+"
+    r"to\s+(?:me|myself)(?:\s+instead)?(?:\s+(?:please|pls))?[\s.!]*$", re.I)
+# ---------- end round 10, slice W ----------
 
 
 def addresses(text):
@@ -813,6 +826,12 @@ class DraftsMixin:
         if d is None:
             if SEND_WORDS.match(t) and self._draft_just_finished(h, now):
                 return self._draft_send_again(person, now)
+            # ---------- round 10, slice W (W1): "email it to me" with nothing written and no answer in view ----------
+            if SELF_COPY_TO_ME.match(t) and not self.store.last_answer(h) and not self._plain_answer(h) \
+                    and not self._export_in_view(h, now):   # (round 8: "email it to me" right after an export)
+                self.note(intent="unsupported")
+                return self.send(h, T.NOTHING_TO_EMAIL)
+            # ---------- end round 10, slice W ----------
             return None
         st = d["state"]
         waiting = st.get("waiting")
@@ -836,6 +855,10 @@ class DraftsMixin:
                 return self.send(h, T.DRAFT_ONE_AT_A_TIME)
             if BLANK.match(t):
                 return self._draft_set_to(person, d, "", now)
+        # ---------- round 10, slice W (W1): the draft to the person themselves; the card stays open ----------
+        if SELF_COPY.match(t):
+            return self._draft_to_self(person, d, now)
+        # ---------- end round 10, slice W ----------
         if SEND_QUESTION.match(t):   # round 9 checks: "send it?" asks; it is never the yes
             self.note(intent="draft_send")
             if waiting in ("to", "sign", "say"):
@@ -902,6 +925,39 @@ class DraftsMixin:
         row = self.store.one("SELECT channel_ref FROM sent WHERE handle=? ORDER BY rowid DESC LIMIT 1", (h,))
         refs = d["state"].get("refs") or []
         return bool(row and row["channel_ref"] in refs) or not refs
+
+    # ---------- round 10, slice W (W1): the draft to the person themselves ----------
+    def _draft_to_self(self, person, d, now):
+        """'email it to me' with a card open: with a confirmed address and email set up, the draft's words go to the
+        person's own address (email.send: only ever to them, no hold, as for every email to self); else a mailto:
+        link with their address in To (blank when unknown) and the card's exact subject and body. Nothing goes to the
+        other person, and the card stays open."""
+        from .actions import perform
+        from .actions.base import Ctx
+        from .actions.email import smtp_settings
+        h = person["handle"]
+        person = self.store.person(h) or person
+        self.note(intent="draft_self_copy")
+        p = d["parts"]
+        waiting = d["state"].get("waiting")
+        body = d.get("body") if d.get("version") and d.get("body") and not waiting else \
+            self._draft_render(person, d, p)
+        whom = T.draft_whom(p.get("greet_name"), p.get("to_word"))
+        own, confirmed = self.store.email_of(h)
+        self._draft_touch(h, d["id"], now)
+        if own and confirmed and smtp_settings():
+            ctx = Ctx(bot=self, person=person, picks=[], kind="draft", now=now, tz=person["timezone"],
+                      answer={"kind": "draft_copy", "subject": d["subject"], "parts": [{"type": "text", "text": body}]})
+            o = perform("email.send", ctx, {})
+            self._log_draft(h, "draft.self_copy", d, status=o.status, now=now, route_self="email")
+            if o.status == "done":
+                self._wrote_final(h, "an email")
+                return self.send(h, T.draft_self_emailed(_masked_dots(own), whom))
+            return self.send(h, ((o.line or "") + " " + T.draft_still_open(whom, waiting == "to")).strip())
+        self._log_draft(h, "draft.self_copy", d, status="link", now=now, route_self="link")
+        link = mailto(own or "", d["subject"], body)
+        return self.send(h, T.draft_self_link(link, whom, waiting == "to" or not d.get("to_addr")))
+    # ---------- end round 10, slice W ----------
 
     def _draft_set_to(self, person, d, addr, now):
         h = person["handle"]
@@ -1629,6 +1685,12 @@ def _masked(addr, domain=None):
         local, dom = addr.split("@", 1)
         return f"{local[:1]}***@{dom}"
     return f"someone at {domain}" if domain else "them"
+
+
+def _masked_dots(addr):
+    """'m•••@example.com' (round 10, slice W): the person's own address said back after an email to them."""
+    local, _, dom = (addr or "").partition("@")
+    return f"{local[:1]}•••@{dom}" if dom else "your address"
 
 
 # ---------- module-level entry points for the other slices (the bot is the first argument) ----------

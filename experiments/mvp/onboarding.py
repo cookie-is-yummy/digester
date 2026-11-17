@@ -114,6 +114,11 @@ class OnboardingMixin:
             self.store.add_profile_note(h, " ".join(text.split())[:300], at=now)
             return self._onboard_contact_ask(person, now, "Thanks.")
         st0 = self._onboard(h) or {}
+        # ---------- round 10, slice W (W3): a request inside the answer is read by code, part by part ----------
+        got = self._setup_requests(person, text, now)
+        if got is not None:
+            return self._onboard_read_parts(person, st0, got, now)
+        # ---------- end round 10, slice W ----------
         try:
             res, _ = P.merge(self.store, h, text, asked="Here's my read of you (their main interests). Did I get that "
                              "right? And in a sentence or two, what are you working toward right now?",
@@ -223,6 +228,12 @@ class OnboardingMixin:
         and with it the setup unless the first-requests offer is still open."""
         h = person["handle"]
         self.note(intent="onboarding")
+        # ---------- round 10, slice W (W3): a request inside the answer is read by code, part by part ----------
+        if not T.SKIP.match(text) and not self._over_cap(person):
+            got = self._setup_requests(person, text, now)
+            if got is not None:
+                return self._onboard_prefs_parts(person, st, got, now)
+        # ---------- end round 10, slice W ----------
         started = self._export_yes(person, text, now) or self._export_no(person, text, now)
         if started:
             text_rest = T.NO_LEAD.sub("", T.YES_LEAD.sub("", text)).strip(" ,.!;:-")
@@ -265,6 +276,127 @@ class OnboardingMixin:
                 self.store.add_profile_note(h, note, at=now)
         return self.send(h, started + (said or (T.PREFS_THANKS + (self._sensitive_once(" ") if res["skipped_sensitive"]
                                                                  else ""))))
+
+    # ---------- round 10, slice W (W3, design B1): a setup answer that holds a request ----------
+    def _setup_code_read(self, person, part, now):
+        """True when a code read (hooks 5a to 8 of answer_normally) answered this part (it sent its own reply); no
+        model call either way."""
+        self._tl.code_only, self._tl.code_missed = True, False
+        try:
+            self.answer_normally(person, part, now)
+        finally:
+            self._tl.code_only = False
+        missed = getattr(self._tl, "code_missed", False)
+        self._tl.code_missed = False
+        return not missed
+
+    def _setup_requests(self, person, text, now):
+        """The answer split into parts (phrasing.parts; in the setup only a quote or a time word stops it). Each
+        request part goes to refresh.export_text (its reply is kept for the setup's own message; a waiting export offer
+        is said yes to) or to the code reads, which send their own replies. Returns None when code answered no part
+        (the whole answer then goes the old way), else {"export", "rest" (the parts that ask for nothing), "left" (the
+        request parts no read took)}."""
+        from . import phrasing
+        from .refresh import export_kind, export_text
+        parts = phrasing.parts(text)
+        reqs = [p for p, r in parts if r or export_kind(p)]
+        if not reqs:
+            return None
+        export, taken, left = "", 0, []
+        for p in reqs:
+            if not export and export_kind(p):
+                export = export_text(self, person, p, now) or ""
+                if export:
+                    taken += 1
+                    continue
+            if self._setup_code_read(person, p, now):
+                taken += 1
+            else:
+                left.append(p)
+        if not taken:
+            return None
+        self.note(intent="onboarding")
+        return {"export": export, "rest": [p for p, _ in parts if p not in reqs], "left": left}
+
+    @staticmethod
+    def _setup_leftover(rest):
+        """The parts that ask for nothing, for the profile form; "" when they are only a bare "not really", "no",
+        "nothing", a yes or "set up the reminders" (no form call then)."""
+        from . import phrasing
+        out = []
+        for p in rest:
+            p = p.strip(" ,;:-")
+            if p and not phrasing.BARE_NO.match(p) and not T.RIGHT.match(p) and not T.YES.match(p) \
+                    and not T.reminders_only(p):
+                out.append(p)
+        return " ".join(out)
+
+    def _setup_left_over_requests(self, person, left, now):
+        """A request part no read took goes alone to the normal path (one interpreter call); a second one is said
+        back."""
+        ref = None
+        if left:
+            ref = self.answer_normally(person, left[0], now)
+            if len(left) > 1:
+                ref = self.send(person["handle"], T.you_also_asked(left[1])) or ref
+        return ref
+
+    def _onboard_read_parts(self, person, st0, got, now):
+        h = person["handle"]
+        rest = " ".join(got["rest"]).strip()
+        res = None
+        lead = "Thanks."
+        if rest and T.RIGHT.match(rest):
+            res = P.apply_merge(self.store, h, {"kind": "about_me", "confirm_all": True}, rest,
+                                shown=st0.get("shown") or [])
+            lead = "Great, thanks."
+        else:
+            left = self._setup_leftover(got["rest"])
+            if left:
+                try:
+                    res, _ = P.merge(self.store, h, left, asked="Here's my read of you (their main interests). Did I "
+                                     "get that right? And in a sentence or two, what are you working toward right "
+                                     "now?", shown=st0.get("shown") or [], no_note=True)
+                except Exception as e:  # noqa: BLE001 - the setup goes on
+                    self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
+        if (res or {}).get("confirmed_all") and st0.get("guessed_direction") and not P.get(self.store, h)["direction"]:
+            self.store.set_direction(h, st0["guessed_direction"])
+        if got["export"]:
+            self.send(h, got["export"])
+        ref = self._onboard_contact_ask(person, now, lead + self._knows_line(h), res)
+        return self._setup_left_over_requests(person, got["left"], now) or ref
+
+    def _onboard_prefs_parts(self, person, st, got, now):
+        h = person["handle"]
+        started = ""
+        rest = list(got["rest"])
+        if not got["export"]:
+            # W-4: a yes or a no to the export offer in another part is read as before; an export request in any part
+            # wins over a no-word elsewhere (export_text said yes already)
+            for i, p in enumerate(rest):
+                started = self._export_yes(person, p, now) or self._export_no(person, p, now)
+                if started:
+                    rest[i] = T.NO_LEAD.sub("", T.YES_LEAD.sub("", p)).strip(" ,.!;:-")
+                    break
+        others = (st.get("others") or 0) + 1
+        if not st.get("requests") or others >= 2:
+            self._set_onboard(h, "done", now)
+        else:
+            self.store.set_state(f"onboard:{h}", dict(st, prefs_open=False, others=others))
+        said = ""
+        left = self._setup_leftover(rest)
+        if left:
+            try:
+                res, _ = P.merge(self.store, h, left, asked=T.PREFS_QUESTION, no_note=True)
+                if res["changes"] or res["skipped_sensitive"]:
+                    said = T.noted_only(res["changes"], res["skipped_sensitive"] and self._sensitive_once()) \
+                        if res["changes"] else self._sensitive_once()
+            except Exception as e:  # noqa: BLE001 - the request parts are answered; nothing kept from the rest
+                self.store.add_run(handle=h, kind="profile_merge", status="error", error=type(e).__name__)
+        msg = "\n\n".join(x for x in (said, got["export"], started) if x)
+        ref = self.send(h, msg) if msg else None
+        return self._setup_left_over_requests(person, got["left"], now) or ref or ""
+    # ---------- end round 10, slice W ----------
 
     def _export_yes(self, person, text, now):
         """Review fix X6 (experience): the setup's last message asks "OK?" about the export reminders and asks about

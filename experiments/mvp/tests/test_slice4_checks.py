@@ -14,7 +14,9 @@ from mvp.tests.test_slice2 import H, ask_pasta, lemon_pick, say  # noqa: E402
 from mvp.tests.test_slice4 import FakeSMTP, ask_with, confirmed, last_code, outbox_rows, read_eml  # noqa: E402
 
 UTC = timezone.utc
-ONLY_YOU = "I can only email you, at your own address. Say \"email it to me\" and I'll send it to you, so you can forward it."
+# round 10, slice W (W1): reworded; it never offers "email it to me" when nothing has been written
+ONLY_YOU = ("Tell me who it's for and what to say, like \"email my teacher that I'm sick today\", and I'll write it for "
+            "you to check.")
 
 
 # ---------- the address ----------
@@ -111,8 +113,9 @@ def test_a_code_sent_by_smtp_is_not_kept_in_a_file(env, monkeypatch):
 # ---------- acting on the last answer ----------
 def test_acting_with_nothing_sent_yet_and_on_a_reminder(env):
     bot, clock = env["bot"], env["clock"]
+    # round 10, slice W (W1): with nothing written and nothing shown, read by code and said plainly
     assert say(env, "email me that", {"intent": "act_on_last", "actions": ["email.send"]}) == \
-        "I haven't sent you anything yet. Ask me for something first."
+        "There's nothing written yet to email you. Tell me what to write, like \"email my teacher that I'm sick today\"."
     assert say(env, "add it to my list", {"intent": "act_on_last", "actions": ["todo.add"]}) == \
         "I haven't sent you anything to add yet. Ask me for something first."
     # after a reminder, "email me that" emails the reminder (not an older answer)

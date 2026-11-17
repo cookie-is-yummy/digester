@@ -25,6 +25,9 @@ MVP = os.path.dirname(HERE)
 BOT_HOOKS = ("draft_reads", "offer_reads", "_cancel_answer", "email_reads", "cancel_reads", "postact_reads",
              "cancel_stop_guard", "receipts_reads", "do_it", "_doit_answer", "secret_reads")
 PLACE_HOOKS = ("place_reads", "asked_reads")
+# round 10, slice W: hook 5a (refresh.export_reads) and the bot's new reads
+W_MODULE_HOOKS = ("export_reads",)
+W_BOT_HOOKS = ("split_reads",)
 ALLOWED = {"buy the ingredients for the first one"}   # the rule eval's t-dev-040: slice C puts them on the list
 CHAT = {"intent": "chat", "reply": "OK."}
 
@@ -74,6 +77,14 @@ def rec(env, monkeypatch):
         monkeypatch.setattr(Bot, name, wrap(name, getattr(Bot, name), 2))
     for name in PLACE_HOOKS:
         monkeypatch.setattr(places, name, wrap(name, getattr(places, name), 2))
+    # ---------- round 10, slice W: the new reads are checked the same way ----------
+    from mvp import refresh
+    for name in W_MODULE_HOOKS:
+        monkeypatch.setattr(refresh, name, wrap(name, getattr(refresh, name), 2))
+    for name in W_BOT_HOOKS:
+        if hasattr(Bot, name):
+            monkeypatch.setattr(Bot, name, wrap(name, getattr(Bot, name), 2))
+    # ---------- end round 10, slice W ----------
     return env
 
 

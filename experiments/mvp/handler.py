@@ -231,6 +231,12 @@ class HandlerMixin:
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
         # ---------- round 9: requests read by code before the model (verdict section 4, hooks 5 to 8) ----------
+        # ---------- round 10, slice W: hook 5a, regular exports in plain words (refresh.py, W3) ----------
+        from .refresh import export_reads
+        ref = export_reads(self, person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 10, slice W ----------
         ref = self.email_reads(person, text, now)   # slice A: "email my landlord that ..." (drafts.py)
         if ref is not None:
             return ref
@@ -253,6 +259,11 @@ class HandlerMixin:
         if ref is not None:
             return ref
         # ---------- end of the round 9 request reads ----------
+        # ---------- round 10, slice W: a part of a setup answer is read by code only (onboarding._setup_code_read) ----
+        if getattr(self._tl, "code_only", False):
+            self._tl.code_missed = True
+            return None
+        # ---------- end round 10, slice W ----------
         # round 8, slice B (DESIGN.md section 15): export, share, "what did my agent ask": code only, no model call
         done, ref = self.integration_reads(person, text, now)
         if done:

@@ -200,6 +200,13 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   words (a YouTube playlist, Gmail, Google Calendar), stubs the other round 10 slices fill, and in-process fakes
   (`tests/fakes/`: the model, an MCP server, an OAuth server, Google and YouTube, a practice merchant).
   Tests: `tests/test_round10_k.py`.
+- **Round 10, wording** (DESIGN.md section 17.W, slice W): with an email card open, "email it to me" emails the draft
+  to your own confirmed address (when email is set up) or gives a tap-to-open link to yourself; the card stays open and
+  nothing goes to the other person. With nothing written, it says so plainly. A setup answer that holds a request ("not
+  really, i don't have much time. but can you set it up so my exports come to you regularly") is read part by part:
+  the request goes to the helper by code (a yes to the export reminders offered), the rest to the profile, and the
+  reply says "Noted: you don't have much time." "where do i upload my new export", "remind me every month to send my
+  youtube takeout" and "sync my saves" are read by code. Tests: `tests/test_round10_wording.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -544,6 +551,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `actions/web.py`, `actions/_tasks.py`, `actions/ticktick.py`, `actions/todoist.py`, `actions/webhook.py` | Round 9, E: the one HTTP helper and the connectors by token (TickTick, Todoist) and the webhook, on `places.py` and `connectors.py` |
 | `settings.py`, `tokens.py` | Round 10, slice K: `secret(name)` (the environment, then the sealed store), the page's status line; sealed sign-ins and settings (AES-256-GCM, 0600 files, the key) |
 | `captionmark.py`, `browser.py`, `phrasing.py`, `yt_auth.py` | Round 10, slice K: stubs (`STUB = True`) giving today's behaviour until slices S, V, W and Y replace them |
+| `phrasing.py` | Round 10, slice W: everyday wording read by code: `normalize` (openers, closers, texting shorthand; a second try for the request reads only, never stored or sent to a model), `parts` / `clauses` (two asks in one message), `TIME_WORDS` |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |
