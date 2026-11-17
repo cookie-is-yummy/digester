@@ -1052,7 +1052,10 @@ class ExecutorMixin:
         stems = {_stem(w) for w in words} | {_stem(t) for w in words for t in _tokens(spelled(w))}
 
         def on_topic(it):
-            return bool(stems & {_stem(t) for t in _tokens(own_text(it, extra))})
+            toks = _tokens(own_text(it, extra))
+            # (check of the live fix, fix9) a run-together word of any topic, not only the spellings render.spelled
+            # knows: "gamedev" is on the topic of a post that says "game dev", "nocode" of one that says "no-code"
+            return bool(stems & ({_stem(t) for t in toks} | {_stem(a + b) for a, b in zip(toks, toks[1:])}))
         rest = [(list_score(own_text_lines(it, extra)), i, it) for i, it in enumerate(cands)
                 if allowed(it) and on_topic(it)]
         # live fix pass, round 8 (finding 102): a title that names a year the request's qualifiers name ("next

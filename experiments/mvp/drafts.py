@@ -56,13 +56,21 @@ Outlook Hotmail Yahoo Proton Email Mail Instagram Youtube YouTube Tomorrow Today
 # (round 9 live fix pass, finding 104) the address the person typed right after the role word or the name, in any of
 # the usual ways: "my friend maya@example.com", "my landlord (bob@example.com)", "my friend Maya at maya@...",
 # "my sister, ana@example.com,", "Maya <maya@example.com>"; a lowercase name only before "at <address>"
-_AT_ADDR = r"(?:\s+at\s+|\s*[(<]\s*|\s*,\s*|\s+)"
-_LOW_NAME = r"(?!(?:that|about|saying|and|to|with|re|regarding|asking|for)\b)[a-z][a-z'’-]{1,20}"
+_AT_ADDR = r"(?:\s+at\s+|\s*[(<]\s*|\s*[,:]\s*|\s+)"
+_LOW_NAME = (r"(?!(?:that|about|saying|and|to|with|re|regarding|asking|for|at|asap|now|quick|quickly|today|tomorrow|"
+             r"tonight|please|pls|again|back|also|too|just|here|there|this|it|or|but|so|if|when)\b)[a-z][a-z'’-]{1,20}")
+# (check of the live fix pass, fix9) a title before the name ("Mr Smith", "Dr. Ruiz", "ms lee"), a second name
+# ("Maya Lopez") or a lowercase name of two words ("maya lopez") when the typed address comes right after it
+_TITLE = r"(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Professor)\.?"
+_TITLE_LOW = r"(?:mr|mrs|ms|miss|mx|dr|prof|professor)\.?"
+_NOT_NAME_WORD = "|".join(sorted(NOT_NAMES, key=len, reverse=True))
+_ADDR_NEXT = rf"(?:\s+at\s+|\s*[(<]\s*|\s*[,:]\s*|\s+){ADDR}"
 _RCPT = (rf"(?P<addr>{ADDR})"
          rf"|(?P<my>(?:my|our)\s+(?P<word>(?:{PEOPLE_WORDS})s?))"
-         rf"(?:\s+(?P<wname>{_NAME})|\s+(?P<lname>{_LOW_NAME})(?=\s+at\s+{ADDR}))?"
+         rf"(?:\s+(?P<wname>(?:{_TITLE}\s+)?{_NAME}(?:\s+(?!(?:{_NOT_NAME_WORD})\b){_NAME}(?={_ADDR_NEXT}))?)"
+         rf"|\s+(?P<lname>(?:{_TITLE_LOW}\s+)?{_LOW_NAME}(?:\s+{_LOW_NAME})?)(?={_ADDR_NEXT}))?"
          rf"(?:{_AT_ADDR}(?P<waddr>{ADDR})(?:\s*[)>])?)?"
-         rf"|(?P<name>{_NAME}(?:\s+{_NAME})?)(?:{_AT_ADDR}(?P<naddr>{ADDR})(?:\s*[)>])?)?"
+         rf"|(?P<name>(?:{_TITLE}\s+)?{_NAME}(?:\s+{_NAME})?)(?:{_AT_ADDR}(?P<naddr>{ADDR})(?:\s*[)>])?)?"
          r"|(?P<pron>him|her|them)")
 # "email ...": what follows the verb
 _EMAIL_VERB = (r"(?:e-?mail|draft(?:\s+and\s+send)?\s+(?:an?\s+)?e-?mail\s+(?:to|for)|"
@@ -230,7 +238,8 @@ def _recipient(rest, original):
     addr = m.group("addr") or m.group("waddr") or m.group("naddr")
     who = {"to": addr.lower() if addr else None,
            "word": m.group("word").lower() if m.group("word") else None,
-           "name": m.group("wname") or (cap(m.group("lname")) if m.group("lname") else None) or m.group("name")}
+           "name": m.group("wname") or (" ".join(cap(w) for w in m.group("lname").split()) if m.group("lname")
+                                        else None) or m.group("name")}
     tail = rest[m.end():]
     m2 = re.match(rf"^\s*(?:and|or|,)\s*({ADDR})", tail)
     if m2 and addr:
@@ -366,6 +375,15 @@ _CLOSING_LINE = re.compile(r"^(?:thanks|thank you|many thanks|best|best wishes|r
                            r"cheers|sincerely|gracias|muchas gracias|saludos|un saludo|merci|danke|grazie|obrigad[oa])"
                            r"(?:[ ,]+(?:so much|again|a lot|very much|in advance|mil))?[\s,!.]*$", re.I)
 URL_RE = re.compile(r"(?:https?://|www\.)\S+", re.I)
+# (check of the live fix pass, fix9) a brief that says its own claim is untrue ("say the report is done even though it
+# isn't", "and pretend i was sick", "lie to my boss and say ..."): the email is not written. A negation that goes on to
+# say something ("even though it wasn't my fault") is a real statement and stays; "make up an excuse" is draft_v2's to
+# leave out (evaluation case d-dev-13)
+ADMITS_FALSE = re.compile(
+    r"\b(?:even\s+though|although|though)\s+(?:it|i|that|they|we|he|she|this)\s+(?:really\s+)?(?:isn'?t|wasn'?t|"
+    r"didn'?t|hasn'?t|haven'?t|won'?t|aren'?t|weren'?t|is\s+not|was\s+not|did\s+not|has\s+not|have\s+not|"
+    r"will\s+not|are\s+not|were\s+not)(?:\s+(?:true|done|ready|finished|sent|paid|really|yet))?\s*(?:[,.;!?]|$|"
+    r"\band\b|\bbut\b|\bso\b)|\b(?:and|to)\s+pretend\s+(?:that\s+)?(?:i|it)\b|\b(?:lie|fib)\s+(?:to|and\s+say)\b", re.I)
 # (round 9 checks) facts the capitalised-word check cannot see: a day or a month written in small letters, "tomorrow"
 # and "tonight" (they start sentences, so they are in _OK_CAPS), a number written as a word, and a claim that something
 # was already done. Each must be in the sources, in any case. ("may" and "one" are left out: they are ordinary words.)
@@ -873,7 +891,9 @@ class DraftsMixin:
             self._log_draft(h, "draft.person_sent", d, now=now)
             self.note(intent="draft_sent")
             return self.send(h, T.DRAFT_THANKS + self._draft_job_done(d, "sent", now))
-        if SAVE_DRAFT.match(t):
+        if SAVE_DRAFT.match(t) and (re.search(r"\bdrafts?\b", t, re.I) or self._draft_card_in_view(h, d)):
+            # (check of the live fix pass, fix9) "put this in my email" is about the newest thing shown: with a newer
+            # answer after the card, it is that answer's (as before finding 107); a word "draft" means the card
             return self._save_to_drafts(person, d, now)
         return self._draft_change(person, d, t, now)
 
@@ -983,10 +1003,18 @@ class DraftsMixin:
         return (flat(body) == flat(d["body"]) and (row.get("to_addr") or "") == (d.get("to_addr") or "")
                 and flat(row.get("subject")) == flat(d.get("subject")))
 
+    def _draft_same_line(self, person, d, line):
+        """(check of the live fix pass, fix9) the "nothing changed" line; when a send of these same words is waiting in
+        its hold, it says so (the person asked for a change, so they may think the send stopped: it did not)."""
+        hold = self.store.get_state(f"sendhold:{person['handle']}")
+        if hold and hold.get("draft_id") == d["id"] and hold.get("due_at"):
+            line += " " + T.mailbox_already_held(self._clock(datetime.fromisoformat(hold["due_at"]), person))
+        return self.send(person["handle"], line)
+
     def _draft_apply(self, person, d, p, now):
         if self._draft_same(person, d, p):
             self.note(intent="draft_change")
-            return self.send(person["handle"], T.DRAFT_SAME_TEXT)
+            return self._draft_same_line(person, d, T.DRAFT_SAME_TEXT)
         p["changes"] = (p.get("changes") or 0) + 1
         self.store.update_draft(d["id"], parts=p)
         return self._draft_changed(person, d["id"], now)
@@ -1015,9 +1043,9 @@ class DraftsMixin:
                 return self.send(h, T.DRAFT_NO_TONE)
             self.note(intent="draft_change")
             if not got and getattr(self._tl, "draft_call_failed", False):
-                return self.send(h, T.DRAFT_TONE_FAILED)
+                return self._draft_same_line(person, d, T.DRAFT_TONE_FAILED)
             m = TONE.search(t)
-            return self.send(h, T.draft_tone_same(m.group(0).lower() if m else None))
+            return self._draft_same_line(person, d, T.draft_tone_same(m.group(0).lower() if m else None))
         return self._draft_apply(person, d, got, now)
 
     # ---------- the email request, read before the model (hook 5 in answer_normally) ----------
@@ -1047,6 +1075,10 @@ class DraftsMixin:
         if req is None:
             return None
         self.note(intent="draft")
+        if ADMITS_FALSE.search(" ".join(text.split())):
+            # (check of the live fix pass, fix9) the person says the claim is not true: no card (draft_v2 wrote "the
+            # report is done. I sent it yesterday." for "... even though it isn't, say i sent it yesterday")
+            return self.send(h, T.DRAFT_NOT_TRUE)
         if req.get("cc"):
             return self.send(h, T.DRAFT_ONE_AT_A_TIME)
         own, _ = self.store.email_of(h)

@@ -449,7 +449,7 @@ def kind_phrase(goal, *texts):
 _KIND_WORD = re.compile(r"[^\W_]+", re.UNICODE)
 # words of a kind phrase that only grade it ("good libraries"), never one of its modifiers, and never compared
 _NOT_MODIFIERS = set("""a an the some any good great best top cool nice new free other more useful favourite favorite
-    must have and or of for""".split())
+    must have and or of for de del la el los las algunas algunos unas unos mejores buenas buenos gratis""".split())
 
 
 def kind_parts(kind):
@@ -493,15 +493,78 @@ PURPOSE = re.compile(
     r"getting\s+started)|(?:i|we)\s+(?:should|could|can|would|might)\s+(?:use|get|try|install))\W*$", re.I)
 
 
+# (check of the live fix, fix9) the same in Spanish ("para mi próximo proyecto", "para principiantes", "que debería
+# usar"), and more verbs of use in English ("i should read", "i could follow")
+PURPOSE_ES = re.compile(
+    r"^\W*(?:(?:que\s+)?(?:debería|deberia|podría|podria|puedo|pueda|tendría|tendria)\s+(?:usar|probar|instalar|"
+    r"descargar|leer|ver|seguir|escuchar|tomar|elegir)\s*)?(?:(?:útiles?|utiles?|buen[oa]s?|ideales?)\s+)?"
+    r"(?:(?:para|en)\s+(?:(?:un|una|mi|mis|el|la|los|las|nuestro|nuestra)\s+)?(?:(?:próximo|proximo|próxima|proxima|"
+    r"nuevo|nueva|siguiente|primer|primera|propio|propia)\s+)?(?:proyectos?|portafolio|portfolio|startup|negocio|"
+    r"emprendimiento|app|apps|aplicación|aplicacion|web|página|pagina|sitio|trabajo|equipo|clases?|escuela|colegio|"
+    r"universidad|uni|principiantes|novatos|estudiantes|empezar)(?:\s+(?:próximo|proximo|nuevo|nueva|siguiente))?|"
+    r"(?:que\s+)?(?:debería|deberia|podría|podria|puedo)\s+(?:usar|probar|instalar|leer|ver|seguir|escuchar))\W*$", re.I)
+PURPOSE_MORE = re.compile(r"^\W*(?:that\s+)?(?:i|we)\s+(?:should|could|can|would|might)\s+(?:read|watch|follow|"
+                          r"listen\s+to|take|learn|check\s+out|play|visit)(?:\s+(?:for|in)\s+(?:a|an|my|the|our)?\s*"
+                          r"(?:next|new|upcoming|own|first)?\s*(?:project|portfolio|startup|business|app|class|"
+                          r"school|work))?\W*$", re.I)
+
+
 def purpose_only(criterion):
     """Round 9, live fix (finding 103): True for a must-have that only says what the things are for."""
-    return bool(PURPOSE.match(" ".join(str(criterion or "").split())))
+    c = " ".join(str(criterion or "").split())
+    return bool(PURPOSE.match(c) or PURPOSE_ES.match(c) or PURPOSE_MORE.match(c))
+
+
+# (check of the live fix, fix9) a request for a kind of thing in Spanish: the interpreter keeps the person's language
+# in the goal and the searches ("herramientas de IA para un proyecto"), so the English word list found no kind and the
+# fix did nothing for a Spanish request. A closed list of Spanish kind words, read only as "<kind> de <what>"
+KINDS_ES = re.compile(
+    r"\b(herramientas|librerías|librerias|bibliotecas|apps|aplicaciones|recursos|cursos|libros|fuentes|tipografías|"
+    r"tipografias|plantillas|extensiones|plugins|complementos|canales|podcasts|sitios|páginas|paginas|webs|programas|"
+    r"becas|oportunidades|lugares|restaurantes|cafés|cafeterías|tiendas|marcas|juegos|películas|peliculas|series|"
+    r"frameworks|kits|iconos|eventos|concursos|hackathons|prácticas|practicas|pasantías|pasantias|newsletters|"
+    r"boletines)\s+(?:de|del)\s+(?P<what>[^\s,.;:!?¿¡()]+(?:\s+[^\s,.;:!?¿¡()]+){0,2})", re.I)
+# a word that ends what the kind is about ("herramientas de IA para ...", "cursos de diseño que ...")
+_ES_END = set("""para que con en sobre a y o e u mi mis tu tus su sus el la los las un una unos unas me te se lo le les
+del al este esta estos estas ese esa debería deberia podría podria puedo puedes tengo tienes tenga hay guardé guarde
+guardado guardados guardada guardadas usar uso ver leer seguir próximo proximo nuevo nueva mejor mejores buenas
+buenos gratis gratuitas gratuitos""".split())
+# a recipe, a workout or a tutorial in Spanish is never a kind request (as topic_kind in English)
+_ES_NOT_KINDS = re.compile(r"\b(recetas?|comidas?|cocina\w*|cenas?|desayunos?|almuerzos?|postres?|ejercicios?|rutinas?|"
+                           r"entrenamientos?|entrenar|yoga|gimnasio|tutoriales?|manualidades)\b", re.I)
+
+
+def kind_es(*texts):
+    """(check of the live fix, fix9) the Spanish kind phrase of a request ("herramientas de IA", "librerías de
+    UI/UX"), or None: only "<kind word> de <what>", never with a recipe, workout or tutorial word."""
+    from .render import spelled
+    joined = " ".join(t for t in texts if t)
+    if _ES_NOT_KINDS.search(joined):
+        return None
+    for t in texts:
+        m = KINDS_ES.search(t or "")
+        if not m:
+            continue
+        what = []
+        for w in m.group("what").split():
+            if w.lower() in _ES_END:
+                break
+            what.append(w)
+        if what:
+            return spelled(f"{m.group(1)} {t[m.start(1) + len(m.group(1)):m.start('what')].strip()} {' '.join(what)}")
+    return None
 
 
 def kind_request(goal, *texts):
     """Round 9, live fix (finding 103): the kind phrase of a request for a kind of thing (asks_for_things), never of a
-    recipe, a workout or a make-or-build tutorial request (topic_kind); None otherwise."""
+    recipe, a workout or a make-or-build tutorial request (topic_kind); None otherwise. Check of the fix: a Spanish
+    request's kind ("herramientas de IA") is read by kind_es."""
     texts = [t for t in texts if t]
+    if _ES_NOT_KINDS.search(" ".join([goal or "", *texts])):
+        return None
+    es = kind_es(goal or "", *texts)
+    if es:
+        return es
     topic = topic_kind(goal or "", *texts)
     # (as default_extract: "my next project" alone is not a make-or-build tutorial)
     if topic in ("food", "fitness") or (topic == "making" and MAKING.search(" ".join([goal or "", *texts]))) or \

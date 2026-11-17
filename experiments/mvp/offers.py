@@ -99,15 +99,19 @@ class OffersMixin:
         kind, nums = got
         if kind == "none":
             self.store.set_state(f"offers:{h}", None)
+            self._offers_date_again(h, st, now)
             return self.send(h, T.OFFERS_NONE)
         if kind == "all":
             if re.search(r"\bboth\b", text, re.I) and n != 2:
+                self._offers_date_again(h, st, now)
                 return self.send(h, T.offers_which(n))
             nums = [o["n"] for o in offers if not o.get("done")] or [o["n"] for o in offers]
         if any(not 1 <= k <= n for k in nums):
+            self._offers_date_again(h, st, now)
             return self.send(h, T.offers_which(n))
         chosen = [offers[k - 1] for k in nums]
         if all(o.get("done") for o in chosen):
+            self._offers_date_again(h, st, now)
             return self.send(h, T.OFFER_DONE_ALREADY)
         chosen = [o for o in chosen if not o.get("done")]
         ref = self.offers_run(person, st, chosen, now)   # postacts.py: each kind through its own code path
@@ -116,9 +120,15 @@ class OffersMixin:
                 o["done"] = True
         left = [o for o in offers if not o.get("done")]
         self.store.set_state(f"offers:{h}", dict(st, offers=offers, ask=None) if left else None)
-        if st.get("date_ask") and not self.store.get_state(f"deadline_ask:{h}"):
-            # (round 9 live fix pass, finding 108) the apply menu's last line asked for the date; the choice was this
-            # message, so the date question waits for the next one again (asked once more, never kept longer)
-            self.store.set_state(f"deadline_ask:{h}", dict(st["date_ask"], at=now_iso(now)))
-            self.store.set_state(f"offers:{h}", dict(st, offers=offers, ask=None, date_ask=None) if left else None)
+        # (round 9 live fix pass, finding 108) the apply menu's last line asked for the date; the choice was this
+        # message, so the date question waits for the next one again (check of the fix: kept while the menu is open,
+        # so a number already done or past the list keeps it too)
+        self._offers_date_again(h, st, now)
         return ref
+
+    def _offers_date_again(self, h, st, now):
+        """(check of the live fix pass, fix9) the apply menu's last line asked for the date: "none", a number past the
+        list or one already done answered the menu, not the date, so the date question waits for the next message
+        again (as after a choice)."""
+        if st.get("date_ask") and not self.store.get_state(f"deadline_ask:{h}"):
+            self.store.set_state(f"deadline_ask:{h}", dict(st["date_ask"], at=now_iso(now)))

@@ -2546,3 +2546,8 @@ def apply_todo_offer(name):
 
 
 APPLY_ASK_DATE = "The post doesn't say when it closes. Tell me the date, like \"dec 5\", and I'll set a reminder too."
+
+
+# check of the live fix pass (fix9): a brief that says its own claim is not true
+DRAFT_NOT_TRUE = ("I can't write something you've told me isn't true, so I didn't write this one. Tell me what you'd "
+                  "like to say instead, like: email my boss that I need one more day.")
