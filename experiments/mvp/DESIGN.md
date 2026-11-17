@@ -572,6 +572,82 @@ Code only; no prompt changed (`tests/test_round8_live.py`).
   (`dates.request_years`); a reel or a video whose title promises a list says "the names are in its video, not its
   text." (`render.is_video`), so case 2's two "Also" lines now say "video".
 
+### Round 9, slice U
+Requests for a kind of thing ("what are some UI/UX libraries ..."; `tests/test_round9_kinds.py`). Prompt `extract_v4`
+(`extract_v3` stays). Where this part and an earlier one differ, this part wins.
+- (4) The kinds evaluation (`eval_kinds.py`, `evalset/kinds_dev.jsonl`: 16 invented requests across tools, apps,
+  channels, servers, books, courses, sites, podcasts, exercises, places, scholarships, fonts, plugins). Each request
+  runs live as a fresh test person with a fixed clock; it writes counts only (things shown, what the details model
+  returned and marked "yes", what code left out and why, sources and picks by verdict, the kind of answer, cost). A
+  run's steps
+  now keep `items_model` (raw, yes, not_in_text, fit_no, repeated), `items_why` (`extract.junk_reason`: kind_word,
+  activity, common_noun, headline; and no_words), `items_sources` (clear, close) and `clear_leads`. A person counts how
+  many shown things are truly of the kind; that judgement stays outside git, as counts in `evalset/kinds_results.json`.
+- (1) The details call gets the kind on its own line, `Kind asked for: "UI/UX libraries"` (`extract.kind_phrase`: the
+  goal's noun phrase through `render.found_noun`, a message's question words left out, else the THINGS word; none for a
+  request that names no kind). `extract_v4`: "fit" is "yes" only when the thing is itself one of that kind, something
+  to use, install, apply to, visit, read, watch or buy as that kind; a part or a feature, a term the post explains, a
+  category, a step, a setting, a tip or a technique is "no"; three contrast examples from other topics (knots for
+  hiking trails, spending categories for budgeting apps, techniques for language courses); the name examples carried
+  over from v3 are replaced by neutral ones. With a kind, the kind and the prompt are part of the items cache key
+  (`items_cache_kind`): a list judged by an earlier prompt is read again. The post's own word for its things ("the post
+  calls these icon sites") was not built: no evaluation run measured it.
+- (2) `answers.clear_leads`: when no source of an items answer is clear and the composer judged one or more shown picks
+  clear (judged, not passed, not old), `Executor._lead_clear` makes the ordinary answer: the opening line, "I recommend
+  ..." for the first clear pick, its key points, its link, "Or try these:" (the other clear picks), "Or these, which are
+  close too:" (close picks that gave no thing), then "Named in other saves, close to what you asked:" and the sources
+  with their numbered things (`render.source_blocks`, shared with the items answer), then "More in your saves:". The
+  lead says "The names are in its slides, not its text." ("its video" for a reel or a video, `render.names_elsewhere`)
+  only when its title or first line promises a list (`promises_slides`): nothing is claimed about a post that promises
+  none; an alternative that promises one says it in its line. Numbers are the things' only, so "add the second one"
+  is the second thing. The stored order is the order shown. The round 8 test of finding 94 that expected "Nothing I
+  found is a clear fit" beside two clear picks now expects this answer.
+- (3) Why the picks for the founder's case differed between runs, from the stores at $0: the two live runs compared
+  (the founder's handle at 20:54, the checker's handle at 20:53, 14 Nov) had the same 40 candidates in the same order
+  and the same spec; the composer's input differed only in the profile text (276 characters against none), and its
+  verdicts differed on 2 of 3 picks (the post about one UI library was a close pick in one, not picked in the other,
+  and then not read: the posts read beyond the picks are taken by list score, and two list posts outscored it). The
+  founder's own run at 20:54 reused the composer's answer of 17:53 from the answer cache (same key within 24 hours).
+  Over the three kinds runs (fresh test people, no profile), 13 requests reached the composer in all three: the
+  interpreter's searches were the same in 2, the candidates in 1, and the composer's verdicts in none (with the same
+  candidates they still differed). The founder's message run three times with his profile on the same day: once the
+  same searches, the same 40 candidates and three different sets of verdicts; once three different searches. So the
+  variation comes from the interpreter's search words and from the composer itself at temperature 0 with a seed, not
+  from the candidate order (ties are broken by id) or the window. Code fix: `Executor._items_reads` reads, after the
+  shown picks, the posts whose own text names the kind's head noun (stemmed: "library" for "libraries"; the composer's
+  other picks first, then other candidates, a year in the title still first among candidates) before posts that only
+  list things; before, the composer's other picks or two higher-scoring lists took every place. The interpreter's words
+  and the composer's verdicts still vary; caching harder would only hide it, so it is left (a vote over several
+  composer calls would cost more per answer).
+- `interpret.chat_guard` (kinds evaluation: 3 of 16 requests came back as a question back; the 2 with a kind word are
+  now searched): "what <kind> should I use / try / get ..." is an ask, its goal without "should I use" ("apps to edit
+  photos on my phone"); never "what should I ...", "what do I ...", "what kind of ...", "what else ...", and never
+  without a kind word. Dev files: 0 of 5 chat, help or unsupported cases flip.
+- `llm.chat_json(model=..., reasoning_effort=...)`: one measured call may name another priced model; the default stays
+  `config.MODEL`.
+- Live check (code only): when fewer than 2 things over all posts are marked as the kind (so the others are shown
+  too), a clear post none of whose things is marked as the kind is not a clear source while a clear post's thing is
+  (`kind_unsure`, `answers.source_rank`): "I found 1 UI/UX library in your saves, and 2 posts that come close.", never
+  "I found 7 UI/UX libraries" for six icon packs and one library (a replay of the third run from its store).
+- Numbers (`evalset/kinds_results.json`; counts only; "truly of the kind" is the builder's reading). Kinds evaluation,
+  before / v4 only / after: answers items 7 / 7 / 8, the new recommend-then-named 0 / 0 / 2, recommend 3 / 5 / 4,
+  closest 3 / 1 / 2, a question back 3 / 3 / 0; things shown 36 / 35 / 41, of them truly of the kind 22 / 25 / 32;
+  "Nothing I found is a clear fit" beside a clear pick 1 / 0 / 0; cost per request $0.0153 / $0.0160 / $0.0176 (per
+  items answer $0.0199 before, $0.0188 after). The after run had all of points 1 to 4 except the read order before the
+  composer's other picks and the live check. On the same 51 posts and requests: v3 marked 21 things "yes", 3 of them
+  not of the kind; v4 marked 18, 1 not of the kind. A stronger model for this one call (gpt-5.5, reasoning effort low,
+  `extract_v4`) on the same posts: the founder's case, 6 posts: 14 "yes" from the small model, 1 truly a UI library,
+  against 1 "yes", that library; the podcasts request, 6 posts: 8 "yes" with 1 about startups, against 2 "yes", both
+  about startups. It costs about $0.017 a call against $0.0017, about $0.10 more per kind answer (six calls); the
+  default is not switched. The founder's message, three fresh runs (his profile copied; the code before the live
+  check): items answers all three; clear sources 1, 2, 2 (the third is 1 under the live check, replayed from its store
+  at $0); things shown 12, 17, 12; truly UI libraries or kits 1, 0, 1; no component type shown as a thing; never
+  "Nothing I found is a clear fit" beside a clear post; the same picks in all three: no; about $0.023 an answer.
+  The 20 draft requests before and after (the after run before the last two changes, which touch kind requests
+  only): handled 20 and 20, errors 0 and 0, answers with picks 19 and 19, items
+  answers 1 and 1, "I recommend" answers 14 and 14, cost $0.177 and $0.175. Recipes, workouts and tutorials are byte
+  for byte the same on the fakes.
+
 ### Not done in this round
 - A rule made from a message with several asks is not split at each run (it runs the whole goal as one request);
   "another" after a split answer repeats the whole message as one request.
