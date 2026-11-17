@@ -38,7 +38,8 @@ GYM_SAID = re.compile(r"\bmy gym\b|\bgym (?:membership|contract|plan)\b", re.I)
 NOT_CANCEL = re.compile(r"\b(?:rules?|reminders?|nudges?|list|lists|to-?dos?|digest|recap|texts?|texting|messages?|"
                         r"messaging|emails? from you|notifications?|send|sends|sending|sent|recommendations?|recommend|"
                         r"suggestions?|picks?|ideas?|remind\w*|e-?mails?|newsletters?|mailing lists?)\b", re.I)
-BARE = re.compile(r"^\W*(?:cancel|cancel it|cancel that|cancel this|unsubscribe|unsubscribe me)(?:\s+please)?\W*$", re.I)
+BARE = re.compile(r"^\W*(?:cancel|cancel it|cancel that|cancel this|unsubscribe|unsubscribe me)(?:\s+please)?\W*$",
+                  re.I)
 ONLY_NUMBER = re.compile(r"^\W*(?:cancel|end|stop|pause|close|quit)\s+(?:rule\s+|number\s+|#\s*)?\d{1,2}\W*$", re.I)
 CARD = re.compile(r"\b(?:credit card|debit card|bank account|checking account|savings account|my (?:[\w&'-]+ )?card)\b",
                   re.I)
@@ -62,8 +63,9 @@ PASSWORD = re.compile(r"\b(?:my|the)\s+(?:[\w+.'-]+\s+){0,2}(?:password|passcode
                       r"|\b(?:use|with)\s+my\s+(?:[\w+.'-]+\s+){0,2}(?:password|passcode|login)\b"
                       r"|\b(?:can|could|will|would)\s+you\s+(?:just\s+)?(?:log|sign)\s*(?:in|into|on)\b"
                       r"|\b(?:log|sign)\s*(?:in|into|on)\s+(?:as me|for me|to my|into my|on my)\b", re.I)
-SAID_DONE = re.compile(r"^\W*(?:(?:ok(?:ay)?|so|yes|yep)[\s,!.]+)?(?:i(?:'ve| have)?\s+(?:just\s+|finally\s+|already\s+)?"
-                       r"(?:cancell?ed|canceled)\s+(?P<a>.+?)|(?P<b>.+?)\s+is\s+(?:now\s+)?(?:cancell?ed|canceled))"
+SAID_DONE = re.compile(r"^\W*(?:(?:ok(?:ay)?|so|yes|yep)[\s,!.]+)?"
+                       r"(?:i(?:'ve| have)?\s+(?:just\s+|finally\s+|already\s+)?(?:cancell?ed|canceled)\s+(?P<a>.+?)"
+                       r"|(?P<b>.+?)\s+is\s+(?:now\s+)?(?:cancell?ed|canceled))"
                        r"(?:\s+(?:now|today|already))?\W*$", re.I)
 _IT = re.compile(r"^(?:it|that|this|them|my (?:subscription|membership)|the (?:subscription|membership))$", re.I)
 BILLING = {"apple": re.compile(r"\b(?:apple|iphone|ipad|ios|app store|itunes|through apple)\b", re.I),
@@ -334,7 +336,10 @@ class CancelMixin:
         ref = self._cancel_said_done(person, t, now)
         if ref is not None:
             return ref
-        req = request(t, self.store.rules(h))
+        # the helper's own check reminders name the merchant; "cancel my netflix" again is still a cancel (a stop or
+        # pause of "the netflix one" goes through cancel_stop_guard, which keeps them)
+        mine = {r["check_rule_id"] for r in self.store.cancellations(h) if r.get("check_rule_id")}
+        req = request(t, [r for r in self.store.rules(h) if r["id"] not in mine])
         if req is None:
             return None
         return self._cancel_start(person, req, t, now)
