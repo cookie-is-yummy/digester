@@ -116,6 +116,7 @@ EN = {
     "share_nothing": "I haven't sent you anything to share yet. Ask me for something first.",
     # ---------- round 10, slice S (design C3): a reel whose caption may not match its video ----------
     "only_match": "The only match I found is",
+    "cm_best": "The best match I found is",
     "cm_doubt": "Heads-up: its caption is {what}, but {reason}, so the video may show something else.",
     "cm_weak": "Going by its caption: I can't watch the video, so check it shows the same.",
     "cm_from_caption": "From the caption:",
@@ -234,6 +235,7 @@ ES = {
                "noviembre", "diciembre"],
     # ---------- round 10, slice S ----------
     "only_match": "Lo único que encontré es",
+    "cm_best": "Lo que mejor encaja es",
     "cm_doubt": "Ojo: su texto es {what}, pero {reason}, así que el video puede mostrar otra cosa.",
     "cm_weak": "Me guío por su texto: no puedo ver el video, así que comprueba que muestre lo mismo.",
     "cm_from_caption": "Según el texto:",

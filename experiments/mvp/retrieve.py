@@ -215,6 +215,7 @@ def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, 
     # ---------- round 10, slice S: the caption mark (captionmark.py), with what this person said (caption_fb) -------
     from . import captionmark
     howto_req = captionmark.howto_request(spec)
+    strong_before = {}   # strong-marked items: their score before the mark's weight
     # ---------- end round 10, slice S ----------
     out = []
     for iid, s in scores.items():
@@ -229,13 +230,26 @@ def candidates(pool, view, spec, exclude=(), disliked=(), creator_weights=None, 
             continue
         boost = max((KIND_BOOST.get(kd, 1.0) for kd in it.kinds), default=1.0)
         level = captionmark.effective(it, caption_fb)[0]   # round 10, slice S
+        before = boost * (1.2 if c.extract and len(it.caption) >= 200 else 1.0) * creator_weights.get(it.creator, 1.0)
         if c.extract and len(it.caption) >= 200 and not level:   # slice S: never for a caption that may be pasted
             boost *= 1.2  # details are only usable when the item's own text holds them
         boost *= creator_weights.get(it.creator, 1.0)
         boost *= captionmark.rank_factor(level, howto_req)   # round 10, slice S: strong x0.4 on a how-to, else x0.8
         out.append((s * boost, iid, it))
+        if level == "strong":
+            strong_before[iid] = s * before
     out.sort(key=lambda x: (-x[0], x[1]))
     top = [it for *_, it in out[:k]]
+    # ---------- round 10, slice S: a strong-marked item that was in the window before its weight stays in it, last,
+    # so it can still be the honest only fit (it takes the places of the lowest ones) ----------
+    if strong_before and len(out) > k:
+        floor = sorted([x[0] for x in out if x[1] not in strong_before] + list(strong_before.values()),
+                       reverse=True)[:k][-1]
+        kept_back = {i for i, v in strong_before.items() if v >= floor} - {it.id for it in top}
+        if kept_back:
+            back = [x[2] for x in out if x[1] in kept_back]
+            top = top[:k - len(back)] + back
+    # ---------- end round 10, slice S ----------
     if c.order in ("newest", "oldest"):   # the best matches, then by date
         top.sort(key=lambda it: (date_for(it, c.kinds) or "", it.id), reverse=(c.order == "newest"))
     elif c.order == "random":

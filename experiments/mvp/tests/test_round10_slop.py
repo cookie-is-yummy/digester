@@ -246,6 +246,17 @@ def test_ranking_drops_the_long_caption_boost_and_weighs_a_strong_mark_down(tmp_
     assert [it.id for it in out] == ["m1", "ok1"]   # x0.8 only: 1.1 * 0.8/60 (a like) still beats 1.3/100 (a save)
     assert captionmark.rank_factor("strong", True) == 0.4 and captionmark.rank_factor("strong", False) == 0.8
     assert captionmark.rank_factor("weak", True) == 1.0 and captionmark.rank_factor(None, True) == 1.0
+    # a strong item that was in the window before its weight stays in it, last (so it can be the honest only fit)
+    lib2 = write_lib(tmp_path / "rk2", [ROWS[0], ROWS[3], ROWS[4], ROWS[-1]])
+    captionmark.build_file(lib2)
+
+    class Pool2:
+        def search(self, lib, q, depth=300):
+            return {"ids": ["m1", "j1", "g1", "ok1"], "mode": "normal", "cost_usd": 0.0}
+    out, _ = candidates(Pool2(), LibraryView(lib2), how, k=3)
+    assert [it.id for it in out] == ["ok1", "j1", "m1"]   # g1 gives its place; m1 is last
+    out, _ = candidates(Pool2(), LibraryView(lib2), how, k=4)
+    assert [it.id for it in out] == ["ok1", "j1", "g1", "m1"]
     # without the file: today's order and boost
     os.remove(captionmark.marks_path(lib))
     out, _ = candidates(Pool(), LibraryView(lib), how)
@@ -305,6 +316,24 @@ def test_details_of_a_strong_only_fit_sit_under_from_the_caption(slop):
     slop["state"]["answers"]["mvp_extract"] = lambda u: {"ingredients": ["2 cups pasta", "1 cup cream"]}
     msg = say(slop, "a chicken alfredo recipe", ALFREDO)
     assert "From the caption:\nIngredients (2):" in msg
+
+
+def test_several_strong_fits_are_the_best_match_never_the_only_one(slop):
+    msg = ask(slop, composer(("recipe for Chicken Alfredo", "clear", "Chicken Alfredo"),
+                             ("recipe for Garlic Pasta", "clear", "Garlic pasta")))
+    assert "The best match I found is A reel from @lol_clipz_daily" in msg and "only match" not in msg
+    assert "Heads-up: its caption is a recipe" in msg and "Garlic" not in msg
+    assert "• A reel from @lol_clipz_daily" in msg   # the other one, by its neutral name
+
+
+def test_the_lines_in_spanish(slop):
+    from mvp import captionmark
+    from mvp import lang as L
+    assert not ({"only_match", "cm_best", "cm_doubt", "cm_weak", "cm_what", "cm_reason", "cm_from_caption"} - set(L.ES))
+    assert set(L.EN["cm_reason"]) == set(L.ES["cm_reason"]) and set(L.EN["cm_what"]) == set(L.ES["cm_what"])
+    res = {"picks": [{"cm": "strong", "cm_reasons": ["account_memes"]}], "cm_what": "recipe"}
+    assert captionmark.lead_lines(res, "es") == ["Ojo: su texto es una receta, pero la cuenta publica sobre todo memes, "
+                                                 "así que el video puede mostrar otra cosa."]
 
 
 def test_a_weak_lead_on_a_how_to_request_gets_the_caption_line_and_keeps_its_place(slop):

@@ -695,7 +695,10 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
             text.append(intro_line(result, spec, lang))
             text.append("")
         # round 10, slice S: when every fit's caption may not match its video, never "I recommend"
-        text.append(pick_sentence(t["only_match" if result.get("only_marked") else "recommend"], first, now, lang))
+        lead = t["recommend"]
+        if result.get("only_marked"):   # one pick shown: "the only match"; more (all marked too): "the best match"
+            lead = t["only_match"] if len(picks) + len(wider) == 1 else t["cm_best"]
+        text.append(pick_sentence(lead, first, now, lang))
     # ---------- round 10, slice S (C3): right after the pick sentence, the doubt line (strong) or the caption line
     # (weak, on a how-to request); code words only, never the caption's ----------
     if not follow_up:
