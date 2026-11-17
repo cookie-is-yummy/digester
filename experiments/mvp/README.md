@@ -149,6 +149,13 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   is not kept) and never says it is cancelled. "Cancel my ... subscription" read by the model as "stop" stops no rule.
   To add a merchant, read its own help page and add an entry with `source_url` and `checked_on` (today's date). Tests:
   `tests/test_round9_cancel.py`.
+- **Round 9, acting on a saved post** (DESIGN.md section 16.C, read by code, no model call): after an answer, "apply
+  to the second one", "book it" (or "book a table at the first one for saturday at 7"), "buy the ingredients for the
+  first one", "where can I buy it" give a short numbered menu of what the bot can set up (a deadline on the calendar
+  and a reminder, a checklist from the post's own lines, Google Maps, a calendar hold, the shopping list); reply "1",
+  "all" or "none". The bot never applies, books or buys, and says so. After a list of things: "add them all", "add
+  2, 4 and 5", "remind me about all of them on friday", "put them all in my calendar", "what's number 4?". Tests:
+  `tests/test_round9_postacts.py`, `tests/test_round9_things.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 

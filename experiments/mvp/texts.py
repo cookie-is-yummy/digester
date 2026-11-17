@@ -959,6 +959,11 @@ def unsupported_reply(text, model_reply=None, lang=None):
         return t.get("not_caught") or NOT_CAUGHT
     if EVENT_TRIGGER.search(text or ""):
         return t.get("unsupported_event") or UNSUPPORTED_EVENT
+    if t is L.EN:   # round 9, slice C (W8): the nearest offer for a booking or a purchase, chosen by code
+        if BOOK_ASK.search(text or ""):
+            return UNSUPPORTED_BOOK
+        if BUY_ASK.search(text or ""):
+            return UNSUPPORTED_BUY
     return t.get("unsupported") or UNSUPPORTED
 
 
@@ -1683,3 +1688,196 @@ def cancel_notice_card(merchant, to_line, subject, body):
     return (f"Here's a cancellation notice you can send to {merchant}. Nothing has been sent.\nTo: {to_line}\n"
             f"Subject: {subject}\n\n{body}\n\nFill in your member number before you send it. Copy it into an email "
             f"from your own address.")
+
+
+# ---------- round 9, slice C (W7, W8, V1; DESIGN.md section 16.C): offers, acting on a saved post, the things ----------
+# Never "booked", "ordered", "bought", "applied", "signed up" or "registered" about the person: the bot does none of it.
+OFFERS_NONE = "OK. They're still in your saves if you want them later."
+OFFER_DONE_ALREADY = "I've done that one already. Tell me what else you'd like."
+
+
+def offers_which(n):
+    """W7: a number past the offers."""
+    if n == 1:
+        return "I offered 1 thing. Reply 1, or \"none\"."
+    return f"I offered {n} things. Reply " + ", ".join(str(i) for i in range(1, n)) + f" or {n}."
+
+
+def offers_reply_line(n):
+    return "Reply 1, or \"none\"." if n == 1 else \
+        "Reply " + ", ".join(str(i) for i in range(1, n + 1)) + ", \"all\", or \"none\"."
+
+
+def undo_line(what):
+    return f"Reply \"undo\" within 10 minutes to take {what} off."
+
+
+def undo_kept(what):
+    """W8: "undo" after a menu's "all": what an undo cannot take back is named, never silently left."""
+    return f"I can't take back {what}, so that stays."
+
+
+POST_LINK_HEAD = "The post:"
+DONE_HEAD = "Here's what I set up:"
+
+
+def apply_head(name, source):
+    return f"I can't fill in or send the application myself, but here's what I can set up for {name} ({source}):"
+
+
+APPLY_CANT = "I can't fill in or send the application myself."
+APPLY_DONE_END = "I didn't apply for you: you do that on their site."
+
+
+def apply_deadline_offer(deadline, day, at_text, days):
+    what = "Its deadline" if deadline else "Its date"
+    if not at_text:
+        return f"{what}, {day}, on your calendar."
+    return f"{what}, {day}, on your calendar, and a reminder {at_text}, {before_words(days)} before."
+
+
+def apply_checklist_offer(lines):
+    return "A checklist from the post's own words: " + ", ".join(lines) + "."
+
+
+def apply_passed(deadline, day):
+    return f"{'Its deadline' if deadline else 'Its date'}, {day}, has passed."
+
+
+def done_deadline(deadline, day):
+    return f"• {'Deadline' if deadline else 'Its date'} {day}: tap to add it to your calendar:"
+
+
+def done_reminder(at_text, n):
+    return f"• A reminder {at_text} (rule {n})"
+
+
+def done_checklist(lines, where):
+    n = len(lines)
+    return f"• {n} {'thing' if n == 1 else 'things'} on your list \"{where}\": " + ", ".join(lines)
+
+
+def book_head(name, tables):
+    return f"I can't book {'tables' if tables else 'for you'}. Here's what I can do for {name} (from your saves):"
+
+
+def maps_offer(url):
+    return f"Find it in Google Maps: {url}"
+
+
+MAPS_NAME_ONLY = "I searched for the name only; add the city in Maps if it finds the wrong place."
+
+
+def hold_offer(when):
+    return f"Put {when} on your calendar as a hold."
+
+
+def book_ask_time(day):
+    return f"What time on {day}? Say a time like \"7pm\" and I'll put a hold on your calendar."
+
+
+BOOK_ASK_WHEN = "To hold a time on your calendar, tell me when, like \"saturday at 7\"."
+BOOK_EMAIL_HINT = "To ask them by email, type their address, like \"email bookings@example.com ...\"."
+BOOK_DONE_END = "I didn't book anything: that's up to you and them."
+HOLD_PASSED = "That time has already passed, so I didn't put a hold on your calendar."
+
+
+def post_number(number):
+    return f"The post gives this number: {number}. I can't call for you."
+
+
+def done_maps(name, url):
+    return f"• {name} in Google Maps: {url}"
+
+
+def done_hold(when):
+    return f"• A hold for {when}: tap to add it to your calendar:"
+
+
+BUY_CANT = "I can't buy things or pay for you."
+NO_CHECKLIST = "That post doesn't list what you need in its own words, so there's no checklist to add."
+
+
+def buy_ingredients(names):
+    n = len(names)
+    return (f"I can't buy things or pay for you. I put the {n} {'ingredient' if n == 1 else 'ingredients'} on your "
+            f"shopping list: " + ", ".join(names) + ".")
+
+
+def buy_product(name, price=None, month=None):
+    note = f" (it said {price} in {month}, so check today's price)" if price and month else ""
+    return f"I can't buy things for you. Here's {name} from the post{note}:"
+
+
+BUY_LIST_OFFER = "Want it on your list? Reply 1."
+
+
+def done_todo(line):
+    return f"• {line}"
+
+
+# the nearest thing the bot can do, when a book or buy request is not about something it showed (docs/06 step 4)
+UNSUPPORTED_BOOK = "I can't book. I can put it on your calendar or remind you, if you tell me when."
+UNSUPPORTED_BUY = "I can't buy things. I can add it to your list or send you the link."
+BOOK_ASK = re.compile(r"\b(?:book|reserve|reservation)\b", re.I)
+BUY_ASK = re.compile(r"\b(?:buy|purchase|pay for|order(?!\s+(?:to|of|by)\b))\b", re.I)
+
+
+# V1: the things of an items answer
+def things_added(names, where, already=(), rest=0, listed=False):
+    """'Added 6 things to your list:' and the names one a line, or 'Added 3 things to your list: A, B, C.'; what was
+    on the list already, and what is left past the first 12."""
+    n = len(names)
+    head = f"Added {n} {'thing' if n == 1 else 'things'} to {where}"
+    if listed and n > 3:
+        msg = head + ":\n" + "\n".join(f"{i}. {x}" for i, x in enumerate(names, 1)) + \
+            "\nEach one links to the post it came from."
+    else:
+        msg = head + ": " + ", ".join(names) + "."
+    if already:
+        msg += f" \"{already[0]}\" was already on it." if len(already) == 1 else \
+            f" {len(already)} were already on it: " + ", ".join(f"\"{x}\"" for x in already) + "."
+    if rest:
+        msg += f" That's the first {n}. Say \"add the rest\" for the other {rest}."
+    return msg + " " + undo_line("them" if n > 1 else "it")
+
+
+def things_all_on(where):
+    return f"They're all on {where} already."
+
+
+def things_count_off(n):
+    return f"I listed {n} things. Reply \"add them all\" for all {n}, or give the numbers."
+
+
+def things_later(first, n, rule_n):
+    return (f"OK. {cap_first(first)} I'll send you the {n} things again, with their links. Reply \"stop {rule_n}\" "
+            f"to cancel.")
+
+
+def things_dates(found, missing, passed):
+    """(head, tail): found is [(name, day words)]; 'Tap to add each:' is followed by the links, then the tail."""
+    k = len(found)
+    if not k:
+        head = "None of them has a date ahead that I can read, so there's nothing to put on your calendar."
+    else:
+        names = _and([f"{name} ({day})" for name, day in found])
+        head = (f"1 of them has a date I can read: {names}. Tap to add it:" if k == 1 else
+                f"{k} of them have a date I can read: {names}. Tap to add each:")
+    tail = []
+    if missing:
+        tail.append((f"The other {missing} {'has' if missing == 1 else 'have'} no date in their words." if k and
+                     not passed else f"{missing} of them {'has' if missing == 1 else 'have'} no date in their words."))
+    if passed:
+        tail.append(f"{passed} of them {'has' if passed == 1 else 'have'} a date that has passed.")
+    return head, " ".join(tail)
+
+
+def thing_words(name, about, when, source_title, creator):
+    """V1: a question about a numbered thing, answered from the thing's own words (no model call)."""
+    w = f" ({when})" if when else ""
+    said = (f"{name}: \"{about}\"{w}. The post doesn't say more about it." if about else
+            f"The post names {name}{w} and doesn't say more about it.")
+    if source_title:
+        said += f" It's in \"{source_title}\"" + (f" by {creator}" if creator else "") + ":"
+    return said

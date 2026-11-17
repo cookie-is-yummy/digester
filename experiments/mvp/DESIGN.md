@@ -1255,3 +1255,91 @@ is cancelled, canceled, done or "all set" (only the merchant can say that).
 - **Out**: logging in, any browser driving, stored passwords; reading the inbox for a confirmation; a library search to
   find the merchant; a follow-up the bot sets by itself; legal lines about cancel laws; a link checker; reply handling
   on the check reminder; the notice's `mailto:` link and "send" (slice A's card); money in the recap.
+
+### 16.C Slice C, W7, W8, V1: acting on a saved post
+All read by code before the model, English only, 0 model calls (the details step still runs for a recipe whose
+ingredient lines were never found, as "add its ingredients" does today, under the caps). No new table or column.
+
+**W7, one numbered-offer reader (`offers.py`).** State `offers:<handle>` = `{at, source, run_id, text, offers: [{n,
+kind, verb, params, text, done}], ask}`, 24 hours; a newer menu replaces it, a new request read here clears it, and
+`outputs._keep_answer` clears it, so "2" never means an older answer's offer. Read in `handler._on_message` right after
+the `confirm_delete` branch (hook 2), whole message only: "1", "2 and 3", "1, 3", "do 2", "yes to 1", "the first one",
+"2 please" pick; "all", "all of them", "both" (only with 2 offers) take every open one; "none", "not now", "no
+thanks", "neither", "no" end them (`OK. They're still in your saves if you want them later.`). A number past them:
+`I offered 2 things. Reply 1 or 2.`; one already done: `I've done that one already. ...`; the others stay open until
+done. With one offer, a plain "yes" or "ok" takes it. Not taken: any message while a pending row waits and the message
+is `T.YES` or `T.NO` (the preview's own); a setup step asked after the offers; a tapback (the tapback path ends
+first); "2 recipes please", "what's in the second one". Each offer runs its `kind` through an existing path:
+`deadline` (calendar.add on the day, all-day, plus `_later_rule` at 9am 3 days before or the next 9am before the day,
+with `deadline:<rule_id>` as BN1 sets it), `checklist` (todo.add `what: "checklist"`), `maps` (the link again), `hold`
+(calendar.add at the person's day and time, 90 minutes, titled "<name> (hold)"), `todo` (todo.add of the pick). One
+reply: `Here's what I set up:`, a bullet a line, each calendar link alone after its line, what the bot did not do, and
+`Reply "undo" within 10 minutes to take the reminder and the list off.` The writes of one choice are one "undo";
+"undo" now ends with `I can't take back a calendar link, so that stays.` whenever a final write was part of it
+(`handler._undo`). `action_log`: `postact.menu` `{verb, offers}` and each action `{kind | what, count}`, never a name or
+a line of the post.
+
+**W8, apply, book, buy (`postacts.py`, hook 7 in `answer_normally`).** Taken only when the target resolves to a shown
+pick or thing: a number (`the second one`, `3`, `#2`; a thing for an items answer, else a pick), a name matched to a
+thing (`_answer_item`) or a pick's title (stemmed words), else "it", "the restaurant", "the workshop" = the only thing
+(several: `which_item`) or the lead pick. A name nothing shown matches, "somewhere nice", "a new phone", or a message
+that also says remind, email, calendar, share, every, goes to the interpreter as before; nothing shown: the interpreter,
+whose `unsupported` now gets the nearest offer by code (`texts.unsupported_reply`): `I can't book. I can put it on your
+calendar or remind you, if you tell me when.` / `I can't buy things. I can add it to your list or send you the link.`
+(English; other languages keep their line). Phrases: "apply to", "help me apply to", "sign me up for", "register me
+for", "enrol me in", "get me ready for"; "book", "reserve", "make a reservation at", "get us a table at"; "buy",
+"order" (not "order ... by"), "purchase", "where can I buy", "get me the ingredients / stuff for".
+- Apply: `I can't fill in or send the application myself, but here's what I can set up for <name> (from "<post>" by
+  @creator | from your saves):` / `1. Its deadline, 30 November, on your calendar, and a reminder on Friday 27
+  November at 9am, 3 days before.` / `2. A checklist from the post's own words: a, b, c.` / `The post:` + link /
+  `Reply 1, 2, "all", or "none".` The date is `_thing_date` (the thing's or post's own words), "Its date" when no
+  deadline word stands by it. Passed: `Its deadline, 14 February 2025, has passed.` and no item 1. None: the existing
+  `deadline_ask` question with its state (the next message's date sets the reminder and the calendar entry). Checklist
+  (`checklist_lines`): the first line with a cue (requirements, you need, you must, eligibility, eligible, to apply,
+  submit, must); its text after a colon split at commas and semicolons, else the lines under it to a blank line (list
+  lines, or plain lines); each kept line stripped of its bullet is a verbatim run of the text, 3 to 120 characters,
+  without "@", a link or domain, "DM", "comment", "link in bio", "follow"; at most 8; never for a thing whose post names
+  several things. The list is named after the thing (`list_name`). End: `I didn't apply for you: you do that on their
+  site.`
+- Book: `I can't book tables. | I can't book for you. Here's what I can do for <name> (from your saves):` / `1. Find
+  it in Google Maps: https://www.google.com/maps/search/?api=1&query=<name> <place>` (domain fixed by code; the place
+  is what follows 📍 or "in <Capitalised>" in the post's text, not a link, not a month or a day; none:
+  `I searched for the name only; ...`) / `2. Put Saturday 14 November at 7pm on your calendar as a hold.` only for a
+  day and a time the person typed (`day_time`: a weekday is the next one, today counts; "at 7" without am or pm from 1
+  to 10 is evening). A day alone: `What time on Saturday? ...`; nothing: `To hold a time on your calendar, tell me
+  when, like "saturday at 7".`; the next "7pm" or "saturday at 7" (`when_only`) makes the hold at once. A phone number
+  in the post: `The post gives this number: ... I can't call for you.` (never dialled; a booking link in the caption is
+  never repeated). Then `To ask them by email, type their address, ...` (slice A reads that). End: `I didn't book
+  anything: that's up to you and them.`
+- Buy: a recipe pick (ingredient words, or checked ingredient lines): todo.add `what: "ingredients"` on "shopping"
+  and `I can't buy things or pay for you. I put the 2 ingredients on your shopping list: a, b. Reply "undo" ...`
+  (t-dev-040's text). A product: `I can't buy things for you. Here's <name> from the post (it said $49 in May 2024, so
+  check today's price):` + link + `Want it on your list? Reply 1.`; a price only when the post's (or thing's) own text
+  holds exactly one and its posted month is known.
+- Never in a reply (a test checks every reply): booked, ordered, bought, applied, signed up, registered, purchased.
+
+**V1, the things of an items answer.** `followup.ALL_THINGS` / `all_things(target)` ("them all", "all of them", "all
+6", "everything", "both"), `numbers_in(target)` (two or more: "2, 4 and 5", "the first and third"), `thing_question`.
+Read in hook 7 when the last answer has things: "add/put/save <all | numbers | the rest> [to my <name> list]",
+"remind me about <all | numbers> <day [time] | time>", "put them all in my calendar", and "what's number 4?", "how
+long is the second one?", "tell me about 3" (not a details question: those go to `_detail_answer`, which now also
+answers a numbered thing from its words when the person said a number).
+- Add: `outputs._answer_items(snap, numbers, all_things)` gives one pick record per thing (`_thing_rec`, shared with
+  `_answer_item`); `_answer_picks(..., all_things=)` and two or more numbers use it. Things already open on that list
+  (same text) are not added: `"Iconoir" was already on it.`; all on: `They're all on your list already.`; at most 12:
+  `That's the first 12. Say "add the rest" for the other 3.` ("add the rest" adds what is not on the list yet). "all
+  6" against 5 shown: `I listed 5 things. Reply "add them all" for all 5, or give the numbers.` Reply: `Added 5
+  things to your list:` and the names one a line, `Each one links to the post it came from.` (numbers: one line) and
+  the undo line. `action_log` `todo.add` `{count, from: "things", already}`.
+- Remind: one `_later_rule` (9am unless a time is said); `_later_rule` now keeps each post once in `item_ids` with all
+  the names in `item_names` (10 at most) and the goal `the 5 things from "<goal>"`. Reply `OK. Tomorrow at 9am I'll
+  send you the 5 things again, with their links. Reply "stop 1" to cancel.`
+- Calendar: a calendar.add link for each thing whose own words give a date ahead; `2 of them have a date I can read:
+  A (30 November) and B (5 December). Tap to add each:`, the links, `3 of them have no date in their words. 1 of them
+  has a date that has passed.`
+- Thing question: `Ant Design: "an enterprise-class UI design language". The post doesn't say more about it. It's in
+  "Best design systems" by @designer:` + link; a number past them: `which_item`.
+- Out: model extraction of requirements, filling forms, booking or paying through any API, a shopping search link,
+  Spanish phrasings, the "close" note for things from posts that only came close, a menu offer to email them (the
+  person types the email request; slice A reads it). Changed on purpose: "book me a table" with `unsupported` now gets
+  `UNSUPPORTED_BOOK` (two asserts in `test_fixpass2.py`).

@@ -191,6 +191,9 @@ class HandlerMixin:
         ref = self.draft_reads(person, text, pending, now)   # slice A: an email draft card (drafts.py)
         if ref is not None:
             return ref
+        ref = self.offer_reads(person, text, pending, now)   # slice C: a numbered offer (offers.py)
+        if ref is not None:
+            return ref
         # ---------- end of the round 9 card reads ----------
         if pending and pending["kind"] == "confirm_rule" and YES.match(text):
             return self._confirm(person, pending)
@@ -228,6 +231,9 @@ class HandlerMixin:
         if ref is not None:
             return ref
         ref = self.cancel_reads(person, text, now)   # slice B: "cancel my netflix", a password, "I cancelled it"
+        if ref is not None:
+            return ref
+        ref = self.postact_reads(person, text, now)   # slice C: apply, book, buy; "add them all" (postacts.py)
         if ref is not None:
             return ref
         # ---------- end of the round 9 request reads ----------
@@ -1006,7 +1012,10 @@ class HandlerMixin:
         if not said:
             final = [w["say"] for w in writes if w["kind"] == "final"]
             return self.send(h, T.cant_undo(" or ".join(dict.fromkeys(final))) if final else T.NOTHING_TO_UNDO)
-        return self.send(h, T.undone("; ".join(reversed(said))))
+        # round 9, slice C (W8): what came with it and cannot be taken back (a calendar link) is said, not left out
+        kept = list(dict.fromkeys(w["say"] for w in writes if w["kind"] == "final"))
+        tail = (" " + T.undo_kept(" or ".join(kept))) if kept else ""
+        return self.send(h, T.undone("; ".join(reversed(said))) + tail)
 
     def _undo_one(self, h, lw, now):
         """Reverses one write; returns what was undone, in words (or None)."""

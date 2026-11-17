@@ -29,8 +29,10 @@ from .handler import (
     norm_handle,
 )
 from .libview import LibraryView
+from .offers import OffersMixin   # round 9, slice C
 from .onboarding import OnboardingMixin
 from .outputs import OutputsMixin
+from .postacts import PostactsMixin   # round 9, slice C
 from .scheduler import (
     MAX_RETRIES,
     MISSED_AFTER,
@@ -98,7 +100,8 @@ __all__ = [
 class Bot(HandlerMixin, FollowupMixin, OnboardingMixin, TodoMixin, OutputsMixin, ExecutorMixin, SchedulerMixin,
           AttentionMixin, DigestMixin,   # round 8: trends and the theme check (attention.py), the recap (digest.py)
           DraftsMixin,   # round 9, slice A: emails to other people (drafts.py)
-          CancelMixin):   # round 9, slice B: the cancel helper (cancel.py)
+          CancelMixin,   # round 9, slice B: the cancel helper (cancel.py)
+          OffersMixin, PostactsMixin):   # round 9, slice C: numbered offers (offers.py), acting on a post (postacts.py)
     def __init__(self, channel, store=None, pool=None, clock=None):
         self.channel = channel
         self.store = store or Store(config.DB)

@@ -63,7 +63,8 @@ class TodoParams(BaseModel):
     checked ingredient line of the pick does."""
     model_config = ConfigDict(extra="forbid")
     list: str = Field(default="todo", min_length=1, max_length=40)   # a list name ("shopping"); default "todo"
-    what: Literal["pick", "ingredients"] = "pick"
+    # round 9, slice C (W8): "checklist", each line code found after a cue in the post's own text (a verbatim run)
+    what: Literal["pick", "ingredients", "checklist"] = "pick"
 
 
 class ActionDef(BaseModel):
