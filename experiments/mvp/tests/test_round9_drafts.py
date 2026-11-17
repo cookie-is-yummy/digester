@@ -221,13 +221,15 @@ def test_w2_the_not_claimed_list_goes_the_old_way(text):
 
 def test_w2_every_rule_eval_text_is_left_alone_by_the_new_reads():
     import glob
-    from mvp.drafts import email_request, repeating_email
+    from mvp.drafts import MAILBOX_SAVE, email_request, repeating_email
     base = os.path.join(os.path.dirname(HERE), "evalset")
     texts_ = [json.loads(line)["text"] for f in sorted(glob.glob(os.path.join(base, "rules_dev_*.jsonl")))
               for line in open(f, encoding="utf-8") if line.strip()]
     assert len(texts_) == 159
     claimed = [t for t in texts_ if email_request(t) or repeating_email(t)]
     assert claimed == []
+    # A5's phrases (operator only) claim no eval text either
+    assert [t for t in texts_ if MAILBOX_SAVE.match(t)] == []
 
 
 @pytest.mark.parametrize("text,first", [

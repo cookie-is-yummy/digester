@@ -113,6 +113,12 @@ REMOVE_IT = re.compile(r"^\W*(?:remove it|remove that line|take it out|leave it 
 SAVE_DRAFT = re.compile(r"^\W*(?:(?:please|can you)\s+)?(?:save|put)\s+(?:it|that|this|that email|the email|the draft)?\s*"
                         r"(?:as a draft|in(?:to)? my drafts?(?: folder)?|in my (?:gmail|icloud|mailbox)(?: drafts)?)\W*$",
                         re.I)
+# A5: "put this in my email", "save it as a draft", "put the second one in my drafts", "draft it in my gmail"
+MAILBOX_SAVE = re.compile(r"^\W*(?:(?:please|can you|could you|pls)\s+)?(?:put|save|draft|stick)\s+"
+                          r"(?P<what>it|this|that|them|these|this one|that one|the\s+(?:first|second|third|fourth|fifth|"
+                          r"last)\s+one|the\s+\w+\s+one|#\s?\d|number\s+\d)?\s*(?:as\s+an?\s+(?:e-?mail\s+)?draft|"
+                          r"in(?:to)?\s+my\s+(?:e-?mail|drafts?(?:\s+folder)?|gmail|icloud|mailbox|inbox)"
+                          r"(?:\s+drafts?)?)(?:\s+please)?\W*$", re.I)
 NOT_A_CHANGE = re.compile(r"\b(?:to|on|onto|in|into)\s+(?:my|the)\s+(?:[\w-]+\s+){0,2}(?:list|calendar|reminders?|"
                           r"to-?dos?)\b", re.I)
 
@@ -854,6 +860,9 @@ class DraftsMixin:
         """'email my landlord that the sink is broken' and the other forms of email_request: a draft card, with no
         model call. 'every friday email my mom a recipe': refused. None for anything else."""
         h = person["handle"]
+        ref = self.mailbox_reads(person, text, now)   # A5: the operator's own Drafts folder
+        if ref is not None:
+            return ref
         when = repeating_email(text)
         if when:
             self.note(intent="unsupported")
@@ -1206,8 +1215,97 @@ class DraftsMixin:
         self.send(h, T.mailbox_accepted(row["to_addr"], self._clock(now, person)))
         return 1
 
+    # ---------- A5: a real draft in the operator's Drafts folder (actions/mailbox_imap.py) ----------
+    def _mailbox_drafts_on(self, h):
+        from .actions import mailbox_imap
+        return config.is_operator(h) and mailbox_imap.settings() is not None
+
     def _save_to_drafts(self, person, d, now):
-        return self.send(person["handle"], T.DRAFT_SAVE_LINK)
+        """'save it as a draft' with a card open: the card's version as last shown goes to their Drafts folder
+        (recipient, subject and body kept). The card stays open, so "send" still works by W4's rules."""
+        h = person["handle"]
+        if not self._mailbox_drafts_on(h):
+            return self.send(h, T.DRAFT_SAVE_LINK)
+        self.note(intent="mailbox_draft")
+        if not d.get("version"):
+            return self.send(h, T.DRAFT_NOT_READY)
+        from .actions.base import Ctx
+        ctx = Ctx(bot=self, person=person, answer={}, picks=[], kind="draft", now=now, tz=person["timezone"])
+        return self._mailbox_draft_run(person, ctx, {"draft_id": d["id"]}, d.get("to_addr"), now, card=True)
+
+    def mailbox_reads(self, person, text, now):
+        """'put this in my email', 'save it as a draft', 'put the second one in my drafts', 'draft it in my gmail',
+        with no card open: for the operator with a mailbox, the answer (or the pick) as a draft in their Drafts
+        folder, addressed to them. For everyone else None (the old way: the email to them, or W3's link)."""
+        h = person["handle"]
+        m = MAILBOX_SAVE.match(" ".join((text or "").split()))
+        if not m or not self._mailbox_drafts_on(h):
+            return None
+        from .actions import mailbox_imap
+        from .actions.base import Ctx
+        from .followup import pick_number
+        last = self._answer_seen(h) or self.store.last_answer(h)
+        if not last or not last.get("items"):
+            return self.send(h, T.NOTHING_TO_ACT_ON)
+        n = pick_number(m.group("what") or "", len(last["items"])) if m.group("what") and \
+            not re.match(r"^(?:it|this|that|them|these)$", m.group("what"), re.I) else None
+        self._tl.msg_text = text
+        picks, whole, answer, problem = self._answer_picks(h, [n] if n else None, None, "pick")
+        if problem:
+            return self.send(h, problem)
+        self.note(intent="mailbox_draft")
+        ctx = Ctx(bot=self, person=person, answer=answer, picks=picks, whole=whole, run_id=answer.get("run_id"),
+                  rule_id=answer.get("rule_id"), kind="act_on_last", now=now, tz=person["timezone"], request_text=text)
+        return self._mailbox_draft_run(person, ctx, {}, mailbox_imap.settings()["address"], now, card=False)
+
+    def _mailbox_draft_run(self, person, ctx, params, to, now, card):
+        from .actions import perform
+        from .actions.mailbox_imap import DraftError
+        h = person["handle"]
+        detail = {"recipient_domain": domain_of(to), "card": card}
+        try:
+            o = perform("mailbox.draft", ctx, params)
+        except DraftError as e:
+            self.store.log_action(h, None, None, "mailbox.draft", "failed", detail=dict(detail, error=e.kind), at=now)
+            print(f"mailbox draft: not saved ({e.kind})", file=__import__("sys").stderr)
+            return self._mailbox_draft_fallback(person, ctx, T.MAILBOX_DRAFT_FAILED[e.kind], card, now)
+        except Exception as e:  # noqa: BLE001 - nothing was saved
+            self.store.log_action(h, None, None, "mailbox.draft", "failed",
+                                  detail=dict(detail, error=type(e).__name__), at=now)
+            print(f"mailbox draft: not saved ({type(e).__name__})", file=__import__("sys").stderr)
+            return self._mailbox_draft_fallback(person, ctx, T.MAILBOX_DRAFT_FAILED["reach"], card, now)
+        if o.status != "done":   # over the day's cap
+            return self._mailbox_draft_fallback(person, ctx, o.line, card, now)
+        uid, folder = (o.detail or {}).get("uid"), (o.detail or {}).get("folder")
+        self.store.log_action(h, None, None, "mailbox.draft", "done", detail=dict(detail, undo=bool(uid)), at=now)
+        if uid:
+            self._wrote(h, "mailbox_draft", "the draft in your Drafts folder", {"folder": folder, "uid": uid})
+        else:
+            self._wrote_final(h, "a draft in your Drafts folder")
+        return self.send(h, T.mailbox_drafted(to, bool(uid)))
+
+    def _mailbox_draft_fallback(self, person, ctx, why, card, now):
+        h = person["handle"]
+        if card:
+            return self.send(h, why + " " + T.MAILBOX_DRAFT_USE_LINK)
+        from .actions import email as email_action
+        to, _ = self.store.email_of(h)
+        o = email_action.self_link(ctx, email_action.content(ctx), to)
+        return self.send(h, why + "\n" + o.line)
+
+    def mailbox_undraft(self, h, u):
+        """'undo' after a draft was saved: deletes that one UID from that folder. Returns what was undone, in words."""
+        from .actions import mailbox_imap
+        s = mailbox_imap.settings()
+        try:
+            if s is None:
+                raise mailbox_imap.DraftError("reach")
+            mailbox_imap.delete_draft(s, u["folder"], u["uid"])
+        except Exception as e:  # noqa: BLE001 - said plainly; nothing else is touched
+            print(f"mailbox draft: not deleted ({type(e).__name__})", file=__import__("sys").stderr)
+            return T.MAILBOX_UNDRAFT_FAILED
+        self.store.log_action(h, None, None, "mailbox.undraft", "done", detail={}, at=self.clock())
+        return T.MAILBOX_UNDRAFTED
 
     # ---------- A6: the model writes the words (config.DRAFT_MODEL); code checks every word before it is shown ----
     def _draft_model_ok(self, person, now):

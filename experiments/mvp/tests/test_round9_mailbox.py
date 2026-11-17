@@ -521,3 +521,228 @@ def test_a_sent_draft_s_log_holds_the_domain_never_the_address(op):
     rows = op["bot"].store.q("SELECT detail FROM action_log WHERE action='mailbox.send'")
     det = json.loads(rows[0]["detail"])
     assert det["recipient_domain"] == "example.com" and "maria" not in json.dumps(det)
+
+
+# =====================================================================================================================
+# A5: mailbox.draft, a real draft in the Drafts folder (IMAP with a fixed allow-list)
+# =====================================================================================================================
+ALLOWED = {"LOGIN", "LIST", "APPEND", "SELECT", "UID STORE", "UID EXPUNGE", "LOGOUT"}
+
+
+class FakeIMAP:
+    """imaplib.IMAP4_SSL stand-in: records every command; any command outside ALLOWED fails the test."""
+    made = []
+    uidplus = True
+    fail = None
+    folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Drafts) "/" "[Gmail]/Drafts"',
+               b'(\\HasNoChildren \\Sent) "/" "[Gmail]/Sent Mail"']
+
+    def __init__(self, host, port, ssl_context=None, timeout=None):
+        self.host, self.port, self.commands, self.appended, self.selected = host, port, [], [], None
+        FakeIMAP.made.append(self)
+        if FakeIMAP.fail == "connect":
+            raise OSError("unreachable")
+
+    def _cmd(self, name, *args):
+        assert name in ALLOWED, name
+        self.commands.append((name, *args))
+
+    def login(self, user, password):
+        self._cmd("LOGIN", user, password == PASSWORD)
+        if FakeIMAP.fail == "login":
+            import imaplib
+            raise imaplib.IMAP4.error("[AUTHENTICATIONFAILED] Invalid credentials")
+        return "OK", [b"ok"]
+
+    def list(self, directory='""', pattern="*"):
+        self._cmd("LIST")
+        return "OK", list(FakeIMAP.folders)
+
+    def append(self, mailbox, flags, date_time, message):
+        self._cmd("APPEND", mailbox, flags)
+        if FakeIMAP.fail == "append":
+            return "NO", [b"quota"]
+        self.appended.append(message)
+        return "OK", [b"[APPENDUID 1 4242] (Success)" if FakeIMAP.uidplus else b"(Success)"]
+
+    def select(self, mailbox="INBOX", readonly=False):
+        self._cmd("SELECT", mailbox)
+        self.selected = mailbox
+        return "OK", [b"1"]
+
+    def uid(self, command, *args):
+        self._cmd("UID " + command.upper(), *args)
+        return "OK", [b"done"]
+
+    def logout(self):
+        self._cmd("LOGOUT")
+        return "BYE", [b""]
+
+    def __getattr__(self, name):   # fetch, search, examine, store, expunge ...: never allowed
+        raise AssertionError(f"IMAP command not allowed: {name}")
+
+
+@pytest.fixture()
+def box(op, monkeypatch):
+    from mvp.actions import mailbox_imap
+    monkeypatch.setenv("MVP_MAILBOX_IMAP_HOST", "imap.example.invalid")
+    monkeypatch.setattr(mailbox_imap.imaplib, "IMAP4_SSL", FakeIMAP)
+    FakeIMAP.made, FakeIMAP.uidplus, FakeIMAP.fail = [], True, None
+    return op
+
+
+def appended():
+    return [m for c in FakeIMAP.made for m in c.appended]
+
+
+def commands():
+    return [c for x in FakeIMAP.made for c in x.commands]
+
+
+def test_a5_save_it_as_a_draft_puts_the_shown_card_in_drafts_and_keeps_the_card(box):
+    draft(box)
+    c = card(box)
+    msg = say(box, "save it as a draft", CHAT)
+    assert msg == ("I saved it in your Drafts folder (maria@example.com is filled in). Nothing has been sent. Reply "
+                   "\"undo\" within 10 minutes to take it out again.")
+    got = appended()
+    assert len(got) == 1
+    m = message_from_bytes(got[0], policy=policy.default)
+    assert m["To"] == "maria@example.com" and m["From"] == ME
+    assert m.get_content().replace("\r\n", "\n").rstrip("\n") == c[1]
+    assert [x[0] for x in commands()] == ["LOGIN", "LIST", "APPEND", "LOGOUT"]
+    assert commands()[2][1:] == ('"[Gmail]/Drafts"', "(\\Draft)")
+    assert sends() == [] and draft_row(box)["status"] == "link_shown"
+    assert say(box, "send", CHAT).startswith("Sending to maria@example.com at ")   # the card is still open
+
+
+@pytest.mark.parametrize("text", ["put this in my email", "save it as a draft", "draft it in my gmail",
+                                  "put it in my drafts"])
+def test_a5_with_no_card_the_answer_goes_to_drafts_addressed_to_them(box, text):
+    one_pick(box)
+    msg = say(box, text, CHAT)
+    assert msg.startswith(f"I saved it in your Drafts folder ({ME} is filled in). Nothing has been sent.")
+    m = message_from_bytes(appended()[0], policy=policy.default)
+    body = m.get_content()
+    assert m["To"] == ME and "Lemon garlic pasta" in body and "Sent by" not in body
+
+
+def test_a5_put_the_second_one_in_my_drafts(box):
+    box["state"]["answers"]["mvp_compose"] = compose_picks(
+        {"n": 1, "title": "Lemon garlic pasta", "why": "Fits.", "verdict": "clear"},
+        {"n": 2, "title": "Pasta night", "why": "Fits.", "verdict": "clear"})
+    from mvp.tests.test_slice2 import ask_pasta
+    form = ask_pasta()
+    form["spec"]["content"]["count"] = 2
+    say(box, "pasta", form)
+    say(box, "put the second one in my drafts", CHAT)
+    m = message_from_bytes(appended()[0], policy=policy.default)
+    assert m["Subject"] == "Pasta night" and "Lemon garlic" not in m.get_content()
+
+
+def test_a5_undo_deletes_only_that_uid_in_that_folder(box):
+    draft(box)
+    say(box, "save it as a draft", CHAT)
+    assert say(box, "undo", CHAT) == "Undone: I deleted the draft from your Drafts folder."
+    last_conn = FakeIMAP.made[-1].commands
+    assert last_conn == [("LOGIN", ME, True), ("SELECT", '"[Gmail]/Drafts"'),
+                         ("UID STORE", "4242", "+FLAGS", "(\\Deleted)"), ("UID EXPUNGE", "4242"), ("LOGOUT",)]
+    assert all(c[1] == '"[Gmail]/Drafts"' for c in commands() if c[0] == "SELECT")
+
+
+def test_a5_without_uidplus_the_reply_says_it_cannot_be_undone(box):
+    FakeIMAP.uidplus = False
+    draft(box)
+    assert say(box, "save it as a draft", CHAT).endswith(
+        "I can't take it out again from here, so delete it in Drafts if you change your mind.")
+    assert say(box, "undo", CHAT) == "I can't take back a draft in your Drafts folder, so I left everything else as it was."
+    assert not any(c[0].startswith("UID") for c in commands())
+
+
+def test_a5_no_drafts_flag_uses_the_usual_name(box):
+    FakeIMAP.folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren) "/" "Drafts"']
+    try:
+        draft(box)
+        say(box, "save it as a draft", CHAT)
+        assert commands()[2][1] == '"Drafts"'
+    finally:
+        FakeIMAP.folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Drafts) "/" "[Gmail]/Drafts"',
+                            b'(\\HasNoChildren \\Sent) "/" "[Gmail]/Sent Mail"']
+
+
+@pytest.mark.parametrize("fail,line", [
+    ("login", "I couldn't save it to your Drafts folder: your mailbox refused my sign-in."),
+    ("connect", "I couldn't save it to your Drafts folder: I couldn't reach your mailbox."),
+    ("append", "I couldn't save it to your Drafts folder: your mailbox said no."),
+])
+def test_a5_a_failure_says_what_failed_then_the_link(box, fail, line):
+    FakeIMAP.fail = fail
+    draft(box)
+    assert say(box, "save it as a draft", CHAT) == line + " Tap the link above to open it in your mail app instead."
+    one_pick(box)
+    say(box, "cancel", CHAT)
+    msg = say(box, "put this in my email", CHAT)
+    assert msg.startswith(line + "\nHere it is as an email to yourself.") and "mailto:" in msg
+
+
+def test_a5_never_reads_the_mailbox(box):
+    draft(box)
+    say(box, "save it as a draft", CHAT)
+    say(box, "undo", CHAT)
+    one_pick(box)
+    say(box, "put this in my email", CHAT)
+    names = {c[0] for c in commands()}
+    assert names <= ALLOWED and not names & {"FETCH", "SEARCH", "EXAMINE", "UID FETCH", "UID SEARCH"}
+    assert all(c[1] != '"INBOX"' and c[1] != "INBOX" for c in commands() if c[0] == "SELECT")
+    import ast
+    path = os.path.join(os.path.dirname(HERE), "actions", "mailbox_imap.py")
+    src = open(path, encoding="utf-8").read()
+    calls = {n.func.attr for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Name) and n.func.value.id == "conn"}
+    assert calls <= {"login", "list", "append", "select", "uid", "logout"}
+
+
+def test_a5_a_non_operator_keeps_the_old_way(box, monkeypatch):
+    from mvp import config
+    monkeypatch.setattr(config, "OPERATOR", None)
+    draft(box)
+    assert say(box, "save it as a draft", CHAT) == (
+        "I can't save to your Drafts folder. Tap the link above: it opens the email in your mail app, where you can "
+        "save it as a draft.")
+    say(box, "cancel", CHAT)
+    one_pick(box)
+    say(box, "put this in my email", {"intent": "act_on_last", "actions": ["email.send"]})
+    assert FakeIMAP.made == []
+
+
+def test_a5_mailbox_draft_cannot_be_named_by_a_model_or_a_rule():
+    from mvp.actions import REGISTRY, validate_action
+    d = REGISTRY["mailbox.draft"]
+    assert (d.outside, d.undo, d.confirm, d.max_per_day, d.in_rules, d.who, d.from_model) == \
+        (True, "delete", "never", 20, False, "operator", False)
+    with pytest.raises(ValueError):
+        validate_action("mailbox.draft", {})
+
+
+def test_a5_the_21st_draft_in_a_day_falls_back_with_the_cap_line(box):
+    box["bot"].max_per_minute = None
+    one_pick(box)
+    for _ in range(20):
+        assert say(box, "put this in my email", CHAT).startswith("I saved it in your Drafts folder")
+    msg = say(box, "put this in my email", CHAT)
+    assert msg.startswith("I've reached my limit of 20 drafts a day for you.") and "mailto:" in msg
+    assert len(appended()) == 20
+
+
+def test_a5_the_password_is_in_no_log_and_the_log_has_no_address(box, capsys):
+    FakeIMAP.fail = "login"
+    draft(box)
+    say(box, "save it as a draft", CHAT)
+    FakeIMAP.fail = None
+    say(box, "save it as a draft", CHAT)
+    out = capsys.readouterr()
+    assert PASSWORD not in out.out + out.err
+    blob = json.dumps(box["bot"].store.q("SELECT * FROM action_log"))
+    assert PASSWORD not in blob and "maria@" not in blob
+    with open(box["bot"].store.path, "rb") as f:
+        assert PASSWORD.encode() not in f.read()

@@ -1040,6 +1040,8 @@ class HandlerMixin:
                 if row and not row.get("reminded_at"):
                     self.store.update_todo(t["id"], due_at=t["due_at"])
             return f"I'm back on {T.zone_name(u['timezone'])} time"
+        if k == "mailbox_draft":   # round 9, slice A (A5): the draft the bot put in their Drafts folder
+            return self.mailbox_undraft(h, u)
         return None
 
     def _spec_for_followup(self, last, question, avoid=(), handle=None):

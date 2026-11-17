@@ -1537,6 +1537,25 @@ MAILBOX_ERRORS = {
 }
 
 
+# A5: a draft in the operator's own Drafts folder
+MAILBOX_DRAFT_FAILED = {
+    "auth": "I couldn't save it to your Drafts folder: your mailbox refused my sign-in.",
+    "reach": "I couldn't save it to your Drafts folder: I couldn't reach your mailbox.",
+    "folder": "I couldn't save it: I couldn't find your Drafts folder.",
+    "server": "I couldn't save it to your Drafts folder: your mailbox said no.",
+}
+MAILBOX_DRAFT_USE_LINK = "Tap the link above to open it in your mail app instead."
+MAILBOX_UNDRAFTED = "I deleted the draft from your Drafts folder"
+MAILBOX_UNDRAFT_FAILED = "I couldn't delete the draft from your Drafts folder just now, so please delete it there"
+
+
+def mailbox_drafted(to, can_undo):
+    head = (f"I saved it in your Drafts folder ({to} is filled in). Nothing has been sent." if to else
+            "I saved it in your Drafts folder. Nothing has been sent.")
+    return head + (" Reply \"undo\" within 10 minutes to take it out again." if can_undo else
+                   " I can't take it out again from here, so delete it in Drafts if you change your mind.")
+
+
 def mailbox_held(to, when):
     return f"Sending to {to} at {when}. Reply \"undo\" before then to stop it."
 
