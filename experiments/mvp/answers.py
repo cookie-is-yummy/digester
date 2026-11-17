@@ -134,7 +134,7 @@ def source_rank(p):
     kind asked for and never leads a fresher post."""
     if not judged(p):
         return 2
-    return 0 if p.get("verdict") == "clear" and not p.get("stale_source") else 1
+    return 0 if p.get("verdict") == "clear" and not p.get("stale_source") and not p.get("kind_unsure") else 1
 
 
 def is_clear_source(p):
@@ -181,7 +181,8 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
         got = [dict(x) for x in (p.get("facts") or {}).get("items") or [] if good(x)]
         if got:
             srcs.append([p, got])
-    if things and sum(1 for _, its in srcs for x in its if x.get("fit") == "yes") >= 2:
+    fallback = things and sum(1 for _, its in srcs for x in its if x.get("fit") == "yes") < 2
+    if things and not fallback:
         n = 0
         for s in srcs:
             if judged(s[0]) and len(s[1]) == 1:
@@ -193,6 +194,17 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
         if n:
             result.setdefault("dropped", {})["items_not_the_kind"] = n
         srcs = [s for s in srcs if s[1]]
+    if fallback:
+        # round 9, slice U (live check): the details model marked fewer than 2 things as the kind asked for, so the
+        # others are shown too; a clear post none of whose things is marked as that kind is then not counted as the
+        # kind while a clear post's thing is ("I found 1 UI/UX library ..., and 2 posts that come close", not "7"):
+        # code lowers a verdict, never raises it
+        def yes_in(s):
+            return any(x.get("fit") == "yes" for x in s[1])
+        if any(is_clear_source(s[0]) and yes_in(s) for s in srcs):
+            for s in srcs:
+                if is_clear_source(s[0]) and not yes_in(s):
+                    s[0]["kind_unsure"] = True
     if ts:   # live fix pass, round 8 (finding 99): a post of an earlier year gives nothing while another post does
         old = [s for s in srcs if old_year_post(s[0], extra, today)]
         if old and len(old) < len(srcs):

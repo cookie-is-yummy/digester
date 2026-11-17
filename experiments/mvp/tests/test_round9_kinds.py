@@ -356,3 +356,53 @@ def test_u3_a_post_naming_the_kind_is_read_before_the_composers_other_picks(env,
     texts = read_texts(seen)
     assert len(texts) == 2 and any("Larder is the UI library" in t for t in texts)
     assert not any("UI goodies" in t for t in texts)
+
+
+# ---------- live check: a clear list whose things the details model did not mark as the kind is not counted ----------
+TABLE_U5 = dict(TABLE98, **{
+    "Pantry UI kit": {"items": [{"name": "Pantry", "about": "", "fit": "yes"}],
+                      "key_points": ["A polished set of UI building blocks I keep coming back to"]},
+    "where to find icons": {"items": [{"name": n, "about": "", "fit": "unknown"}
+                                      for n in ("iconpile", "glyphbox", "svg", "iconfarm")]}})
+
+
+def compose_u5(u):
+    return {"picks": [pick(u, "Pantry UI kit", title="Pantry UI kit"),
+                      pick(u, "where to find icons", title="Where to find icons")]}
+
+
+@pytest.fixture()
+def lib_u5(env, tmp_path):
+    use_lib(env, tmp_path, ROWS98, name="libu5")
+    env["state"]["answers"]["mvp_compose"] = compose_u5
+    env["state"]["answers"]["mvp_extract"] = items_fake(TABLE_U5)
+    return env
+
+
+def test_u5_a_clear_list_with_no_thing_of_the_kind_comes_after_a_clear_thing_of_the_kind(lib_u5):
+    msg = say(lib_u5, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
+    # only one thing is marked as the kind, so the icon sites are shown too, but never counted as UI/UX libraries
+    assert msg.startswith("I found 1 UI/UX library in your saves, and one post that comes close.\n")
+    lines = msg.split("\n")
+    assert lines.index("Close, but not quite what you asked:") < \
+        lines.index(next(x for x in lines if x.startswith('From "Where to find icons"')))
+    assert "1. Pantry" in msg and "2. iconpile" in msg
+
+
+def test_u5_near_variants_keep_their_answers(lib_u5):
+    # nothing marked as the kind anywhere: no clear post is lowered (both stay clear)
+    table = dict(TABLE_U5, **{"Pantry UI kit": {"items": [{"name": "Pantry", "about": "", "fit": "unknown"}],
+                                                "key_points": ["A polished set of UI building blocks I keep coming back to"]}})
+    lib_u5["state"]["answers"]["mvp_extract"] = items_fake(table)
+    msg = say(lib_u5, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
+    assert msg.startswith("I found 4 UI/UX libraries named in 2 of your saves.") and "Close, but not quite" not in msg
+    # two or more marked as the kind: the others are left out as before, nothing lowered
+    from mvp.answers import choose_items, source_rank
+    from mvp.tests.test_round8_answers import It as It8
+    a = {"item": It8("x"), "verdict": "clear", "facts": {"items": [{"name": "A", "about": "a b c", "fit": "yes"},
+                                                                     {"name": "B", "about": "a b c", "fit": "yes"}]}}
+    b = {"item": It8("y"), "verdict": "clear", "facts": {"items": [{"name": "C", "about": "a b c", "fit": "unknown"},
+                                                                     {"name": "D", "about": "a b c", "fit": "unknown"}]}}
+    out = choose_items({"picks": [a, b]}, {}, None, False, things=True, reads=[a, b])
+    assert [x["name"] for _, its, _ in out for x in its] == ["A", "B"] and source_rank(a) == 0
+    assert not b.get("kind_unsure")
