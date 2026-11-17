@@ -53,9 +53,16 @@ _NAME = r"[A-Z][a-z][A-Za-z'’-]*"
 NOT_NAMES = set("""I Me My It This That The A An And Hi Hey Ok Okay Monday Tuesday Wednesday Thursday Friday Saturday
 Sunday January February March April May June July August September October November December Gmail Icloud
 Outlook Hotmail Yahoo Proton Email Mail Instagram Youtube YouTube Tomorrow Today Tonight Please Them Him Her""".split())
+# (round 9 live fix pass, finding 104) the address the person typed right after the role word or the name, in any of
+# the usual ways: "my friend maya@example.com", "my landlord (bob@example.com)", "my friend Maya at maya@...",
+# "my sister, ana@example.com,", "Maya <maya@example.com>"; a lowercase name only before "at <address>"
+_AT_ADDR = r"(?:\s+at\s+|\s*[(<]\s*|\s*,\s*|\s+)"
+_LOW_NAME = r"(?!(?:that|about|saying|and|to|with|re|regarding|asking|for)\b)[a-z][a-z'’-]{1,20}"
 _RCPT = (rf"(?P<addr>{ADDR})"
-         rf"|(?P<my>(?:my|our)\s+(?P<word>(?:{PEOPLE_WORDS})s?))(?:\s+(?P<wname>{_NAME}))?(?:\s+at\s+(?P<waddr>{ADDR}))?"
-         rf"|(?P<name>{_NAME}(?:\s+{_NAME})?)(?:\s+at\s+(?P<naddr>{ADDR}))?"
+         rf"|(?P<my>(?:my|our)\s+(?P<word>(?:{PEOPLE_WORDS})s?))"
+         rf"(?:\s+(?P<wname>{_NAME})|\s+(?P<lname>{_LOW_NAME})(?=\s+at\s+{ADDR}))?"
+         rf"(?:{_AT_ADDR}(?P<waddr>{ADDR})(?:\s*[)>])?)?"
+         rf"|(?P<name>{_NAME}(?:\s+{_NAME})?)(?:{_AT_ADDR}(?P<naddr>{ADDR})(?:\s*[)>])?)?"
          r"|(?P<pron>him|her|them)")
 # "email ...": what follows the verb
 _EMAIL_VERB = (r"(?:e-?mail|draft(?:\s+and\s+send)?\s+(?:an?\s+)?e-?mail\s+(?:to|for)|"
@@ -66,6 +73,11 @@ VERB_FIRST = re.compile(_LEAD + rf"(?P<verb>{_EMAIL_VERB})\s+(?P<rest>.+)$", re.
 # "send the pasta recipe to sam@example.com": an object, then an address (a send with no address is a share)
 SEND_TO_ADDR = re.compile(_LEAD + rf"(?:send|forward|share)\s+(?P<obj>.{{1,60}}?)\s+to\s+(?P<rest>{ADDR}.*)$",
                           re.I | re.S)
+# (round 9 live fix pass, finding 104) "send maya@example.com an email saying ...", "shoot my landlord an email about
+# ...": the recipient between the verb and "an email"; only with words that say what it says (or none)
+SEND_RCPT_EMAIL = re.compile(_LEAD + r"(?:send|shoot|drop|write)\s+(?P<r>.{1,80}?)\s+an?\s+(?:quick\s+|short\s+)?"
+                             r"e-?mail(?:\s+(?P<tail>(?:saying|that|to say|about|regarding|asking|and\s+(?:ask|tell|say)|"
+                             r"telling)\b.*))?\s*[.!]?$", re.I | re.S)
 POINTS = re.compile(r"^(?:it|this|that|these|those|them|both|all of them|this one|that one|the\s+(?:\w+\s+){0,3}?"
                     r"(?:one|ones|recipe|recipes|video|post|reel|tutorial|workout|pick|link|thing|programme|program|"
                     r"opportunity|place|event|answer)|the\s+(?:first|second|third|fourth|fifth|last)\b.*|#\s?\d|"
@@ -119,10 +131,13 @@ TONE = re.compile(r"\b(?:shorter|longer|more formal|less formal|formal|informal|
 TONE_ASK = re.compile(r"^\W*(?:can you\s+|could you\s+|please\s+)?(?:make it|make this|rewrite it|write it|reword it|"
                       r"translate it|put it)\b", re.I)
 REMOVE_IT = re.compile(r"^\W*(?:remove it|remove that line|take it out|leave it out)\W*$", re.I)
-SAVE_DRAFT = re.compile(r"^\W*(?:(?:please|can you)\s+)?(?:save|put)\s+"
-                        r"(?:it|that|this|that email|the email|the draft)?\s*(?:as a draft|in(?:to)? my drafts?"
-                        r"(?: folder)?|in my (?:gmail|icloud|mailbox)(?: drafts)?)\W*$",
-                        re.I)
+# (round 9 live fix pass, finding 107) with a card open, "put this in my email", "put it in my drafts", "save it as a
+# draft", "stick it in my inbox" mean the card (a number, "the second one", is about the answer: mailbox_reads)
+SAVE_DRAFT = re.compile(r"^\W*(?:(?:please|can you|could you|pls)\s+)?(?:save|put|stick|keep)\s+"
+                        r"(?:it|that|this|this one|that one|that email|this email|the email|the draft|my draft)?\s*"
+                        r"(?:as\s+an?\s+(?:e-?mail\s+)?draft|in(?:to)?\s+my\s+(?:e-?mail|drafts?(?:\s+folder)?|gmail|"
+                        r"icloud|outlook|mailbox|inbox|mail(?:\s+app)?)(?:\s+drafts?(?:\s+folder)?)?)"
+                        r"(?:\s+please)?\W*$", re.I)
 # A5: "put this in my email", "save it as a draft", "put the second one in my drafts", "draft it in my gmail"
 MAILBOX_SAVE = re.compile(r"^\W*(?:(?:please|can you|could you|pls)\s+)?(?:put|save|draft|stick)\s+"
                           r"(?P<what>it|this|that|them|these|this one|that one|"
@@ -182,6 +197,13 @@ def clause_paragraph(rest):
         return sentence(m.group("c")), subj, None
     m = re.match(r"^(?:that|saying|to say|and say|and say that)\s+(?P<c>.+)$", r, re.I)
     if m:
+        # (round 9 live fix pass) "that i can't make it on saturday and ask if sunday works": the statement, then the
+        # question as a question, both in the person's own words
+        q = re.match(r"^(?P<a>.+?),?\s+and\s+(?:ask(?:ing)?|to ask)\s+(?:(?:him|her|them)\s+)?"
+                     r"(?P<w>if|whether|when|what|where|how|why|who)\s+(?P<c>.+)$", m.group("c"), re.I)
+        if q:
+            return (sentence(q.group("a")) + " " +
+                    f"Can you let me know {q.group('w').lower()} {_you(q.group('c')).rstrip(' .?!')}?"), subj, None
         return sentence(m.group("c")), subj, None
     m = re.match(r"^(?:about|regarding|re:?)\s+(?P<c>.+)$", r, re.I)
     if m:
@@ -208,7 +230,7 @@ def _recipient(rest, original):
     addr = m.group("addr") or m.group("waddr") or m.group("naddr")
     who = {"to": addr.lower() if addr else None,
            "word": m.group("word").lower() if m.group("word") else None,
-           "name": m.group("wname") or m.group("name")}
+           "name": m.group("wname") or (cap(m.group("lname")) if m.group("lname") else None) or m.group("name")}
     tail = rest[m.end():]
     m2 = re.match(rf"^\s*(?:and|or|,)\s*({ADDR})", tail)
     if m2 and addr:
@@ -237,6 +259,13 @@ def email_request(text):
             mo = re.match(r"^(?P<obj>.{1,60}?)\s+to\s+(?P<r>.+)$", rest, re.I)
             if mo and POINTS.match(mo.group("obj").strip()):
                 obj, rest = mo.group("obj").strip(), mo.group("r").strip()
+    elif SEND_RCPT_EMAIL.match(t):
+        m = SEND_RCPT_EMAIL.match(t)
+        r = m.group("r").strip()
+        who, left = _recipient(r, t)
+        if who is None or who.get("pron") or left.strip(" ,"):
+            return None   # the words before "an email" must be the recipient and nothing else
+        rest = r + " " + (m.group("tail") or "")
     else:
         m = SEND_TO_ADDR.match(t)
         if not m:
@@ -331,8 +360,11 @@ Pero Muy Al Del Este Esta Ese Esa Te Avísame Dime Gracias Buenas Buenos Disculp
 CLAIMS = re.compile(r"\b(sent|emailed|paid|cancell?ed|canceled|booked|ordered|bought|applied|attached|enclosed|"
                     r"transferred|wired|signed up|registered|submitted|confirmed|returned|reserved|scheduled|fixed|"
                     r"repaired)\b", re.I)
-_CLOSING_LINE = re.compile(r"^(?:thanks|thank you|many thanks|best|best wishes|regards|kind regards|cheers|sincerely|"
-                           r"gracias|saludos|un saludo|merci|danke|grazie|obrigad[oa])\b[\w ,!.]*$", re.I)
+# (round 9 live fix pass) a sign-off line alone: "Thanks," "Thanks so much!" "Best wishes," - never a sentence that
+# starts with thanks ("Thanks for watering my plants." is the email itself; it was cut, leaving an empty body)
+_CLOSING_LINE = re.compile(r"^(?:thanks|thank you|many thanks|best|best wishes|regards|kind regards|warm regards|"
+                           r"cheers|sincerely|gracias|muchas gracias|saludos|un saludo|merci|danke|grazie|obrigad[oa])"
+                           r"(?:[ ,]+(?:so much|again|a lot|very much|in advance|mil))?[\s,!.]*$", re.I)
 URL_RE = re.compile(r"(?:https?://|www\.)\S+", re.I)
 # (round 9 checks) facts the capitalised-word check cannot see: a day or a month written in small letters, "tomorrow"
 # and "tonight" (they start sentences, so they are in _OK_CAPS), a number written as a word, and a claim that something
@@ -479,7 +511,10 @@ def model_write(p, sign, handle, change=None, current=None):
             return None, attempts, first or ["the call failed"]
         problems = grounded(raw, sources, name=p.get("greet_name") or "")
         if not problems:
-            return clean_form(raw), attempts, first
+            form = clean_form(raw)
+            if form["body"]:
+                return form, attempts, first
+            problems = ["the body is only a greeting or a sign-off"]   # (round 9 live fix pass) never an empty email
         if attempt == 0:
             first = problems
         why = "; ".join(problems[:3])
@@ -627,7 +662,9 @@ class DraftsMixin:
         if p.get("post") and p["post"].get("title") and not p.get("request"):
             return p["post"]["title"][:150]
         words = p.get("request") or next((x for x in p.get("paragraphs") or [] if x), "") or ""
-        words = words.split("\n")[0].rstrip(".")
+        words = words.split("\n")[0]
+        # (round 9 live fix pass) a statement, then a question: the subject is the statement alone
+        words = re.split(r"(?<=[.!?])\s+(?=[A-Z])", words, maxsplit=1)[0].rstrip(".")
         if len(words) > 60:
             words = words[:60].rsplit(" ", 1)[0]
         return words or (p["post"]["title"][:150] if p.get("post") and p["post"].get("title") else "Hello")
@@ -797,7 +834,8 @@ class DraftsMixin:
             if m and len(m.group(1).split()) <= 3 and not YES_WORDS.match(t):
                 self.store.set_prefs(h, sign_as=cap(m.group(1).strip()))
                 return self._draft_after_to(self.store.person(h), d["id"], now)
-        if waiting == "say" and not CANCEL_WORDS.match(t) and not SEND_WORDS.match(t) and not YES_WORDS.match(t):
+        if waiting == "say" and not CANCEL_WORDS.match(t) and not SEND_WORDS.match(t) and not YES_WORDS.match(t) \
+                and not SAVE_DRAFT.match(t):
             m = CH_INSTEAD.match(t) or CH_ADD.match(t)
             words = (m.group("x") or m.groupdict().get("y") or t) if m else t
             p = d["parts"]
@@ -931,7 +969,21 @@ class DraftsMixin:
             p.setdefault("extra", []).append(sentence(CH_ADD.match(t).group("x")))
         return self._draft_apply(person, d, p, now)
 
+    def _draft_same(self, person, d, p):
+        """(round 9 live fix pass, finding 105) True when these parts make exactly the words of the version last
+        shown (same recipient, subject and body, spacing aside): no new version, and nothing to call new."""
+        if not d.get("version") or not d.get("body"):
+            return False
+        row = self._draft(d["id"])
+        body = self._draft_render(self.store.person(person["handle"]) or person, row, p)
+        flat = lambda s: " ".join((s or "").split())  # noqa: E731
+        return (flat(body) == flat(d["body"]) and (row.get("to_addr") or "") == (d.get("to_addr") or "")
+                and flat(row.get("subject")) == flat(d.get("subject")))
+
     def _draft_apply(self, person, d, p, now):
+        if self._draft_same(person, d, p):
+            self.note(intent="draft_change")
+            return self.send(person["handle"], T.DRAFT_SAME_TEXT)
         p["changes"] = (p.get("changes") or 0) + 1
         self.store.update_draft(d["id"], parts=p)
         return self._draft_changed(person, d["id"], now)
@@ -951,9 +1003,18 @@ class DraftsMixin:
         p = d["parts"]
         if (p.get("changes") or 0) >= MAX_CHANGES:
             return self.send(h, T.DRAFT_TOO_MANY_CHANGES)
+        tried = self._draft_model_ok(person, now) and d["kind"] == "email"
         got = self._draft_model_rewrite(person, d, t, now)
-        if not got:
-            return self.send(h, T.DRAFT_NO_TONE)
+        if not got or self._draft_same(person, d, got):
+            # (round 9 live fix pass, finding 105) the model was asked but its rewrite failed the checks or came back
+            # with the same words: said plainly, with what the person can do; never "the new version", never a change
+            if not tried:
+                return self.send(h, T.DRAFT_NO_TONE)
+            self.note(intent="draft_change")
+            if not got and getattr(self._tl, "draft_call_failed", False):
+                return self.send(h, T.DRAFT_TONE_FAILED)
+            m = TONE.search(t)
+            return self.send(h, T.draft_tone_same(m.group(0).lower() if m else None))
         return self._draft_apply(person, d, got, now)
 
     # ---------- the email request, read before the model (hook 5 in answer_normally) ----------
@@ -1350,7 +1411,18 @@ class DraftsMixin:
         (recipient, subject and body kept). The card stays open, so "send" still works by W4's rules."""
         h = person["handle"]
         if not self._mailbox_drafts_on(h):
-            return self.send(h, T.DRAFT_SAVE_LINK)
+            # (round 9 live fix pass, finding 107) the truth in one line, and the version last shown's link again
+            self.note(intent="draft_save_link")
+            if not d.get("version") or d["state"].get("waiting"):
+                return self.send(h, T.DRAFT_NOT_READY)
+            left = placeholders_left(d)
+            if left:   # no link while a placeholder is left
+                return self.send(h, T.fill_first(left[0]))
+            p = d["parts"]
+            cut = (T.DRAFT_REST_IN_POST.format(url=p["post"]["url"]) if p.get("post") and p["post"].get("url")
+                   and p.get("link", True) and not p.get("no_post") else None)
+            self._draft_touch(h, d["id"], now)
+            return self.send(h, T.draft_save_link(mailto(d.get("to_addr") or "", d["subject"], d["body"], cut)))
         self.note(intent="mailbox_draft")
         if not d.get("version"):
             return self.send(h, T.DRAFT_NOT_READY)
@@ -1448,6 +1520,7 @@ class DraftsMixin:
         (then the code-built words stand and nobody is told about the model)."""
         h = person["handle"]
         form, attempts, first = model_write(p, sign, h, change=change, current=current)
+        self._tl.draft_call_failed = not form and first == ["the call failed"]
         self.store.log_action(h, None, None, "draft.model", "done" if form else "fallback", ref=str(row["id"]),
                               detail={"attempts": attempts, "used": bool(form), "rewrite": bool(change),
                                       "first_try": not first}, at=now)

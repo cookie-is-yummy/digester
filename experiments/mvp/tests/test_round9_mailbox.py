@@ -714,9 +714,10 @@ def test_a5_a_non_operator_keeps_the_old_way(box, monkeypatch):
     from mvp import config
     monkeypatch.setattr(config, "OPERATOR", None)
     draft(box)
-    assert say(box, "save it as a draft", CHAT) == (
-        "I can't save to your Drafts folder. Tap the link above: it opens the email in your mail app, where you can "
-        "save it as a draft.")
+    # (round 9 live fix pass, finding 107: the truth in one line, and the link again)
+    assert say(box, "save it as a draft", CHAT).startswith(
+        "I can't save it in your mail myself. This link opens it as a new message in your mail app; close it there "
+        "without sending, and your mail app keeps it as a draft (some ask you first):\nmailto:maria@example.com?")
     say(box, "cancel", CHAT)
     one_pick(box)
     say(box, "put this in my email", {"intent": "act_on_last", "actions": ["email.send"]})

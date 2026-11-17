@@ -2512,3 +2512,37 @@ def receipt_failed(what, who):
 def did_failed(what, who):
     return (f"No. I tried to send the {what} to {who} after your \"send\", but it didn't go, so nothing was sent. Say "
             f"\"show the draft\" to try again.")
+
+
+# ---------- round 9 live fix pass (DESIGN.md section 16.H) ----------
+# finding 105: a rewrite that came back the same (or could not pass the checks) is not a new version
+def draft_tone_same(tone):
+    if tone and tone.startswith("in "):
+        what = f"put it in {tone[3:].capitalize()}"
+    else:
+        what = f"make it {tone}" if tone else "rewrite it"
+    return (f"I couldn't {what} without adding things you didn't say, so the email is the same as before. Tell me "
+            f"the words to use, like: say \"hope you're well\", or instead say ...")
+
+
+DRAFT_SAME_TEXT = "That's already how the email reads, so nothing changed."
+DRAFT_TONE_FAILED = ("I couldn't rewrite it just now, so the email is the same as before. Try again in a minute, or "
+                     "tell me the words to use, like: instead say ...")
+
+
+# finding 107: "put this in my email" with a card open, for anyone without the operator's mailbox
+def draft_save_link(link):
+    return ("I can't save it in your mail myself. This link opens it as a new message in your mail app; close it "
+            "there without sending, and your mail app keeps it as a draft (some ask you first):\n" + link)
+
+
+# finding 108: "apply to the first one" on a thing whose post gives no date: what the bot can do now
+def apply_todo_text(name):
+    return name if re.match(r"^\W*apply\b", name or "", re.I) else f"Apply to {name}"
+
+
+def apply_todo_offer(name):
+    return f"\"{apply_todo_text(name)}\" on your to-do list, with the post's link."
+
+
+APPLY_ASK_DATE = "The post doesn't say when it closes. Tell me the date, like \"dec 5\", and I'll set a reminder too."

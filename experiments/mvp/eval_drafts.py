@@ -41,12 +41,24 @@ def word_checks(case, form):
     return missing, hits
 
 
+def sentences(body):
+    """(round 9 live fix pass) how many sentences the body holds: a mechanical count beside a person's reading of
+    whether it is a complete email (draft_v2 asks for 2 to 5)."""
+    text = re.sub(r"(?:https?://|www\.)\S+", " ", body or "")
+    return len([s for s in re.split(r"(?<=[.!?¿¡])\s+|\n+", text) if re.search(r"\w", s)])
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--max-usd", type=float, default=0.60)
     ap.add_argument("--only", default=None)
+    ap.add_argument("--prompt", default=None, help="a prompt version to measure (default: config.PROMPT_DRAFT)")
     a = ap.parse_args(argv)
+    if a.prompt:   # the same cases and checks, another prompt file (before and after a prompt change)
+        from . import config, drafts
+        config.PROMPT_DRAFT = a.prompt
+        drafts._PROMPT.clear()
     os.makedirs(a.out, exist_ok=True)
     spent = 0.0
     real = llm.chat_json
@@ -59,7 +71,8 @@ def main(argv=None):
         spent += cost or 0.0
         return out, cost
     llm.chat_json = counted
-    n = {"cases": 0, "passed": 0, "first_try": 0, "fell_back": 0, "must_missing": 0, "must_not_hits": 0}
+    n = {"cases": 0, "passed": 0, "first_try": 0, "fell_back": 0, "must_missing": 0, "must_not_hits": 0,
+         "two_to_five_sentences": 0}
     rows = []
     for case in load():
         if a.only and case["id"] != a.only:
@@ -73,10 +86,17 @@ def main(argv=None):
         n["fell_back"] += not form
         n["must_missing"] += bool(missing)
         n["must_not_hits"] += bool(hits)
+        k = sentences(form["body"]) if form else 0
+        n["two_to_five_sentences"] += 2 <= k <= 5
         rows.append({"id": case["id"], "tags": case["tags"], "attempts": attempts, "first_problems": first,
-                     "form": form, "missing": missing, "must_not_hits": hits})
+                     "form": form, "missing": missing, "must_not_hits": hits, "sentences": k})
     with open(os.path.join(a.out, "drafts_eval.json"), "w", encoding="utf-8") as f:
         json.dump(rows, f, ensure_ascii=False, indent=1)
+    with open(os.path.join(a.out, "drafts_read.txt"), "w", encoding="utf-8") as f:   # for a person to read
+        for r, case in zip(rows, [c for c in load() if not a.only or c["id"] == a.only]):
+            fm = r["form"] or {}
+            f.write(f"== {r['id']} {case['message']!r}\n{fm.get('greeting', '(fell back)')}\n\n{fm.get('body', '')}"
+                    f"\n\n{fm.get('closing', '')}\n\n")
     n["spent_usd"] = round(spent, 4)
     print(json.dumps(n))
     return 0

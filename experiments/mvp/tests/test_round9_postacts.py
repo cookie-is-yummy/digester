@@ -217,21 +217,28 @@ def test_no_date_asks_for_it_and_the_date_or_the_checklist_answers(env, tmp_path
     seed(env, tmp_path, [("n1", "spaceclub", cap, "2026-10-05", "NASA L'SPACE Academy")])
     bot = env["bot"]
     msg = tell(env, "apply to the first one")
-    assert "1. A checklist" in msg and "The post doesn't say when NASA L'SPACE Academy closes. Tell me the date" in msg
+    # (round 9 live fix pass, finding 108: the to-do comes first and the date question is the last line)
+    assert "1. \"Apply to NASA L'SPACE Academy\" on your to-do list" in msg and "2. A checklist" in msg
+    assert msg.endswith("The post doesn't say when it closes. Tell me the date, like \"dec 5\", and I'll set a "
+                        "reminder too.")
     msg = tell(env, "dec 5")   # the existing question's answer: the reminder, and the calendar entry
     assert msg.startswith("OK. I'll remind you about NASA L'SPACE Academy on Wednesday 2 December at 9am")
     assert len(bot.store.rules(H)) == 1
-    msg = tell(env, "1")
+    msg = tell(env, "2")
     assert "• 3 things on your list" in msg
 
 
-def test_no_date_and_no_requirement_lines_is_the_date_question_alone(env, tmp_path):
+def test_no_date_and_no_requirement_lines_offers_the_to_do_and_asks_the_date_last(env, tmp_path):
+    # (round 9 live fix pass, finding 108: this was the date question alone, and "1" then found nothing waiting)
     seed(env, tmp_path, [("n1", "spaceclub", "NASA L'SPACE Academy\nA summer programme for students.",
                           "2026-10-05", "NASA L'SPACE Academy")])
     msg = tell(env, "apply to it")
-    assert msg == ("I can't fill in or send the application myself. The post doesn't say when NASA L'SPACE Academy "
-                   "closes. Tell me the date, like \"dec 5\", and I'll set the reminder.")
-    assert env["bot"].store.get_state(f"offers:{H}") is None
+    assert msg.startswith("I can't fill in or send the application myself, but here's what I can set up for NASA "
+                          "L'SPACE Academy")
+    assert "1. \"Apply to NASA L'SPACE Academy\" on your to-do list, with the post's link." in msg
+    assert "2." not in msg and msg.endswith("Reply 1, or \"none\".\nThe post doesn't say when it closes. Tell me the "
+                                            "date, like \"dec 5\", and I'll set a reminder too.")
+    assert len(env["bot"].store.get_state(f"offers:{H}")["offers"]) == 1
 
 
 def test_the_checklist_is_verbatim_runs_of_the_post_and_filtered():

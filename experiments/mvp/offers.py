@@ -116,4 +116,9 @@ class OffersMixin:
                 o["done"] = True
         left = [o for o in offers if not o.get("done")]
         self.store.set_state(f"offers:{h}", dict(st, offers=offers, ask=None) if left else None)
+        if st.get("date_ask") and not self.store.get_state(f"deadline_ask:{h}"):
+            # (round 9 live fix pass, finding 108) the apply menu's last line asked for the date; the choice was this
+            # message, so the date question waits for the next one again (asked once more, never kept longer)
+            self.store.set_state(f"deadline_ask:{h}", dict(st["date_ask"], at=now_iso(now)))
+            self.store.set_state(f"offers:{h}", dict(st, offers=offers, ask=None, date_ask=None) if left else None)
         return ref
