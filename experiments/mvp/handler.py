@@ -236,6 +236,12 @@ class HandlerMixin:
         ref = self.postact_reads(person, text, now)   # slice C: apply, book, buy; "add them all" (postacts.py)
         if ref is not None:
             return ref
+        # slice D (C3): connect / check / disconnect the Mac, "what are you connected to", "put my lists in reminders
+        # from now on"
+        from .places import place_reads
+        ref = place_reads(self, person, text, now)
+        if ref is not None:
+            return ref
         # ---------- end of the round 9 request reads ----------
         # round 8, slice B (DESIGN.md section 15): export, share, "what did my agent ask": code only, no model call
         done, ref = self.integration_reads(person, text, now)
@@ -287,7 +293,9 @@ class HandlerMixin:
         ref = self._cancel_answer(person, text, now)   # slice B: how they pay, which one, the name, when to remind
         if ref is not None:
             return ref
-        return None
+        # round 9, slice D (C3, DESIGN.md section 16.D): yes / no to a Mac preview; REMOVE / KEEP after "disconnect"
+        from .places import asked_reads as place_answer
+        return place_answer(self, person, text, now)
 
     def _rule_reads(self, person, text, now):
         """Plain messages about rules that code reads before any model call: "no overdue nudges", a bare "done" for a
@@ -850,7 +858,8 @@ class HandlerMixin:
             return self.send(h, msg)
         if it.intent == "delete_data":
             self.store.set_pending(h, "confirm_delete", {}, at=self.clock())
-            return self.send(h, T.DELETE_ASK)
+            from .places import delete_data_line   # round 9, slice D (C3): the Mac stops; what it added stays there
+            return self.send(h, T.DELETE_ASK + delete_data_line(self.store, h))
         if it.intent == "set_quiet_hours":
             return self._set_quiet(person, it, now)
         if it.intent == "snooze":
@@ -1007,6 +1016,9 @@ class HandlerMixin:
         if not lw:
             return self.send(h, T.NOTHING_TO_UNDO)
         self.store.set_state(lw.get("key") or f"lastwrite:{h}", None)
+        if lw["kind"] == "placed":   # round 9, slice D (C3): what the last yes added on the Mac, taken out there
+            from .places import undo_text
+            return self.send(h, undo_text(self, h, lw["undo"], now))
         writes = lw["undo"]["writes"] if lw["kind"] == "multi" else [lw]
         said = [x for x in (self._undo_one(h, w, now) for w in reversed(writes)) if x]   # the last write first
         if not said:

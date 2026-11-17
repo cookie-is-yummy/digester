@@ -1343,3 +1343,78 @@ answers a numbered thing from its words when the person said a number).
   Spanish phrasings, the "close" note for things from posts that only came close, a menu offer to email them (the
   person types the email request; slice A reads it). Changed on purpose: "book me a table" with `unsupported` now gets
   `UNSUPPORTED_BOOK` (two asserts in `test_fixpass2.py`).
+
+### 16.D Slice D, C2: lists named after an app
+- `places.py`: `PLACES` (one entry per app: key, name in replies, kind `todo` / `calendar`, connector or None, the
+  words that name it after "to / in / into / onto / on (my|the)", and the list names that mean it); `named(text,
+  list_name, kind)`. Apps with no connector: Notion, Todoist, TickTick, Things ("Things 3", "Things app"), Trello,
+  Google Tasks, Google Keep, Apple Notes, Evernote, OneNote, Microsoft To Do.
+- Such a list goes where it goes today (the bot's list, with the name the form gave) and the line says so: `I can't
+  reach Notion, so I added "milk" to your list here, called "notion".` (several: `I added 3 things to your list here,
+  called "notion": a; b; c.`; a due time keeps `I'll remind you ...`). Read where to-dos are written: `todos._todo_add`,
+  `todos._add_picks`, and `outputs._perform` for `todo.add` (`places.route`). The `action_log` detail gets `wanted`
+  and `why`; the message is kept in `requests` with intent `wanted:<app>` (the backlog). No model call is added.
+- Kept as today: "my reminders", "my reminders list", "show / stop my reminders", an app word inside a to-do ("add
+  cancel notion subscription to my list"), "I have a notion that ...".
+
+### 16.D Slice D, C3: Reminders and Calendar on the operator's Mac (A-014, Proposed)
+- `actions/mac.py`: `run_script(script, *argv, runner=None, app=None)` runs `osascript -e SCRIPT value ...` (as the
+  Messages channel does): every value (title, note, list name, date numbers, ids) is an argument, never pasted into a
+  script. Dates are 5 numbers (local wall time); each script sets the day to 1 before the month. 20-second timeout.
+  Errors keep a code only: `blocked` (-1743), `timeout` (no answer, or -1712), `unreachable` (not a Mac, no
+  osascript), `no_calendar`, `failed`. Scripts: add reminders (to a named list, made if missing, or the default list;
+  due date and alert), delete reminders and an empty list the bot made, count lists (check), add an event to the
+  "Digest" calendar, delete events by uid, find the calendar (check). All AppleScript is medium confidence until run on
+  the founder's Mac; tests use a fake runner (`mac.RUNNER`).
+- Registry: `mac.reminder` (params `PlaceTodoParams`: `list` or None, `items` [{title, notes, due}], 1 to 40) and
+  `mac.event` (`MacEventParams`: calendar, title, notes, all_day, start, end), both `outside`, `undo="delete"`,
+  `confirm="send_word"`, `in_rules=False`, `who="operator"`, `from_model=False`, `connector="mac"`, caps 40 reminders
+  and 10 events a person's local day (counted from `placements`, all-or-nothing per add), fallback `todo.add` /
+  `calendar.add`. Two older tests now check "exactly four actions" for the ones a form can name.
+- `connectors.py`: `CONNECTORS = {"mac": ...}` (actions by kind, app names, nouns), `unavailable(store, handle, key)`
+  → None or `operator` / `unreachable` / `not_connected` / `off` / `broken`; `failed` (+1; 3 in a row → `broken`; not
+  for `unreachable`, `no_calendar`), `worked` (back to 0).
+- Store: `connections(handle, connector, status connected|broken|off, fails, last_error, created_at, checked_at)` and
+  `placements(id, handle, connector, action, remote_id, run_id, idem, created_at, removed_at)`; no title or body in
+  either. "delete my data" deletes both (what is on the Mac stays; the confirm text says so).
+- `places.route` / `route_todo`: a place named in the message ("to my apple reminders", "in the reminders app", "put
+  it in reminders", "in my mac calendar", "apple calendar", "calendar app") or `prefs.place_todo` /
+  `prefs.place_calendar = "mac"`. Only the operator, only `connected`, only with osascript, calendar only while the
+  "Digest" calendar was found.
+- The founder's approval rule ("Always show, then wait for yes") applies: nothing is added at once. The reply shows
+  every title and link exactly (`I'll add these 2 to your Reminders list "Miso pasta" on your Mac:` / `• ...` /
+  `Reply "yes" to add them, or "no" to leave them.`; an event: title, calendar, day and time, the note). The plan waits
+  in state `placeask:<handle>` for the next message only (30 minutes), read in `handler._asked_reads`: `yes` (T.YES,
+  "yes please", "add them") runs it; `no`, "leave it" drops it; anything else drops it and is handled as usual. A
+  tapback never says yes. The yes token is `make_yes_token(handle, params type, text_hash(the exact params))`;
+  `actions.perform` refuses any other rows. Done: `Added 2 items to your Reminders list "Miso pasta". Reply "undo"
+  within 10 minutes to remove them.` (a due time: `Reminders will remind you ...; I won't send my own reminder.`; the
+  bot keeps no copy, so it never nudges twice).
+- Ingredients go to a Reminders list named after the recipe; a list the person named keeps its name; else the default
+  list. The same things asked again within 24 hours (`idem` = sha256 of handle, action, run, item ids or texts): `I
+  already added that to Reminders on your Mac today.`
+- Fallbacks, each with today's action (the list here or the calendar link): a tester `Reminders on my Mac only works
+  for the person who runs me, so I added ...`; not a Mac `I can't reach a Mac from where I'm running, so ...`; not
+  connected (`Text me "connect my mac" ...`), turned off, broken (`I've stopped using Reminders on your Mac after 3
+  failures in a row ... Text me "check my mac" when it's ready.`), -1743 (`Your Mac blocked me from Reminders, so ...
+  Turn it on in System Settings › Privacy & Security › Automation.`), timeout, error, no calendar (`I couldn't find a
+  calendar called "Digest" on this Mac, so here's a link instead.`), the cap (`I've reached my limit of 40 reminders
+  a day on your Mac, so ...`). A rule's timed send never writes outside: `I only add to Reminders on your Mac after you
+  say yes, so I added ...`.
+- "undo" (10 minutes, `lastwrite` kind `placed`, the placement ids and titles): `Undone: I took those 2 out of
+  Reminders on your Mac.`; a failed delete: `I couldn't take it out of Reminders just now. It's "milk"; delete it
+  there.`; deleted on the phone already counts as gone.
+- By text, no model call (`places.place_reads`, in `answer_normally` after `_rule_reads`): "connect my mac / reminders
+  / calendar" (the two steps); "check my mac" (count lists, find "Digest": connected, or connected without the
+  calendar, or the blocked / timeout line; a failing check marks a connected Mac broken); "what are you connected to"
+  (your list, email to you and its state, calendar links, email to other people as a draft, the Mac's state; a tester
+  gets the Mac-only line); "disconnect my mac", "stop using reminders": `off`, the "from now on" choices cleared, `I've
+  stopped using Reminders and Calendar. I added 2 reminders and 1 event in the last 30 days. Reply REMOVE to delete
+  those, or KEEP to leave them.` (state `macremove:<handle>`, next message, 30 minutes): REMOVE deletes only placement
+  ids and ends with the System Settings line; KEEP, another message or no answer leave them. "put my lists in
+  reminders from now on", "use my list here again", "put events straight in my calendar", "use calendar links again".
+- Adding a connector later (a task app by token, a webhook): one `REGISTRY` entry per kind with `connector="<key>"`
+  and the fields above; a module `actions/<key>.py` with `run`, `yes_token`, `remove`, `check`, `reachable` (errors
+  `ConnectorError(code)`); one `CONNECTORS` entry; its words in `PLACES` with `connector="<key>"` instead of None.
+- Out: Notes, Mail, Contacts; any secret; Todoist and the other apps (C2 only); sync back from Reminders; the Mac's own
+  time zone is assumed to be the operator's.

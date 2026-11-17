@@ -67,6 +67,12 @@ CREATE TABLE IF NOT EXISTS drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, handle 
 -- round 9, slice B (DESIGN.md section 16.B): the cancel helper; no amounts, no account numbers
 CREATE TABLE IF NOT EXISTS cancellations (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, merchant_key TEXT,
   route TEXT, status TEXT NOT NULL, check_rule_id INTEGER, draft_id INTEGER, created_at TEXT, updated_at TEXT);
+-- round 9, slice D (C3, DESIGN.md section 16.D): an outside place per person, and what the bot made there (ids only,
+-- never a title or a body)
+CREATE TABLE IF NOT EXISTS connections (handle TEXT NOT NULL, connector TEXT NOT NULL, status TEXT NOT NULL,
+  fails INTEGER DEFAULT 0, last_error TEXT, created_at TEXT, checked_at TEXT, PRIMARY KEY (handle, connector));
+CREATE TABLE IF NOT EXISTS placements (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, connector TEXT NOT NULL,
+  action TEXT NOT NULL, remote_id TEXT NOT NULL, run_id INTEGER, idem TEXT, created_at TEXT, removed_at TEXT);
 """
 
 
@@ -754,6 +760,8 @@ class Store:
                         if r["library"] and os.path.abspath(r["library"]) == lib:
                             self.db.execute(f"DELETE FROM {t} WHERE library=?", (r["library"],))
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
+            for t in ("connections", "placements"):   # round 9, slice D (C3): what was made on the Mac stays there
+                self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             for rid in rule_ids:   # a timed send's retry count and hold (review fix PRIV-5)
                 for key in (f"retry:{rid}", f"hold:{rid}", f"cadence:{rid}", f"replaced:{rid}", f"deadline:{rid}"):
                     self.db.execute("DELETE FROM state WHERE key=?", (key,))
@@ -837,6 +845,60 @@ class Store:
         """W6: the person's message is not kept (it may hold a password). The text of their inbound rows not yet
         handled is cleared now, before anything else could read it."""
         self.x("UPDATE inbound SET text=NULL WHERE handle=? AND text IS NOT NULL", (handle,))
+
+    # ---------- round 9, slice D (C3, DESIGN.md section 16.D): connections and placements ----------
+    def connection(self, handle, connector):
+        return self.one("SELECT * FROM connections WHERE handle=? AND connector=?", (handle, connector))
+
+    def set_connection(self, handle, connector, status=None, fails=None, last_error=None, at=None, checked=False):
+        """Creates or changes one connection row; a field left None keeps its value ("" clears last_error)."""
+        with self.lock:
+            row = self.connection(handle, connector)
+            if row is None:
+                self.x("INSERT INTO connections(handle,connector,status,fails,last_error,created_at,checked_at) "
+                       "VALUES(?,?,?,?,?,?,?)", (handle, connector, status or "off", fails or 0, last_error or None,
+                                                 now_iso(at), now_iso(at) if checked else None))
+                return
+            self.x("UPDATE connections SET status=?, fails=?, last_error=?, checked_at=? WHERE handle=? AND connector=?",
+                   (status or row["status"], row["fails"] if fails is None else fails,
+                    row["last_error"] if last_error is None else (last_error or None),
+                    now_iso(at) if checked else row["checked_at"], handle, connector))
+
+    def add_placement(self, handle, connector, action, remote_id, run_id=None, idem=None, at=None):
+        cur = self.x("INSERT INTO placements(handle,connector,action,remote_id,run_id,idem,created_at) "
+                     "VALUES(?,?,?,?,?,?,?)", (handle, connector, action, str(remote_id), run_id, idem, now_iso(at)))
+        return cur.lastrowid
+
+    def placements(self, handle, connector=None, since=None, ids=None, open_only=True):
+        """Placement rows of this person, oldest first: of one connector, made since a UTC time, with these ids."""
+        sql, args = "SELECT * FROM placements WHERE handle=?", [handle]
+        if connector:
+            sql, args = sql + " AND connector=?", args + [connector]
+        if since is not None:
+            sql, args = sql + " AND created_at>=?", args + [now_iso(since)]
+        if ids is not None:
+            if not ids:
+                return []
+            sql, args = sql + f" AND id IN ({','.join('?' * len(ids))})", args + [int(i) for i in ids]
+        if open_only:
+            sql += " AND removed_at IS NULL"
+        return self.q(sql + " ORDER BY id", tuple(args))
+
+    def placements_in(self, handle, action, start, end):
+        """How many things of this action were made for this person between two UTC times (removed ones count: they
+        were made)."""
+        r = self.one("SELECT COUNT(*) AS n FROM placements WHERE handle=? AND action=? AND created_at>=? AND created_at<?",
+                     (handle, action, now_iso(start), now_iso(end)))
+        return int(r["n"]) if r else 0
+
+    def placement_idem(self, handle, idem, since):
+        """An open placement made with this idempotency key since a UTC time (the same thing asked again), or None."""
+        return self.one("SELECT * FROM placements WHERE handle=? AND idem=? AND created_at>=? AND removed_at IS NULL "
+                        "LIMIT 1", (handle, idem, now_iso(since)))
+
+    def remove_placements(self, ids, at=None):
+        for i in ids:
+            self.x("UPDATE placements SET removed_at=? WHERE id=?", (now_iso(at), int(i)))
 
 
 def _domain(addr):

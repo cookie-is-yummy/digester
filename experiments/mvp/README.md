@@ -156,6 +156,17 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   "all" or "none". The bot never applies, books or buys, and says so. After a list of things: "add them all", "add
   2, 4 and 5", "remind me about all of them on friday", "put them all in my calendar", "what's number 4?". Tests:
   `tests/test_round9_postacts.py`, `tests/test_round9_things.py`.
+- **Round 9, lists named after an app** (DESIGN.md section 16.D, C2): "add this to my Notion" (or Todoist, TickTick,
+  Things, Trello, Google Tasks, Google Keep, Apple Notes, Evernote, OneNote, Microsoft To Do) goes on the list here,
+  and the reply says plainly that the bot can't reach that app.
+- **Round 9, Reminders and Calendar on the operator's Mac** (DESIGN.md section 16.D, C3; amendment A-014, Proposed):
+  for the operator only, with the bot running on their Mac from Terminal (not over SSH). Text "connect my mac", make a
+  calendar called "Digest" in iCloud, then text "check my mac" and click OK on the Mac's Automation prompts. After
+  that "add the ingredients to my apple reminders" or "put it in my mac calendar" shows exactly what will be added and
+  adds it only after "yes" (it reaches the phone through iCloud); "undo" within 10 minutes takes it out. "put my lists
+  in reminders from now on", "put events straight in my calendar", "what are you connected to", "disconnect my mac".
+  No password or token. Not on a Mac, the bot says so and uses the list here or a calendar link. Tests:
+  `tests/test_round9_mac.py` (a fake `osascript`; no AppleScript has run on a real Mac yet).
 
 ## New picks from outside the saves, and keeping the library fresh
 
