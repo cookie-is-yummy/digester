@@ -589,6 +589,9 @@ class ExecutorMixin:
                 steps["extract"], steps["extract_calls"] = round(time.time() - t1, 2), info["calls"]
                 if info.get("junk_items"):   # round 8, finding 93: things code left out (a kind, a headline ...)
                     result["dropped"]["junk_items"] = info["junk_items"]
+                for k in ("items_model", "why"):   # round 9 (slice U): what the model returned and why code left out
+                    if info.get(k):
+                        steps["items_" + k if k == "why" else k] = info[k]
                 if info.get("errors"):   # a failed details call: the answer goes out without those details
                     steps["extract_errors"] = info["errors"]
             if main and kind != "follow_up" and ts:
@@ -660,6 +663,10 @@ class ExecutorMixin:
                                                       reads=result.get("items_reads") if things else None)
                 if result["items_answer"]:
                     steps["items"] = sum(len(x[1]) for x in result["items_answer"])
+                    from .answers import is_clear_source
+                    clear = sum(1 for x in result["items_answer"] if is_clear_source(x[0]))
+                    # round 9 (slice U): the sources shown, by the composer's verdict (for the kinds evaluation)
+                    steps["items_sources"] = {"clear": clear, "close": len(result["items_answer"]) - clear}
                     off = (getattr(self._tl, "part", None) or {}).get("offset") or 0
                     for _, its, _ in result["items_answer"]:   # round 8, finding 95: numbered across the parts
                         for x in its:

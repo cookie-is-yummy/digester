@@ -256,19 +256,29 @@ def _about(raw, name, text):
     return about
 
 
-def verify_items(raw, text):
+def _tick(tally, key, n=1):
+    if tally is not None:
+        tally[key] = tally.get(key, 0) + n
+
+
+def verify_items(raw, text, tally=None):
     """(items, dropped): the model's items whose name is in the text, each {name, about, when, fit}. An item never
     loses its name; its about and when are kept only when they are the text's own words. fit "no" (the text shows it
-    does not fit the request) is left out; "yes" before "unknown"."""
+    does not fit the request) is left out; "yes" before "unknown". Round 9 (slice U): `tally` counts what the model
+    returned ("raw"), how many it marked "yes", and what this check left out and why ("not_in_text", "fit_no")."""
     if isinstance(raw, dict):
         raw = [raw]
     if not isinstance(raw, list):
         return [], 0
     out, dropped, seen = [], 0, set()
     for r in raw[:MAX_ITEMS + 8]:
+        _tick(tally, "raw")
         if not isinstance(r, dict):
             dropped += 1
+            _tick(tally, "not_in_text")
             continue
+        if str(r.get("fit") or "").strip().lower() == "yes":
+            _tick(tally, "yes")
         name = " ".join(str(r.get("name") or "").split()).strip(" -:•*·\"'")
         m = SITE.match(name)
         if m:   # a site named by its address: its name alone (PRIV-9: no web address is one of our details)
@@ -276,13 +286,16 @@ def verify_items(raw, text):
         if not name or len(name) > 60 or "#" in name or "@" in name or UNSAFE_TEXT.search(name) \
                 or NOT_DETAIL.search(name) or HEADER.match(name) or not name_in_text(name, text):
             dropped += 1
+            _tick(tally, "not_in_text")
             continue
         key = norm(name)
         if key in seen:
+            _tick(tally, "repeated")
             continue
         fit = str(r.get("fit") or "unknown").strip().lower()
         if fit == "no":
             dropped += 1
+            _tick(tally, "fit_no")
             continue
         seen.add(key)
         when = " ".join(str(r.get("when") or "").split())[:60]
@@ -367,9 +380,12 @@ def details(it, extract, library, store=None, person=None, extra=None, now=None,
                            once=once)
     facts = usable(facts)
     if facts.get("items"):
-        facts["items"], n = clean_items(facts["items"], it, extra, facts.get("key_points"))
+        why = {}
+        facts["items"], n = clean_items(facts["items"], it, extra, facts.get("key_points"), why=why)
         if n:
             info["junk_items"] = info.get("junk_items", 0) + n
+        if why:   # round 9 (slice U): which test left each thing out
+            info["why"] = why
     return facts, info
 
 
@@ -575,11 +591,26 @@ def story_about(about):
     return len(STORY.findall(about or "")) >= 2
 
 
-def clean_items(items, it, extra=None, key_points=None):
+def junk_reason(name, about, it, text, listed=False):
+    """Round 9 (slice U): the test that makes a name junk ("kind_word", "activity", "common_noun", "headline"), or
+    None (round 8, finding 93: the tests themselves are unchanged)."""
+    if generic_name(name):
+        return "kind_word"
+    if activity_name(name):
+        return "activity"
+    if not listed and common_noun(name, text):
+        return "common_noun"
+    if restates_headline(name, about, it):
+        return "headline"
+    return None
+
+
+def clean_items(items, it, extra=None, key_points=None, why=None):
     """(items, dropped): the items as they may be shown (round 8, finding 93). A name that is a kind of thing, an
     audience, a count, a common noun or the post's headline is dropped; words that add nothing to the name, or tell a
     story, are not words about it. A post about one thing (one item left, key points found) gives that thing its best
-    one or two key points as its words. A post that names other things drops a thing with no words."""
+    one or two key points as its words. A post that names other things drops a thing with no words. Round 9: `why`
+    counts each test that left a thing out (junk_reason, and "no_words")."""
     text = own_text_lines(it, extra)
     kept, dropped = [], 0
     # live fix pass, round 8 (finding 98): names the text lists on lines of their own, three or more of them, are
@@ -588,9 +619,10 @@ def clean_items(items, it, extra=None, key_points=None):
     for x in items or []:
         name, about = x.get("name") or "", x.get("about") or ""
         listed = run and listed_alone(name, text)
-        if generic_name(name) or activity_name(name) or (not listed and common_noun(name, text)) \
-                or restates_headline(name, about, it):
+        reason = junk_reason(name, about, it, text, listed)
+        if reason:
             dropped += 1
+            _tick(why, reason)
             continue
         x = dict(x)
         if about and (thin_about(name, about, text) or story_about(about)):
@@ -608,6 +640,8 @@ def clean_items(items, it, extra=None, key_points=None):
             if not x.get("about"):
                 x["listed"] = True
         dropped += n - len(kept)
+        if n - len(kept):
+            _tick(why, "no_words", n - len(kept))
     return kept, dropped
 
 
@@ -677,6 +711,7 @@ def _details(it, extract, library, store=None, person=None, extra=None, now=None
     got, tries = {k: [] for k in need}, {k: 0 for k in need}
     ask, note = list(need), ""
     posted = posted_on(it, extra)
+    tally = None
     for attempt in range(2):
         try:
             raw, cost = _call(ask, full, person, config.EXTRACT_SEED + attempt, note, context=context, posted=posted)
@@ -691,7 +726,9 @@ def _details(it, extract, library, store=None, person=None, extra=None, now=None
         for k in ask:
             tries[k] += 1
             got_raw = raw.get(k) if isinstance(raw, dict) else None
-            lines, dropped = verify_items(got_raw, text) if k == "items" else verify(got_raw, text, k)
+            if k == "items":   # round 9 (slice U): what the model returned for the attempt whose things are used
+                tally = {}
+            lines, dropped = verify_items(got_raw, text, tally) if k == "items" else verify(got_raw, text, k)
             info["dropped"] += dropped
             returned_any = returned_any or bool(dropped)
             got[k] = lines
@@ -703,6 +740,8 @@ def _details(it, extract, library, store=None, person=None, extra=None, now=None
             break
         note = ("Your last lines were not exact copies of the text. Copy the words exactly as written."
                 if returned_any else "Look again: the text seems to hold a list.")
+    if tally:
+        info["items_model"] = tally
     if store is not None:
         for k in need:
             prev = store.facts_attempts(library, it.id, names[k], source=source)
@@ -725,9 +764,12 @@ def details_many(items, extract, library, store=None, person=None, extra=None, n
         with ThreadPoolExecutor(max_workers=min(max(workers, 6), len(items))) as ex:
             res = list(ex.map(lambda it: details(it, extract, library, store, person, extra, now, context,
                                                  once=it.id in once), items))
-    out = {}
+    out, counted = {}, list(total)
     for it, (facts, info) in zip(items, res):
         out[it.id] = facts
-        for k in total:
+        for k in counted:
             total[k] += info.get(k, 0)
+        for k in ("items_model", "why"):   # round 9 (slice U): counts by kind, summed over the posts read
+            for key, n in (info.get(k) or {}).items():
+                total.setdefault(k, {})[key] = total.get(k, {}).get(key, 0) + n
     return out, total
