@@ -165,12 +165,13 @@ WHEN_ONLY = re.compile(rf"^[\s\"'(]*(?:(?:ok|okay|sure|yes|how about|maybe|make 
 def when_only(text):
     """True when the whole message is a day and/or a time ("7pm", "saturday at 7"), nothing more."""
     t = " ".join((text or "").split())
-    return bool(t) and bool(WHEN_ONLY.match(t)) and bool(re.search(r"\d|noon|" + _DAYW, t, re.I))
+    return bool(t) and bool(WHEN_ONLY.match(t)) and bool(re.search(r"am\b|pm\b|a\.m\.|p\.m\.|noon|\bat\b|\b(?:"
+                                                                  + _DAYW + r")\b", t, re.I))
 
 
 CUE = re.compile(r"\b(?:requirements?|you(?:'ll)? need|you must|eligibility|eligible|to apply|submit|must)\b", re.I)
 BULLET = re.compile(r"^\s*(?:[-•*·▪●◦–—✅✔☑️➡️👉🔹🔸]+|\d{1,2}[.)])\s*")
-NOT_A_LINE = re.compile(r"@|https?://|www\.|\.(?:com|org|net|io|co)\b|\bdm\b|\bcomment\b|link in bio|\bfollow\b", re.I)
+NOT_A_LINE = re.compile(r"@|https?://|www\.|\w\.[a-z]{2,}\b|\bdm\b|\bcomment\b|link in bio|\bfollow\b", re.I)
 
 
 def checklist_lines(text):
@@ -309,6 +310,7 @@ class PostactsMixin:
         if got is None:
             return None
         self.note(intent="postact")
+        self.store.set_state(f"offers:{h}", None)   # a new request: an older menu's numbers mean nothing now
         rec, n_post, problem = got
         if problem:
             return self.send(h, problem)
@@ -322,6 +324,7 @@ class PostactsMixin:
     def _postact_target(self, h, last, snap, things, req):
         """(rec, post number or None, problem) by the existing rules, or None when it points at nothing shown."""
         from .compose import tokens
+        from .retrieve import _stem
         tgt = req["target"]
         main = [n for n, iid in enumerate(last["items"], 1)
                 if next((p for p in snap.get("picks") or [] if p.get("item_id") == iid), {}).get("main", True)] \
@@ -340,12 +343,12 @@ class PostactsMixin:
                 self._tl.msg_text = req["said"]
                 if got is not None and not got[3]:
                     return got[0][0], None, None
-            said = {w for w in tokens(tgt["name"]) if w not in PRONOUNS and w not in self.ITEM_NAME_SKIP}
+            said = {_stem(w) for w in tokens(tgt["name"]) if w not in PRONOUNS and w not in self.ITEM_NAME_SKIP}
             scored = []
             for n in main:
                 iid = last["items"][n - 1]
                 p = next((q for q in snap.get("picks") or [] if q.get("item_id") == iid), {})
-                hits = len(said & {w for w in tokens(p.get("title") or "") if len(w) >= 3 or w.isupper()})
+                hits = len(said & {_stem(w) for w in tokens(p.get("title") or "") if len(w) >= 3 or w.isupper()})
                 if hits:
                     scored.append((hits, n))
             scored.sort(key=lambda r: (-r[0], r[1]))
@@ -651,7 +654,8 @@ class PostactsMixin:
             elif k == "todo":
                 ctx = self._postact_ctx(person, answer, [p["rec"]], text, now)
                 c = self._postact_do(ctx, "todo.add", {"what": "pick", "list": "todo"}, {"what": "pick", "count": 1})
-                line(T.done_todo(c.line or T.ACTION_FAILED_OTHER))
+                said = c.line or T.ACTION_FAILED_OTHER
+                line(said if len(chosen) == 1 and verb == "buy" else T.done_todo(said))
                 if c.status == "done":
                     wrote()
                     undoable.append("it")
@@ -663,14 +667,15 @@ class PostactsMixin:
         tail = [end] if end else []
         if undoable:
             tail.append(T.undo_line(T.and_words(list(dict.fromkeys(undoable)))))
-        out, cur = [], T.DONE_HEAD if (len(chosen) > 1 or verb != "buy") else ""
+        headed = len(chosen) > 1 or verb != "buy"   # "Here's what I set up:" and a bullet each; one plain line else
+        out, cur = [], T.DONE_HEAD if headed else ""
         for q in parts:   # one bullet a line, a link alone right after its line
             if q["type"] == "link":
                 out += [{"type": "text", "text": cur}, q]
                 cur = ""
             else:
                 cur = (cur + "\n" + q["text"]) if cur else q["text"]
-        cur = (cur + "\n" + " ".join(tail)) if cur and tail else (cur or " ".join(tail))
+        cur = (cur + ("\n" if headed else " ") + " ".join(tail)) if cur and tail else (cur or " ".join(tail))
         out.append({"type": "text", "text": cur})
         return self.send(h, Reply(out))
 
