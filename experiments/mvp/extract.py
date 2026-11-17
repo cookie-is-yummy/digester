@@ -619,6 +619,13 @@ def story_about(about):
     return len(STORY.findall(about or "")) >= 2
 
 
+def handle_only(name, text):
+    """Round 9, slice U2 (live): the text writes the name only as an account's handle ("@pix.ux", "@ux_trends"), so it
+    is someone's account, not a thing (the details model returned six handles without their "@" as UI libraries)."""
+    occ = _occurrences(name, text)
+    return bool(occ) and all(left == "@" for _, _, left, _ in occ)
+
+
 def junk_reason(name, about, it, text, listed=False):
     """Round 9 (slice U): the test that makes a name junk ("kind_word", "activity", "common_noun", "headline"), or
     None (round 8, finding 93: the tests themselves are unchanged)."""
@@ -626,6 +633,8 @@ def junk_reason(name, about, it, text, listed=False):
         return "kind_word"
     if activity_name(name):
         return "activity"
+    if handle_only(name, text):
+        return "handle"
     if not listed and common_noun(name, text):
         return "common_noun"
     if restates_headline(name, about, it):

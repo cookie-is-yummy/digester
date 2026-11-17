@@ -73,6 +73,9 @@ def main(argv=None):
     ap.add_argument("--only", default="")
     ap.add_argument("--timezone", default="America/New_York")
     ap.add_argument("--profile-from", default=None)
+    # round 9, slice U2 (point 3): each request several times as the same person, the composer called afresh each time
+    ap.add_argument("--repeat", type=int, default=1)
+    ap.add_argument("--fresh-composer", action="store_true")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
@@ -97,9 +100,31 @@ def main(argv=None):
         seen["calls"].append({"handle": h, "cands": _h([x.id for x in cands]), "n_cands": len(cands),
                               "once": bool(k.get("once")), "cached": bool(r.get("cached")),
                               "verdicts": _h([(p["item"].id, p["verdict"]) for p in r.get("picks") or []]),
-                              "fits": [p["verdict"] for p in r.get("picks") or []]})
+                              "fits": [p["verdict"] for p in r.get("picks") or []],
+                              "clear": _h(sorted(p["item"].id for p in r.get("picks") or [] if p["verdict"] == "clear"))})
         return r, c
     ex.compose = compose
+    if a.fresh_composer:
+        config.ANSWER_CACHE_HOURS = 0
+    from mvp import answers as A
+    _choose = A.choose_items
+
+    def choose_items(result, *args, **kw):
+        """Round 9, slice U2 (point 3): the posts read, each with the composer's verdict and the judge's "yes" count,
+        and the clear sources, as hashes (for steady answers between runs)."""
+        out = _choose(result, *args, **kw)
+        reads = result.get("items_reads") or []
+        seen["sources"].append({
+            "reads": [[_h(p["item"].id), p.get("verdict") if not p.get("read_for_items") else "read",
+                       sum(1 for x in (p.get("facts") or {}).get("items") or [] if x.get("judge") == "yes")]
+                      for p in reads],
+            "clear_sources": _h(sorted(p["item"].id for p, _, _ in out or [] if A.is_clear_source(p))),
+            "judge_sources": _h(sorted(p["item"].id for p in reads if any(
+                x.get("judge") == "yes" for x in (p.get("facts") or {}).get("items") or []))),
+            "things": _h(sorted(x["name"] for _, its, _ in out or [] for x in its))})
+        return out
+    A.choose_items = choose_items
+    seen["sources"] = []
 
     ch = ConsoleChannel(printer=None)
     clock = [datetime.now(timezone.utc).replace(microsecond=0)]
@@ -108,6 +133,7 @@ def main(argv=None):
     lib = os.path.abspath(a.library)
     bot.pool.get(lib)   # load the engine before timing anything
     rows, transcript = [], []
+    reqs = [dict(r, run=i) for r in reqs for i in range(a.repeat)]
     for r in reqs:
         h = f"{a.tag}-{r['n']}"
         bot.store.upsert_person(h, "Tester", lib, a.timezone)
@@ -121,7 +147,8 @@ def main(argv=None):
         ref = llm.person_ref(h)
         with open(llm.ai.LEDGER, encoding="utf-8") as f:
             n_ledger = sum(1 for _ in f)
-        n0, c0 = len(ch.outbox), len(seen["calls"])
+        n0, c0, s0 = len(ch.outbox), len(seen["calls"]), len(seen["sources"])
+        run0 = bot.store.one("SELECT COALESCE(MAX(id), 0) m FROM runs")["m"]   # this message's runs only
         t0 = time.time()
         bot.on_message(h, r["text"])
         secs = round(time.time() - t0, 1)
@@ -134,7 +161,7 @@ def main(argv=None):
                 by_purpose[x.get("purpose")] += x.get("cost_usd") or 0
         replies = [str(t) for _, _, t in ch.outbox[n0:]]
         text = "\n".join(replies)
-        runs = bot.store.q("SELECT * FROM runs WHERE handle=? ORDER BY id", (h,))
+        runs = bot.store.q("SELECT * FROM runs WHERE handle=? AND id>? ORDER BY id", (h, run0))
         steps = [json.loads(x["steps"] or "{}") for x in runs]
         dropped = Counter()
         for x in runs:
@@ -171,6 +198,7 @@ def main(argv=None):
             "details_calls": sum(s.get("extract_calls") or 0 for s in steps),
             "searches": _h(content.get("searches") or []), "goal_words": len((content.get("goal") or "").split()),
             "composer": [{k: v for k, v in c.items() if k != "handle"} for c in seen["calls"][c0:]],
+            "run": r.get("run", 0), "sources": seen["sources"][s0:],
             "cost_usd": round(cost, 6), "cost_by_purpose": {k: round(v, 6) for k, v in by_purpose.items()},
             # round 9, slice U2: the stronger model's judgement of each thing (judge.py), counted
             "judge": _judge_counts(steps),

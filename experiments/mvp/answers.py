@@ -132,6 +132,15 @@ def source_rank(p):
     Checker of the live fix pass: for a time-sensitive request a post whose things are all old or passed, or a post of
     an earlier year, is never a clear source (code lowers the verdict, never raises it), so it is not counted as the
     kind asked for and never leads a fresher post."""
+    if "judge_yes" in p:
+        # round 9, slice U2 (point 3): for a request that names a kind of thing, once the stronger judge has read the
+        # things (judge.py), a post counts as the kind when the judge said "yes" to one of its things, whatever the
+        # composer's clear or close (its verdicts differ between runs; the judge's are cached per post), unless the
+        # composer answered "no" to one of the request's must-haves; code still lowers a stale or old post
+        if p["judge_yes"] and not p.get("stale_source") and not p.get("kind_unsure") and \
+                "no" not in (p.get("criteria") or []):
+            return 0
+        return 1 if judged(p) else 2
     if not judged(p):
         return 2
     return 0 if p.get("verdict") == "clear" and not p.get("stale_source") and not p.get("kind_unsure") else 1
@@ -176,6 +185,12 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
     are shown by how many good things they give (most first; ties keep the composer's order). The next MAX_MORE posts
     with things are kept as result["items_more"]: [(pick, how many)]."""
     allp = list(reads) if reads is not None else list(result.get("picks") or []) + list(result.get("wider") or [])
+    # round 9, slice U2 (point 3): when the stronger judge read the things, it decides which posts count as the kind
+    # (source_rank); without it nothing changes
+    ran = things and any("judge" in x for p in allp for x in (p.get("facts") or {}).get("items") or [])
+    if ran:
+        for p in allp:
+            p["judge_yes"] = any(x.get("judge") == "yes" for x in (p.get("facts") or {}).get("items") or [])
     srcs = []
     for p in allp:
         got = [dict(x) for x in (p.get("facts") or {}).get("items") or [] if good(x)]
@@ -274,7 +289,9 @@ def choose_items(result, extra, today, ts, year=None, notes=True, things=False, 
                                  -min(len(s[1]), MAX_ITEMS_PER_SOURCE)))
     # live fix pass, round 8 (finding 98): the composer's verdict leads (clear, close, then posts read only for their
     # list); inside a verdict the order above stands (a stable sort). A post of an earlier year comes last (99).
-    srcs.sort(key=lambda s: (source_rank(s[0]), bool(s[0].get("old_year"))))
+    # (round 9, slice U2: with the judge, the composer's own verdict orders the posts that count as the kind)
+    srcs.sort(key=lambda s: (source_rank(s[0]), (2 if not judged(s[0]) else VERDICT_RANK.get(s[0].get("verdict"), 1))
+                             if ran else 0, bool(s[0].get("old_year"))))
     out, n = [], 0
     for p, its in srcs[:MAX_SOURCES]:
         shown = its[:MAX_ITEMS_PER_SOURCE]

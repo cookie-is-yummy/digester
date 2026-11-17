@@ -119,8 +119,9 @@ def test_j1_unsure_and_a_missing_number_keep_the_small_models_fit(lib98, monkeyp
     lib98["state"]["answers"]["mvp_compose"] = compose_sites_clear
     judge_on(lib98, monkeypatch, {"Pantry": "yes", "iconpile": "unsure", "glyphbox": "no"})
     msg = say(lib98, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
-    # iconpile (unsure) and iconfarm (no answer) keep the small model's "yes"; glyphbox is left out
-    assert msg.startswith("I found 3 UI/UX libraries named in 2 of your saves")
+    # iconpile (unsure) and iconfarm (no answer) keep the small model's "yes" and are shown; glyphbox is left out;
+    # the post has no thing the judge said "yes" to, so it is not counted as the kind (point 3)
+    assert msg.startswith("I found 1 UI/UX library in your saves, and 2 posts that come close.\n")
     assert "iconpile" in msg and "iconfarm" in msg and "glyphbox" not in msg
 
 
@@ -221,3 +222,82 @@ def test_j1_the_prompt_file_is_generic():
     text = open(path, encoding="utf-8").read()
     assert '"is_kind"' in text and "yes" in text and "unsure" in text and "data" in text
     assert not any(w in text.lower() for w in ("ui/ux", "uiux", "component", "icon", "figma", "library", "libraries"))
+
+
+# ---------- point 3: with the judge, its verdicts decide which posts count as the kind ----------
+def test_j3_a_close_post_with_a_thing_the_judge_says_yes_to_counts_as_the_kind(lib98, monkeypatch):
+    off = say(lib98, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
+    assert off.startswith("I found 1 UI/UX library in your saves, and 2 posts that come close.")   # the composer's
+    judge_on(lib98, monkeypatch, {"Pantry": "yes", "iconpile": "yes", "glyphbox": "yes", "iconfarm": "no",
+                                  "Slider": "no", "Toggle": "no", "Stepper": "no"})
+    msg = say(lib98, UI_ASK + " now", ask("UI/UX libraries", ["ui libraries"]))
+    assert msg.startswith("I found 3 UI/UX libraries named in 2 of your saves.\n")
+    lines = msg.split("\n")
+    heads = [x for x in lines if x.startswith("From ")]
+    # the composer's clear post first among those that count, then its close one
+    assert heads[0].startswith('From "Pantry UI kit"') and heads[1].startswith('From "Where to find icons"')
+    assert "Close, but not quite" not in msg and "Slider" not in msg and "iconfarm" not in msg
+
+
+def test_j3_the_same_answer_when_the_composers_verdicts_change_between_runs(lib98, monkeypatch):
+    verdicts = {"Pantry": "yes", "iconpile": "yes", "glyphbox": "yes", "iconfarm": "no", "Slider": "no",
+                "Toggle": "no", "Stepper": "no"}
+    judge_on(lib98, monkeypatch, verdicts)
+    a = say(lib98, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
+    lib98["state"]["answers"]["mvp_compose"] = compose_sites_clear   # another run: the icon sites post is clear now
+    b = say(lib98, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
+    assert a.split("\n")[0] == b.split("\n")[0] == "I found 3 UI/UX libraries named in 2 of your saves."
+    def things(m):   # the same things, counted the same way (the composer's verdict still orders the posts)
+        return sorted(x[3:] for x in m.split("\n") if x[:2] in ("1.", "2.", "3.", "4."))
+    assert things(a) == things(b) and len(things(a)) == 3
+    # near variant, without the judge the two runs differ
+    from mvp import config
+    monkeypatch.setattr(config, "JUDGE_MODEL", "")
+    c = say(lib98, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
+    lib98["state"]["answers"]["mvp_compose"] = compose98
+    d = say(lib98, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
+    assert c.split("\n")[0] != d.split("\n")[0]
+
+
+def test_j3_source_rank_reads_the_judge_only_when_it_ran():
+    from mvp.answers import source_rank
+    assert source_rank({"verdict": "close", "judge_yes": True}) == 0
+    assert source_rank({"verdict": "clear", "judge_yes": False}) == 1
+    assert source_rank({"verdict": "close", "read_for_items": True, "judge_yes": True}) == 0
+    assert source_rank({"verdict": "close", "read_for_items": True, "judge_yes": False}) == 2
+    assert source_rank({"verdict": "close", "judge_yes": True, "stale_source": True}) == 1
+    assert source_rank({"verdict": "close", "judge_yes": True, "criteria": ["yes", "no"]}) == 1
+    # without the judge: the composer's verdict, as before
+    assert source_rank({"verdict": "clear"}) == 0 and source_rank({"verdict": "close"}) == 1
+    assert source_rank({"verdict": "close", "read_for_items": True}) == 2
+
+
+def test_j3_a_name_the_text_writes_only_as_a_handle_is_not_a_thing():
+    from mvp.extract import clean_items, handle_only
+    from mvp.tests.test_round8_answers import It, names
+    text = ("Accounts to follow for daily ideas\n@ux_dailyfeed\n@pix.kit\n@gridnest\nAnd try Lanternkit: a calm set "
+            "of blocks for every screen")
+    assert handle_only("ux_dailyfeed", text) and handle_only("pix.kit", text) and handle_only("gridnest", text)
+    assert not handle_only("Lanternkit", text) and not handle_only("Nothing here", text)
+    # near variant: a name the text also writes on its own is a name
+    assert not handle_only("gridnest", text + "\nGridnest is free")
+    why = {}
+    got, _ = clean_items([{"name": "ux_dailyfeed", "about": ""}, {"name": "pix.kit", "about": ""},
+                          {"name": "gridnest", "about": ""},
+                          {"name": "Lanternkit", "about": "a calm set of blocks for every screen"}], It(text), why=why)
+    assert names(got) == ["Lanternkit"] and why == {"handle": 3}
+
+
+def test_j2_the_kinds_evaluation_counts_the_judge():
+    from mvp.eval_kinds import _judge_counts, summary
+    got = _judge_counts([{"judge": {"things": 5, "yes": 3, "no": 1, "unsure": 1, "cached": 0, "calls": 1,
+                                    "seconds": 1.25}}, {"judge": {"things": 2, "error": "call", "seconds": 0.5}}, {}])
+    assert got == {"things": 7, "yes": 3, "no": 1, "unsure": 1, "cached": 0, "calls": 1, "errors": 1,
+                   "seconds": 1.75}
+    row = {"answer": "items", "errors": 0, "shown_things": 4, "model_items": 6, "model_yes": 5,
+           "dropped_by_check": {}, "dropped_as_junk": {}, "dropped_not_the_kind": 0, "sources_clear": 1,
+           "sources_close": 1, "nothing_clear_beside_clear": False, "cost_usd": 0.02, "seconds": 3.0,
+           "cost_by_purpose": {"mvp_judge": 0.005}, "judge": got}
+    s = summary([row, dict(row, judge={}, cost_by_purpose={}, seconds=5.0)])
+    assert s["judge"]["calls"] == 1 and s["judge"]["things"] == 7 and s["judge_cost_usd"] == 0.005
+    assert s["seconds_per_request"] == 4.0
