@@ -110,6 +110,11 @@ REGISTRY.update({
     "email.draft_link": ActionDef(name="email.draft_link", params=DraftParams, module="email_link", order=40,
                                   does="A mailto: link that opens one draft in the person's own mail app",
                                   max_per_day=20, in_rules=False, from_model=False),
+    # W4 (amendment A-013): the operator's own mailbox sends one draft after "send" on the exact version shown
+    "mailbox.send": ActionDef(name="mailbox.send", params=DraftParams, module="mailbox", order=41,
+                              does="Sends one draft from the operator's own address over SMTP, after the hold",
+                              outside=True, undo="hold", confirm="send_word", max_per_day=5, in_rules=False,
+                              who="operator", from_model=False, connector="mailbox", fallback="email.draft_link"),
 })
 
 

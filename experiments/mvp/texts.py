@@ -1524,6 +1524,56 @@ def draft_link_message(link, sender=None):
 _DAY_NAMES = {d.lower(): d for d in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")}
 
 
+# W4: the operator's own mailbox (amendment A-013). Times are the person's local clock ("6:04 pm").
+MAILBOX_STOPPED = "Stopped. Nothing was sent. Reply \"send\" when you're ready."
+MAILBOX_NEEDS_TO = "I need an address to send it to. Say \"to:\" and their email address."
+MAILBOX_OUTLOOK = ("Outlook.com doesn't allow app passwords any more, so I can't send from it. Tap the link to send it "
+                   "yourself.")
+MAILBOX_ERRORS = {
+    "auth": "Your mailbox refused my sign-in, so nothing was sent. Tap the link to send it yourself.",
+    "address": "The address was refused, so nothing was sent. Check it and say \"to: <address>\".",
+    "reach": "I couldn't reach your mailbox, so nothing was sent.",
+    "unknown": "I may or may not have sent it. Check your Sent folder before you ask me again.",
+}
+
+
+def mailbox_held(to, when):
+    return f"Sending to {to} at {when}. Reply \"undo\" before then to stop it."
+
+
+def mailbox_already_held(when):
+    return f"It's already waiting to go at {when}. Reply \"undo\" to stop it."
+
+
+def mailbox_already_sent(when):
+    return f"I already sent that one at {when}."
+
+
+def mailbox_stale(when):
+    return f"That draft is from {when}. Reply \"send\" if it's still right."
+
+
+def mailbox_cap(n, link):
+    return f"I've sent {n} emails for you today, which is my limit. Tap to send this one yourself:\n{link}"
+
+
+def mailbox_accepted(to, when):
+    return f"Your mail server accepted the email to {to} at {when}. I can't unsend it."
+
+
+def mailbox_cant_unsend(to, when):
+    return f"I can't unsend an email. It went to {to} at {when}."
+
+
+def mailbox_offline(who, when):
+    return f"I didn't send your email to {who} at {when} because I was offline. Reply \"send\" to send it now."
+
+
+def mailbox_restarted(masked):
+    return (f"I may or may not have sent the email to {masked} before I restarted. Check your Sent folder before you "
+            "ask me again.")
+
+
 def draft_no_schedule(when):
     w = " ".join(_DAY_NAMES.get(x.lower().rstrip("s"), x.lower()) for x in str(when or "").split())
     return f"I can't email other people on a schedule. I can send it to you {w or 'then'}, so you can forward it."

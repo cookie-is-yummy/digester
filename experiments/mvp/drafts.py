@@ -495,7 +495,7 @@ class DraftsMixin:
             self.store.set_state(f"draft_open:{handle}", None)
             return None
         row = self._draft(st["id"])
-        if not row or row["status"] not in ("open", "link_shown", "held"):
+        if not row or row["status"] not in ("open", "link_shown", "held", "failed"):
             return None
         row["parts"] = json.loads(row.get("parts") or "{}")
         row["state"] = st
@@ -601,10 +601,12 @@ class DraftsMixin:
         p = json.loads(row["parts"])
         body = self._draft_render(person, row, p)
         to = row.get("to_addr") or ""
-        version = (row.get("version") or 0) + 1
         th = text_hash(exact_text(to, row["subject"], body))
+        same = bool(row.get("version")) and th == row.get("text_hash")   # shown again, unchanged: the same version
+        version = row["version"] if same else (row.get("version") or 0) + 1
+        status = "held" if same and row["status"] == "held" else "link_shown"
         self.store.update_draft(draft_id, body=body, version=version, text_hash=th, shown_at=now_iso(now),
-                                status="link_shown")
+                                status=status)
         row = self._draft(draft_id)
         self._draft_touch(h, draft_id, now, waiting=None, shown_version=version)
         head = (T.DRAFT_NEW_VERSION if new else T.DRAFT_HEAD) + "\n" + T.draft_to_line(to) + "\n" + \
@@ -1015,10 +1017,52 @@ class DraftsMixin:
         s = mailbox.settings()
         return s["address"] if s else None
 
+    def _clock(self, dt, person):
+        """'6:04 pm' on the person's own clock."""
+        loc = dt.astimezone(ZoneInfo(person.get("timezone") or "America/New_York"))
+        return f"{loc.hour % 12 or 12}:{loc.minute:02d} {'am' if loc.hour < 12 else 'pm'}"
+
+    def _draft_last_sent(self, h, now):
+        """The person's draft the mailbox sent (or may have) in the last 24 hours, or None."""
+        row = self.store.one("SELECT * FROM drafts WHERE handle=? AND status IN ('sent','unknown') AND sent_at IS NOT "
+                             "NULL ORDER BY id DESC LIMIT 1", (h,))
+        if row and now - datetime.fromisoformat(row["sent_at"]) <= timedelta(hours=OPEN_HOURS):
+            return row
+        return None
+
     def _draft_just_finished(self, h, now):
-        return False
+        return self._draft_last_sent(h, now) is not None
 
     def _draft_send_again(self, person, now):
+        """'send' after the mailbox sent the draft: one send per yes."""
+        row = self._draft_last_sent(person["handle"], now)
+        if row is None:
+            return None
+        self.note(intent="draft_send")
+        return self.send(person["handle"], T.mailbox_already_sent(self._clock(datetime.fromisoformat(row["sent_at"]),
+                                                                              person)))
+
+    def draft_undo(self, person, now):
+        """'undo' (handler._undo checks this first): a send in its hold stops; one the server accepted in the last
+        10 minutes cannot be taken back, and the reply says where it went. None when neither."""
+        from .todos import UNDO_WINDOW
+        h = person["handle"]
+        hold = self.store.get_state(f"sendhold:{h}")
+        if hold:
+            row = self._draft(hold["draft_id"])
+            self.store.set_state(f"sendhold:{h}", None)
+            if row and row["status"] == "held":
+                self.store.update_draft(row["id"], status="link_shown")
+                self._draft_touch(h, row["id"], now)
+                self.note(intent="undo")
+                return self.send(h, T.MAILBOX_STOPPED)
+        row = self._draft_last_sent(h, now)
+        if row and now - datetime.fromisoformat(row["sent_at"]) <= UNDO_WINDOW:
+            lw = self.store.get_state(f"lastwrite:{h}")
+            if not lw or datetime.fromisoformat(lw["at"]) <= datetime.fromisoformat(row["sent_at"]):
+                self.note(intent="undo")
+                return self.send(h, T.mailbox_cant_unsend(row["to_addr"] or row["to_domain"],
+                                                          self._clock(datetime.fromisoformat(row["sent_at"]), person)))
         return None
 
     def _draft_stop_hold(self, h, row, now):
@@ -1034,13 +1078,133 @@ class DraftsMixin:
     def _draft_send_word(self, person, d, now):
         """'send' on route L: the bot cannot send from the person's address. On the mailbox route (W4): the yes for
         the exact version last shown, then the hold."""
+        from .actions import mailbox
         h = person["handle"]
+        if config.is_operator(h) and mailbox.refused_domain():
+            return self.send(h, T.MAILBOX_OUTLOOK)
         if d["route"] != "mailbox" or not self._mailbox_route(h):
             return self.send(h, T.DRAFT_SEND_LINK)
         return self._mailbox_send_word(person, d, now)
 
     def _mailbox_send_word(self, person, d, now):
-        return self.send(person["handle"], T.DRAFT_SEND_LINK)
+        """W4: "send" is the yes for the version last shown, and only that version: its token is made here from the
+        draft's id, version and the hash of the text the card showed. The send waits SEND_HOLD_MIN minutes."""
+        from .actions import make_yes_token, over_cap
+        from .actions.base import Ctx
+        h = person["handle"]
+        if d["status"] == "held":
+            hold = self.store.get_state(f"sendhold:{h}") or {}
+            if hold.get("draft_id") == d["id"]:
+                return self.send(h, T.mailbox_already_held(self._clock(datetime.fromisoformat(hold["due_at"]),
+                                                                       person)))
+        left = placeholders_left(d)
+        if left:
+            return self.send(h, T.fill_first(left[0]))
+        if not d.get("to_addr"):
+            return self.send(h, T.MAILBOX_NEEDS_TO)
+        shown = datetime.fromisoformat(d["shown_at"]) if d.get("shown_at") else None
+        if shown is None or now - shown > timedelta(minutes=FRESH_MINUTES):
+            when = self._clock(shown or now, person)
+            self._draft_show(person, d["id"], now)
+            return self.send(h, T.mailbox_stale(when))
+        ctx = Ctx(bot=self, person=person, answer={}, picks=[], kind="draft", now=now, tz=person["timezone"])
+        cap = over_cap("mailbox.send", ctx)
+        if cap is not None:
+            from .drafts import mailto as _mailto
+            return self.send(h, T.mailbox_cap(cap, _mailto(d["to_addr"], d["subject"], d["body"])))
+        token = make_yes_token(d["id"], d["version"], d["text_hash"])
+        due = now + timedelta(minutes=config.SEND_HOLD_MIN)
+        self.store.update_draft(d["id"], status="held")
+        self.store.set_state(f"sendhold:{h}", {"draft_id": d["id"], "version": d["version"], "token": token,
+                                               "due_at": now_iso(due), "at": now_iso(now)})
+        self._draft_touch(h, d["id"], now)
+        return self.send(h, T.mailbox_held(d["to_addr"], self._clock(due, person)))
+
+    def _draft_tick_holds(self, now):
+        """Every tick: each hold that is due is sent (or, more than 15 minutes late, not sent and the person asked
+        again); a send cut off by a restart is never tried again. Returns the number sent."""
+        n = 0
+        for r in self.store.q("SELECT key, value FROM state WHERE key LIKE 'sendhold:%'"):
+            hold = json.loads(r["value"]) if r["value"] else None
+            if not hold:
+                continue
+            h = r["key"].split(":", 1)[1]
+            if now < datetime.fromisoformat(hold["due_at"]):
+                continue
+            with self.lock_for(h):
+                n += self._draft_send_due(h, hold, now)
+        for row in self.store.q("SELECT * FROM drafts WHERE status='sending'"):
+            started = datetime.fromisoformat(row["sent_at"]) if row.get("sent_at") else None
+            if started is None or now - started > timedelta(minutes=2):
+                with self.lock_for(row["handle"]):
+                    self.store.update_draft(row["id"], status="unknown", done_at=now_iso(now))
+                    self.store.x("UPDATE action_log SET action='mailbox.send', status='unknown' WHERE "
+                                 "action='mailbox.attempt' AND status='sending' AND ref=?", (str(row["id"]),))
+                    person = self.store.person(row["handle"])
+                    if person:
+                        self.send(row["handle"], T.mailbox_restarted(_masked(row.get("to_addr"),
+                                                                             row.get("to_domain"))))
+        return n
+
+    def _draft_send_due(self, h, hold, now):
+        from .actions import perform
+        from .actions.base import Ctx
+        from .actions.mailbox import SendError
+        if self.store.get_state(f"sendhold:{h}") != hold:
+            return 0   # stopped or replaced meanwhile
+        self.store.set_state(f"sendhold:{h}", None)
+        row = self._draft(hold["draft_id"])
+        person = self.store.person(h)
+        if not row or not person or row["status"] != "held" or row["version"] != hold["version"]:
+            return 0   # changed, cancelled or sent: that yes was for another version
+        due = datetime.fromisoformat(hold["due_at"])
+        if now - due > timedelta(minutes=config.SEND_LATE_MIN):
+            self.store.update_draft(row["id"], status="link_shown")
+            self._draft_touch(h, row["id"], now)
+            self.send(h, T.mailbox_offline(row["to_name"] or row["to_addr"], self._clock(due, person)))
+            return 0
+        if any(json.loads(x["detail"] or "{}").get("token") == hold["token"] for x in
+               self.store.q("SELECT detail FROM action_log WHERE handle=? AND action IN ('mailbox.send',"
+                            "'mailbox.attempt') AND status IN ('sending','done','unknown')", (h,))):
+            return 0   # one send per yes
+        p = json.loads(row["parts"] or "{}")
+        detail = {"kind": row["kind"], "route": "mailbox", "version": row["version"],
+                  "recipient_domain": row["to_domain"], "body_from": p.get("body_from") or "words",
+                  "token": hold["token"]}
+        self.store.update_draft(row["id"], status="sending", sent_at=now_iso(now))   # before SMTP: never twice
+        # logged before SMTP as an attempt (not counted against the day's cap until it has a result)
+        log_id = self.store.log_action(h, None, None, "mailbox.attempt", "sending", ref=str(row["id"]),
+                                       detail=detail, at=now)
+        ctx = Ctx(bot=self, person=person, answer={}, picks=[], kind="draft", now=now, tz=person["timezone"])
+        try:
+            o = perform("mailbox.send", ctx, {"draft_id": row["id"]}, yes_token=hold["token"])
+        except SendError as e:
+            kind = e.kind
+            st = "unknown" if kind == "unknown" else "failed"
+            self.store.update_draft(row["id"], status=st,   # a failed one stays open: "send" can try again
+                                    **({"done_at": now_iso(now)} if st == "unknown" else {"sent_at": None}))
+            self.store.update_action(log_id, st, dict(detail, error=kind), action="mailbox.send")
+            if st != "unknown":
+                self._draft_touch(h, row["id"], now)
+            print(f"mailbox: send {st} ({kind})", file=__import__("sys").stderr)
+            self.send(h, T.MAILBOX_ERRORS[kind])
+            return 0
+        except Exception as e:  # noqa: BLE001 - refused by the registry, or anything else: nothing was sent
+            self.store.update_draft(row["id"], status="link_shown", sent_at=None)
+            self.store.update_action(log_id, "failed", dict(detail, error=type(e).__name__), action="mailbox.send")
+            print(f"mailbox: not sent ({type(e).__name__})", file=__import__("sys").stderr)
+            self.send(h, T.MAILBOX_ERRORS["reach"])
+            return 0
+        if o.status != "done":   # over a cap at the last moment: not sent, and said
+            self.store.update_draft(row["id"], status="link_shown", sent_at=None)
+            self.store.update_action(log_id, "skipped", detail, action="mailbox.send")
+            self.send(h, o.line or T.MAILBOX_ERRORS["reach"])
+            return 0
+        self.store.update_draft(row["id"], status="sent", done_at=now_iso(now))
+        self.store.update_action(log_id, "done", detail, action="mailbox.send")
+        self.store.set_state(f"draft_open:{h}", None)
+        self.send(h, T.mailbox_accepted(row["to_addr"], self._clock(now, person)))
+        return 1
 
     def _save_to_drafts(self, person, d, now):
         return self.send(person["handle"], T.DRAFT_SAVE_LINK)
@@ -1123,8 +1287,13 @@ class DraftsMixin:
         self.store.clear_old_drafts(now - timedelta(days=CLEAR_DAYS))
         return self._draft_tick_holds(now)
 
-    def _draft_tick_holds(self, now):
-        return 0
+
+def _masked(addr, domain=None):
+    """'m***@example.com': an address said back when the bot is not sure what happened."""
+    if addr and "@" in addr:
+        local, dom = addr.split("@", 1)
+        return f"{local[:1]}***@{dom}"
+    return f"someone at {domain}" if domain else "them"
 
 
 # ---------- module-level entry points for the other slices (the bot is the first argument) ----------

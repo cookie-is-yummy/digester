@@ -795,6 +795,12 @@ class Store:
         cols = ", ".join(f"{k}=?" for k in fields)
         self.x(f"UPDATE drafts SET {cols} WHERE id=?", (*fields.values(), draft_id))
 
+    def update_action(self, row_id, status, detail=None, action=None):
+        """W4: a send logged before SMTP (action mailbox.attempt, status sending) gets its result after: its action
+        and status (done, failed or unknown) and detail."""
+        self.x("UPDATE action_log SET status=?, detail=COALESCE(?, detail), action=COALESCE(?, action) WHERE id=?",
+               (status, json.dumps(detail) if detail is not None else None, action, row_id))
+
     def drafts_of(self, handle):
         return self.q("SELECT * FROM drafts WHERE handle=? ORDER BY id", (handle,))
 

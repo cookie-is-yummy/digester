@@ -978,6 +978,9 @@ class HandlerMixin:
         """Reverses the last write within 10 minutes: a to-do added, ticked off, removed or given a time; a rule
         started, changed, paused, resumed, stopped or skipped; quiet hours; a snooze; a time zone."""
         h = person["handle"]
+        ref = self.draft_undo(person, now)   # round 9, slice A (W4): an email waiting in its hold is stopped first
+        if ref is not None:
+            return ref
         lw = self._last_write(h, now)
         if not lw:
             return self.send(h, T.NOTHING_TO_UNDO)
