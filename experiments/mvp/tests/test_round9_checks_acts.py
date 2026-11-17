@@ -392,3 +392,13 @@ def test_the_routing_comparison_set_is_kept_out_of_the_new_reads():
         assert parse_choice(t, 3) is None, t
         assert not email_request(t), t
     assert json.dumps(texts)
+
+
+@pytest.mark.parametrize("text,name", [("Book Tacos El Gordo", "Tacos El Gordo"), ("reserve Tacos El Gordo", "Tacos El Gordo"),
+                                       ("Apply to NASA L'SPACE", "NASA L'SPACE"), ("Tacos El Gordo", "Tacos El Gordo"),
+                                       ("Book", "Book")])
+def test_a_to_do_handed_to_a_menu_is_named_without_its_verb(env, tmp_path, text, name):
+    seed(env, tmp_path, [NASA_POST])
+    bot = env["bot"]
+    bot.store.add_todo(H, text, "todo", item_id="n1", url=None, at=env["clock"][0])
+    assert bot._todo_rec(bot.store.person(H), bot.store.todos(H)[0])["title"] == name

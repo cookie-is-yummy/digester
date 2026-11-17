@@ -569,7 +569,10 @@ class TodoMixin:
         it = self.view(person["library"]).get(row["item_id"])
         if it is None:
             return None
-        return {"item_id": row["item_id"], "title": row["text"], "url": row.get("url") or it.url,
+        # (round 9 checks) the name without the to-do's verb: "Tacos El Gordo" in the Maps search, not "Book Tacos ..."
+        name = re.sub(r"^\W*(?:book|reserve|apply\s+(?:to|for)|sign\s+up\s+for|register\s+for|enrol+\s+in)\s+", "",
+                      row["text"], flags=re.I).strip() or row["text"]
+        return {"item_id": row["item_id"], "title": name, "url": row.get("url") or it.url,
                 "platform": it.platform, "video_id": it.video_id, "creator": it.creator, "facts": {}, "lines": [],
                 "line_kinds": None}
 

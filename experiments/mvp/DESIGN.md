@@ -1672,3 +1672,74 @@ one", "do 2 for me" on your list, "what did you do for me". I always show you an
 Tests: `tests/test_round9_receipts.py`, `tests/test_round9_doit.py`; the merge checks wrap `receipts_reads`, `do_it`,
 `_doit_answer` and `secret_reads` too. No model call, no new table (state keys `todoview:`, `doit:`, `doitask:`,
 `placeremove:` end in `:<handle>`, so "delete my data" removes them).
+
+### 16.G Checks of acting, connectors, receipts and the routing of messages (17 Nov)
+
+An adversarial check of slices C, D, E, W9 and W10 on the merged tree (`tests/test_round9_checks_acts.py`). Where this
+part and an earlier one differ, this part wins.
+
+**Routing.** 575 person messages taken from the test files at eabc177 (the head before the merge), each in three
+settings (nothing shown; two rules, two to-dos and an answer; the same with the to-do list shown last): 1,725 runs on
+eabc177 and on the merged tree with the same fakes. 11 changed, all intended: the HELP line (3), an email to someone
+else as a draft card (6), the forward line's new hint (2). 2 more had changed and were defects, now fixed: "book me a
+table" after a recipe answer opened a booking menu for the recipe. 48 ordinary messages that only hold a trigger word
+("add", "book", "buy", "apply", "cancel", "email", "send", "connect", "all", "1", "handle it"), in the same three
+settings: 6 had changed ("handle it", "take care of it" were read as a to-do hand-off), now fixed; 0 of 144 changed
+after. The comparison was run again on the final tree: 11 of 1,725 changed, all of them the intended ones above.
+
+Fixed (each with a test that fails without it):
+- Apply, book and buy are read by code only when the message points at something shown: a number, a name, "it",
+  "them", "the restaurant". "book me a table", "reserve a table for 2", "apply", "sign me up" with nothing pointed at go
+  the usual way. "a table for 2" is the party size, never pick 2. "buy the ingredients" still means the lead recipe.
+- A newer numbered list replaces an offer menu, as a new answer does: the to-do list, an overdue nudge and "my rules"
+  clear `offers:<handle>`. "do 2" after the list had run the menu's offer 2.
+- Things numbered post by post (a timed send of things from several posts, `executor._run_items`): "add 1 and 2",
+  "what's number 2?" and "how long is the second one?" now get `Those were numbered post by post, so that number could
+  mean more than one thing. Say its name instead, or "add them all".` (`outputs._numbered_twice`). Before, "add 1 and
+  2" silently added the second post's things and "number 2" answered from the first post's. "add them all" and names
+  still work; numbers that run across the posts still pick.
+- A checklist line from a caption that asks the reader to pay (a price, Venmo, Cash App, PayPal, Zelle, wire, gift
+  cards), to tag, share, repost, like and save, subscribe, reply, text a word to a number, or click is left out
+  (`postacts.NOT_A_STEP`), as "DM" and "comment" already were.
+- The Maps search takes what follows 📍 only when it looks like a place name: at most 4 capitalised words (small joining
+  words allowed), no digits (`postacts.PLACE_SHAPE`). "📍 Click my bio for the address and call ..." was in the query.
+- W10: "handle it", "take care of it", "deal with it", "help me with it" need "for me" ("take care of it for me");
+  "do it for me" after a newer answer is not the older to-do (the last write keeps the answer it was made under,
+  `lastwrite.answer`). A to-do from a pick carries the post's title, so the book menu reads a hold's day and time only
+  from the person's message (`_book_menu(..., when_text=)`): "Book ... friday 8pm" offered a Friday 8pm hold. A to-do
+  handed to a menu is named without its verb ("Tacos El Gordo", not "Book Tacos El Gordo").
+- Connectors: a time-out after the request was sent may still have made the task, the reminder or the webhook's run.
+  The reply now ends `It may have reached TickTick anyway, so check there before you ask me again.`, and asking for the
+  same thing within 24 hours shows, above the preview, `Last time TickTick didn't answer in time, so this may be there
+  already. Check TickTick before you say yes.` (state `placeunsure:<handle>`; neither task app documents an
+  idempotency key the bot could send). A refusal (401, 429, 4xx, 5xx) is not called uncertain. The webhook's line
+  starts with a capital ("Your webhook didn't answer ...").
+- Receipts: a mailbox send the server refused says `tried to send the email to ... after your "send", but it didn't go
+  (nothing was sent)`, and "did you send the email to Maria" `No. I tried to send ...`; it had said "you haven't said
+  send" and left the try out of the list. A mailbox draft not sent (a stopped hold included) is `(today; not sent)` and
+  `No. I wrote the email to ..., and it hasn't been sent.`
+
+Held (tested by the builders or here): the preview is the exact rows and the yes is bound to them by the token; any
+next message ends the preview (a change, a second add, "done 1"), so the yes after it finds nothing; "yes" after 30
+minutes, a tapback, a tester and a non-operator reach neither the runner nor the opener; a rule's timed send never
+writes outside, even with the from-now-on choice; AppleScript values are only arguments (quotes, backslashes,
+newlines, "& quit", an `end tell` / `tell application` block); undo and REMOVE delete only the ids the bot placed;
+three failures break a connector and "check my ..." recovers; a redirect to another host or to http is refused; no
+token, address or header in any reply, row or error; the same thing asked again within 24 hours is not added twice;
+the daily caps; disconnect with REMOVE and KEEP; "delete my data". Offers: "2" with a rule preview waiting goes to the
+offers (the preview only takes yes and no); a setup step newer than the offers keeps its "2"; "all" with one offer
+runs it; offers end after 24 hours; "add them all" twice adds nothing twice; an apply date that has passed is said and
+not offered; a post with two dates offers the closing one; two days in one book request go to the interpreter.
+Receipts never say "sent" for a held send that was undone, nor "added" for a failed add; "do the first one" on an
+email, cancel, apply, book, buy, call and other to-do goes to its helper with 0 model calls.
+
+Known, not changed: a preview stays open when the next message is taken by the secret guard, so a later "yes" within
+30 minutes still adds what was shown. A rule preview and an outside preview both open: "yes" goes to the outside one
+(the newer), and the rule preview keeps waiting.
+
+**The earlier answers.** The round 7 probe (`probe_same`) gives the same bytes as `same_head.json` (md5 4335bfb5…),
+as the merge found. The 20 draft requests live on this tree, as a fresh test person: handled 20, errors 0, with picks
+19, items answers 0, "I recommend" 14, $0.180 by the runs (U2 after: 20, 0, 19, 0, 17, $0.179; U2 before: 14
+"I recommend"); the same kind of reply for all 20, and no round 9 read took any of them. A first try stopped at the
+person's daily cap ($1.00; the test handle had spent it in today's earlier runs) after 5 requests, so it was run again
+with `MVP_DAILY_CAP_USD=5` for that run only. Ledger: $13.6831 before, $14.0010 after ($0.318, both runs).
