@@ -1,8 +1,8 @@
 """Offline tests for round 9, live fix (kinds; DESIGN.md section 12, "Round 9, live fix (kinds)", finding 103): two
-wordings of one request for a kind of thing read the same posts. A post whose title or first lines name the kind with
-one of its own modifiers is always read; a run-together spelling ("uiux") is read as its parts; a must-have that only
-says what the things are for ("for my next project") is not a test each post must pass. Synthetic posts with made-up
-names, a fake model, a fake search pool and a fake clock only."""
+wordings of one request for a kind of thing read the same posts. A run-together spelling ("uiux") is read as its parts
+when the posts read for things are chosen; a must-have that only says what the things are for ("for my next project")
+is not a test each post must pass; a kind with a modifier is also searched as code spells it. Synthetic posts with
+made-up names, a fake model, a fake search pool and a fake clock only."""
 import json
 import os
 import sys
@@ -27,8 +27,9 @@ ICONS = ("Where to find great icons?\n01. www.iconpile.xyz\n02. www.glyphbox.com
          "04. iconfarm.app")
 GOODIES = ("UI goodies for your next build\n1. Bolt - fast and small\n2. Nimbus - light and airy\n"
            "3. Quill - tidy forms\n4. Reed - quiet tables")
-KITCHEN = ("Kitchen\nOne of the most premium UI libraries I have come across\n"
-           "Every part is built to feel like a real object")
+KITCHEN = ("Kitchen\nOne of the most premium UI libraries I have come across\n- copy the code on each page\n"
+           "- every part feels like a real object")
+PANTRY = "Pantry\nA calm UI library I keep coming back to\nEvery part feels like a real object"   # lists nothing
 SOUNDS = ("Studio notes\nMy library of sounds for every UI click\nAll free to download")
 
 ROWS = [("d1", "systemsfan", DESIGNS, "2026-09-01", "2026-09-02", "instagram"),
@@ -91,22 +92,14 @@ def runs(env):
 
 
 # ---------- the helpers ----------
-def test_k3_a_kind_is_named_by_its_head_noun_with_one_of_its_own_modifiers():
-    from mvp.extract import kind_parts, names_kind_with_modifier as named
+def test_k3_a_kind_phrase_has_a_head_noun_and_its_own_modifiers():
+    from mvp.extract import kind_parts
     assert kind_parts("UI/UX libraries") == ("library", {"ui", "ux"})
     assert kind_parts("uiux libraries") == ("library", {"ui", "ux"})   # spelled first
     assert kind_parts("chrome extensions") == ("extension", {"chrome"})
     assert kind_parts("apps") == ("app", set())
     assert kind_parts("good fonts") == ("font", set())   # a word that only grades is not a modifier
-    for text in ("premium UI library", "a UX component library", "the best uiux libraries", "UI/UX LIBRARIES",
-                 "my favourite ui-ux library"):
-        assert named(text, "UI/UX libraries"), text
-    # near-variants: the head noun alone, a modifier too far from it, another head, a kind of one word
-    for text in ("a library of sounds", "UI design and a component library", "UI kits", "ui libraries"[:2], ""):
-        assert not named(text, "UI/UX libraries"), text
-    assert not named("my favourite apps", "apps")
-    assert named("Three chrome extensions I use daily", "chrome extensions")
-    assert not named("chrome is my browser and these are extensions", "chrome extensions")
+    assert kind_parts("") == (None, set())
 
 
 def test_k3_a_purpose_is_told_apart_from_a_real_must_have():
@@ -150,15 +143,17 @@ def test_k3_both_wordings_show_the_same_things(lib):
     assert things(long_msg) == things(short_msg) and "Kitchen" in things(long_msg)
 
 
-def test_k3_a_named_post_gets_a_place_even_when_the_shown_picks_fill_every_place(lib, monkeypatch):
-    from mvp.executor import ExecutorMixin
-    monkeypatch.setattr(ExecutorMixin, "ITEM_READS", 3)
-    say(lib, LONG_ASK, long_form())
-    texts = read_texts(lib)
-    assert any("Kitchen\nOne of the most" in t for t in texts)
-    assert sum(1 for t in texts if "<item>" not in t) <= 3
-    steps = json.loads(runs(lib)[-1]["steps"])
-    assert steps["items_reads"] == 3
+def test_k3_near_variant_a_post_that_names_the_kind_but_lists_nothing_is_not_read_beyond_the_picks(env, tmp_path):
+    rows = [r for r in ROWS if r[0] != "k1"] + [("p1", "pantryfan", PANTRY, "2026-05-01", "2026-05-02", "instagram")]
+    use_lib(env, tmp_path, rows, name="libk3p")
+    seen = []
+    env["state"]["answers"]["mvp_compose"] = compose_three
+    env["state"]["answers"]["mvp_extract"] = items_fake(dict(TABLE, Pantry={"items": [{"name": "Pantry", "fit": "yes"}]}),
+                                                        seen)
+    say(env, LONG_ASK, long_form())
+    texts = [u.split("<item>", 1)[-1] for u in seen]
+    # (a place kept for it was measured live and not kept: it gained nothing and pushed a list of the kind out)
+    assert not any("Pantry\nA calm UI library" in t for t in texts) and any("UI goodies" in t for t in texts)
 
 
 def test_k3_near_variant_the_head_noun_alone_is_not_read_first(env, tmp_path, monkeypatch):
@@ -188,8 +183,6 @@ def test_k3_a_one_word_kind_reads_as_before(env, tmp_path, monkeypatch):
 
 
 def test_k3_a_run_together_spelling_is_on_topic_for_the_posts_that_spell_it_apart(lib, monkeypatch):
-    from mvp.executor import ExecutorMixin
-    monkeypatch.setattr(ExecutorMixin, "NAMED_READS", 0)   # only the topic test, not the named place
     say(lib, LONG_ASK, long_form())
     # "uiux" is read as "ui" and "ux": the list that says "UI goodies" is now a candidate to read
     assert any("UI goodies" in t for t in read_texts(lib))

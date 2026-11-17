@@ -171,10 +171,8 @@ def test_94_an_items_request_reads_the_posts_whose_text_names_things(lib8):
     msg = say(lib8, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
     read = read_posts(lib8)
     # the shown picks first, then the candidates whose text lists named things, on the request's topic, at most 6
-    # (round 9, live fix (kinds), finding 103: a post whose title names the kind with its modifier, "Lantern UI
-    # library", always gets a place, whatever its list score; before, the CSS list took the sixth place)
     assert sorted(read) == sorted(["UI design vibes", "5 free UI libraries", "Best design systems", "UI icon packs",
-                                   "UI fonts", "Lantern UI library"])     # (the calls run in parallel: any order)
+                                   "UI fonts", "UI css frameworks"])     # (the calls run in parallel: any order)
     assert "Best cafes" not in read and "?" not in read           # a list off the topic, a recipe: never read
     # the posts with the most good things come first, at most 3; the next two are named in one line each
     # (round 9, slice U, point 2: the composer's clear picks name nothing, so they lead in the ordinary format, and
@@ -186,8 +184,8 @@ def test_94_an_items_request_reads_the_posts_whose_text_names_things(lib8):
     heads = [x for x in msg.split("\n") if x.startswith("From ")]
     assert [h.split('"')[1] for h in heads] == ["Best design systems", "UI icon packs I use", "UI fonts for product design"]
     assert "More in your saves:" in msg
-    assert "• Lantern UI library by @kitchen: it names one more. https://" in msg
-    assert "UI css frameworks" not in msg       # not read: the six places are taken
+    assert "• UI css frameworks by @css: it names 2 more. https://" in msg
+    assert "Lantern UI library" not in msg      # its text lists nothing (a score of 0): never read beyond the picks
     # the other clear pick whose title promises a list says where its names are
     assert "• 5 free UI libraries you need to know by @slides: the names are in its slides, not its text. https://" in msg
     assert "• calm workspace inspiration for designers" in msg   # the lead's key point
@@ -216,8 +214,7 @@ def test_94_a_post_with_a_no_an_avoided_word_or_off_topic_is_never_read(lib8):
     say(lib8, UI_ASK, ask("UI/UX libraries", ["ui libraries"], avoid=["fonts"]))
     read = read_posts(lib8)
     assert "UI icon packs" not in read and "UI fonts" not in read and "Best cafes" not in read
-    # (round 9, live fix (kinds), finding 103: the post whose title names the kind is read too, whatever its score)
-    assert "UI css frameworks" in read and "Lantern UI library" in read
+    assert "UI css frameworks" in read and "Lantern UI library" not in read
 
 
 def test_94_a_request_that_names_no_kind_of_thing_reads_its_top_3_as_before(lib8):
