@@ -493,6 +493,36 @@ def test_connect_sends_the_link_word_for_word_and_allow_connects(mcp):
         ["connect.todoist", "connect.todoist"]
 
 
+@pytest.mark.parametrize("text", ["connect todoist", "Link my Todoist account", "set up my todoist",
+                                  "please hook up todoist"])
+def test_connect_wordings_all_send_the_link(mcp, text):
+    assert ask(mcp, text).startswith("To let me add tasks to your Todoist, open this link and press Allow: ")
+
+
+def test_a_second_link_replaces_the_first(mcp):
+    from mvp.actions import mcp as M
+    first = ask(mcp, "connect my todoist").split("press Allow: ", 1)[1].split("\n", 1)[0]
+    second = ask(mcp, "connect my todoist").split("press Allow: ", 1)[1].split("\n", 1)[0]
+    _, q1 = mcp["fk"].allow(first)
+    assert M.on_code(mcp["bot"], q1["state"], q1["code"], None, None) is False
+    _, q2 = mcp["fk"].allow(second)
+    assert M.on_code(mcp["bot"], q2["state"], q2["code"], None, None) is True
+
+
+@pytest.mark.parametrize("text", ["disconnect my todoist", "unlink todoist", "stop using my todoist"])
+def test_disconnect_wordings_revoke(mcp, text):
+    connect(mcp)
+    assert ask(mcp, text).startswith("I've disconnected Todoist. I cancelled my access there.")
+    assert mcp["fk"].count("/revoke") == 1
+
+
+@pytest.mark.parametrize("text", ["yes, keep using todoist", "ok todoist", "yes use my todoist again"])
+def test_yes_again_wordings(mcp, text):
+    connect(mcp)
+    mcp["bot"].store.set_connection(H, "todoist", status="changed", at=mcp["clock"][0])
+    assert ask(mcp, text).startswith("OK, I'll use Todoist again.")
+
+
 def test_the_same_state_works_once_and_a_wrong_state_or_iss_is_refused(mcp):
     from mvp import oauth
     from mvp.actions import mcp as M
