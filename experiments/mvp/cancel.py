@@ -74,6 +74,15 @@ BILLING = {"apple": re.compile(r"\b(?:apple|iphone|ipad|ios|app store|itunes|thr
                              r"paypal|browser)\b", re.I)}
 STOP_ASKING = re.compile(r"^\W*(?:no|nope|nah|no thanks|no thank you|never ?mind|forget it|skip|skip it|cancel|"
                          r"not now)\W*$", re.I)
+# (round 9 checks) never a name typed back to "Which one?", "Which gym?" or "What name is the membership under?": a
+# command ("stop 2", "pause everything", "cancel rule 2", "undo", "help"), a word about the bot's own rules, lists or
+# texts, or a question. Such a message ends the question and is handled as usual.
+NOT_AN_ANSWER = re.compile(r"^\W*(?:(?:pls|please|ok(?:ay)?|hey|so|and|but|actually|no|wait)[\s,]+)*"
+                           r"(?:stop|pause|resume|restart|unpause|cancel|unsubscribe|undo|help|end|quit|delete|remove|"
+                           r"show|list|send|email|remind|snooze|change|move|make|add|turn|done|what|why|how|who|"
+                           r"when|where|everything)\b"
+                           r"|\b(?:rules?|reminders?|nudges?|lists?|to-?dos?|digest|recap|texts?|texting|messages?|"
+                           r"everything|all of them)\b|\?", re.I)
 _WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 _WD = r"(?:mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)"
 _TIME = re.compile(r"\b(?:at\s+)?(\d{1,2})(?::(\d\d))?\s*(am|pm|a\.m\.|p\.m\.)|\b(?:at\s+)?(noon|midday)\b|"
@@ -315,6 +324,10 @@ def from_todo(person, todo, now=None):
     req = request(text) or request(text, forced=True)
     if req is None and re.match(r"^\W*(?:cancel|end|quit)\s+(?:the\s+|my\s+)?gym\b", text, re.I):
         req = {"kind": "gym"}
+    if req is not None and req["kind"] in ("merchant", "unknown", "gym") and (todo or {}).get("item_id"):
+        # (round 9 checks) a to-do that came from a saved post holds the post's words: a merchant read from them
+        # never picks the way out. The person names the company
+        req = {"kind": "from_ad"}
     return req
 
 
@@ -494,6 +507,8 @@ class CancelMixin:
                 self._cancel_ask(h, "when", now, key=st.get("key"), name=st["name"], cid=st["cid"])
                 return self.send(h, T.cancel_web_unchecked(st["name"]) + "\n\n" + T.CANCEL_OFFER_CHECK)
             return self._cancel_store(person, st.get("key"), st["name"], via, now, cid=st["cid"])
+        if step in ("which", "gym", "member_name") and NOT_AN_ANSWER.search(t) and merchant_named(t) is None:
+            return None   # a command or a question, not a name: handled as usual (the question has ended)
         if step in ("which", "gym"):
             if request(t) is not None:
                 return None   # a whole new cancel request: cancel_reads answers it
@@ -528,7 +543,10 @@ class CancelMixin:
         n = notice_text(st["name"], member_name, addr if ok else None)   # signed with the name on the membership
         e = next((x for x in load_routes()["merchants"] if st.get("key") and x["key"] == st["key"]), None) or {}
         # the merchant's address only from an entry whose own page was read (never from a post or a guess)
-        to = e.get("notice_email") if e.get("source_url") and e.get("notice_email") else None
+        # (round 9 checks) and, like a link, only while that check is at most 60 days old
+        today = now.astimezone(ZoneInfo(person["timezone"])).date()
+        to = e.get("notice_email") if e.get("source_url") and e.get("notice_email") and \
+            link_fresh(e.get("checked_on"), today) else None
         cid = st.get("cid")
         self._cancel_update(cid, route="notice", status="notice_drafted", now=now)
         job = f"cancel:{cid}" if cid else None

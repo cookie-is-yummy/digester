@@ -1591,6 +1591,20 @@ def mailbox_cant_unsend(to, when):
     return f"I can't unsend an email. It went to {to} at {when}."
 
 
+# round 9 checks (DESIGN.md section 16.A): a question is never the yes; one send waits at a time; "unknown" stays unknown
+DRAFT_SEND_ASKED = "Nothing has been sent yet. Reply \"send\" when you want it to go."
+
+
+def mailbox_cant_stop_unknown(masked):
+    return (f"I can't stop it now. I may or may not have sent the email to {masked}. Check your Sent folder before "
+            "you ask me again.")
+
+
+def mailbox_other_waiting(to, when):
+    return (f"Your email to {to} is still waiting to go at {when}. Reply \"send\" again once it has gone, or \"undo\" "
+            "to stop it.")
+
+
 def mailbox_offline(who, when):
     return f"I didn't send your email to {who} at {when} because I was offline. Reply \"send\" to send it now."
 
@@ -2186,12 +2200,14 @@ def receipt_placed(n, gone, one, many, where, kind):
     return out + (f", and removed {gone} again" if gone else "")
 
 
-def receipt_cancellations(n, said_done, sent, open_):
+def receipt_cancellations(n, said_done, sent, open_, mine=0):
     parts = []
     if said_done:
         parts.append(f"you said {said_done} {'is' if said_done == 1 else 'are'} done")
     if sent:
         parts.append(f"you sent {_count(sent, 'notice')}")
+    if mine:
+        parts.append(f"I sent {_count(mine, 'notice')} after your \"send\"")
     if open_:
         parts.append(f"{open_} still open")
     return f"helped with {_count(n, 'cancellation')}" + (f" ({', '.join(parts)})" if parts else "")

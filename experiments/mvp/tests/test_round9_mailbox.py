@@ -534,6 +534,9 @@ class FakeIMAP:
     made = []
     uidplus = True
     fail = None
+    # (round 9 checks) every command outside ALLOWED is recorded here before it fails, so a try/except in the code
+    # cannot hide it: the box fixture fails the test when this is not empty
+    forbidden = []
     folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Drafts) "/" "[Gmail]/Drafts"',
                b'(\\HasNoChildren \\Sent) "/" "[Gmail]/Sent Mail"']
 
@@ -544,6 +547,8 @@ class FakeIMAP:
             raise OSError("unreachable")
 
     def _cmd(self, name, *args):
+        if name not in ALLOWED:
+            FakeIMAP.forbidden.append(name)
         assert name in ALLOWED, name
         self.commands.append((name, *args))
 
@@ -579,6 +584,8 @@ class FakeIMAP:
         return "BYE", [b""]
 
     def __getattr__(self, name):   # fetch, search, examine, store, expunge ...: never allowed
+        if not name.startswith("_"):
+            FakeIMAP.forbidden.append(name.upper())
         raise AssertionError(f"IMAP command not allowed: {name}")
 
 
@@ -587,8 +594,9 @@ def box(op, monkeypatch):
     from mvp.actions import mailbox_imap
     monkeypatch.setenv("MVP_MAILBOX_IMAP_HOST", "imap.example.invalid")
     monkeypatch.setattr(mailbox_imap.imaplib, "IMAP4_SSL", FakeIMAP)
-    FakeIMAP.made, FakeIMAP.uidplus, FakeIMAP.fail = [], True, None
-    return op
+    FakeIMAP.made, FakeIMAP.uidplus, FakeIMAP.fail, FakeIMAP.forbidden = [], True, None, []
+    yield op
+    assert FakeIMAP.forbidden == [], f"IMAP commands outside the allow-list were tried: {FakeIMAP.forbidden}"
 
 
 def appended():

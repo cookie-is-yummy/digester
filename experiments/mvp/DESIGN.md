@@ -1185,6 +1185,38 @@ out again from here, ...`). A failure says what failed, then the link. For every
 **Out.** Cc and Bcc; a contact book; Gmail or Outlook compose links; reading the mailbox in any way; sends in rules,
 from `act_on_last` or MCP; sends for anyone but the operator; a "send without asking" setting.
 
+**Checks after the merge (an adversarial pass, `tests/test_round9_checks_email.py`).** Held: no change, no "yes",
+"ok", "go", "do it", 👍 as text or as a tapback, Spanish yes words, a model `confirm` form, "don't send it yet" or "send
+it tomorrow" ever sends; a change between "send" and the hold's end, or between the card and "send", voids the yes; a
+restart between "send" and the hold's end sends once; a second "send" sends once; the cap counts the person's own day
+across midnight; a tester and a handle spelled like the operator's never reach the mailbox; a caption's address, link,
+"reply SEND" or "forward this to" never fills To and never reaches the card; a stop phrasing after a draft card goes as
+before. Fixed, each with a test that failed before:
+- `SEND_WORDS` took "send it?" and "send?" as the yes. A question now gets `Nothing has been sent yet. Reply "send"
+  when you want it to go.` (`SEND_QUESTION`; while held, the time it goes; on the link route, the tap line).
+- One send waits at a time. A second "send" on another card while one is held used to replace the first hold, so the
+  first email, promised for a time, silently never went. Now: `Your email to <address> is still waiting to go at <time>.
+  Reply "send" again once it has gone, or "undo" to stop it.`
+- A send that went closed whatever card was open, so "send" on a newer card got `I already sent that one`. Only the
+  sent card closes now.
+- After an `unknown` send (a time-out after DATA) "send" said `I already sent that one` and "undo" said `It went to
+  ...`. Now: `I may or may not have sent it. Check your Sent folder before you ask me again.` and `I can't stop it now.
+  I may or may not have sent the email to m***@example.com. ...`.
+- "show it" during a hold when the words came out different (the sign-off name changed meanwhile) made a new version
+  and dropped the hold with no word. Now the card leads with `That stopped the send I had waiting. Reply "send" to send
+  this version.`
+- A to-do that came from a saved post (its title or a caption line) named the recipient ("Reply with Studio's email
+  address", "Hi Studio,"). Now a to-do with an `item_id` gives no name or role: `Reply with their email address`.
+- A phone number in a pick's title went into the subject and the body. Now such a title becomes `A post from
+  <creator>`, and points holding one are left out (addresses and links were already kept out by the composer).
+- `drafts.grounded` saw only capitalised words, so a model draft or rewrite could add "monday", "tomorrow", "tonight",
+  "next week", "fifty dollars" or "I already took care of it". Now day and time words, number words and "already /
+  taken care of / settled / received ..." must be in the sources too; a translation of the same day or number counts
+  ("sábado" for "Saturday", "ocho" for "8"). The live eval's first run with this check fell back once on exactly that
+  (d-dev-10, "sábado"), which led to the translation rule.
+- The test fake `FakeIMAP` let a forbidden command through when the code wrapped it in try/except. It now records every
+  forbidden attempt and the `box` fixture fails the test if any was tried.
+
 ### 16.B Slice B, W5 and W6: cancelling a subscription
 Code only (`cancel.py`, `CancelMixin` in `core.Bot`; no model call, no prompt). The bot finds the way out, writes
 what is needed and reminds; it never signs in as the person, never takes a password, and never says a subscription
@@ -1271,6 +1303,23 @@ is cancelled, canceled, done or "all set" (only the merchant can say that).
 - **Out**: logging in, any browser driving, stored passwords; reading the inbox for a confirmation; a library search to
   find the merchant; a follow-up the bot sets by itself; legal lines about cancel laws; a link checker; reply handling
   on the check reminder; money in the recap.
+- **Checks after the merge** (`tests/test_round9_checks_email.py`). Held: a link only from the route file (a caption, a
+  to-do or the person's own message naming another link never becomes it); a merchant name that is also a rule's word
+  ("stop the netflix one") stops the rule; "cancel my netflix list" is not a cancel; "cancel that" after a rule preview
+  or a draft card drops that one; a password or token typed on any path (plain chat, onboarding, the billing answer,
+  the gym answers, a draft's questions) is in no table, file, reply or log; the notice's placeholder blocks the link
+  and "send". Fixed, each with a test that failed before:
+  - The next-message questions "Which one?", "Which gym?" and "What name is the membership under?" took any short
+    message as the answer, so "stop everything", "pause 1", "cancel rule 2" or "stop 2" became a merchant ("I don't have
+    a checked way out of Stop Everything") or a notice signed "Stop" (72 of the 81 earlier stop and pause phrasings
+    after one of these questions). `cancel.NOT_AN_ANSWER` now leaves a command, a word about the bot's rules, lists or
+    texts, or a question to be handled as usual; names such as "Will Smith" are still answers.
+  - A cancel to-do that came from a saved post picked the merchant's route from the post's words. It now asks `Which
+    company is it?` (`cancel.from_todo`: `from_ad` for a to-do with an `item_id`).
+  - The notice's To came from any entry with a `source_url`, however old its check. Like a link, it is now given only
+    while `checked_on` is at most 60 days old.
+  - "What did you do for me" said "you sent 1 notice" for a notice the operator's mailbox sent. It now says `I sent 1
+    notice after your "send"`, and "you sent" only when the person said so.
 
 ### 16.C Slice C, W7, W8, V1: acting on a saved post
 All read by code before the model, English only, 0 model calls (the details step still runs for a recipe whose

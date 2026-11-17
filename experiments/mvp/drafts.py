@@ -77,11 +77,15 @@ REPEATING = re.compile(r"\b(?:every|each)\s+(?:day|morning|evening|night|week|mo
                        r"(?:mon|tues|wednes|thurs|fri|satur|sun)day)s?\b|\b(?:daily|weekly|monthly)\b|"
                        r"\bon\s+(?:mon|tues|wednes|thurs|fri|satur|sun)days\b", re.I)
 EMAIL_WORD = re.compile(r"\be-?mail", re.I)
+PHONE_RE = re.compile(r"\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b|\+\d[\d\s().-]{8,}\d")
 OTHER_RE = re.compile(rf"\b(?:my|our)\s+(?:{PEOPLE_WORDS})s?\b", re.I)
 
 # ---------- the draft reader's words (whole message only) ----------
+# (round 9 checks: a question, "send it?", is never the yes, so the end allows only spaces, "." and "!")
 SEND_WORDS = re.compile(r"^\W*(?:(?:yes|ok(?:ay)?|go ahead and|please)[\s,]+)?send(?:\s+(?:it|the email|it now|now))?"
-                        r"(?:\s+now)?(?:\s+please)?\W*$", re.I)
+                        r"(?:\s+now)?(?:\s+please)?[\s.!]*$", re.I)
+SEND_QUESTION = re.compile(r"^\W*(?:(?:should|shall|can|could|do|will)\s+(?:i|you|we)\s+)?send(?:\s+(?:it|the email))?"
+                           r"(?:\s+now)?\s*\?[\s?!]*$", re.I)
 CANCEL_WORDS = re.compile(r"^\W*(?:cancel(?:\s+(?:it|that|the (?:email|draft)))?|don'?t send(?:\s+it)?|"
                           r"do not send(?:\s+it)?|never\s?mind|scrap(?:\s+it|\s+that)?|no|nope|drop it|forget it|"
                           r"delete (?:it|the draft))\W*$",
@@ -330,6 +334,30 @@ CLAIMS = re.compile(r"\b(sent|emailed|paid|cancell?ed|canceled|booked|ordered|bo
 _CLOSING_LINE = re.compile(r"^(?:thanks|thank you|many thanks|best|best wishes|regards|kind regards|cheers|sincerely|"
                            r"gracias|saludos|un saludo|merci|danke|grazie|obrigad[oa])\b[\w ,!.]*$", re.I)
 URL_RE = re.compile(r"(?:https?://|www\.)\S+", re.I)
+# (round 9 checks) facts the capitalised-word check cannot see: a day or a month written in small letters, "tomorrow"
+# and "tonight" (they start sentences, so they are in _OK_CAPS), a number written as a word, and a claim that something
+# was already done. Each must be in the sources, in any case. ("may" and "one" are left out: they are ordinary words.)
+DATE_WORDS = re.compile(r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend|january|february|"
+                        r"march|april|june|july|august|september|october|november|december|today|tonight|tomorrow|"
+                        r"yesterday|next\s+(?:week|month|year)|this\s+(?:week|month)|noon|midnight|lunes|martes|"
+                        r"miércoles|miercoles|jueves|viernes|sábado|sabado|domingo|hoy|mañana|manana|"
+                        r"esta\s+noche)\b", re.I)
+NUMBER_WORDS = re.compile(r"\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|"
+                          r"fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|"
+                          r"eighty|ninety|hundred|thousand|million|billion|dozen|third|fourth|fifth|sixth|seventh|"
+                          r"eighth|ninth|tenth|dollars?|bucks|euros?|cents?|dos|tres|cuatro|cinco|seis|siete|ocho|"
+                          r"nueve|diez|veinte|cien|mil)\b", re.I)
+# a word counts as said when the person said it or its equivalent (a translation, the digits): "sábado" for "Saturday"
+SAME_AS = {"lunes": "monday", "martes": "tuesday", "miércoles": "wednesday", "miercoles": "wednesday",
+           "jueves": "thursday", "viernes": "friday", "sábado": "saturday", "sabado": "saturday", "domingo": "sunday",
+           "hoy": "today", "mañana": "tomorrow", "manana": "tomorrow", "esta noche": "tonight",
+           "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+           "ten": "10", "eleven": "11", "twelve": "12", "twenty": "20", "thirty": "30", "forty": "40", "fifty": "50",
+           "hundred": "100", "thousand": "1000", "dos": "2", "tres": "3", "cuatro": "4", "cinco": "5", "seis": "6",
+           "siete": "7", "ocho": "8", "nueve": "9", "diez": "10", "veinte": "20", "cien": "100", "mil": "1000",
+           "dollars": "$", "dollar": "$", "bucks": "$", "euros": "€", "euro": "€"}
+DONE_WORDS = re.compile(r"\b(already|taken care of|took care of|completed|finished|settled|handled|spoke|agreed|"
+                        r"promised|approved|delivered|received|mailed|texted|ya)\b", re.I)
 
 
 def _words_in(word, low):
@@ -377,6 +405,17 @@ def grounded(form, sources, name=None):
     for m in CLAIMS.finditer(body + "\n" + subj):
         if not _words_in(m.group(1), low):
             out.append(f"it says something was {m.group(1).lower()}, which their message does not say")
+    plain = URL_RE.sub(" ", every)
+    flat = " ".join(low.split())
+    for rx, what in ((DATE_WORDS, "the day or time"), (NUMBER_WORDS, "the number")):
+        for m in rx.finditer(plain):
+            w = " ".join(m.group(0).lower().split())
+            alt = SAME_AS.get(w)
+            if not _words_in(w, flat) and not (alt and (alt in flat if not alt.isalnum() else _words_in(alt, flat))):
+                out.append(f"{what} \"{w}\" is not in their message")
+    for m in DONE_WORDS.finditer(body + "\n" + subj):
+        if not _words_in(m.group(1), low):
+            out.append(f"it says \"{m.group(1).lower()}\", which their message does not say")
     if name is not None:   # "Hi <name>," only with the name the person typed; never "Hi landlord,"
         allowed = _GREET_WORDS | {w.lower() for w in re.findall(r"[^\W\d_]+", name)}
         if any(w.lower() not in allowed for w in re.findall(r"[^\W\d_]+", greet)):
@@ -645,6 +684,11 @@ class DraftsMixin:
         th = text_hash(exact_text(to, row["subject"], body))
         same = bool(row.get("version")) and th == row.get("text_hash")   # shown again, unchanged: the same version
         version = row["version"] if same else (row.get("version") or 0) + 1
+        if not same and row["status"] == "held" and self._draft_stop_hold(h, row, now):
+            # (round 9 checks) the words came out different (their sign-off name changed meanwhile): the yes was for
+            # the old words, so the send stops, and the person is told rather than left waiting for it
+            lead = T.HOLD_STOPPED_BY_CHANGE + "\n\n" + lead
+            row = self._draft(draft_id)
         status = "held" if same and row["status"] == "held" else "link_shown"
         self.store.update_draft(draft_id, body=body, version=version, text_hash=th, shown_at=now_iso(now),
                                 status=status)
@@ -734,6 +778,16 @@ class DraftsMixin:
                 return self.send(h, T.DRAFT_ONE_AT_A_TIME)
             if BLANK.match(t):
                 return self._draft_set_to(person, d, "", now)
+        if SEND_QUESTION.match(t):   # round 9 checks: "send it?" asks; it is never the yes
+            self.note(intent="draft_send")
+            if waiting in ("to", "sign", "say"):
+                return self.send(h, T.DRAFT_NOT_READY)
+            hold = self.store.get_state(f"sendhold:{h}") or {}
+            if d["status"] == "held" and hold.get("draft_id") == d["id"]:
+                return self.send(h, T.mailbox_already_held(self._clock(datetime.fromisoformat(hold["due_at"]),
+                                                                       person)))
+            return self.send(h, T.DRAFT_SEND_ASKED if d["route"] == "mailbox" and self._mailbox_route(h)
+                             else T.DRAFT_SEND_LINK)
         if waiting == "sign" and not CANCEL_WORDS.match(t) and not SEND_WORDS.match(t) and "?" not in t \
                 and not re.search(r"\b(?:what|why|how|who|when|where|help|stop|undo|show|draft|email)\b", t, re.I):
             if NO_NAME.match(t):
@@ -1038,6 +1092,11 @@ class DraftsMixin:
         title = rec.get("title") if not rec.get("item") else f"{rec['title']} (from \"{rec.get('source_title')}\")" \
             if rec.get("source_title") else rec.get("title")
         sens = P.sensitive(title, own, *points)
+        # (round 9 checks) a phone number in a checked line came from the post's own text: never in an email the
+        # person sends (the composer already keeps addresses and links out of titles)
+        if PHONE_RE.search(title or ""):
+            title = f"A post from {rec['creator']}" if rec.get("creator") else "A post"
+        points = [x for x in points if not PHONE_RE.search(x)]
         block = {"title": " ".join(str(title or "").split())[:150], "creator": rec.get("creator"),
                  "points": [] if sens else points[:2], "url": rec.get("url"), "sensitive": bool(sens),
                  "item_id": rec.get("item_id"), "run_id": (answer or {}).get("run_id"),
@@ -1094,6 +1153,8 @@ class DraftsMixin:
         if row is None:
             return None
         self.note(intent="draft_send")
+        if row["status"] == "unknown":   # (round 9 checks) the bot can't see whether it went: never "I sent"
+            return self.send(person["handle"], T.MAILBOX_ERRORS["unknown"])
         return self.send(person["handle"], T.mailbox_already_sent(self._clock(datetime.fromisoformat(row["sent_at"]),
                                                                               person)))
 
@@ -1116,6 +1177,8 @@ class DraftsMixin:
             lw = self.store.get_state(f"lastwrite:{h}")
             if not lw or datetime.fromisoformat(lw["at"]) <= datetime.fromisoformat(row["sent_at"]):
                 self.note(intent="undo")
+                if row["status"] == "unknown":   # (round 9 checks) never "it went" when the bot can't see that
+                    return self.send(h, T.mailbox_cant_stop_unknown(_masked(row.get("to_addr"), row.get("to_domain"))))
                 return self.send(h, T.mailbox_cant_unsend(row["to_addr"] or row["to_domain"],
                                                           self._clock(datetime.fromisoformat(row["sent_at"]), person)))
         return None
@@ -1160,6 +1223,15 @@ class DraftsMixin:
             return self.send(h, T.fill_first(left[0]))
         if not d.get("to_addr"):
             return self.send(h, T.MAILBOX_NEEDS_TO)
+        other = self.store.get_state(f"sendhold:{h}") or {}
+        if other.get("draft_id") not in (None, d["id"]):
+            # (round 9 checks) one send waits at a time: a second "send" would replace the first one's hold, and the
+            # first email, already promised for a time, would silently never go
+            first = self._draft(other["draft_id"])
+            if first and first["status"] == "held":
+                return self.send(h, T.mailbox_other_waiting(first["to_addr"] or first.get("to_domain") or "them",
+                                                            self._clock(datetime.fromisoformat(other["due_at"]),
+                                                                        person)))
         shown = datetime.fromisoformat(d["shown_at"]) if d.get("shown_at") else None
         if shown is None or now - shown > timedelta(minutes=FRESH_MINUTES):
             when = self._clock(shown or now, person)
@@ -1260,7 +1332,10 @@ class DraftsMixin:
             return 0
         self.store.update_draft(row["id"], status="sent", done_at=now_iso(now))
         self.store.update_action(log_id, "done", detail, action="mailbox.send")
-        self.store.set_state(f"draft_open:{h}", None)
+        if (self.store.get_state(f"draft_open:{h}") or {}).get("id") == row["id"]:
+            # (round 9 checks) only this card closes: a newer card the person opened meanwhile stays open, so its
+            # "send" is never answered with "I already sent that one"
+            self.store.set_state(f"draft_open:{h}", None)
         self.send(h, T.mailbox_accepted(row["to_addr"], self._clock(now, person)) + self._draft_job_done(row, "sent",
                                                                                                          now))
         return 1
@@ -1426,6 +1501,10 @@ class DraftsMixin:
         para, subj, _ = clause_paragraph(m.group("rest"))
         req = {"to": None, "word": who.lower() if is_word else None, "name": None if is_word else cap(who),
                "request": para, "subject": subj}
+        if (todo or {}).get("item_id"):
+            # (round 9 checks) a to-do that came from a saved post holds the post's words (its title, a caption line):
+            # they never name who it goes to. The person is asked, with no name from the post
+            req.update(word=None, name=None)
         return self._draft_start_from(person, req, None, None, "", now, text, job=job)
 
     # ---------- upkeep (Bot.tick) ----------
