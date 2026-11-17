@@ -116,6 +116,11 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   that returns an `Outcome` (`actions/base.py`), plus one entry in `REGISTRY` in `actions/__init__.py` (its params
   model, what it needs, its module name and its order). Nothing else changes: specs are validated against the registry
   and the executor runs whatever the registry names.
+- **Round 9, what an outward action may do** (DESIGN.md section 16.D): each registry entry can say whether it reaches
+  outside (`outside`), how it is undone, whether it needs the person's "send" on the exact text (`confirm`), a daily
+  limit (`max_per_day`), whether a rule or the model may name it (`in_rules`, `from_model`) and whether only the
+  operator may run it (`who`). Set `MVP_OPERATOR` to your own handle (as in `people.json`) to be the operator;
+  unset, nobody is. Tests: `tests/test_round9_registry.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
