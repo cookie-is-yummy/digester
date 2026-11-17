@@ -319,10 +319,21 @@ class Agent:
     def _my_rules(self, person, now):
         from . import texts as T
         rules = self.store.rules(person["handle"])
+        # round 9, slice B (DESIGN.md section 16.B): a check reminder of the cancel helper is money (docs/07): left
+        # out and counted like any personal topic
+        hidden = 0
+        if not self.include_sensitive:
+            try:
+                mine = {r["check_rule_id"] for r in self.store.cancellations(person["handle"]) if r["check_rule_id"]}
+            except sqlite3.OperationalError:   # a store made before round 9 has no such table
+                mine = set()
+            hidden = sum(1 for r in rules if r["id"] in mine)
+            rules = [r for r in rules if r["id"] not in mine]
         if not rules:
-            return {"rules": [], **self._left_out(0)}, {"returned": 0, "left_out_sensitive": 0}
+            return {"rules": [], **self._left_out(hidden)}, {"returned": 0, "left_out_sensitive": hidden}
         lines = [x for x in self.bot()._rules_text(person, rules).split("\n") if x != T.RULES_FOOT]
         lines, gone = self._lines(lines)
+        gone += hidden
         return {"rules": lines, **self._left_out(gone)}, {"returned": max(0, len(lines) - 1), "left_out_sensitive": gone}
 
     def _my_todos(self, person, now):

@@ -421,6 +421,27 @@ def test_delete_my_data_removes_cancellations_and_the_check_rule_and_export_has_
     assert bot.store.q("SELECT key FROM state WHERE key LIKE 'cancelask:%'") == []
 
 
+def test_the_agent_and_the_recap_never_see_what_is_being_ended(c):
+    from mvp import config
+    from mvp.digest import _rules_line
+    from mvp.mcp_server import Agent
+    bot = c["bot"]
+    say(c, "every day at 7 remind me to stretch", {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "days": EVERY_DAY, "time": "07:00"}, "content": {"source": "note",
+                                                                                      "text": "stretch"}}})
+    del c["state"]["answers"]["mvp_interpret"]
+    msg(c, "cancel my netflix")
+    msg(c, "friday")
+    agent = Agent(H, db=config.DB, pool=None, clock=lambda: c["clock"][0])
+    out = json.loads(agent.call("my_rules").partition("\n")[2])
+    assert "netflix" not in json.dumps(out).lower() and "cancel" not in json.dumps(out).lower()
+    assert out["left_out_sensitive"] == 1 and any("stretch" in x for x in out["rules"])
+    c["clock"][0] = datetime(2026, 11, 20, 14, 1, tzinfo=UTC)
+    assert bot.tick() >= 1
+    line = _rules_line(bot.store, H, c["clock"][0] - timedelta(days=7)) or ""
+    assert "netflix" not in line.lower() and "cancel" not in line.lower()
+
+
 def test_an_export_without_cancellations_is_as_before(c):
     from mvp import export as X
     out = X.export(c["bot"], c["bot"].store.person(H), c["clock"][0])

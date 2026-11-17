@@ -876,3 +876,83 @@ yes". Amendments A-012 to A-014 (Proposed). Each slice adds its own subsection b
   `drafts.open_draft(handle)` and `drafts.from_todo(person, todo, now)` return None, `cancel.from_todo(person, todo,
   now)` returns None.
 - Store: `Store.actions_in(handle, actions, start, end)` (no new table or column).
+
+### 16.B Slice B, W5 and W6: cancelling a subscription
+Code only (`cancel.py`, `CancelMixin` in `core.Bot`; no model call, no prompt). The bot finds the way out, writes
+what is needed and reminds; it never signs in as the person, never takes a password, and never says a subscription
+is cancelled, canceled, done or "all set" (only the merchant can say that).
+- **The trigger** (`cancel.request(text, rules, forced=False)`, up to 300 characters): a cancel verb ("cancel",
+  "unsubscribe (me) from", "get out of", "stop paying for", "end / quit / close my|the|our", "how do I cancel") and
+  either a merchant name from `cancel_routes.json`, a subscription word ("subscription", "membership", "(free)
+  trial", "auto-renew") or "my gym" / "gym membership". Never when the message says a rule, reminder, nudge, list,
+  to-do, digest, recap, texts, messages, emails, newsletters, notifications, sending, picks, ideas, recommendations or
+  any "remind" word; names any rule (`names_rule`; the helper's own check reminders are left out of that check for a
+  new cancel); has only a number as its target; or is bare "cancel", "cancel it / that / this", "unsubscribe (me)".
+  Names are distinctive only: never "max", "calm", "prime", "plan", "premium", "youtube" alone.
+- **The guard (W5)**, in `_dispatch_one` before the pending row is cleared and before `_manage`: a model `stop` or
+  `pause` whose message does not say `ALL_RULES_SAID` and that `request(text, rules, forced=True)` claims ("stop" and
+  "pause" count as cancel verbs there) stops no rule; the helper answers. A waiting rule preview stays open.
+- **Where it reads**: `cancel_reads` in `answer_normally` after `_rule_reads`, before `integration_reads` (the
+  password line, "I cancelled it", the trigger); `_cancel_answer` in `_asked_reads` after `_overdue_reply` (state
+  `cancelask:<handle>`, the next message only, 24 hours).
+- **The route file** `cancel_routes.json`: `{key, name, names[], route web|store|notice|phone|ask, url, steps[],
+  billed_via[], notice_email, phone, source_url, checked_on}` plus the Apple and Google Play pages. A `url`, a
+  `notice_email` or a `phone` is given only from an entry whose own help page (`source_url`) was read on `checked_on`,
+  and a link only for 60 days after (then the steps alone). Never a sign-in page, never from memory, never from a
+  post or a caption. Read on 17 Nov 2026: Apple (support.apple.com/en-us/118428), Google Play (answer 7018481),
+  Netflix, Spotify, YouTube Premium and Music, Peacock, Microsoft (365), with links; Dropbox and HelloFresh, steps
+  only (their pages give no cancel link, only a sign-in one); Apple-billed (Apple Music, Apple TV+, iCloud+, ...) and
+  Play Pass go to the store page. Not read (pages blocked or not found): Hulu, Disney+, Amazon Prime, Duolingo,
+  Audible (the billing question, no steps), Planet Fitness (the notice, no address).
+- **Replies** (`texts.py`, section "round 9, slice B"):
+  - web: `<Name> cancels on its website. I can't do it for you, because I never sign in as you. Here's where it is:`,
+    the numbered steps (the first is `Open <url> and sign in if it asks.` while the link is fresh), `(From <Name>'s
+    help page, checked 17 Nov.)`, `If you pay for it through Apple, Google Play or another company, you end it there
+    instead.` when the page says so, then `Want a reminder to check it went through? Tell me when, like "friday".`
+  - ask (an unread page): `How do you pay for <Name>: through Apple (iPhone), Google Play (Android), or their
+    website?` "apple" / "iphone": `Apple subscriptions cancel in your Apple account: Settings › your name ›
+    Subscriptions › <Name> › Cancel Subscription. Or open <Apple link> . Apple says to cancel a free trial at least 24
+    hours before the trial ends.` (Apple's page gives 24 hours for trials only); "android" / "google play": the Play
+    Store line; "their website": `I don't have a checked page for <Name>'s website yet. ...`; each with the offer.
+  - phone (an entry with a read page and a number): the number, `(checked <date>)`, the sentence to say, `Want a
+    reminder to call?`.
+  - gym: `Which gym?` → a name → `What name is the membership under? I only use it for the notice.` → the notice
+    (`cancel.notice_text`): `Hello,` / `Please cancel my membership effective immediately and stop all future
+    charges. Please confirm the cancellation in writing.` / `Name on the membership: <their words>` / `Email on the
+    account: <their confirmed address>` (only when confirmed) / `Member number: (fill this in)` / `Thank you,` / `<the
+    name>`. To: the entry's `notice_email` only from a read page, else `(type their email address; their website or
+    your contract has it)`. Until slice A merges it is shown as text to copy, with no link (`_cancel_notice`: the one
+    function the merge replaces with `drafts.start(person, "notice", ...)` given notice_text's fields).
+  - unknown merchant: `I don't have a checked way out of <Name> yet. These usually work:` / the Apple and Google Play
+    links / `The account or billing page of their website.` / `A cancellation email: type their support address and
+    I'll write it.` Logged to `requests` as `cancel: unknown merchant` (never the name; the row has no merchant key).
+  - `cancel my subscription`: `Which one? Tell me the name, like "cancel my Spotify".`; a saved ad or post ("the meal
+    kit from that ad I saved"): `Which company is it? Tell me the name and I'll find the way out.` (never a merchant
+    read from the post); a bare name answers either. A card or a bank account: `I can't help cancel a card or a bank
+    account. Call the number on the back of the card.` "no", "never mind" to a question: `OK, I've left it.`
+  - the password line, for a message that hands over a password or login ("here's my netflix password ...", "my
+    password is ...", "password: ...", "I can give you my login") or asks the bot to sign in ("can you just log in and
+    do it?", "sign in as me"): `No. I never sign in as you and I never need your password. If you sent a real password
+    here, please change it. I find the way out, write what's needed, and remind you.` No model call, no `requests` row,
+    no interpretation cache, and the person's inbound rows lose their text at once (`store.forget_last_inbound`).
+    "remind me to change my wifi password" is not it.
+- **The check reminder** is set only when the person names a time in the next message ("friday", "tomorrow at 6pm",
+  "in 3 days", "next week", "dec 5", "tonight"; 9am when no time; `cancel.when_answer`). "yes" asks when; "no" says
+  `OK, no reminder.`; anything else ends the offer and nothing is scheduled. It is a one-time note rule (`Check that
+  <Name> confirmed your cancellation (look for their email).`), said as `OK. On Friday 20 November at 9am I'll remind
+  you to check. Reply "stop 1" to drop it.`; "undo" and "stop N" drop it like any reminder.
+- **"I cancelled netflix", "netflix is cancelled", "I cancelled it"** (a row updated in the last 7 days, not already
+  said done or dropped): status `person_says_done`, the check reminder stopped: `Good. I've stopped the check
+  reminder.` (with none: `Good, thanks for telling me.`). Else the message goes on as usual.
+- **Data**: `cancellations(id, handle, merchant_key, route, status prepared|asked_billing|notice_drafted|person_sent|
+  person_says_done|dropped, check_rule_id, draft_id, created_at, updated_at)` (a new table; older stores gain it).
+  No amounts, no account numbers, no member number (it lives only in the draft). `action_log`: `cancel.help`, detail
+  `{route, known}` only. Never sent to a model, never in the recap or trends (the check reminder's goal is "a check
+  you asked for"), never in the MCP server (`my_rules` leaves the check reminders out and counts them as left out,
+  unless `--include-sensitive`). "delete my data" removes
+  the rows and the reminder rule; "export my data" adds `cancellations.json` (and a README line) when there are rows.
+- **W10's entry**: `cancel.from_todo(person, todo, now)` gives the request a "cancel ..." to-do makes ("Cancel the gym"
+  is the gym question), else None; `Bot.cancel_todo(person, todo, now)` sends the first reply.
+- **Out**: logging in, any browser driving, stored passwords; reading the inbox for a confirmation; a library search to
+  find the merchant; a follow-up the bot sets by itself; legal lines about cancel laws; a link checker; reply handling
+  on the check reminder; the notice's `mailto:` link and "send" (slice A's card); money in the recap.

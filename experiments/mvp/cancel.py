@@ -517,7 +517,7 @@ class CancelMixin:
         words = T.cancel_call_text(st["name"]) if st.get("call") else T.cancel_check_text(st["name"])
         spec = RuleSpec.model_validate({"when": {"type": "once", "date": local.date().isoformat(),
                                                  "time": local.strftime("%H:%M")},
-                                        "content": {"source": "note", "text": words, "goal": "check the cancellation"},
+                                        "content": {"source": "note", "text": words, "goal": "a check you asked for"},
                                         "do": ["message.send"]})
         self.note(intent="cancel")
         rule_id = self.store.add_rule(h, f"check reminder: {text}"[:300], spec.stored(), "active", None,
