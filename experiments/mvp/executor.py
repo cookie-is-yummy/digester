@@ -678,7 +678,12 @@ class ExecutorMixin:
                             x["n"] += off
                     for p, its, _ in result["items_answer"]:
                         p["shown_items"] = its
-                    if things:
+                    from .answers import clear_leads
+                    leads = clear_leads(result)
+                    if leads:   # round 9, slice U (point 2): clear picks that name nothing lead; the things follow
+                        steps["clear_leads"] = len(leads)
+                        self._lead_clear(result, leads)
+                    elif things:
                         self._items_order(result)
                 for p in (result.get("picks") or []) + (result.get("wider") or []):
                     p["things"] = things
@@ -1015,10 +1020,19 @@ class ExecutorMixin:
 
         def names_year(it):
             return bool(years) and any(y in title_from_item(it, words=1000) for y in years)
+        # round 9, slice U (point 3): a candidate whose own text names the kind asked for ("library" for "UI/UX
+        # libraries") is read before one that only lists things, so the posts read do not hang on which close
+        # posts the composer happened to return (live: a post about one library was read in one run, not the next)
+        kind = kind_phrase(c.goal or "", *texts) if things else None
+        kind_stem = _stem(_tokens(kind)[-1]) if kind and _tokens(kind) else None
+
+        def names_kind(it):
+            return bool(kind_stem) and kind_stem in {_stem(t) for t in _tokens(own_text(it, extra))}
         added = [date_fields({"item": it, "title": title_from_item(it), "verdict": "close", "because": None,
                               "because_backed": False, "criteria": [], "lines": [], "facts": {},
                               "lines_reused": False, "read_for_items": True}, extra, today, ts, year)
-                 for score, _, it in sorted(rest, key=lambda x: (not names_year(x[2]), -x[0], x[1])) if score > 0]
+                 for score, _, it in sorted(rest, key=lambda x: (not names_year(x[2]), not names_kind(x[2]), -x[0],
+                                                                 x[1])) if score > 0]
         for p in others:
             date_fields(p, extra, today, ts, year)
         reads = (shown + others + added)[:self.ITEM_READS] if things else shown[:3]
@@ -1036,6 +1050,21 @@ class ExecutorMixin:
         rest = [p for p in result.get("picks") or [] if id(p) not in used]
         wider = [p for p in result.get("wider") or [] if id(p) not in used]
         result["picks"], result["wider"] = srcs + more + rest, wider
+
+    @staticmethod
+    def _lead_clear(result, leads):
+        """Round 9, slice U (point 2): the answer leads with the composer's clear picks in the ordinary format (the
+        first clear one is the lead, the shown picks after it in the composer's order); the sources of the items
+        answer, and the posts named under "More in your saves:", come after them as `items_after` (rendered under
+        "Named in other saves, close to what you asked:"). The stored order is the order shown."""
+        after = result["items_answer"]
+        result["items_after"], result["items_answer"] = after, None
+        srcs = [p for p, _, _ in after] + [p for p, _ in result.get("items_more") or []]
+        used = {id(p) for p in srcs}
+        shown = [p for p in result.get("picks") or [] if id(p) not in used]
+        shown = [leads[0]] + [p for p in shown if p is not leads[0]]
+        result["picks"] = shown + [p for p in srcs if all(p is not q for q in shown)]
+        result["wider"] = [p for p in result.get("wider") or [] if id(p) not in used]
 
     def _second_look(self, person, spec, cands, result, request_text, extra, about, level_ok, bound, now, steps,
                      sent_count):

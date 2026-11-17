@@ -40,10 +40,12 @@ def _h(x):
 
 def answer_kind(text, steps_list, run_kinds, n_picks):
     """The kind of answer a person read, from the reply text and the run's steps (counts and fixed phrases only)."""
+    if "I recommend" in text and "Named in other saves" in text:
+        return "recommend_named"
     if any((s or {}).get("items") for s in steps_list):
         return "items"
     if "I recommend" in text:
-        return "recommend_named" if "Named in other saves" in text else "recommend"
+        return "recommend"
     if any(w in text for w in CLOSEST_WORDS):
         return "closest"
     if not n_picks:

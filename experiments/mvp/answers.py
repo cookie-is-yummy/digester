@@ -141,6 +141,20 @@ def is_clear_source(p):
     return source_rank(p) == 0
 
 
+def clear_leads(result):
+    """Round 9, slice U (point 2): the composer's clear picks that give no named thing, when no source of the items
+    answer is clear. They lead the answer in the ordinary format, and the things of the other posts follow under their
+    own label: the answer never says "Nothing I found is a clear fit" while it shows a post the composer judged clear.
+    A pick read only for its list is never clear, and for a time-sensitive request a passed or old post never leads
+    (code lowers a verdict, never raises it). [] otherwise (the items answer as before)."""
+    srcs = result.get("items_answer") or []
+    if not srcs or any(is_clear_source(p) for p, _, _ in srcs):
+        return []
+    used = {id(p) for p, _, _ in srcs} | {id(p) for p, _ in result.get("items_more") or []}
+    return [p for p in result.get("picks") or [] if judged(p) and p.get("verdict") == "clear" and id(p) not in used
+            and not p.get("old_year") and (p.get("date_state") or {}).get("state") not in ("passed", "old", "old_year")]
+
+
 def old_year_post(p, extra, today):
     """Live fix pass, round 8 (finding 99): for a time-sensitive request, a post more than 12 months old whose own
     title and text name years, all of them before this one ("Side income plans for 2024", posted in March 2024)."""

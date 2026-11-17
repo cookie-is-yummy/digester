@@ -511,34 +511,8 @@ def items_message(result, spec, footer=None, now=None, lang=None):
     if result.get("level_note"):
         text.append(result["level_note"])
     used = set()
-    labelled = False
-    for p, its, more in srcs:
-        used.add(id(p))
-        text.append("")
-        if any_clear and not is_clear_source(p) and not labelled:
-            # live fix pass, round 8 (finding 98): things from a close post are never presented as the kind asked for
-            text.append(t["items_close_head"])
-            labelled = True
-        text.append(source_head(p, now, lang))
-        text.extend(_item_line(x, lang) for x in its)
-        if more:
-            text.append(t["and_more"].format(n=more))
-        note = close_note(p, spec, lang) if not is_clear_source(p) else ""
-        if note:
-            text.append(note)
-        parts.append({"type": "text", "text": "\n".join(text).strip("\n")})
-        text = []
-        if p["item"].url:
-            parts.append(link_part(p["item"], p["title"]))
-    more = result.get("items_more") or []
-    if more:
-        text.append("")
-        text.append(t["items_more"])
-        for p, n in more:
-            used.add(id(p))
-            line = t["items_more_line_one" if n == 1 else "items_more_line"].format(title=p["title"],
-                                                                                    by=by(p["item"], lang), n=n)
-            text.append(f"• {line}" + (f" {p['item'].url}" if p["item"].url else ""))
+    text = source_blocks(srcs, spec, parts, text, used, now, lang, label=t["items_close_head"] if any_clear else None,
+                         result=result)
     rest = [p for p in result["picks"] if id(p) not in used]
     if rest:
         text.append("")
@@ -562,6 +536,54 @@ def items_message(result, spec, footer=None, now=None, lang=None):
     if text:
         parts.append({"type": "text", "text": "\n".join(text).strip("\n")})
     return Reply(parts)
+
+
+def source_blocks(srcs, spec, parts, text, used, now=None, lang=None, label=None, more=None, result=None):
+    """The sources of an items answer, each as its head, its numbered things and its link alone, then the "More in
+    your saves:" lines (result["items_more"]); `label` comes before the first source that is not clear (round 8,
+    finding 98: things from a close post are never presented as the kind asked for), or before all of them when no
+    source is clear (round 9, slice U). Adds to `parts` and `used` (ids); returns the text not yet flushed."""
+    from .answers import is_clear_source
+    t = L.table(lang)
+    labelled = False
+    for p, its, n_more in srcs:
+        used.add(id(p))
+        text.append("")
+        if label and not is_clear_source(p) and not labelled:
+            text.append(label)
+            labelled = True
+        text.append(source_head(p, now, lang))
+        text.extend(_item_line(x, lang) for x in its)
+        if n_more:
+            text.append(t["and_more"].format(n=n_more))
+        note = close_note(p, spec, lang) if not is_clear_source(p) else ""
+        if note:
+            text.append(note)
+        parts.append({"type": "text", "text": "\n".join(text).strip("\n")})
+        text = []
+        if p["item"].url:
+            parts.append(link_part(p["item"], p["title"]))
+    if more is None:
+        more = (result or {}).get("items_more") or []
+    if more:
+        text.append("")
+        text.append(t["items_more"])
+        for p, n in more:
+            used.add(id(p))
+            line = t["items_more_line_one" if n == 1 else "items_more_line"].format(title=p["title"],
+                                                                                    by=by(p["item"], lang), n=n)
+            text.append(f"• {line}" + (f" {p['item'].url}" if p["item"].url else ""))
+    return text
+
+
+def names_elsewhere(p, lang=None):
+    """Round 9, slice U: 'The names are in its slides, not its text.' (its video, for a reel or a video) for a clear
+    pick the details step read for things and that shows none, when its title or first line promises a list
+    (promises_slides, as the "Also in your saves" line says it); '' otherwise: nothing is claimed about a post that
+    promises no list."""
+    if not promises_slides(p) or (p.get("facts") or {}).get("items"):
+        return ""
+    return L.table(lang)["names_in_video" if is_video(p["item"]) else "names_in_slides"]
 
 
 def is_video(it):
@@ -642,10 +664,21 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
         text.append(lead_date)
     if first.get("same_creator"):   # round 8, finding 96
         text.append(t["same_creator_lead"])
+    after = result.get("items_after") if not follow_up else None
+    # round 9, slice U: clear picks whose text names nothing lead; the sources of the things come after them, alone
+    skip = ({id(p) for p, _, _ in after} | {id(p) for p, _ in result.get("items_more") or []}) if after else set()
+    names = names_elsewhere(first, lang) if after else ""
+    if names:
+        text.append(names)
     flush()
     if it.url:
         parts.append(link_part(it, first["title"]))
-    text.extend(details_lines(first, extract, asked=c.extract, lang=lang))
+    lines = details_lines(first, extract, asked=c.extract, lang=lang)
+    if names:   # said once: never also "The details are in the post's slides or video"
+        lines = [x for x in lines if x != t["in_video"]["items"]]
+    text.extend(lines)
+    picks = [picks[0]] + [p for p in picks[1:] if id(p) not in skip]
+    wider = [p for p in wider if id(p) not in skip]
     if result.get("closest"):
         groups = [(t["or_close"], picks[1:])]
     else:   # fix pass 5, finding 84 (3): close ones after a clear lead come under their own heading, never mixed
@@ -658,6 +691,8 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
         text.append(head)
         for p in group:
             note = alt_note(p, extract, lang)
+            if after and not note and promises_slides(p):   # round 9, slice U: as the "Also" line says it
+                note = t["in_its_video" if is_video(p["item"]) else "in_slides"]
             dn = date_words(p, result, lang)
             if dn:
                 note = f"{note.rstrip(' .')}; {dn}" if note else dn
@@ -671,6 +706,11 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
         text.append(t["wider"])
         for p in wider:
             text.append(f"• {p['title']}" + (f": {p['item'].url}" if p["item"].url else ""))
+    if after:   # round 9, slice U: the closest named things, from other posts, under their own plain label
+        rest_text = source_blocks(after, spec, parts, list(text), set(), now, lang, label=t["items_named_close"],
+                                  result=result)
+        text.clear()
+        text.extend(rest_text)
     for cr in unknown:
         text.append("")
         text.append(t["cant_check"].format(cr=cr))

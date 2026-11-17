@@ -352,12 +352,18 @@ def items_cache_kind(context):
     return "items:" + hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
+ASK_HEAD = re.compile(r"^\W*(?:(?:so|ok(?:ay)?|hey|um+)[,\s]+)*(?:(?:what|which|where|any|are there|is there|got|do you "
+                      r"have|can you (?:find|show|send|give|get|recommend)(?: me)?)\s+)(?:(?:are|is|were)\s+)?", re.I)
+
+
 def kind_phrase(goal, *texts):
     """Round 9, slice U: the kind of thing a request asks for, in its own words ("UI/UX libraries", "fonts"), for the
     details call's "Kind asked for" line; None when the request names no kind of thing (extract.THINGS)."""
     from .render import found_noun
     for t in (goal, *texts):
-        n = found_noun(t or "")
+        # a message's own question words are never part of the kind ("what websites have ...": "websites")
+        t = ASK_HEAD.sub("", t or "")
+        n = found_noun(t)
         if n:
             return n
     for t in (goal, *texts):

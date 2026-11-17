@@ -175,17 +175,20 @@ def test_94_an_items_request_reads_the_posts_whose_text_names_things(lib8):
                                    "UI fonts", "UI css frameworks"])     # (the calls run in parallel: any order)
     assert "Best cafes" not in read and "?" not in read           # a list off the topic, a recipe: never read
     # the posts with the most good things come first, at most 3; the next two are named in one line each
-    # (live fix pass, round 8, finding 98: no source is a clear pick of the composer, so nothing is counted as the
-    # kind asked for: the closest wording leads)
-    assert msg.startswith('Nothing I found is a clear fit for "UI/UX libraries".\nThese come closest:\n\nFrom ')
+    # (round 9, slice U, point 2: the composer's clear picks name nothing, so they lead in the ordinary format, and
+    # the things of the close posts follow under their own label; never "Nothing I found is a clear fit" beside them.
+    # Before: live fix pass, round 8, finding 98: the closest wording led)
+    assert msg.startswith("Here are some UI libraries.\n\nI recommend UI design vibes by @vibes")
+    assert "Nothing I found is a clear fit" not in msg
+    assert msg.index("Or try these:") < msg.index("Named in other saves, close to what you asked:\nFrom ")
     heads = [x for x in msg.split("\n") if x.startswith("From ")]
     assert [h.split('"')[1] for h in heads] == ["Best design systems", "UI icon packs I use", "UI fonts for product design"]
     assert "More in your saves:" in msg
     assert "• UI css frameworks by @css: it names 2 more. https://" in msg
     assert "Lantern UI library" not in msg      # its text lists nothing (a score of 0): never read beyond the picks
-    # the shown picks with no things follow; the one whose title promises a list says where its names are
+    # the other clear pick whose title promises a list says where its names are
     assert "• 5 free UI libraries you need to know by @slides: the names are in its slides, not its text. https://" in msg
-    assert "• UI design vibes by @vibes: calm workspace inspiration for designers." in msg
+    assert "• calm workspace inspiration for designers" in msg   # the lead's key point
     run = lib8["bot"].store.one("SELECT steps FROM runs WHERE kind='ask' ORDER BY id DESC LIMIT 1")
     steps = json.loads(run["steps"])
     assert steps["items_reads"] == 6 and steps["extract_calls"] == 6
@@ -195,8 +198,9 @@ def test_94_the_numbers_and_the_stored_answer_follow_the_order_shown(lib8):
     say(lib8, UI_ASK, ask("UI/UX libraries", ["ui libraries"]))
     bot = lib8["bot"]
     kept = bot.store.answer(bot.store.last_answer(H)["run_id"])["picks"]
-    assert [p["item_id"] for p in kept][:3] == ["d1", "i1", "f1"]
-    assert [x["name"] for x in kept[1]["items"]] == ["Iconoir", "Lucide", "Phosphor"]
+    # (round 9, slice U: the clear picks that lead come first, then the sources of the things, as shown)
+    assert [p["item_id"] for p in kept][:5] == ["v1", "s1", "d1", "i1", "f1"]
+    assert [x["name"] for x in kept[3]["items"]] == ["Iconoir", "Lucide", "Phosphor"]
     say(lib8, "add the fourth one to my list", {"intent": "todo_add", "pick_number": 4})
     assert bot.store.todos(H)[-1]["text"] == "Iconoir"
 
