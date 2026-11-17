@@ -74,6 +74,10 @@ def rec(env, monkeypatch):
         monkeypatch.setattr(Bot, name, wrap(name, getattr(Bot, name), 2))
     for name in PLACE_HOOKS:
         monkeypatch.setattr(places, name, wrap(name, getattr(places, name), 2))
+    # ---------- round 10, slice G: hook 8a ("stop adding to X", "use X for rule N", "undo rule N") ----------
+    from mvp import grants
+    monkeypatch.setattr(grants, "grant_reads", wrap("grant_reads", grants.grant_reads, 2))
+    # ---------- end round 10, slice G ----------
     return env
 
 
@@ -172,3 +176,6 @@ def test_the_hooks_run_in_the_order_of_the_map():
     order("place_answer(self, person, text, now)", "self._doit_answer(")
     order("self.secret_reads(person, text, now)", "self._asked_reads(person, text, now)", "self.onboard_step(")
     order("self.cancel_stop_guard(", "self._manage(")
+    # round 10, slice G: hook 8a right after place_reads (8), before receipts_reads
+    order("ref = place_reads(self, person, text, now)", "ref = grant_reads(self, person, text, now)",
+          "self.receipts_reads(")

@@ -2567,3 +2567,186 @@ def page_status_line(build, switches):
     """The line under the test page: the build, then each switch by name ("TickTick: off"). Never a value."""
     return " · ".join([f"Build {build}"] + [f"{k}: {v}" for k, v in switches.items()])
 # ---------- end round 10, slice K ----------
+
+
+# ---------- round 10, slice G (DESIGN.md section 17.G): rules that add to the person's own apps, one yes per rule ------
+_G_DAY_NAMES = {"MON": "Monday", "TUE": "Tuesday", "WED": "Wednesday", "THU": "Thursday", "FRI": "Friday",
+              "SAT": "Saturday", "SUN": "Sunday"}
+
+
+def grant_each(days, daily):
+    """'each Sunday', 'each day', 'each weekday', 'each time': how often a rule's caps apply, for the preview."""
+    days = sorted(set(days or []))
+    if daily or len(days) == 7:
+        return "each day"
+    if days == sorted(["MON", "TUE", "WED", "THU", "FRI"]):
+        return "each weekday"
+    if len(days) == 1:
+        return f"each {_G_DAY_NAMES.get(days[0], 'time')}"
+    return "each time"
+
+
+def grant_where(kind, app, target, settings_project=False):
+    """'in your Inbox', 'in your "Dinners" list', 'in your "Digest" calendar', 'in your default list'."""
+    if kind == "calendar":
+        return f"in your \"{target or 'Digest'}\" calendar"
+    if kind == "playlist":
+        return f"in your private playlist \"{target}\"" if target else "in a private playlist"
+    if target:
+        return f"in your \"{target}\" list"
+    if app in ("TickTick", "Todoist"):
+        return "in the project in your settings" if settings_project else "in your Inbox"
+    return "in your default list"
+
+
+def grant_thing(kind, noun_many):
+    """'as tasks with their links', 'as reminders with their links', 'as an event'."""
+    if kind == "calendar":
+        return "as an event"
+    if kind == "playlist":
+        return "as videos"
+    return f"as {noun_many} with their links"
+
+
+def place_grant_note(app, where, thing, per_run, each, per_day, calendar=False, youtube=False):
+    """G3: (the lines a rule's preview gains when it will add to the person's own app under their yes, the YES line
+    that replaces the preview's own). Word for word in the verdict."""
+    on = " on YouTube" if youtube and "YouTube" not in app else ""
+    them = "it" if calendar and per_run == 1 else "them"
+    out = (f"\nI'll also add {them} to {app}{on}, {where}, {thing}: at most {per_run} {each} and {per_day} a day."
+           + ("\nNobody else is invited and nobody gets an email." if calendar else "")
+           + "\nEach time I'll tell you here what I added, and you can say \"undo\".")
+    return out, f"\nReply YES to start and let me add {them}"
+
+
+def place_unusable(app, word, n):
+    """The place can't be used for this person now: the rule sends here, and the line says how to change that."""
+    return (f" {app} isn't connected for you, so I'll put them in my message here instead. Say \"connect {word}\", "
+            f"then \"use {word} for rule {n}\".")
+
+
+def place_no_route(app):
+    return f" I can't add to {app} on a schedule, so I'll put them in my message here instead."
+
+
+def place_not_timed(app):
+    return f" I can only add to {app} from a rule that runs at set times, so I'll put them in my message here instead."
+
+
+def rule_email_other(when, who):
+    """M-14: a rule never emails another person."""
+    return (f" I can't email other people on a schedule. I can send you the picks here {when}; then say "
+            f"\"email {who} …\" and I'll write it.")
+
+
+def grant_started(app):
+    return f" Each time I'll add them to {app} and tell you here what I added."
+
+
+def grant_not_made(app, word, n):
+    return (f" {app} isn't connected now, so I'll put them in my message here instead. Say \"check my {word}\", then "
+            f"\"use {word} for rule {n}\".")
+
+
+def grant_ran(count, one, many, app, n, titles, more=0):
+    """G4: what one run added, always in the run's message."""
+    what = f"{count} {one if count == 1 else many}"
+    more_line = f" {more} more {'is' if more == 1 else 'are'} only in this message." if more else ""
+    return (f"Added {what} to {app} (rule {n}): {'; '.join(titles)}.{more_line} Say \"undo\" to take "
+            f"{'it' if count == 1 else 'them'} out, or \"stop {n}\" to end the rule.")
+
+
+def grant_already(app, n):
+    return f"I'd already added these to {app} for rule {n}."
+
+
+def grant_failed_once(app):
+    return f"{app} didn't answer, so I kept them in my message here."
+
+
+def grant_paused(app, n, word):
+    return (f"I've stopped adding to {app} for rule {n} after 3 failures in a row. The rule keeps sending here. Say "
+            f"\"check my {word}\" to try again.")
+
+
+def grant_not_added(app):
+    return f"I didn't add these to {app} this time, so they're only in this message."
+
+
+def grant_dropped(app):
+    return f" I won't add them to {app} any more."
+
+
+def grant_day_full(app, n, per_day):
+    return f"Rule {n} has added its {per_day} for today to {app}, so these are only in this message."
+
+
+def grant_rule_changed(app, word, n):
+    return (f"Rule {n} changed since you said yes, so I didn't add anything to {app}. Say \"use {word} for rule {n}\" "
+            f"to add them again.")
+
+
+def grant_stopped_adding(app, numbers):
+    if not numbers:
+        return f"OK. I won't add anything to {app} on my own any more."
+    rules = f"Rule {numbers[0]} keeps" if len(numbers) == 1 else \
+        "Rules " + _and([str(n) for n in numbers]) + " keep"
+    return f"OK. I won't add anything to {app} on my own any more. {rules} sending here."
+
+
+def grant_nothing_to_stop(app):
+    return f"No rule adds to {app} on its own, so there's nothing to stop."
+
+
+def grant_use_preview(n, when, what, note_lines, yes_line):
+    return f"Rule {n} sends {what} {when}.{note_lines}{yes_line}, or tell me what to change."
+
+
+def grant_use_same(n, app):
+    return f"Rule {n} already adds to {app}."
+
+
+GRANT_NO_RULE = "I don't have a rule with that number. Say \"my rules\" to see them."
+GRANT_ONLY_PICKS = "That rule doesn't send things from your saves, so there's nothing to add to an app."
+
+
+def grant_change_ask(app, note_lines, yes_line):
+    """After "change 3 ...": the old yes ended; the place line asks again."""
+    return f" I've stopped adding to {app} until you say yes again.{note_lines}{yes_line} to keep adding them."
+
+
+def grant_change_done(app, n):
+    return f"OK. Rule {n} will add them to {app} again, and tell you here what it added."
+
+
+def grant_change_stale(n):
+    return f"Rule {n} changed since I asked, so I didn't start adding. Say \"my rules\" to see it."
+
+
+def grant_undone(count, one, many, app, n):
+    return f"I took the {count} {one if count == 1 else many} rule {n} added out of {app}."
+
+
+def grant_undo_failed(app, titles):
+    names = _and([f"\"{t}\"" for t in titles]) if titles else "some of them"
+    return f"I couldn't take {names} out of {app}; please remove {'it' if len(titles) == 1 else 'them'} there."
+
+
+def grant_undo_none(n):
+    return f"Rule {n} hasn't added anything in the last 7 days that's still there."
+
+
+def receipt_by_rule(by_rule):
+    """' (4 by rule 3)', ' (4 by rule 3, 2 by rule 5)'."""
+    if not by_rule:
+        return ""
+    return " (" + ", ".join(f"{c} by rule {n}" for n, c in by_rule) + ")"
+
+
+RECEIPT_STANDING = "Standing permissions:"
+
+
+def receipt_standing(n, app, many, per_run, per_day, status):
+    state = " (paused after 3 failures)" if status == "paused" else ""
+    return f"rule {n} may add {many} to {app}: at most {per_run} a run and {per_day} a day{state}"
+# ---------- end round 10, slice G ----------

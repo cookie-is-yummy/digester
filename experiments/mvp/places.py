@@ -249,6 +249,13 @@ def route(bot, ctx, name, params):
     if name not in ("todo.add", "calendar.add"):
         return None
     scheduled = ctx.kind == "scheduled"
+    # ---------- round 10, slice G (DESIGN.md section 17.G): a timed run of a rule with a place adds under its grant
+    if scheduled and ctx.rule_id:
+        from .grants import run_place
+        o = run_place(bot, ctx, name, params)
+        if o is not None:
+            return o
+    # ---------- end round 10, slice G ----------
     if name == "todo.add":
         p = TodoParams.model_validate(params or {})
         if not ctx.picks:
@@ -791,6 +798,8 @@ def _t_check(bot, person, key, now):
                                  (None if row else "broken"), last_error=e.code, at=now, checked=True)
         return bot.send(h, T.token_check_failed(e.code, app, _t_word(key)))
     bot.store.set_connection(h, key, status="connected", fails=0, last_error="", at=now, checked=True)
+    from .grants import resume_for   # round 10, slice G: a paused rule grant on this app is active again
+    resume_for(bot.store, h, key)
     return bot.send(h, T.token_checked(key, app))
 
 
@@ -803,6 +812,7 @@ def _t_disconnect(bot, person, key, now):
     if (row is None and not C.module(key).reachable()) or (row and row["status"] == "off"):
         return bot.send(h, T.token_not_on(app))
     bot.store.set_connection(h, key, status="off", at=now)
+    bot.store.end_grants(h, connector=key, reason="disconnected", at=now)   # round 10, slice G
     if bot.store.person_context(h)["prefs"].get("place_todo") == key:
         bot.store.set_prefs(h, place_todo=None)
     rows = bot.store.placements(h, key, since=now - LOOK_BACK)
@@ -886,6 +896,8 @@ def _check(bot, person, now):
         return bot.send(h, T.mac_check_failed(e.code, e.app))
     bot.store.set_connection(h, "mac", status="connected", fails=0, last_error="" if got["calendar"] else "no_calendar",
                              at=now, checked=True)
+    from .grants import resume_for   # round 10, slice G: a paused rule grant on the Mac is active again
+    resume_for(bot.store, h, "mac")
     return bot.send(h, T.MAC_CONNECTED if got["calendar"] else T.MAC_CONNECTED_NO_CALENDAR)
 
 
@@ -897,6 +909,7 @@ def _disconnect(bot, person, now):
     if row is None or row["status"] == "off":
         return bot.send(h, T.MAC_NOT_ON)
     bot.store.set_connection(h, "mac", status="off", at=now)
+    bot.store.end_grants(h, connector="mac", reason="disconnected", at=now)   # round 10, slice G
     prefs = bot.store.person_context(h)["prefs"]
     for k in ("place_todo", "place_calendar"):
         if prefs.get(k) == "mac":

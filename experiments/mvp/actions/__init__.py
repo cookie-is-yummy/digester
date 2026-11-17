@@ -222,6 +222,16 @@ REGISTRY.update({
 })
 
 
+# ---------- round 10, slice G (DESIGN.md section 17.G): the four outside adds a rule may make under its grant -----
+# Adds to the person's own apps that "undo" can take out. Never a webhook (no undo), the mailbox (it sends), or anything
+# that reaches another person. Slices C and Y set rule_grant=True on their own entries (todoist.mcp_add,
+# youtube.playlist_add). Only code runs them (from_model=False, in_rules=False stay): a rule's own do never names them.
+RULE_GRANT_ACTIONS = ("mac.reminder", "mac.event", "ticktick.add", "todoist.add")
+for _name in RULE_GRANT_ACTIONS:
+    REGISTRY[_name] = REGISTRY[_name].model_copy(update={"rule_grant": True})
+# ---------- end round 10, slice G ----------
+
+
 def validate_action(name, params=None, by="model", where="form"):
     """(name, params as a plain dict with defaults left out). Raises ValueError for anything not in the registry.
     Round 9, C1: `by` is who names it ("model": a form the model filled, the default; "code"); `where` is where it is
@@ -311,7 +321,7 @@ def over_cap(name, ctx):
     return None
 
 
-def perform(name, ctx, params=None, yes_token=None):
+def perform(name, ctx, params=None, yes_token=None, grant=None):
     """Runs one action through its module. Returns its Outcome (base.py); an error is raised to the caller.
     Round 9, C1: an action with who="operator" runs only for config.is_operator(handle); one with
     confirm="send_word" runs only when `yes_token` equals what its module's `yes_token(ctx, params)` makes from what
@@ -324,7 +334,14 @@ def perform(name, ctx, params=None, yes_token=None):
         from .. import config
         if not config.is_operator(ctx.handle):
             raise Refused(f"{name} runs only for the operator")
-    if d.confirm == "send_word":
+    # ---------- round 10, slice G: a rule's run under its grant (grants.check raises Refused unless every part of
+    # the grant fits this call: the action may be granted, the grant is active, the person, rule, action, target and
+    # scope are the ones the yes was given for, and the caps hold); then the yes token is not asked for this call
+    if grant is not None:
+        from .. import grants
+        grants.check(name, ctx, p, grant)
+    # ---------- end round 10, slice G ----------
+    if d.confirm == "send_word" and grant is None:
         make = getattr(module, "yes_token", None)
         if make is None:
             raise Refused(f"{name} has no yes_token(ctx, params) in its module")

@@ -138,6 +138,10 @@ class ReceiptsMixin:
             out += [f"• {line}" for line in waiting]
         elif waiting_only:
             out.append(T.RECEIPTS_NOTHING_WAITING)
+        standing = [] if waiting_only else self._standing_lines(h)   # round 10, slice G
+        if standing:
+            out.append(T.RECEIPT_STANDING)
+            out += [f"• {line}" for line in standing]
         lw = self._last_write(h, now)
         if lw and lw["kind"] != "final":
             out.append(T.receipts_undo(lw["say"]))
@@ -235,8 +239,22 @@ class ReceiptsMixin:
                 made = [r for r in got if (r["created_at"] or "") >= since]
                 gone = sum(1 for r in got if r.get("removed_at"))
                 last = max(_t(r.get("removed_at") or r["created_at"]) for r in got)
-                out.append((last, T.receipt_placed(len(made), gone, one, many, con.where, con.kind)))
+                line = T.receipt_placed(len(made), gone, one, many, con.where, con.kind)
+                # round 10, slice G: how many of them a rule added under its grant ("(4 by rule 3)")
+                by = {}
+                for r in made:
+                    if r.get("rule_id"):
+                        by[r["rule_id"]] = by.get(r["rule_id"], 0) + 1
+                if by:
+                    tail = T.receipt_by_rule(sorted((self.store.rule_number(h, k), c) for k, c in by.items()))
+                    line = line.replace(f" {con.where}", f" {con.where}{tail}", 1)
+                out.append((last, line))
         return out
+
+    def _standing_lines(self, h):
+        """Round 10, slice G: the rules allowed to add to an app on their own (grants not ended)."""
+        from .grants import standing
+        return [T.receipt_standing(*row) for row in sorted(standing(self.store, h))]
 
     # ---------- what is still waiting ----------
     def _waiting_lines(self, person, now):
