@@ -121,6 +121,13 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   limit (`max_per_day`), whether a rule or the model may name it (`in_rules`, `from_model`) and whether only the
   operator may run it (`who`). Set `MVP_OPERATOR` to your own handle (as in `people.json`) to be the operator;
   unset, nobody is. Tests: `tests/test_round9_registry.py`.
+- **Round 9, acting on a saved post** (DESIGN.md section 16.C, read by code, no model call): after an answer, "apply
+  to the second one", "book it" (or "book a table at the first one for saturday at 7"), "buy the ingredients for the
+  first one", "where can I buy it" give a short numbered menu of what the bot can set up (a deadline on the calendar
+  and a reminder, a checklist from the post's own lines, Google Maps, a calendar hold, the shopping list); reply "1",
+  "all" or "none". The bot never applies, books or buys, and says so. After a list of things: "add them all", "add
+  2, 4 and 5", "remind me about all of them on friday", "put them all in my calendar", "what's number 4?". Tests:
+  `tests/test_round9_postacts.py`, `tests/test_round9_things.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 

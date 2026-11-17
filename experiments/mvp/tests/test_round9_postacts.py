@@ -185,6 +185,17 @@ def test_a_setup_step_newer_than_the_offers_keeps_its_own_number(nasa):
     assert bot.offer_reads(person, "2", None, now + timedelta(minutes=2)) is None
     bot.store.set_state(f"onboard:{H}", {"step": "done", "at": now_iso(now + timedelta(minutes=1))})
     assert bot.offer_reads(person, "2", None, now + timedelta(minutes=2)) is not None
+    bot.store.set_state(f"offers:{H}", None)   # no offers open: a "2" is never read here
+    assert bot.offer_reads(person, "2", None, now + timedelta(minutes=3)) is None
+
+
+def test_a_thumbs_up_tapback_on_the_menu_runs_nothing(nasa):
+    bot, ch = nasa["bot"], nasa["ch"]
+    tell(nasa, "apply to the first one")
+    ref = ch.outbox[-1][1]
+    bot.on_message(H, "", tapback="up", tapback_ref=ref)
+    assert bot.store.rules(H) == [] and bot.store.todos(H) == []
+    assert bot.store.get_state(f"offers:{H}") is not None
 
 
 def test_a_passed_deadline_is_said_and_only_the_checklist_is_offered(env, tmp_path):
