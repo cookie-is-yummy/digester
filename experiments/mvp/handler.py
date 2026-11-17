@@ -187,7 +187,12 @@ class HandlerMixin:
             if NO.match(text):
                 return self.send(handle, T.NOT_DELETED)
             pending = None
-        elif pending and pending["kind"] == "confirm_rule" and YES.match(text):
+        # ---------- round 9: the reads of an open card or offer (verdict section 4, hooks 1 and 2) ----------
+        ref = self.offer_reads(person, text, pending, now)   # slice C: a numbered offer (offers.py)
+        if ref is not None:
+            return ref
+        # ---------- end of the round 9 card reads ----------
+        if pending and pending["kind"] == "confirm_rule" and YES.match(text):
             return self._confirm(person, pending)
         elif pending and NO.match(text):
             self.store.clear_pending(handle)
@@ -218,6 +223,11 @@ class HandlerMixin:
         pending = self._live_pending(handle, now)
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
+        # ---------- round 9: requests read by code before the model (verdict section 4, hooks 5 to 8) ----------
+        ref = self.postact_reads(person, text, now)   # slice C: apply, book, buy; "add them all" (postacts.py)
+        if ref is not None:
+            return ref
+        # ---------- end of the round 9 request reads ----------
         # round 8, slice B (DESIGN.md section 15): export, share, "what did my agent ask": code only, no model call
         done, ref = self.integration_reads(person, text, now)
         if done:
@@ -970,7 +980,10 @@ class HandlerMixin:
         if not said:
             final = [w["say"] for w in writes if w["kind"] == "final"]
             return self.send(h, T.cant_undo(" or ".join(dict.fromkeys(final))) if final else T.NOTHING_TO_UNDO)
-        return self.send(h, T.undone("; ".join(reversed(said))))
+        # round 9, slice C (W8): what came with it and cannot be taken back (a calendar link) is said, not left out
+        kept = list(dict.fromkeys(w["say"] for w in writes if w["kind"] == "final"))
+        tail = (" " + T.undo_kept(" or ".join(kept))) if kept else ""
+        return self.send(h, T.undone("; ".join(reversed(said))) + tail)
 
     def _undo_one(self, h, lw, now):
         """Reverses one write; returns what was undone, in words (or None)."""

@@ -15,6 +15,12 @@ def rows_for(picks, what="pick", due=None):
     """[(text, item_id, url, due)] for the picks, or (None, reason) when one pick has no ingredient lines of its own."""
     rows = []
     for p in picks:
+        if what == "checklist":   # round 9, slice C (W8): the lines postacts.checklist_lines found, never a model's
+            lines = p.get("checklist") or []
+            if not lines:
+                return None, "no_checklist"
+            rows += [(line, p["item_id"], p.get("url"), None) for line in lines]
+            continue
         if what == "ingredients":
             ing = (p.get("facts") or {}).get("ingredients")
             if not ing:   # lines found before the details step kept kinds apart: only if they are ingredients alone
@@ -33,6 +39,8 @@ def add(bot, person, picks, what="pick", name="todo", due=None, undoable=True):
     writes: review fix S4), and returns the Outcome with the line that says what was added and where."""
     h = person["handle"]
     rows, problem = rows_for(picks, what, due)
+    if problem == "no_checklist":
+        return Outcome("skipped", line=T.NO_CHECKLIST)
     if problem:
         return Outcome("skipped", line=T.NO_INGREDIENTS)
     if not rows:

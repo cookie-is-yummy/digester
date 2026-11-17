@@ -673,7 +673,8 @@ def test_62_a_request_the_bot_will_not_do_gets_a_sentence_picked_by_code(env):
     assert msg == T().UNSUPPORTED and "chicken" not in msg
     assert say(env, "text me when I get home", {"intent": "unsupported", "reply": "Sure thing!"}) == \
         T().UNSUPPORTED_EVENT
-    assert say(env, "book me a table", {"intent": "unsupported", "reply": "Booked for 8!"}) == T().UNSUPPORTED
+    # round 9, slice C (W8): a booking the bot will not do gets the nearest offer, still chosen by code
+    assert say(env, "book me a table", {"intent": "unsupported", "reply": "Booked for 8!"}) == T().UNSUPPORTED_BOOK
 
 
 def test_62_i_eat_meat_again_removes_that_avoid_entry_and_says_so(env):
@@ -836,4 +837,4 @@ def test_63_a_request_answered_at_the_read_is_never_the_direction(rich):
 def test_62_a_request_the_bot_will_not_do_is_answered_in_their_language(env):
     msg = say(env, "resérvame una mesa para cenar", {"intent": "unsupported", "reply": "¡Hecho!", "lang": "es"})
     assert msg.startswith("Eso no lo puedo hacer.")
-    assert say(env, "book me a table", {"intent": "unsupported", "reply": "Booked!"}) == T().UNSUPPORTED
+    assert say(env, "book me a table", {"intent": "unsupported", "reply": "Booked!"}) == T().UNSUPPORTED_BOOK   # round 9

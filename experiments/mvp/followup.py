@@ -882,6 +882,13 @@ class FollowupMixin(IntegrationReadsMixin):
         h = person["handle"]
         now = self.clock()
         items = last.get("items") or []
+        # round 9, slice C (V1): after an items answer, a number the person said names one of its things; it is
+        # answered from that thing's own words (no model call)
+        snap0 = self.store.answer(last["run_id"]) or {}
+        n_things = sum(len(p.get("items") or []) for p in snap0.get("picks") or [])
+        said = pick_number(getattr(self._tl, "msg_text", "") or "", n_things) if n_things else None
+        if said is not None:
+            return self.thing_reply(person, snap0, said)
         if not 1 <= n <= len(items):
             return self.send(h, T.which_pick(len(items)))
         iid = items[n - 1]
@@ -997,3 +1004,62 @@ def recap_rule(it, text, rules=()):
     do = [a for a in stored.get("do") or [] if a.get("action") in ("message.send", "email.send")]
     it.spec = RuleSpec.model_validate(dict(stored, content={"source": "recap"}, do=do))
     return it
+
+
+# ---------- round 9, slice C (V1; DESIGN.md section 16.C): "add them all", "add 2, 4 and 5", a numbered thing ----------
+NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+             "ten": 10, "eleven": 11, "twelve": 12}
+_ORD = r"first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|1st|2nd|3rd|[4-9]th|1[0-2]th"
+_NUMW = "|".join(NUM_WORDS)
+# the whole target of "add <target>": all the things shown, with the count the person said ("all 6") when they said one
+ALL_THINGS = re.compile(r"(?:them\s+all|all\s+of\s+(?:them|these|those)|all\s+(?:these|those|the\s+things|the\s+ones)|"
+                        r"(?:these|those)\s+all|all(?:\s+(?P<n>\d{1,2}|" + _NUMW + r")(?:\s+(?:of\s+them|things))?)?|"
+                        r"everything|every\s+one(?:\s+of\s+them)?|each\s+(?:one|of\s+them)|both(?:\s+of\s+them)?)",
+                        re.I)
+_ONE_N = rf"(?:#\s*)?(?:\d{{1,2}}|(?:the\s+)?(?:{_ORD})(?:\s+one)?)"
+NUMBERS = re.compile(rf"(?:(?:numbers?|nos?\.?)\s+)?{_ONE_N}(?:\s*(?:,|&|\+|and|,\s*and)\s*{_ONE_N})+", re.I)
+
+
+def all_things(target):
+    """(True, n said or None) when the whole target means every thing shown ("them all", "all 6", "both"), else None."""
+    m = ALL_THINGS.fullmatch(" ".join((target or "").split()))
+    if not m:
+        return None
+    n = m.group("n")
+    if n:
+        n = int(n) if n.isdigit() else NUM_WORDS[n.lower()]
+    elif re.match(r"both", m.group(0), re.I):
+        n = 2
+    return True, n or None
+
+
+def numbers_in(target):
+    """[2, 4, 5] for "2, 4 and 5", "numbers 2 and 4", "the first and third"; None unless the whole target is two or more
+    numbers (one number stays the interpreter's, as before)."""
+    t = " ".join((target or "").split())
+    if not NUMBERS.fullmatch(t):
+        return None
+    out = []
+    for m in re.finditer(rf"\d{{1,2}}|{_ORD}", t, re.I):
+        w = m.group(0).lower()
+        n = int(w) if w.isdigit() else (SHARE_ORDINAL.get(w) or int(re.sub(r"\D", "", w) or 0))
+        if n and n not in out:
+            out.append(n)
+    return out if len(out) >= 2 else None
+
+
+THING_ASK = re.compile(rf"^\W*(?:(?:so|ok|okay|and|hey)[,\s]+)?(?:what'?s|whats|what\s+is|who'?s|who\s+is|how\s+long\s+is|"
+                       rf"how\s+much\s+is|how\s+big\s+is|where\s+is|when\s+is|tell\s+me\s+(?:more\s+)?about|"
+                       rf"more\s+about)\s+(?:the\s+)?(?:(?:number|no\.?|#)\s*(?P<d>\d{{1,2}})|(?P<n>\d{{1,2}})|"
+                       rf"(?P<o>{_ORD})(?:\s+one)?)(?:\s+about)?\s*[?.!]*\s*$", re.I)
+
+
+def thing_question(text):
+    """The number of a thing a question asks about ("what's number 4?", "how long is the second one?"), or None."""
+    m = THING_ASK.match(text or "")
+    if not m:
+        return None
+    if m.group("d") or m.group("n"):
+        return int(m.group("d") or m.group("n"))
+    w = m.group("o").lower()
+    return SHARE_ORDINAL.get(w) or int(re.sub(r"\D", "", w))

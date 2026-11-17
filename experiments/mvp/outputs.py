@@ -83,6 +83,7 @@ class OutputsMixin:
     def _keep_answer(self, run_id, handle, rule_id, goal, kind, parts, picks=(), spec=None):
         self.store.put_answer(run_id, handle, rule_id, goal, kind, Reply.of(parts).parts, list(picks), at=self.clock(),
                               spec=spec)
+        self.store.set_state(f"offers:{handle}", None)   # round 9, slice C (W7): "2" never means an older answer's offer
 
     # ---------- the executor's do list ----------
     def deliver(self, person, spec, msg, run_id, kind="ask", rule_id=None, slot=None, request_text=None, after=""):
@@ -178,16 +179,21 @@ class OutputsMixin:
         return r
 
     # ---------- acting on an answer ----------
-    def _answer_picks(self, h, numbers=None, answer_ref=None, what="pick"):
+    def _answer_picks(self, h, numbers=None, answer_ref=None, what="pick", all_things=False):
         """(picks, whole, answer, problem): the picks of the last answer (or a rule's latest send) the person points
         at, each as kept by the executor: its checked title, link and details. For the last answer, the details are
-        the ones its follow-ups kept. Nothing is chosen unless every number is in the answer."""
+        the ones its follow-ups kept. Nothing is chosen unless every number is in the answer. Round 9 (V1): with
+        all_things, or two or more numbers, an items answer gives its things."""
         last = self._answer_for(h, answer_ref)
         if not last or not last.get("items"):
             return None, False, None, T.NO_PICK_TO_ADD
         items = last["items"]
         snap = self.store.answer(last["run_id"]) or {}
         kept = {p["item_id"]: p for p in snap.get("picks") or []}
+        if what == "pick" and (all_things or (numbers and len(numbers) > 1)):
+            got = self._answer_items(snap, numbers, all_things)   # round 9, slice C (V1): several things at once
+            if got is not None:
+                return got
         if what == "pick":   # round 7, finding 90: an items answer: a number or a name means one of its things
             got = self._answer_item(snap, numbers)
             if got is not None:
@@ -277,11 +283,29 @@ saves saved post posts link""".split())
         if chosen is None:
             return None
         x, p = chosen
-        rec = {"item_id": p["item_id"], "title": x.get("name"), "url": p.get("url"), "platform": p.get("platform"),
-               "video_id": p.get("video_id"), "creator": p.get("creator"),
-               "facts": {"key_points": [x["about"]]} if x.get("about") else {}, "lines": [], "line_kinds": None,
-               "item": dict(x), "source_title": p.get("title"), "main": True, "posted": p.get("posted")}
-        return [rec], False, snap, None
+        return [self._thing_rec(x, p)], False, snap, None
+
+    @staticmethod
+    def _thing_rec(x, p):
+        """One thing of an items answer as a pick record: its name, its words, its date, the post's link."""
+        return {"item_id": p["item_id"], "title": x.get("name"), "url": p.get("url"), "platform": p.get("platform"),
+                "video_id": p.get("video_id"), "creator": p.get("creator"),
+                "facts": {"key_points": [x["about"]]} if x.get("about") else {}, "lines": [], "line_kinds": None,
+                "item": dict(x), "source_title": p.get("title"), "main": True, "posted": p.get("posted")}
+
+    def _answer_items(self, snap, numbers, all_things=False):
+        """Round 9, slice C (V1): (picks, whole, answer, problem) for several things of an items answer: every one
+        (all_things), or the numbers given, in the order they were shown. None when the answer names no things."""
+        its = sorted(((x, p) for p in snap.get("picks") or [] for x in p.get("items") or []),
+                     key=lambda r: r[0].get("n") or 0)
+        if not its:
+            return None
+        if not all_things:
+            by_n = {x.get("n"): (x, p) for x, p in its}
+            if any(n not in by_n for n in numbers or []):
+                return None, False, None, T.which_item(len(its))
+            its = [by_n[n] for n in dict.fromkeys(numbers or [])]
+        return [self._thing_rec(x, p) for x, p in its], False, snap, None
 
     def _ingredients_now(self, h, picks, view, is_last):
         """Fix pass, finding 28: "add its ingredients to my list" when no ingredient lines were found yet (the answer
@@ -464,9 +488,13 @@ saves saved post posts link""".split())
         if when.get("date") and when.get("times"):   # "in 2 hours", resolved by code: the moment is what is kept
             when.pop("in_minutes", None)            # (validation would otherwise drop it and the send never comes)
         names = [p["item"]["name"] for p in picks if p.get("item") and p["item"].get("name")]
+        # round 9, slice C (V1): several things from one post: that post once, its things by name
+        ids = list(dict.fromkeys(p["item_id"] for p in picks))[:10]
+        if len(names) > 1:
+            goal = f"the {len(names)} things from \"{answer.get('goal') or 'that'}\""
         spec = RuleSpec.model_validate({"when": when,
-                                        "content": {"source": "items", "item_ids": [p["item_id"] for p in picks][:10],
-                                                    "goal": goal[:200], "count": min(len(picks), 10),
+                                        "content": {"source": "items", "item_ids": ids,
+                                                    "goal": goal[:200], "count": min(len(ids), 10),
                                                     # round 7: one thing of an items answer, by its name
                                                     **({"item_names": names[:10]} if names else {})}, "do": do})
         never = self._never_sends(person, spec, now)
