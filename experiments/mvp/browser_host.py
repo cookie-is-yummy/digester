@@ -86,11 +86,12 @@ class Session:
     screencast = False
 
     def __init__(self, domains, headless=False, install=None, asset_hosts=(), viewport=(1024, 700),
-                 max_presses=MAX_PRESSES, max_seconds=MAX_SECONDS, on_end=None):
+                 max_presses=None, max_seconds=None, on_end=None):
         self.domains = tuple(d.lower() for d in domains)
         self.asset_hosts = tuple(h.lower() for h in asset_hosts or ())
         self.headless, self.install, self.viewport = headless, install, viewport
-        self.max_presses, self.max_seconds = max_presses, max_seconds
+        self.max_presses = MAX_PRESSES if max_presses is None else max_presses
+        self.max_seconds = MAX_SECONDS if max_seconds is None else max_seconds
         self.on_end = on_end
         self.q = queue.Queue()
         self.killed = threading.Event()

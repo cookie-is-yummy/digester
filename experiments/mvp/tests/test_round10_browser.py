@@ -12,7 +12,7 @@ import random
 import re
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -717,6 +717,21 @@ def test_the_last_page_waits_10_minutes_then_closes(cv):
     assert last(cv["ch"]) == ("I closed the browser because I didn't hear back. Nothing was pressed. Say \"do it for "
                               "me\" to start again.")
     assert session(cv) is None and chromium_left() == []
+
+
+@needs_browser
+def test_over_the_press_limit_it_stops_and_gives_the_steps(cv, monkeypatch):
+    from mvp import browser_host
+    monkeypatch.setattr(browser_host, "MAX_PRESSES", 1)   # flow 2 needs two presses before the last step
+    from mvp import browser
+    monkeypatch.setattr(browser, "EXTRA", {"streamly": _practice(2)})
+    msg(cv, "cancel my streamly")
+    msg(cv, "do it for me")
+    msg(cv, "allow streamly")
+    msg(cv, "I'm in")
+    assert walked(cv).startswith("That took longer than I allow, so I stopped. Nothing else was pressed. Here's how "
+                                 "to do it yourself:\n1. ")
+    assert session(cv) is None and cv["bot"].store.browser_runs_of(H)[0]["status"] == "limit"
 
 
 @needs_browser
