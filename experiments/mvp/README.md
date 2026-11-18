@@ -200,6 +200,14 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   words (a YouTube playlist, Gmail, Google Calendar), stubs the other round 10 slices fill, and in-process fakes
   (`tests/fakes/`: the model, an MCP server, an OAuth server, Google and YouTube, a practice merchant).
   Tests: `tests/test_round10_k.py`.
+- **Round 10, the self-test** (DESIGN.md section 17.T, slice T): `python3 -m mvp.selftest` plays 40 everyday
+  conversations (every example a founder gave, paraphrased) against the bot on a made-up library and checks plain
+  things per step: no refusal, no "didn't catch that", no claimed outcome the store does not show, no inside words, no
+  meme reel leading, no friend's post, plus each step's own. Set `MVP_HOME` to a new folder, `MVP_TOTAL_CAP_USD=30` and
+  `MVP_LEDGER_HOME` first; it stops at `MVP_SELFTEST_CAP_USD` (default $1.00). `--dry` uses a fake model ($0),
+  `--quick` 8 conversations, `--only c03,c07` some. Conversations that need a round 10 slice not in the code are
+  skipped and counted. Transcripts go under `MVP_HOME/selftest/`; one line of counts goes to
+  `evalset/selftest_runs.jsonl`. Tests: `tests/test_round10_selftest.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -545,6 +553,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `settings.py`, `tokens.py` | Round 10, slice K: `secret(name)` (the environment, then the sealed store), the page's status line; sealed sign-ins and settings (AES-256-GCM, 0600 files, the key) |
 | `captionmark.py`, `browser.py`, `phrasing.py`, `yt_auth.py` | Round 10, slice K: stubs (`STUB = True`) giving today's behaviour until slices S, V, W and Y replace them |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
+| `selftest.py`, `selftest/` | Round 10, slice T: the self-test (conversations, checks, fakes, dry mode), its made-up library, `truth.json` and `conversations.jsonl` |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |
 | `lang.py` | The answer's fixed phrases in Spanish (with the outside block and the level note that ride on it); any other language gets an all-English answer, and the composer is told to write English. A rule's preview, start line and timed sends are English only for now (their timing words have no Spanish yet), so a rule made in Spanish is set up and sent in English, never in two languages at once |

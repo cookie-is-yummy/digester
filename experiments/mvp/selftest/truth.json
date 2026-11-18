@@ -1,0 +1,105 @@
+{
+ "mismatched": [
+  "st_m01",
+  "st_m02",
+  "st_m03",
+  "st_m04"
+ ],
+ "friends": [
+  "st_f01",
+  "st_f02",
+  "st_f03",
+  "st_f04",
+  "st_f05"
+ ],
+ "instructions": [
+  "st_r30",
+  "st_w15"
+ ],
+ "youtube_channels": {
+  "UCstkitchen01": "Kitchen Lab Example",
+  "UCstrender001": "Render Room Example",
+  "UCstmoney0001": "Money Habits Example",
+  "UCstscreen001": "Screen Picks Example",
+  "UCststretch01": "Stretch Studio Example",
+  "UCstinterf001": "Interface Notes Example",
+  "UCstcareer001": "Career Lab Example",
+  "UCstgarden001": "Garden Hour Example",
+  "UCstbikefix01": "Bike Fix Example",
+  "UCstchess0001": "Chess Corner Example"
+ },
+ "youtube_videos": [
+  [
+   "vidstpasta1",
+   "UCstkitchen01"
+  ],
+  [
+   "vidstpasta2",
+   "UCstkitchen01"
+  ],
+  [
+   "vidstcurry1",
+   "UCstkitchen01"
+  ],
+  [
+   "vidstblend1",
+   "UCstrender001"
+  ],
+  [
+   "vidstblend2",
+   "UCstrender001"
+  ],
+  [
+   "vidstcancel",
+   "UCstmoney0001"
+  ],
+  [
+   "vidstbudget",
+   "UCstmoney0001"
+  ],
+  [
+   "vidstnetflx",
+   "UCstscreen001"
+  ],
+  [
+   "vidstyoga01",
+   "UCststretch01"
+  ],
+  [
+   "vidstworkt1",
+   "UCststretch01"
+  ],
+  [
+   "vidstuiux01",
+   "UCstinterf001"
+  ],
+  [
+   "vidstjobs01",
+   "UCstcareer001"
+  ],
+  [
+   "vidstgard01",
+   "UCstgarden001"
+  ],
+  [
+   "vidstgard02",
+   "UCstgarden001"
+  ],
+  [
+   "vidstbike01",
+   "UCstbikefix01"
+  ],
+  [
+   "vidstbike02",
+   "UCstbikefix01"
+  ],
+  [
+   "vidstchess1",
+   "UCstchess0001"
+  ],
+  [
+   "vidstchess2",
+   "UCstchess0001"
+  ]
+ ]
+}

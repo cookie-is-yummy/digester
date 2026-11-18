@@ -2025,3 +2025,73 @@ No reply changes except the build lines; no read, no connector, no model call.
   `fake_merchant` (the practice merchant "Streamly", 9 flows, by Playwright routing).
 - `tests/test_round9_merge.py`'s rule phrasings skip `test_round10_*` files, so the set stays the round 9 one.
   `test_round9_mac.py` lists the two new `placements` columns.
+
+### 17.T The self-test (slice T)
+
+`python3 -m mvp.selftest [--dry] [--quick] [--only c03,c07] [--private] [--slices W,S]` from `experiments/`
+(`selftest.py`; data in `selftest/`). It plays everyday conversations against the bot on a made-up library and checks
+a few plain things per step.
+
+- **Start-up guard** (before any mvp import): `MVP_HOME` must be a missing or empty folder, `MVP_TOTAL_CAP_USD` must be
+  set, and a live run needs `MVP_LEDGER_HOME`; otherwise exit 2 and nothing is written. It sets `MVP_INBOX` under
+  `MVP_HOME`, `MVP_OUTSIDE=0` (no web search), and clears every outside route's setting (SMTP, mailbox, TickTick,
+  Todoist, webhook, operator, browser, the YouTube key); a conversation's `setup` turns on only what it uses.
+- **In process, no network**: the console channel, one store, a clock that starts Tuesday 17 Nov 2026 6pm UTC and
+  moves 3 minutes a step (or to "SUN 18:05", "2h" ...); before each step the scheduler tick runs, so held sends and
+  rule runs happen between messages. Fakes: `FakeApps` as `actions.web.OPENER` (TickTick and Todoist by token, any
+  example.com webhook, the fake Google when set; any other host raises), `FakeSMTP` for the operator's mailbox (keeps
+  only who it went to), a Mac runner that always fails (a run on a Mac never touches Reminders), no SMTP (email to self
+  goes to the outbox). Slice C's conversations use the fake OAuth server through an ASGI client and the fake Todoist
+  MCP server (C's own loopback page binds a free port, `MVP_CONNECT_PORT=0`, never 8765 or 8791); slice V's use the
+  practice merchant in a headless browser; slice Y's the fake Google with the library's made-up channels.
+- **--dry**: `FakeLLM` (each step's scripted `dry` answers, else harmless defaults: a chat "OK.", the first
+  candidates as clear picks, no details) and `WordPool`, a word-match ranking of the whole library instead of the
+  engine; the judge is off. 0 model calls, $0. It tests the harness; the real check is the live run after a merge.
+- **Live**: the made-up library is copied to `MVP_HOME/selftest_lib` and prepared by the engine (about $0.002); spend
+  is the growth of the shared ledger and the libraries' ledgers; the run stops (`CapReached`, a `BaseException` so the
+  bot's own `except Exception` cannot swallow it) before the first model call at or past `MVP_SELFTEST_CAP_USD`
+  (default $1.00). Remaining conversations are counted as skipped by the cap; exit 1.
+- **Slices**: `merged_slices()` reads the code: W when `phrasing.STUB` is gone and `errand.py` exists, S / Y / V when
+  `captionmark` / `yt_auth` / `browser` have no `STUB`, D / G / C when `panel.py` / `grants.py` / `mcp_client.py`
+  exist. A conversation whose `needs` are not all there is skipped and counted per slice, never failed. `--slices`
+  can only narrow what is there.
+- **Library** (`selftest/library/`, 118 items, all made up): 30 Instagram recipes from 4 creators (2 Instant Pot
+  chicken and rice, a "POV" joke hook on a real recipe), a meme account (`@lol_reels_daily`) with 4 reels whose captions
+  are pasted chatbot recipes, 15 workouts and stretches, 10 Blender tutorials, 10 UI/UX library posts, 8 programs with
+  deadlines, 6 places and events, 12 misc saves, 18 YouTube videos (10 channels; 3 last watched in 2023), 5 friends'
+  posts (`mutual`), and 2 captions with instructions aimed at an assistant (an easy lasagne, an abs workout).
+  `selftest/truth.json` (mismatched, friends, instructions, channels, videos) is read by the checks and the fakes only,
+  never by the bot.
+- **Conversations** (`selftest/conversations.jsonl`, 40, 109 steps): design D's c01 to c25, the verdict's c26 to c31,
+  and the founder's other examples, paraphrased (c32 coach by email, c33 get rid of my hulu, c34 a private playlist
+  called dinners, c35 send from his own mailbox, c36 the version, c37 "that's slop", c38 a timed email to another
+  person is never sent, c39 unfollow on Instagram), plus c07b (only meme reels fit). `founder: true` marks his
+  examples; `--private` adds `data/mvp/selftest_private.jsonl` (his exact words; outside the repository; the file is
+  his to write). A step: `say`, `advance`, `do` (`google_approve`, `mcp_allow`, `mcp_change_tool`), `tap`, `gap`,
+  `wait` ("browser"), `expect`, `expect_live` (checked only live: what only a real model can be asked to get right),
+  `dry`. `continues: c26` goes on as the same person.
+- **Checks** on every step unless `off`: `no_refusal` (no "I can't …" opener, `UNSUPPORTED`, `EMAIL_ONLY_YOU`; a step
+  whose right answer is an honest can't sets `allow_cant`), `no_not_caught`, `no_claim` (the bot's own words, quotes
+  removed, say sent / emailed / added / unsubscribed only when the store shows such an act for that person, and never
+  cancelled / booked / ordered / bought / paid; a negated claim such as "Nothing has been sent" is not one),
+  `no_inside` (json, structured, prompt, schema, interpreter), `no_mismatch_lead` (a new answer never leads with a
+  `truth.json` mismatched reel when another pick fits; with S merged a shown mismatched reel carries the doubt line),
+  `no_friends`. Per step: `helper` / `helper_not` (which read claimed the message: every hook is wrapped as in the
+  phrasing baseline, plus the noted intent), `reply_has` / `reply_any` / `reply_not` (case-insensitive), `pending`,
+  `rule_made` (with `place.connector`), `draft_open`, `model_calls` (at most n per purpose), `sent_to_other` (exactly n
+  emails from the person's mailbox to anyone but them), `placed`, `new_creator`, `last_lead_not`. A crash inside the
+  bot is a failed step, not a crashed run. Every patch is undone at the end.
+- **Output**: each step printed; the transcript to `$MVP_HOME/selftest/<stamp>.md`; one line of counts (no text) to
+  `mvp/evalset/selftest_runs.jsonl` (a dry run: `$MVP_HOME/selftest/counts.jsonl` unless `--counts`): `{at, head,
+  build, mode, slices, conversations, ran, skipped, skipped_by_slice, steps, steps_ok, by_check: {check: [ok, n]},
+  failed: ["c07.2"], stopped, spend_usd, models: {purpose: n}, seconds}`. Exit 1 on any failed check or a stop at the
+  cap.
+- **On the foundation alone** (dry): 9 conversations run, 19 steps, all pass; 31 skipped (W 14, S 5, Y 5, G 4, C 2,
+  V 2, D 1). Found on the way, left to slice W (its cancel false-positive guard): "any videos on how to cancel
+  subscriptions you don't use" and "im thinking of cancelling netflix, did i save anything worth watching on it first"
+  are taken by `cancel_reads` (c24).
+- **The habit**: `--quick` (c02, c03, c05, c07, c10, c19, c20, c23, about $0.15) after a change to a read, a guard or a
+  prompt; the full set (about $0.55 to $0.70) before a merge, the line of counts in the PR. A failing step gets an
+  offline test first. A conversation is never deleted; a changed expectation gets a `note`.
+- Tests: `tests/test_round10_selftest.py` (the guard, the dry run end to end with 0 model calls, every check, skips,
+  the cap, crashes, timed sends, the fakes, the library and the conversations).
