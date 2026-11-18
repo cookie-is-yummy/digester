@@ -377,6 +377,58 @@ def test_the_library_is_made_up_and_shaped_as_designed():
             assert addr.endswith("@example.com")
 
 
+ITEM_KEYS = {"id", "platform", "source_url", "dedup_key", "first_seen_at", "caption", "platform_data", "importance",
+             "processing_depth", "interaction_kinds"}
+
+
+def test_the_library_has_the_contract_shape_an_import_writes():
+    """The first live run found the made-up items without dedup_key: the real engine could not open the library and
+    every search said "Something went wrong". Every item and interaction has the shape the importers write."""
+    its = items()
+    for i in its:
+        assert set(i) == ITEM_KEYS, i["id"]
+        code = i["dedup_key"].split(":", 1)
+        assert code[0] == i["platform"] and code[1] and code[1] in i["source_url"], i["id"]
+        assert i["first_seen_at"] and i["processing_depth"] in ("full", "light") and 0 < i["importance"] <= 1
+        pd = i["platform_data"]
+        assert {"owner_handle", "owner_name", "owner_relation", "hashtags", "collections", "media_kind"} <= set(pd)
+        if i["platform"] == "youtube":
+            assert {"video_id", "watch_count", "available", "channel_id"} <= set(pd)
+    assert len({i["dedup_key"] for i in its}) == len(its)
+    for r in (json.loads(x) for x in open(INTER)):
+        assert {"item_id", "kind", "at", "capture_method", "weight"} <= set(r)
+
+
+def test_the_real_engine_opens_the_made_up_library(tmp_path):
+    """The engine's own loader (a q8 store of made-up vectors, no key, no network) opens the library and counts every
+    item as searchable, YouTube ones included (their depth passes the tier-1 gate)."""
+    import shutil
+    import subprocess
+    lib = tmp_path / "lib"
+    shutil.copytree(os.path.dirname(os.path.dirname(ITEMS)), lib)
+    code = f"""
+import json, os, sys
+import numpy as np
+sys.path.insert(0, {os.path.join(os.path.dirname(MVP), 'demo')!r})
+import engine
+lib = engine.configure({str(lib)!r})
+ids = [json.loads(x)["id"] for x in open(os.path.join(lib, "corpus", "items.jsonl"))]
+rng = np.random.RandomState(0)
+os.makedirs(os.path.join(lib, "r7"))
+np.savez(os.path.join(lib, "r7", "router.npz"), Wt=rng.randn(5, 1024) * 0.01, bt=np.zeros(5),
+         Wp=rng.randn(3, 1024) * 0.01, bp=np.zeros(3))
+engine.save_q8_store(lib, ids, rng.randint(-100, 100, (len(ids), 1024)).astype(np.int8),
+                     np.ones(len(ids), np.float32))
+print(json.dumps(engine.Engine(lib).info()["counts"]))
+"""
+    env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY")}
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=240,
+                       cwd=os.path.dirname(MVP))
+    assert r.returncode == 0, r.stderr[-2000:]
+    counts = json.loads(r.stdout.strip().splitlines()[-1])
+    assert counts["items"] == 118 and counts["with_vectors"] == 118 and counts["youtube"] == 18
+
+
 def test_friends_posts_never_reach_a_reply_in_a_dry_run(st, tmp_path):
     f = write_convs(tmp_path, [{"id": "t1", "who": "tester", "needs": [], "steps": [
         {"say": "dinner party pasta night", "dry": {"mvp_interpret": {"intent": "ask", "spec": {

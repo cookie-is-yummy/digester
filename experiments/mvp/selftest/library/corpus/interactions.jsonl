@@ -1,118 +1,118 @@
-{"item_id": "st_r01", "kind": "save", "at": "2026-02-01T19:00:00+00:00"}
-{"item_id": "st_r02", "kind": "save", "at": "2026-03-02T19:00:00+00:00"}
-{"item_id": "st_r03", "kind": "save", "at": "2026-04-03T19:00:00+00:00"}
-{"item_id": "st_r04", "kind": "save", "at": "2026-05-04T19:00:00+00:00"}
-{"item_id": "st_r05", "kind": "save", "at": "2026-06-05T19:00:00+00:00"}
-{"item_id": "st_r06", "kind": "save", "at": "2026-07-06T19:00:00+00:00"}
-{"item_id": "st_r07", "kind": "save", "at": "2026-08-07T19:00:00+00:00"}
-{"item_id": "st_r08", "kind": "save", "at": "2026-09-08T19:00:00+00:00"}
-{"item_id": "st_r09", "kind": "save", "at": "2026-10-09T19:00:00+00:00"}
-{"item_id": "st_r10", "kind": "save", "at": "2026-02-10T19:00:00+00:00"}
-{"item_id": "st_r11", "kind": "save", "at": "2026-03-11T19:00:00+00:00"}
-{"item_id": "st_r12", "kind": "save", "at": "2026-04-12T19:00:00+00:00"}
-{"item_id": "st_r13", "kind": "save", "at": "2026-05-13T19:00:00+00:00"}
-{"item_id": "st_r14", "kind": "save", "at": "2026-06-14T19:00:00+00:00"}
-{"item_id": "st_r15", "kind": "save", "at": "2026-07-15T19:00:00+00:00"}
-{"item_id": "st_r16", "kind": "save", "at": "2026-08-16T19:00:00+00:00"}
-{"item_id": "st_r17", "kind": "save", "at": "2026-09-17T19:00:00+00:00"}
-{"item_id": "st_r18", "kind": "save", "at": "2026-10-18T19:00:00+00:00"}
-{"item_id": "st_r19", "kind": "save", "at": "2026-02-19T19:00:00+00:00"}
-{"item_id": "st_r20", "kind": "save", "at": "2026-03-20T19:00:00+00:00"}
-{"item_id": "st_r21", "kind": "save", "at": "2026-04-21T19:00:00+00:00"}
-{"item_id": "st_r22", "kind": "save", "at": "2026-05-22T19:00:00+00:00"}
-{"item_id": "st_r23", "kind": "save", "at": "2026-06-23T19:00:00+00:00"}
-{"item_id": "st_r24", "kind": "save", "at": "2026-07-24T19:00:00+00:00"}
-{"item_id": "st_r25", "kind": "save", "at": "2026-08-25T19:00:00+00:00"}
-{"item_id": "st_r26", "kind": "save", "at": "2026-09-26T19:00:00+00:00"}
-{"item_id": "st_r27", "kind": "save", "at": "2026-10-27T19:00:00+00:00"}
-{"item_id": "st_r28", "kind": "save", "at": "2026-02-01T19:00:00+00:00"}
-{"item_id": "st_r29", "kind": "save", "at": "2026-03-02T19:00:00+00:00"}
-{"item_id": "st_r30", "kind": "save", "at": "2026-10-02T19:00:00+00:00"}
-{"item_id": "st_m01", "kind": "save", "at": "2026-10-10T21:00:00+00:00"}
-{"item_id": "st_m02", "kind": "save", "at": "2026-10-11T21:00:00+00:00"}
-{"item_id": "st_m03", "kind": "save", "at": "2026-10-12T21:00:00+00:00"}
-{"item_id": "st_m04", "kind": "save", "at": "2026-10-13T21:00:00+00:00"}
-{"item_id": "st_w01", "kind": "save", "at": "2026-02-10T07:00:00+00:00"}
-{"item_id": "st_w02", "kind": "save", "at": "2026-03-11T07:00:00+00:00"}
-{"item_id": "st_w03", "kind": "save", "at": "2026-04-12T07:00:00+00:00"}
-{"item_id": "st_w04", "kind": "save", "at": "2026-05-13T07:00:00+00:00"}
-{"item_id": "st_w05", "kind": "save", "at": "2026-06-14T07:00:00+00:00"}
-{"item_id": "st_w06", "kind": "save", "at": "2026-07-15T07:00:00+00:00"}
-{"item_id": "st_w07", "kind": "save", "at": "2026-08-16T07:00:00+00:00"}
-{"item_id": "st_w08", "kind": "save", "at": "2026-09-17T07:00:00+00:00"}
-{"item_id": "st_w09", "kind": "save", "at": "2026-02-18T07:00:00+00:00"}
-{"item_id": "st_w10", "kind": "save", "at": "2026-03-10T07:00:00+00:00"}
-{"item_id": "st_w11", "kind": "save", "at": "2026-04-11T07:00:00+00:00"}
-{"item_id": "st_w12", "kind": "save", "at": "2026-05-12T07:00:00+00:00"}
-{"item_id": "st_w13", "kind": "save", "at": "2026-06-13T07:00:00+00:00"}
-{"item_id": "st_w14", "kind": "save", "at": "2026-07-14T07:00:00+00:00"}
-{"item_id": "st_w15", "kind": "save", "at": "2026-10-20T07:00:00+00:00"}
-{"item_id": "st_b01", "kind": "save", "at": "2026-08-01T22:00:00+00:00"}
-{"item_id": "st_b02", "kind": "save", "at": "2026-08-02T22:00:00+00:00"}
-{"item_id": "st_b03", "kind": "save", "at": "2026-08-03T22:00:00+00:00"}
-{"item_id": "st_b04", "kind": "save", "at": "2026-08-04T22:00:00+00:00"}
-{"item_id": "st_b05", "kind": "save", "at": "2026-08-05T22:00:00+00:00"}
-{"item_id": "st_b06", "kind": "save", "at": "2026-08-06T22:00:00+00:00"}
-{"item_id": "st_b07", "kind": "save", "at": "2026-08-07T22:00:00+00:00"}
-{"item_id": "st_b08", "kind": "save", "at": "2026-08-08T22:00:00+00:00"}
-{"item_id": "st_b09", "kind": "save", "at": "2026-08-09T22:00:00+00:00"}
-{"item_id": "st_b10", "kind": "save", "at": "2026-08-10T22:00:00+00:00"}
-{"item_id": "st_u01", "kind": "save", "at": "2026-07-01T15:00:00+00:00"}
-{"item_id": "st_u02", "kind": "save", "at": "2026-07-02T15:00:00+00:00"}
-{"item_id": "st_u03", "kind": "save", "at": "2026-07-03T15:00:00+00:00"}
-{"item_id": "st_u04", "kind": "save", "at": "2026-07-04T15:00:00+00:00"}
-{"item_id": "st_u05", "kind": "save", "at": "2026-07-05T15:00:00+00:00"}
-{"item_id": "st_u06", "kind": "save", "at": "2026-07-06T15:00:00+00:00"}
-{"item_id": "st_u07", "kind": "save", "at": "2026-07-07T15:00:00+00:00"}
-{"item_id": "st_u08", "kind": "save", "at": "2026-07-08T15:00:00+00:00"}
-{"item_id": "st_u09", "kind": "save", "at": "2026-07-09T15:00:00+00:00"}
-{"item_id": "st_u10", "kind": "save", "at": "2026-07-10T15:00:00+00:00"}
-{"item_id": "st_j01", "kind": "save", "at": "2026-11-01T12:00:00+00:00"}
-{"item_id": "st_j02", "kind": "save", "at": "2026-11-02T12:00:00+00:00"}
-{"item_id": "st_j03", "kind": "save", "at": "2026-11-03T12:00:00+00:00"}
-{"item_id": "st_j04", "kind": "save", "at": "2026-11-04T12:00:00+00:00"}
-{"item_id": "st_j05", "kind": "save", "at": "2026-11-05T12:00:00+00:00"}
-{"item_id": "st_j06", "kind": "save", "at": "2026-11-06T12:00:00+00:00"}
-{"item_id": "st_j07", "kind": "save", "at": "2026-11-07T12:00:00+00:00"}
-{"item_id": "st_j08", "kind": "save", "at": "2026-11-08T12:00:00+00:00"}
-{"item_id": "st_e01", "kind": "save", "at": "2026-10-01T18:00:00+00:00"}
-{"item_id": "st_e02", "kind": "save", "at": "2026-10-02T18:00:00+00:00"}
-{"item_id": "st_e03", "kind": "save", "at": "2026-10-03T18:00:00+00:00"}
-{"item_id": "st_e04", "kind": "save", "at": "2026-10-04T18:00:00+00:00"}
-{"item_id": "st_e05", "kind": "save", "at": "2026-10-05T18:00:00+00:00"}
-{"item_id": "st_e06", "kind": "save", "at": "2026-10-06T18:00:00+00:00"}
-{"item_id": "st_y01", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y02", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y03", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y04", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y05", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y06", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y07", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y08", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y09", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y10", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y11", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y12", "kind": "watch", "at": "2026-10-30T20:00:00+00:00"}
-{"item_id": "st_y13", "kind": "watch", "at": "2023-05-01T10:00:00+00:00"}
-{"item_id": "st_y14", "kind": "watch", "at": "2023-06-11T10:00:00+00:00"}
-{"item_id": "st_y15", "kind": "watch", "at": "2023-09-03T10:00:00+00:00"}
-{"item_id": "st_y16", "kind": "watch", "at": "2023-10-03T10:00:00+00:00"}
-{"item_id": "st_y17", "kind": "watch", "at": "2023-12-24T10:00:00+00:00"}
-{"item_id": "st_y18", "kind": "watch", "at": "2023-12-28T10:00:00+00:00"}
-{"item_id": "st_x01", "kind": "save", "at": "2026-06-01T12:00:00+00:00"}
-{"item_id": "st_x02", "kind": "save", "at": "2026-06-02T12:00:00+00:00"}
-{"item_id": "st_x03", "kind": "save", "at": "2026-06-03T12:00:00+00:00"}
-{"item_id": "st_x04", "kind": "save", "at": "2026-06-04T12:00:00+00:00"}
-{"item_id": "st_x05", "kind": "save", "at": "2026-06-05T12:00:00+00:00"}
-{"item_id": "st_x06", "kind": "save", "at": "2026-06-06T12:00:00+00:00"}
-{"item_id": "st_x07", "kind": "save", "at": "2026-06-07T12:00:00+00:00"}
-{"item_id": "st_x08", "kind": "save", "at": "2026-06-08T12:00:00+00:00"}
-{"item_id": "st_x09", "kind": "save", "at": "2026-06-09T12:00:00+00:00"}
-{"item_id": "st_x10", "kind": "save", "at": "2026-06-10T12:00:00+00:00"}
-{"item_id": "st_x11", "kind": "save", "at": "2026-06-11T12:00:00+00:00"}
-{"item_id": "st_x12", "kind": "save", "at": "2026-06-12T12:00:00+00:00"}
-{"item_id": "st_f01", "kind": "save", "at": "2026-09-15T19:00:00+00:00"}
-{"item_id": "st_f02", "kind": "save", "at": "2026-09-15T19:00:00+00:00"}
-{"item_id": "st_f03", "kind": "save", "at": "2026-09-15T19:00:00+00:00"}
-{"item_id": "st_f04", "kind": "save", "at": "2026-09-15T19:00:00+00:00"}
-{"item_id": "st_f05", "kind": "save", "at": "2026-09-15T19:00:00+00:00"}
+{"item_id": "st_r01", "kind": "save", "at": "2026-02-01T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r02", "kind": "save", "at": "2026-03-02T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r03", "kind": "save", "at": "2026-04-03T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r04", "kind": "save", "at": "2026-05-04T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r05", "kind": "save", "at": "2026-06-05T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r06", "kind": "save", "at": "2026-07-06T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r07", "kind": "save", "at": "2026-08-07T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r08", "kind": "save", "at": "2026-09-08T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r09", "kind": "save", "at": "2026-10-09T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r10", "kind": "save", "at": "2026-02-10T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r11", "kind": "save", "at": "2026-03-11T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r12", "kind": "save", "at": "2026-04-12T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r13", "kind": "save", "at": "2026-05-13T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r14", "kind": "save", "at": "2026-06-14T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r15", "kind": "save", "at": "2026-07-15T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r16", "kind": "save", "at": "2026-08-16T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r17", "kind": "save", "at": "2026-09-17T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r18", "kind": "save", "at": "2026-10-18T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r19", "kind": "save", "at": "2026-02-19T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r20", "kind": "save", "at": "2026-03-20T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r21", "kind": "save", "at": "2026-04-21T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r22", "kind": "save", "at": "2026-05-22T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r23", "kind": "save", "at": "2026-06-23T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r24", "kind": "save", "at": "2026-07-24T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r25", "kind": "save", "at": "2026-08-25T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r26", "kind": "save", "at": "2026-09-26T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r27", "kind": "save", "at": "2026-10-27T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r28", "kind": "save", "at": "2026-02-01T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r29", "kind": "save", "at": "2026-03-02T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_r30", "kind": "save", "at": "2026-10-02T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_m01", "kind": "save", "at": "2026-10-10T21:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_m02", "kind": "save", "at": "2026-10-11T21:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_m03", "kind": "save", "at": "2026-10-12T21:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_m04", "kind": "save", "at": "2026-10-13T21:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w01", "kind": "save", "at": "2026-02-10T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w02", "kind": "save", "at": "2026-03-11T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w03", "kind": "save", "at": "2026-04-12T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w04", "kind": "save", "at": "2026-05-13T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w05", "kind": "save", "at": "2026-06-14T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w06", "kind": "save", "at": "2026-07-15T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w07", "kind": "save", "at": "2026-08-16T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w08", "kind": "save", "at": "2026-09-17T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w09", "kind": "save", "at": "2026-02-18T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w10", "kind": "save", "at": "2026-03-10T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w11", "kind": "save", "at": "2026-04-11T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w12", "kind": "save", "at": "2026-05-12T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w13", "kind": "save", "at": "2026-06-13T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w14", "kind": "save", "at": "2026-07-14T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_w15", "kind": "save", "at": "2026-10-20T07:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b01", "kind": "save", "at": "2026-08-01T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b02", "kind": "save", "at": "2026-08-02T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b03", "kind": "save", "at": "2026-08-03T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b04", "kind": "save", "at": "2026-08-04T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b05", "kind": "save", "at": "2026-08-05T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b06", "kind": "save", "at": "2026-08-06T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b07", "kind": "save", "at": "2026-08-07T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b08", "kind": "save", "at": "2026-08-08T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b09", "kind": "save", "at": "2026-08-09T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_b10", "kind": "save", "at": "2026-08-10T22:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u01", "kind": "save", "at": "2026-07-01T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u02", "kind": "save", "at": "2026-07-02T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u03", "kind": "save", "at": "2026-07-03T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u04", "kind": "save", "at": "2026-07-04T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u05", "kind": "save", "at": "2026-07-05T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u06", "kind": "save", "at": "2026-07-06T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u07", "kind": "save", "at": "2026-07-07T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u08", "kind": "save", "at": "2026-07-08T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u09", "kind": "save", "at": "2026-07-09T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_u10", "kind": "save", "at": "2026-07-10T15:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_j01", "kind": "save", "at": "2026-11-01T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_j02", "kind": "save", "at": "2026-11-02T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_j03", "kind": "save", "at": "2026-11-03T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_j04", "kind": "save", "at": "2026-11-04T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_j05", "kind": "save", "at": "2026-11-05T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_j06", "kind": "save", "at": "2026-11-06T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_j07", "kind": "save", "at": "2026-11-07T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_j08", "kind": "save", "at": "2026-11-08T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_e01", "kind": "save", "at": "2026-10-01T18:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_e02", "kind": "save", "at": "2026-10-02T18:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_e03", "kind": "save", "at": "2026-10-03T18:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_e04", "kind": "save", "at": "2026-10-04T18:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_e05", "kind": "save", "at": "2026-10-05T18:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_e06", "kind": "save", "at": "2026-10-06T18:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_y01", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y02", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y03", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y04", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y05", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y06", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y07", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y08", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y09", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y10", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y11", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y12", "kind": "watch", "at": "2026-10-30T20:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y13", "kind": "watch", "at": "2023-05-01T10:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y14", "kind": "watch", "at": "2023-06-11T10:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y15", "kind": "watch", "at": "2023-09-03T10:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y16", "kind": "watch", "at": "2023-10-03T10:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y17", "kind": "watch", "at": "2023-12-24T10:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_y18", "kind": "watch", "at": "2023-12-28T10:00:00+00:00", "capture_method": "export_import", "weight": 0.1}
+{"item_id": "st_x01", "kind": "save", "at": "2026-06-01T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x02", "kind": "save", "at": "2026-06-02T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x03", "kind": "save", "at": "2026-06-03T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x04", "kind": "save", "at": "2026-06-04T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x05", "kind": "save", "at": "2026-06-05T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x06", "kind": "save", "at": "2026-06-06T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x07", "kind": "save", "at": "2026-06-07T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x08", "kind": "save", "at": "2026-06-08T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x09", "kind": "save", "at": "2026-06-09T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x10", "kind": "save", "at": "2026-06-10T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x11", "kind": "save", "at": "2026-06-11T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_x12", "kind": "save", "at": "2026-06-12T12:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_f01", "kind": "save", "at": "2026-09-15T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_f02", "kind": "save", "at": "2026-09-15T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_f03", "kind": "save", "at": "2026-09-15T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_f04", "kind": "save", "at": "2026-09-15T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
+{"item_id": "st_f05", "kind": "save", "at": "2026-09-15T19:00:00+00:00", "capture_method": "export_import", "weight": 0.8}
