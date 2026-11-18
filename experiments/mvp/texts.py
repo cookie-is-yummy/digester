@@ -2855,8 +2855,12 @@ def place_grant_note(app, where, thing, per_run, each, per_day, calendar=False, 
     return out, f"\nReply YES to start and let me add {them}"
 
 
-def place_unusable(app, word, n):
+def place_unusable(app, word, n, why=None):
     """The place can't be used for this person now: the rule sends here, and the line says how to change that."""
+    # review of the round 10 merge: a tester can't connect the app this round ("connect todoist" says it isn't ready),
+    # so the line never tells them to
+    if why == "operator":
+        return f" {app} is only for the person who runs me, so I'll put them in my message here instead."
     return (f" {app} isn't connected for you, so I'll put them in my message here instead. Say \"connect {word}\", "
             f"then \"use {word} for rule {n}\".")
 

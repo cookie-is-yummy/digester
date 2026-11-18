@@ -170,8 +170,8 @@ def test_a_tester_gets_the_honest_line_no_place_and_no_grant(tok, monkeypatch):
     monkeypatch.setattr(config, "OPERATOR", None)
     bot = tok["bot"]
     msg = make_rule(tok, yes=False)
-    assert msg.endswith(" TickTick isn't connected for you, so I'll put them in my message here instead. Say \"connect "
-                        "ticktick\", then \"use ticktick for rule 1\".")
+    # the review of the round 10 merge: a tester can't connect TickTick, so the line never tells them to
+    assert msg.endswith(" TickTick is only for the person who runs me, so I'll put them in my message here instead.")
     assert "I'll also add" not in msg
     start = say(tok, "yes", boom)
     assert "TickTick" not in start
@@ -669,9 +669,8 @@ def test_use_the_app_for_rule_n_as_a_tester_says_why_not(tok, monkeypatch):
     from mvp import config
     make_rule(tok, text="every sunday at 6pm send me 3 pasta recipes")
     monkeypatch.setattr(config, "OPERATOR", None)
-    assert say(tok, "use ticktick for rule 1", boom) == (
-        "TickTick isn't connected for you, so I'll put them in my message here instead. Say \"connect ticktick\", "
-        "then \"use ticktick for rule 1\".")
+    assert say(tok, "use ticktick for rule 1", boom) == (   # the review of the round 10 merge: never "connect ..."
+        "TickTick is only for the person who runs me, so I'll put them in my message here instead.")
     assert say(tok, "use notion for rule 1", boom) == (
         "I can't add to Notion on a schedule, so I'll put them in my message here instead.")
     assert say(tok, "use ticktick for rule 7", boom) == T().GRANT_NO_RULE

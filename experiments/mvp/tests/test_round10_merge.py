@@ -546,3 +546,18 @@ def test_a_token_set_after_a_todoist_sign_in_ends_the_grant_with_one_line_and_ad
     assert say(mcp, "yes", boom) == "OK. Rule 1 will add them to Todoist again, and tell you here what it added."
     g = [x for x in bot.store.grants_of(H, active_only=False) if x["status"] == "active"]
     assert [x["action"] for x in g] == ["todoist.add"]
+
+
+@pytest.mark.parametrize("app,word", [("ticktick", "TickTick"), ("todoist", "Todoist")])
+def test_a_tester_naming_an_app_in_a_rule_is_never_told_to_connect_it(tok, app, word, monkeypatch):
+    """Slice G's "isn't connected for you ... Say "connect todoist"" line told a tester to do what slice C (and round 9)
+    answer with "isn't ready yet" / "only for the person who runs me". A tester hears that it is the operator's only."""
+    from mvp import config
+    monkeypatch.setattr(config, "OPERATOR", "+15559999")
+    out = say(tok, f"every sunday at 6pm put 3 pasta recipes in my {app}", rule_form())
+    assert out.endswith(f" {word} is only for the person who runs me, so I'll put them in my message here instead.")
+    assert "connect" not in out.split("stay quiet.")[-1]
+    say(tok, "yes", boom)
+    assert say(tok, f"use {app} for rule 1", boom) == \
+        f"{word} is only for the person who runs me, so I'll put them in my message here instead."
+    assert tok["bot"].store.grants_of(H, active_only=False) == []

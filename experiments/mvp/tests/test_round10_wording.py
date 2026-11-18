@@ -697,8 +697,8 @@ def test_a_rule_naming_an_app_says_it_cant_add_there_yet(tester):
         "content": {"source": "library", "goal": "recipes", "searches": ["recipes"]}}})
     out = replies_of(e, n0)
     assert len(out) == 1 and "on a schedule yet" not in out[0], out
-    assert "TickTick isn't connected for you, so I'll put them in my message here instead. Say \"connect ticktick\"" \
-        in out[0], out
+    # the review of the round 10 merge: a tester is never told to connect an app only the operator can use
+    assert "TickTick is only for the person who runs me, so I'll put them in my message here instead." in out[0], out
 
 
 # ---------- two asks in one message (split_reads, hook 8z) ----------

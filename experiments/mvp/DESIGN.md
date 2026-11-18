@@ -2010,9 +2010,11 @@ Nothing above hook 5 sees the normalised text; the reads of slices D, G and C in
   stops the deletion; the reply adds `I couldn't reach Todoist to cancel my access; remove it in Todoist under Settings
   › Integrations.`
 - A strong-marked reel (slice S) is never placed by a rule run: the kept pick record carries S's level (`cm: strong`,
-  what the person said included), the library mark is read as before, and the run's line ends with S's `1 left out:
-  its caption may not match the video.` (also when nothing else was left to add). An item the person called fine whose
-  library mark is strong is still left out (the safe side).
+  what the person said included), else the item's level with what the person said (`captionmark.effective`, read in
+  `grants._strong`), and the run's line ends with S's `1 left out: its caption may not match the video.` (also when
+  nothing else was left to add). A reel the person called fine is added again, even when the library marks it strong
+  (under S's neutral name: compose names it from the library's mark); one they called a mismatch is left out (the
+  review of the merge, below).
 - The errand form reaches the helpers of D, G and C only through their code reads: `send_draft` is D's "can you send
   it for me" read (the route read again, the operator's switch-on line, never a send); "connect / check / disconnect
   <app>" go through `place_reads` (C's sign-in link, G's grants ended by a disconnect). `errand.py` names no action,
@@ -2036,6 +2038,41 @@ right by code, 1 wrong helper (d007, by design), 63 lines fell through to the mo
 its 8 lines that ask a rule to add to an app, slice G reads the app from 4 once the interpreter has made the rule.
 Stubs: `phrasing` (W), `captionmark` and `compose.display_title` (S) and `connectors.route_for` (C) are real;
 `browser` and `yt_auth` are still stubs (`STUB = True`, "not available").
+
+**The review of the merge** (18 Nov, an independent check, offline, no model call).
+- Nothing dropped: every function, method, constant, text, table line and test each of the six branches added or
+  changed is in the merged tree with the branch's body or one that keeps both sides (an AST and line check of each
+  branch against its base). The only lines gone are slice K's stub bodies (replaced by S, W and C), slice W's stop-gap
+  line `T.app_rule_line` (replaced by G's place line) and the test lines the merge updated on purpose.
+- The order of the reads matches the table above, by the source and by probes with the fakes: the three screenshot
+  messages (the setup's form, then `email_reads`, then `draft_reads`, no interpreter call), "that reel had nothing to
+  do with it" (`fit_reads`), "send" on a card as the operator (`draft_reads`), "cancel my gym membership" then the
+  notice (`cancel_reads`, `_cancel_answer`, `draft_reads`), a rule that adds to TickTick, its yes, its run and "undo",
+  "connect my todoist" (operator: the sign-in link; tester: the "isn't ready yet" line), "stop adding to ticktick"
+  (`grant_reads`), "version" (`integration_reads`), the errand form on a message no read took and never on one with a
+  time word.
+- Three seams broke and are fixed (`test_round10_merge.py`, "the review of the merge"):
+  - A tester whose rule named TickTick or Todoist was told `Say "connect todoist", then "use todoist for rule 1"`,
+    and "use todoist for rule 1" said the same, while "connect todoist" answers a tester with `isn't ready yet`
+    (slice C) or `only for the person who runs me` (round 9). A tester now hears `Todoist is only for the person who
+    runs me, so I'll put them in my message here instead.` (`T.place_unusable(..., why="operator")`). The operator's
+    line is unchanged.
+  - A rule run read the library's caption mark only when the pick carried no level: a reel the person called fine
+    stayed out of their app, and one they called a mismatch could go in. `grants._strong` now reads
+    `captionmark.effective` with the person's caption feedback.
+  - A rule whose yes was given on one Todoist route (the sign-in, slice C) added nothing and said nothing once the
+    other route was set (a token, slice D's panel or the environment), every week. Now the run ends that grant and
+    says once: `The way I reach Todoist changed since you said yes to rule 3, so I didn't add anything there. Say "use
+    todoist for rule 3" to add them again.` The same holds the other way round.
+- Held, with probes: "change 1 to 7pm" ends the grant and adds nothing until a new yes on a preview that names the
+  app; a model form naming a place is dropped for `new_rule`, `change_rule` and `also`; the 31st errand-eligible
+  message of a day makes no errand call; a key typed in the chat is refused on every path tried (plain, a card waiting
+  for its address, the cancel helper's question, a rule preview, the thumbs-down question, two asks, the test page,
+  the setup) and appears in no table; the page, `/api/state` and `/api/connections` never carry a saved value;
+  "disconnect todoist" and "stop adding to todoist" end a grant on the sign-in route; "delete my data" leaves no row
+  and no sealed file.
+- Known and left: "email maria@example.com that the sink is broken and cancel my netflix" is one email card whose
+  words hold the second ask (hook 5 takes the whole message before 8z can split it; the card waits for "send").
 
 ### 17.K The foundation (slice K)
 
@@ -2465,7 +2502,8 @@ The founder's decision: a timed rule that adds to the person's own apps needs on
     slice Y), **not_timed** (a new-items or one-off rule), **email_other** (M-14): no place; a model `todo.add` naming
     that app is dropped, so the picks stay in the message (never the bot's list under the app's name); one line:
     `TickTick isn't connected for you, so I'll put them in my message here instead. Say "connect ticktick", then "use
-    ticktick for rule 3".` / `I can't add to Notion on a schedule, so I'll put them in my message here instead.` /
+    ticktick for rule 3".` (for a tester, since the review of the merge: `TickTick is only for the person who runs me,
+    so I'll put them in my message here instead.`) / `I can't add to Notion on a schedule, so I'll put them in my message here instead.` /
     `I can only add to X from a rule that runs at set times, …` / `I can't email other people on a schedule. I can
     send you the picks here every Friday at 4pm; then say "email my team …" and I'll write it.` (slice A's email read
     answers most such requests first, with its own line, and makes no rule).

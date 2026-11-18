@@ -210,7 +210,7 @@ def rule_place(store, handle, text, spec, to_other=False, who=None, when_words="
         _strip_place_todos(spec, p)
         return {"status": "unusable", "app": app, "why": why,
                 "line": T.place_unusable(app, CONNECT_WORD.get(p.connector, p.connector),
-                                         number or next_number(store, handle))}
+                                         number or next_number(store, handle), why=why)}
     model_list = next(((a.params or {}).get("list") for a in spec.do if a.action == "todo.add"), None)
     from .schema import RulePlace
     spec.place = RulePlace(connector=p.connector, kind=p.kind, target=_target(p, model_list, text),
@@ -712,7 +712,7 @@ def use_for_rule(bot, person, p, n, now):
         return T.place_no_route(app).strip()
     why = C.unavailable(store, h, p.connector)
     if why:
-        return T.place_unusable(app, CONNECT_WORD.get(p.connector, p.connector), n).strip()
+        return T.place_unusable(app, CONNECT_WORD.get(p.connector, p.connector), n, why=why).strip()
     spec = RuleSpec.model_validate(rule["spec"])
     from .schema import RulePlace
     spec.place = RulePlace(connector=p.connector, kind=p.kind, target=_target(p, None, ""),
