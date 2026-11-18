@@ -3058,7 +3058,8 @@ the held-out set).
   rule preview asks nothing and "yes" starts the rule (45); a strong-marked pick is never added to TickTick by a
   granted run, said with S's left-out line (46).
 - **Counts** (counts only; no line, text or name leaves the scratchpad):
-  - Held-out set, run once on the final candidate (100 lines, 70 helper, 30 none). By code, tester = operator: 22 of 70
+  - Held-out set, run once, on commit a3a4f57 (before the receipts words above, which came from its counts; 100
+    lines, 70 helper, 30 none). By code, tester = operator: 22 of 70
     helper lines right, 0 wrong helper, 47 fell through, 1 to the setup form; 0 of 30 none lines taken. Live, the 77
     lines code did not settle (real interpreter and errand form): 32 more right, 2 wrong helper (an email to someone
     else read as one to the person, nothing sent to anyone; a setup answer read as a rule preview, nothing started),
