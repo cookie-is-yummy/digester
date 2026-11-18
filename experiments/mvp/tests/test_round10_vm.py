@@ -26,7 +26,10 @@ from mvp.tests.test_slice2 import H  # noqa: E402
 
 UTC = timezone.utc
 needs_browser = pytest.mark.skipif(WHY_NO_BROWSER is not None, reason=f"no browser can start here: {WHY_NO_BROWSER}")
-OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 127.0.0.1 only, never through a proxy
+# 127.0.0.1 only, never through a proxy; with a cookie jar, as a browser has (checks of round 10: the view belongs to
+# the first browser that opens it)
+OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                     urllib.request.HTTPCookieProcessor(__import__("http.cookiejar").cookiejar.CookieJar()))
 EMAIL, PASSWORD = "person@example.com", "Not-A-Real-Pass-42"
 
 

@@ -19,10 +19,12 @@ nothing. What they type is forwarded and never logged, stored, echoed, counted b
 handler keeps a count of inputs only. The bot never types and never solves a check: at any wall it stops and gives this
 link.
 """
+import hashlib
 import hmac
 import json
 import secrets
 import threading
+from http.cookies import CookieError, SimpleCookie
 from urllib.parse import parse_qs
 
 from .browser_host import Host, Session
@@ -62,7 +64,8 @@ def open_view(bot, handle, run_id, session):
     with _LOCK:
         for k in [k for k, v in _VIEWS.items() if v["handle"] == handle]:
             _VIEWS.pop(k, None)   # one view per person: an older run's key stops working
-        _VIEWS[key] = {"bot": bot, "handle": handle, "run_id": run_id, "session": session, "inputs": 0}
+        _VIEWS[key] = {"bot": bot, "handle": handle, "run_id": run_id, "session": session, "inputs": 0,
+                       "viewer": None}   # checks of round 10: the hash of the first browser's cookie (_viewer_ok)
     base = getattr(getattr(bot, "channel", None), "base_url", None) or ""
     return f"{base}/vm?k={key}"
 
@@ -143,14 +146,59 @@ def _key(query):
     return (parse_qs(query).get("k") or [""])[0]
 
 
+# ---------- checks of round 10 (acting): one view, one browser ----------
+# The key alone opened the picture and took clicks and keys from anywhere it travelled (a second device, a copied
+# link). Now the first browser that opens /vm gets a cookie only it holds (HttpOnly, SameSite=Strict, this run's own
+# name); from then on the page, the picture and the input answer that browser only. A tab of the same browser shares
+# it (it is the same person); any other client gets 403 and nothing else.
+def _cookie_name(key):
+    return "vm_" + hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def _digest(value):
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _viewer_ok(req, key, v):
+    """True when no browser has claimed the view yet, or this request carries the claiming browser's cookie."""
+    if v.get("viewer") is None:
+        return True
+    try:
+        c = SimpleCookie(req.headers.get("Cookie") or "")
+    except CookieError:
+        return False
+    m = c.get(_cookie_name(key))
+    return m is not None and hmac.compare_digest(_digest(m.value), v["viewer"])
+
+
+def _claim(key, v):
+    """A new cookie value for the first browser (None when the view is already claimed)."""
+    with _LOCK:
+        if v.get("viewer") is not None:
+            return None
+        value = secrets.token_urlsafe(24)
+        v["viewer"] = _digest(value)
+        return value
+# ---------- end checks of round 10 ----------
+
+
 def handle_get(req, path, query):
     """The web channel's GET for /vm and /api/vm/frame. True when it answered."""
     if path == "/vm":
-        if view(_key(query)) is None:
+        key = _key(query)
+        v = view(key)
+        if v is None:
             _empty(req, 404)
+            return True
+        claim = _claim(key, v)
+        if claim is None and not _viewer_ok(req, key, v):
+            _empty(req, 403)
             return True
         body = PAGE.encode()
         req.send_response(200)
+        if claim is not None:
+            req.send_header("Set-Cookie", f"{_cookie_name(key)}={claim}; HttpOnly; SameSite=Strict; Path=/; "
+                                          "Max-Age=1800")
         req.send_header("Content-Type", "text/html; charset=utf-8")
         req.send_header("Cache-Control", "no-store")
         req.send_header("Referrer-Policy", "no-referrer")
@@ -164,6 +212,9 @@ def handle_get(req, path, query):
         v = view(_key(query))
         if v is None or not v["session"].alive:
             _empty(req, 410)
+            return True
+        if not _viewer_ok(req, _key(query), v):
+            _empty(req, 403)
             return True
         try:
             after = int((parse_qs(query).get("after") or ["0"])[0])
@@ -198,7 +249,10 @@ def handle_post(req, path, query):
     v = view(_key(query))
     n = int(req.headers.get("Content-Length") or 0)
     raw = req.rfile.read(min(n, VIEW_INPUT_MAX)) if n > 0 else b""
+    if v is not None and not _viewer_ok(req, _key(query), v):
+        v = None   # checks of round 10: another browser than the one that opened the view
     if v is None or n > VIEW_INPUT_MAX:
+        raw = None
         _empty(req, 403 if v is None else 413)
         return True
     try:

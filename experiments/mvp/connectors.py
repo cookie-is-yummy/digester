@@ -214,7 +214,26 @@ _HOOK_URL = re.compile(r"\bhttps?://(?:maker\.ifttt\.com/(?:trigger|use)/|hooks\
                        r"hook\.[a-z0-9-]+\.make\.com/)\S+", re.I)
 
 
+# ---------- checks of round 10 (acting and secrets): the everyday shapes the narrow guard missed ----------
+# A probe typed a YouTube client secret, a Todoist or TickTick token with no "is" before it, a sign-in's return
+# address with its one-time code, and Google's own token shapes: each reached the interpreter (a model). Still narrow:
+# a word that names a secret right before a long run of letters AND digits outside any link; a few prefixes that only
+# secrets carry; a loopback return address with "code="; an app password's four groups after its own name.
+_RUN = r"(?<![=/?&#.\w-])(?=[A-Za-z0-9_\-./+]*\d)(?=[A-Za-z0-9_\-./+]*[A-Za-z])[A-Za-z0-9_\-./+]{20,}={0,2}(?![\w/])"
+_SECRET_MORE = (
+    re.compile(r"\b(?:token|api[\s_-]?key|client[\s_-]?secret|secret(?:[\s_-]?key)?|refresh[\s_-]?token|"
+               r"access[\s_-]?token|bearer)\b[\s\w'\"“”:=,-]{0,30}?" + _RUN, re.I),
+    re.compile(r"\b(?:GOCSPX-[\w-]{10,}|ya29\.[\w.-]{20,}|1//0[\w-]{20,}|sk-(?:ant-|proj-)?[\w-]{20,}|"
+               r"gh[pousr]_[A-Za-z0-9]{20,}|xox[abpr]-[\w-]{10,})"),
+    re.compile(r"(?:127\.0\.0\.1|localhost)(?::\d+)?/\S*[?&]code=[^&\s]{6,}", re.I),
+    re.compile(r"[?&]code=[^&\s]{8,}\S*[?&]state=|[?&]state=[^&\s]+\S*[?&]code=[^&\s]{8,}", re.I),
+    re.compile(r"\bapp[\s-]?password\b\W{0,6}(?:is\W{0,3})?(?:[a-z]{4}[\s-]?){3}[a-z]{4}\b", re.I),
+)
+# ---------- end checks of round 10 ----------
+
+
 def secret_said(text):
     """True when a chat message holds (or names) a secret the bot must never take there."""
     t = " ".join((text or "").split())
-    return bool(_SECRET_NAME.search(t) or _SECRET_SAID.search(t) or _HOOK_URL.search(t))
+    return bool(_SECRET_NAME.search(t) or _SECRET_SAID.search(t) or _HOOK_URL.search(t)
+                or any(rx.search(t) for rx in _SECRET_MORE))

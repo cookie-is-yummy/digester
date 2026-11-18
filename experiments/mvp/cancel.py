@@ -71,7 +71,10 @@ PASSWORD = re.compile(r"\b(?:my|the)\s+(?:[\w+.'-]+\s+){0,2}(?:password|passcode
                       r"|\b(?:give|send|tell|text)\s+you\s+my\s+(?:[\w+.'-]+\s+){0,2}(?:password|passcode|login)\b"
                       r"|\b(?:use|with)\s+my\s+(?:[\w+.'-]+\s+){0,2}(?:password|passcode|login)\b"
                       r"|\b(?:can|could|will|would)\s+you\s+(?:just\s+)?(?:log|sign)\s*(?:in|into|on)\b"
-                      r"|\b(?:log|sign)\s*(?:in|into|on)\s+(?:as me|for me|to my|into my|on my)\b", re.I)
+                      r"|\b(?:log|sign)\s*(?:in|into|on)\s+(?:as me|for me|to my|into my|on my)\b"
+                      # checks of round 10 (secrets): "my password for netflix is ..." reached the model
+                      r"|\b(?:password|passcode)\s+(?:for|to|on|of)\s+(?:my\s+|the\s+)?[\w+.'-]+(?:\s+[\w+.'-]+)?"
+                      r"\s*(?:is|=|:)\s*\S", re.I)
 SAID_DONE = re.compile(r"^\W*(?:(?:ok(?:ay)?|so|yes|yep)[\s,!.]+)?"
                        r"(?:i(?:'ve| have)?\s+(?:just\s+|finally\s+|already\s+)?(?:cancell?ed|canceled)\s+(?P<a>.+?)"
                        r"|(?P<b>.+?)\s+is\s+(?:now\s+)?(?:cancell?ed|canceled))"

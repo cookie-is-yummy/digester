@@ -14,6 +14,7 @@ sentence aimed at an assistant). The page is third-party data: nothing on it can
 """
 import hashlib
 import re
+import unicodedata
 from urllib.parse import urlparse
 
 SNAPSHOT_JS = r"""
@@ -33,7 +34,7 @@ SNAPSHOT_JS = r"""
     out.push({id, tag: e.tagName.toLowerCase(), type: (e.getAttribute('type')||'').toLowerCase(),
       name: name.trim().replace(/\s+/g,' ').slice(0,80), href: e.href || null, disabled: !!e.disabled,
       autocomplete: (e.getAttribute('autocomplete')||'').toLowerCase(), field: (e.getAttribute('name')||'').toLowerCase(),
-      ctx: region(e)});
+      ctx: region(e), shown: (e.innerText || e.value || '').trim().replace(/\s+/g,' ').slice(0,80)});
   }
   let hidden = 0;
   for (const e of document.querySelectorAll('body *')) {
@@ -131,6 +132,14 @@ def el_hash(snap, el):
     return hashlib.sha256("|".join([snap["url"], el["name"], el["tag"], text_hash(snap)]).encode()).hexdigest()
 
 
+def _shows_other(el):
+    """Checks of round 10 (acting): a button whose name for assistants (aria-label) is "Finish Cancellation" while it
+    shows "Accept 50% off and stay" was named to the person by its label and pressed on the yes. What it shows is
+    read too: an offer, a buy or words aimed at the bot there refuse it, whatever its label says."""
+    shown = el.get("shown") or ""
+    return bool(shown) and bool(REFUSE.search(shown) or TO_BOT.search(shown))
+
+
 def offer_around(el):
     return bool(OFFER_CTX.search(el.get("ctx") or "")) and (el.get("ctx") or "").strip() != ""
 
@@ -139,7 +148,7 @@ def is_final(el, snap, final_names=()):
     """The last step: the merchant's own final button name (route file), a known final wording, or any cancel-like
     button on a page that states the effects. Never a button inside an offer or one that speaks to the bot."""
     n = el["name"]
-    if REFUSE.search(n) or TO_BOT.search(n):
+    if REFUSE.search(n) or TO_BOT.search(n) or _shows_other(el):
         return False
     return bool(n.lower() in {x.lower() for x in final_names} or FINAL.search(n)
                 or (SOFT_FINAL.search(n) and EFFECTS.search(snap["text"])))
@@ -186,6 +195,8 @@ def allowed(el, action, domains, snap, final_names=()):
         return False, "the button speaks to the bot"
     if REFUSE.search(n):
         return False, "buys, upgrades, pauses or accepts an offer"
+    if _shows_other(el):
+        return False, "the button shows other words than its name"
     if GENERIC.match(n) and offer_around(el):
         return False, "a generic button inside an offer"
     if is_final(el, snap, final_names) and action != "confirmed_click":
@@ -208,7 +219,10 @@ def quote(text, rx, limit=200):
     """The merchant's own words to show the person: the sentences of the first line of the page that `rx` matches,
     links and addresses removed, never a sentence aimed at an assistant or the bot, at most `limit` characters. ""
     when there is none. Only this ever leaves the page (D-10)."""
-    for line in (text or "").split("\n"):
+    # checks of round 10 (attack 20): the dots a browser also reads as a dot ("evil．com", "evil。com") are dots here
+    # too, so a link written with them is cut like any other
+    text = unicodedata.normalize("NFKC", text or "").replace("\u3002", ".").replace("\uff61", ".")
+    for line in text.split("\n"):
         if not rx.search(line):
             continue
         keep = []

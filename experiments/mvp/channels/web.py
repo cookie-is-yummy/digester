@@ -109,6 +109,7 @@ class WebChannel(Channel):
         self.stamp = run_stamp()
         self._tick = False
         self.server = None
+        self.bind_host = host   # checks of round 10: which Host headers the page answers (_Handler._host_ok)
         if serve:
             self.server = ThreadingHTTPServer((host, port), self._handler())
             self.port = self.server.server_address[1]
@@ -385,7 +386,21 @@ class WebChannel(Channel):
             def _ok(self):
                 return hmac.compare_digest(self.headers.get("X-Test-Token") or "", ch.token)
 
+            # ---------- checks of round 10 (acting): only requests addressed to this page ----------
+            # GET / hands out the page's token. A web page elsewhere whose name is made to point at 127.0.0.1 (DNS
+            # rebinding) could read it and then say "send" for the person. On this machine's own address the page
+            # answers only the names of this machine; when it listens on another address (a phone on the same
+            # network), the check is the one who runs it.
+            def _host_ok(self):
+                if str(ch.bind_host) not in ("127.0.0.1", "localhost", "::1"):
+                    return True
+                port = getattr(ch, "port", None)
+                want = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
+                return (self.headers.get("Host") or "").strip().lower() in want
+
             def do_GET(self):
+                if not self._host_ok():
+                    return self._json(421, {"error": "host"})
                 path, _, query = self.path.partition("?")
                 if path in ("/", "/index.html"):
                     with open(PAGE, encoding="utf-8") as f:
@@ -429,6 +444,8 @@ class WebChannel(Channel):
                 self._json(404, {"error": "not found"})
 
             def do_POST(self):
+                if not self._host_ok():
+                    return self._json(421, {"error": "host"})
                 # ---------- round 10, slice V5: the take-over view's clicks and keys (its own key, never logged) ------
                 if self.path.partition("?")[0] == "/api/vm/input":
                     from .. import browser_vm
