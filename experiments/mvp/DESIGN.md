@@ -1961,6 +1961,69 @@ caption has nothing to do with the video, and rules that call the connectors. Bu
 (`round10_verdict.md`) and its addendum; amendments A-015 and A-016 (Proposed). Slice K first, then W, S, D, G, C, Y,
 V and T. Each slice adds its own section below.
 
+**Hook order** (who answers a message; `tests/test_round10_merge.py::test_the_hooks_run_in_the_order_of_design_section_17`
+checks it in `handler.py`, line by line). Rows marked "later" belong to slices Y and V, which are not merged yet: their
+place is kept, and nothing stands there now.
+
+| Where | Order | Read | Slice |
+| --- | --- | --- | --- |
+| `_on_message`, after the tapback branch | - | `secret_reads` (first) | round 9 B, E |
+| | - | `browser_reads` (only while this person's browser run is open) | V, **later** |
+| `_asked_reads` (next message only) | - | `captionmark.take_ask` (the 👎 question ends with this message), `_deadline_answer`, `_overdue_reply` | S, round 8 |
+| | 3 | `_cancel_answer` (with the notice follow-up, the check reminder, the second notice) | round 9 B, D |
+| | 4 | `places.asked_reads` (Mac yes / no, REMOVE / KEEP, the Todoist REMOVE / KEEP) | round 9 D, C |
+| | 4a | `youtube_answer` | Y, **later** |
+| | 4b | `_mismatch_answer` (yes / no after the 👎 question) | S |
+| | - | `_doit_answer` | round 9 W10 |
+| `_on_message`, after the `confirm_delete` branch | 0 | `fit_reads` ("that reel had nothing to do with it") | S |
+| | 1 | `draft_reads` (with "email it to me", the send route read again, "can you send it for me") | round 9 A, W, D |
+| | 2 | `offer_reads` | round 9 C |
+| | - | `onboard_step` (the setup's clause split and `export_reads` inside) | W |
+| `answer_normally`, after `_rule_reads`; each read tries the message, then `phrasing.normalize(text)` | 5a | `export_reads` | W |
+| | 5 | `email_reads`, then `self_email_reads` (the message itself only) | round 9 A, W |
+| | 5b | `youtube_reads` | Y, **later** |
+| | 6 | `cancel_reads` (the notice route; the browser offer inside it is V, **later**) | round 9 B, D |
+| | 7 | `postact_reads` | round 9 C |
+| | 8 | `places.place_reads` (Todoist connect / check / disconnect by sign-in inside) | round 9 D, E, C |
+| | 8a | `grant_reads` ("stop adding to X", "use X for rule N", "undo rule N") | G |
+| | 8 | `receipts_reads`, `do_it` | round 9 W9, W10 |
+| after the two tries | 8z | `split_reads` (two asks; only when no read took the whole message) | W |
+| | - | `integration_reads` (with "version") | round 8, K |
+| after `interpret`, `chat_guard` | - | `screen_guard`, then the errand form on `unsupported` / `chat` / a clash | W |
+
+Nothing above hook 5 sees the normalised text; the reads of slices D, G and C inside hooks 6 and 8 get both tries
+(`tests/test_round10_merge.py`, section (e)).
+
+**Where the slices meet** (settled at the merge, each with a test in `tests/test_round10_merge.py`):
+- W-13's stop-gap line ("I can't add to TickTick on a schedule yet") is gone: slice G's place line in the rule's own
+  preview says what will happen (a grant, "isn't connected for you", "I can't add to X on a schedule", or "only from a
+  rule that runs at set times"). One message, never two.
+- Slice G's grant covers slice C's route: `todoist.mcp_add` carries `rule_grant`; a rule's place resolves through
+  `connectors.route_for` (the token first, else the sign-in); the grant binds the pinned tools through the scope hash.
+  In a run, a changed or gone pinned tool (C's `_mark` ends every grant on Todoist) says C's own line (`Todoist changed
+  how adding a task works, so I stopped adding there. Say "yes todoist" ...`); a sign-in that needs the person says
+  `Todoist needs you to sign in again: say "connect todoist".` at most once a day, opens nothing and counts no failure;
+  a stream that broke after the create adds `It may have arrived in Todoist anyway; check before asking again.` and the
+  slot is never sent again.
+- "delete my data" revokes every sealed sign-in made through an app's own server at that server (RFC 7009) before
+  `tokens.delete_all`, drops a waiting sign-in, ends every grant, then deletes the rows. A revoke that fails never
+  stops the deletion; the reply adds `I couldn't reach Todoist to cancel my access; remove it in Todoist under Settings
+  › Integrations.`
+- A strong-marked reel (slice S) is never placed by a rule run: the kept pick record carries S's level (`cm: strong`,
+  what the person said included), the library mark is read as before, and the run's line ends with S's `1 left out:
+  its caption may not match the video.` (also when nothing else was left to add). An item the person called fine whose
+  library mark is strong is still left out (the safe side).
+- The errand form reaches the helpers of D, G and C only through their code reads: `send_draft` is D's "can you send
+  it for me" read (the route read again, the operator's switch-on line, never a send); "connect / check / disconnect
+  <app>" go through `place_reads` (C's sign-in link, G's grants ended by a disconnect). `errand.py` names no action,
+  no registry and no grant function (a test reads its source).
+- The Connections panel (D) and the page footer (K) agree for sending, TickTick, Todoist (token) and the webhook, and
+  neither shows a value. A Todoist sign-in is per person and appears in "what are you connected to", not in the
+  footer or the panel.
+- "what are you connected to", "what did you do for me" and "export my data" follow a rule that adds to Todoist by
+  sign-in: the connection, the adds counted by rule and the standing permission, then, after a changed tool, the grant
+  ended in all three.
+
 ### 17.K The foundation (slice K)
 
 No reply changes except the build lines; no read, no connector, no model call.

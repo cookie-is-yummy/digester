@@ -257,6 +257,13 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   "check my todoist" tests it; "disconnect todoist" cancels the bot's access there. A personal token, when set, is
   used first. The daily check `python -m mvp.mcp_client --discover` needs no sign-in and no model.
   Tests: `tests/test_round10_mcp.py`.
+- **Round 10, the merge of K, W, S, D, G and C** (DESIGN.md section 17, the hook order table and "where the slices
+  meet"): a rule that names an app shows one preview with the app's line (slice W's stop-gap line is gone); a rule can
+  add to Todoist through the sign-in route under its one yes, and a changed Todoist tool or a sign-in that needs you is
+  said in the run's message; "delete my data" cancels the bot's Todoist access at Todoist before deleting the sign-in;
+  a reel whose caption may not match its video is never put in your apps by a rule ("1 left out: ..."); the errand
+  form's "send it" says what "send" would do, as "can you send it for me" does. Restart the test page after the merge
+  and check that its footer shows the build. Tests: `tests/test_round10_merge.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 

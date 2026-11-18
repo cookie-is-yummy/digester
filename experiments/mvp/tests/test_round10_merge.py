@@ -470,3 +470,22 @@ def test_the_hooks_run_in_the_order_of_design_section_17():
     loop, after = body.index("for text in phrasing.variants(said):"), body.index("        text = said\n")
     for n in HOOK_ORDER["answer_normally"][2:11]:
         assert loop < body.index(n) < after, n
+
+
+# ================================ the stubs of slice K after the six merges ======================================
+def test_the_stubs_after_the_merge_real_phrasing_marks_titles_and_routes_and_no_browser_or_youtube(mcp):
+    from types import SimpleNamespace
+
+    from mvp import browser, captionmark, compose, connectors, phrasing, yt_auth
+    assert phrasing.STUB is False and phrasing.variants("hey can u connect my todoist pls")[-1] == "connect my todoist"
+    assert captionmark.STUB is False
+    it = SimpleNamespace(platform="instagram", creator="@memes", media="reel", caption_reasons=(), caption_fp=None,
+                         first_line="Creamy pasta", caption="Creamy pasta", raw_caption="Creamy pasta",
+                         caption_mark="strong")
+    assert compose.display_title(it, "Creamy pasta") == "A reel from @memes"   # slice S: a neutral name when strong
+    st = mcp["bot"].store
+    connect(mcp)
+    assert connectors.route_for(st, H, "todoist", "todo") == "todoist.mcp_add"   # slice C: the sign-in route
+    assert browser.STUB is True and browser.available(None, {"handle": H}, "netflix") is False
+    assert browser.run_open(None, H) is False
+    assert yt_auth.STUB is True and yt_auth.connectable(None, H) is False and yt_auth.connected(None, H) is False
