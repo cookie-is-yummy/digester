@@ -315,12 +315,11 @@ def act(bot, person, name, what, text, now):
     if name == "save_draft":
         d = bot.open_draft(h, now)
         return bot._save_to_drafts(person, d, now) if d is not None else None
-    if name == "send_draft":   # never sends: the card's own send line
-        d = bot.open_draft(h, now)
+    if name == "send_draft":   # never sends: what "send" would do now (merge of round 10: slice D's own read, with
+        d = bot.open_draft(h, now)   # the route read again and the switch-on line for the operator)
         if d is None:
             return None
-        return bot.send(h, T.DRAFT_SEND_ASKED if d["route"] == "mailbox" and bot._mailbox_route(h)
-                        else T.DRAFT_SEND_LINK)
+        return bot._draft_send_asked(person, d, now)
     if name == "change_draft":
         d = bot.open_draft(h, now)
         if d is None:

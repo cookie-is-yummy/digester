@@ -5,6 +5,8 @@ import os
 from datetime import timedelta
 import sys
 
+import pytest
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
@@ -195,3 +197,138 @@ def test_a_timed_run_never_places_a_reel_the_library_marks_strong(tok):
     titles = [c["body"]["title"] for c in posts(tok)]
     assert "Tomato rigatoni" not in titles and len(titles) == 2, titles
     assert "1 left out: its caption may not match the video." in sent
+
+
+# ================================ (e) hooks 5 to 8z try the message, then its normalised form ===================
+ABOVE_HOOK_5 = ("secret_reads", "_asked_reads", "fit_reads", "draft_reads", "offer_reads", "_email_text",
+                "understanding_reads", "_length_way_out", "onboard_step", "_rule_reads")
+
+
+@pytest.fixture()
+def seen(monkeypatch):
+    """Every text the reads above hook 5 and the grant / place reads were given, by read."""
+    from mvp import grants, places
+    from mvp.core import Bot
+    got = {}
+
+    def wrap(name, f, at):
+        def w(*a, **kw):
+            got.setdefault(name, []).append(a[at])
+            return f(*a, **kw)
+        return w
+    for name in ABOVE_HOOK_5:
+        monkeypatch.setattr(Bot, name, wrap(name, getattr(Bot, name), 2))
+    monkeypatch.setattr(grants, "grant_reads", wrap("grant_reads", grants.grant_reads, 2))
+    monkeypatch.setattr(places, "place_reads", wrap("place_reads", places.place_reads, 2))
+    return got
+
+
+def _only_the_message_above_hook_5(got, said):
+    for name in ABOVE_HOOK_5:
+        assert all(t == said for t in got.get(name, [])), (name, got.get(name))
+
+
+def test_slice_g_reads_the_normalised_form_and_nothing_above_hook_5_sees_it(tok, seen):
+    make_rule(tok)
+    seen.clear()
+    said = "hey can u stop adding to ticktick thx"
+    out = say(tok, said, boom)
+    assert out.startswith("OK. I won't add anything to TickTick on my own any more.")
+    assert seen["grant_reads"] == [said, "stop adding to ticktick"]
+    _only_the_message_above_hook_5(seen, said)
+
+
+def test_slice_c_connect_reads_the_normalised_form_and_nothing_above_hook_5_sees_it(mcp, seen):
+    said = "hey can u connect my todoist pls"
+    out = say(mcp, said, boom)
+    assert out.startswith("To let me add tasks to your Todoist, open this link and press Allow: ")
+    assert seen["place_reads"][-1] == "connect my todoist"
+    _only_the_message_above_hook_5(seen, said)
+
+
+def test_slice_d_cancel_notice_reads_the_message_and_nothing_above_hook_5_sees_a_normalised_form(env, seen, monkeypatch):
+    from mvp.core import Bot
+    got = []
+    real = Bot.cancel_reads
+
+    def w(self, person, text, now):
+        got.append(text)
+        return real(self, person, text, now)
+    monkeypatch.setattr(Bot, "cancel_reads", w)
+    said = "yo pls cancel my planet fitness membership thx"
+    out = say(env, said, boom)
+    assert out == "What name is the membership under? I only use it for the notice."   # the notice route (D)
+    assert got == [said]   # taken on the message itself; the normalised form is only a second try
+    _only_the_message_above_hook_5(seen, said)
+
+
+# ================================ (f) the errand form reaches D, G and C only through code reads ================
+UNSUP = {"intent": "unsupported", "reply": "I can't do that."}
+
+
+@pytest.fixture()
+def no_action(monkeypatch):
+    """Any action performed while the errand form's helper runs fails the test (the errand never acts by itself)."""
+    from mvp import actions, errand
+    real_act = errand.act
+    inside = {"on": False}
+    real_perform = actions.perform
+
+    def perform(*a, **kw):
+        assert not inside["on"], ("an action ran from the errand form", a[0])
+        return real_perform(*a, **kw)
+
+    def act(*a, **kw):
+        inside["on"] = True
+        try:
+            return real_act(*a, **kw)
+        finally:
+            inside["on"] = False
+    monkeypatch.setattr(actions, "perform", perform)
+    monkeypatch.setattr(errand, "act", act)
+    monkeypatch.setenv("MVP_ERRAND_PER_DAY", "30")
+    return inside
+
+
+def _errand_form(e, f):
+    e["state"]["answers"]["mvp_errand"] = lambda user: dict(f)
+
+
+def test_the_errand_send_draft_is_slice_ds_question_read_and_never_sends(env, no_action, monkeypatch):
+    from mvp import config
+    from mvp import texts as T
+    for k in ("MVP_SMTP_HOST", "MVP_MAILBOX_ADDRESS", "MVP_MAILBOX_APP_PASSWORD"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(config, "OPERATOR", H)
+    monkeypatch.setattr(config, "DRAFT_MODEL", False, raising=False)
+    say(env, "email sam@example.com that the meeting moved to wednesday", UNSUP)
+    _errand_form(env, {"errand": "send_draft"})
+    out = say(env, "dale, envíalo ya mismo", {"intent": "chat", "reply": "Sure thing!"})
+    assert "mvp_errand" in env["calls"]
+    assert out == T.SEND_SWITCH_ON   # the operator hears how to switch sending on, as for "can you send it for me"
+    assert env["bot"].store.get_state(f"sendhold:{H}") is None
+
+
+def test_the_errand_connect_todoist_reaches_slice_cs_code_read(mcp, no_action):
+    _errand_form(mcp, {"errand": "app_connection", "op": "connect", "app_words": "todoist"})
+    out = say(mcp, "conecta mi todoist", UNSUP)
+    assert out.startswith("To let me add tasks to your Todoist, open this link and press Allow: ")
+    assert "mvp_errand" in mcp["calls"]
+
+
+def test_the_errand_disconnect_reaches_the_code_read_that_ends_slice_gs_grants(tok, no_action):
+    make_rule(tok)
+    bot = tok["bot"]
+    assert bot.store.grants_of(H, connector="ticktick")
+    _errand_form(tok, {"errand": "app_connection", "op": "disconnect", "app_words": "ticktick"})
+    say(tok, "desconecta mi ticktick", UNSUP)
+    assert "mvp_errand" in tok["calls"] and bot.store.grants_of(H, connector="ticktick") == []
+
+
+def test_the_errand_form_names_no_action_and_no_grant_read():
+    import ast
+    src = open(os.path.join(os.path.dirname(HERE), "errand.py"), encoding="utf-8").read()
+    names = {n.attr if isinstance(n, ast.Attribute) else n.id for n in ast.walk(ast.parse(src))
+             if isinstance(n, (ast.Attribute, ast.Name))}
+    assert not names & {"perform", "REGISTRY", "run_place", "add_grant", "make", "grant_reads", "send_word",
+                        "_mailbox_send_word", "draft_send"}

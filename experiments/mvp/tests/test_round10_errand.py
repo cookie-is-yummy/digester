@@ -142,7 +142,7 @@ def test_send_draft_never_sends(e, monkeypatch):
     _draft(e)
     form(e, {"errand": "send_draft"})
     out = say(e, "dale, envíalo ya mismo", CHAT)
-    assert out == T.DRAFT_SEND_LINK
+    assert out == T.SEND_FOR_ME_TESTER   # merge of round 10: slice D's "can you send it for me" line
     assert e["bot"].store.get_state(f"sendhold:{H}") is None
     assert e["bot"].store.q("SELECT count(*) n FROM outbox")[0]["n"] == 0
 
