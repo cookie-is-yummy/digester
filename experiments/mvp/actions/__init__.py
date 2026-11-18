@@ -222,6 +222,24 @@ REGISTRY.update({
 })
 
 
+# ---------- round 10, slice V (DESIGN.md section 17.V; A-016, Proposed): the browser's last press ----------
+class BrowserParams(BaseModel):
+    """browser.cancel: the open run and the hash of the page the person said yes to."""
+    model_config = ConfigDict(extra="forbid")
+    run_id: int
+    yes_hash: str = Field(min_length=16, max_length=128)
+
+
+REGISTRY.update({
+    "browser.cancel": ActionDef(name="browser.cancel", params=BrowserParams, module="browser", order=50,
+                                does="Presses the last button of a merchant's cancel pages in the browser, once, "
+                                     "after \"yes cancel <merchant>\" on that exact page",
+                                outside=True, undo="none", confirm="send_word", max_per_day=3, in_rules=False,
+                                who="operator", from_model=False, connector="browser", fallback="cancel.steps"),
+})
+# ---------- end round 10, slice V ----------
+
+
 def validate_action(name, params=None, by="model", where="form"):
     """(name, params as a plain dict with defaults left out). Raises ValueError for anything not in the registry.
     Round 9, C1: `by` is who names it ("model": a form the model filled, the default; "code"); `where` is where it is
