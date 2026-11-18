@@ -1115,7 +1115,7 @@ EXPORT_REMIND = re.compile(
     r"to\s+(?:send|export|download|get|do)\s+(?:you\s+)?(?:my|an?)\s+(?:new\s+|fresh\s+)?"
     r"(?P<what>(?:youtube\s+|instagram\s+)?(?:takeout|export|data)|instagram|youtube)\b", re.I)
 # "export to you regularly", "sync my saves", "set it up so my youtube export comes by itself"
-_EXPORT_SUBJECT = r"(?=.*\b(?:instagram|youtube|takeout|saves|library|data|to you)\b)"
+_EXPORT_SUBJECT = r"(?=.*\b(?:instagram|youtube|takeout|saves|library|data|to you|send you|get you|give you|to u)\b)"
 EXPORT_REGULAR = re.compile(
     rf"\bexports?\b(?=.*\b(?:regularly|automatically|every|each|by itself|on (?:its|their) own|on a schedule|"
     rf"keep coming)\b){_EXPORT_SUBJECT}"
@@ -1123,7 +1123,22 @@ EXPORT_REGULAR = re.compile(
     r"|\bmy\s+(?:saves|library)\s+(?:to\s+)?(?:sync|stay synced|update)\s+(?:automatically|by itself|on (?:its|their) own)"
     r"|^\W*(?:can you\s+|please\s+)?sync\s+my\s+(?:saves|library|instagram|youtube)\W*$"
     r"|\bset\s+(?:it|this|that)\s+up\s+so\s+(?:that\s+)?(?:my\s+)?(?:youtube|instagram)(?:\s+and\s+(?:youtube|instagram))?"
-    r"\s+exports?\b", re.I)
+    r"\s+exports?\b"
+    # checks of round 10 (reading): Spanish ("cómo te mando mis guardados de instagram cada mes")
+    r"|\b(?:te\s+)?(?:mando|env[ií]o|paso|mandar|enviar|pasar)(?:te)?\s+(?:mis\s+)?(?:guardados|exportaci[oó]n(?:es)?|"
+    r"datos|likes)\b(?=.*\b(?:cada\s+(?:semana|mes|d[ií]a)|todas\s+las\s+semanas|todos\s+los\s+meses|"
+    r"autom[aá]ticamente|regularmente|seguido)\b)"
+    # checks of round 10 (reading): "help me send you my exports regularly" (the person's words before the export)
+    r"|^(?=.*\b(?:send|get|give)\s+(?:you|u)\b)(?=.*\bexports?\b)(?=.*\b(?:regularly|automatically|every|each|weekly|"
+    r"monthly|by\s+itself)\b)"
+    # checks of round 10 (reading): "how can i get my instagram saves to you every week", "can u pull my youtube likes
+    # automatically": the same facts (no app pulls Instagram saves; YouTube by its own sign-in)
+    r"|\b(?:get|send|give|bring)\s+(?:you\s+|u\s+)?(?:all\s+)?my\s+(?:new\s+)?(?:instagram|insta|ig|youtube|yt)\s+"
+    r"(?:saves|saved\s+posts|likes|history|data|stuff)\s+(?:to\s+(?:you|u)\s+)?(?:every\s+(?:week|month|day)|each\s+"
+    r"(?:week|month)|weekly|monthly|regularly|automatically|by\s+itself|on\s+(?:its|their)\s+own)\b"
+    r"|\b(?:pull|import|fetch|grab|sync|get)\s+(?:in\s+)?(?:all\s+)?my\s+(?:new\s+)?(?:instagram|insta|ig|youtube|yt)\s+"
+    r"(?:saves|saved\s+posts|likes|history|data|stuff)\s+(?:automatically|by\s+itself|on\s+(?:its|their)\s+own|"
+    r"regularly|every\s+(?:week|month|day)|each\s+(?:week|month)|weekly|monthly)\b", re.I)
 # "steps" right after the export reply said to say it (state exportsteps:<handle>, a day)
 EXPORT_STEPS = re.compile(r"^\W*(?:(?:ok|okay|yes|sure)[\s,]+)?(?:(?:send|give|show)\s+(?:me\s+)?)?(?:the\s+)?steps"
                           r"(?:\s+please)?\W*$", re.I)

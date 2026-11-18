@@ -208,8 +208,13 @@ _SELF_LEAD = r"^\W*(?:(?:ok(?:ay)?|so|just|please|pls|can you|could you|can u|co
 SELF_COPY = re.compile(
     _SELF_LEAD + r"(?:(?:e-?mail|send|mail|forward)\s+(?:it|this|that|this one|that one|the (?:draft|email)|a copy)\s+"
     r"to\s+(?:me|myself|my (?:own )?(?:e-?mail|inbox|address))(?:\s+instead)?"
-    r"|(?:e-?mail|mail|send)\s+me\s+(?:it|that|this|a copy|the draft|a copy of (?:it|the draft))(?:\s+instead)?)"
-    r"(?:\s+(?:please|pls|first|too))?[\s.!]*$", re.I)
+    r"|(?:e-?mail|mail|send)\s+me\s+(?:it|that|this|a copy|the draft|a copy of (?:it|the draft))(?:\s+instead)?"
+    # checks of round 10 (reading): "send me a copy of that email", "email it to me first so i can check"
+    r"|(?:e-?mail|mail|send|forward)\s+me\s+a\s+copy\s+of\s+(?:that|this|the|my)\s+(?:e-?mail|draft|message)"
+    r"|(?:can|could)\s+i\s+(?:get|have)\s+a\s+copy(?:\s+of\s+(?:it|that|the\s+(?:e-?mail|draft)))?)"
+    r"(?:\s+(?:please|pls|first|too))?"
+    r"(?:\s+(?:so\s+(?:that\s+)?i\s+can\s+(?:check|read|look\s+at|see|forward)(?:\s+it)?(?:\s+first)?|to\s+check(?:\s+it)?|"
+    r"before\s+(?:i|you)\s+send\s+it))?(?:\s+(?:please|pls))?[\s.!]*$", re.I)
 # with nothing open: only the "... to me" shapes are read by code ("email me that" stays the interpreter's
 # act_on_last, whose reply with nothing to send is the same NOTHING_TO_EMAIL: outputs._act_on_last)
 SELF_COPY_TO_ME = re.compile(

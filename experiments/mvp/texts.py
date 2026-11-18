@@ -3362,6 +3362,28 @@ def ig_tap(verb, handle, link):
             f"Following › {word}: {link} . Say \"done\" or \"next\".")
 
 
+# ---------- checks of round 10 (reading): Instagram actions no app may do ----------
+_IG_HOW = {"saves": "open your profile, tap ☰, then Saved", "likes": "open your profile, tap ☰, then Your activity "
+           "› Likes", "comments": "open your profile, tap ☰, then Your activity › Comments",
+           "posts": "open your profile and tap the post, then ⋯", "followers": "open your profile and tap Followers",
+           "following": "open your profile and tap Following"}
+
+
+def ig_cant(verb, what, link, which=False):
+    """The line for an Instagram action no app may do for a personal account (verb: unlike, unsave, delete ...)."""
+    key = "saves" if what.startswith(("save", "collection")) or verb == "unsave" else "likes" if what.startswith("like") or \
+        verb == "unlike" else "comments" if what.startswith("comment") else "followers" if what == "followers" else \
+        "following" if what in ("follows", "following") else "posts"
+    head = f"Instagram doesn't let any app {verb} for you, and I won't sign in as you."
+    if which:
+        return head + " Which post? Say its number, or open it and tap it yourself."
+    if link:
+        tap = "the bookmark" if key == "saves" else "the heart"
+        return f"{head} Tap to open it, then tap {tap}: {link}"
+    return f"{head} You can do it yourself in the Instagram app: {_IG_HOW[key]}."
+# ---------- end checks of round 10 (reading) ----------
+
+
 def ig_schedule():
     return ("Instagram may be able to send your saved posts to your Google Drive every week. Open this on your phone "
             f"and see what it offers: {IG_SCHEDULE_LINK}\nI can't tell yet whether your account gets the weekly option; "

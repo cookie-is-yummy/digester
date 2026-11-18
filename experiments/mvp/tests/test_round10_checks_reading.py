@@ -188,3 +188,173 @@ def test_one_email_whose_words_name_a_cancel_stays_one_card(env, text):
     out = replies(env, text)
     assert not any("cancels on its website" in r or r.startswith("How do you pay") for r in out), out
     assert env["bot"].store.one("SELECT COUNT(*) AS n FROM drafts")["n"] == 1
+
+
+# =====================================================================================================================
+# 6. Everyday wording for the new helpers (60 new made-up messages; the classes that failed by code)
+# =====================================================================================================================
+def fresh(env):
+    from mvp import config
+    config.DRAFT_MODEL = False
+    env["bot"].max_per_minute = None
+    env["state"]["answers"]["mvp_interpret"] = lambda u: FELL
+    return env
+
+
+@pytest.mark.parametrize("text", ["emial my landlord the heater is broken again pls", "can u emial my coach that im late",
+                                  "eamil my boss that i'm sick"])
+def test_a_misspelt_email_still_starts_the_card(env, text):
+    e = fresh(env)
+    out = replies(e, text)
+    assert any(r.startswith("Who should it go to?") for r in out), out
+    assert "mvp_interpret" not in e["calls"]
+
+
+@pytest.mark.parametrize("text", ["email it to me first so i can check", "send me a copy of that email",
+                                  "email it to me so i can read it first", "can i get a copy of it",
+                                  "send it to me before i send it"])
+def test_a_copy_to_myself_with_a_card_open_is_read_by_code(env, text):
+    e = fresh(env)
+    replies(e, "email sam@example.com that the sink is broken")
+    out = replies(e, text)
+    assert out and out[0].startswith("Here's the draft as an email to yourself"), out
+    assert "mvp_interpret" not in e["calls"]
+    assert e["bot"].store.one("SELECT COUNT(*) AS n FROM drafts WHERE status='open'")["n"] in (0, 1)
+
+
+def test_near_variant_a_copy_of_the_email_to_someone_else_is_not_to_me(env):
+    from mvp.drafts import SELF_COPY
+    assert not SELF_COPY.match("send a copy of that email to sam")
+    assert not SELF_COPY.match("send me a copy of the recipe book")
+
+
+@pytest.mark.parametrize("text", ["unsub me from disney plus", "unsub from netflix", "can u unsub me from spotify"])
+def test_unsub_is_a_cancel_word_for_a_paid_service(env, text):
+    from mvp import cancel
+    assert cancel.request(text)["kind"] == "merchant", text
+    out = replies(fresh(env), text)
+    assert any("cancels on its website" in r or r.startswith("How do you pay") for r in out), out
+
+
+def test_unsub_from_a_channel_is_still_youtube(yt):
+    connect(yt)
+    show(yt, "yt_1")
+    assert tell(yt, "unsub me from that channel").startswith('Unsubscribe from "Kitchen Lab" on YouTube?')
+
+
+@pytest.mark.parametrize("text", ["save this video to my youtube watch later", "add that video to my watch later",
+                                  "put the video in my watch later"])
+def test_watch_later_for_this_video(yt, text):
+    connect(yt)
+    show(yt, "yt_1")
+    r = tell(yt, text)
+    assert "youtube.com/watch?v=vidAAAAAAA1" in r and "mvp_interpret" not in yt["calls"], r
+
+
+@pytest.mark.parametrize("text,how", [("can u unlike all my old instagram posts", "Your activity › Likes"),
+                                      ("delete my instagram saves pls", "Saved"),
+                                      ("remove my saved posts on instagram", "Saved"),
+                                      ("clear my insta likes", "Your activity › Likes")])
+def test_instagram_actions_no_app_may_do_are_said_plainly(yt, text, how):
+    r = tell(yt, text)
+    assert r.startswith("Instagram doesn't let any app") and how in r, r
+    assert "mvp_interpret" not in yt["calls"] and not [a for a in actions(yt) if a["action"].startswith("link.")]
+
+
+def test_unsave_this_gives_the_reels_own_link(yt):
+    show(yt, "ig_1")
+    r = tell(yt, "unsave this reel")
+    assert r.startswith("Instagram doesn't let any app unsave for you") and "bookmark" in r and "https://" in r, r
+
+
+def test_near_variants_of_instagram_words_that_are_not_an_instagram_action(yt):
+    for text in ("delete my rules", "remove the saves from my list", "clear my list", "unlike"):
+        r = tell(yt, text) or ""
+        assert not r.startswith("Instagram doesn't let any app"), text
+
+
+@pytest.mark.parametrize("ask", ["can u do it for me", "could u do it for me", "pls do it for me"])
+def test_can_u_do_it_for_me_after_the_cancel_steps(env, ask):
+    e = fresh(env)
+    replies(e, "cancel my netflix")
+    out = replies(e, ask)
+    assert out and out[0].startswith("I can't cancel Netflix for you"), out
+
+
+@pytest.mark.parametrize("text", ["help me send you my exports regularly",
+                                  "how can i get my instagram saves to you every week",
+                                  "can u pull my youtube likes automatically",
+                                  "can i send my youtube history to you every month"])
+def test_the_regular_export_question_in_more_words(env, text):
+    e = fresh(env)
+    out = replies(e, text)
+    # "how can i ..." gets the steps, as slice W reads every "how do i" export question; the rest the facts
+    assert out and (out[0].startswith("About regular exports:") or "export" in out[0].lower()), out
+    assert "mvp_interpret" not in e["calls"]
+
+
+def test_near_variant_a_library_question_about_saves_is_not_the_export_question(env):
+    e = fresh(env)
+    out = replies(e, "send me my instagram saves about pasta")
+    assert not any(r.startswith("About regular exports:") for r in out)
+
+
+@pytest.mark.parametrize("text", ["what version are u", "what version are you on", "are you up to date?",
+                                  "which build is running", "r u on the latest version"])
+def test_version_in_everyday_words(env, text):
+    out = replies(fresh(env), text)
+    assert out and out[0].startswith("I'm running build"), out
+
+
+def test_near_variant_up_to_date_about_something_else_is_not_the_version(env):
+    out = replies(fresh(env), "are my rules up to date?")
+    assert not (out and out[0].startswith("I'm running build"))
+
+
+# =====================================================================================================================
+# 7. The Spanish lines of the 60 that went wrong live: words in code (no new interpreter intent)
+# =====================================================================================================================
+def test_a_spanish_channel_through_the_errand_form_is_never_a_merchant(env, monkeypatch):
+    e = fresh(env)
+    monkeypatch.setenv("MVP_ERRAND_PER_DAY", "30")
+    e["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "unsupported", "reply": "UNSUP"}
+    e["state"]["answers"]["mvp_errand"] = lambda u: {"errand": "cancel", "merchant_words": "ese canal"}
+    out = replies(e, "desuscríbeme de ese canal")
+    assert not any("way out of" in r or "cancels on its website" in r for r in out), out
+    assert not e["bot"].store.cancellations(H)
+    # near variant: a real merchant named through the same form is still the cancel helper
+    e["state"]["answers"]["mvp_errand"] = lambda u: {"errand": "cancel", "merchant_words": "netflix"}
+    out = replies(e, "quiero darme de baja de netflix")
+    assert any("Netflix" in r for r in out), out
+
+
+def test_spanish_unfollow_gives_the_instagram_link(yt):
+    r = tell(yt, "deja de seguir a @made_up_cook en instagram")
+    assert r.startswith("Instagram doesn't let any app unfollow for you") and "instagram.com/made_up_cook" in r, r
+    r = tell(yt, "silencia a @made_up_cook")
+    assert r.startswith("Instagram doesn't let any app mute for you"), r
+
+
+@pytest.mark.parametrize("ask", ["hazlo tú por mí", "hazlo por mí", "cancélalo tú"])
+def test_spanish_do_it_for_me_after_the_cancel_steps(env, ask):
+    e = fresh(env)
+    replies(e, "cancel my netflix")
+    out = replies(e, ask)
+    assert out and out[0].startswith("I can't cancel Netflix for you"), out
+
+
+def test_spanish_mismatch_learns_and_spanish_export_question_gets_the_facts(slop, env):
+    ask(slop, composer(GOOD, PENNE))
+    items = slop["bot"].store.last_answer(H)["items"]
+    assert say(slop, "el segundo... no, ese video no tenía nada que ver", FELL).startswith("Thanks, that helps.")
+    assert len(feedback(slop["bot"])) == 1 and feedback(slop["bot"])[0][0] in items
+    out = replies(fresh(env), "cómo te mando mis guardados de instagram cada mes")
+    assert out and out[0].startswith("About regular exports:"), out
+
+
+def test_a_spanish_rule_naming_an_app_reads_the_app():
+    from mvp import grants
+    assert grants.rule_named("cada domingo pon 3 recetas en mi ticktick").key == "ticktick"
+    assert grants.rule_named("cada lunes añade 2 videos a mi todoist").key == "todoist"
+    assert grants.rule_named("every sunday put 3 recipes in my ticktick").key == "ticktick"   # as before
+    assert grants.rule_named("cada domingo mándame 3 recetas") is None

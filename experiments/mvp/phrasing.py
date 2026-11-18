@@ -19,7 +19,9 @@ STUB = False
 SHORT = [(r"\bu\b", "you"), (r"\bur\b", "your"), (r"\bpl[sz]\b", "please"), (r"\bim\b", "i'm"), (r"\bive\b", "i've"),
          (r"\bdont\b", "don't"), (r"\bcant\b", "can't"), (r"\bwont\b", "won't"), (r"\bdidnt\b", "didn't"),
          (r"\bwanna\b", "want to"), (r"\bgonna\b", "going to"), (r"\bjs\b", "just"), (r"\btmrw?\b", "tomorrow"),
-         (r"\bthx\b", "thanks")]
+         (r"\bthx\b", "thanks"),
+         # checks of round 10 (reading): the everyday misspellings of "email"
+         (r"\b(?:emial|emai|emial|emil|emaill|eamil|emali)\b", "email")]
 # verbs that start an errand (after them, a soft opener may be stripped)
 VERBS = (r"(?:e-?mail|mail|write|draft|send|shoot|forward|cancel|unsubscribe|stop paying|get rid of|end|quit|add|put|"
          r"save|keep|stick|drop|book|reserve|apply|buy|order|get me|sign me up|sign up|register|connect|link|hook up|"

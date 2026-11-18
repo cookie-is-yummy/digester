@@ -28,6 +28,7 @@ SAID_DONE_DAYS = 7       # "I cancelled it" refers to a cancel reply this recent
 
 # ---------- the trigger (W5) ----------
 CANCEL_VERB = re.compile(r"\b(?:cancel|cancelling|canceling|unsubscribe me from|unsubscribe from|get out of|"
+                         r"unsub me from|unsub from|"   # checks of round 10 (reading)
                          r"stop paying for)\b|\b(?:end|quit|close)\s+(?:my|the|our)\b|"
                          r"\bhow (?:do|can|would|should) i (?:cancel|end|stop|quit|get out of)\b"
                          # ---------- round 10, slice W (W5): "get rid of my hulu", "drop my ... subscription" ----------
@@ -56,14 +57,16 @@ PRODUCT = re.compile(r"\b(?:meal kits?|kits?|box|boxes|apps?|services?|deliver(?
 FROM_SAVED = re.compile(r"\b(?:from|in|on)\s+(?:that|the|this|an?)\s+(?:ad|advert|post|reel|video)\b|\bi saved\b", re.I)
 _NAME_BEFORE = re.compile(r"\b(?:my|the|our|this|that)\s+([\w&+.'-]+(?:\s+[\w&+.'-]+){0,3}?)\s+"
                           r"(?:subscriptions?|memberships?|free trial|trial|account|plan)\b", re.I)
-_NAME_AFTER = re.compile(r"\b(?:unsubscribe me from|unsubscribe from|cancel|end|quit|get out of|stop paying for|close)"
+_NAME_AFTER = re.compile(r"\b(?:unsubscribe me from|unsubscribe from|unsub me from|unsub from|cancel|end|quit|"
+                         r"get out of|stop paying for|close)"
                          r"\s+(?:my\s+|the\s+|our\s+)?([\w&+.'-]+(?:\s+[\w&+.'-]+){0,2}?)\s*(?:please|pls|for me|now|"
                          r"today|asap)?\W*$", re.I)
 GENERIC = set("""a an the my our this that it its one subscription subscriptions membership memberships trial free plan
 account monthly yearly annual paid premium service services app apps auto renew renewal recurring current old new
 streaming music tv video so just all every""".split())
 GYM_WORDS = re.compile(r"^(?:the\s+)?(?:gym|fitness|club)$", re.I)
-CHANNEL_NAME = re.compile(r"(?:youtube\s+|yt\s+)?(?:channels?|youtubers?|creators?|accounts?|pages?|guy|girl)", re.I)
+CHANNEL_NAME = re.compile(r"(?:(?:that|this|the|ese|este|esa|el|la)\s+)?(?:youtube\s+|yt\s+)?(?:channels?|youtubers?|"
+                          r"creators?|accounts?|pages?|guy|girl|canal(?:es)?|cuenta)", re.I)
 
 # ---------- the other reads ----------
 PASSWORD = re.compile(r"\b(?:my|the)\s+(?:[\w+.'-]+\s+){0,2}(?:password|passcode|pass code|login|log-in)\s*(?:is|=|:)"
@@ -112,9 +115,13 @@ PAY_ANSWER = re.compile(r"^\W*(?:(?:i|we|they)\s+(?:pay|paid|am\s+paying|charge|
                         r"bank|direct\s+debit|cash|apple\s+pay|google\s+pay)\b|"
                         r"(?:monthly|yearly|annually|every\s+month)\b)", re.I)
 # self-test c31: "do it for me" right after the steps (no browser offered to this person, or none for this merchant)
-DOIT_AFTER_STEPS = re.compile(r"^\W*(?:(?:yes|ok|okay|sure|please|so|can\s+you|could\s+you|will\s+you|just)[\s,!.]*)*"
+DOIT_AFTER_STEPS = re.compile(r"^\W*(?:(?:yes|ok|okay|sure|please|pls|plz|so|can\s+(?:you|u)|could\s+(?:you|u)|"
+                              r"will\s+(?:you|u)|just)[\s,!.]*)*"   # checks of round 10 (reading): "can u"
                               r"(?:do\s+it\s+for\s+me|cancel\s+it\s+for\s+me|do\s+that\s+for\s+me|you\s+do\s+it|"
-                              r"do\s+it\s+yourself)(?:\s+(?:please|pls|thanks))*\W*$", re.I)
+                              r"do\s+it\s+yourself"
+                              # checks of round 10 (reading): the same in Spanish ("hazlo tú por mí", "cancélalo tú")
+                              r"|h[aá]zlo(?:\s+t[uú])?(?:\s+por\s+m[ií])?|canc[eé]lalo(?:\s+t[uú])?(?:\s+por\s+m[ií])?)"
+                              r"(?:\s+(?:please|pls|thanks|por\s+favor))*\W*$", re.I)
 # ---------- end second merge of round 10 ----------
 # ---------- round 10, slice D: the notice's follow-up (DESIGN.md section 17.D) ----------
 CHECK_DAYS = 7           # the check date offered after a notice went, when the route file gives no notice_days

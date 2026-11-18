@@ -334,6 +334,8 @@ def act(bot, person, name, what, text, now):
             {"kind": "unknown", "name": C._clean_name(what) if hasattr(C, "_clean_name") else what}
         if not req.get("entry") and not req.get("name"):
             return None
+        if not entry and C.CHANNEL_NAME.fullmatch(req["name"]):   # checks of round 10 (reading): "desuscríbeme de
+            return None                                            # ese canal" is a channel, never a merchant
         return bot._cancel_start(person, req, text, now)
     if name == "post_act":   # the words named, then "that one" when the message points at what is shown
         for t in what:

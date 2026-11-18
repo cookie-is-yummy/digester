@@ -524,7 +524,10 @@ MISMATCH = re.compile(
     r"|(?:it'?s|its|that'?s|thats)\s+(?:just\s+)?a\s+meme\b"
     r"|the\s+caption\s+(?:is|was)\s+(?:fake|wrong|unrelated|copied|pasted)\b"
     r"|the\s+caption\s+(?:has|had)\s+nothing\s+to\s+do\s+with\b"
-    r"|(?:the\s+)?(?:video|reel)" + _N + r"\s+(?:is|was)\s+(?:something\s+else|unrelated)\b)", re.I)
+    r"|(?:the\s+)?(?:video|reel)" + _N + r"\s+(?:is|was)\s+(?:something\s+else|unrelated)\b"
+    # checks of round 10 (reading): Spanish ("ese video no tenía nada que ver", "el reel no coincide con el texto")
+    r"|\b(?:ese|este|el)\s+(?:video|v[ií]deo|reel|post)\s+no\s+(?:ten[ií]a|tiene)\s+nada\s+que\s+ver\b"
+    r"|\b(?:el\s+)?(?:video|v[ií]deo|reel)\s+no\s+coincid[eií]a?\b)", re.I)
 MATCH_OK = re.compile(
     r"^\s*(?:(?:that|the)\s+" + _ORDW + r"(?:one|reel|video)" + _N + r"\s+(?:was|is)\s+(?:fine|ok|okay|right)"
     r"|the\s+video\s+(?:was|is)\s+(?:right|fine|ok|okay)"

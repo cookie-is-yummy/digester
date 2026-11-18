@@ -442,7 +442,12 @@ NUDGES_ON = re.compile(r"^\W*(?:overdue\s+(?:nudges?|reminders?)\s+on|turn on(?:
 VERSION_ASKED = re.compile(r"^\W*(?:(?:hey|hi|ok|so)[\s,]+)?(?:(?:what|which)(?:'s|’s|s|\s+is)?\s+(?:the\s+|your\s+|this\s+)?"
                            r"(?:version|build)(?:\s+(?:are\s+you|is\s+this|of\s+the\s+bot|do\s+you\s+run|"
                            r"is\s+running)(?:\s+(?:on|running|using))?)?|(?:your\s+)?(?:version|build)(?:\s+number)?)"
-                           r"\s*[?.!]*\s*$", re.I)
+                           r"\s*[?.!]*\s*$"
+                           # checks of round 10 (reading): "what version are u", "which build is this", "are you up to
+                           # date", "what build r u on"
+                           r"|^\W*(?:(?:what|which)\s+(?:version|build)\s+(?:are|r)\s+(?:you|u)(?:\s+on)?"
+                           r"|(?:are|r)\s+(?:you|u)\s+(?:up\s+to\s+date|on\s+the\s+(?:latest|newest)\s+(?:version|build))"
+                           r"|(?:what|which)\s+(?:version|build)\s+(?:is\s+)?(?:running|this\s+is))\s*[?.!]*\s*$", re.I)
 # ---------- end round 10, slice K ----------
 AGENT_ASKED = re.compile(r"^\W*(?:what|which things?)\s+(?:did|has|have)\s+my\s+(?:ai\s+)?(?:agent|assistant)\s+"
                          r"(?:ask(?:ed)?(?:\s+(?:you|me))?(?:\s+for)?|look(?:ed)?\s+at|looked up|see|seen|read)"

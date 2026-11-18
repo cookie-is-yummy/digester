@@ -54,6 +54,9 @@ def _refused(code):
 # "a guide to notion" and "tips on todoist" name a topic, not a place (M-7).
 _VERB = r"\b(?:put|add|save|drop|send|push|move|stick|place|copy|log|throw|schedule|block|pop|dump)\b"
 _RULE_PREP = r"\b(?:(?:in|into|onto)\s+(?:my\s+|the\s+|our\s+|a\s+)?|(?:to|on)\s+(?:my|our|a)\s+)"
+# checks of round 10 (reading): Spanish ("cada domingo pon 3 recetas en mi ticktick")
+_VERB = _VERB[:-3] + r"|pon|ponme|pone|poner|agrega|agr[eé]game|a[nñ]ade|a[nñ][aá]deme|mete|guarda|manda)\b"
+_RULE_PREP = _RULE_PREP[:-1] + r"|(?:en|a)\s+(?:mi|mis|el|la)\s+)"
 
 
 def _rule_rx(p):

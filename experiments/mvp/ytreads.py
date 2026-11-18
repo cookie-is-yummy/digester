@@ -74,8 +74,11 @@ UNSUB_THAT = re.compile(r"^" + _PLEASE + _UNSUB + r"(?:\s+me)?\s+from\s+" + _THA
                         _TAILS + r"$")
 UNSUB_NAME = re.compile(r"^" + _PLEASE + _UNSUB + r"(?:\s+me)?\s+from\s+(?:the\s+)?(?P<name>[^,;?]{1,60}?)"
                         r"(?P<tail>\s+(?:" + _YT + r"\s+)?channel|\s+on\s+" + _YT + r")?" + _TAILS + r"$")
-UNFOLLOW = re.compile(r"^" + _PLEASE + r"(?P<verb>unfollow|mute|stop\s+following)\s+(?P<who>[^?;]{1,80}?)"
-                      r"(?:\s+on\s+(?P<app>instagram|insta|ig|" + _YT + r"))?" + _TAILS + r"$")
+UNFOLLOW = re.compile(r"^" + _PLEASE + r"(?P<verb>unfollow|mute|stop\s+following"
+                      # checks of round 10 (reading): Spanish ("deja de seguir a @x en instagram", "silencia a @x")
+                      r"|deja(?:r)?\s+de\s+seguir(?=\s+a\s)|silencia(?:r)?(?=\s+a\s))"
+                      r"\s+(?:a\s+)?(?P<who>[^?;]{1,80}?)"
+                      r"(?:\s+(?:on|en)\s+(?P<app>instagram|insta|ig|" + _YT + r"))?" + _TAILS + r"$")
 _SINCE_WORDS = (r"(?:haven'?t|have\s+not|never|didn'?t|don'?t|stopped|not)\s+(?:been\s+)?(?:watch(?:ed|ing)?|seen|"
                 r"opened|visited)")
 IDLE = re.compile(r"^" + _PLEASE + r"(?:" + _UNSUB + r"(?:\s+me)?\s+from|unfollow|get\s+rid\s+of|clean\s+up)\s+"
@@ -83,6 +86,8 @@ IDLE = re.compile(r"^" + _PLEASE + r"(?:" + _UNSUB + r"(?:\s+me)?\s+from|unfollo
                   r"(?:the\s+|my\s+)?(?:" + _YT + r"\s+)?(?:channels?|subscriptions?)\s+(?:on\s+" + _YT +
                   r"\s+)?(?:that\s+|which\s+)?(?:i\s+)?" + _SINCE_WORDS + r"\b(?P<when>.*)$")
 _WHAT = (r"(?P<what>these|them|those|it|this|that|this\s+one|that\s+one|them\s+all|all\s+of\s+them|all|both|"
+         # checks of round 10 (reading): "save this video to my youtube watch later"
+         r"(?:this|that|the)\s+(?:video|vid)|(?:these|those|the)\s+(?:videos|vids)|"
          r"(?:these|those|the)\s+(?:videos?|ones|youtube\s+ones)|the\s+(?:first|second|third|fourth|fifth|1st|2nd|3rd|"
          r"4th|5th)(?:\s+one)?|(?:number\s+|#\s*)?\d{1,2})")
 PLAYLIST = re.compile(r"^" + _PLEASE + r"(?:put|add|save|move|stick)\s+" + _WHAT + r"\s+(?:in|into|to|on)\s+"
@@ -99,7 +104,7 @@ REMOVE_SUB = re.compile(r"^" + _PLEASE + r"(?:remove|delete|drop|take)\s+(?:the\
                         r"(?:off|from|out\s+of)\s+my\s+(?P<yt>" + _YT + r"\s+)?(?:subscriptions|subs)"
                         r"(?P<on>\s+on\s+" + _YT + r")?" + _TAILS + r"$")
 WATCH_LATER = re.compile(r"^" + _PLEASE + r"(?:add|put|save)\s+" + _WHAT + r"\s+(?:to|in|on)\s+(?:my\s+)?"
-                         r"watch[\s-]?later(?:\s+on\s+" + _YT + r")?" + _TAILS + r"$")
+                         r"(?:youtube\s+|yt\s+)?watch[\s-]?later(?:\s+on\s+" + _YT + r")?" + _TAILS + r"$")
 HISTORY = re.compile(r"^" + _PLEASE + r"(?:clear|delete|erase|pause|turn\s+off|wipe|stop)\s+(?:my\s+)?" + _YT +
                      r"\s+(?:watch\s+)?history" + _TAILS + r"$")
 IG_EXPORT = re.compile(r"^(?:(?:how\s+(?:do|can|could)\s+i|can\s+you|could\s+you|help\s+me|is\s+there\s+a\s+way\s+to|"
@@ -118,6 +123,21 @@ CLEAN_UP = re.compile(r"^" + _PLEASE + r"(?:(?:clean|tidy)\s+up|go\s+through|pru
 # "save these videos to youtube", "add this to my youtube": a playlist, and its name is asked
 PLAYLIST_BARE = re.compile(r"^" + _PLEASE + r"(?:put|add|save)\s+" + _WHAT + r"\s+(?:to|on|in)\s+(?:my\s+)?" + _YT +
                            _TAILS + r"$")
+# ---------- checks of round 10 (reading): Instagram actions no app may do for a personal account ("unlike all my
+# old instagram posts", "delete my instagram saves", "unsave this reel"): said plainly, with the way to do it oneself
+# and the post's own link when one is in view. Nothing is done and nothing is opened ----------
+_IG = r"(?:instagram|insta|ig)"
+_IG_WHAT = (r"(?P<what>saves|saved(?:\s+posts|\s+reels)?|likes|liked\s+posts|posts|reels|comments|collections?|"
+            r"followers|follows|following)")
+IG_CANT = re.compile(
+    r"^" + _PLEASE + r"(?P<verb>unlike|un-like|unsave|un-save|delete|remove|clear|wipe|archive|hide|block|"
+    r"deactivate|clean\s+up|get\s+rid\s+of)\s+(?:all\s+(?:of\s+)?)?(?:my\s+)?(?:old\s+|recent\s+)?"
+    r"(?:(?:" + _IG + r"\s+)" + _IG_WHAT + r"|" + _IG_WHAT.replace("<what>", "<what2>") +
+    r"\s+(?:on|from|in)\s+(?:my\s+)?" + _IG + r")"
+    + _TAILS + r"$"
+    r"|^" + _PLEASE + r"(?P<verb2>unlike|unsave|un-save)\s+(?P<this>this|that|it|this\s+one|that\s+one|this\s+(?:reel|post)|"
+    r"that\s+(?:reel|post))(?:\s+(?:on|from)\s+" + _IG + r")?" + _TAILS + r"$")
+# ---------- end checks of round 10 (reading) ----------
 OTHER_MUSIC = re.compile(r"\b(?:spotify|apple\s+music|soundcloud|tidal|deezer|amazon\s+music|pandora)\b")
 REST_STOP = re.compile(r"^(?:please\s+)?(?:stop|stop\s+it|don'?t|do\s+not|stop\s+(?:that|unsubscribing|"
                        r"subscribing))$")
@@ -387,9 +407,13 @@ def youtube_reads(bot, person, text, now):
             return _unsub_that(bot, person, now)
         said = bool(m.group("yt") or m.group("on")) or bool(re.search(r"\b(?:channel|youtuber)\b", m.group("name")))
         return _unsub_name(bot, person, re.sub(r"\s+(?:channel|youtuber)$", "", m.group("name")), said, text, now)
+    m = IG_CANT.match(t)   # checks of round 10 (reading)
+    if m:
+        return _ig_cant(bot, person, m)
     m = UNFOLLOW.match(t)
     if m:
-        verb = "unfollow" if m.group("verb").startswith("stop") else m.group("verb")
+        verb = "unfollow" if m.group("verb").startswith(("stop", "deja")) else \
+            "mute" if m.group("verb").startswith("silencia") else m.group("verb")
         return _unfollow(bot, person, verb, m.group("who"), m.group("app"), text, now)
     return None
 
@@ -994,6 +1018,23 @@ def _ig_handles(who):
             return None
         out.append(hd)
     return list(dict.fromkeys(out))[:IG_MAX] or None
+
+
+def _ig_cant(bot, person, m):
+    """checks of round 10 (reading): the plain line for an Instagram action no app may do; the post's own link when
+    the ask is about an Instagram pick in view. Opens nothing, changes nothing."""
+    h = person["handle"]
+    verb = (m.group("verb") or m.group("verb2") or "").replace("-", "")
+    what = (m.group("what") or m.group("what2") or "") if m.group("verb") else "saves" if verb == "unsave" else "likes"
+    link, which = None, False
+    if m.group("verb2"):   # "unsave this": the one Instagram pick in view; with two or more, which one
+        ig = [p for p in in_view(bot, person) if p.platform == "instagram" and p.url]
+        link = ig[0].url if len(ig) == 1 else None
+        which = len(ig) > 1
+    bot.note(intent="instagram_link")
+    if which:
+        return bot.send(h, T.ig_cant(verb, what, None, which=True))
+    return bot.send(h, T.ig_cant(verb, what, link))
 
 
 def _unfollow(bot, person, verb, who, app, text, now):
