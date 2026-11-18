@@ -58,7 +58,7 @@ def _urllib(method, url, headers, body, timeout):
     except urllib.error.HTTPError as e:   # Google's error body names the reason (quotaExceeded ...): read it
         try:
             return e.code, e.read()
-        except Exception:  # noqa: BLE001
+        except Exception:
             return e.code, b""
     except urllib.error.URLError as e:
         if isinstance(getattr(e, "reason", None), (socket.timeout, TimeoutError)):
@@ -106,9 +106,9 @@ def request(method, url, form=None, json_body=None, token=None):
         headers["Authorization"] = f"Bearer {token}"
     try:
         status, raw = (web.OPENER or _urllib)(method, url, headers, data, web.TIMEOUT)
-    except (socket.timeout, TimeoutError):
+    except TimeoutError:
         raise YtError("timeout") from None
-    except Exception:  # noqa: BLE001 - no network, a bad answer: only a code leaves this function
+    except Exception:
         raise YtError("failed") from None
     if 200 <= status < 300:
         try:

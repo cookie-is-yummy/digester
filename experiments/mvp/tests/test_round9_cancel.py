@@ -642,7 +642,8 @@ def _texts_in_tests():
     word = re.compile(r"\b(?:cancel\w*|stop|stopped|pause|end|quit|close|unsubscribe)\b", re.I)
     out = set()
     for path in glob.glob(os.path.join(HERE, "*.py")):
-        if os.path.basename(path).startswith("test_round9_"):
+        if os.path.basename(path).startswith(("test_round9_",
+                                              "test_round10_")):   # round 10, slice Y: the set stays the round 9 one
             continue   # the round 9 slices' own fixtures (a notice card's "Please cancel my membership" is one) are not
             #            phrasings from before; each of those files checks its own reads
         for node in ast.walk(ast.parse(open(path, encoding="utf-8").read())):

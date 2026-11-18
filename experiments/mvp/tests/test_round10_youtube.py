@@ -14,8 +14,8 @@ import pytest
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
-from mvp.tests.test_mvp import env, last  # noqa: E402,F401  (env is a fixture)
-from mvp.tests.test_slice2 import H  # noqa: E402
+from mvp.tests.test_mvp import env, last
+from mvp.tests.test_slice2 import H
 
 UTC = timezone.utc
 CHAT = {"intent": "chat", "reply": "OK."}
@@ -234,7 +234,8 @@ def test_disconnect_ends_access_at_google_deletes_the_sign_in_and_the_lists(yt):
 
 def test_a_tester_can_connect_and_act_but_the_other_routes_stay_the_operators(yt):
     """M-4: the new branch of connectors.unavailable is for kind "oauth" only."""
-    from mvp import config, connectors as C
+    from mvp import config
+    from mvp import connectors as C
     from mvp.actions import REGISTRY
     store = yt["bot"].store
     assert not config.is_operator(H)
@@ -522,6 +523,19 @@ def test_29_only_instagram_in_view_or_a_link_in_a_caption_adds_nothing(yt):
     show(yt, "ig_2")
     assert tell(yt, "put it in a playlist called later").startswith("None of these are YouTube videos")
     assert yt["g"].playlists == {} and ("POST", "playlistItems") not in yt["g"].calls
+
+
+def test_29_the_name_keeps_the_persons_capitals_and_another_apps_playlist_is_refused(yt):
+    connect(yt)
+    show(yt, "yt_1")
+    assert tell(yt, "put it in a playlist called Weeknight Dinners").startswith(
+        'I\'ll make a private YouTube playlist "Weeknight Dinners" and add this video to it')
+    tell(yt, "no")
+    for text, app in (("add it to my spotify playlist", "Spotify"),
+                      ("put it in a playlist called runs on apple music", "Apple Music")):
+        assert tell(yt, text) == (f"I can only add videos to YouTube playlists, so I didn't add anything to {app}. Say "
+                                  "\"put these in a playlist called ...\" for a private one on YouTube.")
+    assert yt["g"].playlists == {} and yt["bot"].store.get_state(f"ytask:{H}") is None
 
 
 def test_29_no_name_asks_and_no_means_nothing(yt):

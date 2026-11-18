@@ -200,6 +200,19 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   words (a YouTube playlist, Gmail, Google Calendar), stubs the other round 10 slices fill, and in-process fakes
   (`tests/fakes/`: the model, an MCP server, an OAuth server, Google and YouTube, a practice merchant).
   Tests: `tests/test_round10_k.py`.
+- **Round 10, your YouTube and Instagram links** (DESIGN.md section 17.Y, slice Y; amendment A-015, Proposed): "connect
+  youtube" gives a code to type at google.com/device (Google's own sign-in, the `youtube` scope only; the bot keeps
+  the sign-in sealed and checks with Google on its own every 30 seconds, or at once on "done"); "disconnect youtube"
+  ends it at Google. Then "unsubscribe me from that channel", "unsubscribe from <channel>", "unsubscribe from channels
+  I haven't watched since 2024" (only with a YouTube watch history under 120 days old; the whole list, "keep 2, 5",
+  "unsubscribe N") and "put these in a playlist called dinners" (always private; only YouTube videos from your saves)
+  each show the exact change and run after your yes, with "undo" (7 days for an unsubscribe, 24 hours for a playlist).
+  A tester can do this too. YouTube's daily limit for this app stops the run and the rest is done the next morning
+  unless you say "stop". Instagram lets no app unfollow or mute, so the bot sends the link and the two taps, one at a
+  time ("done" or "next"); also Watch Later, history and the Instagram weekly-export link. Set up once: a Google Cloud
+  project with a "TVs and Limited Input devices" client; `MVP_YT_CLIENT_ID` and `MVP_YT_CLIENT_SECRET` in the 0600
+  settings file (or the Connections panel); `MVP_YT_UNITS_PER_DAY` (8,000) caps the writes. Tests:
+  `tests/test_round10_youtube.py` (a fake Google; no real call).
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -544,6 +557,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `actions/web.py`, `actions/_tasks.py`, `actions/ticktick.py`, `actions/todoist.py`, `actions/webhook.py` | Round 9, E: the one HTTP helper and the connectors by token (TickTick, Todoist) and the webhook, on `places.py` and `connectors.py` |
 | `settings.py`, `tokens.py` | Round 10, slice K: `secret(name)` (the environment, then the sealed store), the page's status line; sealed sign-ins and settings (AES-256-GCM, 0600 files, the key) |
 | `captionmark.py`, `browser.py`, `phrasing.py`, `yt_auth.py` | Round 10, slice K: stubs (`STUB = True`) giving today's behaviour until slices S, V, W and Y replace them |
+| `yt_auth.py`, `ytreads.py`, `actions/youtube.py`, `actions/link.py` | Round 10, slice Y: the person's YouTube sign-in by a code (device flow), the YouTube and Instagram reads and answers, the YouTube Data API calls with quota counting, and the links the person taps |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |

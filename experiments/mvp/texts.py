@@ -2780,6 +2780,18 @@ def yt_undo_rest(done, total):
             f"I'll do the other {total - done} tomorrow at 9am unless you say \"stop\".")
 
 
+def yt_rule_place(target, per_run, when, per_day):
+    """Y4, for slice G's rule preview once G merges: the playlist line of a rule with a YouTube place ("each Sunday")."""
+    return (f"I'll also add them to your private YouTube playlist {_yt_q(target)}, on YouTube: at most {per_run} "
+            f"{when} and {per_day} a day.")
+
+
+def yt_other_app(app):
+    name = " ".join(w.capitalize() for w in app.split())
+    return (f"I can only add videos to YouTube playlists, so I didn't add anything to {name}. Say \"put these in a "
+            "playlist called ...\" for a private one on YouTube.")
+
+
 def yt_watch_later(link):
     return f"YouTube doesn't let any app add to Watch Later. Open the video and tap Save, then Watch later: {link}"
 

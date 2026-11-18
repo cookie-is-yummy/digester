@@ -94,6 +94,7 @@ IG_EXPORT = re.compile(r"^(?:how\s+(?:do|can|could)\s+i|can\s+you|could\s+you|he
                        r"can\s+i|i\s+want\s+to)\s+(?:make|set\s+up|get|have|schedule)\s+(?:my\s+)?(?:instagram|insta|ig)\s+"
                        r"(?:export|exports|data\s+export|download)s?\b.*\b(?:repeat|regular(?:ly)?|every\s+week|weekly|"
                        r"automatic(?:ally)?|on\s+(?:a|its)\s+own|by\s+itself|schedule|scheduled)\b")
+OTHER_MUSIC = re.compile(r"\b(?:spotify|apple\s+music|soundcloud|tidal|deezer|amazon\s+music|pandora)\b")
 REST_STOP = re.compile(r"^(?:please\s+)?(?:stop|stop\s+it|don'?t|do\s+not|stop\s+(?:that|unsubscribing|"
                        r"subscribing))$")
 # the answers to a preview
@@ -108,6 +109,14 @@ _ORD = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "four
 _PRONOUN = {"it", "that", "this", "them", "him", "her", "that one", "this one", "it all", "everything", "all"}
 _CREATOR_WORDS = re.compile(r"^(?:that|this|the)\s+(?:creator|account|person|guy|girl|page|youtuber|channel)$"
                             r"|^(?:them|him|her)$")
+
+
+def _cased(text, name):
+    """The name as the person typed it (the reads match on the lowercased text)."""
+    if not name:
+        return name
+    m = re.search(r"\s+".join(map(re.escape, name.split())), " ".join((text or "").split()), re.I)
+    return m.group(0) if m else name
 
 
 def _key(s):
@@ -129,7 +138,7 @@ def _aware(now):
 def _view(bot, person):
     try:
         return bot.view(person["library"])
-    except Exception:  # noqa: BLE001 - no library here: nothing in view
+    except Exception:
         return None
 
 
@@ -305,7 +314,11 @@ def youtube_reads(bot, person, text, now):
         if m:
             if _key(m.group("name") or "") == "watch later":   # no app can add to Watch Later: the link instead
                 return _watch_later(bot, person, m.group("what") or "it")
-            return _playlist(bot, person, m.group("what") or "these", m.group("name"), now)
+            other = OTHER_MUSIC.search(m.group("name") or "")
+            if other:   # "my spotify playlist": not YouTube's, and nothing is added anywhere
+                bot.note(intent="youtube")
+                return bot.send(person["handle"], T.yt_other_app(other.group(0)))
+            return _playlist(bot, person, m.group("what") or "these", _cased(text, m.group("name")), now)
     m = WATCH_LATER.match(t)
     if m:
         return _watch_later(bot, person, m.group("what"))
@@ -498,9 +511,8 @@ def _unsub_pick(bot, person, it, now):
 def _unsub_name(bot, person, name, channel_said, text, now):
     """"unsubscribe from <name>": a channel the person follows (or a YouTube pick's channel in view). A paid service
     (cancel_routes.json) with no such channel is left to the cancel helper; one that is both asks."""
-    from . import cancel
+    from . import cancel, yt_auth
     from .actions.youtube import YtError
-    from . import yt_auth
     h = person["handle"]
     name = re.sub(r"^(?:my|the|that|this)\s+", "", " ".join((name or "").split())).strip(" '\"")
     if not name or name in _PRONOUN or cancel.NOT_CANCEL.search(name) or re.search(r"\d{3,}|@|https?:", name):
@@ -685,7 +697,6 @@ def _one_note(st):
 
 def _both_answer(bot, person, st, t, text, now):
     from . import cancel
-    h = person["handle"]
     if PAID_WORD.search(t) and not re.search(r"\bchannel\b", t):
         req = cancel.request(st["text"])
         if req is None:
@@ -1043,7 +1054,7 @@ def tick(bot, now):
         h = row["key"].split(":", 1)[1]
         try:
             got = yt_auth.poll(bot.store, h, now)
-        except Exception:  # noqa: BLE001 - one person's sign-in never stops the tick, and is not asked again
+        except Exception:
             yt_auth.end_device(bot.store, h)
             got = "failed"
         if got in (None, "pending"):
@@ -1062,7 +1073,7 @@ def tick(bot, now):
             continue
         try:
             line = _run_rest(bot, person, st, now)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             bot.store.add_run(handle=h, kind="youtube_rest", status="error", error=type(e).__name__)
             continue
         if line:
@@ -1091,8 +1102,8 @@ def _run_rest(bot, person, st, now):
     """The rest of a list the person said yes to, the day after: only channels still subscribed (or, for an undo,
     the same placements); the same lines as the first run."""
     from .actions import perform
-    from .actions.youtube import YtError, token_for
     from .actions import youtube as Y
+    from .actions.youtube import YtError, token_for
     h = person["handle"]
     if _blocked(bot, h):
         return None
