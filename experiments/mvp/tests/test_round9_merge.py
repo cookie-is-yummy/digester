@@ -30,6 +30,7 @@ W_MODULE_HOOKS = ("export_reads",)
 W_BOT_HOOKS = ("split_reads", "self_email_reads")
 # ---------- round 10, slice S: its two reads are checked the same way (hook 0 and hook 4b) ----------
 BOT_HOOKS += ("fit_reads", "_mismatch_answer")
+BOT_HOOKS += ("browser_reads",)   # second merge of round 10: slice V's read (only while a run is open)
 # ---------- end round 10, slice S ----------
 ALLOWED = {"buy the ingredients for the first one"}   # the rule eval's t-dev-040: slice C puts them on the list
 CHAT = {"intent": "chat", "reply": "OK."}

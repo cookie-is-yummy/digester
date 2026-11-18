@@ -145,6 +145,8 @@
       <div class="small" id="connSending"></div>
       <div id="conn"></div>
       <div class="small" id="connKey"></div>
+      <div class="small" id="connYoutube"></div>
+      <div class="small" id="connBrowser"></div>
       <div class="small">For the person who runs the bot. A saved value is sealed on this computer and never shown
         again, here or in the chat. Never type these into the chat.</div>
     </div>
@@ -389,6 +391,8 @@ async function loadConn() {
 function drawConn(c) {
   $("connSending").textContent = c.sending || "";
   $("connKey").textContent = c.key || "";
+  $("connYoutube").textContent = c.youtube || "";
+  $("connBrowser").textContent = c.browser || "";
   $("conn").innerHTML = (c.rows || []).map(r =>
     `<div class="conn" data-name="${esc(r.name)}"><label>${esc(r.label)}${r.optional ? " (optional)" : ""}</label>`
     + `<div class="st ${r.state === "unset" ? "" : "set"}">${esc(r.words)}</div>`

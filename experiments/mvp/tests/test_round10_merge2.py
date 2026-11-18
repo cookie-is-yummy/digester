@@ -3,6 +3,7 @@ meet"): slices Y (YouTube, Instagram links), V (the browser that cancels, the vi
 on top of K, W, S, D, G and C, and the fixes the self-test's trial merges found. Fakes only (the fake interpreter and
 composer of test_mvp, the fake MCP and OAuth servers, the fake Google, the fake merchant): no network, no model call.
 Made-up data only."""
+import json
 import os
 import sys
 from datetime import timedelta
@@ -282,3 +283,240 @@ def test_y4_connect_youtube_then_use_my_youtube_playlist_for_rule_1_makes_the_gr
     assert (g["action"], g["target"]) == ("youtube.playlist_add", "Recipes")
     _, sent = tick_at(yt, SUNDAY)
     assert _videos(yt["g"]) == [["vidAAAAAAA1", "vidCCCCCCC3"]], sent
+
+
+# ================================ seam (d): slice W's export_reads (5a) and slice Y's Instagram export line agree ====
+IG_REPEAT_ASKS = ["how do i make my instagram export repeat", "can you set up my instagram export weekly",
+                  "how can i get instagram to export my saves every week", "can my instagram export repeat",
+                  "i want my instagram export to repeat every week", "is there a way to make my ig export automatic"]
+
+
+@pytest.mark.parametrize("ask", IG_REPEAT_ASKS)
+def test_d_an_instagram_repeat_question_gets_the_weekly_export_link_whichever_read_takes_it(env, ask):
+    from mvp import texts as T
+    env["bot"].max_per_minute = None
+    out = say(env, ask, boom)
+    assert out == T.ig_schedule(), out
+
+
+def test_d_the_general_export_facts_and_the_instagram_line_never_promise_a_repeat():
+    from mvp import texts as T
+    facts = T.export_facts(["instagram", "youtube"], "the upload box")
+    assert "I can't confirm a repeating export for your account" in facts
+    assert "I can't tell yet whether your account gets the weekly option" in T.ig_schedule()
+    for line in (facts, T.ig_schedule()):
+        assert "will repeat" not in line and "is set up" not in line
+
+
+@pytest.mark.parametrize("text", ["every week send me instagram saves about pasta",
+                                  "remind me every month to send my instagram export",
+                                  "every sunday put 3 instagram recipes in my ticktick"])
+def test_d_rules_and_reminders_that_name_instagram_are_not_taken_by_the_export_line(text):
+    from mvp import refresh
+    assert refresh.IG_REPEAT.search(text) is None or refresh.export_kind(text) == "remind"
+
+
+# ================================ seam (b): "delete my data" and "export my data" with Y and V ===================
+from mvp.tests.test_round10_youtube import show  # noqa: E402
+from mvp.tests.test_round10_sending import b  # noqa: E402,F401  (b is a fixture)
+
+
+def _held_files():
+    import json as _json
+    from mvp import config
+    out = {}
+    for d, _, fs in os.walk(config.HOME):
+        for n in fs:
+            if n in ("connections.json", "browser_runs.json", "README.txt"):
+                with open(os.path.join(d, n), encoding="utf-8") as f:
+                    out[n] = f.read()
+    return out, (_json.loads(out["connections.json"]) if "connections.json" in out else {})
+
+
+def _everything(yt):
+    """A playlist rule run, a YouTube change waiting for a yes, a browser site OK and a run row."""
+    _playlist_rule(yt)
+    _yes(yt)
+    tick_at(yt, SUNDAY)
+    show(yt, "yt_1")
+    tell(yt, "unsubscribe me from that channel")          # the one-channel question waits (ytsubs, ytask)
+    st = yt["bot"].store
+    st.add_site_grant(H, "streamly", 1)
+    rid = st.add_browser_run(H, "streamly", None, "vm")
+    st.end_browser_run(rid, "page_says_cancelled", presses=3, outcome_quote="Your membership has been cancelled.")
+    return st
+
+
+def test_b_export_lists_youtube_and_the_browser_without_titles(yt):
+    st = _everything(yt)
+    tell(yt, "export my data")
+    files, body = _held_files()
+    assert "youtube" in body["sign_ins_kept"]
+    assert [(g["app"], g["action"]) for g in body["standing_permissions"]] == [("youtube", "youtube.playlist_add")]
+    held = {x["what"] for x in body["youtube_held"]}
+    assert "your YouTube subscription list (kept 24 hours)" in held   # (the question ended with this message)
+    assert all(set(x) == {"what", "since"} for x in body["youtube_held"])
+    runs = files["browser_runs.json"]
+    assert '"streamly"' in runs and '"page_says_cancelled"' in runs
+    for f in (files["connections.json"], runs):
+        for title in ("Kitchen Lab", "One-pan miso pasta", "Lemon orzo", "Garden Hour", "membership has been"):
+            assert title not in f, title
+    assert "youtube_held" in files["README.txt"] or "YouTube" in files["README.txt"]
+
+
+def test_b_delete_my_data_revokes_youtube_and_removes_browser_rows_youtube_state_and_grants(yt):
+    from mvp import tokens
+    st = _everything(yt)
+    yt["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "delete_data"}
+    tell(yt, "delete my data")
+    yt["state"]["answers"]["mvp_interpret"] = lambda u: {"intent": "confirm"}
+    out = tell(yt, "yes")
+    assert out.startswith("Done: your rules and history are deleted."), out
+    assert yt["g"].revoked == [True] and not tokens.exists(H, "youtube")
+    assert st.site_grants_of(H) == [] and st.browser_runs_of(H) == []
+    assert st.grants_of(H, active_only=False) == [] and st.placements(H, open_only=False) == []
+    assert [r["key"] for r in st.q("SELECT key FROM state") if r["key"].endswith(H)] == []
+
+
+# ================================ seam (c): a tester may connect YouTube; no line says it is only for the operator =====
+OPERATOR_ONLY = ("only for the person who runs me", "isn't ready yet", "only the person who runs me")
+
+
+@pytest.fixture()
+def tester_yt(yt, monkeypatch):
+    from mvp import config
+    monkeypatch.setattr(config, "OPERATOR", "+15550009999")   # someone else runs the bot: H is a tester
+    assert not config.is_operator(H)
+    return yt
+
+
+def test_c_a_tester_connects_youtube_and_nothing_says_it_is_operator_only(tester_yt):
+    e = tester_yt
+    out = tell(e, "what are you connected to")
+    assert '• YouTube: not connected yet (say "connect youtube").' in out, out
+    first = tell(e, "connect youtube")
+    assert "google.com/device" in first
+    e["g"].approve()
+    done = tell(e, "done")
+    assert done.startswith("YouTube is connected.")
+    out = tell(e, "what are you connected to")
+    assert "• YouTube: connected." in out, out
+    preview = _playlist_rule(e, connect_first=False)
+    assert PLAYLIST_PREVIEW in preview
+    yt_lines = [ln for x in (first, done, out, preview) for ln in x.split("\n") if "YouTube" in ln or "youtube" in ln]
+    assert yt_lines
+    for line in yt_lines:   # (the Mac's own line still says the Mac is the operator's: it is)
+        assert not any(w in line for w in OPERATOR_ONLY), line
+
+
+def test_c_a_tester_not_connected_is_told_how_to_connect_youtube_on_every_path(tester_yt):
+    e = tester_yt
+    preview = _playlist_rule(e, connect_first=False)
+    _yes(e)
+    use = tell(e, "use my youtube playlist for rule 1")
+    show(e, "yt_1")
+    unsub = tell(e, "unsubscribe me from that channel")
+    for line in (preview, use, unsub):
+        assert not any(w in line for w in OPERATOR_ONLY), line
+        assert "connect youtube" in line, line
+
+
+# ================================ seam (e): the footer, the panel and "what are you connected to" ===================
+def test_e_the_footer_and_the_panel_agree_on_youtube_and_never_show_a_value(b, monkeypatch):
+    from mvp import config, panel, settings
+    monkeypatch.setattr(config, "OPERATOR", None)
+    monkeypatch.setattr(config, "PAGE_OPERATOR", True)
+    for k in ("MVP_YT_CLIENT_ID", "MVP_YT_CLIENT_SECRET"):
+        monkeypatch.delenv(k, raising=False)
+    cid, sec = "made-up-client.example.com", "made-up-client-secret-0123456789"
+
+    def agree():
+        sw, st = settings.switches(), panel.state()
+        rows = {r["name"]: r for r in st["rows"]}
+        both = all(rows[n]["state"] in ("setting", "sealed") for n in ("MVP_YT_CLIENT_ID", "MVP_YT_CLIENT_SECRET"))
+        assert (sw["YouTube"] == "on") == both, (sw, rows)
+        shown = settings.page_status() + json.dumps(st)
+        assert cid not in shown and sec not in shown
+        return sw, st
+    sw, st = agree()
+    assert sw["YouTube"] == "off" and "YouTube" in st["youtube"]
+    panel.save("MVP_YT_CLIENT_ID", cid)
+    assert agree()[0]["YouTube"] == "off"
+    panel.save("MVP_YT_CLIENT_SECRET", sec)
+    sw, st = agree()
+    assert sw["YouTube"] == "on" and st["youtube"] == ('YouTube: set up. Each person connects their own by saying '
+                                                       '"connect youtube" in the chat.')
+    panel.remove("MVP_YT_CLIENT_SECRET")
+    assert agree()[0]["YouTube"] == "off"
+
+
+@pytest.mark.parametrize("env_set,footer,panel_line", [
+    ({}, "off", "Browser for cancelling: off."),
+    ({"MVP_BROWSER": "operator", "MVP_BROWSER_MERCHANTS": "netflix"}, "operator",
+     "Browser for cancelling: on, in a window on this computer, for you only. Sites: netflix."),
+    ({"MVP_BROWSER": "vm", "MVP_BROWSER_DEMO": "1"}, "vm",
+     "Browser for cancelling: on, on my side (watch it at /vm on this page), for you only. Sites: streamly "
+     "(a practice site)."),
+    ({"MVP_BROWSER": "vm", "MVP_BROWSER_FOR": "all", "MVP_BROWSER_MERCHANTS": "netflix,spotify"}, "vm, everyone",
+     "Browser for cancelling: on, on my side (watch it at /vm on this page), for everyone who uses this page. Sites: "
+     "netflix, spotify."),
+])
+def test_e_the_browser_setting_is_said_truthfully_in_the_footer_the_panel_and_the_chat(env, monkeypatch, env_set,
+                                                                                       footer, panel_line):
+    from mvp import config, panel, settings
+    for k in ("MVP_BROWSER", "MVP_BROWSER_DEMO", "MVP_BROWSER_FOR", "MVP_BROWSER_MERCHANTS"):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env_set.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(config, "OPERATOR", H)
+    assert settings.switches()["browser"] == footer
+    assert panel.state()["browser"] == panel_line
+    env["bot"].max_per_minute = None
+    out = say(env, "what are you connected to", boom)
+    if footer == "off":   # off: the chat's answer is the one it gave before the browser existed
+        assert "Browser for cancelling" not in out
+    else:
+        assert "• " + panel_line.replace("(watch it at /vm on this page)", "(you watch it on the test page)") in out
+
+
+def test_e_a_tester_hears_about_the_browser_only_when_it_is_open_to_them(env, monkeypatch):
+    from mvp import config
+    monkeypatch.setattr(config, "OPERATOR", "+15550009999")
+    monkeypatch.setenv("MVP_BROWSER", "vm")
+    env["bot"].max_per_minute = None
+    assert "Browser for cancelling" not in say(env, "what are you connected to", boom)
+    monkeypatch.setenv("MVP_BROWSER_FOR", "all")
+    assert "Browser for cancelling: on" in say(env, "what are you connected to", boom)
+
+
+# ================================ seam (h): the errand form reaches Y and V only through their code reads =========
+ERRAND_UNSUP = {"intent": "unsupported"}
+
+
+def _errand_on(e, monkeypatch, f):
+    monkeypatch.delenv("MVP_ERRAND_PER_DAY", raising=False)
+    e["state"]["answers"]["mvp_errand"] = lambda u: dict(f)
+
+
+@pytest.mark.parametrize("op,said,want", [
+    ("connect", "conecta mi youtube", "google.com/device"),
+    ("disconnect", "desconecta mi youtube", "YouTube"),
+])
+def test_h_the_errand_forms_youtube_connection_goes_through_slice_ys_read(tester_yt, monkeypatch, op, said, want):
+    _errand_on(tester_yt, monkeypatch, {"errand": "app_connection", "op": op, "app_words": "youtube"})
+    if op == "disconnect":
+        yt_connect(tester_yt)
+    out = say(tester_yt, said, ERRAND_UNSUP)
+    assert want in out, out
+    assert not any(w in out for w in OPERATOR_ONLY) and "I can't connect to YouTube" not in out
+    assert tester_yt["calls"].count("mvp_errand") == 1
+
+
+def test_h_the_errand_module_names_no_action_of_y_or_v():
+    import ast
+    src = open(os.path.join(os.path.dirname(HERE), "errand.py"), encoding="utf-8").read()
+    names = {n.attr if isinstance(n, ast.Attribute) else n.id for n in ast.walk(ast.parse(src))
+             if isinstance(n, (ast.Attribute, ast.Name))}
+    assert not names & {"perform", "REGISTRY", "run_place", "add_grant", "grant_reads", "browser_offer",
+                        "_browser_press", "_browser_go_on", "Api", "playlist_add", "unsubscribe", "yt_auth",
+                        "browser_cancel", "VmHost", "LocalHost"}

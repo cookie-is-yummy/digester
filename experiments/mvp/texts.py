@@ -3574,4 +3574,25 @@ def yt_rule_ig_left(n):
 
 YT_RULE_QUOTA = "YouTube's daily limit for this app is used up, so I didn't add them to your playlist this time."
 YT_RULE_STOPPED_PART = "YouTube stopped me part way, so the rest are only in this message."
+
+
+# seam (e): YouTube and the browser setting, said the same way in the chat, the panel and the footer (never a value)
+YT_STATUS = {None: "connected", "not_connected": "not connected yet (say \"connect youtube\")",
+             "off": "not connected (say \"connect youtube\" to connect it again)",
+             "broken": "stopped after 3 failures in a row (say \"connect youtube\")",
+             "unreachable": "not set up on this bot yet"}
+PANEL_YT_ON = "YouTube: set up. Each person connects their own by saying \"connect youtube\" in the chat."
+PANEL_YT_OFF = "YouTube: add the client id and the secret above, then each person says \"connect youtube\" in the chat."
+
+
+def browser_setting(mode, everyone, sites, practice=(), chat=False):
+    """'Browser for cancelling: on, in a window on this computer, for you only. Sites: netflix.' (or off)."""
+    if mode not in ("operator", "vm"):
+        return "Browser for cancelling: off."
+    where = ("in a window on this computer" if mode == "operator" else
+             "on my side (you watch it on the test page)" if chat else "on my side (watch it at /vm on this page)")
+    who = "everyone who uses this page" if everyone else "you only"
+    names = ", ".join(f"{k} (a practice site)" if k in practice else k for k in sorted(sites)) or \
+        "none yet (MVP_BROWSER_MERCHANTS names them)"
+    return f"Browser for cancelling: on, {where}, for {who}. Sites: {names}."
 # ---------- end second merge of round 10 ----------

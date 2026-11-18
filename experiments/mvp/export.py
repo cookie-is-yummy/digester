@@ -198,12 +198,15 @@ def export(bot, person, now, lists_only=False):
     pinned = {k: sorted((bot.store.get_state(f"pins:{k}:{h}") or {}).get("tools") or {}) for k in MCP_ROUTES}
     pinned = {k: v for k, v in pinned.items() if v}
     # ---------- end round 10, slice C ----------
-    if conns or made or grants or sign_ins:
+    held = youtube_held(bot.store, h)   # second merge of round 10: slice Y's short-lived state, kind and time only
+    if conns or made or grants or sign_ins or held:
         body = {"connections": conns, "placements": made}
         if grants or sign_ins:   # round 10, slice K
             body.update(standing_permissions=grants, sign_ins_kept=sign_ins)
         if pinned:   # round 10, slice C
             body.update(pinned_tools=pinned)
+        if held:   # second merge of round 10
+            body.update(youtube_held=held)
         files.append(("connections.json", _write(d, "connections.json", json.dumps(body, indent=1))))
         readme += ("\nconnections.json  The outside places you connected (like Reminders and Calendar on a Mac), and "
                    "each thing the bot\n                  added there: its id there, when, and when it was taken out. No "
@@ -212,6 +215,9 @@ def export(bot, person, now, lists_only=False):
             readme += ("                  Also: the rules you let add to your apps on their own (rule number, app, "
                        "the most per run\n                  and per day, and whether it is on), and the apps whose "
                        "sign-in I keep (names only).\n")
+        if held:   # second merge of round 10
+            readme += ("                  youtube_held: what I'm holding for a moment about your YouTube (like your "
+                       "subscription list,\n                  kept 24 hours): what it is and since when. No titles.\n")
     # ---------- round 10, slice S: what they said about reels whose video did not match the caption (no words) ------
     said = [{k: r[k] for k in ("item_id", "kind", "source", "at")} for r in bot.store.caption_feedback(h)]
     if said:
@@ -251,6 +257,22 @@ def sealed_sign_ins(h):
     except Exception:  # noqa: BLE001 - the export never fails for this list
         return []
 # ---------- end round 10, slice K ----------
+
+
+# ---------- second merge of round 10: slice Y's short-lived state, listed by kind and time (never a title) ------
+YOUTUBE_HELD = (("ytdevice", "a YouTube sign-in code waiting"), ("ytsubs", "your YouTube subscription list (kept 24 hours)"),
+                ("ytask", "a YouTube change waiting for your yes"), ("igtap", "Instagram links waiting for done or next"),
+                ("ytundo", "what \"undo\" can take back on YouTube"), ("ytrest", "YouTube changes left for tomorrow"))
+
+
+def youtube_held(store, h):
+    out = []
+    for key, what in YOUTUBE_HELD:
+        st = store.get_state(f"{key}:{h}")
+        if st:
+            out.append({"what": what, "since": st.get("at") if isinstance(st, dict) else None})
+    return out
+# ---------- end second merge of round 10 ----------
 
 
 # ---------- round 10, slice V ----------

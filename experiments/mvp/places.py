@@ -1000,19 +1000,43 @@ def _email_lines(bot, h):
 def _connected(bot, person, now):
     h = person["handle"]
     email, others = _email_lines(bot, h)
+    extra = _yt_and_browser_lines(bot, h)   # second merge of round 10 (seam e): a tester too
     if not config.is_operator(h):
-        return bot.send(h, T.connected_lines(email, None, others) + "\n" + T.MAC_ONLY_OPERATOR)
+        return bot.send(h, T.connected_lines(email, None, others) + extra + "\n" + T.MAC_ONLY_OPERATOR)
     why = C.unavailable(bot.store, h, "mac")
     line = T.MAC_STATUS[why or "connected"]
     if not why and (bot.store.connection(h, "mac") or {}).get("last_error") == "no_calendar":
         line += " (events still come as a link: there's no \"Digest\" calendar)"
     out = T.connected_lines(email, line, others)
     for key, con in C.CONNECTORS.items():   # round 9, E: a task app or the webhook set up here, with its state
+        if con.kind == "oauth":   # second merge of round 10: YouTube is per person, said below
+            continue
         if con.kind != "mac" and (C.module(key).reachable() or bot.store.connection(h, key)):
             out += f"\n• {con.name[:1].upper() + con.name[1:]}: {T.token_status(key, C.unavailable(bot.store, h, key))}."
+    out += extra
     if why in (None, "broken"):
         out += "\n" + T.MAC_DISCONNECT_HINT
     return bot.send(h, out)
+
+
+def _yt_and_browser_lines(bot, h):
+    """Second merge of round 10 (seam e): this person's YouTube (each person connects their own) and, for whoever may
+    have it, the browser setting. Names and states only."""
+    out = ""
+    try:
+        from . import yt_auth
+        if C.module("youtube").reachable() or yt_auth.connected(bot.store, h) or bot.store.connection(h, "youtube"):
+            out += f"\n• YouTube: {T.YT_STATUS.get(C.unavailable(bot.store, h, 'youtube'), T.YT_STATUS['off'])}."
+    except Exception:  # noqa: BLE001 - this answer never breaks on a connector
+        pass
+    try:
+        from . import browser
+        from .panel import browser_words
+        if browser.mode() != "off" and (config.is_operator(h) or browser.person_ok(h)):   # off: today's answer
+            out += "\n• " + browser_words(chat=True)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
 
 
 def _connect(bot, person, now):

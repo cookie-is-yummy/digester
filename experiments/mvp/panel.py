@@ -141,4 +141,24 @@ def key_words():
 
 def state():
     """Everything the panel draws: rows, the sending line and the key line. No value, ever."""
-    return {"rows": rows(), "sending": T.panel_sending(sending_state()), "key": key_words()}
+    return {"rows": rows(), "sending": T.panel_sending(sending_state()), "key": key_words(),
+            "youtube": youtube_words(), "browser": browser_words()}   # second merge of round 10 (seam e)
+
+
+# ---------- second merge of round 10 (seam e): YouTube and the browser setting, in words, never a value ----------
+def youtube_words():
+    from .actions import youtube
+    try:
+        return T.PANEL_YT_ON if youtube.reachable() else T.PANEL_YT_OFF
+    except Exception:  # noqa: BLE001 - the panel never breaks the page
+        return T.PANEL_YT_OFF
+
+
+def browser_words(chat=False):
+    from . import browser
+    try:
+        return T.browser_setting(browser.mode(), browser.for_all(), browser.merchants(),
+                                 practice=("streamly",) if browser.demo() else (), chat=chat)
+    except Exception:  # noqa: BLE001
+        return T.browser_setting("off", False, ())
+# ---------- end second merge of round 10 ----------

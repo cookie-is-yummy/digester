@@ -343,6 +343,11 @@ def act(bot, person, name, what, text, now):
         return None
     if name in ("add_to_app", "app_connection"):
         from .places import place_reads
+        if name == "app_connection":   # second merge of round 10: YouTube's connection is slice Y's own read (5b)
+            from .ytreads import youtube_reads
+            ref = youtube_reads(bot, person, what, now)
+            if ref is not None:
+                return ref
         return place_reads(bot, person, what, now)
     if name == "what_did_you_do":
         return bot.receipts_reads(person, what, now)

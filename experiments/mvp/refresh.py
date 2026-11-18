@@ -1227,6 +1227,10 @@ def _remind_spec(platform, m, now, tz):
     return RuleSpec.model_validate(stored), every
 
 
+IG_REPEAT = re.compile(r"\b(?:instagram|insta|ig)\b(?=.*\bexport)(?=.*\b(?:repeat\w*|regular(?:ly)?|every\s+week|weekly|"
+                       r"automatic(?:ally)?|on\s+its\s+own|by\s+itself|schedul\w*)\b)(?!.*\bremind)", re.I)
+
+
 def export_text(bot, person, text, now, kind=None):
     """The reply to an export request, built by code (dates from the reminders' own schedule). While the setup's offer
     of export reminders waits, the request is the yes to it and starts them. None when the words are not an export
@@ -1234,6 +1238,10 @@ def export_text(bot, person, text, now, kind=None):
     from .schedule import next_run
     h, tz = person["handle"], person["timezone"]
     kind = kind or export_kind(text)
+    # second merge of round 10 (seam d): "make my instagram export repeat" gets slice Y's weekly-export link (the
+    # verdict's Y5: export_reads sends it), the same line hook 5b gives, whichever read takes the message
+    if kind in (None, "how") and IG_REPEAT.search(" ".join((text or "").split())):
+        return T.ig_schedule()
     if kind is None:
         return None
     if kind == "how":

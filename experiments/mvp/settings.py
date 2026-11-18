@@ -92,6 +92,8 @@ def switches():
             out[label] = "off"
     b = (os.environ.get("MVP_BROWSER") or "").strip().lower()
     out["browser"] = b if b in ("operator", "vm") else "off"
+    if out["browser"] == "vm" and (os.environ.get("MVP_BROWSER_FOR") or "").strip().lower() == "all":
+        out["browser"] = "vm, everyone"   # second merge of round 10: who may have it, said truthfully
     src = tokens.key_source()
     out["sign-in key"] = {"setting": "set", "file": "in a file here"}.get(src) or \
         ("made at the first sign-in" if tokens.can_make_key() else "not set")
