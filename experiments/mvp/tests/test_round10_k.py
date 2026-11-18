@@ -447,10 +447,11 @@ def test_the_published_stubs_give_todays_behaviour():
     from types import SimpleNamespace
 
     from mvp import browser, captionmark, compose, connectors, phrasing, yt_auth
-    assert browser.STUB is True
+    # the merge of Y, V and T: every stub of slice K is replaced; browser and yt_auth no longer carry STUB at all
     assert phrasing.STUB is False   # round 10, slice W replaced this stub (W4); its names and today's takes stay
     assert captionmark.STUB is False   # round 10, slice S built it (tests/test_round10_slop.py); unmarked items as before
-    assert yt_auth.STUB is False   # round 10, slice Y replaced this stub (tests/test_round10_youtube.py)
+    for m in (browser, yt_auth):   # round 10, slices V and Y; off by default the browser still gives today's behaviour
+        assert not hasattr(m, "STUB")
     assert captionmark.mark(SimpleNamespace()) is None and captionmark.SIGNAL_VERSION == "cm-v1"
     assert browser.available(None, {"handle": H}, "netflix") is False and browser.run_open(None, H) is False
     assert phrasing.normalize("cancel it for me") == "cancel it for me"

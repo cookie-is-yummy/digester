@@ -1,0 +1,36 @@
+{
+ "_about": "Round 10, slice V (DESIGN.md section 17.V): the browser part of a merchant's way out. Turned on only by MVP_BROWSER and MVP_BROWSER_MERCHANTS (never here). domains and final_names from cancel_routes.json win when that file has them. start_url, path and final_names come from the merchant's own help page (source_url, checked_on); the path is not tried on a real site yet (the founder's trial). asset_hosts: hosts a page may load pictures and scripts from (never a page); empty until the trial shows what is needed.",
+ "merchants": {
+  "netflix": {
+   "start_url": "https://www.netflix.com/cancelplan",
+   "path": [],
+   "final_names": ["Finish Cancellation"],
+   "domains": ["www.netflix.com"],
+   "asset_hosts": [],
+   "outcome_phrases": ["will end on", "has been cancelled"],
+   "source_url": "https://help.netflix.com/en/node/407",
+   "checked_on": "2026-11-17"
+  },
+  "spotify": {
+   "start_url": "https://www.spotify.com/account/subscription/manage/",
+   "path": [],
+   "final_names": ["Cancel subscription"],
+   "domains": ["www.spotify.com"],
+   "asset_hosts": [],
+   "outcome_phrases": [],
+   "source_url": "https://support.spotify.com/us/article/cancel-premium/",
+   "checked_on": "2026-11-17"
+  },
+  "youtube_premium": {
+   "start_url": "https://www.youtube.com/paid_memberships",
+   "path": [],
+   "final_names": ["Yes, cancel"],
+   "domains": ["www.youtube.com"],
+   "asset_hosts": [],
+   "outcome_phrases": [],
+   "note": "never driven: YouTube is a denied site (browser_guard.DENIED_SITES); the official connector is slice Y",
+   "source_url": "https://support.google.com/youtube/answer/6308278?hl=en",
+   "checked_on": "2026-11-17"
+  }
+ }
+}

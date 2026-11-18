@@ -2710,3 +2710,88 @@ blocks in `connectors.py`, `handler.py`, `scheduler.py`, `ytinfo.py`, `actions/_
   youtube", "add this to my youtube", the Instagram export) plus "unsub", "remove X from my (youtube) subscriptions",
   "stop following X", "log out of youtube", "make a playlist of these": 21 of 25. Left to the model (`unsupported`):
   "i don't want X in my subscriptions anymore", "can you get into my youtube", "i'm done with X, unsubscribe".
+### 17.V The browser that cancels for the person, and the "virtual machine" (slice V; A-016, Proposed)
+
+Off unless a setting turns it on. No model in the loop (version 1): code follows the merchant's own path by exact
+names; page text never chooses anything. Never from a timed rule or a model form. May merge for real only once A-016
+part 1 is Accepted; this branch is the prototype.
+
+**Settings.** `MVP_BROWSER=operator` (a headed Chromium window on the computer that runs the bot; no screen: "I can
+only open a browser on the computer that runs me, and there isn't a screen there.") or `MVP_BROWSER=vm` (a headless
+Chromium inside the bot's machine, watched and taken over on the test page at `/vm`; elsewhere: "I can only do that
+from the test page for now."). `MVP_BROWSER_MERCHANTS=netflix,spotify` names the merchants (none by default).
+`MVP_BROWSER_FOR=all` opens the vm to testers (default: the operator only). `MVP_BROWSER_DEMO=1` (with the browser on)
+adds the practice merchant "Streamly" (`tests/fakes/fake_merchant.py`, served by routing, no port; flow 5: a sign-in
+first); every reply about it says it is a practice site. `MVP_CHROMIUM` may point at a Chromium binary.
+
+**Files.** `browser_guard.py` (V1, pure): `SNAPSHOT_JS`, `page_state` (off_site | captcha | otp | login_wall | kept |
+outcome_ok | final_step | normal), `allowed(el, "click"|"confirmed_click", ...)` (no typing, no field or box but a
+neutral reason radio, no secret field, no other site, no buy/upgrade/pause/offer word, no generic button inside an
+offer, no button aimed at the bot, no last step without the yes), `is_final` (three arms), `el_hash` (address, button
+name and tag, sha256 of the page text), `DENIED_SITES` (Instagram, Facebook, Messenger, Threads, TikTok, X/Twitter,
+Snapchat, Reddit, YouTube, Google sign-in: refused whatever the settings say), `effects_quote` / `outcome_quote` (only
+the sentences that state the effects or the outcome, links and addresses removed, never one aimed at an assistant,
+≤200 characters). `browser_host.py` (V2): the `Host` seam, `LocalHost`, `Session` (Playwright on its own thread; a
+fresh browser and context per run, thrown away at the end; every request outside the route's domains aborted;
+`Agent/ScrollDigest` in the user agent, `navigator.webdriver` left true; one tab; no downloads; 12 presses, 180 s of
+bot time; `press` re-snapshots and needs exactly one element of that name and tag; `kill()` from any thread).
+`browser.py` (V3, V4): `FlowRunner` and `BrowserMixin`; `browser_routes.json` (start URL, path, final names, domains
+per merchant, from their help pages; Netflix, Spotify; YouTube Premium listed but denied). `actions/browser.py`:
+`browser.cancel` (outside, undo none, confirm send_word with the page hash as the yes token, 3 a day, in_rules False,
+from_model False, connector "browser", fallback "cancel.steps"). Its registry `who` is "anyone": the action itself
+refuses anyone but the operator (or anyone with vm and `MVP_BROWSER_FOR=all`) and any context but the person's own
+message. `browser_vm.py` (V5): `VmHost` / `VmSession` (screencast over the DevTools protocol, only the newest frame in
+memory), the view's keys, `handle_get` / `handle_post` for the test page.
+
+**The conversation** (texts under `# round 10, slice V`). The cancel helper's web route offers it instead of the steps
+when `browser.available` (row 2: "... I can do it for you in a browser I open on this computer ... Say "do it for
+me". Or say "steps" ..."). "do it for me": the first time for a site, the OK (row 4, with "Netflix's terms don't
+allow automated tools, so they may flag or close your account. I can't tell how likely that is.") and "allow
+netflix" records it in `site_grants`; then the browser opens at the start URL (row 6). "I'm in": "Thanks. Going to
+the cancel page." and the runner walks in the background; it stops before the last button with the page's own
+sentence in quotes (row 10). A plain yes, "ok", 👍 or "yes cancel <another>" gets row 12. "yes cancel netflix"
+presses through `perform` (the yes token re-made from the page now; a changed page is shown again with a new hash,
+nothing pressed). Row 14 quotes the page and offers a check reminder five days before the end date it names (else a
+week on); "yes" sets it (the cancel helper's one-time reminder rule). Walls: the person signs in or does the check
+themselves (in the window, or at the `/vm` link); the same wall twice hands back with the steps; lost / unclear / a
+field to type hands back and leaves the window 10 minutes; off-site, the limit, an offer page after the press
+("Nothing ended.") each have their line. "stop", "stop it", "cancel that", "kill it", "don't" while a run is open:
+"Stopped. I closed the browser. Nothing else was pressed." ("stop 2", "stop the netflix rule" are not taken). The last
+page waits 10 minutes; a run's state lasts 30. "stop acting on netflix" ends the site's OK. The password line names
+the browser where it is on for that person and merchant. 3 runs a person a day. The bot's own words never say a
+subscription ended.
+
+**Hook.** `browser_reads` in `_on_message` right after `secret_reads`, before `_asked_reads`; it reads the original
+text only, and only while this person's run or its offer is open (state `browserrun:<handle>`), plus "stop acting
+on <site>" when that site has an OK. The cancel helper: `_cancel_entry`'s web route (offer, or a note line before the
+steps for a denied site, the wrong channel or no screen; "steps" after the offer starts "Here's how to cancel X
+yourself:"), `cancel_reads` knows the practice merchant when the demo is on, and both password lines go through
+`browser_password`.
+
+**The view (V5).** `/vm?k=<key>` (a random key per run, dropped when it closes; the page token does not open it),
+`/api/vm/frame` (the newest JPEG; `X-Held: person|bot`; 410 after the run), `/api/vm/input` (click, text ≤200
+characters, a short list of keys, scroll, take, handback, stop; always an empty 204). Clicks and keys reach the page
+only while the person holds it; while they hold it the bot presses nothing ("You have the browser right now, so I
+didn't press it."). The person's typing is forwarded and never logged, stored, echoed or put in an error; the handler
+counts inputs only. The browser opens with the person holding it (to sign in); "I'm done" on the view acts as "I'm
+in", "Stop everything" as "stop".
+
+**Kept.** `site_grants(handle, site_key, granted_at, warning_version, revoked_at)`; `browser_runs(handle, site_key,
+cancellation_id, host, status, presses, refusals, walls, flags, aborted, seconds, final_name, final_hash,
+outcome_quote ≤200, end_date, started_at, ended_at)`; `cancellations.status` gains browser_opened, final_shown,
+page_says_cancelled, page_unclear, offer_taken, handed_back; `action_log`: browser.grant, .open, .wall, .refused,
+.final_shown (hash prefix), .cancel, .outcome, .stopped, .revoke. Never a field value, keystroke, cookie, picture or
+other page text. "delete my data" closes an open browser and deletes both tables; "export my data" adds
+`browser_runs.json` (sites allowed; runs with status, counts and dates; no quote, no button name).
+
+**Measured (offline, the practice merchant).** The dofy checks as tests: flows 1, 2, 3, 4, 7, 8 complete with the yes
+and 0 wrong presses; 5 stops at the sign-in and completes after the person signs in; 6 stops at the check and never
+presses on it; 9 stops with nothing typed; without a yes 0 last presses; a changed page and a yes from another page
+press nothing; the hostile picker lets nothing dangerous through; 600 random walks, 0 wrong presses. VM: one run,
+6 Chromium processes, about 410 MB resident, about 1.5 s from the offer to the last step on the fake. Every test
+leaves 0 Chromium processes. Tests: `tests/test_round10_browser.py`, `tests/test_round10_vm.py` (skipped, and
+counted, where no browser can start). `tests/test_round10_k.py`'s stub check now expects `browser.STUB` False.
+
+**Not built.** Sealed sessions or any sign-in kept between runs, pictures, a hosted browser, the model step loop
+(version 2), any social-media site, Amazon, a timed rule that opens a browser (a rule may only remind), a real
+merchant tried live (the founder's trial).

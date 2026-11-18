@@ -649,7 +649,7 @@ def _texts_in_tests():
     out = set()
     for path in glob.glob(os.path.join(HERE, "*.py")):
         if os.path.basename(path).startswith(("test_round9_",
-                                              "test_round10_")):   # round 10, slices W, D and Y: the round 10 files check their own
+                                              "test_round10_")):   # round 10, slices W, D, Y and V: the round 10 files check their own
             continue   # the round 9 slices' own fixtures (a notice card's "Please cancel my membership" is one) are not
             #            phrasings from before; each of those files checks its own reads
         for node in ast.walk(ast.parse(open(path, encoding="utf-8").read())):

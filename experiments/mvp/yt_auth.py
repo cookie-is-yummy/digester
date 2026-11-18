@@ -17,7 +17,6 @@ from datetime import datetime, timedelta, timezone
 from . import tokens
 from .store import now_iso
 
-STUB = False
 SCOPE = "https://www.googleapis.com/auth/youtube"
 DEVICE_URL = "https://oauth2.googleapis.com/device/code"
 TOKEN_URL = "https://oauth2.googleapis.com/token"

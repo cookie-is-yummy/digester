@@ -220,6 +220,14 @@ def export(bot, person, now, lists_only=False):
                    "one, when, and\n                    whether you said it in words or with a thumbs-down. No "
                    "captions.\n")
     # ---------- end round 10, slice S ----------
+    # ---------- round 10, slice V: the browser's site permissions and runs (counts and dates; no page words) ------
+    runs = browser_rows(bot.store, h)
+    if runs["runs"] or runs["sites_allowed"]:
+        files.append(("browser_runs.json", _write(d, "browser_runs.json", json.dumps(runs, indent=1))))
+        readme += ("\nbrowser_runs.json  The sites you let the bot press buttons on, and each time it opened a browser "
+                   "for you:\n                  which site, how it ended, how many presses, and when. No page "
+                   "words, nothing typed.\n")
+    # ---------- end round 10, slice V ----------
     files.append(("README.txt", _write(d, "README.txt", readme)))
     files.append(("drafts.json", _write(d, "drafts.json", drafts_json(bot.store, h))))   # round 9, slice A
     out.update(saves=n, rules=n_rules)
@@ -243,6 +251,17 @@ def sealed_sign_ins(h):
     except Exception:  # noqa: BLE001 - the export never fails for this list
         return []
 # ---------- end round 10, slice K ----------
+
+
+# ---------- round 10, slice V ----------
+def browser_rows(store, h):
+    """The browser's rows as the export lists them: site keys, statuses, counts and dates. Never the merchant's quoted
+    words, a button's name or the hash."""
+    sites = [{k: g[k] for k in ("site_key", "granted_at", "revoked_at")} for g in store.site_grants_of(h)]
+    runs = [{k: r[k] for k in ("id", "site_key", "host", "status", "presses", "refusals", "walls", "started_at",
+                               "ended_at")} for r in store.browser_runs_of(h)]
+    return {"sites_allowed": sites, "runs": runs}
+# ---------- end round 10, slice V ----------
 
 
 def attachments(files):

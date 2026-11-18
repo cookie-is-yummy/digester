@@ -404,7 +404,7 @@ class CancelMixin:
         if password_said(t):
             self.note(intent="cancel_password")
             self.store.forget_last_inbound(h)
-            return self.send(h, T.CANCEL_PASSWORD)
+            return self.send(h, self.browser_password(person, t) or T.CANCEL_PASSWORD)   # round 10, slice V
         ref = self._cancel_said_done(person, t, now)
         if ref is not None:
             return ref
@@ -419,7 +419,9 @@ class CancelMixin:
         # the helper's own check reminders name the merchant; "cancel my netflix" again is still a cancel (a stop or
         # pause of "the netflix one" goes through cancel_stop_guard, which keeps them)
         mine = {r["check_rule_id"] for r in self.store.cancellations(h) if r.get("check_rule_id")}
-        req = request(t, [r for r in self.store.rules(h) if r["id"] not in mine])
+        # round 10, slice V: with MVP_BROWSER_DEMO=1 (and the browser on) the practice merchant is known too
+        from .browser import practice_routes
+        req = request(t, [r for r in self.store.rules(h) if r["id"] not in mine], routes=practice_routes())
         if req is None:
             return None
         return self._cancel_start(person, req, t, now)
@@ -440,7 +442,9 @@ class CancelMixin:
         if password_said(t):
             self.note(intent="cancel_password")
             self.store.forget_last_inbound(h)
-            return self.send(h, T.CANCEL_PASSWORD + (page if re.search(r"\bapp\s+password\b", t, re.I) else ""))
+            # round 10, slice V: where the browser is on for this person and the merchant they name, its own line
+            return self.send(h, self.browser_password(person, t)
+                             or T.CANCEL_PASSWORD + (page if re.search(r"\bapp\s+password\b", t, re.I) else ""))
         if secret_said(t):
             self.note(intent="secret_refused")
             self.store.forget_last_inbound(h)
@@ -490,16 +494,26 @@ class CancelMixin:
             self._cancel_ask(h, "when", now, key=e["key"], name=e["name"], cid=cid, call=True)
             return self.send(h, T.cancel_phone(e["name"], e["phone"], checked_words(e["checked_on"])) + "\n\n"
                              + T.CANCEL_OFFER_CALL)
+        # ---------- round 10, slice V: the browser offer (only where browser.available says so; else today's steps) ---
+        pre = ""
+        if route == "web" and checked and e.get("steps") and not getattr(self._tl, "browser_steps", False):
+            from . import browser
+            if browser.available(self, person, e["key"]):
+                return self.browser_offer(person, e, now)
+            pre = self.browser_note(person, e)
+        # ---------- end round 10, slice V ----------
         if route == "web" and checked and e.get("steps"):
             steps = list(e["steps"])
             if e.get("url") and link_fresh(e["checked_on"], today):
                 steps[0] = f"Open {e['url']} and sign in if it asks."
             lines = T.cancel_web(e["name"], steps, checked_words(e["checked_on"]))
+            if getattr(self._tl, "browser_steps", False):   # round 10, slice V: "steps" after the browser offer
+                lines[0] = T.browser_steps_head(e["name"])
             if any(b != "web" for b in e.get("billed_via") or []):
                 lines.append(T.CANCEL_OTHER_BILLING)
             cid = self._cancel_row(h, e["key"], "web", "prepared", now)
             self._cancel_ask(h, "when", now, key=e["key"], name=e["name"], cid=cid)
-            return self.send(h, "\n".join(lines) + "\n\n" + T.CANCEL_OFFER_CHECK)
+            return self.send(h, pre + "\n".join(lines) + "\n\n" + T.CANCEL_OFFER_CHECK)
         if route == "store" and checked:
             via = (e.get("billed_via") or ["apple"])[0]
             return self._cancel_store(person, e["key"], e["name"], via, now, own=True)

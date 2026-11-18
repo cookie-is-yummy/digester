@@ -277,6 +277,15 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   project with a "TVs and Limited Input devices" client; `MVP_YT_CLIENT_ID` and `MVP_YT_CLIENT_SECRET` in the 0600
   settings file (or the Connections panel); `MVP_YT_UNITS_PER_DAY` (8,000) caps the writes. Tests:
   `tests/test_round10_youtube.py` (a fake Google; no real call).
+- **Round 10, the browser that cancels for you** (DESIGN.md section 17.V, slice V; amendment A-016, Proposed; off by
+  default): with `MVP_BROWSER=operator` and the merchant named in `MVP_BROWSER_MERCHANTS` (e.g. `netflix`), "cancel
+  my netflix" offers "do it for me": after your OK for the site ("allow netflix"), a Chromium window opens on the
+  computer that runs the bot, you sign in there yourself, say "I'm in", and the bot follows Netflix's own cancel path,
+  stops before the last button and quotes the page; only "yes cancel netflix" presses it. It never types, never
+  accepts an offer, stops at any check; "stop" closes it. `MVP_BROWSER=vm` runs the browser inside the bot's machine
+  instead: you watch it and take over at the `/vm` link on the test page. `MVP_BROWSER_DEMO=1` adds a made-up practice
+  merchant, "Streamly", to try the whole thing safely ("cancel my streamly"). Social media, YouTube and Google
+  sign-in are never driven. Tests: `tests/test_round10_browser.py`, `tests/test_round10_vm.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -623,10 +632,10 @@ still hold the handle (`ledger_rows_with_handle`).
 | `errand.py`, `prompts/errand_v2.md` | Round 10, slice W7: the errand form: one small model call after the interpreter refused or chatted; code checks the form and hands the person's words to the helper's own entry |
 | `phrasing.py` | Round 10, slice W: everyday wording read by code: `normalize` (openers, closers, texting shorthand; a second try for the request reads only, never stored or sent to a model), `parts` / `clauses` (two asks in one message), `TIME_WORDS` |
 | `captionmark.py` | Round 10, slice S: the caption mark (`cm-v1`, derived, versioned), what the person said about it (`caption_feedback`), the order rule, the doubt line, `fit_reads` and the thumbs-down question |
-| `browser.py` | Round 10, slice K: a stub (`STUB = True`) giving today's behaviour until slice V replaces it |
 | `panel.py` | Round 10, slice D: the test page's Connections panel (seal, remove, states only; whether sending is on) |
 | `grants.py` | Round 10, slice G: a rule's place read from the person's words, its standing yes (grant: made, checked by `actions.perform(..., grant=)`, ended), each run's add and its line, undo, "stop adding to X", "use X for rule N", the standing permissions in receipts |
 | `yt_auth.py`, `ytreads.py`, `actions/youtube.py`, `actions/link.py` | Round 10, slice Y: the person's YouTube sign-in by a code (device flow), the YouTube and Instagram reads and answers, the YouTube Data API calls with quota counting, and the links the person taps |
+| `browser.py`, `browser_guard.py`, `browser_host.py`, `browser_vm.py`, `browser_routes.json`, `actions/browser.py` | Round 10, slice V: the browser that cancels (off by default): the conversation and the runner, what may be pressed, the window on this computer, the browser watched at `/vm`, the merchants' paths, the last press |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
 | `mcp_client.py`, `mcp_mappings.py`, `oauth.py`, `actions/mcp.py` | Round 10, slice C: the bot as an MCP client (pinned tools, codes only, the SDK as transport), the servers and mappings in code (Todoist `add-tasks` / `delete-object`), our own OAuth sign-in and refresh, and the `todoist.mcp_add` action with connect / check / disconnect |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |

@@ -84,6 +84,17 @@ CREATE TABLE IF NOT EXISTS grants (id INTEGER PRIMARY KEY AUTOINCREMENT, handle 
 -- fp: the caption's fingerprint (a hash, never its words).
 CREATE TABLE IF NOT EXISTS caption_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL,
   item_id TEXT NOT NULL, creator TEXT, fp TEXT, kind TEXT NOT NULL, source TEXT, at TEXT);
+-- ---------- round 10, slice V (DESIGN.md section 17.V; A-016, Proposed): the browser that cancels ----------
+-- a person's OK for the bot to press buttons on one merchant's site (revoked_at ends it), and one row per browser run:
+-- counts, the last button's name and the hash the yes bound to, and at most 200 characters of the merchant's own
+-- outcome sentence. Never a field value, a keystroke, a cookie, a picture or any other page text.
+CREATE TABLE IF NOT EXISTS site_grants (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, site_key TEXT NOT NULL,
+  granted_at TEXT, warning_version INTEGER, revoked_at TEXT);
+CREATE TABLE IF NOT EXISTS browser_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, site_key TEXT,
+  cancellation_id INTEGER, host TEXT, status TEXT NOT NULL, presses INTEGER DEFAULT 0, refusals INTEGER DEFAULT 0,
+  walls INTEGER DEFAULT 0, flags INTEGER DEFAULT 0, aborted INTEGER DEFAULT 0, seconds REAL, final_name TEXT,
+  final_hash TEXT, outcome_quote TEXT, end_date TEXT, started_at TEXT, ended_at TEXT);
+-- ---------- end round 10, slice V ----------
 """
 
 
@@ -785,6 +796,8 @@ class Store:
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             self.db.execute("DELETE FROM grants WHERE handle=?", (handle,))   # round 10, slice K
             self.db.execute("DELETE FROM caption_feedback WHERE handle=?", (handle,))   # round 10, slice S
+            for t in ("site_grants", "browser_runs"):   # round 10, slice V
+                self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
             for rid in rule_ids:   # a timed send's retry count and hold (review fix PRIV-5)
                 for key in (f"retry:{rid}", f"hold:{rid}", f"cadence:{rid}", f"replaced:{rid}", f"deadline:{rid}"):
                     self.db.execute("DELETE FROM state WHERE key=?", (key,))
@@ -996,6 +1009,71 @@ class Store:
         return self.q("SELECT id, item_id, creator, fp, kind, source, at FROM caption_feedback WHERE handle=? "
                       "ORDER BY id", (handle,))
     # ---------- end round 10, slice S ----------
+    # ---------- round 10, slice V (DESIGN.md section 17.V): site permissions and browser runs ----------
+    def site_grant(self, handle, site_key):
+        """The person's OK for this merchant's site that has not been revoked, or None."""
+        return self.one("SELECT * FROM site_grants WHERE handle=? AND site_key=? AND revoked_at IS NULL "
+                        "ORDER BY id DESC LIMIT 1", (handle, site_key))
+
+    def add_site_grant(self, handle, site_key, warning_version, at=None):
+        cur = self.x("INSERT INTO site_grants(handle,site_key,granted_at,warning_version) VALUES(?,?,?,?)",
+                     (handle, site_key, now_iso(at), int(warning_version)))
+        return cur.lastrowid
+
+    def revoke_site_grants(self, handle, site_key=None, at=None):
+        """Ends the person's OK for one site (or every site); returns how many ended."""
+        sql, args = "UPDATE site_grants SET revoked_at=? WHERE handle=? AND revoked_at IS NULL", [now_iso(at), handle]
+        if site_key:
+            sql, args = sql + " AND site_key=?", args + [site_key]
+        return self.x(sql, tuple(args)).rowcount
+
+    def site_grants_of(self, handle):
+        return self.q("SELECT * FROM site_grants WHERE handle=? ORDER BY id", (handle,))
+
+    def add_browser_run(self, handle, site_key, cancellation_id, host, at=None):
+        cur = self.x("INSERT INTO browser_runs(handle,site_key,cancellation_id,host,status,started_at) "
+                     "VALUES(?,?,?,?,'opened',?)", (handle, site_key, cancellation_id, host, now_iso(at)))
+        return cur.lastrowid
+
+    _RUN_FIELDS = ("status", "presses", "refusals", "walls", "flags", "aborted", "seconds", "final_name", "final_hash",
+                   "outcome_quote", "end_date", "ended_at")
+
+    def update_browser_run(self, run_id, **fields):
+        fields = {k: v for k, v in fields.items() if k in self._RUN_FIELDS}
+        if "outcome_quote" in fields and fields["outcome_quote"] is not None:
+            fields["outcome_quote"] = str(fields["outcome_quote"])[:200]
+        if "final_name" in fields and fields["final_name"] is not None:
+            fields["final_name"] = str(fields["final_name"])[:80]
+        if not fields:
+            return
+        cols = ", ".join(f"{k}=?" for k in fields)
+        self.x(f"UPDATE browser_runs SET {cols} WHERE id=?", (*fields.values(), int(run_id)))
+
+    def end_browser_run(self, run_id, status, at=None, **fields):
+        """A run's last status, its end time and its counts (a run that has ended keeps its first end)."""
+        row = self.browser_run(run_id)
+        if row is None:
+            return
+        if row.get("ended_at"):
+            fields = {k: v for k, v in fields.items() if k in ("outcome_quote", "end_date") and v}
+            if fields:
+                self.update_browser_run(run_id, **fields)
+            return
+        self.update_browser_run(run_id, status=status, ended_at=now_iso(at),
+                                **{k: v for k, v in fields.items() if v is not None})
+
+    def browser_run(self, run_id):
+        return self.one("SELECT * FROM browser_runs WHERE id=?", (int(run_id),))
+
+    def browser_runs_of(self, handle):
+        return self.q("SELECT * FROM browser_runs WHERE handle=? ORDER BY id", (handle,))
+
+    def browser_runs_between(self, handle, start, end):
+        """How many runs this person started between two UTC ISO times (the daily cap)."""
+        r = self.one("SELECT COUNT(*) AS n FROM browser_runs WHERE handle=? AND started_at>=? AND started_at<?",
+                     (handle, start, end))
+        return int(r["n"]) if r else 0
+    # ---------- end round 10, slice V ----------
 
 
 def _domain(addr):

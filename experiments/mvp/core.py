@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from . import config
 from .attention import AttentionMixin
+from .browser import BrowserMixin   # round 10, slice V
 from .cancel import CancelMixin   # round 9, slice B
 from .digest import DigestMixin
 from .drafts import DraftsMixin   # round 9, slice A
@@ -103,7 +104,8 @@ class Bot(HandlerMixin, FollowupMixin, OnboardingMixin, TodoMixin, OutputsMixin,
           DraftsMixin,   # round 9, slice A: emails to other people (drafts.py)
           CancelMixin,   # round 9, slice B: the cancel helper (cancel.py)
           OffersMixin, PostactsMixin,   # round 9, slice C: numbered offers (offers.py), acting on a post (postacts.py)
-          ReceiptsMixin):   # round 9, W9: "what did you do for me" (receipts.py)
+          ReceiptsMixin,   # round 9, W9: "what did you do for me" (receipts.py)
+          BrowserMixin):   # round 10, slice V: the browser that cancels for the person (browser.py; A-016, Proposed)
     def __init__(self, channel, store=None, pool=None, clock=None):
         self.channel = channel
         self.store = store or Store(config.DB)

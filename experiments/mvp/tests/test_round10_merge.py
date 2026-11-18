@@ -486,10 +486,11 @@ def test_the_stubs_after_the_merge_real_phrasing_marks_titles_and_routes_and_no_
     st = mcp["bot"].store
     connect(mcp)
     assert connectors.route_for(st, H, "todoist", "todo") == "todoist.mcp_add"   # slice C: the sign-in route
-    assert browser.STUB is True and browser.available(None, {"handle": H}, "netflix") is False
+    # the merge of Y, V and T: browser (V) and yt_auth (Y) are real and carry no STUB; off by default (no
+    # MVP_BROWSER, no Google client) the browser is offered to nobody and nobody can connect YouTube
+    assert not hasattr(browser, "STUB") and not hasattr(yt_auth, "STUB")
+    assert browser.available(None, {"handle": H}, "netflix") is False
     assert browser.run_open(None, H) is False
-    # the merge of Y, V and T: yt_auth is real (slice Y); with no Google client set nobody can connect, nobody is
-    assert not hasattr(yt_auth, "STUB") or yt_auth.STUB is False
     assert yt_auth.connectable(st, H) is False and yt_auth.connected(st, H) is False
 
 
