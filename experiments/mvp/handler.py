@@ -234,6 +234,12 @@ class HandlerMixin:
         ref = self.email_reads(person, text, now)   # slice A: "email my landlord that ..." (drafts.py)
         if ref is not None:
             return ref
+        # ---------- round 10, slice Y: 5b, the person's YouTube and Instagram links, before the cancel helper -------
+        from . import ytreads
+        ref = ytreads.youtube_reads(self, person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 10, slice Y ----------
         ref = self.cancel_reads(person, text, now)   # slice B: "cancel my netflix", a password, "I cancelled it"
         if ref is not None:
             return ref
@@ -308,6 +314,12 @@ class HandlerMixin:
         ref = place_answer(self, person, text, now)
         if ref is not None:
             return ref
+        # ---------- round 10, slice Y: 4a, the answer to a YouTube preview or an Instagram link (ytreads.py) -------
+        from . import ytreads
+        ref = ytreads.youtube_answer(self, person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 10, slice Y ----------
         return self._doit_answer(person, text, now)   # W10: "tell me when" after a to-do the bot can't do
 
     def _rule_reads(self, person, text, now):
@@ -1029,6 +1041,12 @@ class HandlerMixin:
         if ref is not None:
             return ref
         lw = self._last_write(h, now)
+        # ---------- round 10, slice Y: the last YouTube change (7 days for an unsubscribe, 24 hours for a playlist),
+        # when it is newer than the person's own last write ----------
+        from . import ytreads
+        if ytreads.undo_due(self, h, now, lw):
+            return self.send(h, ytreads.undo(self, person, now))
+        # ---------- end round 10, slice Y ----------
         if not lw:
             return self.send(h, T.NOTHING_TO_UNDO)
         self.store.set_state(lw.get("key") or f"lastwrite:{h}", None)
@@ -1181,6 +1199,10 @@ class HandlerMixin:
             from .refresh import forget_inbox
             from .export import forget_exports   # round 8, slice B: the export folders go too
             forget_exports(h)
+            # ---------- round 10, slice Y: Google's access to their YouTube is ended too (best effort) ----------
+            from . import yt_auth
+            yt_auth.forget(h)
+            # ---------- end round 10, slice Y ----------
             from . import tokens   # round 10, slice K: the person's sealed sign-ins go too
             tokens.delete_all(h)
             inbox_left = forget_inbox(self.store, h)

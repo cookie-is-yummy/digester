@@ -222,6 +222,75 @@ REGISTRY.update({
 })
 
 
+# ---------- round 10, slice Y (DESIGN.md section 17.Y): the person's YouTube through Google's own API ----------
+# Only code builds these params (ytreads.py): channel and subscription ids from subscriptions.list, video ids from the
+# library's own YouTube items, never from a message, a caption or anything a model wrote. Each runs after the person's
+# yes to the exact list shown (the yes token); a tester may use them once they connected their own YouTube
+# (connectors.unavailable, kind "oauth"). undo="delete": what was made is taken out again (a re-subscribe for an
+# unsubscribe, within 7 days). rule_grant stays False here; slice G turns it on for youtube.playlist_add (Y4).
+_YT_ID = r"^[A-Za-z0-9_-]{3,64}$"
+
+
+class YtChannel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    channel_id: str = Field(pattern=_YT_ID)
+    subscription_id: Optional[str] = Field(default=None, pattern=_YT_ID)   # None for a subscribe
+    title: str = Field(min_length=1, max_length=200)
+
+
+class YtUnsubscribe(BaseModel):
+    """youtube.unsubscribe: exactly the channels shown (1 to 50), each with the subscription id the API gave."""
+    model_config = ConfigDict(extra="forbid")
+    items: List[YtChannel] = Field(min_length=1, max_length=50)
+
+
+class YtSubscribe(BaseModel):
+    """youtube.subscribe: only to take an unsubscribe back (the same channel ids)."""
+    model_config = ConfigDict(extra="forbid")
+    items: List[YtChannel] = Field(min_length=1, max_length=50)
+
+
+class YtPlaylistMake(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=60)
+    privacy: Literal["private"] = "private"     # a playlist the bot makes is always private
+
+
+class YtVideo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    video_id: str = Field(pattern=r"^[A-Za-z0-9_-]{11}$")
+    title: str = Field(min_length=1, max_length=200)
+
+
+class YtPlaylistAdd(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    playlist_title: str = Field(min_length=1, max_length=60)
+    playlist_id: Optional[str] = Field(default=None, pattern=_YT_ID)   # filled at the run when the bot just made it
+    videos: List[YtVideo] = Field(min_length=1, max_length=50)
+
+
+REGISTRY.update({
+    "youtube.unsubscribe": ActionDef(name="youtube.unsubscribe", params=YtUnsubscribe, module="youtube", order=15,
+                                     does="Unsubscribes the person from the channels shown, on YouTube",
+                                     outside=True, undo="delete", confirm="send_word", max_per_day=10, in_rules=False,
+                                     who="anyone", from_model=False, connector="youtube"),
+    "youtube.subscribe": ActionDef(name="youtube.subscribe", params=YtSubscribe, module="youtube", order=16,
+                                   does="Subscribes again to channels the bot unsubscribed (undo only), on YouTube",
+                                   outside=True, undo="delete", confirm="send_word", max_per_day=20, in_rules=False,
+                                   who="anyone", from_model=False, connector="youtube"),
+    "youtube.playlist_make": ActionDef(name="youtube.playlist_make", params=YtPlaylistMake, module="youtube", order=17,
+                                       does="Makes one private playlist on the person's YouTube",
+                                       outside=True, undo="delete", confirm="send_word", max_per_day=5, in_rules=False,
+                                       who="anyone", from_model=False, connector="youtube"),
+    "youtube.playlist_add": ActionDef(name="youtube.playlist_add", params=YtPlaylistAdd, module="youtube", order=18,
+                                      does="Adds videos from the library to one of the person's YouTube playlists",
+                                      outside=True, undo="delete", confirm="send_word", max_per_day=20,
+                                      in_rules=False, who="anyone", from_model=False, connector="youtube",
+                                      fallback="todo.add"),
+})
+# ---------- end round 10, slice Y ----------
+
+
 def validate_action(name, params=None, by="model", where="form"):
     """(name, params as a plain dict with defaults left out). Raises ValueError for anything not in the registry.
     Round 9, C1: `by` is who names it ("model": a form the model filled, the default; "code"); `where` is where it is

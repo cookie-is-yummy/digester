@@ -58,6 +58,21 @@ def parse(resp, ids):
     return out
 
 
+# ---------- round 10, slice Y (DESIGN.md section 17.Y): the channel of each video, kept beside its details ----------
+def channel_ids(resp, ids):
+    """{video_id: snippet.channelId} for the ids asked (a value that is not a plain id is left out)."""
+    import re
+    out = {}
+    for v in (resp.get("items") or []) if isinstance(resp, dict) else []:
+        if not isinstance(v, dict) or v.get("id") not in ids:
+            continue
+        ch = (v.get("snippet") or {}).get("channelId")
+        if isinstance(ch, str) and re.fullmatch(r"[A-Za-z0-9_-]{3,64}", ch):
+            out[v["id"]] = ch
+    return out
+# ---------- end round 10, slice Y ----------
+
+
 class YouTubeInfo:
     """details(items, now) -> {item_id: {"duration_s", "description", "published_at"}} for the YouTube items among
     `items`."""
@@ -86,15 +101,18 @@ class YouTubeInfo:
             for i in range(0, len(missing), BATCH):
                 chunk = missing[i:i + BATCH]
                 try:
-                    got = parse((self.fetch or fetch_batch)(chunk, key), chunk)
+                    resp = (self.fetch or fetch_batch)(chunk, key)
+                    got = parse(resp, chunk)
                     self.calls += 1
                 except Exception:  # noqa: BLE001 - an HTTP error, a timeout or an odd response: work as before
                     self.errors += 1   # the type only; the request URL and headers are never logged
                     break
                 at = _iso(now)
+                chans = channel_ids(resp, chunk)   # round 10, slice Y: snippet.channelId, for "that channel"
                 for vid, (ok, dur, desc, pub) in got.items():
                     self.store.x("INSERT OR REPLACE INTO youtube_cache(video_id,ok,duration_s,description,fetched_at,"
-                                 "published_at) VALUES(?,?,?,?,?,?)", (vid, ok, dur, desc, at, pub))
+                                 "published_at,channel_id) VALUES(?,?,?,?,?,?,?)",
+                                 (vid, ok, dur, desc, at, pub, chans.get(vid)))
                     rows[vid] = {"video_id": vid, "ok": ok, "duration_s": dur, "description": desc, "fetched_at": at,
                                  "published_at": pub}
         out = {}
