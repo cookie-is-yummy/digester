@@ -2934,6 +2934,56 @@ a few plain things per step.
   steps got "Which one? Say "do 2 for me"") was added after that trial and fails until fixed. The trials also showed
   S's title for the made-up lasagne whose first line is a note to assistants: "Brown the mince 2." (a step line).
   All four, and the title, are fixed at the second merge (section 17 above): the dry self-test passes every step.
+- **The first live run** (18 Nov, real models, fake outside apps, the shared ledger and `MVP_TOTAL_CAP_USD=30`; cap
+  `MVP_SELFTEST_CAP_USD=0.67`). The dry run before it passed every step (40 conversations, 114 steps, 0 model calls).
+  - *A start that was stopped*: the made-up library's items had no `dedup_key` (nor first seen, importance, depth,
+    the full platform data or the interactions' weight), so the real engine could not open it and every search said
+    "Something went wrong" (the dry run's word pool never needed them). The run was stopped after 9 conversations
+    ($0.03, no counts line). The library now has the shape the importers write; `test_round10_selftest.py` checks the
+    shape and opens the library with the engine's own loader (made-up vectors, no key).
+  - *The full run* (build 1ab877c): 40 conversations, 114 steps, **103 passed**, 11 failed, $0.25 (93 model calls:
+    interpret 30, extract 28, compose 24, draft 4, errand 3, and one each of judge, profile guess, profile merge and
+    first requests; 170 s). By slice: W 37 of 37, D 10 of 10, V 8 of 8, S 9 of 10, Y 14 of 18, G 8 of 12, C 5 of 8,
+    no slice 17 of 19; the founder's examples (26 conversations) 59 of 64 steps. Every check of what was done held:
+    no claimed outcome, no send to another person, no friend's post, no meme reel leading, no inside word, no refusal
+    or "didn't catch that" where one was not right.
+  - *Why the 11 failed*, and what was done:
+    - c10.3, c26.5, c26.6, c27.1 (harness): the model set the Sunday rules for 9am; the clock jumped from Tuesday to
+      Sunday 18:05 and the scheduler skipped the send as more than 2 hours late, so there was no run line and nothing
+      to undo. An `advance` now stops one minute after each of the person's rule slots on the way and ticks there (as
+      the running bot ticks every minute), the step's counts are taken before the clock moves, the outside app's
+      change comes before the clock, and `"advance": "next run"` goes to just after the next slot (c10, c26, c27).
+    - c26 (bot): said on a Sunday at 8:08pm, "every sunday put 3 recipes in my todoist" came back from the model as
+      every Sunday at 20:08, the minute it was told it is now. A repeating rule whose only time is this minute (give or
+      take 2), when the message names no time of day, gets 9am (`interpret._model_minute`).
+    - c15.1, c15.2 (bot, a founder example): "mini blender tutorials to start doing daily" came back as an answer for
+      now, so there was no rule to say yes to. A request to do something daily, or one that ends with "daily" / "every
+      day", is a daily rule's preview at 9am (`interpret._doing_daily`); a question, "today" or "tonight" stays an
+      answer. The person now sees the preview with "Every day at 9am ... Reply YES to start".
+    - c07b.1 (too exact): the composer showed two of the meme reels, so the lead said "The best match I found is", as
+      `render.py` intends. The wording check takes either lead; the doubt line is still required.
+    - c28.4 to c28.6, c34.5 (the set-up step): "a pasta recipe video" and "pasta videos" brought Instagram reels
+      (reels are videos too), so the YouTube steps had nothing to act on and the bot said so truthfully ("Instagram
+      doesn't let any app unfollow for you"; "None of these are YouTube videos"). The set-up step now says "on youtube";
+      the checks of what is done on YouTube are unchanged.
+  - *The quick run after the fixes* (build cb50458): the 7 conversations that failed and 3 whose wording changed (c04,
+    c08, c16): 10 conversations, 31 steps, **31 passed**, $0.11 (43 model calls). With the full run's other 103 steps
+    that is 114 of 114. Spend for this pass: $0.39 of the $1.00 it had (ledger $19.21 to $19.61).
+  - *Read as the founder would* (his examples; correct but clumsy): (1) c04 asked for "Everyone In My Class's email
+    address" and wrote "Hi Everyone In My Class,": a group now greets everyone and asks for one address at a time
+    (`drafts.is_group`, `T.DRAFT_WHO_GROUP`); (2) c07b, c08: "The only match I found is A reel from @..." now reads "a
+    reel from"; (3) c07b: "I found some easy pasta recipes" above reels the doubt line doubts: when every fit is
+    doubted the opening is "Here's what I found in your saves."; (4) c15: a Blender tutorial's alternative said "the
+    recipe is in the video": now "the steps are in the video"; (5) c16: "Accessible component libraries: Accessible
+    component libraries: React Aria and Radix": a key point never repeats its pick's title (`render.untitled`); (6)
+    c13: "the person who runs me needs to add a Google sign-in client" (an operator's word, to a tester): now "YouTube
+    isn't set up on this bot yet, so I can't change anything there for you"; (7) c34: "None of these are YouTube
+    videos" now says to ask again "on youtube". Not fixed, as they are not a change of wording alone: (8) c05.2 "yes
+    cancel netflix" with no browser open repeats all of Netflix's steps and the reminder question; (9) c19.5 "do all of
+    them" repeats the Netflix steps shown one message before; (10) c01.2 after "looks right" quotes the bot's own guess
+    back as the person's goal ("You're working toward 'learning home workouts and into quick dinners'").
+  - Tests: `tests/test_round10_selftest_live.py` (49; 37 fail without the fixes, the rest are near-variant guards);
+    three older tests changed only the capital A of a neutral title, two YouTube lines changed in their tests.
 - **The habit**: `--quick` (c02, c03, c05, c07, c10, c19, c20, c23, about $0.15) after a change to a read, a guard or a
   prompt; the full set (about $0.55 to $0.70) before a merge, the line of counts in the PR. A failing step gets an
   offline test first. A conversation is never deleted; a changed expectation gets a `note`.
