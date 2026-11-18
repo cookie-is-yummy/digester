@@ -2628,3 +2628,85 @@ No new hook and no model call: "connect / check / disconnect todoist" stay in `p
   the export lists `pinned_tools` (names only).
 - **Not built** (verdict C "Out"): TickTick MCP, Notion, Gmail, Calendar, testers, the paste-back page. "delete my
   data" deletes the sealed sign-in (K) but does not revoke it first. Tests: `tests/test_round10_mcp.py`.
+### 17.Y The person's YouTube by Google's own API, and Instagram links (slice Y)
+
+Code reads only, no model call. Every write runs after the person's yes to the exact list shown; a tester can use it
+once they connected their own YouTube. Files: `yt_auth.py`, `actions/youtube.py`, `actions/link.py`, `ytreads.py`;
+blocks in `connectors.py`, `handler.py`, `scheduler.py`, `ytinfo.py`, `actions/__init__.py`, `texts.py`; tests in
+`tests/test_round10_youtube.py` (all against `fake_google`).
+
+- **Connector.** `connectors.CONNECTORS["youtube"]`, `kind="oauth"`, `where="on YouTube"`, no check needed.
+  `connectors.unavailable` has a branch for `kind == "oauth"` only: `unreachable` (no client id and secret on this
+  bot), `not_connected` (no sealed sign-in for this person), else None. Mac, TickTick, Todoist, webhook (and the
+  mailbox actions) still answer `operator` for a tester (M-4, tested).
+- **Connect (`yt_auth.py`, device flow).** "connect youtube" asks Google for a code with the scope
+  `https://www.googleapis.com/auth/youtube` only. The device code is sealed (`tokens`, connector `youtube_device`);
+  state `ytdevice:<h>` holds the times, the interval and the code the person types (30 minutes). The scheduler tick
+  asks Google when the interval has passed (`slow_down` adds 5 seconds); "done" asks at once. A grant with any other
+  scope (force-ssl, read-only) is not kept and is revoked at Google (`T.YT_SCOPE`). Tokens sealed per person
+  (connector `youtube`, issuer `google`); the access token is renewed under `tokens.lock`; a refused refresh
+  (`invalid_grant`) deletes the sign-in. "disconnect youtube" revokes at Google, deletes the sign-in, ends the
+  person's YouTube grants and drops the lists. "delete my data" revokes too (best effort) before the files go. The
+  client id and secret come only through `settings.secret`. Lines: `T.yt_connect_link`, `T.yt_connected`
+  (`You follow N channels and have N playlists.`; no "fresh" promise: no sync this round).
+- **Hook 5b `ytreads.youtube_reads`** (after `email_reads`, before `cancel_reads`): connect / disconnect / "is youtube
+  connected"; "unsubscribe (me) from that channel" (the YouTube pick in view; two channels ask which; only an
+  Instagram pick gives its unfollow link); "unsubscribe from <name>" (a pick's channel or, connected, one of the
+  person's subscriptions; a paid service of `cancel_routes.json` goes to the cancel helper, "youtube premium" too;
+  a name that is both asks `Do you mean the YouTube channel or a paid subscription?`); "unfollow / mute <creator>";
+  "unsubscribe from channels I haven't watched since <time>"; "put these in a playlist called X" / "add it to my X
+  playlist" (another music app's playlist is refused with `T.yt_other_app`); Watch Later and history links; the
+  Instagram weekly-export link; "stop" while a rest-for-tomorrow waits. Not connected: `I can do that on YouTube once
+  you connect it: say "connect youtube". Or do it yourself here: https://www.youtube.com/feed/channels`.
+- **Hook 4a `ytreads.youtube_answer`** (in `_asked_reads`, after the places' answer; the next message only, 30
+  minutes): "yes" for one channel or a playlist; for a list, "unsubscribe N" where N is the count shown (else
+  `T.yt_count_mismatch`); "keep 2, 5" shows a new list with a new yes token; "next" shows the next 50; "no" leaves it.
+- **Writes (`actions/youtube.py`, registry entries `youtube.unsubscribe`, `youtube.subscribe` (undo only),
+  `youtube.playlist_make` (always private), `youtube.playlist_add`).** All `outside`, `confirm="send_word"`,
+  `who="anyone"`, `from_model=False`, `in_rules=False`, `connector="youtube"`; rule_grant stays False (Y4 below).
+  Params are built by code: channels and subscription ids from `subscriptions.list mine=true`, video ids only from the
+  library's own YouTube items (a link in a caption is never used). The yes token is over the sorted ids and titles
+  shown; at the yes the list is read again, and a channel gone or renamed changes nothing (`T.YT_LIST_CHANGED`).
+  Requests go through `actions.web.OPENER` (tests: `fake_google`); errors keep a code only. Caps: 50 channels and 50
+  videos a person a local day (placements), plus each entry's `max_per_day`.
+- **Quota.** 1 unit a read, 50 a write; every call counted in state `yt_units:<Pacific day>` (no person in it) and in
+  the action_log detail `units` (with the check read). Writes stop at `MVP_YT_UNITS_PER_DAY` (8,000), reads 1,000 past
+  it. `quotaExceeded`, the project counter, or "Too many recent subscriptions" stop the run: what was done is kept, the
+  rest goes to state `ytrest:<h>` and runs at 9am the next day (never before Google's reset at midnight Pacific),
+  `Unsubscribed from 1 of 3 channels on YouTube. YouTube's daily limit for this app is used up. I'll do the other 2
+  tomorrow at 9am unless you say "stop".` "stop" drops it. Gone (`subscriptionNotFound`) counts as done.
+- **Revoked.** A 401 gets one fresh token; a refused refresh deletes the sign-in, sets the connection off, ends the
+  YouTube grants and says `YouTube says I no longer have your permission, so I stopped. Say "connect youtube" if you
+  want me back.`
+- **Channels not watched since (M-15).** Only with YouTube watch history in the library (`dates["watch"]` of YouTube
+  items) whose newest record is under 120 days old; else the reply names the history's date. A subscription matches
+  the history by channel id (`youtube_cache.channel_id`, which `ytinfo.py` now stores from `snippet.channelId`) or by
+  exact title; unmatched channels are left out and counted, never guessed. At most 50 a message, "next" for more.
+- **Undo** (`handler._undo` block): the last YouTube change, when newer than the person's own last write: an
+  unsubscribe within 7 days (re-subscribe; a slowed one does the rest tomorrow), a playlist add within 24 hours (the
+  items are taken out; a playlist the bot made stays, said so). Logged as `youtube.subscribe` / `youtube.undo`.
+- **Links (`actions/link.py`, Y5, no outside write).** Built from what code holds: `instagram_profile(handle)` (a plain
+  handle from the person's own export or typed with "@", at most 10 in one message, one at a time), `youtube_video`,
+  `youtube_channel` (the channel page when its id is known, else the channels list), history, Watch Later, Premium.
+  Instagram: `Instagram doesn't let any app unfollow for you, and I won't sign in as you. Tap to open @creator, then
+  Following › Unfollow: <link> . Say "done" or "next".` "done" is logged as `link.tap` (app and verb, no handle).
+  YouTube Premium is the cancel helper's route.
+- **State** (all `<what>:<handle>`, so "delete my data" removes them): `ytdevice` (30 minutes), `ytsubs` (the
+  subscription list, 24 hours), `ytask` (a question, 30 minutes), `igtap` (30 minutes), `ytundo` (its window), `ytrest`
+  (until it runs). The tick drops each when its time is up, and unit counters older than two days. Nothing YouTube
+  returns becomes a library item; titles are shown back only in the question.
+- **Y4, the playlist rule: not built on this branch** (it needs slice G). Ready for the merge: `YtPlaylistAdd.target`
+  and `.items` (what `grants.check` reads), `T.yt_rule_place(target, per_run, when, per_day)` (`I'll also add them to
+  your private YouTube playlist "Recipes", on YouTube: at most 5 each Sunday and 20 a day.`). The merge sets
+  `rule_grant=True` on `youtube.playlist_add` and gives G's `run_place` a `playlist` kind.
+- **Measured.** The 159 rule texts and the round 9 rule phrasings (tester and operator, with and without an answer):
+  0 taken by hooks 5b and 4a (`tests/test_round9_merge.py` wraps both). The 20 draft requests and the 25 dev drafts,
+  connected and not: 0 taken. No model call in any YouTube or Instagram read. Live (18 Nov, $0.034, 11 interpreter
+  calls, ledger $18.33 to $18.36): of 25 made-up YouTube and Instagram wordings, code read 13; the 11 it missed (not
+  "cancel youtube premium", which is the cancel helper's) went to the interpreter: 9 `unsupported`, "which channels do
+  i never watch" an `ask` of the saves, and "make my instagram export happen every week" a weekly `new_rule` (a wrong
+  rule). Code now reads 8 of them ("get rid of the X channel", "delete the X subscription on youtube", "take me off
+  X's channel", "clean up my youtube subscriptions", "which channels do i never watch", "save these videos to
+  youtube", "add this to my youtube", the Instagram export) plus "unsub", "remove X from my (youtube) subscriptions",
+  "stop following X", "log out of youtube", "make a playlist of these": 21 of 25. Left to the model (`unsupported`):
+  "i don't want X in my subscriptions anymore", "can you get into my youtube", "i'm done with X, unsubscribe".

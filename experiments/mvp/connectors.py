@@ -66,6 +66,17 @@ CONNECTORS = {
                          apps={"todo": "your webhook"}, nouns={"webhook.post": ("thing", "things")}, kind="webhook",
                          where="to your webhook", needs_check=False, env=("MVP_WEBHOOK_URL",)),
 }
+# ---------- round 10, slice Y (DESIGN.md section 17.Y): the person's own YouTube, signed in by Google's device flow ---
+# kind "oauth": each person connects their own account (a tester too), so `unavailable` reads this person's sign-in
+# (yt_auth.py) instead of asking for the operator. Its actions are run by ytreads.py after a yes to the exact list.
+CONNECTORS["youtube"] = Connector(key="youtube", name="YouTube", module="youtube",
+                                  actions={"playlist": "youtube.playlist_add", "unsubscribe": "youtube.unsubscribe"},
+                                  apps={"playlist": "YouTube", "unsubscribe": "YouTube"},
+                                  nouns={"youtube.playlist_add": ("video", "videos"),
+                                         "youtube.playlist_make": ("playlist", "playlists")},
+                                  kind="oauth", where="on YouTube", needs_check=False,
+                                  env=("MVP_YT_CLIENT_ID", "MVP_YT_CLIENT_SECRET"))
+# ---------- end round 10, slice Y ----------
 SECRET_ENV = ("MVP_TICKTICK_TOKEN", "MVP_TODOIST_TOKEN", "MVP_WEBHOOK_URL", "MVP_MAILBOX_APP_PASSWORD")
 # ---------- round 10, slice K: the sealing key and the YouTube client's secret (read through settings.secret) ------
 SECRET_ENV += ("MVP_TOKEN_KEY", "MVP_YT_CLIENT_SECRET")
@@ -143,6 +154,17 @@ def unavailable(store, handle, key):
     """None when the connector can be used for this person now; else why not: operator (only the person who runs the
     bot), unreachable (not on a Mac), not_connected, off, broken."""
     from . import config
+    # ---------- round 10, slice Y: a connector each person signs in to themselves (kind "oauth": YouTube) ----------
+    # Only this kind; the Mac, token, webhook and mailbox routes still answer "operator" for anyone else (M-4).
+    if CONNECTORS[key].kind == "oauth":
+        if not module(key).reachable():
+            return "unreachable"            # no Google client is set up on this bot
+        from . import yt_auth
+        if not yt_auth.connected(store, handle):
+            return "not_connected"
+        st = status(store, handle, key)
+        return st if st in ("off", "broken") else None
+    # ---------- end round 10, slice Y ----------
     if not config.is_operator(handle):
         return "operator"
     # ---------- round 10, slice C: no personal token, but an MCP sign-in may be there ----------

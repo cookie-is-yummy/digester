@@ -282,6 +282,12 @@ class HandlerMixin:
                 ref = self.self_email_reads(person, text, now)
                 if ref is not None:
                     return ref
+            # ---------- round 10, slice Y: 5b, the person's YouTube and Instagram links, before the cancel helper ---
+            from . import ytreads
+            ref = ytreads.youtube_reads(self, person, text, now)
+            if ref is not None:
+                return ref
+            # ---------- end round 10, slice Y ----------
             ref = self.cancel_reads(person, text, now)   # slice B: "cancel my netflix", a password, "I cancelled it"
             if ref is not None:
                 return ref
@@ -496,6 +502,12 @@ class HandlerMixin:
         ref = place_answer(self, person, text, now)
         if ref is not None:
             return ref
+        # ---------- round 10, slice Y: 4a, the answer to a YouTube preview or an Instagram link (ytreads.py) -------
+        from . import ytreads
+        ref = ytreads.youtube_answer(self, person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 10, slice Y ----------
         ref = self._mismatch_answer(person, text, now, ask)   # round 10, slice S (4b): yes / no to the 👎 question
         if ref is not None:
             return ref
@@ -1252,6 +1264,14 @@ class HandlerMixin:
         if ref is not None:
             return ref
         lw = self._last_write(h, now)
+        # ---------- round 10, slice Y: the last YouTube change (7 days for an unsubscribe, 24 hours for a playlist),
+        # when it is newer than the person's own last write and than a rule's last adds (merge of round 10) ----------
+        from . import ytreads
+        from .grants import rule_write
+        rw = rule_write(self.store, h, now)
+        if ytreads.undo_due(self, h, now, lw) and (not rw or ytreads.undo_due(self, h, now, rw)):
+            return self.send(h, ytreads.undo(self, person, now))
+        # ---------- end round 10, slice Y ----------
         # ---------- round 10, slice G (G5): a rule's last adds to an app, for 24 hours; the person's own writes of
         # the last 10 minutes come first, and a newer timed write too
         from .grants import rule_write, undo_write
@@ -1419,6 +1439,10 @@ class HandlerMixin:
             from .refresh import forget_inbox
             from .export import forget_exports   # round 8, slice B: the export folders go too
             forget_exports(h)
+            # ---------- round 10, slice Y: Google's access to their YouTube is ended too (best effort) ----------
+            from . import yt_auth
+            yt_auth.forget(h)
+            # ---------- end round 10, slice Y ----------
             from . import tokens   # round 10, slice K: the person's sealed sign-ins go too
             # ---------- merge of round 10: a sign-in made through an app's own server (slice C) is revoked at the
             # server first (RFC 7009), every standing yes (slice G) ends, then the sealed files go ----------

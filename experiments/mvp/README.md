@@ -264,6 +264,19 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   a reel whose caption may not match its video is never put in your apps by a rule ("1 left out: ..."); the errand
   form's "send it" says what "send" would do, as "can you send it for me" does. Restart the test page after the merge
   and check that its footer shows the build. Tests: `tests/test_round10_merge.py`.
+- **Round 10, your YouTube and Instagram links** (DESIGN.md section 17.Y, slice Y; amendment A-015, Proposed): "connect
+  youtube" gives a code to type at google.com/device (Google's own sign-in, the `youtube` scope only; the bot keeps
+  the sign-in sealed and checks with Google on its own every 30 seconds, or at once on "done"); "disconnect youtube"
+  ends it at Google. Then "unsubscribe me from that channel", "unsubscribe from <channel>", "unsubscribe from channels
+  I haven't watched since 2024" (only with a YouTube watch history under 120 days old; the whole list, "keep 2, 5",
+  "unsubscribe N") and "put these in a playlist called dinners" (always private; only YouTube videos from your saves)
+  each show the exact change and run after your yes, with "undo" (7 days for an unsubscribe, 24 hours for a playlist).
+  A tester can do this too. YouTube's daily limit for this app stops the run and the rest is done the next morning
+  unless you say "stop". Instagram lets no app unfollow or mute, so the bot sends the link and the two taps, one at a
+  time ("done" or "next"); also Watch Later, history and the Instagram weekly-export link. Set up once: a Google Cloud
+  project with a "TVs and Limited Input devices" client; `MVP_YT_CLIENT_ID` and `MVP_YT_CLIENT_SECRET` in the 0600
+  settings file (or the Connections panel); `MVP_YT_UNITS_PER_DAY` (8,000) caps the writes. Tests:
+  `tests/test_round10_youtube.py` (a fake Google; no real call).
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -610,9 +623,10 @@ still hold the handle (`ledger_rows_with_handle`).
 | `errand.py`, `prompts/errand_v2.md` | Round 10, slice W7: the errand form: one small model call after the interpreter refused or chatted; code checks the form and hands the person's words to the helper's own entry |
 | `phrasing.py` | Round 10, slice W: everyday wording read by code: `normalize` (openers, closers, texting shorthand; a second try for the request reads only, never stored or sent to a model), `parts` / `clauses` (two asks in one message), `TIME_WORDS` |
 | `captionmark.py` | Round 10, slice S: the caption mark (`cm-v1`, derived, versioned), what the person said about it (`caption_feedback`), the order rule, the doubt line, `fit_reads` and the thumbs-down question |
-| `browser.py`, `yt_auth.py` | Round 10, slice K: stubs (`STUB = True`) giving today's behaviour until slices V and Y replace them |
+| `browser.py` | Round 10, slice K: a stub (`STUB = True`) giving today's behaviour until slice V replaces it |
 | `panel.py` | Round 10, slice D: the test page's Connections panel (seal, remove, states only; whether sending is on) |
 | `grants.py` | Round 10, slice G: a rule's place read from the person's words, its standing yes (grant: made, checked by `actions.perform(..., grant=)`, ended), each run's add and its line, undo, "stop adding to X", "use X for rule N", the standing permissions in receipts |
+| `yt_auth.py`, `ytreads.py`, `actions/youtube.py`, `actions/link.py` | Round 10, slice Y: the person's YouTube sign-in by a code (device flow), the YouTube and Instagram reads and answers, the YouTube Data API calls with quota counting, and the links the person taps |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
 | `mcp_client.py`, `mcp_mappings.py`, `oauth.py`, `actions/mcp.py` | Round 10, slice C: the bot as an MCP client (pinned tools, codes only, the SDK as transport), the servers and mappings in code (Todoist `add-tasks` / `delete-object`), our own OAuth sign-in and refresh, and the `todoist.mcp_add` action with connect / check / disconnect |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |

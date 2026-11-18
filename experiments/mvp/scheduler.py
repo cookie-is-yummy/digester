@@ -69,6 +69,13 @@ class SchedulerMixin:
                 self._retry_or_skip(self.store.rule(rule["id"]) or rule, now, slot)
         sent += self._tick_todos(now)   # due to-dos remind once (todos.py)
         sent += self.drafts_tick(now)   # round 9, slice A: a held send that is due (W4); old drafts cleared
+        # ---------- round 10, slice Y: an open YouTube sign-in code, a rest-tomorrow, old subscription lists ------
+        try:
+            from . import ytreads
+            sent += ytreads.tick(self, now)
+        except Exception as e:  # noqa: BLE001 - the type only; timed sends go on
+            print(f"youtube tick: {type(e).__name__}", file=__import__("sys").stderr)
+        # ---------- end round 10, slice Y ----------
         return sent
 
     # ---------- what changes with time alone ----------

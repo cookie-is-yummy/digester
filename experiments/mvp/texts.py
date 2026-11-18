@@ -3124,3 +3124,251 @@ def grant_route_changed(app, word, n):
     return (f"The way I reach {app} changed since you said yes to rule {n}, so I didn't add anything there. Say "
             f"\"use {word} for rule {n}\" to add them again.")
 # ---------- end review of the round 10 merge ----------
+# ---------- round 10, slice Y (DESIGN.md section 17.Y): the person's YouTube by Google's own API; Instagram links ----
+YT_FEED = "https://www.youtube.com/feed/channels"
+YT_NOT_CONNECTED = f"I can do that on YouTube once you connect it: say \"connect youtube\". Or do it yourself here: {YT_FEED}"
+YT_NOT_CONNECTED_PLAYLIST = "I can do that on YouTube once you connect it: say \"connect youtube\"."
+YT_OR_PAID = "Do you mean the YouTube channel or a paid subscription?"
+YT_NOT_SET_UP = ("YouTube isn't set up here yet: the person who runs me needs to add a Google sign-in client first. "
+                 f"You can still manage it yourself here: {YT_FEED}")
+YT_NO_KEY = "I can't keep sign-ins safely yet: the person who runs me needs to set a key first."
+YT_ALREADY = "YouTube is already connected. Say \"disconnect youtube\" to end it."
+YT_DENIED = "Google says you didn't allow it, so YouTube isn't connected. Say \"connect youtube\" to try again."
+YT_CODE_EXPIRED = ("The code ran out before Google heard from you, so YouTube isn't connected. Say \"connect youtube\" "
+                   "for a new one.")
+YT_CONNECT_FAILED = "I couldn't reach Google just now, so YouTube isn't connected. Try \"connect youtube\" again in a minute."
+YT_NOT_ON = "YouTube isn't connected, so there's nothing to disconnect."
+YT_SCOPE = ("Google gave me a different permission than the one I asked for, so I didn't keep it and YouTube isn't "
+            "connected. Say \"connect youtube\" to try again.")
+YT_REVOKED = "YouTube says I no longer have your permission, so I stopped. Say \"connect youtube\" if you want me back."
+YT_FAILED = "YouTube didn't answer, so I didn't change anything there. Try again in a minute."
+YT_LIST_CHANGED = ("Your YouTube subscriptions changed since I showed you that list, so I didn't change anything. Ask "
+                   "again and I'll show you the new list.")
+YT_KEEP_ALL = "Then nothing is left on the list, so I didn't change anything on YouTube."
+YT_LEFT = "OK, I left it as it is on YouTube."
+YT_REST_STOPPED = "OK. I won't do the rest on YouTube."
+YT_NO_HISTORY = ("I don't have your YouTube watch history, so I can't tell which channels you've stopped watching. "
+                 "It's in your Google Takeout (YouTube, history); send me a new one and ask again.")
+YT_SINCE_ASK = ("Since when? Say, for example, \"unsubscribe from channels I haven't watched since 2024\", or \"... in a "
+                "year\".")
+YT_UNSUB_CAP = ("I can unsubscribe you from at most 50 channels a day, and that would go past it. Say \"keep\" with some "
+                "numbers to make the list shorter, or ask again tomorrow.")
+YT_ADD_CAP = "I can add at most 50 videos a day to your YouTube playlists, and that would go past it. Ask again tomorrow."
+YT_WHICH_NONE = "Which channel? Say \"unsubscribe from\" and its name."
+YT_QUOTA_NOTHING = "YouTube's daily limit for this app is used up, so I didn't change anything. Try again tomorrow."
+YT_NOTHING_IN_VIEW = "Ask me for something first, then say \"put these in a playlist called ...\"."
+YT_NO_YT_PICKS = ("None of these are YouTube videos, so I can't put them in a YouTube playlist. Instagram doesn't let "
+                  "any app add to your collections.")
+YT_PLAYLIST_NAME_ASK = "What should the playlist be called? Say, for example, \"put these in a playlist called dinners\"."
+YT_HISTORY = ("No app can change your YouTube history. Open it here to clear or pause it: "
+              "https://www.youtube.com/feed/history")
+YT_NOT_A_VIDEO = "That one isn't a YouTube video, so it can't go in Watch Later."
+IG_ALL_DONE = "That's all of them."
+IG_WHO = "Which account? Say, for example, \"unfollow @name\"."
+IG_SCHEDULE_LINK = ("https://accountscenter.instagram.com/info_and_permissions/dyi?source=external&account_type=1"
+                    "&sections[0]=IG_SAVED&format=JSON&date_range=LAST_WEEK&import_service=GoogleDrive"
+                    "&schedule_frequency=ONCE_A_WEEK_FOR_ONE_YEAR")
+
+
+def _yt_q(title):
+    return f"\"{title}\""
+
+
+def _yt_n(n, one, many):
+    return f"{n:,} {one if n == 1 else many}"
+
+
+def yt_connect_link(user_code, minutes):
+    return (f"To let me manage your YouTube, open google.com/device on any phone or computer and type {user_code}. "
+            "Google will warn that the app isn't verified yet; that's expected for this test. I'll only change "
+            f"something on YouTube after you say yes to the exact change. The code works for {minutes} minutes.")
+
+
+def yt_code_waiting(user_code):
+    return (f"I haven't heard from Google yet. Open google.com/device, type {user_code} and press Allow; I'll tell you "
+            "here when it's connected.")
+
+
+def yt_connected(channels, playlists):
+    return (f"YouTube is connected. You follow {_yt_n(channels, 'channel', 'channels')} and have "
+            f"{_yt_n(playlists, 'playlist', 'playlists')}. Say \"disconnect youtube\" any time.")
+
+
+def yt_status(connected, set_up):
+    if connected:
+        return "YouTube is connected. Say \"disconnect youtube\" to end it."
+    return "YouTube isn't connected. Say \"connect youtube\" to connect it." if set_up else YT_NOT_SET_UP
+
+
+def yt_disconnected(revoked):
+    out = "YouTube is disconnected, and I deleted my sign-in. What I changed there stays as it is."
+    if not revoked:
+        out += " I couldn't reach Google to cancel my access; remove it at myaccount.google.com/permissions."
+    return out
+
+
+def yt_unsub_one(title):
+    return f"Unsubscribe from {_yt_q(title)} on YouTube? Reply \"yes\" to unsubscribe, or \"no\" to keep it."
+
+
+def yt_not_subscribed(title):
+    return f"You're not subscribed to {_yt_q(title)} on YouTube."
+
+
+def yt_no_channel(name, total):
+    return (f"I can't find a channel called {_yt_q(name)} among the {_yt_n(total, 'channel', 'channels')} you follow "
+            "on YouTube.")
+
+
+def yt_which_channel(titles):
+    rows = "\n".join(f"{i}. {_yt_q(t)}" for i, t in enumerate(titles, 1))
+    return f"Which channel?\n{rows}\nSay \"unsubscribe from\" and its name."
+
+
+def yt_unsub_done(n, title=None):
+    what = _yt_q(title) if n == 1 and title else _yt_n(n, "channel", "channels")
+    return f"Unsubscribed from {what} on YouTube. Say \"undo\" in the next 7 days to subscribe again."
+
+
+def yt_rest_tomorrow(done, total, code):
+    """quota: the project's daily YouTube units are used up; too_many: YouTube slowed the changes down."""
+    left = total - done
+    head = f"Unsubscribed from {done} of {total} channels on YouTube. " if done else ""
+    why = ("YouTube's daily limit for this app is used up." if code == "quota"
+           else "YouTube says that's too many changes for now.")
+    rest = f"the other {left}" if done else ("it" if left == 1 else f"all {left}")
+    return f"{head}{why} I'll do {rest} tomorrow at 9am unless you say \"stop\"."
+
+
+def yt_unsub_stopped(done, total):
+    return (f"Unsubscribed from {done} of {total} channels on YouTube, then YouTube stopped answering, so I left the "
+            "rest. Say \"undo\" in the next 7 days to subscribe again to those.")
+
+
+def yt_rest_done(n, kind):
+    if kind == "resub":
+        return f"I subscribed you again to the other {_yt_n(n, 'channel', 'channels')} on YouTube."
+    return (f"Unsubscribed from the other {_yt_n(n, 'channel', 'channels')} on YouTube. Say \"undo\" in the next 7 "
+            "days to subscribe again.")
+
+
+def yt_count_mismatch(n):
+    return (f"That list has {n} channel{'' if n == 1 else 's'}. Reply \"unsubscribe {n}\" to remove "
+            f"{'it' if n == 1 else 'them all'} on YouTube, or \"keep 4, 9\" first.")
+
+
+def yt_history_old(day):
+    return (f"Your newest YouTube watch history here is from {day}, so I can't tell what you've watched since. Send me "
+            "a new Google Takeout and ask again.")
+
+
+def _yt_history_note(newest, unmatched):
+    out = f"your history here ends on {newest}"
+    if unmatched:
+        out += (f"; {_yt_n(unmatched, 'channel', 'channels')} I can't match to your history "
+                f"{'is' if unmatched == 1 else 'are'} left out")
+    return out
+
+
+def yt_idle_list(total, titles, since, newest, unmatched, more=0, start=1, kept=0):
+    n, all_ = len(titles), len(titles) + more + kept
+    rows = "\n".join(f"{i}. {t}" for i, t in enumerate(titles, start))
+    head = (f"You're subscribed to {_yt_n(total, 'channel', 'channels')} on YouTube. {all_} "
+            f"{'has' if all_ == 1 else 'have'} nothing in your watch history since {since} "
+            f"({_yt_history_note(newest, unmatched)}).")
+    if kept:
+        head += f" You're keeping {kept}."
+    if more:
+        head += f" Here are {start} to {start + n - 1}; say \"next\" for the rest."
+    return (f"{head}\n{rows}\nReply \"unsubscribe {n}\" to remove {'it' if n == 1 else 'them all'} on YouTube, or "
+            "\"keep 4, 9\" first.")
+
+
+def yt_idle_none(total, since, newest, unmatched):
+    return (f"You follow {_yt_n(total, 'channel', 'channels')} on YouTube, and each one I can match has something in "
+            f"your watch history since {since} ({_yt_history_note(newest, unmatched)}). Nothing to unsubscribe from.")
+
+
+def yt_playlist_ask(title, titles, new, n_other):
+    rows = "\n".join(f"• {t}" for t in titles)
+    n = len(titles)
+    vids = "this video" if n == 1 else f"these {n} videos"
+    if new:
+        head = f"I'll make a private YouTube playlist {_yt_q(title)} and add {vids} to it, on YouTube:"
+    else:
+        head = f"I'll add {vids} to your YouTube playlist {_yt_q(title)}, on YouTube:"
+    tail = ""
+    if n_other:
+        tail = (f"\n({n_other} of the picks {'is' if n_other == 1 else 'are'} from Instagram, so "
+                f"{'it stays' if n_other == 1 else 'they stay'} here.)")
+    return f"{head}\n{rows}{tail}\nReply \"yes\" to do it, or \"no\" to leave it."
+
+
+def yt_playlist_done(title, n, new):
+    vids = _yt_n(n, "video", "videos")
+    if new:
+        return f"Made {_yt_q(title)} on YouTube with {vids}. Say \"undo\" to take them out."
+    return f"Added {vids} to your YouTube playlist {_yt_q(title)}. Say \"undo\" to take them out."
+
+
+def yt_playlist_part(title, done, total):
+    return (f"Added {done} of {total} videos to {_yt_q(title)} on YouTube, then YouTube stopped me. Say \"undo\" to "
+            "take them out.")
+
+
+def yt_undo_playlist(title, n, failed, made):
+    out = f"I took {_yt_n(n, 'video', 'videos')} out of {_yt_q(title)} on YouTube."
+    if failed:
+        out += f" {failed} I couldn't take out; remove {'it' if failed == 1 else 'them'} on YouTube."
+    if made:
+        out += " The playlist itself is still there; delete it on YouTube if you don't want it."
+    return out
+
+
+def yt_undo_unsub(n, title=None):
+    what = _yt_q(title) if n == 1 and title else _yt_n(n, "channel", "channels")
+    return f"I subscribed you again to {what} on YouTube."
+
+
+def yt_undo_rest(done, total):
+    return (f"I subscribed you again to {done} of {total} channels on YouTube. YouTube says that's too many for now, so "
+            f"I'll do the other {total - done} tomorrow at 9am unless you say \"stop\".")
+
+
+def yt_rule_place(target, per_run, when, per_day):
+    """Y4, for slice G's rule preview once G merges: the playlist line of a rule with a YouTube place ("each Sunday")."""
+    return (f"I'll also add them to your private YouTube playlist {_yt_q(target)}, on YouTube: at most {per_run} "
+            f"{when} and {per_day} a day.")
+
+
+def yt_other_app(app):
+    name = " ".join(w.capitalize() for w in app.split())
+    return (f"I can only add videos to YouTube playlists, so I didn't add anything to {name}. Say \"put these in a "
+            "playlist called ...\" for a private one on YouTube.")
+
+
+def yt_watch_later(link):
+    return f"YouTube doesn't let any app add to Watch Later. Open the video and tap Save, then Watch later: {link}"
+
+
+def yt_mute(title, link):
+    return (f"YouTube doesn't let any app hide a channel for you. On YouTube, tap ⋮ next to one of {_yt_q(title)}'s "
+            f"videos, then \"Don't recommend channel\". The channel: {link}")
+
+
+def ig_tap(verb, handle, link):
+    word = "Unfollow" if verb == "unfollow" else "Mute"
+    return (f"Instagram doesn't let any app {verb} for you, and I won't sign in as you. Tap to open @{handle}, then "
+            f"Following › {word}: {link} . Say \"done\" or \"next\".")
+
+
+def ig_schedule():
+    return ("Instagram may be able to send your saved posts to your Google Drive every week. Open this on your phone "
+            f"and see what it offers: {IG_SCHEDULE_LINK}\nI can't tell yet whether your account gets the weekly option; "
+            "tell me what the screen shows.")
+
+
+ACTION_CAP_LABEL.update({"youtube.unsubscribe": "unsubscribes on YouTube", "youtube.subscribe": "subscribes on YouTube",
+                         "youtube.playlist_make": "playlists made on YouTube",
+                         "youtube.playlist_add": "playlist adds on YouTube"})
+# ---------- end round 10, slice Y ----------

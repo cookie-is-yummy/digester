@@ -92,6 +92,11 @@ def rec(env, monkeypatch):
     from mvp import grants
     monkeypatch.setattr(grants, "grant_reads", wrap("grant_reads", grants.grant_reads, 2))
     # ---------- end round 10, slice G ----------
+    # ---------- round 10, slice Y: hook 5b (youtube_reads) and 4a (youtube_answer) ----------
+    from mvp import ytreads
+    for name in ("youtube_reads", "youtube_answer"):
+        monkeypatch.setattr(ytreads, name, wrap(name, getattr(ytreads, name), 2))
+    # ---------- end round 10, slice Y ----------
     return env
 
 
@@ -197,3 +202,7 @@ def test_the_hooks_run_in_the_order_of_the_map():
     # round 10, slice G: hook 8a right after place_reads (8), before receipts_reads
     order("ref = place_reads(self, person, text, now)", "ref = grant_reads(self, person, text, now)",
           "self.receipts_reads(")
+    # round 10, slice Y: 5b after email_reads and before cancel_reads; 4a after the places' yes/no answer
+    order("self.email_reads(", "ref = ytreads.youtube_reads(self, person, text, now)", "self.cancel_reads(")
+    order("place_answer(self, person, text, now)", "ref = ytreads.youtube_answer(self, person, text, now)",
+          "self._mismatch_answer(person, text, now, ask)")
