@@ -563,8 +563,13 @@ def _take_out(store, handle, rows, now):
     gone, left = [], []
     for key, group in by.items():
         try:
-            mod = C.module(key)
-            res = mod.remove(group) if mod.reachable() else {"removed": [], "failed": [r["id"] for r in group]}
+            # second merge of round 10: each row through the module of the action that made it (connectors.remove_rows:
+            # a Todoist sign-in's adds through Todoist's MCP server, self-test c26; YouTube's through its API)
+            if key == "youtube":
+                from .actions import youtube as Y
+                res = Y.remove(group, store, now)
+            else:
+                res = C.remove_rows(store, key, group)
         except Exception:  # noqa: BLE001
             res = {"removed": [], "failed": [r["id"] for r in group]}
         store.remove_placements(res["removed"], now)
