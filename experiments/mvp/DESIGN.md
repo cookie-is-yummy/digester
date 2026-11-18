@@ -1962,17 +1962,17 @@ caption has nothing to do with the video, and rules that call the connectors. Bu
 V and T. Each slice adds its own section below.
 
 **Hook order** (who answers a message; `tests/test_round10_merge.py::test_the_hooks_run_in_the_order_of_design_section_17`
-checks it in `handler.py`, line by line). Rows marked "later" belong to slices Y and V, which are not merged yet: their
-place is kept, and nothing stands there now.
+checks it in `handler.py`, line by line, and the browser offer's place in `cancel.py`). Every slice is merged (the
+second merge, 18 Nov, added Y, V and T in the rows that were kept for them).
 
 | Where | Order | Read | Slice |
 | --- | --- | --- | --- |
 | `_on_message`, after the tapback branch | - | `secret_reads` (first) | round 9 B, E |
-| | - | `browser_reads` (only while this person's browser run is open) | V, **later** |
+| | - | `browser_reads` (only while this person's browser run or its offer is open, 30 minutes at most) | V |
 | `_asked_reads` (next message only) | - | `captionmark.take_ask` (the 👎 question ends with this message), `_deadline_answer`, `_overdue_reply` | S, round 8 |
 | | 3 | `_cancel_answer` (with the notice follow-up, the check reminder, the second notice) | round 9 B, D |
 | | 4 | `places.asked_reads` (Mac yes / no, REMOVE / KEEP, the Todoist REMOVE / KEEP) | round 9 D, C |
-| | 4a | `youtube_answer` | Y, **later** |
+| | 4a | `ytreads.youtube_answer` (yes / "unsubscribe N" / "keep 4, 9" / "next" to a YouTube preview, the Instagram link's "done" / "next") | Y |
 | | 4b | `_mismatch_answer` (yes / no after the 👎 question) | S |
 | | - | `_doit_answer` | round 9 W10 |
 | `_on_message`, after the `confirm_delete` branch | 0 | `fit_reads` ("that reel had nothing to do with it") | S |
@@ -1981,8 +1981,8 @@ place is kept, and nothing stands there now.
 | | - | `onboard_step` (the setup's clause split and `export_reads` inside) | W |
 | `answer_normally`, after `_rule_reads`; each read tries the message, then `phrasing.normalize(text)` | 5a | `export_reads` | W |
 | | 5 | `email_reads`, then `self_email_reads` (the message itself only) | round 9 A, W |
-| | 5b | `youtube_reads` | Y, **later** |
-| | 6 | `cancel_reads` (the notice route; the browser offer inside it is V, **later**) | round 9 B, D |
+| | 5b | `ytreads.youtube_reads` (connect / disconnect YouTube, unsubscribe, a playlist, the Instagram links) | Y |
+| | 6 | `cancel_reads` (the notice route; the browser offer inside the web route, behind `browser.available`) | round 9 B, D, V |
 | | 7 | `postact_reads` | round 9 C |
 | | 8 | `places.place_reads` (Todoist connect / check / disconnect by sign-in inside) | round 9 D, E, C |
 | | 8a | `grant_reads` ("stop adding to X", "use X for rule N", "undo rule N") | G |
@@ -2076,6 +2076,65 @@ Stubs: `phrasing` (W), `captionmark` and `compose.display_title` (S) and `connec
   development phrasing set gives the same 73 / 1 / 63 / 0-of-40 as at the merge. No model call.
 - Known and left: "email maria@example.com that the sink is broken and cancel my netflix" is one email card whose
   words hold the second ask (hook 5 takes the whole message before 8z can split it; the card waits for "send").
+
+**The second merge** (18 Nov: slices Y, V and T on top of the six, `git merge --no-ff` in that order; offline, no
+model call; tests in `tests/test_round10_merge2.py`).
+- The reads sit where the table above says: `browser_reads` right after `secret_reads`; `youtube_answer` (4a) after
+  the places' answer and before slice S's mismatch answer; `youtube_reads` (5b) inside the loop over the message and
+  its normalised form, after the email reads and before `cancel_reads`; the browser offer inside `cancel_reads`' web
+  route. `tests/test_round10_merge.py::test_the_hooks_run_in_the_order_of_design_section_17` holds every one. "undo"
+  takes the newest of a YouTube change and a rule's adds. The `STUB` flags of `browser` and `yt_auth` are gone.
+- **Y4, the playlist rule** (slice G's grant): `youtube.playlist_add` carries `rule_grant` (never an unsubscribe, a
+  subscribe or making a playlist on its own). "every sunday at 6pm put 3 cooking videos in my recipes playlist" shows
+  slice Y's line in the preview (`I'll also add them to your private YouTube playlist "Recipes", on YouTube: at most 3
+  each Sunday and 10 a day.`); the YES makes the grant. `outputs.deliver` adds the playlist add to a timed run of such
+  a rule (a rule's own `do` never names it) and `places.route` runs it only under the grant (`grants.run_place`, kind
+  `playlist`): only the run's YouTube picks, each video id from the library's own YouTube item, go to the person's
+  playlist of that name, or a private one made then (it stays after "undo"). Instagram picks are counted and stay in
+  the message (`1 from Instagram stays in this message: a YouTube playlist takes only YouTube videos.`). YouTube's
+  daily limit (`YouTube's daily limit for this app is used up, so I didn't add them to your playlist this time.`) and
+  a withdrawn sign-in (slice Y's line; the sign-in goes and the grant ends) are never counted as a grant failure. A
+  playlist with no name in the request is "From my saves". Not connected: `Say "connect youtube", then "use my
+  youtube playlist for rule 1".`
+- "undo" and "undo rule N" take a rule's adds out through the route that made them (`connectors.remove_rows`; YouTube's
+  own remove): before, adds made through Todoist's sign-in stayed (self-test c26).
+- "delete my data" revokes the YouTube sign-in at Google, then removes site permissions, browser runs, YouTube state,
+  grants and placements. "export my data" lists, in `connections.json`, `youtube_held`: what slice Y holds for a
+  moment (the subscription list, a change waiting for a yes, the Instagram links, what "undo" can take back, the rest
+  left for tomorrow) and since when, never a title; the browser's rows are in `browser_runs.json` (counts and dates).
+- A tester connects YouTube like anyone (it is per person); no YouTube line says it is for the operator only.
+- "make my instagram export repeat" and its kin get slice Y's weekly-export line whichever read takes them
+  (`refresh.IG_REPEAT` in slice W's export read; slice Y's own read): the bot can't tell yet whether the account gets
+  the weekly option. The general export facts say the same ("I can't confirm a repeating export").
+- "what are you connected to" says each person's YouTube (`connected`, `not connected yet (say "connect youtube")`,
+  `not set up on this bot yet`), a tester's too, and, when the browser is on, where it runs, for whom and which sites
+  (`Browser for cancelling: on, in a window on this computer, for you only. Sites: netflix.`); with the browser off
+  the answer is as before. The Connections panel says the same in two lines (YouTube set up or not; the browser
+  setting); the footer says `YouTube: on` exactly when the client id and the secret are both set, and `browser: vm,
+  everyone` when `MVP_BROWSER_FOR=all`. Never a value.
+- The errand form's "connect / disconnect youtube" goes through slice Y's read; `errand.py` names no action of Y or V.
+- Fixed from the self-test's trial merges: "Which gym?" (or "Which one?") answered with how the person pays asks
+  again (`Got it. Which gym is it? Just its name, like "City Gym".`) and nothing of it reaches the notice (c06);
+  "do it for me" right after the cancel steps, with no browser for this person, says `I can't cancel Netflix for you:
+  it needs your sign-in, and I never sign in as you. ...` and keeps the reminder question open (c31); a display title
+  is read line by line and is never a note to assistants, a numbered step, a bullet or a header
+  (`compose.caption_title`); the changed-tool case (c27) was fixed at the first merge.
+- With `MVP_BROWSER` unset, ten cancel conversations ("cancel my netflix", "steps", "friday", a gym, "unsubscribe from
+  netflix", "cancel my youtube premium", a password, "cancel my streamly") give byte-identical replies before and
+  after this merge.
+- **Checks** (offline, no model call): the full suite passes (count in the README), demo 10; `python3 -m mvp.selftest
+  --dry`: 40 conversations, 114 steps, 114 passed, 0 skipped, 0 real model calls, 0 Chromium processes left;
+  `probe_same` byte-equal with `mvp4/probes_round8/same_head.json`; the 159 rule-eval texts and the 123 rule phrasings
+  taken by no new read (`browser_reads` and both YouTube reads wrapped too); the 20 draft requests: 0 taken in all four
+  settings; a store made by 1606f80 loads, keeps its rows and gains `grants`, `caption_feedback`, `site_grants`,
+  `browser_runs` and the new columns; the development phrasing set: 73 of 100 right by code, 1 wrong (d007, by
+  design), 63 fell through, 0 of 40 `none` lines taken, the YouTube and browser reads taking none of it; the browser
+  tests run here (Chromium in `/opt/pw-browsers`), 0 skipped (where no browser can start they are skipped and
+  counted).
+- Known and left: a YouTube playlist rule's daily cap is slice G's 10 a day (slice Y's one-off adds allow 50); a
+  YouTube that is not set up on this bot still gets the "isn't connected for you" line in a rule's preview (saying
+  "connect youtube" then says it is not set up); the browser's practice merchant is served from `tests/fakes`
+  (prototype only); no live self-test run yet (its $0.70 is for after this merge).
 
 ### 17.K The foundation (slice K)
 
@@ -2695,7 +2754,8 @@ blocks in `connectors.py`, `handler.py`, `scheduler.py`, `ytinfo.py`, `actions/_
   subscription list, 24 hours), `ytask` (a question, 30 minutes), `igtap` (30 minutes), `ytundo` (its window), `ytrest`
   (until it runs). The tick drops each when its time is up, and unit counters older than two days. Nothing YouTube
   returns becomes a library item; titles are shown back only in the question.
-- **Y4, the playlist rule: not built on this branch** (it needs slice G). Ready for the merge: `YtPlaylistAdd.target`
+- **Y4, the playlist rule: not built on this branch** (it needs slice G; built at the second merge, section 17
+  above, "The second merge"). Ready for the merge: `YtPlaylistAdd.target`
   and `.items` (what `grants.check` reads), `T.yt_rule_place(target, per_run, when, per_day)` (`I'll also add them to
   your private YouTube playlist "Recipes", on YouTube: at most 5 each Sunday and 20 a day.`). The merge sets
   `rule_grant=True` on `youtube.playlist_add` and gives G's `run_place` a `playlist` kind.
@@ -2871,6 +2931,7 @@ a few plain things per step.
   "Todoist didn't answer" instead of the changed-tool line). c31.2 (V, a tester's "do it for me" after the cancel
   steps got "Which one? Say "do 2 for me"") was added after that trial and fails until fixed. The trials also showed
   S's title for the made-up lasagne whose first line is a note to assistants: "Brown the mince 2." (a step line).
+  All four, and the title, are fixed at the second merge (section 17 above): the dry self-test passes every step.
 - **The habit**: `--quick` (c02, c03, c05, c07, c10, c19, c20, c23, about $0.15) after a change to a read, a guard or a
   prompt; the full set (about $0.55 to $0.70) before a merge, the line of counts in the PR. A failing step gets an
   offline test first. A conversation is never deleted; a changed expectation gets a `note`.
