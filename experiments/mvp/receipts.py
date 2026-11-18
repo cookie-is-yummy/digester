@@ -38,7 +38,18 @@ RECEIPTS = re.compile(
     r"(?:\s+(?:today|this\s+week|lately|recently|so\s+far))?"
     r"|what\s+(?:did|have)\s+you\s+(?:add|added|put)\s+(?:to|in|on|into)\s+my\s+[\w ]{2,30}?"
     r"(?:\s+(?:today|this\s+week|lately|recently))?"
-    r")" + _THANKS, re.I)
+    # ---------- checks of round 10 (reading): the same question in more everyday words, a class the held-out set
+    # showed (made-up examples here: "show me everything you did", "what have you been doing for me", "did you do
+    # anything for me today", "what did you get done today", "list what you've done") ----------
+    r"|(?:show|tell|list|give)\s+(?:me\s+)?(?:everything|all|what)\s+(?:(?:that|of\s+what)\s+)?you(?:'ve|\s+have)?\s+"
+    r"(?:did|done|have\s+done|handled|sent)(?:\s+for\s+me)?"
+    r"|list\s+what\s+you(?:'ve|\s+have)?\s*(?:ve\s+)?(?:did|done)"
+    r"|what\s+(?:have|did)\s+you\s+(?:been\s+doing|handled?|taken\s+care\s+of|actually\s+(?:do|done)|get\s+done|got\s+done)"
+    r"(?:\s+for\s+me)?"
+    r"|(?:did|have)\s+you\s+(?:do|done)\s+anything\s+for\s+me"
+    r"|anything\s+you(?:'ve|\s+have)?\s+(?:did|done)\s+for\s+me"
+    r"|what\s+(?:stuff|things)\s+(?:did|have)\s+you\s+(?:do|done)(?:\s+for\s+me)?"
+    r")(?:\s+(?:today|this\s+week|lately|recently|so\s+far))?" + _THANKS, re.I)
 # "what did you do": only when something was done for them in the last 7 days (else the usual path reads it)
 RECEIPTS_BARE = re.compile(r"^\W*what\s+(?:did|have)\s+you\s+(?:do|done)\W*$", re.I)
 TODAY = re.compile(r"\btoday\b", re.I)

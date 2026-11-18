@@ -358,3 +358,28 @@ def test_a_spanish_rule_naming_an_app_reads_the_app():
     assert grants.rule_named("cada lunes añade 2 videos a mi todoist").key == "todoist"
     assert grants.rule_named("every sunday put 3 recipes in my ticktick").key == "ticktick"   # as before
     assert grants.rule_named("cada domingo mándame 3 recetas") is None
+
+
+# =====================================================================================================================
+# 8. "what did you do for me" in more words: a class the held-out run showed (counts only); these examples are made up
+#    here and are not lines of the held-out set
+# =====================================================================================================================
+@pytest.mark.parametrize("text", ["show me everything you did", "anything you did for me this week?", "what stuff did u do",
+                                  "what have u handled for me", "list what youve done", "what did you get done today",
+                                  "what have you been doing for me", "did you do anything for me today",
+                                  "what did you actually do"])
+def test_what_did_you_do_for_me_in_everyday_words(env, text):
+    from mvp import phrasing
+    from mvp.receipts import RECEIPTS, RECEIPTS_BARE
+    assert any(RECEIPTS.search(x) or RECEIPTS_BARE.search(x) for x in phrasing.variants(text)), text
+    e = fresh(env)
+    replies(e, text)
+    assert "mvp_interpret" not in e["calls"], text
+
+
+@pytest.mark.parametrize("text", ["show me everything i saved", "what did you send me", "tell me everything you know about pasta",
+                                  "what did you think of it", "show me what you saved about pasta"])
+def test_near_variants_that_are_not_the_receipts_question(text):
+    from mvp import phrasing
+    from mvp.receipts import RECEIPTS, RECEIPTS_BARE
+    assert not any(RECEIPTS.search(x) or RECEIPTS_BARE.search(x) for x in phrasing.variants(text)), text
