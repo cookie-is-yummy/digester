@@ -466,15 +466,30 @@ def run_place(bot, ctx, name, params):
     try:
         o = perform(action, ctx, out.model_dump(mode="json"), grant=g)
     except C.ConnectorError as e:
+        # ---------- merge of round 10: slice C's MCP route under slice G's grant ----------
+        # A changed (or gone) pinned tool and a sign-in that needs the person are not the app failing:
+        # actions/mcp._mark already set the connection (a changed tool also ended every grant on the app). The run
+        # says slice C's own line (the sign-in line at most once a day), counts no failure and opens nothing.
+        if action in C.MCP_ROUTES.values() and e.code in ("changed", "unpinned", "needs_signin"):
+            store.log_action(h, ctx.run_id, rule["id"], action, "failed", detail=dict(base, error=e.code), slot=None,
+                             at=now)
+            from .actions import mcp as _mcp
+            line = _mcp.signin_line_once(store, h, pl.connector, now) if e.code == "needs_signin" else \
+                T.mcp_changed(app, pl.connector)
+            return Outcome("failed", line=line, detail=dict(base, error=e.code))
+        # ---------- end merge of round 10 ----------
         C.failed(store, h, pl.connector, e.code, now)
         row = store.grant_failed(g["id"], pause_after=PAUSE_AFTER) or {}
-        if e.code == "timeout":   # it may have arrived: a repeat of the same slot is never sent
+        maybe = getattr(e, "maybe_arrived", False)   # merge of round 10: an MCP stream broke after the create
+        if e.code == "timeout" or maybe:   # it may have arrived: a repeat of the same slot is never sent
             from .places import _unsure_mark
             _unsure_mark(bot, h, idem, now)
         store.log_action(h, ctx.run_id, rule["id"], action, "failed", detail=dict(base, error=e.code), slot=None,
                          at=now)
         line = T.grant_paused(app, n, CHECK_WORD.get(pl.connector, pl.connector)) if row.get("status") == "paused" \
             else T.grant_failed_once(app)
+        if maybe:
+            line += T.mcp_maybe_arrived(app)
         return Outcome("failed", line=line, detail=dict(base, error=e.code))
     except Refused as e:
         code = str(e).split(":", 1)[-1]
