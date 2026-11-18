@@ -99,6 +99,19 @@ _TIME = re.compile(r"\b(?:at\s+)?(\d{1,2})(?::(\d\d))?\s*(am|pm|a\.m\.|p\.m\.)|\
 _WHEN_FILLER = set("""ok okay sure yes yep yeah please pls remind me on this coming next at in the morning by around
 then""".split())
 
+# ---------- second merge of round 10 (self-test c06): an answer to "Which gym?" or "Which one?" that says how the
+# person pays ("i pay by card", "it's billed to my card") is not a name: the question is asked again, and nothing of
+# it reaches the notice. A name that only holds such a word ("Card Club Fitness") is still a name.
+PAY_ANSWER = re.compile(r"^\W*(?:(?:i|we|they)\s+(?:pay|paid|am\s+paying|charge|charged|bill|billed)\b|"
+                        r"(?:it'?s|it\s+is|its)\s+(?:billed|charged|paid|on\s+my)\b|"
+                        r"(?:by|with|through|via|on)\s+(?:my\s+|a\s+)?(?:credit\s+|debit\s+)?(?:card|paypal|"
+                        r"bank|direct\s+debit|cash|apple\s+pay|google\s+pay)\b|"
+                        r"(?:monthly|yearly|annually|every\s+month)\b)", re.I)
+# self-test c31: "do it for me" right after the steps (no browser offered to this person, or none for this merchant)
+DOIT_AFTER_STEPS = re.compile(r"^\W*(?:(?:yes|ok|okay|sure|please|so|can\s+you|could\s+you|will\s+you|just)[\s,!.]*)*"
+                              r"(?:do\s+it\s+for\s+me|cancel\s+it\s+for\s+me|do\s+that\s+for\s+me|you\s+do\s+it|"
+                              r"do\s+it\s+yourself)(?:\s+(?:please|pls|thanks))*\W*$", re.I)
+# ---------- end second merge of round 10 ----------
 # ---------- round 10, slice D: the notice's follow-up (DESIGN.md section 17.D) ----------
 CHECK_DAYS = 7           # the check date offered after a notice went, when the route file gives no notice_days
 AFTER_CHECK_HOURS = 72   # an answer to the check reminder ("they confirmed", "no") is read this long after it fired
@@ -576,6 +589,12 @@ class CancelMixin:
             return None
         # ---------- end round 10, slice D ----------
         if step == "when":
+            # second merge of round 10 (self-test c31): after the steps, "do it for me" gets why not, plainly; the
+            # reminder question stays open (the browser's own offer, where it is on, is read before this)
+            if st.get("name") and not st.get("notice") and DOIT_AFTER_STEPS.match(t):
+                self._cancel_ask(h, "when", now, **{k: v for k, v in st.items() if k not in ("step", "at")})
+                self.note(intent="cancel")
+                return self.send(h, T.cancel_doit_cant(st["name"]))
             if STOP_ASKING.match(t):
                 self.note(intent="cancel")
                 return self.send(h, T.CANCEL_NO_REMINDER)
@@ -611,6 +630,10 @@ class CancelMixin:
         if step in ("which", "gym"):
             if request(t) is not None:
                 return None   # a whole new cancel request: cancel_reads answers it
+            if PAY_ANSWER.search(t) and merchant_named(t) is None:   # second merge of round 10 (self-test c06)
+                self._cancel_ask(h, step, now, **{k: v for k, v in st.items() if k not in ("step", "at")})
+                self.note(intent="cancel")
+                return self.send(h, T.cancel_which_again(step == "gym"))
             e = merchant_named(t)
             if e is not None:
                 return self._cancel_entry(person, e, now)

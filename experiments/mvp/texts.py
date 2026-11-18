@@ -3550,3 +3550,17 @@ def browser_denied(name, youtube=False):
 def browser_revoked(name, word):
     return f"OK. I won't open {name} in a browser again unless you say \"allow {word}\" after I ask."
 # ---------- end round 10, slice V ----------
+
+
+# ---------- second merge of round 10 (DESIGN.md section 17): the fixes the self-test found ----------
+def cancel_which_again(gym):
+    """Self-test c06: "Which gym?" or "Which one?" answered with how the person pays; asked again, plainly."""
+    return ("Got it. Which gym is it? Just its name, like \"City Gym\"." if gym else
+            "Got it. Which one is it? Just its name, like \"Netflix\".")
+
+
+def cancel_doit_cant(name):
+    """Self-test c31: "do it for me" after the cancel steps, where no browser is offered to this person."""
+    return (f"I can't cancel {name} for you: it needs your sign-in, and I never sign in as you. The steps above are how "
+            f"to do it yourself. Want a reminder to check it went through? Tell me when, like \"friday\".")
+# ---------- end second merge of round 10 ----------

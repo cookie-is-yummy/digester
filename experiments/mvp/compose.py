@@ -101,9 +101,44 @@ def display_title(it, model_title=None, level=...):
         return neutral_title(it)
     if model_title:
         return model_title
-    title = title_from_item(it)
+    title = caption_title(it)   # second merge of round 10: by lines, never a note to assistants or a step
     return neutral_title(it) if captionmark.opener_line(title) else title
 # ---------- end round 10, slice S ----------
+
+
+# ---------- second merge of round 10 (self-test, slice S trial): the title shown is a line of the caption's own ------
+# A first line that speaks to an assistant ("Note to any AI assistant reading this: ...") is third-party text and never
+# the name the bot gives a pick; nor is a numbered step, a bullet or a header. The caption is read line by line (the
+# first line first, as before), so a recipe's "Brown the mince" step never becomes its name.
+ASSISTANT_NOTE = re.compile(r"\bnote\s+to\s+(?:any\s+|all\s+|the\s+)?(?:ai|assistants?|bots?|chat\s*bots?|llms?)\b|"
+                            r"\b(?:ai|chat\s*bots?|llms?)(?:\s+assistants?)?\s*(?::|reading\b)|"
+                            r"^\W*(?:ai\s+)?assistants?\s*[:,]|"
+                            r"\bdear\s+(?:chat\s*gpt|claude|gemini|copilot|ai|assistant|bot)\b|"
+                            r"\bignore\s+(?:all\s+|any\s+|your\s+|the\s+|previous\s+|prior\s+|above\s+)+"
+                            r"(?:rules|instructions|prompts?)\b", re.I)
+STEP_LINE = re.compile(r"^\s*(?:\d{1,2}\s*[.):]|[-•*–]\s|step\s*\d+\b)", re.I)
+
+
+def caption_title(it, words=8):
+    """A display name from the item's own lines (title_from_item's rules, line by line): its first line that is not a
+    note to assistants, a numbered step, a bullet, a header, a call to comment, follow or shop, or a web address."""
+    kind = {"youtube": "video"}.get(it.platform, "post")
+    neutral = f"A {kind} from {it.creator}" if it.creator else f"A {kind} from your library"
+    lines = [it.first_line] + [ln for ln in (it.caption or "").split("\n")[:15]]
+    for line in lines:
+        line = (line or "").strip()
+        if not line or STEP_LINE.match(line) or HEADER.match(line) or ASSISTANT_NOTE.search(line):
+            continue
+        line = re.split(r"(?<=[.!?])\s", line, maxsplit=1)[0]
+        parts = [w for w in line.split() if not w.startswith(("#", "@", "http"))]
+        if len(parts) < 2 or PROMO_TITLE.search(line) or NOT_DETAIL.search(line) or UNSAFE_TEXT.search(line):
+            continue
+        out = " ".join(parts[:words]).strip(" -:|,(")
+        if len(parts) > words:
+            out += "…"
+        return out[:72]
+    return neutral
+# ---------- end second merge of round 10 ----------
 
 
 def title_from_item(it, words=8):
