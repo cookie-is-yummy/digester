@@ -405,6 +405,29 @@ class HandlerMixin:
                 return True
         return False
 
+    # ---------- checks of round 10 (reading): two asks in one message ----------
+    def _another_ask(self, person, text, own):
+        """True when the message holds two or more asks (phrasing.parts) and one of them is not the `own` kind
+        ("email" or "cancel") but goes to another doing helper or is a YouTube ask: the whole message is then left to
+        split_reads (hook 8z), which brings each part back to its read. Never inside the split itself."""
+        from . import cancel as C
+        from . import phrasing
+        from . import ytreads
+        from .drafts import email_request
+        if getattr(self._tl, "in_split", False):
+            return False
+        parts = [p for p, r in phrasing.parts(text) if r]
+        if len(parts) < 2:
+            return False
+        for p in parts:
+            if ytreads.is_ask(p):   # hook 5b reads it before the cancel helper when it stands alone
+                return True
+            mine = (email_request(p) is not None) if own == "email" else (C.request(p) is not None)
+            if not mine and self._doing_part(person, p):
+                return True
+        return False
+    # ---------- end checks of round 10 (reading) ----------
+
     def split_reads(self, person, text, now):
         """Hook 8z (W5): two asks in one message, only when no read took the whole message and one part goes to a
         doing helper. Each request part (two at most) goes through hooks 5a to 8 by code; a part no read takes goes
@@ -417,7 +440,8 @@ class HandlerMixin:
             return None
         parts = phrasing.parts(t)
         reqs = [p for p, r in parts if r]
-        if len(parts) < 2 or not reqs or not any(self._doing_part(person, p) for p in reqs[:2]):
+        from . import ytreads   # checks of round 10 (reading): a YouTube ask is a doing part too
+        if len(parts) < 2 or not reqs or not any(self._doing_part(person, p) or ytreads.is_ask(p) for p in reqs[:2]):
             return None
         h = person["handle"]
         self.note(intent="split")

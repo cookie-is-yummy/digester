@@ -52,6 +52,10 @@ def _norm(text):
 
 
 _PLEASE = r"(?:(?:please|pls|hey|ok(?:ay)?|so)[\s,]+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?"
+# checks of round 10 (reading): "i want to unsubscribe from that channel" reached the cancel helper ("I don't have a
+# checked way out of Channel"); the everyday ways of saying what one wants come before the verb too
+_PLEASE += (r"(?:(?:i\s+(?:want|need|would\s+like)\s+(?:you\s+)?to|i'?d\s+like\s+(?:you\s+)?to|i\s+wanna|"
+            r"help\s+me|pls|please)\s+)?")
 _TAILS = r"(?:\s+(?:for\s+me|please|pls|now))*"
 _YT = r"(?:youtube|yt|you\s?tube)"
 CONNECT = re.compile(r"^" + _PLEASE + r"(?:connect|link|hook\s+up|set\s*up|sign\s+in\s+to|log\s*in\s+to)\s+(?:to\s+)?"
@@ -301,10 +305,27 @@ def _api(bot, h, now):
 
 
 # ---------- hook 5b ----------
+def is_ask(text):
+    """checks of round 10 (reading): True when the words alone are one of the YouTube or Instagram asks this module
+    reads (unsubscribe, a playlist, connect or disconnect, unfollow, the idle channels); used to see two asks in one
+    message. Reads nothing and changes nothing."""
+    t = _norm(text)
+    if not t or len(t) > 200:
+        return False
+    return any(rx.match(t) for rx in (CONNECT, DISCONNECT, UNSUB_THAT, UNSUB_NAME, IDLE, CLEAN_UP, PLAYLIST_BARE,
+                                      GET_RID, PLAYLIST, PLAYLIST_MY, PLAYLIST_MAKE, WATCH_LATER, REMOVE_SUB,
+                                      UNFOLLOW))
+
+
 def youtube_reads(bot, person, text, now):
     """handler.answer_normally hook 5b. None when the message is none of the YouTube or Instagram asks."""
     t = _norm(text)
     if not t or len(t) > 200:
+        return None
+    # checks of round 10 (reading): two asks in one message ("unsubscribe from that channel and cancel netflix") are
+    # for the split (hook 8z), which brings each part back here; the whole message was read as one channel's name
+    from . import phrasing
+    if sum(1 for _, r in phrasing.parts(text) if r) >= 2:
         return None
     h = person["handle"]
     now = _aware(now)

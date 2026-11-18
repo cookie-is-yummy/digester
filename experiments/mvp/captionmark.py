@@ -531,6 +531,30 @@ MATCH_OK = re.compile(
     r"|it\s+did\s+match|the\s+caption\s+(?:was|is)\s+right)\b[\s.!]*$", re.I)
 SLOP = re.compile(r"^\s*(?:(?:that'?s|thats|this\s+is|that\s+is|it'?s|its)\s+)?(?:just\s+|total\s+|pure\s+)?slop"
                   r"[\s.!]*$", re.I)
+# ---------- checks of round 10 (reading): the everyday ways of saying "slop" ask too ("that's ai slop", "slop lol",
+# "these are slop", "the first one is slop", "that was slop"); "that's not slop" is never one ----------
+_SLOP_FILL = r"(?:lol|lmao|ugh|bro|man|honestly|ngl|tbh|fr|ok|okay|yeah|yea|so|again|omg)"
+SLOP_MORE = re.compile(
+    r"^\s*(?:" + _SLOP_FILL + r"[\s,!.]+)*"
+    r"(?:(?:that'?s|thats|this\s+is|that\s+is|it'?s|its|that\s+was|this\s+was|it\s+was|these\s+are|those\s+are|"
+    r"they'?re|they\s+are|(?:that|this|the)\s+" + _ORDW + r"(?:one|reel|video|post|clip|pick)" + _N +
+    r"\s+(?:is|was))\s+)?"
+    r"(?:just\s+|total\s+|pure\s+|such\s+|so\s+much\s+|complete\s+|absolute\s+|more\s+)?(?:a?\s*)?(?:ai\s+)?slop"
+    r"(?:[\s,!.]+" + _SLOP_FILL + r")*[\s.!]*$", re.I)
+# a complaint about what was asked ("the video doesn't match what i asked for", "wrong video, i wanted soup") is
+# about the answer, not the caption: the bot asks before it learns anything (W-6)
+ABOUT_ASK = re.compile(r"\b(?:what|the\s+thing)\s+i\s+(?:asked|wanted|meant|said|was\s+looking)\b|\bmy\s+(?:question|"
+                       r"request|search)\b|\bi\s+(?:wanted|asked\s+for|meant|was\s+looking\s+for)\b", re.I)
+_CLAUSE_END = re.compile(r"[,;.!]|\bbut\b|\band\b|\bwhile\b", re.I)
+
+
+def _clause(t, m):
+    """The words of the clause that holds the match m ("the first one was fine, the second one had nothing to do
+    with it" -> "the second one had nothing to do with it")."""
+    start = max([x.end() for x in _CLAUSE_END.finditer(t, 0, m.start())] or [0])
+    nxt = _CLAUSE_END.search(t, m.end())
+    return t[start:nxt.start() if nxt else len(t)]
+# ---------- end checks of round 10 (reading) ----------
 ORDINAL = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "1st": 1, "2nd": 2, "3rd": 3}
 ORD = re.compile(r"\b(first|second|third|fourth|fifth|1st|2nd|3rd)\s+(?:one|reel|video|post|pick)\b", re.I)
 YES = re.compile(r"^\s*(?:yes|yeah|yep|yup|y|right|exactly|it was|correct|that'?s it)\b[\s.!]*$", re.I)
@@ -603,7 +627,7 @@ def fit_reads(bot, person, text, now):
     t = (text or "").strip()
     if not t or len(t.split()) > 20 or t.endswith("?"):   # a question ("why doesn't my video match ...?") goes on
         return None
-    m_bad, m_ok, slop = MISMATCH.search(t), MATCH_OK.search(t), SLOP.search(t)
+    m_bad, m_ok, slop = MISMATCH.search(t), MATCH_OK.search(t), SLOP.search(t) or SLOP_MORE.search(t)
     if not (m_bad or m_ok or slop):
         return None
     h = person["handle"]
@@ -612,7 +636,21 @@ def fit_reads(bot, person, text, now):
         return None
     fb = index(bot.store.caption_feedback(h))
     view, its = _items(bot, person, last["items"])
-    it = _chosen(its, fb, _number(t, m_bad or m_ok))
+    # ---------- checks of round 10 (reading): the pick named in the mismatch's own clause, never one the same message
+    # calls fine; a complaint about what was asked is asked about first ----------
+    number = _number(t, m_bad or m_ok)
+    if m_bad:
+        part = _clause(t, m_bad)
+        number = _number(part, MISMATCH.search(part))
+        other = _number(t[:t.find(part)] + " " + t[t.find(part) + len(part):], None) if part != t else None
+        if number is None and other is not None:
+            if len(its) != 2:
+                return None   # "the first one was fine but the reel had nothing to do with it": which one is unclear
+            number = 3 - other
+        if ABOUT_ASK.search(t) and not re.search(r"\bcaptions?\b", t, re.I):
+            slop, m_bad = True, None
+    it = _chosen(its, fb, number)
+    # ---------- end checks of round 10 (reading) ----------
     if it is None:
         return None
     bot.note(intent="feedback")

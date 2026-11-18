@@ -63,6 +63,7 @@ GENERIC = set("""a an the my our this that it its one subscription subscriptions
 account monthly yearly annual paid premium service services app apps auto renew renewal recurring current old new
 streaming music tv video so just all every""".split())
 GYM_WORDS = re.compile(r"^(?:the\s+)?(?:gym|fitness|club)$", re.I)
+CHANNEL_NAME = re.compile(r"(?:youtube\s+|yt\s+)?(?:channels?|youtubers?|creators?|accounts?|pages?|guy|girl)", re.I)
 
 # ---------- the other reads ----------
 PASSWORD = re.compile(r"\b(?:my|the)\s+(?:[\w+.'-]+\s+){0,2}(?:password|passcode|pass code|login|log-in)\s*(?:is|=|:)"
@@ -249,6 +250,8 @@ def request(text, rules=(), forced=False, routes=None):
     if not (sub or gym):
         return None
     name = unknown_name(t)
+    if name and CHANNEL_NAME.fullmatch(name):   # checks of round 10 (reading): "unsubscribe from that channel"
+        return None                             # is the person's YouTube (ytreads), never a merchant called Channel
     if gym or (name and GYM_WORDS.match(name)):
         return {"kind": "gym"}
     if name:
@@ -438,6 +441,8 @@ class CancelMixin:
         # round 10, slice V: with MVP_BROWSER_DEMO=1 (and the browser on) the practice merchant is known too
         from .browser import practice_routes
         req = request(t, [r for r in self.store.rules(h) if r["id"] not in mine], routes=practice_routes())
+        if req is not None and self._another_ask(person, t, "cancel"):   # checks of round 10 (reading): two asks
+            return None                                                 # go to the split (hook 8z), each on its own
         if req is None:
             return None
         return self._cancel_start(person, req, t, now)

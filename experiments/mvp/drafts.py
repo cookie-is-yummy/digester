@@ -1301,6 +1301,8 @@ class DraftsMixin:
         req = email_request(text)
         if req is None:
             return None
+        if self._another_ask(person, text, "email"):   # checks of round 10 (reading): "email maria ... and cancel my
+            return None                                # netflix" is two asks (the split, hook 8z), never one card
         return self.draft_from_request(person, text, now, req)
 
     def draft_from_request(self, person, text, now, req=None):
