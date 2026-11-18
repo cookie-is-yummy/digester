@@ -2071,6 +2071,9 @@ Stubs: `phrasing` (W), `captionmark` and `compose.display_title` (S) and `connec
   the setup) and appears in no table; the page, `/api/state` and `/api/connections` never carry a saved value;
   "disconnect todoist" and "stop adding to todoist" end a grant on the sign-in route; "delete my data" leaves no row
   and no sealed file.
+- After the review: 2627 tests pass, demo 10, `probe_same` byte-equal, the 159 rule-eval texts and 123 rule
+  phrasings taken by no new read, the 20 draft requests 0 taken in all four settings, the 1606f80 store loads, and the
+  development phrasing set gives the same 73 / 1 / 63 / 0-of-40 as at the merge. No model call.
 - Known and left: "email maria@example.com that the sink is broken and cancel my netflix" is one email card whose
   words hold the second ask (hook 5 takes the whole message before 8z can split it; the card waits for "send").
 
