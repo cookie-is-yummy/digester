@@ -227,9 +227,9 @@ def route_todo(bot, person, rows, name, text, now, scheduled=False, run_id=None,
         due_text = say_time(due, now, tz)
     if d.use:
         got = _ask_todo(bot, person, d.place, rows, name, app_list, run_id, due_text, now)
-        if got[0] != "cap":
+        if got[0] not in ("cap", "no_due"):   # round 10, slice C: "no_due"
             return got[1], [], {"asked": C.CONNECTORS[d.place.connector].actions["todo"], "wanted": d.place.key}
-        d = replace(d, use=False, reason="cap")
+        d = replace(d, use=False, reason=got[0])
     ids = write_here(bot, person, rows, name, now, undoable)
     if d.reason == "no_connector" or (_kind(d.place) in ("token", "webhook") and d.reason in ("operator",
                                                                                             "unreachable")):
@@ -316,6 +316,11 @@ def _ask_todo(bot, person, place, rows, name, app_list, run_id, due_text, now, m
     h, tz = person["handle"], person["timezone"]
     con = C.CONNECTORS[place.connector]
     action = con.actions["todo"]
+    # ---------- round 10, slice C: the route under the app (a personal token, else the person's MCP sign-in) -------
+    action = C.route_for(bot.store, h, place.connector, "todo") or action
+    if action in C.MCP_ROUTES.values() and any(r[3] for r in rows):
+        return "no_due", None   # M-6: no due time goes to an app through MCP; the to-do stays here with its time
+    # ---------- end round 10, slice C ----------
     if len(rows) > 40:
         return "cap", 40
     cap = _over_cap(bot.store, h, tz, action, len(rows), now)
@@ -332,7 +337,7 @@ def _ask_todo(bot, person, place, rows, name, app_list, run_id, due_text, now, m
     titles, notes = [i.title for i in params.items], [i.notes for i in params.items]
     plan = {"action": action, "connector": place.connector, "place": place.key, "kind": "todo",
             "params": params.model_dump(mode="json"), "idem": idem, "run_id": run_id, "due_text": due_text,
-            "token": C.module(place.connector).yes_token(SimpleNamespace(handle=h), params),
+            "token": C.action_module(action).yes_token(SimpleNamespace(handle=h), params),   # round 10, slice C
             "fallback": {"kind": "todo", "list": name,
                          "rows": [[t, iid, url, now_iso(due) if due else None] for t, iid, url, due in rows]}}
     if move_ids:
@@ -444,6 +449,12 @@ def _remove_answer(bot, person, text, now):
     h = person["handle"]
     st = _open(bot, f"macremove:{h}", now, REMOVE_OPEN)
     if not st:
+        # ---------- round 10, slice C: after "disconnect todoist" on its MCP sign-in (the disconnect ends here) -----
+        raw = bot.store.get_state(f"placeremove:{h}")
+        if raw and raw.get("mcp_disconnect"):
+            from .actions import mcp as mcp_action
+            return mcp_action.disconnect_answer(bot, person, raw, text, now)
+        # ---------- end round 10, slice C ----------
         st = _open(bot, f"placeremove:{h}", now, REMOVE_OPEN)   # round 9, E: after "disconnect my ticktick"
         if st:
             return _token_remove_answer(bot, person, st, text, now)
@@ -478,8 +489,7 @@ def _token_remove_answer(bot, person, st, text, now):
         return None
     bot.note(intent="place_remove")
     rows = bot.store.placements(h, ids=st.get("ids") or [])
-    mod = C.module(key)
-    res = mod.remove(rows) if rows and mod.reachable() else {"removed": [], "failed": [r["id"] for r in rows]}
+    res = C.remove_rows(bot.store, key, rows)   # round 10, slice C: each through the route that made it
     bot.store.remove_placements(res["removed"], now)
     return bot.send(h, T.token_removed(app, len(res["removed"]), len(res["failed"])))
 
@@ -512,6 +522,9 @@ def run_plan(bot, person, plan, now):
         if e.code == "timeout":   # (round 9 checks) it may have arrived: never "not there", and a repeat is warned
             _unsure_mark(bot, h, plan["idem"], now)
             out = out + T.place_maybe_there(_short(place))
+        elif getattr(e, "maybe_arrived", False):   # round 10, slice C: an MCP stream broke after the create
+            _unsure_mark(bot, h, plan["idem"], now)
+            out = out + T.mcp_maybe_arrived(_short(place))
         return out
     except Exception as e:  # noqa: BLE001 - Refused (a token that is not the rows shown), a bad form: today's action
         bot.store.log_action(h, plan.get("run_id"), None, action, "failed", detail={"error": type(e).__name__}, at=now)
@@ -520,7 +533,8 @@ def run_plan(bot, person, plan, now):
         bot.store.log_action(h, plan.get("run_id"), None, action, o.status, detail=o.detail, at=now)
         return _fallback(bot, person, plan, "cap", now, cap=(o.detail or {}).get("cap"))
     placed = (o.detail or {}).get("placed") or []
-    ids = [bot.store.add_placement(h, key, x["action"], x["remote_id"], plan.get("run_id"), plan["idem"], now)
+    ids = [bot.store.add_placement(h, key, x["action"], x["remote_id"], plan.get("run_id"), plan["idem"], now,
+                                   route=(o.detail or {}).get("route"))   # round 10, slice C: "mcp" on that route
            for x in placed]
     C.worked(bot.store, h, key, now)
     bot.store.log_action(h, plan.get("run_id"), None, action, "done", ref=",".join(map(str, ids)),
@@ -579,8 +593,7 @@ def undo_text(bot, handle, u, now):
     rows = bot.store.placements(handle, ids=u.get("ids") or [])
     if not rows:
         return gone_line
-    mod = C.module(con.key)
-    res = mod.remove(rows) if mod.reachable() else {"removed": [], "failed": [r["id"] for r in rows]}
+    res = C.remove_rows(bot.store, con.key, rows)   # round 10, slice C: each through the route that made it
     bot.store.remove_placements(res["removed"], now)
     if res["removed"] and u.get("moved"):   # "send my list to ticktick" taken back: the list is here again
         for i in u["moved"]:
@@ -643,6 +656,8 @@ T_DISCONNECT = re.compile(r"^(?:please\s+)?(?:disconnect|unlink|stop\s+using)\s+
 T_PREF_ON = re.compile(r"^(?:please\s+)?(?:put|add|send|save)\s+" + _LISTS + r"\s+(?:in|into|to|on)\s+(?:my\s+|the\s+)?"
                        + _TOK + r"\s+from\s+now\s+on$")
 T_PREF_USE = re.compile(r"^(?:please\s+)?use\s+(?:my\s+)?" + _TOK + r"\s+for\s+" + _LISTS + r"(?:\s+from\s+now\s+on)?$")
+MCP_YES_APP = re.compile(r"^(?:yes|yep|yeah|ok|okay)[\s,]+(?:keep\s+(?:using\s+)?|use\s+)?(?:my\s+)?(?P<app>todoist)"
+                         r"(?:\s+again)?$")   # round 10, slice C
 T_SEND = re.compile(r"^(?:please\s+)?(?:can\s+you\s+)?(?:add|put|send|push|move|save)\s+(?P<what>.+?)\s+"
                     r"(?:to|in|into|on|onto)\s+(?:my\s+|the\s+)?" + _TOK + r"(?:\s+(?:app|list|inbox|account))?"
                     r"(?:\s+please)?$")
@@ -786,6 +801,14 @@ def token_reads(bot, person, text, t, now):
         if m:
             bot.note(intent="places")
             return fn(bot, person, _tok_key(m.group("app")), now)
+    # ---------- round 10, slice C: "yes todoist" after Todoist changed a tool (only then; else not read here) -----
+    m = MCP_YES_APP.match(t)
+    if m and _tok_key(m.group("app")) in C.MCP_ROUTES:
+        from .actions import mcp as mcp_action
+        got = mcp_action.yes_again(bot, person, _tok_key(m.group("app")), now)
+        if got is not None:
+            return got
+    # ---------- end round 10, slice C ----------
     m = T_SEND.match(t)
     if m:
         return _t_send(bot, person, text, m.group("what"), _tok_key(m.group("app")), now)
@@ -849,8 +872,8 @@ def _t_send_list(bot, person, place, name, text, now):
         from .schedule import say_time
         due_text = say_time(due, now, person["timezone"])
     got = _ask_todo(bot, person, d.place, rows, None, None, None, due_text, now, move_ids=[t["id"] for t in todos])
-    if got[0] == "cap":
-        return bot.send(h, clause(d.place, "cap", got[1]) + "." + T.LIST_STAYS)
+    if got[0] in ("cap", "no_due"):   # round 10, slice C: "no_due"
+        return bot.send(h, clause(d.place, got[0], got[1]) + "." + T.LIST_STAYS)
     return bot.send(h, got[1])
 
 
@@ -869,6 +892,11 @@ def _t_word(key):
 
 def _t_connect(bot, person, key, now):
     h = person["handle"]
+    if key in C.MCP_ROUTES:   # round 10, slice C: the sign-in link (no personal token set), the tester line
+        from .actions import mcp as mcp_action
+        got = mcp_action.connect_reply(bot, person, key, now)
+        if got is not None:
+            return got
     if not config.is_operator(h):
         return bot.send(h, _only_operator(_t_app(key)))
     out = T.TOKEN_SETUP[key]
@@ -886,6 +914,11 @@ def _t_check(bot, person, key, now):
     app = _t_app(key)
     if not config.is_operator(h):
         return bot.send(h, _only_operator(app))
+    if key in C.MCP_ROUTES:   # round 10, slice C: the MCP sign-in (no personal token set)
+        from .actions import mcp as mcp_action
+        got = mcp_action.check_reply(bot, person, key, now)
+        if got is not None:
+            return got
     mod = C.module(key)
     from .settings import secret   # round 10, slice K
     if key == "webhook" and secret("MVP_WEBHOOK_URL") and not mod.reachable():
@@ -910,6 +943,11 @@ def _t_disconnect(bot, person, key, now):
     app = _t_app(key)
     if not config.is_operator(h):
         return bot.send(h, _only_operator(app))
+    if key in C.MCP_ROUTES:   # round 10, slice C: an MCP sign-in is kept: revoke it, delete it, void the grants
+        from .actions import mcp as mcp_action
+        got = mcp_action.disconnect_reply(bot, person, key, now)
+        if got is not None:
+            return got
     row = bot.store.connection(h, key)
     if (row is None and not C.module(key).reachable()) or (row and row["status"] == "off"):
         return bot.send(h, T.token_not_on(app))

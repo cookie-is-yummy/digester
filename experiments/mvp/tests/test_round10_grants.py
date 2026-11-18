@@ -448,11 +448,13 @@ def test_perform_refuses_a_grant_that_does_not_fit(tok, case, monkeypatch):
 
 def test_the_four_grantable_actions_and_never_the_others():
     from mvp.actions import REGISTRY
+    # the merge of round 10: slice C's todoist.mcp_add is the fifth (the Todoist sign-in route)
     assert sorted(n for n, d in REGISTRY.items() if d.rule_grant) == ["mac.event", "mac.reminder", "ticktick.add",
-                                                                       "todoist.add"]
+                                                                       "todoist.add", "todoist.mcp_add"]
     for n in ("webhook.post", "mailbox.send", "mailbox.draft", "email.draft_link", "email.send", "todo.add"):
         assert REGISTRY[n].rule_grant is False
-    for n in ("mac.event", "mac.reminder", "ticktick.add", "todoist.add"):   # still never named by a model or a rule
+    for n in ("mac.event", "mac.reminder", "ticktick.add", "todoist.add",
+              "todoist.mcp_add"):   # still never named by a model or a rule
         assert REGISTRY[n].from_model is False and REGISTRY[n].in_rules is False and REGISTRY[n].who == "operator"
 
 

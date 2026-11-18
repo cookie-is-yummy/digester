@@ -249,6 +249,14 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   ticktick") and "delete my data" end or pause it. Never for a webhook, the mailbox or anything to another person.
   "what did you do for me" counts a rule's adds and lists the standing permissions. Tests:
   `tests/test_round10_grants.py`.
+- **Round 10, Todoist by its own connector** (DESIGN.md section 17.C, slice C, the operator only): with no
+  `MVP_TODOIST_TOKEN` set, "connect my todoist" sends a sign-in link; open it on the computer the bot runs on and press
+  Allow (the page comes back to `http://127.0.0.1:8799/callback`; `MVP_CONNECT_PORT` changes the port). Then "add it
+  to my todoist" shows the tasks and adds them after your yes through Todoist's MCP server; "undo" takes them out.
+  Only the tools pinned at the sign-in are ever called; if Todoist changes one, the bot stops and asks "yes todoist".
+  "check my todoist" tests it; "disconnect todoist" cancels the bot's access there. A personal token, when set, is
+  used first. The daily check `python -m mvp.mcp_client --discover` needs no sign-in and no model.
+  Tests: `tests/test_round10_mcp.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -599,6 +607,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `panel.py` | Round 10, slice D: the test page's Connections panel (seal, remove, states only; whether sending is on) |
 | `grants.py` | Round 10, slice G: a rule's place read from the person's words, its standing yes (grant: made, checked by `actions.perform(..., grant=)`, ended), each run's add and its line, undo, "stop adding to X", "use X for rule N", the standing permissions in receipts |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
+| `mcp_client.py`, `mcp_mappings.py`, `oauth.py`, `actions/mcp.py` | Round 10, slice C: the bot as an MCP client (pinned tools, codes only, the SDK as transport), the servers and mappings in code (Todoist `add-tasks` / `delete-object`), our own OAuth sign-in and refresh, and the `todoist.mcp_add` action with connect / check / disconnect |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |
 | `lang.py` | The answer's fixed phrases in Spanish (with the outside block and the level note that ride on it); any other language gets an all-English answer, and the composer is told to write English. A rule's preview, start line and timed sends are English only for now (their timing words have no Spanish yet), so a rule made in Spanish is set up and sent in English, never in two languages at once |

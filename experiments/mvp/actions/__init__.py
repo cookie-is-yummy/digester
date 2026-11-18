@@ -230,6 +230,18 @@ RULE_GRANT_ACTIONS = ("mac.reminder", "mac.event", "ticktick.add", "todoist.add"
 for _name in RULE_GRANT_ACTIONS:
     REGISTRY[_name] = REGISTRY[_name].model_copy(update={"rule_grant": True})
 # ---------- end round 10, slice G ----------
+# ---------- round 10, slice C (DESIGN.md section 17.C): Todoist through its own MCP server (actions/mcp.py) ----------
+# The same tasks as todoist.add, on the other route: the person's sign-in ("connect todoist", Allow) instead of a
+# personal token. One ActionDef per route (verdict M-2), so who may use each route is set per route. A rule may run it
+# under the person's standing yes (rule_grant, slice G); never a due time (M-6).
+REGISTRY.update({
+    "todoist.mcp_add": ActionDef(name="todoist.mcp_add", params=PlaceTodoParams, module="mcp", order=15,
+                                 does="Tasks in the person's Todoist, through Todoist's own MCP server (their sign-in)",
+                                 outside=True, undo="delete", confirm="send_word", max_per_day=40, in_rules=False,
+                                 who="operator", from_model=False, connector="todoist", fallback="todo.add",
+                                 rule_grant=True),
+})
+# ---------- end round 10, slice C ----------
 
 
 def validate_action(name, params=None, by="model", where="form"):

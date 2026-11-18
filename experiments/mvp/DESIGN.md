@@ -2451,3 +2451,63 @@ The founder's decision: a timed rule that adds to the person's own apps needs on
   5 (their list: source todos) and 10 no place. So a model `todo.add` with no list (or "todo") counts as the app's
   when the request names an app, and goes when no grant can be made.
   Tests: `tests/test_round10_grants.py` (77); `test_round9_merge.py` wraps hook 8a and checks its place in the order.
+### 17.C The MCP client, Todoist first (slice C; operator only)
+
+No new hook and no model call: "connect / check / disconnect todoist" stay in `places.token_reads` (hook 8).
+
+- **Route.** The connector stays `todoist` (the app's name, `connections`, `placements`, grants). Under it two routes,
+  one `ActionDef` each (M-2): `todoist.add` (the personal token, round 9) and `todoist.mcp_add` (the person's sign-in;
+  `actions/mcp.py`; `outside`, `undo="delete"`, `confirm="send_word"`, 40 a day, `in_rules=False`, `rule_grant=True`,
+  `who="operator"`, `from_model=False`, `fallback="todo.add"`). `connectors.route_for(store, h, "todoist", "todo")`:
+  the token route when `MVP_TODOIST_TOKEN` is set, else `todoist.mcp_add` when this person has a sealed sign-in
+  (`connectors.mcp_route`). `connectors.unavailable` gains one branch for that case (`actions/mcp.unavailable`: no
+  sign-in → `unreachable`; `off`, `broken`, `needs_signin`, `changed` as stored; no pins → `unreachable`); a tester
+  still gets `operator` for every route. `places._ask_todo` takes the route's action and its module's yes token (the
+  token route's yes never opens the MCP route); a to-do with a due time never goes by MCP (M-6): it stays on the list
+  here with `I can't give Todoist a due time yet, so I added …`. `placements.route` = "mcp". Undo, REMOVE and receipts
+  go through `connectors.remove_rows`, which sends MCP rows to `actions/mcp.remove(rows, store)` and every other row to
+  the connector's module exactly as before.
+- **`mcp_client.py`.** The SDK `mcp==2.3.0` as transport only (`SdkTransport`: one client per list or call,
+  `asyncio.run` in the calling thread, a Bearer header, an httpx2 response hook keeps the HTTP status the SDK would
+  hide). `list_all` over every page; `pin` = sha256 of name, input schema, description and annotations for each tool
+  the mapping names (a create tool whose `destructiveHint` is not false is never pinned or called); before every call
+  the list is read again: gone → `unpinned`, different → `changed`, nothing sent; a tool the server adds is never
+  called. Arguments are checked against the live schema first (`bad_args`, nothing sent). `CALL_TIMEOUT` 10 s,
+  `LIST_TIMEOUT` 5 s, one action at most `MVP_MCP_RUN_BUDGET_S` (25 s). Results: `structuredContent`, else the first
+  text part that is a JSON object (prose skipped); ids must match `^[A-Za-z0-9_\-:.@/=+]{1,200}$`. A batch is all or
+  nothing (what was made is deleted again; `partial` when that fails). A create that timed out or whose stream broke
+  is never retried (`maybe_arrived`; the reply adds `It may have arrived in Todoist anyway; check before asking
+  again.` and the 24-hour repeat warning). `McpError(code)` is a `ConnectorError`; codes in the module docstring;
+  `protocol`, `tool_error`, `bad_result` join `COUNTS_AS_FAILURE`. `python -m mvp.mcp_client --discover`: no token,
+  no model; prints codes and whether the metadata's fingerprint changed (kept in `MVP_HOME/mcp_discovery.json`).
+- **`mcp_mappings.py`.** `SERVERS["todoist"]` (url `https://ai.todoist.net/mcp`, issuer `https://todoist.com`, scope
+  `data:read_write`, `testers: False`): addresses are code, never from text. `todoist.mcp_add` → `add-tasks`:
+  `content` = the title the person saw, `description` = the post's own link, ≤25 a call, never `dueString`; `failures`
+  → cleanup; undo `delete-object {"type": "task", "id"}`.
+- **`oauth.py`** (our own client; research_mcp 3.3's refresh fix): discovery (PRM `resource` = the server's address;
+  issuer = `SERVERS` issuer; S256 required; every endpoint https on the issuer's host), CIMD when `MVP_CIMD_URL` is
+  set and offered, else DCR as a native public client; PKCE S256, `state` (memory only, one use, 10 minutes, one per
+  person), `resource`, `iss` checked when sent or promised; loopback `http://127.0.0.1:<MVP_CONNECT_PORT>/callback`
+  (8799; 8765, 8791 refused), a page that never logs its request line. Tokens sealed by `tokens.py` with the absolute
+  expiry, token and revocation endpoints and client id. `access_token`: <60 s left or refused (401) → one refresh under
+  `tokens.lock`, the new pair sealed before use; a caller that waited finds it and sends nothing; no refresh token,
+  `invalid_grant`, or no key → `NeedsPerson` (`needs_signin`). Nothing here opens a browser or sends a link, so a rule
+  run only falls back. `revoke`: RFC 7009, one request. Under pytest, with no fake set, neither module reaches a server.
+- **Conversation** (`actions/mcp.py`, called from `places._t_connect / _t_check / _t_disconnect / token_reads`):
+  "connect my todoist" (operator, no token): `To let me add tasks to your Todoist, open this link and press Allow:
+  <link>` / `I'll only add things after you say yes to them, and you can say "disconnect todoist" any time. The link
+  works for 10 minutes.`; back on the page: pins made, `connected`, `Todoist is connected. Try "add it to my todoist"
+  after an answer, or make a rule like "every sunday put 3 recipes in my todoist".` Tester: `Connecting Todoist from a
+  phone isn't ready yet. I'll keep your list here; say "my list" to see it.` (and a `wanted:todoist` row). No usable
+  key: `I can't keep sign-ins safely yet: the person who runs me needs to set a key first.` A changed tool: status
+  `changed`, every grant on Todoist ended (`changed`), `pins.changed` logged, `Todoist changed how adding a task
+  works, …`; "yes todoist" pins again (old grants stay ended). `needs_signin`: status `needs_signin`;
+  `signin_line_once` gives `Todoist needs you to sign in again: say "connect todoist".` at most once a day (for G's
+  rule runs). "check my todoist" lists the tools (calls none), compares pins, resumes paused grants. "disconnect
+  todoist": stop at once, end the app's grants; with MCP adds in the last 30 days, REMOVE / KEEP first (the deletes
+  need the sign-in), and whatever the next message is, the sign-in is then revoked and deleted with its pins; a
+  failed revoke adds `I couldn't reach Todoist to cancel my access; remove it in Todoist under Settings ›
+  Integrations.` State: `pins:todoist:<h>`, `oauthpending:<h>`, `signinnote:todoist:<h>` (deleted with the person);
+  the export lists `pinned_tools` (names only).
+- **Not built** (verdict C "Out"): TickTick MCP, Notion, Gmail, Calendar, testers, the paste-back page. "delete my
+  data" deletes the sealed sign-in (K) but does not revoke it first. Tests: `tests/test_round10_mcp.py`.

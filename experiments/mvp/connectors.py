@@ -72,13 +72,61 @@ SECRET_ENV += ("MVP_TOKEN_KEY", "MVP_YT_CLIENT_SECRET")
 # ---------- end round 10, slice K ----------
 
 
-# ---------- round 10, slice K: a stub slice C fills (C3: which route adds for this person) ----------
+# ---------- round 10, slice C: Todoist also by its own MCP server, signed in with "Allow" (DESIGN.md 17.C) ----------
+# The connector stays "todoist" (the app the person names, connections, placements, grants); the route under it is
+# the personal token (actions/todoist.py, todoist.add) when one is set, else the MCP sign-in (actions/mcp.py,
+# todoist.mcp_add) when this person has one. MCP_ROUTES: connector -> the MCP action that adds a to-do there.
+from dataclasses import replace as _replace  # noqa: E402
+
+MCP_ROUTES = {"todoist": "todoist.mcp_add"}
+MCP_STATUSES = ("needs_signin", "changed")   # connection states only an MCP sign-in has
+COUNTS_AS_FAILURE += ("protocol", "tool_error", "bad_result")   # an MCP server's own errors count toward 3 in a row
+CONNECTORS["todoist"] = _replace(CONNECTORS["todoist"],
+                                 nouns={**CONNECTORS["todoist"].nouns, "todoist.mcp_add": ("task", "tasks")})
+
+
+def mcp_route(store, handle, connector):
+    """True when this person's adds to `connector` go through its MCP server: no personal token is set and this
+    person has an MCP sign-in sealed."""
+    if connector not in MCP_ROUTES or module(connector).reachable():
+        return False
+    from . import oauth
+    return oauth.connected(handle, connector)
+
+
+def action_module(action):
+    """The module in actions/ that runs a registry action (a connector can have more than one route)."""
+    from .actions import REGISTRY
+    return importlib.import_module(f"mvp.actions.{REGISTRY[action].module}")
+
+
+def remove_rows(store, connector, rows):
+    """Takes out placements, each through the module of the action that made it. {"removed": [...], "failed": [...]}"""
+    out = {"removed": [], "failed": []}
+    mcp_actions = set(MCP_ROUTES.values())
+    rest = [r for r in rows if r.get("action") not in mcp_actions]
+    if rest:   # today's route, unchanged: the connector's own module, all rows at once
+        mod = module(connector)
+        res = mod.remove(rest) if mod.reachable() else {"removed": [], "failed": [r["id"] for r in rest]}
+        out["removed"] += res["removed"]
+        out["failed"] += res["failed"]
+    for action in sorted({r["action"] for r in rows if r.get("action") in mcp_actions}):
+        res = action_module(action).remove([r for r in rows if r["action"] == action], store=store)
+        out["removed"] += res["removed"]
+        out["failed"] += res["failed"]
+    return out
+
+
 def route_for(store, handle, connector, kind):
     """The action name that adds a thing of `kind` ("todo", "calendar", "playlist") through `connector` for this
-    person, or None. Stub until slice C: the connector's one action (today's REST, token or Mac route)."""
+    person, or None: the MCP action when mcp_route() says so, else the connector's own action (today's route)."""
     con = CONNECTORS.get(connector)
-    return con.actions.get(kind) if con else None
-# ---------- end round 10, slice K ----------
+    if not con:
+        return None
+    if kind == "todo" and store is not None and mcp_route(store, handle, connector):
+        return MCP_ROUTES[connector]
+    return con.actions.get(kind)
+# ---------- end round 10, slice C ----------
 
 
 def module(key):
@@ -97,6 +145,11 @@ def unavailable(store, handle, key):
     from . import config
     if not config.is_operator(handle):
         return "operator"
+    # ---------- round 10, slice C: no personal token, but an MCP sign-in may be there ----------
+    if key in MCP_ROUTES and not module(key).reachable():
+        from .actions import mcp as _mcp
+        return _mcp.unavailable(store, handle, key)
+    # ---------- end round 10, slice C ----------
     if not module(key).reachable():
         return "unreachable"
     st = status(store, handle, key)
