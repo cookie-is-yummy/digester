@@ -87,13 +87,38 @@ _LINKISH = re.compile(r"https?://\S+|www\.\S+|\S+@\S+\.\S+|\b[\w-]+\.(?:com|net|
 _SENTENCE = re.compile(r"[^.!?]+[.!?]?")
 
 
+def canon(h):
+    """A host the way the browser reads it (checks of round 10, acting): percent signs decoded, a trailing dot gone,
+    lower case, and a non-ASCII name (full-width letters among them) in its ASCII form, so "ＩＮＳＴＡＧＲＡＭ.com."
+    and "%69nstagram.com" are "instagram.com" here as they are in Chromium."""
+    from urllib.parse import unquote
+    h = unquote(str(h or "")).strip().rstrip(".").lower()
+    if h.count(":") == 1:   # "host:443" (an IPv6 address has more than one colon)
+        h = h.split(":")[0].rstrip(".")
+    try:
+        h = h.encode("idna").decode("ascii")
+    except UnicodeError:
+        pass
+    return h.lower()
+
+
 def host(u):
-    return (urlparse(u).hostname or "").lower() if u else ""
+    """The host of a URL as the browser would go to it: tabs and line breaks dropped and a backslash read as a slash
+    (WHATWG URL rules, which Chromium follows and urlparse does not), then canon()."""
+    if not u:
+        return ""
+    s = re.sub(r"[\t\r\n]", "", str(u)).strip()
+    if re.match(r"^(?:https?|wss?|ftp):", s, re.I):
+        s = s.replace("\\", "/")
+    try:
+        return canon(urlparse(s).hostname or "")
+    except ValueError:
+        return ""
 
 
 def denied(url_or_host):
     """True for a page on a site the bot never drives (DENIED_SITES), given a URL or a bare host."""
-    h = host(url_or_host) if "/" in str(url_or_host or "") else str(url_or_host or "").lower().strip(".")
+    h = host(url_or_host) if "/" in str(url_or_host or "") else canon(url_or_host)
     return any(h == d or h.endswith("." + d) for d in DENIED_SITES)
 
 

@@ -18,6 +18,7 @@ person can watch and take over on the test page.
 import base64
 import os
 import queue
+import re
 import signal
 import sys
 import threading
@@ -74,6 +75,24 @@ def chromium_processes():
     return sorted(out)
 
 
+# ---------- checks of round 10 (acting): the network lock under the request guard ----------
+# Playwright's request routing never sees the second hop of a redirect: an allowed merchant page that answers "302,
+# go to www.instagram.com" (or to any other site) was followed by the browser without the guard (probe of the checks).
+# So every request also goes through a proxy that does not exist, except to the route's own hosts: a redirect, a
+# meta refresh or a link to any other host (an IP address, a loopback address and a denied site among them) fails in
+# the browser's own network code and never leaves this computer. The allowed hosts go out directly.
+BLACKHOLE = "http://127.0.0.1:9"
+
+
+def network_lock(hosts):
+    """Playwright's `proxy` launch option: everything to BLACKHOLE but the route's own hosts (never a denied site)."""
+    keep = [h for h in dict.fromkeys(G.canon(x) for x in hosts) if h and not G.denied(h)
+            and re.match(r"^[a-z0-9.-]+$", h)]
+    # "<-loopback>" first: it ends Chromium's own pass for loopback addresses; after a host it would undo that host
+    return {"server": BLACKHOLE, "bypass": ",".join(["<-loopback>"] + keep)}
+# ---------- end checks of round 10 (acting) ----------
+
+
 def chromium_path():
     """MVP_CHROMIUM when set (a path to a Chromium or Chrome binary), else Playwright's own browser."""
     p = (os.environ.get("MVP_CHROMIUM") or "").strip()
@@ -85,10 +104,12 @@ class Session:
 
     screencast = False
 
+    extra_args = ()                      # tests only: more Chromium switches
+
     def __init__(self, domains, headless=False, install=None, asset_hosts=(), viewport=(1024, 700),
                  max_presses=None, max_seconds=None, on_end=None):
-        self.domains = tuple(d.lower() for d in domains)
-        self.asset_hosts = tuple(h.lower() for h in asset_hosts or ())
+        self.domains = tuple(G.canon(d) for d in domains)
+        self.asset_hosts = tuple(G.canon(h) for h in asset_hosts or ())
         self.headless, self.install, self.viewport = headless, install, viewport
         self.max_presses = MAX_PRESSES if max_presses is None else max_presses
         self.max_seconds = MAX_SECONDS if max_seconds is None else max_seconds
@@ -178,8 +199,10 @@ class Session:
     def _open(self):
         from playwright.sync_api import sync_playwright
         self.pw = sync_playwright().start()
-        args = ["--disable-features=AutofillServerCommunication", "--password-store=basic", "--no-first-run"]
-        self.browser = self.pw.chromium.launch(headless=self.headless, executable_path=chromium_path(), args=args)
+        args = ["--disable-features=AutofillServerCommunication", "--password-store=basic", "--no-first-run",
+                *self.extra_args]
+        self.browser = self.pw.chromium.launch(headless=self.headless, executable_path=chromium_path(), args=args,
+                                               proxy=network_lock(self.domains + self.asset_hosts))
         probe = self.browser.new_context()
         try:
             base = probe.new_page().evaluate("navigator.userAgent")
