@@ -152,7 +152,19 @@ def _complete(r):
 
 
 def is_denied(r):
-    return any(G.denied(d) for d in (r or {}).get("domains") or []) or G.denied((r or {}).get("start_url") or "")
+    """A route on a denied site, or (checks of round 10) on a bare IP address, which could be any site at all: a
+    merchant's route names the merchant's own hosts."""
+    hosts = [G.canon(d) for d in (r or {}).get("domains") or []] + [G.host((r or {}).get("start_url") or "")]
+    return any(G.denied(h) or _ip(h) for h in hosts if h)
+
+
+def _ip(h):
+    import ipaddress
+    try:
+        ipaddress.ip_address(h.strip("[]"))
+        return True
+    except ValueError:
+        return False
 
 
 # ---------- who may see it ----------

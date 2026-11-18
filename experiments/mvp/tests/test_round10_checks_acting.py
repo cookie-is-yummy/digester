@@ -145,7 +145,8 @@ def test_a_denied_site_is_known_in_every_spelling_the_browser_accepts(url):
     assert G.denied(url), url
 
 
-@pytest.mark.parametrize("host", ["ＩＮＳＴＡＧＲＡＭ.com", "instagram.com.", "Instagram.com:443", "%69nstagram.com"])
+@pytest.mark.parametrize("host", ["ＩＮＳＴＡＧＲＡＭ.com", "instagram.com.", "Instagram.com:443", "%69nstagram.com",
+                                  "157.240.22.174", "[2a03:2880:f12f:83:face:b00c:0:25de]"])
 def test_a_route_file_naming_a_denied_site_in_another_spelling_is_refused(env, monkeypatch, host):
     from mvp import browser, config
     monkeypatch.setenv("MVP_BROWSER", "operator")
@@ -385,3 +386,43 @@ def test_a_link_written_with_another_dot_never_reaches_the_card(dot):
     from mvp import browser_guard as G
     q = G.effects_quote(f"You won't be charged again, see keep-my-plan{dot}com/now")
     assert q and "com/now" not in q and dot not in q and "keep-my-plan.com" not in q
+
+
+# =====================================================================================================================
+# 6. Held, kept as a guard: a tester typing the operator's words gets no operator action (attack 13)
+# =====================================================================================================================
+TESTER_WORDS = ["email maria@example.com that the kitchen sink is broken", "send", "send it", "yes send",
+                "send it for me", "send it from my gmail", "do it for me", "save it as a draft", "connect my todoist",
+                "connect my mac", "check my mac", "check my ticktick", "a pasta recipe", "add it to my ticktick", "yes",
+                "add it to my todoist", "yes", "put it in my reminders", "yes", "post it to my webhook", "yes",
+                "every sunday at 6pm put 3 pasta recipes in my ticktick", "yes", "cancel my streamly", "do it for me",
+                "allow streamly", "yes cancel streamly", "yes todoist", "connect youtube", "disconnect todoist"]
+
+
+@pytest.mark.parametrize("who", ["+15559999", "none"])
+def test_a_tester_on_the_page_typing_the_operators_words_gets_no_operator_action(env, monkeypatch, who):
+    import importlib
+    from mvp import actions, browser, config
+    from mvp.actions import web
+    from mvp.tests.test_round9_tokens import TD, TT, FakeOpener
+    monkeypatch.setattr(config, "OPERATOR", who)
+    monkeypatch.setattr(config, "PAGE_OPERATOR", True)   # the test page, where an unset MVP_OPERATOR means its person
+    for k, v in (("MVP_MAILBOX_ADDRESS", "me@example.com"), ("MVP_MAILBOX_APP_PASSWORD", "fake-app-pass-1234"),
+                 ("MVP_TICKTICK_TOKEN", TT), ("MVP_TODOIST_TOKEN", TD), ("MVP_WEBHOOK_URL", "https://hooks.example.com/x"),
+                 ("MVP_BROWSER", "vm"), ("MVP_BROWSER_DEMO", "1")):
+        monkeypatch.setenv(k, v)
+    f = FakeOpener()
+    monkeypatch.setattr(web, "OPENER", f)
+    env["ch"].name = "web"
+    ran = []
+    for name, d in actions.REGISTRY.items():
+        if d.who == "operator" or name == "browser.cancel":
+            monkeypatch.setattr(importlib.import_module(f"mvp.actions.{d.module}"), "run",
+                                lambda ctx, p, _n=name: ran.append(_n))
+    monkeypatch.setattr(browser, "make_host", lambda m: ran.append("browser opened"))
+    for text in TESTER_WORDS:
+        say(env, text, {"intent": "chat", "reply": "Sure."})
+    st = env["bot"].store
+    assert ran == [] and f.calls == []
+    assert st.q("SELECT * FROM grants") == [] and st.q("SELECT * FROM site_grants") == []
+    assert not [r for r in st.q("SELECT key FROM state") if r["key"].startswith(("oauth", "browserrun", "pins"))]

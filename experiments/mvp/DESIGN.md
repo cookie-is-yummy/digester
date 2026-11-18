@@ -2828,7 +2828,8 @@ steps for a denied site, the wrong channel or no screen; "steps" after the offer
 yourself:"), `cancel_reads` knows the practice merchant when the demo is on, and both password lines go through
 `browser_password`.
 
-**The view (V5).** `/vm?k=<key>` (a random key per run, dropped when it closes; the page token does not open it),
+**The view (V5).** `/vm?k=<key>` (a random key per run, dropped when it closes; the page token does not open it;
+since the check of acting, 17.X, the first browser that opens it gets a cookie and the view answers that browser only),
 `/api/vm/frame` (the newest JPEG; `X-Held: person|bot`; 410 after the run), `/api/vm/input` (click, text ≤200
 characters, a short list of keys, scroll, take, handback, stop; always an empty 204). Clicks and keys reach the page
 only while the person holds it; while they hold it the bot presses nothing ("You have the browser right now, so I
@@ -2937,3 +2938,63 @@ a few plain things per step.
   offline test first. A conversation is never deleted; a changed expectation gets a `note`.
 - Tests: `tests/test_round10_selftest.py` (the guard, the dry run end to end with 0 model calls, every check, skips,
   the cap, crashes, timed sends, the fakes, the library and the conversations).
+
+### 17.X The check of acting and secrets (checker 1 of the verdict's section 5.2, 18 Nov)
+
+An adversarial check of groups A (1 to 13), C (22 to 27), D (28 to 32), H (47, 48) and attacks 16 to 20, plus the
+addendum's virtual machine, run with the fakes on fresh stores (probes in the scratchpad, outside git; no real site, no
+real account, no model money). Each defect has a test in `tests/test_round10_checks_acting.py` that failed before its
+fix.
+
+- **A redirect left the merchant's site.** Playwright's request routing never sees the second hop of a redirect: an
+  allowed page answering "302, go to another site" was followed by the browser without the guard (probe: a local
+  merchant redirecting to `localhost`, to `127.0.0.2` and to a made-up denied name; the request went out). Now the
+  browser starts with a proxy that does not exist (`browser_host.BLACKHOLE`) for everything but the route's own hosts
+  (`network_lock`: never a denied site, loopback included, `<-loopback>` first). A redirect, a meta refresh, a link or
+  an address typed in the view to any other host fails inside the browser and never leaves the machine. The allowed
+  hosts go out directly (a proxy set in the environment is no longer used by the browser).
+- **A host in another spelling.** `browser_guard.host` / `canon` read a host the way Chromium does: percent signs,
+  a trailing dot, a port, full-width letters (`ＩＮＳＴＡＧＲＡＭ.com`), a tab, a backslash (`https://a.com\@b.com` goes
+  to `a.com`). A route file naming a denied site in any of these spellings, or a bare IP address, is refused
+  (`browser.is_denied`).
+- **Secrets in everyday words reached the model.** "my youtube client secret is GOCSPX-...", "here is my todoist token
+  <40 hex>" (no "is"), "ticktick token tp...", a sign-in's return address with its `code=`, Google's `ya29.` and `1//0`
+  tokens, "app password abcd efgh ijkl mnop", "my password for netflix is ...": each went to the interpreter. Now
+  `connectors.secret_said` also reads a secret's name right before a long run of letters and digits outside any link,
+  a few prefixes only secrets carry, a loopback return address with `code=`, `code=` with `state=`, and an app
+  password's four groups after its name; `cancel.PASSWORD` reads "password for <something> is". The reply is the
+  fixed line; the message is not kept. 457 ordinary texts (the evalset files, the self-test's conversations, the
+  development phrasings): 0 taken.
+- **The take-over view opened for anyone with its key** (a second device, a copied link, a script). The first browser
+  that opens `/vm` gets a cookie (HttpOnly, SameSite=Strict, a name per run); after that the page, the picture and
+  the input answer only that browser (a reload or a second tab of it still works); anything else gets 403.
+- **The test page answered any name.** `GET /` hands out the page's token; a page elsewhere whose name points at
+  127.0.0.1 (DNS rebinding) could read it and say "send" for the person. Listening on this machine's own address,
+  the page answers only `127.0.0.1:<port>`, `localhost:<port>` and `[::1]:<port>` (421 otherwise). Listening on
+  another address (a phone on the same network) is unchanged: whoever reaches it can use it.
+- **A button that shows an offer under a cancel label.** The snapshot named a button by its `aria-label`; a page
+  whose last button was labelled "Finish Cancellation" but showed "Accept 50% off and stay" was shown to the person
+  as "Finish Cancellation" and pressed on the yes. The snapshot now keeps what a button shows; an offer, a buy or
+  words to the bot there refuse it, whatever its label (`browser_guard._shows_other`).
+- **A link written with another dot** ("keep-my-plan．com") reached the card's quote; such dots are dots now.
+- **Held** (tests that already existed, or a probe that found nothing): a changed rule, route, account or tool list
+  needs a new yes (1, 2); no grant when the app broke before the yes (3); the caps and a replayed slot (4, 5); a grant
+  for another rule, list or action, a webhook, the mailbox, an unsubscribe or the browser is refused (6); a stale
+  YouTube list deletes nothing (7); the last press only on "yes cancel <merchant>" for the page as it is (8, 9; a page
+  that renames, doubles or moves its button, or adds an offer, after the card: shown again or handed back, never
+  pressed); never from a rule or a form (10); the errand form never sends (11); "email it to me" with a card to
+  someone else open reaches only the person (12); a tester, with `MVP_OPERATOR` set to someone else or to `none`, got
+  no operator action on 42 phrasings (mailbox, Mac, tokens, MCP sign-in, the browser, the webhook) (13); MCP results,
+  descriptions and instructions, a new or changed tool (16 to 18); a page aimed at assistants (19); no cookie,
+  profile folder or process left after stop, a timer, the bot's exit (SIGTERM, SIGKILL, Ctrl-C) or an exception (25);
+  no token, code or sign-in value in a row, a log, a reply or the export (26); "delete my data" (27); outcomes said
+  only as the page or the app said them (28 to 32; a run the page called cancelled counts as "still open" in the
+  receipts, never as done); the self-test's cap and the ledger cap (47); YouTube's own counter stops writes and keeps
+  reads (48). The Connections panel: the page's token to save, a value never returned, logged or exported, a plain
+  line for a bad value, "Remove" removes.
+- **Checks after the fixes** (offline, no model call): the full suite 2935 passed, 0 skipped (the browser tests ran here); demo 10; `python3 -m mvp.selftest --dry`: 40 conversations, 114 steps, 114 passed, 0 Chromium processes left. No live call: the ledger stayed at $18.41.
+- Known and left: the browser no longer uses a proxy set in the environment (a machine that can reach merchants only
+  through one cannot use the browser); on a page listening on another address than this machine's own, anyone who
+  reaches it can read every thread and the view's link (as before); a "page_says_cancelled" run is counted as "still
+  open" in "what did you do for me".
+
