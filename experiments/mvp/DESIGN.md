@@ -1953,3 +1953,75 @@ got "Hi <name>," (a little casual). Eight briefs of the checker's own: of three 
 part left out and one was written as asked (fixed above, in code); two posts telling the reader to wire money or send
 a password gave only the friendly intro (no money, address or password); landlord, professor and friend tones as
 above; $0.033 for the evaluation and about $0.01 for the eight.
+
+## 17. Doing it for you, rules into the person's apps, connectors (round 10, 17 Nov 2026)
+
+The founder, 17 Nov (version 4): do it for him once he says yes, cancel for him after he confirms, no reels whose
+caption has nothing to do with the video, and rules that call the connectors. Built as slices on the verdict
+(`round10_verdict.md`) and its addendum; amendments A-015 and A-016 (Proposed). Slice K first, then W, S, D, G, C, Y,
+V and T. Each slice adds its own section below.
+
+### 17.K The foundation (slice K)
+
+No reply changes except the build lines; no read, no connector, no model call.
+
+- **Registry and schema.** `ActionDef.rule_grant: bool = False` (a timed rule may run the action under a grant; every
+  entry is False until slice G). `schema.RulePlace` (code only, `extra="forbid"`): `connector` (a connectors key,
+  checked where used: a stored spec must load even for a connector no longer listed), `kind` todo | calendar |
+  playlist, `target` (≤80, None: the app's default), `per_run` 1..10 (3), `per_day` 1..40 (10). `RuleSpec.place`
+  (None by default; `stored()` and `same_as` include it). `interpret.settle` drops `place` from a model form's `spec`,
+  `draft` and `also` (`_drop_model_place`); a stored spec keeps it (`RuleSpec.model_validate` is not settle).
+- **Store.** Table `grants(id, handle, rule_id, connector, action, target, per_run, per_day, scope_hash, status
+  active|paused|ended, fails, created_at, ended_at, end_reason)`. Accessors only: `add_grant`, `grant(id)`,
+  `grant_for(handle, rule_id, action)` (newest not ended), `grants_of(handle, connector=None, active_only=True)`,
+  `end_grants(handle, rule_id=None, connector=None, reason)` (returns how many), `grant_failed(id, pause_after=3)`
+  (pauses an active grant at 3 in a row; returns the row), `grant_worked(id)`, `resume_grant(id)` (paused to active;
+  ended stays ended). `ADDED_COLUMNS`: `placements.route`, `placements.rule_id` (`add_placement(..., route=,
+  rule_id=)`), `youtube_cache.channel_id`. "delete my data" deletes the grants and the person's sealed sign-ins;
+  "export my data" lists, in `connections.json`, `standing_permissions` (rule number, app, action, caps, status, dates;
+  never the list name) and `sign_ins_kept` (connector names).
+- **Secrets: `settings.secret(name)`**, the one way a module reads one: the environment first (stripped), then, for
+  `settings.SEALABLE` names only (the mailbox address and app password, TickTick and Todoist token and project, the
+  webhook address, the YouTube client id and secret), the sealed store. Unreadable (wrong key) reads as unset.
+  `settings.seal(name, value)` / `unseal(name)` / `where(name)` ('setting' | 'sealed' | 'unreadable' | None) are for
+  the Connections panel (slice D). The mailbox, the token connectors (`_tasks.env`), the webhook check, the SMTP
+  password and the YouTube key read through it; a test fails on a new `os.environ` read of a secret name.
+  `connectors.SECRET_ENV` gains `MVP_TOKEN_KEY` and `MVP_YT_CLIENT_SECRET`, and the chat guard's name list is built from
+  it.
+- **Sealed files: `tokens.py`.** AES-256-GCM, one file per (person, connector) at
+  `MVP_HOME/tokens/<sha256(handle)[:12]>/<connector>.json.enc` (folders 0700, files 0600, written to a temp file and
+  renamed). The file holds the format, the issuer, the nonce and the ciphertext; the additional data is `<sha256 of
+  the handle>|<connector>|<issuer>`, so a file copied to another person or connector, or opened with another key,
+  fails (`TokenError("unreadable")`), and `load(..., issuer=)` refuses another issuer. `save`, `load`, `exists`,
+  `connectors_of`, `delete`, `delete_all`, `lock` (`fcntl.flock` on a lock file beside it). Settings are sealed the
+  same way under `tokens/_settings/<NAME>.json.enc`. The key: `MVP_TOKEN_KEY` (32 bytes, base64; a bad one refuses:
+  `TokenKeyMissing("bad")`); else made once, at the first seal, in `MVP_HOME/token.key` (0600, created exclusively,
+  never overwritten; a key file others can read is refused: `file_mode`); `MVP_TOKEN_KEY_AUTO=0` never makes one
+  (`unset`). Reading never makes a key. Errors carry a code only. `cryptography==50.0.1` pinned.
+- **The operator on the test page.** With `--channel web` and `MVP_OPERATOR` unset, every person typed as on that page
+  is the operator (`config.use_page_operator`, called by `bot.main`; the page runs on the computer of whoever runs the
+  bot). `MVP_OPERATOR` still wins; `MVP_OPERATOR=none` makes nobody the operator, also on the page.
+  `config.operator_source()`: 'setting' | 'page' | None.
+- **The build.** `config.BUILD`: `MVP_BUILD`, else `git log -1 --format="%h %cs"` as `1a2b3c4 (17 Nov 2026)`, else
+  `unknown`; read once at start. Shown: in the test page footer (`settings.page_status()`: `Build … · operator: you, on
+  this page · sending: on/off · Mac · TickTick · Todoist · webhook · browser: off/operator/vm · sign-in key: set / in
+  a file here / made at the first sign-in / not set`; names and states only, never a value), at the end of every help
+  reply (`T.help_text`; the welcome is unchanged), and as the reply to "version", "what version are you", "which build
+  are you on" (`followup.VERSION_ASKED` in `integration_reads`, no model call): `I'm running build 1a2b3c4 (17 Nov
+  2026).`
+- **App words** (`places.PLACES`): `youtube_playlist` (kind playlist, connector `youtube`, the word "playlist"
+  required: "recipes on youtube" names no place, M-7), `gmail` (todo) and `google_calendar` (calendar, "gcal"), both
+  with no connector, so the reply says "I can't reach Gmail / Google Calendar" instead of nothing.
+- **Stubs other slices call** (today's behaviour; each stub module has `STUB = True` for the self-test):
+  `compose.display_title(it, model_title=None)` (S), `captionmark.mark(it)` / `SIGNAL_VERSION` (S),
+  `browser.available(bot, person, merchant_key)` / `browser.run_open(store, handle, now)` (V), `phrasing.normalize` /
+  `variants` / `clauses` / `TIME_WORDS` (W), `yt_auth.connectable(store, handle)` / `connected` (Y),
+  `connectors.route_for(store, handle, connector, kind)` (C).
+- **Fakes** (`tests/fakes/`, in process, no port): `fake_llm.FakeLLM` (answers by purpose; an unexpected call raises),
+  `fake_mcp.FakeMcpServer` (Todoist and TickTick tools with real schemas; every knob of design_mcp 3.7; `WireError`
+  for the transport's failures; `sdk_app` for one round trip through the real SDK), `fake_oauth.fake_oauth_app` (the
+  SDK's OAuth server: PRM, metadata, DCR, PKCE S256, 3-second tokens, rotation, revoke, also for a public client),
+  `fake_google.FakeGoogle` (an `actions.web.OPENER`: device flow, YouTube subset, quota, Google's error bodies),
+  `fake_merchant` (the practice merchant "Streamly", 9 flows, by Playwright routing).
+- `tests/test_round9_merge.py`'s rule phrasings skip `test_round10_*` files, so the set stays the round 9 one.
+  `test_round9_mac.py` lists the two new `placements` columns.

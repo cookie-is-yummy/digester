@@ -2551,3 +2551,19 @@ APPLY_ASK_DATE = "The post doesn't say when it closes. Tell me the date, like \"
 # check of the live fix pass (fix9): a brief that says its own claim is not true
 DRAFT_NOT_TRUE = ("I can't write something you've told me isn't true, so I didn't write this one. Tell me what you'd "
                   "like to say instead, like: email my boss that I need one more day.")
+
+
+# ---------- round 10, slice K (DESIGN.md section 17.K): the build, on the page, at the end of "help", and "version" ---
+def build_line(build):
+    return f"I'm running build {build}."
+
+
+def help_text(build):
+    """The help reply: HELP, then the build it runs (round 10, slice K)."""
+    return f"{HELP}\n{build_line(build)}"
+
+
+def page_status_line(build, switches):
+    """The line under the test page: the build, then each switch by name ("TickTick: off"). Never a value."""
+    return " · ".join([f"Build {build}"] + [f"{k}: {v}" for k, v in switches.items()])
+# ---------- end round 10, slice K ----------

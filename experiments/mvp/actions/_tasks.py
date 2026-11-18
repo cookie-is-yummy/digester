@@ -2,7 +2,6 @@
 exact rows shown, a local due time turned into UTC, and "all or nothing" for a batch (a task app that took only part
 of it has that part deleted again, so the person's list is never half there)."""
 import json
-import os
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -10,9 +9,10 @@ from ..connectors import ConnectorError
 
 
 def env(name):
-    """A setting from the environment, stripped; None when unset or empty. Never logged, never stored."""
-    v = (os.environ.get(name) or "").strip()
-    return v or None
+    """A setting, stripped; None when unset or empty. Never logged, never stored. Round 10, slice K: through
+    settings.secret (the environment first, then the sealed store)."""
+    from ..settings import secret
+    return secret(name)
 
 
 def yes_token(key, ctx, params):

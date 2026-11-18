@@ -2,3 +2,5 @@
 pydantic>=2,<3
 # round 8, slice B: the read-only MCP server (mcp_server.py) and its tests; 2.x names the server MCPServer
 mcp==2.3.0
+# round 10, slice K: sealed sign-ins and settings (tokens.py, AES-256-GCM); the version installed with mcp 2.3.0
+cryptography==50.0.1

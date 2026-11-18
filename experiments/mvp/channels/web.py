@@ -38,6 +38,17 @@ def instagram_permalink(url):
 MAX_BODY = 20_000
 
 
+# ---------- round 10, slice K: the line under the page (the build, the operator, what is switched on) ----------
+def page_status():
+    try:
+        from ..settings import page_status as line
+        return line()
+    except Exception:  # noqa: BLE001 - the footer never breaks the page
+        from .. import config
+        return f"Build {config.BUILD}"
+# ---------- end round 10, slice K ----------
+
+
 def _local(dt, tzname, with_day=True):
     t = dt.astimezone(ZoneInfo(tzname))
     clock = t.strftime("%-I:%M %p").lower()
@@ -201,7 +212,7 @@ class WebChannel(Channel):
         bot = self.bot
         people = bot.store.q("SELECT handle, name, timezone, consent_version FROM people ORDER BY handle") if bot else []
         if not people:
-            return {"people": [], "ready": self.ready}
+            return {"people": [], "ready": self.ready, "build": page_status()}
         me = next((p for p in people if p["handle"] == handle), people[0])
         tz = me["timezone"]
         now = self.clock()
@@ -234,7 +245,8 @@ class WebChannel(Channel):
                 "problem": self.problem,
                 "now": _local(now, tz), "timezone": tz, "ahead_minutes": int(self.offset.total_seconds() // 60),
                 "messages": msgs, "rules": rules, "todos": todos, "outbox": outbox, "imports": imports,
-                "importing": importing, "profile": profile}
+                "importing": importing, "profile": profile,
+                "build": page_status()}   # round 10, slice K: the footer
 
     def profile_panel(self, handle):
         """The Profile panel (slice 6): interests with their level and whether confirmed, direction, preferences,

@@ -24,13 +24,18 @@ from .base import Outcome, outbox_reachable, where_outbox, write_outbox
 DOMAIN = "digest-bot.invalid"
 
 
+def _secret(name):
+    from ..settings import secret   # round 10, slice K: every secret is read through settings.secret
+    return secret(name)
+
+
 def smtp_settings():
     """The SMTP settings from the environment, or None when no host is set."""
     host = os.environ.get("MVP_SMTP_HOST")
     if not host:
         return None
     return {"host": host, "port": int(os.environ.get("MVP_SMTP_PORT") or 587),
-            "user": os.environ.get("MVP_SMTP_USER") or None, "password": os.environ.get("MVP_SMTP_PASSWORD") or None,
+            "user": os.environ.get("MVP_SMTP_USER") or None, "password": _secret("MVP_SMTP_PASSWORD"),
             "from": os.environ.get("MVP_SMTP_FROM") or os.environ.get("MVP_SMTP_USER") or f"bot@{DOMAIN}"}
 
 

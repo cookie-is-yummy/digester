@@ -326,7 +326,8 @@ def test_c3_ingredients_preview_then_yes_then_undo(env, mac):
     rows = bot.store.placements(H)
     assert [r["action"] for r in rows] == ["mac.reminder", "mac.reminder", "mac.list"]
     assert set(rows[0]) == {"id", "handle", "connector", "action", "remote_id", "run_id", "idem", "created_at",
-                            "removed_at"}                                   # no title, no body in the table
+                            "removed_at",
+                            "route", "rule_id"}   # round 10, slice K: two code-made columns; no title, no body
     assert bot.store.todos(H) == []                                         # not on the bot's list too
     log = bot.store.one("SELECT * FROM action_log WHERE action='mac.reminder'")
     assert log["status"] == "done" and "spaghetti" not in (log["detail"] or "")

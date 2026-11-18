@@ -20,7 +20,6 @@ from .texts import (
     AGREE,
     CONSENT,
     CONSENT_VERSION,
-    HELP,
     NEGATION,
     NO,
     NOTHING_PENDING,
@@ -654,7 +653,9 @@ class HandlerMixin:
             if it.intent == "chat" and it.reply and T.CHAT_CLAIM.search(it.reply):
                 # round 9, slice A (W1): small talk never claims an outcome the bot cannot see ("I've sent ...")
                 return self.send(h, T.CHAT_NO_CLAIM)
-            return self.send(h, HELP if it.intent == "help" and not it.reply else (it.reply or HELP))
+            # round 10, slice K: the help text ends with the build it runs
+            return self.send(h, T.help_text(config.BUILD) if it.intent == "help" and not it.reply else
+                             (it.reply or T.help_text(config.BUILD)))
         if it.intent == "confirm":
             if pending and pending["kind"] == "confirm_rule":
                 return self._confirm(person, pending)
@@ -907,7 +908,7 @@ class HandlerMixin:
             return self.send(h, library_status(self, person, now, steps=bool(HOW_EXPORT.search(text))))
         if it.intent == "profile_show":
             return self.send(h, P.show_text(P.get(self.store, h), now))
-        return self.send(h, HELP)
+        return self.send(h, T.help_text(config.BUILD))   # round 10, slice K: with the build
 
     def _profile_update(self, person, text, now):
         """'I'm past beginner at Blender now', 'I have an air fryer', 'stop guessing my level': the form call fills
@@ -1180,6 +1181,8 @@ class HandlerMixin:
             from .refresh import forget_inbox
             from .export import forget_exports   # round 8, slice B: the export folders go too
             forget_exports(h)
+            from . import tokens   # round 10, slice K: the person's sealed sign-ins go too
+            tokens.delete_all(h)
             inbox_left = forget_inbox(self.store, h)
             gone = self.store.delete_person_data(h)
             line = {"handle": h, "library": person["library"], "libraries": gone["libraries"], "at": now_iso()}

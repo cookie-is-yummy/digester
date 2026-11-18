@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS connections (handle TEXT NOT NULL, connector TEXT NOT
   fails INTEGER DEFAULT 0, last_error TEXT, created_at TEXT, checked_at TEXT, PRIMARY KEY (handle, connector));
 CREATE TABLE IF NOT EXISTS placements (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, connector TEXT NOT NULL,
   action TEXT NOT NULL, remote_id TEXT NOT NULL, run_id INTEGER, idem TEXT, created_at TEXT, removed_at TEXT);
+-- round 10, slice K (DESIGN.md section 17.K): a rule's standing yes to add to one of the person's own apps (slice G
+-- writes the logic). status: active | paused (failures in a row) | ended (end_reason says why). No titles, no tokens.
+CREATE TABLE IF NOT EXISTS grants (id INTEGER PRIMARY KEY AUTOINCREMENT, handle TEXT NOT NULL, rule_id INTEGER NOT NULL,
+  connector TEXT NOT NULL, action TEXT NOT NULL, target TEXT, per_run INTEGER NOT NULL, per_day INTEGER NOT NULL,
+  scope_hash TEXT NOT NULL, status TEXT NOT NULL, fails INTEGER DEFAULT 0, created_at TEXT, ended_at TEXT,
+  end_reason TEXT);
 """
 
 
@@ -102,6 +108,11 @@ ADDED_COLUMNS = [
                                          # given when it is made and never reused, so a finished rule shifts nothing
     ("youtube_cache", "published_at TEXT"),   # round 7, finding 91: snippet.publishedAt (NULL in rows fetched before)
     ("todos", "overdue_at TEXT"),        # round 8: when the one nudge about a to-do past its due time went out
+    # ---------- round 10, slice K ----------
+    ("placements", "route TEXT"),        # the action that made it ("todoist.add", "todoist.mcp_add"); NULL before
+    ("placements", "rule_id INTEGER"),   # the rule whose run made it under a grant (slice G); NULL for a one-off
+    ("youtube_cache", "channel_id TEXT"),   # videos.list snippet.channelId, for "that channel" (slice Y)
+    # ---------- end round 10, slice K ----------
 ]
 
 
@@ -762,6 +773,7 @@ class Store:
             self.db.execute("DELETE FROM people WHERE handle=?", (handle,))
             for t in ("connections", "placements"):   # round 9, slice D (C3): what was made on the Mac stays there
                 self.db.execute(f"DELETE FROM {t} WHERE handle=?", (handle,))
+            self.db.execute("DELETE FROM grants WHERE handle=?", (handle,))   # round 10, slice K
             for rid in rule_ids:   # a timed send's retry count and hold (review fix PRIV-5)
                 for key in (f"retry:{rid}", f"hold:{rid}", f"cadence:{rid}", f"replaced:{rid}", f"deadline:{rid}"):
                     self.db.execute("DELETE FROM state WHERE key=?", (key,))
@@ -868,9 +880,12 @@ class Store:
         """Every connection row of this person (for "export my data")."""
         return self.q("SELECT * FROM connections WHERE handle=? ORDER BY connector", (handle,))
 
-    def add_placement(self, handle, connector, action, remote_id, run_id=None, idem=None, at=None):
-        cur = self.x("INSERT INTO placements(handle,connector,action,remote_id,run_id,idem,created_at) "
-                     "VALUES(?,?,?,?,?,?,?)", (handle, connector, action, str(remote_id), run_id, idem, now_iso(at)))
+    def add_placement(self, handle, connector, action, remote_id, run_id=None, idem=None, at=None, route=None,
+                      rule_id=None):
+        """route, rule_id: round 10, slice K (NULL when not given, as in rows made before)."""
+        cur = self.x("INSERT INTO placements(handle,connector,action,remote_id,run_id,idem,created_at,route,rule_id) "
+                     "VALUES(?,?,?,?,?,?,?,?,?)", (handle, connector, action, str(remote_id), run_id, idem, now_iso(at),
+                                                   route, rule_id))
         return cur.lastrowid
 
     def placements(self, handle, connector=None, since=None, ids=None, open_only=True):
@@ -903,6 +918,61 @@ class Store:
     def remove_placements(self, ids, at=None):
         for i in ids:
             self.x("UPDATE placements SET removed_at=? WHERE id=?", (now_iso(at), int(i)))
+
+    # ---------- round 10, slice K (DESIGN.md section 17.K): grants, accessors only (the logic is slice G's) ----------
+    def add_grant(self, handle, rule_id, connector, action, target, per_run, per_day, scope_hash, at=None):
+        """A new active grant; returns its id."""
+        cur = self.x("INSERT INTO grants(handle,rule_id,connector,action,target,per_run,per_day,scope_hash,status,fails,"
+                     "created_at) VALUES(?,?,?,?,?,?,?,?,'active',0,?)",
+                     (handle, int(rule_id), connector, action, target, int(per_run), int(per_day), scope_hash,
+                      now_iso(at)))
+        return cur.lastrowid
+
+    def grant(self, grant_id):
+        return self.one("SELECT * FROM grants WHERE id=?", (int(grant_id),))
+
+    def grant_for(self, handle, rule_id, action):
+        """The newest grant of this person's rule for this action that has not ended (active or paused), or None."""
+        return self.one("SELECT * FROM grants WHERE handle=? AND rule_id=? AND action=? AND status<>'ended' "
+                        "ORDER BY id DESC LIMIT 1", (handle, int(rule_id), action))
+
+    def grants_of(self, handle, connector=None, active_only=True):
+        """This person's grants, oldest first: of one connector; only active ones (else every row, ended ones too)."""
+        sql, args = "SELECT * FROM grants WHERE handle=?", [handle]
+        if connector:
+            sql, args = sql + " AND connector=?", args + [connector]
+        if active_only:
+            sql += " AND status='active'"
+        return self.q(sql + " ORDER BY id", tuple(args))
+
+    def end_grants(self, handle, rule_id=None, connector=None, reason="ended", at=None):
+        """Ends this person's grants that have not ended (of one rule, of one connector, or all); returns how many."""
+        sql, args = "UPDATE grants SET status='ended', ended_at=?, end_reason=? WHERE handle=? AND status<>'ended'", \
+            [now_iso(at), reason, handle]
+        if rule_id is not None:
+            sql, args = sql + " AND rule_id=?", args + [int(rule_id)]
+        if connector:
+            sql, args = sql + " AND connector=?", args + [connector]
+        return self.x(sql, tuple(args)).rowcount
+
+    def grant_failed(self, grant_id, pause_after=3):
+        """One more failure in a row; at `pause_after` in a row an active grant becomes paused (None: never). Returns
+        the row after."""
+        with self.lock:
+            self.x("UPDATE grants SET fails=COALESCE(fails,0)+1 WHERE id=?", (int(grant_id),))
+            if pause_after:
+                self.x("UPDATE grants SET status='paused' WHERE id=? AND status='active' AND fails>=?",
+                       (int(grant_id), int(pause_after)))
+            return self.grant(grant_id)
+
+    def grant_worked(self, grant_id):
+        """A run that did its work ends a run of failures (a paused grant stays paused until resume_grant)."""
+        self.x("UPDATE grants SET fails=0 WHERE id=?", (int(grant_id),))
+
+    def resume_grant(self, grant_id):
+        """A paused grant is active again ("check my ticktick" worked); an ended one stays ended."""
+        self.x("UPDATE grants SET status='active', fails=0 WHERE id=? AND status='paused'", (int(grant_id),))
+    # ---------- end round 10, slice K ----------
 
 
 def _domain(addr):

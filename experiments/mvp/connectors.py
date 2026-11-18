@@ -67,6 +67,18 @@ CONNECTORS = {
                          where="to your webhook", needs_check=False, env=("MVP_WEBHOOK_URL",)),
 }
 SECRET_ENV = ("MVP_TICKTICK_TOKEN", "MVP_TODOIST_TOKEN", "MVP_WEBHOOK_URL", "MVP_MAILBOX_APP_PASSWORD")
+# ---------- round 10, slice K: the sealing key and the YouTube client's secret (read through settings.secret) ------
+SECRET_ENV += ("MVP_TOKEN_KEY", "MVP_YT_CLIENT_SECRET")
+# ---------- end round 10, slice K ----------
+
+
+# ---------- round 10, slice K: a stub slice C fills (C3: which route adds for this person) ----------
+def route_for(store, handle, connector, kind):
+    """The action name that adds a thing of `kind` ("todo", "calendar", "playlist") through `connector` for this
+    person, or None. Stub until slice C: the connector's one action (today's REST, token or Mac route)."""
+    con = CONNECTORS.get(connector)
+    return con.actions.get(kind) if con else None
+# ---------- end round 10, slice K ----------
 
 
 def module(key):
@@ -120,7 +132,7 @@ def worked(store, handle, key, now):
 # "=") followed by a run of 16 or more non-space characters, and on an automation service's own webhook address.
 # Nothing broader (the critic rejected "four groups of four letters" and "any 32-character run": they hit ordinary
 # messages and link tokens).
-_SECRET_NAME = re.compile(r"\bMVP_(?:TICKTICK_TOKEN|TODOIST_TOKEN|WEBHOOK_URL|MAILBOX_APP_PASSWORD)\b", re.I)
+_SECRET_NAME = re.compile(r"\b(?:" + "|".join(SECRET_ENV) + r")\b", re.I)   # round 10, slice K: from SECRET_ENV
 _SECRET_SAID = re.compile(r"\b(?:token|api[\s-]?key|app\s+password|password|passcode)\s*(?:is|=|:)\s*[\"'“‘]?\S{16,}",
                           re.I)
 _HOOK_URL = re.compile(r"\bhttps?://(?:maker\.ifttt\.com/(?:trigger|use)/|hooks\.zapier\.com/hooks/|"

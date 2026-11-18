@@ -77,6 +77,14 @@ PLACES = (
     Place("onenote", "OneNote", "todo", None, r"one\s?note", ("onenote", "one note")),
     Place("microsoft_todo", "Microsoft To Do", "todo", None, r"(?:microsoft|ms)\s+to[\s-]?do",
           ("microsoft to do", "microsoft todo", "microsoft to-do", "ms to do", "ms todo")),
+    # ---------- round 10, slice K (DESIGN.md section 17.K): the words for these apps (their routes are other slices')
+    # a YouTube playlist (slice Y's connector): the word "playlist" is required, so "recipes on youtube" names no place
+    Place("youtube_playlist", "YouTube", "playlist", "youtube",
+          r"(?:(?:youtube\s+)?playlist(?:\s+(?:called|named)\s+[\w' -]{1,40})?|[\w' -]{1,40}\s+playlist)"),
+    # no connector this round: an honest "I can't reach" line, never silence
+    Place("gmail", "Gmail", "todo", None, r"g-?mail", ("gmail",)),
+    Place("google_calendar", "Google Calendar", "calendar", None, r"(?:google\s+calendar|gcal)"),
+    # ---------- end round 10, slice K ----------
 )
 BY_KEY = {p.key: p for p in PLACES}
 _RX = {p.key: re.compile(_PREP + p.words + _TAIL, re.I) for p in PLACES}
@@ -765,13 +773,13 @@ def _t_connect(bot, person, key, now):
 
 
 def _t_check(bot, person, key, now):
-    import os
     h = person["handle"]
     app = _t_app(key)
     if not config.is_operator(h):
         return bot.send(h, _only_operator(app))
     mod = C.module(key)
-    if key == "webhook" and (os.environ.get("MVP_WEBHOOK_URL") or "").strip() and not mod.reachable():
+    from .settings import secret   # round 10, slice K
+    if key == "webhook" and secret("MVP_WEBHOOK_URL") and not mod.reachable():
         return bot.send(h, T.WEBHOOK_NOT_HTTPS)
     if not mod.reachable():
         return bot.send(h, T.token_check_failed("unreachable", app, _t_word(key)))

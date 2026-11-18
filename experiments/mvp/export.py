@@ -190,16 +190,44 @@ def export(bot, person, now, lists_only=False):
     conns = [{k: r[k] for k in ("connector", "status", "created_at", "checked_at")} for r in bot.store.connections_of(h)]
     made = [{k: r[k] for k in ("id", "connector", "action", "remote_id", "run_id", "created_at", "removed_at")}
             for r in bot.store.placements(h, open_only=False)]
-    if conns or made:
-        files.append(("connections.json", _write(d, "connections.json",
-                                                 json.dumps({"connections": conns, "placements": made}, indent=1))))
+    # ---------- round 10, slice K: standing permissions (grants) and the apps with a sign-in kept, names only ------
+    grants, sign_ins = grants_rows(bot.store, h), sealed_sign_ins(h)
+    # ---------- end round 10, slice K ----------
+    if conns or made or grants or sign_ins:
+        body = {"connections": conns, "placements": made}
+        if grants or sign_ins:   # round 10, slice K
+            body.update(standing_permissions=grants, sign_ins_kept=sign_ins)
+        files.append(("connections.json", _write(d, "connections.json", json.dumps(body, indent=1))))
         readme += ("\nconnections.json  The outside places you connected (like Reminders and Calendar on a Mac), and "
                    "each thing the bot\n                  added there: its id there, when, and when it was taken out. No "
                    "titles.\n")
+        if grants or sign_ins:   # round 10, slice K
+            readme += ("                  Also: the rules you let add to your apps on their own (rule number, app, "
+                       "the most per run\n                  and per day, and whether it is on), and the apps whose "
+                       "sign-in I keep (names only).\n")
     files.append(("README.txt", _write(d, "README.txt", readme)))
     files.append(("drafts.json", _write(d, "drafts.json", drafts_json(bot.store, h))))   # round 9, slice A
     out.update(saves=n, rules=n_rules)
     return out
+
+
+# ---------- round 10, slice K ----------
+def grants_rows(store, h):
+    """Each grant as the export lists it: the rule's number, the app, the caps and the status. No list name, no titles."""
+    from .store import number_of
+    rules = store.q("SELECT id, number FROM rules WHERE handle=? ORDER BY id", (h,))   # every rule, ended ones too
+    return [{"rule": number_of(rules, g["rule_id"]), "app": g["connector"], "action": g["action"],
+             "per_run": g["per_run"], "per_day": g["per_day"], "status": g["status"], "created_at": g["created_at"],
+             "ended_at": g["ended_at"]} for g in store.grants_of(h, active_only=False)]
+
+
+def sealed_sign_ins(h):
+    from . import tokens
+    try:
+        return tokens.connectors_of(h)
+    except Exception:  # noqa: BLE001 - the export never fails for this list
+        return []
+# ---------- end round 10, slice K ----------
 
 
 def attachments(files):

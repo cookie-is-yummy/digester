@@ -45,6 +45,7 @@ def main():
                     help="mac only: your own number or Apple Account email; text yourself and the bot answers there")
     ap.add_argument("--as", dest="as_handle", default=None, help="console only: the test person's handle")
     a = ap.parse_args()
+    config.use_page_operator(a.channel)   # round 10, slice K: the test page's own person is the operator (unless set)
     # The test page has its own store: moving its clock must never touch rules that real testers have.
     store = Store(os.path.join(config.HOME, "webtest.sqlite") if a.channel == "web" else config.DB)
     channel = make_channel(a.channel, store, a.port, a.host, a.self_chat)
@@ -52,7 +53,7 @@ def main():
     if hasattr(channel, "attach"):
         channel.attach(bot)
     n = bot.load_people()
-    print(f"MVP bot: {n} people, channel {a.channel}, store {store.path}", file=sys.stderr)
+    print(f"MVP bot: {n} people, channel {a.channel}, store {store.path}, build {config.BUILD}", file=sys.stderr)
     if a.channel == "web":
         print(f"Open http://{a.host}:{channel.port} in a browser on this computer.", file=sys.stderr)
     libs = [r["library"] for r in store.q("SELECT DISTINCT library FROM people")][:bot.pool.max_resident]

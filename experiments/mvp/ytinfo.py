@@ -80,7 +80,8 @@ class YouTubeInfo:
         rows = {r["video_id"]: r for r in self.store.q(
             f"SELECT * FROM youtube_cache WHERE video_id IN ({marks}) AND fetched_at>=?", (*want, since))}
         missing = [v for v in want if v not in rows]
-        key = os.environ.get(self.key_env)
+        from .settings import secret   # round 10, slice K
+        key = secret(self.key_env)
         if missing and key:
             for i in range(0, len(missing), BATCH):
                 chunk = missing[i:i + BATCH]
