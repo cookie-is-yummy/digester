@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 
 from . import connectors as C
 from . import texts as T
+from .actions import link as L
 from .store import now_iso
 
 ASK_OPEN = timedelta(minutes=30)
@@ -42,7 +43,6 @@ LIST_MAX = 50               # channels in one list (one yes)
 UNSUB_PER_DAY = 50          # channels a person may be unsubscribed from in one local day
 ADD_PER_DAY = 50            # videos a person may have added to playlists in one local day
 _VID = re.compile(r"^[A-Za-z0-9_-]{11}$")
-_IG = re.compile(r"^[A-Za-z0-9._]{1,30}$")
 
 
 # ---------- words ----------
@@ -311,8 +311,10 @@ def youtube_reads(bot, person, text, now):
         return _watch_later(bot, person, m.group("what"))
     m = UNSUB_NAME.match(t)
     if m:
-        return _unsub_name(bot, person, m.group("name"), bool(m.group("tail")) or bool(CHANNEL_WORD.search(t)),
-                           text, now)
+        # "channel" / "youtuber" / "on youtube" say it is the YouTube channel; "youtube" inside the name does not
+        # ("unsubscribe from youtube premium" is the paid membership: the cancel helper)
+        said = bool(m.group("tail")) or bool(re.search(r"\b(?:channel|youtuber)\b", t))
+        return _unsub_name(bot, person, m.group("name"), said, text, now)
     m = UNFOLLOW.match(t)
     if m:
         return _unfollow(bot, person, m.group("verb"), m.group("who"), m.group("app"), text, now)
@@ -350,6 +352,11 @@ def connected_line(bot, h, now):
     return T.yt_connected(n, p)
 
 
+def _poll_line(got):
+    """The line after a sign-in code ended without a connection."""
+    return {"denied": T.YT_DENIED, "expired": T.YT_CODE_EXPIRED, "scope": T.YT_SCOPE}.get(got, T.YT_CONNECT_FAILED)
+
+
 def _poll_now(bot, person, now):
     from . import yt_auth
     h = person["handle"]
@@ -359,7 +366,7 @@ def _poll_now(bot, person, now):
         return bot.send(h, connected_line(bot, h, now))
     if got == "pending":
         return bot.send(h, T.yt_code_waiting((st or {}).get("user_code") or ""))
-    return bot.send(h, {"denied": T.YT_DENIED, "expired": T.YT_CODE_EXPIRED}.get(got, T.YT_CONNECT_FAILED))
+    return bot.send(h, _poll_line(got))
 
 
 def _forget_lists(bot, h):
@@ -458,6 +465,11 @@ def _yt_picks(bot, person):
 def _unsub_that(bot, person, now):
     h = person["handle"]
     picks = _yt_picks(bot, person)
+    if not picks:   # only Instagram in view: "unsubscribe" there means unfollow, which only the person can do
+        ig = [it for it in in_view(bot, person) if it.platform == "instagram" and it.creator]
+        hd = L.instagram_handle(ig[0].creator) if len(ig) == 1 else None
+        if hd:
+            return _ig_send(bot, h, "unfollow", [hd], now)
     names = list(dict.fromkeys(it.creator for it in picks if it.creator))
     if len(names) > 1:
         return bot.send(h, T.yt_which_channel(names))
@@ -720,8 +732,9 @@ def _do_unsub(bot, person, st, now):
     start, end = _day_bounds(person, now)
     if bot.store.placements_in(h, "youtube.unsubscribe", start, end) + len(shown) > UNSUB_PER_DAY:
         return bot.send(h, T.YT_UNSUB_CAP)
+    api = _api(bot, h, now)
     try:
-        fresh = {r[0]: r for r in subs(bot, h, _api(bot, h, now), now, fresh=True)}
+        fresh = {r[0]: r for r in subs(bot, h, api, now, fresh=True)}
     except YtError as e:
         return bot.send(h, _fail_line(bot, h, e.code, now))
     if any(s not in fresh or fresh[s][1] != c for s, c, _ in shown):
@@ -729,6 +742,8 @@ def _do_unsub(bot, person, st, now):
     params = _params_unsub([fresh[s] for s, _, _ in shown])
     try:
         o = perform("youtube.unsubscribe", _ctx(bot, person, now), params.model_dump(), yes_token=st["token"])
+        if o.detail is not None:   # the units of the check read too, so action_log holds what this yes cost
+            o.detail["units"] = int(o.detail.get("units") or 0) + api.units
     except Refused:
         return bot.send(h, T.YT_LIST_CHANGED)   # a title changed since the list was shown: another list
     except YtError as e:
@@ -880,7 +895,10 @@ def _do_playlist(bot, person, st, now):
     return bot.send(h, T.yt_playlist_part(st["title"], len(ids), len(st["videos"])))
 
 
-# ---------- links the person taps ----------
+# ---------- links the person taps (actions/link.py builds each one from what code holds) ----------
+IG_MAX = 10   # Instagram accounts in one "unfollow @a, @b ..." (one link at a time)
+
+
 def _watch_later(bot, person, what):
     h = person["handle"]
     items = in_view(bot, person)
@@ -888,10 +906,10 @@ def _watch_later(bot, person, what):
     if not sel:
         return None
     bot.note(intent="youtube")
-    vid = video_id_of(sel[0])
-    if not vid:
+    link = L.youtube_video(video_id_of(sel[0]))
+    if not link:
         return bot.send(h, T.YT_NOT_A_VIDEO)
-    return bot.send(h, T.yt_watch_later(f"https://www.youtube.com/watch?v={vid}"))
+    return bot.send(h, T.yt_watch_later(link))
 
 
 def _ig_handles(who):
@@ -900,10 +918,11 @@ def _ig_handles(who):
     out = []
     for p in parts:
         p = p.strip()
-        if not p.startswith("@") or not _IG.match(p[1:]):
+        hd = L.instagram_handle(p) if p.startswith("@") else None
+        if not hd:
             return None
-        out.append(p[1:])
-    return out or None
+        out.append(hd)
+    return list(dict.fromkeys(out))[:IG_MAX] or None
 
 
 def _unfollow(bot, person, verb, who, app, text, now):
@@ -915,15 +934,18 @@ def _unfollow(bot, person, verb, who, app, text, now):
     it = None
     if handles is None:
         if _CREATOR_WORDS.match(who):
-            it = next((p for p in picks if p.creator), None)
+            named = list(dict.fromkeys(p.creator for p in picks if p.creator))
+            if len(named) != 1:   # "unfollow them" with two creators in view: never a guess
+                return None
+            it = next(p for p in picks if p.creator)
         else:
             k = _key(who.lstrip("@"))
             it = next((p for p in picks if p.creator and _key(p.creator.lstrip("@")) == k), None)
         if it is None:
             return None
         if it.platform == "instagram" and not yt_app:
-            hd = it.creator.lstrip("@")
-            if not _IG.match(hd):
+            hd = L.instagram_handle(it.creator)
+            if not hd:
                 return None
             handles = [hd]
     bot.note(intent="youtube" if handles is None else "instagram_link")
@@ -932,7 +954,9 @@ def _unfollow(bot, person, verb, who, app, text, now):
     if it.platform != "youtube":
         return None
     if verb == "mute":
-        return bot.send(h, T.yt_mute(it.creator or "the channel", T.YT_FEED))
+        vid = video_id_of(it)
+        ch = _cache_channels(bot, [vid]).get(vid) if vid else None
+        return bot.send(h, T.yt_mute(it.creator or "the channel", L.youtube_channel(ch)))
     line = _blocked(bot, h)
     if line:
         return bot.send(h, line)
@@ -942,7 +966,7 @@ def _unfollow(bot, person, verb, who, app, text, now):
 def _ig_send(bot, h, verb, handles, now):
     first, rest = handles[0], handles[1:]
     bot.store.set_state(f"igtap:{h}", {"at": now_iso(now), "verb": verb, "current": first, "queue": rest})
-    return bot.send(h, T.ig_tap(verb, first, f"https://www.instagram.com/{first}/"))
+    return bot.send(h, T.ig_tap(verb, first, L.instagram_profile(first)))
 
 
 def _ig_answer(bot, person, st, t, now):
@@ -951,8 +975,7 @@ def _ig_answer(bot, person, st, t, now):
     if not done and not NEXT.match(t) and t not in ("skip", "skip it"):
         return None
     if done:
-        bot.store.log_action(h, None, None, "link.tap", "done", detail={"app": "instagram", "verb": st["verb"]},
-                             at=now)
+        L.tap(bot.store, h, "instagram", st["verb"], now)
     bot.note(intent="instagram_link")
     if not st.get("queue"):
         return bot.send(h, T.IG_ALL_DONE)
@@ -986,7 +1009,7 @@ def undo(bot, person, now):
         bot.store.remove_placements(res["removed"], now)
         if res.get("stop") == "needs_signin":
             return revoked(bot, h, now)
-        bot.store.log_action(h, None, None, "youtube.playlist_add", "undone",
+        bot.store.log_action(h, None, None, "youtube.undo", "done",   # not an add: no daily cap counts it
                              detail={"count": len(res["removed"]), "units": res.get("units")}, at=now)
         return T.yt_undo_playlist(st["title"], len(res["removed"]), len(res["failed"]), st.get("made"))
     if not rows:
@@ -1013,18 +1036,19 @@ def undo(bot, person, now):
 def tick(bot, now):
     """Sign-in codes, rests for tomorrow, old subscription lists. Returns how many messages went out."""
     from . import yt_auth
+    from .actions.youtube import units_day
     now = _aware(now)
     sent = 0
     for row in bot.store.q("SELECT key FROM state WHERE key LIKE 'ytdevice:%'"):
         h = row["key"].split(":", 1)[1]
         try:
             got = yt_auth.poll(bot.store, h, now)
-        except Exception as e:  # noqa: BLE001 - one person's sign-in never stops the tick
-            got = "failed:" + type(e).__name__
+        except Exception:  # noqa: BLE001 - one person's sign-in never stops the tick, and is not asked again
+            yt_auth.end_device(bot.store, h)
+            got = "failed"
         if got in (None, "pending"):
             continue
-        line = connected_line(bot, h, now) if got == "connected" else \
-            {"denied": T.YT_DENIED, "expired": T.YT_CODE_EXPIRED}.get(got, T.YT_CONNECT_FAILED)
+        line = connected_line(bot, h, now) if got == "connected" else _poll_line(got)
         bot._notice(h, line, now)
         sent += 1
     for row in bot.store.q("SELECT key FROM state WHERE key LIKE 'ytrest:%'"):
@@ -1044,9 +1068,21 @@ def tick(bot, now):
         if line:
             bot._notice(h, line, now)
             sent += 1
-    for row in bot.store.q("SELECT key FROM state WHERE key LIKE 'ytsubs:%'"):
+    # what YouTube listed (channel titles) is kept no longer than it is needed: the list 24 hours, a question with no
+    # answer 30 minutes, what "undo" needs for its window; the project's unit counters of past days go
+    keep = {"ytsubs": SUBS_KEEP, "ytask": ASK_OPEN, "igtap": ASK_OPEN}
+    for row in bot.store.q("SELECT key, value FROM state WHERE key LIKE 'ytsubs:%' OR key LIKE 'ytask:%' OR "
+                           "key LIKE 'igtap:%' OR key LIKE 'ytundo:%' OR key LIKE 'yt_units:%'"):
+        kind = row["key"].split(":", 1)[0]
+        if kind == "yt_units":
+            if row["key"] < f"yt_units:{units_day(now - timedelta(days=2))}":
+                bot.store.x("DELETE FROM state WHERE key=?", (row["key"],))
+            continue
         st = bot.store.get_state(row["key"])
-        if st and now - datetime.fromisoformat(st["at"]) >= SUBS_KEEP:
+        if not st:
+            continue
+        life = keep.get(kind) or (UNDO_UNSUB if st.get("kind") == "unsub" else UNDO_PLAYLIST)
+        if now - datetime.fromisoformat(st["at"]) > life:
             bot.store.set_state(row["key"], None)
     return sent
 

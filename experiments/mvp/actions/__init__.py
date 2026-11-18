@@ -268,6 +268,15 @@ class YtPlaylistAdd(BaseModel):
     playlist_id: Optional[str] = Field(default=None, pattern=_YT_ID)   # filled at the run when the bot just made it
     videos: List[YtVideo] = Field(min_length=1, max_length=50)
 
+    # what a rule's grant names (slice G's grants.check reads `target` and counts `items`): Y4, after G merges
+    @property
+    def target(self):
+        return self.playlist_title
+
+    @property
+    def items(self):
+        return self.videos
+
 
 REGISTRY.update({
     "youtube.unsubscribe": ActionDef(name="youtube.unsubscribe", params=YtUnsubscribe, module="youtube", order=15,

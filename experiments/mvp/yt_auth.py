@@ -137,10 +137,18 @@ def poll(store, handle, now, force=False):
             return "pending"
         end_device(store, handle)
         return {"denied": "denied", "expired": "expired"}.get(e.code, "failed")
-    granted = str(got.get("scope") or SCOPE).split()
-    if not got.get("access_token") or not got.get("refresh_token") or SCOPE not in granted:
+    granted = set(str(got.get("scope") or SCOPE).split())
+    # exactly the one scope asked: never youtube.force-ssl or any wider grant kept, never a read-only one that would
+    # fail at the first change
+    if not got.get("access_token") or not got.get("refresh_token") or granted != {SCOPE}:
         end_device(store, handle)
-        return "failed"
+        t = got.get("refresh_token") or got.get("access_token")
+        if t:   # not kept: Google is asked to end it too (best effort)
+            try:
+                request("POST", REVOKE_URL, form={"token": t})
+            except YtError:
+                pass
+        return "scope" if got.get("access_token") and granted != {SCOPE} else "failed"
     tokens.save(handle, CONNECTOR, {"access_token": got["access_token"], "refresh_token": got["refresh_token"],
                                     "expires_at": now_iso(now + timedelta(seconds=int(got.get("expires_in") or 3600))),
                                     "scope": SCOPE}, issuer=ISSUER)

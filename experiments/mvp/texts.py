@@ -2583,6 +2583,8 @@ YT_CODE_EXPIRED = ("The code ran out before Google heard from you, so YouTube is
                    "for a new one.")
 YT_CONNECT_FAILED = "I couldn't reach Google just now, so YouTube isn't connected. Try \"connect youtube\" again in a minute."
 YT_NOT_ON = "YouTube isn't connected, so there's nothing to disconnect."
+YT_SCOPE = ("Google gave me a different permission than the one I asked for, so I didn't keep it and YouTube isn't "
+            "connected. Say \"connect youtube\" to try again.")
 YT_REVOKED = "YouTube says I no longer have your permission, so I stopped. Say \"connect youtube\" if you want me back."
 YT_FAILED = "YouTube didn't answer, so I didn't change anything there. Try again in a minute."
 YT_LIST_CHANGED = ("Your YouTube subscriptions changed since I showed you that list, so I didn't change anything. Ask "
