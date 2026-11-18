@@ -2099,4 +2099,12 @@ blocks in `connectors.py`, `handler.py`, `scheduler.py`, `ytinfo.py`, `actions/_
   `rule_grant=True` on `youtube.playlist_add` and gives G's `run_place` a `playlist` kind.
 - **Measured.** The 159 rule texts and the round 9 rule phrasings (tester and operator, with and without an answer):
   0 taken by hooks 5b and 4a (`tests/test_round9_merge.py` wraps both). The 20 draft requests and the 25 dev drafts,
-  connected and not: 0 taken. No model call in any YouTube or Instagram read.
+  connected and not: 0 taken. No model call in any YouTube or Instagram read. Live (18 Nov, $0.034, 11 interpreter
+  calls, ledger $18.33 to $18.36): of 25 made-up YouTube and Instagram wordings, code read 13; the 11 it missed (not
+  "cancel youtube premium", which is the cancel helper's) went to the interpreter: 9 `unsupported`, "which channels do
+  i never watch" an `ask` of the saves, and "make my instagram export happen every week" a weekly `new_rule` (a wrong
+  rule). Code now reads 8 of them ("get rid of the X channel", "delete the X subscription on youtube", "take me off
+  X's channel", "clean up my youtube subscriptions", "which channels do i never watch", "save these videos to
+  youtube", "add this to my youtube", the Instagram export) plus "unsub", "remove X from my (youtube) subscriptions",
+  "stop following X", "log out of youtube", "make a playlist of these": 21 of 25. Left to the model (`unsupported`):
+  "i don't want X in my subscriptions anymore", "can you get into my youtube", "i'm done with X, unsubscribe".

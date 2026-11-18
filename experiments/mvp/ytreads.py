@@ -56,23 +56,26 @@ _TAILS = r"(?:\s+(?:for\s+me|please|pls|now))*"
 _YT = r"(?:youtube|yt|you\s?tube)"
 CONNECT = re.compile(r"^" + _PLEASE + r"(?:connect|link|hook\s+up|set\s*up|sign\s+in\s+to|log\s*in\s+to)\s+(?:to\s+)?"
                      r"(?:my\s+|the\s+)?" + _YT + r"(?:\s+account)?" + _TAILS + r"$")
-DISCONNECT = re.compile(r"^" + _PLEASE + r"(?:disconnect|unlink|stop\s+using)\s+(?:my\s+|the\s+)?" + _YT +
+DISCONNECT = re.compile(r"^" + _PLEASE + r"(?:disconnect|unlink|stop\s+using|(?:log|sign)\s+(?:me\s+)?out\s+of)\s+"
+                        r"(?:my\s+|the\s+)?" + _YT +
                         r"(?:\s+account)?" + _TAILS + r"$")
 IS_CONNECTED = re.compile(r"^(?:is\s+(?:my\s+)?" + _YT + r"\s+connected|are\s+you\s+connected\s+to\s+(?:my\s+)?" + _YT +
                           r"|is\s+" + _YT + r"\s+(?:linked|set\s+up))$")
 DEVICE_DONE = re.compile(r"^(?:(?:ok(?:ay)?|yes|yep|so)[\s,]+)?(?:done|i'?m\s+done|i\s+did\s+it|i'?ve\s+done\s+it|"
                          r"i\s+typed\s+it(?:\s+in)?|i\s+entered\s+(?:it|the\s+code)|i\s+allowed\s+it|allowed|"
                          r"i\s+(?:pressed|clicked|tapped)\s+allow|it'?s\s+done|connected)$")
-_THAT = r"(?:that|this|the)\s+(?:" + _YT + r"\s+)?(?:channel|youtuber|creator)"
-UNSUB_THAT = re.compile(r"^" + _PLEASE + r"unsubscribe(?:\s+me)?\s+from\s+" + _THAT + r"(?:\s+on\s+" + _YT + r")?" +
+_UNSUB = r"(?:unsubscribe|unsub)"
+_THAT = r"(?:that|this|the)\s+(?:" + _YT + r"\s+)?(?:channel|youtuber|creator|guy|girl)"
+UNSUB_THAT = re.compile(r"^" + _PLEASE + _UNSUB + r"(?:\s+me)?\s+from\s+" + _THAT + r"(?:\s+on\s+" + _YT + r")?" +
                         _TAILS + r"$")
-UNSUB_NAME = re.compile(r"^" + _PLEASE + r"unsubscribe(?:\s+me)?\s+from\s+(?:the\s+)?(?P<name>[^,;?]{1,60}?)"
+UNSUB_NAME = re.compile(r"^" + _PLEASE + _UNSUB + r"(?:\s+me)?\s+from\s+(?:the\s+)?(?P<name>[^,;?]{1,60}?)"
                         r"(?P<tail>\s+(?:" + _YT + r"\s+)?channel|\s+on\s+" + _YT + r")?" + _TAILS + r"$")
-UNFOLLOW = re.compile(r"^" + _PLEASE + r"(?P<verb>unfollow|mute)\s+(?P<who>[^?;]{1,80}?)"
+UNFOLLOW = re.compile(r"^" + _PLEASE + r"(?P<verb>unfollow|mute|stop\s+following)\s+(?P<who>[^?;]{1,80}?)"
                       r"(?:\s+on\s+(?P<app>instagram|insta|ig|" + _YT + r"))?" + _TAILS + r"$")
 _SINCE_WORDS = (r"(?:haven'?t|have\s+not|never|didn'?t|don'?t|stopped|not)\s+(?:been\s+)?(?:watch(?:ed|ing)?|seen|"
                 r"opened|visited)")
-IDLE = re.compile(r"^" + _PLEASE + r"(?:unsubscribe(?:\s+me)?\s+from|unfollow|get\s+rid\s+of|clean\s+up)\s+(?:all\s+)?"
+IDLE = re.compile(r"^" + _PLEASE + r"(?:" + _UNSUB + r"(?:\s+me)?\s+from|unfollow|get\s+rid\s+of|clean\s+up)\s+"
+                  r"(?:all\s+)?"
                   r"(?:the\s+|my\s+)?(?:" + _YT + r"\s+)?(?:channels?|subscriptions?)\s+(?:on\s+" + _YT +
                   r"\s+)?(?:that\s+|which\s+)?(?:i\s+)?" + _SINCE_WORDS + r"\b(?P<when>.*)$")
 _WHAT = (r"(?P<what>these|them|those|it|this|that|this\s+one|that\s+one|them\s+all|all\s+of\s+them|all|both|"
@@ -84,22 +87,40 @@ PLAYLIST = re.compile(r"^" + _PLEASE + r"(?:put|add|save|move|stick)\s+" + _WHAT
 PLAYLIST_MY = re.compile(r"^" + _PLEASE + r"(?:put|add|save|move|stick)\s+" + _WHAT + r"\s+(?:in|into|to|on)\s+my\s+"
                          r"(?P<name>[\w' -]{1,40}?)\s+playlist(?:\s+on\s+" + _YT + r")?" + _TAILS + r"$")
 PLAYLIST_MAKE = re.compile(r"^" + _PLEASE + r"(?:make|create|start)\s+(?:me\s+)?a\s+(?:new\s+)?(?:private\s+)?"
-                           r"(?:" + _YT + r"\s+)?playlist\s+(?:called|named)\s+(?P<name>[^?;]{1,60}?)"
-                           r"(?:\s+(?:with|of|from)\s+" + _WHAT + r")?" + _TAILS + r"$")
+                           r"(?:" + _YT + r"\s+)?playlist(?:\s+(?:called|named)\s+(?P<name>[^?;]{1,60}?))?"
+                           r"(?:\s+(?:with|of|from|for)\s+" + _WHAT + r")?" + _TAILS + r"$")
+# "remove kitchen lab from my youtube subscriptions": "youtube" there, or "channel", says it is YouTube's; "remove
+# netflix from my subscriptions" is left to the cancel helper unless one of the person's channels has that name
+REMOVE_SUB = re.compile(r"^" + _PLEASE + r"(?:remove|delete|drop|take)\s+(?:the\s+)?(?P<name>[^,;?]{1,60}?)\s+"
+                        r"(?:off|from|out\s+of)\s+my\s+(?P<yt>" + _YT + r"\s+)?(?:subscriptions|subs)"
+                        r"(?P<on>\s+on\s+" + _YT + r")?" + _TAILS + r"$")
 WATCH_LATER = re.compile(r"^" + _PLEASE + r"(?:add|put|save)\s+" + _WHAT + r"\s+(?:to|in|on)\s+(?:my\s+)?"
                          r"watch[\s-]?later(?:\s+on\s+" + _YT + r")?" + _TAILS + r"$")
 HISTORY = re.compile(r"^" + _PLEASE + r"(?:clear|delete|erase|pause|turn\s+off|wipe|stop)\s+(?:my\s+)?" + _YT +
                      r"\s+(?:watch\s+)?history" + _TAILS + r"$")
-IG_EXPORT = re.compile(r"^(?:how\s+(?:do|can|could)\s+i|can\s+you|could\s+you|help\s+me|is\s+there\s+a\s+way\s+to|"
-                       r"can\s+i|i\s+want\s+to)\s+(?:make|set\s+up|get|have|schedule)\s+(?:my\s+)?(?:instagram|insta|ig)\s+"
+IG_EXPORT = re.compile(r"^(?:(?:how\s+(?:do|can|could)\s+i|can\s+you|could\s+you|help\s+me|is\s+there\s+a\s+way\s+to|"
+                       r"can\s+i|i\s+want\s+to)\s+)?(?:make|set\s+up|get|have|schedule)\s+(?:my\s+)?(?:instagram|insta|ig)\s+"
                        r"(?:export|exports|data\s+export|download)s?\b.*\b(?:repeat|regular(?:ly)?|every\s+week|weekly|"
                        r"automatic(?:ally)?|on\s+(?:a|its)\s+own|by\s+itself|schedule|scheduled)\b")
+# "get rid of the kitchen lab channel", "delete the kitchen lab subscription on youtube", "take me off X's channel"
+GET_RID = re.compile(r"^" + _PLEASE + r"(?:get\s+rid\s+of|drop|ditch|delete|remove|take\s+me\s+off)\s+(?:the\s+|my\s+)?"
+                     r"(?P<name>[^,;?]{1,60}?)(?:'s)?\s+(?P<yt>" + _YT + r"\s+)?(?P<what>channel|subscription)"
+                     r"(?P<on>\s+on\s+" + _YT + r")?" + _TAILS + r"$")
+# "clean up my youtube subscriptions", "which channels do i never watch": the list of channels not watched, after
+# "since when?"
+CLEAN_UP = re.compile(r"^" + _PLEASE + r"(?:(?:clean|tidy)\s+up|go\s+through|prune|sort\s+out)\s+(?:my\s+)?" + _YT +
+                      r"\s+(?:subscriptions|subs|channels)" + _TAILS + r"$|^which\s+(?:" + _YT + r"\s+)?channels\s+"
+                      r"(?:do\s+)?i\s+(?:never|not|rarely|no\s+longer)\s+watch(?:\s+any\s?more)?$")
+# "save these videos to youtube", "add this to my youtube": a playlist, and its name is asked
+PLAYLIST_BARE = re.compile(r"^" + _PLEASE + r"(?:put|add|save)\s+" + _WHAT + r"\s+(?:to|on|in)\s+(?:my\s+)?" + _YT +
+                           _TAILS + r"$")
 OTHER_MUSIC = re.compile(r"\b(?:spotify|apple\s+music|soundcloud|tidal|deezer|amazon\s+music|pandora)\b")
 REST_STOP = re.compile(r"^(?:please\s+)?(?:stop|stop\s+it|don'?t|do\s+not|stop\s+(?:that|unsubscribing|"
                        r"subscribing))$")
 # the answers to a preview
-UNSUB_N = re.compile(r"^(?:yes[\s,]+)?unsubscribe\s+(?:from\s+)?(?:all\s+)?(?P<n>\d{1,3})(?:\s+channels?)?$")
-KEEP_N = re.compile(r"^(?:but\s+)?keep\s+(?:numbers?\s+|#\s*)?(?P<nums>\d{1,3}(?:\s*(?:,|and|&|\s)\s*(?:#\s*)?\d{1,3})*)$")
+UNSUB_N = re.compile(r"^(?:yes[\s,]+)?(?:unsubscribe|unsub)\s+(?:from\s+)?(?:all\s+)?(?P<n>\d{1,3})(?:\s+channels?)?$")
+KEEP_N = re.compile(r"^(?:but\s+)?keep\s+(?:numbers?\s+|#\s*)?"
+                    r"(?P<nums>\d{1,3}(?:\s*(?:,|and|&|\s)\s*(?:#\s*)?\d{1,3})*)$")
 NEXT = re.compile(r"^(?:next|next\s+(?:one|page|ones)|more|show\s+(?:me\s+)?(?:the\s+)?(?:next|rest|more))$")
 KEEP_ALL = re.compile(r"^(?:no|nope|nah|keep\s+(?:it|them|them\s+all|all)|leave\s+(?:it|them)|never\s?mind|"
                       r"don'?t|cancel)$")
@@ -306,6 +327,16 @@ def youtube_reads(bot, person, text, now):
     if m:
         bot.note(intent="youtube")
         return _idle(bot, person, m.group("when"), now)
+    if CLEAN_UP.match(t):
+        bot.note(intent="youtube")
+        return _idle(bot, person, "", now)
+    m = PLAYLIST_BARE.match(t)
+    if m:
+        return _playlist(bot, person, m.group("what"), None, now)
+    m = GET_RID.match(t)
+    if m and not re.fullmatch(r"(?:that|this|it|them)", m.group("name")):
+        said = bool(m.group("yt") or m.group("on")) or m.group("what") == "channel"
+        return _unsub_name(bot, person, m.group("name"), said, text, now)
     if UNSUB_THAT.match(t):
         bot.note(intent="youtube")
         return _unsub_that(bot, person, now)
@@ -328,9 +359,17 @@ def youtube_reads(bot, person, text, now):
         # ("unsubscribe from youtube premium" is the paid membership: the cancel helper)
         said = bool(m.group("tail")) or bool(re.search(r"\b(?:channel|youtuber)\b", t))
         return _unsub_name(bot, person, m.group("name"), said, text, now)
+    m = REMOVE_SUB.match(t)
+    if m:
+        if re.fullmatch(_THAT, m.group("name")):
+            bot.note(intent="youtube")
+            return _unsub_that(bot, person, now)
+        said = bool(m.group("yt") or m.group("on")) or bool(re.search(r"\b(?:channel|youtuber)\b", m.group("name")))
+        return _unsub_name(bot, person, re.sub(r"\s+(?:channel|youtuber)$", "", m.group("name")), said, text, now)
     m = UNFOLLOW.match(t)
     if m:
-        return _unfollow(bot, person, m.group("verb"), m.group("who"), m.group("app"), text, now)
+        verb = "unfollow" if m.group("verb").startswith("stop") else m.group("verb")
+        return _unfollow(bot, person, verb, m.group("who"), m.group("app"), text, now)
     return None
 
 

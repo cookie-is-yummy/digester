@@ -14,8 +14,8 @@ import pytest
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
-from mvp.tests.test_mvp import env, last
-from mvp.tests.test_slice2 import H
+from mvp.tests.test_mvp import env  # noqa: E402,F401  (env is a fixture)
+from mvp.tests.test_slice2 import H  # noqa: E402
 
 UTC = timezone.utc
 CHAT = {"intent": "chat", "reply": "OK."}
@@ -297,6 +297,46 @@ def test_two_channels_in_view_ask_which_and_a_name_answers(yt):
     assert tell(yt, "unsubscribe from garden hour").startswith('Unsubscribe from "Garden Hour" on YouTube?')
 
 
+@pytest.mark.parametrize("text", ["can you unsub me from kitchen lab",
+                                  "remove kitchen lab from my youtube subscriptions",
+                                  "remove that channel from my subscriptions", "stop following kitchen lab",
+                                  "unsubscribe from this guy", "take the kitchen lab channel off my subscriptions",
+                                  "remove kitchen lab from my subscriptions",
+                                  # the wordings the live interpreter read as "unsupported" (DESIGN 17.Y, measured)
+                                  "get rid of the kitchen lab channel", "take me off kitchen lab's channel",
+                                  "delete the kitchen lab subscription on youtube"])
+def test_everyday_wordings_reach_the_one_channel_question(yt, text):
+    connect(yt)
+    show(yt, "yt_1")
+    assert tell(yt, text) == ('Unsubscribe from "Kitchen Lab" on YouTube? Reply "yes" to unsubscribe, or "no" to keep '
+                              'it.'), text
+    assert tell(yt, "no") == "OK, I left it as it is on YouTube."
+
+
+def test_everyday_wordings_for_links_disconnect_and_a_playlist(yt):
+    assert "Following › Unfollow" in tell(yt, "stop following @made_up_cook")
+    connect(yt)
+    show(yt, "yt_1", "yt_3")
+    assert tell(yt, "make a playlist of these").startswith("What should the playlist be called?")
+    assert tell(yt, "make me a youtube playlist called pasta night with these").startswith(
+        'I\'ll make a private YouTube playlist "Pasta night" and add these 2 videos to it')
+    tell(yt, "no")
+    assert tell(yt, "unsub 2") is not None and ("DELETE", "subscriptions") not in yt["g"].calls   # nothing waiting
+    for text in ("save these videos to youtube", "add this to my youtube"):
+        show(yt, "yt_1", "yt_3")
+        assert tell(yt, text).startswith("What should the playlist be called?"), text
+    for text in ("clean up my youtube subscriptions", "which channels do i never watch"):
+        assert tell(yt, text).startswith("Since when? Say, for example,"), text
+    assert "schedule_frequency=ONCE_A_WEEK" in tell(yt, "make my instagram export happen every week")
+    assert tell(yt, "log out of youtube").startswith("YouTube is disconnected")
+    # near variant: a paid service named the same way is not taken
+    for text in ("remove netflix from my subscriptions", "delete my netflix subscription",
+                 "get rid of the netflix subscription"):
+        tell(yt, text)
+        assert yt["bot"].store.get_state(f"ytask:{H}") is None, text
+    assert not [r for r in actions(yt) if r["action"].startswith("youtube.")]
+
+
 def test_words_that_are_not_a_youtube_request_are_left_alone(yt):
     connect(yt)
     show(yt, "yt_1")
@@ -452,12 +492,11 @@ def test_m15_no_watch_history_or_an_old_one_refuses(yt, tmp_path):
         if it.platform == "youtube":
             it.dates["watch"] = "2026-06-01T10:00:00+00:00"            # 164 days before the clock
     assert tell(yt, "unsubscribe from channels I haven't watched since 2024") == (
-        "Your newest YouTube watch history here is from 1 Jun 2026, so I can't tell what you've watched since. Send me a "
-        "new Google Takeout and ask again.")
+        "Your newest YouTube watch history here is from 1 Jun 2026, so I can't tell what you've watched since. "
+        "Send me a new Google Takeout and ask again.")
     assert ("DELETE", "subscriptions") not in yt["g"].calls and ("GET", "subscriptions") in yt["g"].calls
-    assert tell(yt, "unsubscribe from channels i don't watch") == ('Since when? Say, for example, "unsubscribe from '
-                                                                   'channels I haven\'t watched since 2024", or "... in '
-                                                                   'a year".')
+    assert tell(yt, "unsubscribe from channels i don't watch") == (
+        'Since when? Say, for example, "unsubscribe from channels I haven\'t watched since 2024", or "... in a year".')
 
 
 def test_m15_a_long_list_is_shown_50_at_a_time(yt):
@@ -553,8 +592,9 @@ def test_30_quota_stops_writes_with_the_tomorrow_line_and_the_rest_runs_after_9a
     _idle_setup(yt)
     yt["g"].quota = yt["g"].units_used + 3 + 50      # the list read, the check read, then one delete
     tell(yt, "unsubscribe from channels I haven't watched since 2024")
-    assert tell(yt, "unsubscribe 3") == ('Unsubscribed from 1 of 3 channels on YouTube. YouTube\'s daily limit for this '
-                                         'app is used up. I\'ll do the other 2 tomorrow at 9am unless you say "stop".')
+    assert tell(yt, "unsubscribe 3") == (
+        'Unsubscribed from 1 of 3 channels on YouTube. YouTube\'s daily limit for this app is used up. I\'ll do the '
+        'other 2 tomorrow at 9am unless you say "stop".')
     d = json.loads(actions(yt, "youtube.unsubscribe")[-1]["detail"])
     assert d["count"] == 1 and d["units"] >= 50
     yt["g"].quota = 10_000
@@ -627,10 +667,11 @@ def test_revoked_access_stops_with_the_revoke_line_and_forgets_the_sign_in(yt, l
 # ---------- Y5: links the person taps ----------
 def test_instagram_unfollow_is_a_link_one_at_a_time_and_done_is_a_tap(yt):
     r = tell(yt, "unfollow @made_up_cook and @another.cook")
-    assert r == ("Instagram doesn't let any app unfollow for you, and I won't sign in as you. Tap to open @made_up_cook, "
-                 "then Following › Unfollow: https://www.instagram.com/made_up_cook/ . Say \"done\" or \"next\".")
-    assert tell(yt, "done").startswith("Instagram doesn't let any app unfollow for you, and I won't sign in as you. Tap "
-                                       "to open @another.cook,")
+    assert r == ("Instagram doesn't let any app unfollow for you, and I won't sign in as you. Tap to open "
+                 "@made_up_cook, then Following › Unfollow: https://www.instagram.com/made_up_cook/ . Say \"done\" or "
+                 "\"next\".")
+    assert tell(yt, "done").startswith("Instagram doesn't let any app unfollow for you, and I won't sign in as you. "
+                                       "Tap to open @another.cook,")
     assert tell(yt, "done") == "That's all of them."
     taps = actions(yt, "link.tap")
     assert len(taps) == 2 and json.loads(taps[0]["detail"]) == {"app": "instagram", "verb": "unfollow"}

@@ -80,8 +80,8 @@ def start(store, handle, now):
     except tokens.TokenKeyMissing:
         raise _err("no_key") from None
     store.set_state(f"ytdevice:{handle}", {"at": now_iso(now), "expires_at": now_iso(now + timedelta(seconds=life)),
-                                           "interval": interval, "next_poll": now_iso(now + timedelta(seconds=interval)),
-                                           "user_code": uc})
+                                           "interval": interval, "user_code": uc,
+                                           "next_poll": now_iso(now + timedelta(seconds=interval))})
     return {"user_code": uc, "minutes": life // 60}
 
 
