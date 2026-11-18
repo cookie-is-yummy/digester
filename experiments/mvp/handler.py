@@ -1420,6 +1420,20 @@ class HandlerMixin:
             from .export import forget_exports   # round 8, slice B: the export folders go too
             forget_exports(h)
             from . import tokens   # round 10, slice K: the person's sealed sign-ins go too
+            # ---------- merge of round 10: a sign-in made through an app's own server (slice C) is revoked at the
+            # server first (RFC 7009), every standing yes (slice G) ends, then the sealed files go ----------
+            revoke_failed = []
+            try:
+                from . import oauth
+                from .mcp_mappings import SERVERS
+                oauth.drop_pending(h)
+                for key in tokens.connectors_of(h):
+                    if key in SERVERS and not oauth.revoke(h, key):
+                        revoke_failed.append(SERVERS[key].get("app") or key)
+            except Exception:  # noqa: BLE001 - deleting never stops on a server that cannot be reached
+                pass
+            self.store.end_grants(h, reason="deleted", at=self.clock())
+            # ---------- end merge of round 10 ----------
             tokens.delete_all(h)
             inbox_left = forget_inbox(self.store, h)
             gone = self.store.delete_person_data(h)
@@ -1431,7 +1445,7 @@ class HandlerMixin:
                 line["ledger_rows_with_handle"] = old_rows
             self.store.add_deletion(line)
             # sent through the channel directly, so nothing new is recorded about the person
-            return self.channel.send(h, T.DELETED)
+            return self.channel.send(h, T.DELETED + "".join(" " + T.mcp_revoke_failed(a) for a in revoke_failed))
         return None
 
     def _activate_more(self, person, pending, ref):

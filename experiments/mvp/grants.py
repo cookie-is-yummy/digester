@@ -380,8 +380,8 @@ def check(name, ctx, params, grant):
 
 # ---------- each run (G4): the add under the grant, and the line that always says what it added ----------
 def _strong(bot, person, pick):
-    if pick.get("caption_mark") == "strong":
-        return True
+    if pick.get("caption_mark") == "strong" or pick.get("cm") == "strong":   # merge of round 10: slice S's level
+        return True                                                           # (what the person said included)
     try:
         from . import captionmark
         it = bot.view(person["library"]).get(pick.get("item_id"))
@@ -422,9 +422,11 @@ def run_place(bot, ctx, name, params):
     if pl.kind == "todo":
         tp = TodoParams.model_validate(params or {})
         picks = [x for x in ctx.picks if not _strong(bot, ctx.person, x)]   # S3: a strong-marked reel is never placed
+        left_out = len(ctx.picks) - len(picks)   # merge of round 10: said with slice S's line (T.cm_left_out)
         rows, problem = todo_action.rows_for(picks, tp.what) if picks else ([], "none")
         if problem or not rows:
-            return Outcome("skipped", line="", detail={"grant_id": g["id"], "why": problem or "none"})
+            return Outcome("skipped", line=T.cm_left_out(left_out) if left_out else "",
+                           detail={"grant_id": g["id"], "why": problem or "none"})
         keep = rows[:int(g["per_run"])]
         more = len(rows) - len(keep)
         left = int(g["per_day"]) - added_today(store, h, rule["id"], action, now, tz)
@@ -441,8 +443,10 @@ def run_place(bot, ctx, name, params):
         from .actions import calendar as cal
         from .places import _local
         picks = [x for x in ctx.picks if not _strong(bot, ctx.person, x)]
+        left_out = len(ctx.picks) - len(picks)   # merge of round 10: said with slice S's line (T.cm_left_out)
         if not picks:
-            return Outcome("skipped", line="", detail={"grant_id": g["id"], "why": "none"})
+            return Outcome("skipped", line=T.cm_left_out(left_out) if left_out else "",
+                           detail={"grant_id": g["id"], "why": "none"})
         from dataclasses import replace as _with
         ev = cal.event_for(_with(ctx, picks=picks[:1]), CalendarParams.model_validate(params or {}))   # ctx unchanged
         if ev is None:
@@ -519,6 +523,8 @@ def run_place(bot, ctx, name, params):
                                      "n": n, "one": one, "many": many,
                                      "titles": {str(i): t for i, t in zip(named, titles)}}})
     line = T.grant_ran(len(named), one, many, app, n, titles, more)
+    if left_out:   # merge of round 10: slice S's line for the strong-marked picks left out
+        line += " " + T.cm_left_out(left_out)
     return Outcome("done", line=line, ref=",".join(map(str, ids)),
                    detail=dict(base, count=len(named), placements=ids, more=more))
 

@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from mvp.tests.test_mvp import env  # noqa: E402,F401  (env is a fixture)
-from mvp.tests.test_slice2 import H  # noqa: E402
+from mvp.tests.test_slice2 import H, say  # noqa: E402
 from mvp.tests.test_round10_grants import (PREVIEW_LINES, TEXT, boom, make_rule, rule_form,  # noqa: E402,F401
                                            tok)
 
@@ -108,3 +108,90 @@ def test_a_broken_stream_after_the_create_in_a_rule_run_says_it_may_have_arrived
     assert [n for n, _ in srv.calls] == ["add-tasks"]   # one call, not retried
     assert "Todoist didn't answer, so I kept them in my message here. It may have arrived in Todoist anyway; check " \
            "before asking again." in sent
+
+
+# ================================ (c) "delete my data" revokes a sealed sign-in at the server first =============
+def _delete(e):
+    say(e, "delete my data", {"intent": "delete_data"})
+    return say(e, "YES", boom)
+
+
+def test_delete_my_data_revokes_the_todoist_sign_in_before_the_sealed_file_goes_and_ends_grants(mcp, tmp_path,
+                                                                                                 monkeypatch):
+    from mvp import oauth, tokens
+    bot, rid, _ = _mcp_rule(mcp, tmp_path)
+    assert tokens.exists(H, "todoist") and bot.store.grants_of(H)
+    order = []
+    real_revoke, real_delete = oauth.revoke, tokens.delete_all
+    monkeypatch.setattr(oauth, "revoke", lambda h, k: order.append(("revoke", k)) or real_revoke(h, k))
+    monkeypatch.setattr(tokens, "delete_all", lambda h: order.append(("delete_all", None)) or real_delete(h))
+    out = _delete(mcp)
+    assert out.startswith("Done: your rules and history are deleted.") and "couldn't reach" not in out
+    assert order == [("revoke", "todoist"), ("delete_all", None)]
+    assert mcp["fk"].count("/revoke") == 1 and not tokens.exists(H, "todoist")
+    assert bot.store.grants_of(H, active_only=False) == []
+
+
+def test_delete_my_data_with_a_failed_revoke_still_deletes_and_says_where_to_remove_access(mcp, tmp_path):
+    from mvp import tokens
+    bot, rid, _ = _mcp_rule(mcp, tmp_path)
+    mcp["fk"].revoke_status = 503
+    out = _delete(mcp)
+    assert out.endswith("I couldn't reach Todoist to cancel my access; remove it in Todoist under Settings › "
+                        "Integrations.")
+    assert not tokens.exists(H, "todoist") and bot.store.grants_of(H, active_only=False) == []
+
+
+# ================================ (d) a strong-marked item is never placed by a rule run with a grant ===========
+from mvp.tests.test_round10_grants import ctx_for, pick, posts  # noqa: E402
+
+
+def _mark_strong(lib, *item_ids):
+    """A marks file for this made-up library (slice S's derived file), with these items strong-marked."""
+    import json as _json
+
+    from mvp import captionmark
+    from mvp.retrieve import _library_stamp
+    lib = os.path.abspath(str(lib))
+    path = captionmark.marks_path(lib)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        _json.dump({"version": captionmark.SIGNAL_VERSION, "stamp": _library_stamp(lib),
+                    "items": {i: ["strong", ["says_unrelated"], "fp-" + i] for i in item_ids}}, f)
+
+
+def test_a_pick_slice_s_marked_strong_is_left_out_of_the_app_and_the_run_says_so(tok):
+    from mvp.places import route
+    bot = tok["bot"]
+    make_rule(tok)
+    rid = bot.store.rules(H)[0]["id"]
+    o = route(bot, ctx_for(tok, rid, [dict(pick(0), cm="strong"), pick(1)], SUNDAY), "todo.add", {"list": "ticktick"})
+    assert [c["body"]["title"] for c in posts(tok)] == ["Lemon orzo"]
+    assert o.line.endswith(" 1 left out: its caption may not match the video.")
+    o = route(bot, ctx_for(tok, rid, [dict(pick(2), cm="strong")], SUNDAY + timedelta(minutes=3)), "todo.add",
+              {"list": "ticktick"})
+    assert o.status == "skipped" and len(posts(tok)) == 1 and o.line == "1 left out: its caption may not match the video."
+
+
+def _composer_of(*needles):
+    """A fake composer that picks the candidates whose caption holds these words, in this order."""
+    import re
+
+    def answer(user):
+        found = re.findall(r"^(\d+)\. .*\n<item>(.*?)</item>", user, re.M)
+        out = []
+        for w in needles:
+            out += [{"n": int(n), "verdict": "clear", "title": cap.split(" recipe")[0][:40]} for n, cap in found
+                    if w in cap]
+        return {"picks": out, "intro": "Here you go."}
+    return answer
+
+
+def test_a_timed_run_never_places_a_reel_the_library_marks_strong(tok):
+    _mark_strong(tok["lib"], "p3")   # "Tomato rigatoni", which the composer picks first
+    make_rule(tok)
+    tok["state"]["answers"]["mvp_compose"] = _composer_of("Tomato", "Pesto", "Garlic")
+    _, sent = tick_at(tok, SUNDAY)
+    titles = [c["body"]["title"] for c in posts(tok)]
+    assert "Tomato rigatoni" not in titles and len(titles) == 2, titles
+    assert "1 left out: its caption may not match the video." in sent

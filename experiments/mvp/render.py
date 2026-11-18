@@ -806,6 +806,8 @@ def pick_record(p):
             x["shown"] = _item_line(x)[len(f"{x['n']}. "):]
     if p.get("posted"):
         rec["posted"] = p["posted"]
+    if p.get("cm") == "strong":   # merge of round 10: slice S's level (with what the person said), for slice G's runs
+        rec["cm"] = "strong"
     return rec
 
 
