@@ -167,6 +167,11 @@ class HandlerMixin:
         ref = self.secret_reads(person, text, now)
         if ref is not None:
             return ref
+        # ---------- round 10, slice V: the browser's words (only while this person's run or its offer is open) ------
+        ref = self.browser_reads(person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 10, slice V ----------
         ref = self._asked_reads(person, text, now)   # round 8: the answer to "tell me the date" or to an overdue nudge
         if ref is not None:
             return ref
@@ -1183,6 +1188,8 @@ class HandlerMixin:
             forget_exports(h)
             from . import tokens   # round 10, slice K: the person's sealed sign-ins go too
             tokens.delete_all(h)
+            from .browser import forget as forget_browser   # round 10, slice V: an open browser of theirs is closed
+            forget_browser(self, h)
             inbox_left = forget_inbox(self.store, h)
             gone = self.store.delete_person_data(h)
             line = {"handle": h, "library": person["library"], "libraries": gone["libraries"], "at": now_iso()}

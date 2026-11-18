@@ -441,8 +441,9 @@ def test_the_published_stubs_give_todays_behaviour():
     from types import SimpleNamespace
 
     from mvp import browser, captionmark, compose, connectors, phrasing, yt_auth
-    for m in (browser, captionmark, phrasing, yt_auth):
+    for m in (captionmark, phrasing, yt_auth):
         assert m.STUB is True
+    assert browser.STUB is False   # round 10, slice V replaced its stub; off by default it still gives today's behaviour
     assert captionmark.mark(SimpleNamespace()) is None and captionmark.SIGNAL_VERSION == "cm-v1"
     assert browser.available(None, {"handle": H}, "netflix") is False and browser.run_open(None, H) is False
     assert phrasing.normalize("cancel it for me") == "cancel it for me"

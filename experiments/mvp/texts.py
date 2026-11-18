@@ -2567,3 +2567,183 @@ def page_status_line(build, switches):
     """The line under the test page: the build, then each switch by name ("TickTick: off"). Never a value."""
     return " · ".join([f"Build {build}"] + [f"{k}: {v}" for k, v in switches.items()])
 # ---------- end round 10, slice K ----------
+
+
+# ---------- round 10, slice V (DESIGN.md section 17.V; A-016, Proposed): the browser that cancels for the person ----
+# The bot's own words never say a subscription ended: only the merchant's page may, inside quotes. Rows 2 to 14 are the
+# verdict's V4 table; the "vm" wording is the addendum's (a browser on the bot's side the person watches at <page>/vm).
+def _where(vm):
+    return "in a browser on my side that you can watch" if vm else "in a browser I open on this computer"
+
+
+BROWSER_PRACTICE = "Streamly is a practice site made up for trying this: no real account, no real money."
+
+
+def browser_offer(name, vm=False, practice=False):
+    """Row 2: instead of the steps."""
+    line = (f"{name} cancels on its website. I can do it for you {_where(vm)}: you sign in to {name} yourself, I go to "
+            f"the cancel page and stop before the last button to ask you. Say \"do it for me\". Or say \"steps\" and "
+            f"I'll tell you how to do it yourself.")
+    return f"{line} {BROWSER_PRACTICE}" if practice else line
+
+
+def browser_permission(name, site, word, vm=False, practice=False):
+    """Row 4: the first time for a site."""
+    where = "in a browser on my side that you can watch" if vm else "in a browser window here"
+    risk = (BROWSER_PRACTICE if practice else
+            f"{name}'s terms don't allow automated tools, so they may flag or close your account. I can't tell how "
+            f"likely that is.")
+    return (f"First, your OK. I'll open {site} {where} and press buttons there for you. I never type, never buy, never "
+            f"accept an offer, and I press the last button only after you say so. {risk} I say I'm an assistant and "
+            f"stop at any check. Reply \"allow {word}\" to go ahead.")
+
+
+def browser_allow_hint(word):
+    return f"To go ahead, reply \"allow {word}\". Or say \"steps\" and I'll tell you how to do it yourself."
+
+
+def browser_opening(name, link=None):
+    """Row 6."""
+    if link:
+        return (f"Opening {name} in a browser on my side. Watch it here: {link} . Sign in there yourself if it asks, "
+                f"then say \"I'm in\". Your typing goes through my server to the browser; I don't keep it.")
+    return f"Opening {name} in a window on this computer. Sign in there yourself if it asks, then say \"I'm in\"."
+
+
+BROWSER_GOING = "Thanks. Going to the cancel page."   # row 9
+
+
+def _said(quote):
+    """' says: "<quote>"' (the merchant's sentence ends it), or a plain sentence when nothing can be quoted."""
+    return f" says: \"{quote}\"" if quote else " doesn't say what happens next."
+
+
+def browser_final(name, quote, button, yes_word):
+    """Row 10: the last step, shown and not pressed. Only the merchant's sentence about the effects is quoted."""
+    return (f"This is the last step. {name}'s page{_said(quote)} The button says \"{button}\". I haven't pressed it. "
+            f"Reply \"{yes_word}\" to press it, or \"stop\".")
+
+
+def browser_plain_yes(yes_word):
+    """Row 12."""
+    return f"To press it, reply \"{yes_word}\". I won't press the last button on a plain yes."
+
+
+def browser_outcome(name, quote, day):
+    """Row 14: the merchant's own words after the press, then the check offer."""
+    return (f"{name}'s page now says: \"{quote}\" Look for {name}'s email too. Want a reminder on {day} to check? "
+            f"Reply \"yes\", or give another day.")
+
+
+def browser_unclear(name, button, day):
+    return (f"I pressed \"{button}\". {name}'s page doesn't say it has ended. Check for an email from {name}. Want a "
+            f"reminder on {day} to check? Reply \"yes\", or give another day.")
+
+
+def browser_offer_taken(name):
+    return (f"{name}'s page says your plan goes on (an offer, a pause or a change of plan). Nothing ended. I didn't mean "
+            f"to choose that. Say \"do it for me\" to try again, or \"steps\" to do it yourself.")
+
+
+BROWSER_YOURSELF = "Here's how to do it yourself:"
+
+
+def browser_steps_head(name):
+    """The first line of the steps when the person said "steps" after the browser offer."""
+    return f"Here's how to cancel {name} yourself:"
+BROWSER_STOPPED = "Stopped. I closed the browser. Nothing else was pressed."
+BROWSER_NO_ANSWER = ("I closed the browser because I didn't hear back. Nothing was pressed. Say \"do it for me\" to "
+                     "start again.")
+BROWSER_CLOSED_LATE = "I closed the browser because it was open too long. Nothing else was pressed."
+BROWSER_LIMIT = "That took longer than I allow, so I stopped. Nothing else was pressed. " + BROWSER_YOURSELF
+BROWSER_GONE = "The browser had closed, so I didn't press anything. Say \"do it for me\" to start again."
+BROWSER_CANT_START = "I couldn't open the browser, so nothing was pressed."
+BROWSER_NO_SCREEN = "I can only open a browser on the computer that runs me, and there isn't a screen there."
+BROWSER_PAGE_ONLY = "I can only do that from the test page for now."
+
+
+def browser_runs_cap(n):
+    return f"I've opened the browser {n} times today, which is my limit. {BROWSER_YOURSELF}"
+
+
+def browser_wall(kind, name, link=None):
+    """A sign-in, a check for a person, or a code: the person does it themselves; the bot never does."""
+    if link:
+        return f"{name} is asking for something only you can do. Open {link} , do it there, then say \"I'm in\"."
+    if kind == "captcha":
+        return (f"{name} wants to check you're a person. I don't do those. Do it yourself in the window on this "
+                f"computer, then say \"I'm in\".")
+    if kind == "otp":
+        return (f"{name} sent you a code. Type it yourself in the window on this computer, then say \"I'm in\". Don't "
+                f"send me the code.")
+    return f"{name} wants you to sign in. Sign in yourself in the window on this computer, then say \"I'm in\"."
+
+
+def browser_keeps_stopping(name):
+    return (f"{name} keeps stopping me, so I've stopped and closed the browser. Nothing else was pressed. "
+            f"{BROWSER_YOURSELF}")
+
+
+def browser_off_site(name):
+    return (f"{name} sent me to another site, so I stopped and closed the browser. Nothing else was pressed. "
+            f"{BROWSER_YOURSELF}")
+
+
+def browser_lost(name, link=None):
+    where = f"here, in the same browser (open for 10 minutes): {link} ." if link else \
+        "in the same window (open for 10 minutes)."
+    return (f"{name}'s page didn't match the steps I know, so I stopped and pressed nothing more. You can finish it "
+            f"yourself {where} Or here are the steps:")
+
+
+def browser_person_has_it(link=None):
+    where = f" ({link} )" if link else ""
+    return f"You have the browser right now{where}, so I didn't press anything. Say \"I'm in\" when you're done."
+
+
+def browser_held(yes_word):
+    return f"You have the browser right now, so I didn't press it. Say \"I'm in\" first, then \"{yes_word}\"."
+
+
+def browser_changed(name, quote, button, yes_word):
+    return (f"{name}'s page changed after I showed it to you, so I didn't press anything. It now{_said(quote)} The "
+            f"button says \"{button}\". Reply \"{yes_word}\" to press it.")
+
+
+def browser_changed_gone(name):
+    return (f"{name}'s page changed after I showed it to you, so I didn't press anything, and I can't find the last "
+            f"step now. I closed the browser. {BROWSER_YOURSELF}")
+
+
+def browser_status(step, name, yes_word):
+    """"what's happening" while a run is open."""
+    if step == "walking":
+        return f"I'm on {name}'s pages now. I'll stop before the last button and ask you."
+    if step == "final_shown":
+        return f"I'm waiting on the last step. Reply \"{yes_word}\" to press it, or \"stop\"."
+    if step == "handed_back":
+        return "The browser is yours for now. Say \"stop\" to close it."
+    if step == "wall":
+        return "I'm waiting for you in the browser. Say \"I'm in\" when you're done, or \"stop\"."
+    return f"The browser is open on {name}. Sign in there yourself if it asks, then say \"I'm in\"."
+
+
+def browser_password(name, vm=False):
+    """The password line for this person and merchant while the browser is on for them (everyone else keeps
+    CANCEL_PASSWORD)."""
+    where = "in a browser on my side that you sign in to yourself" if vm else "in a window you sign in to yourself"
+    return (f"No. Don't send me passwords: I never take them. If you sent a real one here, please change it. For {name} "
+            f"I can open their page {where}: say \"do it for me\".")
+
+
+def browser_denied(name, youtube=False):
+    """A site the bot never drives in a browser, whatever the settings say."""
+    line = f"I don't drive {name} in a browser: its rules don't allow it, and it could put your account at risk."
+    if youtube:
+        line += " For YouTube I use Google's own connection instead."
+    return line
+
+
+def browser_revoked(name, word):
+    return f"OK. I won't open {name} in a browser again unless you say \"allow {word}\" after I ask."
+# ---------- end round 10, slice V ----------

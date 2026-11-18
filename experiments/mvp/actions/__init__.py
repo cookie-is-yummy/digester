@@ -234,8 +234,10 @@ REGISTRY.update({
     "browser.cancel": ActionDef(name="browser.cancel", params=BrowserParams, module="browser", order=50,
                                 does="Presses the last button of a merchant's cancel pages in the browser, once, "
                                      "after \"yes cancel <merchant>\" on that exact page",
+                                # who: the operator, or anyone with MVP_BROWSER=vm and MVP_BROWSER_FOR=all; checked in
+                                # code by actions/browser.py (perform's operator check cannot see that switch)
                                 outside=True, undo="none", confirm="send_word", max_per_day=3, in_rules=False,
-                                who="operator", from_model=False, connector="browser", fallback="cancel.steps"),
+                                who="anyone", from_model=False, connector="browser", fallback="cancel.steps"),
 })
 # ---------- end round 10, slice V ----------
 

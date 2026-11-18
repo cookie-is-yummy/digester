@@ -67,7 +67,14 @@ def mode():
 
 
 def demo():
-    return (os.environ.get("MVP_BROWSER_DEMO") or "").strip() == "1"
+    """MVP_BROWSER_DEMO=1 with the browser on: the practice merchant "Streamly" is known."""
+    return (os.environ.get("MVP_BROWSER_DEMO") or "").strip() == "1" and mode() != "off"
+
+
+def practice_routes():
+    """The route file with the practice merchant when the demo is on (the cancel helper's request read), else None
+    (the helper reads its own file, as before)."""
+    return cancel_routes() if demo() or EXTRA else None
 
 
 def merchants():
@@ -159,14 +166,19 @@ def make_host(m):
     return LocalHost()
 
 
+def person_ok(handle):
+    """Who may have the browser: with it on, the operator; with MVP_BROWSER=vm and MVP_BROWSER_FOR=all, anyone."""
+    from . import config
+    return mode() != "off" and (config.is_operator(handle) or for_all())
+
+
 def why_not(bot, person, merchant_key):
     """'ok', or why the browser is not offered: off | person | merchant | route | denied | channel | no_screen |
     no_playwright."""
-    from . import config
     m = mode()
     if m == "off":
         return "off"
-    if not (config.is_operator(person["handle"]) or for_all()):
+    if not person_ok(person["handle"]):
         return "person"
     if (merchant_key or "").lower() not in merchants():
         return "merchant"
@@ -191,6 +203,8 @@ def available(bot, person, merchant_key):
 
 def run_open(store, handle, now=None):
     """True while this person's browser run (or its offer) is open: at most 30 minutes."""
+    if store is None:
+        return False
     st = store.get_state(f"browserrun:{handle}")
     if not st:
         return False
@@ -203,6 +217,8 @@ def run_open(store, handle, now=None):
 def _sessions(bot):
     if not hasattr(bot, "_browser"):
         bot._browser = {"lock": threading.Lock(), "runs": {}, "threads": {}, "timers": []}
+        import atexit
+        atexit.register(close_all, bot)   # the bot stops: every browser it opened is closed
     return bot._browser
 
 
@@ -353,8 +369,10 @@ class BrowserMixin:
             return None
         now = self.clock()
         h = person["handle"]
-        self._browser_state(h, {"step": "offered", "key": e["key"], "name": e["name"], "at": _iso(now),
-                                "started": _iso(now)})
+        st = self.store.get_state(f"browserrun:{h}") or {}
+        if not st.get("run_id"):   # an open run is never replaced by an offer
+            self._browser_state(h, {"step": "offered", "key": e["key"], "name": e["name"], "at": _iso(now),
+                                    "started": _iso(now)})
         return T.browser_password(e["name"], vm=mode() == "vm")
 
     # ---------- the hook: handler._on_message, right after secret_reads ----------
@@ -455,8 +473,9 @@ class BrowserMixin:
         e = next((m for m in cancel_routes()["merchants"] if m["key"] == r["key"]), None) or r
         self._tl.browser_steps = True
         try:
-            if e.get("practice") and e["key"] not in {m["key"] for m in load_routes()["merchants"]}:
-                return self.send(person["handle"], self._browser_steps_text(r, now))
+            if e["key"] not in {m["key"] for m in load_routes()["merchants"]}:
+                self.note(intent="cancel")
+                return self.send(person["handle"], self._browser_steps_text(r, now, head=T.browser_steps_head(r["name"])))
             return self._cancel_entry(person, e, now)
         finally:
             self._tl.browser_steps = False
@@ -495,8 +514,8 @@ class BrowserMixin:
         m = mode()
         host = make_host(m)
         install = None
-        if r.get("practice"):
-            from .tests.fakes import fake_merchant as M
+        from .tests.fakes import fake_merchant as M
+        if G.host(r["start_url"]) in M.DOMAINS:   # the practice site (a reserved .example name) is served by the fake
             flow = int(re.search(r"/f(\d)/", r["start_url"]).group(1))
             install = (lambda ctx, _f=flow: M.install(ctx, signed_in=(_f != 5)))
         cid = self.store.add_cancellation(h, r["key"], "web", "browser_opened", at=now)
@@ -642,7 +661,10 @@ class BrowserMixin:
         params = {"run_id": st["run_id"], "yes_hash": st["yes_hash"]}
         try:
             out = perform("browser.cancel", ctx, params, yes_token=st["yes_hash"])
-        except Refused:
+        except Refused:   # the page now is not the page the yes was for (or the browser has gone)
+            if session_of(self, h, st.get("run_id")) is None:
+                self._browser_close(h, st, "stopped", now)
+                return self.send(h, T.BROWSER_GONE)
             return self._browser_changed(person, st, r, now)
         if out.status == "skipped" and (out.detail or {}).get("cap"):
             self._browser_close(h, st, "limit", now, say=None)

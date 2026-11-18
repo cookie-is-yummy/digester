@@ -200,6 +200,15 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   words (a YouTube playlist, Gmail, Google Calendar), stubs the other round 10 slices fill, and in-process fakes
   (`tests/fakes/`: the model, an MCP server, an OAuth server, Google and YouTube, a practice merchant).
   Tests: `tests/test_round10_k.py`.
+- **Round 10, the browser that cancels for you** (DESIGN.md section 17.V, slice V; amendment A-016, Proposed; off by
+  default): with `MVP_BROWSER=operator` and the merchant named in `MVP_BROWSER_MERCHANTS` (e.g. `netflix`), "cancel
+  my netflix" offers "do it for me": after your OK for the site ("allow netflix"), a Chromium window opens on the
+  computer that runs the bot, you sign in there yourself, say "I'm in", and the bot follows Netflix's own cancel path,
+  stops before the last button and quotes the page; only "yes cancel netflix" presses it. It never types, never
+  accepts an offer, stops at any check; "stop" closes it. `MVP_BROWSER=vm` runs the browser inside the bot's machine
+  instead: you watch it and take over at the `/vm` link on the test page. `MVP_BROWSER_DEMO=1` adds a made-up practice
+  merchant, "Streamly", to try the whole thing safely ("cancel my streamly"). Social media, YouTube and Google
+  sign-in are never driven. Tests: `tests/test_round10_browser.py`, `tests/test_round10_vm.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -544,6 +553,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `actions/web.py`, `actions/_tasks.py`, `actions/ticktick.py`, `actions/todoist.py`, `actions/webhook.py` | Round 9, E: the one HTTP helper and the connectors by token (TickTick, Todoist) and the webhook, on `places.py` and `connectors.py` |
 | `settings.py`, `tokens.py` | Round 10, slice K: `secret(name)` (the environment, then the sealed store), the page's status line; sealed sign-ins and settings (AES-256-GCM, 0600 files, the key) |
 | `captionmark.py`, `browser.py`, `phrasing.py`, `yt_auth.py` | Round 10, slice K: stubs (`STUB = True`) giving today's behaviour until slices S, V, W and Y replace them |
+| `browser.py`, `browser_guard.py`, `browser_host.py`, `browser_vm.py`, `browser_routes.json`, `actions/browser.py` | Round 10, slice V: the browser that cancels (off by default): the conversation and the runner, what may be pressed, the window on this computer, the browser watched at `/vm`, the merchants' paths, the last press |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |

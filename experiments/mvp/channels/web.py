@@ -82,6 +82,8 @@ class WebChannel(Channel):
         if serve:
             self.server = ThreadingHTTPServer((host, port), self._handler())
             self.port = self.server.server_address[1]
+            # round 10, slice V5: the address the bot's links to this page start with (the browser's /vm view)
+            self.base_url = f"http://{host}:{self.port}"
             threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
     # ---------- the bot's side ----------
@@ -382,9 +384,21 @@ class WebChannel(Channel):
                         return self._json(400, {"error": "id"})
                     got = ch.outbox_item((q.get("as") or [None])[0], item_id)
                     return self._json(200, got) if got else self._json(404, {"error": "not found"})
+                # ---------- round 10, slice V5: the browser's take-over view (its own key per run) ----------
+                if path in ("/vm", "/api/vm/frame"):
+                    from .. import browser_vm
+                    if browser_vm.handle_get(self, path, query):
+                        return
+                # ---------- end round 10, slice V5 ----------
                 self._json(404, {"error": "not found"})
 
             def do_POST(self):
+                # ---------- round 10, slice V5: the take-over view's clicks and keys (its own key, never logged) ------
+                if self.path.partition("?")[0] == "/api/vm/input":
+                    from .. import browser_vm
+                    if browser_vm.handle_post(self, "/api/vm/input", self.path.partition("?")[2]):
+                        return
+                # ---------- end round 10, slice V5 ----------
                 if not self._ok():
                     return self._json(403, {"error": "token"})
                 if self.path.startswith("/api/upload"):   # a raw file body, streamed to the inbox
