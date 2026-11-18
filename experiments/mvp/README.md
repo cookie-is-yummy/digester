@@ -286,6 +286,14 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   instead: you watch it and take over at the `/vm` link on the test page. `MVP_BROWSER_DEMO=1` adds a made-up practice
   merchant, "Streamly", to try the whole thing safely ("cancel my streamly"). Social media, YouTube and Google
   sign-in are never driven. Tests: `tests/test_round10_browser.py`, `tests/test_round10_vm.py`.
+- **Round 10, the self-test** (DESIGN.md section 17.T, slice T): `python3 -m mvp.selftest` plays 40 everyday
+  conversations (every example a founder gave, paraphrased) against the bot on a made-up library and checks plain
+  things per step: no refusal, no "didn't catch that", no claimed outcome the store does not show, no inside words, no
+  meme reel leading, no friend's post, plus each step's own. Set `MVP_HOME` to a new folder, `MVP_TOTAL_CAP_USD=30` and
+  `MVP_LEDGER_HOME` first; it stops at `MVP_SELFTEST_CAP_USD` (default $1.00). `--dry` uses a fake model ($0),
+  `--quick` 8 conversations, `--only c03,c07` some. Conversations that need a round 10 slice not in the code are
+  skipped and counted. Transcripts go under `MVP_HOME/selftest/`; one line of counts goes to
+  `evalset/selftest_runs.jsonl`. Tests: `tests/test_round10_selftest.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -638,6 +646,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `browser.py`, `browser_guard.py`, `browser_host.py`, `browser_vm.py`, `browser_routes.json`, `actions/browser.py` | Round 10, slice V: the browser that cancels (off by default): the conversation and the runner, what may be pressed, the window on this computer, the browser watched at `/vm`, the merchants' paths, the last press |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
 | `mcp_client.py`, `mcp_mappings.py`, `oauth.py`, `actions/mcp.py` | Round 10, slice C: the bot as an MCP client (pinned tools, codes only, the SDK as transport), the servers and mappings in code (Todoist `add-tasks` / `delete-object`), our own OAuth sign-in and refresh, and the `todoist.mcp_add` action with connect / check / disconnect |
+| `selftest.py`, `selftest/` | Round 10, slice T: the self-test (conversations, checks, fakes, dry mode), its made-up library, `truth.json` and `conversations.jsonl` |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |
 | `lang.py` | The answer's fixed phrases in Spanish (with the outside block and the level note that ride on it); any other language gets an all-English answer, and the composer is told to write English. A rule's preview, start line and timed sends are English only for now (their timing words have no Spanish yet), so a rule made in Spanish is set up and sent in English, never in two languages at once |
