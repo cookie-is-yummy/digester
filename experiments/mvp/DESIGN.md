@@ -2024,6 +2024,19 @@ Nothing above hook 5 sees the normalised text; the reads of slices D, G and C in
   sign-in: the connection, the adds counted by rule and the standing permission, then, after a changed tool, the grant
   ended in all three.
 
+**Checks on the merged tree** (18 Nov, offline, no model call): 2622 tests pass, demo 10; `probe_same` gives the same
+bytes as `mvp4/probes_round8/same_head.json`; the 159 rule-eval texts and the 123 rule phrasings (tester and operator,
+with and without an answer kept) are taken by no new read (`test_round9_merge.py`, with the reads of W, S and G
+wrapped; C's and D's reads sit inside hooks already wrapped); the 20 draft requests, counted only: 0 taken in all four
+settings; a store made by the code at 1606f80 loads, keeps every row and gains `grants`, `caption_feedback`,
+`placements.route`, `placements.rule_id` and `youtube_cache.channel_id`, and its rule's spec reads with no place; the
+development phrasing set through slice W's own offline script (tester and operator alike): 73 of 100 helper lines
+right by code, 1 wrong helper (d007, by design), 63 lines fell through to the model (37 of them `none` lines), 0 of 40
+`none` lines taken (3 go to the setup's form, as before) — the same as slice W measured before D, G and C were in. Of
+its 8 lines that ask a rule to add to an app, slice G reads the app from 4 once the interpreter has made the rule.
+Stubs: `phrasing` (W), `captionmark` and `compose.display_title` (S) and `connectors.route_for` (C) are real;
+`browser` and `yt_auth` are still stubs (`STUB = True`, "not available").
+
 ### 17.K The foundation (slice K)
 
 No reply changes except the build lines; no read, no connector, no model call.
