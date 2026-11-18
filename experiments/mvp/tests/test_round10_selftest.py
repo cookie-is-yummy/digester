@@ -227,6 +227,8 @@ def ctx(**kw):
     ("I booked a table for two.", {"add": 5}, False),
     ("Here's the email. Nothing has been sent.", {}, True),
     ("I haven't sent, booked or bought anything.", {}, True),
+    ("Each time I'll tell you here what I added, and you can say \"undo\".", {}, True),   # a promise, not a claim
+    ("Tell me once I added the wrong one.", {}, True),
     ("You're unsubscribed from Garden Hour.", {}, False),
 ])
 def test_no_claim(st, reply, acts, ok):
@@ -382,3 +384,45 @@ def test_friends_posts_never_reach_a_reply_in_a_dry_run(st, tmp_path):
                                                  "count": 3}}}}}]}])
     code, c = run(st, tmp_path, conv_file=f)
     assert code == 0 and c["by_check"]["no_friends"] == [1, 1]
+
+
+def test_slices_can_only_narrow_what_the_code_holds(st, tmp_path):
+    f = write_convs(tmp_path, [{"id": "t1", "who": "tester", "needs": ["V"], "steps": [{"say": "x"}]}])
+    code, c = run(st, tmp_path, "--slices", "V,W,S,D,G,C,Y", conv_file=f)
+    have = st.merged_slices()
+    assert set(c["slices"]) == have
+    assert c["skipped"] == 0 if "V" in have else c["skipped_by_slice"] == {"V": 1}
+
+
+def test_dry_compose_picks_by_words_or_by_order(st):
+    prompt = ("Candidates:\n1. instagram reel; by @a\nLemon pasta\n2. youtube; by Kitchen Lab\nCreamy pasta video\n"
+              "3. youtube; by Kitchen Lab\nOrzo\n4. instagram reel; by @b\nTacos\n")
+    assert [p["n"] for p in st._dry_compose(prompt)["picks"]] == [1, 2, 3]
+    assert [p["n"] for p in st._dry_compose(prompt, words=["youtube"])["picks"]] == [2, 3]
+    f = st._dry_answer("mvp_compose", {"pick_words": ["tacos"], "most": 1})
+    assert [p["n"] for p in f(prompt)["picks"]] == [4]
+    assert st._dry_answer("mvp_interpret", {"intent": "chat"}) == {"intent": "chat"}
+
+
+def test_continues_goes_on_as_the_same_person(st, tmp_path):
+    rule = {"mvp_interpret": {"intent": "new_rule", "spec": {
+        "when": {"type": "schedule", "every_days": 2, "times": ["08:00"]},
+        "content": {"goal": "a workout", "searches": ["workout"], "count": 1}}}}
+    f = write_convs(tmp_path, [
+        {"id": "t1", "who": "tester", "needs": [], "steps": [
+            {"say": "every 2 days send me a workout", "dry": rule}, {"say": "yes", "expect": {"rule_made": True}}]},
+        {"id": "t2", "who": "tester", "needs": [], "continues": "t1", "steps": [
+            {"say": "my rules", "expect": {"reply_has": ["workout"]}}]},
+        {"id": "t3", "who": "tester", "needs": [], "steps": [
+            {"say": "my rules", "expect": {"reply_not": ["workout"]}}]}])
+    code, c = run(st, tmp_path, conv_file=f)
+    assert code == 0, c["failed"]
+
+
+def test_the_outside_part_runs_before_the_tick_and_the_tick_before_the_message(st):
+    """A step's `do` (the outside app's part: an Allow, a changed tool) first, then the timed work due by then (a
+    device code's poll, a rule run), then the person's message."""
+    src = open(st.__file__, encoding="utf-8").read()
+    body = src[src.index("    def run_step("):src.index("    def _print_step(")]
+    assert body.index('step.get("do")') < body.index("self.bot.tick()") < \
+        body.index('self.bot.on_message(h, step["say"])')

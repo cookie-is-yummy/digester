@@ -2045,8 +2045,11 @@ a few plain things per step.
   MCP server (C's own loopback page binds a free port, `MVP_CONNECT_PORT=0`, never 8765 or 8791); slice V's use the
   practice merchant in a headless browser; slice Y's the fake Google with the library's made-up channels.
 - **--dry**: `FakeLLM` (each step's scripted `dry` answers, else harmless defaults: a chat "OK.", the first
-  candidates as clear picks, no details) and `WordPool`, a word-match ranking of the whole library instead of the
-  engine; the judge is off. 0 model calls, $0. It tests the harness; the real check is the live run after a merge.
+  candidates as clear picks, no details; a compose answer `{"pick_words": [...], "most": n}` picks the candidates
+  whose text holds one of the words) and `WordPool`, a word-match ranking of the whole library instead of the engine
+  (ties: the shorter caption first); the judge is off. 0 model calls, $0. It tests the harness; the real check is the
+  live run after a merge. With slice S in the code, each made-up library's caption marks are built at set-up
+  (`captionmark.ensure_lib`), as the bot does at start and after an import.
 - **Live**: the made-up library is copied to `MVP_HOME/selftest_lib` and prepared by the engine (about $0.002); spend
   is the growth of the shared ledger and the libraries' ledgers; the run stops (`CapReached`, a `BaseException` so the
   bot's own `except Exception` cannot swallow it) before the first model call at or past `MVP_SELFTEST_CAP_USD`
@@ -2062,7 +2065,7 @@ a few plain things per step.
   posts (`mutual`), and 2 captions with instructions aimed at an assistant (an easy lasagne, an abs workout).
   `selftest/truth.json` (mismatched, friends, instructions, channels, videos) is read by the checks and the fakes only,
   never by the bot.
-- **Conversations** (`selftest/conversations.jsonl`, 40, 109 steps): design D's c01 to c25, the verdict's c26 to c31,
+- **Conversations** (`selftest/conversations.jsonl`, 40, 114 steps): design D's c01 to c25, the verdict's c26 to c31,
   and the founder's other examples, paraphrased (c32 coach by email, c33 get rid of my hulu, c34 a private playlist
   called dinners, c35 send from his own mailbox, c36 the version, c37 "that's slop", c38 a timed email to another
   person is never sent, c39 unfollow on Instagram), plus c07b (only meme reels fit). `founder: true` marks his
@@ -2087,9 +2090,18 @@ a few plain things per step.
   failed: ["c07.2"], stopped, spend_usd, models: {purpose: n}, seconds}`. Exit 1 on any failed check or a stop at the
   cap.
 - **On the foundation alone** (dry): 9 conversations run, 19 steps, all pass; 31 skipped (W 14, S 5, Y 5, G 4, C 2,
-  V 2, D 1). Found on the way, left to slice W (its cancel false-positive guard): "any videos on how to cancel
-  subscriptions you don't use" and "im thinking of cancelling netflix, did i save anything worth watching on it first"
-  are taken by `cancel_reads` (c24).
+  V 2, D 1). Found on the way: "any videos on how to cancel subscriptions you don't use" and "im thinking of
+  cancelling netflix, did i save anything worth watching on it first" are taken by `cancel_reads` (c24; slice W's
+  guard fixes both).
+- **Trial merges** (dry, each slice branch merged alone onto this one in a throwaway branch, docs conflicts only; C
+  with G): W 23 conversations, 56 steps, all pass; S 14 / 29 all pass; G 11 / 23 all pass; Y 14 / 37 all pass; V
+  11 / 27 all pass (the practice merchant in headless Chromium, 0 processes left); D 10 / 29 with 2 failing steps,
+  C+G 13 / 31 with 2 failing steps. The failing steps are findings, kept as expectations with a `note`: c06.3-4 (D:
+  after "Which gym?", "i pay by card" became the gym's name and "planet fitness" the name on the membership),
+  c26.6 (C+G: "undo" after a rule's MCP adds could not take them out of Todoist), c27.1 (C+G: a changed add tool gave
+  "Todoist didn't answer" instead of the changed-tool line). c31.2 (V, a tester's "do it for me" after the cancel
+  steps got "Which one? Say "do 2 for me"") was added after that trial and fails until fixed. The trials also showed
+  S's title for the made-up lasagne whose first line is a note to assistants: "Brown the mince 2." (a step line).
 - **The habit**: `--quick` (c02, c03, c05, c07, c10, c19, c20, c23, about $0.15) after a change to a read, a guard or a
   prompt; the full set (about $0.55 to $0.70) before a merge, the line of counts in the PR. A failing step gets an
   offline test first. A conversation is never deleted; a changed expectation gets a `note`.

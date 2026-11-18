@@ -277,11 +277,25 @@ class WordPool:
 
 
 # ---------- dry answers: what the fake model says when a step scripts nothing ----------
-def _dry_compose(user, system=None):
-    n = len(re.findall(r"(?m)^\d+\. ", user or ""))
+def _dry_compose(user, system=None, words=None, most=3):
+    """The fake composer: the first `most` candidates as clear picks; with `words`, only candidates whose own text
+    holds one of them (a step's {"mvp_compose": {"pick_words": [...]}})."""
+    nums = []
+    for b in re.split(r"(?m)^(?=\d+\. )", user or ""):
+        m = re.match(r"(\d+)\. ", b)
+        if m and (not words or any(w.lower() in b.lower() for w in words)):
+            nums.append(int(m.group(1)))
     picks = [{"n": i, "title": "", "why": "It fits what you asked.", "verdict": "clear", "lines": []}
-             for i in range(1, min(n, 3) + 1)]
+             for i in nums[:most]]
     return {"picks": picks, "intro": "Here you go."}
+
+
+def _dry_answer(purpose, ans):
+    """A step's scripted answer; a compose answer may name words to pick candidates by instead of fixed numbers."""
+    if purpose == "mvp_compose" and isinstance(ans, dict) and "pick_words" in ans:
+        words, most = ans["pick_words"], ans.get("most", 3)
+        return lambda user, system=None: _dry_compose(user, system, words, most)
+    return ans
 
 
 DRY_DEFAULTS = {
@@ -394,6 +408,11 @@ class Run:
             r = refresh.prepare_library(lib, 0.05)
             if not r["ok"]:
                 raise SelftestError("The made-up library could not be prepared for search.")
+        # slice S: the caption marks, built as the bot builds them at start and after an import (derived data under
+        # the library; without the file no item is marked)
+        from mvp import captionmark
+        if hasattr(captionmark, "ensure_lib"):
+            captionmark.ensure_lib(lib)
         return lib
 
     def _ledger(self):
@@ -595,6 +614,8 @@ class Run:
         from mvp.mcp_mappings import SERVERS
         from mvp.tests.fakes.fake_mcp import FakeMcpServer
         from mvp.tests.fakes.fake_oauth import fake_oauth_app
+        import logging
+        logging.getLogger("httpx").setLevel(logging.WARNING)   # no request lines (with codes in their URLs) in output
         oa = fake_oauth_app(access_ttl=3600)
         client = TestClient(oa.asgi, base_url=oa.base)
         client.__enter__()
@@ -700,7 +721,7 @@ class Run:
         if self.dry and self.fake is not None:
             self.fake.answers = dict(DRY_DEFAULTS)
             for purpose, ans in (step.get("dry") or {}).items():
-                self.fake.answers[purpose] = ans
+                self.fake.answers[purpose] = _dry_answer(purpose, ans)
         acts0, n_out, smtp0 = self._acts(h), len(self.ch.outbox), len(FakeSMTP.sent)
         last0 = (self.bot.store.last_answer(h) or {}).get("run_id")
         self._claimed.clear()
@@ -862,8 +883,8 @@ class Run:
             for m in self.CLAIM.finditer(plain):
                 verb = next(g for g in m.groups() if g).lower()
                 before = plain[max(0, m.start() - 16):m.start()].lower()
-                if re.search(r"\b(?:nothing|not|never|no)\b|n't\s*$", before):
-                    continue   # "Nothing has been sent", "I haven't sent ..." say what did not happen
+                if re.search(r"\b(?:nothing|not|never|no)\b|n't\s*$|\b(?:what|if|once|when|after)\s*$", before):
+                    continue   # "Nothing has been sent", "I haven't sent ...", "I'll tell you what I added"
                 if verb in ("sent", "emailed"):
                     if ctx["acts1"]["email"] > 0:
                         continue
@@ -883,8 +904,8 @@ class Run:
         items = ctx["items"]
         if items[0] in bad and any(i not in bad for i in items[1:]):
             return False, f"a mismatched reel leads ({items[0]}) though another pick fits"
-        if "S" in self.slices and any(i in bad for i in items) and not self.DOUBT.search(ctx["text"]):
-            return False, "a mismatched reel is shown without the doubt line"
+        if "S" in self.slices and items[0] in bad and not self.DOUBT.search(ctx["text"]):
+            return False, "a mismatched reel leads without the doubt line"
         return True, ""
 
     def _rule_ok(self, ctx, want):
