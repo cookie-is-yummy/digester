@@ -286,7 +286,7 @@ def test_the_only_fit_is_said_plainly_with_a_neutral_title_and_the_doubt_line(sl
     msg = ask(slop, composer(("recipe for Chicken Alfredo", "clear", "Chicken Alfredo")))
     lines = msg.split("\n")
     lead = next(i for i, x in enumerate(lines) if x.startswith("The only match I found is"))
-    assert lines[lead].startswith("The only match I found is A reel from @lol_clipz_daily, which you liked")
+    assert lines[lead].startswith("The only match I found is a reel from @lol_clipz_daily, which you liked")
     assert lines[lead + 1] == ("Heads-up: its caption is a recipe, but the account mostly posts memes, so the video "
                                "may show something else.")
     assert "I recommend" not in msg and "Chicken Alfredo" not in msg
@@ -321,7 +321,7 @@ def test_details_of_a_strong_only_fit_sit_under_from_the_caption(slop):
 def test_several_strong_fits_are_the_best_match_never_the_only_one(slop):
     msg = ask(slop, composer(("recipe for Chicken Alfredo", "clear", "Chicken Alfredo"),
                              ("recipe for Garlic Pasta", "clear", "Garlic pasta")))
-    assert "The best match I found is A reel from @lol_clipz_daily" in msg and "only match" not in msg
+    assert "The best match I found is a reel from @lol_clipz_daily" in msg and "only match" not in msg
     assert "Heads-up: its caption is a recipe" in msg and "Garlic" not in msg
     assert "• A reel from @lol_clipz_daily" in msg   # the other one, by its neutral name
 

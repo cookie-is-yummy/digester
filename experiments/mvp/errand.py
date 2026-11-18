@@ -187,6 +187,9 @@ def built(bot, person, form, text, state, now):
         say = words("say_words")
         if not say:
             return None
+        from .drafts import is_group
+        if is_group(to):   # first full live self-test (c04): a group is never a name
+            return name, {"to": addr, "word": None, "name": "everyone", "group": True, "say": say}
         m = re.match(rf"^(?:my|mi|mis|our)\s+(?P<w>{PEOPLE_WORDS}|[^\W\d_]{{2,20}})$", to, re.I)
         word = SAME_WORD.get(_fold(m.group("w")), m.group("w").lower()) if m else None
         return name, {"to": addr, "word": word,
@@ -295,7 +298,7 @@ def act(bot, person, name, what, text, now):
     from . import drafts as D
     h = person["handle"]
     if name == "email_other":
-        req = {"to": what["to"], "word": what["word"], "name": what["name"],
+        req = {"to": what["to"], "word": what["word"], "name": what["name"], "group": what.get("group"),
                "request": D.sentence(what["say"]), "subject": None, "post": None, "cc": False}
         if what["to"] is None:
             draft_id = bot._new_draft_row(person, req, None, now, text)

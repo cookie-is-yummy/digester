@@ -290,6 +290,20 @@ def clause_paragraph(rest):
     return None, subj, None
 
 
+# first full live self-test (18 Nov, c04): "email everyone in my class that the meeting moved" asked for "Everyone In
+# My Class's email address" and wrote "Hi Everyone In My Class,". A group is never a name: the card greets "everyone"
+# and asks for one address at a time (or "blank" to add them in the mail app).
+GROUP_TO = re.compile(r"^(?:to\s+)?(?:(?:everyone|everybody|all(?:\s+of)?)(?:\s+(?:in|at|from|on|of)\s+.{1,40})?|"
+                      r"(?:all|both)\s+(?:of\s+)?(?:my|our|the)\s+.{1,40}|(?:my|our|the)\s+whole\s+.{1,40}|"
+                      r"(?:my|our|the)\s+(?:class|team|group|family|friends|coworkers|co-workers|colleagues|classmates|"
+                      r"teammates|staff|squad|crew|neighbou?rs|students|clients|members)|y['’]?all|todos|todas|"
+                      r"tod[oa]s\s+(?:en|de|mis|los|las)\s+.{1,40})$", re.I)
+
+
+def is_group(words):
+    return bool(words) and bool(GROUP_TO.match(" ".join(str(words).split())))
+
+
 def _recipient(rest, original):
     """(recipient dict, the words after it) from the start of `rest`, or (None, rest)."""
     m = re.match(rf"^(?:{_RCPT})(?=$|[\s,.;:!?])", rest)
@@ -855,6 +869,8 @@ class DraftsMixin:
     def _draft_ask_to(self, person, draft_id, p, now, lead=""):
         h = person["handle"]
         self._draft_touch(h, draft_id, now, waiting="to", asked_at=now_iso(now))
+        if p.get("group"):
+            return self.send(h, lead + T.DRAFT_WHO_GROUP)
         whose = (f"{p['greet_name']}'s" if p.get("greet_name") else
                  f"your {p['to_word']}'s" if p.get("to_word") else "their")
         return self.send(h, lead + T.draft_who(whose))
@@ -1364,6 +1380,7 @@ class DraftsMixin:
         h = person["handle"]
         route = self._send_route(h)   # round 10, slice D
         p = {"greet_name": req.get("name"), "to_word": req.get("word"), "request": req.get("request"),
+             **({"group": True} if req.get("group") else {}),
              "paragraphs": [], "post": post, "link": True, "extra": [], "changes": 0, "placeholders": [],
              "subject_set": bool(req.get("subject")),
              "body_from": "pick" if post and not req.get("request") else "words", "text": (getattr(self._tl, "norm_of", None) or text or "")[:REQUEST_MAX]}

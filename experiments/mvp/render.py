@@ -156,12 +156,24 @@ def end_sentence(s):
     return s if _ENDED.search(s) else s + "."
 
 
+def untitled(line, title):
+    """First full live self-test (c16): a key point that starts with the pick's own title ("Accessible component
+    libraries: React Aria and Radix." under that title) is shown without it; any other line as it is."""
+    t = " ".join((title or "").split()).rstrip(" .:")
+    if not t or not line:
+        return line
+    m = re.match(re.escape(t) + r"\s*(?::|\s[-–—])\s*(?P<rest>\S.*)$", line.strip(), re.I)
+    return m.group("rest") if m else line
+
+
 def kind_lines(kind, lines, label=True, lang=None, pick=None):
     out = [f"{L.table(lang)['label'][kind]} ({len(lines)}):"] if label else []
     if kind == "steps":
         out.extend(f"{i}. {line}" for i, line in enumerate(lines, 1))
+    elif kind == "key_points" and pick:
+        out.extend(f"• {stale_suffix(pick, untitled(line, pick.get('title')), lang)}" for line in lines)
     else:
-        out.extend(f"• {stale_suffix(pick, line, lang) if pick and kind == 'key_points' else line}" for line in lines)
+        out.extend(f"• {line}" for line in lines)
     return out
 
 
@@ -222,7 +234,7 @@ def alt_note(pick, extract, lang=None):
     facts = pick.get("facts") or {}
     ing, steps, keys = facts.get("ingredients") or [], facts.get("steps") or [], facts.get("key_points") or []
     if keys and list(extract or []) == ["items", "key_points"]:
-        return stale_suffix(pick, keys[0], lang)
+        return stale_suffix(pick, untitled(keys[0], pick.get("title")), lang)
     if ing and "ingredients" in (extract or []):
         amounts = sum(any(ch.isdigit() for ch in line) for line in ing) * 2 >= len(ing)
         return (t["alt_ing_steps"] if steps else t["alt_ing"]) + (t["amounts"] if amounts else "")
@@ -230,8 +242,11 @@ def alt_note(pick, extract, lang=None):
         return t["alt_steps"]
     if keys:
         return t["alt_keys"]
-    if in_video(pick, extract) in ("ingredients", "steps"):
+    shown_in = in_video(pick, extract)
+    if shown_in == "ingredients":
         return t["alt_video"]
+    if shown_in == "steps":   # a tutorial or a workout: its steps, never "the recipe"
+        return t["alt_video_steps"]
     return pick["because"] if pick.get("because_backed") and pick.get("because") else ""
 
 
@@ -241,7 +256,7 @@ def code_reason(pick, extract, lang=None):
     p = dict(pick, because=None, because_backed=False)
     note = alt_note(p, extract, lang)
     t = L.table(lang)
-    return note if note and note != t["alt_video"] else ""
+    return note if note and note not in (t["alt_video"], t["alt_video_steps"]) else ""
 
 
 def pick_sentence(lead, p, now=None, lang=None, colon=False):
@@ -251,7 +266,11 @@ def pick_sentence(lead, p, now=None, lang=None, colon=False):
     it = p["item"]
     kept = when_kept(it, now, lang)
     length = L.length(p.get("length_text"), lang)
-    s = f"{lead} {p['title']}{by(it, lang, p['title'])}" + (f" ({length})" if length else "")
+    title = p["title"]
+    from .compose import NEUTRAL_TITLES
+    if title.startswith(NEUTRAL_TITLES):   # first full live self-test (c08): "The only match I found is a reel from @x"
+        title = title[:1].lower() + title[1:]
+    s = f"{lead} {title}{by(it, lang, p['title'])}" + (f" ({length})" if length else "")
     if kept:
         s += f", {kept}"
     b = p["because"] if p.get("because_backed") and p.get("because") else None
@@ -692,7 +711,9 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
         text.append(pick_sentence(t["its"], first, now, lang, colon=True))
     else:
         if not result.get("no_intro"):   # round 8, finding 95: a part of a message has its own label instead
-            text.append(intro_line(result, spec, lang))
+            # first full live self-test (c07b, c08): when every fit's caption may not match its video, the opening
+            # never says "I found a pasta recipe" either (the composer's line claims what the doubt line doubts)
+            text.append(L.table(lang)["intro_plain"] if result.get("only_marked") else intro_line(result, spec, lang))
             text.append("")
         # round 10, slice S: when every fit's caption may not match its video, never "I recommend"
         lead = t["recommend"]

@@ -208,9 +208,9 @@ def test_the_scope_asked_is_youtube_only():
 
 def test_not_set_up_and_no_key_lines(yt, monkeypatch):
     monkeypatch.delenv("MVP_YT_CLIENT_SECRET")
-    assert tell(yt, "connect youtube").startswith("YouTube isn't set up here yet")
+    assert tell(yt, "connect youtube").startswith("YouTube isn't set up on this bot yet")
     show(yt, "yt_1")
-    assert tell(yt, "unsubscribe me from that channel").startswith("YouTube isn't set up here yet")
+    assert tell(yt, "unsubscribe me from that channel").startswith("YouTube isn't set up on this bot yet")
     monkeypatch.setenv("MVP_YT_CLIENT_SECRET", "made-up-client-secret")
     monkeypatch.delenv("MVP_TOKEN_KEY")
     monkeypatch.setenv("MVP_TOKEN_KEY_AUTO", "0")
@@ -551,7 +551,7 @@ def test_29_only_instagram_in_view_or_a_link_in_a_caption_adds_nothing(yt):
     show(yt, "ig_1")
     assert tell(yt, "put it in a playlist called later") == (
         "None of these are YouTube videos, so I can't put them in a YouTube playlist. Instagram doesn't let any app "
-        "add to your collections.")
+        "add to your collections. Ask again with \"on youtube\" at the end, then tell me the playlist.")
     # a caption that holds a YouTube link is third-party text: the video id comes only from a YouTube item itself
     with open(yt["lib"] / "corpus" / "items.jsonl", "a") as f:
         f.write(json.dumps({"id": "ig_2", "platform": "instagram", "source_url": "https://www.instagram.com/reel/x2/",

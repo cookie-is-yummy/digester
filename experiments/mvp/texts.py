@@ -1507,6 +1507,11 @@ SELF_LINK = ("Here it is as an email to yourself. Tap to open it in your mail ap
              "as a draft:")
 
 
+# first full live self-test (c04): an email to a group ("everyone in my class")
+DRAFT_WHO_GROUP = ("Who should it go to? I write to one address at a time: reply with one email address, or \"blank\" "
+                   "and add everyone in your mail app.")
+
+
 def draft_who(whose):
     return f"Who should it go to? Reply with {whose} email address, or \"blank\" to pick them in your mail app."
 
@@ -3129,8 +3134,9 @@ YT_FEED = "https://www.youtube.com/feed/channels"
 YT_NOT_CONNECTED = f"I can do that on YouTube once you connect it: say \"connect youtube\". Or do it yourself here: {YT_FEED}"
 YT_NOT_CONNECTED_PLAYLIST = "I can do that on YouTube once you connect it: say \"connect youtube\"."
 YT_OR_PAID = "Do you mean the YouTube channel or a paid subscription?"
-YT_NOT_SET_UP = ("YouTube isn't set up here yet: the person who runs me needs to add a Google sign-in client first. "
-                 f"You can still manage it yourself here: {YT_FEED}")
+# (first full live self-test, 18 Nov, c13: "a Google sign-in client" is a word for the operator, never for a tester)
+YT_NOT_SET_UP = ("YouTube isn't set up on this bot yet, so I can't change anything there for you. You can manage your "
+                 f"channels yourself here: {YT_FEED}")
 YT_NO_KEY = "I can't keep sign-ins safely yet: the person who runs me needs to set a key first."
 YT_ALREADY = "YouTube is already connected. Say \"disconnect youtube\" to end it."
 YT_DENIED = "Google says you didn't allow it, so YouTube isn't connected. Say \"connect youtube\" to try again."
@@ -3157,8 +3163,10 @@ YT_ADD_CAP = "I can add at most 50 videos a day to your YouTube playlists, and t
 YT_WHICH_NONE = "Which channel? Say \"unsubscribe from\" and its name."
 YT_QUOTA_NOTHING = "YouTube's daily limit for this app is used up, so I didn't change anything. Try again tomorrow."
 YT_NOTHING_IN_VIEW = "Ask me for something first, then say \"put these in a playlist called ...\"."
+# (first full live self-test, c34: "pasta videos" brought reels; the line now says what to do next)
 YT_NO_YT_PICKS = ("None of these are YouTube videos, so I can't put them in a YouTube playlist. Instagram doesn't let "
-                  "any app add to your collections.")
+                  "any app add to your collections. Ask again with \"on youtube\" at the end, then tell me the "
+                  "playlist.")
 YT_PLAYLIST_NAME_ASK = "What should the playlist be called? Say, for example, \"put these in a playlist called dinners\"."
 YT_HISTORY = ("No app can change your YouTube history. Open it here to clear or pause it: "
               "https://www.youtube.com/feed/history")

@@ -1262,6 +1262,50 @@ def _every_day(when, message):
         when.days = list(ALL_DAYS)
 
 
+# first full live self-test (18 Nov, c15): "mini blender tutorials to start doing daily" came back from the model as
+# an answer for now. The founder's own words ask for one a day (finding 87 read it as a daily rule): an ask whose
+# message says the person will do the thing daily, or ends with "daily" / "every day", is a daily rule's preview
+# (nothing starts before YES). A question ("what can i eat daily?", "how often should i stretch every day") and
+# "today" / "tonight" stay an answer.
+DOING_DAILY = re.compile(r"\b(?:to\s+)?(?:start\s+)?(?:doing|do|practi[cs]ing|practi[cs]e|watch(?:ing)?|learn(?:ing)?|"
+                         r"try(?:ing)?|follow(?:ing)?)\s+(?:(?:one|them|it|these)\s+)?(?:daily|every\s+day|each\s+day)\b"
+                         r"|\b(?:daily|every\s+day|each\s+day)\s*[.!]*\s*$", re.I)
+QUESTION_START = re.compile(r"^\W*(?:what|which|how|why|when|where|who|can|could|should|would|is|are|do|does|did|"
+                            r"any)\b|\?", re.I)
+TODAY_WORDS = re.compile(r"\b(?:today|tonight|right now|this (?:morning|evening|afternoon))\b", re.I)
+
+
+def _doing_daily(x: Interpretation, message):
+    if x.intent != "ask" or x.spec is None or x.spec.when.type != "now" or x.spec.content.source != "library":
+        return
+    t = " ".join((message or "").split())
+    if not DOING_DAILY.search(t) or QUESTION_START.search(t) or TODAY_WORDS.search(t):
+        return
+    x.intent = "new_rule"
+    x.spec.when = When(type="schedule", days=list(ALL_DAYS), times=["09:00"])
+
+
+# first full live self-test (18 Nov, c26): "every sunday put 3 recipes in my todoist", said on a Sunday at 8:08pm, came
+# back as every Sunday at 20:08: the model took the minute it was told it is now. A repeating rule whose only clock time
+# is this very minute (give or take 2), when the message names no time of day, gets the usual 9am.
+THIS_TIME = re.compile(r"\b(?:this|that|same|the same)\s+time\b|\bright now\b|\bnow\b", re.I)
+DAY_PART_SAID = re.compile(r"\b(?:morning|mornings|afternoon|afternoons|evening|evenings|night|nights|nightly|tonight|"
+                         r"noon|midday|lunch|lunchtime|dinner|dinnertime|breakfast|bedtime|after work|before work)\b",
+                         re.I)
+
+
+def _model_minute(x: Interpretation, message, now, tzname):
+    if x.spec is None or x.intent not in ("new_rule",) or x.spec.when.type != "schedule" or len(x.spec.when.times) != 1:
+        return
+    if CLOCK_TIME.search(message) or THIS_TIME.search(message) or DAY_PART_SAID.search(message):
+        return
+    from .schema import DEFAULT_TIME
+    local = now.astimezone(ZoneInfo(tzname))
+    hh, mm = (int(v) for v in x.spec.when.times[0].split(":"))
+    if abs((hh * 60 + mm) - (local.hour * 60 + local.minute)) <= 2:
+        x.spec.when.times = [DEFAULT_TIME]
+
+
 FIND_CLAUSE = re.compile(r"(?:,|;|\band\b|\bthen\b|\balso\b)\s+(?:also\s+|then\s+)?(?:can you\s+|could you\s+|please\s+)?"
                          r"(?:find|send|show|get|give|recommend|suggest|look up|pull up|pick)\s+(?:me\s+)?"
                          r"(?P<what>[^,;.!?]{3,120})", re.I)
@@ -1372,6 +1416,8 @@ def settle(raw, message, rules, now, tzname, todos=()):
         _canonical_change(x, rules)
         _reminder_text(x, rules)
         _clarify_keeps(x, message)
+        _doing_daily(x, message)
+        _model_minute(x, message, now, tzname)
         if x.spec is not None:
             _surprise(x, message, now, tzname)
             _cadence_words(x, message)

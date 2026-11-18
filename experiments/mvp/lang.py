@@ -85,6 +85,7 @@ EN = {
     "alt_steps": "the steps are written out",
     "alt_keys": "the tips are written out",
     "alt_video": "the recipe is in the video",
+    "alt_video_steps": "the steps are in the video",   # first full live self-test (c15): a Blender tutorial
     "none": "I didn't find a good match: {reason}.",
     "none_default": "nothing in your library fits well",
     "none_lib": "nothing in your library matched",
@@ -206,6 +207,7 @@ ES = {
     "alt_steps": "los pasos están escritos",
     "alt_keys": "los consejos están escritos",
     "alt_video": "la receta está en el video",
+    "alt_video_steps": "los pasos están en el video",
     "none": "No encontré nada que encaje bien: {reason}.",
     "none_default": "no hay nada parecido en lo que guardaste",   # review fix X11: not the same words twice
     "none_lib": "nada de tu biblioteca coincide",

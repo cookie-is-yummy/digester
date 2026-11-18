@@ -43,6 +43,7 @@ PRIVATE = os.path.join(REPO, "data", "mvp", "selftest_private.jsonl")   # the fo
 SLICES = ("W", "S", "D", "G", "C", "Y", "V")
 QUICK = ("c02", "c03", "c05", "c07", "c10", "c19", "c20", "c23")
 START = datetime(2026, 11, 17, 18, 0, tzinfo=timezone.utc)   # a Tuesday, 1pm in New York
+MAX_SLOT_STOPS = 20   # an "advance" stops at most this often at the person's rule slots on the way
 STEP_MINUTES = 3
 TZ = "America/New_York"
 SELF_ADDR = "me@example.com"          # the made-up person's own address (verified in setups that need it)
@@ -660,14 +661,39 @@ class Run:
         return M.on_code(self.bot, q.get("state"), q.get("code"), q.get("iss"), q.get("error")) is True
 
     def _advance(self, h, spec):
-        """Moves the clock: "3m", "2h", "2d", or "SUN 18:05" (the next such local time), then lets timed work run."""
+        """Moves the clock: "3m", "2h", "2d", or "SUN 18:05" (the next such local time). On the way, the clock stops
+        just after each slot of this person's active rules and the scheduler ticks there, as the running bot ticks
+        every minute (the first live run: a rule the model set for 9am never ran when the clock jumped to 18:05, as
+        the scheduler skips a send more than 2 hours late). The step's own tick then runs at the end."""
+        target = self._target(spec, h)
+        for _ in range(MAX_SLOT_STOPS):
+            due = sorted(r["next_run_at"] for r in self.bot.store.rules(h, statuses=("active",))
+                         if r.get("next_run_at"))
+            due = [datetime.fromisoformat(d) for d in due]
+            due = [d for d in due if self.clock[0] < d + timedelta(minutes=1) <= target]
+            if not due:
+                break
+            self.clock[0] = due[0] + timedelta(minutes=1)
+            self.bot.tick()
+        self.clock[0] = max(self.clock[0], target)
+
+    def _target(self, spec, h=None):
+        """The time an "advance" goes to. "next run": one minute after this person's next rule slot (the time a real
+        model chose for "every sunday" is not known in advance; "undo" right after the run is then inside its 10
+        minutes)."""
         from zoneinfo import ZoneInfo
         now = self.clock[0]
+        if spec.strip() == "next run":
+            due = [datetime.fromisoformat(r["next_run_at"]) for r in self.bot.store.rules(h, statuses=("active",))
+                   if r.get("next_run_at")]
+            due = [d for d in due if d + timedelta(minutes=1) > now]
+            if not due:
+                raise SelftestError("no rule slot ahead for 'next run'")
+            return min(due) + timedelta(minutes=1)
         m = re.fullmatch(r"(\d+)([mhd])", spec.strip())
         if m:
             n, u = int(m.group(1)), m.group(2)
-            self.clock[0] = now + timedelta(**{"m": {"minutes": n}, "h": {"hours": n}, "d": {"days": n}}[u])
-            return
+            return now + timedelta(**{"m": {"minutes": n}, "h": {"hours": n}, "d": {"days": n}}[u])
         day, hhmm = spec.split()
         days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
         hh, mm = (int(x) for x in hhmm.split(":"))
@@ -675,8 +701,7 @@ class Run:
         for k in range(1, 9):
             cand = (local + timedelta(days=k - 1)).replace(hour=hh, minute=mm, second=0, microsecond=0)
             if cand > local and days[cand.weekday()] == day.upper()[:3]:
-                self.clock[0] = cand.astimezone(timezone.utc)
-                return
+                return cand.astimezone(timezone.utc)
         raise SelftestError(f"bad clock step {spec!r}")
 
     def _do(self, h, what):
@@ -715,23 +740,24 @@ class Run:
 
     def run_step(self, conv, h, i, step):
         sid = f"{conv['id']}.{i}"
-        self.clock[0] += timedelta(minutes=step.get("gap", STEP_MINUTES))
-        if step.get("advance"):
-            self._advance(h, step["advance"])
         if self.dry and self.fake is not None:
             self.fake.answers = dict(DRY_DEFAULTS)
             for purpose, ans in (step.get("dry") or {}).items():
                 self.fake.answers[purpose] = _dry_answer(purpose, ans)
+        # (the counts before the clock moves: what a rule's run says on the way belongs to this step)
         acts0, n_out, smtp0 = self._acts(h), len(self.ch.outbox), len(FakeSMTP.sent)
         last0 = (self.bot.store.last_answer(h) or {}).get("run_id")
         self._claimed.clear()
         self._step_calls = []
         trace = self.bot._tl.trace = {}
         error = None
+        self.clock[0] += timedelta(minutes=step.get("gap", STEP_MINUTES))
         try:
             for what in step.get("do") or []:   # what the outside world does first (an Allow, a changed tool)
                 if not self._do(h, what):
                     error = f"harness action {what} not available"
+            if step.get("advance"):   # then the clock, stopping at this person's rule slots on the way
+                self._advance(h, step["advance"])
             self.bot.tick()   # then the timed work due by now (held sends, rule runs, a device code's poll)
             if step.get("tap"):
                 ref = next((r for r, hh, _ in reversed(self.ch.outbox) if hh == h), None)

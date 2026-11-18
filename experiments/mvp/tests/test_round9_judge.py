@@ -383,7 +383,7 @@ def test_j6_a_neutral_title_says_the_creator_once():
     assert by(it, title="A post from @maker") == "" and by(it, title="Calm desk tour") == " by @maker"
     assert by(it) == " by @maker" and not names_creator("A post from @makerx", "@maker")
     p = {"item": it, "title": "A post from @maker", "because": None}
-    assert pick_sentence("I recommend", p) == "I recommend A post from @maker, which you saved."
+    assert pick_sentence("I recommend", p) == "I recommend a post from @maker, which you saved."
     assert source_head(p) == 'From "A post from @maker":'
     assert source_head(dict(p, title="Calm desk tour")) == 'From "Calm desk tour" by @maker:'
     head = pick_parts({"title": "A post from @maker", "creator": "@maker", "url": "u"})[0]["text"]
