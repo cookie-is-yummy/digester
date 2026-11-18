@@ -49,6 +49,36 @@ def page_status():
 # ---------- end round 10, slice K ----------
 
 
+# ---------- round 10, slice D: the Connections panel (mvp/panel.py); a value goes in, only "set"/"not set" comes out
+def connections_state():
+    try:
+        from .. import panel
+        return panel.state()
+    except Exception:  # noqa: BLE001 - the panel never breaks the page
+        return {"rows": [], "sending": "", "key": ""}
+
+
+def connections_post(body):
+    """(status code, reply) for {"name", "value"} (seal it) or {"name", "remove": true}. The reply never holds the
+    value; an error is a code and its plain words."""
+    from .. import panel
+    from .. import texts as T
+    body = body if isinstance(body, dict) else {}
+    name = str(body.get("name") or "")
+    try:
+        if body.get("remove"):
+            panel.remove(name)
+        else:
+            value = body.get("value")
+            panel.save(name, value if isinstance(value, str) else "")
+    except panel.PanelError as e:
+        return 400, {"error": e.code, "words": T.PANEL_ERRORS.get(e.code, T.PANEL_ERRORS["failed"])}
+    except Exception:  # noqa: BLE001 - never a value or a trace in the reply
+        return 400, {"error": "failed", "words": T.PANEL_ERRORS["failed"]}
+    return 200, dict(connections_state(), ok=True)
+# ---------- end round 10, slice D ----------
+
+
 def _local(dt, tzname, with_day=True):
     t = dt.astimezone(ZoneInfo(tzname))
     clock = t.strftime("%-I:%M %p").lower()
@@ -371,6 +401,12 @@ class WebChannel(Channel):
                     from urllib.parse import parse_qs
                     handle = (parse_qs(query).get("as") or [None])[0]
                     return self._json(200, ch.state(handle))
+                # ---------- round 10, slice D: the Connections panel (states only, never a value) ----------
+                if path == "/api/connections":
+                    if not self._ok():
+                        return self._json(403, {"error": "token"})
+                    return self._json(200, connections_state())
+                # ---------- end round 10, slice D ----------
                 if path == "/api/outbox":
                     if not self._ok():
                         return self._json(403, {"error": "token"})
@@ -409,6 +445,10 @@ class WebChannel(Channel):
                     ch.post_tapback(body.get("handle"), body.get("ref"), body.get("kind"))
                 elif self.path == "/api/control":
                     ch.post_control(body)
+                elif self.path == "/api/connections":   # round 10, slice D: seal or remove one value
+                    code, out = connections_post(body)
+                    body = None   # the value is not kept a moment longer than the seal needs
+                    return self._json(code, out)
                 else:
                     return self._json(404, {"error": "not found"})
                 self._json(200, {"ok": True})

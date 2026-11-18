@@ -200,10 +200,12 @@ class ReceiptsMixin:
         cans = [r for r in self.store.cancellations(h) if (r.get("updated_at") or "") >= s]
         if cans:
             said = sum(1 for r in cans if r["status"] == "person_says_done")
-            sent = sum(1 for r in cans if r["status"] == "person_sent")
+            # round 10, slice D: "notice_sent" is a notice the bot sent after their "send"
+            sent = sum(1 for r in cans if r["status"] in ("person_sent", "notice_sent"))
             # (round 9 checks) a notice the mailbox sent after their "send" is the bot's send, never "you sent"
-            mine = sum(1 for r in cans if r["status"] == "person_sent" and r.get("draft_id")
-                       and (self.store.draft(r["draft_id"]) or {}).get("status") == "sent")
+            mine = sum(1 for r in cans if r["status"] == "notice_sent" or (
+                r["status"] == "person_sent" and r.get("draft_id")
+                and (self.store.draft(r["draft_id"]) or {}).get("status") == "sent"))
             dropped = sum(1 for r in cans if r["status"] == "dropped")
             lines.append((max(_t(r["updated_at"]) for r in cans),
                           T.receipt_cancellations(len(cans), said, sent - mine, len(cans) - said - sent - dropped,

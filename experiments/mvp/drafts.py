@@ -187,6 +187,20 @@ MAILBOX_SAVE = re.compile(r"^\W*(?:(?:please|can you|could you|pls)\s+)?(?:put|s
                           r"last)\s+one|the\s+\w+\s+one|#\s?\d|number\s+\d)?\s*(?:as\s+an?\s+(?:e-?mail\s+)?draft|"
                           r"in(?:to)?\s+my\s+(?:e-?mail|drafts?(?:\s+folder)?|gmail|icloud|mailbox|inbox)"
                           r"(?:\s+drafts?)?)(?:\s+please)?\W*$", re.I)
+# ---------- round 10, slice D: "send it for me" is the send word; "can you send it (for me)" asks ----------
+_SEND_OBJ = r"send\s+(?:it|this|that|this one|the (?:email|notice|draft|message))(?:\s+(?:out|off))?"
+_FOR_ME = r"(?:for me|yourself|on my behalf|from my (?:e-?mail|address|account|gmail|mailbox))"
+SEND_FOR_ME = re.compile(rf"^\W*(?:(?:please|pls|just|ok(?:ay)?|yes|go ahead and)[\s,]+)*{_SEND_OBJ}\s+{_FOR_ME}"
+                         r"(?:\s+(?:please|now))*[\s.!?]*$", re.I)
+SEND_ASK = re.compile(r"^\W*(?:can|could|would|will|can'?t|couldn'?t|why can'?t)\s+(?:you|u)\s+(?:please\s+|just\s+)?"
+                      rf"{_SEND_OBJ}(?:\s+{_FOR_ME})?(?:\s+(?:please|now))*[\s.!?]*$", re.I)
+
+
+class NotBuilt(Exception):
+    """A send route the seam names but this round does not build (send_as: the person's own connected mailbox)."""
+
+
+# ---------- end round 10, slice D ----------
 NOT_A_CHANGE = re.compile(r"\b(?:to|on|onto|in|into)\s+(?:my|the)\s+(?:[\w-]+\s+){0,2}(?:list|calendar|reminders?|"
                           r"to-?dos?)\b", re.I)
 # ---------- round 10, slice W (W1): "email it to me", read with a card open (also while it waits for "to") ----------
@@ -799,7 +813,7 @@ class DraftsMixin:
         place of "Here's the email." to_hint: what the To line says while it is blank."""
         h = person["handle"]
         now = now or self.clock()
-        route = "mailbox" if self._mailbox_route(h) else "link"
+        route = self._send_route(h)   # round 10, slice D: the one route chooser (read again at "send")
         p = {"greet_name": to_name, "to_word": to_word, "request": request, "paragraphs": list(paragraphs or []),
              "post": post, "link": True, "extra": [], "changes": 0, "placeholders": list(placeholders or []),
              "greeting": greeting or ("Hello," if kind == "notice" else None),
@@ -879,6 +893,12 @@ class DraftsMixin:
         h = person["handle"]
         person = self.store.person(h) or person
         row = self._draft(draft_id)
+        # ---------- round 10, slice D: the card shows the route as it is now (a "send" checks it again) ----------
+        cur = self._send_route(h)
+        if row.get("route") != cur and row["status"] != "held":
+            self.store.update_draft(draft_id, route=cur)
+            row = self._draft(draft_id)
+        # ---------- end round 10, slice D ----------
         p = json.loads(row["parts"])
         body = self._draft_render(person, row, p)
         to = row.get("to_addr") or ""
@@ -940,11 +960,15 @@ class DraftsMixin:
         (the mail server took it, or the person says they sent it) or "dropped". Returns a line to add to the reply."""
         job = row.get("job") or ""
         if job.startswith("todo:") and job[5:].isdigit():   # round 9, W10: a to-do handed to the draft
-            return self._doit_ticked(row["handle"], int(job[5:]), now) if how == "sent" else ""
+            return self._doit_ticked(row["handle"], int(job[5:]), now) if how in ("sent", "bot_sent") else ""
         if not job.startswith("cancel:") or not job[7:].isdigit():
             return ""
-        self.store.update_cancellation(int(job[7:]), at=now, status="person_sent" if how == "sent" else "dropped")
-        return " " + T.NOTICE_NOT_YET if how == "sent" else ""
+        # ---------- round 10, slice D: a notice that went gets the follow-up offer (cancel.py) ----------
+        if how in ("sent", "bot_sent"):
+            return " " + self._cancel_notice_went(int(job[7:]), row, by_bot=how == "bot_sent", now=now)
+        # ---------- end round 10, slice D ----------
+        self.store.update_cancellation(int(job[7:]), at=now, status="dropped")
+        return ""
 
     # ---------- the person's next messages while a draft is open ----------
     def draft_reads(self, person, text, pending, now):
@@ -998,7 +1022,8 @@ class DraftsMixin:
                 return self.send(h, T.mailbox_already_held(self._clock(datetime.fromisoformat(hold["due_at"]),
                                                                        person)))
             return self.send(h, T.DRAFT_SEND_ASKED if d["route"] == "mailbox" and self._mailbox_route(h)
-                             else T.DRAFT_SEND_LINK)
+                             # round 10, slice D: the operator hears how to switch sending on
+                             else self._switch_on_line(h) if config.is_operator(h) else T.DRAFT_SEND_LINK)
         if waiting == "sign" and not CANCEL_WORDS.match(t) and not SEND_WORDS.match(t) and "?" not in t \
                 and not re.search(r"\b(?:what|why|how|who|when|where|help|stop|undo|show|draft|email)\b", t, re.I):
             if NO_NAME.match(t):
@@ -1017,6 +1042,16 @@ class DraftsMixin:
             self.store.update_draft(d["id"], parts=p,
                                     subject=d["subject"] if p.get("subject_set") else self._draft_subject_of(p))
             return self._draft_after_to(person, d["id"], now)
+        # ---------- round 10, slice D: "send it for me" (the send word) and "can you send it for me" (a question) ----
+        fm = SEND_FOR_ME.match(t) or SEND_ASK.match(t)
+        if fm:
+            self.note(intent="draft_send")
+            if waiting in ("to", "sign", "say"):
+                return self.send(h, T.DRAFT_NOT_READY)
+            if fm.re is SEND_ASK or "?" in t:
+                return self._draft_send_asked(person, d, now)
+            return self._draft_send_word(person, d, now)
+        # ---------- end round 10, slice D ----------
         if SEND_WORDS.match(t):
             self.note(intent="draft_send")
             if waiting in ("to", "sign", "say"):
@@ -1320,7 +1355,7 @@ class DraftsMixin:
 
     def _new_draft_row(self, person, req, post, now, text, job=None):
         h = person["handle"]
-        route = "mailbox" if self._mailbox_route(h) else "link"
+        route = self._send_route(h)   # round 10, slice D
         p = {"greet_name": req.get("name"), "to_word": req.get("word"), "request": req.get("request"),
              "paragraphs": [], "post": post, "link": True, "extra": [], "changes": 0, "placeholders": [],
              "subject_set": bool(req.get("subject")),
@@ -1501,9 +1536,55 @@ class DraftsMixin:
         left = placeholders_left(d)
         if left:   # no link was given and nothing can be sent while one is left, on either route
             return self.send(h, T.fill_first(left[0]))
-        if d["route"] != "mailbox" or not self._mailbox_route(h):
-            return self.send(h, T.DRAFT_SEND_LINK)
+        # ---------- round 10, slice D: the route is read again at "send"; a change shows the card again ----------
+        cur = self._send_route(h)
+        if cur != d["route"]:
+            return self._draft_route_changed(person, d, cur, now)
+        if cur != "mailbox":
+            return self.send(h, self._switch_on_line(h) if config.is_operator(h) else T.DRAFT_SEND_LINK)
+        # ---------- end round 10, slice D ----------
         return self._mailbox_send_word(person, d, now)
+
+    # ---------- round 10, slice D: the send route (D1), the switch-on line (D4) ----------
+    SEND_ROUTES = ("send_as", "mailbox", "link")   # send_as (the person's own connected mailbox) is round 11
+
+    def _send_route(self, h):
+        """How a draft for this person goes: "mailbox" (the operator, with A-013's settings: the bot sends after
+        "send") or "link" (the person taps the mailto: link). Read when the card is made and again at "send"."""
+        return "mailbox" if self._mailbox_route(h) else "link"
+
+    def _send_as(self, person, d, now):
+        raise NotBuilt("send_as")
+
+    def _switch_on_line(self, h):
+        """D4: what the operator needs to do so "send" sends (on the test page: the Connections panel)."""
+        from . import panel
+        state = panel.sending_state()
+        if state in ("outlook", "host", "nobody"):
+            return T.panel_sending(state)
+        return T.SEND_SWITCH_ON_PAGE if getattr(self.channel, "name", "") == "web" else T.SEND_SWITCH_ON
+
+    def _draft_send_asked(self, person, d, now):
+        """'can you send it for me': a question, never the yes. What "send" would do now, in one line."""
+        h = person["handle"]
+        left = placeholders_left(d)
+        if left:
+            return self.send(h, T.fill_first(left[0]))
+        if self._send_route(h) == "mailbox":
+            if d["route"] != "mailbox":
+                return self._draft_route_changed(person, d, "mailbox", now)
+            return self.send(h, T.DRAFT_SEND_ASKED)
+        return self.send(h, self._switch_on_line(h) if config.is_operator(h) else T.SEND_FOR_ME_TESTER)
+
+    def _draft_route_changed(self, person, d, cur, now):
+        """The route at "send" is not the one the card showed (sending was switched on or off meanwhile): the card
+        again with the route as it is now, and no yes taken."""
+        h = person["handle"]
+        if d["status"] == "held":
+            self._draft_stop_hold(h, self._draft(d["id"]), now)
+        self._draft_show(person, d["id"], now)
+        return self.send(h, T.SEND_ROUTE_CHANGED if cur == "mailbox" else T.SEND_ROUTE_GONE)
+    # ---------- end round 10, slice D ----------
 
     def _mailbox_send_word(self, person, d, now):
         """W4: "send" is the yes for the version last shown, and only that version: its token is made here from the
@@ -1585,6 +1666,13 @@ class DraftsMixin:
         person = self.store.person(h)
         if not row or not person or row["status"] != "held" or row["version"] != hold["version"]:
             return 0   # changed, cancelled or sent: that yes was for another version
+        # ---------- round 10, slice D: sending was switched off during the hold: nothing goes, and the person hears it
+        if self._send_route(h) != "mailbox":
+            self.store.update_draft(row["id"], status="link_shown")
+            self._draft_touch(h, row["id"], now)
+            self._draft_show(person, row["id"], now, lead=T.SEND_ROUTE_GONE_HELD + "\n\n")
+            return 0
+        # ---------- end round 10, slice D ----------
         due = datetime.fromisoformat(hold["due_at"])
         if now - due > timedelta(minutes=config.SEND_LATE_MIN):
             self.store.update_draft(row["id"], status="link_shown")
@@ -1634,8 +1722,13 @@ class DraftsMixin:
             # (round 9 checks) only this card closes: a newer card the person opened meanwhile stays open, so its
             # "send" is never answered with "I already sent that one"
             self.store.set_state(f"draft_open:{h}", None)
-        self.send(h, T.mailbox_accepted(row["to_addr"], self._clock(now, person)) + self._draft_job_done(row, "sent",
-                                                                                                         now))
+        # ---------- round 10, slice D: a notice's receipt names the merchant; the follow-up offer comes with it ------
+        if row["kind"] == "notice":
+            head = T.notice_accepted(p.get("merchant"), row["to_addr"], self._clock(now, person))
+        else:
+            head = T.mailbox_accepted(row["to_addr"], self._clock(now, person))
+        self.send(h, head + self._draft_job_done(row, "bot_sent", now))
+        # ---------- end round 10, slice D ----------
         return 1
 
     # ---------- A5: a real draft in the operator's Drafts folder (actions/mailbox_imap.py) ----------

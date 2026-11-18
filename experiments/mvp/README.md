@@ -228,6 +228,16 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   trusts that account's captions, and the same text under other accounts, less; "that one was fine" undoes it.
   `MVP_CM_DOUBT_ALL=0` names only the two sure reasons in the doubt line (for when the founder's labels put the mark
   under 85%). Tests: `tests/test_round10_slop.py`.
+- **Round 10, sending and notices** (DESIGN.md section 17.D, slice D): on the test page, the **Connections** panel
+  beside the chat takes your mailbox address and app password (and the TickTick, Todoist, webhook and YouTube keys);
+  each is sealed on this computer and never shown again (the panel says "set" or "not set"). With them, "send" on an
+  email card sends it from your own address after a 2-minute wait ("undo" stops it). If sending was switched on or off
+  after the card was shown, "send" shows the card again first. "can you send it for me" says what "send" would do
+  (or how to switch sending on); "send it for me" is the send word. A cancellation notice that went (sent by the bot,
+  or "sent" after the link) offers a check date ("yes", another day, or "no"); the check reminder takes "they
+  confirmed" or "no", and "no" offers a second notice, written by code, that goes only after its own "send". The
+  route file gains the cancel facts read on 17 Nov (Amazon's cancel page, Audible's steps, LA Fitness's notice box,
+  Planet Fitness's deadline, the last button's words for slice V). Tests: `tests/test_round10_sending.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -575,6 +585,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `phrasing.py` | Round 10, slice W: everyday wording read by code: `normalize` (openers, closers, texting shorthand; a second try for the request reads only, never stored or sent to a model), `parts` / `clauses` (two asks in one message), `TIME_WORDS` |
 | `captionmark.py` | Round 10, slice S: the caption mark (`cm-v1`, derived, versioned), what the person said about it (`caption_feedback`), the order rule, the doubt line, `fit_reads` and the thumbs-down question |
 | `browser.py`, `yt_auth.py` | Round 10, slice K: stubs (`STUB = True`) giving today's behaviour until slices V and Y replace them |
+| `panel.py` | Round 10, slice D: the test page's Connections panel (seal, remove, states only; whether sending is on) |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |

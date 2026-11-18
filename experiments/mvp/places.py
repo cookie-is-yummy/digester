@@ -865,6 +865,10 @@ def _t_connect(bot, person, key, now):
     if not config.is_operator(h):
         return bot.send(h, _only_operator(_t_app(key)))
     out = T.TOKEN_SETUP[key]
+    # ---------- round 10, slice D: on the test page, the Connections panel takes the key (never the chat) ----------
+    if getattr(getattr(bot, "channel", None), "name", "") == "web":
+        out = T.token_setup_page(key)
+    # ---------- end round 10, slice D ----------
     if C.module(key).reachable():
         out += "\n" + T.token_set_already(_t_word(key))
     return bot.send(h, out)
