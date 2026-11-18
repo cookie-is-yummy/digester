@@ -100,7 +100,12 @@ class OutputsMixin:
         ctx = Ctx(bot=self, person=person, answer=answer, picks=[p for p in answer["picks"] if p.get("main", True)],
                   run_id=run_id, rule_id=rule_id, kind=kind, now=self.clock(), tz=spec.when.tz or person["timezone"],
                   request_text=request_text or "", slot_at=datetime.fromisoformat(slot) if slot else None)
-        done = self._perform(ctx, [(a.action, a.params) for a in spec.do], slot=slot)
+        acts = [(a.action, a.params) for a in spec.do]
+        # second merge of round 10 (Y4): a timed rule with a private YouTube playlist as its place adds there under
+        # its grant (grants.run_place, reached through places.route); a rule's own do never names the action
+        if kind == "scheduled" and rule_id and spec.place is not None and spec.place.kind == "playlist":
+            acts.append(("youtube.playlist_add", {}))
+        done = self._perform(ctx, acts, slot=slot)
         if "message.send" in names or ("email.send" in names and not self._email_reached(done)):
             # an email that waits for an address, failed, or sits in an outbox the person cannot open: the answer
             # comes here too, so it is never lost (with the line that says what happened to the email)

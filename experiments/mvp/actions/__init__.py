@@ -318,6 +318,11 @@ REGISTRY.update({
                                       fallback="todo.add"),
 })
 # ---------- end round 10, slice Y ----------
+# ---------- second merge of round 10, Y4 (DESIGN.md section 17): a rule adds its YouTube picks to the person's
+# private playlist under slice G's grant (the one yes when the rule is made). Only this YouTube action: never an
+# unsubscribe or a subscribe (no grant for a destructive write, verdict 6.3), never from a model or a rule's own do.
+REGISTRY["youtube.playlist_add"] = REGISTRY["youtube.playlist_add"].model_copy(update={"rule_grant": True})
+# ---------- end second merge of round 10 ----------
 # ---------- round 10, slice V (DESIGN.md section 17.V; A-016, Proposed): the browser's last press ----------
 class BrowserParams(BaseModel):
     """browser.cancel: the open run and the hash of the page the person said yes to."""

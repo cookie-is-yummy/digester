@@ -246,6 +246,14 @@ def route(bot, ctx, name, params):
     from .actions import todo as todo_action
     from .actions.base import Outcome
     from .schema import list_name
+    # ---------- second merge of round 10 (Y4): the playlist add a timed rule's place asks for runs only under the
+    # rule's grant; anything else is "skipped" with nothing said, never a call without the person's yes ----------
+    if name == "youtube.playlist_add":
+        from .actions.base import Outcome as _Outcome
+        from .grants import run_place as _run_place
+        o = _run_place(bot, ctx, name, params) if ctx.kind == "scheduled" and ctx.rule_id else None
+        return o if o is not None else _Outcome("skipped", line="", detail={"grant": "none"})
+    # ---------- end second merge of round 10 ----------
     if name not in ("todo.add", "calendar.add"):
         return None
     scheduled = ctx.kind == "scheduled"

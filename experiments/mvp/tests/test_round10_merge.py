@@ -419,6 +419,7 @@ def test_connected_did_and_export_tell_the_truth_about_a_rule_adding_to_todoist_
 # youtube_reads (5b) after email_reads; the browser offer inside cancel_reads.
 HOOK_ORDER = {
     "_on_message": ["ref = self.secret_reads(person, text, now)",
+                    "ref = self.browser_reads(person, text, now)",                   # V (second merge)
                     "ref = self._asked_reads(person, text, now)",
                     'if pending and pending["kind"] == "confirm_delete":',
                     "ref = self.fit_reads(person, text, now)",                       # 0 (S)
@@ -431,6 +432,7 @@ HOOK_ORDER = {
                      "ref = self._overdue_reply(person, text, now)",
                      "ref = self._cancel_answer(person, text, now)",                 # 3 (B, D)
                      "ref = place_answer(self, person, text, now)",                  # 4 (D)
+                     "ref = ytreads.youtube_answer(self, person, text, now)",        # 4a (Y, second merge)
                      "ref = self._mismatch_answer(person, text, now, ask)",          # 4b (S)
                      "return self._doit_answer(person, text, now)"],
     "answer_normally": ["ref = self._rule_reads(person, text, now)",
@@ -438,6 +440,7 @@ HOOK_ORDER = {
                         "ref = export_reads(self, person, text, now)",              # 5a (W)
                         "ref = self.email_reads(person, text, now)",                # 5 (A)
                         "ref = self.self_email_reads(person, text, now)",           # 5 (W: the message itself only)
+                        "ref = ytreads.youtube_reads(self, person, text, now)",     # 5b (Y, second merge)
                         "ref = self.cancel_reads(person, text, now)",               # 6 (B, D)
                         "ref = self.postact_reads(person, text, now)",              # 7 (C of round 9)
                         "ref = place_reads(self, person, text, now)",               # 8 (D, E, C)
@@ -468,8 +471,15 @@ def test_the_hooks_run_in_the_order_of_design_section_17():
     # every read of hooks 5a to 8 is inside the loop over the message and its normalised form; 8z and the model after
     body = src[src.index("    def answer_normally("):]
     loop, after = body.index("for text in phrasing.variants(said):"), body.index("        text = said\n")
-    for n in HOOK_ORDER["answer_normally"][2:11]:
+    for n in HOOK_ORDER["answer_normally"][2:12]:
         assert loop < body.index(n) < after, n
+    # second merge of round 10: the browser offer (V) sits inside cancel_reads' web route, behind browser.available,
+    # before today's steps
+    csrc = open(os.path.join(os.path.dirname(HERE), "cancel.py"), encoding="utf-8").read()
+    entry = csrc[csrc.index("    def _cancel_entry("):]
+    entry = entry[:entry.index("\n    def ", 10)]
+    offer, steps = entry.index("if browser.available(self, person, e[\"key\"]):"), entry.index("T.browser_steps_head(")
+    assert entry.index("return self.browser_offer(person, e, now)") > offer and offer < steps
 
 
 # ================================ the stubs of slice K after the six merges ======================================

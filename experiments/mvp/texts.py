@@ -2855,14 +2855,14 @@ def place_grant_note(app, where, thing, per_run, each, per_day, calendar=False, 
     return out, f"\nReply YES to start and let me add {them}"
 
 
-def place_unusable(app, word, n, why=None):
+def place_unusable(app, word, n, why=None, use=None):
     """The place can't be used for this person now: the rule sends here, and the line says how to change that."""
     # review of the round 10 merge: a tester can't connect the app this round ("connect todoist" says it isn't ready),
     # so the line never tells them to
     if why == "operator":
         return f" {app} is only for the person who runs me, so I'll put them in my message here instead."
     return (f" {app} isn't connected for you, so I'll put them in my message here instead. Say \"connect {word}\", "
-            f"then \"use {word} for rule {n}\".")
+            f"then \"use {use or word} for rule {n}\".")   # use: second merge of round 10 ("my youtube playlist")
 
 
 def place_no_route(app):
@@ -3563,4 +3563,15 @@ def cancel_doit_cant(name):
     """Self-test c31: "do it for me" after the cancel steps, where no browser is offered to this person."""
     return (f"I can't cancel {name} for you: it needs your sign-in, and I never sign in as you. The steps above are how "
             f"to do it yourself. Want a reminder to check it went through? Tell me when, like \"friday\".")
+
+
+# Y4: a rule's run that adds its YouTube picks to the person's private playlist under the rule's yes
+def yt_rule_ig_left(n):
+    """The rule's Instagram picks, counted and never placed (a YouTube playlist takes only YouTube videos)."""
+    return (f"{n} from Instagram {'stays' if n == 1 else 'stay'} in this message: a YouTube playlist takes only YouTube "
+            f"videos.")
+
+
+YT_RULE_QUOTA = "YouTube's daily limit for this app is used up, so I didn't add them to your playlist this time."
+YT_RULE_STOPPED_PART = "YouTube stopped me part way, so the rest are only in this message."
 # ---------- end second merge of round 10 ----------

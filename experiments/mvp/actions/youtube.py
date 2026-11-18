@@ -307,13 +307,21 @@ def run(ctx, params):
         return Outcome("done", detail={"placed": [{"action": "youtube.playlist_make", "remote_id": pid}],
                                        "playlist_id": pid, "count": 1, "units": api.units})
     if kind == "playlist_add":
-        if not params.playlist_id:
+        pid = params.playlist_id
+        if not pid and getattr(ctx, "kind", None) == "scheduled":
+            # second merge of round 10 (Y4): a rule's run under its grant adds to the private playlist the preview
+            # named: the person's own playlist of that name, else one made now (always private; it stays on undo)
+            lists, _ = api.playlists()
+            pid = next((p for p, tl in lists if tl and tl.casefold() == params.playlist_title.casefold()), None)
+            if not pid:
+                pid = api.make_playlist(params.playlist_title)
+                placed.append({"action": "youtube.playlist_make", "remote_id": pid})
+        if not pid:
             raise YtError("failed")
         todo = list(params.videos)
         for i, v in enumerate(todo):
             try:
-                placed.append({"action": "youtube.playlist_add", "remote_id": api.add_video(params.playlist_id,
-                                                                                            v.video_id)})
+                placed.append({"action": "youtube.playlist_add", "remote_id": api.add_video(pid, v.video_id)})
             except YtError as e:
                 stop, left = e.code, [x.model_dump() for x in todo[i:]]
                 break

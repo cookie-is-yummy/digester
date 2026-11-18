@@ -150,3 +150,135 @@ def test_an_ordinary_first_line_is_still_the_title():
     from mvp import compose
     assert compose.display_title(_item("Creamy mushroom risotto\n1. Toast the rice")) == "Creamy mushroom risotto"
     assert compose.display_title(_item("10 minute garlic noodles. So good")) == "10 minute garlic noodles."
+
+
+# ================================ seam (a), Y4: a rule adds its YouTube picks to a private playlist (G's grant) =====
+import re  # noqa: E402
+
+from mvp.tests.test_round10_grants import boom, rule_form  # noqa: E402
+from mvp.tests.test_round10_youtube import connect as yt_connect, tell, yt  # noqa: E402,F401  (yt is a fixture)
+
+PLAYLIST_TEXT = "every sunday at 6pm put 3 cooking videos in my recipes playlist"
+PLAYLIST_PREVIEW = ("I'll also add them to your private YouTube playlist \"Recipes\", on YouTube: at most 3 each Sunday "
+                    "and 10 a day.")
+
+
+def picks_of(*words):
+    """A fake composer that picks the candidates whose text holds one of these words, titled by their first line."""
+    def answer(user):
+        found = re.findall(r"^(\d+)\. [^\n]*\n<item>(.*?)</item>", user, re.M | re.S)
+        return {"picks": [{"n": int(n), "verdict": "clear", "title": cap.split("\n")[0][:40]}
+                          for n, cap in found if any(w in cap.lower() for w in words)][:3], "intro": "Here you go."}
+    return answer
+
+
+def _playlist_rule(e, connect_first=True, words=("miso", "orzo", "crispy")):
+    from mvp.tests.test_round7 import AllPool
+    e["bot"].pool = AllPool(str(e["lib"]))   # every item of the library is a candidate (the YouTube ones included)
+    if connect_first:
+        yt_connect(e)
+    e["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "intro": ""}   # the preview shows nothing yet
+    e["clock"][0] += timedelta(seconds=30)
+    preview = say(e, PLAYLIST_TEXT, rule_form(goal="cooking videos"))
+    e["state"]["answers"]["mvp_compose"] = picks_of(*words)                       # the run picks these
+    return preview
+
+
+def _yes(e):
+    e["clock"][0] += timedelta(seconds=30)
+    return say(e, "yes", boom)
+
+
+def _videos(g, title="Recipes"):
+    return [sorted(p["items"].values()) for p in g.playlists.values() if p["title"] == title]
+
+
+def test_y4_youtube_playlist_add_is_the_one_youtube_action_a_rule_may_run_under_its_grant():
+    from mvp.actions import REGISTRY
+    assert REGISTRY["youtube.playlist_add"].rule_grant is True
+    for name in ("youtube.unsubscribe", "youtube.subscribe", "youtube.playlist_make"):
+        assert REGISTRY[name].rule_grant is False, name
+    d = REGISTRY["youtube.playlist_add"]
+    assert d.from_model is False and d.in_rules is False   # only code runs it, never a rule's own do
+
+
+def test_y4_the_preview_names_the_private_playlist_and_the_yes_makes_one_grant(yt):
+    preview = _playlist_rule(yt)
+    assert PLAYLIST_PREVIEW in preview, preview
+    assert "Reply YES to start and let me add them" in preview
+    _yes(yt)
+    g, = yt["bot"].store.grants_of(H)
+    assert (g["connector"], g["action"], g["target"], g["per_run"]) == ("youtube", "youtube.playlist_add", "Recipes", 3)
+
+
+def test_y4_a_run_adds_only_youtube_picks_to_the_private_playlist_counts_instagram_and_undo_takes_them_out(yt):
+    _playlist_rule(yt)
+    _yes(yt)
+    g = yt["g"]
+    _, sent = tick_at(yt, SUNDAY)
+    (vids,) = _videos(g)
+    assert vids == ["vidAAAAAAA1", "vidCCCCCCC3"]                       # the two YouTube picks, never the reel
+    (pl,) = [p for p in g.playlists.values() if p["title"] == "Recipes"]
+    assert pl["privacy"] == "private"
+    assert "Added 2 videos to YouTube (rule 1): One-pan miso pasta; Lemon orzo." in sent, sent
+    assert "1 from Instagram stays in this message: a YouTube playlist takes only YouTube videos." in sent
+    rows = yt["bot"].store.placements(H)
+    assert {r["action"] for r in rows} >= {"youtube.playlist_add"} and all(r["rule_id"] for r in rows
+                                                                            if r["action"] == "youtube.playlist_add")
+    out = tell(yt, "undo")
+    assert "out of YouTube" in out or "took" in out.lower(), out
+    assert _videos(g) == [[]]                                            # the playlist the rule made stays, empty
+
+
+def test_y4_youtubes_daily_limit_in_a_run_is_said_and_never_counted_as_a_grant_failure(yt, monkeypatch):
+    _playlist_rule(yt)
+    _yes(yt)
+    monkeypatch.setenv("MVP_YT_UNITS_PER_DAY", "0")
+    _, sent = tick_at(yt, SUNDAY)
+    assert "YouTube's daily limit for this app is used up, so I didn't add them to your playlist this time." in sent
+    assert "didn't answer" not in sent
+    g, = yt["bot"].store.grants_of(H)
+    assert g["status"] == "active" and not g["fails"]
+    assert _videos(yt["g"]) == []
+
+
+def test_y4_a_revoked_sign_in_in_a_run_says_so_ends_the_grant_and_counts_no_failure(yt):
+    _playlist_rule(yt)
+    _yes(yt)
+    yt["g"].withdraw()
+    _, sent = tick_at(yt, SUNDAY)
+    from mvp import texts as T
+    assert T.YT_REVOKED in sent, sent
+    assert "didn't answer" not in sent
+    g, = yt["bot"].store.grants_of(H, active_only=False)
+    assert g["status"] == "ended" and not g["fails"]
+
+
+def test_y4_a_person_not_connected_to_youtube_is_told_to_connect_it_never_that_it_is_operator_only(yt):
+    preview = _playlist_rule(yt, connect_first=False)
+    assert "only for the person who runs me" not in preview
+    assert 'Say "connect youtube"' in preview
+    assert yt["bot"].store.grants_of(H, active_only=False) == []
+
+
+def test_y4_a_rule_with_only_instagram_picks_adds_nothing_and_says_why(yt):
+    _playlist_rule(yt, words=("crispy",))
+    _yes(yt)
+    _, sent = tick_at(yt, SUNDAY)
+    assert "1 from Instagram stays in this message: a YouTube playlist takes only YouTube videos." in sent
+    assert _videos(yt["g"]) == []
+
+
+def test_y4_connect_youtube_then_use_my_youtube_playlist_for_rule_1_makes_the_grant_on_the_named_playlist(yt):
+    preview = _playlist_rule(yt, connect_first=False)
+    assert 'Say "connect youtube", then "use my youtube playlist for rule 1".' in preview, preview
+    _yes(yt)
+    assert yt["bot"].store.grants_of(H, active_only=False) == []
+    yt_connect(yt)
+    out = tell(yt, "use my youtube playlist for rule 1")
+    assert PLAYLIST_PREVIEW in out, out
+    tell(yt, "yes")
+    g, = yt["bot"].store.grants_of(H)
+    assert (g["action"], g["target"]) == ("youtube.playlist_add", "Recipes")
+    _, sent = tick_at(yt, SUNDAY)
+    assert _videos(yt["g"]) == [["vidAAAAAAA1", "vidCCCCCCC3"]], sent

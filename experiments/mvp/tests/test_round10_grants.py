@@ -448,10 +448,13 @@ def test_perform_refuses_a_grant_that_does_not_fit(tok, case, monkeypatch):
 
 def test_the_four_grantable_actions_and_never_the_others():
     from mvp.actions import REGISTRY
-    # the merge of round 10: slice C's todoist.mcp_add is the fifth (the Todoist sign-in route)
+    # the merge of round 10: slice C's todoist.mcp_add is the fifth (the Todoist sign-in route); the second merge adds
+    # slice Y's youtube.playlist_add (Y4), and never a YouTube unsubscribe or subscribe
     assert sorted(n for n, d in REGISTRY.items() if d.rule_grant) == ["mac.event", "mac.reminder", "ticktick.add",
-                                                                       "todoist.add", "todoist.mcp_add"]
-    for n in ("webhook.post", "mailbox.send", "mailbox.draft", "email.draft_link", "email.send", "todo.add"):
+                                                                       "todoist.add", "todoist.mcp_add",
+                                                                       "youtube.playlist_add"]
+    for n in ("webhook.post", "mailbox.send", "mailbox.draft", "email.draft_link", "email.send", "todo.add",
+              "youtube.unsubscribe", "youtube.subscribe", "youtube.playlist_make"):
         assert REGISTRY[n].rule_grant is False
     for n in ("mac.event", "mac.reminder", "ticktick.add", "todoist.add",
               "todoist.mcp_add"):   # still never named by a model or a rule
@@ -780,8 +783,9 @@ PHRASINGS = [
      rule_form(when={"type": "schedule", "days": ["FRI"], "time": "16:00"}), "line:I can't email other people"),
     ("every friday save a draft in my gmail with what I saved this week",
      rule_form(when={"type": "schedule", "days": ["FRI"], "time": "16:00"}), "line:I can't add to Gmail on a schedule"),
+    # the second merge of round 10 (Y4): a playlist is a place a rule may add to once YouTube is connected
     ("every sunday put the youtube recipes I saved this week in my playlist called recipes", rule_form(),
-     "line:I can't add to YouTube on a schedule"),
+     "line:YouTube isn't connected for you, so I'll put them in my message here instead. Say \"connect youtube\""),
     ("every month tell me which youtube channels I stopped watching",
      rule_form(when={"type": "schedule", "month_days": [1], "time": "10:00"}), "none"),
 ]

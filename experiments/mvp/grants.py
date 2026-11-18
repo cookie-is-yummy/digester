@@ -28,14 +28,16 @@ PAUSE_AFTER = 3                          # failed runs in a row before a grant p
 RULE_UNDO_WINDOW = timedelta(hours=24)   # "undo" takes out a rule's last adds this long after the run
 RULE_UNDO_DAYS = timedelta(days=7)       # "undo rule 3" reaches back this far
 SAME_SLOT = timedelta(days=7)            # a retried slot never adds twice within this
-KIND_OF = {"todo.add": "todo", "calendar.add": "calendar"}
+KIND_OF = {"todo.add": "todo", "calendar.add": "calendar",
+           "youtube.playlist_add": "playlist"}   # second merge of round 10 (Y4): outputs.deliver adds it for a playlist
 MAX_PER_RUN = 5                          # a rule sends 1 to 5 picks; its per_run follows its count
 # what the person types to connect, check, or name the place in "use X for rule 3"
 CONNECT_WORD = {"mac": "my mac", "ticktick": "ticktick", "todoist": "todoist", "youtube": "youtube"}
 CHECK_WORD = {"mac": "mac", "ticktick": "ticktick", "todoist": "todoist", "youtube": "youtube"}
 USE_WORD = {"mac_reminders": "reminders", "mac_calendar": "my mac calendar", "ticktick": "ticktick",
-            "todoist": "todoist", "youtube_playlist": "my playlist"}
+            "todoist": "todoist", "youtube_playlist": "my youtube playlist"}
 TIMED = ("schedule", "random")
+PLAYLIST_DEFAULT = "From my saves"       # second merge of round 10 (Y4): the private playlist a rule adds to unnamed
 
 
 class GrantRefused(Exception):
@@ -75,6 +77,12 @@ def _app(p):
     return p.app
 
 
+def _use_word(p):
+    """What the person says in "use X for rule N" when it differs from the connect word (second merge of round 10:
+    "connect youtube", then "use my youtube playlist for rule 1"); None: the connect word."""
+    return USE_WORD.get(p.key) if p.connector == "youtube" else None
+
+
 def email_who(text):
     """Who an email in a rule's request is to, in the person's own words ("my team", "my landlord"), for the M-14
     line; "them" when no such words are found. Never an address."""
@@ -103,7 +111,10 @@ def _target(p, list_name=None, text=""):
     if p.kind == "playlist":
         m = re.search(r"\bplaylist\s+(?:called|named)\s+([\w' -]{1,40})", text or "", re.I) or \
             re.search(r"\bmy\s+([\w' -]{1,40}?)\s+playlist\b", text or "", re.I)
-        return m.group(1).strip().title()[:80] if m else None
+        name = m.group(1).strip() if m else ""
+        if re.fullmatch(r"(?:(?:my|a|the|private|new)\s+)*(?:youtube|yt)?", name, re.I):
+            return None   # second merge of round 10: "my youtube playlist" names no playlist (Y4 uses its default)
+        return name.title()[:80]
     if p.connector == "mac" and list_name and not _names_place(list_name, p):
         from .places import _app_list
         return _app_list(list_name, None, p)
@@ -210,10 +221,13 @@ def rule_place(store, handle, text, spec, to_other=False, who=None, when_words="
         _strip_place_todos(spec, p)
         return {"status": "unusable", "app": app, "why": why,
                 "line": T.place_unusable(app, CONNECT_WORD.get(p.connector, p.connector),
-                                         number or next_number(store, handle), why=why)}
+                                         number or next_number(store, handle), why=why, use=_use_word(p))}
     model_list = next(((a.params or {}).get("list") for a in spec.do if a.action == "todo.add"), None)
     from .schema import RulePlace
-    spec.place = RulePlace(connector=p.connector, kind=p.kind, target=_target(p, model_list, text),
+    target = _target(p, model_list, text)
+    if p.kind == "playlist" and not target:
+        target = PLAYLIST_DEFAULT   # second merge of round 10 (Y4): a playlist always has a name the preview shows
+    spec.place = RulePlace(connector=p.connector, kind=p.kind, target=target,
                            per_run=_per_run(spec, p), per_day=_per_day(action))
     _ensure_do(spec, p)
     lines, yes = note_lines(store, handle, spec)
@@ -244,6 +258,10 @@ def note_lines(store, handle, spec):
     daily = w.every_days == 1 or (w.type == "schedule" and not (w.days or w.month_days or w.month_weeks or w.every_weeks
                                                                 or w.every_months or w.every_days))
     each = "each time" if len(w.times) > 1 or w.every_hours or w.type == "random" else T.grant_each(w.days, daily)
+    if pl.kind == "playlist":   # second merge of round 10 (Y4): slice Y's own preview line (T.yt_rule_place)
+        return ("\n" + T.yt_rule_place(pl.target or PLAYLIST_DEFAULT, pl.per_run, each, pl.per_day)
+                + "\nEach time I'll tell you here what I added, and you can say \"undo\".",
+                "\nReply YES to start and let me add them")
     return T.place_grant_note(_app(p) if p else pl.connector, T.grant_where(pl.kind, _app(p) if p else "", pl.target,
                                                                               project),
                               T.grant_thing(pl.kind, many), pl.per_run, each, pl.per_day,
@@ -455,6 +473,38 @@ def run_place(bot, ctx, name, params):
                                                        for t, iid, url, due in keep])
         titles = [i.title for i in out.items]
         keys = [r[1] or r[0] for r in keep]
+    elif pl.kind == "playlist":
+        # ---------- second merge of round 10, Y4: the run's YouTube picks go to the private playlist; an Instagram
+        # pick is counted and never placed; a video id comes only from the library's own YouTube item ----------
+        from .actions import YtPlaylistAdd
+        from .ytreads import video_id_of
+        picks = [x for x in ctx.picks if not _strong(bot, ctx.person, x)]
+        left_out = len(ctx.picks) - len(picks)
+        view = bot.view(ctx.person["library"])
+        videos, seen = [], set()
+        for x in picks:
+            it = view.get(x.get("item_id"))
+            vid = video_id_of(it) if it is not None else None
+            if vid and vid not in seen:
+                seen.add(vid)
+                videos.append({"video_id": vid, "title": (x.get("title") or vid)[:200]})
+        ig_left = len(picks) - len(videos)
+        extra = T.yt_rule_ig_left(ig_left) if ig_left else ""
+        if not videos:
+            line = " ".join(x for x in (extra, T.cm_left_out(left_out) if left_out else "") if x)
+            return Outcome("skipped", line=line, detail={"grant_id": g["id"], "why": "no_youtube"})
+        keep = videos[:int(g["per_run"])]
+        more = len(videos) - len(keep)
+        left = int(g["per_day"]) - added_today(store, h, rule["id"], action, now, tz)
+        if left <= 0:
+            return Outcome("skipped", line=T.grant_day_full(app, n, g["per_day"]), detail={"grant_id": g["id"],
+                                                                                       "why": "per_day"})
+        more += max(0, len(keep) - left)
+        keep = keep[:left]
+        out = YtPlaylistAdd(playlist_title=g["target"] or PLAYLIST_DEFAULT, videos=keep)
+        titles = [v["title"] for v in keep]
+        keys = [v["video_id"] for v in keep]
+        # ---------- end second merge of round 10 ----------
     else:
         from .actions import calendar as cal
         from .places import _local
@@ -498,6 +548,18 @@ def run_place(bot, ctx, name, params):
                 T.mcp_changed(app, pl.connector)
             return Outcome("failed", line=line, detail=dict(base, error=e.code))
         # ---------- end merge of round 10 ----------
+        # ---------- second merge of round 10, Y4: YouTube's own limits and a withdrawn sign-in are not the app
+        # failing: the person has to act (or wait), so no failure is counted and nothing pauses ----------
+        if pl.connector == "youtube" and e.code in ("quota", "rate", "too_many", "needs_signin"):
+            store.log_action(h, ctx.run_id, rule["id"], action, "failed", detail=dict(base, error=e.code), slot=None,
+                             at=now)
+            if e.code == "needs_signin":
+                from .ytreads import revoked
+                line = revoked(bot, h, now)   # the sign-in goes and every YouTube grant ends (slice Y's line)
+            else:
+                line = T.YT_RULE_QUOTA
+            return Outcome("failed", line=line, detail=dict(base, error=e.code))
+        # ---------- end second merge of round 10 ----------
         C.failed(store, h, pl.connector, e.code, now)
         row = store.grant_failed(g["id"], pause_after=PAUSE_AFTER) or {}
         maybe = getattr(e, "maybe_arrived", False)   # merge of round 10: an MCP stream broke after the create
@@ -522,6 +584,15 @@ def run_place(bot, ctx, name, params):
         if code == "per_day":
             return Outcome("skipped", line=T.grant_day_full(app, n, g["per_day"]), detail=dict(base, why="per_day"))
         return Outcome("skipped", line=T.grant_not_added(app), detail=dict(base, why=code))
+    stopped = None
+    if o.status == "partial":   # second merge of round 10 (Y4): YouTube stopped part way; what was added is kept
+        stopped = (o.detail or {}).get("stop")
+        if stopped == "needs_signin":
+            from .ytreads import revoked
+            stopped = revoked(bot, h, now)
+        else:
+            stopped = T.YT_RULE_STOPPED_PART
+        o.status = "done"
     if o.status != "done":   # perform's own daily cap across every outside add
         store.log_action(h, ctx.run_id, rule["id"], action, o.status, detail=dict(base, **(o.detail or {})), at=now)
         return Outcome("skipped", line=o.line, detail=dict(base, why="cap"))
@@ -532,7 +603,7 @@ def run_place(bot, ctx, name, params):
     store.grant_worked(g["id"])
     store.log_action(h, ctx.run_id, rule["id"], action, "done", ref=",".join(map(str, ids)),
                      detail=dict(base, count=o.detail.get("count"), placements=ids), at=now)
-    named = [i for i, x in zip(ids, placed) if x["action"] != "mac.list"]
+    named = [i for i, x in zip(ids, placed) if x["action"] not in ("mac.list", "youtube.playlist_make")]
     store.set_state(f"lastwrite_rule:{h}", {
         "kind": "placed", "say": f"added {len(named)} {one if len(named) == 1 else many} to {app} (rule {n})",
         "at": now_iso(now), "undo": {"ids": ids, "connector": pl.connector, "app": app, "rule_id": rule["id"],
@@ -541,6 +612,8 @@ def run_place(bot, ctx, name, params):
     line = T.grant_ran(len(named), one, many, app, n, titles, more)
     if left_out:   # merge of round 10: slice S's line for the strong-marked picks left out
         line += " " + T.cm_left_out(left_out)
+    if pl.kind == "playlist":   # second merge of round 10 (Y4)
+        line += "".join(" " + x for x in (stopped, extra) if x)
     return Outcome("done", line=line, ref=",".join(map(str, ids)),
                    detail=dict(base, count=len(named), placements=ids, more=more))
 
@@ -694,7 +767,8 @@ def stop_adding(store, handle, p, now):
     return T.grant_stopped_adding(_app(p), sorted(set(numbers)))
 
 
-KIND_FOR_ACTION = {"mac.reminder": "todo", "mac.event": "calendar", "ticktick.add": "todo", "todoist.add": "todo"}
+KIND_FOR_ACTION = {"mac.reminder": "todo", "mac.event": "calendar", "ticktick.add": "todo", "todoist.add": "todo",
+                   "youtube.playlist_add": "playlist"}   # second merge of round 10 (Y4)
 
 
 def use_for_rule(bot, person, p, n, now):
@@ -717,10 +791,13 @@ def use_for_rule(bot, person, p, n, now):
         return T.place_no_route(app).strip()
     why = C.unavailable(store, h, p.connector)
     if why:
-        return T.place_unusable(app, CONNECT_WORD.get(p.connector, p.connector), n, why=why).strip()
+        return T.place_unusable(app, CONNECT_WORD.get(p.connector, p.connector), n, why=why, use=_use_word(p)).strip()
     spec = RuleSpec.model_validate(rule["spec"])
     from .schema import RulePlace
-    spec.place = RulePlace(connector=p.connector, kind=p.kind, target=_target(p, None, ""),
+    target = _target(p, None, rule.get("text") or "") if p.kind == "playlist" else _target(p, None, "")
+    if p.kind == "playlist" and not target:   # second merge of round 10 (Y4): the playlist the rule's words named
+        target = PLAYLIST_DEFAULT
+    spec.place = RulePlace(connector=p.connector, kind=p.kind, target=target,
                            per_run=_per_run(spec, p), per_day=_per_day(action))
     _ensure_do(spec, p)
     g = store.grant_for(h, r["id"], action)

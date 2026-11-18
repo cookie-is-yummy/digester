@@ -45,7 +45,8 @@ def test_every_registry_entry_has_rule_grant_false():
     # round 10, slice G sets it on the four adds a rule may make under its grant (tests/test_round10_grants.py),
     # slice C on todoist.mcp_add; slice Y may add youtube.playlist_add (the merge of round 10)
     assert sorted(n for n, a in REGISTRY.items() if a.rule_grant) == \
-        ["mac.event", "mac.reminder", "ticktick.add", "todoist.add", "todoist.mcp_add"]
+        ["mac.event", "mac.reminder", "ticktick.add", "todoist.add", "todoist.mcp_add",
+         "youtube.playlist_add"]   # the second merge of round 10 (Y4)
     # round 10, slice C: the verdict's G2 list is the only set a slice may turn on (C: todoist.mcp_add)
     allowed = {"ticktick.add", "todoist.add", "mac.reminder", "mac.event", "todoist.mcp_add", "youtube.playlist_add"}
     assert {n for n, a in REGISTRY.items() if a.rule_grant} <= allowed
