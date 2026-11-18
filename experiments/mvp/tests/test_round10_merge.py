@@ -1,6 +1,7 @@
 """Offline tests for the merge of round 10 (DESIGN.md section 17, the hook order table at its top): what crosses the
 border between slices K, W, S, D, G and C. Fakes only (the fake interpreter and composer of test_mvp, the fake HTTP
 opener of round 9, the fake MCP and OAuth servers of slice K): no network, no model call. Made-up data only."""
+import json
 import os
 from datetime import timedelta
 import sys
@@ -332,3 +333,140 @@ def test_the_errand_form_names_no_action_and_no_grant_read():
              if isinstance(n, (ast.Attribute, ast.Name))}
     assert not names & {"perform", "REGISTRY", "run_place", "add_grant", "make", "grant_reads", "send_word",
                         "_mailbox_send_word", "draft_send"}
+
+
+# ================================ (g) the Connections panel (D) and the page footer (K) agree ===================
+from mvp.tests.test_round10_sending import b  # noqa: E402,F401  (b is a fixture)
+
+
+def _agree(values):
+    from mvp import panel, settings
+    sw, st = settings.switches(), panel.state()
+    rows = {r["name"]: r for r in st["rows"]}
+    assert (sw["sending"] == "on") == (panel.sending_state() == "on"), (sw, panel.sending_state())
+    for name, label in (("MVP_TICKTICK_TOKEN", "TickTick"), ("MVP_TODOIST_TOKEN", "Todoist"),
+                        ("MVP_WEBHOOK_URL", "webhook")):
+        assert (sw[label] == "on") == (rows[name]["state"] in ("setting", "sealed")), (label, sw, rows[name])
+    shown = settings.page_status() + json.dumps(st)
+    for v in values:
+        assert v not in shown
+    return sw
+
+
+def test_the_panel_and_the_footer_say_the_same_and_never_show_a_value(b, monkeypatch):
+    from mvp import config, panel
+    monkeypatch.setattr(config, "OPERATOR", None)
+    monkeypatch.setattr(config, "PAGE_OPERATOR", True)
+    for k in ("MVP_TICKTICK_TOKEN", "MVP_TODOIST_TOKEN", "MVP_WEBHOOK_URL", "MVP_MAILBOX_SMTP_HOST"):
+        monkeypatch.delenv(k, raising=False)
+    tick, pw = "tt-made-up-token-0123456789abcdef", "abcd efgh ijkl mnop"
+    values = [tick, pw, pw.replace(" ", "")]
+    assert _agree(values)["sending"] == "off"
+    panel.save("MVP_MAILBOX_ADDRESS", "me@example.com")
+    panel.save("MVP_MAILBOX_APP_PASSWORD", pw)
+    _agree(values)
+    monkeypatch.setenv("MVP_MAILBOX_SMTP_HOST", "smtp.example.invalid")
+    monkeypatch.setenv("MVP_MAILBOX_SMTP_PORT", "465")
+    assert _agree(values)["sending"] == "on"
+    assert _agree(values)["TickTick"] == "off"
+    panel.save("MVP_TICKTICK_TOKEN", tick)
+    assert _agree(values)["TickTick"] == "on"
+    monkeypatch.setenv("MVP_TODOIST_TOKEN", "td-made-up-token-0123456789abcdef")
+    assert _agree(values + ["td-made-up-token-0123456789abcdef"])["Todoist"] == "on"
+    panel.remove("MVP_TICKTICK_TOKEN")
+    panel.remove("MVP_MAILBOX_APP_PASSWORD")
+    sw = _agree(values)
+    assert sw["TickTick"] == "off" and sw["sending"] == "off"
+
+
+# ================================ (h) the three questions are true for everything merged =======================
+def _connections_json():
+    from mvp import config
+    found = sorted((os.path.getmtime(os.path.join(d, n)), os.path.join(d, n))
+                   for d, _, fs in os.walk(config.HOME) for n in fs if n == "connections.json")
+    with open(found[-1][1], encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_connected_did_and_export_tell_the_truth_about_a_rule_adding_to_todoist_by_sign_in(mcp, tmp_path):
+    bot, rid, _ = _mcp_rule(mcp, tmp_path)
+    tick_at(mcp, SUNDAY)
+    mcp["clock"][0] = SUNDAY + timedelta(hours=1)
+    assert "• Todoist: connected." in say(mcp, "what are you connected to", boom)
+    did = say(mcp, "what did you do for me", boom)
+    assert "• added 3 tasks in Todoist (3 by rule 1)" in did
+    assert "Standing permissions:\n• rule 1 may add tasks to Todoist: at most 3 a run and 10 a day" in did
+    assert "Tomato" not in did
+    say(mcp, "export my data", boom)
+    body = _connections_json()
+    assert [(g["rule"], g["app"], g["action"], g["status"]) for g in body["standing_permissions"]] == \
+        [(1, "todoist", "todoist.mcp_add", "active")]
+    assert body["sign_ins_kept"] == ["todoist"] and body["pinned_tools"] == {"todoist": ["add-tasks", "delete-object"]}
+    assert len(body["placements"]) == 3 and "Tomato" not in json.dumps(body)
+    # a changed tool: the three answers follow
+    mcp["fk"].srv.change_tool("add-tasks", description="Add tasks. " + INJECT)
+    tick_at(mcp, SUNDAY + timedelta(days=7))
+    mcp["clock"][0] = SUNDAY + timedelta(days=7, hours=1)
+    assert "Standing permissions" not in say(mcp, "what did you do for me", boom)
+    assert "Todoist: connected." not in say(mcp, "what are you connected to", boom)
+    say(mcp, "export my data", boom)
+    assert [g["status"] for g in _connections_json()["standing_permissions"]] == ["ended"]
+
+
+# ================================ the hook order of DESIGN.md section 17 (verdict 3.2), in the source ===========
+# (where, needle in handler.py); the rows of slices Y and V are "later" (not merged yet) and have no needle here:
+# browser_reads after secret_reads; youtube_answer (4a) between places.asked_reads and _mismatch_answer;
+# youtube_reads (5b) after email_reads; the browser offer inside cancel_reads.
+HOOK_ORDER = {
+    "_on_message": ["ref = self.secret_reads(person, text, now)",
+                    "ref = self._asked_reads(person, text, now)",
+                    'if pending and pending["kind"] == "confirm_delete":',
+                    "ref = self.fit_reads(person, text, now)",                       # 0 (S)
+                    "ref = self.draft_reads(person, text, pending, now)",            # 1 (A, W, D)
+                    "ref = self.offer_reads(person, text, pending, now)",            # 2 (C of round 9)
+                    "ref = self.onboard_step(person, text, now)",                    # the setup (W inside)
+                    "return self.answer_normally(person, text, now)"],
+    "_asked_reads": ["ask = captionmark.take_ask(self.store, person[\"handle\"])",
+                     "ref = self._deadline_answer(person, text, now)",
+                     "ref = self._overdue_reply(person, text, now)",
+                     "ref = self._cancel_answer(person, text, now)",                 # 3 (B, D)
+                     "ref = place_answer(self, person, text, now)",                  # 4 (D)
+                     "ref = self._mismatch_answer(person, text, now, ask)",          # 4b (S)
+                     "return self._doit_answer(person, text, now)"],
+    "answer_normally": ["ref = self._rule_reads(person, text, now)",
+                        "for text in phrasing.variants(said):",
+                        "ref = export_reads(self, person, text, now)",              # 5a (W)
+                        "ref = self.email_reads(person, text, now)",                # 5 (A)
+                        "ref = self.self_email_reads(person, text, now)",           # 5 (W: the message itself only)
+                        "ref = self.cancel_reads(person, text, now)",               # 6 (B, D)
+                        "ref = self.postact_reads(person, text, now)",              # 7 (C of round 9)
+                        "ref = place_reads(self, person, text, now)",               # 8 (D, E, C)
+                        "ref = grant_reads(self, person, text, now)",               # 8a (G)
+                        "ref = self.receipts_reads(person, text, now)",             # 8 (W9)
+                        "ref = self.do_it(person, text, now)",                      # 8 (W10)
+                        "text = said",                                              # end of the two tries
+                        "ref = self.split_reads(person, text, now)",                # 8z (W)
+                        "done, ref = self.integration_reads(person, text, now)",
+                        "it, _ = interpret(",
+                        "it = chat_guard(it, text)",
+                        "screened = self.screen_guard(person, it, text, now)",      # then the errand form (W)
+                        "if screened is not None:"],
+}
+
+
+def test_the_hooks_run_in_the_order_of_design_section_17():
+    src = open(os.path.join(os.path.dirname(HERE), "handler.py"), encoding="utf-8").read()
+    for fn, needles in HOOK_ORDER.items():
+        start = src.index(f"    def {fn}(")
+        end = src.index("\n    def ", start + 10)
+        body = src[start:end]
+        at = []
+        for n in needles:
+            assert body.count(n) == 1, (fn, n, body.count(n))
+            at.append(body.index(n))
+        assert at == sorted(at), (fn, [n for _, n in sorted(zip(at, needles))])
+    # every read of hooks 5a to 8 is inside the loop over the message and its normalised form; 8z and the model after
+    body = src[src.index("    def answer_normally("):]
+    loop, after = body.index("for text in phrasing.variants(said):"), body.index("        text = said\n")
+    for n in HOOK_ORDER["answer_normally"][2:11]:
+        assert loop < body.index(n) < after, n
