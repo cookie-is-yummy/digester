@@ -74,6 +74,11 @@ def rec(env, monkeypatch):
         monkeypatch.setattr(Bot, name, wrap(name, getattr(Bot, name), 2))
     for name in PLACE_HOOKS:
         monkeypatch.setattr(places, name, wrap(name, getattr(places, name), 2))
+    # ---------- round 10, slice Y: hook 5b (youtube_reads) and 4a (youtube_answer) ----------
+    from mvp import ytreads
+    for name in ("youtube_reads", "youtube_answer"):
+        monkeypatch.setattr(ytreads, name, wrap(name, getattr(ytreads, name), 2))
+    # ---------- end round 10, slice Y ----------
     return env
 
 
@@ -172,3 +177,7 @@ def test_the_hooks_run_in_the_order_of_the_map():
     order("place_answer(self, person, text, now)", "self._doit_answer(")
     order("self.secret_reads(person, text, now)", "self._asked_reads(person, text, now)", "self.onboard_step(")
     order("self.cancel_stop_guard(", "self._manage(")
+    # round 10, slice Y: 5b after email_reads and before cancel_reads; 4a after the places' yes/no answer
+    order("self.email_reads(", "ref = ytreads.youtube_reads(self, person, text, now)", "self.cancel_reads(")
+    order("place_answer(self, person, text, now)", "ref = ytreads.youtube_answer(self, person, text, now)",
+          "self._doit_answer(")
