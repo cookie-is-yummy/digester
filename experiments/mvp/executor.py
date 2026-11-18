@@ -13,7 +13,7 @@ import time
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
-from . import config, llm
+from . import captionmark, config, llm   # captionmark: round 10, slice S
 from . import texts as T
 from .channels.base import SendUncertain
 from .compose import FINISHED, collapse_copies, compose, duration_of, own_text, own_text_lines, written_details
@@ -431,6 +431,7 @@ class ExecutorMixin:
                 self.send(person["handle"], LOADING)  # the first search after a start can take a minute
             h = person["handle"]
             now = self.clock()
+            cfb = captionmark.index(self.store.caption_feedback(h))   # round 10, slice S
             sent_before = self.store.delivered(rule_id) if rule_id else set()
             widen, first_window = False, set()
             if cands_override is not None:
@@ -439,6 +440,11 @@ class ExecutorMixin:
                 exclude = sent_before if spec.content.exclude_sent else set()
                 exclude |= set(shown)
                 weights = self._feedback_weights(rule_id, view)
+                # ---------- round 10, slice S: what the person said about captions (core data), for the ranking ----
+                for cw, x in captionmark.creator_weights(cfb).items():
+                    weights = dict(weights or {})
+                    weights[cw] = (weights.get(cw) or 1.0) * x
+                # ---------- end round 10, slice S ----------
                 ex_kinds, ex_platforms = self._exclusions(h)
                 seed = f"{rule_id or h}:{now.date().isoformat()}"   # order "random": one draw per run, repeatable
                 # live fix pass, round 8 (finding 101): an avoid word read in descriptions, or a passed-on series, takes
@@ -459,7 +465,8 @@ class ExecutorMixin:
                 cands, meta = candidates(self.pool, view, searched, exclude=exclude, disliked=disliked,
                                          creator_weights=weights, now=now, store=self.store, exclude_kinds=ex_kinds,
                                          exclude_platforms=ex_platforms, seed=seed, only=only_ids,
-                                         k=config.CANDIDATES + (self.REFILL if widen else 0))
+                                         k=config.CANDIDATES + (self.REFILL if widen else 0),
+                                         caption_fb=cfb)   # round 10, slice S
                 cost += meta.get("cost_usd", 0.0)
                 first_window = {x.id for x in cands[:config.CANDIDATES]}
                 search_rank = {x.id: i for i, x in enumerate(cands)}
@@ -511,6 +518,12 @@ class ExecutorMixin:
                 result, c = self._second_look(person, spec, cands, result, request_text, extra, about, level_ok,
                                               bound, now, steps, len(sent_before))
                 cost += c
+            # ---------- round 10, slice S (C3): a strong-marked pick never leads when another fit exists ----------
+            if kind != "follow_up":
+                demoted = captionmark.order_picks(result, spec, cfb, request_text)
+                if demoted:
+                    steps["mark_demoted"] = demoted
+            # ---------- end round 10, slice S ----------
             if result.get("picks") and kind != "follow_up":
                 self._level_note(h, result, guessed)
             steps["compose"], steps["answer_cached"] = round(time.time() - t1, 2), result.get("cached", False)
@@ -561,6 +574,7 @@ class ExecutorMixin:
                 # (checker: a list of tips is not a recipe written out; it never takes the lead this way)
                 from .compose import tips_only
                 better = next((p for p in pool if p["verdict"] == main[0]["verdict"] and not p.get("second_look")
+                               and not captionmark.is_strong(p)   # round 10, slice S: never a strong mark to lead
                                and written_details(p["item"], extra)
                                and not tips_only(own_text(p["item"], extra))
                                and default_fits(own_text(p["item"], extra))), None)
@@ -608,7 +622,8 @@ class ExecutorMixin:
                     # the best-ranked of the top 3 that has every kind asked for; else the one with the most of them
                     # (fix pass 5, finding 84: never a close one or one from the second look as the lead)
                     have = [(sum(1 for k in asked if p["facts"].get(k)), -i, p) for i, p in enumerate(targets[:3])
-                            if p["verdict"] == main[0]["verdict"] and not p.get("second_look")]
+                            if p["verdict"] == main[0]["verdict"] and not p.get("second_look")
+                            and (captionmark.is_strong(main[0]) or not captionmark.is_strong(p))]   # slice S
                     top = max(have, key=lambda x: x[:2]) if have else None
                     best = top[2] if top and top[0] else None
                     if best is not None and best is not main[0]:
@@ -649,13 +664,17 @@ class ExecutorMixin:
                 ps = result["picks"]
                 result["picks"] = ps[:1] + [p for p in ps[1:] if p["verdict"] == "clear"] + \
                     [p for p in ps[1:] if p["verdict"] != "clear"]
+            if result.get("picks") and kind != "follow_up":   # round 10, slice S: the order holds after the reorders
+                demoted = captionmark.order_picks(result, spec, cfb, request_text)
+                if demoted:
+                    steps["mark_demoted"] = steps.get("mark_demoted", 0) + demoted
             for p in (result.get("picks") or []) + (result.get("wider") or []):
                 own = own_text(p["item"], extra)
                 if any(names_kit(p.get("title") or "", k) and not names_kit(own, k) for k in kits):
                     # fix pass 4 (live check of finding 74): a title that names their kit the post never names
                     # ("Instant Pot ..." for a stovetop recipe) is the post's own first words instead
-                    from .compose import title_from_item
-                    p["title"] = title_from_item(p["item"])
+                    from .compose import display_title   # round 10, slice S (W-9: a display use)
+                    p["title"] = display_title(p["item"], level=p.get("cm", ...))
                     result["dropped"]["title_pref"] = result["dropped"].get("title_pref", 0) + 1
                 # finding 47: a reason that promises ingredients or steps the answer does not show is left out
                 b = p.get("because") if p.get("because_backed") else None
@@ -1073,7 +1092,8 @@ class ExecutorMixin:
 
         def names_kind(it):
             return bool(kind_stem) and kind_stem in {_stem(t) for t in _tokens(own_text(it, extra))}
-        added = [date_fields({"item": it, "title": title_from_item(it), "verdict": "close", "because": None,
+        from .compose import display_title   # round 10, slice S (W-9: a display use)
+        added = [date_fields({"item": it, "title": display_title(it), "verdict": "close", "because": None,
                               "because_backed": False, "criteria": [], "lines": [], "facts": {},
                               "lines_reused": False, "read_for_items": True}, extra, today, ts, year)
                  for score, _, it in sorted(rest, key=lambda x: (not names_year(x[2]), not names_kind(x[2]), -x[0],
@@ -1405,14 +1425,14 @@ class ExecutorMixin:
                         and any(x.get("name") in names for x in p.get("items") or []):
                     kept[p["item_id"]] = p
                 kept.setdefault(p["item_id"], p)
-        from .compose import title_from_item
+        from .compose import display_title   # round 10, slice S (W-9: a display use)
         recs = []
         disliked = self.store.disliked(h)
         for iid in spec.content.item_ids:
             it = view.get(iid)
             if it is None or iid in disliked:
                 continue
-            rec = dict(kept.get(iid) or {"item_id": iid, "title": title_from_item(it), "url": it.url,
+            rec = dict(kept.get(iid) or {"item_id": iid, "title": display_title(it), "url": it.url,
                                          "platform": it.platform, "video_id": it.video_id, "creator": it.creator,
                                          "facts": {}, "lines": [], "line_kinds": None})
             rec["main"] = True

@@ -636,8 +636,8 @@ class IntegrationReadsMixin:
             it = view.get(iid)
             if it is None:
                 return None
-            from .compose import title_from_item
-            return {"item_id": iid, "title": title_from_item(it), "creator": it.creator, "url": it.url, "facts": {}}
+            from .compose import display_title   # round 10, slice S (W-9: a display use)
+            return {"item_id": iid, "title": display_title(it), "creator": it.creator, "url": it.url, "facts": {}}
 
         items = last["items"]
         main = [i for i in items if kept.get(i, {}).get("main", True)] or items
@@ -889,7 +889,7 @@ class FollowupMixin(IntegrationReadsMixin):
     # ---------- a question about a pick already shown ----------
     def _detail_answer(self, person, last, kinds, n):
         """The lines asked for of pick n of the last answer, or one honest line and its link. No compose call."""
-        from .compose import title_from_item
+        from .compose import display_title   # round 10, slice S (W-9: a display use)
         from .extract import details
         from .store import now_iso
         h = person["handle"]
@@ -911,7 +911,7 @@ class FollowupMixin(IntegrationReadsMixin):
             return self.send(h, T.ITEMS_GONE)
         snap = self.store.answer(last["run_id"]) or {}
         rec = next((p for p in snap.get("picks") or [] if p.get("item_id") == iid), None) or {}
-        title = rec.get("title") or title_from_item(it)
+        title = rec.get("title") or display_title(it)
         cur = self.store.last_answer(h)
         is_last = bool(cur) and cur["run_id"] == last["run_id"]
         state_facts = (self.store.get_state(f"facts:{h}", {}) or {}) if is_last else {}

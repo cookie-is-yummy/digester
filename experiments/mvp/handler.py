@@ -180,6 +180,10 @@ class HandlerMixin:
                 self.store.add_feedback(handle, d["item_id"], d["rule_id"], tapback)
             if rows:
                 self._wrote_final(handle, "a reaction")
+            if rows and tapback == "down":   # round 10, slice S: one question, at most once per answer (W-7 guards)
+                ask = self._mismatch_offer(person, run_id, [d["item_id"] for d in rows], None, now)
+                if ask:
+                    return self.send(handle, ask)
             return None
         if not text:
             return None
@@ -199,6 +203,10 @@ class HandlerMixin:
                 self.store.add_feedback(handle, iid, last.get("rule_id"), "down" if down else "up")
             if (last or {}).get("items"):
                 self._wrote_final(handle, "a reaction")
+                if down:   # round 10, slice S: one question, at most once per answer (W-7 guards)
+                    ask = self._mismatch_offer(person, last.get("run_id"), last["items"], None, now)
+                    if ask:
+                        return self.send(handle, ask)
             return None
         if pending and pending["kind"] == "confirm_rule" and text == "👍":
             return self._confirm(person, pending)
@@ -212,6 +220,10 @@ class HandlerMixin:
             if NO.match(text):
                 return self.send(handle, T.NOT_DELETED)
             pending = None
+        # round 10, slice S (hook 0): "that reel had nothing to do with it", "that one was fine", "slop"
+        ref = self.fit_reads(person, text, now)
+        if ref is not None:
+            return ref
         # ---------- round 9: the reads of an open card or offer (verdict section 4, hooks 1 and 2) ----------
         ref = self.draft_reads(person, text, pending, now)   # slice A: an email draft card (drafts.py)
         if ref is not None:
@@ -465,6 +477,8 @@ class HandlerMixin:
     def _asked_reads(self, person, text, now):
         """The message right after a question code asked: "Tell me the date" (BN1) or an overdue nudge (BN2). Each
         question is answered by the next message only; any other message ends it and is handled as usual."""
+        from . import captionmark   # round 10, slice S: the thumbs-down question ends with this message, whatever reads it
+        ask = captionmark.take_ask(self.store, person["handle"])
         ref = self._deadline_answer(person, text, now)
         if ref is not None:
             return ref
@@ -478,6 +492,9 @@ class HandlerMixin:
         # round 9, slice D (C3, DESIGN.md section 16.D): yes / no to a Mac preview; REMOVE / KEEP after "disconnect"
         from .places import asked_reads as place_answer
         ref = place_answer(self, person, text, now)
+        if ref is not None:
+            return ref
+        ref = self._mismatch_answer(person, text, now, ask)   # round 10, slice S (4b): yes / no to the 👎 question
         if ref is not None:
             return ref
         return self._doit_answer(person, text, now)   # W10: "tell me when" after a to-do the bot can't do
@@ -1574,7 +1591,7 @@ class HandlerMixin:
     def _cant_tell(self, person, last, n):
         """Review fix X4: the posts shown do not say what was asked. With pick n named: its title and its link."""
         from . import lang as L
-        from .compose import title_from_item
+        from .compose import display_title   # round 10, slice S (W-9: a display use)
         from .render import Reply, by, link_part
         t = L.table(self._answer_lang())
         if not n:
@@ -1584,7 +1601,7 @@ class HandlerMixin:
             return t.get("cant_tell_all") or L.EN["cant_tell_all"]
         snap = self.store.answer(last["run_id"]) or {}
         rec = next((p for p in snap.get("picks") or [] if p.get("item_id") == it.id), None) or {}
-        title = rec.get("title") or title_from_item(it)
+        title = rec.get("title") or display_title(it)
         parts = [{"type": "text", "text": (t.get("cant_tell_one") or L.EN["cant_tell_one"]).format(
             name=f"{title}{by(it)}")}]
         if it.url:
@@ -1687,7 +1704,31 @@ class HandlerMixin:
                 return self.send(h, T.level_moved(interest["topic"], P.LEVEL_PLAIN[level], kind))
         if kind == "less" and not last.get("rule_id"):   # review fix X9: an ask learns nothing from "less like that"
             return self.send(h, T.LESS_ON_ASK)
+        if kind == "down" and not text:   # round 10, slice S: after a bare 👎, the one question (W-7 guards)
+            ask = self._mismatch_offer(person, last.get("run_id"), items, pick_number, self.clock())
+            if ask:
+                return self.send(h, T.FEEDBACK_REPLIES["down"] + "\n\n" + ask)
         return self.send(h, T.FEEDBACK_REPLIES.get(kind, T.FEEDBACK_OTHER))
+
+    # ---------- round 10, slice S (DESIGN.md section 17.S): mismatched reels; the logic is captionmark's ----------
+    def fit_reads(self, person, text, now):
+        """Hook 0: what the person says about a reel whose video did not match its caption (captionmark.fit_reads)."""
+        from . import captionmark
+        return captionmark.fit_reads(self, person, text, now)
+
+    def _mismatch_answer(self, person, text, now, ask=None):
+        """Hook 4b in _asked_reads: "yes" / "no" to the thumbs-down question (captionmark.mismatch_answer)."""
+        from . import captionmark
+        return captionmark.mismatch_answer(self, person, text, now, ask)
+
+    def _mismatch_offer(self, person, run_id, items, pick_number, now):
+        from . import captionmark
+        try:
+            return captionmark.thumbs_ask(self, person, run_id, items, pick_number, now)
+        except Exception as e:  # noqa: BLE001 - the question is extra; a 👎 is kept whatever happens here
+            self.note(mismatch_ask_error=type(e).__name__)
+            return None
+    # ---------- end round 10, slice S ----------
 
     def _avoid_creator(self, person, last, item_id):
         """Review fix X9: the creator of the pick is left out of every later answer (prefs.avoid_creators, applied

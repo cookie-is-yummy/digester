@@ -2686,3 +2686,30 @@ def noted_only(changes, skipped=False):
     m = profile_changed(changes, skipped)
     return m[:-len(_KNOW_TAIL)] if m.endswith(_KNOW_TAIL) else m
 # ---------- end round 10, slice W ----------
+# ---------- round 10, slice S (DESIGN.md section 17.S): "that reel had nothing to do with it" ----------
+MISMATCH_ASK = "Was it that the video didn't match what its caption said? Reply \"yes\" or \"no\"."
+MISMATCH_NOTED = "OK, noted."
+
+
+def mismatch_reply(creator, others=0):
+    """After "that reel had nothing to do with it" (or "yes" to MISMATCH_ASK). `others`: how many other accounts carry
+    the same text."""
+    who = f"captions from {creator}" if creator else "captions from that account"
+    out = (f"Thanks, that helps. I've taken that reel out of your picks and I'll trust {who} less from now on. "
+           "Say \"another\" for a different one.")
+    if others:
+        out += (f" The same text is under {others} other account{'s' if others != 1 else ''}; "
+                "I'll treat those the same.")
+    return out
+
+
+def match_ok_reply(creator):
+    return f"Good to know. I'll trust {creator}'s captions again." if creator else \
+        "Good to know. I'll trust that account's captions again."
+
+
+def cm_left_out(n):
+    """A rule run that adds to the person's apps (slice G) left strong-marked picks out."""
+    return "1 left out: its caption may not match the video." if n == 1 else \
+        f"{n} left out: their captions may not match the videos."
+# ---------- end round 10, slice S ----------

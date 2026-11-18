@@ -19,7 +19,9 @@ KIND_LABEL = {"save": "saved", "collection": "in a collection", "share_self": "s
 
 class Item:
     __slots__ = ("id", "platform", "url", "caption", "first_line", "creator", "media", "kinds", "dates", "collections",
-                 "watch_count", "video_id", "duration_s", "raw_caption")
+                 "watch_count", "video_id", "duration_s", "raw_caption",
+                 # ---------- round 10, slice S: the derived caption mark (captionmark.py; None until its file exists)
+                 "caption_mark", "caption_reasons", "caption_fp")
 
     def __init__(self, raw):
         pd = raw.get("platform_data") or {}
@@ -40,6 +42,9 @@ class Item:
         self.duration_s = pd.get("duration_s") if isinstance(pd.get("duration_s"), (int, float)) else None
         # the caption with its line breaks, for the details step (lists are lines); `caption` is one line
         self.raw_caption = raw.get("caption") or ""
+        # ---------- round 10, slice S: filled from <library>/marks/ by captionmark.load_into ----------
+        self.caption_mark, self.caption_reasons, self.caption_fp = None, (), None
+        # ---------- end round 10, slice S ----------
 
     def how(self):
         order = ["save", "collection", "share_self", "playlist", "like", "watch", "view"]
@@ -80,6 +85,11 @@ class LibraryView:
                     k = r.get("kind")
                     if r["at"] > it.dates.get(k, ""):
                         it.dates[k] = r["at"]
+        # ---------- round 10, slice S: the caption marks of this build, when their file exists (never built here:
+        # a miss would hold up the first answer; refresh and the bot's start build it) ----------
+        from . import captionmark
+        captionmark.load_into(self)
+        # ---------- end round 10, slice S ----------
 
     def get(self, item_id):
         return self.items.get(item_id)

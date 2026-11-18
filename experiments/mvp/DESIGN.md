@@ -2201,3 +2201,95 @@ word; never a word of the message).
 - Tests: `tests/test_round10_errand.py` (fake forms: every check, every helper, the cap, the cache, the input, a send
   that never sends, a number never said, a form that names a rule).
 
+### 17.S Mismatched reels (slice S)
+
+The founder: "some reels still show up with unrelated captions. so it feels like slop." Meme pages paste text that has
+nothing to do with the clip (a chatbot recipe, a spec sheet, a course ad); the bot reads only text. Code only, no
+model, no prompt change (`compose_v6` cut).
+
+- **The mark (`captionmark.py`, `SIGNAL_VERSION = "cm-v1"`).** `build_rows(rows)` over the library's Instagram rows
+  (friends' posts already left out): **strong** = the caption says it is unrelated; otherwise, never when either of
+  the first two lines that are not "follow" lines is in the first person (i, my, me, we, our); otherwise a how-to
+  block (a header, 3+ amounts, or 5+ list lines) or 300+ characters, **and** either the assistant's own words (the
+  narrow echo list `ECHO`: "Here's a … recipe for", "No problem! Here …", "Enjoy your delicious …", "Here's the
+  information about") or two of: chatbot text (markdown Instagram never shows, or an assistant opener), the same body
+  under another account (exact, or 6-word shingles with Jaccard ≥ 0.5), one account repeating one 80+ character body
+  3+ times, a meme account (whole words in the handle or display name, or 30%+ meme-page captions), a joke first line
+  over a how-to block, an account whose captions are 50%+ chatbot text. **Weak** = the broad rule minus strong (a
+  filler signal on a how-to or long caption, or a how-to from a meme account). Reasons are fixed codes; `fp` = sha256
+  of the normalised body, 16 hex (none under 60 characters). English patterns only: another language is missed, never
+  a false alarm. YouTube rows are never marked. A broad opener alone ("Here's the full breakdown") is chatbot evidence,
+  never a strong mark by itself: with it, 9 items the diagnosis's v3 left unmarked were strong, among them posts the
+  bot picks often.
+- **Derived, versioned, rebuildable.** `<library>/marks/caption_marks-cm-v1.json` (`version`, `stamp` =
+  `retrieve._library_stamp`, `built_at`, `counts`, `items` {id: [level, reasons, fp]}, marked only) and a line per build
+  in `marks/build_log.jsonl` (items, marked, items per second, wall time). `LibraryView` only reads a file whose
+  version and stamp match (`load_into`); it never builds (W-8). `refresh` builds it for a new library before the person
+  is switched to it (`ensure_lib`); `bot.main`'s loader thread builds it after the libraries are ready (`ensure`;
+  `MVP_CM_BUILD_AT_START=0` off). A new version writes a new file beside the old one. `Item` slots `caption_mark`,
+  `caption_reasons`, `caption_fp` (None until the file exists: today's behaviour).
+- **What the person says (core data).** Table `caption_feedback(id, handle, item_id, creator, fp, kind mismatch |
+  match_ok, source words | thumbs, at)`; `store.add_caption_feedback`, `store.caption_feedback(h)`; a mismatch puts the
+  item in `store.disliked` (a later "fine" takes it out). `captionmark.effective(it, fb)` with
+  `fb = captionmark.index(rows)`: the item's own word first (fine: no mark; mismatch: strong); its fingerprint's latest
+  word (mismatch: strong; fine: no mark); an account with a mismatch since its last "fine": weight ×0.5 on every
+  request (`creator_weights`, merged into the executor's weights), its weak marks strong, and after 2 its how-to or
+  long captions strong; 2 "fine"s since its last mismatch: its strong marks weak. `you_said` leads the reasons.
+  "delete my data" deletes the rows and the state keys; "export my data" writes `reel_feedback.json` (item id, kind,
+  source, date; no caption, no account) when there are rows.
+- **Ranking (`retrieve.candidates`, `caption_fb=`).** No 1.2 long-caption boost for any marked item; strong ×0.4 on a
+  how-to request (`extract` set, or recipe, workout, routine, tutorial, tips, how to, steps, guide in the goal or
+  searches), ×0.8 otherwise. Marked items stay in the window: a strong item that would have been among the `k`
+  candidates without its weight keeps a place, last (the lowest ones give theirs). Without this, ×0.4 on a first-rank
+  item (about rank 90 after it) took every strong item out of the composer's view, so the honest only fit never came
+  and loose fits were said instead (live: "feijoada" answered with a different dish as the closest).
+- **Order (`captionmark.order_picks`, in the executor after compose and the second look, and again after the
+  reorders).** A strong pick never leads while a pick that is not strong, clear or close, is among the picks, the wider
+  list or the spare list: the strong ones move to the end of the picks (`steps["mark_demoted"]`). When the new lead is
+  only close, the answer says "The closest I have is". The details reorder (finding 79) and the "has every kind asked"
+  reorder never promote a strong pick over one that is not.
+- **Words (`render.picks_message`, `lang.py` EN and ES, `captionmark.lead_lines`).** A strong lead (every fit is
+  strong): `The only match I found is` (`The best match I found is` when other strong picks are shown too; never "I
+  recommend"), the neutral title, and right after the pick sentence
+  `Heads-up: its caption is {a recipe | a workout | a list of tips | a how-to | a long text}, but {reason}, so the video
+  may show something else.` (the first reason in the order: says it is unrelated; you told me; the account mostly
+  posts memes; the same text under other accounts; a joke first line; pasted from a chatbot). Its details come under
+  `From the caption:`. `MVP_CM_DOUBT_ALL=0` (the founder's labels under 85%): only the first two reasons are named,
+  else the weak line. A weak lead on a how-to request: `Going by its caption: I can't watch the video, so check it
+  shows the same.` Weak marks never move a pick.
+- **Titles (`compose.display_title(it, model_title=None, level=...)`, S4).** Strong: `A reel from @x` / `A video from
+  X`, whatever the model wrote; else the model's title, else `title_from_item`, never an assistant's opener line. Used
+  at the display call sites only (W-9): `compose.check`, executor (the kit-title fix, `_items_reads`, `_run_items`),
+  followup (two), handler `_cant_tell`, outputs; the series keys and year matching keep
+  `title_from_item(it, words=1000)`. `same_keys` skips the neutral names. Stored answer titles, to-dos, calendar
+  entries and placements follow from the pick's title.
+- **Reads.** Hook 0 `fit_reads` (`_on_message`, after the `confirm_delete` branch, before `draft_reads`): with an answer
+  with picks in view (its run under 48 hours old), "that reel had nothing to do with it", "the video doesn't match",
+  "wrong video", "it's just a meme", "the caption was copied", "the video is something else" (a pick number or ordinal
+  optional) learn a mismatch; "that one was fine", "the video was right", "it did match" a match; "slop" / "that's
+  slop" / "this is slop" only ask `T.MISMATCH_ASK` (W-6). Which pick: the number; else the only marked pick shown;
+  else pick 1. A message over 20 words or ending in "?" is never taken. Replies `T.mismatch_reply(creator, others)`
+  (+ "The same text is under N other accounts; I'll treat those the same.") and `T.match_ok_reply`. The thumbs-down
+  question: after a bare 👎, a 👎 tapback or a "Disliked …" reaction on an answer with a marked pick or an Instagram
+  how-to, once per answer (`mismatchasked:<h>`), never when a rule preview or a draft card is newer than the answer or
+  a browser run is open (W-7); state `mismatchask:<h>` {run_id, item_id, at} is taken off at the top of `_asked_reads`
+  by the next message and answered at hook 4b `_mismatch_answer` (after `places.asked_reads`, before `_doit_answer`):
+  "yes" learns a mismatch (source thumbs), "no" → `OK, noted.`, anything else goes on as usual.
+- **For slice G.** `captionmark.placeable(picks)` → (picks to add, n left out) and `T.cm_left_out(n)`: a strong pick is
+  never placed in an outside app by a rule run.
+- **Checks.** `tests/test_round10_slop.py` (32 tests, synthetic library); `tests/test_round9_merge.py` wraps `fit_reads`
+  and `_mismatch_answer` too: none of the 159 rule-eval texts or the 123 rule phrasings is taken; the 20 draft
+  requests, run locally in the four settings: 0 taken. `probe_same` gives the same bytes as `same_head.json` (md5
+  4335bfb5…), and its fixtures carry 0 marks.
+- **Counts (17 Nov; counts only, the requests and answers stay in the scratchpad).** The library: 136,445 items, 20,830
+  Instagram; 194 strong (128 how-to, 33 recipes, 106 accounts), 160 weak; 191 of the diagnosis's 200 v3 items are
+  strong; about 5 s. Stored runs with cm-v1: the 20 draft requests 3 strong picks of 306, 1 in first place, in 148
+  runs (as diagnosed); the kinds evaluation 0 strong picks of 2,601 and 0 strong items in the top 40 of any of 1,253
+  stored rankings, so its answers cannot change by the order or the weight (weak: 62 picks, 25 leads, 0 of them on a
+  how-to request; the kinds rerun was not needed). Live, the marked set (12 requests on topics of strong-marked
+  how-tos) on head: 9 strong leads in 11 answers, 0 doubt lines, 9 titles taken from a pasted caption; after (the
+  last code, 10 requests: 6 of the set and 4 whose only fit is strong): 9 strong leads, each the only kind of fit
+  shown, 9 of 9 with the doubt line, 0 caption-made titles on 12 strong picks, 1 strong pick moved behind a real fit,
+  0 strong leads while another fit was shown. The 20 draft requests live: head 20 handled, 0 errors, 19 with picks,
+  "I recommend" 13; after (before the window fix) 20, 0, 19, 12, 0 strong picks in either (the one-request difference
+  is the composer's wording on two unmarked picks). Live spend $1.01 on the ledger (budget $0.85).

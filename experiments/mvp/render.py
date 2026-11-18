@@ -694,7 +694,17 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
         if not result.get("no_intro"):   # round 8, finding 95: a part of a message has its own label instead
             text.append(intro_line(result, spec, lang))
             text.append("")
-        text.append(pick_sentence(t["recommend"], first, now, lang))
+        # round 10, slice S: when every fit's caption may not match its video, never "I recommend"
+        lead = t["recommend"]
+        if result.get("only_marked"):   # one pick shown: "the only match"; more (all marked too): "the best match"
+            lead = t["only_match"] if len(picks) + len(wider) == 1 else t["cm_best"]
+        text.append(pick_sentence(lead, first, now, lang))
+    # ---------- round 10, slice S (C3): right after the pick sentence, the doubt line (strong) or the caption line
+    # (weak, on a how-to request); code words only, never the caption's ----------
+    if not follow_up:
+        from .captionmark import lead_lines
+        text.extend(lead_lines(result, lang))
+    # ---------- end round 10, slice S ----------
     if result.get("level_note"):   # slice 6: once per topic while the level is a guess
         text.append(result["level_note"])
     lead_date = date_sentence(first, result, lang)
@@ -714,6 +724,8 @@ def picks_message(result, spec, footer=None, now=None, extract=None, lang=None, 
     lines = details_lines(first, extract, asked=c.extract, lang=lang)
     if names:   # said once: never also "The details are in the post's slides or video"
         lines = [x for x in lines if x != t["in_video"]["items"]]
+    if lines and first.get("cm") == "strong" and not follow_up:   # round 10, slice S: a pasted recipe is still one
+        lines = [t["cm_from_caption"]] + lines
     text.extend(lines)
     picks = [picks[0]] + [p for p in picks[1:] if id(p) not in skip]
     wider = [p for p in wider if id(p) not in skip]

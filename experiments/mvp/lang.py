@@ -114,6 +114,23 @@ EN = {
     # round 8, slice B (I3): after the message to forward, and when there is nothing to share
     "share_hint": "Press and hold that message to forward it. I can't send to other people myself.",
     "share_nothing": "I haven't sent you anything to share yet. Ask me for something first.",
+    # ---------- round 10, slice S (design C3): a reel whose caption may not match its video ----------
+    "only_match": "The only match I found is",
+    "cm_best": "The best match I found is",
+    "cm_doubt": "Heads-up: its caption is {what}, but {reason}, so the video may show something else.",
+    "cm_weak": "Going by its caption: I can't watch the video, so check it shows the same.",
+    "cm_from_caption": "From the caption:",
+    "cm_what": {"recipe": "a recipe", "workout": "a workout", "tips": "a list of tips", "howto": "a how-to",
+                "text": "a long text"},
+    "cm_reason": {"says_unrelated": "the caption itself says it has nothing to do with the video",
+                  "you_said": "you told me this account's captions don't match their videos",
+                  "account_memes": "the account mostly posts memes",
+                  "account_mostly_chatbot": "the account mostly posts memes",
+                  "pasted_elsewhere": "the same text is posted under other, unrelated accounts",
+                  "same_caption_repeated": "the same text is posted under other, unrelated accounts",
+                  "joke_over_block": "its first line is a joke that has nothing to do with the rest",
+                  "chatbot_text": "the text reads like it was pasted from a chatbot"},
+    # ---------- end round 10, slice S ----------
 }
 
 ES = {
@@ -216,6 +233,23 @@ ES = {
     "share_nothing": "Todavía no te he enviado nada para compartir. Pídeme algo primero.",
     "months": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
                "noviembre", "diciembre"],
+    # ---------- round 10, slice S ----------
+    "only_match": "Lo único que encontré es",
+    "cm_best": "Lo que mejor encaja es",
+    "cm_doubt": "Ojo: su texto es {what}, pero {reason}, así que el video puede mostrar otra cosa.",
+    "cm_weak": "Me guío por su texto: no puedo ver el video, así que comprueba que muestre lo mismo.",
+    "cm_from_caption": "Según el texto:",
+    "cm_what": {"recipe": "una receta", "workout": "un entrenamiento", "tips": "una lista de consejos",
+                "howto": "un paso a paso", "text": "un texto largo"},
+    "cm_reason": {"says_unrelated": "el propio texto dice que no tiene nada que ver con el video",
+                  "you_said": "me dijiste que los textos de esta cuenta no coinciden con sus videos",
+                  "account_memes": "la cuenta publica sobre todo memes",
+                  "account_mostly_chatbot": "la cuenta publica sobre todo memes",
+                  "pasted_elsewhere": "el mismo texto aparece en otras cuentas que no tienen nada que ver",
+                  "same_caption_repeated": "el mismo texto aparece en otras cuentas que no tienen nada que ver",
+                  "joke_over_block": "su primera línea es un chiste que no tiene que ver con el resto",
+                  "chatbot_text": "el texto parece copiado de un chatbot"},
+    # ---------- end round 10, slice S ----------
 }
 
 TABLES = {"es": ES}
