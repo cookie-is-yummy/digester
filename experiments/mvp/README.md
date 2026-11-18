@@ -238,6 +238,17 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   confirmed" or "no", and "no" offers a second notice, written by code, that goes only after its own "send". The
   route file gains the cancel facts read on 17 Nov (Amazon's cancel page, Audible's steps, LA Fitness's notice box,
   Planet Fitness's deadline, the last button's words for slice V). Tests: `tests/test_round10_sending.py`.
+- **Round 10, rules that add to your apps** (DESIGN.md section 17.G, slice G; amendment A-015, Proposed): "every
+  Sunday at 6pm put 3 pasta recipes in my ticktick" shows a preview that names the app, the kind of thing, the list,
+  how often and the most per run and per day; the YES that starts the rule also lets it add (one yes per rule, the
+  founder's decision). Each run adds through that standing yes and always says what it added ("Added 3 tasks to
+  TickTick (rule 3): …"); "undo" takes them out for 24 hours, "undo rule 3" for 7 days. Routes: TickTick and Todoist by
+  the operator's token, Reminders and Calendar on the operator's Mac. A tester, an app not connected, or an app the bot
+  can't reach gets one honest line and the picks in the message. "stop adding to ticktick", "use ticktick for rule 3",
+  "stop 3", "change 3 …" (asks yes again), "disconnect ticktick", 3 failures in a row (paused until "check my
+  ticktick") and "delete my data" end or pause it. Never for a webhook, the mailbox or anything to another person.
+  "what did you do for me" counts a rule's adds and lists the standing permissions. Tests:
+  `tests/test_round10_grants.py`.
 
 ## New picks from outside the saves, and keeping the library fresh
 
@@ -586,6 +597,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `captionmark.py` | Round 10, slice S: the caption mark (`cm-v1`, derived, versioned), what the person said about it (`caption_feedback`), the order rule, the doubt line, `fit_reads` and the thumbs-down question |
 | `browser.py`, `yt_auth.py` | Round 10, slice K: stubs (`STUB = True`) giving today's behaviour until slices V and Y replace them |
 | `panel.py` | Round 10, slice D: the test page's Connections panel (seal, remove, states only; whether sending is on) |
+| `grants.py` | Round 10, slice G: a rule's place read from the person's words, its standing yes (grant: made, checked by `actions.perform(..., grant=)`, ended), each run's add and its line, undo, "stop adding to X", "use X for rule N", the standing permissions in receipts |
 | `tests/fakes/` | Round 10, slice K: in-process fakes for tests and the self-test: `fake_llm`, `fake_mcp`, `fake_oauth`, `fake_google`, `fake_merchant` |
 | `followup.py` | Round 8, slice B: export, "email it to me" after one, share and "what did my agent ask", read by code before the model (`IntegrationReadsMixin`). A follow-up that changes the request becomes a new search (round 7); what code reads without the model: plain commands ("stop 2", "pause 1", "resume all", "skip 3", "run 1", "done 2", "remove 3", "my rules", "undo", "help"), "another" / "more" / "next" (the last request, unchanged), round 8's rule phrasings ("remind me 3 days before it closes", "until I've done it", "don't text me if there's nothing", a bare "done", "tomorrow" / "drop it" after a nudge, "no overdue nudges"), "only new stuff, not from my saves" (outside only, same topic); a question about a shown pick's details ("what are the steps for the first one?") answered directly from its own text, or one honest line and its link |
 | `compose.py`, `prompts/compose_v5.md` | The model chooses (verdicts clear / close / no, a backed "because" given as a bare clause, must-haves, the person's level); code checks it (a finished-result must-have is "no" for tips-only text, though such a pick can still be the closest when nothing else is; a reason may name a level only when one may be used; an unbacked reason is left out; "mini" / "short" / "quick" is a length bound checked against YouTube's length); the composer's opening line only when its words are the request's (else one built by code); a cached answer per spec and candidates, kept no longer than it can be reused |

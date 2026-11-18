@@ -42,7 +42,9 @@ def _key():
 def test_every_registry_entry_has_rule_grant_false():
     from mvp.actions import REGISTRY, ActionDef
     assert ActionDef.model_fields["rule_grant"].default is False
-    assert [n for n, a in REGISTRY.items() if a.rule_grant] == []
+    # round 10, slice G sets it on the four adds a rule may make under its grant (tests/test_round10_grants.py)
+    assert sorted(n for n, a in REGISTRY.items() if a.rule_grant) == \
+        ["mac.event", "mac.reminder", "ticktick.add", "todoist.add"]
 
 
 def test_a_model_form_carrying_place_validates_with_place_none():

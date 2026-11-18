@@ -688,6 +688,7 @@ def test_a_chat_reply_about_the_bots_insides_is_replaced(tester):
 
 
 def test_a_rule_naming_an_app_says_it_cant_add_there_yet(tester):
+    # merge of round 10: W-13's stop-gap line is replaced by slice G's place line inside the rule's own preview
     e = tester
     e["state"]["answers"]["mvp_compose"] = lemon_pick()
     n0 = len(e["ch"].outbox)
@@ -695,7 +696,9 @@ def test_a_rule_naming_an_app_says_it_cant_add_there_yet(tester):
         "when": {"type": "schedule", "days": ["SUN"], "time": "09:00"},
         "content": {"source": "library", "goal": "recipes", "searches": ["recipes"]}}})
     out = replies_of(e, n0)
-    assert out[0].startswith("I can't add to TickTick on a schedule yet. I can send them to you every Sunday"), out
+    assert len(out) == 1 and "on a schedule yet" not in out[0], out
+    assert "TickTick isn't connected for you, so I'll put them in my message here instead. Say \"connect ticktick\"" \
+        in out[0], out
 
 
 # ---------- two asks in one message (split_reads, hook 8z) ----------

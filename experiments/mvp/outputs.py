@@ -658,7 +658,10 @@ saves saved post posts link""".split())
     # ---------- what a spec's do means, in the replies that start or show a rule ----------
     @staticmethod
     def _do_note(spec):
-        return T.outputs_note([a.action for a in spec.do], spec.when.repeating)
+        names = [a.action for a in spec.do]
+        if getattr(spec, "place", None) is not None:   # round 10, slice G: the place lines say where these go
+            names = [n for n in names if n not in ("todo.add", "calendar.add")]
+        return T.outputs_note(names, spec.when.repeating)
 
     def _email_ask(self, person, spec, now):
         """When a rule or a later send emails and there is no confirmed address: ask for it once, here."""

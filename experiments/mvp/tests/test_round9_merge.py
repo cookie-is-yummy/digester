@@ -88,6 +88,10 @@ def rec(env, monkeypatch):
         if hasattr(Bot, name):
             monkeypatch.setattr(Bot, name, wrap(name, getattr(Bot, name), 2))
     # ---------- end round 10, slice W ----------
+    # ---------- round 10, slice G: hook 8a ("stop adding to X", "use X for rule N", "undo rule N") ----------
+    from mvp import grants
+    monkeypatch.setattr(grants, "grant_reads", wrap("grant_reads", grants.grant_reads, 2))
+    # ---------- end round 10, slice G ----------
     return env
 
 
@@ -190,3 +194,6 @@ def test_the_hooks_run_in_the_order_of_the_map():
     order('pending["kind"] == "confirm_delete"', "ref = self.fit_reads(person, text, now)", "self.draft_reads(")
     order("place_answer(self, person, text, now)", "self._mismatch_answer(person, text, now, ask)", "self._doit_answer(")
     # ---------- end round 10, slice S ----------
+    # round 10, slice G: hook 8a right after place_reads (8), before receipts_reads
+    order("ref = place_reads(self, person, text, now)", "ref = grant_reads(self, person, text, now)",
+          "self.receipts_reads(")

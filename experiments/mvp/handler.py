@@ -294,6 +294,12 @@ class HandlerMixin:
             ref = place_reads(self, person, text, now)
             if ref is not None:
                 return ref
+            # ---------- round 10, slice G (hook 8a): "stop adding to X", "use X for rule N", "undo rule N" ----------
+            from .grants import grant_reads
+            ref = grant_reads(self, person, text, now)
+            if ref is not None:
+                return ref
+            # ---------- end round 10, slice G ----------
             ref = self.receipts_reads(person, text, now)   # W9: "what did you do for me" (receipts.py)
             if ref is not None:
                 return ref
@@ -455,12 +461,8 @@ class HandlerMixin:
         if it.intent == "chat" and it.reply and CHAT_INSIDE.search(it.reply):
             ref = self._errand(person, it, text, now)   # W7: the errand may read what was asked
             return ref if ref is not None else self.send(h, T.CHAT_INSIDE)
-        if it.intent == "new_rule" and getattr(it.spec, "place", None) is None \
-                and it.spec.content.source in ("library", "recent"):
-            from .places import named
-            p = named(text)
-            if p is not None:   # slice G replaces this line with the place preview (W-13)
-                self.send(h, T.app_rule_line(p.app, describe(it.spec.when)))
+        # W-13's stop-gap line for a rule that names an app ("I can't add to TickTick on a schedule yet") is gone:
+        # slice G's place line in the rule's own preview says what will happen (merge of round 10)
         return None
 
     def _errand(self, person, it, text, now):
@@ -865,14 +867,27 @@ class HandlerMixin:
             said = (pending["payload"].get("text", "") + " / " + text) if pending and it.edits_pending \
                 and pending["kind"] == "confirm_rule" else text
             self._rule_words(it.spec, said)
+            # ---------- round 10, slice G (G1): the person's own app named in their whole request ----------
+            if pending and pending["kind"] == "confirm_rule" and pending["payload"].get("change_of"):
+                it.edits_pending = False   # a change preview of a stored rule is never edited into a new rule
+            place_note = self._place_note(person, said, it.spec)
+            # ---------- end round 10, slice G ----------
             if it.spec.when.type in ("once", "on_request") or it.spec.content.source in ("note", "todos"):
                 # one send at a stated time, a saved request, or a reminder in their own words: nothing from the
                 # library repeats, so no preview is needed; the reply states what will happen and how to stop it
-                return self._activate(person, text, it.spec)
+                self._tl.place_note = place_note   # round 10, slice G: said in the start line instead
+                try:
+                    return self._activate(person, text, it.spec)
+                finally:
+                    self._tl.place_note = None
             if pending and it.edits_pending and T.YES_WITH_EDIT.match(text):
                 same = it.spec.stored()["content"] == RuleSpec.model_validate(pending["payload"]["spec"]).stored()["content"]
-                ref = self._activate(person, pending["payload"]["text"] + " / " + text, it.spec, edited=True,
-                                     preview_run=pending["payload"].get("run_id") if same else None)
+                self._tl.place_note = place_note   # round 10, slice G
+                try:
+                    ref = self._activate(person, pending["payload"]["text"] + " / " + text, it.spec, edited=True,
+                                         preview_run=pending["payload"].get("run_id") if same else None)
+                finally:
+                    self._tl.place_note = None
                 return self._activate_more(person, pending, ref)
             more = (pending["payload"].get("more") or []) if pending and pending["kind"] == "confirm_rule" else []
             if pending and it.edits_pending:  # keep the whole request, not only the edit
@@ -903,6 +918,8 @@ class HandlerMixin:
                 payload["more"] = (payload.get("more") or []) + [{"text": text, "spec": it.spec.stored()}]
                 self.store.set_pending(h, "confirm_rule", payload, at=datetime.fromisoformat(pending["at"]))
                 tail = T.preview_also_tail(describe(it.spec.when), what, first)
+                if place_note:   # round 10, slice G: the second rule's place is said too
+                    tail += place_note.get("lines") or place_note.get("line") or ""
             else:
                 info = getattr(self._tl, "run_info", None) or {}
                 length_only = info.get("length_only") if info.get("run_id") == run_id and it.spec.when.repeating \
@@ -915,8 +932,15 @@ class HandlerMixin:
                     self.store.set_state(f"lengthout:{h}", {"run_id": run_id, "at": now_iso(self.clock())})
                 self._tl.made_pending = True
                 quiet_note = T.QUIET_EMPTY_NOTE if it.spec.when.if_empty == "quiet" else ""
-                tail = T.preview_tail(describe(it.spec.when), what, first, heads=(offer[0] or "") + quiet_note,
-                                      offer=offer[1])
+                # ---------- round 10, slice G (G3): the app, the kind of thing, the list, the caps, then the YES ----
+                grant_lines, grant_yes = "", ""
+                if place_note and place_note["status"] == "grant":
+                    grant_lines, grant_yes = place_note["lines"], place_note["yes"]
+                tail = T.preview_tail(describe(it.spec.when), what, first,
+                                      heads=(offer[0] or "") + quiet_note + grant_lines, offer=offer[1] or grant_yes)
+                if place_note and place_note["status"] != "grant":
+                    tail += place_note["line"]
+                # ---------- end round 10, slice G ----------
                 if more:
                     tail += " " + T.preview_more_note(len(more))
             w = it.spec.when
@@ -998,6 +1022,9 @@ class HandlerMixin:
                     return self.send(h, T.reminder_fixed(self.store.rule_number(h, r["id"])))
                 it.spec.content = old.content.model_copy(deep=True) if old.content.source == "todos" \
                     or reminder_name(old.content.text) else it.spec.content
+            # round 10, slice G (M-8): the rule keeps its place unless the change names another; its grant ends
+            from .grants import on_change
+            place_line = on_change(self.store, h, r["id"], old, it.spec, text, now)
             self._wrote(h, "rule_rows", f"changed rule \"{old.content.goal}\"", {"rows": self._rule_rows([r["id"]])})
             # fix pass 2, finding 51: the rule keeps the words it was made with (its outside search and its length
             # bound are read from them); the change is added after them, never in their place
@@ -1013,7 +1040,7 @@ class HandlerMixin:
             self.store.set_slot(r["id"], nxt, status if r["status"] == "active" else r["status"])
             return self.send(h, T.changed(describe(it.spec.when), it.spec.content.goal, words)
                              + self._do_note(it.spec) + self._not_yet_notes(it.spec)
-                             + self._email_ask(person, it.spec, now))
+                             + self._email_ask(person, it.spec, now) + place_line)   # round 10, slice G
         if it.intent == "run_rule":
             r = self._pick_rule(rules, it.rule_number)
             if not r:
@@ -1225,6 +1252,15 @@ class HandlerMixin:
         if ref is not None:
             return ref
         lw = self._last_write(h, now)
+        # ---------- round 10, slice G (G5): a rule's last adds to an app, for 24 hours; the person's own writes of
+        # the last 10 minutes come first, and a newer timed write too
+        from .grants import rule_write, undo_write
+        rw = rule_write(self.store, h, now)
+        if rw and (not lw or (lw.get("key", "").startswith("lastwrite_timed") and rw["at"] >= lw["at"])):
+            self.store.set_state(f"lastwrite_rule:{h}", None)
+            self.note(intent="grant_undo")
+            return self.send(h, undo_write(self, h, rw, now))
+        # ---------- end round 10, slice G ----------
         if not lw:
             return self.send(h, T.NOTHING_TO_UNDO)
         self.store.set_state(lw.get("key") or f"lastwrite:{h}", None)
@@ -1264,6 +1300,7 @@ class HandlerMixin:
             for i in ids:
                 r = self.store.rule(i)
                 self.store.set_slot(i, None, "stopped")
+                self.store.end_grants(h, rule_id=i, reason="rule_stopped", at=now)   # round 10, slice G
                 goals.append(RuleSpec.model_validate(r["spec"]).content.goal if r else "that rule")
             if len(goals) == 1:
                 return f"I stopped the rule I just started, \"{goals[0]}\""
@@ -1358,6 +1395,11 @@ class HandlerMixin:
                                                     list(pending["payload"].get("more") or []))
             finally:
                 self._tl.join_write = False
+        # ---------- round 10, slice G: the YES to a change preview of a stored rule (its place and grant) ----------
+        if pending["kind"] == "confirm_rule" and pending["payload"].get("change_of"):
+            from .grants import change_yes
+            return self.send(h, change_yes(self, person, pending["payload"], self.clock()))
+        # ---------- end round 10, slice G ----------
         if pending["kind"] == "confirm_rule":
             spec = RuleSpec.model_validate(pending["payload"]["spec"])
             if pending["payload"].get("outside_offer") and spec.content.outside == "none":
@@ -1456,7 +1498,7 @@ class HandlerMixin:
             start = T.new_items_started(describe(spec.when), what, n) if spec.when.type == "new_items" else \
                 T.saved_rule(n, what, trigger_word(text))   # review fix X8 (experience): it runs when they save something, not on request
             return self.send(h, start + self._do_note(spec) + self._not_yet_notes(spec)
-                             + self._email_ask(person, spec, now))
+                             + self._email_ask(person, spec, now) + self._grant_on_start(person, spec, rule_id, n, now))
         quiet = self.store.quiet(h)
         never = self._never_sends(person, spec, now)
         if never:
@@ -1483,6 +1525,7 @@ class HandlerMixin:
         first = say_time(nxt, now, spec.when.tz or tz)
         notes = self._limit_note(h, spec, rule_id) + self._do_note(spec) + self._not_yet_notes(spec) \
             + self._email_ask(person, spec, now) + (T.QUIET_EMPTY_NOTE if spec.when.if_empty == "quiet" else "")
+        notes += self._grant_on_start(person, spec, rule_id, n, now)   # round 10, slice G (G2)
         if c.source == "note":   # a reminder in their own words
             if spec.when.type == "once":
                 return self.send(h, T.reminder_once(first, c.text, n) + notes)
@@ -1507,6 +1550,37 @@ class HandlerMixin:
             notes = T.length_way_out(length_only) + notes
             self.store.set_state(f"lengthout:{h}", {"rule_id": rule_id, "at": now_iso(now)})
         return self.send(h, T.rule_started(edited, describe(spec.when), c.goal, avoid, first) + notes)
+
+    # ---------- round 10, slice G (DESIGN.md section 17.G): the place a new rule names, and its grant ----------
+    def _place_note(self, person, text, spec):
+        """G1: grants.rule_place on the person's whole request (an email to someone else gets the M-14 line)."""
+        from .grants import email_who, rule_place
+        h = person["handle"]
+        other = spec.when.type in ("schedule", "random", "new_items") and self.email_to_other(text, h)
+        return rule_place(self.store, h, text, spec, to_other=other, who=email_who(text) if other else None,
+                          when_words=describe(spec.when))
+
+    def _grant_on_start(self, person, spec, rule_id, n, now):
+        """G2: the YES that starts a rule with a place makes its grant, only when the place can be used now; else the
+        rule starts without it (its stored spec loses the place) and the start line says so. A note the request
+        gave with no preview (an app the bot can't add to from this rule) is said here too."""
+        from . import grants
+        h = person["handle"]
+        note = getattr(self._tl, "place_note", None)
+        self._tl.place_note = None
+        if spec.place is None:
+            if note and note.get("status") != "grant":
+                return re.sub(r"for rule \d+", f"for rule {n}", note["line"])
+            return ""
+        p = grants.place_of(spec)
+        app = p.app if p else spec.place.connector
+        gid, why = grants.make(self.store, h, rule_id, spec, now)
+        if gid:
+            return T.grant_started(app)
+        word = grants.CHECK_WORD.get(spec.place.connector, spec.place.connector)
+        self.store.update_rule(rule_id, spec=grants.strip_place(spec).stored())
+        return T.grant_not_made(app, word, n)
+    # ---------- end round 10, slice G ----------
 
     def _length_way_out(self, person, text, now):
         """Fix pass 5, finding 87: "any length" or "include YouTube" right after a rule whose picks are all longer than
@@ -1791,6 +1865,7 @@ class HandlerMixin:
             elif action == "stop":
                 self.store.set_slot(r["id"], None, "stopped")
                 self.store.update_rule(r["id"], paused_until=None)
+                self.store.end_grants(h, rule_id=r["id"], reason="rule_stopped", at=now)   # round 10, slice G
             else:
                 status, nxt = self._next_for(RuleSpec.model_validate(r["spec"]), person, now, r)
                 self.store.set_slot(r["id"], nxt, status)

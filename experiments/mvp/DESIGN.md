@@ -2369,3 +2369,85 @@ the reads live inside `draft_reads` (1), `_cancel_answer` (3), `cancel_reads` (6
 - **Tests**: `tests/test_round10_sending.py` (65). Changed round 9 expectations, each for a fact or a line this slice
   adds: `test_round9_cancel.py` (the Planet Fitness card's post and deadline lines, the "sent" reply's offer, the
   mailbox notice's `notice_sent`, 16 entries, Amazon's host, "no" after Amazon's new offer).
+### 17.G Rules that add to the person's own apps, one yes per rule (slice G)
+
+The founder's decision: a timed rule that adds to the person's own apps needs one yes, when the rule is made. All in
+`grants.py` (amendment A-015, Proposed); no model call, no prompt change.
+
+- **The place (G1).** `grants.rule_place(store, handle, text, spec)` runs in `_dispatch_one`'s new_rule branch (via
+  `handler._place_note`) on the person's **whole** request, never on a caption or a model form (K drops a model's
+  `place`). `rule_named` is stricter than `places.named`: a placing verb (put, add, save, drop, send …) and "in / into /
+  onto (my)" or "to / on my": "a guide to notion", "tips on todoist", "videos on youtube" name no place (M-7). The
+  model's own `todo.add` list counts only when the person's words name that app too. Only for library or recent rules;
+  outcomes:
+  - **grant**: the place can be used now (`route_of`: `connectors.route_for` gives an action with `rule_grant`, and
+    `connectors.unavailable` is None). Code sets `spec.place` (`target`: None for the token apps (their Inbox or the
+    project in the settings), the Reminders list the person named, "Digest" for the Mac calendar; `per_run` =
+    `content.count` 1..5 (1 for an event); `per_day` = min(10, the action's cap)) and the `todo.add {list: <app>}` or
+    `calendar.add` it needs (`validate_action(by="code", where="rule")`).
+  - **unusable** (a tester, not connected, broken, off), **no_route** (an app the bot can't reach, or YouTube before
+    slice Y), **not_timed** (a new-items or one-off rule), **email_other** (M-14): no place; a model `todo.add` naming
+    that app is dropped, so the picks stay in the message (never the bot's list under the app's name); one line:
+    `TickTick isn't connected for you, so I'll put them in my message here instead. Say "connect ticktick", then "use
+    ticktick for rule 3".` / `I can't add to Notion on a schedule, so I'll put them in my message here instead.` /
+    `I can only add to X from a rule that runs at set times, …` / `I can't email other people on a schedule. I can
+    send you the picks here every Friday at 4pm; then say "email my team …" and I'll write it.` (slice A's email read
+    answers most such requests first, with its own line, and makes no rule).
+- **The preview (G3)**, word for word: `I'll also add them to TickTick, in your Inbox, as tasks with their links: at
+  most 3 each Sunday and 10 a day.` / `Each time I'll tell you here what I added, and you can say "undo".` / `Reply
+  YES to start and let me add them, or tell me what to change.` A calendar place adds `Nobody else is invited and
+  nobody gets an email.`; `_do_note` leaves out the place's own todo.add / calendar.add ("put it on your list").
+- **The grant (G2).** `grants.make` in `handler._grant_on_start` (called by `_activate`) on the same YES, only when
+  the place is usable then: `store.add_grant(rule, connector, action, target, per_run, per_day, scope_hash)`. Else
+  the rule starts without it, its stored spec loses the place, and the start line says `TickTick isn't connected now,
+  …`. `scope_hash` = sha256 of the stored spec (without `when.if_empty`: "tell me even if there's nothing" changes no
+  add), connector, action, target, caps, the connector's pins (state `pins:<connector>:<handle>`, slice C) and an
+  account hint (a hash of the token app's settings, or the module's `account_hint()`).
+- **`actions.perform(..., grant=g)`** calls `grants.check` before the yes-token check, which it then skips: the
+  action's `rule_grant` (True on `mac.reminder`, `mac.event`, `ticktick.add`, `todoist.add`; never `webhook.post`, the
+  mailbox, email, anything to another person), the grant re-read from the store and `active`, the same person, rule
+  (`ctx.rule_id`), action, an active rule whose spec still has that place, the scope hash recomputed now, the target,
+  `per_run`, and today's adds by this rule plus these ≤ `per_day`. `who="operator"` and the action's daily cap still
+  apply. A refusal raises `Refused("grant:<code>")`.
+- **Each run (G4).** `places.route` → `grants.run_place` for a scheduled run with `ctx.rule_id` whose spec has a place
+  of this kind. No active grant (it ended, or paused and the person was told): nothing is added and nothing goes on the
+  list here. Else picks (strong-marked ones never, S3) → `todo_action.rows_for` → cut to `per_run` (the rest: `2 more
+  are only in this message.`, written nowhere) and to what is left of `per_day`; `idem = sha256(handle, action,
+  grant, slot, item ids)` (a retried slot: `I'd already added these to TickTick for rule 3.`; `_perform`'s
+  `action_done` also replays the logged line); `perform(..., grant=g)`; placements with `route` and `rule_id`;
+  `action_log` row of the action with `{grant_id, route, count, placements}` (no titles). The line goes in the run's
+  message even when `do` has no `message.send` (deliver's "For …:" message): `Added 3 tasks to TickTick (rule 3):
+  Miso pasta; Lemon orzo; Sheet-pan gnocchi. Say "undo" to take them out, or "stop 3" to end the rule.` Titles are the
+  bot's own params, never the app's answer. No due times are sent.
+- **Failures.** One: `TickTick didn't answer, so I kept them in my message here.` (`connectors.failed`,
+  `grant_failed`; a time-out marks the slot "maybe there"); three in a row: paused, `I've stopped adding to TickTick
+  for rule 3 after 3 failures in a row. The rule keeps sending here. Say "check my ticktick" to try again.`; a success
+  resets; "check my ticktick" / "check my mac" resume paused grants. A scope that changed at run time ends the grant:
+  `Rule 3 changed since you said yes, so I didn't add anything to TickTick. Say "use ticktick for rule 3" to add them
+  again.` (a new token counts as another account).
+- **Undo (G5).** State `lastwrite_rule:<handle>`: "undo" takes a rule run's adds out for 24 hours, after the person's
+  own writes of the last 10 minutes (and after a newer timed write): `I took the 3 tasks rule 3 added out of
+  TickTick.` "undo rule 3" / "take out what rule 3 added": rule 3's last run's adds in the last 7 days.
+- **What ends a grant.** "stop 3" (and the stop of a rule just started by "undo"): `rule_stopped`. A change (model
+  `change_rule`, `grants.on_change`, M-8): the old place is kept unless the change names another app or "not in
+  <app>" (`I won't add them to TickTick any more.`); any real change ends the grant (`rule_changed`), and the reply
+  adds the place lines with `Reply YES to start and let me add them to keep adding them.` (a `confirm_rule` waiting
+  with `change_of`; `grants.change_yes` makes the new grant, or says the rule changed again since). Hook **8a**
+  `grants.grant_reads` (after `place_reads`, before `receipts_reads`): "stop adding to ticktick" (`stopped_by_person`;
+  `OK. I won't add anything to TickTick on my own any more. Rules 3 and 5 keep sending here.`), "use ticktick for rule
+  3" (a change preview with the place lines; the YES makes the grant), "undo rule 3". "disconnect ticktick" / "my mac":
+  `disconnected`. "delete my data": the rows go (slice K).
+- **Receipts.** `added 6 tasks in TickTick (4 by rule 3)`, and `Standing permissions:` with `rule 3 may add tasks to
+  TickTick: at most 3 a run and 10 a day` (paused ones say so). No titles, no list names.
+- **For slices C and Y.** A new route is a registry entry with `rule_grant=True` returned by `connectors.route_for`;
+  `run_place` builds `PlaceTodoParams` for todo places and `MacEventParams` for calendar ones; a playlist place (kind
+  "playlist") needs Y's own params and run (its place is read now, but `route_of` finds no route until Y).
+- **Not built.** Email rules (M-14 line only), `mailbox.draft` under a grant, new-item deadline rules, any grant for a
+  tester, pausing a grant with "pause 3" (a paused rule does not run, so its grant is not used).
+- **Live check** (17 Nov, $0.032, the 10 phrasings of design 4.8 through the real interpreter, then `rule_place`; a
+  made-up person): the model never names the app (rows 1, 2, 6 give `todo.add` with **no list**: before this slice,
+  the bot's own list). After: rows 1, 2, 6 grant (TickTick, Todoist, TickTick); 3 and 8 no_route (Google Calendar,
+  Gmail); 4 not_timed; 7 email_other (slice A's read takes it first in the bot); 9 no_route (YouTube, until slice Y);
+  5 (their list: source todos) and 10 no place. So a model `todo.add` with no list (or "todo") counts as the app's
+  when the request names an app, and goes when no grant can be made.
+  Tests: `tests/test_round10_grants.py` (77); `test_round9_merge.py` wraps hook 8a and checks its place in the order.
