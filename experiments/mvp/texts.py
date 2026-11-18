@@ -840,8 +840,9 @@ CODE_CANCELLED = "That code was cancelled after too many wrong tries. Reply \"ne
 CODE_TOO_MANY = ("That's not it either, so I've cancelled that code. Reply \"new code\" and I'll send another, or send "
                  "me a different address.")
 CODE_LIMIT = "I've sent enough codes for today. Please try again tomorrow."
-EMAIL_ONLY_YOU = ("I can only email you, at your own address. Say \"email it to me\" and I'll send it to you, so you can "
-                  "forward it.")
+# round 10, slice W (W1): never offers "email it to me" when nothing has been written
+EMAIL_ONLY_YOU = ("Tell me who it's for and what to say, like \"email my teacher that I'm sick today\", and I'll write it "
+                  "for you to check.")
 EMAIL_TYPE_IT = "What's your email address? Type it out and I'll send a 6-digit code there to check it's yours."
 NOTHING_TO_ACT_ON = "I haven't sent you anything yet. Ask me for something first."
 
@@ -2567,3 +2568,121 @@ def page_status_line(build, switches):
     """The line under the test page: the build, then each switch by name ("TickTick: off"). Never a value."""
     return " · ".join([f"Build {build}"] + [f"{k}: {v}" for k, v in switches.items()])
 # ---------- end round 10, slice K ----------
+
+
+# ---------- round 10, slice W: wording, the setup answer, "email it to me" ----------
+# W1: "email it to me" with nothing written and no answer in view
+NOTHING_TO_EMAIL = ("There's nothing written yet to email you. Tell me what to write, like \"email my teacher that I'm "
+                    "sick today\".")
+
+
+def draft_whom(name=None, word=None):
+    """'your teacher', 'Sam', or 'them': who an open draft is for, in the person's own words."""
+    return name or (f"your {word}" if word else "them")
+
+
+def draft_self_emailed(masked, whom):
+    return f"I emailed the draft to you at {masked}, so you can forward it. The draft to {whom} is still open."
+
+
+def draft_still_open(whom, needs_address):
+    return f"The draft to {whom} is still open." + (" Send me their address when you have it." if needs_address else "")
+
+
+def draft_self_link(link, whom, needs_address):
+    return (f"Here's the draft as an email to yourself (tap to open it in your mail app): {link}\n"
+            + draft_still_open(whom, needs_address))
+
+
+# W3: the setup answer that asks for regular exports, and export_reads
+EXPORT_FACTS_HEAD = "About regular exports: Instagram doesn't let any app pull your saves, so here's the closest I can do."
+EXPORT_FACT_YOUTUBE = ("• YouTube: Google Takeout can repeat your export every 2 months for a year. You set that up once; "
+                       "say \"steps\" and I'll send them.")
+EXPORT_FACT_YOUTUBE_CONNECT = (" Your likes, subscriptions and playlists I can also read straight from YouTube: say "
+                               "\"connect youtube\".")
+EXPORT_FACT_INSTAGRAM = ("• Instagram: I can't confirm a repeating export for your account, so I'll remind you every 4 "
+                         "weeks.")
+
+
+def export_facts(platforms, where, yt_connect=False):
+    """The facts about regular exports, per platform the person has, and where a new file goes."""
+    lines = [EXPORT_FACTS_HEAD]
+    if "youtube" in platforms:
+        lines.append(EXPORT_FACT_YOUTUBE + (EXPORT_FACT_YOUTUBE_CONNECT if yt_connect else ""))
+    if "instagram" in platforms:
+        lines.append(EXPORT_FACT_INSTAGRAM)
+    lines.append(f"• Each new file goes in {where}, and I add it by myself.")
+    return "\n".join(lines)
+
+
+def _nexts_words(nexts, word="reminder"):
+    parts = []
+    for i, (p, d) in enumerate(nexts):
+        day = d.strftime("%-d %B")
+        parts.append(f"next {PLATFORM_NAMES.get(p, p)} {word} {day}" if i == 0 else
+                     f"next {PLATFORM_NAMES.get(p, p)} one {day}")
+    return ", ".join(parts)
+
+
+def export_setup_done(nexts):
+    """'Done: next Instagram reminder 15 December, next YouTube one 17 January. Say "undo" to stop the reminders.'"""
+    return f"Done: {_nexts_words(nexts)}. Say \"undo\" to stop the reminders."
+
+
+EXPORT_OFFER_TAIL = "Want me to remind you? Say yes."
+
+
+def export_on(nexts):
+    return f"Your export reminders are on: {_nexts_words(nexts, 'one')}. Say \"steps\" for how to do it."
+
+
+def export_remind_offer(platform, every, first):
+    return (f"I'll remind you {every} to send me a new {PLATFORM_NAMES.get(platform, platform)} export, with the steps, "
+            f"starting {first.strftime('%-d %B')}. Want me to? Say yes.")
+
+
+UPLOAD_HERE = "the upload box on this page"
+UPLOAD_TEST_PAGE = "the upload box on the test page"
+
+
+def you_also_asked(part):
+    return f"You also asked: \"{part}\". Send it on its own and I'll do it."
+
+
+# W6: what code says instead of a model reading that clashes with what is on screen
+CHAT_INSIDE = "I keep a list of what I did for you: say \"what did you do for me\"."
+DRAFT_CHANGE_HOW = ("I didn't change the draft or make a reminder from that. Tell me the change, like \"say Tuesday "
+                    "instead of Monday\" or \"take out the part about the doctor\".")
+
+
+def draft_words_not_found(words):
+    return (f"The draft doesn't say \"{words}\", so I didn't change it. Tell me the words to change, like \"say "
+            f"Tuesday instead of Monday\".")
+
+
+def app_rule_line(app, cadence):
+    """W6 (slice G replaces it with the place preview): a rule that names an app the bot can't add to on a schedule."""
+    return f"I can't add to {app} on a schedule yet. I can send them to you {cadence} instead: say yes."
+
+
+def doit_next(n, text):
+    """'do all of them': one at a time; the next one is named, never done without being asked."""
+    return f"One at a time: next is \"{text}\". Say \"do {n} for me\" when you're ready."
+
+
+def app_cant_connect(app):
+    return f"I can't connect to {app} yet. Say \"what are you connected to\" to see what I can reach."
+
+
+def app_not_connected(app):
+    return f"I'm not connected to {app}, so there's nothing to check or disconnect."
+
+
+_KNOW_TAIL = " Say \"what do you know about me\" to see it all."
+
+
+def noted_only(changes, skipped=False):
+    """profile_changed without its "what do you know about me" tail (inside the setup, offered already)."""
+    m = profile_changed(changes, skipped)
+    return m[:-len(_KNOW_TAIL)] if m.endswith(_KNOW_TAIL) else m
+# ---------- end round 10, slice W ----------

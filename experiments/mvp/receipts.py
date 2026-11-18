@@ -33,7 +33,14 @@ RECEIPTS = re.compile(
     r"|(?:show|give)\s+(?:me\s+)?my\s+(?:activity|receipts)"
     r"|my\s+(?:activity|receipts)"
     r"|what(?:'s|\s+is|\s+are)\s+(?:still\s+)?waiting(?:\s+(?:for\s+me|on\s+me))?"
+    # ---------- round 10, slice W (W5): "show me what you've done for me this week", "what did you add to my X"
+    r"|(?:show|tell)\s+me\s+what\s+you(?:'ve|\s+have)?\s+(?:done|did)(?:\s+for\s+me)?"
+    r"(?:\s+(?:today|this\s+week|lately|recently|so\s+far))?"
+    r"|what\s+(?:did|have)\s+you\s+(?:add|added|put)\s+(?:to|in|on|into)\s+my\s+[\w ]{2,30}?"
+    r"(?:\s+(?:today|this\s+week|lately|recently))?"
     r")" + _THANKS, re.I)
+# "what did you do": only when something was done for them in the last 7 days (else the usual path reads it)
+RECEIPTS_BARE = re.compile(r"^\W*what\s+(?:did|have)\s+you\s+(?:do|done)\W*$", re.I)
 TODAY = re.compile(r"\btoday\b", re.I)
 WAITING_ONLY = re.compile(r"\bwaiting\b", re.I)
 DID_SEND = re.compile(r"^\W*did\s+you\s+(?:(?:really|already|actually)\s+)?(?:send|email|mail|write)\s+"
@@ -109,7 +116,10 @@ class ReceiptsMixin:
         if m:
             self.note(intent="receipts")
             return self.send(h, self._did_send(person, m.group("who"), now))
-        if not RECEIPTS.match(t):
+        if RECEIPTS_BARE.match(t):   # round 10, slice W (W5)
+            if not self._receipt_lines(person, now - timedelta(days=DAYS), now):
+                return None
+        elif not RECEIPTS.match(t):
             return None
         self.note(intent="receipts")
         today = bool(TODAY.search(t))

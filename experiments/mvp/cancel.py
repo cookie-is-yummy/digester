@@ -29,7 +29,16 @@ SAID_DONE_DAYS = 7       # "I cancelled it" refers to a cancel reply this recent
 # ---------- the trigger (W5) ----------
 CANCEL_VERB = re.compile(r"\b(?:cancel|cancelling|canceling|unsubscribe me from|unsubscribe from|get out of|"
                          r"stop paying for)\b|\b(?:end|quit|close)\s+(?:my|the|our)\b|"
-                         r"\bhow (?:do|can|would|should) i (?:cancel|end|stop|quit|get out of)\b", re.I)
+                         r"\bhow (?:do|can|would|should) i (?:cancel|end|stop|quit|get out of)\b"
+                         # ---------- round 10, slice W (W5): "get rid of my hulu", "drop my ... subscription" ----------
+                         r"|\bget rid of (?:my|the|our)\b"
+                         r"|\bdrop (?:my|the|our)\b(?=.*\b(?:subscriptions?|memberships?|plan|trial)\b)", re.I)
+# round 10, slice W (W5): a question about the library is never a cancel request ("any videos on how to cancel
+# subscriptions", "im thinking of cancelling netflix, did i save anything ..."); "how do i cancel my netflix" still is
+LIBRARY_ASK = re.compile(r"\b(?:did i save|have i saved|i saved anything|anything i saved|any (?:videos?|reels?|posts?|"
+                         r"tips?)\b|show me\b|^\W*find\b|\bfind (?:me )?(?:the|a|some)\b|what did i save|reels? about|"
+                         r"videos? about|posts? about)", re.I)
+HOW_TO_CANCEL_ANY = re.compile(r"\bhow to (?:cancel|unsubscribe)\b(?!.*\bmy\b)", re.I)
 # W5: a stop or pause the model read from a message about a subscription counts as a cancel verb there
 FORCED_VERB = re.compile(r"\b(?:stop|pause|turn off|end|cancel)\b", re.I)
 SUB_WORD = re.compile(r"\b(?:subscriptions?|memberships?|free trial|trial|auto-?renew(?:al)?)\b", re.I)
@@ -162,6 +171,8 @@ def request(text, rules=(), forced=False, routes=None):
     if not (CANCEL_VERB.search(t) or (forced and FORCED_VERB.search(t))):
         return None
     if NOT_CANCEL.search(t):
+        return None
+    if not forced and (LIBRARY_ASK.search(t) or HOW_TO_CANCEL_ANY.search(t)):   # round 10, slice W (W5)
         return None
     if rules:
         from .interpret import names_rule

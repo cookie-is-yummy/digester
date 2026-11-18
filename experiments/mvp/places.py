@@ -640,7 +640,8 @@ T_SEND = re.compile(r"^(?:please\s+)?(?:can\s+you\s+)?(?:add|put|send|push|move|
                     r"(?:to|in|into|on|onto)\s+(?:my\s+|the\s+)?" + _TOK + r"(?:\s+(?:app|list|inbox|account))?"
                     r"(?:\s+please)?$")
 _IT = re.compile(r"^(?:it|this|that|this one|that one)$")
-_THEM = re.compile(r"^(?:them|them all|all of them|both|all)$")
+_THEM = re.compile(r"^(?:them|them all|all of them|both|all|these|those|these ones|those ones|"   # W5: these, those
+                   r"all of these|all of those)$")
 _NTH = re.compile(r"^(?:the\s+)?(?:(?P<ord>first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)(?:\s+one)?|"
                   r"(?:number\s+|#\s*)(?P<n>\d{1,2})|(?P<bare>\d{1,2}))$")
 _INGR = re.compile(r"^(?:the\s+|its\s+|their\s+)?(?:ingredients|shopping list|groceries)(?:\s+for\s+(?:it|the\s+(?P<ord>first|"
@@ -674,7 +675,99 @@ def place_reads(bot, person, text, now):
         if rx.match(t):
             bot.note(intent="places")
             return _pref(bot, person, kind, on)
-    return token_reads(bot, person, text, t, now)
+    ref = token_reads(bot, person, text, t, now)
+    if ref is not None:
+        return ref
+    return w_place_reads(bot, person, text, t, now)   # round 10, slice W (W5)
+
+
+# ---------- round 10, slice W (W5): connector questions in everyday shapes, and apps with no connector ----------
+_W_LEAD = r"^(?:(?:please|pls|can you|could you|i want to|i'd like to|i wanna|let me|help me)\s+)*"
+_W_TOK = r"tick\s?tick|todoist|webhook|automation|ifttt|zapier|n8n"
+_W_OTHER = (r"g-?mail|google\s+calendar|gcal|notion|google\s+tasks|google\s+keep|trello|evernote|one\s?note|"
+            r"apple\s+notes|things\s+3|microsoft\s+to[\s-]?do|outlook")
+_W_APP = rf"(?P<app>{_W_TOK}|{_W_OTHER})"
+W_APP_CONNECT = re.compile(_W_LEAD + r"(?:connect|link|set\s*up|hook\s+up|sync)\s+(?:to\s+|with\s+)?(?:my\s+|the\s+|a\s+)?"
+                           + _W_APP + r"(?:\s+account)?(?:\s+(?:to you|for me|please|pls))?$")
+class _AnyOf:
+    """Several patterns read as one (each may name the same group)."""
+
+    def __init__(self, *rxs):
+        self.rxs = rxs
+
+    def match(self, t):
+        return next((m for m in (rx.match(t) for rx in self.rxs) if m), None)
+
+
+W_APP_CHECK = _AnyOf(
+    re.compile(r"^(?:is|are)\s+(?:my\s+|the\s+)?" + _W_APP + r"\s+(?:account\s+)?(?:connected|linked|set\s*up|"
+               r"working)(?:\s+(?:yet|now|still))?$"),
+    re.compile(r"^are\s+you\s+(?:connected|linked)\s+to\s+(?:my\s+)?" + _W_APP + r"$"),
+    re.compile(_W_LEAD + r"(?:check|test)\s+(?:my\s+|the\s+)?" + _W_APP + r"(?:\s+(?:connection|again))?$"))
+W_APP_DISCONNECT = re.compile(_W_LEAD + r"(?:disconnect|unlink|stop\s+using|remove|turn\s+off)\s+(?:my\s+|the\s+)?"
+                              + _W_APP + r"(?:\s+(?:account|please|pls))?$")
+W_CONNECTED = re.compile(r"^what\s+(?:apps?|services|accounts|tools)\s+(?:are\s+you|you're|do\s+you\s+have|have\s+you)\s+"
+                         r"(?:connected|linked)(?:\s+(?:to|with))?(?:\s+(?:so far|now|right now))?$"
+                         r"|^what\s+(?:apps?|services)\s+can\s+you\s+(?:connect\s+to|use|reach|put\s+things\s+in)$"
+                         r"|^(?:are\s+you|is\s+anything)\s+connected\s+to\s+(?:any|my)\s+apps?$")
+W_APP_SEND = re.compile(_W_LEAD + r"(?:add|put|send|push|move|save|stick)\s+(?P<what>.+?)\s+(?:to|in|into|on|onto)\s+"
+                        r"(?:my\s+|the\s+)?(?P<app>" + _W_OTHER + r")(?:\s+(?:app|list|account|board|inbox))?"
+                        r"(?:\s+(?:please|pls))?$")
+
+
+def _w_place(app):
+    """The Place an app word names (Gmail, Notion, Google Tasks, ...), or None."""
+    return named("in " + app)
+
+
+def w_place_reads(bot, person, text, t, now):
+    """'is ticktick connected?', 'i want to link my todoist', 'what apps are you connected to', 'connect my gmail',
+    'disconnect notion', 'save the first one to my notion'. A task app with a connector goes to the round 9 flow; an
+    app with none gets the honest line, never silence. None when the message is none of these."""
+    if W_CONNECTED.match(t):
+        bot.note(intent="places")
+        return _connected(bot, person, now)
+    for rx, fn, other in ((W_APP_CONNECT, _t_connect, T.app_cant_connect), (W_APP_CHECK, _t_check, T.app_not_connected),
+                          (W_APP_DISCONNECT, _t_disconnect, T.app_not_connected)):
+        m = rx.match(t)
+        if m:
+            bot.note(intent="places")
+            app = m.group("app")
+            if re.fullmatch(_W_TOK, app):
+                return fn(bot, person, _tok_key(app), now)
+            p = _w_place(app)
+            return bot.send(person["handle"], other(p.app if p else app))
+    m = W_APP_SEND.match(t)
+    if m:
+        p = _w_place(m.group("app"))
+        what = m.group("what")
+        if p is None or p.kind != "todo" or p.key == "gmail" or not bot.store.last_answer(person["handle"]):
+            return None
+        numbers, kind = None, "pick"
+        if _IT.match(what):
+            numbers = [1]
+        elif _THEM.match(what):
+            numbers = None
+        elif _NTH.match(what):
+            n = _NTH.match(what)
+            numbers = [_ORDN[n.group("ord").lower()] if n.group("ord") else int(n.group("n") or n.group("bare"))]
+        elif _INGR.match(what):
+            kind = "ingredients"
+            o = _INGR.match(what).group("ord")
+            numbers = [_ORDN[o]] if o else None
+        else:
+            return None
+        # the interpreter's own act_on_last todo.add with that app's list name, by code (the same reply and log row)
+        from .schema import Interpretation
+        params = {"list": p.names[0] if p.names else p.app.lower(),
+                  **({"what": "ingredients"} if kind == "ingredients" else {})}
+        it = Interpretation.model_validate({"intent": "act_on_last",
+                                            "actions": [{"action": "todo.add", "params": params}],
+                                            **({"pick_number": numbers[0]} if numbers else {})})
+        bot.note(intent="act_on_last")
+        return bot._act_on_last(person, it, text, now)
+    return None
+# ---------- end round 10, slice W ----------
 
 
 def token_reads(bot, person, text, t, now):
@@ -700,6 +793,11 @@ def _t_send(bot, person, text, what, key, now):
     place = next(p for p in PLACES if p.connector == key)
     bot._tl.msg_text = text
     m = _MYLIST.match(what)
+    # round 10, slice W (W5): "add the shopping list to ticktick" right after a recipe, with no such list of theirs:
+    # the recipe's ingredients ("my shopping list" stays their list)
+    if m and what.startswith("the ") and _INGR.match(what) and bot.store.last_answer(person["handle"]) \
+            and not any((t.get("list") or "todo") == m.group("name") for t in bot.store.todos(person["handle"])):
+        m = None
     if m:
         bot.note(intent="places")
         return _t_send_list(bot, person, place, m.group("name"), text, now)

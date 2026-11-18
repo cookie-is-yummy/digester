@@ -398,6 +398,10 @@ saves saved post posts link""".split())
         if problem:
             if problem == T.NO_PICK_TO_ADD and not any(n == "todo.add" for n, _ in acts):
                 problem = T.NOTHING_TO_ACT_ON
+                # ---------- round 10, slice W (W1): "email me that" with nothing written or shown ----------
+                if [n for n, _ in acts] == ["email.send"]:
+                    problem = T.NOTHING_TO_EMAIL
+                # ---------- end round 10, slice W ----------
             return self.send(h, problem)
         item = (picks[0].get("item") if picks and len(picks) == 1 else None) or {}
         day = self._thing_date(picks[0], now, person) if item else None

@@ -2025,3 +2025,179 @@ No reply changes except the build lines; no read, no connector, no model call.
   `fake_merchant` (the practice merchant "Streamly", 9 flows, by Playwright routing).
 - `tests/test_round9_merge.py`'s rule phrasings skip `test_round10_*` files, so the set stays the round 9 one.
   `test_round9_mac.py` lists the two new `placements` columns.
+
+### 17.W Wording, the setup answer, the screenshot failures (slice W)
+
+**W-a: the three screenshot failures, the time line, the setup answer** (no model call added; probe_same unchanged).
+- **"email my coach that ..."** was already read by code (round 9); the test page ran older code. Pinned with a made-up
+  sentence (`test_teacher_card`). `T.EMAIL_ONLY_YOU` now says `Tell me who it's for and what to say, like "email my
+  teacher that I'm sick today", and I'll write it for you to check.` and never offers "email it to me".
+- **"email it to me" with a card open** (`drafts.SELF_COPY`, read in `draft_reads` right after the "to" answers, also
+  while the card waits for "to", before the sign-off, words and send reads): `_draft_to_self`. With a confirmed address
+  and SMTP set up, `email.send` (only ever to their own address; `email.content` gains the answer kind `draft_copy`
+  with the draft's own subject) and `I emailed the draft to you at m•••@example.com, so you can forward it. The draft
+  to your coach is still open.`; else a `mailto:` link with their own address in To (blank when unknown) and the
+  card's exact subject and body: `Here's the draft as an email to yourself (tap to open it in your mail app): <link>`
+  + `The draft to your coach is still open. Send me their address when you have it.` The card stays open; nothing goes
+  to the other person; action_log `draft.self_copy` (route only).
+- **Nothing written, nothing shown**: "email it to me", "send it to me" (`drafts.SELF_COPY_TO_ME`) get
+  `T.NOTHING_TO_EMAIL` by code, never NOT_CAUGHT or "I haven't sent you anything yet". "email me that" stays the
+  interpreter's (it is a rule-eval text); `outputs._act_on_last` gives the same line when an email.send-only
+  act_on_last has nothing to act on.
+- **The time line** (`profile.time_line(t, who)`): "usually / normally / typically / generally / most days / in
+  general" dropped; little time → `you don't have much time`; an amount → `you usually have {t}`; else `time you
+  have: {t}`. Used in apply_merge's change line, `show_text`, and `pref_words` (the interpreter's and composer's
+  form: `doesn't have much time` / `usually has {t}` / `time they have: {t}`; an amount reads as before).
+- **A request-shaped note is never kept** (`profile.REQUEST_NOTE`, in apply_merge): "wants ...", "would like ...",
+  "needs you to ...", "help ...", "set up ...". `merge(..., no_note=True)` keeps no note at all and reads a form's
+  `kind: request` as about_me (the setup's request parts were taken out by code).
+- **`phrasing.py`** replaces the stub (W4): `normalize`, `variants`, `clauses` (strings) and `parts` ([(part,
+  is_request)]), `is_request`, `TIME_WORDS`. "for me" stays when cancel, do, handle, send, email or add is in the
+  message (W-1). A later part loses a leading "and / also / but / plus / then"; "can you also X" is read "also can you
+  X"; a part of 1 or 2 words that asks nothing joins the one before; at most 3 parts; never split with a time word
+  (checked on the normalised text too) or two quote marks.
+- **The setup answer** (`onboarding._setup_requests`, used by `_onboard_read` and `_onboard_prefs` before the form
+  call): the answer's parts; each request part (or one `refresh.export_kind` reads) goes to `refresh.export_text` (its
+  reply kept for the setup's own message) or to the code reads (hooks 5a to 8 through `answer_normally` in a code-only
+  mode: `_tl.code_only`, cut right after `do_it`; no model call). When code answered no part, the whole answer goes
+  the old way, byte for byte. Otherwise: the other parts, unless only a bare "not really / no / nope / nah / nothing",
+  a yes or "set up the reminders", go to one `P.merge(..., no_note=True)`; `_export_yes` / `_export_no` are tried on
+  each other part only when no export part was taken (W-4: an export request in any part wins over a no-word); one
+  message: `Noted: you don't have much time.` (no "what do you know about me" tail) + the export reply. A request
+  part no read took goes alone to the normal path after it (one interpreter call); a second one is said back with
+  `You also asked: "<part>". Send it on its own and I'll do it.` At the read step the card (or other code reply) comes
+  first, then the setup's next question.
+- **`refresh.export_reads`** (hook 5a in `answer_normally`, after `_rule_reads`; no model call). Kinds by
+  `export_kind`: `how` ("where do i upload my new export", "how do i send you a new instagram export", "how do i set it
+  up so ...": `library_status(steps=True)`), `remind` ("remind me every month to send my youtube takeout": an export
+  reminder at that interval, one yes, `T.export_remind_offer`), `regular` ("... export to you regularly",
+  "sync my saves", "my saves to sync automatically"; an export word needs Instagram, YouTube, Takeout, saves, library,
+  data or "to you" in the message). The `regular` reply (`T.export_facts`): `About regular exports: Instagram doesn't
+  let any app pull your saves, so here's the closest I can do.`, the YouTube bullet (Takeout repeats every 2 months;
+  `say "steps"`; plus the `connect youtube` line once `yt_auth.connectable` and not connected: slice Y), the Instagram
+  bullet (a reminder every 4 weeks), `• Each new file goes in the upload box on this page` (web channel; else "on the
+  test page"). Then: the setup's offer waiting (a pending confirm_rule `export reminders (...)`) is said yes to:
+  `Done: next Instagram reminder 10 December, next YouTube one 12 January. Say "undo" to stop the reminders.`;
+  reminders already on: `Your export reminders are on: next Instagram one ..., next YouTube one .... Say "steps" for
+  how to do it.`; else the offer through `offer_export_routine` and `Want me to remind you? Say yes.` "steps" alone is
+  read only within a day of that reply with no newer answer (state `exportsteps:<handle>`, removed by "delete my
+  data").
+- Checks: `tests/test_round9_merge.py` wraps `refresh.export_reads` (and later `split_reads`) like the round 9 reads;
+  the 159 rule-eval texts and 123 rule phrasings: 0 taken. `probe_same`: the same bytes as `same_head.json`.
+  Tests: `tests/test_round10_wording.py`.
+
+**W-b: everyday wording read by code** (no model call added).
+- **Hooks 5a to 8 try the message, then `phrasing.normalize(text)`** (`answer_normally`: one loop over
+  `phrasing.variants`; `text` is the message itself again after the loop). Nothing above hook 5 sees the normalised
+  form (secret_reads, _asked_reads, draft_reads, offer_reads, the confirm yes: W-2). What a read keeps is the message
+  itself: `_tl.norm_of` holds it while the normalised form is tried, and the draft row's `text` uses it.
+- **New words, per read** (design A3; dev ids in brackets):
+  - `drafts._RCPT`: a role word with a name and no "my" ("coach dan", d004), a lowercase title and name before a typed
+    address ("ms rivera (rivera@example.com)", d002), a lone lowercase name before "that / saying / about / an email"
+    ("shoot sam an email saying", d010). `LET_KNOW` ("let my professor know by email that ...", "tell ... by email",
+    d008) and `DROP_LINE` ("drop sam a line saying ..."): the recipient between the verb and "by email" / "a line".
+  - The card's words (whole message, never normalised): `SEND_WORDS` gains the leads "looks good, / sounds good /
+    perfect / great / cool / alright / yep / yeah" and a tail "pls", and Spanish "envíalo", "mándalo", "sí, envíalo"
+    (d038, d041, d042); `YES_WORDS` gains "go ahead", "ok go ahead" (the card's yes line; it never sends, d039);
+    `SAVE_DRAFT` gains "just", "keep it in drafts" (no "my"), a leading "don't send (it) yet," and a tail "pls / for now"
+    (d024 to d026); `SAVE_IT` "save it, i'll send it myself" with the card in view (d027); `CH_REPLACE` "(no,) say X not
+    Y", "say X instead of Y", "change Y to X": X in place of Y only where the draft's own words hold Y (case kept);
+    `CH_DROP_PART` "take out the part about X": the sentences holding X go, at least one sentence stays. When Y or X is
+    not in the draft and the card is in view: `The draft doesn't say "monday", so I didn't change it. ...` (d033, d034;
+    never a reminder).
+  - `handler.self_email_reads` (hook 5, the message itself only, never its normalised form; no card open; an answer or
+    a reminder / list in view; no time word): "email it to me", "send it to my email so ...", "email me the list / the
+    recipe", "send me this by email" are act_on_last email.send by code (to their own address only, as before). "email
+    me that", "can u email me this one too", "email me these tonight at 8", "yes but also email it to me" are rule-eval
+    texts and stay the interpreter's.
+  - `cancel.CANCEL_VERB`: "get rid of my", "drop my ... subscription" (d046); `cancel_routes.json`: "apple tv" (d052;
+    "disney plus" and "apple tv+" were there). `cancel.LIBRARY_ASK` / `HOW_TO_CANCEL_ANY`: "did i save", "any videos
+    on", "show me", "find ...", "reels / videos / posts about", "how to cancel ..." without "my" are never a cancel
+    (d102, d118); "how do i cancel my netflix" still is.
+  - `postacts._LEAD`: "can i", "could i", "i want to" (d054); `BOOK`: "get me tickets (for)", "buy me tickets" (d058);
+    `_WHEN`: "for 2" before a day or the end is how many people (d056: "reserve a table at that place for 2 on friday").
+  - `places`: `_THEM` gains "these", "those" (d061); `w_place_reads` after `token_reads`: `W_CONNECTED` ("what apps are
+    you connected to", d072), `W_APP_CONNECT` / `W_APP_CHECK` / `W_APP_DISCONNECT` with leads "can you / i want to /
+    let me" and the shapes "is X connected?", "are you connected to X", "stop using my X" (d069 to d075): a task app goes
+    to round 9's flow; Gmail, Google Calendar, Notion, Google Tasks, Google Keep, Trello, Evernote, OneNote, Apple Notes,
+    Things 3, Microsoft To Do, Outlook get `I can't connect to Gmail yet. Say "what are you connected to" ...` or `I'm
+    not connected to Notion, so there's nothing to check or disconnect.` `W_APP_SEND` "save the first one to my
+    notion", "add it to google tasks" (a to-do app with no connector) goes to `_add_picks` with that app's list name, so
+    the reply is round 9's honest "I can't reach Notion, so I added ... to your list here" (d064, d065). "add the
+    shopping list to ticktick" right after a recipe, with no such list of theirs, is the recipe's ingredients.
+  - `receipts`: "show me what you've done (for me) this week", "what did you add to my X" (d078, d080); a bare "what
+    did you do" only when something was done for them in the last 7 days (d077 falls through on a fresh store).
+  - `todos._DOIT`: "go ahead with the X one" (d084); "do all of them" / "all" / "everything on my list" (only with the
+    list in view): the first to-do's helper, then `One at a time: next is "Cancel Netflix". Say "do 2 for me" when
+    you're ready.`; nothing is ticked off (d085).
+- **`handler.split_reads`, hook 8z** (after `do_it`, below the code-only cut): `phrasing.parts`; acted on only when no
+  read took the whole message and one of the first two request parts goes to a doing helper (`_doing_part`: an email
+  to someone else, `cancel.request`, `postacts.request`, the connect / check / disconnect patterns, or an add to an
+  outside app). Each of the two request parts goes through hooks 5a to 8 in code-only mode (`_setup_code_read`); one no
+  read takes goes alone to the normal path; a third is said back (`You also asked: ...`). Each helper sends its own
+  reply. d050 "cancel my hulu and also email my landlord about the rent": the cancel question and the card.
+- **`handler.screen_guard(person, it, text, now)`**, after `chat_guard` and `recap_rule` in `answer_normally`: with a
+  card open (not waiting for an answer, no rule preview waiting): a model `confirm` with the card newest → the card's
+  yes line (never "nothing waiting for a yes"); `change_rule`, or `new_rule` of a note repeating 60% or more of the
+  message's words → no rule: `_draft_change(normalize(text))`, else `T.DRAFT_CHANGE_HOW`; act_on_last email.send with
+  nothing shown → `_draft_to_self`. With the to-do list in view: `todo_done` without a done word (`todos.DOIT_DONE_WORD`)
+  → `do_it`, else `T.DOIT_WHICH` (live: "do all of them" ticked everything off). A `chat` reply naming JSON,
+  structured, prompt, form, schema, interpreter or model → `T.CHAT_INSIDE`. A library rule whose message names an app
+  (`places.named`) the spec has no place for: first `I can't add to TickTick on a schedule yet. I can send them to you
+  every Sunday at 9am instead: say yes.`, then the preview as before (slice G replaces this line, W-13).
+- **Measured** (the development set, offline with the fakes, the harness of `phr_build` with export_reads,
+  split_reads and self_email_reads wrapped; tester and operator the same): r10/k **27 of 100 helper lines right by
+  code, 3 wrong (d007 by design; d102, d118 none lines taken), 106 fell through**; after W-b **73 of 100 right, 1 wrong
+  (d007, by design), 0 of 40 none lines taken**. The 27 left: 13 Spanish (the errand form), 7 English rules that
+  write to an app (the interpreter, then slice G), "email me that" and "could u email that to me tonight" (rule-eval
+  shapes and a time word), "send me an email with the workouts i saved this week" and three calendar or own-list adds
+  (the interpreter's act_on_last by design), "what did you do" on a fresh store. The 159 rule texts and 123 rule
+  phrasings (tester and operator, with and without an answer): 0 taken by any read, the new ones wrapped; the 20 draft
+  requests: 0 taken in all four settings.
+
+**W-c: the errand form** (`errand.py`, `prompts/errand_v2.md`; `errand_v1.md` kept; design A6). One small model call
+(`purpose="mvp_errand"`, `max_tokens=120`, temperature 0, seed 7; `MVP_ERRAND_MODEL`, else `config.MODEL`), logged in
+ai_runs by `llm.chat_json` and as an action_log row `errand.form` (the errand's name, whether it was used, the state
+word; never a word of the message).
+- **When it runs** (`errand.wanted`, `handler._errand`): every code read missed and the interpreter answered
+  `unsupported` (NOT_CAUGHT included), `help` with no help word, or `chat` that is not small talk; also from
+  `screen_guard` when code could not settle a clash (a draft change read as a reminder, a todo_done with no done word,
+  a chat about the bot's insides). Never: a message with a time or repeat word (`phrasing.TIME_WORDS`, now also
+  Spanish "cada", "todos los días", "mañana", ...; W-3), over 400 characters, a chained second request, the setup's
+  own answer, a code-only part, over the caps, or past `MVP_ERRAND_PER_DAY` (30) calls a person a day (0: off; the
+  tests' `env` fixture sets 0). Cached 6 hours by version, state and text (state `errandc:<hash>:<handle>`).
+- **Input**: `<state>fresh | answer N | draft | todos N | setup</state>` and `<message>...</message>`; nothing else
+  (no caption, title, to-do text, rule text or profile line).
+- **The checks** (`errand.built`; any failure → the interpreter's answer as before): each copied field must occur in
+  the message (casefolded, accents aside, or in its normalised form); an address only when typed in the message; a
+  number (pick, to-do) only when the message says it (a digit or an English or Spanish ordinal: `said_number`), or
+  "it / this / that / esto / ese" for the first one where the request reads do the same; the state each errand needs
+  (a draft, an answer of N picks, the to-do list); the enums; an app that `places.named` knows; draft words to replace
+  or remove must be in the draft. Spanish role words are said back in English ("mi jefe" → "your boss").
+- **Where it goes** (`errand.act`, the helpers' existing entries with a message built by code): email_other →
+  `_new_draft_row` / `draft_start` (a card; no address → "Who should it go to?"); email_self → `_draft_to_self` or
+  act_on_last email.send; save_draft → `_save_to_drafts`; send_draft → the card's send line (**it never sends**);
+  change_draft → `_draft_tone` / `_draft_change` ("make it shorter", "say X instead of Y", ...); cancel →
+  `cancel.merchant_in` or the unknown-merchant path, `_cancel_start`; post_act → `postact_reads` ("book the first
+  one", the words named, then "book that one" when the message points); add_to_app / app_connection → `place_reads`;
+  what_did_you_do → `receipts_reads`; do_todo → `do_it` / `_do_todo` (never a tick-off); exports → `export_text` /
+  `library_status`. A helper that does not take it → the interpreter's answer.
+- **errand_v2** (v1 plus: an errand marked "(state ... only)" is "none" in any other state; a number only when the
+  message says one; "fresh | email me that" → none). Found live: v1 read 4 of the 159 rule texts as errands with
+  nothing on screen ("email me that", "can u email me this one too", t-dev-040, "book me a table somewhere nice for
+  saturday"; code refused all 4, so no outcome changed), and read "ese restaurante" as pick 5.
+- **Measured live** (the real interpreter and errand form, everything else the fakes; tester; ledger
+  `data/mvp/ai_runs.jsonl`, `MVP_TOTAL_CAP_USD=30`): before (the design's baseline at head: 27 of 100 by code, 6 of
+  40 fell-through lines rescued live); after, of the 66 development lines code still misses (26 helper lines, 40
+  "none"), 25 of 26 helper lines reach the right helper in the end (the one left: "put the workouts in my calendar mon
+  wed fri at 7am", read as a search; the 8 rules that name an app count as the rule helper: 5 say the app line, the
+  Spanish one drops TickTick silently because `places.named` reads English prepositions), so 98 of 100 helper lines
+  with code; **0 wrong actions** (no tick-off, no rule from a draft change, no send, no cancel done); Spanish 12 of
+  13 helper lines (13 with the rule); 0 of the 40 none lines taken (3 errand calls, all "none"). The 159 rule texts
+  through the interpreter: 17 errand calls (10.7 per 100 messages); v2 on those texts: 0 forms other than none, 0 used,
+  0 outcomes changed. The 20 draft requests (counts only): 2 errand calls, 0 forms other than none, 0 used. Cost: 64
+  errand calls in all, $0.0605 ($0.00095 a call); the W-c evaluation spent about $0.96 (interpreter calls included).
+  The held-out set was not run (checker 2 runs it once).
+- Tests: `tests/test_round10_errand.py` (fake forms: every check, every helper, the cap, the cache, the input, a send
+  that never sends, a number never said, a form that names a rule).
+

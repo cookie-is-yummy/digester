@@ -40,6 +40,9 @@ VERBS = set("""call buy get pick email text book pay clean fix send make finish 
 
 
 # ---------- round 9, W10 (DESIGN.md section 16.F): "do 2 for me" on the to-do list ----------
+# round 10, slice W (W6): a to-do is ticked off by the model's todo_done only when the message says it is done
+DOIT_DONE_WORD = re.compile(r"\b(?:done|did|finished|completed?|tick(?:ed)?(?:\s+off)?|check(?:ed)?\s+off|"
+                            r"cross(?:ed)?\s+off|mark(?:ed)?|got it|bought|paid|sent)\b", re.I)
 DOIT_VIEW = timedelta(hours=24)   # a list shown this long ago (with no newer answer) is still "in view"
 DOIT_ASK = timedelta(hours=24)    # "tell me when" after a to-do the bot can't do: the next message only
 _ORD = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5,
@@ -47,8 +50,10 @@ _ORD = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "four
         "10th": 10}
 _DOIT = re.compile(
     r"^\W*(?:(?:please|ok|okay|so|hey)[\s,]+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:please\s+)?"
-    r"(?P<verb>do|handle|take\s+care\s+of|help\s+(?:me\s+)?with|deal\s+with|sort\s+out)\s+"
-    r"(?:(?P<it>it|that|this|that\s+one|this\s+one)"
+    r"(?P<verb>do|handle|take\s+care\s+of|help\s+(?:me\s+)?with|deal\s+with|sort\s+out"
+    r"|go\s+ahead\s+(?:and\s+do|with))\s+"   # round 10, slice W (W5): "go ahead with the netflix one"
+    r"(?:(?P<all>all\s+of\s+them|them\s+all|all\s+of\s+it|everything\s+on\s+(?:my|the)\s+list|all)"   # W5
+    r"|(?P<it>it|that|this|that\s+one|this\s+one)"
     r"|(?P<todo>(?:my\s+)?(?:to-?do|todo|task)\s+(?:number\s+|#\s*)?)?(?:number\s+|#\s*)?(?P<n>\d{1,2})"
     r"|the\s+(?P<ord>" + "|".join(_ORD) + r")(?:\s+(?:one|to-?do|todo|task))?"
     r"|the\s+(?P<words>[^\W\d_][\w' -]{1,40}?)\s+(?:one|to-?do|todo|task))"
@@ -70,6 +75,8 @@ def doit_request(text):
     if not m:
         return None
     verb = m.group("verb").lower()
+    if m.group("all"):   # round 10, slice W (W5): "do all of them": the first one, then the next is named
+        return {"number": None, "words": None, "said_todo": False, "all": True}
     if verb == "do" and not (m.group("forme") or m.group("todo") or m.group("ord") or m.group("words")
                              or re.search(r"\b(?:number|#)", t, re.I)):
         return None
@@ -490,6 +497,16 @@ class TodoMixin:
             return None
         todos = self.store.todos(h)
         n, row = None, None
+        if req.get("all"):   # round 10, slice W (W5): one at a time, never all at once; never ticked off here
+            if not (self._todos_in_view(h, now) and self.store.get_state(f"todoview:{h}")):
+                return None
+            self.note(intent="do_it")
+            if not todos:
+                return self.send(h, T.NO_TODOS)
+            ref = self._do_todo(person, 1, todos[0], now, said=text)
+            if len(todos) > 1:
+                self.send(h, T.doit_next(2, todos[1]["text"]))
+            return ref
         if req["number"] is not None:
             if not req["said_todo"] and not self._todos_in_view(h, now):
                 return None   # "do 2 for me" right after an answer: the number may be a pick; the usual path reads it

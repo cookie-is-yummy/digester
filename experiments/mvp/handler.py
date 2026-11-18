@@ -99,6 +99,26 @@ def norm_handle(h):
     return h
 
 
+# ---------- round 10, slice W (W5, W6): the person's own email by code, and the words of what is on screen ----------
+_SELF_LEAD = r"^\W*(?:(?:can you|could you|can u|could u|please|pls|ok|okay)[\s,]+)*"
+SELF_EMAIL = re.compile(
+    _SELF_LEAD + r"(?:(?:e-?mail|mail|send|forward)\s+(?:it|this|that|this one|that one)\s+to\s+(?:me|myself|my\s+(?:own\s+)?"
+    r"(?:e-?mail|inbox))(?:\s+(?:so\b.*|please|pls|too|as well|instead))?"
+    r"|(?:e-?mail|mail)\s+me\s+(?:the\s+)?(?:list|recipe|recipes|ingredients|answer|picks?|steps|whole thing)"
+    r"(?:\s+(?:please|pls|too|as well))?"
+    r"|send\s+(?:me\s+)?(?:it|this|that)\s+(?:to\s+me\s+)?(?:by|via|in\s+an?|over)\s+e-?mail(?:\s+(?:please|pls))?)"
+    r"[\s.!]*$", re.I)
+CHAT_INSIDE = re.compile(r"\b(?:json|structured|prompt|form|schema|interpreter|(?:language\s+)?model)\b", re.I)
+
+
+def _repeats(note, text):
+    """True when a note's words are 60% or more of the message's own words (a draft change read as a reminder)."""
+    words = [w for w in re.findall(r"[a-z']+", (text or "").lower()) if len(w) > 1]
+    have = set(re.findall(r"[a-z']+", (note or "").lower()))
+    return bool(words) and sum(1 for w in words if w in have) >= 0.6 * len(words)
+# ---------- end round 10, slice W ----------
+
+
 # (checker of fix pass 6) the intents that ask for something rather than state something about the person
 REQUEST_INTENTS = {"ask", "new_rule", "change_rule", "more", "follow_up", "act_on_last", "run_rule", "todo_add"}
 
@@ -111,6 +131,7 @@ class HandlerMixin:
         handle = norm_handle(handle)
         self._tl.received = received
         self._tl.sens_said = False   # the "left out one personal detail" line, at most once per message (finding 38)
+        self._tl.norm_of = None      # round 10, slice W: the message a normalised form was read from (phrasing.py)
         with self.lock_for(handle):
             return self._on_message(handle, text, tapback, tapback_ref)
 
@@ -231,28 +252,54 @@ class HandlerMixin:
         rules = self.store.rules(handle)
         last = self.store.last_answer(handle)
         # ---------- round 9: requests read by code before the model (verdict section 4, hooks 5 to 8) ----------
-        ref = self.email_reads(person, text, now)   # slice A: "email my landlord that ..." (drafts.py)
-        if ref is not None:
-            return ref
-        ref = self.cancel_reads(person, text, now)   # slice B: "cancel my netflix", a password, "I cancelled it"
-        if ref is not None:
-            return ref
-        ref = self.postact_reads(person, text, now)   # slice C: apply, book, buy; "add them all" (postacts.py)
-        if ref is not None:
-            return ref
-        # slice D (C3): connect / check / disconnect the Mac, "what are you connected to", "put my lists in reminders
-        # from now on"
-        from .places import place_reads
-        ref = place_reads(self, person, text, now)
-        if ref is not None:
-            return ref
-        ref = self.receipts_reads(person, text, now)   # W9: "what did you do for me" (receipts.py)
-        if ref is not None:
-            return ref
-        ref = self.do_it(person, text, now)   # W10: "do 2 for me" on the to-do list (todos.py)
-        if ref is not None:
-            return ref
+        # ---------- round 10, slice W (W4): hooks 5a to 8 try the message, then its normalised form (phrasing.py);
+        # `text` is the form being tried and is the message itself again after the loop ----------
+        from . import phrasing
+        from .refresh import export_reads
+        said = text
+        for text in phrasing.variants(said):
+            self._tl.norm_of = said if text != said else None   # what a read keeps is the message itself (W-2)
+            ref = export_reads(self, person, text, now)   # round 10, slice W: hook 5a, regular exports (refresh.py)
+            if ref is not None:
+                return ref
+            # ---------- end round 10, slice W ----------
+            ref = self.email_reads(person, text, now)   # slice A: "email my landlord that ..." (drafts.py)
+            if ref is not None:
+                return ref
+            if text == said:   # round 10, slice W: "email it to me" with an answer in view, the message itself only
+                ref = self.self_email_reads(person, text, now)
+                if ref is not None:
+                    return ref
+            ref = self.cancel_reads(person, text, now)   # slice B: "cancel my netflix", a password, "I cancelled it"
+            if ref is not None:
+                return ref
+            ref = self.postact_reads(person, text, now)   # slice C: apply, book, buy; "add them all" (postacts.py)
+            if ref is not None:
+                return ref
+            # slice D (C3): connect / check / disconnect the Mac, "what are you connected to", "put my lists in
+            # reminders from now on"
+            from .places import place_reads
+            ref = place_reads(self, person, text, now)
+            if ref is not None:
+                return ref
+            ref = self.receipts_reads(person, text, now)   # W9: "what did you do for me" (receipts.py)
+            if ref is not None:
+                return ref
+            ref = self.do_it(person, text, now)   # W10: "do 2 for me" on the to-do list (todos.py)
+            if ref is not None:
+                return ref
+        text = said
+        self._tl.norm_of = None
         # ---------- end of the round 9 request reads ----------
+        # ---------- round 10, slice W: a part of a setup answer is read by code only (onboarding._setup_code_read) ----
+        if getattr(self._tl, "code_only", False):
+            self._tl.code_missed = True
+            return None
+        # hook 8z: two asks in one message, when one part goes to a doing helper (phrasing.parts; W5)
+        ref = self.split_reads(person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 10, slice W ----------
         # round 8, slice B (DESIGN.md section 15): export, share, "what did my agent ask": code only, no model call
         done, ref = self.integration_reads(person, text, now)
         if done:
@@ -279,15 +326,140 @@ class HandlerMixin:
             # round 8, finding 97: a plain question about their own saves, read as small talk, is an ask
             it = chat_guard(it, text)
             it = recap_rule(it, text, rules)   # round 8 (BN5): "every sunday at 6pm send me a recap" (content by code)
+            screened = self.screen_guard(person, it, text, now)   # round 10, slice W (W6): what is on screen
         except Exception as e:  # noqa: BLE001
             self.store.add_run(handle=handle, kind="interpret", status="error", error=type(e).__name__)
             if budget_stop(e):   # review fix X6: ai.py's budget guard refused the call: never a false "try again"
                 self.note(intent="over_cap")
                 return self._limit_notice(person, "total")
             return self.send(handle, T.INTERPRET_ERROR)
+        if screened is not None:   # round 10, slice W (W6)
+            return screened
         if it.intent == "new_rule" and it.spec.content.source == "recap":
             return self._recap_preview(person, it.spec, text, now)   # round 8 (BN5): this week's recap, then YES
         return self._dispatch(person, it, text, rules, pending, last, now)
+
+    # ---------- round 10, slice W: everyday wording (DESIGN.md section 17.W) ----------
+    def self_email_reads(self, person, text, now):
+        """Hook 5, the message itself only (never its normalised form): "email it to me", "send me this by email",
+        "email me the list" with an answer in view and no card open: the interpreter's act_on_last email.send, by code.
+        Only to the person's own address, as before. "email me that" and timed ones stay the interpreter's."""
+        from . import phrasing
+        t = " ".join((text or "").split())
+        if not SELF_EMAIL.match(t) or phrasing.TIME_WORDS.search(t):
+            return None
+        h = person["handle"]
+        if self.open_draft(h, now) is not None or not (self._answer_seen(h) or self._plain_answer(h)) \
+                or self._export_in_view(h, now):   # round 8: "email it to me" right after an export is the export's
+            return None
+        from .schema import Interpretation
+        it = Interpretation.model_validate({"intent": "act_on_last", "actions": ["email.send"]})
+        self.note(intent="act_on_last")
+        return self._act_on_last(person, it, t, now)
+
+    def _doing_part(self, person, part):
+        """True when a doing helper would take this part: an email to someone else, a cancel, an apply / book / buy,
+        connect / check / disconnect, or an add to an outside app (W5's gate for split_reads)."""
+        from . import cancel as C
+        from . import phrasing
+        from . import places as PL
+        from . import postacts as PA
+        from .drafts import email_request
+        for t in phrasing.variants(part):
+            req = email_request(t)
+            if (req and not req.get("pron")) or C.request(t) is not None or PA.request(t) is not None:
+                return True
+            n = PL._norm(t)
+            if any(rx.match(n) for rx in (PL.CONNECT, PL.CHECK, PL.DISCONNECT, PL.T_CONNECT, PL.T_CHECK,
+                                          PL.T_DISCONNECT, PL.T_SEND, PL.W_APP_CONNECT, PL.W_APP_CHECK,
+                                          PL.W_APP_DISCONNECT, PL.W_APP_SEND)):
+                return True
+        return False
+
+    def split_reads(self, person, text, now):
+        """Hook 8z (W5): two asks in one message, only when no read took the whole message and one part goes to a
+        doing helper. Each request part (two at most) goes through hooks 5a to 8 by code; a part no read takes goes
+        alone to the normal path (one interpreter call); a third ask is said back."""
+        from . import phrasing
+        if getattr(self._tl, "in_split", False):
+            return None
+        t = " ".join((text or "").split())
+        if not t or len(t) > 400:
+            return None
+        parts = phrasing.parts(t)
+        reqs = [p for p, r in parts if r]
+        if len(parts) < 2 or not reqs or not any(self._doing_part(person, p) for p in reqs[:2]):
+            return None
+        h = person["handle"]
+        self.note(intent="split")
+        ref, left = None, []
+        self._tl.in_split = True
+        try:
+            for p in reqs[:2]:
+                taken, r = self._setup_code_read(person, p, now)
+                if taken:
+                    ref = ref or r
+                else:
+                    left.append(p)
+            for p in left[:1]:
+                ref = self.answer_normally(person, p, now) or ref
+            more = left[1:] + reqs[2:]
+            if more:
+                ref = self.send(h, T.you_also_asked(more[0])) or ref
+        finally:
+            self._tl.in_split = False
+        return ref if ref is not None else ""
+
+    def screen_guard(self, person, it, text, now):
+        """W6, after the interpreter's guards: a reading that clashes with what is on screen is settled by code.
+        Returns a reply's reference when code answered, else None (the reading is dispatched as before)."""
+        from . import phrasing
+        from .todos import DOIT_DONE_WORD
+        h = person["handle"]
+        pending = self._live_pending(h, now)
+        d = self.open_draft(h, now)
+        if d is not None and d["state"].get("waiting") is None and not (pending and pending["kind"] == "confirm_rule"):
+            newest = self._draft_card_in_view(h, d)
+            if it.intent == "confirm" and newest:
+                self.note(intent="draft_yes")   # the model never sends: "send" on the exact card does (W4)
+                return self.send(h, T.DRAFT_YES_MAILBOX if d["route"] == "mailbox" else T.DRAFT_YES)
+            if it.intent == "change_rule" or (it.intent == "new_rule" and it.spec.content.source == "note"
+                                              and _repeats(it.spec.content.text or "", text)):
+                self.note(intent="draft_change")
+                ref = self._draft_change(person, d, phrasing.normalize(text), now)
+                if ref is None:   # W7: the errand form may still read the change; else the plain line
+                    ref = self._errand(person, None, text, now)
+                return ref if ref is not None else self.send(h, T.DRAFT_CHANGE_HOW)
+            if it.intent == "act_on_last" and [a.action for a in it.actions] == ["email.send"] \
+                    and not self._answer_seen(h) and not self._plain_answer(h):
+                return self._draft_to_self(person, d, now)
+        if it.intent == "todo_done" and not DOIT_DONE_WORD.search(text) and self._todos_in_view(h, now) \
+                and self.store.get_state(f"todoview:{h}"):
+            ref = self.do_it(person, text, now)
+            if ref is None:   # W7: the errand form may read which one ("haz la segunda"); never a tick-off
+                ref = self._errand(person, None, text, now)
+            self.note(intent="do_it")
+            return ref if ref is not None else self.send(h, T.DOIT_WHICH)
+        if it.intent == "chat" and it.reply and CHAT_INSIDE.search(it.reply):
+            ref = self._errand(person, it, text, now)   # W7: the errand may read what was asked
+            return ref if ref is not None else self.send(h, T.CHAT_INSIDE)
+        if it.intent == "new_rule" and getattr(it.spec, "place", None) is None \
+                and it.spec.content.source in ("library", "recent"):
+            from .places import named
+            p = named(text)
+            if p is not None:   # slice G replaces this line with the place preview (W-13)
+                self.send(h, T.app_rule_line(p.app, describe(it.spec.when)))
+        return None
+
+    def _errand(self, person, it, text, now):
+        """W7: the errand form (errand.py) for a message the interpreter could not place; never for the setup's own
+        answer, a code-only part or a chained second request. The helper's reply's reference, or None."""
+        if text in (getattr(self._tl, "merged_text", None), getattr(self._tl, "setup_text", None)):
+            return None
+        from .errand import try_errand
+        return try_errand(self, person, it, text, now)
+
+    # ---------- end round 10, slice W ----------
 
     # ---------- round 8 (DESIGN.md section 13): rules beyond timing, read by code ----------
     def _asked_reads(self, person, text, now):
@@ -645,6 +817,13 @@ class HandlerMixin:
                     ref = self.draft_from_request(person, text, now)
                     if ref is not None:
                         return ref
+            # ---------- round 10, slice W (W7): the errand form, when every code read missed ----------
+            if not chained:
+                ref = self._errand(person, it, text, now)
+                if ref is not None:
+                    return ref
+            # ---------- end round 10, slice W ----------
+            if it.intent == "unsupported":
                 if self.to_someone_else(text):   # sending to others stays out; offer to send it to them (section 11)
                     return self.send(h, T.EMAIL_ONLY_YOU)
                 # fix pass 2, finding 62: never the model's own words for a request it would not do: code picks the

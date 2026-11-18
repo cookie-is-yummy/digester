@@ -1091,3 +1091,201 @@ def reminder_message(text, tester=False):
         if str(text or "").startswith(opening):
             return f"{opening}. Here's how:\n\n" + routine_text(export_routine((p,), tester=tester))
     return None
+
+
+# ---------- round 10, slice W (W3, design B3): regular exports asked for in plain words, read by code ----------
+# "how do i send you a new export", "where do i upload my new export": the steps (library_status with steps)
+EXPORT_HOW = re.compile(
+    r"\bwhere\s+(?:do|should|can)\s+i\s+(?:upload|put|send|drop)\s+(?:my|the|a)\s+(?:new\s+)?(?:instagram\s+|youtube\s+)?"
+    r"(?:export|takeout|zip|file)\b"
+    r"|\bhow\s+(?:do|can|should)\s+i\s+(?:send|give|get|upload)\s+(?:you\s+)?(?:my|a|the)\s+(?:new\s+)?"
+    r"(?:instagram\s+|youtube\s+)?(?:export|takeout)\b(?:\s+(?:to\s+you|in))?\W*$"
+    r"|^\W*(?:i\s+want\s+to\s+|let\s+me\s+|can\s+i\s+)?send\s+you\s+(?:a|my)\s+new\s+(?:instagram\s+|youtube\s+)?export\W*$",
+    re.I)
+# "remind me every month to send my youtube takeout": an export reminder at the interval named
+EXPORT_REMIND = re.compile(
+    r"\bremind\s+me\s+(?:(?P<every>every\s+(?:(?P<n>\d+|two|three|four|six)\s+)?(?P<unit>weeks?|months?))\s+)?"
+    r"to\s+(?:send|export|download|get|do)\s+(?:you\s+)?(?:my|an?)\s+(?:new\s+|fresh\s+)?"
+    r"(?P<what>(?:youtube\s+|instagram\s+)?(?:takeout|export|data)|instagram|youtube)\b", re.I)
+# "export to you regularly", "sync my saves", "set it up so my youtube export comes by itself"
+_EXPORT_SUBJECT = r"(?=.*\b(?:instagram|youtube|takeout|saves|library|data|to you)\b)"
+EXPORT_REGULAR = re.compile(
+    rf"\bexports?\b(?=.*\b(?:regularly|automatically|every|each|by itself|on (?:its|their) own|on a schedule|"
+    rf"keep coming)\b){_EXPORT_SUBJECT}"
+    r"|\b(?:sync|keep)\s+my\s+(?:saves|library|instagram|youtube)\b(?:\s+\w+){0,2}?\s*(?:up to date|synced|in sync)\b"
+    r"|\bmy\s+(?:saves|library)\s+(?:to\s+)?(?:sync|stay synced|update)\s+(?:automatically|by itself|on (?:its|their) own)"
+    r"|^\W*(?:can you\s+|please\s+)?sync\s+my\s+(?:saves|library|instagram|youtube)\W*$"
+    r"|\bset\s+(?:it|this|that)\s+up\s+so\s+(?:that\s+)?(?:my\s+)?(?:youtube|instagram)(?:\s+and\s+(?:youtube|instagram))?"
+    r"\s+exports?\b", re.I)
+# "steps" right after the export reply said to say it (state exportsteps:<handle>, a day)
+EXPORT_STEPS = re.compile(r"^\W*(?:(?:ok|okay|yes|sure)[\s,]+)?(?:(?:send|give|show)\s+(?:me\s+)?)?(?:the\s+)?steps"
+                          r"(?:\s+please)?\W*$", re.I)
+_NUM = {"two": 2, "three": 3, "four": 4, "six": 6}
+
+
+def export_kind(text):
+    """'how' | 'remind' | 'regular' | None, from the person's words."""
+    t = " ".join((text or "").split())
+    if not t or len(t) > 400:
+        return None
+    if EXPORT_REMIND.search(t):
+        return "remind"
+    if EXPORT_HOW.search(t):
+        return "how"
+    if EXPORT_REGULAR.search(t):
+        # "how do i set it up so my exports come by themselves?": the steps
+        return "how" if re.search(r"^\W*how\s+(?:do|can|should|would)\s+i\b|^\W*how\s+to\b", t, re.I) else "regular"
+    return None
+
+
+def export_platforms(bot, person, text=""):
+    """The platforms the words name (takeout is YouTube), else the ones in the person's library, else both."""
+    named = [p for p, w in (("instagram", r"\binstagram\b"), ("youtube", r"\b(?:youtube|takeout)\b"))
+             if re.search(w, text or "", re.I)]
+    if named:
+        return named
+    try:
+        have = sorted(bot.view(person["library"]).platforms() & {"instagram", "youtube"})
+    except Exception:  # noqa: BLE001 - no library yet: both
+        have = []
+    return have or ["instagram", "youtube"]
+
+
+def reminders_on(store, handle):
+    """{platform: next send (aware datetime)} for the person's active export reminders."""
+    out = {}
+    for r in store.rules(handle, statuses=("active",)):
+        c = r["spec"].get("content") or {}
+        for p, opening in REMINDER_OPENING.items():
+            if c.get("source") == "note" and str(c.get("text") or "").startswith(opening) and r.get("next_run_at") \
+                    and p not in out:
+                out[p] = datetime.fromisoformat(r["next_run_at"])
+    return out
+
+
+def _nexts(store, handle, tz, platforms=("instagram", "youtube")):
+    on = reminders_on(store, handle)
+    return [(p, on[p].astimezone(ZoneInfo(tz))) for p in ("instagram", "youtube") if p in on and p in platforms]
+
+
+def upload_where(bot):
+    return T.UPLOAD_HERE if getattr(bot.channel, "name", "") == "web" else T.UPLOAD_TEST_PAGE
+
+
+def _yt_connect(bot, h):
+    from . import yt_auth   # slice Y: the YouTube bullet gains its line once YouTube can be connected
+    try:
+        return bool(yt_auth.connectable(bot.store, h)) and not yt_auth.connected(bot.store, h)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def export_offer_waiting(bot, h, now):
+    """The setup's export reminder offer, when it waits for a yes (a pending confirm_rule), else None."""
+    from .handler import EXPORT_REMINDER
+    pending = bot._live_pending(h, now)
+    if pending and pending["kind"] == "confirm_rule" and EXPORT_REMINDER.match(str(pending["payload"].get("text") or "")):
+        return pending
+    return None
+
+
+def _steps_offered(bot, h, now):
+    bot.store.set_state(f"exportsteps:{h}", {"at": now_iso(now),
+                                             "run_id": (bot.store.last_answer(h) or {}).get("run_id")})
+
+
+def _remind_spec(platform, m, now, tz):
+    """The export reminder at the interval the words name ("every month"), else the usual one."""
+    spec = reminder_spec(platform, now, tz)
+    if not m.group("every"):
+        return spec, None
+    n = m.group("n")
+    n = int(n) if n and n.isdigit() else _NUM.get((n or "").lower(), 1)
+    local = now.astimezone(ZoneInfo(tz)).date()
+    stored = spec.stored()
+    if m.group("unit").lower().startswith("week"):
+        n = max(1, min(n, 8))
+        stored["when"] = {"type": "schedule", "days": [local.strftime("%a").upper()[:3]], "times": ["10:00"],
+                          **({"every_weeks": n} if n > 1 else {}),
+                          "start": (local + timedelta(days=7 * n)).isoformat()}
+        every = "every week" if n == 1 else f"every {n} weeks"
+    else:
+        n = max(1, min(n, 12))
+        day = min(local.day, 28)
+        mo = local.month - 1 + n
+        start = local.replace(year=local.year + mo // 12, month=mo % 12 + 1, day=day)
+        stored["when"] = {"type": "schedule", "every_months": n, "month_days": [day], "times": ["10:00"],
+                          "start": start.isoformat()}
+        every = "every month" if n == 1 else f"every {n} months"
+    return RuleSpec.model_validate(stored), every
+
+
+def export_text(bot, person, text, now, kind=None):
+    """The reply to an export request, built by code (dates from the reminders' own schedule). While the setup's offer
+    of export reminders waits, the request is the yes to it and starts them. None when the words are not an export
+    request. Sends nothing."""
+    from .schedule import next_run
+    h, tz = person["handle"], person["timezone"]
+    kind = kind or export_kind(text)
+    if kind is None:
+        return None
+    if kind == "how":
+        return library_status(bot, person, now, steps=True)
+    platforms = export_platforms(bot, person, text)
+    if kind == "remind":
+        m = EXPORT_REMIND.search(" ".join(text.split()))
+        what = m.group("what").lower()
+        p = "instagram" if "instagram" in what else "youtube" if re.search(r"youtube|takeout", what) else platforms[0]
+        on = _nexts(bot.store, h, tz, (p,))
+        if on:
+            _steps_offered(bot, h, now)
+            return T.export_on(on)
+        spec, every = _remind_spec(p, m, now, tz)
+        first = next_run(spec.when, tz, now, anchor=now, quiet=bot.store.quiet(h))
+        if first is None:
+            return None
+        bot.store.set_pending(h, "confirm_rule", {"text": f"export reminders ({p})", "spec": spec.stored(),
+                                                  "run_id": None, "more": []}, at=now)
+        return T.export_remind_offer(p, every or ("every 4 weeks" if p == "instagram" else "every 2 months"),
+                                     first.astimezone(ZoneInfo(tz)))
+    facts = T.export_facts(platforms, upload_where(bot), yt_connect=_yt_connect(bot, h))
+    _steps_offered(bot, h, now)
+    pending = export_offer_waiting(bot, h, now)
+    if pending is not None:   # the offer the setup made is waiting: this request is the yes to it
+        bot.store.clear_pending(h)
+        bot._tl.join_write = True
+        try:
+            bot._start_export_reminders(person, [pending["payload"]] + list(pending["payload"].get("more") or []),
+                                        say=False)
+        finally:
+            bot._tl.join_write = False
+        nexts = _nexts(bot.store, h, tz)
+        return facts + ("\n\n" + T.export_setup_done(nexts) if nexts else "")
+    on = _nexts(bot.store, h, tz)
+    if on:
+        return T.export_on(on)
+    offer_export_routine(bot, h, platforms=platforms, now=now)   # one yes starts them (a pending confirm_rule)
+    return facts + "\n\n" + T.EXPORT_OFFER_TAIL
+
+
+def export_steps_asked(bot, person, text, now):
+    """'steps' within a day of the export reply that said to say it, with no newer answer: the steps."""
+    h = person["handle"]
+    if not EXPORT_STEPS.match(text or ""):
+        return None
+    st = bot.store.get_state(f"exportsteps:{h}")
+    if not st or now - datetime.fromisoformat(st["at"]) > timedelta(hours=24) \
+            or (bot.store.last_answer(h) or {}).get("run_id") != st.get("run_id"):
+        return None
+    return library_status(bot, person, now, steps=True)
+
+
+def export_reads(bot, person, text, now):
+    """Hook 5a (answer_normally, after _rule_reads): an export request read by code, no model call. Returns the
+    reply's reference, or None when the message is not one."""
+    msg = export_steps_asked(bot, person, text, now) or export_text(bot, person, text, now)
+    if msg is None:
+        return None
+    bot.note(intent="library_status")
+    return bot.send(person["handle"], msg)
+# ---------- end round 10, slice W ----------

@@ -179,13 +179,15 @@ def test_email_it_to_me_means_the_answer_again_once_a_new_answer_came_or_an_hour
     say(env, "pasta", ask_pasta())
     n = model_calls(env)
     say(env, "email it to me", {"intent": "act_on_last", "actions": ["email.send"]})
-    assert model_calls(env) == n + 1                               # the interpreter's act_on_last, as before
+    # round 10, slice W (W5): the same act_on_last email.send, now read by code (handler.self_email_reads)
+    assert model_calls(env) == n
     assert read_eml(outbox_rows(bot, "email")[-1]["path"])["Subject"] == "From your saves: a pasta recipe"
     say(env, "export my data", CHAT)
     env["clock"][0] += timedelta(minutes=61)
     n = model_calls(env)
     say(env, "email it to me", {"intent": "act_on_last", "actions": ["email.send"]})
-    assert model_calls(env) == n + 1
+    assert model_calls(env) == n   # round 10, slice W (W5): the answer again, by code
+    assert read_eml(outbox_rows(bot, "email")[-1]["path"])["Subject"] == "From your saves: a pasta recipe"
 
 
 def test_a_file_over_5mb_is_not_emailed(tmp_path, env):

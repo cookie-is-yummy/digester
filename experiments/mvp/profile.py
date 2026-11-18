@@ -536,6 +536,30 @@ def _plain(key, vals):
     return [names.get(v, v) for v in vals]
 
 
+# ---------- round 10, slice W (W2): how much time they have, in one plain line ----------
+_USUALLY = re.compile(r"\s*\b(?:usually|normally|typically|generally|most days|in general)\b[,]?", re.I)
+_LITTLE_TIME = re.compile(r"\b(?:not (?:much|a lot of|that much|a lot|loads of)|little|hardly any|barely any|limited|"
+                          r"very little|no(?: spare| free)?)\b(?:\s+\w+)?(?:\s+time\b|\s*$)|^\W*not much\W*$", re.I)
+_AMOUNT = re.compile(r"^\W*(?:(?:about|around|roughly|like|only|just|maybe|max|at most|up to|under)\s+)*"
+                     r"(?:\d|an?\s+(?:hour|half)|half\s+an?\s+hour|a\s+(?:few|couple)\b)", re.I)
+
+
+def time_line(t, who="you"):
+    """The time a person usually has, said plainly (design B2): "you don't have much time", "you usually have 20
+    minutes a day", "time you have: evenings only". who="pref" is the interpreter's and composer's form ("doesn't have
+    much time", "usually has 20 minutes a day", "time they have: evenings only")."""
+    t = " ".join(_USUALLY.sub("", " ".join(str(t or "").split())).split()).strip(" ,.")
+    you = who != "pref"
+    if not t:
+        return ""
+    if _LITTLE_TIME.search(t):
+        return "you don't have much time" if you else "doesn't have much time"
+    if _AMOUNT.match(t):
+        return f"you usually have {t}" if you else f"usually has {t}"
+    return f"time you have: {t}" if you else f"time they have: {t}"
+# ---------- end round 10, slice W ----------
+
+
 def pref_words(prefs):
     out = []
     if prefs.get("avoid"):
@@ -543,7 +567,7 @@ def pref_words(prefs):
     if prefs.get("tools"):
         out.append("has " + kit_words(prefs["tools"]))
     if prefs.get("time"):
-        out.append("usually has " + prefs["time"])
+        out.append(time_line(prefs["time"], who="pref"))   # round 10, slice W (W2)
     if prefs.get("style") in ("brief", "full"):
         out.append("brief answers" if prefs["style"] == "brief" else "full answers")
     if prefs.get("outside") is True:
@@ -627,7 +651,7 @@ def _strs(v, n=8, size=40):
     return [s for s in (_clean(x, size) for x in (v or []) if isinstance(x, str)) if s][:n]
 
 
-def merge(store, handle, message, asked=None, person=None, shown=None, side=False):
+def merge(store, handle, message, asked=None, person=None, shown=None, side=False, no_note=False):
     """One model call fills the form; apply_merge() checks and applies it. Returns (result, cost); result is
     apply_merge's. side: the message is a request (finding 88: only what a request may teach is applied)."""
     prof = get(store, handle)
@@ -642,7 +666,7 @@ def merge(store, handle, message, asked=None, person=None, shown=None, side=Fals
                               prompt_version=config.PROMPT_PROFILE_MERGE, person=person or handle, max_tokens=700,
                               temperature=config.PROFILE_TEMPERATURE, seed=config.PROFILE_SEED)
     return apply_merge(store, handle, raw, message, shown=shown,
-                       asked_direction=bool(asked and "working toward" in asked), side=side), cost
+                       asked_direction=bool(asked and "working toward" in asked), side=side, no_note=no_note), cost
 
 
 # fix pass 2, finding 63: a direction is stored only when the person states a goal ("I'm working toward...", "I want to
@@ -831,7 +855,12 @@ def restates(prof, note):
     return True
 
 
-def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, side=False):
+# round 10, slice W (B1.5): the prompt says a note is never a request; code enforces it
+REQUEST_NOTE = re.compile(r"^\W*(?:wants?|would like|asks?|asking|needs? (?:you|me) to|help|set(?:ting)? ?up|"
+                          r"to (?:set|help|send|export|sync|remind|email))\b", re.I)
+
+
+def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, side=False, no_note=False):
     """Validates the model's form against the message and the stored profile and applies it. Returns {"kind",
     "changes": [plain lines], "other": [the lines short_summary() does not cover], "skipped_sensitive": bool}. Levels and topics must name a stored topic or use the person's
     own words; direction and tools must be their own words; anything sensitive is left out (and said).
@@ -841,6 +870,10 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
     from .schema import KINDS, PLATFORMS
     raw = raw if isinstance(raw, dict) else {}
     kind = raw.get("kind") if raw.get("kind") in ("about_me", "request", "both") else "about_me"
+    if no_note and kind == "request" and not side:
+        # round 10, slice W (B1): the setup's request parts were taken out and answered by code; what is left is
+        # about them, whatever the form says
+        kind = "about_me"
     if side or kind == "request":
         raw = side_form(raw, message)
         side = True
@@ -918,7 +951,7 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
     t = _clean(raw.get("time"), 60)
     if t and not stated_sensitive(t) and own_words(t, message) and t != prefs.get("time"):
         prefs["time"] = t   # finding 46: how much time they usually have, in their words
-        changes.append(f"you usually have {t}")
+        changes.append(time_line(t))   # round 10, slice W (W2): never "you usually have not much time usually"
         other.append(changes[-1])
     allow = [a for a in _strs(raw.get("allow"), 6, 30) + allowed_again(message) if own_words(a, message)]
     if allow:   # finding 62: "I eat meat again, I'm not vegetarian": those avoid entries go, and the reply says so
@@ -976,6 +1009,10 @@ def apply_merge(store, handle, raw, message, shown=None, asked_direction=False, 
             changes.append(("I won't use your " if key == "exclude_kinds" else "I won't use ") + _and(_plain(key, new)))
             other.append(changes[-1])
     note = _clean(raw.get("note"), 120)
+    if note and (no_note or REQUEST_NOTE.search(note)):
+        # round 10, slice W (B1.5): a note shaped like a request ("wants exports sent regularly") is never kept, nor
+        # any note when a part of the same message was a request that code answered
+        note = ""
     if note and (timing_only(note) or kind == "request" or (allow and any(named_against(a, note) for a in allow))
                  or (side and not own_words(note, message)) or restates(prof, note)):
         # finding 63: words about timing are never a note; a note that repeats what they took back neither; finding
@@ -1131,7 +1168,7 @@ def show_text(prof, now=None):
     if prefs.get("tools"):
         p.append("you have " + kit_words(prefs["tools"]))
     if prefs.get("time"):
-        p.append("you usually have " + prefs["time"])
+        p.append(time_line(prefs["time"]))   # round 10, slice W (W2)
     if prefs.get("avoid"):
         p.append("you'd rather avoid " + _and(prefs["avoid"]))
     if prefs.get("style") in ("brief", "full"):
