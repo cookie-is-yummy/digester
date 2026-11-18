@@ -489,3 +489,60 @@ def test_the_stubs_after_the_merge_real_phrasing_marks_titles_and_routes_and_no_
     assert browser.STUB is True and browser.available(None, {"handle": H}, "netflix") is False
     assert browser.run_open(None, H) is False
     assert yt_auth.STUB is True and yt_auth.connectable(None, H) is False and yt_auth.connected(None, H) is False
+
+
+# ================================ the review of the merge (DESIGN.md section 17, "the review of the merge") ========
+def test_a_reel_the_person_called_fine_is_placed_by_a_granted_run_though_the_library_marks_it_strong(tok):
+    """Slice S's level with what the person said (effective), not the library's mark alone: "that one was fine" on a
+    strong-marked reel puts it back in the rule's adds, and no "left out" line is said."""
+    from mvp import captionmark
+    _mark_strong(tok["lib"], "p3")   # "Tomato rigatoni", which the composer picks first
+    make_rule(tok)
+    bot = tok["bot"]
+    it = bot.view(bot.store.person(H)["library"]).get("p3")
+    bot.store.add_caption_feedback(H, "p3", it.creator, captionmark.fp_of(it), "match_ok", "words", tok["clock"][0])
+    tok["state"]["answers"]["mvp_compose"] = _composer_of("Tomato", "Pesto", "Garlic")
+    _, sent = tick_at(tok, SUNDAY)
+    titles = [c["body"]["title"] for c in posts(tok)]
+    # the reel is added (under slice S's neutral name, which compose gives from the library's mark)
+    assert titles == ["A post from @cook3", "Pesto fusilli", "Garlic linguine"], titles
+    assert "left out" not in sent
+
+
+def test_a_reel_the_person_called_a_mismatch_is_left_out_though_the_library_has_no_mark(tok):
+    from mvp import captionmark
+    from mvp.places import route
+    make_rule(tok)
+    bot = tok["bot"]
+    rid = bot.store.rules(H)[0]["id"]
+    it = bot.view(bot.store.person(H)["library"]).get("p0")
+    assert captionmark.mark(it) is None
+    bot.store.add_caption_feedback(H, "p0", it.creator, captionmark.fp_of(it), "mismatch", "words", tok["clock"][0])
+    o = route(bot, ctx_for(tok, rid, [pick(0), pick(1)], SUNDAY), "todo.add", {"list": "ticktick"})
+    assert [c["body"]["title"] for c in posts(tok)] == ["Lemon orzo"]
+    assert o.line.endswith(" 1 left out: its caption may not match the video.")
+
+
+def test_a_token_set_after_a_todoist_sign_in_ends_the_grant_with_one_line_and_adds_nothing(mcp, tmp_path,
+                                                                                            monkeypatch):
+    """The yes was given for the sign-in route; with a token set the app is reached the other way. Nothing is added
+    either way, the grant ends, the run says so once, and "use todoist for rule 1" asks for a new yes."""
+    from mvp.actions import web
+    from mvp.tests.test_round9_tokens import TD, FakeOpener
+    bot, rid, _ = _mcp_rule(mcp, tmp_path)
+    f = FakeOpener()
+    monkeypatch.setattr(web, "OPENER", f)
+    monkeypatch.setenv("MVP_TODOIST_TOKEN", TD)
+    _, sent = tick_at(mcp, SUNDAY)
+    assert ("The way I reach Todoist changed since you said yes to rule 1, so I didn't add anything there. Say \"use "
+            "todoist for rule 1\" to add them again.") in sent
+    assert mcp["fk"].srv.items == {} and [c for c in f.calls if c["method"] == "POST"] == []
+    g, = bot.store.grants_of(H, active_only=False)
+    assert (g["status"], g["end_reason"]) == ("ended", "route_changed")
+    _, sent = tick_at(mcp, SUNDAY + timedelta(days=7))   # said once: the next run is the picks here only
+    assert "The way I reach" not in sent and [c for c in f.calls if c["method"] == "POST"] == []
+    out = say(mcp, "use todoist for rule 1", boom)
+    assert "I'll also add them to Todoist" in out
+    assert say(mcp, "yes", boom) == "OK. Rule 1 will add them to Todoist again, and tell you here what it added."
+    g = [x for x in bot.store.grants_of(H, active_only=False) if x["status"] == "active"]
+    assert [x["action"] for x in g] == ["todoist.add"]

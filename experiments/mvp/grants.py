@@ -385,7 +385,12 @@ def _strong(bot, person, pick):
     try:
         from . import captionmark
         it = bot.view(person["library"]).get(pick.get("item_id"))
-        return it is not None and captionmark.mark(it) == "strong"
+        if it is None:
+            return False
+        # review of the round 10 merge: the level with what the person said (slice S's effective, design C2), not the
+        # library's mark alone: "that one was fine" puts a reel back; "nothing to do with it" leaves one out
+        fb = captionmark.index(bot.store.caption_feedback(person["handle"]))
+        return captionmark.effective(it, fb)[0] == "strong"
     except Exception:  # noqa: BLE001 - a mark that cannot be read is no mark (today's behaviour)
         return False
 
@@ -411,6 +416,17 @@ def run_place(bot, ctx, name, params):
     app = _app(p)
     action = route_of(store, h, p)
     g = store.grant_for(h, rule["id"], action) if action else None
+    if g is None and action:
+        # ---------- review of the round 10 merge: the route under the app changed since the yes ----------
+        # (a token set after a Todoist sign-in, or the other way round): the yes was for the other route, so nothing
+        # is added; that grant ends and the person is told once, with the words that ask again
+        old = [x for x in store.grants_of(h, pl.connector, active_only=False)
+               if x["status"] != "ended" and int(x["rule_id"]) == int(rule["id"]) and x["action"] != action]
+        if old:
+            store.end_grants(h, rule_id=rule["id"], connector=pl.connector, reason="route_changed", at=ctx.now)
+            return Outcome("skipped", line=T.grant_route_changed(_app(p), USE_WORD.get(p.key, p.key), n),
+                           detail={"grant": "route_changed"})
+        # ---------- end review of the round 10 merge ----------
     if g is None or g["status"] != "active":
         # no standing yes now (it ended, or paused after failures, and the person was told then): the picks are in
         # the message only, and nothing goes to the app or to the list here

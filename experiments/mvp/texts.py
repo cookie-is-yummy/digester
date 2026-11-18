@@ -3111,3 +3111,12 @@ def mcp_yes_again(app, word, rules):
         out += f" Rules that added there keep things here until you say \"use {word} for rule\" and its number."
     return out
 # ---------- end round 10, slice C ----------
+# ---------- review of the round 10 merge: a rule's run when the route under the app changed since the yes ----------
+
+
+def grant_route_changed(app, word, n):
+    """Slice G's grant was given on one route (a Todoist token, or slice C's sign-in) and the app is now reached the
+    other way: nothing is added, the grant ends, and this is said once."""
+    return (f"The way I reach {app} changed since you said yes to rule {n}, so I didn't add anything there. Say "
+            f"\"use {word} for rule {n}\" to add them again.")
+# ---------- end review of the round 10 merge ----------
