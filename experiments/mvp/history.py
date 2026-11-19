@@ -29,6 +29,7 @@ import threading
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
@@ -458,8 +459,11 @@ def _topic_and_platform(t, spans):
             else how
     toks = re.findall(r"[a-z0-9&'+.#-]+", rest)
     runs, cur = [], []
-    for w in toks:
+    for k, w in enumerate(toks):
         w2 = w.strip(".'-")
+        if w2 == "after" and k + 1 < len(toks) and toks[k + 1].strip(".'-") == "effects":
+            cur.append(w2)   # round 11 fix, A: "after effects" is a name, not "after" and a topic "effects"
+            continue
         if (not w2 or w2 in STOP or w2.isdigit() or w2 in MONTHS or w2 in MON_ABBR or w2 in MONTH_ES
                 or w2 in DAYS or w2 in DAYS_ES or re.fullmatch(_DAY_RE, w2) or re.fullmatch(r"\d+(?:st|nd|rd|th)", w2)
                 or w2 in ("what's", "i've", "i'm", "it's", "i'd")):
@@ -661,7 +665,29 @@ def matches(it, q, channel_key=None):
     if not q.topic:
         return True
     text = it.caption or ""
-    return any(contains_word(text, x) for x in q.topic)
+    return any(holds(text, x) for x in q.topic)
+
+
+@lru_cache(maxsize=512)
+def _keys(phrase):
+    """Round 11 fix, A (R3, speed): the parts a text must hold, as plain substrings, for contains_word to match: each
+    word's stem without its last letter ("berr" for "berries", "tomat" for "tomatoes")."""
+    from .retrieve import WORD, _stem, norm
+    out = []
+    for w in WORD.findall(norm(phrase)):
+        s = _stem(w)
+        out.append(s[:-1] if len(s) > 2 else s)
+    return tuple(out)
+
+
+def holds(text, phrase):
+    """retrieve.contains_word, with a cheap test first (the same answer, about ten times faster over a library)."""
+    ks = _keys(phrase)
+    if ks:
+        low = unicodedata.normalize("NFKC", text or "").lower()
+        if any(k not in low for k in ks):
+            return False
+    return contains_word(text, phrase)
 
 
 def _squash(s):
@@ -695,6 +721,120 @@ def hits(view, rec, q, start, end, plats):
             continue
         out[iid] = ds
     return out
+
+
+# ---------- round 11 fix, A (R3): a topic's items must fit it by the engine's own item vectors, not only hold the
+# word. The library's stored vectors (text-embedding-3-large @ 1024, the ones the engine ranks with: a demo library's
+# int8 store, or a research root's float store) are read here, no model call: the topic's vector is the trimmed
+# centroid of every item of the record whose text holds the word, and an item fits when its own vector is within
+# FIT_CUT of the median of those items. Without vectors, or with fewer than FIT_MIN matches, nothing changes (word
+# matches, said "mention"). The engine's own search would need its query rewrite (a model call) and its loaded
+# process; this reads only the same vectors, in well under a second (DESIGN 18.LA).
+FIT_MIN, FIT_CUT, FIT_TRIM = 6, 0.08, 0.25
+_VECS, _FITS = {}, {}
+
+
+def _vector_store(lib):
+    """(id -> row, matrix, per-dimension scale or None) for the library's item vectors, or None."""
+    import numpy as np
+    for name, files in (("oai3l_1024_q8", ("q8.npy", "scale.npy")), ("oai3l_1024", ("emb.npy", None))):
+        d = os.path.join(lib, "corpus", "emb", name)
+        ids_path = os.path.join(d, "ids.json")
+        if not (os.path.exists(ids_path) and os.path.exists(os.path.join(d, files[0]))):
+            continue
+        try:
+            stamp = (ids_path, os.stat(ids_path).st_mtime_ns)
+        except OSError:
+            continue
+        with _LOCK:
+            hit = _VECS.get(lib)
+            if hit and hit[0] == stamp:
+                return hit[1]
+        try:
+            with open(ids_path, encoding="utf-8") as f:
+                ids = json.load(f)
+            mat = np.load(os.path.join(d, files[0]), mmap_mode="r")
+            scale = np.load(os.path.join(d, files[1])).astype(np.float32) if files[1] else None
+        except (OSError, ValueError):
+            return None
+        if len(ids) != mat.shape[0]:
+            return None
+        got = ({i: k for k, i in enumerate(ids)}, mat, scale)
+        with _LOCK:
+            _VECS.clear()
+            _VECS[lib] = (stamp, got)
+            _FITS.clear()
+        return got
+    return None
+
+
+def topic_fit(view, rec, phrase):
+    """{item_id: score} for the record's items that hold `phrase`, with the cut (score >= cut fits), or None when the
+    library has no vectors or too few items hold it to tell."""
+    import numpy as np
+    vs = _vector_store(view.lib)
+    if vs is None:
+        return None
+    key = (view.lib, id(rec), phrase)
+    with _LOCK:
+        if key in _FITS:
+            return _FITS[key]
+    pos, mat, scale = vs
+    have = [i for i in rec.events if view.items.get(i) is not None and i in pos
+            and holds(view.items[i].caption or "", phrase)]
+    if len(have) < FIT_MIN:
+        out = None
+    else:
+        rows = sorted(pos[i] for i in have)
+        m = np.asarray(mat[rows], dtype=np.float32)
+        if scale is not None:
+            m = m * scale
+        m /= np.linalg.norm(m, axis=1, keepdims=True) + 1e-9
+        order = {r: k for k, r in enumerate(rows)}
+        keep = np.ones(len(rows), bool)
+        s = None
+        for _ in range(2):
+            c = m[keep].mean(0)
+            c /= np.linalg.norm(c) + 1e-9
+            s = m @ c
+            keep = s >= np.quantile(s, FIT_TRIM)
+        cut = float(np.median(s)) - FIT_CUT
+        out = ({i: float(s[order[pos[i]]]) for i in have}, cut)
+    with _LOCK:
+        _FITS[key] = out
+    return out
+
+
+def fit_hits(view, rec, q, h):
+    """(the hits that fit q's topic, how many were left out, whether the fit was used) for a first, last or list
+    answer; the word matches unchanged when the fit can't be told."""
+    if not q.topic or q.channel or not h:
+        return h, 0, False
+    fits = [topic_fit(view, rec, x) for x in q.topic]
+    if any(f is None for f in fits):
+        return h, 0, False
+    kept = {i: ds for i, ds in h.items() if any(i in f[0] and f[0][i] >= f[1] for f in fits)}
+    if not kept:
+        return h, 0, False
+    return kept, len(h) - len(kept), True
+
+
+def _about_fit(q, used, n=2):
+    """' about "cooking"' when the fit was used, else the word match's ' that mention "cooking"'."""
+    if not used:
+        return _about(q, n)
+    return (" sobre " if q.lang == "es" else " about ") + topic_words(q)
+
+
+def _left_line(q, left):
+    if not left:
+        return ""
+    if q.lang == "es":
+        return (f"(Otros {left} mencionan {topic_words(q)} pero no parecen ser de eso, así que no los cuento aquí.)"
+                if left > 1 else f"(Otro menciona {topic_words(q)} pero no parece ser de eso, así que no lo cuento aquí.)")
+    return (f"({left} more mention {topic_words(q)} but don't seem to be about it, so I left them out.)" if left > 1
+            else f"(1 more mentions {topic_words(q)} but doesn't seem to be about it, so I left it out.)")
+# ---------- end round 11 fix, A (R3) ----------
 
 
 # ====================================== the words =================================================================
@@ -869,7 +1009,7 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
         # a topic is a topic first; it is a channel when the message says so ("from X", "X's channel"), or when no
         # title in the scope mentions it and a channel has exactly that name
         ch = channel_of(view, q.topic[0])
-        if ch and (q.channel_hint or not any(contains_word(view.items[i].caption or "", q.topic[0])
+        if ch and (q.channel_hint or not any(holds(view.items[i].caption or "", q.topic[0])
                                              for i in rec.events if view.items.get(i) is not None)):
             q = q.model_copy(update={"channel": ch, "topic": []})
     lang = q.lang
@@ -1039,10 +1179,11 @@ def num(n, lang="en"):
     return s.replace(",", ".") if lang == "es" else s
 
 
-def _opening(q, n, W, plats, extra=""):
+def _opening(q, n, W, plats, extra="", fitted=False):
+    about = _about_fit(q, fitted, n)   # round 11 fix, A (R3): "about" only when the engine's fit chose the items
     if q.lang == "es":
-        return f"{W} {verb(q)} {num(n, 'es')} {noun(q, n, plats)}{_about(q, n)}{extra}."
-    return f"{W} you {verb(q)} {num(n)} {noun(q, n, plats)}{_about(q, n)}{extra}."
+        return f"{W} {verb(q)} {num(n, 'es')} {noun(q, n, plats)}{about}{extra}."
+    return f"{W} you {verb(q)} {num(n)} {noun(q, n, plats)}{about}{extra}."
 
 
 def _by_platform(view, ids, lang):
@@ -1116,7 +1257,7 @@ def _topic_counts(view, ids, prof):
             continue
         words = topic_words_of(i)
         support = set(i.get("support_ids") or [])
-        n = sum(1 for x in ids if x in support or any(contains_word(view.items[x].caption, w) for w in words))
+        n = sum(1 for x in ids if x in support or any(holds(view.items[x].caption, w) for w in words))
         if n:
             out.append((P.shown_topic(i["topic"]), n))
     out.sort(key=lambda x: (-x[1], x[0].lower()))
@@ -1173,6 +1314,7 @@ def _list(view, rec, q, start, end, plats, W, today, prof):
     h = hits(view, rec, q, start, end, plats)
     if not h:
         return _nothing(q, W, plats), [], {}
+    h, left, fitted = fit_hits(view, rec, q, h)   # round 11 fix, A (R3)
     cap = DAY_MAX if q.kind == "on_day" else LIST_MAX
     order = sorted(h, key=lambda i: (-max(h[i]).toordinal(), i))
     page = order[q.offset:q.offset + cap]
@@ -1181,15 +1323,17 @@ def _list(view, rec, q, start, end, plats, W, today, prof):
     if q.offset:
         lines = [(f"Los siguientes {len(page)}:" if es else f"The next {len(page)}:")]
     elif q.kind == "on_day":
-        lines = [_opening(q, len(h), W, plats)[:-1] + ":"]
+        lines = [_opening(q, len(h), W, plats, fitted=fitted)[:-1] + ":"]
     else:
         k = len(page)
-        lines = [_opening(q, len(h), W, plats) + (f" Los {k} más recientes:" if es else
-                                                  (" The latest:" if k == 1 else f" The latest {k}:"))]
+        lines = [_opening(q, len(h), W, plats, fitted=fitted) + (f" Los {k} más recientes:" if es else
+                                                                 (" The latest:" if k == 1 else f" The latest {k}:"))]
     lines += [item_line(q.offset + k, view.items[i], max(h[i]), q.lang, today) for k, i in enumerate(page, 1)]
     rest = len(order) - q.offset - len(page)
     if rest > 0:
         lines.append(f"Y {rest} más (di \"más\" para verlos)." if es else f"And {rest} more (say \"more\" to see them).")
+    if left and not q.offset:
+        lines.append(_left_line(q, left))
     return "\n".join(lines), page, {}
 
 
@@ -1206,6 +1350,7 @@ def _first(view, rec, q, start, end, plats, W, today, prof, last=False):
     h = hits(view, rec, q, start, end, plats)
     if not h:
         return _nothing(q, W, plats), [], {}
+    h, left, fitted = fit_hits(view, rec, q, h)   # round 11 fix, A (R3)
     key = (lambda i: (-max(h[i]).toordinal(), i)) if last else (lambda i: (min(h[i]), i))
     order = sorted(h, key=key)[:FIRST_MAX]
     d0 = max(h[order[0]]) if last else min(h[order[0]])
@@ -1213,15 +1358,19 @@ def _first(view, rec, q, start, end, plats, W, today, prof, last=False):
     win = "" if q.window.kind == "all" else " " + window_words(q.window, start, end, q.lang, cap=False)
     if es:
         word = "último" if last else "primer"
-        head = f"El {word} {n1} que {verb(q)}{_about(q, 1)}{win} fue el {day_words(d0, 'es')}:"
+        head = f"El {word} {n1} que {verb(q)}{_about_fit(q, fitted, 1)}{win} fue el {day_words(d0, 'es')}:"
     else:
-        head = f"The {'last' if last else 'first'} {n1} you {verb(q)}{_about(q, 1)}{win} was on {day_words(d0)}:"
+        head = (f"The {'last' if last else 'first'} {n1} you {verb(q)}{_about_fit(q, fitted, 1)}{win} was on "
+                f"{day_words(d0)}:")
     lines = [head]
     for k, i in enumerate(order, 1):
         lines.append(item_line(k, view.items[i], max(h[i]) if last else min(h[i]), q.lang, None, url=False))
     if len(h) > 1:
         lines.append((f"({num(len(h), 'es')} en total" if es else f"({num(len(h))} in all") +
                      (f"{win}.)" if win else ".)"))
+    if left:   # round 11 fix, A (R3): one line with the count, "(98 in all. 15 more mention ...)"
+        ll = _left_line(q, left)
+        lines[-1] = lines[-1][:-1] + " " + ll[1:] if len(h) > 1 else ll
     return "\n".join(lines), order, {"cards": True}
 
 
@@ -1492,7 +1641,7 @@ def history_reads(bot, person, text, now):
     if st:
         def known(x):
             view = bot.view(person["library"])
-            return any(contains_word(it.caption or "", x) for it in view.items.values())
+            return any(holds(it.caption or "", x) for it in view.items.values())
         f = follow_up(st, text, today, known)
         if isinstance(f, tuple):
             return _pick(bot, person, st, f[1], now, today)
