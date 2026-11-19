@@ -380,7 +380,7 @@ def summarize(bot, person, req, now, last=None):
                       key=lambda it: len(own_text_lines(it, extra)) < RICH_TEXT)[:READS]
     maybe = []
     if len(fits) < MAYBE_WHEN:
-        # few posts name the topic in its own words ("quick dinners"): the search's next best are read too, and one
+        # few posts name the topic in its own words ("lazy weeknight meals"): the search's next best are read too, and one
         # counts only when the model lists it as about the topic (check_points' need_about)
         maybe = [it for it in maybes if len(own_text_lines(it, extra)) >= MIN_TEXT][:max(0, MAYBE_READS - len(readable))]
         steps["maybe_reads"] = len(maybe)
