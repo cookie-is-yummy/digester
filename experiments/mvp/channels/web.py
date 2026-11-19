@@ -238,7 +238,8 @@ class WebChannel(Channel):
                 self.offset = timedelta(0)
                 if c.get("with_welcome") and bot.store.person(handle):
                     from ..texts import CONSENT
-                    bot.send(handle, CONSENT)   # the setup's first message, as a new person gets it
+                    from ..videoask import consent_note   # round 11, slice Q
+                    bot.send(handle, CONSENT + consent_note())   # the setup's first message, as a new person gets it
         self._tick = True
 
     def state(self, handle):

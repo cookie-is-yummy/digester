@@ -167,7 +167,10 @@ class HandlerMixin:
             if shown and now - datetime.fromisoformat(shown) < timedelta(hours=24):
                 return self.send(handle, T.CONSENT_AGAIN)
             self.store.set_state(f"consent_shown:{handle}", now_iso(now))
-            return self.send(handle, CONSENT)
+            # ---------- round 11, slice Q: the consent names asking a video while MVP_VIDEO_ASK is on ----------
+            from .videoask import consent_note
+            return self.send(handle, CONSENT + consent_note())
+            # ---------- end round 11, slice Q ----------
         pending = self._live_pending(handle, now)
         if tapback:
             self.note(intent="tapback")
@@ -324,6 +327,12 @@ class HandlerMixin:
         if getattr(self._tl, "code_only", False):
             self._tl.code_missed = True
             return None
+        # ---------- round 11, slice Q (hook 8y): "what leaves this computer"; "ask the video ..." (MVP_VIDEO_ASK=1) --
+        from . import videoask
+        ref = videoask.reads(self, person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 11, slice Q ----------
         # hook 8z: two asks in one message, when one part goes to a doing helper (phrasing.parts; W5)
         ref = self.split_reads(person, text, now)
         if ref is not None:
@@ -1039,6 +1048,11 @@ class HandlerMixin:
                 # a question about picks already shown that their own text does not answer ("is the second one
                 # vegetarian?"): one line built by code naming the pick, and its link; never "nothing in your library"
                 msg = self._cant_tell(person, last, named if named else (1 if len(last["items"]) == 1 else None))
+                # ---------- round 11, slice Q: a YouTube pick may be asked itself (MVP_VIDEO_ASK=1 only) ----------
+                from .videoask import offer
+                msg = offer(self, person, last, named if named else (1 if len(last["items"]) == 1 else None),
+                            it.question or text, msg, now)
+                # ---------- end round 11, slice Q ----------
             return self.send(h, msg, run_id)
         if it.intent == "feedback":
             return self._feedback(person, it.feedback, it.pick_number, it=it, text=text)
