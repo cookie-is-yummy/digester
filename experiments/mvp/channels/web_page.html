@@ -207,7 +207,10 @@ const $ = id => document.getElementById(id);
 let me = null, lastCount = -1, lastSig = "";
 
 const esc = s => s.replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
-const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+// Live check of 19 Nov: the bot's link to its own take-over view names this machine's own address; a page opened
+// through another address (a preview) follows it on the address the page itself was opened on.
+const ownView = u => u.replace(/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+\/vm\?/, location.origin + "/vm?");
+const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${ownView(u)}" target="_blank" rel="noopener noreferrer">${ownView(u)}</a>`);
 
 async function api(path, body) {
   const opt = {headers: {"X-Test-Token": TOKEN}};

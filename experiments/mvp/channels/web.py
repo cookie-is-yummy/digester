@@ -396,7 +396,12 @@ class WebChannel(Channel):
                     return True
                 port = getattr(ch, "port", None)
                 want = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
-                return (self.headers.get("Host") or "").strip().lower() in want
+                # Live check of 19 Nov: a page reached through a preview address (a cloud machine's forwarded port)
+                # arrives under that address's name. MVP_PAGE_HOSTS names the extra hosts this page answers
+                # ("preview.example,preview.example:443"), or "*" for any: only for a machine no browser runs on.
+                more = {x.strip().lower() for x in (os.environ.get("MVP_PAGE_HOSTS") or "").split(",") if x.strip()}
+                got = (self.headers.get("Host") or "").strip().lower()
+                return got in want or "*" in more or got in more
 
             def do_GET(self):
                 if not self._host_ok():

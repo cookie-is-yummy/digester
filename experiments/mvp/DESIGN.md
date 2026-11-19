@@ -3294,3 +3294,10 @@ writes to a list. What broke, and is fixed:
   "helped with N cancellations (N still open)" counts a run that was stopped or handed back and one that only gave the
   steps, so after a cancelled Streamly it can still say "4 still open"; with `MVP_BROWSER=vm` off the test page the steps
   after "I can only do that from the test page for now" keep "because I never sign in as you".
+
+**The test page behind a preview address (19 Nov).** The check of acting made the page answer only this machine's own
+names (421 for any other Host). A page reached through a forwarded port arrives under another name, so it got 421.
+`MVP_PAGE_HOSTS` names the extra hosts the page answers, or `*` for any; unset, nothing changes. The page also follows
+the bot's own `/vm` link on the address the page was opened on (`ownView` in `web_page.html`). Tests:
+`test_the_page_answers_a_preview_address_only_when_the_setting_names_it` and the one after it, in
+`tests/test_round10_livefix_checks.py`. The take-over view behind a preview address was not tried by a person.

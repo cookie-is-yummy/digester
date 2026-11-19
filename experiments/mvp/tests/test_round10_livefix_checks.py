@@ -404,3 +404,38 @@ def test_the_menu_on_the_test_page_says_the_outbox_panel(op):
     op["ch"].name = "web"
     out = said_n(op, "what can i connect")[-1]
     assert "• Email to you: not connected here, so emails wait in the Outbox panel." in out
+
+
+# =====================================================================================================================
+# The test page behind a preview address (found when the page was restarted on the cloud machine, 19 Nov)
+# =====================================================================================================================
+def test_the_page_answers_a_preview_address_only_when_the_setting_names_it(monkeypatch):
+    import urllib.error
+    import urllib.request
+    from mvp.channels.web import WebChannel
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def code(ch, host):
+        req = urllib.request.Request(ch.base_url + "/", headers={"Host": host})
+        try:
+            return opener.open(req, timeout=5).status
+        except urllib.error.HTTPError as err:
+            return err.code
+
+    monkeypatch.delenv("MVP_PAGE_HOSTS", raising=False)
+    ch = WebChannel(port=0, serve=True)
+    try:
+        assert code(ch, "preview.example") == 421 and code(ch, f"127.0.0.1:{ch.port}") == 200
+        monkeypatch.setenv("MVP_PAGE_HOSTS", "preview.example, other.example:443")
+        assert code(ch, "preview.example") == 200 and code(ch, "Other.Example:443") == 200
+        assert code(ch, "evil.example") == 421 and code(ch, "preview.example.evil.example") == 421
+        monkeypatch.setenv("MVP_PAGE_HOSTS", "*")
+        assert code(ch, "anything.example") == 200
+    finally:
+        ch.close()
+
+
+def test_the_page_follows_its_own_take_over_link_on_the_address_it_was_opened_on():
+    import os
+    page = open(os.path.join(os.path.dirname(__file__), "..", "channels", "web_page.html"), encoding="utf-8").read()
+    assert "const ownView" in page and 'location.origin + "/vm?"' in page and "ownView(u)" in page
