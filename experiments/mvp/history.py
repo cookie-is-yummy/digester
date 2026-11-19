@@ -354,12 +354,13 @@ def find_windows(t, today):
     for m in rx(r"\byesterday\b|\bayer\b"):
         y = today - timedelta(days=1)
         add(m, _win("day", y, y))
-    for m in rx(r"\bnew year'?s eve\b|\bnew year'?s(?: day)?\b|\bchristmas eve\b|\bchristmas(?: day)?\b|"
-                r"\bhalloween\b|\bvalentine'?s(?: day)?\b"):
+    for m in rx(r"(?:\bnew year'?s eve\b|\bnew year'?s(?: day)?\b|\bchristmas eve\b|\bchristmas(?: day)?\b|"
+                r"\bhalloween\b|\bvalentine'?s(?: day)?\b)(?:,?\s+(?:of\s+|in\s+)?((?:19|20)\d\d)\b)?"):
         w = m.group(0)
         md = (12, 31) if "eve" in w and "new" in w else (1, 1) if "new" in w else (12, 24) if "eve" in w else \
             (12, 25) if "christmas" in w else (10, 31) if "halloween" in w else (2, 14)
-        d = _past_day(*md, today)
+        # the round 11 check (DESIGN 18.X): "halloween 2025" is that year's, never this year's with 2025 dropped
+        d = date(int(m.group(1)), *md) if m.group(1) else _past_day(*md, today)
         add(m, _win("day", d, d))
     for m in rx(r"\b(?:on\s+)?(" + _MONTH_RE + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?|"
                 r"\b(?:on\s+)?(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + _MONTH_RE + r")\b(?:,?\s+(\d{4}))?|"
@@ -890,7 +891,10 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
         lead = "Lo último que veo:" if es else "The latest I can see:"
         return head + "\n\n" + lead + "\n" + body, ids, extra
     W = window_words(q.window, start, end, lang)
-    touches = newest is not None and (end is None or end >= newest)
+    reached = [p for p in plats if p in rec.ends and (end is None or end >= rec.ends[p])]
+    if q.kind == "compare" and q.window2:
+        reached = [p for p in plats if p in reached or (p in rec.ends and (q.window2.end is None or
+                                                                           q.window2.end >= rec.ends[p]))]
     tail = []
     oldest = _record_start(rec, plats, q)
     if oldest and end and end < oldest and q.kind != "compare":
@@ -908,9 +912,10 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
         pass
     elif q.window.kind == "all":
         tail += [range_line(rec, plats, q), REFRESH[lang]]
-    elif touches or (q.kind == "compare" and q.window2 and
-                     (q.window2.end is None or (newest and q.window2.end >= newest))):
-        tail += [ends_line(rec, plats, lang), REFRESH[lang]]
+    elif reached:
+        # the round 11 check (DESIGN 18.X): each platform whose export the window reaches is said, so "October 1 to
+        # 15" says Instagram's ends on the 15th even while YouTube's runs on
+        tail += [ends_line(rec, reached, lang), REFRESH[lang]]
     if q.how == "saved":
         tail.append("(Guardado cuenta lo guardado, las colecciones, lo que te enviaste y las listas.)" if es else
                     "(Saved counts saves, collections, posts you sent yourself and playlists.)")

@@ -271,3 +271,81 @@ def test_the_checkers_60_traps_are_never_a_history_question(text):
     from mvp import history
     assert history.read(text, TODAY) is None
     assert len(TRAPS) == 60
+
+
+# ================================ 2. numbers and window edges (counted by hand from the library above) ==========
+@pytest.mark.parametrize("clock,text,head", [
+    # the person's time zone: 1 Oct 02:00 UTC is 30 September in New York, 1 Nov 03:00 UTC is 31 October
+    ("2026-11-19T17:00:00+00:00", "how many videos did i watch in september", "In September 2026 you watched 6 videos."),
+    ("2026-11-19T17:00:00+00:00", "how many videos did i watch in october", "In October 2026 you watched 9 videos."),
+    ("2026-11-19T17:00:00+00:00", "what did i watch on halloween",
+     "On Saturday 31 October 2026 you watched 1 video:\n1. Halloween synth sounds"),
+    ("2026-11-19T17:00:00+00:00", "what did i watch on oct 1", "On Thursday 1 October 2026 you watched no videos."),
+    # "today" at 23:00 in New York is still 15 November, where UTC is on the 16th
+    ("2026-11-16T04:00:00+00:00", "what did i watch today", "On Sunday 15 November 2026 you watched 1 video:"),
+    # the month at 22:00 on 30 November in New York is November, not December
+    ("2026-12-01T03:00:00+00:00", "how many videos did i watch this month", "This month (1 to 30 November 2026) you"),
+    # "the last 7 days" counts today and the 6 days before it: 9 November is in, 8 November is not
+    ("2026-11-15T20:00:00+00:00", "how many videos did i watch in the last 7 days",
+     "In the last 7 days (9 to 15 November 2026) you watched 5 videos (4 on YouTube, 1 on Instagram)."),
+    ("2026-11-19T17:00:00+00:00", "how many videos did i watch on feb 29 2024",
+     "On Thursday 29 February 2024 you watched 1 video."),
+    ("2026-11-19T17:00:00+00:00", "how many videos did i watch on christmas 2025",
+     "On Thursday 25 December 2025 you watched 0 videos."),
+    ("2026-11-19T17:00:00+00:00", "what did i watch in 2022",
+     "I can't see 2022: your YouTube history here starts on 3 December 2023, so I can't see before that."),
+    ("2026-11-19T17:00:00+00:00", "how many videos did i watch in 2025", "In 2025 you watched 13 videos."),
+    ("2026-11-19T17:00:00+00:00", "which channels do i watch the most",
+     "In all your history I can see, you watched 43 videos (40 on YouTube, 3 on Instagram). Most from:\n"
+     "1. Tidal Synths: 11\n2. Orbit Kitchen: 11\n3. Grain & Grit: 6\n4. Byte Garage: 5\n5. Pocket Atlas: 4\n"
+     "(9 channels in all.)"),
+])
+def test_numbers_and_window_edges_match_a_count_by_hand(chk, clock, text, head):
+    at(chk, clock)
+    out, calls = ask(chk, text)
+    assert calls == [] and out.startswith(head), out
+
+
+def test_a_holiday_with_a_year_is_that_years():
+    from mvp import history
+    q = history.read("how many videos did i watch on halloween 2025", TODAY)
+    assert (q.window.kind, q.window.start, q.window.end) == ("day", date(2025, 10, 31), date(2025, 10, 31))
+
+
+# ================================ 3. honesty ======================================================================
+def test_a_window_that_reaches_one_platforms_export_end_says_that_one(chk):
+    out, _ = ask(chk, "what did i watch between nov 1 and nov 12")
+    assert out.startswith("From 1 to 12 November 2026 you watched 8 videos.")
+    assert "Your Instagram export ends on 10 November 2026, so I can't see after that." in out
+    assert "YouTube export" not in out          # YouTube's runs to the 15th, past the window
+
+
+def test_friends_posts_are_never_counted_nor_shown(chk):
+    out, _ = ask(chk, "how many videos have i liked")
+    assert out.startswith("In all your history I can see, you liked 4 posts and videos (2 on YouTube, 2 on Instagram).")
+    out, _ = ask(chk, "how many cooking videos have i watched")
+    assert out.startswith('In all your history I can see, you watched 11 videos that mention "cooking"')
+    out, _ = ask(chk, "what did i watch on nov 8")
+    assert out.startswith("On Sunday 8 November 2026 you watched no videos.")
+    assert "party" not in out.lower() and "bestie" not in out and "bandmate" not in out
+
+
+def test_a_like_is_never_said_as_watched(chk):
+    out, _ = ask(chk, "which videos did i like last month")
+    first = out.split("\n")[0]
+    assert first.startswith("In October 2026 you liked 2 posts and videos") and "watched" not in out
+    out, _ = ask(chk, "when did i first like a video")
+    assert out.startswith("The first post or video you liked was on 11 October 2026:") and "watched" not in out
+
+
+@pytest.mark.parametrize("text,head", [
+    ("have i ever watched anything about knitting",
+     'In all your history I can see, you watched 0 videos that mention "knitting" (of 43 you watched in all).'),
+    ("what did i watch about knitting last month", 'In October 2026 you watched no videos that mention "knitting".'),
+    ("when did i first watch knitting videos", 'In all your history I can see, you watched no videos that mention '
+                                               '"knitting".'),
+])
+def test_a_topic_with_no_match_says_so_and_lists_nothing(chk, text, head):
+    out, calls = ask(chk, text)
+    assert calls == [] and out.startswith(head), out
+    assert "http" not in out
