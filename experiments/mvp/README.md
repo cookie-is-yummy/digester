@@ -356,6 +356,27 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   - `MVP_YT_CLIENT_ID` and `MVP_YT_CLIENT_SECRET`: the "TVs and Limited Input devices" client of your Google Cloud
     project. With both set, anyone says "connect youtube" and signs in to their own account at google.com/device.
 
+<!-- round 11, slice Q -->
+## Ask the video itself (round 11, slice Q, DESIGN.md section 18.Q; amendment A-017, Proposed; off by default)
+
+- **Off** (the default): nothing changes. A question about a video shown that its title and description do not answer
+  gets "I can't tell that from what <title> says. Here it is, so you can check:" and its link, as before.
+- **On** (`MVP_VIDEO_ASK=1`, and `GEMINI_API_KEY` set on a billed Google project): that line gains `I can ask the
+  video itself: say "ask the video"...`. "ask the video" (or "ask the video what settings it uses", "ask video 2
+  ...", "ask the second video ...") sends the video's public link and the question to Google's Gemini, which watches
+  it, and the reply is up to 5 points, each with its time and a link to that second, under `From the video (not
+  checked against its text), "<title>":`. YouTube only, public videos only. The first time, the bot says what leaves
+  this computer and waits for "ask the video" again. Kept: the points, their times, the video id and the ledger row;
+  never a transcript, audio or picture.
+- **Limits** (checked before the call): `MVP_VIDEO_ASK_MAX_MIN` (default 20; a longer or unknown length is asked
+  about its first 20 minutes only, and the reply says so), `MVP_VIDEO_ASK_PER_DAY` (default 5 questions a person a
+  day), and the cost's worst case against the person's daily cap and the total cap. `MVP_VIDEO_ASK_MODEL` (default
+  `gemini-3.1-flash-lite`). Measured on 19 Nov: 5 to 10 seconds and $0.003 to $0.011 an answer for 2- to 8-minute
+  videos.
+- **"what leaves this computer"** (also "what do you send to google", "where does my data go"): a short list, read by
+  code, setting on or off; the Gemini line only while it is on. The consent message names the flow while it is on.
+<!-- end round 11, slice Q -->
+
 ## New picks from outside the saves, and keeping the library fresh
 
 - **Outside picks** (`outside.py`): when someone asks for new things ("…and show me a few new ones from outside my
