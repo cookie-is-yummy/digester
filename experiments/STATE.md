@@ -1,5 +1,35 @@
 # State
 
+## Founders' summary - round 10, MVP version 5 (19 Nov 2026; `BRIEF-10.md` section 19, `results/r10-mvp-v5.md`, `mvp/DESIGN.md` section 17)
+
+- **Asked for:** do it for me once I say yes; cancel for me after I confirm; no reels whose caption has nothing to do with the video; rules that call the connectors.
+- **Built as nine slices:** K (foundation), W (wording), S (mismatched reels), D (sending and notices), G (rules into apps), C (MCP), Y (YouTube), V (browser), T (self-test).
+- **K:** the build shows in the footer and the help. The test page's own person is the operator unless `MVP_OPERATOR` is set. Secrets are sealed at rest. 62 tests.
+- **W:** "email it to me", a setup answer with a request inside, a small form when code misses. Development set by code: 27 of 100 before, 73 after.
+- **S:** pasted captions are marked: 194 strong and 160 weak on the real library. On the marked set: 9 strong leads in 11 answers before; none after while another fit was shown.
+- **D:** a notice gets a check-up date and a second notice. Keys go in a Connections panel, never the chat. 65 tests.
+- **G:** one yes per rule lets it add to Mac, TickTick, Todoist or a private YouTube playlist. Every run reports, with undo. 77 tests.
+- **C:** Todoist by its official MCP server, operator only. A changed or new tool is never called. 79 tests.
+- **Y:** YouTube by Google's own API, with a code at google.com/device. Unsubscribe and playlists after a yes, with undo. Instagram gets one-tap links. 80 tests.
+- **V:** a browser, off by default, presses the last cancel button only after "yes cancel <merchant>". Practice site: 0 wrong presses in 600 random walks.
+- **T:** 40 made-up conversations, 114 steps. First live run: 103 of 114, then all 114 after fixes.
+- **Checks:** 3,316 offline tests pass (2,086 at version 4). Two adversarial checks fixed 7 and 15 kinds of defect. The live check of 19 Nov found 11; all fixed and checked.
+- **Held-out wording missed its bars:** 22 of 70 by code (bar 70%), 54 of 70 with the model (bar 85%). New wordings are read worse than the development set.
+- **60 new messages:** 59 of 60 right in the end, Spanish 9 of 10. **Slop sample:** 17 of 20 strong marks right.
+- **Never run for real:** the mailbox, the Mac, TickTick, Todoist, the webhook, YouTube, any real merchant in the browser. Each ran only against a fake.
+- **Still wrong or unproven** (full list in the results file): new wordings read poorly by code; the slop mark's precision on video; "4 still open" in the receipts after a stopped run; steps repeated after "yes cancel netflix" with no browser.
+- **Not built, on purpose:** Instagram in a browser (its terms, AGENTS rule 7); sending from a tester's Gmail; Google's own MCP servers. Real merchants stay off by default.
+- **Spend:** $19.70 of the $30 cap ($3.39 since the verdict of 17 Nov).
+- **Founder, please:**
+  1. Pull and restart the test page; check the footer shows the new build.
+  2. In the Connections panel: your Gmail address and app password; optionally the TickTick and Todoist tokens and the webhook.
+  3. Press "Allow" for Todoist on the machine the bot runs on.
+  4. Make a Google Cloud project with a "TVs and Limited Input devices" client for YouTube; put its id and secret in the panel.
+  5. Try the practice merchant ("cancel my streamly"), then one real merchant on your own Mac with `MVP_BROWSER_MERCHANTS`.
+  6. Label about 150 reels for the slop mark (bar 85%).
+  7. Write `data/mvp/selftest_private.jsonl` with your exact test messages.
+  8. Decide A-008 to A-016 (A-013 to A-016 need both founders).
+
 ## Founders' summary - round 10, MVP version 4 (17 Nov 2026; `BRIEF-10.md` section 18, `results/r10-mvp-v4.md`, `mvp/DESIGN.md` sections 12 and 16)
 
 How it all works, in one document: "Digest bot MVP: how it works", https://claude.ai/artifact/MbuBQQMjVndxdeUhqvTcJ4

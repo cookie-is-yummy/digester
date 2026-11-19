@@ -423,3 +423,33 @@ Decisions still open after version 4:
 22. **A-014:** connectors (registry fields, the Mac, token connectors, the webhook). Both founders.
 23. **Yes on every outside add:** it is the rule now. An add to the person's own task app could instead happen at once, with undo.
 24. **A real trial:** each connector needs Derrick's own machine, app password or token. None has run for real.
+
+## 19. Version 5 (17 to 19 Nov): the bot does it for you, with your permission
+
+The design is `mvp/DESIGN.md` section 17. Results are in `results/r10-mvp-v5.md`. The scope changes are recorded as
+A-015 and A-016 (both Proposed) in `docs/amendments.md`. Everything runs on this prototype branch only.
+
+The founder asked: do it for him once he says yes, and cancel for him after he confirms. He also asked for no reels
+whose caption has nothing to do with the video, and for rules that call the connectors. It was built as nine slices
+(K, W, S, D, G, C, Y, V, T), two merges, two checks, a live self-test and a live check.
+
+| Asked | Built | Limit |
+| --- | --- | --- |
+| Send it for me | For the operator, "send" sends from their own Gmail after a 2-minute hold, as in version 4. Keys now go in a Connections panel, and the route is read again at "send" | Testers still get the tap-to-send link. Only run against a fake mail server |
+| Cancel it for me | A written notice with a check-up date and a second notice. A browser that opens the cancel page and presses the last button after "yes cancel <merchant>" | Off by default. Only the practice merchant has run. No real merchant tried |
+| Rules that call the connectors | One yes per rule on a preview naming the app, list and caps. Each run reports what it added, with undo | Mac, TickTick, Todoist, a private YouTube playlist. None tried for real |
+| More connectors | Todoist by its official MCP server; YouTube by Google's own API; a connector menu | Todoist is operator only. YouTube needs the founder's Google Cloud project |
+| Act on my social media | YouTube: unsubscribe and playlists, after a yes, with undo. Instagram: one-tap links | No app may act on a personal Instagram account |
+| No mismatched reels | A code mark on pasted captions. Such a reel never leads while another fit exists | 17 of 20 marks right in a sample. The founder's 150 labels decide |
+| Everyday wording | Code reads tidied wording; a small form fills the rest, and code checks it | Held-out wording: 22 of 70 by code, 54 of 70 with the model. Both bars missed |
+
+Measured: 3,316 offline tests pass (2,086 at version 4). The first live self-test passed 103 of 114 steps, then all
+114 after fixes. Spend: $19.70 of the $30 cap.
+
+Decisions still open after version 5:
+25. **A-015:** connectors through official APIs and MCP, rules that write with one yes per rule, the person's YouTube. Both founders.
+26. **A-016:** the browser that cancels on merchants' own pages, and the take-over view. Both founders.
+27. **A-008 to A-014** are still Proposed.
+28. **A real trial:** the mailbox, Todoist, YouTube and one real merchant each need the founder's own machine and accounts.
+29. **The slop mark:** about 150 labelled reels decide whether the strong mark keeps its doubt line as it is.
+30. **Wording:** code reads fit the development set far better than new wordings. Rebuilding them from wider data is open.
