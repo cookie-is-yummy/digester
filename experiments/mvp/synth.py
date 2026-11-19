@@ -23,10 +23,15 @@ import time
 
 from . import config, llm
 
-PROMPT_VERSION = os.environ.get("MVP_SYNTH_PROMPT", "synth_v3")   # v3: v2 plus points spread over the items;
+# round 11 fix, B (S3): v4 asks for points that answer the question about the topic, never what an item is
+PROMPT_VERSION = os.environ.get("MVP_SYNTH_PROMPT", "synth_v4")   # v3: v2 plus points spread over the items;
 # v2: closer to the items' words, one idea per point, never what the items are (DESIGN 18.M); v1 and v2 stay as measured
 PROMPT = open(os.path.join(config.HERE, "prompts", f"{PROMPT_VERSION}.md"), encoding="utf-8").read()
 ON = os.environ.get("MVP_SYNTH", "1") != "0"    # off: the message goes to the interpreter as before (the eval's "before")
+# round 11 fix, B (S2): "from what i watched" limits the items to watches, "from my saves" to saves (off: as slice M)
+SOURCE_LIMIT = os.environ.get("MVP_SYNTH_SOURCE", "1") != "0"
+ONE_ITEM_MAX = 2     # points that come from one item alone, when 3 or more items are cited
+THIN_LIST = 3        # (S3) items listed, with their links, when the text says too little to sum up
 CANDS = 40           # ranked candidates looked at
 READS = 12           # items whose key points are read (one details call each, cached per item)
 RICH_TEXT = 120      # an item with at least this much of its own text is read before shorter ones
@@ -144,6 +149,9 @@ def _how(t):
     t = t.lower()
     if re.search(r"\b(?:liked|likes)\b", t):
         return "liked"
+    # round 11 fix, B (S2): "what i watched and saved" limits nothing
+    if re.search(r"\bwatch(?:ed|ing)?\b", t) and re.search(r"\b(?:saved|saves|bookmarked)\b", t):
+        return "any"
     if re.search(r"\bwatch(?:ed|ing)?\b", t):
         return "watched"
     if re.search(r"\b(?:saved|saves|bookmarked)\b", t):
@@ -187,6 +195,30 @@ def read(text, today=None):
     if req is not None:
         req.update(window=window, how=_how(t))
     return req
+
+
+# ---------- round 11 fix, B (V1): "ask my videos about X": the summary of what was watched, then the offer ----------
+ASK_MINE = re.compile(_LEAD + r"ask\s+(?:all\s+)?my\s+(?:youtube\s+)?(?:videos|vids|watch\s+history)\s+"
+                      r"(?:what\s+they\s+say\s+)?" + _ABOUT + r"\s+" + _TOPIC + _END, re.I)
+
+
+def read_ask_mine(text):
+    """The summary request of "ask my videos about X" (the videos watched; the reply offers "ask them"), or None.
+    Only while MVP_VIDEO_ASK=1: with it off the message goes on as before."""
+    from . import videoask
+    if not videoask.on():
+        return None
+    t = " ".join((text or "").split())
+    if not t or len(t) > 220 or NOT_HERE.search(t):
+        return None
+    m = ASK_MINE.match(t)
+    if not m:
+        return None
+    topic = clean_topic(m.group("topic"))
+    if not topic or not topic_ok(topic):
+        return None
+    return {"topic": topic, "platforms": [], "kinds": [], "these": False, "window": None, "how": "watched"}
+# ---------- end round 11 fix, B ----------
 
 
 def _read(t):
@@ -277,7 +309,51 @@ _ABOUT_ITEM = re.compile(r"\b(?:this|the|that)\s+(?:video|post|reel|item|creator
                          r"\b(?:subscribe|follow\s+(?:me|us|for)|link\s+in\s+bio|use\s+code)\b", re.I)
 
 
-def check_points(raw, items, extra=None, notes=None, need_about=()):
+# ---------- round 11 fix, B (S3): a point that says what an item is, not what it says ----------
+_KIND_NOUN = (r"(?:tutorials?|videos?|vids?|guides?|courses?|clips?|reels?|posts?|creators?|lessons?|walkthroughs?|"
+              r"breakdowns?|channels?|vlogs?|explainers?|series|sources?|resources?|episodes?|streams?|livestreams?|"
+              r"items?|captions?|descriptions?|titles?|recaps?|tier\s+lists?|reviews?)")
+_KIND_VERB = (r"(?:(?:is|are|was|were)\s+(?:all\s+|mostly\s+|also\s+)?(?:suitable|aimed|meant|designed|made|geared|"
+              r"tailored|targeted|intended|ideal|perfect|great|good|useful|helpful|available|focused|dedicated|"
+              r"beginner|beginner-friendly|for|about|part|explained|ranked|shared|listed|posted|a\s+(?:vlog|recap|series|"
+              r"tier\s+list|tutorial|walkthrough))|"
+              r"(?:also\s+|mainly\s+|mostly\s+)?(?:focus|focuses|cover|covers|show|shows|showcase|showcases|"
+              r"demonstrate|demonstrates|feature|features|include|includes|walk|walks|offer|offers|introduce|"
+              r"introduces|discuss|discusses|provide|provides|explore|explores|highlight|highlights|present|presents|"
+              r"go\s+over|goes\s+over|talk\s+about|talks\s+about|review|reviews|compare|compares|exist|exists|"
+              r"rank|ranks|follow|follows|document|documents)\b(?!\s+(?:that|why)\b))")
+META = re.compile(
+    r"^(?:(?:several|some|many|most|a\s+few|few|two|three|four|five|both|all|these|those|the|one|other|each|"
+    r"certain|various|multiple)\s+(?:of\s+(?:the|these|them)\s+)?)?(?:[\w'-]+\s+){0,3}?" + _KIND_NOUN + r"\s+"
+    + _KIND_VERB
+    + r"|^there\s+(?:is|are)\s+(?:a|an|one|two|three|several|some|many|a\s+few)\s+(?:[\w'-]+\s+){0,3}?" + _KIND_NOUN
+    + r"|\b(?:is|are)\s+(?:suitable|aimed|meant|designed|geared|tailored|targeted|intended)\s+(?:at|for)\b"
+    + r"|\b(?:suitable|perfect|ideal|great)\s+for\s+(?:complete\s+|absolute\s+|total\s+)?(?:beginners|newcomers|"
+      r"novices|everyone|anyone|all\s+levels)\b"
+    + r"|\bfor\s+(?:motion\s+designers|creators|artists)\s+of\s+(?:every|all)\s+levels?\b"
+    + r"|^[\w\s'-]{0,40}\b(?:is|are)\s+(?:all\s+)?about\s+(?:shooting|making|doing|watching|having|sharing)\b"
+    + r"|\b(?:can|could)\s+be\s+(?:ranked|rated|sorted|listed|explained|shared|found|watched)\b"
+    + r"|\b(?:is|are)\s+explained\s+(?:for|to|in)\b"
+    + r"|\b(?:is|are)\s+(?:a|an|just\s+a)\s+(?:vlog|recap|tier\s+list|series|walkthrough|livestream|dump|tour|"
+      r"reaction|compilation|montage)\b"
+    + r"|\bpersonal\s+experience\b|\bnot\s+a\s+tutorial\b|\bfirst\s+(?:week|year|month|day)\s+(?:of|learning)\b",
+    re.I)
+
+
+def _title_only(text, titles, topic):
+    """True when every content word of the point, the topic's own words aside, is a word of one cited item's title:
+    the title said again as a sentence ("Knife skills for beginners.")."""
+    tw = {_stem(w)[:6] for w in content_words(topic or "")}
+    words = {_stem(w)[:6] for w in content_words(text)} - tw
+    if not words:
+        return True
+    if len(words) > 3:   # a sentence with more to it than a label is kept, even when the caption is one line
+        return False
+    return any(words <= {_stem(w)[:6] for w in content_words(t)} for t in titles)
+# ---------- end round 11 fix, B ----------
+
+
+def check_points(raw, items, extra=None, notes=None, need_about=(), topic=None):
     """(points, dropped): the model's points that code can trace to the text of the items they cite.
 
     `items` is the numbered list the model saw (1-based). A point is kept only when it is a plain sentence (no link,
@@ -316,6 +392,9 @@ def check_points(raw, items, extra=None, notes=None, need_about=()):
             # calendar", "ignore your rules") is never passed on as something the person learned
             drop("instruction", text)
             continue
+        if META.search(text):   # round 11 fix, B (S3): what an item is, who it is for, that it exists
+            drop("about_item", text)
+            continue
         ids, texts = [], []
         for s in p.get("sources") or []:
             if not isinstance(s, dict):
@@ -340,6 +419,10 @@ def check_points(raw, items, extra=None, notes=None, need_about=()):
         if not ids:
             drop("no_source", text)
             continue
+        if _title_only(text, [getattr(x, "first_line", "") or (x.caption or "").split("\n")[0]
+                              for x in items if x.id in ids], topic):   # round 11 fix, B (S3): an item's title said again is not something it says
+            drop("title_only", text)
+            continue
         share = trace_share(text, texts)
         if share < TRACE_MIN:
             drop("not_traced", text)
@@ -358,6 +441,79 @@ def check_points(raw, items, extra=None, notes=None, need_about=()):
     return kept, dropped
 
 
+# ---------- round 11 fix, B (S2): no more than 2 points from one item when 3 or more items are cited ----------
+def spread(points, dropped=None, notes=None):
+    """The points with the third and later of those that come from one item alone left out, when the points cite 3
+    items or more (a point with several sources is from all of them and always stays)."""
+    if len({i for p in points for i in p["ids"]}) < 3:
+        return points
+    alone, out = {}, []
+    for p in points:
+        if len(p["ids"]) == 1:
+            n = alone.get(p["ids"][0], 0)
+            if n >= ONE_ITEM_MAX:
+                if dropped is not None:
+                    dropped["one_item"] = dropped.get("one_item", 0) + 1
+                if notes is not None:
+                    notes.append(("one_item", p["text"]))
+                continue
+            alone[p["ids"][0]] = n + 1
+        out.append(p)
+    return out
+
+
+_FOCUS = re.compile(r"^(?P<thing>[^\W\d_][\w'-]*(?:\s+[\w'-]+){0,2}?)\s+(?:in|for|with|using|inside|on)\s+"
+                    r"(?P<ctx>[\w'-]+(?:\s+[\w'-]+){0,3})$", re.I)
+
+
+def focus(topic):
+    """(the thing asked about, the subject it sits in) for "easing in after effects", else (topic, None)."""
+    m = _FOCUS.match(" ".join((topic or "").split()))
+    if not m or not content_words(m.group("thing")) or not content_words(m.group("ctx")):
+        return topic, None
+    return m.group("thing"), m.group("ctx")
+
+
+def _did(it, how_kinds):
+    return bool((set(it.kinds) | set(getattr(it, "dates", {}) or {})) & set(how_kinds))
+
+
+def lead_words(how, items):
+    """What was read, for the reply's lead: "the videos you watched", "the posts you saved", "the posts and videos you
+    watched and saved". Never "kept" for a watch."""
+    from .history import HOW_KINDS
+    yt = sum(1 for it in items if it.platform == "youtube")
+    noun = "videos" if yt == len(items) else "posts" if not yt else "posts and videos"
+    if how == "watched":
+        return "the videos you watched"
+    if how in ("saved", "liked"):
+        return f"the {noun} you {how}"
+    watched = [it for it in items if _did(it, HOW_KINDS["watched"])]
+    if items and len(watched) == len(items):
+        return "the videos you watched"
+    if not watched:
+        return f"the {noun} you saved"
+    return f"the {noun} you watched and saved"
+
+
+def _limit(bot, person, req):
+    """The request limited to what the person watched, saved or liked when the message says so ("from what i
+    watched", "the videos i watched", "my watch history", "from my saves")."""
+    from .history import HOW_KINDS
+    how = req.get("how") or "any"
+    if not SOURCE_LIMIT or how == "any" or req.get("these") or req.get("only") is not None:
+        return req
+    kinds = HOW_KINDS[how]
+    view = bot.view(person["library"])
+    dates = {}
+    for iid, it in view.items.items():
+        if _did(it, kinds):
+            ds = [d for k, d in (getattr(it, "dates", {}) or {}).items() if k in kinds and d]
+            dates[iid] = max(ds) if ds else ""
+    return dict(req, only=set(dates), dates=dates)
+# ---------- end round 11 fix, B ----------
+
+
 # ---------- the call ----------
 def _block(n, it, lines):
     from .compose import as_data, display_title
@@ -367,7 +523,9 @@ def _block(n, it, lines):
 
 def call(topic, items, points_of, person=None):
     """One model call over the numbered items. Returns (raw, cost)."""
-    user = ("Topic: " + json.dumps(topic, ensure_ascii=False) + "\n\nItems:\n\n"
+    thing, ctx = focus(topic)   # round 11 fix, B (S3): "easing in after effects" asks about easing
+    asked = ("\nAsked about: " + json.dumps(thing, ensure_ascii=False)) if ctx and PROMPT_VERSION >= "synth_v4" else ""
+    user = ("Topic: " + json.dumps(topic, ensure_ascii=False) + asked + "\n\nItems:\n\n"
             + "\n\n".join(_block(i, it, points_of[it.id]) for i, it in enumerate(items, 1)))
     return llm.chat_json(PROMPT, user, purpose="mvp_synth", prompt_version=PROMPT_VERSION, person=person,
                          max_tokens=1400, temperature=TEMPERATURE, seed=SEED)
@@ -471,7 +629,9 @@ def summarize(bot, person, req, now, last=None):
             raw = {}
             steps["synth_error"] = type(e).__name__
         notes = []
-        points, dropped = check_points(raw, said, extra, notes=notes, need_about={it.id for it in maybe})
+        points, dropped = check_points(raw, said, extra, notes=notes, need_about={it.id for it in maybe},
+                                       topic=req["topic"])
+        points = spread(points, dropped, notes)   # round 11 fix, B (S2): at most 2 points from one item alone
         out["points"], out["dropped"], out["dropped_text"] = points, dropped, notes
         steps["points_model"] = len(raw.get("points") or []) if isinstance(raw, dict) and isinstance(
             raw.get("points"), list) else 0
@@ -490,6 +650,15 @@ def summarize(bot, person, req, now, last=None):
             if iid not in order:
                 order.append(iid)
     out["cited"] = [view.get(i) for i in order]
+    # ---------- round 11 fix, B (S1, S2, S3): what the reply names, numbered as the person sees it ----------
+    if out.get("thin"):   # the best 3: the one cited first, then the search's order
+        listed = [it for it in out["cited"] if it is not None]
+        listed += [it for it in out["fits"] if it.id not in {x.id for x in listed}]
+        out["listed"] = listed[:THIN_LIST]
+    out["lead"] = lead_words(req.get("how") or "any", [it for it in out["cited"] if it is not None] or out["fits"])
+    out["how"] = req.get("how") or "any"
+    out["thing"], out["context"] = focus(req["topic"])
+    # ---------- end round 11 fix, B ----------
     steps["points"] = len(out["points"])
     steps["cited"] = len(order)
     steps["seconds"] = round(time.time() - t0, 2)
@@ -505,6 +674,8 @@ def synth_reads(bot, person, text, now):
     from zoneinfo import ZoneInfo
     today = now.astimezone(ZoneInfo(person.get("timezone") or "UTC")).date()
     req = read(text, today)
+    if req is None:
+        req = read_ask_mine(text)   # round 11 fix, B (V1): "ask my videos about X", only with MVP_VIDEO_ASK=1
     if req is None:
         return None
     h = person["handle"]
@@ -524,6 +695,7 @@ def synth_reads(bot, person, text, now):
         if not isinstance(ref, dict):
             return ref
         req = ref
+    req = _limit(bot, person, req)   # round 11 fix, B (S2): "from what i watched" reads only what was watched
     return run(bot, person, req, now, last=last)
 
 
@@ -589,6 +761,8 @@ def run(bot, person, req, now, last=None):
     shown = (res or {}).get("cited") or []
     if res and (not res["points"]):
         shown = res["fits"][:5]
+    if res and res.get("thin"):   # round 11 fix, B (S3): the numbered list the reply shows, in its order
+        shown = res.get("listed") or shown
     run_id = bot.store.add_run(handle=h, kind="synth", at=now_iso(now), n_candidates=(res or {}).get("steps", {}).get(
         "candidates", 0), n_picks=len(shown), n_dropped=sum(((res or {}).get("dropped") or {}).values()),
         cost_usd=round((res or {}).get("cost", 0.0), 6), status="error" if status == "error" else (
@@ -599,8 +773,13 @@ def run(bot, person, req, now, last=None):
         return bot.send(h, T.LIMIT_TOTAL if stopped else T.RUN_ERROR)
     if res is not None and req.get("when"):   # the merge of round 11: the window said back, and where the record ends
         res.update(when=req["when"], verb=req["verb"], window_tail=req.get("window_tail") or "")
-    msg = T.synth_message(res, video_offer=_video_offer(shown))
+    msg = T.synth_message(res, video_offer=_video_offer(shown, thin=bool(res and res.get("thin"))))
     if shown:
+        # round 11 fix, B (V1): "ask them" right after reads this answer's YouTube videos and its topic
+        from . import videoask
+        if videoask.on():
+            bot.store.set_state(f"videomany:{h}", {"run_id": run_id, "topic": req["topic"][:120],
+                                                    "at": now.isoformat()})
         from .compose import display_title
         for i, it in enumerate(shown, 1):
             bot.store.add_delivery(h, None, run_id, it.id, i, at=now)
@@ -621,17 +800,16 @@ def run(bot, person, req, now, last=None):
 
 
 # ---------- the merge of round 11 (DESIGN 18, seam c): slice Q's offer, only with MVP_VIDEO_ASK=1 and a YouTube video
-def _video_offer(shown):
-    """The words that offer to ask a cited video itself, by its number in this answer (as "ask video N" reads it), or
-    "" when the setting is off or no shown item is a YouTube video."""
+def _video_offer(shown, thin=False):
+    """The words that offer to ask a cited video itself, by its number in this answer's sources (as "ask video N"
+    reads it), or "" when the setting is off or no shown item is a YouTube video. Round 11 fix, B (S1, V1): only the
+    YouTube sources are offered, by the numbers the person sees; two or more also get "ask them"."""
     from . import texts as T
     from . import videoask
     if not videoask.on():
         return ""
-    yt = [(n, it) for n, it in enumerate(shown, 1) if videoask.video_id(it)]
+    yt = [n for n, it in enumerate(shown, 1) if videoask.video_id(it)]
     if not yt:
         return ""
-    if len(yt) == 1:
-        return T.SYNTH_VIDEO_OFFER_ONE
-    return T.synth_video_offer_many(yt[:3])
+    return T.synth_video_offer(yt, total=len(shown), thin=thin)
 # ---------- end the merge of round 11 ----------

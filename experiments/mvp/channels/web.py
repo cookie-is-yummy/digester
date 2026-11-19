@@ -239,7 +239,9 @@ class WebChannel(Channel):
                 if c.get("with_welcome") and bot.store.person(handle):
                     from ..texts import CONSENT
                     from ..videoask import consent_note   # round 11, slice Q
-                    bot.send(handle, CONSENT + consent_note())   # the setup's first message, as a new person gets it
+                    # the setup's first message, as a new person gets it (round 11 fix, B, V2: remembered when it
+                    # holds the Google line)
+                    bot.send(handle, CONSENT + consent_note(bot.store, handle))
         self._tick = True
 
     def state(self, handle):

@@ -168,8 +168,8 @@ class HandlerMixin:
                 return self.send(handle, T.CONSENT_AGAIN)
             self.store.set_state(f"consent_shown:{handle}", now_iso(now))
             # ---------- round 11, slice Q: the consent names asking a video while MVP_VIDEO_ASK is on ----------
-            from .videoask import consent_note
-            return self.send(handle, CONSENT + consent_note())
+            from .videoask import consent_note   # round 11 fix, B (V2): remembered when it holds the Google line
+            return self.send(handle, CONSENT + consent_note(self.store, handle, now))
             # ---------- end round 11, slice Q ----------
         pending = self._live_pending(handle, now)
         if tapback:
@@ -544,6 +544,8 @@ class HandlerMixin:
         question is answered by the next message only; any other message ends it and is handled as usual."""
         from . import captionmark   # round 10, slice S: the thumbs-down question ends with this message, whatever reads it
         ask = captionmark.take_ask(self.store, person["handle"])
+        from . import videoask   # round 11 fix, B (V2): the first-time note of asking a video ends with this message
+        vgo = videoask.take_go(self.store, person["handle"])
         ref = self._deadline_answer(person, text, now)
         if ref is not None:
             return ref
@@ -568,6 +570,11 @@ class HandlerMixin:
         ref = self._mismatch_answer(person, text, now, ask)   # round 10, slice S (4b): yes / no to the 👎 question
         if ref is not None:
             return ref
+        # ---------- round 11 fix, B (4c, V2): "yes" right after the note asks the video (or videos) at once ----------
+        ref = videoask.go_answer(self, person, text, now, vgo)
+        if ref is not None:
+            return ref
+        # ---------- end round 11 fix, B ----------
         return self._doit_answer(person, text, now)   # W10: "tell me when" after a to-do the bot can't do
 
     def _rule_reads(self, person, text, now):

@@ -3896,6 +3896,24 @@ def synth_video_offer_many(numbered):
         return t if len(t) <= 40 else t[:40].rsplit(" ", 1)[0].rstrip(" ,;:-") + "…"
     said = ", ".join(f"{n} is \"{short(it)}\"" for n, it in numbered)
     return f" To hear what a video itself says, say \"ask video N\" and your question ({said})."
+
+
+# ---------- round 11 fix, B (S1, V1): the offer names the YouTube sources by the numbers shown ----------
+ASK_MANY_MAX = 3
+
+
+def synth_video_offer(nums, total=0, thin=False):
+    """' To hear what video 2 itself says, say "ask video 2" and your question.'; two or more: "ask them" asks up to
+    3 of them at once. `nums`: the numbers of the YouTube sources in the list the person sees."""
+    if len(nums) == 1:
+        if total == 1:
+            return SYNTH_VIDEO_OFFER_ONE
+        return f" To hear what video {nums[0]} itself says, say \"ask video {nums[0]}\" and your question."
+    first = nums[:ASK_MANY_MAX]
+    which = f"videos {_and([str(n) for n in first])}" + (" (the first 3)" if len(nums) > ASK_MANY_MAX else "")
+    return (f" To hear what the videos themselves say, say \"ask them\" and your question, and I'll ask {which}; "
+            f"for one, \"ask video {first[0]}\".")
+# ---------- end round 11 fix, B ----------
 SYNTH_TITLE_CHARS = 70
 
 
@@ -3923,46 +3941,72 @@ def synth_source(it):
 
 def synth_message(res, video_offer="", show=3):
     """The reply for a synthesis (synth.summarize's result): the points, each with the items it came from, the counts,
-    and what was read. Built by code from checked points; the model wrote only the points' sentences."""
+    and what was read. Built by code from checked points; the model wrote only the points' sentences.
+    Round 11 fix, B (S1, S2, S3): each point cites the numbers of its sources, and the sources are listed once,
+    numbered as "ask video N" reads them; the lead says what was read ("the videos you watched"), never "kept" for a
+    watch; when the points say too little, it is said plainly with the best 3 and their links."""
     topic = res["topic"]
     by_id = {it.id: it for it in res["fits"]}
     lines = []
     when = res.get("when")   # the merge of round 11: a window ("in October 2026"), with what the person did then
-    within = f" in what you {res.get('verb') or 'kept'} {when}" if when else ""
+    lead = res.get("lead") or f"the posts and videos you {res.get('verb') or 'watched or saved'}"
+    within = f" in what you {res.get('verb') or 'watched or saved'} {when}" if when else ""
     if res["points"] and not res.get("thin"):
-        lines.append(f"Here's what the posts and videos you {res.get('verb') or 'kept'} {when} say about {topic}:"
-                     if when else f"Here's what the posts and videos you kept say about {topic}:")
-        lines.append("")
-        for i, p in enumerate(res["points"], 1):
-            srcs = [by_id[iid] for iid in p["ids"] if iid in by_id][:show]
-            lines.append(f"{i}. {p['text']}")
-            lines.append("   From " + "; ".join(synth_source(it) for it in srcs))
         cited = [by_id[i] for i in dict.fromkeys(i for p in res["points"] for i in p["ids"]) if i in by_id]
-        silent = [it for it in res["silent"] if it.id not in {c.id for c in cited}]
+        num = {it.id: n for n, it in enumerate(cited, 1)}
+        lines.append(f"Here's what {lead}{' ' + when if when else ''} say about {topic}:")
+        lines.append("")
+        for p in res["points"]:
+            refs = [str(num[i]) for i in p["ids"] if i in num][:show]
+            lines.append(f"• {p['text']} [{', '.join(refs)}]")
+        lines += ["", "Sources:"]
+        for n, it in enumerate(cited, 1):
+            lines.append(f"{n}. {synth_source(it)}")
+        silent = [it for it in res["silent"] if it.id not in num]
         tail = f"From {synth_counts(cited)}"
         if silent:
             tail += f"; {len(silent)} more fit but say nothing in their text"
-        unused = [it for it in res.get("said") or [] if it.id not in {c.id for c in cited}]
+        unused = [it for it in res.get("said") or [] if it.id not in num]
         if unused:
             tail += f"; I read {len(unused)} more that I didn't use"
         if res.get("unread"):
             tail += f"; {len(res['unread'])} more fit that I didn't read"
         lines += ["", tail + "."]
     elif not res["fits"]:
-        lines.append(f"I found nothing about {topic}{within}." if when else
-                     f"I found nothing in your saves about {topic}.")
+        what = {"watched": "you watched", "saved": "in your saves", "liked": "you liked"}.get(res.get("how") or "",
+                                                                                          "you watched or saved")
+        lines.append(f"I found nothing about {topic}{within}." if when else f"I found nothing {what} about {topic}.")
     else:
-        n = len(res["fits"])
-        lines.append(f"I found {n} {'thing' if n == 1 else 'things'} about {topic}{within or ' in your saves'}, but "
-                     f"their text says too little to sum up.")
+        listed = res.get("listed") or res["fits"][:3]
+        lines.append(synth_thin_line(res, within))
         if res["points"]:
-            lines.append(f"One thing they say: {res['points'][0]['text']}")
-        lines.append("Here they are:")
-        for it in res["fits"][:5]:
-            lines.append("• " + synth_source(it))
+            num = {it.id: n for n, it in enumerate(listed, 1)}
+            refs = [str(num[i]) for i in res["points"][0]["ids"] if i in num]
+            lines.append(f"One thing they say: {res['points'][0]['text']}" + (f" [{', '.join(refs)}]" if refs else ""))
+        lines.append(f"The best {len(listed)}:" if len(listed) > 1 else "The best one:")
+        for n, it in enumerate(listed, 1):
+            lines.append(f"{n}. {synth_source(it)}")
     if res["fits"]:
         lines.append(SYNTH_READS_WHAT + (video_offer or ""))
     if res.get("window_tail"):
         lines.append(res["window_tail"])
     return "\n".join(lines)
+
+
+def synth_thin_line(res, within=""):
+    """Round 11 fix, B (S3): 'The titles and descriptions of the 4 videos you watched about after effects don't say
+    much about easing.'"""
+    fits = res["fits"]
+    yt = sum(1 for it in fits if it.platform == "youtube")
+    what = ("titles and descriptions" if yt == len(fits) else "captions" if not yt
+            else "titles, descriptions and captions")
+    lead = res.get("lead") or "the posts and videos you watched or saved"
+    noun = _synth_count(len(fits), "video", "videos") if lead.endswith("you watched") else synth_counts(fits)
+    verb = lead.split(" you ", 1)[1] if " you " in lead else "watched or saved"
+    if within:
+        verb = within.split(" you ", 1)[1]
+    thing, ctx = res.get("thing") or res["topic"], res.get("context")
+    if ctx:
+        return f"The {what} of the {noun} you {verb} about {ctx} don't say much about {thing}."
+    return f"The {what} of the {noun} you {verb} about {res['topic']} say little about it beyond what they are."
 # ---------- end round 11, slice M ----------
