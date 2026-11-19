@@ -3313,8 +3313,73 @@ the bot's own `/vm` link on the address the page was opened on (`ownView` in `we
 
 ## 18. Ask your watch history anything (round 11, 19 Nov 2026)
 
-The founder, 19 Nov: "treat it like 'ask your watch history anything'". Three slices (H, M, Q), then a merge. Each
-slice adds its own part below.
+**What was asked.** The founder, 19 Nov: "i also think it would be beneficial to treat it like 'ask your watch history
+anything'", with a screenshot of another project: a searchable archive of YouTube transcripts with timestamp-cited
+answers. The round's brief (outside git) split it into three slices and a merge.
+
+**The probe (build 84a413a, the founder's library, no titles here).** Eight questions typed as the founder would: H1
+"what have i been watching the most this month" counted all time and searched the question's own words ("watching",
+"most", "this month"); H2 "what did i watch last week" said "nothing you kept since ..." and never where the export
+ends; H3 "which channels do i watch the most" gave no ranking; H4 (how many videos about a topic) was right but said
+"kept" for watched; H5 (that video I watched about X) was right; H6 (what did that video say about X) got the honest
+"I can't tell that from what <title> says" and nothing more; H7 (summarize what I've learned about X) recommended one
+post; H8 (when did I first watch X) went to the picks with an unrelated video.
+
+**The three slices.** H (18.H, `history.py`): history questions read into a small form and answered by code from
+every dated event of the library, in the person's time zone, with the window always said back and where the export
+ends; no model, no prompt. M (18.M, `synth.py`, prompt `synth_v3`): a summary across many items, each point traced by
+code to a quote of a cited item, with the counts of what fit, what was read and what was not. Q (18.Q, `videoask.py`,
+prompt `video_ask_v1`, amendment A-017 Proposed, off unless `MVP_VIDEO_ASK=1`): a YouTube video asked itself through
+Gemini's documented YouTube-link input, the answer's points checked by code and linked to their seconds; nothing of
+the video is stored.
+
+**Where they meet (the merge, `tests/test_round11_merge.py`).**
+- (a) One hook order (the table in section 17): the history read 8h after `integration_reads`, then asking a video 8y
+  (so "ask" only ever reaches a video pick already in view, else one line asking for one first), then `code_reads`,
+  the cap check, the summary read 8m and the interpreter; `history.after_interpret` after `screen_guard`.
+- (b) A summary with a time window ("summarize what i watched last month about X", "what have I learned about X in
+  October"): `synth.read` with today's date takes one plain window by slice H's own words (`find_windows`) and only
+  when nothing else in the message stops it (a repeat, a reminder, "first", "most", "how many"); the search keeps the
+  items the person watched, liked or saved in it (H's record; "watched" in the message means watches only), adds the
+  window's items that name the topic, and the reply says the window back ("in what you watched in October 2026") with
+  where the export ends. A window wholly after or before the record is said plainly with no model call.
+- (c) The summary's "I read titles, descriptions and captions" line offers slice Q's "ask the video" only with
+  `MVP_VIDEO_ASK=1` and a YouTube video among the items shown: one video, "ask the video"; several, "ask video N" with
+  each video's number in this answer (the number "ask video N" reads).
+- (d) A history list or first/last answer keeps its items as the last answer; "the first one" makes that one item the
+  pick in view (the history follow-ups still read their own list), so "what does it say about X" gets the honest line
+  of a title-only video and, with the setting on, the offer, and "ask the video" asks it. "what do these say" after a
+  history answer sums up its items on the history question's own topic or channel.
+- (e) What is kept: a run of kind `history` and of kind `synth` with their deliveries and kept answers (existing
+  tables), the history follow-up form (`history:<handle>`, 6 hours), and slice Q's `videoask`, `videoask_seen`,
+  `videoans` states and `video.ask` rows. "what did you do for me" says each video asked ("sending its link and your
+  question to Google"); "export my data" adds `history_and_videos.json` (the form, the video answer's points and times,
+  each ask without its question); "delete my data" removes all of it (state keys named after the person, and
+  `action_log`).
+- (f) The help says "ask the video" only while the setting is on; the connector menu is unchanged (asking a video is
+  not a connection).
+
+**The framing.** The help, "what can you do" and the setup's last message lead with "Ask your watch history
+anything. I can see N videos you watched on YouTube and M on Instagram, up to <date>. Try:" and three questions
+built from the person's own record and profile: the channel ranking for the month the record ends in, and, when a
+profile topic is mentioned by something in the record, "when did I first watch videos about <topic>?" and "summarize
+what I've learned about <topic>" (else a day and a year). Each example is one the code reads take, checked before it
+is offered. With no watch history the help is as before. The round 10 help lines stay as they were.
+
+**The checks (at the merge).** Suite 3,529 passed, 0 failed (4 shards); demo 10 passed; the dry self-test 51
+conversations, 136 of 136 steps (c40 to c50 are round 11's); `probe_same` byte-equal; the development phrasing set
+by code 73 right and 1 wrong (d007, as before) for the helper lines, 1 of 40 `none` lines taken: d132 ("what did i
+watch on youtube last week", the brief's H2 with a platform), answered by the history read on purpose (the founder
+decides whether that `none` line stands); the 159 rule-eval texts and the 123 rule phrasings taken by no round 11
+read (with the window read and the video reads too). The rule phrasing set stays the round 9 one: the round 11 test
+files are left out of it as round 10's are (slice Q's made-up video answer "Turn off image stabilisation." had made it
+124). One live run on the real library as a fresh person (scratch home, $0.017): the help with the person's counts
+(code, 2.5 s, the record built on first use); a summary inside a month window (9 key-point reads and 1 summary call,
+$0.014, 7 s, 5 points); first, the pick, a question on it and "what do these say" (code, then $0.003).
+
+**Not done at the merge.** No live "ask the video" (slice Q measured 8 questions). The examples are English only. A
+summary reads one window, not two ("compared with"). Section 18.H's open points stand: topics by words, not the
+engine's ranking.
 
 ### 18.H History questions answered by code (slice H; `history.py`, `tests/test_round11_h.py`)
 A history question is about the person's own watching and liking as a record: how much, what, who, when, first,
