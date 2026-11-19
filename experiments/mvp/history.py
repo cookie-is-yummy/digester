@@ -1003,6 +1003,8 @@ def window_noun(w, start, end, lang="en"):
         return f"{unit[0] if es else unit[1]} ({span_words(start, end, lang)})"
     if w.kind == "since":
         return ("nada desde el " if es else "anything since ") + day_words(start, lang)
+    if es and start != end:   # the round 11 check (DESIGN 18.X): "No veo del 13 al 19 de noviembre"
+        return "del " + span_words(start, end, lang).replace(" a ", " al ", 1)
     return span_words(start, end, lang)
 
 
@@ -1604,6 +1606,8 @@ def examples(bot, person, now):
                         for i, (p, n) in enumerate(counts))
     line = f"Ask your watch history anything. I can see {said}, up to {day_words(newest)}."
     month = MONTHS[newest.month - 1].capitalize()   # the month the record ends in: its answer says where it ends
+    if (today.year * 12 + today.month) - (newest.year * 12 + newest.month) >= 12:
+        month += f" {newest.year}"   # the round 11 check: an export over a year old names its year (never this year's)
     qs = [f"which channels did I watch the most in {month}?"]
     topic = None
     for t in _example_topics(P.get(bot.store, person["handle"])):

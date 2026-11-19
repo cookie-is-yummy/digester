@@ -636,3 +636,19 @@ def test_an_ask_keeps_only_what_design_18q_lists(chk, monkeypatch, tmp_path):
     assert "secret filter trick" not in ans and set(json.loads(ans)) == {"video_id", "item_id", "model", "points", "at"}
     for f in new_files:
         assert "secret filter trick" not in open(os.path.join(home, f), encoding="utf-8", errors="ignore").read()
+
+
+# ================================ 6. what the live run showed (DESIGN 18.X) =======================================
+def test_spanish_says_a_span_it_cannot_see_with_del_and_al(chk):
+    out, _ = ask(chk, "cuantos videos vi en los ultimos 3 dias")
+    assert out.startswith("No veo del 17 al 19 de noviembre de 2026: ")
+
+
+def test_the_help_example_month_names_its_year_when_the_export_is_over_a_year_old(chk):
+    from mvp import history
+    at(chk, "2027-12-02T17:00:00+00:00")
+    person = chk["bot"].store.person(H)
+    line, qs = history.examples(chk["bot"], person, chk["clock"][0])
+    assert qs[0] == "which channels did I watch the most in November 2026?"
+    q = history.read(qs[0], date(2027, 12, 2))
+    assert (q.window.start, q.window.end) == (date(2026, 11, 1), date(2026, 11, 30))
