@@ -51,8 +51,8 @@ def rule_phrasings():
     """Every short string in the test files from before round 9 that stops, pauses or changes something."""
     out = set()
     for path in glob.glob(os.path.join(HERE, "test_*.py")):
-        if os.path.basename(path).startswith(("test_round9_",
-                                              "test_round10_")):   # round 10, slice K: the set stays the round 9 one
+        if os.path.basename(path).startswith(("test_round9_", "test_round10_",
+                                              "test_round11_")):   # round 10, slice K: the set stays the round 9 one
             continue
         for node in ast.walk(ast.parse(open(path, encoding="utf-8").read())):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and 2 <= len(node.value) <= 120 \
