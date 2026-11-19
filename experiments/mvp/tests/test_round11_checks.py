@@ -633,7 +633,9 @@ def test_an_ask_keeps_only_what_design_18q_lists(chk, monkeypatch, tmp_path):
     row = st.q("SELECT detail FROM action_log WHERE action='video.ask'")[-1]["detail"]
     assert "secret filter trick" not in row
     ans = json.dumps(st.get_state(f"videoans:{H}"))
-    assert "secret filter trick" not in ans and set(json.loads(ans)) == {"video_id", "item_id", "model", "points", "at"}
+    # round 11 fix, B (V4): "after_run", the newest run's id, so "email it to me" knows the video answer is in view
+    assert "secret filter trick" not in ans and set(json.loads(ans)) == {"video_id", "item_id", "model", "points", "at",
+                                                                          "after_run"}
     for f in new_files:
         assert "secret filter trick" not in open(os.path.join(home, f), encoding="utf-8", errors="ignore").read()
 

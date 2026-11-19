@@ -3998,15 +3998,22 @@ def synth_thin_line(res, within=""):
     much about easing.'"""
     fits = res["fits"]
     yt = sum(1 for it in fits if it.platform == "youtube")
-    what = ("titles and descriptions" if yt == len(fits) else "captions" if not yt
-            else "titles, descriptions and captions")
+    one = len(fits) == 1
+    if one:
+        what = "title and description" if yt else "caption"
+        noun = "video" if yt else "post"
+    else:
+        what = ("titles and descriptions" if yt == len(fits) else "captions" if not yt
+                else "titles, descriptions and captions")
     lead = res.get("lead") or "the posts and videos you watched or saved"
-    noun = _synth_count(len(fits), "video", "videos") if lead.endswith("you watched") else synth_counts(fits)
+    if not one:
+        noun = _synth_count(len(fits), "video", "videos") if lead.endswith("you watched") else synth_counts(fits)
     verb = lead.split(" you ", 1)[1] if " you " in lead else "watched or saved"
     if within:
         verb = within.split(" you ", 1)[1]
     thing, ctx = res.get("thing") or res["topic"], res.get("context")
+    head = f"The {what} of the {noun} you {verb} about {ctx or res['topic']}"
     if ctx:
-        return f"The {what} of the {noun} you {verb} about {ctx} don't say much about {thing}."
-    return f"The {what} of the {noun} you {verb} about {res['topic']} say little about it beyond what they are."
+        return f"{head} {'doesn' if one else 'don'}'t say much about {thing}."
+    return f"{head} {'says' if one else 'say'} too little to sum up."
 # ---------- end round 11, slice M ----------

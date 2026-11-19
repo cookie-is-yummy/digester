@@ -729,7 +729,7 @@ MANY_NOTE = ("Before I ask: asking {these} sends their links and your question t
 MANY_START = "I'll ask {these}; their links and your question go to Google. I keep only the answers."
 MANY_LABEL = "From the videos themselves (not checked against their text):"
 MANY_KEEP = "A model at Google watched them for this; I keep only these answers."
-MANY_STOPPED = "I stopped there: {line}"
+MANY_STOPPED = "I stopped there. {line}"
 MANY_MORE = "(I kept its first {n} points here; \"ask video {k}\" and your question gives all of them.)"
 
 
@@ -836,7 +836,7 @@ def _run_many(bot, person, items, question, nums, now):
         return bot.send(h, stop or FAILED)
     body = [MANY_LABEL, ""] + ["\n\n".join(blocks)]
     if stop is not None:
-        body += ["", MANY_STOPPED.format(line=stop[:1].lower() + stop[1:])]
+        body += ["", MANY_STOPPED.format(line=stop)]
     body += ["", MANY_KEEP]
     text = "\n".join(body)
     if len(text) > MANY_CHARS:

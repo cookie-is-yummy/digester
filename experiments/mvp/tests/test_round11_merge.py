@@ -140,7 +140,8 @@ def test_a_summary_with_a_window_reads_only_what_was_watched_then_and_says_the_w
     lib["state"]["answers"]["mvp_extract"] = lambda u: {"key_points": ["Lens filters for night video made simple"]}
     out, calls = ask(lib, "summarize what i watched in october about lens filters", CHAT)
     assert "mvp_interpret" not in calls
-    assert "about lens filters in what you watched in October 2026" in out
+    # round 11 fix, B (S3): the plain line names the window (was "about lens filters in what you watched in October 2026")
+    assert "of the 2 videos you watched in October 2026 about lens filters" in out
     assert "Pretend Lens Co" in out and "cheat sheet" not in out   # watched only: the saved post is left out
     assert "Your YouTube export ends on 9 October 2026, so I can't see after that." in out
     assert "how do I send you a new export?" in out
@@ -173,19 +174,22 @@ def test_the_summary_offers_to_ask_a_video_only_with_the_setting_and_names_the_v
     assert "ask the video" not in out and "ask video" not in out
     on(monkeypatch)
     out, _ = _summary(lib)
-    m = re.search(r'To hear what a video itself says, say "ask video N" and your question \((.*?)\)\.', out)
+    # round 11 fix, B (S1, V1): the YouTube sources by the numbers shown, and "ask them" (was 'say "ask video N" and
+    # your question (2 is "<title>", ...)')
+    m = re.search(r'say "ask them" and your question, and I\'ll ask videos (.*?); for one, "ask video (\d)"\.', out)
     assert m, out
     shown = lib["bot"].store.last_answer(H)["items"]
-    for n, title in re.findall(r'(\d) is "(.*?)"', m.group(1)):
+    for n in re.findall(r"\d", m.group(1)):
         it = lib["bot"].view(lib["bot"].store.person(H)["library"]).get(shown[int(n) - 1])
-        assert it.platform == "youtube" and it.caption.startswith(title.rstrip("…"))
+        assert it.platform == "youtube"
+        assert f"{n}. \"{it.caption}" in out
 
 
 def test_ask_video_n_after_a_summary_asks_that_video(lib, monkeypatch):
     on(monkeypatch)
     fake = FakeGemini(GOOD).install(monkeypatch)
     out, _ = _summary(lib)
-    n = re.search(r'(\d) is "Lens filters for night', out).group(1)
+    n = re.search(r'(?m)^(\d)\. "Lens filters for night', out).group(1)   # round 11 fix, B (S1): the numbered list
     out, _ = ask(lib, f"ask video {n} what white balance it uses")
     assert out.startswith("Before I ask:")   # the first time: what leaves this computer
     out, calls = ask(lib, "ask the video")
