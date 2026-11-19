@@ -3301,3 +3301,119 @@ names (421 for any other Host). A page reached through a forwarded port arrives 
 the bot's own `/vm` link on the address the page was opened on (`ownView` in `web_page.html`). Tests:
 `test_the_page_answers_a_preview_address_only_when_the_setting_names_it` and the one after it, in
 `tests/test_round10_livefix_checks.py`. The take-over view behind a preview address was not tried by a person.
+
+## 18. Ask your watch history anything (round 11, 19 Nov 2026)
+
+The founder, 19 Nov: "treat it like 'ask your watch history anything'". Built as slices H (history questions), M
+(summaries across many items) and Q (what the video itself says), then a merge. Each slice adds its own part below.
+
+### 18.M Summaries across many items (`synth.py`, prompt `synth_v3`)
+
+**Today (build 84a413a, reproduced offline with the fakes).** "summarize what ive learned about motion design from what
+i watched" reaches the interpreter, which makes it an ask; the composer picks; the reply is "I recommend <one post>"
+with its key points and two alternatives as bare links. On the made-up set below the twelve requests got 42 key point
+lines from 13 posts in all: 10 of 12 answers drew on one post, one on three, and one ("what did i learn about color
+grading") found nothing.
+
+**The read (code only, before the interpreter).** `synth.read`: "summarize / sum up / a summary of" + "what I've
+learned / watched / saved / my saves" + "about X"; "summarize X from what I watched"; "what have / did I learn about X";
+"tell me what I've learned about X"; "what do my saves / the videos I watched say about X"; "the main ideas / key
+takeaways across what I watched on X" (both orders). The topic is the words after "about / on", without the source
+phrase ("from what i watched", "in my saves", "so far", "on youtube"); the question's own words are never search words.
+"what do these say", "what do those videos say about X", "summarize all of these" read the last answer's items (none in
+view: the message goes on as before). Never taken: anything with a time, a repeat or an action word ("every", "this
+month", "last week", "lately", "since", a weekday, "remind", "email", "my list"), "how many", "most", "first" (slice H's
+words), a topic that is the person or the bot ("myself", "my rules"), "summarize it / the second one / the pasta video"
+(questions on a pick stay `code_reads`), "summarize my week" (the recap). English only; a reply in another language
+goes on as before. "from what i watched" and "my saves" limit nothing (the bot itself calls everything kept "your
+saves", and a reel watched and kept is a watched video); "on youtube / instagram" limits the platform; "what I liked"
+limits to likes. The hook: `answer_normally`, after `code_reads` and the cap check, before `interpret` (the "round 11,
+slice M" block; `tests/test_round11_m.py` checks the order). `MVP_SYNTH=0` switches it off.
+
+**The run.**
+1. Retrieval: `retrieve.candidates` for the topic (40, the person's exclusions and dislikes as for any ask), the
+   YouTube descriptions (`ytinfo`, the official API), copies collapsed. Left out before anything is read: a strong
+   caption mark (slice S), and any item whose text speaks to an assistant (`compose.ASSISTANT_NOTE`); friends' posts are
+   never in the view.
+2. Fit by code: the item's own text names the topic (the phrase, or each content word of a short topic, 2 of 3 for a
+   longer one; a word said as an activity also as the thing: "stretching" finds "stretch"). When fewer than 5 items name
+   it, the search's next best are read too (8 reads in all at most) and one of them counts, as a fit and as a source,
+   only when the model lists it in `about`.
+3. Reads: each fitting item's key points from its own text with the details step (`extract_v4`, every line checked
+   against the text, cached per item), at most 12, the items with the most text first (a bare title says little).
+4. One call (`synth_v3`, temperature 0, seed 7): the topic and the numbered items (title and verified points, as data
+   in `<item>` tags); it returns `points: [{text, sources: [{n, quote}]}]` and `about: [n]`.
+5. Code checks every point (`synth.check_points`): a sentence of at most 260 characters with 2 content words or more;
+   no link, handle, word about the bot (`compose.INTERNAL`) or about an item ("this video", "item", "subscribe"); each
+   source a valid number listed in `about`, its quote 3 words or more and a whole run of that item's own words
+   (`compose.quote_ok`); at least one such source; 60% of the point's content words (stemmed) found in the cited
+   items' text (`TRACE_MIN`); every number in it in that text (`compose.numbers_backed`); not a repeat of a kept point.
+   A point that fails is dropped and counted in the run's `dropped` (`no_source`, `not_traced`, `number_not_in_text`,
+   `unsafe_text`, `repeat`). At most 6 points.
+6. The reply, built by code (`texts.synth_message`, the round 11 block), in this shape (made up):
+   ```
+   Here's what the posts and videos you kept say about sourdough:
+
+   1. Feed your starter at the same time every day.
+      From "Sourdough starter tips" by @made_up_sd1 <link>
+   2. ...
+
+   From 2 videos and 2 posts; 1 more fit but say nothing in their text; I read 1 more that I didn't use.
+   I read titles, descriptions and captions, not what is said in the videos.
+   ```
+   At most 3 sources under a point (the title cut at 70 characters, the creator, the link). With `MVP_VIDEO_ASK=1`
+   (slice Q) the last line adds "To hear what one of the videos itself says, ask me about that video." (the merge aligns
+   it with Q's words). Fewer than 2 checked points: "I found N things about X in your saves, but their text says too
+   little to sum up.", the one checked point if any, and up to 5 of them with links. None fits: "I found nothing in
+   your saves about X."
+7. Kept like any answer: the run (`kind` "synth", `prompt_version`, `dropped`, `steps`: candidates, fit, reads, maybe
+   reads, unread, points, cited, seconds), a delivery per cited item, the last answer (the cited items in order: "the
+   second one" and "email it to me" work on it), the kept answer with each item's points, and `lastspec`, so "another"
+   gives one more on the topic without the cited items. Nothing new is stored: no table, no column. The model's
+   sentences are shown only after the checks; nothing an item says can start a rule, an email, a to-do or any action.
+
+**The made-up evaluation.** `evalset/synth/`: the self-test's made-up library plus 51 made-up items on 12 topics (posts
+with tips in their captions, videos with descriptions served by a fake videos.list, a title-only item per topic, three
+items that share a word with a topic and are about something else, a friend's post, a post that speaks to an
+assistant), and the 12 requests with the items that truly fit. `python3 -m mvp.eval_synth mvp/evalset/synth --mode
+before|after --out <folder outside git>` sends each request through the whole bot as a fresh made-up person; "before"
+switches the read off (today's path). The scorer (`eval_synth.score_answer`) counts the points shown (before: the key
+point lines shown under each pick), the points traceable by code to the text of an item they cite (a whole run of its
+words, or `TRACE_MIN` of the content words with every number), the items cited by a shown point and how many of them
+truly fit, and the answers that cite 3 items or more. Live, `gpt-5.4-mini`, 19 Nov:
+
+| Run | Points (per answer) | Traceable | Dropped by code | Items cited (per answer) | Not truly fitting | Answers citing 3+ | Cost (per answer) | Seconds per answer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| before (the 84a413a path) | 42 (3.5) | 42 | 0 | 13 (1.1) | 1 | 1 of 12 | $0.128 ($0.011) | 6.5 |
+| synth_v1 | 36 (3.0) | 36 | 15 | 37 (3.1) | 0 | 8 of 12 | $0.081 ($0.007) | 4.2 |
+| synth_v2 | 67 (5.6) | 67 | 0 | 36 (3.0) | 0 | 9 of 12 | $0.089 ($0.007) | 4.2 |
+| v2, the richest items read first | 65 (5.4) | 65 | 0 | 35 (2.9) | 0 | 9 of 12 | $0.090 ($0.007) | 3.9 |
+| synth_v3 | 66 (5.5) | 66 | 0 | 40 (3.3) | 0 | 12 of 12 | $0.092 ($0.008) | 4.2 |
+| synth_v3 with the search's next best (final) | 64 (5.3) | 64 | 1 | 41 (3.4) | 0 | 12 of 12 | $0.102 ($0.008) | 4.6 |
+
+v1 wrote long points that joined several tips in other words, so code could not trace 15 of them; v2 asks for the
+items' own key words, one idea per point, and never what the items are; v3 asks to spread the points over the items.
+The prompts were tuned on this one set (there is no held-out synthesis set yet). "Traceable" uses the same test as the
+check, so for "after" it is true by construction; the independent signals are "not truly fitting" (0 of 41) and the
+transcripts, read by the builder: every point says something its sources say.
+
+**The real library** (the founder's, read only, a scratch store; 6 requests on the 6 topics of the profile guess, each
+in a different wording; no topic or title is written here): every request was taken by the read. Per answer: points 5,
+5, 5, 4, 5, 6 (all traceable by code), items cited 4, 4, 7, 6, 6, 4 (6 of 6 cite 3 or more), cost $0.013 to $0.023
+($0.103 in all: about 12 key point reads and one synthesis call each), 5.9 to 7.0 seconds (29.6 and 43.7 for the first
+request of a run, which loads the search engine). The fourth topic, two words, first found 1 post that named both and
+got the "too little to sum up" answer; with the search's next best read (step 2) it cites 6. Seen in the transcripts:
+on the real library many points are thin (a time or a feature a post claims, not a lesson) or say what the posts are
+rather than what they teach, because titles, descriptions and captions hold little. They are grounded, not
+deep; what the video itself says is slice Q's.
+
+**Checks that stay true** (19 Nov, on r11/M): the full suite 3389 passed, 0 failed (71 of them in
+`tests/test_round11_m.py`; the README's count is left to the merge); demo 10 passed; the dry self-test 114 of 114;
+`probe_same` byte-equal; the development phrasing set by code 73 right, 1 wrong (d007), 63 to the model, 0 of 40
+`none` lines taken (tester and operator alike); the 159 rule-eval texts and the 123 rule phrasings taken by no read of
+this slice.
+
+**Not done.** A time window ("what did I learn about X this month") is not read: it goes to the interpreter as before
+(slice H's window can set the spec's `saved_after` / `saved_before` at the merge). No held-out synthesis set.
+"summarize these videos" right after an answer still goes to the question on one pick (`code_reads`, unchanged); "what
+do these say" is the new form. Other languages go on as before. The video offer's words wait for slice Q.
