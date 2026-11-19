@@ -587,6 +587,8 @@ def test_c3_connect_check_and_what_are_you_connected_to(env, mac):
                           "Mac, make a calendar called \"Digest\"")
     assert say(env, "Connect my calendar.", no_model(env)) == msg
     msg = say(env, "what are you connected to?", no_model(env))
+    # the live check of 19 Nov (F7): after the answer, what isn't connected yet, with the words
+    msg = msg.split("\nNot connected yet:")[0]
     assert msg.splitlines() == [
         "Here's where I can put things for you:", "• Your list here: always on.",
         "• Email to you: not connected here, so emails wait in the bot's outbox folder.",   # no SMTP in the tests
@@ -600,7 +602,7 @@ def test_c3_connect_check_and_what_are_you_connected_to(env, mac):
     assert "connected (events still come as a link" in say(env, "what are you connected to", no_model(env))
     mac.calendar = True
     connect(env)
-    msg = say(env, "what are you connected to", no_model(env))
+    msg = say(env, "what are you connected to", no_model(env)).split("\nNot connected yet:")[0]   # F7, 19 Nov
     assert msg.endswith("• Reminders and Calendar on this Mac: connected.\nSay \"disconnect my mac\" to stop.")
     assert say(env, "connect my mac", no_model(env)) == \
         'Reminders and Calendar are connected on this Mac. Events go to your "Digest" calendar.'

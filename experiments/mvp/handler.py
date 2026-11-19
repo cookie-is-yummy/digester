@@ -727,6 +727,12 @@ class HandlerMixin:
             ref = self.send(h, said) or ref
         return ref
 
+    def _help_text(self, h):
+        """The help with the build (round 10, slice K) and, since the live check of 19 Nov (F11), one line on the
+        apps and, only when the browser is on for this person, one on cancelling in it."""
+        from .places import help_args
+        return T.help_full(config.BUILD, **help_args(self, h))
+
     def _rule_in_view(self, h, last, number, rules):
         """True when rule `number` is the one the conversation is on: the last write started or changed it, or the
         last answer came from it (fix pass 6, checker's audit)."""
@@ -893,8 +899,8 @@ class HandlerMixin:
                 # round 9, slice A (W1): small talk never claims an outcome the bot cannot see ("I've sent ...")
                 return self.send(h, T.CHAT_NO_CLAIM)
             # round 10, slice K: the help text ends with the build it runs
-            return self.send(h, T.help_text(config.BUILD) if it.intent == "help" and not it.reply else
-                             (it.reply or T.help_text(config.BUILD)))
+            return self.send(h, self._help_text(h) if it.intent == "help" and not it.reply else
+                             (it.reply or self._help_text(h)))
         if it.intent == "confirm":
             if pending and pending["kind"] == "confirm_rule":
                 return self._confirm(person, pending)
@@ -1172,7 +1178,7 @@ class HandlerMixin:
             return self.send(h, library_status(self, person, now, steps=bool(HOW_EXPORT.search(text))))
         if it.intent == "profile_show":
             return self.send(h, P.show_text(P.get(self.store, h), now))
-        return self.send(h, T.help_text(config.BUILD))   # round 10, slice K: with the build
+        return self.send(h, self._help_text(h))   # round 10, slice K: with the build
 
     def _profile_update(self, person, text, now):
         """'I'm past beginner at Blender now', 'I have an air fryer', 'stop guessing my level': the form call fills

@@ -211,8 +211,14 @@ class ReceiptsMixin:
             lines.append((_t(todos[-1]["created_at"]), T.receipt_todos(len(todos), done, gone)))
         # things put in an outside place (placements: ids only)
         lines += self._placement_receipts(h, s)
+        # the live check of 19 Nov (DESIGN.md section 17.L, F2): what the browser did after the person's "yes cancel
+        # <merchant>", in the page's own words kept for the run; never the bot's claim that anything ended
+        pressed = self._browser_receipts(person, s, now)
+        lines += [(at, line) for at, line, _ in pressed]
+        done_by_browser = {cid for _, _, cid in pressed if cid}
         # the cancel helper (no merchant named)
-        cans = [r for r in self.store.cancellations(h) if (r.get("updated_at") or "") >= s]
+        cans = [r for r in self.store.cancellations(h) if (r.get("updated_at") or "") >= s
+                and r["id"] not in done_by_browser]
         if cans:
             said = sum(1 for r in cans if r["status"] == "person_says_done")
             # round 10, slice D: "notice_sent" is a notice the bot sent after their "send"
@@ -226,6 +232,31 @@ class ReceiptsMixin:
                           T.receipt_cancellations(len(cans), said, sent - mine, len(cans) - said - sent - dropped,
                                                   mine=mine)))
         return lines
+
+    def _browser_receipts(self, person, since, now):
+        """[(moment, line, cancellation id)] for each browser run that pressed the last button since `since` (F2)."""
+        h, tz = person["handle"], person["timezone"]
+        out = []
+        for run in self.store.browser_runs_of(h):
+            pressed = run["status"] in ("page_says_cancelled", "page_unclear") or (
+                run["status"] == "offer_taken" and run.get("final_name"))
+            if not pressed or not run.get("ended_at") or run["ended_at"] < since or not run.get("final_name"):
+                continue
+            name, practice = run["site_key"] or "the site", False
+            try:
+                from . import browser
+                r = browser.route(run["site_key"])
+                if r is not None:
+                    name, practice = r["name"], bool(r.get("practice"))
+                else:
+                    name = name[:1].upper() + name[1:]
+            except Exception:  # noqa: BLE001 - the receipts never break on the browser
+                pass
+            at = _t(run["ended_at"])
+            out.append((at, T.receipt_browser(name, run["final_name"], run.get("outcome_quote") or "",
+                                              when_words(at, now, tz), run["status"], practice=practice),
+                        run.get("cancellation_id")))
+        return out
 
     def _draft_receipts(self, person, since, now):
         h, tz = person["handle"], person["timezone"]

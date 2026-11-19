@@ -587,7 +587,7 @@ def test_post_acts_in_everyday_shapes(env, tmp_path, text, start):
 
 # ---------- connectors and outside apps ----------
 @pytest.mark.parametrize("text,start", [
-    ("connect my gmail", "I can't connect to Gmail yet."),
+    ("connect my gmail", "I don't sign in to Gmail, but email works"),   # the live check of 19 Nov (F8)
     ("can you hook up my google calendar", "I can't connect to Google Calendar yet."),
     ("disconnect notion pls", "I'm not connected to Notion"),
     ("stop using my gmail", "I'm not connected to Gmail"),

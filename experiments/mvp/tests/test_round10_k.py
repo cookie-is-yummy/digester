@@ -387,7 +387,8 @@ def test_help_ends_with_the_build(env, monkeypatch):
     from mvp import texts as T
     monkeypatch.setattr(config, "BUILD", "1a2b3c4 (17 Nov 2026)")
     msg = say(env, "help", {"intent": "help"})
-    assert msg == T.HELP + "\nI'm running build 1a2b3c4 (17 Nov 2026)."
+    # the live check of 19 Nov (F11): one line on the apps before the build (no browser or YouTube set up here)
+    assert msg == T.HELP + "\n" + T.help_apps() + "\nI'm running build 1a2b3c4 (17 Nov 2026)."
     assert T.WELCOME == "Thanks! " + T.HELP                              # the welcome is unchanged
 
 

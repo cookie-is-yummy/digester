@@ -138,6 +138,46 @@ IG_CANT = re.compile(
     r"|^" + _PLEASE + r"(?P<verb2>unlike|unsave|un-save)\s+(?P<this>this|that|it|this\s+one|that\s+one|this\s+(?:reel|post)|"
     r"that\s+(?:reel|post))(?:\s+(?:on|from)\s+" + _IG + r")?" + _TAILS + r"$")
 # ---------- end checks of round 10 (reading) ----------
+# ---------- the live check of 19 Nov (DESIGN.md section 17.L, F4 to F6): an action on Instagram asked of the bot
+# ("like that reel for me", "comment nice on that reel", "save that reel to my instagram collection called dinners"):
+# one plain line for the whole class, with the pick's own link (or the account's) when one is in view. Read before
+# the feedback reads, the shopping-list helper and the to-do helper; it never writes to a list and learns nothing ----
+_ASK = (r"(?P<ask>(?:(?:please|pls|hey|ok(?:ay)?|so)[\s,]+|(?:can|could|would|will)\s+(?:you|u)\s+(?:please\s+)?|"
+        r"i\s+(?:want|need)\s+you\s+to\s+|i'?d\s+like\s+you\s+to\s+|go\s+(?:and\s+)?)+)?")
+_IG_ON = r"(?P<ig>\s+(?:on|in|to|from)\s+(?:my\s+)?" + _IG + r")?"
+_IG_POST = (r"(?P<obj>(?:that|this|the|it'?s|its)\s+(?:(?:" + _IG + r")\s+)?(?P<noun>reel|post|video|story|pic|photo)"
+            r"|(?:it|this|that|this\s+one|that\s+one)|the\s+(?:first|second|third|1st|2nd|3rd)(?:\s+one)?"
+            r"|(?:number\s+|#\s*)\d)")
+_IG_WHO = (r"(?P<who>(?:that|this|the)\s+(?:creator|account|person|guy|girl|page|cook|chef)|them|him|her|"
+           r"@[A-Za-z0-9_.]{1,30})")
+_FOR = r"(?P<for>\s+for\s+me)?"
+_END = r"(?:\s+(?:please|pls|now))*$"
+_R = lambda body: re.compile(r"^" + _ASK + body + _FOR + _END)  # noqa: E731
+_COLL = r"(?:\s+(?:called|named)\s+[\"“]?(?P<coll>[^\"”]{1,40}?)[\"”]?)?"
+# (verb, pattern) in order; a verb may have more than one shape
+IG_ACTS = (
+    ("like", _R(r"(?:like|heart|double[\s-]?tap)\s+" + _IG_POST + _IG_ON)),
+    ("comment", _R(r"(?:comment|leave\s+a\s+comment|write\s+a\s+comment)(?:\s+[\"“]?(?P<words>[^\"”]{1,60}?)[\"”]?)?"
+                   r"\s+(?:on|under)\s+" + _IG_POST + _IG_ON)),
+    ("reply", _R(r"reply\s+(?:to\s+)?(?:the\s+)?comments?\s+(?:on|under)\s+" + _IG_POST + _IG_ON)),
+    ("share", _R(r"(?:share|post|put|add)\s+" + _IG_POST + r"\s+(?:to|on|in)\s+my\s+(?:" + _IG + r"\s+)?story")),
+    ("repost", _R(r"(?:repost|re-post|reshare|re-share)\s+" + _IG_POST + _IG_ON)),
+    ("dm", _R(r"(?:dm|message|send\s+a\s+(?:dm|message)\s+to)\s+" + _IG_WHO + _IG_ON)),
+    ("dm", _R(r"(?:dm|send|forward)\s+" + _IG_POST + r"\s+to\s+(?P<who>@[A-Za-z0-9_.]{1,30})" + _IG_ON)),
+    ("follow", _R(r"follow\s+" + _IG_WHO + r"(?:\s+back)?" + _IG_ON)),
+    ("block", _R(r"(?P<v>block|restrict|report)\s+" + _IG_WHO + _IG_ON)),
+    ("remove_follower", _R(r"remove\s+(?:a|one|that|this|the|my)?\s*followers?" + _IG_ON)),
+    ("remove_follower", _R(r"remove\s+" + _IG_WHO + r"\s+(?:as\s+a|from\s+my)\s+followers?" + _IG_ON)),
+    ("save", _R(r"(?:save|add|put|move)\s+" + _IG_POST + r"\s+(?:to|in|into)\s+(?:my\s+|a\s+|the\s+)?(?:(?:" + _IG +
+                r")\s+)?(?:saved\s+)?collection" + _COLL + _IG_ON)),
+    ("save", _R(r"(?:save|add|put|move)\s+" + _IG_POST + r"\s+(?:to|in|into)\s+my\s+[\"“]?(?P<coll>[\w' -]{1,40}?)[\"”]?"
+                r"\s+collection(?P<ig>\s+on\s+" + _IG + r")")),
+    ("post", _R(r"post\s+(?:" + _IG_POST + r"|something|a\s+(?:reel|story|photo|pic))(?P<ig>\s+(?:on|to)\s+(?:my\s+)?"
+                + _IG + r")")),
+    ("delete", _R(r"delete\s+(?:my|a|that|this|the)\s+(?:(?:" + _IG + r")\s+)?post(?P<ig>\s+(?:on|from)\s+(?:my\s+)?" +
+                  _IG + r")")),
+)
+# ---------- end the live check of 19 Nov ----------
 OTHER_MUSIC = re.compile(r"\b(?:spotify|apple\s+music|soundcloud|tidal|deezer|amazon\s+music|pandora)\b")
 REST_STOP = re.compile(r"^(?:please\s+)?(?:stop|stop\s+it|don'?t|do\s+not|stop\s+(?:that|unsubscribing|"
                        r"subscribing))$")
@@ -407,6 +447,9 @@ def youtube_reads(bot, person, text, now):
             return _unsub_that(bot, person, now)
         said = bool(m.group("yt") or m.group("on")) or bool(re.search(r"\b(?:channel|youtuber)\b", m.group("name")))
         return _unsub_name(bot, person, re.sub(r"\s+(?:channel|youtuber)$", "", m.group("name")), said, text, now)
+    ref = ig_act_reads(bot, person, t, now)   # the live check of 19 Nov (F4 to F6)
+    if ref is not None:
+        return ref
     m = IG_CANT.match(t)   # checks of round 10 (reading)
     if m:
         return _ig_cant(bot, person, m)
@@ -431,7 +474,7 @@ def _connect(bot, person, now):
     try:
         got = yt_auth.start(bot.store, h, now)
     except YtError as e:
-        line = {"not_set_up": T.YT_NOT_SET_UP, "no_key": T.YT_NO_KEY}.get(e.code, T.YT_CONNECT_FAILED)
+        line = {"not_set_up": _not_set_up(bot, h), "no_key": T.YT_NO_KEY}.get(e.code, T.YT_CONNECT_FAILED)
         return bot.send(h, line)
     return bot.send(h, T.yt_connect_link(got["user_code"], got["minutes"]))
 
@@ -515,8 +558,16 @@ def _blocked(bot, h, what="unsubscribe"):
     if why is None:
         return None
     if why == "unreachable":
-        return T.YT_NOT_SET_UP
+        return _not_set_up(bot, h)
     return T.YT_NOT_CONNECTED if what == "unsubscribe" else T.YT_NOT_CONNECTED_PLAYLIST
+
+
+def _not_set_up(bot, h):
+    """The live check of 19 Nov (F10): no Google client on this bot. The person who runs it is told how to set it up
+    (on the test page: the Connections panel); a tester gets the plain line."""
+    from . import config
+    page = getattr(getattr(bot, "channel", None), "name", "") == "web"
+    return T.yt_not_set_up(operator=config.is_operator(h), page=page)
 
 
 def _fail_line(bot, h, code, now):
@@ -724,6 +775,11 @@ def youtube_answer(bot, person, text, now):
     st = _open(bot, f"igtap:{h}", now)
     if st:
         ref = _ig_answer(bot, person, st, t, now)
+        if ref is not None:
+            return ref
+    st = _open(bot, f"igsave:{h}", now)   # the live check of 19 Nov (F6)
+    if st:
+        ref = _ig_save_answer(bot, person, st, t, now)
         if ref is not None:
             return ref
     st = _open(bot, f"ytask:{h}", now)
@@ -1035,6 +1091,92 @@ def _ig_cant(bot, person, m):
     if which:
         return bot.send(h, T.ig_cant(verb, what, None, which=True))
     return bot.send(h, T.ig_cant(verb, what, link))
+
+
+# ---------- the live check of 19 Nov (DESIGN.md section 17.L, F4 to F6) ----------
+def ig_act_reads(bot, person, t, now):
+    """F4 to F6: an action on Instagram asked of the bot. The plain line, with the pick's own link (or the account's
+    profile) when one is in view; with two Instagram picks and no number, which one. Never a write, a list or a
+    feedback row. None when the words are none of these, or point at a YouTube pick with no Instagram word."""
+    h = person["handle"]
+    for verb, rx in IG_ACTS:
+        m = rx.match(t)
+        if not m:
+            continue
+        ig_said = bool(m.groupdict().get("ig")) or bool(re.search(r"\b" + _IG + r"\b", t))
+        if verb == "like" and not (m.group("ask") or m.group("for") or ig_said):
+            return None   # "like that reel" alone may be what they think of it: the usual path reads it
+        if verb == "like" and re.fullmatch(r"(?:would|will)\s+(?:you|u)\s+", m.group("ask") or "") and \
+                not (m.group("for") or ig_said):
+            return None   # "would you like it": a question about taste, not a request to tap the heart
+        if verb == "comment" and not (m.groupdict().get("words") or m.group("for") or ig_said or
+                                      re.match(r"(?:leave|write)\s", t[len(m.group("ask") or ""):])):
+            return None   # "comment on this" may ask what the bot thinks: only words to post, "for me" or Instagram
+        picks = in_view(bot, person)
+        who, obj = m.groupdict().get("who"), m.groupdict().get("obj")
+        handle = it = None
+        which = False
+        if who and who.startswith("@"):
+            handle = L.instagram_handle(who)
+        elif who:
+            named = list(dict.fromkeys(p.creator for p in picks if p.creator and p.platform == "instagram"))
+            if len(named) == 1:
+                handle = L.instagram_handle(named[0])
+            elif not ig_said and any(p.platform != "instagram" for p in picks):
+                return None   # "follow them" with a YouTube pick in view: not about Instagram
+        if obj and picks:
+            numbered = re.match(r"^(?:the\s+(?:first|second|third|1st|2nd|3rd)|number\s+\d|#\s*\d)", obj)
+            if numbered:
+                sel = _select(picks, obj)
+                it = sel[0] if sel else None
+            else:
+                ig = [p for p in picks if p.platform == "instagram" and p.url]
+                if len(picks) == 1:
+                    it = picks[0]
+                elif len(ig) == 1:
+                    it = ig[0]
+                elif len(ig) > 1:
+                    which = True
+            if it is not None and it.platform != "instagram":
+                if not ig_said:
+                    return None   # a YouTube video with no Instagram word: not this read's
+                it = None
+        profile = verb in ("follow", "block") or (verb == "dm" and not obj)
+        link = L.instagram_profile(handle) if profile and handle else (it.url if it is not None else None)
+        v = m.groupdict().get("v") or verb
+        coll = m.groupdict().get("coll")
+        bot.note(intent="instagram_link")
+        line = T.ig_act(v, link=link, handle=handle if profile else None, which=which, collection=coll)
+        if verb == "save" and coll and not which:
+            line += _save_instead(bot, person, it, picks, coll, now)
+        return bot.send(h, line)
+    return None
+
+
+def _save_instead(bot, person, it, picks, coll, now):
+    """F6: what the bot can do instead of an Instagram collection: its own list of that name (after a yes), or a
+    private YouTube playlist when the pick is a YouTube video and YouTube is connected."""
+    from .schema import list_name
+    h = person["handle"]
+    target = it if it is not None else (picks[0] if len(picks) == 1 else None)
+    if target is None:
+        return ""
+    n = next((i for i, p in enumerate(picks, 1) if p.id == target.id), None)
+    name = " ".join(w[:1].upper() + w[1:] for w in coll.split())[:40]
+    bot.store.set_state(f"igsave:{h}", {"at": now_iso(now), "n": n, "list": list_name(coll)})
+    playlist = target.platform == "youtube" and C.unavailable(bot.store, h, "youtube") is None
+    return T.ig_save_instead(name, playlist=playlist)
+
+
+def _ig_save_answer(bot, person, st, t, now):
+    """F6: "yes" to keeping the pick on the bot's own list instead of an Instagram collection."""
+    if not (T.YES.match(t) or re.match(r"^(?:yes[\s,]+)?(?:please|do\s+it|keep\s+it|add\s+it)$", t)):
+        return None
+    if not st.get("n"):
+        return None
+    bot.note(intent="todo_add")
+    return bot._add_picks(person, [st["n"]], st["list"], "pick")
+# ---------- end the live check of 19 Nov ----------
 
 
 def _unfollow(bot, person, verb, who, app, text, now):

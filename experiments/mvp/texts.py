@@ -2670,8 +2670,12 @@ def doit_next(n, text):
     return f"One at a time: next is \"{text}\". Say \"do {n} for me\" when you're ready."
 
 
-def app_cant_connect(app):
-    return f"I can't connect to {app} yet. Say \"what are you connected to\" to see what I can reach."
+def app_cant_connect(app, names=None):
+    # the live check of 19 Nov (F8): then the menu's short form (`names`, built by places.menu_short from the registry)
+    if names:
+        joined = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+        return f"I can't connect to {app} yet. I can reach {joined}; say \"what can I connect\" for how."
+    return f"I can't connect to {app} yet. Say \"what can I connect\" to see what I can."
 
 
 def app_not_connected(app):
@@ -3626,3 +3630,230 @@ def browser_setting(mode, everyone, sites, practice=(), chat=False):
         "none yet (MVP_BROWSER_MERCHANTS names them)"
     return f"Browser for cancelling: on, {where}, for {who}. Sites: {names}."
 # ---------- end second merge of round 10 ----------
+# ---------- the live check of 19 Nov (DESIGN.md section 17.L): F1 to F11 ----------
+# F1: a bare "I'm in" never changes the time zone
+SIGNED_IN_NOTHING = "Nothing is waiting for you to sign in right now, so I didn't change anything."
+
+
+def signed_in_app_wait(app):
+    """F1: "I'm in" while an app's own sign-in page is open (Todoist): the app tells the bot itself."""
+    return f"Thanks. {app} tells me itself once you press Allow on its page; I'll say here when it's connected."
+
+
+# F2: "what did you do for me" after the browser pressed the last button: what happened there, in the page's words
+def receipt_browser(name, button, quote, when, status, practice=False):
+    site = f"{name}'s cancel page" + (" (a practice site)" if practice else "")
+    head = f"pressed \"{button}\" on {site} {when}, after your \"yes cancel {name.lower()}\""
+    if status == "page_says_cancelled" and quote:
+        return f"{head}. The page then said: \"{quote}\""
+    if status == "offer_taken":
+        return f"{head}. The page then said your plan goes on (an offer, a pause or a change of plan)"
+    return f"{head}. The page didn't say it had ended"
+
+
+# F3: with the browser on, why it can't do this merchant, in plain words (browser off: today's line, byte-equal)
+def browser_not_for(name, kind, operator=False):
+    """kind "switch": the site has a browser path that was never tried on the real site, so it is not switched on;
+    kind "unchecked": the site has no checked browser path at all."""
+    if kind == "switch":
+        who = (" You can switch it on: the README's round 10 settings name the setting." if operator else
+               " The person who runs me can switch it on.")
+        return (f"the browser is on, but {name} isn't switched on for it, because I've never tried its cancel path on "
+                f"the real site.{who}")
+    return f"I only press buttons on sites whose cancel path I've checked, and {name}'s isn't one of them yet."
+
+
+def cancel_web_why(name, why):
+    """The first line of the steps when the browser is on but not for this merchant (F3)."""
+    sep = " yet: " if why.startswith("the browser is on") else ": "
+    return f"{name} cancels on its website. I can't do it for you{sep}{why} Here's where it is:"
+
+
+def cancel_doit_why(name, why):
+    """F3: "do it for me" after the steps, with the browser on but not for this merchant."""
+    sep = " yet: " if why.startswith("the browser is on") else ": "
+    return (f"I can't cancel {name} for you{sep}{why} The steps above are how to do it yourself. Want a reminder to "
+            f"check it went through? Tell me when, like \"friday\".")
+
+
+# F4 to F6: actions on Instagram asked of the bot (no app may do them for a personal account)
+_IG_ACT_WORDS = {"like": "like a post", "comment": "comment", "reply": "reply to a comment",
+                 "share": "share to your story", "repost": "repost", "dm": "send a message", "follow": "follow an account",
+                 "block": "block an account", "restrict": "restrict an account", "report": "report an account",
+                 "remove_follower": "remove a follower", "save": "save to a collection", "post": "post",
+                 "delete": "delete a post"}
+_IG_ACT_TAP = {"like": "tap the heart", "comment": "tap the speech bubble and write it there",
+               "reply": "tap the speech bubble and reply there", "share": "tap the paper plane, then Add to story",
+               "repost": "tap the repost arrows", "dm": "tap the paper plane and pick who gets it",
+               "save": "hold the bookmark and pick the collection"}
+_IG_ACT_PROFILE = {"follow": "Follow", "dm": "Message", "block": "⋯ › Block", "restrict": "⋯ › Restrict",
+                   "report": "⋯ › Report"}
+_IG_ACT_HOW = {"like": "open the post and tap the heart", "comment": "open the post and tap the speech bubble",
+               "reply": "open the post and tap the speech bubble", "share": "open the post, tap the paper plane, then "
+               "Add to story", "repost": "open the post and tap the repost arrows",
+               "dm": "open the profile and tap Message", "follow": "open their profile and tap Follow",
+               "block": "open their profile, tap ⋯, then Block", "restrict": "open their profile, tap ⋯, then Restrict",
+               "report": "open their profile, tap ⋯, then Report",
+               "remove_follower": "open your profile, tap Followers, then Remove next to their name",
+               "save": "open the post, hold the bookmark and pick the collection", "post": "tap + at the bottom",
+               "delete": "open your profile, tap the post, then ⋯ › Delete"}
+
+
+def ig_act(verb, link=None, handle=None, which=False, collection=None):
+    """The plain line for an Instagram action asked of the bot, with the post's own link (or the account's) when
+    one is in view. Nothing is done, opened, added to a list or learned."""
+    head = f"Instagram doesn't let any app {_IG_ACT_WORDS[verb]} for you, and I won't sign in as you."
+    if which:
+        return head + " Which post? Say its number, or open it and do it yourself."
+    tap = _IG_ACT_TAP.get(verb)
+    if verb == "save" and collection and tap:
+        tap = f"hold the bookmark and pick \"{collection}\""
+    if handle and link and verb in _IG_ACT_PROFILE:
+        return f"{head} Tap to open @{handle}, then {_IG_ACT_PROFILE[verb]}: {link}"
+    if link and tap:
+        return f"{head} Tap to open it, then {tap}: {link}"
+    return f"{head} You can do it yourself in the Instagram app: {_IG_ACT_HOW[verb]}."
+
+
+def ig_save_instead(name, playlist=False):
+    """F6: what the bot can do instead of an Instagram collection (its own list; a private YouTube playlist)."""
+    out = f"\nI can keep it on my own list called \"{name}\" here instead: reply \"yes\"."
+    if playlist:
+        out += f" Or say \"add it to my {name.lower()} playlist\" for a private YouTube playlist."
+    return out
+
+
+# F7, F8: the connector menu, read by code from connectors.CONNECTORS, the places code and settings.switches()
+MENU_HEAD = "Here's what I can connect to, and how:"
+MENU_LIST = "• Your list here: always on."
+MENU_CALENDAR = "• Calendar: a link you tap, no sign-in. Always on."
+MENU_STATE = {None: "connected", "not_connected": "not connected yet", "off": "turned off",
+              "broken": "stopped after 3 failures in a row", "unreachable": "not set up yet",
+              "needs_signin": "needs you to sign in again", "changed": "stopped, because it changed how adding works"}
+MENU_INSTAGRAM = ("• Instagram: no app may act on a personal account, so I never sign in there. I read the export you "
+                  "send me, and give you one-tap links for what only you can do (say \"connect my instagram\" for how "
+                  "the export reaches me).")
+
+
+def menu_email_self(state):
+    return {"on": "• Email to you: on.", "code": "• Email to you: waiting for the 6-digit code I sent you.",
+            "none": "• Email to you: not set up yet (tell me your email address).",
+            "outbox": "• Email to you: not connected here, so emails wait in my outbox.",
+            "link": "• Email to you: a link that opens an email to yourself."}[state]
+
+
+def menu_email_others(state, page=False):
+    if state == "mailbox":
+        return ("• Email to other people: a draft I show you first; I send it from your mailbox only after you reply "
+                "\"send\".")
+    if state == "operator":
+        where = "the Connections panel beside this chat" if page else "my settings (the README's part on the operator's own mailbox)"
+        return ("• Email to other people: a draft you send from your mail app. To have me send it after you reply "
+                f"\"send\", add your mailbox in {where}.")
+    return "• Email to other people: a draft you send from your mail app."
+
+
+def menu_line(name, state, words=None):
+    tail = f" (say \"{words}\")" if words else ""
+    return f"• {name}: {state}{tail}."
+
+
+def yt_setup_how(page=False):
+    """F10: how the person who runs the bot sets YouTube up (no value, only where it goes)."""
+    where = ("the Connections panel beside this chat" if page else
+             "MVP_YT_CLIENT_ID and MVP_YT_CLIENT_SECRET on the computer I run on (the README's round 10 settings)")
+    return ("In a Google Cloud project, make an OAuth client of the type \"TVs and Limited Input devices\", put its "
+            f"client id and secret in {where}, then say \"connect youtube\".")
+
+
+def yt_not_set_up(operator=False, page=False):
+    """F10: YouTube with no Google client set: the person who runs the bot is told how; a tester gets the plain line."""
+    if not operator:
+        return YT_NOT_SET_UP
+    return f"YouTube isn't set up on this bot yet. {yt_setup_how(page)} Meanwhile your channels are here: {YT_FEED}"
+
+
+def menu_browser(mode_on, words=None):
+    if words:
+        return "• " + words
+    if mode_on:
+        return "• Browser for cancelling: only for the person who runs me; I give you the steps (say \"cancel my netflix\")."
+    return "• Browser for cancelling: off on this bot; I give you the steps (say \"cancel my netflix\")."
+
+
+def menu_browser_off_operator():
+    return "• Browser for cancelling: off (the README's round 10 settings say how to turn it on)."
+
+
+def menu_operator_only(names):
+    if not names:
+        return ""
+    joined = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    return f"Only the person who runs me can set up {joined}."
+
+
+MENU_TAIL = "Say \"what are you connected to\" to see what's on right now."
+
+
+def connected_not_yet(lines):
+    """F7: the end of "what are you connected to": what isn't connected yet, with the words."""
+    return "\n".join(["Not connected yet:"] + lines) if lines else ""
+
+
+def connect_merchant(name, browser_line=None, practice=False):
+    """F8: "connect netflix": nothing to connect for a merchant the cancel helper knows."""
+    out = f"There's nothing to connect for {name}. Say \"cancel my {name.lower()}\" when you want out, and I'll help."
+    if browser_line:
+        out += " " + browser_line
+    return out + (" " + BROWSER_PRACTICE if practice else "")
+
+
+def connect_instagram(link):
+    return ("Instagram doesn't let any app connect to a personal account, so there's nothing to connect, and I never "
+            f"sign in as you. I read your own export instead: ask Instagram for it at {link} and send me the zip "
+            "(say \"how do i send you my instagram export\" for the steps). For what only you can do there, I give you "
+            "one-tap links.")
+
+
+def connect_email(app, state, page=False):
+    """F8: "connect my gmail": what email does today, without signing in to the mail app."""
+    head = f"I don't sign in to {app}, but email works: I email you, and I write emails to other people as a draft "
+    if state == "mailbox":
+        return head + "I show you first, and I send it from your mailbox only after you reply \"send\"."
+    if state == "operator":
+        where = "the Connections panel beside this chat" if page else "my settings (the README's part on the operator's own mailbox)"
+        return (head + f"you send from your mail app. To have me send them from your {app} after you reply \"send\", "
+                f"add your address and its app password in {where}.")
+    return head + "you send from your mail app."
+
+
+def connect_other(app, names=None):
+    return app_cant_connect(app, names)
+
+
+# F9: two or more things to cancel in one message: the first is handled, the rest are said, never dropped
+def cancel_next(names, words):
+    if len(names) == 1:
+        return f"You also asked to cancel {names[0]}. When this one is done, say \"{words[0]}\"."
+    joined = ", ".join(names[:-1]) + " and " + names[-1]
+    said = ", then ".join(f"\"{w}\"" for w in words)
+    return f"You also asked to cancel {joined}. One at a time: when this one is done, say {said}."
+
+
+# F11: the help says the apps, truthful to this run's switches (a browser line only when the browser is on)
+def help_apps(youtube=False):
+    """F11: one line on the apps, truthful to this run (YouTube only when it is set up on this bot)."""
+    yt = "; YouTube: \"connect youtube\"" if youtube else ""
+    return f"Apps: \"what can I connect\" shows what I can reach here and how to connect each{yt}."
+
+
+def help_browser(sites):
+    """F11: the browser line, only when the browser is on for this person (sites as the setting names them)."""
+    return f"Cancelling for you: I can do it in a browser on {', '.join(sites)}; say \"cancel my {sites[0]}\"."
+
+
+def help_full(build, youtube=False, sites=None):
+    """The help reply with the apps line (and the browser line when it is on), then the build."""
+    lines = [HELP, help_apps(youtube)] + ([help_browser(sites)] if sites else []) + [build_line(build)]
+    return "\n".join(lines)
+# ---------- end the live check of 19 Nov ----------

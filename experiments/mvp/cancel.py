@@ -266,6 +266,62 @@ def request(text, rules=(), forced=False, routes=None):
     return {"kind": "which"}
 
 
+# ---------- the live check of 19 Nov (DESIGN.md section 17.L, F9): two or more things to cancel in one message ------
+_LIST_SPLIT = re.compile(r"\s*,\s*(?:and\s+|&\s+)?|\s+and\s+(?:also\s+)?|\s*&\s*|\s+plus\s+|\s+as\s+well\s+as\s+",
+                         re.I)
+
+
+def _thing(chunk, routes):
+    """(key, name said back, the words that start it) for one thing to cancel in a list, by code; None when the words
+    are not a thing to cancel (then the list is not read at all)."""
+    c = re.sub(r"\s+(?:please|pls|for me|too|as well|now)$", "", chunk.strip(" .!?"), flags=re.I)
+    bare = re.sub(r"^(?:my|the|our|also)\s+", "", c, flags=re.I)
+    e = merchant_in(c, routes)
+    if e is not None:
+        return e["key"], e["name"], f"cancel my {e['name'].lower()}"
+    if GYM_SAID.search(c) or re.match(r"^(?:the\s+)?gym\b", bare, re.I):
+        return "gym", "your gym membership", "cancel my gym membership"
+    if len(bare.split()) > 3 or NOT_CANCEL.search(bare) or CARD.search(c) or FROM_SAVED.search(c):
+        return None
+    # a name the file does not know is a plain word or two ("brightbox", "my brightbox subscription"), never a clause
+    named = re.sub(r"\s+(?:subscriptions?|memberships?|free trial|trial|account|plan)$", "", bare, flags=re.I)
+    if not re.fullmatch(r"[A-Za-z][A-Za-z&+'-]*(?:\s+[A-Za-z][A-Za-z&+'-]*)?", named) or \
+            re.search(r"\b(?:is|are|was|were|be|link|it|that|this|them|me|you|i|when|if|then|so|but)\b", named, re.I):
+        return None
+    name = unknown_name(f"cancel my {bare}") or _clean_name(bare)
+    if not name or CHANNEL_NAME.fullmatch(name) or GYM_WORDS.match(name):
+        return None
+    return name.lower(), name, f"cancel my {name.lower()}"
+
+
+def more_to_cancel(text, req, routes=None):
+    """F9: "cancel my spotify and my gym membership": (the request for the first thing named, [the others' names],
+    [the words that start each]) when the message lists two or more things to cancel; None otherwise (one thing, or
+    words that are not a list of things). Names come from the message by code, never a model."""
+    m = CANCEL_VERB.search(text or "")
+    if not m or req is None or req["kind"] in ("card", "from_ad"):
+        return None
+    chunks = [c for c in _LIST_SPLIT.split(text[m.end():]) if c.strip(" .!?")]
+    if len(chunks) < 2:
+        return None
+    routes = routes or load_routes()
+    things = [_thing(c, routes) for c in chunks]
+    if any(x is None for x in things):
+        return None
+    first_key, _, _ = things[0]
+    e = next((x for x in routes["merchants"] if x.get("key") == first_key), None)
+    first = {"kind": "merchant", "entry": e} if e is not None else {"kind": "gym"} if first_key == "gym" else \
+        {"kind": "unknown", "name": things[0][1]}
+    seen, names, words = {first_key}, [], []
+    for key, name, word in things[1:]:
+        if key not in seen:
+            seen.add(key)
+            names.append(name)
+            words.append(word)
+    return (first, names, words) if names else None
+# ---------- end the live check of 19 Nov ----------
+
+
 def password_said(text):
     """True for a message that hands over a password or asks the bot to sign in as the person."""
     return bool(PASSWORD.search(" ".join((text or "").split())))
@@ -452,7 +508,13 @@ class CancelMixin:
             return None                                                 # go to the split (hook 8z), each on its own
         if req is None:
             return None
-        return self._cancel_start(person, req, t, now)
+        more = more_to_cancel(t, req, practice_routes())   # the live check of 19 Nov (F9): never drop one silently
+        if more is None:
+            return self._cancel_start(person, req, t, now)
+        first, names, words = more
+        ref = self._cancel_start(person, first, t, now)
+        self.send(h, T.cancel_next(names, words))
+        return ref
 
     def secret_reads(self, person, text, now):
         """Round 9 (W6 and E): a password handed over or a request to sign in as the person (W6's line), and a key,
@@ -537,6 +599,10 @@ class CancelMixin:
             lines = T.cancel_web(e["name"], steps, checked_words(e["checked_on"]))
             if getattr(self._tl, "browser_steps", False):   # round 10, slice V: "steps" after the browser offer
                 lines[0] = T.browser_steps_head(e["name"])
+            elif not pre:   # the live check of 19 Nov (F3): the browser is on, but not for this merchant: why
+                why = self.browser_not_for(person, e)
+                if why:
+                    lines[0] = T.cancel_web_why(e["name"], why)
             if any(b != "web" for b in e.get("billed_via") or []):
                 lines.append(T.CANCEL_OTHER_BILLING)
             cid = self._cancel_row(h, e["key"], "web", "prepared", now)
@@ -609,7 +675,10 @@ class CancelMixin:
             if st.get("name") and not st.get("notice") and DOIT_AFTER_STEPS.match(t):
                 self._cancel_ask(h, "when", now, **{k: v for k, v in st.items() if k not in ("step", "at")})
                 self.note(intent="cancel")
-                return self.send(h, T.cancel_doit_cant(st["name"]))
+                # the live check of 19 Nov (F3): with the browser on but not for this merchant, the true reason
+                e = self._cancel_entry_of(st.get("key")) if st.get("key") else None
+                why = self.browser_not_for(person, e) if e else None
+                return self.send(h, T.cancel_doit_why(st["name"], why) if why else T.cancel_doit_cant(st["name"]))
             if STOP_ASKING.match(t):
                 self.note(intent="cancel")
                 return self.send(h, T.CANCEL_NO_REMINDER)

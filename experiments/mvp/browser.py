@@ -54,6 +54,11 @@ YES_CANCEL = re.compile(r"^\W*yes,?\s+cancel\s+(?:my\s+)?(.{2,40}?)(?:\s+now)?\W
 STATUS = re.compile(r"^\W*(?:what'?s happening|what is happening|what are you doing|status|where are you|"
                     r"how'?s it going|what now)\W*$", re.I)
 REVOKE = re.compile(r"^\W*(?:please\s+)?stop acting on\s+(?:my\s+)?(.{2,40}?)\W*$", re.I)
+# the live check of 19 Nov (DESIGN.md section 17.L, F1): a bare "I'm in" with no place name, read whatever the run's
+# step; it never reaches the model, which read it as a move to New York time
+SIGNED_IN = re.compile(r"^\W*(?:(?:ok(?:ay)?|yes|yep|right|so|alright|done)[\s,!.]+)?(?:(?:i'?m|im|i am)\s+(?:in|"
+                       r"signed\s+in|logged\s+in)|(?:signed|logged)\s+in|i'?ve\s+(?:signed|logged)\s+in|"
+                       r"i\s+(?:signed|logged)\s+in)(?:\s+now)?\W*$", re.I)
 NOT_TAKEN = re.compile(r"\d|\b(?:rules?|reminders?|nudges?|lists?|to-?dos?|digest|recap|texts?|messages?|picks?)\b",
                        re.I)
 
@@ -371,6 +376,24 @@ class BrowserMixin:
             return T.BROWSER_NO_SCREEN + "\n"
         return ""
 
+    def browser_not_for(self, person, e):
+        """The live check of 19 Nov (F3): with the browser on for this person but not for this merchant, why, in plain
+        words ("switch": its path was never tried on the real site, so it is not switched on; "unchecked": it has no
+        checked path). None otherwise: the browser off, someone it is not for, or a merchant it can do (today's
+        lines, byte-equal)."""
+        try:
+            if mode() == "off" or not person_ok(person["handle"]):
+                return None
+            why = why_not(self, person, e["key"])
+            if why not in ("merchant", "route"):
+                return None
+            r = route(e["key"])
+            kind = "switch" if why == "merchant" and _complete(r) and not is_denied(r) else "unchecked"
+        except Exception:  # noqa: BLE001 - the steps never break on the browser
+            return None
+        from . import config
+        return T.browser_not_for(e["name"], kind, operator=config.is_operator(person["handle"]))
+
     def browser_password(self, person, text):
         """The password line where the browser is on for this person and the merchant they name; it opens the offer,
         so "do it for me" goes on from there. None for everyone else (today's line)."""
@@ -399,16 +422,19 @@ class BrowserMixin:
                 return ref
         st = self.store.get_state(f"browserrun:{h}")
         if not st:
-            return None
+            return self._signed_in_nothing(person, t, now)   # the live check of 19 Nov (F1)
         if datetime.fromisoformat(st["started"]) < now - timedelta(minutes=RUN_MINUTES):
             self._browser_close(h, st, "limit", now, say=None)
-            return None
+            return self._signed_in_nothing(person, t, now)
         step = st["step"]
         r = route(st["key"])
         if r is None:
             self._browser_state(h, None)
-            return None
+            return self._signed_in_nothing(person, t, now)
         if step in NEXT_ONLY:
+            if SIGNED_IN.match(t):   # F1: nothing is open to sign in to yet (or any more); the question stays
+                self.note(intent="browser")
+                return self.send(h, T.SIGNED_IN_NOTHING)
             return self._browser_next(person, st, r, t, now)
         if STOP.match(t) and not NOT_TAKEN.search(t):
             return self._browser_stop(person, st, now)
@@ -437,10 +463,38 @@ class BrowserMixin:
             if m or DO_IT.match(t) or t in ("👍",):
                 self.note(intent="browser")
                 return self.send(h, T.browser_plain_yes(yes_word(r)))
+            if SIGNED_IN.match(t):   # the live check of 19 Nov (F1): the last step again, word for word
+                self.note(intent="browser")
+                return self.send(h, final_card(r, {"name": st.get("final_name") or "", "quote": st.get("final_quote")}))
             return None
         if step == "handed_back":
+            if SIGNED_IN.match(t):   # F1: the browser is the person's; never the model
+                self.note(intent="browser")
+                return self.send(h, T.browser_status("handed_back", r["name"], yes_word(r)))
             return None
         return None
+
+    def _signed_in_nothing(self, person, t, now):
+        """The live check of 19 Nov (F1): "I'm in", "ok im signed in", "logged in" with no browser run that takes it:
+        one plain line, never a time zone. While a YouTube code or an app's sign-in page waits, that one answers."""
+        if not SIGNED_IN.match(t):
+            return None
+        h = person["handle"]
+        from . import yt_auth
+        if yt_auth.waiting(self.store, h, now):
+            from . import ytreads
+            self.note(intent="youtube")
+            return ytreads._poll_now(self, person, now)
+        waiting = self.store.get_state(f"oauthpending:{h}")
+        if waiting:
+            from . import oauth
+            from .connectors import CONNECTORS
+            con = CONNECTORS.get(waiting.get("connector") or "")
+            if con is not None and oauth.pending(h):
+                self.note(intent="places")
+                return self.send(h, T.signed_in_app_wait(con.apps.get("todo") or con.name))
+        self.note(intent="signed_in")
+        return self.send(h, T.SIGNED_IN_NOTHING)
 
     def _browser_next(self, person, st, r, t, now):
         """The next message after the offer, the permission question or the reminder offer."""
@@ -610,7 +664,8 @@ class BrowserMixin:
             self.store.log_action(h, None, None, "browser.final_shown", "done", detail={"hash": found["hash"][:12]},
                                   at=now)
             self._browser_state(h, dict(st, step="final_shown", at=_iso(now), yes_hash=found["hash"],
-                                        final_name=found["name"], final_tag=found["tag"]))
+                                        final_name=found["name"], final_tag=found["tag"],
+                                        final_quote=found.get("quote") or ""))   # F1: the card said again
             self._browser_timer(h, st["run_id"], YES_MINUTES * 60, "no_answer")
             return self.send(h, final_card(r, found))
         if status in ("login_wall", "captcha", "otp"):
@@ -706,7 +761,7 @@ class BrowserMixin:
             return self.send(h, self._browser_steps_text(r, now, head=T.browser_changed_gone(r["name"])))
         self.store.update_browser_run(st["run_id"], final_hash=found["hash"], final_name=found["name"][:80])
         self._browser_state(h, dict(st, at=_iso(now), yes_hash=found["hash"], final_name=found["name"],
-                                    final_tag=found["tag"]))
+                                    final_tag=found["tag"], final_quote=found.get("quote") or ""))
         return self.send(h, T.browser_changed(r["name"], found.get("quote") or "", found["name"], yes_word(r)))
 
     def _browser_outcome(self, h, st, r, got, now):

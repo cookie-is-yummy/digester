@@ -36,6 +36,13 @@ CHANGES = {"shorter": "make it shorter", "longer": "make it longer", "more_forma
            "less_formal": "make it less formal", "friendlier": "make it friendlier"}
 LANGS = {"english", "spanish", "french", "german", "italian", "portuguese"}
 ACTS = {"apply": "apply to", "book": "book", "buy": "buy", "tickets": "get me tickets for", "sign_up": "sign me up for"}
+# the live check of 19 Nov (F5): the words of each act, in English and Spanish, accents folded (the message must say one)
+ACT_SAID = {"apply": re.compile(r"\b(?:appl|application|sign|regist|enrol|inscri|solicit|postul)", re.I),
+            "sign_up": re.compile(r"\b(?:sign|regist|enrol|inscri|appl|apunt)", re.I),
+            "book": re.compile(r"\b(?:book|reserv|table|mesa|cita|ticket)", re.I),
+            "tickets": re.compile(r"\b(?:ticket|entrada|boleto)", re.I),
+            "buy": re.compile(r"\b(?:buy|bought|order|purchas|shop|grocer|ingredient|get\s+me\s+the|compr|ped[ií]|pide)",
+                              re.I)}
 APP_OPS = {"connect": "connect my {app}", "check": "check my {app}", "disconnect": "disconnect my {app}"}
 _PROMPT = {}
 # the person's role words in Spanish, said back in English ("your boss's email address"); any other word as written
@@ -236,6 +243,10 @@ def built(bot, person, form, text, state, now):
     if name == "post_act":
         act = ACTS.get(form.get("act"))
         if not act or not n_ans:
+            return None
+        # the live check of 19 Nov (DESIGN.md section 17.L, F5): "comment nice on that reel" came back as a buy and
+        # put a recipe's ingredients on the shopping list; an act is used only when the message says its word
+        if not ACT_SAID[form.get("act")].search(_fold(text)):
             return None
         pick = _num(form.get("pick"), 1, n_ans)
         if pick and said_number(pick, text):

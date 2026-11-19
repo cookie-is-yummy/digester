@@ -454,20 +454,40 @@ HOOK_ORDER = {
                         "it = chat_guard(it, text)",
                         "screened = self.screen_guard(person, it, text, now)",      # then the errand form (W)
                         "if screened is not None:"],
+    # the live check of 19 Nov (DESIGN.md section 17.L): the new reads inside the hooks of their kind, in order
+    "browser.py:browser_reads": ["m = REVOKE.match(t)",
+                                 "return self._signed_in_nothing(person, t, now)   # the live check of 19 Nov (F1)",
+                                 "if step in NEXT_ONLY:",
+                                 "if STOP.match(t) and not NOT_TAKEN.search(t):",
+                                 "if SIGNED_IN.match(t):   # the live check of 19 Nov (F1): the last step again"],
+    "ytreads.py:youtube_reads": ["m = REMOVE_SUB.match(t)",
+                                 "ref = ig_act_reads(bot, person, t, now)",          # F4 to F6, beside IG_CANT
+                                 "m = IG_CANT.match(t)",
+                                 "m = UNFOLLOW.match(t)"],
+    "places.py:place_reads": ["if MENU.match(t):",                                   # F7, before CONNECTED
+                              "for rx, fn in ((CONNECTED, _connected), (CONNECT, _connect)",
+                              "ref = token_reads(bot, person, text, t, now)",
+                              "ref = w_place_reads(bot, person, text, t, now)",
+                              "return connect_reads(bot, person, text, t, now)"],    # F8, last
+    "cancel.py:cancel_reads": ["req = request(t,", "more = more_to_cancel(t, req, practice_routes())",   # F9
+                               "return self._cancel_start(person, req, t, now)"],
 }
 
 
 def test_the_hooks_run_in_the_order_of_design_section_17():
-    src = open(os.path.join(os.path.dirname(HERE), "handler.py"), encoding="utf-8").read()
-    for fn, needles in HOOK_ORDER.items():
-        start = src.index(f"    def {fn}(")
-        end = src.index("\n    def ", start + 10)
+    for key, needles in HOOK_ORDER.items():
+        mod, fn = key.split(":") if ":" in key else ("handler.py", key)
+        src = open(os.path.join(os.path.dirname(HERE), mod), encoding="utf-8").read()
+        at_def = src.find(f"    def {fn}(")
+        start = at_def if at_def >= 0 else src.index(f"\ndef {fn}(")
+        end = min(i for i in (src.find("\n    def ", start + 10), src.find("\ndef ", start + 10), len(src)) if i > 0)
         body = src[start:end]
         at = []
         for n in needles:
-            assert body.count(n) == 1, (fn, n, body.count(n))
+            assert body.count(n) == 1, (key, n, body.count(n))
             at.append(body.index(n))
-        assert at == sorted(at), (fn, [n for _, n in sorted(zip(at, needles))])
+        assert at == sorted(at), (key, [n for _, n in sorted(zip(at, needles))])
+    src = open(os.path.join(os.path.dirname(HERE), "handler.py"), encoding="utf-8").read()
     # every read of hooks 5a to 8 is inside the loop over the message and its normalised form; 8z and the model after
     body = src[src.index("    def answer_normally("):]
     loop, after = body.index("for text in phrasing.variants(said):"), body.index("        text = said\n")

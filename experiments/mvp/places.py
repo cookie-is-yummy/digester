@@ -696,6 +696,9 @@ def place_reads(bot, person, text, now):
     t = _norm(text)
     if not t or len(t) > 80:
         return None
+    if MENU.match(t):   # the live check of 19 Nov (F7): the connector menu, before "what are you connected to"
+        bot.note(intent="places")
+        return bot.send(person["handle"], connector_menu(bot, person["handle"]))
     for rx, fn in ((CONNECTED, _connected), (CONNECT, _connect), (CHECK, _check), (DISCONNECT, _disconnect)):
         if rx.match(t):
             bot.note(intent="places")
@@ -708,7 +711,10 @@ def place_reads(bot, person, text, now):
     ref = token_reads(bot, person, text, t, now)
     if ref is not None:
         return ref
-    return w_place_reads(bot, person, text, t, now)   # round 10, slice W (W5)
+    ref = w_place_reads(bot, person, text, t, now)   # round 10, slice W (W5)
+    if ref is not None:
+        return ref
+    return connect_reads(bot, person, text, t, now)   # the live check of 19 Nov (F8): any other "connect X"
 
 
 # ---------- round 10, slice W (W5): connector questions in everyday shapes, and apps with no connector ----------
@@ -765,7 +771,11 @@ def w_place_reads(bot, person, text, t, now):
             app = m.group("app")
             if re.fullmatch(_W_TOK, app):
                 return fn(bot, person, _tok_key(app), now)
+            if rx is W_APP_CONNECT and EMAIL_APP.fullmatch(app):   # the live check of 19 Nov (F8)
+                return _connect_email(bot, person, app)
             p = _w_place(app)
+            if rx is W_APP_CONNECT:   # the live check of 19 Nov (F8): then the menu's short form
+                return bot.send(person["handle"], other(p.app if p else app, menu_short(bot, person["handle"])))
             return bot.send(person["handle"], other(p.app if p else app))
     m = W_APP_SEND.match(t)
     if m:
@@ -1001,8 +1011,9 @@ def _connected(bot, person, now):
     h = person["handle"]
     email, others = _email_lines(bot, h)
     extra = _yt_and_browser_lines(bot, h)   # second merge of round 10 (seam e): a tester too
+    tail = _not_yet(bot, h, extra)   # the live check of 19 Nov (F7): what isn't connected yet, with the words
     if not config.is_operator(h):
-        return bot.send(h, T.connected_lines(email, None, others) + extra + "\n" + T.MAC_ONLY_OPERATOR)
+        return bot.send(h, T.connected_lines(email, None, others) + extra + "\n" + T.MAC_ONLY_OPERATOR + tail)
     why = C.unavailable(bot.store, h, "mac")
     line = T.MAC_STATUS[why or "connected"]
     if not why and (bot.store.connection(h, "mac") or {}).get("last_error") == "no_calendar":
@@ -1016,7 +1027,7 @@ def _connected(bot, person, now):
     out += extra
     if why in (None, "broken"):
         out += "\n" + T.MAC_DISCONNECT_HINT
-    return bot.send(h, out)
+    return bot.send(h, out + _not_yet(bot, h, out))
 
 
 def _yt_and_browser_lines(bot, h):
@@ -1104,3 +1115,225 @@ def _pref(bot, person, kind, on):
         return bot.send(h, T.MAC_ONLY_OPERATOR + T.MAC_TESTER_INSTEAD)
     bot.store.set_prefs(h, **{key: "mac"})
     return bot.send(h, T.place_pref_set(kind, C.unavailable(bot.store, h, "mac") is None))
+
+
+# ---------- the live check of 19 Nov (DESIGN.md section 17.L, F7 and F8): the connector menu, read by code ----------
+# Built from connectors.CONNECTORS (every connector the build has, a new one included), the places and grants code
+# (connectors.unavailable: this person's state) and settings.switches() (the browser, sending). States only: never a
+# value, an address or a secret. A tester is told what they can connect themselves and, in one line, what only the
+# person who runs the bot can set up.
+_M_LEAD = r"^(?:(?:so|ok|okay|hey|and|um+|hmm+|pls|please)[\s,]+)?"
+_YOU = r"(?:you|u)"
+MENU = re.compile(
+    _M_LEAD + r"(?:"
+    r"what\s+(?:else\s+)?(?:can|could)\s+i\s+(?:connect|link|hook\s+up)(?:\s+" + _YOU + r")?(?:\s+(?:to|with))?"
+    r"(?:\s+(?:here|now))?"
+    r"|what\s+(?:else\s+)?(?:can|could|do)\s+" + _YOU + r"\s+(?:connect|link|integrate)\s+(?:to|with|into)"
+    r"|what\s+(?:else\s+)?(?:can|could)\s+" + _YOU + r"\s+(?:hook|plug)\s+(?:up\s+)?(?:to|into|in\s+to)"
+    r"|what\s+(?:connectors|integrations|connections|apps)\s+(?:do\s+" + _YOU + r"\s+(?:have|support|offer)|are\s+there|"
+    r"can\s+i\s+(?:use|add|connect|set\s+up)|can\s+" + _YOU + r"\s+(?:use|connect\s+(?:to|with)|reach|work\s+with))"
+    r"|(?:which|what)\s+(?:apps?|services|tools)\s+(?:do\s+" + _YOU + r"\s+(?:work|integrate|connect)\s+with|"
+    r"can\s+" + _YOU + r"\s+(?:use|work\s+with|connect\s+(?:to|with)|reach|talk\s+to)|do\s+" + _YOU + r"\s+support)"
+    r"|(?:show\s+me\s+|list\s+)?(?:the\s+|your\s+)?(?:connectors|integrations|connector\s+menu)(?:\s+(?:list|menu))?"
+    r"|connect|connections\s+menu"
+    r")$")
+EMAIL_APP = re.compile(r"(?:g-?mail|google\s+mail|outlook|hotmail|yahoo(?:\s+mail)?|icloud\s+mail|e-?mail|mail|inbox|"
+                       r"mailbox)")
+CONNECT_ANY = re.compile(_W_LEAD + r"(?:connect|link|hook\s+up|sync|integrate)\s+(?:to\s+|with\s+)?(?:my\s+|the\s+|a\s+)?"
+                         r"(?P<app>[a-z0-9][\w+.&'-]*(?:\s+[a-z0-9][\w+.&'-]*){0,2}?)(?:\s+(?:account|app))?"
+                         r"(?:\s+(?:to you|with you|for me|please|pls))?$")
+# never an app's name: what a library question or a game says after "connect" ("connect four strategy videos")
+_NOT_APP = re.compile(r"\b(?:videos?|reels?|posts?|recipes?|tutorials?|strateg\w*|tips|ideas?|games?|dots|people|"
+                      r"friends?|family|others|someone|anyone|everyone|me|you|it|this|that|them|these|those|with|and|"
+                      r"or|the|to|four|4|two|three|five|puzzle|world)\b")
+_INSTAGRAM = re.compile(r"(?:instagram|insta|ig)(?:\s+account)?")
+
+
+def _email_state(bot, h):
+    """(self, others): the states of email to the person and to other people, never an address."""
+    from .actions import email as E
+    from .actions.base import outbox_reachable
+    addr, ok = bot.store.email_of(h)
+    if E.smtp_settings():
+        own = "on" if addr and ok else "code" if addr else "none"
+    else:
+        own = "outbox" if outbox_reachable(bot) else "link"
+    from .settings import switches
+    others = "mailbox" if switches().get("sending") == "on" and bot._mailbox_route(h) else \
+        "operator" if config.is_operator(h) else "tester"
+    return own, others
+
+
+def _page(bot):
+    return getattr(getattr(bot, "channel", None), "name", "") == "web"
+
+
+_WORDS = {"mac": "my mac", "webhook": "my webhook"}
+_SHOWN = {"mac": "Reminders and Calendar on the Mac", "webhook": "a webhook"}
+
+
+def _connector_line(bot, h, key, con):
+    """One connector's line for this person: its state and the words that connect it (operator, or anyone for a
+    connector each person signs in to)."""
+    try:
+        why = C.unavailable(bot.store, h, key)
+    except Exception:  # noqa: BLE001 - a connector the build lists but cannot load is "not set up yet"
+        why = "unreachable"
+    word = _WORDS.get(key, key)
+    name = con.name[:1].upper() + con.name[1:]
+    if why is None:
+        return T.menu_line(name, "connected")
+    if con.kind == "oauth" and why == "unreachable":
+        if config.is_operator(h):
+            return T.menu_line(name, "not set up on this bot yet. " + T.yt_setup_how(_page(bot)).rstrip("."))
+        return T.menu_line(name, "not set up on this bot yet")
+    if key == "mac" and why == "unreachable":
+        return T.menu_line(name, T.MAC_STATUS["unreachable"])
+    if why in ("off", "broken"):
+        return T.menu_line(name, T.MENU_STATE[why], f"check my {word}" if con.kind != "oauth" else f"connect {word}")
+    if why == "changed":
+        return T.menu_line(name, T.MENU_STATE[why], f"yes {word}")
+    return T.menu_line(name, T.MENU_STATE.get(why, T.MENU_STATE["unreachable"]), f"connect {word}")
+
+
+def _browser_menu(bot, h):
+    from . import browser
+    from .panel import browser_words
+    from .settings import switches
+    on = switches().get("browser", "off") != "off"
+    if on and (config.is_operator(h) or browser.person_ok(h)):
+        words = browser_words(chat=True)
+        sites = sorted(browser.merchants())
+        return "• " + words + (f" Say \"cancel my {sites[0]}\"." if sites else "")
+    if not on and config.is_operator(h):
+        return T.menu_browser_off_operator()
+    return T.menu_browser(on)
+
+
+def connector_menu(bot, h):
+    """F7: every connector the build has, its state for this person and the exact words that connect it."""
+    own, others = _email_state(bot, h)
+    lines = [T.MENU_HEAD, T.MENU_LIST, T.menu_email_self(own), T.menu_email_others(others, _page(bot)), T.MENU_CALENDAR]
+    operator = config.is_operator(h)
+    only = []
+    for key, con in C.CONNECTORS.items():
+        if con.kind == "oauth" or operator:
+            lines.append(_connector_line(bot, h, key, con))
+        else:
+            only.append(_SHOWN.get(key, con.name))
+    try:
+        lines.append(_browser_menu(bot, h))
+    except Exception:  # noqa: BLE001 - the menu never breaks on the browser
+        pass
+    lines.append(T.MENU_INSTAGRAM)
+    if not operator:
+        only.append("sending email from a mailbox")
+        lines.append(T.menu_operator_only(only))
+    return "\n".join(x for x in lines if x)
+
+
+def menu_short(bot, h):
+    """F8: the menu's short form, the names only, from the same registry and switches: email, the calendar link, each
+    connector of connectors.CONNECTORS this person can have (the operator: all of them; a tester: the ones each person
+    signs in to, when they are set up here) and the browser when it is on for this person."""
+    operator = config.is_operator(h)
+    out = ["email", "a calendar link"]
+    for key, con in C.CONNECTORS.items():
+        if not operator and con.kind != "oauth":
+            continue
+        if not operator:
+            try:
+                if C.unavailable(bot.store, h, key) == "unreachable":
+                    continue
+            except Exception:  # noqa: BLE001 - a connector that cannot load is left out of a tester's short form
+                continue
+        out.append(_SHOWN.get(key, con.name))
+    try:
+        from . import browser
+        from .settings import switches
+        if switches().get("browser", "off") != "off" and (operator or browser.person_ok(h)):
+            out.append("a browser for cancelling")
+    except Exception:  # noqa: BLE001 - the short form never breaks on the browser
+        pass
+    return out
+
+
+def _not_yet(bot, h, body):
+    """F7: the end of "what are you connected to": each connector this person could connect and hasn't, with the
+    words (one the answer above already names is left out)."""
+    operator = config.is_operator(h)
+    out = []
+    for key, con in C.CONNECTORS.items():
+        if con.kind != "oauth" and not operator:
+            continue
+        name = con.name[:1].upper() + con.name[1:]
+        if f"• {name}:" in body:
+            continue
+        line = _connector_line(bot, h, key, con)
+        if "say \"" in line:
+            out.append(line)
+    text = T.connected_not_yet(out)
+    return "\n" + text if text else ""
+
+
+def _connect_email(bot, person, app):
+    h = person["handle"]
+    _, others = _email_state(bot, h)
+    nice = {"gmail": "Gmail", "g-mail": "Gmail", "google mail": "Gmail", "outlook": "Outlook", "hotmail": "Hotmail",
+            "icloud mail": "iCloud Mail", "yahoo": "Yahoo Mail", "yahoo mail": "Yahoo Mail"}.get(app, "your email")
+    return bot.send(h, T.connect_email(nice, others, _page(bot)))
+
+
+def connect_reads(bot, person, text, t, now):
+    """F8: "connect netflix", "connect my instagram", "connect my email", "connect <any other app>": the honest line,
+    never a model call. None for words after "connect" that are not an app's name."""
+    m = CONNECT_ANY.match(t)
+    if not m:
+        return None
+    app = m.group("app")
+    h = person["handle"]
+    if EMAIL_APP.fullmatch(app):
+        bot.note(intent="places")
+        return _connect_email(bot, person, app)
+    if _INSTAGRAM.fullmatch(app):
+        bot.note(intent="places")
+        from .refresh import EXPORT_LINKS
+        return bot.send(h, T.connect_instagram(EXPORT_LINKS["instagram"]))
+    from . import browser
+    from .cancel import merchant_named
+    e = merchant_named(app, browser.practice_routes())
+    if e is not None:
+        bot.note(intent="places")
+        line = None
+        try:
+            if browser.available(bot, person, e["key"]):
+                line = "With the browser on, I can do it for you on its website, stopping before the last button to ask you."
+        except Exception:  # noqa: BLE001
+            line = None
+        return bot.send(h, T.connect_merchant(e["name"], line, practice=bool(e.get("practice"))))
+    if _NOT_APP.search(app) or len(app) < 2:
+        return None
+    bot.note(intent="places")
+    return bot.send(h, T.connect_other(_cased(text, app), menu_short(bot, h)))
+
+
+def _cased(text, name):
+    """The app's name as the person typed it (title case when they typed it all lowercase)."""
+    mm = re.search(re.escape(name), text or "", re.I)
+    got = mm.group(0) if mm else name
+    return got if any(c.isupper() for c in got) else " ".join(w[:1].upper() + w[1:] for w in got.split())
+# ---------- end the live check of 19 Nov ----------
+
+
+def help_args(bot, h):
+    """F11: what the help may say for this run: YouTube when it is set up here, the browser's sites when it is on for
+    this person."""
+    out = {"youtube": False, "sites": None}
+    try:
+        out["youtube"] = bool(C.module("youtube").reachable())
+        from . import browser
+        if browser.mode() != "off" and (config.is_operator(h) or browser.person_ok(h)):
+            out["sites"] = sorted(browser.merchants()) or None
+    except Exception:  # noqa: BLE001 - the help never breaks
+        pass
+    return out

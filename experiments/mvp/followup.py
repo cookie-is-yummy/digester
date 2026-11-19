@@ -20,7 +20,10 @@ from .schema import PLATFORMS, Interpretation, RuleSpec
 COMMAND = re.compile(r"^\s*(?:(?:please|pls|plz)[\s,]+)?(stop|pause|resume|skip|run|done|remove)\s+"
                      r"(?:rule\s+|#\s*|number\s+)?(\d{1,2}|all)\s*(?:,?\s*(?:please|pls|plz))?\s*[.!?]*\s*$", re.I)
 WORDS = {"my rules": "list_rules", "rules": "list_rules", "list my rules": "list_rules", "show my rules": "list_rules",
-         "undo": "undo", "help": "help"}
+         "undo": "undo", "help": "help",
+         # the live check of 19 Nov (F11): the everyday ways of asking for the help, read by code
+         "what can you do": "help", "what can you do for me": "help", "what can u do": "help",
+         "what can u do for me": "help", "what do you do": "help", "what else can you do": "help"}
 MORE = re.compile(r"^\s*(?:(?:give me|send me|show me|try|ok|okay)\s+)?(another(?: one)?|more|one more|next(?: one)?|"
                   r"something else|a different one)\s*(?:please|pls)?\s*[.!?]*\s*$", re.I)
 # a message that only asks for new things from outside the saves; what is left after these phrases must be nothing
