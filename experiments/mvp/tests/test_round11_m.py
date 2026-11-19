@@ -277,10 +277,44 @@ def test_points_with_no_traceable_source_never_show(lib_env):
 
 
 def test_a_topic_with_nothing_fitting_says_so_plainly(lib_env):
+    """No post names the topic: the search's best few are read and the model says none is about it."""
+    from mvp import synth
     e = lib_env
+    e["state"]["answers"]["mvp_synth"] = lambda u: dict(fake_synth(u), about=[])
     out = say(e, "what have i learned about beekeeping", CHAT)
     assert out == "I found nothing in your saves about beekeeping."
-    assert "mvp_synth" not in e["calls"]
+    assert e["calls"].count("mvp_extract") <= synth.MAYBE_READS and e["calls"].count("mvp_synth") == 1
+
+
+def test_items_that_do_not_name_the_topic_count_only_when_the_model_says_they_are_about_it(lib_env):
+    e = lib_env
+    seen = {}
+
+    def synth_one(user):
+        out = fake_synth(user)
+        seen["n"] = len(out["about"])
+        out["about"] = [1]   # only the first item read is about the topic
+        return out
+    e["state"]["answers"]["mvp_synth"] = synth_one
+    out = say(e, "what have i learned about beekeeping", CHAT)
+    assert seen["n"] >= 3
+    assert out.startswith("I found 1 thing about beekeeping in your saves") and out.count("• \"") == 1, out
+
+
+def test_without_an_about_list_items_that_do_not_name_the_topic_are_never_cited(lib_env):
+    e = lib_env
+    e["state"]["answers"]["mvp_synth"] = lambda u: {"points": fake_synth(u)["points"]}
+    out = say(e, "what have i learned about beekeeping", CHAT)
+    assert out == "I found nothing in your saves about beekeeping."
+
+
+def test_a_topic_named_by_many_posts_reads_no_others(lib_env):
+    from mvp import synth
+    e = lib_env
+    say(e, "what did i learn about blender", CHAT)
+    run = e["bot"].store.q("SELECT * FROM runs WHERE kind='synth'")[-1]
+    steps = json.loads(run["steps"])
+    assert steps["fit"] >= synth.MAYBE_WHEN and "maybe_reads" not in steps
 
 
 def test_an_off_topic_item_sharing_a_word_is_not_cited(lib_env):

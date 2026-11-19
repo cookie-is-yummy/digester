@@ -30,6 +30,8 @@ ON = os.environ.get("MVP_SYNTH", "1") != "0"    # off: the message goes to the i
 CANDS = 40           # ranked candidates looked at
 READS = 12           # items whose key points are read (one details call each, cached per item)
 RICH_TEXT = 120      # an item with at least this much of its own text is read before shorter ones
+MAYBE_WHEN = 5       # fewer items than this name the topic: the search's next best are read too (the model judges)
+MAYBE_READS = 8      # at most this many items read in all when that happens
 MAX_POINTS = 6
 MIN_POINTS = 2       # fewer checked points than this: the plain list of what fits, with no summary
 TRACE_MIN = 0.6      # share of a point's content words that must be found in the text of the items it cites
@@ -228,13 +230,15 @@ _ABOUT_ITEM = re.compile(r"\b(?:this|the|that)\s+(?:video|post|reel|item|creator
                          r"\b(?:subscribe|follow\s+(?:me|us|for)|link\s+in\s+bio|use\s+code)\b", re.I)
 
 
-def check_points(raw, items, extra=None, notes=None):
+def check_points(raw, items, extra=None, notes=None, need_about=()):
     """(points, dropped): the model's points that code can trace to the text of the items they cite.
 
     `items` is the numbered list the model saw (1-based). A point is kept only when it is a plain sentence (no link,
     handle or word about the bot or the item), at least one of its sources is a valid item number whose quote is that
     item's own words (3 words or more), its content words are found in the cited items' text (TRACE_MIN), every number
-    in it is in that text, and it does not repeat a kept point. Each kept point: {"text", "ids", "share"}."""
+    in it is in that text, and it does not repeat a kept point. Each kept point: {"text", "ids", "share"}.
+    `need_about`: ids of items that do not name the topic in their own words (search-ranked only): such an item counts
+    as a source only when the model listed it in "about"."""
     from .compose import INTERNAL, UNSAFE_TEXT, check_text, numbers_backed, quote_ok, tokens
     dropped = {}
 
@@ -271,6 +275,8 @@ def check_points(raw, items, extra=None, notes=None):
             if about is not None and n not in about:   # the model itself said the item is not about the topic
                 continue
             it = items[n - 1]
+            if it.id in need_about and about is None:
+                continue
             quote = " ".join(str(s.get("quote") or "").split())
             body = check_text(it, extra)
             if len(tokens(quote)) < QUOTE_MIN_WORDS or not quote_ok(quote, body):
@@ -323,7 +329,8 @@ def _spec(topic, platforms, kinds):
 
 
 def gather(bot, person, req, now, last=None):
-    """(fits, extra, steps, cost): the items that fit, best first, with their YouTube descriptions."""
+    """(fits, maybes, extra, steps, cost): the items whose own text names the topic, best first; the other ranked
+    candidates (the search's own order), read only when few name it; the YouTube descriptions."""
     from . import captionmark
     from .compose import ASSISTANT_NOTE, collapse_copies, own_text
     from .retrieve import candidates
@@ -343,7 +350,7 @@ def gather(bot, person, req, now, last=None):
     cands, n_copies = collapse_copies(cands, extra)
     if n_copies:
         steps["copies"] = n_copies
-    fits = []
+    fits, maybes = [], []
     for it in cands:
         own = own_text(it, extra)
         if captionmark.effective(it, cfb)[0] == "strong":   # a caption that may not be the video's: never read here
@@ -354,8 +361,10 @@ def gather(bot, person, req, now, last=None):
             continue
         if req.get("these") or fits_topic(own, req["topic"]):
             fits.append(it)
+        else:
+            maybes.append(it)
     steps["candidates"], steps["fit"] = len(cands), len(fits)
-    return fits, extra, steps, cost
+    return fits, maybes, extra, steps, cost
 
 
 def summarize(bot, person, req, now, last=None):
@@ -364,11 +373,18 @@ def summarize(bot, person, req, now, last=None):
     from .extract import MIN_TEXT, details_many
     t0 = time.time()
     h = person["handle"]
-    fits, extra, steps, cost = gather(bot, person, req, now, last=last)
+    fits, maybes, extra, steps, cost = gather(bot, person, req, now, last=last)
     view = bot.view(person["library"])
     # the items with the most of their own text are read first (search order otherwise): a bare title says little
     readable = sorted([it for it in fits if len(own_text_lines(it, extra)) >= MIN_TEXT],
                       key=lambda it: len(own_text_lines(it, extra)) < RICH_TEXT)[:READS]
+    maybe = []
+    if len(fits) < MAYBE_WHEN:
+        # few posts name the topic in its own words ("quick dinners"): the search's next best are read too, and one
+        # counts only when the model lists it as about the topic (check_points' need_about)
+        maybe = [it for it in maybes if len(own_text_lines(it, extra)) >= MIN_TEXT][:max(0, MAYBE_READS - len(readable))]
+        steps["maybe_reads"] = len(maybe)
+    readable = readable + maybe
     facts, info = details_many(readable, ["key_points"], view.lib, store=bot.store, person=h, extra=extra, now=now,
                                context={"request": req["topic"]})
     cost += info["cost"]
@@ -381,6 +397,7 @@ def summarize(bot, person, req, now, last=None):
            "silent": [it for it in fits if it.id not in {x.id for x in unread} and not points_of.get(it.id)],
            "unread": unread, "extra": extra}
     steps["unread"] = len(unread)
+    raw = {}
     if len(said) >= 1:
         try:
             raw, c = call(req["topic"], said, points_of, person=h)
@@ -392,10 +409,17 @@ def summarize(bot, person, req, now, last=None):
             raw = {}
             steps["synth_error"] = type(e).__name__
         notes = []
-        points, dropped = check_points(raw, said, extra, notes=notes)
+        points, dropped = check_points(raw, said, extra, notes=notes, need_about={it.id for it in maybe})
         out["points"], out["dropped"], out["dropped_text"] = points, dropped, notes
         steps["points_model"] = len(raw.get("points") or []) if isinstance(raw, dict) and isinstance(
             raw.get("points"), list) else 0
+    if maybe:   # a search-ranked item counts as fitting only when the model said it is about the topic
+        about = raw.get("about") if isinstance(raw, dict) and isinstance(raw.get("about"), list) else []
+        on = {said[n - 1].id for n in about if isinstance(n, int) and 1 <= n <= len(said)}
+        gone = {it.id for it in maybe if it.id not in on}
+        out["fits"] = fits + [it for it in maybe if it.id in on]
+        out["said"] = [it for it in out["said"] if it.id not in gone]
+        steps["maybe_fit"] = len(maybe) - len(gone)
     if len(out["points"]) < MIN_POINTS:
         out["thin"] = True
     order = []
