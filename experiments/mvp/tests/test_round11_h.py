@@ -102,12 +102,14 @@ def test_h8_first_gives_the_date_and_the_items_with_their_cards_never_a_recommen
         "https://www.youtube.com/watch?v=vy037"]
 
 
-def test_h5_that_video_about_stays_a_search_for_the_one_video(hist):
+def test_h5_that_video_about_is_a_recall_answered_by_code(hist):
+    # round 11 fix, A (R1, on purpose): it was the interpreter's search for one video (a pick, "I recommend"); it is
+    # now a recall of what was watched (tests/test_round11_fix_a.py)
     hist["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "intro": ""}
     out, calls = ask(hist, "what was that video i watched about color grading", {"intent": "ask", "spec": {
         "when": {"type": "now"}, "content": {"goal": "a video about color grading", "searches": ["color grading"],
                                              "count": 1}}})
-    assert calls[:1] == ["mvp_interpret"]
+    assert calls == [] and out.startswith("You watched these about \"color grading\"")
 
 
 # ================================ what is counted ==================================================================
