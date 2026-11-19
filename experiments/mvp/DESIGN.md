@@ -1968,7 +1968,7 @@ second merge, 18 Nov, added Y, V and T in the rows that were kept for them).
 | Where | Order | Read | Slice |
 | --- | --- | --- | --- |
 | `_on_message`, after the tapback branch | - | `secret_reads` (first) | round 9 B, E |
-| | - | `browser_reads` (only while this person's browser run or its offer is open, 30 minutes at most) | V |
+| | - | `browser_reads` (only while this person's browser run or its offer is open, 30 minutes at most; and a bare "I'm in" that no run takes, 17.L) | V, L |
 | `_asked_reads` (next message only) | - | `captionmark.take_ask` (the 👎 question ends with this message), `_deadline_answer`, `_overdue_reply` | S, round 8 |
 | | 3 | `_cancel_answer` (with the notice follow-up, the check reminder, the second notice) | round 9 B, D |
 | | 4 | `places.asked_reads` (Mac yes / no, REMOVE / KEEP, the Todoist REMOVE / KEEP) | round 9 D, C |
@@ -1981,15 +1981,18 @@ second merge, 18 Nov, added Y, V and T in the rows that were kept for them).
 | | - | `onboard_step` (the setup's clause split and `export_reads` inside) | W |
 | `answer_normally`, after `_rule_reads`; each read tries the message, then `phrasing.normalize(text)` | 5a | `export_reads` | W |
 | | 5 | `email_reads`, then `self_email_reads` (the message itself only) | round 9 A, W |
-| | 5b | `ytreads.youtube_reads` (connect / disconnect YouTube, unsubscribe, a playlist, the Instagram links) | Y |
-| | 6 | `cancel_reads` (the notice route; the browser offer inside the web route, behind `browser.available`) | round 9 B, D, V |
+| | 5b | `ytreads.youtube_reads` (connect / disconnect YouTube, unsubscribe, a playlist, the Instagram links; the Instagram actions asked of the bot, `ig_act_reads`, beside `IG_CANT` and `UNFOLLOW`, 17.L) | Y, L |
+| | 6 | `cancel_reads` (the notice route; the browser offer inside the web route, behind `browser.available`; two or more things to cancel, `more_to_cancel`, 17.L) | round 9 B, D, V, L |
 | | 7 | `postact_reads` | round 9 C |
-| | 8 | `places.place_reads` (Todoist connect / check / disconnect by sign-in inside) | round 9 D, E, C |
+| | 8 | `places.place_reads` (Todoist connect / check / disconnect by sign-in inside; the connector menu first, `MENU`, and any other "connect X" last, `connect_reads`, 17.L) | round 9 D, E, C, L |
 | | 8a | `grant_reads` ("stop adding to X", "use X for rule N", "undo rule N") | G |
-| | 8 | `receipts_reads`, `do_it` | round 9 W9, W10 |
+| | 8 | `receipts_reads` (with what the browser pressed, 17.L), `do_it` | round 9 W9, W10, L |
 | after the two tries | 8z | `split_reads` (two asks; only when no read took the whole message) | W |
 | | - | `integration_reads` (with "version") | round 8, K |
 | after `interpret`, `chat_guard` | - | `screen_guard`, then the errand form on `unsupported` / `chat` / a clash | W |
+
+The order inside `browser_reads`, `youtube_reads`, `place_reads` and `cancel_reads` of the reads added by the live
+check of 19 Nov (17.L) is held by the same test (`HOOK_ORDER`'s `module:function` keys).
 
 Nothing above hook 5 sees the normalised text; the reads of slices D, G and C inside hooks 6 and 8 get both tries
 (`tests/test_round10_merge.py`, section (e)).
@@ -3135,3 +3138,104 @@ the held-out set).
   (`account_memes` from the page's captions). The rule (`cm-v1`) is unchanged: its precision on the real sample is 17
   of 20, the founder's 150 labels decide (the verdict's 85% bar). A third held-out class (apply, book, buy through the
   errand form, "not taken") did not show with made-up examples and is left. Live spend of this check: $0.80.
+
+### 17.L The live check of 19 Nov and its fixes
+
+The founder's flow was tried on the test page (fresh store, the real library, `MVP_BROWSER=vm MVP_BROWSER_DEMO=1`, the
+page's person as the operator). What worked stays as it was and is held by tests (the practice cancel end to end with
+the take-over view, a plain "yes" refused, the chicken pasta recipe and "that reel had nothing to do with the caption",
+"unfollow that creator on instagram", a Todoist rule's preview at 9am with its honest line, "connect ticktick"). Eleven
+findings, each reproduced offline first with the fakes (the fake model answering what the live model did), fixed by a
+code read and fixed texts (`texts.py`, block "the live check of 19 Nov"), no prompt change, and tested in
+`tests/test_round10_livefix.py` (121 tests: 83 fail without the fixes, 38 are near-variant guards that pass either way).
+The new reads sit inside the hooks of their kind (table above) and are covered by the round 9 rule-text checks; the 159
+rule texts and the 123 rule phrasings are taken by none of them.
+
+- **F1, "im in" read as a time zone.** Typed after the view's "I'm done" had handed back and the last-step card was
+  showing, "im in" fell through `browser_reads` (it took the words only while signing in) to the interpreter, which
+  moved the person to New York time. Now `browser.SIGNED_IN` (a bare "I'm in", "im in now", "ok im signed in", "logged
+  in", nothing after it) is read in `browser_reads` whatever the step: at the last-step card the card is said again word
+  for word (its quote is kept in the run's state), after a hand-back the status line, at the offer, the permission or
+  the reminder question one plain line with the question kept, and with no run `T.SIGNED_IN_NOTHING` ("Nothing is
+  waiting for you to sign in right now, so I didn't change anything."); while a YouTube code waits it asks Google as
+  "done" does, while Todoist's sign-in page is open it says Todoist tells the bot itself. "i'm in chicago now", "im in
+  the mood for pasta" still reach the interpreter; at the card "done", "ready" and "continue" keep their old path (only
+  the sign-in words are read). Tests: section F1, and the whole run in a headless browser.
+- **F2, the receipts after the browser pressed.** "what did you do for me" said "helped with 1 cancellation (1 still
+  open)". The receipts now read `browser_runs` (`_browser_receipts`): for a run that pressed the last button, `pressed
+  "Finish Cancellation" on Streamly's cancel page (a practice site) today at 9:02am, after your "yes cancel streamly".
+  The page then said: "..."`, the page's own words kept for the run (`outcome_quote`), or "The page didn't say it had
+  ended", or that the plan goes on; that cancellation leaves the helped count. The merchant is named here, in the
+  person's own answer to their own question (never in a digest); the bot's words never say it ended. A run handed back
+  before the last button is counted as before.
+- **F3, "I never sign in as you" with the browser on.** With the browser on for the person but Netflix (or Spotify) not
+  among `MVP_BROWSER_MERCHANTS`, the steps and "do it for me" gave the old reason, a contradiction right after the bot
+  did it for Streamly. `BrowserMixin.browser_not_for` gives the true one: the site has a browser path never tried on
+  the real site, so it is not switched on ("You can switch it on: the README's round 10 settings name the setting." for
+  the operator, "The person who runs me can switch it on." for a tester the vm is open to), or the site has no checked
+  path ("I only press buttons on sites whose cancel path I've checked"). The steps and the reminder question stay. With
+  the browser off, or for a tester it is not for, the words are today's: the ten cancel conversations of
+  `merge11/probes` give byte-identical replies (no line changed).
+- **F4 to F6, actions on Instagram asked of the bot.** "like that reel for me" was the interpreter's feedback ("Noted
+  👍"), "comment nice on that reel" became the errand form's "buy" and put a recipe's ingredients on the shopping list,
+  "save that reel to my instagram collection called dinners" got the generic refusal. One read for the class,
+  `ytreads.ig_act_reads` (inside hook 5b, before `IG_CANT` and `UNFOLLOW`, so before the feedback reads, the
+  shopping-list helper and the to-do helper): like (only with "for me", a request word or an Instagram word), comment,
+  reply, share to the story, repost, DM, follow, block / restrict / report, remove a follower, save to a collection,
+  post, delete a post. The plain line `T.ig_act` with the pick's own link when one Instagram pick is in view (the
+  account's profile link for an account), which one with two, how to do it in the app with none. It writes nothing
+  and learns nothing. The collection adds what the bot can do instead: its own list of that name after "yes" (state
+  `igsave:<handle>`, next message only, answered in hook 4a), and a private YouTube playlist's words when the pick is a
+  YouTube video and YouTube is connected. Why the shopping list was written: the errand form's `post_act` took any act
+  the model named; `errand.built` now uses an act only when the message says its word (`ACT_SAID`, English and Spanish,
+  accents folded). "i like that one", "liked it", "👍", "love that reel", "find me a reel i'd like", "comment on my
+  draft", "follow up with my landlord", "save that for later", "share that with me by email" are not taken, nor are
+  "comment on this", "can you comment on that" (they may ask what the bot thinks: a comment is read only with the
+  words to post, "leave / write a comment", "for me" or an Instagram word) and "would you like it".
+- **F7, a connector menu.** "what can i connect you to" was refused. `places.connector_menu`, read by code (`MENU`,
+  first in `place_reads`) for "what can i connect (you to)", "what connectors do you have", "which apps do you work
+  with", "what apps can you use", "connect" alone, "integrations", "what can you hook up to", "what can you connect
+  to": email to the person (its state, never the address), email to others (a draft; sending after "send" once the
+  mailbox is set, and where it is set, for the operator), the calendar link, every entry of `connectors.CONNECTORS`
+  with its state from `connectors.unavailable` and the words that connect it, the browser from `settings.switches()`
+  (on or off and its sites), and Instagram said honestly. A tester sees what they can connect themselves and one line
+  for what only the person who runs the bot can set up. No list is kept by hand: a test adds a connector to the
+  registry and the menu names it. "what are you connected to" ends with "Not connected yet:" and the words for each.
+  Never a value: a token or a mailbox set in the environment appears only as a state.
+- **F8, "connect netflix", "connect my instagram", "connect my gmail".** `places.connect_reads` (last in
+  `place_reads`): a merchant the cancel helper knows has nothing to connect ("say "cancel my netflix""; the browser's
+  line when it is on for it); Instagram gets the honest line and the export link with words code reads ("how do i send
+  you my instagram export"); Gmail, email, Outlook say what email does today (to the person; a draft to others;
+  sending after "send" once the mailbox is set, for the operator); any other app name gets "I can't connect to X yet."
+  and the menu's short form, built by `places.menu_short` from the same registry and switches (names only: email, the
+  calendar link, each connector this person can have, the browser when it is on for them; `I can reach email and a
+  calendar link; say "what can I connect" for how.` for a tester here). The round 10 W shapes ("can you hook up my
+  google calendar") end the same way. Words that are not an app's name ("connect four strategy videos",
+  "connect with people who cook", "connect the dots") go the usual way. Never a model call.
+- **F9, two things to cancel.** "can you cancel my spotify and my gym membership" gave only Spotify's steps.
+  `cancel.more_to_cancel` reads a list of things to cancel after the cancel verb by code (a known merchant, the gym, or a
+  plain name of one or two words; any other chunk and the list is not read): the first in the message is handled and
+  one more message says the rest and the words to start each (`You also asked to cancel your gym membership. When this
+  one is done, say "cancel my gym membership".`), which then asks "Which gym?". Three or more: the same, one at a
+  time. No model call. "cancel my netflix, the link is evil.example/cancel" stays one request.
+- **F10, YouTube not set up, for the operator.** "connect youtube" and "unsubscribe me from youtube channels i never
+  watch" with no Google client told the page operator nothing on how. The operator now hears how
+  (`T.yt_not_set_up`): an OAuth client of the type "TVs and Limited Input devices" in a Google Cloud project, its id and
+  secret in the Connections panel beside the chat (off the page: the two settings, named), then "connect youtube"; a
+  tester keeps the plain line.
+- **F11, the help.** The help never named the apps. `T.help_full` adds one line (`Apps: "what can I connect" shows what
+  I can reach here and how to connect each`, with YouTube's words only when YouTube is set up on this bot) and, only
+  when the browser is on for this person, one on cancelling in it with its sites; "what can you do (for me)" is read by
+  code as the help. At most two new lines.
+- **Older tests changed on purpose** (each names 17.L): `test_round10_k.py` (the help's apps line),
+  `test_round9_mac.py` (the "Not connected yet" end of "what are you connected to"), `test_round10_wording.py` ("connect
+  my gmail" now says what email does), `test_round10_merge.py` (`HOOK_ORDER` holds the new reads' places).
+- **Checks** (offline): the full suite passes (count in the README), demo 10; `python3 -m mvp.selftest --dry`: 40
+  conversations, 114 steps, 114 passed; `probe_same` byte-equal with `mvp4/probes_round8/same_head.json`; the
+  development phrasing set by code: 73 right, 1 wrong (d007), 63 fell through, 0 of 40 `none` lines taken, tester and
+  operator alike (five lines of three phrasings changed wording on purpose, all `connect_app`: "connect my gmail" and
+  "hook up my google calendar" for both, "what apps are you connected to" for the operator); with `MVP_BROWSER` unset the cancel conversations of `merge11/probes` are byte-equal.
+  No live call (the fixes are code reads; the ledger stayed at $19.68).
+- Known and left: "like that reel" alone (no "for me", no request word) still goes to the interpreter, as it may be
+  what the person thinks of it; a bare "delete that post" with no Instagram word is not read (it may mean the bot's own
+  list); the YouTube line for a pick in view ("like that video for me") is not read (YouTube's rating is not built).
