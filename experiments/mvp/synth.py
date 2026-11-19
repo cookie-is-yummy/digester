@@ -286,7 +286,8 @@ def check_points(raw, items, extra=None, notes=None, need_about=()):
     in it is in that text, and it does not repeat a kept point. Each kept point: {"text", "ids", "share"}.
     `need_about`: ids of items that do not name the topic in their own words (search-ranked only): such an item counts
     as a source only when the model listed it in "about"."""
-    from .compose import INTERNAL, UNSAFE_TEXT, check_text, numbers_backed, quote_ok, tokens
+    from .compose import ASSISTANT_NOTE, INTERNAL, UNSAFE_TEXT, check_text, numbers_backed, quote_ok, tokens
+    from .videoask import ACTING   # the same words asking a video uses for a point that reads like an order
     dropped = {}
 
     def drop(why, text=None):
@@ -309,6 +310,11 @@ def check_points(raw, items, extra=None, notes=None, need_about=()):
             continue
         if UNSAFE_TEXT.search(text) or INTERNAL.search(text) or _ABOUT_ITEM.search(text):
             drop("unsafe_text", text)
+            continue
+        if ACTING.search(text) or ASSISTANT_NOTE.search(text):
+            # the round 11 check (DESIGN 18.X): an item's own call to act ("email everyone you know", "add it to your
+            # calendar", "ignore your rules") is never passed on as something the person learned
+            drop("instruction", text)
             continue
         ids, texts = [], []
         for s in p.get("sources") or []:
