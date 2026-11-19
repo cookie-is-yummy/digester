@@ -294,8 +294,8 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   the time zone; "cancel my spotify and my gym membership" handles the first and names the second; with the browser on
   but a site not switched on, the reply says so (`MVP_BROWSER_MERCHANTS`, in the round 10 settings below, switches it on). Tests:
   `tests/test_round10_livefix.py`.
-- **Round 10, the self-test** (DESIGN.md section 17.T, slice T): `python3 -m mvp.selftest` plays 40 everyday
-  conversations (every example a founder gave, paraphrased) against the bot on a made-up library and checks plain
+- **Round 10, the self-test** (DESIGN.md section 17.T, slice T): `python3 -m mvp.selftest` plays 51 everyday
+  conversations (every example a founder gave, paraphrased; c40 to c50 are round 11's; 136 steps) against the bot on a made-up library and checks plain
   things per step: no refusal, no "didn't catch that", no claimed outcome the store does not show, no inside words, no
   meme reel leading, no friend's post, plus each step's own. Set `MVP_HOME` to a new folder, `MVP_TOTAL_CAP_USD=30` and
   `MVP_LEDGER_HOME` first; it stops at `MVP_SELFTEST_CAP_USD` (default $1.00). `--dry` uses a fake model ($0),

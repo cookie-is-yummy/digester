@@ -1,5 +1,30 @@
 # State
 
+## Founders' summary - round 11, MVP version 6 (19 Nov 2026; `BRIEF-10.md` section 20, `results/r11-mvp-v6.md`, `mvp/DESIGN.md` section 18)
+
+- **Asked for:** "treat it like 'ask your watch history anything'", with a screenshot of a transcript archive that answers with timestamps.
+- **Built as three slices:** H (history questions by code), M (summaries across many items), Q (asking a video itself). Then one merge and one check.
+- **H:** rankings, counts, first and last, a day, timelines and comparisons, by code in the person's time zone. Every answer says its window and where the export ends. No model call.
+- **H, measured:** 58 of the builder's 60 questions taken, 0 of 40 traps. Every real-library number matched an independent count. 40 tests.
+- **M:** "summarize what I've learned about X" gives up to 6 points, each traced by code to a cited item's own words. Made-up set: answers citing 3+ items went from 1 of 12 to 12 of 12. 71 tests.
+- **Q:** off unless `MVP_VIDEO_ASK=1`. The video's link and the question go to Gemini; up to 5 points come back with timestamp links. Nothing of the video is kept. 64 tests.
+- **Q, measured:** live on 8 short videos, 0 of 8 answered before, 7 of 8 after, and the control said "doesn't cover that". 25 of 25 timestamps inside the video.
+- **Merge:** one hook order; a summary can take a time window; a history pick can be asked. The help, "what can you do" and the setup now lead with "Ask your watch history anything". 36 tests.
+- **Check:** 95 new history messages: 86 right at the merge, 95 after its fixes. 30 chat messages after a history answer: 16 taken as a topic, then 0. 189 tests.
+- **Probe of eight messages:** H1 to H4 and H8 now answered by code. H7 is a real summary. H5 is still a recommendation and H6 still can't tell.
+- **Checks:** 3,718 offline tests pass (3,318 at version 5). Dry self-test 136 of 136 steps. Unchanged answers byte-equal. Rule texts and phrasings taken by no new read.
+- **One wording-set line changed on purpose:** d132, a "none" line, is now answered by the history code. The founder decides.
+- **Still wrong or unproven** (full list in the results file): topics are matched by words, so H8's first item is a talk-show clip. Nobody has checked a video answer against the video. A-017's legal footing is unsettled.
+- **Not built, on purpose:** storing transcripts to search every video (AGENTS rule 8); a history rule on a schedule (needs a contract change); hours watched.
+- **Spend:** $20.61 of the $30 cap ($0.89 this round, of its $3.00 budget).
+- **Founder, please:**
+  1. Pull and restart the test page; type "what can you do".
+  2. Refresh your exports: YouTube ends 30 Oct, Instagram 15 Oct. Ask "how do I send you a new export?".
+  3. To try asking a video, set `MVP_VIDEO_ASK=1` and `GEMINI_API_KEY` from a billed Google project.
+  4. Decide A-017 with the other founder (a legal read and 20+ answers checked against videos come first).
+  5. Decide d132, and whether a history rule on a schedule is wanted.
+  6. A-008 to A-016 are still open.
+
 ## Founders' summary - round 10, MVP version 5 (19 Nov 2026; `BRIEF-10.md` section 19, `results/r10-mvp-v5.md`, `mvp/DESIGN.md` section 17)
 
 - **Asked for:** do it for me once I say yes; cancel for me after I confirm; no reels whose caption has nothing to do with the video; rules that call the connectors.

@@ -453,3 +453,30 @@ Decisions still open after version 5:
 28. **A real trial:** the mailbox, Todoist, YouTube and one real merchant each need the founder's own machine and accounts.
 29. **The slop mark:** about 150 labelled reels decide whether the strong mark keeps its doubt line as it is.
 30. **Wording:** code reads fit the development set far better than new wordings. Rebuilding them from wider data is open.
+
+## 20. Version 6 (19 Nov, round 11): ask your watch history anything
+
+The design is `mvp/DESIGN.md` section 18. Results are in `results/r11-mvp-v6.md`. The one scope change is recorded as
+A-017 (Proposed, both founders) in `docs/amendments.md`. Everything runs on this prototype branch only.
+
+The founder asked to "treat it like 'ask your watch history anything'". He sent a screenshot of an archive that answers
+questions across stored YouTube transcripts, with timestamps. It was built as three slices (H, M, Q), a merge and a
+check.
+
+| Asked | Built | Limit |
+| --- | --- | --- |
+| Questions about my watching | Rankings, counts, first and last, a day, timelines and comparisons, by code. Every answer says its window and where the export ends | Topics are matched by words in titles and captions, not by the search engine |
+| What have I learned about X | Up to 6 points across many items, each traced by code to a cited item's own words | Points are often thin: titles and captions hold little |
+| What did that video say | One YouTube video asked through Gemini's documented link input, with timestamp links. Nothing of the video is kept | Off by default. Preview feature, terms unsettled. No answer checked against a video |
+| Lead with it | The help, "what can you do" and the setup start with "Ask your watch history anything" and three questions from the person's own record | English only |
+| Search every video, as in the screenshot | Not built | Stored transcripts conflict with AGENTS rule 8; no official route to other people's transcripts |
+
+Measured: 3,718 offline tests pass (3,318 at version 5). Of the probe's eight messages, H1 to H4 and H7 now get the answer
+asked for. H8 gets the right form, but its first item fits only by its words. H5 and H6 do not yet. Spend: $20.61 of the $30 cap ($0.89 this round).
+
+Decisions still open after version 6:
+31. **A-017:** asking a YouTube video itself through Gemini, on demand, nothing of the video kept. Both founders. A legal read and 20+ answers checked against the videos come first.
+32. **The wording set's line d132** ("what did i watch on youtube last week", a "none" line) is now answered by the history code. Keep it, or keep the none-line rule.
+33. **A history rule on a schedule** ("send me my top channels every month"): wanted or not. It would need a data-contract amendment.
+34. **Topics by meaning:** history topics match words today. Using the search engine's ranking is open.
+35. **A-008 to A-016** are still Proposed.
