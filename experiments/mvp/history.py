@@ -38,13 +38,15 @@ from .retrieve import contains_word
 
 KINDS = ("top_channels", "top_topics", "top_items", "count", "list", "first", "last", "timeline", "on_day", "compare")
 HOW_KINDS = {"watched": ("watch", "view"), "liked": ("like",), "saved": ("save", "collection", "share_self", "playlist"),
-             "any": ("watch", "view", "like", "save", "collection", "share_self", "playlist")}
+             "any": ("watch", "view", "like", "save", "collection", "share_self", "playlist"),
+             # the round 11 check (DESIGN 18.X): "did I like or save" never counts a watch
+             "liked_saved": ("like", "save", "collection", "share_self", "playlist")}
 FOLLOW_HOURS = 6
 LIST_MAX, DAY_MAX, FIRST_MAX = 5, 8, 3
 
 
 class Window(BaseModel):
-    kind: Literal["all", "day", "week", "month", "year", "since", "days", "lately"] = "all"
+    kind: Literal["all", "day", "week", "month", "year", "since", "days", "lately", "weekend", "range"] = "all"
     start: Optional[date] = None
     end: Optional[date] = None          # inclusive
     this: bool = False                  # "this week / month / year": up to today
@@ -53,7 +55,7 @@ class Window(BaseModel):
 class HistoryQuery(BaseModel):
     """The form a history question is read into (by code, or from the interpreter's library_stats form)."""
     kind: Literal[KINDS]
-    how: Literal["watched", "liked", "saved", "any"] = "watched"
+    how: Literal["watched", "liked", "saved", "any", "liked_saved"] = "watched"
     platform: Optional[Literal["youtube", "instagram"]] = None
     topic: list[str] = Field(default_factory=list, max_length=3)
     channel: Optional[str] = None
@@ -78,7 +80,10 @@ TYPOS = {"wacth": "watch", "whatch": "watch", "wach": "watch", "watchd": "watche
          "yt": "youtube", "ig": "instagram", "insta": "instagram", "u": "you", "ive": "i've", "im": "i'm",
          "yesteday": "yesterday", "yday": "yesterday", "lst": "last", "mnth": "month", "wk": "week",
          "mosty": "most", "mostt": "most", "fav": "favourite", "fave": "favourite", "hw": "how", "mny": "many",
-         "dd": "did", "frist": "first", "fisrt": "first", "sept": "september"}
+         "dd": "did", "frist": "first", "fisrt": "first", "sept": "september",
+         # the round 11 check (DESIGN 18.X): "this yr" was searched as the topic "yr"
+         "yr": "year", "yrs": "years", "wks": "weeks", "mnths": "months", "ystrday": "yesterday",
+         "yesterdy": "yesterday", "wkend": "weekend", "wknd": "weekend"}
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
           "november", "december"]
 MON_ABBR = {m[:3]: i + 1 for i, m in enumerate(MONTHS)} | {"sept": 9}
@@ -88,11 +93,15 @@ DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sun
 DAYS_ES = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]
 NUM = {"one": 1, "a": 1, "an": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
        "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "couple": 2, "a couple of": 2, "few": 3, "a few": 3,
-       "un": 1, "una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7, "diez": 10}
+       "un": 1, "una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9,
+       "diez": 10}
 _MONTH_RE = r"(?:" + "|".join(MONTHS + ["jan", "feb", "mar", "apr", "jun", "jul", "aug", "sept", "sep", "oct", "nov",
                                         "dec"]) + r")"
 _DAY_RE = r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues|tue|wed|thurs|thu|fri|sat|sun)"
 _NUM_RE = r"(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a couple of|a few|few|couple)"
+_NUM_ES = r"(?:\d{1,3}|un|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)"
+_UNIT_ES = {"dia": "day", "dias": "day", "semana": "week", "semanas": "week", "mes": "month", "meses": "month",
+            "ano": "year", "anos": "year"}
 
 
 def strip_accents(s):
@@ -178,6 +187,9 @@ TOPIC_WORD = re.compile(r"\b(?:topics?|subjects?|kinds? of|types? of|categor\w+|
 MOST = re.compile(r"\b(?:watch\w*|view\w*|liked?|saved?|see|seen|veo|visto|vi)\s+(?:the\s+)?most\b|"
                   r"\bmost\s+(?:watched|viewed|liked|saved|often|of all)\b|\bmas\b")
 LISTING = re.compile(r"\b(?:what|which|show|list|tell me|que|muestrame|dime)\b|\bwatch history\b")
+# time words a window should have taken (the round 11 check); "may" is a verb as often as a month
+LEFT_TIME = re.compile(r"\b(?:days?|weeks?|weekends?|months?|years?|ago|dias?|semanas?|meses|anos?|" +
+                       "|".join(m for m in MONTHS if m != "may") + "|" + "|".join(MONTH_ES) + r")\b")
 TOP_N = re.compile(r"\btop\s+(\d{1,2}|five|ten|three)\b")
 ONE_DAY = re.compile(r"\b(?:on|el)\s+(?:the\s+)?\w+")
 
@@ -202,6 +214,8 @@ que cuantos cuantas cuando cual cuales he has ha hemos visto vi veo ver viendo m
 gustaron yo el la los las un una unos unas de del sobre en este esta estos estas ese esa mes meses semana semanas ano
 anos dia dias hoy ayer pasado pasada ultimo ultima ultimos ultimas primer primero primera empece a al videos video
 canales canal mas menos y o por cada desde historial cosas contenido publicaciones temas tema estado mi mis me
+fue fueron es son era eran sido ser lo le les se su sus algo alguno alguna algun nada todo todos toda todas mucho muchos
+mucha muchas cuanto cuanta cosa veces vez hace entre hasta para con sin ni tu tus te ago between until till
 """.split())
 PLATFORM_WORDS = {"youtube": "youtube", "instagram": "instagram"}
 
@@ -227,6 +241,17 @@ def _past_month(m, today):
 def _past_day(m, d, today, year=None):
     if year:
         return date(year, m, d)
+    if (m, d) == (2, 29):   # the round 11 check (DESIGN 18.X): the latest 29 February, never another window
+        y = today.year
+        while True:
+            try:
+                x = date(y, 2, 29)
+            except ValueError:
+                y -= 1
+                continue
+            if x <= today:
+                return x
+            y -= 1
     try:
         x = date(today.year, m, d)
     except ValueError:
@@ -260,6 +285,37 @@ def find_windows(t, today):
 
     def rx(p):
         return re.finditer(p, t)
+    # ---- the round 11 check (DESIGN 18.X): "2 weeks ago", weekends, Spanish "los ultimos 7 dias" ----
+    for m in rx(r"\b(" + _NUM_RE + r"|an?)\s+(day|week|month|year)s?\s+ago\b|\bhace\s+(" + _NUM_ES +
+                r")\s+(dias?|semanas?|meses|mes|anos?)\b"):
+        n = _num(m.group(1) or m.group(3)) or 1
+        unit = m.group(2) or _UNIT_ES[m.group(4)]
+        if unit == "day":
+            d = today - timedelta(days=n)
+            add(m, _win("day", d, d))
+        elif unit == "week":
+            mon = today - timedelta(days=today.weekday() + 7 * n)
+            add(m, _win("week", mon, mon + timedelta(days=6)))
+        elif unit == "month":
+            y, mo = today.year, today.month - n
+            while mo < 1:
+                y, mo = y - 1, mo + 12
+            add(m, _win("month", _month_start(y, mo), _month_end(y, mo)))
+        else:
+            add(m, _win("year", date(today.year - n, 1, 1), date(today.year - n, 12, 31)))
+    for m in rx(r"\b(?:(?:on|over|during)\s+)?(?:this\s+past|last|the\s+past|past|the|this)\s+weekend\b|"
+                r"\b(?:el\s+)?fin\s+de\s+semana(?:\s+pasado)?\b"):
+        w = m.group(0)
+        sat = today - timedelta(days=(today.weekday() - 5) % 7)          # the latest Saturday up to today
+        if today.weekday() >= 5 and re.search(r"\b(?:last|pasado)\b", w):
+            sat -= timedelta(days=7)                                    # on a weekend, "last weekend" is the one before
+        add(m, _win("weekend", sat, sat + timedelta(days=1)))
+    for m in rx(r"\b(?:en\s+)?(?:los|las)\s+ultim[oa]s\s+(" + _NUM_ES + r")\s+(dias|semanas|meses|anos)\b|"
+                r"\b(?:en\s+)?(?:la|el)\s+ultim[oa]\s+(semana|mes|ano)\b"):
+        n = _num(m.group(1)) or 1 if m.group(1) else 1
+        unit = _UNIT_ES[m.group(2) or m.group(3)]
+        days = {"day": 1, "week": 7, "month": 30, "year": 365}[unit] * n
+        add(m, _win("days", today - timedelta(days=days - 1), today))
     for m in rx(r"\b(?:(?:in|over|during|for|within)\s+)?(?:the\s+)?(?:last|past|previous)\s+(" + _NUM_RE +
                 r")\s+(day|week|month|year)s?\b"):
         n = _num(m.group(1)) or 1
@@ -352,6 +408,17 @@ def find_windows(t, today):
         add(m, _win("year", date(y, 1, 1), date(y, 12, 31)))
     for m in rx(r"\b(?:lately|recently|these days|of late|ultimamente|recientemente)\b"):
         add(m, _win("lately", None, None))
+    # the round 11 check (DESIGN 18.X): "between oct 1 and oct 10", "from march to may": one range, never the first only
+    wins = sorted((x for x in found if isinstance(x[1], Window) and x[1].start), key=lambda x: x[0])
+    for (s1, w1, sp1), (s2, w2, sp2) in zip(wins, wins[1:]):
+        if ((re.search(r"\b(?:between|from|entre|del?)\s+(?:the\s+)?$", t[:sp1[0]]) or
+             re.match(r"(?:between|from|entre)\b", t[sp1[0]:])) and
+                re.fullmatch(r"\s*(?:and|to|until|till|through|thru|-|y|a|al|hasta)\s+(?:the\s+)?", t[sp1[1]:sp2[0]])
+                and w2.end and w1.start <= w2.end):
+            found = [x for x in found if x[0] not in (s1, s2)]
+            found.append((s1, _win("range", w1.start, w2.end), (sp1[0], sp2[1])))
+            taken.append((sp1[0], sp2[1]))
+            break
     # "since <window>": from its start to today; a window never runs past today ("in 2026" is up to today)
     found = [(s, _win(w.kind, w.start, min(w.end, today) if w.end else w.end, w.this) if isinstance(w, Window) else w,
               span) for s, w, span in found]
@@ -383,7 +450,7 @@ def _topic_and_platform(t, spans):
     if re.search(r"\b(?:liked|like|likes|me gusto|me gustaron|di like)\b", rest):
         how = "liked"
     if re.search(r"\b(?:saved|save|saves|bookmarked|guarde|guardado|guardados)\b", rest):
-        how = "saved" if how == "watched" else "any"
+        how = "saved" if how == "watched" else "liked_saved"
     if re.search(r"\b(?:watch\w*|viewed|seen|visto|vi|veo|viendo)\b", rest) and how != "watched":
         how = "watched" if how == "liked" and re.search(r"\bwatch\w*\b", rest) and not re.search(r"\bliked\b", rest) \
             else how
@@ -441,6 +508,10 @@ def read(text, today, loose=False):
     if sum(len(x.split()) for x in topic) > 4 or len(topic) > 3:
         return None    # a longer request than a history question: the interpreter reads it
     rest = "".join(t[i] if not any(a <= i < b for a, b in spans) else " " for i in range(len(t)))
+    if LEFT_TIME.search(TIMELINE.sub(" ", rest)):
+        # the round 11 check (DESIGN 18.X): time words no window took ("the first week of october", "2 wks back",
+        # "a day") are never answered as another window or as all time: the interpreter reads the message
+        return None
     q = {"lang": lang, "topic": topic, "platform": platform, "how": how, "channel_hint": hint}
     m = TOP_N.search(t)
     if m:
@@ -465,6 +536,10 @@ def read(text, today, loose=False):
         # "have I watched anything about knitting": how many, so the answer says yes or no with its count
         q.update(kind="count", window=w1,
                  unit="channels" if CHANNEL_WORD.search(rest) and not topic else "items")
+    elif windows and not topic and re.match(r"\W*(?:have|did)\s+i\s+(?:ever\s+)?(?:watch\w*|see|seen)\s+"
+                                            r"(?:any|anything|something|videos?)\b", t):
+        # the round 11 check (DESIGN 18.X): "did I watch anything on nov 10" lists that day
+        q.update(kind="on_day" if w1.kind == "day" else "list", window=w1)
     elif LAST.search(rest):
         q.update(kind="last", window=w1)
     elif TOPIC_WORD.search(rest) and MOST.search(rest):
@@ -577,7 +652,9 @@ def resolve(w, rec, plats, today):
 
 def matches(it, q, channel_key=None):
     if channel_key is not None:
-        return _squash(it.creator or "") == channel_key
+        # the round 11 check (DESIGN 18.X): the channel's own name, as the ranking counts it, so an Instagram
+        # account of the same name ("@orbit.kitchen") is never added to the YouTube channel's count
+        return (it.creator or "") == q.channel
     if not q.topic:
         return True
     text = it.caption or ""
@@ -594,10 +671,11 @@ def channel_of(view, phrase):
     key = _squash(phrase)
     if len(key) < 3:
         return None
-    for it in view.items.values():
-        if it.creator and _squash(it.creator) == key:
-            return it.creator
-    return None
+    named = Counter(it.creator for it in view.items.values() if it.creator and _squash(it.creator) == key)
+    if not named:
+        return None
+    # the name with the most items (a YouTube channel before an Instagram account of the same name on a tie)
+    return max(named, key=lambda c: (named[c], not c.startswith("@"), c))
 
 
 def hits(view, rec, q, start, end, plats):
@@ -693,6 +771,12 @@ def window_words(w, start, end, lang="en", cap=True):
     elif w.kind == "lately":
         s = (f"En las 4 semanas hasta el {day_words(end, lang)}, donde termina tu exportación" if es else
              f"In the 4 weeks up to {day_words(end, lang)} (where your export ends),")
+    elif w.kind == "weekend":
+        s = (f"El fin de semana del {span_words(start, end, lang)}" if es else
+             f"On the weekend of {span_words(start, end, lang)}")
+    elif w.kind == "range" or (w.kind == "days" and start == end):
+        s = (("Del " if es else "From ") + span_words(start, end, lang)) if start != end else \
+            (("El " if es else "On ") + day_words(start, lang, weekday=True))
     else:
         n = (end - start).days + 1
         s = (f"En los últimos {n} días ({span_words(start, end, lang)})" if es else
@@ -712,8 +796,10 @@ def noun(q, n, plats):
 
 def verb(q):
     if q.lang == "es":
-        return {"watched": "viste", "liked": "te gustaron", "saved": "guardaste", "any": "tocaste"}[q.how]
-    return {"watched": "watched", "liked": "liked", "saved": "saved", "any": "watched, liked or saved"}[q.how]
+        return {"watched": "viste", "liked": "te gustaron", "saved": "guardaste", "any": "tocaste",
+                "liked_saved": "te gustaron o guardaste"}[q.how]
+    return {"watched": "watched", "liked": "liked", "saved": "saved", "any": "watched, liked or saved",
+            "liked_saved": "liked or saved"}[q.how]
 
 
 def topic_words(q):
@@ -849,9 +935,19 @@ def start_line(rec, plats, q):
     if not have:
         return ""
     p, d = min(have, key=lambda x: x[1])
+    lab = _LABEL.get(q.how)
     if q.lang == "es":
+        if lab:   # the round 11 check (DESIGN 18.X): where the likes start is not where the history starts
+            return f"{lab[1]} en {PNAME.get(p, p)} aquí empieza el {day_words(d, 'es')}, así que no veo nada antes."
         return f"Tu historial de {PNAME.get(p, p)} aquí empieza el {day_words(d, 'es')}, así que no veo nada antes."
+    if lab:
+        return f"Your {PNAME.get(p, p)} {lab[0]} here start on {day_words(d)}, so I can't see before that."
     return f"Your {PNAME.get(p, p)} history here starts on {day_words(d)}, so I can't see before that."
+
+
+# what start_line and range_line call a record of likes or saves (English, Spanish); watches are "history"
+_LABEL = {"liked": ("likes", "Lo que te gustó"), "saved": ("saves", "Lo que guardaste"),
+          "liked_saved": ("likes and saves", "Lo que te gustó o guardaste")}
 
 
 def range_line(rec, plats, q):
@@ -864,10 +960,19 @@ def range_line(rec, plats, q):
             have.append((p, min(ds), rec.ends[p]))
     if not have:
         return ""
+    lab = _LABEL.get(q.how)
     if q.lang == "es":
+        if lab:
+            parts = [f"{lab[1].lower()} en {PNAME.get(p, p)} aquí va del "
+                     f"{span_words(a, b, 'es').replace(' a ', ' al ', 1)}" for p, a, b in have]
+            return _cap(" y ".join(parts)) + "."
         parts = [f"tu historial de {PNAME.get(p, p)} aquí va del {span_words(a, b, 'es').replace(' a ', ' al ', 1)}"
                  for p, a, b in have]
         return _cap(" y ".join(parts)) + "."
+    if lab:
+        parts = [(f"your {PNAME.get(p, p)} {lab[0]} here run from " if i == 0 else
+                  f"your {PNAME.get(p, p)} {lab[0]} from ") + span_words(a, b) for i, (p, a, b) in enumerate(have)]
+        return _cap(", and ".join(parts)) + "."
     parts = [(f"your {PNAME.get(p, p)} history here runs from " if i == 0 else f"your {PNAME.get(p, p)} history from ")
              + span_words(a, b) for i, (p, a, b) in enumerate(have)]
     return _cap(", and ".join(parts)) + "."
@@ -885,6 +990,8 @@ def window_noun(w, start, end, lang="en"):
         return str(start.year)
     if w.kind == "week" and not w.this:
         return ("la semana del " if es else "the week of ") + span_words(start, end, lang)
+    if w.kind == "weekend":
+        return ("el fin de semana del " if es else "the weekend of ") + span_words(start, end, lang)
     unit = {"month": ("este mes", "this month"), "year": ("este año", "this year"),
             "week": ("esta semana", "this week")}.get(w.kind)
     if unit:
@@ -903,6 +1010,8 @@ def shifted(w, start, end, newest):
         return _win("year", date(newest.year, 1, 1), date(newest.year, 12, 31))
     n = ((end or newest) - start).days + 1 if start else 7
     n = max(n, 1)
+    if n == 1:   # the round 11 check (DESIGN 18.X): "this week" on a Monday was "the last 1 days"
+        return _win("day", newest, newest)
     return _win("days", newest - timedelta(days=n - 1), newest)
 
 
@@ -1194,7 +1303,13 @@ SHOW_THEM = re.compile(r"^\W*(?:(?:and|ok|okay|so|y|cool|great)[,\s]+)?(?:(?:can
 MORE = re.compile(r"^\W*(?:(?:and|ok|y)\s+)?(?:show\s+me\s+)?(?:more|the\s+rest|next|mas|los\s+demas)(?:\s+please)?"
                   r"\s*[?.!]*\s*$")
 FOLLOW_LEAD = re.compile(r"^\W*(?:(?:and|ok|okay|so|y|but)[,\s]+)?(?:(?:what|how)\s+about|and\s+for|and\s+in|and\s+on|"
-                         r"for|in|on|only|just|y\s+(?:en|para|de)|y\s+que\s+tal|que\s+tal)?\s*")
+                         r"for|in|on|only|just|y\s+(?:en|para|de)|y\s+que\s+tal|que\s+tal)?\b\s*")
+# the round 11 check (DESIGN 18.X): a new topic needs a lead that asks again ("what about guitar", "and cooking?");
+# "ok thanks", "for real?", "just kidding", "on my way" are never a topic
+STRONG = re.compile(r"^\W*(?:(?:and|ok|okay|so|but)[,\s]+)?(?:what|how)\s+about\b|^\W*(?:y\s+)?que\s+tal\b")
+AND_LEAD = re.compile(r"^\W*(?:and|y)\b(?!\s+(?:you|u|tu|then|why|so|what|yours|that|this|it)\b)")
+ONES = re.compile(r"^\W*(?:(?:and|ok|okay|so|y)[,\s]+)?(?:(?:only|just)\s+)?(?:the\s+)?ones?\s+(?:that\s+)?i\s+"
+                  r"(liked|saved|watched)\W*$")
 
 
 def _fresh_state(bot, h, now):
@@ -1213,14 +1328,18 @@ def _fresh_state(bot, h, now):
     return st
 
 
-def follow_up(st, text, today):
-    """A changed query for a follow-up to the history answer in `st`, ("pick", n), or None."""
+def follow_up(st, text, today, known=None):
+    """A changed query for a follow-up to the history answer in `st`, ("pick", n), or None. `known(topic)`: whether
+    anything in the record mentions a topic (an "and X?" topic is taken only then)."""
     q = HistoryQuery.model_validate(st["q"])
     t = normal(text)
     if not t or len(t) > 80:
         return None
     if REMIND.search(t) or ACTING.search(t) or EVERY.search(t):
         return None
+    m = ONES.match(t)
+    if m:
+        return q.model_copy(update={"how": m.group(1), "offset": 0})
     m = PICK.match(t)
     if m:
         return ("pick", ORD.get(m.group(1)) or int(m.group(1)))
@@ -1234,15 +1353,22 @@ def follow_up(st, text, today):
         return q.model_copy(update={"offset": q.offset + cap})
     body = FOLLOW_LEAD.sub("", t, count=1)
     body = re.sub(r"[?.!]+\s*$", "", body).strip()
-    if not body or body == t.strip("?.! "):
-        if not re.match(r"^\W*(?:and|what about|how about|y)\b", t):
-            return None
+    strong, anded = bool(STRONG.match(t)), bool(AND_LEAD.match(t))
     wins = find_windows(body, today)
+    if not body or body == t.strip("?.! "):
+        # no lead: only a bare window ("last month?") or "and ..." / "what about ..."
+        if not (strong or anded or (wins and body == " ".join(body[a:b] for _, (a, b) in wins).strip())):
+            return None
     spans = [s for _, s in wins]
     topic, platform, how = _topic_and_platform(body, spans)
     leftover = topic
     changes = {}
     w = [x for x, _ in wins if isinstance(x, Window)]
+    before = next((x for x, _ in wins if isinstance(x, str)), None)
+    if not w and before and q.window.start:
+        # "and the month before that?" (the round 11 check, DESIGN 18.X)
+        w2 = _before(q.window, before.split(":", 1)[1])
+        w = [w2] if w2 else []
     if w:
         changes["window"] = w[0]
         changes["offset"] = 0
@@ -1256,6 +1382,8 @@ def follow_up(st, text, today):
         changes["how"] = "watched"
     if leftover and not w and not platform and "how" not in changes:
         if sum(len(x.split()) for x in leftover) > 3:
+            return None
+        if not strong and not (anded and known is not None and any(known(x) for x in leftover)):
             return None
         changes["topic"] = leftover
         changes["channel"] = None
@@ -1276,7 +1404,10 @@ def history_reads(bot, person, text, now):
     today = now.astimezone(ZoneInfo(tz)).date()
     st = _fresh_state(bot, h, now)
     if st:
-        f = follow_up(st, text, today)
+        def known(x):
+            view = bot.view(person["library"])
+            return any(contains_word(it.caption or "", x) for it in view.items.values())
+        f = follow_up(st, text, today, known)
         if isinstance(f, tuple):
             return _pick(bot, person, st, f[1], now, today)
         if f is not None:
