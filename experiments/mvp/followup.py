@@ -23,7 +23,11 @@ WORDS = {"my rules": "list_rules", "rules": "list_rules", "list my rules": "list
          "undo": "undo", "help": "help",
          # the live check of 19 Nov (F11): the everyday ways of asking for the help, read by code
          "what can you do": "help", "what can you do for me": "help", "what can u do": "help",
-         "what can u do for me": "help", "what do you do": "help", "what else can you do": "help"}
+         "what can u do for me": "help", "what do you do": "help", "what else can you do": "help",
+         # the check of the live fixes (17.L check): the texting and Spanish ways
+         "what do u do": "help", "wat can u do": "help", "what can u even do": "help", "wat can u even do": "help",
+         "what else can u do": "help", "what can you even do": "help", "que puedes hacer": "help",
+         "qué puedes hacer": "help", "que puedes hacer por mi": "help", "qué puedes hacer por mí": "help"}
 MORE = re.compile(r"^\s*(?:(?:give me|send me|show me|try|ok|okay)\s+)?(another(?: one)?|more|one more|next(?: one)?|"
                   r"something else|a different one)\s*(?:please|pls)?\s*[.!?]*\s*$", re.I)
 # a message that only asks for new things from outside the saves; what is left after these phrases must be nothing

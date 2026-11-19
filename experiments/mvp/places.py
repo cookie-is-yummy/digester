@@ -696,9 +696,12 @@ def place_reads(bot, person, text, now):
     t = _norm(text)
     if not t or len(t) > 80:
         return None
-    if MENU.match(t):   # the live check of 19 Nov (F7): the connector menu, before "what are you connected to"
+    if MENU.match(t) or MENU_MORE.match(t):   # the live check of 19 Nov (F7): the menu, before "what are you connected to"
         bot.note(intent="places")
         return bot.send(person["handle"], connector_menu(bot, person["handle"]))
+    if CONNECTED_MORE.match(t):   # the 17.L check: "what r u connected to rn"
+        bot.note(intent="places")
+        return _connected(bot, person, now)
     for rx, fn in ((CONNECTED, _connected), (CONNECT, _connect), (CHECK, _check), (DISCONNECT, _disconnect)):
         if rx.match(t):
             bot.note(intent="places")
@@ -1022,8 +1025,14 @@ def _connected(bot, person, now):
     for key, con in C.CONNECTORS.items():   # round 9, E: a task app or the webhook set up here, with its state
         if con.kind == "oauth":   # second merge of round 10: YouTube is per person, said below
             continue
-        if con.kind != "mac" and (C.module(key).reachable() or bot.store.connection(h, key)):
-            out += f"\n• {con.name[:1].upper() + con.name[1:]}: {T.token_status(key, C.unavailable(bot.store, h, key))}."
+        try:   # the 17.L check: a connector the registry lists but cannot load never breaks this answer
+            here = con.kind != "mac" and (C.module(key).reachable() or bot.store.connection(h, key))
+            if here:
+                why_k = C.unavailable(bot.store, h, key)
+        except Exception:  # noqa: BLE001 - it is said below as "not set up yet" (_not_yet)
+            here = False
+        if here:
+            out += f"\n• {con.name[:1].upper() + con.name[1:]}: {T.token_status(key, why_k)}."
     out += extra
     if why in (None, "broken"):
         out += "\n" + T.MAC_DISCONNECT_HINT
@@ -1137,6 +1146,30 @@ MENU = re.compile(
     r"|(?:show\s+me\s+|list\s+)?(?:the\s+|your\s+)?(?:connectors|integrations|connector\s+menu)(?:\s+(?:list|menu))?"
     r"|connect|connections\s+menu"
     r")$")
+# the check of the live fixes (DESIGN.md section 17.L, "17.L check"): the menu asked in texting words ("wat", "r",
+# "stuff", "do u have integrations", "can u connect to other apps") and in Spanish; "what r u connected to" the same
+_WAT = r"(?:what|wat|wht)"
+_FILL = r"(?:\s+(?:lol|rn|now|right\s+now|tho|though|here|btw|haha+|even))*"
+MENU_MORE = re.compile(
+    _M_LEAD + r"(?:"
+    + _WAT + r"(?:\s+(?:else|other))?(?:\s+(?:apps?|stuff|things|services|tools|connectors|integrations))?\s+(?:can|could|do)"
+    r"\s+" + _YOU + r"(?:\s+even)?\s+(?:connect|link|hook\s+up|plug|integrate)(?:\s+(?:to|with|into|in\s+to|up\s+to|up\s+with))?"
+    r"|(?:do|can)\s+" + _YOU + r"\s+(?:have|got|do|support)\s+(?:any\s+)?(?:integrations|connectors|connections|"
+    r"app\s+connections|other\s+apps)"
+    r"|" + _WAT + r"\s+(?:connectors|integrations|apps|connections)\s+(?:are|r)\s+there"
+    r"|(?:can|could)\s+" + _YOU + r"\s+(?:connect|link|hook\s+up)\s+(?:to|with|into)\s+(?:other|any|more|some|my\s+other)\s+"
+    r"(?:apps?|services|stuff|things|tools)"
+    r"|(?:list|show(?:\s+me)?)\s+(?:your|ur|the)\s+(?:integrations|connectors|connections)"
+    r"|(?:which|wich|what|wat)\s+apps?\s+(?:do|can)\s+" + _YOU + r"\s+(?:work|integrate|connect)\s+with"
+    # Spanish
+    r"|(?:a\s+|con\s+)?qu[eé]\s+(?:apps|aplicaciones|cosas|servicios)\s+(?:te\s+puedes\s+conectar|puedes\s+conectar|"
+    r"puedes\s+usar|conectas|usas)(?:\s+conmigo)?"
+    r"|qu[eé]\s+(?:puedo|se\s+puede)\s+conectar(?:\s+(?:contigo|aqu[ií]))?"
+    r"|con\s+qu[eé]\s+(?:apps|aplicaciones)\s+(?:trabajas|funcionas|te\s+conectas)"
+    r"|qu[eé]\s+integraciones\s+(?:tienes|hay)"
+    r")" + _FILL + r"$")
+CONNECTED_MORE = re.compile(_M_LEAD + _WAT + r"(?:\s+apps?)?\s+(?:are|r)\s+" + _YOU + r"\s+connected\s+(?:to|with)"
+                            + _FILL + r"$")
 EMAIL_APP = re.compile(r"(?:g-?mail|google\s+mail|outlook|hotmail|yahoo(?:\s+mail)?|icloud\s+mail|e-?mail|mail|inbox|"
                        r"mailbox)")
 CONNECT_ANY = re.compile(_W_LEAD + r"(?:connect|link|hook\s+up|sync|integrate)\s+(?:to\s+|with\s+)?(?:my\s+|the\s+|a\s+)?"
@@ -1145,7 +1178,9 @@ CONNECT_ANY = re.compile(_W_LEAD + r"(?:connect|link|hook\s+up|sync|integrate)\s
 # never an app's name: what a library question or a game says after "connect" ("connect four strategy videos")
 _NOT_APP = re.compile(r"\b(?:videos?|reels?|posts?|recipes?|tutorials?|strateg\w*|tips|ideas?|games?|dots|people|"
                       r"friends?|family|others|someone|anyone|everyone|me|you|it|this|that|them|these|those|with|and|"
-                      r"or|the|to|four|4|two|three|five|puzzle|world)\b")
+                      r"or|the|to|four|4|two|three|five|puzzle|world|"
+                      # the 17.L check: "can u connect to other apps" is the menu, never an app called "Other Apps"
+                      r"other|apps?|stuff|things?|services?|tools?|anything|something|everything|more|all|any|some)\b")
 _INSTAGRAM = re.compile(r"(?:instagram|insta|ig)(?:\s+account)?")
 
 
@@ -1184,7 +1219,8 @@ def _connector_line(bot, h, key, con):
     if why is None:
         return T.menu_line(name, "connected")
     if con.kind == "oauth" and why == "unreachable":
-        if config.is_operator(h):
+        # the 17.L check: the Google steps are YouTube's own; any other connector of this kind says the plain state
+        if config.is_operator(h) and key == "youtube":
             return T.menu_line(name, "not set up on this bot yet. " + T.yt_setup_how(_page(bot)).rstrip("."))
         return T.menu_line(name, "not set up on this bot yet")
     if key == "mac" and why == "unreachable":
@@ -1203,7 +1239,7 @@ def _browser_menu(bot, h):
     on = switches().get("browser", "off") != "off"
     if on and (config.is_operator(h) or browser.person_ok(h)):
         words = browser_words(chat=True)
-        sites = sorted(browser.merchants())
+        sites = [k for k, _ in usable_sites()]   # the 17.L check: the words name a site the browser can do
         return "• " + words + (f" Say \"cancel my {sites[0]}\"." if sites else "")
     if not on and config.is_operator(h):
         return T.menu_browser_off_operator()
@@ -1213,7 +1249,7 @@ def _browser_menu(bot, h):
 def connector_menu(bot, h):
     """F7: every connector the build has, its state for this person and the exact words that connect it."""
     own, others = _email_state(bot, h)
-    lines = [T.MENU_HEAD, T.MENU_LIST, T.menu_email_self(own), T.menu_email_others(others, _page(bot)), T.MENU_CALENDAR]
+    lines = [T.MENU_HEAD, T.MENU_LIST, T.menu_email_self(own, _page(bot)), T.menu_email_others(others, _page(bot)), T.MENU_CALENDAR]
     operator = config.is_operator(h)
     only = []
     for key, con in C.CONNECTORS.items():
@@ -1325,15 +1361,31 @@ def _cased(text, name):
 # ---------- end the live check of 19 Nov ----------
 
 
+def usable_sites():
+    """The 17.L check: [(key, name said)] of the switched-on sites the browser has a whole, allowed path for (a key in
+    MVP_BROWSER_MERCHANTS with no path, or a denied one, is never named as a site it can do); the practice site says
+    so."""
+    from . import browser
+    out = []
+    for k in sorted(browser.merchants()):
+        r = browser.route(k)
+        if r is None or not browser._complete(r) or browser.is_denied(r):
+            continue
+        out.append((k, r["name"] + (" (a practice site)" if r.get("practice") else "")))
+    return out
+
+
 def help_args(bot, h):
     """F11: what the help may say for this run: YouTube when it is set up here, the browser's sites when it is on for
-    this person."""
-    out = {"youtube": False, "sites": None}
+    this person (17.L check: only sites it can do, by their names)."""
+    out = {"youtube": False, "sites": None, "say": None}
     try:
         out["youtube"] = bool(C.module("youtube").reachable())
         from . import browser
         if browser.mode() != "off" and (config.is_operator(h) or browser.person_ok(h)):
-            out["sites"] = sorted(browser.merchants()) or None
+            sites = usable_sites()
+            if sites:
+                out["sites"], out["say"] = [n for _, n in sites], sites[0][0]
     except Exception:  # noqa: BLE001 - the help never breaks
         pass
     return out

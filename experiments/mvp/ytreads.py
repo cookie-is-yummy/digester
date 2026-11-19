@@ -177,6 +177,30 @@ IG_ACTS = (
     ("delete", _R(r"delete\s+(?:my|a|that|this|the)\s+(?:(?:" + _IG + r")\s+)?post(?P<ig>\s+(?:on|from)\s+(?:my\s+)?" +
                   _IG + r")")),
 )
+# the check of the live fixes (DESIGN.md section 17.L, "17.L check"): the same asks in Spanish ("dale like a ese reel por
+# mi", "comenta que rico en ese reel"), which the model would read as the person's own like (feedback). "dale" and
+# "ponle" are asks of the bot, so they sit in the ask group; "me gusta ese" stays feedback (no read here)
+_ASK_ES = (r"(?P<ask>(?:(?:porfa|por\s+favor|oye|ey|plis)[\s,]+|(?:puedes|podr[ií]as)\s+|"
+           r"(?:dale|d[aá]le|da|ponle|p[oó]nle|pon)\s+(?=(?:un\s+)?(?:like|me\s+gusta|coraz[oó]n)))+)?")
+_FOR_ES = r"(?P<for>\s+por\s+m[ií])?"
+_END_ES = r"(?:\s+(?:porfa|por\s+favor|plis|pls|ya))*$"
+_IG_ES = r"(?:instagram|insta|ig)"
+_IG_ON_ES = r"(?P<ig>\s+(?:en|de)\s+(?:mi\s+)?" + _IG_ES + r")?"
+_POST_ES = (r"(?P<obj>(?:ese|este|el|la|esa|esta)\s+(?P<noun>reel|post|video|v[ií]deo|publicaci[oó]n|foto|historia)"
+            r"|eso|esto|ese|este)")
+_WHO_ES = (r"(?P<who>(?:ese|este|esa|esta)\s+(?:creador|creadora|cuenta|chef|cocinero|cocinera|perfil|chico|chica)"
+           r"|@[A-Za-z0-9_.]{1,30})")
+_R_ES = lambda body: re.compile(r"^" + _ASK_ES + body + _FOR_ES + _END_ES)  # noqa: E731
+IG_ACTS += (
+    ("like", _R_ES(r"(?:(?:un\s+)?(?:like|me\s+gusta|coraz[oó]n)\s+(?:a\s+)?|likea\s+)" + _POST_ES + _IG_ON_ES)),
+    ("comment", _R_ES(r"(?:comenta|com[eé]ntale|deja(?:le)?\s+un\s+comentario|escribe\s+un\s+comentario)"
+                      r"(?:\s+[\"“]?(?P<words>[^\"”]{1,60}?)[\"”]?)?\s+(?:en|a)\s+" + _POST_ES + _IG_ON_ES)),
+    ("share", _R_ES(r"(?:comparte|sube|pon)\s+" + _POST_ES + r"\s+(?:en|a)\s+mi\s+historia")),
+    ("follow", _R_ES(r"sigue\s+a\s+" + _WHO_ES + _IG_ON_ES)),
+    ("dm", _R_ES(r"(?:m[aá]ndale|escr[ií]bele|env[ií]ale)\s+(?:un\s+)?(?:dm|mensaje)\s+a\s+" + _WHO_ES + _IG_ON_ES)),
+    ("save", _R_ES(r"guarda\s+" + _POST_ES + r"\s+en\s+mi\s+colecci[oó]n(?:\s+(?:de\s+)?" + _IG_ES + r")?"
+                   r"(?:\s+(?:llamada|que\s+se\s+llama)\s+[\"“]?(?P<coll>[^\"”]{1,40}?)[\"”]?)?" + _IG_ON_ES)),
+)
 # ---------- end the live check of 19 Nov ----------
 OTHER_MUSIC = re.compile(r"\b(?:spotify|apple\s+music|soundcloud|tidal|deezer|amazon\s+music|pandora)\b")
 REST_STOP = re.compile(r"^(?:please\s+)?(?:stop|stop\s+it|don'?t|do\s+not|stop\s+(?:that|unsubscribing|"
@@ -1110,7 +1134,7 @@ def ig_act_reads(bot, person, t, now):
                 not (m.group("for") or ig_said):
             return None   # "would you like it": a question about taste, not a request to tap the heart
         if verb == "comment" and not (m.groupdict().get("words") or m.group("for") or ig_said or
-                                      re.match(r"(?:leave|write)\s", t[len(m.group("ask") or ""):])):
+                                      re.match(r"(?:leave|write|deja|escribe)\s", t[len(m.group("ask") or ""):])):
             return None   # "comment on this" may ask what the bot thinks: only words to post, "for me" or Instagram
         picks = in_view(bot, person)
         who, obj = m.groupdict().get("who"), m.groupdict().get("obj")

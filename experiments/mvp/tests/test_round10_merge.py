@@ -464,7 +464,8 @@ HOOK_ORDER = {
                                  "ref = ig_act_reads(bot, person, t, now)",          # F4 to F6, beside IG_CANT
                                  "m = IG_CANT.match(t)",
                                  "m = UNFOLLOW.match(t)"],
-    "places.py:place_reads": ["if MENU.match(t):",                                   # F7, before CONNECTED
+    "places.py:place_reads": ["if MENU.match(t) or MENU_MORE.match(t):",             # F7 (17.L check), first
+                              "if CONNECTED_MORE.match(t):",                         # 17.L check
                               "for rx, fn in ((CONNECTED, _connected), (CONNECT, _connect)",
                               "ref = token_reads(bot, person, text, t, now)",
                               "ref = w_place_reads(bot, person, text, t, now)",

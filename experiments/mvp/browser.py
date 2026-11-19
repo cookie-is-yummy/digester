@@ -41,9 +41,13 @@ NEXT_ONLY = ("offered", "permission", "reminder")   # steps answered by the next
 STOP = re.compile(r"^\W*(?:(?:please|no|ok|okay)[\s,!.]+)?(?:stop|stop it|stop that|stop now|stop everything|"
                   r"stop the browser|cancel that|kill it|don'?t|do not|abort|close it|close the browser|halt)"
                   r"(?:\s+please)?\W*$", re.I)
-IM_IN = re.compile(r"^\W*(?:(?:ok(?:ay)?|yes|yep|right|done)[\s,!.]+)?(?:i'?m in|im in|i am in|i'?m signed in|"
+# the check of the live fixes (DESIGN.md section 17.L, "17.L check"): the fillers a person texts around "I'm in"
+# ("k im in", "im in lol", "yeah im in now haha"); the model read "im in lol" as a move to another time zone
+_IN_PRE = r"(?:(?:ok(?:ay)?|k+|kk+|yes|yep|yeah|ya|yea|right|so|alright|done|cool|great|perfect)[\s,!.]+)*"
+_IN_POST = r"(?:\s+(?:now|lol|lmao|haha+|finally|already|thanks|thx|ty))*"
+IM_IN = re.compile(r"^\W*" + _IN_PRE + r"(?:i'?m in|im in|i am in|i'?m signed in|"
                    r"i am signed in|signed in|i'?m logged in|logged in|i'?m done|i am done|done|go on|carry on|"
-                   r"continue|ready|i did it|did it)(?:\s+now)?\W*$", re.I)
+                   r"continue|ready|i did it|did it)" + _IN_POST + r"\W*$", re.I)
 DO_IT = re.compile(r"^\W*(?:(?:yes|yep|yeah|ok|okay|sure|please)[\s,!.]*)*(?:do it for me|cancel it for me|"
                    r"you do it|do it|go ahead|please do|yes please|yes|yep|yeah|ok|okay|sure)(?:\s+please)?\W*$", re.I)
 STEPS = re.compile(r"^\W*(?:(?:no|ok|okay)[\s,]+)?(?:steps|the steps|show me the steps|give me the steps|tell me how|"
@@ -56,9 +60,9 @@ STATUS = re.compile(r"^\W*(?:what'?s happening|what is happening|what are you do
 REVOKE = re.compile(r"^\W*(?:please\s+)?stop acting on\s+(?:my\s+)?(.{2,40}?)\W*$", re.I)
 # the live check of 19 Nov (DESIGN.md section 17.L, F1): a bare "I'm in" with no place name, read whatever the run's
 # step; it never reaches the model, which read it as a move to New York time
-SIGNED_IN = re.compile(r"^\W*(?:(?:ok(?:ay)?|yes|yep|right|so|alright|done)[\s,!.]+)?(?:(?:i'?m|im|i am)\s+(?:in|"
+SIGNED_IN = re.compile(r"^\W*" + _IN_PRE + r"(?:(?:i'?m|im|i am)\s+(?:in|"
                        r"signed\s+in|logged\s+in)|(?:signed|logged)\s+in|i'?ve\s+(?:signed|logged)\s+in|"
-                       r"i\s+(?:signed|logged)\s+in)(?:\s+now)?\W*$", re.I)
+                       r"i\s+(?:signed|logged)\s+in)" + _IN_POST + r"\W*$", re.I)
 NOT_TAKEN = re.compile(r"\d|\b(?:rules?|reminders?|nudges?|lists?|to-?dos?|digest|recap|texts?|messages?|picks?)\b",
                        re.I)
 
@@ -441,6 +445,10 @@ class BrowserMixin:
         if STATUS.match(t):
             self.note(intent="browser")
             return self.send(h, T.browser_status(step, r["name"], yes_word(r)))
+        m = ALLOW.match(t)   # the 17.L check: "allow streamly" again while its run is open (the model refused it live)
+        if m and names_match(r, m.group(1)):
+            self.note(intent="browser")
+            return self.send(h, T.browser_allowed_open(r["name"], T.browser_status(step, r["name"], yes_word(r))))
         if step == "walking":
             if IM_IN.match(t):
                 self.note(intent="browser")

@@ -3565,6 +3565,11 @@ def browser_status(step, name, yes_word):
     return f"The browser is open on {name}. Sign in there yourself if it asks, then say \"I'm in\"."
 
 
+def browser_allowed_open(name, status):
+    """The 17.L check: "allow <merchant>" while its run is already open: it is allowed; where the run is now."""
+    return f"You've already allowed {name}. {status}"
+
+
 def browser_password(name, vm=False):
     """The password line for this person and merchant while the browser is on for them (everyone else keeps
     CANCEL_PASSWORD)."""
@@ -3735,10 +3740,12 @@ MENU_INSTAGRAM = ("• Instagram: no app may act on a personal account, so I nev
                   "the export reaches me).")
 
 
-def menu_email_self(state):
+def menu_email_self(state, page=False):
+    # the 17.L check: on the test page the outbox is the Outbox panel, as "what are you connected to" says
     return {"on": "• Email to you: on.", "code": "• Email to you: waiting for the 6-digit code I sent you.",
             "none": "• Email to you: not set up yet (tell me your email address).",
-            "outbox": "• Email to you: not connected here, so emails wait in my outbox.",
+            "outbox": "• Email to you: not connected here, so emails wait in " +
+                      ("the Outbox panel." if page else "my outbox."),
             "link": "• Email to you: a link that opens an email to yourself."}[state]
 
 
@@ -3847,13 +3854,14 @@ def help_apps(youtube=False):
     return f"Apps: \"what can I connect\" shows what I can reach here and how to connect each{yt}."
 
 
-def help_browser(sites):
-    """F11: the browser line, only when the browser is on for this person (sites as the setting names them)."""
-    return f"Cancelling for you: I can do it in a browser on {', '.join(sites)}; say \"cancel my {sites[0]}\"."
+def help_browser(sites, say=None):
+    """F11: the browser line, only when the browser is on for this person (17.L check: the sites it can do, by name)."""
+    say = say or sites[0].split(" (")[0].lower()
+    return f"Cancelling for you: I can do it in a browser on {', '.join(sites)}; say \"cancel my {say}\"."
 
 
-def help_full(build, youtube=False, sites=None):
+def help_full(build, youtube=False, sites=None, say=None):
     """The help reply with the apps line (and the browser line when it is on), then the build."""
-    lines = [HELP, help_apps(youtube)] + ([help_browser(sites)] if sites else []) + [build_line(build)]
+    lines = [HELP, help_apps(youtube)] + ([help_browser(sites, say)] if sites else []) + [build_line(build)]
     return "\n".join(lines)
 # ---------- end the live check of 19 Nov ----------

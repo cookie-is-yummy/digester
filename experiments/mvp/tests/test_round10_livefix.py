@@ -624,7 +624,7 @@ def test_the_help_with_the_browser_on_and_youtube_set_up_is_two_lines_longer_at_
     old = T.HELP + "\n" + T.build_line(config.BUILD)
     assert len(out.split("\n")) - len(old.split("\n")) == 2
     assert "; YouTube: \"connect youtube\"." in out and \
-        "Cancelling for you: I can do it in a browser on netflix; say \"cancel my netflix\"." in out
+        "Cancelling for you: I can do it in a browser on Netflix; say \"cancel my netflix\"." in out   # 17.L check: by name
 
 
 def test_a_tester_the_browser_is_not_for_gets_no_browser_line(tester, monkeypatch):
