@@ -116,6 +116,10 @@ def main(argv=None):
 
         from mvp import refresh
         LIB.ensure_empty_te_files(lib)
+        router = os.path.join(config.REPO, "data", "all", "r7", "router.npz")   # as the self-test does
+        if os.path.isfile(router):
+            os.makedirs(os.path.join(lib, "r7"), exist_ok=True)
+            shutil.copyfile(router, os.path.join(lib, "r7", "router.npz"))
         r = refresh.prepare_library(lib, 0.05)
         if not r["ok"]:
             sys.exit("The made-up library could not be prepared for search.")
@@ -180,7 +184,9 @@ def main(argv=None):
                   "fit_found": len((caught.get(h) or {}).get("fits") or [])})
         results.append(s)
         if not a.real:
-            transcript.append(f"## {r['id']} {r['topic']}\n\n> {r['message']}\n\n{reply}\n")
+            gone = "\n".join(f"- dropped ({why}): {txt}" for why, txt in (caught.get(h) or {}).get("dropped_text") or [])
+            transcript.append(f"## {r['id']} {r['topic']}\n\n> {r['message']}\n\n{reply}\n" + (
+                f"\n{gone}\n" if gone else ""))
         else:
             transcript.append(f"## {r['id']}\n\n{reply}\n")
         print(json.dumps({k: v for k, v in s.items()}))

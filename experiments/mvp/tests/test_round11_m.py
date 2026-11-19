@@ -237,12 +237,12 @@ def test_a_summary_cites_many_items_and_says_what_it_read(lib_env):
     assert out.startswith("Here's what the posts and videos you kept say about sourdough:")
     assert re.search(r"(?m)^1\. ", out) and re.search(r"(?m)^3\. ", out)
     assert out.count("   From \"") >= 3
-    assert re.search(r"From \d+ videos? and \d+ posts?; 1 more fit but say nothing in their text\.", out), out
+    assert re.search(r"From \d+ videos? and \d+ posts?; 1 more fit but say nothing in their text(; I read \d+ more that I didn.t use)?\.", out), out
     assert out.rstrip().endswith("I read titles, descriptions and captions, not what is said in the videos.")
     # the friend's post, and the post that speaks to an assistant, are never read or named
     assert "sm_sd7" not in out and "sm_sd6" not in out and "password" not in out.lower()
     run = e["bot"].store.q("SELECT * FROM runs WHERE kind='synth'")[-1]
-    assert run["prompt_version"] == "synth_v1" and run["n_picks"] >= 3
+    assert run["prompt_version"] == "synth_v2" and run["n_picks"] >= 3
     steps = json.loads(run["steps"])
     assert steps["note_left_out"] == 1 and steps["points"] >= 3
 

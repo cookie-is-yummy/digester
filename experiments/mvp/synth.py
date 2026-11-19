@@ -23,11 +23,13 @@ import time
 
 from . import config, llm
 
-PROMPT_VERSION = "synth_v1"
+PROMPT_VERSION = os.environ.get("MVP_SYNTH_PROMPT", "synth_v2")   # v2: closer to the items' words, one idea
+# per point, never what the items are (DESIGN 18.M); synth_v1 stays for the measurement
 PROMPT = open(os.path.join(config.HERE, "prompts", f"{PROMPT_VERSION}.md"), encoding="utf-8").read()
 ON = os.environ.get("MVP_SYNTH", "1") != "0"    # off: the message goes to the interpreter as before (the eval's "before")
 CANDS = 40           # ranked candidates looked at
 READS = 12           # items whose key points are read (one details call each, cached per item)
+RICH_TEXT = 120      # an item with at least this much of its own text is read before shorter ones
 MAX_POINTS = 6
 MIN_POINTS = 2       # fewer checked points than this: the plain list of what fits, with no summary
 TRACE_MIN = 0.6      # share of a point's content words that must be found in the text of the items it cites
@@ -170,6 +172,15 @@ def content_words(text):
     return [w for w in _WORD.findall((text or "").lower()) if w not in STOP and (len(w) >= 3 or w.isdigit())]
 
 
+def _base(word):
+    """'stretching' -> 'stretch', 'budgeting' -> 'budget', 'running' -> 'run' (so a topic said as an activity finds
+    posts that name the thing); other words as they are."""
+    if len(word) > 6 and word.endswith("ing"):
+        b = word[:-3]
+        return b[:-1] if len(b) > 2 and b[-1] == b[-2] and b[-1] not in "ls" else b
+    return word
+
+
 def fits_topic(text, topic):
     """True when the item's own text names the topic: the phrase, or every content word of a short topic (2 of 3 or
     more for a longer one), each as a whole word in singular or plural (retrieve.contains_word)."""
@@ -179,7 +190,7 @@ def fits_topic(text, topic):
     words = list(dict.fromkeys(content_words(topic)))
     if not words:
         return False
-    found = sum(1 for w in words if contains_word(text, w))
+    found = sum(1 for w in words if contains_word(text, w) or (_base(w) != w and contains_word(text, _base(w))))
     need = len(words) if len(words) <= 2 else max(2, (2 * len(words) + 2) // 3)
     return found >= need
 
@@ -213,11 +224,11 @@ def trace_share(point, texts):
 
 
 _LEADING_MARK = re.compile(r"^\s*(?:\d{1,2}\s*[.)\-:]|[-*•·]+)\s*")
-_ABOUT_ITEM = re.compile(r"\b(?:this|the|that)\s+(?:video|post|reel|item|creator|caption|description)\b|\bitems?\s+\d|"
+_ABOUT_ITEM = re.compile(r"\b(?:this|the|that)\s+(?:video|post|reel|item|creator|caption|description)\b|\bitems?\b|"
                          r"\b(?:subscribe|follow\s+(?:me|us|for)|link\s+in\s+bio|use\s+code)\b", re.I)
 
 
-def check_points(raw, items, extra=None):
+def check_points(raw, items, extra=None, notes=None):
     """(points, dropped): the model's points that code can trace to the text of the items they cite.
 
     `items` is the numbered list the model saw (1-based). A point is kept only when it is a plain sentence (no link,
@@ -227,8 +238,10 @@ def check_points(raw, items, extra=None):
     from .compose import INTERNAL, UNSAFE_TEXT, check_text, numbers_backed, quote_ok, tokens
     dropped = {}
 
-    def drop(why):
+    def drop(why, text=None):
         dropped[why] = dropped.get(why, 0) + 1
+        if notes is not None:   # the eval's transcript only (made-up data); never stored
+            notes.append((why, text))
     pts = raw.get("points") if isinstance(raw, dict) else None
     if not isinstance(pts, list):
         return [], ({"bad_form": 1} if raw else {})
@@ -241,10 +254,10 @@ def check_points(raw, items, extra=None):
             continue
         text = _LEADING_MARK.sub("", " ".join(str(p.get("text") or "").split())).strip()
         if not text or len(text) > POINT_MAX_CHARS or len(content_words(text)) < 2:
-            drop("bad_text")
+            drop("bad_text", text)
             continue
         if UNSAFE_TEXT.search(text) or INTERNAL.search(text) or _ABOUT_ITEM.search(text):
-            drop("unsafe_text")
+            drop("unsafe_text", text)
             continue
         ids, texts = [], []
         for s in p.get("sources") or []:
@@ -266,18 +279,18 @@ def check_points(raw, items, extra=None):
                 ids.append(it.id)
                 texts.append(body)
         if not ids:
-            drop("no_source")
+            drop("no_source", text)
             continue
         share = trace_share(text, texts)
         if share < TRACE_MIN:
-            drop("not_traced")
+            drop("not_traced", text)
             continue
         if not numbers_backed(text, "\n".join(texts)):
-            drop("number_not_in_text")
+            drop("number_not_in_text", text)
             continue
         keys = _keyset(" ".join(content_words(text)))
         if any(len(keys & k) >= 0.8 * max(1, min(len(keys), len(k))) for k in seen):
-            drop("repeat")
+            drop("repeat", text)
             continue
         seen.append(keys)
         kept.append({"text": text if text.endswith((".", "!", "?")) else text + ".", "ids": ids, "share": round(share, 2)})
@@ -353,7 +366,9 @@ def summarize(bot, person, req, now, last=None):
     h = person["handle"]
     fits, extra, steps, cost = gather(bot, person, req, now, last=last)
     view = bot.view(person["library"])
-    readable = [it for it in fits if len(own_text_lines(it, extra)) >= MIN_TEXT][:READS]
+    # the items with the most of their own text are read first (search order otherwise): a bare title says little
+    readable = sorted([it for it in fits if len(own_text_lines(it, extra)) >= MIN_TEXT],
+                      key=lambda it: len(own_text_lines(it, extra)) < RICH_TEXT)[:READS]
     facts, info = details_many(readable, ["key_points"], view.lib, store=bot.store, person=h, extra=extra, now=now,
                                context={"request": req["topic"]})
     cost += info["cost"]
@@ -376,8 +391,9 @@ def summarize(bot, person, req, now, last=None):
                 raise
             raw = {}
             steps["synth_error"] = type(e).__name__
-        points, dropped = check_points(raw, said, extra)
-        out["points"], out["dropped"] = points, dropped
+        notes = []
+        points, dropped = check_points(raw, said, extra, notes=notes)
+        out["points"], out["dropped"], out["dropped_text"] = points, dropped, notes
         steps["points_model"] = len(raw.get("points") or []) if isinstance(raw, dict) and isinstance(
             raw.get("points"), list) else 0
     if len(out["points"]) < MIN_POINTS:

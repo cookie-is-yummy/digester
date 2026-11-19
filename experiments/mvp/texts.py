@@ -3913,6 +3913,9 @@ def synth_message(res, video_ask=False, show=3):
         tail = f"From {synth_counts(cited)}"
         if silent:
             tail += f"; {len(silent)} more fit but say nothing in their text"
+        unused = [it for it in res.get("said") or [] if it.id not in {c.id for c in cited}]
+        if unused:
+            tail += f"; I read {len(unused)} more that I didn't use"
         if res.get("unread"):
             tail += f"; {len(res['unread'])} more fit that I didn't read"
         lines += ["", tail + "."]
