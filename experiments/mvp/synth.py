@@ -23,8 +23,8 @@ import time
 
 from . import config, llm
 
-PROMPT_VERSION = os.environ.get("MVP_SYNTH_PROMPT", "synth_v2")   # v2: closer to the items' words, one idea
-# per point, never what the items are (DESIGN 18.M); synth_v1 stays for the measurement
+PROMPT_VERSION = os.environ.get("MVP_SYNTH_PROMPT", "synth_v3")   # v3: v2 plus points spread over the items;
+# v2: closer to the items' words, one idea per point, never what the items are (DESIGN 18.M); v1 and v2 stay as measured
 PROMPT = open(os.path.join(config.HERE, "prompts", f"{PROMPT_VERSION}.md"), encoding="utf-8").read()
 ON = os.environ.get("MVP_SYNTH", "1") != "0"    # off: the message goes to the interpreter as before (the eval's "before")
 CANDS = 40           # ranked candidates looked at
