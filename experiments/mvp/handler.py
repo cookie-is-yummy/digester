@@ -342,6 +342,12 @@ class HandlerMixin:
             return self._limit_notice(person, over)  # before any paid call
         if it is not None:
             return self._dispatch(person, it, text, rules, pending, last, now)
+        # ---------- round 11, slice M: "summarize what I've learned about X", across many items (synth.py) ----------
+        from .synth import synth_reads
+        ref = synth_reads(self, person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 11, slice M ----------
         if last and not last.get("rule_id"):
             last = dict(last, request=(self.store.get_state(f"lastspec:{handle}") or {}).get("text"))
         try:

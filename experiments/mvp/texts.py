@@ -3865,3 +3865,69 @@ def help_full(build, youtube=False, sites=None, say=None):
     lines = [HELP, help_apps(youtube)] + ([help_browser(sites, say)] if sites else []) + [build_line(build)]
     return "\n".join(lines)
 # ---------- end the live check of 19 Nov ----------
+
+
+# ---------- round 11, slice M: answers across many items (synth.py; DESIGN.md section 18.M) ----------
+SYNTH_READS_WHAT = "I read titles, descriptions and captions, not what is said in the videos."
+SYNTH_VIDEO_OFFER = " To hear what one of the videos itself says, ask me about that video."   # only with MVP_VIDEO_ASK=1
+SYNTH_TITLE_CHARS = 70
+
+
+def _synth_count(n, one, many):
+    return f"{n} {one if n == 1 else many}"
+
+
+def synth_counts(items):
+    """'4 videos and 2 posts' (YouTube items are videos; Instagram items are posts)."""
+    v = sum(1 for it in items if it.platform == "youtube")
+    p = len(items) - v
+    parts = ([_synth_count(v, "video", "videos")] if v else []) + ([_synth_count(p, "post", "posts")] if p else [])
+    return " and ".join(parts) or "0 posts"
+
+
+def synth_source(it):
+    """'"Title" by creator <link>', the title cut to SYNTH_TITLE_CHARS."""
+    from .compose import display_title
+    title = display_title(it)
+    if len(title) > SYNTH_TITLE_CHARS:
+        title = title[:SYNTH_TITLE_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:-") + "…"
+    who = f" by {it.creator}" if it.creator and it.creator.lower() not in title.lower() else ""
+    return f"\"{title}\"{who}" + (f" {it.url}" if it.url else "")
+
+
+def synth_message(res, video_ask=False, show=3):
+    """The reply for a synthesis (synth.summarize's result): the points, each with the items it came from, the counts,
+    and what was read. Built by code from checked points; the model wrote only the points' sentences."""
+    topic = res["topic"]
+    by_id = {it.id: it for it in res["fits"]}
+    lines = []
+    if res["points"] and not res.get("thin"):
+        lines.append(f"Here's what the posts and videos you kept say about {topic}:")
+        lines.append("")
+        for i, p in enumerate(res["points"], 1):
+            srcs = [by_id[iid] for iid in p["ids"] if iid in by_id][:show]
+            lines.append(f"{i}. {p['text']}")
+            lines.append("   From " + "; ".join(synth_source(it) for it in srcs))
+        cited = [by_id[i] for i in dict.fromkeys(i for p in res["points"] for i in p["ids"]) if i in by_id]
+        silent = [it for it in res["silent"] if it.id not in {c.id for c in cited}]
+        tail = f"From {synth_counts(cited)}"
+        if silent:
+            tail += f"; {len(silent)} more fit but say nothing in their text"
+        if res.get("unread"):
+            tail += f"; {len(res['unread'])} more fit that I didn't read"
+        lines += ["", tail + "."]
+    elif not res["fits"]:
+        lines.append(f"I found nothing in your saves about {topic}.")
+    else:
+        n = len(res["fits"])
+        lines.append(f"I found {n} {'thing' if n == 1 else 'things'} about {topic} in your saves, but their text says "
+                     f"too little to sum up.")
+        if res["points"]:
+            lines.append(f"One thing they say: {res['points'][0]['text']}")
+        lines.append("Here they are:")
+        for it in res["fits"][:5]:
+            lines.append("• " + synth_source(it))
+    if res["fits"]:
+        lines.append(SYNTH_READS_WHAT + (SYNTH_VIDEO_OFFER if video_ask else ""))
+    return "\n".join(lines)
+# ---------- end round 11, slice M ----------
