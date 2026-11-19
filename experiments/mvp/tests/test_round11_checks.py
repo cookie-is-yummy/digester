@@ -298,7 +298,7 @@ def test_the_checkers_60_traps_are_never_a_history_question(text):
     ("2026-11-19T17:00:00+00:00", "which channels do i watch the most",
      "In all your history I can see, you watched 43 videos (40 on YouTube, 3 on Instagram). Most from:\n"
      "1. Tidal Synths: 11\n2. Orbit Kitchen: 11\n3. Grain & Grit: 6\n4. Byte Garage: 5\n5. Pocket Atlas: 4\n"
-     "(9 channels in all.)"),
+     "(9 accounts and channels in all.)"),   # round 11 fix, A (R7): 3 of them on Instagram
 ])
 def test_numbers_and_window_edges_match_a_count_by_hand(chk, clock, text, head):
     at(chk, clock)

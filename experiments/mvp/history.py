@@ -69,6 +69,7 @@ class HistoryQuery(BaseModel):
     lang: Literal["en", "es"] = "en"
     offset: int = 0                     # "more" after a list
     by: Optional[Literal["month", "year"]] = None   # timeline: "by year", "per month"
+    less: bool = False                  # round 11 fix, A (R5): compare asked "less / fewer", so its answer leads so
 
 
 # ====================================== reading the message ======================================================
@@ -523,7 +524,8 @@ def read(text, today, loose=False):
         w2 = _before(windows[0], before.split(":", 1)[1])
         windows = [windows[0], w2] if w2 else windows
     if len(windows) >= 2 and COMPARE.search(rest):
-        q.update(kind="compare", window=windows[0], window2=windows[1])
+        q.update(kind="compare", window=windows[0], window2=windows[1],
+                 less=bool(re.search(r"\b(?:less|fewer|menos)\b", rest)) and not re.search(r"\b(?:more|mas)\b", rest))
     elif TOP_ITEMS.search(rest):
         q.update(kind="top_items", window=w1, topic=[x for x in topic if x not in ("times", "often")])
     elif TIMELINE.search(rest):
@@ -857,9 +859,10 @@ def item_line(i, it, d, lang, today, url=True, times=None):
 
 
 # ====================================== the answers ==============================================================
-def answer(view, q, today, prof=None, rec=None, said_end=False):
+def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
     """(text, [item ids shown in order], extra) for a query. `extra`: {"channels": [...] for a ranking, "cards": True
-    when the items go out as link cards}. `said_end`: the reply already says where the export ends."""
+    when the items go out as link cards, "said": the notes said}. `said_end`: the reply already says where the export
+    ends. `quiet` (round 11 fix, A, R4): notes said already in this stretch ("friends", "range"), left out now."""
     rec = rec or record(view, "UTC")
     plats = _scope_platforms(q, view, rec)
     if q.topic and not q.channel and len(q.topic) == 1:
@@ -887,7 +890,7 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
         q2 = q.model_copy(update={"window": w2})
         if q.kind == "compare":
             q2 = q.model_copy(update={"kind": "count", "window": w2, "window2": None})
-        body, ids, extra = answer(view, q2, today, prof, rec, said_end=True)
+        body, ids, extra = answer(view, q2, today, prof, rec, said_end=True, quiet=quiet)
         lead = "Lo último que veo:" if es else "The latest I can see:"
         return head + "\n\n" + lead + "\n" + body, ids, extra
     W = window_words(q.window, start, end, lang)
@@ -908,10 +911,17 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
           "list": _list, "on_day": _list, "first": _first, "last": _last, "timeline": _timeline,
           "compare": _compare}[q.kind]
     text, ids, extra = fn(view, rec, q, start, end, plats, W, today, prof)
+    said = []
     if said_end:
         pass
-    elif q.window.kind == "all":
+    elif q.window.kind == "all" and "range" not in quiet:
         tail += [range_line(rec, plats, q), REFRESH[lang]]
+        said.append("range")
+    elif q.window.kind == "all":
+        # round 11 fix, A (R4): the range was said in this stretch; an answer about the latest items still says where
+        # the record ends (it changes the answer), the others say nothing more
+        if q.kind in ("last", "list", "on_day") and reached:
+            tail.append(ends_line(rec, reached, lang))
     elif reached:
         # the round 11 check (DESIGN 18.X): each platform whose export the window reaches is said, so "October 1 to
         # 15" says Instagram's ends on the 15th even while YouTube's runs on
@@ -919,10 +929,11 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
     if q.how == "saved":
         tail.append("(Guardado cuenta lo guardado, las colecciones, lo que te enviaste y las listas.)" if es else
                     "(Saved counts saves, collections, posts you sent yourself and playlists.)")
-    if "instagram" in plats:   # friends' posts are an Instagram matter
+    if "instagram" in plats and "friends" not in quiet:   # friends' posts are an Instagram matter
         tail.append("No cuento las publicaciones de tus amigos." if es else "Posts from friends are not counted.")
-    extra = dict(extra, tail=" ".join(x for x in tail if x))
-    return text + "\n\n" + extra["tail"], ids, extra
+        said.append("friends")   # round 11 fix, A (R4): once in a stretch of 6 hours
+    extra = dict(extra, tail=" ".join(x for x in tail if x), said=said)
+    return text + ("\n\n" + extra["tail"] if extra["tail"] else ""), ids, extra
 
 
 def _record_start(rec, plats, q):
@@ -1049,10 +1060,10 @@ def _count(view, rec, q, start, end, plats, W, today, prof):
     if q.unit == "channels":
         chans = {view.items[i].creator for i in h if view.items[i].creator}
         n = len(chans)
+        word = who_word(view, h, n, q.lang)   # round 11 fix, A (R7)
         if es:
-            return f"{pre}{W} {verb(q)} videos de {num(n, 'es')} {'canal' if n == 1 else 'canales'}.", [], {}
-        return (f"{pre}{W} you {verb(q)} {noun(q, 2, plats)} from {num(n)} {'channel' if n == 1 else 'channels'}.",
-                [], {})
+            return f"{pre}{W} {verb(q)} videos de {num(n, 'es')} {word}.", [], {}
+        return f"{pre}{W} you {verb(q)} {noun(q, 2, plats)} from {num(n)} {word}.", [], {}
     n = len(h)
     if not (q.topic or q.channel):
         return pre + _opening(q, n, W, plats, _by_platform(view, h, q.lang)), [], {}
@@ -1075,12 +1086,25 @@ def _top_channels(view, rec, q, start, end, plats, W, today, prof):
     lines = [_opening(q, len(h), W, plats, _by_platform(view, h, q.lang)) + (" Más de:" if es else " Most from:")]
     lines += [f"{i}. {name}: {num(n, q.lang)}" for i, (name, n) in enumerate(top, 1)]
     if len(c) > len(top):
-        lines.append(f"({num(len(c), 'es')} canales en total.)" if es else f"({num(len(c))} channels in all.)")
+        word = who_word(view, h, len(c), q.lang)   # round 11 fix, A (R7)
+        lines.append(f"({num(len(c), 'es')} {word} en total.)" if es else f"({num(len(c))} {word} in all.)")
     if q.topics_too:
         tl = _topic_line(view, h, prof, q.lang)
         if tl:
             lines.append(tl)
     return "\n".join(lines), [], {"channels": [name for name, _ in top]}
+
+
+def who_word(view, ids, n, lang="en"):
+    """Round 11 fix, A (R7): what the counted creators are: YouTube channels, Instagram accounts, or both."""
+    plats = {view.items[i].platform for i in ids if view.items[i].creator}
+    one = n == 1
+    if plats == {"instagram"}:
+        return ("cuenta" if one else "cuentas") if lang == "es" else ("account" if one else "accounts")
+    if "instagram" in plats:
+        return ("cuenta o canal" if one else "cuentas y canales") if lang == "es" else \
+            ("account or channel" if one else "accounts and channels")
+    return ("canal" if one else "canales") if lang == "es" else ("channel" if one else "channels")
 
 
 def _topic_counts(view, ids, prof):
@@ -1237,6 +1261,18 @@ def _timeline(view, rec, q, start, end, plats, W, today, prof):
     hi = min(end or newest, newest)
     if lo > hi:
         lo = hi
+    # ---------- round 11 fix, A (R6): start at the first year (or month) with a count, never a row of leading zeros
+    none_before = None
+    seen = [d for ds in h.values() for d in ds if lo <= d <= hi]
+    if seen and min(seen) > lo:
+        f0 = min(seen)
+        span_by_month = q.by == "month" if q.by else (hi.year - f0.year) * 12 + hi.month - f0.month < 18
+        new_lo = date(f0.year, f0.month, 1) if span_by_month else date(f0.year, 1, 1)
+        if new_lo > lo:
+            none_before = new_lo if (new_lo.year, new_lo.month) > (lo.year, lo.month) and (
+                span_by_month or new_lo.year > lo.year) else None
+            lo = new_lo
+    # ---------- end round 11 fix, A (R6) ----------
     by_month = q.by == "month" if q.by else (hi.year - lo.year) * 12 + hi.month - lo.month < 18
     unit = ("por mes" if es else "by month") if by_month else ("por año" if es else "by year")
     n2 = noun(q, 2, plats)
@@ -1252,6 +1288,9 @@ def _timeline(view, rec, q, start, end, plats, W, today, prof):
                  _cells(h, date(y, m, 1), hi, True, q.lang) + "."]
     else:
         lines = [head, _cells(h, lo, hi, by_month, q.lang) + "."]
+    if none_before:   # round 11 fix, A (R6)
+        when = month_words(none_before, q.lang) if by_month else str(none_before.year)
+        lines[1] += f" Nada antes de {when}." if es else f" None before {when}."
     if not by_month and q.by != "year":
         y, m = (hi.year, hi.month - 5) if hi.month > 5 else (hi.year - 1, hi.month + 7)
         lo6 = max(lo, date(y, m, 1))
@@ -1284,6 +1323,20 @@ def _compare(view, rec, q, start, end, plats, W, today, prof):
     b = len(hits(view, rec, q, s2, e2, plats))
     W2 = window_words(q.window2, s2, e2, q.lang, cap=False)
     short = window_words(q.window, start, end, q.lang, cap=False)
+    # ---------- round 11 fix, A (R5): the answer to "more in X or Y?" first, then both counts ----------
+    if a != b:
+        less = q.less
+        hi_w, hi_n, lo_w, lo_n = (short, a, W2, b) if (a > b) != less else (W2, b, short, a)
+        n2 = noun(q, 2 if hi_n != 1 else 1, plats)
+        d = abs(a - b)
+        if es:
+            word = "Menos" if less else "Más"
+            return (f"{word} {hi_w}: {num(hi_n, 'es')} {n2}{_about(q, hi_n)}, frente a {num(lo_n, 'es')} {lo_w} "
+                    f"({num(d, 'es')} {'menos' if less else 'más'})."), [], {}
+        word = "Fewer" if less else "More"
+        return (f"{word} {hi_w}: {num(hi_n)} {n2}{_about(q, hi_n)}, against {num(lo_n)} {lo_w} "
+                f"({num(d)} {'fewer' if less else 'more'})."), [], {}
+    # ---------- end round 11 fix, A (R5) ----------
     s = _opening(q, a, W, plats)[:-1]
     if es:
         s += f", y {W2.replace('En ', 'en ', 1)}, {num(b, 'es')}"
@@ -1296,6 +1349,32 @@ def _compare(view, rec, q, start, end, plats, W, today, prof):
 
 # ====================================== on the bot ===============================================================
 STATE = "history:{h}"
+# ---------- round 11 fix, A (R4): the friends line and the all-time range, once in a stretch of 6 hours ----------
+NOTES = "histnotes:{h}"
+
+
+def said_lately(bot, h, now):
+    """The notes ("friends", "range") a history answer said to this person in the last 6 hours."""
+    st = bot.store.get_state(NOTES.format(h=h)) or {}
+    out = set()
+    for k, at in st.items():
+        try:
+            if now - datetime.fromisoformat(at) < timedelta(hours=FOLLOW_HOURS):
+                out.add(k)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def note_said(bot, h, now, said):
+    if not said:
+        return
+    st = dict(bot.store.get_state(NOTES.format(h=h)) or {})
+    from .store import now_iso
+    for k in said:
+        st[k] = now_iso(now)
+    bot.store.set_state(NOTES.format(h=h), st)
+# ---------- end round 11 fix, A (R4) ----------
 PICK = re.compile(r"^\W*(?:(?:and|ok|so|y)\s+)?(?:show\s+me\s+|open\s+|what\s+about\s+|what\s+did\s+i\s+watch\s+from\s+|"
                   r"muestrame\s+)?(?:the\s+|el\s+|la\s+)?(?:#|number\s+|no\.?\s*)?"
                   r"(first|second|third|fourth|fifth|sixth|seventh|eighth|1st|2nd|3rd|4th|5th|6th|7th|8th|[1-8]|"
@@ -1435,15 +1514,18 @@ def send_answer(bot, person, q, now, follow=False, lead=""):
     view = bot.view(person["library"])
     rec = record(view, tz)
     t0 = datetime.now()
-    text, ids, extra = answer(view, q, today, P.get(bot.store, h), rec)
+    quiet = said_lately(bot, h, now)
+    text, ids, extra = answer(view, q, today, P.get(bot.store, h), rec, quiet=quiet)
+    note_said(bot, h, now, extra.get("said") or ())
     bot.note(intent="history")
     tail = extra.get("tail") or ""
-    if extra.get("cards") and tail and text.endswith(tail):
+    if extra.get("cards") and (not tail or text.endswith(tail)):
         # the cards of the first or last items go right under their lines, before where the record ends
-        body = text[:-len(tail)].rstrip()
+        body = text[:-len(tail)].rstrip() if tail else text
         parts = [{"type": "text", "text": (lead + "\n\n" if lead else "") + body}]
         parts += [link_part(view.items[i], _title(view.items[i])) for i in ids if view.items[i].url]
-        parts.append({"type": "text", "text": tail})
+        if tail:
+            parts.append({"type": "text", "text": tail})
     else:
         parts = [{"type": "text", "text": (lead + "\n\n" if lead else "") + text}]
     reply = Reply(parts)
