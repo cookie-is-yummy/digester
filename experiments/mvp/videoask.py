@@ -225,9 +225,40 @@ ACTING = re.compile(
     r"\b(?:system\s+prompt|previous\s+instructions|as\s+an\s+ai|you\s+must\s+now|from\s+now\s+on)\b", re.I)
 
 
-def check_points(out, length_s, clip_s):
+_TWORD = re.compile(r"[^\W_]+", re.UNICODE)
+
+
+def _twords(s):
+    return tuple(w.lower() for w in _TWORD.findall(s or ""))
+
+
+def other_titles(view, it):
+    """The round 11 check (DESIGN 18.X): the titles of the library's other YouTube videos, as word tuples (3 to 12
+    words; a longer title by its first 8), so a point that names one ("<another title> covers this") is left out."""
+    from .compose import display_title
+    own = _twords(display_title(it))
+    out = set()
+    for x in view.items.values():
+        if x.platform != "youtube" or x.id == it.id:
+            continue
+        w = _twords(x.first_line or x.caption)
+        if len(w) > 12:
+            w = w[:8]
+        if len(w) >= 3 and sum(len(t) for t in w) >= 12 and w != own:
+            out.add(w)
+    return out
+
+
+def _names_other(says, titles):
+    if not titles:
+        return False
+    w = _twords(says)
+    return any(w[i:i + n] in titles for n in range(3, 13) for i in range(0, max(0, len(w) - n) + 1))
+
+
+def check_points(out, length_s, clip_s, titles=None):
     """(kept points [(seconds, text)], counts of what was left out by reason). The model's form is data: only its
-    'at' and 'says' strings are read, as strings."""
+    'at' and 'says' strings are read, as strings. `titles`: other videos' titles (other_titles), never named."""
     from .compose import ASSISTANT_NOTE
     pts = (out or {}).get("points") if isinstance(out, dict) else None
     kept, dropped = [], {"time": 0, "other": 0, "acting": 0, "empty": 0}
@@ -246,7 +277,7 @@ def check_points(out, length_s, clip_s):
         if s is None or (end is not None and s > end):
             dropped["time"] += 1
             continue
-        if OTHER_VIDEO.search(says):
+        if OTHER_VIDEO.search(says) or _names_other(says, titles):
             dropped["other"] += 1
             continue
         if ACTING.search(says) or ASSISTANT_NOTE.search(says):
@@ -464,7 +495,11 @@ def run(bot, person, it, question, now):
     if out is None or not isinstance(out, dict):
         _log(bot, h, "done", vid, now, points=0, refused=True, cost_usd=round(cost or 0, 6))
         return bot.send(h, REFUSED + f"\n{watch_url(vid)}")
-    kept, dropped = check_points(out, length, clip)
+    try:
+        titles = other_titles(bot.view(person["library"]), it)
+    except Exception:  # noqa: BLE001 - the other checks still run
+        titles = None
+    kept, dropped = check_points(out, length, clip, titles)
     answered = out.get("answered") is True
     if not answered:   # "it doesn't say": any points beside it are not passed on
         kept, dropped = [], {k: 0 for k in dropped}
