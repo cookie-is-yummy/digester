@@ -460,7 +460,9 @@ def read(text, today, loose=False):
                  "month" if re.search(r"\b(?:month|monthly|mes)\b", rest) else None)
     elif FIRST.search(rest) and not re.search(r"\bfirst\s+(?:one|1)\b", rest):
         q.update(kind="first", window=w1)
-    elif COUNT.search(rest):
+    elif COUNT.search(rest) or (topic and re.match(r"\W*(?:have|did)\s+i\s+(?:ever\s+)?(?:watch\w*|seen|see)\s+"
+                                                   r"(?:any|anything|something|videos?)\b", t)):
+        # "have I watched anything about knitting": how many, so the answer says yes or no with its count
         q.update(kind="count", window=w1,
                  unit="channels" if CHANNEL_WORD.search(rest) and not topic else "items")
     elif LAST.search(rest):

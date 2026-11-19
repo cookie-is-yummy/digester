@@ -181,6 +181,15 @@ def test_a_window_inside_the_record_does_not_say_where_it_ends_and_one_that_touc
     assert ENDS in out and REFRESH in out
 
 
+def test_have_i_watched_anything_about_a_topic_is_answered_with_its_count(hist):
+    out, calls = ask(hist, "have i watched anything about knitting")
+    assert calls == [] and out.startswith("In all your history I can see, you watched 0 videos that mention "
+                                          "\"knitting\" (of 44 you watched in all).")
+    from mvp import history
+    assert history.read("did i watch the new blender tutorial", TODAY) is None   # one video: the search
+    assert history.read("have i seen this one", TODAY) is None
+
+
 def test_big_numbers_are_written_with_separators():
     from mvp import history
     assert history.num(108997) == "108,997" and history.num(108997, "es") == "108.997" and history.num(44) == "44"
