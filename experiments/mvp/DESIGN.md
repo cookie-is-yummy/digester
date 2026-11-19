@@ -3239,3 +3239,58 @@ rule texts and the 123 rule phrasings are taken by none of them.
 - Known and left: "like that reel" alone (no "for me", no request word) still goes to the interpreter, as it may be
   what the person thinks of it; a bare "delete that post" with no Instagram word is not read (it may mean the bot's own
   list); the YouTube line for a pick in view ("like that video for me") is not read (YouTube's rating is not built).
+
+**17.L check** (19 Nov, an independent checker; tests in `tests/test_round10_livefix_checks.py`, 107 tests: 46 fail on
+the fixes as built, 9f2bbf8, and 61 are guards that hold either way). The checker wrote 80 new made-up messages a
+19-year-old would text (10 in Spanish) and 50 traps, and ran them offline as tester and operator, browser off and on
+(vm and the demo). The 80, by code: at f9e76f5 13 right, 18 wrong helper, 49 to the model; as built 52 right, 7 wrong, 21
+to the model (tester, browser off); now 67 to 70 right, 9 to the model, 0 refused, and the 1 to 5 the score counts wrong
+are not defects (a run's state with the browser off, "connect streamly" when the demo is off, the TickTick token steps'
+placeholder, "delete my data" leaving no person). The 50 traps, and 32 more attacks on the Instagram class, give replies,
+rows and model calls byte-equal to f9e76f5 in all four settings; with an errand form that always answers "buy" no message
+writes to a list. What broke, and is fixed:
+- "im in lol", "k im in" reached the model, which moved the time zone: `browser.SIGNED_IN` and `IM_IN` take the fillers
+  around the words (`_IN_PRE`: k, kk, ok, yeah, ya, cool...; `_IN_POST`: now, lol, haha, finally...); "im in london now
+  lol", "im in for friday" still reach the interpreter.
+- "can u connect to other apps" said `I can't connect to Other Apps yet.`: words that name no app ("other", "apps",
+  "stuff", "anything"...) are never an app's name, and `places.MENU_MORE` reads the menu in texting words ("wat", "r",
+  "do u have integrations", "what stuff can u hook up to") and in Spanish ("a qué apps te puedes conectar", "qué puedo
+  conectar contigo"); `CONNECTED_MORE` reads "what r u connected to (rn)".
+- A connector added to the registry: one of the sign-in kind was told YouTube's Google Cloud steps (now only YouTube's own
+  line has them), and one whose module cannot load broke "what are you connected to" (now it is left to the "Not
+  connected yet" end).
+- The help named every key of `MVP_BROWSER_MERCHANTS` as a site it could do, lowercase, even one with no checked path:
+  now only sites with a whole, allowed path, by name, the practice one saying so (`Streamly (a practice site)`); the
+  menu's "Say "cancel my X"" the same.
+- Spanish asks of the bot on Instagram ("dale like a ese reel por mi", "comenta que rico en ese reel", "sigue a esa
+  cuenta", "guarda ese reel en mi colección de instagram llamada cenas") went to the model, which would read a like as
+  the person's own: they join `IG_ACTS`; "me gusta ese", "me encanta", "dale", "guárdalo para después" do not.
+- The help in texting words and Spanish ("what do u do", "wat can u do", "qué puedes hacer") by code.
+- Live (one run, the real library, page operator, `MVP_BROWSER=vm MVP_BROWSER_DEMO=1`, $0.025): with the site already
+  allowed, "do it for me" opened the browser and "allow streamly" then went to the model ("That's not something I can
+  do"); now `You've already allowed Streamly.` and where the run is. On the test page the menu's outbox is "the Outbox
+  panel", as "what are you connected to" says. All eleven findings read right live: the pick's own link for "like that
+  reel for me", "comment nice on that reel" and the collection (with the own-list offer; nothing written), the menu,
+  "connect netflix / my instagram / spotify / my gmail", YouTube's set-up for the operator, the help's two lines, the
+  true reason for Netflix and Spotify with the browser on, the gym said after Spotify, "im in" with no run, the last
+  step said again at the card, and the receipt quoting the page after "yes cancel streamly"; 0 Chromium left.
+- Held: a tester is never told an operator's step (README, the panel, a setting, Google Cloud, an app password) in any
+  connector, YouTube, cancel or help answer, browser on or off; no token, mailbox address, someone else's address, client
+  id or URL with a query string appears in any of them; "connect netflix" with the browser on for Streamly only says
+  there is nothing to connect and nothing about the browser; after "delete my data" the person is gone (people.json does
+  not bring them back) and no sign-in or connection row is left; a caption that says "like and follow for more" or
+  "comment RECIPE" never makes the bot answer as asked; "i liked that one", 👍, "love it" stay feedback; "save this"
+  keeps its old path; "every friday send me reels i would like" is still a rule. The practice merchant's nine flows end
+  to end: flows 1, 2, 3, 4, 7 and 8 press after the yes and the receipt quotes the page; a stop at the last step, the
+  sign-in wall (5), the check (6) and the typed reason (9) list nothing as pressed ("helped with 1 cancellation (1
+  still open)"); an offer page after the press says the plan goes on.
+- Older tests changed on purpose: `test_round10_livefix.py` (the help names Netflix by name), `test_round10_merge.py`
+  (`HOOK_ORDER`: the menu line and `CONNECTED_MORE`).
+- Checks: the full suite passes (count in the README), demo 10; dry self-test 114 of 114, $0; `probe_same` byte-equal;
+  the development phrasing set by code 73 right, 1 wrong (d007), 0 of 40 `none` lines taken, every reply byte-equal to
+  the build's; with `MVP_BROWSER` unset the cancel conversations of `merge11/probes` byte-equal (no line changed).
+- Known and left: Spanish "conecta mi gmail / youtube", "cancela mi netflix y spotify", "quiero cancelar netflix", "qué
+  hiciste por mí" and "wat did you do" still go to the model (the errand form's "connect" reaches the code reads);
+  "helped with N cancellations (N still open)" counts a run that was stopped or handed back and one that only gave the
+  steps, so after a cancelled Streamly it can still say "4 still open"; with `MVP_BROWSER=vm` off the test page the steps
+  after "I can only do that from the test page for now" keep "because I never sign in as you".
