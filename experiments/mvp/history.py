@@ -874,10 +874,16 @@ def shifted(w, start, end, newest):
     return _win("days", newest - timedelta(days=n - 1), newest)
 
 
+def num(n, lang="en"):
+    """108,997 (English) or 108.997 (Spanish)."""
+    s = f"{n:,}"
+    return s.replace(",", ".") if lang == "es" else s
+
+
 def _opening(q, n, W, plats, extra=""):
     if q.lang == "es":
-        return f"{W} {verb(q)} {n} {noun(q, n, plats)}{_about(q, n)}{extra}."
-    return f"{W} you {verb(q)} {n} {noun(q, n, plats)}{_about(q, n)}{extra}."
+        return f"{W} {verb(q)} {num(n, 'es')} {noun(q, n, plats)}{_about(q, n)}{extra}."
+    return f"{W} you {verb(q)} {num(n)} {noun(q, n, plats)}{_about(q, n)}{extra}."
 
 
 def _by_platform(view, ids, lang):
@@ -885,7 +891,7 @@ def _by_platform(view, ids, lang):
     if len(c) < 2:
         return ""
     en = " en " if lang == "es" else " on "
-    return " (" + ", ".join(f"{n}{en}{PNAME.get(p, p)}" for p, n in c.most_common()) + ")"
+    return " (" + ", ".join(f"{num(n, lang)}{en}{PNAME.get(p, p)}" for p, n in c.most_common()) + ")"
 
 
 def _count(view, rec, q, start, end, plats, W, today, prof):
@@ -896,17 +902,18 @@ def _count(view, rec, q, start, end, plats, W, today, prof):
         chans = {view.items[i].creator for i in h if view.items[i].creator}
         n = len(chans)
         if es:
-            return f"{pre}{W} {verb(q)} videos de {n} {'canal' if n == 1 else 'canales'}.", [], {}
-        return f"{pre}{W} you {verb(q)} {noun(q, 2, plats)} from {n} {'channel' if n == 1 else 'channels'}.", [], {}
+            return f"{pre}{W} {verb(q)} videos de {num(n, 'es')} {'canal' if n == 1 else 'canales'}.", [], {}
+        return (f"{pre}{W} you {verb(q)} {noun(q, 2, plats)} from {num(n)} {'channel' if n == 1 else 'channels'}.",
+                [], {})
     n = len(h)
     if not (q.topic or q.channel):
         return pre + _opening(q, n, W, plats, _by_platform(view, h, q.lang)), [], {}
     q_all = q.model_copy(update={"topic": [], "channel": None})
     total = len(hits(view, rec, q_all, start, end, plats))
     if es:
-        of = f" (de {total} en total)"
+        of = f" (de {num(total, 'es')} en total)"
     else:
-        of = f" (of {total} you {verb(q)} {'in all' if q.window.kind == 'all' else 'then'})"
+        of = f" (of {num(total)} you {verb(q)} {'in all' if q.window.kind == 'all' else 'then'})"
     return pre + _opening(q, n, W, plats, of), [], {}
 
 
@@ -918,9 +925,9 @@ def _top_channels(view, rec, q, start, end, plats, W, today, prof):
     c = Counter(view.items[i].creator for i in h if view.items[i].creator)
     top = c.most_common(q.n)
     lines = [_opening(q, len(h), W, plats, _by_platform(view, h, q.lang)) + (" Más de:" if es else " Most from:")]
-    lines += [f"{i}. {name}: {n}" for i, (name, n) in enumerate(top, 1)]
+    lines += [f"{i}. {name}: {num(n, q.lang)}" for i, (name, n) in enumerate(top, 1)]
     if len(c) > len(top):
-        lines.append(f"({len(c)} canales en total.)" if es else f"({len(c)} channels in all.)")
+        lines.append(f"({num(len(c), 'es')} canales en total.)" if es else f"({num(len(c))} channels in all.)")
     if q.topics_too:
         tl = _topic_line(view, h, prof, q.lang)
         if tl:
@@ -1041,7 +1048,7 @@ def _first(view, rec, q, start, end, plats, W, today, prof, last=False):
     for k, i in enumerate(order, 1):
         lines.append(item_line(k, view.items[i], max(h[i]) if last else min(h[i]), q.lang, None, url=False))
     if len(h) > 1:
-        lines.append((f"({len(h)} en total" if es else f"({len(h)} in all") +
+        lines.append((f"({num(len(h), 'es')} en total" if es else f"({num(len(h))} in all") +
                      (f"{win}.)" if win else ".)"))
     return "\n".join(lines), order, {"cards": True}
 
@@ -1062,9 +1069,9 @@ def _cells(h, lo, hi, by_month, lang):
             keys.append((y, m))
             y, m = (y + (m == 12), m % 12 + 1)
         names = MONTHS_ES_LIST if lang == "es" else MONTH_EN
-        cells = [f"{names[m - 1][:3]} {y}: {c[(y, m)]}" for y, m in keys]
+        cells = [f"{names[m - 1][:3]} {y}: {num(c[(y, m)], lang)}" for y, m in keys]
     else:
-        cells = [f"{y}: {c[y]}" for y in range(lo.year, hi.year + 1)]
+        cells = [f"{y}: {num(c[y], lang)}" for y in range(lo.year, hi.year + 1)]
     if hi.day != _month_end(hi.year, hi.month).day or (not by_month and hi < date(hi.year, 12, 31)):
         cells[-1] += f" (hasta el {short_day(hi, 'es')})" if lang == "es" else f" (up to {short_day(hi)})"
     return ", ".join(cells)
@@ -1096,7 +1103,7 @@ def _timeline(view, rec, q, start, end, plats, W, today, prof):
         lo6 = max(lo, date(y, m, 1))
         lines.append(("Los últimos meses: " if es else "The last months, by month: ") +
                      _cells(h, lo6, hi, True, q.lang) + ".")
-    lines.append(f"En total, {len(h)}." if es else f"{len(h)} in all.")
+    lines.append(f"En total, {num(len(h), 'es')}." if es else f"{num(len(h))} in all.")
     return "\n".join(lines), [], {}
 
 
@@ -1109,11 +1116,11 @@ def _compare(view, rec, q, start, end, plats, W, today, prof):
     short = window_words(q.window, start, end, q.lang, cap=False)
     s = _opening(q, a, W, plats)[:-1]
     if es:
-        s += f", y {W2.replace('En ', 'en ', 1)}, {b}"
-        diff = (f": {abs(a - b)} {'más' if a > b else 'menos'} {short}." if a != b else ": lo mismo.")
+        s += f", y {W2.replace('En ', 'en ', 1)}, {num(b, 'es')}"
+        diff = (f": {num(abs(a - b), 'es')} {'más' if a > b else 'menos'} {short}." if a != b else ": lo mismo.")
     else:
-        s += f", and {W2}, {b}"
-        diff = (f": {abs(a - b)} {'more' if a > b else 'fewer'} {short}." if a != b else ": the same.")
+        s += f", and {W2}, {num(b)}"
+        diff = (f": {num(abs(a - b))} {'more' if a > b else 'fewer'} {short}." if a != b else ": the same.")
     return s + diff, [], {}
 
 

@@ -181,6 +181,11 @@ def test_a_window_inside_the_record_does_not_say_where_it_ends_and_one_that_touc
     assert ENDS in out and REFRESH in out
 
 
+def test_big_numbers_are_written_with_separators():
+    from mvp import history
+    assert history.num(108997) == "108,997" and history.num(108997, "es") == "108.997" and history.num(44) == "44"
+
+
 def test_the_refresh_words_are_read_as_the_export_steps(hist):
     from mvp.refresh import export_kind
     assert export_kind("how do I send you a new export?") == "how"
