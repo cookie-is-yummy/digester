@@ -2190,6 +2190,13 @@ def receipt_calendar_links(n):
     return f"gave you {_count(n, 'calendar link')} (I can't see whether you added {'it' if n == 1 else 'them'})"
 
 
+def receipt_video_asks(n, day):
+    """The merge of round 11: asking a YouTube video itself (slice Q, MVP_VIDEO_ASK=1) sent its link and the question
+    to Google; a receipt says so."""
+    return (f"asked {_count(n, 'YouTube video')} a question for you, sending {'its' if n == 1 else 'each'} link and "
+            f"your question to Google (last {day})")
+
+
 def receipt_todos(n, done, gone):
     out = f"added {_count(n, 'thing')} to your lists here"
     extra = []
@@ -3860,16 +3867,35 @@ def help_browser(sites, say=None):
     return f"Cancelling for you: I can do it in a browser on {', '.join(sites)}; say \"cancel my {say}\"."
 
 
-def help_full(build, youtube=False, sites=None, say=None):
-    """The help reply with the apps line (and the browser line when it is on), then the build."""
-    lines = [HELP, help_apps(youtube)] + ([help_browser(sites, say)] if sites else []) + [build_line(build)]
+def help_full(build, youtube=False, sites=None, say=None, history="", video_ask=False):
+    """The help reply with the apps line (and the browser line when it is on), then the build. The merge of round
+    11: it leads with asking the watch history (`history`, built from the person's own counts and topics), and says
+    "ask the video" only when MVP_VIDEO_ASK is on."""
+    lines = ([history] if history else []) + [HELP] + ([HELP_VIDEO_ASK] if video_ask else []) + [help_apps(youtube)] \
+        + ([help_browser(sites, say)] if sites else []) + [build_line(build)]
     return "\n".join(lines)
+
+
+# the merge of round 11: the help's line on asking a video itself (slice Q), only while MVP_VIDEO_ASK=1
+HELP_VIDEO_ASK = ("Videos: after I show you a YouTube video, \"ask the video\" and your question asks the video itself "
+                  "(its link and your question go to Google).")
 # ---------- end the live check of 19 Nov ----------
 
 
 # ---------- round 11, slice M: answers across many items (synth.py; DESIGN.md section 18.M) ----------
 SYNTH_READS_WHAT = "I read titles, descriptions and captions, not what is said in the videos."
-SYNTH_VIDEO_OFFER = " To hear what one of the videos itself says, ask me about that video."   # only with MVP_VIDEO_ASK=1
+# the merge of round 11: slice Q's words, only with MVP_VIDEO_ASK=1 and a YouTube video among the items shown
+SYNTH_VIDEO_OFFER_ONE = " To hear what the video itself says, say \"ask the video\" and your question."
+
+
+def synth_video_offer_many(numbered):
+    """' To hear what a video itself says, say "ask video N" and your question (1 is "Title", 3 is "Title").'"""
+    def short(it):
+        from .compose import display_title
+        t = display_title(it)
+        return t if len(t) <= 40 else t[:40].rsplit(" ", 1)[0].rstrip(" ,;:-") + "…"
+    said = ", ".join(f"{n} is \"{short(it)}\"" for n, it in numbered)
+    return f" To hear what a video itself says, say \"ask video N\" and your question ({said})."
 SYNTH_TITLE_CHARS = 70
 
 
@@ -3895,14 +3921,17 @@ def synth_source(it):
     return f"\"{title}\"{who}" + (f" {it.url}" if it.url else "")
 
 
-def synth_message(res, video_ask=False, show=3):
+def synth_message(res, video_offer="", show=3):
     """The reply for a synthesis (synth.summarize's result): the points, each with the items it came from, the counts,
     and what was read. Built by code from checked points; the model wrote only the points' sentences."""
     topic = res["topic"]
     by_id = {it.id: it for it in res["fits"]}
     lines = []
+    when = res.get("when")   # the merge of round 11: a window ("in October 2026"), with what the person did then
+    within = f" in what you {res.get('verb') or 'kept'} {when}" if when else ""
     if res["points"] and not res.get("thin"):
-        lines.append(f"Here's what the posts and videos you kept say about {topic}:")
+        lines.append(f"Here's what the posts and videos you {res.get('verb') or 'kept'} {when} say about {topic}:"
+                     if when else f"Here's what the posts and videos you kept say about {topic}:")
         lines.append("")
         for i, p in enumerate(res["points"], 1):
             srcs = [by_id[iid] for iid in p["ids"] if iid in by_id][:show]
@@ -3920,17 +3949,20 @@ def synth_message(res, video_ask=False, show=3):
             tail += f"; {len(res['unread'])} more fit that I didn't read"
         lines += ["", tail + "."]
     elif not res["fits"]:
-        lines.append(f"I found nothing in your saves about {topic}.")
+        lines.append(f"I found nothing about {topic}{within}." if when else
+                     f"I found nothing in your saves about {topic}.")
     else:
         n = len(res["fits"])
-        lines.append(f"I found {n} {'thing' if n == 1 else 'things'} about {topic} in your saves, but their text says "
-                     f"too little to sum up.")
+        lines.append(f"I found {n} {'thing' if n == 1 else 'things'} about {topic}{within or ' in your saves'}, but "
+                     f"their text says too little to sum up.")
         if res["points"]:
             lines.append(f"One thing they say: {res['points'][0]['text']}")
         lines.append("Here they are:")
         for it in res["fits"][:5]:
             lines.append("• " + synth_source(it))
     if res["fits"]:
-        lines.append(SYNTH_READS_WHAT + (SYNTH_VIDEO_OFFER if video_ask else ""))
+        lines.append(SYNTH_READS_WHAT + (video_offer or ""))
+    if res.get("window_tail"):
+        lines.append(res["window_tail"])
     return "\n".join(lines)
 # ---------- end round 11, slice M ----------

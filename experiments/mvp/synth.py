@@ -138,11 +138,58 @@ def topic_ok(topic):
     return True
 
 
-def read(text):
-    """The request read from the message, or None: {"topic", "platforms", "kinds", "these"}. Code only; English only."""
-    t = " ".join((text or "").split())
-    if not t or len(t) > 220 or NOT_HERE.search(t):
+# ---------- the merge of round 11 (DESIGN 18, seam b): a time window, read with slice H's window words ----------
+def _how(t):
+    """watched | liked | saved | any: what the message says the person did with the items."""
+    t = t.lower()
+    if re.search(r"\b(?:liked|likes)\b", t):
+        return "liked"
+    if re.search(r"\bwatch(?:ed|ing)?\b", t):
+        return "watched"
+    if re.search(r"\b(?:saved|saves|bookmarked)\b", t):
+        return "saved"
+    return "any"
+
+
+def _window_cut(t, today):
+    """(the message without its one time window, the Window) or None. Only a plain window ("last month", "in
+    October", "this year", "since March", "lately"); anything else NOT_HERE stops (a repeat, a reminder, "first",
+    "most", "how many") still stops the read."""
+    from .history import Window, find_windows, normal
+    n = normal(t)
+    wins = find_windows(n, today)
+    if len(wins) != 1 or not isinstance(wins[0][0], Window):
         return None
+    (w, (a, b)), = wins
+    rest = " ".join((n[:a] + " " + n[b:]).split())
+    if NOT_HERE.search(rest):
+        return None
+    return rest, w
+# ---------- end the merge of round 11 ----------
+
+
+def read(text, today=None):
+    """The request read from the message, or None: {"topic", "platforms", "kinds", "these", "window", "how"}. Code
+    only; English only. With `today`, one time window is read too (the merge of round 11) and the items are limited
+    to what the person watched, liked or saved in it (slice H's record)."""
+    t = " ".join((text or "").split())
+    if not t or len(t) > 220:
+        return None
+    window = None
+    if NOT_HERE.search(t):
+        got = _window_cut(t, today) if today is not None else None
+        if got is None:
+            return None
+        t, window = got
+    req = _read(t)
+    if req is not None and window is not None and req["these"]:
+        return None   # "what do these say last month": not a summary of the answer in view
+    if req is not None:
+        req.update(window=window, how=_how(t))
+    return req
+
+
+def _read(t):
     m = THESE.match(t)
     if m:
         topic = clean_topic(m.group("topic") or "")
@@ -343,9 +390,18 @@ def gather(bot, person, req, now, last=None):
     else:
         ex_kinds, ex_platforms = bot._exclusions(h)
         spec = _spec(req["topic"], req.get("platforms") or [], req.get("kinds") or [])
+        only = req.get("only")   # the merge of round 11: the items of the window (slice H's record), when one was said
         cands, meta = candidates(bot.pool, view, spec, disliked=bot.store.disliked(h), now=now, store=bot.store,
-                                 exclude_kinds=ex_kinds, exclude_platforms=ex_platforms, k=CANDS, caption_fb=cfb)
+                                 exclude_kinds=ex_kinds, exclude_platforms=ex_platforms, k=CANDS, caption_fb=cfb,
+                                 only=only)
         cost += meta.get("cost_usd", 0.0)
+        if only is not None and len(cands) < CANDS:
+            # the search ranks the whole library and then keeps the window's items, so a window's items that name
+            # the topic in their own words are added after them, newest first (code fit, as below)
+            have = {c.id for c in cands} | set(bot.store.disliked(h))
+            more = [view.get(i) for i in sorted(only, key=lambda i: req["dates"].get(i, ""), reverse=True)
+                    if i not in have]
+            cands += [x for x in more if x is not None and fits_topic(own_text(x, {}), req["topic"])][:CANDS - len(cands)]
     extra = bot._youtube().details(cands, now=now) if any(c.platform == "youtube" for c in cands) else {}
     cands, n_copies = collapse_copies(cands, extra)
     if n_copies:
@@ -440,7 +496,9 @@ def synth_reads(bot, person, text, now):
     is not in English, or the feature is off)."""
     if not ON or bot._answer_lang():
         return None
-    req = read(text)
+    from zoneinfo import ZoneInfo
+    today = now.astimezone(ZoneInfo(person.get("timezone") or "UTC")).date()
+    req = read(text, today)
     if req is None:
         return None
     h = person["handle"]
@@ -449,8 +507,65 @@ def synth_reads(bot, person, text, now):
         return None
     if req["these"] and not req["topic"]:
         goal = last.get("goal") or (bot.store.get_state(f"lastspec:{h}") or {}).get("text") or ""
+        if goal.startswith("history:"):   # the merge of round 11: after a history answer, its topic or channel
+            from . import history
+            st = bot.store.get_state(history.STATE.format(h=h)) or {}
+            q = (st.get("q") or {}) if st.get("run_id") == last.get("run_id") else {}
+            goal = " ".join(q.get("topic") or []) or q.get("channel") or ""
         req = dict(req, topic=" ".join(goal.split())[:80] or "these")
+    if req.get("window") is not None:
+        ref = _window(bot, person, req, today)
+        if not isinstance(ref, dict):
+            return ref
+        req = ref
     return run(bot, person, req, now, last=last)
+
+
+# ---------- the merge of round 11 (DESIGN 18, seam b): the window's items, from slice H's record ----------
+VERB = {"watched": "watched", "liked": "liked", "saved": "saved", "any": "watched or saved"}
+
+
+def _window(bot, person, req, today):
+    """The request with the window's items (`only`, `dates`) and its words, or a reply's reference when the window
+    lies wholly outside the record (said plainly, with where the export ends or starts; no model call)."""
+    from . import history as Hs
+    h = person["handle"]
+    view = bot.view(person["library"])
+    rec = Hs.record(view, person.get("timezone") or "UTC")
+    how = req.get("how") or "any"
+    kinds = set(Hs.HOW_KINDS[how])
+    plats = sorted({p for (p, k) in rec.starts if k in kinds})
+    if req.get("platforms"):
+        plats = [p for p in plats if p in req["platforms"]] or list(req["platforms"])
+    w = req["window"]
+    start, end = Hs.resolve(w, rec, plats, today)
+    newest = max((rec.ends[p] for p in plats if p in rec.ends), default=None)
+    q = Hs.HistoryQuery(kind="count", how=how)
+    oldest = Hs._record_start(rec, plats, q)
+    said = Hs.window_noun(w, start, end)
+    if newest and start and start > newest:
+        bot.note(intent="synth")
+        el = Hs.ends_line(rec, plats)
+        return bot.send(h, f"I can't see {said}: {el[:1].lower() + el[1:]} {Hs.REFRESH['en']}")
+    if oldest and end and end < oldest:
+        bot.note(intent="synth")
+        sl = Hs.start_line(rec, plats, q)
+        return bot.send(h, f"I can't see {said}: {sl[:1].lower() + sl[1:]}")
+    dates = {}
+    for iid, evs in rec.events.items():
+        it = view.items.get(iid)
+        if it is None or it.platform not in plats:
+            continue
+        ds = [d for d, k in evs if k in kinds and (start is None or d >= start) and (end is None or d <= end)]
+        if ds:
+            dates[iid] = max(ds).isoformat()
+    tail = []
+    if newest is not None and (end is None or end >= newest):
+        tail = [Hs.ends_line(rec, plats), Hs.REFRESH["en"]]
+    return dict(req, only=set(dates), dates=dates, platforms=req.get("platforms") or [],
+                when=Hs.window_words(w, start, end, cap=False).rstrip(","), verb=VERB[how],
+                window_tail=" ".join(x for x in tail if x))
+# ---------- end the merge of round 11 ----------
 
 
 def run(bot, person, req, now, last=None):
@@ -476,7 +591,9 @@ def run(bot, person, req, now, last=None):
     bot.note(run_id=run_id)
     if status == "error":
         return bot.send(h, T.LIMIT_TOTAL if stopped else T.RUN_ERROR)
-    msg = T.synth_message(res, video_ask=os.environ.get("MVP_VIDEO_ASK") == "1")
+    if res is not None and req.get("when"):   # the merge of round 11: the window said back, and where the record ends
+        res.update(when=req["when"], verb=req["verb"], window_tail=req.get("window_tail") or "")
+    msg = T.synth_message(res, video_offer=_video_offer(shown))
     if shown:
         from .compose import display_title
         for i, it in enumerate(shown, 1):
@@ -495,3 +612,20 @@ def run(bot, person, req, now, last=None):
         bot.store.set_state(f"lastspec:{h}", {"spec": spec.stored(), "rule_id": None, "text": req["topic"][:300],
                                               "shown": [it.id for it in shown], "clear_shown": 0})
     return bot.send(h, msg, run_id)
+
+
+# ---------- the merge of round 11 (DESIGN 18, seam c): slice Q's offer, only with MVP_VIDEO_ASK=1 and a YouTube video
+def _video_offer(shown):
+    """The words that offer to ask a cited video itself, by its number in this answer (as "ask video N" reads it), or
+    "" when the setting is off or no shown item is a YouTube video."""
+    from . import texts as T
+    from . import videoask
+    if not videoask.on():
+        return ""
+    yt = [(n, it) for n, it in enumerate(shown, 1) if videoask.video_id(it)]
+    if not yt:
+        return ""
+    if len(yt) == 1:
+        return T.SYNTH_VIDEO_OFFER_ONE
+    return T.synth_video_offer_many(yt[:3])
+# ---------- end the merge of round 11 ----------

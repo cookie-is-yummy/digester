@@ -450,10 +450,16 @@ HOOK_ORDER = {
                         "text = said",                                              # end of the two tries
                         "ref = self.split_reads(person, text, now)",                # 8z (W)
                         "done, ref = self.integration_reads(person, text, now)",
+                        "ref = history.history_reads(self, person, text, now)",     # 8h (round 11 H)
+                        "ref = videoask.reads(self, person, text, now)",            # 8y (round 11 Q)
+                        "it, paid = self.code_reads(person, text, self._answer_seen(handle))",
+                        "over = self._over_cap(person)",
+                        "ref = synth_reads(self, person, text, now)",               # 8m (round 11 M)
                         "it, _ = interpret(",
                         "it = chat_guard(it, text)",
                         "screened = self.screen_guard(person, it, text, now)",      # then the errand form (W)
-                        "if screened is not None:"],
+                        "if screened is not None:",
+                        "ref = history.after_interpret(self, person, it, text, now)"],   # round 11 H
     # the live check of 19 Nov (DESIGN.md section 17.L): the new reads inside the hooks of their kind, in order
     "browser.py:browser_reads": ["m = REVOKE.match(t)",
                                  "return self._signed_in_nothing(person, t, now)   # the live check of 19 Nov (F1)",

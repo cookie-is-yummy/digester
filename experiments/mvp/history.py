@@ -1356,6 +1356,14 @@ def _pick(bot, person, st, n, now, today):
         return None
     bot.note(intent="history")
     title = _title(it)
+    # the merge of round 11 (DESIGN 18, seam d): the one item shown is the pick in view, so "what does it say about X"
+    # and "ask the video" name it; the follow-ups above read the history state's own list, which stays as it was
+    run_id = st.get("run_id")
+    if run_id is not None:
+        bot.store.set_last_answer(h, run_id, None, [it.id], (bot.store.last_answer(h) or {}).get("goal") or "")
+        bot.store.set_state(f"lines:{h}", {it.id: []})
+        bot.store.set_state(f"linekinds:{h}", {it.id: None})
+        bot.store.set_state(f"facts:{h}", {it.id: {}})
     from .render import by
     line = f"{title}{by(it, None if q.lang == 'en' else 'es', title=title)}"
     parts = [{"type": "text", "text": line}]
@@ -1414,3 +1422,75 @@ def _history_shaped(q, text):
     t = normal(text)
     return (q.kind != "count" or q.window.kind != "all" or q.unit == "channels" or q.hours
             or bool(re.search(r"\b(?:watch\w*|viewed|seen|visto|vi|veo)\b", t)))
+
+
+# ====================================== the merge of round 11: the framing (DESIGN 18) ===========================
+# The setup's suggestions, "help" and "what can you do" lead with asking the watch history, with example questions
+# built from the person's own record (counts) and profile (topics). Every example is one the reads take: a history
+# question (`read`) or a summary (synth.read), checked here before it is offered; a topic is offered only when the
+# record holds something that mentions it.
+def _example_topics(prof, n=4):
+    """Short topic words from the profile's interests, most saved first: the topic itself when it is one or two
+    words, else its longest content word."""
+    out = []
+    for i in (prof or {}).get("interests") or []:
+        t = normal(str(i.get("topic") or ""))
+        words = [w for w in re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", t) if w not in STOP and len(w) >= 3]
+        if not words:
+            continue
+        cand = " ".join(words) if len(words) <= 2 and len(t.split()) <= 2 else max(words, key=len)
+        if cand not in out:
+            out.append(cand)
+        if len(out) >= n:
+            break
+    return out
+
+
+def examples(bot, person, now):
+    """(the count line, [example questions]) for this person, or ("", []) when there is no watch history to ask."""
+    from . import profile as P
+    from . import synth
+    tz = person.get("timezone") or "UTC"
+    today = now.astimezone(ZoneInfo(tz)).date()
+    view = bot.view(person["library"])
+    rec = record(view, tz)
+    q0 = HistoryQuery(kind="count", how="watched")
+    counts = []
+    for p in ("youtube", "instagram"):
+        if p in rec.ends:
+            n = len(hits(view, rec, q0, None, None, [p]))
+            if n:
+                counts.append((p, n))
+    if not counts:
+        return "", []
+    newest = max(rec.ends[p] for p, _ in counts)
+    said = " and ".join((f"{num(n)} videos you watched on {PNAME[p]}" if i == 0 else f"{num(n)} on {PNAME[p]}")
+                        for i, (p, n) in enumerate(counts))
+    line = f"Ask your watch history anything. I can see {said}, up to {day_words(newest)}."
+    month = MONTHS[newest.month - 1].capitalize()   # the month the record ends in: its answer says where it ends
+    qs = [f"which channels did I watch the most in {month}?"]
+    topic = None
+    for t in _example_topics(P.get(bot.store, person["handle"])):
+        q = read(f"when did I first watch videos about {t}?", today)
+        if q is None or not q.topic or synth.read(f"summarize what I've learned about {t}") is None:
+            continue
+        if hits(view, rec, q, None, None, [p for p, _ in counts]):
+            topic = t
+            break
+    if topic:
+        qs += [f"when did I first watch videos about {topic}?", f"summarize what I've learned about {topic}"]
+    else:
+        qs += [f"what did I watch on {day_words(newest)}?", f"how many videos did I watch in {newest.year}?"]
+    qs = [x for x in qs if read(x, today) is not None or synth.read(x) is not None]
+    return line, qs
+
+
+def examples_block(bot, person, now):
+    """The block the help and the setup lead with, or "" (never fails the message it is in)."""
+    try:
+        line, qs = examples(bot, person, now)
+    except Exception:  # noqa: BLE001 - the help and the setup never break for this
+        return ""
+    if not line:
+        return ""
+    return line + " Try:\n" + "\n".join(f"\"{x}\"" for x in qs)

@@ -216,6 +216,12 @@ class OnboardingMixin:
             reqs = self.first_requests(person, now)
         except Exception as e:  # noqa: BLE001 - no offer rather than an unchecked one
             self.store.add_run(handle=h, kind="first_requests", status="error", error=type(e).__name__)
+        # ---------- the merge of round 11: the setup's suggestions lead with asking the watch history (DESIGN 18) ---
+        from . import history
+        lead_block = history.examples_block(self, person, now)
+        if lead_block:
+            parts.append(lead_block)
+        # ---------- end the merge of round 11 ----------
         if reqs:
             parts.append(T.first_requests_block([r["text"] for r in reqs]))
         parts.append(T.PREFS_QUESTION)

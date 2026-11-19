@@ -339,13 +339,21 @@ def offer(bot, person, last, n, question, msg, now):
     if not on() or not n or not last or not 1 <= n <= len(last.get("items") or []):
         return msg
     it = bot.view(person["library"]).get(last["items"][n - 1])
-    if it is None or not video_id(it):
-        return msg
+    line = offer_line(bot, person, it, question, now)
+    return Reply.of(msg) + Reply([{"type": "text", "text": "\n" + line}]) if line else msg
+
+
+def offer_line(bot, person, it, question, now):
+    """The offer for one YouTube item with the setting on (else ""); the pick and the question are kept 30 minutes for
+    "ask the video". The merge of round 11: also after the honest line of a details question ("what does it say about
+    X" on a title-only video, followup._detail_answer)."""
+    if not on() or it is None or not video_id(it):
+        return ""
     h = person["handle"]
     bot.store.set_state(f"videoask:{h}", {"item_id": it.id, "question": " ".join(str(question or "").split())[:300],
                                           "at": now.isoformat()})
     bot.store.set_state(f"videoask_seen:{h}", now.isoformat())   # the offer says what leaves this computer
-    return Reply.of(msg) + Reply([{"type": "text", "text": "\n" + OFFER}])
+    return OFFER
 
 
 def reads(bot, person, text, now):

@@ -405,10 +405,13 @@ def test_a_reply_in_another_language_is_not_this_read(lib_env):
 def test_the_video_offer_is_said_only_with_the_setting(lib_env, monkeypatch):
     e = lib_env
     out = say(e, "what have i learned about running", CHAT)
-    assert "ask me about that video" not in out
+    assert "ask the video" not in out and "ask video" not in out
     monkeypatch.setenv("MVP_VIDEO_ASK", "1")
     out = say(e, "what have i learned about watercolor", CHAT)
-    assert out.rstrip().endswith("To hear what one of the videos itself says, ask me about that video.")
+    # the merge of round 11 (on purpose): the offer is slice Q's ("ask video N"), only for a cited item slice Q can
+    # ask; this set's made-up video ids are not YouTube's 11-letter form, so nothing is offered here
+    # (test_round11_merge.py has the offer with asks that work)
+    assert "ask the video" not in out and "ask video" not in out and "ask me about that video" not in out
 
 
 def test_the_hook_sits_after_the_cap_check_and_before_the_interpreter():

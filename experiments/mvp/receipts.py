@@ -202,6 +202,12 @@ class ReceiptsMixin:
         got = rows("calendar.add", "done")
         if got:
             lines.append((_t(got[-1]["at"]), T.receipt_calendar_links(len(got))))
+        # ---------- the merge of round 11: a YouTube video asked itself (slice Q; the link and question went out) ----
+        got = rows("video.ask", "done")
+        if got:
+            last = _t(got[-1]["at"])
+            lines.append((last, T.receipt_video_asks(len(got), day_words(last, now, tz))))
+        # ---------- end the merge of round 11 ----------
         # to-dos on the bot's own lists
         todos = self.store.q("SELECT created_at, done_at, removed_at FROM todos WHERE handle=? AND created_at>=? "
                              "ORDER BY id", (h, s))

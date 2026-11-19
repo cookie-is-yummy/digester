@@ -234,6 +234,15 @@ def export(bot, person, now, lists_only=False):
                    "for you:\n                  which site, how it ended, how many presses, and when. No page "
                    "words, nothing typed.\n")
     # ---------- end round 10, slice V ----------
+    # ---------- the merge of round 11: what asking the history and the videos keeps (DESIGN 18) ----------
+    asked = round11_rows(bot.store, h)
+    if asked:
+        files.append(("history_and_videos.json", _write(d, "history_and_videos.json", json.dumps(asked, indent=1))))
+        readme += ("\nhistory_and_videos.json  What I keep from asking your watch history and asking videos: the "
+                   "last history question's\n                  form (for follow-ups, 6 hours), and each video you had "
+                   "me ask (its id, when, how it\n                  ended, and the points it answered with their "
+                   "times). Never the video or what it says in full.\n")
+    # ---------- end the merge of round 11 ----------
     files.append(("README.txt", _write(d, "README.txt", readme)))
     files.append(("drafts.json", _write(d, "drafts.json", drafts_json(bot.store, h))))   # round 9, slice A
     out.update(saves=n, rules=n_rules)
@@ -273,6 +282,32 @@ def youtube_held(store, h):
             out.append({"what": what, "since": st.get("at") if isinstance(st, dict) else None})
     return out
 # ---------- end second merge of round 10 ----------
+
+
+# ---------- the merge of round 11 ----------
+def round11_rows(store, h):
+    """{} when nothing is kept; else the history follow-up form (slice H), the video answer kept (slice Q) and each
+    ask of a video (action_log video.ask: id, status, counts, cost, when; never the question)."""
+    out = {}
+    st = store.get_state(f"history:{h}")
+    if st:
+        out["history_follow_up"] = {"form": st.get("q"), "since": st.get("at")}
+    ans = store.get_state(f"videoans:{h}")
+    if ans:
+        out["video_answer"] = ans
+    asks = []
+    for r in store.q("SELECT status, detail, at FROM action_log WHERE handle=? AND action='video.ask' ORDER BY id",
+                     (h,)):
+        try:
+            d = json.loads(r["detail"] or "{}")
+        except ValueError:
+            d = {}
+        asks.append({"video_id": d.get("video_id"), "status": r["status"], "points": d.get("points"),
+                     "cost_usd": d.get("cost_usd"), "at": r["at"]})
+    if asks:
+        out["video_asks"] = asks
+    return out
+# ---------- end the merge of round 11 ----------
 
 
 # ---------- round 10, slice V ----------

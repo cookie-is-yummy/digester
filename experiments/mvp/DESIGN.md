@@ -1989,10 +1989,19 @@ second merge, 18 Nov, added Y, V and T in the rows that were kept for them).
 | | 8 | `receipts_reads` (with what the browser pressed, 17.L), `do_it` | round 9 W9, W10, L |
 | after the two tries | 8z | `split_reads` (two asks; only when no read took the whole message) | W |
 | | - | `integration_reads` (with "version") | round 8, K |
+| | 8h | `history.history_reads` (a history question, or a follow-up to a history answer for 6 hours; code only, 18.H) | round 11 H |
+| | 8y | `videoask.reads` ("what leaves this computer"; "ask the video ..." only with `MVP_VIDEO_ASK=1`, and only on a video pick already in view, else one line asking for one; 18.Q) | round 11 Q |
+| | - | `code_reads`, then the cap check (`_over_cap`) | round 7 |
+| | 8m | `synth.synth_reads` ("summarize what I've learned about X", with one time window read by slice H's words; after the cap check, it calls the model; 18.M) | round 11 M |
 | after `interpret`, `chat_guard` | - | `screen_guard`, then the errand form on `unsupported` / `chat` / a clash | W |
+| | - | `history.after_interpret` (a `library_stats` form with a history shape; a rule made of a history question declined plainly) | round 11 H |
 
 The order inside `browser_reads`, `youtube_reads`, `place_reads` and `cancel_reads` of the reads added by the live
 check of 19 Nov (17.L) is held by the same test (`HOOK_ORDER`'s `module:function` keys).
+
+Round 11 (18): the history read (8h) comes before asking a video (8y), and both before the ordinary request path
+(`code_reads`, the cap, then the summary read 8m and the interpreter); a question about a pick shown that its own text
+does not answer gets today's honest line and, with `MVP_VIDEO_ASK=1` and a YouTube pick, the offer to ask the video.
 
 Nothing above hook 5 sees the normalised text; the reads of slices D, G and C inside hooks 6 and 8 get both tries
 (`tests/test_round10_merge.py`, section (e)).

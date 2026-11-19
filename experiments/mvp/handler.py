@@ -327,12 +327,6 @@ class HandlerMixin:
         if getattr(self._tl, "code_only", False):
             self._tl.code_missed = True
             return None
-        # ---------- round 11, slice Q (hook 8y): "what leaves this computer"; "ask the video ..." (MVP_VIDEO_ASK=1) --
-        from . import videoask
-        ref = videoask.reads(self, person, text, now)
-        if ref is not None:
-            return ref
-        # ---------- end round 11, slice Q ----------
         # hook 8z: two asks in one message, when one part goes to a doing helper (phrasing.parts; W5)
         ref = self.split_reads(person, text, now)
         if ref is not None:
@@ -348,6 +342,14 @@ class HandlerMixin:
         if ref is not None:
             return ref
         # ---------- end round 11, slice H ----------
+        # ---------- round 11, slice Q (hook 8y): "what leaves this computer"; "ask the video ..." (MVP_VIDEO_ASK=1).
+        # The merge of round 11: after the history read (8h), so "ask" only ever reaches a video pick already in view
+        # (the last answer's, or the one an offer named); with none in view it says so and asks for one first ------
+        from . import videoask
+        ref = videoask.reads(self, person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 11, slice Q ----------
         it, paid = self.code_reads(person, text, self._answer_seen(handle))
         if it is not None and not paid:   # "stop 2", "my rules", "undo": no model call, never misread
             return self._dispatch(person, it, text, rules, pending, last, now)
@@ -757,7 +759,12 @@ class HandlerMixin:
         """The help with the build (round 10, slice K) and, since the live check of 19 Nov (F11), one line on the
         apps and, only when the browser is on for this person, one on cancelling in it."""
         from .places import help_args
-        return T.help_full(config.BUILD, **help_args(self, h))
+        # ---------- the merge of round 11: the help leads with asking the watch history (DESIGN 18) ----------
+        from . import history, videoask
+        person = self.store.person(h)
+        lead = history.examples_block(self, person, self.clock()) if person else ""
+        return T.help_full(config.BUILD, **help_args(self, h), history=lead, video_ask=videoask.on())
+        # ---------- end the merge of round 11 ----------
 
     def _rule_in_view(self, h, last, number, rules):
         """True when rule `number` is the one the conversation is on: the last write started or changed it, or the

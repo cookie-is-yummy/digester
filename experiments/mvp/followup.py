@@ -963,6 +963,12 @@ class FollowupMixin(IntegrationReadsMixin):
             parts.append({"type": "text", "text": T.detail_none(words, name, it.platform, has_desc)})
             if it.url:
                 parts.append(link_part(it, title))
+            # ---------- the merge of round 11 (DESIGN 18, seam d): a YouTube pick may be asked itself (MVP_VIDEO_ASK=1)
+            from .videoask import offer_line
+            line = offer_line(self, person, it, getattr(self._tl, "msg_text", "") or "", now)
+            if line:
+                parts.append({"type": "text", "text": line})
+            # ---------- end the merge of round 11 ----------
         run_id = self.store.add_run(handle=h, kind="follow_up", at=now_iso(now), n_candidates=1,
                                     n_picks=1 if found else 0, n_dropped=0, cost_usd=round(cost, 6),
                                     status="picked" if found else ("error" if status == "error" else "none"),
