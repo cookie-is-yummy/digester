@@ -441,3 +441,60 @@ def test_delete_my_data_removes_what_asking_kept(qon, monkeypatch):
     st.delete_person_data(H)
     left = st.q("SELECT key FROM state WHERE key LIKE 'video%'")
     assert not [r for r in left if r["key"].endswith(H)]
+
+
+# =====================================================================================================================
+# The checks that must stay true: no rule-eval text and no rule phrasing is taken by the slice Q read (setting on)
+# =====================================================================================================================
+@pytest.fixture()
+def qrec(env, monkeypatch):
+    from mvp import videoask
+    claimed = []
+    env["qclaimed"] = claimed
+    env["bot"].max_per_minute = None
+    real = videoask.reads
+
+    def wrapped(bot, person, text, now):
+        out = real(bot, person, text, now)
+        if out is not None:
+            claimed.append(text)
+        return out
+    monkeypatch.setattr(videoask, "reads", wrapped)
+    monkeypatch.setenv("MVP_VIDEO_ASK", "1")
+    FakeGemini(GOOD).install(monkeypatch)
+    return env
+
+
+@pytest.mark.parametrize("who", ["tester", "operator"])
+@pytest.mark.parametrize("after_answer", [False, True])
+def test_no_rule_eval_text_is_taken_by_the_slice_q_read(qrec, monkeypatch, who, after_answer):
+    from mvp.tests.test_round9_merge import CHAT, eval_texts, operator, send_all
+    from mvp.tests.test_slice2 import say as say2
+    texts = eval_texts()
+    assert len(texts) == 159
+    if who == "operator":
+        operator(qrec, monkeypatch)
+    qrec["qclaimed"].clear()
+    send_all(qrec, texts, after_answer)
+    assert [t for t in qrec["qclaimed"] if t in texts] == []
+    say2(qrec, "what leaves this computer", CHAT)
+    assert qrec["qclaimed"][-1:] == ["what leaves this computer"]      # the wrapper sees what it should
+
+
+@pytest.mark.parametrize("who", ["tester", "operator"])
+def test_no_rule_phrasing_is_taken_by_the_slice_q_read(qrec, monkeypatch, who):
+    from mvp.tests.test_round9_merge import CHAT, operator, rule_phrasings
+    from mvp.tests.test_slice2 import say as say2
+    texts = rule_phrasings()
+    assert len(texts) > 100
+    if who == "operator":
+        operator(qrec, monkeypatch)
+    for words in ("stretch", "water the plants"):
+        say2(qrec, f"remind me to {words}", {"intent": "new_rule", "spec": {
+            "when": {"type": "schedule", "days": ["MON"], "time": "07:00"}, "content": {"source": "note", "text": words}}})
+        qrec["bot"].store.clear_pending(H)
+    qrec["qclaimed"].clear()
+    for t in texts:
+        qrec["bot"].store.clear_pending(H)
+        say2(qrec, t, CHAT)
+    assert [t for t in qrec["qclaimed"] if t in texts] == []
