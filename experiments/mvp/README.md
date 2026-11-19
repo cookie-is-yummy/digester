@@ -542,6 +542,23 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   answered with a question back.
 - **The kinds evaluation**: `python3 -m mvp.eval_kinds` (see "Test it without a phone").
 
+<!-- round 11, slice H -->
+## Ask your watch history (round 11, slice H, DESIGN.md section 18.H)
+
+Read and counted by code, with no model call (`history.py`).
+
+- **"Which channels do I watch the most?"**, "what did I watch last week", "how many videos about blender have I
+  watched", "when did I first start watching cooking videos", "what did I watch on October 30", "how has my guitar
+  watching changed over time", "did I watch more in October or September", "whats my most rewatched video", and
+  the same in Spanish. Watched means watched (likes are "liked"); friends' posts are never counted.
+- Every answer says its window back with dates, and says where your export ends when the window reaches it, with
+  the words that get the export steps. A window after the export says so and answers for the latest stretch it can
+  see.
+- Then: "and last month?", "what about youtube", "what about guitar", "show me them", "more", "the first one".
+- "Send me my top channels every month" is answered now, with a plain line that a history rule isn't possible yet.
+- Offline checks: `python3 -m pytest -q mvp/tests/test_round11_h.py` (a made-up watch history, `tests/h_library.py`).
+<!-- end round 11, slice H -->
+
 ## Understanding: trends, the theme check, the recap (round 8, DESIGN.md section 14)
 
 All read and counted by code, with no model call.
@@ -714,6 +731,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `extract.py`, `prompts/extract_v4.md` | The named things a pick's text lists (items: name, its words, its date; round 7; what an item is, enforced in code, and which posts list things: round 8; the kind asked for on its own line and "fit" yes only for a thing that is itself of that kind: round 9, slice U), ingredients, steps and key points from a pick's whole text, checked line by line, cached in the `facts` table (a line is never shown cut off: a step or key point is kept whole up to 260 characters, a sentence that only describes the video is not a step, and steps are shown only when two or more remain); a recipe, workout or make-or-build tutorial gets its details for the recommended pick even when none were asked for (a talk, a list of habits or an opinion gets none, unless its text writes out a recipe or a workout); when details are asked for, the best of the top 3 that has them all is recommended |
 | `dates.py`, `answers.py` | Round 7: posted dates (the Instagram link's shortcode, YouTube's publishedAt), time-sensitive requests, dates read from a post's text (passed, old, ahead), no stale claims; the date order of picks and the choice of the items answer |
 | `attention.py`, `digest.py` | Round 8: what they have been into lately (windows, shares, labels, the live count script) and the theme check's messages; the recap and its one suggested rule (DESIGN.md section 14) |
+| `history.py` | Round 11, slice H: history questions read and answered by code (the form, the record of every event, windows, rankings, first and last, timelines, follow-ups; DESIGN.md 18.H) |
 | `render.py` | What the person reads, as parts (text and link), the items answer among them: a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
 | `schedule.py` | Every date and time (every timing form, seeded random moments, quiet hours), in the person's zone |
 | `scheduler.py` | Timed sends and their guards: skips, snooze, quiet hours, daily limit, retries and holds |

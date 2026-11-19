@@ -3301,3 +3301,102 @@ names (421 for any other Host). A page reached through a forwarded port arrives 
 the bot's own `/vm` link on the address the page was opened on (`ownView` in `web_page.html`). Tests:
 `test_the_page_answers_a_preview_address_only_when_the_setting_names_it` and the one after it, in
 `tests/test_round10_livefix_checks.py`. The take-over view behind a preview address was not tried by a person.
+
+## 18. Ask your watch history anything (round 11, 19 Nov 2026)
+
+The founder, 19 Nov: "treat it like 'ask your watch history anything'". Three slices (H, M, Q), then a merge. Each
+slice adds its own part below.
+
+### 18.H History questions answered by code (slice H; `history.py`, `tests/test_round11_h.py`)
+A history question is about the person's own watching and liking as a record: how much, what, who, when, first,
+last, most, change over time. Code reads it into a small form, computes the answer from the library's own files and
+says it in fixed words; no model writes a number and no model is called. No new prompt: the interpreter's existing
+`library_stats` form is the way in for what the code read misses. No contract change (the form is not stored; a run
+of kind `history` and the kept answer use the existing tables).
+- Before (offline, the fakes, the planted history `tests/h_library.py`): H1 counted all time, searched "watching",
+  "most" and "this month", and called watches "kept"; H2 said "nothing you kept since 2026-11-12" and never where the
+  export ends; H3 gave totals and no ranking; H4's count was right but "kept"; H8 went to the picks. The count read
+  `interaction_kinds`, and `LibraryView` keeps only the latest date of each kind, so a video watched in September and
+  again in October was only in October.
+- The form (`HistoryQuery`): kind (top_channels, top_topics, top_items, count, list, on_day, first, last, timeline,
+  compare), how (watched = watch and view events; liked; saved = save, collection, sent to yourself, playlist; any),
+  platform, topic words (at most 3 phrases, 4 words), channel, window (all, day, week, month, year, since, last N
+  days, lately) and a second window for compare, top N (5, at most 10), by month or year, hours asked, Spanish.
+- The record (`history.Record`): every event of `interactions.jsonl` for the view's items (friends' posts are not in
+  the view; a share to a friend is not an event here), dated in the person's time zone; where each platform's export
+  ends (its newest event of any kind) and where each kind starts. Cached per library file; on the founder's library
+  149,801 events, built in about a second.
+- The code read (hook 8h, `history_reads`, in `answer_normally` after `integration_reads`, before `code_reads` and
+  the model): a message is read only when it speaks of the person's own watching or liking ("did I watch", "I've been
+  watching", "my watch history", "my top channels", Spanish "vi", "he visto", "veo") and is a question or a listing
+  ("top channels last month"); never with a reminder, a send-on-a-schedule word, an action (add, put, email,
+  calendar, delete ...), a search for one video ("that video", "find", "a video where"), a summary or learning word,
+  "should I", "recommend", a question about the bot ("you"), a statement ("i watched way too much youtube lol"), or
+  more than 4 topic words. Saves stay where they were: "what did I save this week" is the recent answer and "how
+  many recipes have I saved" the library count (rule eval t-dev-014 and t-dev-049); the interpreter's
+  `library_stats` form brings a dated saves question here. The window phrases are taken out before the topic is
+  read, with the question, kind and platform words, so "watching", "most" and "this month" are never search words.
+- After the interpreter (`after_interpret`, after `screen_guard`): a `library_stats` form whose message has a history
+  shape (a window, watching, a ranking, a first or last, a timeline, hours) gets the history answer; otherwise the
+  question's own function words are taken out of `stats.words` and the old count runs as before. A `new_rule` from
+  the library whose words, without their timing and "send me", are a history question ("send me my top channels every
+  month") is said plainly: "I can answer that now, but I can't send your history on a schedule yet, so I didn't set
+  up a rule. Here it is for now:" and today's answer (a history rule needs a new content source in the schema: not
+  cheap, not built). A reminder or a note rule is never touched.
+- Topics: an item matches when its own text (a video's title, a post's caption) holds a topic word by the engine's
+  word match (`retrieve.contains_word`: plurals, a few endings, longer words that end in it). A topic that is exactly
+  a channel's name is that channel when the message says "from", "by" or "channel", or when no title mentions it.
+- The answers. Every window is said back with its dates ("In October 2026", "the week of 9 to 15 November 2026",
+  "This month (1 to 19 November 2026)", "In the last 30 days (21 October to 19 November 2026)", "In the 4 weeks up to
+  30 October 2026 (where your export ends)", "In all your history I can see,"). A window that touches or passes where
+  the export ends says "Your YouTube export ends on 30 October 2026, so I can't see after that." and 'For newer
+  history, send me a new export (ask "how do I send you a new export?" for the steps).' (the words hook 5a answers
+  with the steps); over all the history it gives the range per platform instead. A window wholly after the record
+  says "I can't see <window>: ..." then "The latest I can see:" and the same question for the latest stretch of the
+  same length (the export's last day, 7 days, month, year or N days). A window wholly before the record says it
+  can't be seen and where the history starts (never "you watched none"); one that starts before it says so too.
+  - count: "<window> you watched 1,484 videos (1,172 on YouTube, 312 on Instagram)."; with a topic or channel "(of N
+    you watched then)"; "how many channels" counts channels; "have I watched anything about X" is a count; hours or
+    minutes: "I count videos, not hours or minutes." first (docs/07: no time spent).
+  - top_channels: the count, then "Most from:" and the top N with counts, "(N channels in all.)"; "what have I been
+    watching the most" adds "By topic:" from the profile's topics (attention's topic words; sensitive and "not me"
+    never). top_topics without profile topics says so and gives the channels.
+  - list and on_day: the latest 5 (a day: 8) as "n. Title by Channel (30 Oct) <link>" and "And N more (say "more" to
+    see them)". first and last: the date, the first (or last) 3 with their dates, "(N in all.)", and their cards
+    right under them (link parts), never a recommendation. top_items: watched more than once, with how many times.
+  - timeline: by month when the span is under 18 months, else by year (or as asked); over all the history also the
+    last 6 months by month; months over many years show the last 12; then "The most: October 2026, with 17." and the
+    total. compare: both windows and the difference.
+  - Spanish questions get the same answers in Spanish (dates, numbers as 108.997). The friends line only when
+    Instagram is in the scope.
+- Follow-ups, for 6 hours while the history answer is the last answer (`history:<handle>` state, matched to the last
+  answer's run): another window ("and last month?", "and in 2025?"), a platform ("what about youtube"), liked or
+  watched, a new topic ("what about guitar"), "show me them" (a count, ranking or comparison becomes the list),
+  "more" (the next page), and a number ("the first one": that item and its card; after a ranking, that channel's
+  videos). Any newer answer ends them. The answer is kept as the last answer with its items (deliveries, `answers`
+  kind `history`), so "email it to me", "add the second one to my list" and reactions work as on any answer. The
+  run's steps keep the form's shape (kind, how, platform, window kind, how many topic words), never the words.
+- Checked (19 Nov, offline). The builder's 60 made-up questions and 40 traps (outside git): the code read takes 58 of
+  60 as written (the other 2 are saves: a dated one comes through the interpreter's form, "what did I save this
+  month" stays the recent answer by design) and 0 of 40 traps; the tests hold 50 traps and near variants, none taken,
+  and the 60 questions (two saves swapped for likes) answered with no model call. The 159 rule texts and the 123 rule
+  phrasings, with and without an answer kept, are taken by neither read. Full suite 3,358 passed and 0 failed (3,318
+  before and the 40 of `test_round11_h.py`), demo 10, dry self-test
+  114 of 114 steps, `probe_same` byte-equal with `same_head.json`. The development phrasing set: helper lines 73 right
+  and 1 wrong as before; of its 40 `none` lines one is now answered by code, d132 "what did i watch on youtube last
+  week", on purpose: it is the brief's H2 with a platform (before, it went to the model and got "nothing you kept
+  since ...").
+- Numbers on the founder's library (counts only), each against an independent count (a script outside git that reads
+  the two files directly): October 2026 1,484 watched (1,172 YouTube, 312 Instagram) and the same top 5 channel
+  counts; the last 7 days of the record 343; all time 108,997 watched (108,685 YouTube, 312 Instagram), the same top
+  5, 33,931 channels; the date of the first watch and of the first video whose title mentions "cooking" the same.
+  Topic counts follow the engine's word match: "blender" 300 (a plain whole-word count 283, 299 when a word joined to
+  digits counts, as in "Blender3D"), "cooking" 113 (108). The YouTube record ends 30 October 2026, Instagram's 15
+  October 2026 (its watched videos cover the last 12 days of it only).
+- Live, once each on the real library as a fresh person (19 Nov): H1, H2, H3, H4 and H8 by code with no model call
+  (0.1 to 2.8 seconds each); H5 through the interpreter and the composer as before; $0.0098 in all.
+- Not done: a topic is matched by its words in titles and captions, so "the first cooking video" can be a talk show
+  whose title says "cooking" (live H8); the engine's ranking does not judge a topic here. Spanish topic words match
+  only Spanish titles. A history rule (sent on a schedule) is declined, not built. "What topics do I watch" needs the
+  profile's topics. Minutes watched are never counted (docs/07). No prompt changed, so the 20 draft requests and the
+  held-out set were not run.

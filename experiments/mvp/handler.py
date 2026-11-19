@@ -333,6 +333,12 @@ class HandlerMixin:
         done, ref = self.integration_reads(person, text, now)
         if done:
             return ref
+        # ---------- round 11, slice H (hook 8h): a history question, read and answered by code (history.py) -------
+        from . import history
+        ref = history.history_reads(self, person, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 11, slice H ----------
         it, paid = self.code_reads(person, text, self._answer_seen(handle))
         if it is not None and not paid:   # "stop 2", "my rules", "undo": no model call, never misread
             return self._dispatch(person, it, text, rules, pending, last, now)
@@ -364,6 +370,11 @@ class HandlerMixin:
             return self.send(handle, T.INTERPRET_ERROR)
         if screened is not None:   # round 10, slice W (W6)
             return screened
+        # ---------- round 11, slice H: a library_stats form with a history shape, or a rule made of one ----------
+        ref = history.after_interpret(self, person, it, text, now)
+        if ref is not None:
+            return ref
+        # ---------- end round 11, slice H ----------
         if it.intent == "new_rule" and it.spec.content.source == "recap":
             return self._recap_preview(person, it.spec, text, now)   # round 8 (BN5): this week's recap, then YES
         return self._dispatch(person, it, text, rules, pending, last, now)
