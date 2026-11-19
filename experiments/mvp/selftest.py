@@ -291,11 +291,39 @@ def _dry_compose(user, system=None, words=None, most=3):
     return {"picks": picks, "intro": "Here you go."}
 
 
+def _dry_extract(user, system=None):
+    """Round 11: the fake details step for a summary: the item's own sentences as its key points, copied exactly."""
+    body = user.split("<item>", 1)[1].rsplit("</item>", 1)[0] if "<item>" in user else ""
+    parts = [x.strip(" -") for x in re.split(r"(?<=[.!?])\s+|\n", body) if len(x.strip(" -")) > 12]
+    return {"key_points": parts[:3]}
+
+
+def _dry_synth(user, system=None, most=4):
+    """Round 11: the fake summary call: one point per item that names the topic, its first key point quoted (the
+    items that do not name it are not called about it, as the model is asked to judge)."""
+    m = re.search(r'Topic: "(.*?)"', user or "")
+    words = [w for w in re.findall(r"[a-z]+", (m.group(1) if m else "").lower()) if len(w) > 2]
+    blocks = [(n, body) for n, title, body in re.findall(
+        r"(?m)^(\d+)\. <item>Title: (.*?)\nPoints from its own text:\n(.*?)</item>", user or "", re.S)
+        if not words or any(w in (title + " " + body).lower() for w in words)]
+    pts = []
+    for n, body in blocks[:most]:
+        first = body.split("\n")[0][2:].strip()
+        if first:
+            pts.append({"text": first, "sources": [{"n": int(n), "quote": first}]})
+    return {"points": pts, "about": [int(n) for n, _ in blocks]}
+
+
 def _dry_answer(purpose, ans):
-    """A step's scripted answer; a compose answer may name words to pick candidates by instead of fixed numbers."""
+    """A step's scripted answer; a compose answer may name words to pick candidates by instead of fixed numbers. Round
+    11: {"mvp_extract": "own_text"} and {"mvp_synth": "quote_points"} answer from the items' own text."""
     if purpose == "mvp_compose" and isinstance(ans, dict) and "pick_words" in ans:
         words, most = ans["pick_words"], ans.get("most", 3)
         return lambda user, system=None: _dry_compose(user, system, words, most)
+    if purpose == "mvp_extract" and ans == "own_text":
+        return _dry_extract
+    if purpose == "mvp_synth" and ans == "quote_points":
+        return _dry_synth
     return ans
 
 
@@ -442,7 +470,8 @@ class Run:
                  "grant_reads", "receipts_reads", "do_it", "split_reads", "integration_reads", "onboard_step",
                  "understanding_reads", "_email_text")
     MODULE_HOOKS = (("places", "place_reads"), ("places", "asked_reads"), ("refresh", "export_reads"),
-                    ("grants", "grant_reads"), ("ytreads", "youtube_reads"))
+                    ("grants", "grant_reads"), ("ytreads", "youtube_reads"),
+                    ("history", "history_reads"), ("videoask", "reads"), ("synth", "synth_reads"))   # round 11
 
     def _wrap_hooks(self):
         import importlib
@@ -573,6 +602,11 @@ class Run:
             self._setup_mcp()
         for k, v in (setup.get("env") or {}).items():
             setenv(k, v)
+        if "gemini" in setup:   # round 11, slice Q: the fake Gemini answers "ask the video", dry and live alike
+            from mvp import videoask
+            from mvp.tests.fakes.fake_gemini import FakeGemini
+            self._patch(videoask, "call_model", FakeGemini(setup["gemini"], cost_per_call=0.0).call)
+            setenv("GEMINI_API_KEY", "selftest-not-a-key")
         return env
 
     # ----- slice fakes (only reached when the slice is in this code) -----
