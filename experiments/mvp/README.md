@@ -583,6 +583,21 @@ All read and counted by code, with no model call.
 - Live check of the counts, nothing personal printed: `python3 -m mvp.attention ../data/all --store
   ../data/mvp/mvp.sqlite`.
 
+<!-- round 11, slice M -->
+## What have I learned about X (round 11, slice M, DESIGN.md section 18.M)
+
+- **"summarize what I've learned about sourdough"** (also "what have I learned about X", "what do my saves say about
+  X", "the main ideas across what I watched on X", "what do these say" after an answer): read by code, no interpreter
+  call. Many fitting posts and videos are read (their own text: captions, video descriptions), and the reply gives 3 to
+  6 points, each with the posts it came from (title and link), then "From 4 videos and 2 posts; 3 more fit but say
+  nothing in their text." and that it read titles, descriptions and captions, not what is said in the videos. Every
+  point is checked by code against the text of the posts it cites; one that cannot be traced is never shown. A time
+  ("this month"), a repeat ("every week") or an action ("email me") is never this read. `MVP_SYNTH=0` switches it off.
+- **The evaluation** (live, about $0.10 a run): `python3 -m mvp.eval_synth mvp/evalset/synth --mode before|after --out
+  <folder outside git>` with a new `MVP_HOME`, `MVP_LEDGER_HOME` and `MVP_TOTAL_CAP_USD`: 12 made-up requests on a
+  made-up library; counts only to `counts.json`, the made-up replies to `transcript.md`.
+<!-- end round 11, slice M -->
+
 ## Your own agent (MCP, prototype)
 
 A read-only server that lets the person's own AI agent (a desktop agent app on the same computer) search and read
