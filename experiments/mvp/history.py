@@ -163,7 +163,9 @@ TOP_ITEMS = re.compile(r"\b(?:re-?watch\w*|more than once|over and over|(?:watch
                        r"(?:times|often)|most\s+(?:watched|viewed|played)\s+(?:videos?|reels?|clips?)|"
                        r"(?:videos?|reels?)\s+(?:that\s+)?i(?:'ve| have)?\s+watched\s+(?:the\s+)?most|"
                        r"top\s+(?:\d+\s+)?(?:videos?|reels?)\s+i(?:'ve| have)?\s+watched)\b")
-TIMELINE = re.compile(r"\b(?:over time|over the (?:years|months)|changed?|changing|trends?|trending|grown|growing|"
+TIMELINE = re.compile(r"\b(?:which|what)\s+(?:month|year)\b|\bmost\s+(?:watched\s+)?(?:month|year)\b|"
+                      r"\bbusiest\b|"
+                      r"\b(?:over time|over the (?:years|months)|changed?|changing|trends?|trending|grown|growing|"
                       r"(?:by|per|each|every|a)\s+(?:month|year)|monthly|yearly|month by month|year by year|"
                       r"por mes|cada mes|por ano|cada ano)\b")
 FIRST = re.compile(r"\b(?:first|earliest|since when|start(?:ed)?\s+(?:watching|to watch)|began|begin|primer\w*|"
@@ -802,6 +804,14 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
     W = window_words(q.window, start, end, lang)
     touches = newest is not None and (end is None or end >= newest)
     tail = []
+    oldest = _record_start(rec, plats, q)
+    if oldest and end and end < oldest and q.kind != "compare":
+        # a window wholly before the record: it can't be seen, never "you watched none"
+        sl = start_line(rec, plats, q)
+        return ((f"No veo {window_noun(q.window, start, end, lang)}: " if es else
+                 f"I can't see {window_noun(q.window, start, end, lang)}: ") + sl[:1].lower() + sl[1:]), [], {}
+    if oldest and start and start < oldest and q.window.kind != "all":
+        tail.append(start_line(rec, plats, q))
     fn = {"top_channels": _top_channels, "top_topics": _top_topics, "top_items": _top_items, "count": _count,
           "list": _list, "on_day": _list, "first": _first, "last": _last, "timeline": _timeline,
           "compare": _compare}[q.kind]
@@ -820,6 +830,26 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
         tail.append("No cuento las publicaciones de tus amigos." if es else "Posts from friends are not counted.")
     extra = dict(extra, tail=" ".join(x for x in tail if x))
     return text + "\n\n" + extra["tail"], ids, extra
+
+
+def _record_start(rec, plats, q):
+    ds = [rec.starts[(p, k)] for p in plats for k in HOW_KINDS[q.how] if (p, k) in rec.starts]
+    return min(ds) if ds else None
+
+
+def start_line(rec, plats, q):
+    """'Your YouTube history here starts on 19 September 2015, so I can't see before that.'"""
+    have = []
+    for p in plats:
+        ds = [rec.starts[(p, k)] for k in HOW_KINDS[q.how] if (p, k) in rec.starts]
+        if ds:
+            have.append((p, min(ds)))
+    if not have:
+        return ""
+    p, d = min(have, key=lambda x: x[1])
+    if q.lang == "es":
+        return f"Tu historial de {PNAME.get(p, p)} aquí empieza el {day_words(d, 'es')}, así que no veo nada antes."
+    return f"Your {PNAME.get(p, p)} history here starts on {day_words(d)}, so I can't see before that."
 
 
 def range_line(rec, plats, q):
@@ -1097,14 +1127,36 @@ def _timeline(view, rec, q, start, end, plats, W, today, prof):
         head = f"{_cap(n2)} que {verb(q)}{_about(q)}, {unit}{said}:"
     else:
         head = f"{_cap(n2)} you {verb(q)}{_about(q)}, {unit}{said}:"
-    lines = [head, _cells(h, lo, hi, by_month, q.lang) + "."]
+    if by_month and (hi.year - lo.year) * 12 + hi.month - lo.month >= 24:
+        # months over many years: the last 12 in words, the busiest month over the whole span after them
+        y, m = (hi.year, hi.month - 11) if hi.month > 11 else (hi.year - 1, hi.month + 1)
+        lines = [head, ("Los últimos 12 meses: " if es else "The last 12 months: ") +
+                 _cells(h, date(y, m, 1), hi, True, q.lang) + "."]
+    else:
+        lines = [head, _cells(h, lo, hi, by_month, q.lang) + "."]
     if not by_month and q.by != "year":
         y, m = (hi.year, hi.month - 5) if hi.month > 5 else (hi.year - 1, hi.month + 7)
         lo6 = max(lo, date(y, m, 1))
         lines.append(("Los últimos meses: " if es else "The last months, by month: ") +
                      _cells(h, lo6, hi, True, q.lang) + ".")
+    peak = _peak(h, lo, hi, by_month)
+    if peak:
+        k, n = peak
+        when = (month_words(date(k[0], k[1], 1), q.lang) if by_month else str(k))
+        lines.append(f"Lo más: {when}, con {num(n, 'es')}." if es else f"The most: {when}, with {num(n)}.")
     lines.append(f"En total, {num(len(h), 'es')}." if es else f"{num(len(h))} in all.")
     return "\n".join(lines), [], {}
+
+
+def _peak(h, lo, hi, by_month):
+    c = Counter()
+    for ds in h.values():
+        for k in {(d.year, d.month) if by_month else d.year for d in ds if lo <= d <= hi}:
+            c[k] += 1
+    if not c:
+        return None
+    k, n = max(c.items(), key=lambda kv: (kv[1], kv[0]))
+    return (k, n) if n else None
 
 
 def _compare(view, rec, q, start, end, plats, W, today, prof):

@@ -195,7 +195,16 @@ def test_timeline_compare_and_channel_questions(hist):
     out, _ = ask(hist, "how has my blender watching changed over time")
     assert out.startswith("Videos you watched that mention \"blender\", by year:\n2024: 0, 2025: 1, 2026: 8 (up to "
                           "30 Oct 2026).\nThe last months, by month: May 2026: 0, Jun 2026: 0, Jul 2026: 0, Aug 2026: 0, "
-                          "Sep 2026: 2, Oct 2026: 7 (up to 30 Oct 2026).\n9 in all.")
+                          "Sep 2026: 2, Oct 2026: 7 (up to 30 Oct 2026).\nThe most: 2026, with 8.\n9 in all.")
+    out, _ = ask(hist, "which month did i watch the most")
+    assert out.startswith("Videos you watched, by month:\nThe last 12 months: Nov 2025: 1, Dec 2025: 0,")
+    assert "Oct 2026: 17 (up to 30 Oct 2026).\nThe most: October 2026, with 17.\n44 in all." in out
+    out, _ = ask(hist, "how many videos did i watch in 2023")
+    assert out.startswith("I can't see 2023: your YouTube history here starts on 5 January 2024, so I can't see "
+                          "before that.")
+    out, _ = ask(hist, "how many videos did i watch since december 2023")
+    assert out.startswith("Since 1 December 2023 you watched 44 videos")
+    assert "Your YouTube history here starts on 5 January 2024, so I can't see before that." in out
     out, _ = ask(hist, "how many blender videos did i watch each month this year")
     assert out.startswith("Videos you watched that mention \"blender\", by month, this year (1 January to 19 November "
                           "2026):\nJan 2026: 0,")
