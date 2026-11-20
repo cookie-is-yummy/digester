@@ -29,6 +29,7 @@ import threading
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
@@ -69,6 +70,7 @@ class HistoryQuery(BaseModel):
     lang: Literal["en", "es"] = "en"
     offset: int = 0                     # "more" after a list
     by: Optional[Literal["month", "year"]] = None   # timeline: "by year", "per month"
+    less: bool = False                  # round 11 fix, A (R5): compare asked "less / fewer", so its answer leads so
 
 
 # ====================================== reading the message ======================================================
@@ -167,7 +169,7 @@ SPANISH = re.compile(r"\b(?:que|cuantos|cuantas|cuando|canales|vi|veo|visto|ayer
 
 # ---------- the kind ----------
 HOURS = re.compile(r"\b(?:hours?|minutes?|time spent|how long|horas|minutos)\b")
-COMPARE = re.compile(r"\b(?:more|less|fewer|vs\.?|versus|compared?|comparison|than|or|mas|menos)\b")
+COMPARE = re.compile(r"\b(?:more|less|fewer|vs\.?|versus|compared?|comparison|than|or|mas|menos|compar\w+)\b")
 TOP_ITEMS = re.compile(r"\b(?:re-?watch\w*|more than once|over and over|(?:watched|viewed)\s+(?:the\s+)?most\s+"
                        r"(?:times|often)|most\s+(?:watched|viewed|played)\s+(?:videos?|reels?|clips?)|"
                        r"(?:videos?|reels?)\s+(?:that\s+)?i(?:'ve| have)?\s+watched\s+(?:the\s+)?most|"
@@ -216,6 +218,7 @@ anos dia dias hoy ayer pasado pasada ultimo ultima ultimos ultimas primer primer
 canales canal mas menos y o por cada desde historial cosas contenido publicaciones temas tema estado mi mis me
 fue fueron es son era eran sido ser lo le les se su sus algo alguno alguna algun nada todo todos toda todas mucho muchos
 mucha muchas cuanto cuanta cosa veces vez hace entre hasta para con sin ni tu tus te ago between until till
+comparado comparada comparando comparar comparacion frente
 """.split())
 PLATFORM_WORDS = {"youtube": "youtube", "instagram": "instagram"}
 
@@ -457,8 +460,11 @@ def _topic_and_platform(t, spans):
             else how
     toks = re.findall(r"[a-z0-9&'+.#-]+", rest)
     runs, cur = [], []
-    for w in toks:
+    for k, w in enumerate(toks):
         w2 = w.strip(".'-")
+        if w2 == "after" and k + 1 < len(toks) and toks[k + 1].strip(".'-") == "effects":
+            cur.append(w2)   # round 11 fix, A: "after effects" is a name, not "after" and a topic "effects"
+            continue
         if (not w2 or w2 in STOP or w2.isdigit() or w2 in MONTHS or w2 in MON_ABBR or w2 in MONTH_ES
                 or w2 in DAYS or w2 in DAYS_ES or re.fullmatch(_DAY_RE, w2) or re.fullmatch(r"\d+(?:st|nd|rd|th)", w2)
                 or w2 in ("what's", "i've", "i'm", "it's", "i'd")):
@@ -523,7 +529,8 @@ def read(text, today, loose=False):
         w2 = _before(windows[0], before.split(":", 1)[1])
         windows = [windows[0], w2] if w2 else windows
     if len(windows) >= 2 and COMPARE.search(rest):
-        q.update(kind="compare", window=windows[0], window2=windows[1])
+        q.update(kind="compare", window=windows[0], window2=windows[1],
+                 less=bool(re.search(r"\b(?:less|fewer|menos)\b", rest)) and not re.search(r"\b(?:more|mas)\b", rest))
     elif TOP_ITEMS.search(rest):
         q.update(kind="top_items", window=w1, topic=[x for x in topic if x not in ("times", "often")])
     elif TIMELINE.search(rest):
@@ -659,7 +666,29 @@ def matches(it, q, channel_key=None):
     if not q.topic:
         return True
     text = it.caption or ""
-    return any(contains_word(text, x) for x in q.topic)
+    return any(holds(text, x) for x in q.topic)
+
+
+@lru_cache(maxsize=512)
+def _keys(phrase):
+    """Round 11 fix, A (R3, speed): the parts a text must hold, as plain substrings, for contains_word to match: each
+    word's stem without its last letter ("berr" for "berries", "tomat" for "tomatoes")."""
+    from .retrieve import WORD, _stem, norm
+    out = []
+    for w in WORD.findall(norm(phrase)):
+        s = _stem(w)
+        out.append(s[:-1] if len(s) > 2 else s)
+    return tuple(out)
+
+
+def holds(text, phrase):
+    """retrieve.contains_word, with a cheap test first (the same answer, about ten times faster over a library)."""
+    ks = _keys(phrase)
+    if ks:
+        low = unicodedata.normalize("NFKC", text or "").lower()
+        if any(k not in low for k in ks):
+            return False
+    return contains_word(text, phrase)
 
 
 def _squash(s):
@@ -693,6 +722,127 @@ def hits(view, rec, q, start, end, plats):
             continue
         out[iid] = ds
     return out
+
+
+# ---------- round 11 fix, A (R3): a topic's items must fit it by the engine's own item vectors, not only hold the
+# word. The library's stored vectors (text-embedding-3-large @ 1024, the ones the engine ranks with: a demo library's
+# int8 store, or a research root's float store) are read here, no model call: the topic's vector is the trimmed
+# centroid of every item of the record whose text holds the word, and an item fits when its own vector is within
+# FIT_CUT of the median of those items. Without vectors, or with fewer than FIT_MIN matches, nothing changes (word
+# matches, said "mention"). The engine's own search would need its query rewrite (a model call) and its loaded
+# process; this reads only the same vectors, in well under a second (DESIGN 18.LA).
+FIT_MIN, FIT_CUT, FIT_TRIM = 6, 0.08, 0.25
+_VECS, _FITS = {}, {}
+
+
+def _vector_store(lib):
+    """(id -> row, matrix, per-dimension scale or None) for the library's item vectors, or None."""
+    import numpy as np
+    for name, files in (("oai3l_1024_q8", ("q8.npy", "scale.npy")), ("oai3l_1024", ("emb.npy", None))):
+        d = os.path.join(lib, "corpus", "emb", name)
+        ids_path = os.path.join(d, "ids.json")
+        if not (os.path.exists(ids_path) and os.path.exists(os.path.join(d, files[0]))):
+            continue
+        try:
+            stamp = (ids_path, os.stat(ids_path).st_mtime_ns)
+        except OSError:
+            continue
+        with _LOCK:
+            hit = _VECS.get(lib)
+            if hit and hit[0] == stamp:
+                return hit[1]
+        try:
+            with open(ids_path, encoding="utf-8") as f:
+                ids = json.load(f)
+            mat = np.load(os.path.join(d, files[0]), mmap_mode="r")
+            scale = np.load(os.path.join(d, files[1])).astype(np.float32) if files[1] else None
+        except (OSError, ValueError):
+            return None
+        if len(ids) != mat.shape[0]:
+            return None
+        got = ({i: k for k, i in enumerate(ids)}, mat, scale)
+        with _LOCK:
+            _VECS.clear()
+            _VECS[lib] = (stamp, got)
+            _FITS.clear()
+        return got
+    return None
+
+
+def topic_fit(view, rec, phrase):
+    """{item_id: score} for the record's items that hold `phrase`, with the cut (score >= cut fits), or None when the
+    library has no vectors or too few items hold it to tell."""
+    import numpy as np
+    vs = _vector_store(view.lib)
+    if vs is None:
+        return None
+    key = (view.lib, id(rec), phrase)
+    with _LOCK:
+        if key in _FITS:
+            return _FITS[key]
+    pos, mat, scale = vs
+    have = [i for i in rec.events if view.items.get(i) is not None and i in pos
+            and holds(view.items[i].caption or "", phrase)]
+    if len(have) < FIT_MIN:
+        out = None
+    else:
+        rows = sorted(pos[i] for i in have)
+        m = np.asarray(mat[rows], dtype=np.float32)
+        if scale is not None:
+            m = m * scale
+        m /= np.linalg.norm(m, axis=1, keepdims=True) + 1e-9
+        order = {r: k for k, r in enumerate(rows)}
+        keep = np.ones(len(rows), bool)
+        s = None
+        for _ in range(2):
+            c = m[keep].mean(0)
+            c /= np.linalg.norm(c) + 1e-9
+            s = m @ c
+            keep = s >= np.quantile(s, FIT_TRIM)
+        cut = float(np.median(s)) - FIT_CUT
+        out = ({i: float(s[order[pos[i]]]) for i in have}, cut)
+    with _LOCK:
+        _FITS[key] = out
+    return out
+
+
+def fit_hits(view, rec, q, h):
+    """(the hits that fit q's topic, how many were left out, whether the fit was used) for a first, last or list
+    answer; the word matches unchanged when the fit can't be told."""
+    if not q.topic or q.channel or not h:
+        return h, 0, False
+    fits = [topic_fit(view, rec, x) for x in q.topic]
+    if any(f is None for f in fits):
+        return h, 0, False
+    kept = {i: ds for i, ds in h.items() if any(i in f[0] and f[0][i] >= f[1] for f in fits)}
+    return kept, len(h) - len(kept), True
+
+
+def _nothing_fit(q, W, plats, left):
+    """Round 11 fix, A (R3): the window holds only items that mention the topic without being about it."""
+    if q.lang == "es":
+        s = f"{W} no {verb(q)} {'ningún video' if q.how == 'watched' else 'nada'} sobre {topic_words(q)}."
+    else:
+        s = f"{W} you {verb(q)} no {noun(q, 2, plats)} about {topic_words(q)}."
+    return s + " " + _left_line(q, left)
+
+
+def _about_fit(q, used, n=2):
+    """' about "cooking"' when the fit was used, else the word match's ' that mention "cooking"'."""
+    if not used:
+        return _about(q, n)
+    return (" sobre " if q.lang == "es" else " about ") + topic_words(q)
+
+
+def _left_line(q, left):
+    if not left:
+        return ""
+    if q.lang == "es":
+        return (f"(Otros {left} mencionan {topic_words(q)} pero no parecen ser de eso, así que no los cuento aquí.)"
+                if left > 1 else f"(Otro menciona {topic_words(q)} pero no parece ser de eso, así que no lo cuento aquí.)")
+    return (f"({left} more mention {topic_words(q)} but don't seem to be about it, so I left them out.)" if left > 1
+            else f"(1 more mentions {topic_words(q)} but doesn't seem to be about it, so I left it out.)")
+# ---------- end round 11 fix, A (R3) ----------
 
 
 # ====================================== the words =================================================================
@@ -857,16 +1007,17 @@ def item_line(i, it, d, lang, today, url=True, times=None):
 
 
 # ====================================== the answers ==============================================================
-def answer(view, q, today, prof=None, rec=None, said_end=False):
+def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
     """(text, [item ids shown in order], extra) for a query. `extra`: {"channels": [...] for a ranking, "cards": True
-    when the items go out as link cards}. `said_end`: the reply already says where the export ends."""
+    when the items go out as link cards, "said": the notes said}. `said_end`: the reply already says where the export
+    ends. `quiet` (round 11 fix, A, R4): notes said already in this stretch ("friends", "range"), left out now."""
     rec = rec or record(view, "UTC")
     plats = _scope_platforms(q, view, rec)
     if q.topic and not q.channel and len(q.topic) == 1:
         # a topic is a topic first; it is a channel when the message says so ("from X", "X's channel"), or when no
         # title in the scope mentions it and a channel has exactly that name
         ch = channel_of(view, q.topic[0])
-        if ch and (q.channel_hint or not any(contains_word(view.items[i].caption or "", q.topic[0])
+        if ch and (q.channel_hint or not any(holds(view.items[i].caption or "", q.topic[0])
                                              for i in rec.events if view.items.get(i) is not None)):
             q = q.model_copy(update={"channel": ch, "topic": []})
     lang = q.lang
@@ -887,7 +1038,7 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
         q2 = q.model_copy(update={"window": w2})
         if q.kind == "compare":
             q2 = q.model_copy(update={"kind": "count", "window": w2, "window2": None})
-        body, ids, extra = answer(view, q2, today, prof, rec, said_end=True)
+        body, ids, extra = answer(view, q2, today, prof, rec, said_end=True, quiet=quiet)
         lead = "Lo último que veo:" if es else "The latest I can see:"
         return head + "\n\n" + lead + "\n" + body, ids, extra
     W = window_words(q.window, start, end, lang)
@@ -908,10 +1059,17 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
           "list": _list, "on_day": _list, "first": _first, "last": _last, "timeline": _timeline,
           "compare": _compare}[q.kind]
     text, ids, extra = fn(view, rec, q, start, end, plats, W, today, prof)
+    said = []
     if said_end:
         pass
-    elif q.window.kind == "all":
+    elif q.window.kind == "all" and "range" not in quiet:
         tail += [range_line(rec, plats, q), REFRESH[lang]]
+        said.append("range")
+    elif q.window.kind == "all":
+        # round 11 fix, A (R4): the range was said in this stretch; an answer about the latest items still says where
+        # the record ends (it changes the answer), the others say nothing more
+        if q.kind in ("last", "list", "on_day") and reached:
+            tail.append(ends_line(rec, reached, lang))
     elif reached:
         # the round 11 check (DESIGN 18.X): each platform whose export the window reaches is said, so "October 1 to
         # 15" says Instagram's ends on the 15th even while YouTube's runs on
@@ -919,10 +1077,11 @@ def answer(view, q, today, prof=None, rec=None, said_end=False):
     if q.how == "saved":
         tail.append("(Guardado cuenta lo guardado, las colecciones, lo que te enviaste y las listas.)" if es else
                     "(Saved counts saves, collections, posts you sent yourself and playlists.)")
-    if "instagram" in plats:   # friends' posts are an Instagram matter
+    if "instagram" in plats and "friends" not in quiet:   # friends' posts are an Instagram matter
         tail.append("No cuento las publicaciones de tus amigos." if es else "Posts from friends are not counted.")
-    extra = dict(extra, tail=" ".join(x for x in tail if x))
-    return text + "\n\n" + extra["tail"], ids, extra
+        said.append("friends")   # round 11 fix, A (R4): once in a stretch of 6 hours
+    extra = dict(extra, tail=" ".join(x for x in tail if x), said=said)
+    return text + ("\n\n" + extra["tail"] if extra["tail"] else ""), ids, extra
 
 
 def _record_start(rec, plats, q):
@@ -1028,10 +1187,11 @@ def num(n, lang="en"):
     return s.replace(",", ".") if lang == "es" else s
 
 
-def _opening(q, n, W, plats, extra=""):
+def _opening(q, n, W, plats, extra="", fitted=False):
+    about = _about_fit(q, fitted, n)   # round 11 fix, A (R3): "about" only when the engine's fit chose the items
     if q.lang == "es":
-        return f"{W} {verb(q)} {num(n, 'es')} {noun(q, n, plats)}{_about(q, n)}{extra}."
-    return f"{W} you {verb(q)} {num(n)} {noun(q, n, plats)}{_about(q, n)}{extra}."
+        return f"{W} {verb(q)} {num(n, 'es')} {noun(q, n, plats)}{about}{extra}."
+    return f"{W} you {verb(q)} {num(n)} {noun(q, n, plats)}{about}{extra}."
 
 
 def _by_platform(view, ids, lang):
@@ -1049,10 +1209,10 @@ def _count(view, rec, q, start, end, plats, W, today, prof):
     if q.unit == "channels":
         chans = {view.items[i].creator for i in h if view.items[i].creator}
         n = len(chans)
+        word = who_word(view, h, n, q.lang)   # round 11 fix, A (R7)
         if es:
-            return f"{pre}{W} {verb(q)} videos de {num(n, 'es')} {'canal' if n == 1 else 'canales'}.", [], {}
-        return (f"{pre}{W} you {verb(q)} {noun(q, 2, plats)} from {num(n)} {'channel' if n == 1 else 'channels'}.",
-                [], {})
+            return f"{pre}{W} {verb(q)} videos de {num(n, 'es')} {word}.", [], {}
+        return f"{pre}{W} you {verb(q)} {noun(q, 2, plats)} from {num(n)} {word}.", [], {}
     n = len(h)
     if not (q.topic or q.channel):
         return pre + _opening(q, n, W, plats, _by_platform(view, h, q.lang)), [], {}
@@ -1075,12 +1235,25 @@ def _top_channels(view, rec, q, start, end, plats, W, today, prof):
     lines = [_opening(q, len(h), W, plats, _by_platform(view, h, q.lang)) + (" Más de:" if es else " Most from:")]
     lines += [f"{i}. {name}: {num(n, q.lang)}" for i, (name, n) in enumerate(top, 1)]
     if len(c) > len(top):
-        lines.append(f"({num(len(c), 'es')} canales en total.)" if es else f"({num(len(c))} channels in all.)")
+        word = who_word(view, h, len(c), q.lang)   # round 11 fix, A (R7)
+        lines.append(f"({num(len(c), 'es')} {word} en total.)" if es else f"({num(len(c))} {word} in all.)")
     if q.topics_too:
         tl = _topic_line(view, h, prof, q.lang)
         if tl:
             lines.append(tl)
     return "\n".join(lines), [], {"channels": [name for name, _ in top]}
+
+
+def who_word(view, ids, n, lang="en"):
+    """Round 11 fix, A (R7): what the counted creators are: YouTube channels, Instagram accounts, or both."""
+    plats = {view.items[i].platform for i in ids if view.items[i].creator}
+    one = n == 1
+    if plats == {"instagram"}:
+        return ("cuenta" if one else "cuentas") if lang == "es" else ("account" if one else "accounts")
+    if "instagram" in plats:
+        return ("cuenta o canal" if one else "cuentas y canales") if lang == "es" else \
+            ("account or channel" if one else "accounts and channels")
+    return ("canal" if one else "canales") if lang == "es" else ("channel" if one else "channels")
 
 
 def _topic_counts(view, ids, prof):
@@ -1092,7 +1265,7 @@ def _topic_counts(view, ids, prof):
             continue
         words = topic_words_of(i)
         support = set(i.get("support_ids") or [])
-        n = sum(1 for x in ids if x in support or any(contains_word(view.items[x].caption, w) for w in words))
+        n = sum(1 for x in ids if x in support or any(holds(view.items[x].caption, w) for w in words))
         if n:
             out.append((P.shown_topic(i["topic"]), n))
     out.sort(key=lambda x: (-x[1], x[0].lower()))
@@ -1149,6 +1322,9 @@ def _list(view, rec, q, start, end, plats, W, today, prof):
     h = hits(view, rec, q, start, end, plats)
     if not h:
         return _nothing(q, W, plats), [], {}
+    h, left, fitted = fit_hits(view, rec, q, h)   # round 11 fix, A (R3)
+    if not h:
+        return _nothing_fit(q, W, plats, left), [], {}
     cap = DAY_MAX if q.kind == "on_day" else LIST_MAX
     order = sorted(h, key=lambda i: (-max(h[i]).toordinal(), i))
     page = order[q.offset:q.offset + cap]
@@ -1157,15 +1333,17 @@ def _list(view, rec, q, start, end, plats, W, today, prof):
     if q.offset:
         lines = [(f"Los siguientes {len(page)}:" if es else f"The next {len(page)}:")]
     elif q.kind == "on_day":
-        lines = [_opening(q, len(h), W, plats)[:-1] + ":"]
+        lines = [_opening(q, len(h), W, plats, fitted=fitted)[:-1] + ":"]
     else:
         k = len(page)
-        lines = [_opening(q, len(h), W, plats) + (f" Los {k} más recientes:" if es else
-                                                  (" The latest:" if k == 1 else f" The latest {k}:"))]
+        lines = [_opening(q, len(h), W, plats, fitted=fitted) + (f" Los {k} más recientes:" if es else
+                                                                 (" The latest:" if k == 1 else f" The latest {k}:"))]
     lines += [item_line(q.offset + k, view.items[i], max(h[i]), q.lang, today) for k, i in enumerate(page, 1)]
     rest = len(order) - q.offset - len(page)
     if rest > 0:
         lines.append(f"Y {rest} más (di \"más\" para verlos)." if es else f"And {rest} more (say \"more\" to see them).")
+    if left and not q.offset:
+        lines.append(_left_line(q, left))
     return "\n".join(lines), page, {}
 
 
@@ -1182,6 +1360,9 @@ def _first(view, rec, q, start, end, plats, W, today, prof, last=False):
     h = hits(view, rec, q, start, end, plats)
     if not h:
         return _nothing(q, W, plats), [], {}
+    h, left, fitted = fit_hits(view, rec, q, h)   # round 11 fix, A (R3)
+    if not h:
+        return _nothing_fit(q, W, plats, left), [], {}
     key = (lambda i: (-max(h[i]).toordinal(), i)) if last else (lambda i: (min(h[i]), i))
     order = sorted(h, key=key)[:FIRST_MAX]
     d0 = max(h[order[0]]) if last else min(h[order[0]])
@@ -1189,15 +1370,19 @@ def _first(view, rec, q, start, end, plats, W, today, prof, last=False):
     win = "" if q.window.kind == "all" else " " + window_words(q.window, start, end, q.lang, cap=False)
     if es:
         word = "último" if last else "primer"
-        head = f"El {word} {n1} que {verb(q)}{_about(q, 1)}{win} fue el {day_words(d0, 'es')}:"
+        head = f"El {word} {n1} que {verb(q)}{_about_fit(q, fitted, 1)}{win} fue el {day_words(d0, 'es')}:"
     else:
-        head = f"The {'last' if last else 'first'} {n1} you {verb(q)}{_about(q, 1)}{win} was on {day_words(d0)}:"
+        head = (f"The {'last' if last else 'first'} {n1} you {verb(q)}{_about_fit(q, fitted, 1)}{win} was on "
+                f"{day_words(d0)}:")
     lines = [head]
     for k, i in enumerate(order, 1):
         lines.append(item_line(k, view.items[i], max(h[i]) if last else min(h[i]), q.lang, None, url=False))
     if len(h) > 1:
         lines.append((f"({num(len(h), 'es')} en total" if es else f"({num(len(h))} in all") +
                      (f"{win}.)" if win else ".)"))
+    if left:   # round 11 fix, A (R3): one line with the count, "(98 in all. 15 more mention ...)"
+        ll = _left_line(q, left)
+        lines[-1] = lines[-1][:-1] + " " + ll[1:] if len(h) > 1 else ll
     return "\n".join(lines), order, {"cards": True}
 
 
@@ -1237,6 +1422,18 @@ def _timeline(view, rec, q, start, end, plats, W, today, prof):
     hi = min(end or newest, newest)
     if lo > hi:
         lo = hi
+    # ---------- round 11 fix, A (R6): start at the first year (or month) with a count, never a row of leading zeros
+    none_before = None
+    seen = [d for ds in h.values() for d in ds if lo <= d <= hi]
+    if seen and min(seen) > lo:
+        f0 = min(seen)
+        span_by_month = q.by == "month" if q.by else (hi.year - f0.year) * 12 + hi.month - f0.month < 18
+        new_lo = date(f0.year, f0.month, 1) if span_by_month else date(f0.year, 1, 1)
+        if new_lo > lo:
+            none_before = new_lo if (new_lo.year, new_lo.month) > (lo.year, lo.month) and (
+                span_by_month or new_lo.year > lo.year) else None
+            lo = new_lo
+    # ---------- end round 11 fix, A (R6) ----------
     by_month = q.by == "month" if q.by else (hi.year - lo.year) * 12 + hi.month - lo.month < 18
     unit = ("por mes" if es else "by month") if by_month else ("por año" if es else "by year")
     n2 = noun(q, 2, plats)
@@ -1252,6 +1449,9 @@ def _timeline(view, rec, q, start, end, plats, W, today, prof):
                  _cells(h, date(y, m, 1), hi, True, q.lang) + "."]
     else:
         lines = [head, _cells(h, lo, hi, by_month, q.lang) + "."]
+    if none_before:   # round 11 fix, A (R6)
+        when = month_words(none_before, q.lang) if by_month else str(none_before.year)
+        lines[1] += f" Nada antes de {when}." if es else f" None before {when}."
     if not by_month and q.by != "year":
         y, m = (hi.year, hi.month - 5) if hi.month > 5 else (hi.year - 1, hi.month + 7)
         lo6 = max(lo, date(y, m, 1))
@@ -1284,6 +1484,20 @@ def _compare(view, rec, q, start, end, plats, W, today, prof):
     b = len(hits(view, rec, q, s2, e2, plats))
     W2 = window_words(q.window2, s2, e2, q.lang, cap=False)
     short = window_words(q.window, start, end, q.lang, cap=False)
+    # ---------- round 11 fix, A (R5): the answer to "more in X or Y?" first, then both counts ----------
+    if a != b:
+        less = q.less
+        hi_w, hi_n, lo_w, lo_n = (short, a, W2, b) if (a > b) != less else (W2, b, short, a)
+        n2 = noun(q, 2 if hi_n != 1 else 1, plats)
+        d = abs(a - b)
+        if es:
+            word = "Menos" if less else "Más"
+            return (f"{word} {hi_w}: {num(hi_n, 'es')} {n2}{_about(q, hi_n)}, frente a {num(lo_n, 'es')} {lo_w} "
+                    f"({num(d, 'es')} {'menos' if less else 'más'})."), [], {}
+        word = "Fewer" if less else "More"
+        return (f"{word} {hi_w}: {num(hi_n)} {n2}{_about(q, hi_n)}, against {num(lo_n)} {lo_w} "
+                f"({num(d)} {'fewer' if less else 'more'})."), [], {}
+    # ---------- end round 11 fix, A (R5) ----------
     s = _opening(q, a, W, plats)[:-1]
     if es:
         s += f", y {W2.replace('En ', 'en ', 1)}, {num(b, 'es')}"
@@ -1296,6 +1510,32 @@ def _compare(view, rec, q, start, end, plats, W, today, prof):
 
 # ====================================== on the bot ===============================================================
 STATE = "history:{h}"
+# ---------- round 11 fix, A (R4): the friends line and the all-time range, once in a stretch of 6 hours ----------
+NOTES = "histnotes:{h}"
+
+
+def said_lately(bot, h, now):
+    """The notes ("friends", "range") a history answer said to this person in the last 6 hours."""
+    st = bot.store.get_state(NOTES.format(h=h)) or {}
+    out = set()
+    for k, at in st.items():
+        try:
+            if now - datetime.fromisoformat(at) < timedelta(hours=FOLLOW_HOURS):
+                out.add(k)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def note_said(bot, h, now, said):
+    if not said:
+        return
+    st = dict(bot.store.get_state(NOTES.format(h=h)) or {})
+    from .store import now_iso
+    for k in said:
+        st[k] = now_iso(now)
+    bot.store.set_state(NOTES.format(h=h), st)
+# ---------- end round 11 fix, A (R4) ----------
 PICK = re.compile(r"^\W*(?:(?:and|ok|so|y)\s+)?(?:show\s+me\s+|open\s+|what\s+about\s+|what\s+did\s+i\s+watch\s+from\s+|"
                   r"muestrame\s+)?(?:the\s+|el\s+|la\s+)?(?:#|number\s+|no\.?\s*)?"
                   r"(first|second|third|fourth|fifth|sixth|seventh|eighth|1st|2nd|3rd|4th|5th|6th|7th|8th|[1-8]|"
@@ -1413,12 +1653,19 @@ def history_reads(bot, person, text, now):
     if st:
         def known(x):
             view = bot.view(person["library"])
-            return any(contains_word(it.caption or "", x) for it in view.items.values())
+            return any(holds(it.caption or "", x) for it in view.items.values())
         f = follow_up(st, text, today, known)
         if isinstance(f, tuple):
             return _pick(bot, person, st, f[1], now, today)
         if f is not None:
             return send_answer(bot, person, f, now, follow=True)
+    # ---------- round 11 fix, A (R1): "what was that video i watched about X" is a recall of the record ----------
+    r = read_recall(text, today)
+    if r is not None:
+        ref = recall_answer(bot, person, r, now)
+        if ref is not None:
+            return ref
+    # ---------- end round 11 fix, A (R1) ----------
     q = read(text, today)
     if q is None:
         return None
@@ -1435,15 +1682,18 @@ def send_answer(bot, person, q, now, follow=False, lead=""):
     view = bot.view(person["library"])
     rec = record(view, tz)
     t0 = datetime.now()
-    text, ids, extra = answer(view, q, today, P.get(bot.store, h), rec)
+    quiet = said_lately(bot, h, now)
+    text, ids, extra = answer(view, q, today, P.get(bot.store, h), rec, quiet=quiet)
+    note_said(bot, h, now, extra.get("said") or ())
     bot.note(intent="history")
     tail = extra.get("tail") or ""
-    if extra.get("cards") and tail and text.endswith(tail):
+    if extra.get("cards") and (not tail or text.endswith(tail)):
         # the cards of the first or last items go right under their lines, before where the record ends
-        body = text[:-len(tail)].rstrip()
+        body = text[:-len(tail)].rstrip() if tail else text
         parts = [{"type": "text", "text": (lead + "\n\n" if lead else "") + body}]
         parts += [link_part(view.items[i], _title(view.items[i])) for i in ids if view.items[i].url]
-        parts.append({"type": "text", "text": tail})
+        if tail:
+            parts.append({"type": "text", "text": tail})
     else:
         parts = [{"type": "text", "text": (lead + "\n\n" if lead else "") + text}]
     reply = Reply(parts)
@@ -1508,6 +1758,377 @@ def _pick(bot, person, st, n, now, today):
     if it.url:
         parts.append(link_part(it, title))
     return bot.send(h, Reply(parts), st.get("run_id"))
+
+
+# ====================================== round 11 fix, A (R1, R2, R8): recall ======================================
+# "what was that video i watched about color grading" asks the record for one thing seen before: never a pick, never
+# "I recommend". Read by code (`read_recall`), answered by code (`recall_answer`): the videos the person WATCHED
+# (YouTube first; watched reels only when the message says reel or post, or nothing on YouTube fits), best fit first
+# (the engine's ranking of the words, then how much of them the item's text holds, then the library's own vectors),
+# up to 3, each with the day it was watched and its card. The first is the pick in view, so "what did it say about X"
+# and "ask the video" work on it. Nothing watched fits: said, with the saved one that does. A plain "find me a video
+# about X" stays a pick (it is not read here).
+RECALL_MAX = 3
+_KIND = r"(?:youtube\s+|yt\s+|insta(?:gram)?\s+|ig\s+)?(?P<kind>videos?|vids?|reels?|posts?|clips?|shorts?|tiktoks?|" \
+        r"tutorials?)"
+_SAW = (r"(?:i|we)\s+(?:once\s+|already\s+|just\s+|recently\s+|literally\s+)?(?:watched|saw|seen|viewed|"
+        r"was\s+watching|have\s+watched|have\s+seen|'ve\s+watched|'ve\s+seen|had\s+watched|watched\s+on\s+youtube)")
+_LEAD = (r"^\W*(?:(?:hey|yo|ok|okay|so|um+|uh+|wait|hmm+)[,\s]+)*(?:(?:can|could)\s+you\s+(?:help\s+me\s+)?|"
+         r"(?:please\s+)?help\s+me\s+|pls\s+|please\s+)?")
+RECALL = [
+    # "what was that video i watched about X", "find the video i watched on X last month", "remember that reel i saw ..."
+    re.compile(_LEAD + r"(?:(?:do\s+you\s+)?(?:remember|recall|know)\s+|what(?:'s|\s+is|\s+was|\s+were)\s+(?:the\s+"
+               r"name\s+of\s+|the\s+title\s+of\s+)?|which\s+(?:one\s+)?(?:was|is)\s+|find\s+(?:me\s+)?|"
+               r"look\s+up\s+|where(?:'s|\s+is)\s+|show\s+me\s+|get\s+me\s+|what\s+was\s+)?(?:that|the|this)\s+"
+               + _KIND + r"\s+(?:that\s+|which\s+)?" + _SAW + r"\b(?P<rest>.*)$"),
+    # "what's that video where ...", "remember that reel with the ..." ("what was that video about X", with no "i
+    # watched", stays the interpreter's: "that video" may be a pick the bot showed)
+    re.compile(_LEAD + r"(?:what(?:'s|\s+is|\s+was)\s+(?:the\s+name\s+of\s+)?|which\s+(?:one\s+)?was\s+|"
+               r"(?:do\s+you\s+)?(?:remember|recall)\s+|find\s+(?:me\s+)?)that\s+" + _KIND +
+               r"\s+(?P<prep>where|with|when)\s+(?P<rest>.+)$"),
+    re.compile(_LEAD + r"what(?:'s|\s+is|\s+was)\s+the\s+" + _KIND + r"\s+(?P<prep>where|with|when)\s+(?P<rest>.+)$"),
+    # "which video did i watch about X" (one video: "which videos did i watch ..." is a history list)
+    re.compile(_LEAD + r"which\s+(?P<kind>video|vid|reel|clip|post|short|tutorial)\s+(?:was\s+it\s+(?:that\s+)?)?"
+               r"(?:did|have)\s+i\s+(?:watch|see|watched|seen)\s+(?P<rest>(?:about|on|where|with|that|of|from)\b.+)$"),
+    # "i watched something about X a while ago, what was it"
+    re.compile(r"^\W*(?:(?:so|ok|okay|hey|yo)[,\s]+)?i\s+(?:once\s+|recently\s+)?(?:watched|saw)\s+(?:a|this|some|one|"
+               r"that)\s+(?:youtube\s+)?(?:(?P<kind>video|vid|reel|clip|post|short|tutorial)|thing|something)\s+"
+               r"(?P<rest>.+?)[,.;!\s-]+(?:and\s+)?(?:what\s+was\s+it(?:\s+called)?|what\s+was\s+that|which\s+(?:one\s+)?"
+               r"was\s+it|what'?s\s+it\s+called|can\s+you\s+find\s+it|find\s+it|do\s+you\s+know\s+which(?:\s+one)?|"
+               r"what\s+was\s+the\s+name)\W*$"),
+    re.compile(r"^\W*(?:(?:so|ok|okay|hey|yo)[,\s]+)?i\s+(?:once\s+|recently\s+)?(?:watched|saw)\s+something\s+"
+               r"(?P<rest>.+?)[,.;!\s-]+(?:and\s+)?(?:what\s+was\s+it(?:\s+called)?|what\s+was\s+that|which\s+(?:one\s+)?"
+               r"was\s+it|what'?s\s+it\s+called|can\s+you\s+find\s+it|find\s+it|do\s+you\s+know\s+which(?:\s+one)?)\W*$"),
+]
+# "that <channel> video about X": read only when <channel> is a channel of the library (recall_answer checks it)
+RECALL_CHANNEL = re.compile(_LEAD + r"(?:what(?:'s|\s+is|\s+was)\s+|find\s+(?:me\s+)?|(?:do\s+you\s+)?remember\s+)?"
+                            r"that\s+(?P<chan>[a-z0-9&'.@_ -]{2,40}?)\s+(?P<kind>video|vid|reel|clip|tutorial)\s+"
+                            r"(?:i\s+(?:watched|saw)\s+)?(?P<prep>about|on|where|with)\s+(?P<rest>.+)$")
+# what never makes a recall, whatever its shape: reminders, rules, acting, a pick asked for, feedback
+RECALL_NOT = re.compile(
+    r"\b(?:remind|reminder|every|each|daily|weekly|from now on|whenever|should i|recommend\w*|suggest\w*|"
+    r"something (?:new )?to watch|to watch (?:tonight|today|tomorrow|next|later)|"
+    r"(?:add|put|save|send|email|e-mail|text|forward|share|dm|bookmark)\s+(?:it|this|that|them|those|me|to)|"
+    r"delete|remove|unsubscribe|calendar|to-?do|my list|summar\w*|ask the video|ask video|"
+    r"(?:was|is|were)\s+(?:so\s+|really\s+|too\s+|pretty\s+|kinda\s+)?(?:good|great|bad|boring|long|short|funny|"
+    r"awesome|amazing|terrible|wrong|helpful|useless|cool|mid|fire|trash))\b")
+_TAIL = re.compile(r"[,.;!\s-]*(?:\b(?:a\s+while\s+(?:ago|back)|a\s+long\s+time\s+ago|the\s+other\s+day|recently|"
+                   r"before|once|again|at\s+some\s+point|some\s+time\s+ago|a\s+bit\s+ago|lol|haha|pls|please|i\s+think|"
+                   r"or\s+something|on\s+youtube|on\s+yt|on\s+instagram|on\s+insta|on\s+ig|the\s+other\s+week|"
+                   r"what\s+was\s+it(?:\s+called)?|do\s+you\s+remember|can\s+you\s+find\s+it|"
+                   r"remember)\b[,.;!\s-]*)+$")
+_PREP = re.compile(r"^\W*(?:(?:it\s+was\s+|that\s+was\s+|which\s+was\s+)?(?:about|on|where|with|of|from|when|that|"
+                   r"which|in\s+which|explaining|showing|talking\s+about|covering)\s+)+")
+GENERIC = set("""guy girl man woman dude bro someone somebody person people they he she him her his them explains
+explained explain shows showed show talks talked talking makes made does did thing things stuff cool funny really
+very kind sort how way some one video videos reel reels clip clips tutorial tutorials youtube instagram yt ig insta
+was were is are it this that these those like literally basically out up down off into onto back where""".split())
+
+
+class Recall(BaseModel):
+    """The form a recall is read into: the words to find, the kind said, a time window, a channel phrase."""
+    words: str
+    kind: Optional[str] = None
+    window: Optional[Window] = None
+    chan: Optional[str] = None
+
+
+def read_recall(text, today):
+    """A Recall for "what was that video i watched about X" and its shapes, else None."""
+    raw = " ".join((text or "").split())
+    if not raw or len(raw) > 220:
+        return None
+    t = normal(raw).rstrip(" ?!.")
+    if RECALL_NOT.search(t) or BOT_ASK.search(re.sub(r"\b(?:can|could|do)\s+you\b", " ", t)):
+        return None
+    m, chan = None, None
+    for rx in RECALL:
+        m = rx.match(t)
+        if m:
+            break
+    if m is None:
+        m = RECALL_CHANNEL.match(t)
+        if m is None:
+            return None
+        chan = m.group("chan").strip()
+        if chan.split()[0] in ("one", "same", "other", "first", "last", "new", "old", "youtube", "instagram", "long",
+                               "short", "funny", "cool", "good", "weird", "random"):
+            chan = None
+    rest = (m.group("rest") or "").strip()
+    rest = _TAIL.sub("", rest)
+    rest = _PREP.sub("", rest).strip(" ,.?!")
+    kind = (m.groupdict().get("kind") or "").rstrip("s") or None
+    if kind in ("vid", "short", "tutorial", "clip", "tiktok"):
+        kind = "video"
+    window = None
+    wins = find_windows(rest, today)
+    if wins:
+        spans = [s for _, s in wins]
+        ws = [w for w, _ in wins if isinstance(w, Window)]
+        window = ws[0] if ws else None
+        rest = "".join(" " if any(a <= i < b for a, b in spans) else c for i, c in enumerate(rest))
+        rest = re.sub(r"\s+(?:in|on|from|during|around|back\s+in)\s*$", "", " ".join(rest.split())).strip(" ,.")
+        rest = _TAIL.sub("", rest).strip(" ,.?!")
+    if not content_words(rest):
+        return None
+    if len(rest.split()) > 14:
+        return None
+    return Recall(words=rest, kind=kind, window=window, chan=chan)
+
+
+def content_words(phrase):
+    return [w for w in re.findall(r"[a-z0-9][a-z0-9&'+.#-]*", normal(phrase))
+            if w.strip(".'-") not in STOP and w.strip(".'-") not in GENERIC and len(w.strip(".'-")) >= 2
+            and not w.isdigit()]
+
+
+def _watched_on(rec, iid, start=None, end=None):
+    return [d for d, k in rec.events.get(iid, ()) if k in ("watch", "view")
+            and (start is None or d >= start) and (end is None or d <= end)]
+
+
+def _engine_rank(bot, person, words, now):
+    """{item_id: rank} from the engine's own ranking of the words (one search, cached for the library build), or {}
+    when the person is over a cap or the search fails (then the words and the vectors order alone)."""
+    from .retrieve import ranked
+    try:
+        if bot._over_cap(person):
+            return {}
+        r = ranked(bot.pool, person["library"], words, store=bot.store, now=now)
+    except Exception:  # noqa: BLE001 - a recall still answers from the words when the engine can't
+        return {}
+    return {i: k for k, i in enumerate(r.get("ids") or [])}
+
+
+def _recall_level(text, phrase, words):
+    """3 when the item's text holds the whole phrase, 2 all its words, 1 one of them, 0 none."""
+    if len(phrase.split()) <= 4 and holds(text, phrase):
+        return 3
+    got = sum(1 for w in words if holds(text, w))
+    if words and got == len(words):
+        return 2
+    return 1 if got else 0
+
+
+def recall_items(bot, person, r, now, platforms=None, how=("watch", "view"), limit=RECALL_MAX, rank=None):
+    """The items for a recall, best first: [(item, level, [dates])]. `how`: the event kinds counted."""
+    tz = person.get("timezone") or "UTC"
+    view = bot.view(person["library"])
+    rec = record(view, tz)
+    words = content_words(r.words)
+    phrase = " ".join(words) if len(words) <= 4 else r.words
+    start, end = (r.window.start, r.window.end) if r.window else (None, None)
+    ckey = _squash(r.chan) if r.chan else None
+    rank = rank if rank is not None else {}
+    fit = topic_fit(view, rec, phrase) if len(words) <= 4 else None
+    out = []
+    for iid, evs in rec.events.items():
+        it = view.items.get(iid)
+        if it is None or (platforms and it.platform not in platforms):
+            continue
+        if ckey is not None and _squash(it.creator) != ckey:
+            continue
+        ds = [d for d, k in evs if k in how and (start is None or d >= start) and (end is None or d <= end)]
+        if not ds:
+            continue
+        lv = _recall_level(it.caption or "", phrase, words)
+        if lv == 0 or (lv == 1 and rank.get(iid, 10 ** 9) >= 50):
+            continue
+        if fit is not None and iid in fit[0] and fit[0][iid] < fit[1]:
+            continue   # R3: it holds the words, but its vector says it is about something else
+        score = fit[0].get(iid, 0.0) if fit else 0.0
+        out.append((it, lv, ds, (-lv, rank.get(iid, 10 ** 9), -score, -max(ds).toordinal(), iid)))
+    out.sort(key=lambda x: x[3])
+    if out and out[0][1] >= 2:   # one that holds only one of the words is shown only when nothing holds them all
+        out = [x for x in out if x[1] >= 2]
+    return [(it, lv, ds) for it, lv, ds, _ in out[:limit]]
+
+
+def recall_answer(bot, person, r, now):
+    """The recall's reply (its reference), or None when the message names a channel the library doesn't have."""
+    from .render import Reply, by, link_part
+    from .store import now_iso
+    h = person["handle"]
+    tz = person.get("timezone") or "UTC"
+    view = bot.view(person["library"])
+    rec = record(view, tz)
+    if r.chan:
+        ch = channel_of(view, r.chan)
+        if not ch:
+            return None
+        r = r.model_copy(update={"chan": ch})
+    t0 = datetime.now()
+    bot.note(intent="history")
+    words = content_words(r.words)
+    shown_words = " ".join(words) if len(words) <= 4 else r.words
+    rank = _engine_rank(bot, person, r.words, now)
+    want_ig = r.kind in ("reel", "post")
+    first, second = (["instagram"], ["youtube"]) if want_ig else (["youtube"], ["instagram"])
+    got = recall_items(bot, person, r, now, platforms=first, rank=rank)
+    fell = False
+    if not got:
+        got = recall_items(bot, person, r, now, platforms=second, rank=rank)
+        fell = bool(got)
+    head_bits = f"\"{shown_words}\""
+    if r.chan:
+        head_bits += f" from {r.chan}"
+    win = (" " + window_words(r.window, r.window.start, r.window.end, cap=False)) if r.window and r.window.start else ""
+    parts = []
+    ids = []
+    if got:
+        noun_ = "reel" if got[0][0].platform == "instagram" else "video"
+        lead = ""
+        if fell:
+            lead = (f"No reel you watched{win} fits {head_bits}. " if want_ig else
+                    f"No YouTube video you watched{win} fits {head_bits}. ")
+        if len(got) == 1:
+            lead += f"You watched this {noun_} about {head_bits}{win}:"
+        else:
+            lead += f"You watched these about {head_bits}{win}, best match first:"
+        parts.append({"type": "text", "text": lead})
+        for k, (it, lv, ds) in enumerate(got, 1):
+            title = _title(it)
+            all_w = _watched_on(rec, it.id)
+            n = len(all_w)
+            when = (f"You watched it on {day_words(max(ds))}." if n <= 1 else
+                    f"You watched it {n} times, last on {day_words(max(all_w))}.")
+            num_ = f"{k}. " if len(got) > 1 else ""
+            parts.append({"type": "text", "text": f"{num_}{title}{by(it, title=title)}. {when}"})
+            if it.url:
+                parts.append(link_part(it, title))
+            ids.append(it.id)
+    else:
+        saved = recall_items(bot, person, r.model_copy(update={"window": None}), now, platforms=None,
+                             how=("save", "collection", "share_self", "playlist", "like"), limit=1, rank=rank)
+        if saved:
+            it, _, ds = saved[0]
+            title = _title(it)
+            kinds = {k for d, k in rec.events.get(it.id, ())}
+            verb_ = "saved" if kinds & {"save", "collection", "share_self", "playlist"} else "liked"
+            parts.append({"type": "text", "text": f"Nothing you watched{win} fits {head_bits}. You {verb_} one about "
+                                                  f"it: {title}{by(it, title=title)} ({verb_} on {day_words(max(ds))})."})
+            if it.url:
+                parts.append(link_part(it, title))
+            ids.append(it.id)
+        else:
+            parts.append({"type": "text", "text": f"Nothing you watched{win} or saved fits {head_bits}. Try other words "
+                                                  f"for it, or ask \"find me a video about {shown_words}\"."})
+    if r.window and r.window.start:
+        newest = max(rec.ends.values(), default=None)
+        if newest and (r.window.end or r.window.start) >= newest:
+            parts.append({"type": "text", "text": ends_line(rec, sorted(rec.ends), "en") + " " + REFRESH["en"]})
+    reply = Reply(parts)
+    run_id = bot.store.add_run(handle=h, kind="history", at=now_iso(now), n_candidates=len(ids), n_picks=len(ids),
+                               n_dropped=0, cost_usd=0.0, status="picked" if ids else "none", prompt_version=None,
+                               seconds=round((datetime.now() - t0).total_seconds(), 3),
+                               steps={"history": {"kind": "recall", "how": "watched", "platform": first[0],
+                                                  "window": r.window.kind if r.window else "all",
+                                                  "topic_words": len(words), "channel": bool(r.chan),
+                                                  "engine": bool(rank), "fell_back": fell, "follow_up": False}})
+    bot.note(run_id=run_id)
+    recs = []
+    for k, i in enumerate(ids, 1):
+        it = view.items[i]
+        bot.store.add_delivery(h, None, run_id, i, k, at=now)
+        recs.append({"item_id": i, "title": _title(it), "url": it.url, "platform": it.platform,
+                     "video_id": it.video_id, "creator": it.creator, "facts": {}, "lines": [], "line_kinds": None})
+    goal = "history: recall"
+    # the first is the pick in view ("what did it say about X", "ask the video"); "the second one" reads the state
+    bot.store.set_last_answer(h, run_id, None, ids[:1], goal)
+    bot.store.set_state(f"lines:{h}", {i: [] for i in ids[:1]})
+    bot.store.set_state(f"linekinds:{h}", {i: None for i in ids[:1]})
+    bot.store.set_state(f"facts:{h}", {i: {} for i in ids[:1]})
+    bot._keep_answer(run_id, h, None, goal, "history", reply, recs)
+    q = HistoryQuery(kind="list", topic=[shown_words] if len(words) <= 4 and words else [],
+                     channel=r.chan, window=r.window or Window())
+    bot.store.set_state(STATE.format(h=h), {"q": q.model_dump(mode="json"), "at": now_iso(now), "run_id": run_id,
+                                            "ids": list(ids), "channels": [], "recall": True})
+    return bot.send(h, reply, run_id)
+
+
+def best_watched_video(bot, person, topic=None, item=None, latest=False, exclude=()):
+    """Round 11 fix, A (R2, R8), for the offer after an Instagram post or reel in view: the YouTube video the person
+    WATCHED that fits best, or None. `topic`: words ("color grading"); else `item`: a libview Item in view, matched by
+    the words its caption shares with the video's and, when the library has them, by its stored vector. `latest`: the
+    most recent fitting one instead of the best ("the last blender video"). Code only, no model call, no search."""
+    import numpy as np
+    tz = person.get("timezone") or "UTC"
+    view = bot.view(person["library"])
+    rec = record(view, tz)
+    skip = set(exclude) | ({item.id} if item is not None else set())
+    watched = {i: _watched_on(rec, i) for i, it in ((i, view.items.get(i)) for i in rec.events)
+               if it is not None and it.platform == "youtube" and i not in skip}
+    watched = {i: ds for i, ds in watched.items() if ds}
+    if not watched:
+        return None
+    if topic:
+        words = content_words(topic)
+        if not words:
+            return None
+        phrase = " ".join(words) if len(words) <= 4 else topic
+        cands = [i for i in watched if _recall_level(view.items[i].caption or "", phrase, words) >= 2]
+        if not cands:
+            return None
+        fit = topic_fit(view, rec, phrase) if len(words) <= 4 else None
+        if fit is not None:
+            cands = [i for i in cands if i not in fit[0] or fit[0][i] >= fit[1]] or cands
+        if latest or fit is None:
+            best = max(cands, key=lambda i: (max(watched[i]), i))
+        else:
+            best = max(cands, key=lambda i: (fit[0].get(i, 0.0), max(watched[i]), i))
+        return view.items[best]
+    if item is None:
+        return None
+    words = [w for w in content_words(item.caption or "") if len(w) >= 4 and not w.startswith("#")][:20]
+    if not words:
+        return None
+    shared = {}
+    for i in watched:
+        n = sum(1 for w in words if holds(view.items[i].caption or "", w))
+        if n:
+            shared[i] = n
+    if not shared:
+        return None
+    vs = _vector_store(view.lib)
+    if vs is not None and item.id in vs[0]:
+        pos, mat, scale = vs
+        rows = [i for i in shared if i in pos]
+        if rows:
+            m = np.asarray(mat[[pos[i] for i in rows]], dtype=np.float32)
+            v = np.asarray(mat[pos[item.id]], dtype=np.float32)
+            if scale is not None:
+                m, v = m * scale, v * scale
+            m /= np.linalg.norm(m, axis=1, keepdims=True) + 1e-9
+            v /= np.linalg.norm(v) + 1e-9
+            s = dict(zip(rows, (m @ v).tolist()))
+            good = [i for i in rows if s[i] >= ITEM_NEAR]
+            if not good:
+                return None
+            key = (lambda i: (max(watched[i]), i)) if latest else (lambda i: (s[i], shared[i], max(watched[i]), i))
+            return view.items[max(good, key=key)]
+    # no vectors: two shared words, or one of 5 letters or more ("blender", never "cat")
+    long_ = [w for w in words if len(w) >= 5]
+    good = [i for i in shared if shared[i] >= 2 or any(holds(view.items[i].caption or "", w) for w in long_)]
+    if not good:
+        return None
+    key = (lambda i: (max(watched[i]), i)) if latest else (lambda i: (shared[i], max(watched[i]), i))
+    return view.items[max(good, key=key)]
+
+
+ITEM_NEAR = 0.5   # the cosine of two titles' stored vectors taken as "the same topic" (DESIGN 18.LA)
+
+
+def history_topic(bot, handle, now):
+    """The topic words of the history answer (or recall) still in view, else None: what an offer after it is about."""
+    st = _fresh_state(bot, handle, now)
+    if not st:
+        return None
+    try:
+        q = HistoryQuery.model_validate(st["q"])
+    except Exception:  # noqa: BLE001
+        return None
+    return " ".join(q.topic) if q.topic else None
+# ====================================== end round 11 fix, A (R1, R2, R8) ==========================================
 
 
 # ---------- after the interpreter ----------
