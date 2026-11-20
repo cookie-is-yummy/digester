@@ -57,6 +57,77 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-018 · A first test with five people on the founder's Mac: one engine, two doors, YouTube first, gates before any build
+- **Date:** 2026-11-20
+- **Requested by:** Derrick, in a planning talk on 20 Nov ("a chat bot at the front and centre"; "i want both"). He asked for it to be written up as Proposed. The narrowed plan below is the agent's; he has not accepted it. Written by the coding agent.
+- **Status:** Proposed
+- **Conflicts with:**
+  - `AGENTS.md` › What we are building ("Current focus: **the backend only.** The frontend (hub, onboarding screens) is deliberately deferred.") and › Prototype code ("prototype scripts are not product code"). Testers' data would sit on prototype code.
+  - `docs/10-decisions.md`, five Agreed rows: 28 Oct "Backend first; frontend deferred"; 28 Oct "Supabase for database, vectors, auth, storage and queues"; 28 Oct "Local database / desktop app (Electron) is a future direction, not MVP"; 17 Oct "History export backfills once; ongoing data arrives through shares"; Sep "Real deletion; no ads; no selling data".
+  - `docs/00-vision.md` › Out of scope for now ("**Frontend** (hub, boards, onboarding screens). Backend endpoints and JSON outputs come first."; "**MCP server.** Designed (`01-architecture.md`), built after the query API is stable.") and › The core loop ("From then on they share content to our account"). The test uses no share route.
+  - `docs/01-architecture.md` › Boundaries ("**The query API** is the line between the processor and everything that uses it"), › Later layers ("**Hub** (web app): reads `*_view` database views and calls the query API.") and › Main flows › A ("Client uploads the export zip straight to Supabase Storage (signed URL)."). Both doors sit on the prototype engine.
+  - `docs/02-tech-stack.md`: "Supabase Auth (Google sign-in)", "Export zips, uploaded via signed URLs", "Next.js on Vercel reading database views and calling the query API", "calling the query API in-process". A tunnel is a new tool.
+  - `docs/03-data-contract.md` ("deleting a user cascades everywhere"): deletion is partly by hand today.
+  - `docs/07-privacy-and-safety.md`: "**Minimum necessary.**"; sensitive categories "hidden from agents and digests unless the user opts in" (no tagger exists); "**Real deletion:**"; "Before shipping a source, record in its section of `04-intake.md`: what the terms allow us to store" (not done for Takeout); "Supabase row-level security on every user table"; "upload URLs are short-lived signed URLs".
+  - `docs/04-intake.md` › YouTube ("choosing **JSON** for history"). A-004 Round 3 found on a real Takeout: HTML by default, the YouTube product cut to 11.5 months, the full history only in My Activity.
+  - `docs/09-roadmap-and-ownership.md`: "| Frontend | Later | — |" and "Marketing, positioning, recruiting testers". M5 ("5–10 testers upload exports") would run before M3 and M4 pass.
+  - A-008 ("Then show it to 5 to 10 people from 17 November"; "Strangers and payment are still the real answer"): replaced for this test only.
+  - A-011 ("Do not ship it to testers before the query API, the sensitive tagger and consent wording for the agent's provider exist."). A-015 item 3 (YouTube connector "open to testers"): narrowed for this test only.
+  - `experiments/mvp/README.md` ("on this computer only"; "Type as any person in `people.json`.").
+
+**What is requested**
+A first test with outside people, in eight parts:
+1. **Features frozen.** Nothing is built until Derrick grades 20 answers on the test page: at least 14 of 20 useful. Below that, only the worst kind of answer is fixed.
+2. **Five testers Derrick knows in person**, each told plainly what they hand over. Not hosted: the bot runs on the founder's Mac, beside every library.
+3. **One engine, two doors:** the chat box on the test page, and the read-only MCP server for the person's own agent. That server is A-011's: stdio, same computer only today. Search is the same box.
+4. **YouTube first:** "ask your YouTube history anything". Testers hand in a Google Takeout they run themselves (rule 7's first preference).
+5. **Acting for testers** only where it starts from their item and reaches only them. That is the bot's own reminder, a calendar file, email to their confirmed address, and rules sending their items. Everything else is off for testers, not deleted.
+6. **Asking a video (A-017)** stays off while testers are on the bot: `MVP_VIDEO_ASK` is one switch for everyone.
+7. **A pass mark set before the test** (condition 10 below).
+8. **Not in this amendment:** a feed, vision boards, recommendations from other platforms, hosting strangers' data, any new acting.
+
+**Why the requester wants it**
+"i picture the finished site as one which has a chat bot at the front and centre where its like 'what would you like to do today'. ofc the main product is the mcp but we could be the perplexity of people's own data." And: "i want both, because i want us to be accessible for those who have not been far enough to have their own agents, and accessible to those who have their own agents".
+
+**Why it is better than the current approach**
+- **It tests the vision's promise:** "**Our platform works alone; the user's agent makes it powerful.**" The chat box is the core loop's "A text box".
+- **It follows the data.** Derrick's library holds 108,685 YouTube watches against 312 on Instagram, whose export covered 12 days of watching.
+- **For this test, Takeout is the only route.** The YouTube Data API gives no watch history. The Data Portability API works only in the EU, Switzerland and the UK, after app review, for people 18 or over.
+- **It stops building ahead of evidence.** 4,713 offline tests pass, but no person has graded the bot's answers yet (search results have been graded). The grade gate comes first.
+- **Few hands hold the data.** No hosted server. Five people who know the founder can report problems face to face.
+- **The verdict is fixed in advance**, so a friendly test cannot be read as success.
+
+**Costs and risks**
+- **Other people's full histories on one laptop.** Titles reveal health, politics, sexuality, money and relationships. One lost or unlocked Mac exposes six people.
+- **Every tester is the operator today.** With `--channel web` and `MVP_OPERATOR` unset, every person on the page is the operator. Testers would reach the founder's mailbox (A-013), the Mac's Reminders and Calendar (A-014) and the browser (A-016).
+- **The page exposes everyone.** It hands its token to any page load. `as=` returns any person's thread, rules, outbox and profile. Any visitor can move the shared clock, "start over" a person or change Connections. Uploads of up to 2 GB reach any inbox and start a paid import.
+- **Takeout sends more than asked.** Google pre-selects every product the person uses; My Activity also holds Search and Maps. A refused or failed archive is kept in `.failed/` today. An Instagram zip holds friends' DM text (rule 8).
+- **A new provider.** A quick tunnel ends TLS at the tunnel company. Data has already left the Mac: a cloud coding session holds copies of the test page's store.
+- **Deletion leaves traces.** "delete my data" leaves library folders to a founder and keeps the query cache. Deleted rows stay in the SQLite file until VACUUM. The page keeps its own deletion list.
+- **Privacy law applies to friends.** In the EU or UK the founders would be controllers, with deletion rights and breach notice. No privacy policy exists; no lawyer has read the consent.
+- **The consent is out of date.** It says "Your library stays on the founders' Mac". It omits the upload, the untick step, the whole library going to OpenAI at import, and an end date.
+- **Manual and untried.** A scheduled Takeout runs "every 2 months for one year", each archive the full history again. Real email sending has never run.
+- **Cost.** Spend was $22.17 of a $30 cap on 20 Nov (`experiments/STATE.md`); the code's default cap is $10. Answers cost $0.008 to $0.023 live; each import up to $1.50. Five testers for two weeks could cost $12 to $17, against $7.83 left.
+- **A small, friendly sample.** 3 of 5 is weak evidence. A pass justifies a test with strangers and a price, not a build. The Mac stays on, and support is the founder's time.
+
+**Agent's assessment**
+Agree with changes. Grades, then security, then five people, with the verdict fixed first, is the right order. YouTube first follows the evidence. The real risk is other people's histories on a personal laptop. It is acceptable only with these conditions, all done before the first upload:
+1. **Grades.** The 20 questions are written before any answer is seen, mostly on YouTube history. At most 1 confidently wrong answer. 14 of 20 is below M3's 16: choose knowingly.
+2. **No operator for testers.** `MVP_OPERATOR` names Derrick's handle. A test logs in as a tester and never passes `is_operator`.
+3. **The page, per person.** The server takes the handle from the login session and ignores `as`. A test shows no person sees another. Uploads are size-capped and rate-limited.
+4. **Founder tools local only.** Connections, the clock, "Start over", `/vm` and others' panels sit on a port the tunnel never reaches. An access gate fronts the tunnel; `MVP_PAGE_HOSTS` is never `*`.
+5. **Data stays on the Mac.** None in cloud sessions, preview addresses or transcripts. Disk encryption, screen lock and remote wipe on; `data/` out of cloud sync.
+6. **Uploads.** Takeout only: YouTube and YouTube Music, plus My Activity limited to YouTube. The file list is checked before extraction. Anything else is deleted at once, never kept in `.failed/`.
+7. **Deletion tested end to end** on the tester page: folders, inbox, `.failed/`, query cache, ledger rows, VACUUM, store copies. The page uses the real deletion list and pause. A founder confirms each deletion in writing.
+8. **Consent, breach plan, end date.** The text names the Mac, the tunnel provider, the untick step, OpenAI at import, and what cannot be deleted. A breach plan says who tells testers, and how fast. Someone outside the build reads it, or it says nobody has.
+9. **Door two founders only**, as A-011 says; testers need its own amendment. Outside picks, YouTube API calls and the connector are off for testers. Real email only after it has run for the founders. Caps are set first.
+10. **The pass mark, written first.** Two weeks. At least 3 of 5 ask on 2 or more days of week two. At least 2 of 5 set up a scheduled export or send a second; a second archive replaces the first at once. Less reads as "not yet": nothing further is built. M5's week-3 gate is not measured.
+
+I see nothing in part 8 to disagree with.
+
+**Affected**
+Docs: `AGENTS.md` (Current focus), `00-vision.md` (Out of scope), `01-architecture.md` (Later layers, Main flows › A), `02-tech-stack.md` (Auth, storage, tunnel), `03-data-contract.md` (`users` and `uploads` exist; a login session table would be new), `04-intake.md` (Takeout with My Activity, HTML history, scheduled exports, its terms), `07-privacy-and-safety.md` (Security, Retention), `09-roadmap-and-ownership.md` (M5 before M3 and M4; Frontend and recruiting rows), `10-decisions.md` (rows beside the five above, for this test only), A-008, A-015; to correct once Meta's regions are checked: A-009's Meta line and the `refresh.py` docstring · Code (only after the grade gate): `experiments/mvp/channels/web.py`, `texts.py`, `config.py`, `refresh.py`, `handler.py`, `store.py` · Contract change: no (prototype); yes when logins are ported · Needs both founders: **yes** (architecture, stack, ownership, and Agreed decisions)
+
 ### A-017 · Ask a YouTube video itself, on demand, through Gemini's YouTube-link input (answers with timestamps; nothing of the video kept)
 - **Date:** 2026-11-19
 - **Requested by:** Derrick (19 Nov: "i also think it would be beneficial to treat it like 'ask your watch history anything'", sent with a screenshot of another project: a searchable YouTube archive answering questions across 1,000+ transcripts with timestamp citations); written by the coding agent
