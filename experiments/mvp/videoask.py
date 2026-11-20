@@ -498,6 +498,10 @@ def best_watched(bot, person, topic, now, latest=False, item=None):
         return None
     try:
         it = best_watched_video(bot, person, topic=topic or None, item=item, latest=latest)
+        if it is None and topic and item is not None:
+            # the merge of round 11's fixes (seam a): the request's words found no watched video; the post in view may
+            # still match one by its caption
+            it = best_watched_video(bot, person, topic=None, item=item, latest=latest)
     except Exception:  # noqa: BLE001 - an offer never breaks the reply it is added to
         return None
     return it if it is not None and video_id(it) else None

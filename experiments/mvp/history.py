@@ -1878,9 +1878,13 @@ def read_recall(text, today):
 
 
 def content_words(phrase):
-    return [w for w in re.findall(r"[a-z0-9][a-z0-9&'+.#-]*", normal(phrase))
-            if w.strip(".'-") not in STOP and w.strip(".'-") not in GENERIC and len(w.strip(".'-")) >= 2
-            and not w.isdigit()]
+    toks = re.findall(r"[a-z0-9][a-z0-9&'+.#-]*", normal(phrase))
+    # the merge of round 11's fixes: "after effects" is a name here too, as in the history read (a recall said
+    # "about \"effects\"" and a summary's fit read "effects")
+    return [w for k, w in enumerate(toks)
+            if (w.strip(".'-") == "after" and toks[k + 1:k + 2] and toks[k + 1].strip(".'-") == "effects")
+            or (w.strip(".'-") not in STOP and w.strip(".'-") not in GENERIC and len(w.strip(".'-")) >= 2
+                and not w.isdigit())]
 
 
 def _watched_on(rec, iid, start=None, end=None):
