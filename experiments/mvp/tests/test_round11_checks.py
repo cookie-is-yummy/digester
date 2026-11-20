@@ -584,6 +584,12 @@ def test_an_instagram_pick_is_never_asked(chk, monkeypatch):
     from mvp import videoask as V
     fake = _video_on(chk, monkeypatch, {"answered": True, "points": []}, pick="i003")
     out, _ = ask(chk, "ask the video what desk it is")
+    # the merge of round 11's fixes (R2): the plain line, then the YouTube video the person watched on it; nothing asked
+    assert out.startswith(V.NOT_YOUTUBE + "\nYou also watched a YouTube video on this: ") and not fake.requests
+    from mvp import history
+    monkeypatch.setattr(history, "best_watched_video", lambda *a, **k: None)
+    chk["bot"].store.set_state(f"videoask:{H}", None)   # the offer just made would be asked ("ask that one")
+    out, _ = ask(chk, "ask the video what desk it is")
     assert out == V.NOT_YOUTUBE and not fake.requests
 
 

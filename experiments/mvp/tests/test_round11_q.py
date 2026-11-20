@@ -212,6 +212,24 @@ def test_on_an_instagram_pick_is_never_asked(qon, monkeypatch):
     show(qon, "over the lake")
     out = cant_tell(qon)
     assert out.startswith("I can't tell that from what") and V.OFFER not in out
+    # the merge of round 11's fixes (A and B, R2): the person watched a YouTube video on the same topic, so the line
+    # offers it, and "ask the video" asks that one; the Instagram post itself is never sent
+    assert ('You also watched a YouTube video on this: "Night sky photography settings for beginners" '
+            'https://www.youtube.com/watch?v=FAKEvid0001') in out
+    out = say(qon, "ask the video what lens it uses")
+    assert out.startswith('From the video (not checked against its text), "Night sky photography settings')
+    assert [FakeGemini.sent_url(r) for r in fake.requests] == ["https://www.youtube.com/watch?v=FAKEvid0001"]
+
+
+def test_on_an_instagram_pick_with_no_watched_video_on_it_is_never_asked(qon, monkeypatch):
+    # the merge of round 11's fixes: with no watched YouTube video that fits, the plain line as before
+    from mvp import history
+    from mvp import videoask as V
+    monkeypatch.setattr(history, "best_watched_video", lambda *a, **k: None)
+    fake = FakeGemini(GOOD).install(monkeypatch)
+    show(qon, "over the lake")
+    out = cant_tell(qon)
+    assert out.startswith("I can't tell that from what") and V.OFFER not in out and "You also watched" not in out
     assert say(qon, "ask the video what lens it uses") == V.NOT_YOUTUBE and not fake.requests
 
 
