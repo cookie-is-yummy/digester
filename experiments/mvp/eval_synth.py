@@ -79,6 +79,8 @@ def main(argv=None):
     ap.add_argument("--real")
     ap.add_argument("--topics-file")
     ap.add_argument("--cap", type=float, default=0.40, help="this run's own spend at most (dollars)")
+    # round 11 fix B (S3): the made-up topics whose items say only what they are (topics_thin.jsonl)
+    ap.add_argument("--with-thin", action="store_true")
     a = ap.parse_args(argv)
     home = os.environ.get("MVP_HOME")
     if not home or (os.path.exists(home) and os.listdir(home)):
@@ -124,6 +126,9 @@ def main(argv=None):
         if not r["ok"]:
             sys.exit("The made-up library could not be prepared for search.")
         rows = [json.loads(x) for x in open(os.path.join(a.set, "topics.jsonl"), encoding="utf-8") if x.strip()]
+        if a.with_thin:   # round 11 fix B (S3)
+            rows += [json.loads(x) for x in open(os.path.join(a.set, "topics_thin.jsonl"), encoding="utf-8")
+                     if x.strip()]
         fits = {r["id"]: set(r["fit"]) for r in rows}
         desc = json.load(open(os.path.join(a.set, "descriptions.json"), encoding="utf-8"))
     if a.ids:
@@ -182,6 +187,9 @@ def main(argv=None):
                   "dropped": (caught.get(h) or {}).get("dropped") or {},
                   "thin": bool((caught.get(h) or {}).get("thin")),
                   "fit_found": len((caught.get(h) or {}).get("fits") or [])})
+        if not a.real:   # round 11 fix B (S3): the points' own words (made-up data), scored again offline
+            s["point_texts"] = [p["text"] for p in points]
+            s["thin_topic"] = bool(r.get("thin"))
         results.append(s)
         if not a.real:
             gone = "\n".join(f"- dropped ({why}): {txt}" for why, txt in (caught.get(h) or {}).get("dropped_text") or [])

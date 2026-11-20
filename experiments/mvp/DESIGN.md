@@ -3935,3 +3935,146 @@ item-to-video match of R2 (`ITEM_NEAR`) was read on 12 random saved Instagram po
 my own reading): 10 of 12 gave a watched video on the same topic, 2 a video that only shares a word. A recall reads at most
 14 words; a description with no word of the title ("the one where the guy cries at the end") finds only what the
 engine's top 50 holds with one of its words. Topics whose word means something else in most of the record (R3 above).
+
+### 18.LB Fix B of the live check (summaries and asking videos; S1 to S3, V1 to V4, the offer side of R2 and R8)
+
+The orchestrator's live check of 02f3581 (19 Nov evening, the founder's library, `MVP_VIDEO_ASK=1`) found the summary's
+sources unnumbered while its last line said "ask video N", a summary "from what i watched" built on a saved post, a
+summary of an easing question whose five points only described the videos, "ask the video" needed twice, points in
+lower case, and "email it to me" after a video answer emailing the earlier picks. Fix B, on `r11fix/B` (fixer A did the
+history answers in parallel; the merge brings both). Made-up data only in git; tests in `tests/test_round11_fix_b.py`
+(135 tests; 83 of its first 103 fail on 02f3581, the rest of those are guards that hold on both).
+
+**S1, numbered sources.** A summary's points are bullets, each ending with the numbers of its sources (`[1, 3]`), and a
+`Sources:` list gives each item once: `n. "Title" by creator <link>`. The numbers are the last answer's order, so "the
+second one", "ask video 2" and the list agree. Only YouTube sources are offered (`texts.synth_video_offer`): one, `To
+hear what video 2 itself says, say "ask video 2" and your question.`; two or more, `... say "ask them" and your
+question, and I'll ask videos 2, 5 and 6; for one, "ask video 2".` "ask video N" on an Instagram source says it can only
+ask YouTube videos.
+
+**S2, what was read** (the orchestrator's decision, for the founder to confirm). "from what i watched", "the videos i
+watched", "my watch history" limit a summary to watched items (watch or view events, so a watched reel counts); "from my
+saves" to saves; "liked" to likes; neither word, or "watched and saved", everything (`synth._how`, `synth._limit`; the
+window path as before; `MVP_SYNTH_SOURCE=0` switches the limit off, for measuring). The lead says what was read:
+`Here's what the videos you watched say about X:`, `the posts you saved`, `the posts and videos you watched and saved`
+(by the cited items' own events); never "kept". At most 2 points that come from one item alone when 3 or more items are
+cited (`synth.spread`, dropped as `one_item`; a point with several sources stays).
+
+**S3, points that answer the question.** Prompt `synth_v5` (beside `synth_v3`, which is not edited; `synth_v4`, the
+first try, is kept as measured): every point says something about the topic itself; a point that says what an item is,
+who it is for, what it covers or that it exists is not a point; with "Asked about" (code splits "easing in after
+effects" into the thing, easing, and its subject, `synth.focus`) every point is about the thing; every item with
+something to say gets a point before any gets a second. Code drops what it can tell (`check_points`, reasons
+`about_item`, `title_only`, `off_question`): a point whose subject is an item ("Several tutorials are suitable for
+beginners", "Some tutorials focus on text animation", "... are explained for beginners in a series", "can be ranked",
+"courses teach ...", `synth.META`); one that says what the topic is ("Film photography can be a day in the city"); a
+title said again (3 words or fewer beyond the topic); and, for a thing asked inside a subject, a point that never names
+the thing, one whose quoted item words never name it, and one whose every quote is the maker describing the video ("In
+this tutorial, I break down", "I explore workflow, easing & ...", `SELF_DESCRIBED`). The search's next best are read only
+when fewer than 3 fitting items have text (`MAYBE_READABLE`; in the eval of v4 they brought in workout posts for
+"strength training"). Fewer than 2 points left: `The titles and descriptions of the 39 videos you watched about after
+effects don't say much about easing.` (or `... say too little to sum up.` with no thing asked; the singular, captions and
+windows in the same words), `One thing they say: ...` when one point passed, `The best 3:` numbered with links, and the
+"ask them" offer.
+
+**The evaluation** (`eval_synth --with-thin`: slice M's 12 made-up requests plus 5 new made-up topics whose 16 items say
+only what they are, `evalset/synth/topics_thin.jsonl`; the easing topic also fits slice M's one After Effects video whose
+description does mention easing curves; live `gpt-5.4-mini`; transcripts outside git):
+
+| Run | 12 requests: points / cited / citing 3+ / outside the fit list | 5 "what it is" topics: points shown | Cost |
+| --- | --- | --- | --- |
+| before (02f3581, `synth_v3`) | 66 / 40 / 12 of 12 / 0 | 11 (10 only say what the items are; 1 real, from the easing video) | $0.129 |
+| `synth_v4`, the S2 limit on | 55 / 37 / 7 of 12 / 4 (workout posts for "strength training") | 4 | $0.125 |
+| `synth_v4`, limit off | 63 / 39 / 11 of 12 / 0 | 1 (the real one) | $0.117 |
+| `synth_v5`, limit off (final prompt) | 62 / 41 / 12 of 12 / 0 | 2 (the real one, and one about storyboards the later off-question check drops) | $0.118 |
+| `synth_v5`, limit on, the 6 limited requests | s02, s06, s07, s09, s12: 2 cited each, 0 outside | the easing topic: the plain line with its 1 real point | $0.061 |
+
+The 12 requests do not regress except by the rules asked for: 62 points against slice M's 64 (3 left out by the
+one-item rule; 65 without it), 12 of 12 citing 3 or more and 0 outside the fit list with the limit off. With the limit
+on, the five requests that say "watched" or "my saves" cite 2 items each, because the made-up set holds only 2 or 3
+watched (or saved) items with text on those topics: the S2 decision costs those answers their third source, by design.
+The four topics with nothing to say get the plain line every time (0 points shown, from 10). The checks added after the
+live run (the quote must name the thing; the maker's descriptions; "teach") judge only a thing asked inside a subject,
+except "teach": none of the 12 requests has a thing asked, and on the 141 points recorded in the runs above they drop
+none of the real ones.
+
+**V1, "ask them".** Hook 8y also reads "ask them", "ask those videos", "ask the top 2", "ask all 3", "ask both of them",
+with a question (it must read as one: "ask them for a refund" is not this read) or none (then the summary's own: "What
+does it say about <topic>?", kept as `videomany:<handle>` for an hour and matched to the answer's run); only when the
+answer in view holds a YouTube video, else the message goes on. Up to 3 of the answer's YouTube items, each through
+slice Q's own ask (`videoask._ask_one`: the same checks before each call, the per-day count, the cost check, the same
+label, one ledger row and one `video.ask` row each); a cap that stops it says where (`I stopped there. I've asked 2
+videos for you today, ...`) and shows the ones asked; a video that fails says so in its block and the others answer. One
+message, at most 3,000 characters: `From the videos themselves (not checked against their text):`, then `Video 2,
+"<title>":` and up to 4 points with their timestamp links (`(1 more from this video in the email: say "email it to
+me".)`), the clip line, and `A model at Google watched them for this; I keep only these answers.` The first time it says
+what it sends (`I'll ask these 3 videos; their links and your question go to Google. I keep only the answers.`) before
+it starts; with nothing told yet, the note first. After a thin answer, a recall or a history list the same read works on
+its YouTube items. "ask my videos about X" (setting on only) gives the summary of what was watched and the offer; it
+never asks unasked. Kept: `videoans:<handle>` holds the videos' points (and, for "email it to me", the newest run's id,
+`after_run`); nothing else new. A-017 (Proposed) names it: up to 3 links per question, the daily cap counts each video.
+
+**V2, one note.** The first-time note ends `Say "yes" to go ahead.` and keeps the question; the next message, if it is
+"yes", "ok", "go ahead", "sure", "do it" (`videoask.GO`; not "ok thanks", not "yes but tomorrow"), asks at once (hook 4c,
+`videoask.go_answer` in `_asked_reads` after slice S's answer; the note's go is taken off by the next message whatever
+reads it; "ask the video" again still works). A person whose consent text held the Google sentence (shown while the
+setting was on, remembered as `consent_video:<handle>`) gets no note at all.
+
+**V3.** Each point of a video answer starts with a capital, by code (`check_points`).
+
+**V4.** "email it to me" right after a video answer (no run since it) emails that answer through the same path as any
+email (`outputs._plain_answer` reads `videoask.answer_in_view`; kind `video`): its title, points, timestamp links and the
+label; subject `From the video: <title>` or `From your videos: 3 answers`; an address not yet confirmed waits for it as
+any email does. A newer answer is the one emailed.
+
+**R2 and R8, the offer side.** With the setting on, an Instagram post in view ("ask the video", the can't-tell line, a
+title-only post's line) gets `I can only ask YouTube videos. ...` and `You also watched a YouTube video on this:
+"<title>" <link>` / `Say "ask that one" and your question, and I'll ask it. ...` (the offer kept 30 minutes; "ask that
+one" is read only while it is). A history list of watched reels gets `Those are Instagram posts, and I can only ask
+YouTube videos: ...` and the latest watched YouTube video on its topic. The video comes from fixer A's
+`history.best_watched_video(bot, person, topic=None, item=None, latest=False, exclude=())` through a guarded import
+(`videoask.best_watched`): on this branch alone it is missing and nothing is offered (the plain lines stay); the tests
+stand it in with a fake of that signature.
+
+**With `MVP_VIDEO_ASK` unset** nothing of V1 to V4, R2 or R8 runs, and no reply changes but the summaries' own (S1 to S3
+change every summary, on purpose): the 60 traps of the round 11 check and 20 more of fix B's ("ask them", "ask that
+one", "yes", "ok go ahead", "email it to me", "ask my videos about easing", "the second one", a rule, feedback, chat,
+"what leaves this computer", after a pick on a made-up library), each in a fresh store, give byte-equal replies, model
+calls and table row counts against a copy of 02f3581.
+
+**Live** (the founder's library read-only, a scratch home, `MVP_VIDEO_ASK=1`, `MVP_VIDEO_ASK_MAX_MIN=10` for the run;
+$0.126 in all: the summaries $0.07, the pick $0.018, 4 video questions $0.051; no title is written here).
+- "summarize what ive learned about motion design from what i watched": watched only (5 videos and 1 watched reel), the
+  lead says so, 6 points with numbered sources and the "ask them" offer. Read as the founder would: 1 point is a lesson
+  (a step before animating), 2 say what courses and plugins are (the "teach" form is now in the code check), 3 are
+  vague. The descriptions are mostly promotion; that is what their text holds.
+- "what do the videos i watched say about easing in after effects": at first 3, then 2, points that named easing and
+  said nothing; with the quote checks, `The titles and descriptions of the 39 videos you watched about after effects
+  don't say much about easing.`, one weak point, the best 3 and the offer.
+- "ask them": the note, then "yes": 3 videos in 21.5 s ($0.038); 3 points shown for two of them (5 kept each; this was
+  before the 4-point change), the third `it doesn't seem to say anything about that.`; two clip lines. "email it to me":
+  the address asked (none in the scratch home); the waiting email holds the three answers.
+- "find me a youtube video about easing in after effects", then "ask the video what easing settings it recommends": 1
+  point in 7.8 s ($0.014).
+- Against each video's own description (counts only): of the 7 points shown, 1 is supported (the description names
+  easing and transitions), 0 contradicted, 6 not covered (no description speaks of easing settings); the third video's
+  "doesn't say" fits its description, which never mentions easing.
+
+**Checks that stay true.** Full suite 0 failed (the count in the README); demo 10 passed; dry self-test 136 of 136 (c45
+reads `Sources:`); `probe_same` byte-equal with `same_head.json`; the development phrasing set by code as before (73
+helper lines right, 1 wrong, d007; 1 of 40 `none` lines taken, d132), with the setting on too; the 159 rule texts and
+123 phrasings taken by no new read; the 60 traps not taken.
+
+**Changed on purpose in earlier tests** (each line marked "round 11 fix, B"): `test_round11_m.py` (the lead "watched and
+saved", the Sources list for '   From "', the plain line and "The best 3", "I found nothing you watched or saved", the
+caption line for one post, `synth_v5`); `test_round11_merge.py` (the window's plain line, the offer's numbers and "ask
+them", the numbered list); `test_round11_checks.py` (`after_run` in `videoans`); the self-test's c45 (`Sources:` for
+`From "`).
+
+**Not done, or still wrong.** The R2 and R8 offer needs fixer A's function (the merge). The real library's descriptions
+say little: a summary there is honest but thin, and a vague point that names the thing and traces to the text still
+passes (code cannot tell it teaches nothing). The off-question and maker's-description checks judge only a thing asked
+inside a subject ("X in Y"); "what do my videos say about easing", with no subject, is judged by the prompt alone. The
+S2 limit leaves fewer sources when few watched items have text. The eval has no held-out set (the prompts were tuned on
+this one). The live pick's "Steps (3)" listing a description's sentences as steps (the composer, not this fix) was seen
+and is left. "ask them" answers are the model's, not checked against the videos.

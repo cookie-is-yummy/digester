@@ -234,15 +234,17 @@ def test_a_summary_cites_many_items_and_says_what_it_read(lib_env):
     e = lib_env
     out = say(e, "summarize what i've learned about sourdough", CHAT)
     assert "mvp_interpret" not in e["calls"] and "mvp_synth" in e["calls"]
-    assert out.startswith("Here's what the posts and videos you kept say about sourdough:")
+    # round 11 fix, B (S2): the lead says what was read, never "kept" (was: "...you kept say about sourdough:")
+    assert out.startswith("Here's what the posts and videos you watched and saved say about sourdough:")
     assert re.search(r"(?m)^1\. ", out) and re.search(r"(?m)^3\. ", out)
-    assert out.count("   From \"") >= 3
+    # round 11 fix, B (S1): each point cites numbered sources, listed once (was: '   From "' under every point)
+    assert out.count("\n• ") >= 3 and re.search(r"(?m)^3\. \"", out.split("Sources:\n", 1)[1])
     assert re.search(r"From \d+ videos? and \d+ posts?; 1 more fit but say nothing in their text(; I read \d+ more that I didn.t use)?\.", out), out
     assert out.rstrip().endswith("I read titles, descriptions and captions, not what is said in the videos.")
     # the friend's post, and the post that speaks to an assistant, are never read or named
     assert "sm_sd7" not in out and "sm_sd6" not in out and "password" not in out.lower()
     run = e["bot"].store.q("SELECT * FROM runs WHERE kind='synth'")[-1]
-    assert run["prompt_version"] == "synth_v3" and run["n_picks"] >= 3
+    assert run["prompt_version"] == "synth_v5" and run["n_picks"] >= 3   # round 11 fix, B (S3): was synth_v3
     steps = json.loads(run["steps"])
     assert steps["note_left_out"] == 1 and steps["points"] >= 3
 
@@ -271,7 +273,8 @@ def test_points_with_no_traceable_source_never_show(lib_env):
         "about": [1, 2, 3]}
     out = say(e, "summarize what i've learned about sourdough", CHAT)
     assert "rye" not in out and "72" not in out
-    assert "too little to sum up" in out and out.count("• \"") >= 3
+    # round 11 fix, B (S3): the plain line and the best 3, numbered (was: "too little to sum up" and 5 bullets)
+    assert "too little to sum up" in out and re.search(r"(?m)^3\. \"", out) and "The best 3:" in out
     run = e["bot"].store.q("SELECT * FROM runs WHERE kind='synth'")[-1]
     assert json.loads(run["dropped"]) == {"no_source": 1, "not_traced": 1}
 
@@ -282,7 +285,7 @@ def test_a_topic_with_nothing_fitting_says_so_plainly(lib_env):
     e = lib_env
     e["state"]["answers"]["mvp_synth"] = lambda u: dict(fake_synth(u), about=[])
     out = say(e, "what have i learned about beekeeping", CHAT)
-    assert out == "I found nothing in your saves about beekeeping."
+    assert out == "I found nothing you watched or saved about beekeeping."   # round 11 fix, B (S2): was "in your saves"
     assert e["calls"].count("mvp_extract") <= synth.MAYBE_READS and e["calls"].count("mvp_synth") == 1
 
 
@@ -298,14 +301,16 @@ def test_items_that_do_not_name_the_topic_count_only_when_the_model_says_they_ar
     e["state"]["answers"]["mvp_synth"] = synth_one
     out = say(e, "what have i learned about beekeeping", CHAT)
     assert seen["n"] >= 3
-    assert out.startswith("I found 1 thing about beekeeping in your saves") and out.count("• \"") == 1, out
+    # round 11 fix, B (S3): was 'I found 1 thing about beekeeping in your saves' and one bullet
+    assert out.startswith("The caption of the post you saved about beekeeping says too little to sum up.") \
+        and "The best one:\n1. \"" in out, out
 
 
 def test_without_an_about_list_items_that_do_not_name_the_topic_are_never_cited(lib_env):
     e = lib_env
     e["state"]["answers"]["mvp_synth"] = lambda u: {"points": fake_synth(u)["points"]}
     out = say(e, "what have i learned about beekeeping", CHAT)
-    assert out == "I found nothing in your saves about beekeeping."
+    assert out == "I found nothing you watched or saved about beekeeping."   # round 11 fix, B (S2): was "in your saves"
 
 
 def test_a_topic_named_by_many_posts_reads_no_others(lib_env):

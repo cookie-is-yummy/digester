@@ -360,6 +360,12 @@ saves saved post posts link""".split())
     def _plain_answer(self, h):
         """The newest answer when it is a reminder or a to-do list sent after the last picks ("email me that" after
         "Reminder: call mum"), or None."""
+        # ---------- round 11 fix, B (V4): a video's answer shown after the last picks is the one emailed ----------
+        from . import videoask
+        va = videoask.answer_in_view(self, h)
+        if va is not None:
+            return va
+        # ---------- end round 11 fix, B ----------
         row = self.store.one("SELECT run_id, kind FROM answers WHERE handle=? ORDER BY run_id DESC LIMIT 1", (h,))
         if not row or row["kind"] not in ("note", "todos"):
             return None
