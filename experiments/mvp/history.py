@@ -1383,7 +1383,10 @@ def _first(view, rec, q, start, end, plats, W, today, prof, last=False):
                      (f"{win}.)" if win else ".)"))
     if left:   # round 11 fix, A (R3): one line with the count, "(98 in all. 15 more mention ...)"
         ll = _left_line(q, left)
-        lines[-1] = lines[-1][:-1] + " " + ll[1:] if len(h) > 1 else ll
+        if len(h) > 1:
+            lines[-1] = lines[-1][:-1] + " " + ll[1:]
+        else:   # the merge of round 11's fixes: one item left: its line stays, the count after it (it replaced it)
+            lines.append(ll)
     return "\n".join(lines), order, {"cards": True}
 
 

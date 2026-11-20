@@ -335,3 +335,21 @@ def test_g_the_help_says_ask_them_in_one_line_only_with_the_setting(fb, monkeypa
     out, _ = ask(fb, "help")
     assert out.count(T.HELP_ASK_THEM) == 1 and T.HELP_VIDEO_ASK in out
     assert out.index(T.HELP_VIDEO_ASK) < out.index(T.HELP_ASK_THEM)
+
+
+# ================================ found at the merge: one item kept by the fit keeps its own line ===================
+def test_a_first_answer_with_one_item_left_by_the_fit_keeps_its_line_and_adds_the_count(fb, monkeypatch):
+    from mvp import history
+    real = history.fit_hits
+
+    def one_left(view, rec, q, h):
+        got, left, used = real(view, rec, q, h)
+        keep = sorted(h)[:1]
+        return {i: h[i] for i in keep}, len(h) - 1, True
+    monkeypatch.setattr(history, "fit_hits", one_left)
+    out, calls = ask(fb, "when did i first watch videos about motion design")
+    assert calls == []
+    lines = out.split("\n")
+    assert lines[0].startswith('The first video you watched about "motion design" was on')
+    assert lines[1].startswith("1. ") and "don't seem to be about it" not in lines[1]
+    assert any("more mention" in x and "left them out" in x or "left it out" in x for x in lines[2:])

@@ -49,7 +49,8 @@ TZ = "America/New_York"
 SELF_ADDR = "me@example.com"          # the made-up person's own address (verified in setups that need it)
 DEFAULT_CHECKS = ("no_refusal", "no_not_caught", "no_claim", "no_inside", "no_mismatch_lead", "no_friends")
 CHECKS = DEFAULT_CHECKS + ("helper", "helper_not", "reply_has", "reply_any", "reply_not", "pending", "rule_made",
-                           "draft_open", "model_calls", "sent_to_other", "placed", "new_creator", "last_lead_not")
+                           "draft_open", "model_calls", "sent_to_other", "placed", "new_creator", "last_lead_not",
+                           "email_has")
 
 
 class SelftestError(Exception):
@@ -403,9 +404,10 @@ class Run:
         self.ledger0 = self._ledger()
         self._wrap_hooks()
 
-    def _library(self, src, name, drop=()):
-        """A copy of the made-up library under MVP_HOME (items matching `drop` left out). A live run builds its search
-        vectors once (about $0.002 of embeddings) with the engine's own prepare."""
+    def _library(self, src, name, drop=(), extra=()):
+        """A copy of the made-up library under MVP_HOME (items matching `drop` left out; `extra`, made-up items of one
+        conversation, added with their one event each). A live run builds its search vectors once (about $0.002 of
+        embeddings) with the engine's own prepare."""
         lib = os.path.join(self.home, name)
         if os.path.isdir(lib):
             return lib
@@ -424,6 +426,19 @@ class Run:
             for line in f:
                 if json.loads(line)["item_id"] in kept:
                     out.write(line)
+        if extra:   # the merge of round 11's fixes: e.g. reels the person watched, for a watched-only summary
+            with open(os.path.join(lib, "corpus", "items.jsonl"), "a", encoding="utf-8") as items, \
+                    open(os.path.join(lib, "corpus", "interactions.jsonl"), "a", encoding="utf-8") as inter:
+                for x in extra:
+                    pd = {"owner_handle": x["by"], "owner_name": x["by"], "owner_relation": "none",
+                          "media_kind": "reel", "hashtags": [], "collections": []}
+                    items.write(json.dumps({
+                        "id": x["id"], "platform": "instagram", "source_url": f"https://www.instagram.com/reel/{x['id']}/",
+                        "dedup_key": f"instagram:{x['id']}", "first_seen_at": x["at"], "caption": x["caption"],
+                        "platform_data": pd, "importance": 0.5, "processing_depth": "full",
+                        "interaction_kinds": [x["kind"]]}) + "\n")
+                    inter.write(json.dumps({"item_id": x["id"], "kind": x["kind"], "at": x["at"],
+                                            "capture_method": "export_import", "weight": 0.1}) + "\n")
         if not self.dry:
             sys.path.insert(0, os.path.join(EXP, "demo"))
             import library as LIB
@@ -539,8 +554,15 @@ class Run:
         self._lead_creator = None
         setup = conv.get("setup") or {}
         lib = self.lib
-        if setup.get("drop"):
-            lib = self._library(LIBRARY, f"selftest_lib_{conv['id']}", drop=setup["drop"])
+        if setup.get("drop") or setup.get("extra"):
+            lib = self._library(LIBRARY, f"selftest_lib_{conv['id']}", drop=setup.get("drop") or (),
+                                extra=setup.get("extra") or ())
+        if setup.get("vectors"):
+            # the merge of round 11's fixes: a copy of the library with item vectors, so fix A's fit (R3) is read; a
+            # live run builds the engine's own, a dry run writes made-up ones (setup["vectors"]: word, off)
+            lib = self._library(LIBRARY, f"selftest_lib_{conv['id']}")
+            if self.dry:
+                self._dry_vectors(lib, setup["vectors"])
         store = self.bot.store
         store.upsert_person(h, "Sam Example", lib, TZ)
         if not setup.get("fresh") and not conv.get("continues"):
@@ -605,9 +627,41 @@ class Run:
         if "gemini" in setup:   # round 11, slice Q: the fake Gemini answers "ask the video", dry and live alike
             from mvp import videoask
             from mvp.tests.fakes.fake_gemini import FakeGemini
-            self._patch(videoask, "call_model", FakeGemini(setup["gemini"], cost_per_call=0.0).call)
+            answer = setup["gemini"]
+            fail = set(setup.get("gemini_fail") or ())
+            if fail:   # the merge of round 11's fixes: these made-up video ids fail as a private video does (403)
+
+                def answer(req, ok=setup["gemini"]):
+                    import urllib.error
+                    if any(v in FakeGemini.sent_url(req) for v in fail):
+                        raise urllib.error.HTTPError("https://example.invalid", 403, "Forbidden", {}, None)
+                    return ok
+            self._patch(videoask, "call_model", FakeGemini(answer, cost_per_call=0.0).call)
             setenv("GEMINI_API_KEY", "selftest-not-a-key")
         return env
+
+    @staticmethod
+    def _dry_vectors(lib, spec):
+        """Made-up 8-dimension item vectors (dry runs only): the items whose caption holds spec["word"] point one way,
+        the ids in spec["off"] another, the rest elsewhere; written where the library's float store lives."""
+        import numpy as np
+        d = os.path.join(lib, "corpus", "emb", "oai3l_1024")
+        if os.path.isfile(os.path.join(d, "ids.json")):
+            return
+        word, off = spec["word"].lower(), set(spec.get("off") or ())
+        rng = np.random.default_rng(5)
+        ids, vecs = [], []
+        with open(os.path.join(lib, "corpus", "items.jsonl"), encoding="utf-8") as f:
+            for line in f:
+                r = json.loads(line)
+                v = rng.normal(0, 0.05, 8)
+                v[1 if r["id"] in off else 0 if word in (r.get("caption") or "").lower() else 2 + len(ids) % 6] += 1.0
+                ids.append(r["id"])
+                vecs.append(v)
+        os.makedirs(d)
+        with open(os.path.join(d, "ids.json"), "w", encoding="utf-8") as f:
+            json.dump(ids, f)
+        np.save(os.path.join(d, "emb.npy"), np.asarray(vecs, dtype=np.float16))
 
     # ----- slice fakes (only reached when the slice is in this code) -----
     def _setup_browser(self):
@@ -856,6 +910,21 @@ class Run:
     QUOTED = re.compile(r"\"[^\"\n]{0,400}\"|“[^”\n]{0,400}”")
     DOUBT = re.compile(r"Heads-up: its caption|Going by its caption|The only match I found is", re.I)
 
+    def _email_has(self, h, want):
+        import email
+        from email import policy
+        rows = self.bot.store.outbox(h, limit=1)
+        if not rows:
+            return False, "no email kept"
+        try:
+            m = email.message_from_bytes(open(rows[0]["path"], "rb").read(), policy=policy.default)
+            body = m.get_body(preferencelist=("plain",)).get_content()
+        except (OSError, AttributeError, ValueError):
+            return False, "the email could not be read"
+        got = (rows[0]["subject"] or "") + "\n" + body
+        miss = [w for w in want if w.lower() not in got.lower()]
+        return not miss, "missing: " + " | ".join(miss)
+
     def check(self, ctx, exp, conv):
         from mvp import texts as T
         allow_cant = exp.get("allow_cant", False)
@@ -901,6 +970,8 @@ class Run:
             want = exp["reply_not"] if isinstance(exp["reply_not"], list) else [exp["reply_not"]]
             hit = [w for w in want if w.lower() in text.lower()]
             put("reply_not", not hit, "has: " + " | ".join(hit))
+        if "email_has" in exp:   # the merge of round 11's fixes: the newest email kept for this person, subject and text
+            put("email_has", *self._email_has(ctx["h"], exp["email_has"]))
         if "pending" in exp:
             p = self.bot.store.pending(ctx["h"])
             want = exp["pending"]
