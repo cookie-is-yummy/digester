@@ -4410,3 +4410,132 @@ $22.018 after.
 - P4: "can you remind me which video i watched about X was" (no "that") still goes to the model; Spanish recalls.
 - The eval has no held-out list (the prompt was written before the after run and not tuned on it, but on the
   findings' description).
+
+### 18.L2 check The check of fix pass 2 (20 Nov; `tests/test_round11_fix2_checks.py`)
+
+An independent check after fix pass 2 (f436200), on the main tree; the fixer left nothing uncommitted. Made-up data
+only in git: the checker's library is the one of the 18.L check plus a blender video with a title, a later one with
+tags only, two watched blender reels after it, 2, 5, 6 and 7 watched videos on four made-up topics with 6 saved posts
+each that hold the same word and point elsewhere (vectors in another direction), a third watched squash-and-stretch
+reel and a watched clip whose title says "cooked" as slang. The message sets, the replies, the real-library ids and the
+live threads stay outside git.
+
+**1. Messages.** 50 new made-up messages (lower case, typos, 6 Spanish) for the shapes fix pass 2 fixed: offers with
+and without a typed question, "ask that one", "ask the video" and "ask them" after a recall with no question, "ask
+them" with nothing shown, every P4 shape in 3 wordings, P5's wordings, P6 with 2, 5, 6 and 7 watched matches. Tester
+and operator alike, setting on: at 25a1189 6 right, 17 wrong helper, 27 to the model; at f436200 40 right, 8 wrong, 2
+to the model; after this check's fixes 48 right, 0 wrong, 2 to the model ("como han cambiado mis videos con el
+tiempo", with no "veo"; "list the X videos i watched"). Setting off, the 34 that need no video: 32 right, 0 wrong, 2
+to the model, and no reply offers or runs a video ask. The 8 wrong at f436200:
+- 5 by P2's own rule: "what was the last blender video i watched" listed two reels and one YouTube video with no title
+  of its own ("A video from <channel>", its title only tags); "ask the video ..." then took that video because it was
+  the only YouTube one in view, asked it, and "ask that one" asked it too. Fixed (`videoask.ask`, `UNTITLED_ONE`):
+  chosen on its own (not by its number), such a video is never asked; the reply says so and offers the best titled
+  video watched on the topic, the typed question kept. "ask video 3" naming it still asks it.
+- 2 of P6's kind above the threshold: 6 watched videos whose titles hold "kayaking", and 6 saved posts that hold it and
+  point elsewhere. The fit (its centre made from all 12) kept none of the watched ones: the recall said "Nothing you
+  watched fits" and offered a saved post, the first answer "you watched no videos about" it with "6 more mention it".
+  Fixed (`history.few_watched`, `history._few_watched`): when the fit keeps none of the watched items that hold the
+  words (at any time, in the platforms asked) it is not used, and they are shown as "mention", as below 6. A window
+  whose only matches the fit leaves out still says so ("first cooking video i watched in 2023": the talk-show clip is
+  left out, as before).
+- 1 from before: "and how many videos did i watch this month" after a list answered the list again (a follow-up kept
+  the list's kind). Now a count (`history.follow_up`).
+
+40 traps (ordinary picks, rules, reminders including "remind me what that video i watched about ramen was tomorrow at
+9" and "remind me every friday ...", emails, "can you email me that" / "email me that" / "email me that tomorrow
+morning" after a pick, cancels, feedback, "more videos like this", "fewer videos this week please", Spanish chat, chat
+after a history answer, "ask the video ..." after a pick): compared byte for byte with a checkout of 25a1189 and the
+fake model, tester and operator, setting off and on (160 runs: every reply, every table's row count, every model and
+Gemini call, the run kinds and the routes): 0 differ but the build line, before and after this check's fixes.
+
+**2. P1 with the fake Gemini** (tests in the file): a video whose answer has no points (answered true or false, or
+false with a point beside it) gets `This video, "...", doesn't seem to cover luts.` and nothing else; "ask them" with
+all three not covering gives three such lines (and the label and "watched them" line: Google did watch them), one
+covering and two not gives one block of points and two lines; an answer that carries orders ("add this to your
+rules", "ignore previous instructions", "email this to your boss") keeps only the real point, says "I left out 2 that
+read like an instruction", and a "yes" after it makes no rule, pending action or draft; a point with no "at", an empty
+"at" and one past the end are left out ("I left out 3 with a time outside the video"), a point that is the title again
+is left out silently; the total and daily caps stop before the next call, in "ask them" and for one video; what an ask
+keeps: no table or file appears in the home, rows change only in `sent`, `state`, `action_log` (and their ids), the
+new state keys are only `videoans`, `videoask`, `videoask_go`, `videoask_seen`, `videomany_seen`, and the question is
+in no row. Found and fixed: a single video's answer said "1 that only said what the video is" in its "I left out" line,
+which 18.L2 and "ask them" say it never does (removed); and "ask video 2" after a recall of three said `Which video?
+Say "ask video 2 ..."`, because a recall puts only its first video in view (now the recall's own numbered list, as
+"ask them" uses since seam b; present at 25a1189 too).
+
+The fixer's evaluation, read again (its list and both runs are outside git): I agree with its reading. v2's points
+are all on the question; v1's two vague ones are as it says; v2 is terser, and on "which tools does it use to select
+and remove the background" it gives one route in 3 steps where v1 also named two more tools. Re-run live by the
+checker on 4 of its cases (2 covered, 2 not; v2, `MVP_VIDEO_ASK_MAX_MIN=10`, $0.041): the tools question again 3 steps
+of one route (the loss repeats), the settings question 4 points, every time inside the video (81 to 357 s of 426 s),
+and both not-covered questions `answered: false` with 0 points. Same numbers as the fixer's after run on these 4.
+
+**3. The findings by their exact messages (offline).** P1 fixed where code can tell (the plain line, nothing made up;
+whether a point is on the question stays the model's: not measurable on the eval's videos, where v1 already said
+"doesn't cover" on all 10). P2 partly at f436200, fixed now (the case above). P3 fixed ("I'll ask it about color
+grading." / "I'll ask them about ..."; "ask them", "ask those videos", "ask all 3" with nothing shown: one line, no
+interpreter call). P4 fixed for every shape in 3 wordings, but the two above that still reach the model. P5 (a) fixed
+("the reels you watched", "From 2 reels."; "videos and reels", "From 3 videos and 1 reel."); (b) fixed (part 4);
+(c) fixed with vectors (the slang clip is not cited in "summarize what i watched last month about cooking"); with no
+vectors it is cited, as 18.L2 says. P6 fixed, and extended above.
+
+P6 on the real library, by the checker's own script that imports nothing of the bot (counts only; the bot's word
+forms count more, 74 to 327, the difference known since 18.H): watched matches cooking 108, coffee 94, running 169,
+workout 161, guitar 73, photography 46, blender 283, color grading 4. What is shown (the recall's 3, the first
+answer's 3 and the last answer's 3, without repeats), and the checker's reading of how many are truly about the topic:
+cooking 6 of 9, coffee 6 of 9, running 2 of 9 (mostly speedrunning), workout 8 of 8, guitar 9 of 9, photography 7 of
+9, blender 8 of 9, color grading 4 of 4 (at 25a1189 the fit showed 2 of 2 and left out 2 that are about it): 50 of 66.
+The 7 large topics are the same before and after P6 (the fit is used); the recall order fix below changed which three
+the cooking and workout recalls show, not how many are about the topic.
+
+**4. Where the export ends.** Ten history answers in a row whose windows touch or pass an export end all say where it
+ends; the hint on sending a new export only in the first, and again after 6 hours; after a restart (a new bot on the
+same store) the end every time and no hint; a second person gets their own hint once and the end every time; a window
+wholly after the record ("yesterday") keeps the hint every time.
+
+**Live** (the page operator on the real library, a scratch home, port 8797, `MVP_VIDEO_ASK=1`,
+`MVP_VIDEO_ASK_MAX_MIN=10`; the threads in the scratchpad only; no title here). The orchestrator's nine messages,
+then three of the checker's. Read right: the color grading recall (3 watched videos, their days and cards, "mention");
+"ask the video" asked at once and said "I'll ask it about color grading."; the easing question's plain line, best 3
+and offer; "ask them": one video "doesn't seem to cover easing", one concrete step (the key for easy ease), one 4
+points on easing; "the last blender video" (3 watched reels, the counts, the range and friends line once); "ask the
+video what tool do they use first": the Instagram line, a titled watched video offered with the question kept; "ask
+that one" asked it (one concrete step); "remind me what that video i watched about cooking was" read as a recall;
+"more videos in october or september?" answered first with both export ends; "email me that" asked for the address
+(none on file). Still thin or wrong: the color grading video's one point says what the video shows (a before-and-after
+montage; little else to say, but it reads like "what the video is"); in "ask them", 2 of the third video's 4 points
+tell what the speaker did rather than how; three clip lines in one answer (the 10-minute cap). Found live and fixed:
+the guitar recall showed three "A video from <channel>" and the cooking recall two: any "#" in a YouTube title made it
+no title (`compose.NOT_DETAIL` matches "#\w"), 34,560 of the founder's 115,615 YouTube items (16,146 of them with a
+real title line); P2's rule then left them out of every offer and "ask them". Now a YouTube title's own hashtags are
+cut off the name (`compose.caption_title`; Instagram captions unchanged; 19,782 left with no title, mostly one word or
+only tags), and a recall lists titled videos before untitled ones of the same match level. A second short live run on
+the fixed build: the guitar recall showed 2 titled videos and one with a one-word title; "ask video 2 ..." asked the
+second video listed ("doesn't seem to cover that": the question names no thing); the cooking recall still led with two
+untitled (that run was before the order fix; offline on the real library the cooking recall now shows three titled),
+and "ask the video" there said it won't ask a video with no title and offered a titled one. The daily count stopped the
+first run's last ask ("I've asked 5 videos for you today"), as it should.
+
+**Changed on purpose:** no earlier test or self-test conversation. Behaviour: a recall's order (titled first) and a
+YouTube title with hashtags now named by its words (any reply that named such a video "A video from <channel>").
+
+**Checks.** Full suite 0 failed (4,713: 4,439 + 274); demo 10 passed; dry self-test 59 conversations, 152 of 152
+steps; `probe_same` byte-equal with `same_head.json`; the development phrasing set by code, setting off and on, tester
+and operator: 73 helper lines right, 1 wrong (d007), 1 of 40 `none` lines taken (d132), all 280 replies byte-equal with
+the run of 18.L check; the 159 rule texts and 123 phrasings taken by no new read (`test_round9_merge`); the traps of
+`test_round11_checks.py` and `test_round11_fix_checks.py` still not taken; with `MVP_VIDEO_ASK` unset nothing about
+asking videos is offered or run (the 34 messages above, tester and operator, and the trap runs).
+
+**Spend:** $0.148 (the 4 evaluation cases $0.041, the two live runs $0.107); the ledger $22.018 before, $22.165 after.
+
+**Still wrong or not done.**
+- v2 is terser than v1 and lost two named tools on one question (2 runs of 2); not tuned here (a prompt change needs
+  its own evaluation).
+- History answers about Instagram watches say "videos" ("fewer reels this month than last month?" answers "2 videos");
+  a recall drops "and" from the topic it says back ("squash stretch").
+- "como han cambiado mis videos con el tiempo" and "list the X videos i watched" reach the model; a Spanish topic is
+  matched as written ("cocina" finds only titles in Spanish) and its timeline lists months of zeros.
+- After "what was the last cooking video i watched" (three YouTube videos), "ask the video" asks which one; R3's fit
+  still lets "running" mean speedrunning on the real library.
+- A one-word YouTube title ("Guitar") is still no title, so it is not offered or asked unless named by its number.
