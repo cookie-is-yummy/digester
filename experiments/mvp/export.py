@@ -295,6 +295,18 @@ def round11_rows(store, h):
     ans = store.get_state(f"videoans:{h}")
     if ans:
         out["video_answer"] = ans
+    # the merge of round 11's fixes: what "ask them" and the notes of the history answers keep, by kind and time
+    many = store.get_state(f"videomany:{h}")
+    if many:
+        out["ask_them_topic"] = {"topic": many.get("topic"), "since": many.get("at")}
+    go = store.get_state(f"videoask_go:{h}")
+    if go:
+        out["video_ask_waiting_for_yes"] = {"videos": len(go.get("many") or [go.get("item_id")]), "since": go.get("at")}
+    notes = store.get_state(f"histnotes:{h}")
+    if notes:
+        out["notes_said"] = notes
+    if store.get_state(f"consent_video:{h}"):
+        out["told_about_asking_videos"] = store.get_state(f"consent_video:{h}")
     asks = []
     for r in store.q("SELECT status, detail, at FROM action_log WHERE handle=? AND action='video.ask' ORDER BY id",
                      (h,)):

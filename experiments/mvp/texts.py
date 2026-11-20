@@ -3871,7 +3871,8 @@ def help_full(build, youtube=False, sites=None, say=None, history="", video_ask=
     """The help reply with the apps line (and the browser line when it is on), then the build. The merge of round
     11: it leads with asking the watch history (`history`, built from the person's own counts and topics), and says
     "ask the video" only when MVP_VIDEO_ASK is on."""
-    lines = ([history] if history else []) + [HELP] + ([HELP_VIDEO_ASK] if video_ask else []) + [help_apps(youtube)] \
+    lines = ([history] if history else []) + [HELP] + ([HELP_VIDEO_ASK, HELP_ASK_THEM] if video_ask else []) \
+        + [help_apps(youtube)] \
         + ([help_browser(sites, say)] if sites else []) + [build_line(build)]
     return "\n".join(lines)
 
@@ -3879,6 +3880,8 @@ def help_full(build, youtube=False, sites=None, say=None, history="", video_ask=
 # the merge of round 11: the help's line on asking a video itself (slice Q), only while MVP_VIDEO_ASK=1
 HELP_VIDEO_ASK = ("Videos: after I show you a YouTube video, \"ask the video\" and your question asks the video itself "
                   "(its link and your question go to Google).")
+# the merge of round 11's fixes (seam g): "ask them" (fix B, V1), one short line, only while MVP_VIDEO_ASK=1
+HELP_ASK_THEM = "After a summary or a list of videos, \"ask them\" and your question asks up to 3 of them."
 # ---------- end the live check of 19 Nov ----------
 
 

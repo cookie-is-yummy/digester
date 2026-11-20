@@ -120,8 +120,9 @@ def consent_note(store=None, h=None, now=None):
         return ""
     if store is not None and h:
         store.set_state(f"consent_video:{h}", (now or datetime.now().astimezone()).isoformat())
-    return (" If you ask me to ask a YouTube video itself, its link and your question go to Google (Gemini); I keep "
-            "only its answer.")
+    # the merge of round 11's fixes (seam f): "ask them" sends up to 3 links, each with the question
+    return (" If you ask me to ask a YouTube video itself, its link and your question go to Google (Gemini), up to 3 "
+            "videos at once with \"ask them\"; I keep only the answers.")
 
 
 def _seen(bot, person):
@@ -152,7 +153,8 @@ def leaves_text():
              "• Emails, events and to-dos you ask for go only where you said."]
     if on():
         lines.append("• Asking a video: when you say \"ask the video\", its link and your question go to Google's "
-                     "Gemini, which watches it. I keep only its answer.")
+                     "Gemini, which watches it; \"ask them\" sends up to 3 links, one at a time, each with your "
+                     "question. I keep only the answers.")
     lines.append("Your library and my notes about you stay on this computer. \"delete my data\" removes them.")
     return "\n".join(lines)
 
@@ -746,7 +748,14 @@ def _many_in_view(bot, person, k):
         return [], last
     view = bot.view(person["library"])
     out = []
-    for n, iid in enumerate(last["items"], 1):
+    ids = last["items"]
+    # the merge of round 11's fixes (seam b): a recall puts only its first video in view (for "what did it say" and
+    # "ask the video"), but "ask them" asks the recall's own list, up to 3, numbered as the recall shows them
+    from . import history
+    st = bot.store.get_state(history.STATE.format(h=h)) or {}
+    if st.get("recall") and st.get("run_id") == last.get("run_id") and st.get("ids"):
+        ids = st["ids"]
+    for n, iid in enumerate(ids, 1):
         it = view.get(iid)
         if it is not None and it.platform == "youtube" and video_id(it):
             out.append((n, it))
@@ -757,7 +766,10 @@ def _default_question(bot, h, last, now):
     """The question of a summary just shown ("what do the videos i watched say about easing"): its topic."""
     st = bot.store.get_state(f"videomany:{h}") or {}
     if not st or not last or st.get("run_id") != last.get("run_id"):
-        return ""
+        # the merge of round 11's fixes (seam b): after a recall or a history list, the topic of that answer
+        from . import history
+        topic = history.history_topic(bot, h, now)
+        return f"What does it say about {topic}?" if topic else ""
     try:
         if now - datetime.fromisoformat(st["at"]) > timedelta(minutes=MANY_MINUTES):
             return ""

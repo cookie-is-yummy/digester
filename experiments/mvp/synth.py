@@ -555,18 +555,34 @@ def lead_words(how, items):
 def _limit(bot, person, req):
     """The request limited to what the person watched, saved or liked when the message says so ("from what i
     watched", "the videos i watched", "my watch history", "from my saves")."""
-    from .history import HOW_KINDS
+    from . import history as Hs
     how = req.get("how") or "any"
     if not SOURCE_LIMIT or how == "any" or req.get("these") or req.get("only") is not None:
         return req
-    kinds = HOW_KINDS[how]
+    kinds = set(Hs.HOW_KINDS[how])
     view = bot.view(person["library"])
+    # the merge of round 11's fixes (seam c): "watched" means what slice H's record counts as watched (a watch or a
+    # view event, in the person's time zone, never a friend's share), the same record a history answer reads
+    rec = Hs.record(view, person.get("timezone") or "UTC")
     dates = {}
-    for iid, it in view.items.items():
-        if _did(it, kinds):
-            ds = [d for k, d in (getattr(it, "dates", {}) or {}).items() if k in kinds and d]
-            dates[iid] = max(ds) if ds else ""
-    return dict(req, only=set(dates), dates=dates)
+    for iid, evs in rec.events.items():
+        if view.items.get(iid) is None:
+            continue
+        ds = [d for d, k in evs if k in kinds]
+        if ds:
+            dates[iid] = max(ds).isoformat()
+    # and fix A's fit (R3) where the library has its item vectors: an item that holds the topic's words but whose
+    # vector is far from the others that hold them is left out ("mentions it but isn't about it"); items that don't
+    # hold the words are left to the search. No vectors, or too few items to tell: nothing changes.
+    unfit = set()
+    words = Hs.content_words(req.get("topic") or "")
+    if 0 < len(words) <= 4:
+        fit = Hs.topic_fit(view, rec, " ".join(words))
+        if fit is not None:
+            unfit = {i for i in dates if i in fit[0] and fit[0][i] < fit[1]}
+    for i in unfit:
+        dates.pop(i, None)
+    return dict(req, only=set(dates), dates=dates, unfit=len(unfit))
 # ---------- end round 11 fix, B ----------
 
 
@@ -604,6 +620,8 @@ def gather(bot, person, req, now, last=None):
     h = person["handle"]
     view = bot.view(person["library"])
     steps, cost = {}, 0.0
+    if req.get("unfit"):   # the merge of round 11's fixes (seam c): left out of a limited summary by fix A's fit
+        steps["unfit"] = req["unfit"]
     cfb = captionmark.index(bot.store.caption_feedback(h))
     if req.get("these"):
         cands = [x for x in (view.get(i) for i in (last or {}).get("items") or []) if x is not None]
@@ -751,7 +769,7 @@ def synth_reads(bot, person, text, now):
             goal = " ".join(q.get("topic") or []) or q.get("channel") or ""
         req = dict(req, topic=" ".join(goal.split())[:80] or "these")
     if req.get("window") is not None:
-        ref = _window(bot, person, req, today)
+        ref = _window(bot, person, req, today, now)
         if not isinstance(ref, dict):
             return ref
         req = ref
@@ -763,7 +781,7 @@ def synth_reads(bot, person, text, now):
 VERB = {"watched": "watched", "liked": "liked", "saved": "saved", "any": "watched or saved"}
 
 
-def _window(bot, person, req, today):
+def _window(bot, person, req, today, now=None):
     """The request with the window's items (`only`, `dates`) and its words, or a reply's reference when the window
     lies wholly outside the record (said plainly, with where the export ends or starts; no model call)."""
     from . import history as Hs
@@ -797,12 +815,17 @@ def _window(bot, person, req, today):
         ds = [d for d, k in evs if k in kinds and (start is None or d >= start) and (end is None or d <= end)]
         if ds:
             dates[iid] = max(ds).isoformat()
-    tail = []
+    tail, said = [], []
     if newest is not None and (end is None or end >= newest):
-        tail = [Hs.ends_line(rec, plats), Hs.REFRESH["en"]]
+        # the merge of round 11's fixes (seam d, R4): where the export ends always stays (it changes the answer); the
+        # hint on sending a new export is said once in a stretch of 6 hours, shared with the history answers
+        tail = [Hs.ends_line(rec, plats)]
+        if now is None or not ({"range", "refresh"} & Hs.said_lately(bot, h, now)):
+            tail.append(Hs.REFRESH["en"])
+            said.append("refresh")
     return dict(req, only=set(dates), dates=dates, platforms=req.get("platforms") or [],
                 when=Hs.window_words(w, start, end, cap=False).rstrip(","), verb=VERB[how],
-                window_tail=" ".join(x for x in tail if x))
+                window_tail=" ".join(x for x in tail if x), said=said)
 # ---------- end the merge of round 11 ----------
 
 
@@ -834,6 +857,9 @@ def run(bot, person, req, now, last=None):
     if res is not None and req.get("when"):   # the merge of round 11: the window said back, and where the record ends
         res.update(when=req["when"], verb=req["verb"], window_tail=req.get("window_tail") or "")
     msg = T.synth_message(res, video_offer=_video_offer(shown, thin=bool(res and res.get("thin"))))
+    if req.get("said"):   # the merge of round 11's fixes (seam d): the notes said, once in a stretch (R4)
+        from . import history as Hs
+        Hs.note_said(bot, h, now, req["said"])
     if shown:
         # round 11 fix, B (V1): "ask them" right after reads this answer's YouTube videos and its topic
         from . import videoask

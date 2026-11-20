@@ -428,12 +428,14 @@ HOOK_ORDER = {
                     "ref = self.onboard_step(person, text, now)",                    # the setup (W inside)
                     "return self.answer_normally(person, text, now)"],
     "_asked_reads": ["ask = captionmark.take_ask(self.store, person[\"handle\"])",
+                     "vgo = videoask.take_go(self.store, person[\"handle\"])",    # round 11 fix B (the note's go)
                      "ref = self._deadline_answer(person, text, now)",
                      "ref = self._overdue_reply(person, text, now)",
                      "ref = self._cancel_answer(person, text, now)",                 # 3 (B, D)
                      "ref = place_answer(self, person, text, now)",                  # 4 (D)
                      "ref = ytreads.youtube_answer(self, person, text, now)",        # 4a (Y, second merge)
                      "ref = self._mismatch_answer(person, text, now, ask)",          # 4b (S)
+                     "ref = videoask.go_answer(self, person, text, now, vgo)",       # 4c (round 11 fix B, V2)
                      "return self._doit_answer(person, text, now)"],
     "answer_normally": ["ref = self._rule_reads(person, text, now)",
                         "for text in phrasing.variants(said):",
@@ -476,6 +478,15 @@ HOOK_ORDER = {
                               "ref = token_reads(bot, person, text, t, now)",
                               "ref = w_place_reads(bot, person, text, t, now)",
                               "return connect_reads(bot, person, text, t, now)"],    # F8, last
+    # the merge of round 11's fixes (DESIGN 17's table, 8h, 8y, 8m): the reads of fixes A and B inside their hooks
+    "history.py:history_reads": ["f = follow_up(st, text, today, known)",
+                                 "r = read_recall(text, today)",                     # fix A, R1: the recall
+                                 "q = read(text, today)"],
+    "videoask.py:reads": ["if LEAVES.match(t):", "got = read_ask(t)",
+                          "one = read_one(t)",                                       # fix B, R2: "ask that one"
+                          "many = read_many(t)"],                                    # fix B, V1: "ask them"
+    "synth.py:synth_reads": ["req = read(text, today)",
+                             "req = read_ask_mine(text)"],                           # fix B, V1: "ask my videos"
     "cancel.py:cancel_reads": ["req = request(t,", "more = more_to_cancel(t, req, practice_routes())",   # F9
                                "return self._cancel_start(person, req, t, now)"],
 }

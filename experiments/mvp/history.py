@@ -1074,6 +1074,7 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
         # the round 11 check (DESIGN 18.X): each platform whose export the window reaches is said, so "October 1 to
         # 15" says Instagram's ends on the 15th even while YouTube's runs on
         tail += [ends_line(rec, reached, lang), REFRESH[lang]]
+        said.append("refresh")   # the merge of round 11's fixes (seam d): a summary after it leaves the hint out
     if q.how == "saved":
         tail.append("(Guardado cuenta lo guardado, las colecciones, lo que te enviaste y las listas.)" if es else
                     "(Saved counts saves, collections, posts you sent yourself and playlists.)")
