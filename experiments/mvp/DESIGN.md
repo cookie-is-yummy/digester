@@ -4166,3 +4166,110 @@ inside a subject ("X in Y"); "what do my videos say about easing", with no subje
 S2 limit leaves fewer sources when few watched items have text. The eval has no held-out set (the prompts were tuned on
 this one). The live pick's "Steps (3)" listing a description's sentences as steps (the composer, not this fix) was seen
 and is left. "ask them" answers are the model's, not checked against the videos.
+
+### 18.L check The check of round 11's fix pass (20 Nov; `tests/test_round11_fix_checks.py`)
+
+An independent check after the merge of the fixes (958e8c1), on the main tree. Made-up data only in git: the checker's
+own watch history in the test file (a person in New York; the clock Friday 20 November 2026; YouTube ending Thursday
+12 November, Instagram 3 November; a talk-show clip and a game stream whose titles say "cooking"; a saved post never
+watched; a watched reel; a friend's post; made-up item vectors and YouTube descriptions). The message sets, the
+replies and the real-library counts stay outside git (they hold real titles).
+
+**1. Messages.** 70 new made-up messages (lower case, typos, 8 Spanish): recalls in every wording, firsts and lasts by
+topic, comparisons, timelines, likes, summaries "from what i watched" / "from my saves" / neither, questions on what a
+video says, "ask them", "ask video N", "email it to me" after a video answer. Tester and operator alike, setting on:
+64 right, 0 wrong helper, 6 to the model ("remind me what that video i watched about X was": "remind" never makes a
+recall; "whens the first time ..."; "more videos in october or september?" with no "i watched"; Spanish "como ha
+cambiado lo que veo de cocina"; "sum up what my watch history says about X"; "can you email me that"); setting off, 54
+right and 5 to the model of the 59 that need no video. Read reply by reply, one more was wrong in what it said ("how
+many reels have i liked" counted YouTube likes; fixed) and two read badly ("abt" said back as the topic; a title with
+"follow through" shown as "A video from <channel>"; fixed). 50 traps (ordinary picks, rules, reminders, emails,
+cancels, feedback, chat after a pick, "what was that video about X" with no "i watched"), compared byte for byte with a
+checkout of 02f3581 and the fake model, every reply, every table's row count and every model call, tester and
+operator, setting off and on: 0 differ, but for the build line (the checkout has no git) and, setting on, the help's
+"ask them" line (seam g, on purpose). 10 more after a history answer ("ok thanks", "lol", "for real?", a reminder, a
+rule, a cancel, a pick): 0 differ in the reply to them.
+
+**2. The findings, by their exact messages (offline).** R1 fixed (a recall of watched videos with their days and cards,
+never "I recommend", never a save when a watch fits); R2 fixed (the plain line, the offer of the watched video, "ask
+the video" asks it); R3 partly (below); R4 fixed (and part 3); R5, R6, R7 fixed (a timeline that ties had a "most":
+fixed); R8 fixed for a list of reels, but "the last X reel" read the reel as any video before this check (fixed); S1
+fixed (the number shown is the video asked; an Instagram source is never offered); S2 fixed (a watched-only summary
+reads no save, prompt or details call; at most 2 points from one item); S3 fixed where code can tell (only "what it
+is" points give the plain line, the best 3 and the offer; the prompt's part was not re-measured: no prompt changed);
+V1 to V4 fixed (V4 offline with a confirmed address; live, with no address in the scratch home, it asked for one).
+Real library, by a script of the checker's that imports nothing of the bot, 12 numbers the changed answers give: the
+recall's dates (2), the first cooking video's date by the fit and by the words, the last one's, 2024 and 2025 for the
+comparison, the timeline's first year and 2023, Instagram likes, YouTube likes: 11 the same; the twelfth, the cooking
+word matches (the fit's "in all" plus "left out"), is 113 against the script's 108, the word-boundary difference known
+since 18.H. R3 on the real library (the checker's own reading of the last 3 and first 2 shown for 8 topics, counts
+only): 26 of 37 truly about the topic after, 26 of 38 before; better for cooking (1 to 2 of 5) and photography (4 to
+5), worse for workouts (5 to 4), the same for blender (5), guitar (5), coffee (3) and running (0); for color grading
+the fit keeps 2 of the 4 watched videos whose titles hold it and drops 2 that are truly about it in other programs,
+because the topic's vector is made from all 27 record items that hold the words, mostly saved posts. Not changed: it
+needs an evaluation, not one reading.
+
+**3. Where the export ends.** Every history answer whose window touches or passes an export end says so, the 1st to
+the 10th in a row, after a restart (a new bot on the same store; the once-only notes are kept) and for a second person
+(whose own first answer also says the friends line); an all-time answer says the range once in 6 hours, which names
+both ends. A summary with a window that passes the end says it every time (three in a row); one inside the record
+does not.
+
+**4. Summaries.** Points that only say what the items are: the plain line, no point shown, nothing made up; points
+from one item: at most 2 when 3 or more are cited; "from what i watched" sent no saved-only item to any details or
+synthesis call; "ask video N" asks the source numbered N; the watched reel among the sources is never offered.
+
+**5. Asking up to 3 videos** (the fake Gemini). One failing: said in its block, the others answer; an answer with an
+order and a time past the end: both left out, nothing made, a "yes" after finds nothing; the total cap and the daily
+cap each stop before the second call; the daily count reached after the first; "ask them" with nothing shown goes on
+as before, after reels only it says plainly; setting off it is not read (tester and operator); "yes" after the note
+asks. A "yes" that belongs to something else: a rule preview after the note takes its own yes (the note's go ends with
+the next message); a rule preview shown before the note keeps its own yes for after the videos; an email card and a
+cancel's steps keep theirs. What an ask keeps, listed before and after: rows change only in `sent`, `state` and
+`action_log`; new state keys only `videoans`, `videoask`, `videoask_go`, `videoask_seen`, `videomany_seen` (18.Q,
+18.LB); no new file in the home; the question in no row, state or file.
+
+**Defects found and fixed.**
+- After a one-item answer (a recall keeps one item in view), "summarize what i watched this month about cooking" and
+  "summarize what ive learned about cooking this month" got the pick's key points: `code_reads` read the "this" of
+  "this month" as the pick. A summary with a topic and a window is now left to the summary read
+  (`followup._a_summary_asked`); "summarize this" is still the pick's.
+- A summary with a window skipped fix A's fit (seam c covered only the summary without a window): "summarize what i
+  watched in 2026 about cooking" cited a game stream whose title says "cooking". The window's items are fitted too
+  (`synth._unfit_out`), whatever was watched, saved or liked in it.
+- "Full stream replay." passed as a point: it is what an item is (`synth.META`).
+- "ask them" with every video failing kept the label and "A model at Google watched them"; now neither, and one
+  answered says "watched it" and "this answer" (`videoask._run_many`). "I've asked 1 videos" said right.
+- Live: one video's answer said the same step three times in other words; a point whose content words are mostly a
+  kept one's (and the same numbers) is shown once (`videoask._same_point`, counted as `repeat`, not as left out).
+- "reels" (and "insta", "ig") with no video word is Instagram in a history question (`history._topic_and_platform`).
+- A timeline whose busiest months tie names no "most" (`history._peak`).
+- "follow through" in a title is the title, not a call to follow (`compose.PROMO_TITLE`).
+- "abt" is "about" in a recall; "1 more fits but says nothing in its text"; "One thing it says" for one item; a
+  watched-only summary counts a watched reel as a reel ("From 3 videos and 1 reel").
+
+**Changed on purpose:** `test_round11_m.py::test_a_summary_cites_many_items_and_says_what_it_read`, one line: its
+regex now expects "1 more fits but says nothing in its text" (was "1 more fit but say nothing in their text").
+
+**Live** (the page operator on the real library, a scratch home, the test page on port 8797, `MVP_VIDEO_ASK=1`; the
+thread in the scratchpad only; $0.1315 in all, the ledger $21.3841 before and $21.5156 after; no title here). Read right:
+the recall (2 watched videos, their days and cards, no recommendation); the honest line and the offer, then "ask the
+video" asked at once (the offer had told what goes to Google), 2 timestamped points; the first cooking video by the
+fit (a recipe, with "94 in all. 19 more mention ..."), the range and friends line once; the comparison answered
+first; "how many reels have i liked" Instagram only; the last blender video, three reels, then the honest Instagram
+line and the offer of a watched YouTube video. Still wrong or thin: the watched-only motion design summary is
+grounded but mostly says what courses and plugins are (2 of 5 points teach something); the easing question got the
+plain line (right), but "ask them" asked with the summary's question and one video's points were about its own
+subject, not easing (the model's, not checked against the videos), and another said one step three times (fixed
+above); "summarize what i watched last month about cooking" listed a clip whose title only says "cooked" as slang
+(the summary's word fit stems "cooked" to "cook"; the vector fit reads only items that hold "cooking").
+
+**Checks.** Full suite 0 failed (the README's count); demo 10 passed; dry self-test 59 conversations, 152 of 152
+steps; `probe_same` byte-equal with `same_head.json`; the development phrasing set by code with the setting off and
+on, tester and operator: 73 helper lines right, 1 wrong (d007), 1 of 40 `none` lines taken (d132, on purpose), the
+replies of all 280 runs the same as at the merge; the 159 rule texts and 123 phrasings taken by no new read
+(`test_round9_merge`, fix A and fix B guards); the 60 traps of `test_round11_checks.py` still not taken.
+
+**Not done.** R3's fit for a topic whose record matches are mostly saves, and the summary's stem fit ("cooked"). "ask
+the video" with no question after a recall still asks what to ask ("ask them" uses the recall's topic). "ask them"
+with nothing shown goes to the interpreter. The six messages above that reach the model. Spanish recalls.

@@ -390,7 +390,9 @@ def _same_point(a, b):
     x, y = _point_words(a), _point_words(b)
     if len(x) < 3 or len(y) < 3:
         return False
-    return len(x & y) / len(x | y) >= 0.6
+    if {w for w in x if any(c.isdigit() for c in w)} != {w for w in y if any(c.isdigit() for c in w)}:
+        return False   # a different number is a different point ("1/50" and "1/100", "step 4" and "step 5")
+    return len(x & y) / len(x | y) > 0.6
 
 
 def answer_text(title, vid, kept, dropped, answered, clip_line=""):
