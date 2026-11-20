@@ -21,20 +21,31 @@
 - **Fixed, videos:** an Instagram post in view offers the watched YouTube video on the same topic (10 of 12 real posts got one on their topic).
 - **Partly fixed:** first, last and list keep only items that fit the topic by the library's own vectors. Real library: 39 of 50 fit before, 41 after.
 - **Fix check:** 70 new made-up messages: 64 right, 0 wrong, 6 left to the model. 50 traps unchanged. 11 of 12 real numbers match; the 12th is a known gap.
+- **Second live check of 25a1189 (20 Nov):** 12 replies read right. 6 findings, P1 to P6. One fixer (f436200), then an independent check (c26c85f). 413 new tests.
+- **P1, fixed where code can tell:** a new video prompt, `video_ask_v2`, asks for concrete points on the thing asked. A video that doesn't cover it gets one plain line.
+- **P1, measured:** 8 public tutorials, 9 covered and 10 not-covered questions. Before 34 points, 32 on the question; after 30, all 30. Not covered: 10 of 10 in both.
+- **P1, unproven:** the old prompt did not repeat the live off-question answer, so the new one's effect on it has no number.
+- **P2 and P3, fixed:** a video with no title is never offered or asked unasked. A typed question is kept for "ask that one". "ask the video" after a recall asks about its topic.
+- **P4, fixed:** the 7 shapes that reached the model are read by code, with traps beside each.
+- **P5, fixed:** "reels" in watched summaries; the new-export hint once in 6 hours in history answers; a slang word form must pass the fit (with vectors only).
+- **P6, fixed:** below 6 watched matches, all are shown and said as "mention". Real library: one small topic went from 2 of 4 shown to 4 of 4.
+- **Second check:** 50 made-up messages: 6 right at 25a1189, 40 after the fixer, 48 after the check (0 wrong, 2 to the model). 160 trap runs unchanged.
+- **Found and fixed by the check:** any "#" in a YouTube title made it untitled: 34,560 of 115,615 items before, 19,782 after. Plus 6 smaller defects.
 - **Probe of eight messages now:** H1 to H5, H7 and H8 get the answer asked for. H6 gets the honest line, then, with the setting on, the video's own answer.
-- **Checks:** 4,300 offline tests pass (3,718 before the fix pass). Dry self-test 152 of 152 steps. Unchanged answers byte-equal. Rule texts and phrasings taken by no new read.
+- **Checks:** 4,713 offline tests pass (4,300 before the second fix pass, 3,718 before the first). Dry self-test 152 of 152 steps. Unchanged answers byte-equal. Rule texts and phrasings taken by no new read.
 - **One wording-set line changed on purpose:** d132, a "none" line, is now answered by the history code. The founder decides.
 - **Still wrong or unproven** (full list in the results file): the fit cannot tell a topic word used another way. Real-library summaries are honest but thin. No video answer checked against its video. A-017's legal footing is unsettled. Recall is English only.
+- **Also still wrong:** the new video prompt is terser and lost two named tools on one question. History answers call reels "videos". One-word YouTube titles count as untitled. Three messages still reach the model.
 - **Not built, on purpose:** storing transcripts to search every video (AGENTS rule 8); a history rule on a schedule (needs a contract change); hours watched.
-- **Spend:** $21.52 of the $30 cap. Round 11 spent about $1.80 of its $3.00 budget, $0.90 of it in the fix pass.
+- **Spend:** $22.17 of the $30 cap. Round 11 spent about $2.45 of its $3.00 budget: $0.90 in the first fix pass, about $0.65 in the second.
 - **Founder, please:**
-  1. Pull and restart the test page; type "what can you do", then "what was that video i watched about X".
+  1. Pull and restart the test page; type "what can you do", then "what was that video i watched about X", then "ask the video".
   2. Refresh your exports: YouTube ends 30 Oct, Instagram 15 Oct. Ask "how do I send you a new export?".
   3. To try asking videos, set `MVP_VIDEO_ASK=1` and `GEMINI_API_KEY` from a billed Google project. After a recall or a summary, say "ask them".
   4. Decide the recall's order: what you watched first, a save only when nothing watched fits.
-  5. Decide the "about" wording where the fit is weak, or keep "mention" there.
+  5. Confirm P6: below 6 watched matches, all shown as "mention"; and when the fit keeps none of them, the same. Read a few replies naming YouTube videos whose titles held hashtags.
   6. Confirm the summary rule: "from what i watched" reads watched items only, "from my saves" saves only, neither reads everything.
-  7. Decide A-017 with the other founder. It now covers up to 3 videos per question. A legal read and 20+ answers checked against videos come first.
+  7. Decide A-017 with the other founder. It covers up to 3 videos per question and now names `video_ask_v2`. A legal read and 20+ answers checked against videos come first. Decide whether to tune the video prompt again (its own evaluation).
   8. Decide d132, and whether a history rule on a schedule is wanted.
   9. A-008 to A-016 are still open.
 

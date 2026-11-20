@@ -462,20 +462,28 @@ A-017 (Proposed, both founders) in `docs/amendments.md`. Everything runs on this
 The founder asked to "treat it like 'ask your watch history anything'". He sent a screenshot of an archive that answers
 questions across stored YouTube transcripts, with timestamps. It was built as three slices (H, M, Q), a merge and a
 check. A live check of that build on 19 Nov found 15 things. A fix pass (two fixers, a merge, a check) followed on 20 Nov.
+A second live check, of 25a1189, found 6 more (P1 to P6). One fixer and an independent check followed the same day.
 
 | Asked | Built | Limit |
 | --- | --- | --- |
 | Questions about my watching | Rankings, counts, first and last, a day, timelines and comparisons, by code. Every answer says its window and where the export ends. Comparisons answer first | First, last and list fit topics by the library's own vectors; counts and timelines by words. The fit cannot tell a topic word used another way |
-| What was that video I watched | A recall by code: up to 3 watched videos with the day watched and the card. A save only when nothing watched fits | English only. A description that shares no word with the title is found only in the search's top 50 |
+| What was that video I watched | A recall by code: up to 3 watched videos with the day watched and the card, titled ones first. A save only when nothing watched fits. Below 6 watched matches all are shown, said as "mention" | English only. A description that shares no word with the title is found only in the search's top 50 |
 | What have I learned about X | Up to 6 points across many items, each traced by code to a cited item's own words. Numbered sources. "from what i watched" reads only watched items | Points are often thin: titles and captions hold little. No held-out set for the prompt |
-| What did that video say | One YouTube video, or up to 3 with "ask them", asked through Google's documented link input, with timestamp links. Nothing of the video is kept | Off by default. Preview feature, terms unsettled. No answer checked against a video |
+| What did that video say | One YouTube video, or up to 3 with "ask them", asked through Google's documented link input, with timestamp links. Concrete points on the thing asked, or one line saying the video doesn't cover it. A video with no title is never offered. Nothing of the video is kept | Off by default. Preview feature, terms unsettled. No answer checked against a video. Code cannot tell an off-question point |
 | Lead with it | The help, "what can you do" and the setup start with "Ask your watch history anything" and three questions from the person's own record | English only |
 | Search every video, as in the screenshot | Not built | Stored transcripts conflict with AGENTS rule 8; no official route to other people's transcripts |
 
 Measured: 4,300 offline tests pass (3,718 before the fix pass, 3,318 at version 5). Of the probe's eight messages, H1 to
 H5, H7 and H8 now get the answer asked for. H6 gets the honest line, then the video's own answer with the setting on.
 Of the live check's 15 findings, 13 are fixed. S3 (points that only describe) is fixed where code can tell. R3 (topics
-by meaning) is partly fixed: 39 of 50 items fit before, 41 after. Spend: $21.52 of the $30 cap (about $1.80 this round, $0.90 of it in the fix pass).
+by meaning) is partly fixed: 39 of 50 items fit before, 41 after.
+
+After the second fix pass: 4,713 offline tests pass (4,300 before it). P2 to P6 are fixed; P1 is fixed where code can tell.
+On 8 public tutorials, the new video prompt `video_ask_v2` kept 30 of 30 points on the question (the old one 32 of 34).
+Both said "doesn't cover" on 10 of 10 questions the videos don't cover. The live off-question answer did not repeat
+there, so the new prompt's effect on it is unmeasured. The check's 50 made-up messages: 6 right at 25a1189, 48 after
+(0 wrong, 2 to the model). It also found that hashtags made 34,560 of 115,615 YouTube titles count as none; 19,782 now.
+Spend: $22.17 of the $30 cap (about $2.45 this round: $0.90 in the first fix pass, about $0.65 in the second).
 
 Decisions still open after version 6:
 31. **A-017:** asking a YouTube video itself through Google, on demand, nothing of the video kept. It now covers up to 3 videos per question, each counted against the daily cap. Both founders. A legal read and 20+ answers checked against the videos come first.
@@ -486,3 +494,6 @@ Decisions still open after version 6:
 36. **The recall's order:** what was watched first, a save only when nothing watched fits.
 37. **"about" or "mention":** first and last answers say "about" when the fit is used, even where it is weak.
 38. **What a summary reads:** "from what i watched" reads watched items only, "from my saves" saves only, neither reads everything (the orchestrator's decision, for the founder to confirm).
+39. **Few watched matches (P6):** below 6 watched items holding the topic's words, all are shown and said as "mention"; the same when the fit keeps none of them (the orchestrator's decision and the check's extension, for the founder to confirm). This also answers 37 below 6 matches.
+40. **YouTube titles with hashtags** are now named by their words, in every reply. The founder may want to read a few on his library.
+41. **The video prompt:** `video_ask_v2` is terser than v1 and lost two named tools on one question. Tune it again (with its own evaluation), or keep it.
