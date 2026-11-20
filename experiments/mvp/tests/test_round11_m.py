@@ -244,7 +244,7 @@ def test_a_summary_cites_many_items_and_says_what_it_read(lib_env):
     # the friend's post, and the post that speaks to an assistant, are never read or named
     assert "sm_sd7" not in out and "sm_sd6" not in out and "password" not in out.lower()
     run = e["bot"].store.q("SELECT * FROM runs WHERE kind='synth'")[-1]
-    assert run["prompt_version"] == "synth_v4" and run["n_picks"] >= 3   # round 11 fix, B (S3): was synth_v3
+    assert run["prompt_version"] == "synth_v5" and run["n_picks"] >= 3   # round 11 fix, B (S3): was synth_v3
     steps = json.loads(run["steps"])
     assert steps["note_left_out"] == 1 and steps["points"] >= 3
 

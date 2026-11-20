@@ -24,7 +24,7 @@ import time
 from . import config, llm
 
 # round 11 fix, B (S3): v4 asks for points that answer the question about the topic, never what an item is
-PROMPT_VERSION = os.environ.get("MVP_SYNTH_PROMPT", "synth_v4")   # v3: v2 plus points spread over the items;
+PROMPT_VERSION = os.environ.get("MVP_SYNTH_PROMPT", "synth_v5")   # v3: v2 plus points spread over the items;
 # v2: closer to the items' words, one idea per point, never what the items are (DESIGN 18.M); v1 and v2 stay as measured
 PROMPT = open(os.path.join(config.HERE, "prompts", f"{PROMPT_VERSION}.md"), encoding="utf-8").read()
 ON = os.environ.get("MVP_SYNTH", "1") != "0"    # off: the message goes to the interpreter as before (the eval's "before")
@@ -32,6 +32,7 @@ ON = os.environ.get("MVP_SYNTH", "1") != "0"    # off: the message goes to the i
 SOURCE_LIMIT = os.environ.get("MVP_SYNTH_SOURCE", "1") != "0"
 ONE_ITEM_MAX = 2     # points that come from one item alone, when 3 or more items are cited
 THIN_LIST = 3        # (S3) items listed, with their links, when the text says too little to sum up
+MAYBE_READABLE = 3   # the search's next best are read only when fewer than this many fitting items have text
 CANDS = 40           # ranked candidates looked at
 READS = 12           # items whose key points are read (one details call each, cached per item)
 RICH_TEXT = 120      # an item with at least this much of its own text is read before shorter ones
@@ -340,6 +341,37 @@ META = re.compile(
     re.I)
 
 
+def _defines_topic(text, topic):
+    """True for "<topic> can be a day in the city", "<topic> is all about ...": what the topic is, not what it says."""
+    if not topic:
+        return False
+    rx = (r"^(?:the\s+)?" + re.escape(topic.lower()) + r"s?\s+(?:can\s+(?:be|mean)|is|are|was|were)\s+(?:a|an|about|"
+          r"all\s+about|just|mostly|really)\b")
+    return bool(re.match(rx, text.lower()))
+
+
+def _root(w):
+    """'easing', 'ease', 'easy', 'eased' -> 'eas'; 'lighting', 'lights' -> 'light'."""
+    w = w.lower()
+    for suf in ("ings", "ing", "ed", "es", "s"):
+        if len(w) > len(suf) + 2 and w.endswith(suf):
+            w = w[:-len(suf)]
+            break
+    return w[:-1] if len(w) > 3 and w[-1] in "ey" else w
+
+
+def off_question(text, topic):
+    """True when the topic asks about one thing inside a subject ("easing in after effects") and the point never
+    names that thing: it may be about the subject, but it does not answer the question."""
+    thing, ctx = focus(topic)
+    if not ctx:
+        return False
+    want = {_root(w) for w in content_words(thing)}
+    have = {_root(w) for w in _WORD.findall((text or "").lower())}
+    return not any(a == b or (min(len(a), len(b)) >= 3 and (a.startswith(b) or b.startswith(a)))
+                   for a in want for b in have)
+
+
 def _title_only(text, titles, topic):
     """True when every content word of the point, the topic's own words aside, is a word of one cited item's title:
     the title said again as a sentence ("Knife skills for beginners.")."""
@@ -392,8 +424,11 @@ def check_points(raw, items, extra=None, notes=None, need_about=(), topic=None):
             # calendar", "ignore your rules") is never passed on as something the person learned
             drop("instruction", text)
             continue
-        if META.search(text):   # round 11 fix, B (S3): what an item is, who it is for, that it exists
+        if META.search(text) or _defines_topic(text, topic):   # round 11 fix, B (S3): what an item is, who it is for
             drop("about_item", text)
+            continue
+        if off_question(text, topic):   # round 11 fix, B (S3): "easing in after effects", a point never about easing
+            drop("off_question", text)
             continue
         ids, texts = [], []
         for s in p.get("sources") or []:
@@ -599,7 +634,10 @@ def summarize(bot, person, req, now, last=None):
     readable = sorted([it for it in fits if len(own_text_lines(it, extra)) >= MIN_TEXT],
                       key=lambda it: len(own_text_lines(it, extra)) < RICH_TEXT)[:READS]
     maybe = []
-    if len(fits) < MAYBE_WHEN:
+    # round 11 fix, B: only when fewer than 3 items that name the topic have text to read (3 or more make a summary
+    # on their own; reading nearby items then brought in posts about something close by, a workout for "strength
+    # training", in the eval of synth_v4)
+    if len(fits) < MAYBE_WHEN and len(readable) < MAYBE_READABLE:
         # few posts name the topic in its own words ("lazy weeknight meals"): the search's next best are read too, and one
         # counts only when the model lists it as about the topic (check_points' need_about)
         maybe = [it for it in maybes if len(own_text_lines(it, extra)) >= MIN_TEXT][:max(0, MAYBE_READS - len(readable))]
@@ -655,7 +693,8 @@ def summarize(bot, person, req, now, last=None):
         listed = [it for it in out["cited"] if it is not None]
         listed += [it for it in out["fits"] if it.id not in {x.id for x in listed}]
         out["listed"] = listed[:THIN_LIST]
-    out["lead"] = lead_words(req.get("how") or "any", [it for it in out["cited"] if it is not None] or out["fits"])
+    named = [it for it in out["cited"] if it is not None] if not out.get("thin") else []
+    out["lead"] = lead_words(req.get("how") or "any", named or out["fits"])
     out["how"] = req.get("how") or "any"
     out["thing"], out["context"] = focus(req["topic"])
     # ---------- end round 11 fix, B ----------

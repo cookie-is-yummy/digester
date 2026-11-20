@@ -39,6 +39,9 @@ LIB = [
     ("y4", "youtube", "FAKEmot0004", "Motion design timing tips", "Pretend Motion Lab", "watch",
      "2026-10-04T15:00:00+00:00",
      "Keep UI animations between 200 and 500 milliseconds. Stagger elements by 2 to 4 frames so the eye can follow."),
+    ("y5", "youtube", "FAKEmot0005", "Motion design curves explained", "Invented Frames", "watch",
+     "2026-10-04T18:00:00+00:00",
+     "Ease in and ease out make motion design feel alive. Overshoot a little on the last keyframe, then settle."),
     ("p1", "instagram", None, "Motion design tip: timing\nAnimate one thing at a time so the eye can follow.\nGive "
      "every move in motion design a reason.\nShort moves feel snappy, long moves feel heavy.\nEase out of every "
      "motion design move.", "notarealmotion", "save", "2026-10-05T12:00:00+00:00", None),
@@ -284,7 +287,7 @@ def test_s3_points_that_say_what_an_item_is_are_dropped_and_the_answer_says_so_p
                     r"after effects don't say much about easing\.\n", out), out
     assert "The best 3:\n1. \"" in out and out.count("youtube.com/watch?v=") == 3
     run = fb["bot"].store.q("SELECT * FROM runs WHERE kind='synth'")[-1]
-    assert run["prompt_version"] == "synth_v4"
+    assert run["prompt_version"] == "synth_v5"
     assert json.loads(run["dropped"]).get("about_item", 0) >= 3
     # the numbered list is the last answer, so "the second one" and "ask video 2" read it
     assert len(fb["bot"].store.last_answer(H)["items"]) == 3
@@ -300,7 +303,7 @@ def test_s3_the_plain_answer_offers_ask_them_with_the_setting_on(fb, monkeypatch
 
 def test_s3_the_prompt_is_a_new_version_and_names_the_thing_asked(fb):
     from mvp import synth
-    assert synth.PROMPT_VERSION == "synth_v4"
+    assert synth.PROMPT_VERSION == "synth_v5"
     assert os.path.isfile(os.path.join(os.path.dirname(HERE), "prompts", "synth_v3.md"))
     seen_user = []
 
@@ -672,7 +675,7 @@ def best(monkeypatch):
     from mvp import history
     got = []
 
-    def fake(bot, person, topic, now=None, latest=False):
+    def fake(bot, person, topic=None, item=None, latest=False, exclude=()):   # fixer A's signature
         got.append((topic, latest))
         return bot.view(person["library"]).get("y1")
     monkeypatch.setattr(history, "best_watched_video", fake, raising=False)
@@ -794,3 +797,63 @@ def test_no_rule_eval_text_or_rule_phrasing_is_taken_by_the_new_reads(monkeypatc
     taken = [t for t in texts + phr if videoask.read_many(t) is not None or videoask.read_one(t) is not None
              or synth.read_ask_mine(t) is not None]
     assert taken == []
+
+
+# ================================ more of S3: the eval's lessons, by code =========================================
+@pytest.mark.parametrize("text,topic,off", [
+    ("Use the graph editor to shape your easing curves.", "easing in after effects", False),
+    ("Start with easy ease, then pull the handles.", "easing in after effects", False),
+    ("Plan the piece as a storyboard before you open After Effects.", "easing in after effects", True),
+    ("Add a rim light to separate the subject.", "lighting for portraits", False),
+    ("Shoot at f/2.8 for a soft background.", "lighting for portraits", True),
+    ("Feed your starter at the same time every day.", "sourdough", False),   # no thing inside a subject: no check
+])
+def test_s3_a_point_must_name_the_thing_asked_when_the_topic_has_one(text, topic, off):
+    from mvp.synth import off_question
+    assert off_question(text, topic) is off
+
+
+@pytest.mark.parametrize("text,topic,drop", [
+    ("Film photography can be a day in the city or a weekend dump.", "film photography", True),
+    ("Pottery is all about patience and wonky bowls.", "pottery", True),
+    ("Film photography needs a light meter for slide film.", "film photography", False),
+    ("Overexpose colour negative film by one stop.", "film photography", False)])
+def test_s3_a_point_that_says_what_the_topic_is_is_dropped(text, topic, drop):
+    from mvp.synth import _defines_topic
+    assert _defines_topic(text, topic) is drop
+
+
+def test_s3_the_search_next_best_is_read_only_when_fewer_than_3_fitting_items_have_text(fb):
+    ask(fb, "summarize what i've learned about motion design", CHAT)
+    run = fb["bot"].store.q("SELECT steps FROM runs WHERE kind='synth'")[-1]
+    assert "maybe_reads" not in json.loads(run["steps"])   # 5 items name it and have text
+
+
+def test_s3_the_plain_line_says_what_was_read_from_the_items_that_fit(fb):
+    fb["state"]["answers"]["mvp_synth"] = synth_meta
+    out, _ = ask(fb, "summarize what i've learned about after effects", CHAT)
+    assert out.startswith("The titles and descriptions of the 3 videos you watched about after effects say too little "
+                          "to sum up."), out
+
+
+# ================================ guards: what must still go its own way ==========================================
+@pytest.mark.parametrize("text", ["find me a video about easing", "what video should i watch about easing tonight",
+                                  "i watched a video about easing", "remind me to watch easing videos tomorrow",
+                                  "every day send me easing tips", "easing is so hard lol", "the second one",
+                                  "that was a great pick thanks"])
+def test_s_near_variants_are_not_summaries(text, monkeypatch):
+    from mvp import synth
+    monkeypatch.setenv("MVP_VIDEO_ASK", "1")
+    assert synth.read(text) is None and synth.read_ask_mine(text) is None
+
+
+@pytest.mark.parametrize("text", ["no", "not now", "what does it cost", "yes but tomorrow", "ok thanks",
+                                  "what should i watch tonight", "yes remind me at 6", "stop"])
+def test_v2_messages_after_the_note_that_are_not_a_go_ask_nothing(fb, monkeypatch, text):
+    on(monkeypatch)
+    fake = FakeGemini(GOOD).install(monkeypatch)
+    fb["bot"].store.set_last_answer(H, None, None, ["y1"], "easing")
+    ask(fb, "ask the video what easing it uses")
+    fb["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "none_reason": "nothing"}
+    ask(fb, text, CHAT)
+    assert not fake.requests

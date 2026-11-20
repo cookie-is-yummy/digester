@@ -203,7 +203,7 @@ _Q_START = re.compile(r"^(?:what|whats|what's|how|which|why|when|where|who|wheth
                       re.I)
 GO = re.compile(r"^\W*(?:yes|yeah|yep|yup|ok|okay|sure|go(?:\s+ahead)?|go\s+for\s+it|do\s+it|please(?:\s+do)?|"
                 r"ask(?:\s+(?:it|them))?|yes\s+please|ok\s+go(?:\s+ahead)?|sounds\s+good|fine)(?:[\s,.!]+(?:please|go\s+ahead|"
-                r"do\s+it|thanks|thank\s+you))*\W*$", re.I)
+                r"do\s+it))*\W*$", re.I)
 
 
 def read_one(text):
@@ -449,7 +449,7 @@ def offer_line(bot, person, it, question, now):
     if not video_id(it):
         # round 11 fix, B (R2): an Instagram post can't be asked; the YouTube video the person watched on the same
         # topic, if there is one, is offered instead
-        return also_watched(bot, person, question, now) if it.platform != "youtube" else ""
+        return also_watched(bot, person, question, now, item=it) if it.platform != "youtube" else ""
     h = person["handle"]
     bot.store.set_state(f"videoask:{h}", {"item_id": it.id, "question": " ".join(str(question or "").split())[:300],
                                           "at": now.isoformat()})
@@ -484,28 +484,29 @@ def _history_kind(bot, h):
     return (st.get("q") or {}).get("kind")
 
 
-def best_watched(bot, person, topic, now, latest=False):
-    """The YouTube video the person watched that fits `topic` best (the latest one with `latest`), or None.
-    history.best_watched_video is fixer A's (round 11 fix, A); until the merge brings it, nothing is offered."""
-    if not topic:
+def best_watched(bot, person, topic, now, latest=False, item=None):
+    """The YouTube video the person watched that fits `topic` (else the Instagram `item` in view) best, the latest
+    one with `latest`, or None. history.best_watched_video(bot, person, topic=None, item=None, latest=False,
+    exclude=()) is fixer A's (round 11 fix, A); until the merge brings it, nothing is offered."""
+    if not topic and item is None:
         return None
     try:
         from .history import best_watched_video
     except ImportError:
         return None
     try:
-        it = best_watched_video(bot, person, topic, now=now, latest=latest)
+        it = best_watched_video(bot, person, topic=topic or None, item=item, latest=latest)
     except Exception:  # noqa: BLE001 - an offer never breaks the reply it is added to
         return None
     return it if it is not None and video_id(it) else None
 
 
-def also_watched(bot, person, question, now):
-    """The line offering the best-fitting YouTube video the person watched on the topic in view (and the offer kept
-    30 minutes for "ask that one" / "ask the video"), or ""."""
+def also_watched(bot, person, question, now, item=None):
+    """The line offering the best-fitting YouTube video the person watched on the topic in view (or like the
+    Instagram `item` in view), and the offer kept 30 minutes for "ask that one" / "ask the video"; or ""."""
     h = person["handle"]
     latest = _history_kind(bot, h) == "last"
-    it = best_watched(bot, person, topic_in_view(bot, h), now, latest=latest)
+    it = best_watched(bot, person, topic_in_view(bot, h), now, latest=latest, item=item)
     if it is None:
         return ""
     from .compose import display_title
@@ -568,7 +569,7 @@ def ask(bot, person, n, question, now):
             line = also_watched(bot, person, question, now)
             return bot.send(h, ALL_INSTAGRAM + ("\n" + line if line else ""))
     if it is not None and it.platform != "youtube" and on():
-        line = also_watched(bot, person, question, now)
+        line = also_watched(bot, person, question, now, item=it)
         if line:
             return bot.send(h, NOT_YOUTUBE + "\n" + line)
     # ---------- end round 11 fix, B ----------
