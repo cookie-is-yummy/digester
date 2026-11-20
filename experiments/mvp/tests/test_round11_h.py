@@ -109,7 +109,7 @@ def test_h5_that_video_about_is_a_recall_answered_by_code(hist):
     out, calls = ask(hist, "what was that video i watched about color grading", {"intent": "ask", "spec": {
         "when": {"type": "now"}, "content": {"goal": "a video about color grading", "searches": ["color grading"],
                                              "count": 1}}})
-    assert calls == [] and out.startswith("You watched these about \"color grading\"")
+    assert calls == [] and out.startswith("You watched these that mention \"color grading\"")
 
 
 # ================================ what is counted ==================================================================

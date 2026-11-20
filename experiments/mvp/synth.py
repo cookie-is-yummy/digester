@@ -852,11 +852,7 @@ def _window(bot, person, req, today, now=None):
     if newest and start and start > newest:
         bot.note(intent="synth")
         el = Hs.ends_line(rec, plats)
-        # round 11 fix pass 2 (P5b): the hint on a new export once in 6 hours, shared with the history answers
-        hint = now is None or not ({"range", "refresh"} & Hs.said_lately(bot, h, now))
-        if hint and now is not None:
-            Hs.note_said(bot, h, now, ["refresh"])
-        return bot.send(h, f"I can't see {said}: {el[:1].lower() + el[1:]}" + (f" {Hs.REFRESH['en']}" if hint else ""))
+        return bot.send(h, f"I can't see {said}: {el[:1].lower() + el[1:]} {Hs.REFRESH['en']}")
     if oldest and end and end < oldest:
         bot.note(intent="synth")
         sl = Hs.start_line(rec, plats, q)

@@ -208,7 +208,7 @@ def test_s1_ask_video_n_on_an_instagram_source_says_so(fb, monkeypatch):
 # ================================ S2: what was read, and at most 2 points from one item ===========================
 def test_s2_from_what_i_watched_reads_only_what_was_watched_and_says_so(fb):
     out, _ = ask(fb, "summarize what ive learned about motion design from what i watched", CHAT)
-    assert out.startswith("Here's what the videos you watched say about motion design:"), out
+    assert out.startswith("Here's what the videos and reels you watched say about motion design:"), out
     assert "notarealmotion" not in out and "CposFAKE" not in out.replace("Cp2FAKE", "")   # the saved post is out
     assert "Cp1FAKE" not in out
     assert "kept" not in out
@@ -482,7 +482,7 @@ def test_v1_the_direct_form_summarises_then_offers_and_never_asks_by_itself(fb, 
     fake = FakeGemini(GOOD).install(monkeypatch)
     out, calls = ask(fb, "ask my videos about motion design", CHAT)
     assert "mvp_synth" in calls and not fake.requests
-    assert out.startswith("Here's what the videos you watched say about motion design:")
+    assert out.startswith("Here's what the videos and reels you watched say about motion design:")
     assert 'say "ask them" and your question' in out
 
 

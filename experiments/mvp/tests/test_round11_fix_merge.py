@@ -106,7 +106,7 @@ def test_b_a_recall_then_ask_them_asks_the_recalls_own_videos_in_its_order(fb, m
     seen(fb)
     fake = FakeGemini(GOOD).install(monkeypatch)
     out, calls = ask(fb, RECALL)
-    assert calls == [] and out.startswith('You watched these about "after effects", best match first:')
+    assert calls == [] and out.startswith('You watched these that mention "after effects", best match first:')
     assert "You watched it on 1 October 2026." in out and "I recommend" not in out
     assert fb["bot"].store.last_answer(H)["items"] == ["y1"]   # the first is the pick in view
     out, calls = ask(fb, "ask them what easing they use")
@@ -169,7 +169,7 @@ def test_b_a_recall_of_one_video_then_ask_them_asks_that_one(fb, monkeypatch):
     seen(fb)
     fake = FakeGemini(GOOD).install(monkeypatch)
     out, _ = ask(fb, "what was that video i watched about easing")
-    assert out.startswith('You watched this video about "easing":')
+    assert out.startswith('You watched this video that mentions "easing":')
     ask(fb, "ask them what curve they use")
     assert urls(fake) == ["https://www.youtube.com/watch?v=FAKEeas0001"]
 
@@ -229,7 +229,7 @@ def _summary_run(e):
 def test_c_watched_means_what_fix_as_record_counts_and_the_fit_leaves_out_what_only_mentions_it(fitlib):
     out, calls = ask(fitlib, "summarize what ive learned about motion design from what i watched", CHAT)
     assert "mvp_synth" in calls
-    assert out.startswith("Here's what the videos you watched say about motion design:")
+    assert out.startswith("Here's what the videos and reels you watched say about motion design:")
     assert "Late night chat" not in out and "Motion design tip: timing" not in out   # off the topic; a save
     assert _summary_run(fitlib).get("unfit") == 1
 
@@ -347,6 +347,7 @@ def test_a_first_answer_with_one_item_left_by_the_fit_keeps_its_line_and_adds_th
         keep = sorted(h)[:1]
         return {i: h[i] for i in keep}, len(h) - 1, True
     monkeypatch.setattr(history, "fit_hits", one_left)
+    monkeypatch.setattr(history, "few_watched", lambda *a: False)   # round 11 fix pass 2 (P6): the fit is asked for
     out, calls = ask(fb, "when did i first watch videos about motion design")
     assert calls == []
     lines = out.split("\n")

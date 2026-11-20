@@ -860,16 +860,19 @@ def fit_score(view, rec, phrase, iid):
 FIT_WATCHED_MIN = 6   # round 11 fix pass 2 (P6): fewer items of the kind asked hold the word: all shown, "mention"
 
 
-def fit_hits(view, rec, q, h, plats=None):
+def few_watched(view, rec, q, plats):
+    """Round 11 fix pass 2 (P6): fewer than FIT_WATCHED_MIN items of the kind asked hold the topic's words."""
+    return bool(q.topic) and not q.channel and len(hits(view, rec, q, None, None, plats)) < FIT_WATCHED_MIN
+
+
+def fit_hits(view, rec, q, h):
     """(the hits that fit q's topic, how many were left out, whether the fit was used) for a first, last or list
     answer; the word matches unchanged when the fit can't be told. Round 11 fix pass 2 (P6, the orchestrator's
-    decision): when fewer than FIT_WATCHED_MIN items the person watched (or liked, or saved: the kind asked) hold
-    the topic's words, in the platforms asked and at any time, they are all shown and said to "mention" it; the fit
-    (whose centroid is made of every item that holds the words, mostly saves on a real library) is used only above
-    that."""
+    decision): the callers skip it when fewer than FIT_WATCHED_MIN items the person watched (or liked, or saved: the
+    kind asked) hold the topic's words, in the platforms asked and at any time (few_watched): they are all shown and
+    said to "mention" it; the fit (whose centroid is made of every item that holds the words, mostly saves on a real
+    library) is used only above that."""
     if not q.topic or q.channel or not h:
-        return h, 0, False
-    if plats is not None and len(hits(view, rec, q, None, None, plats)) < FIT_WATCHED_MIN:
         return h, 0, False
     fits = [topic_fit(view, rec, x) for x in q.topic]
     if any(f is None for f in fits):
@@ -1093,16 +1096,13 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
         el = ends_line(rec, plats, lang)
         head = (f"No veo {window_noun(q.window, start, end, lang)}: " if es else
                 f"I can't see {window_noun(q.window, start, end, lang)}: ") + el[:1].lower() + el[1:]
-        hint = not ({"refresh", "range"} & set(quiet))   # round 11 fix pass 2 (P5b): the hint once in 6 hours
-        if hint:
-            head += " " + REFRESH[lang]
+        head += " " + REFRESH[lang]   # wholly after the record: the hint always stays (as a summary's, seam d)
         w2 = shifted(q.window, start, end, newest)
         q2 = q.model_copy(update={"window": w2})
         if q.kind == "compare":
             q2 = q.model_copy(update={"kind": "count", "window": w2, "window2": None})
         body, ids, extra = answer(view, q2, today, prof, rec, said_end=True, quiet=quiet)
-        if hint:
-            extra = dict(extra, said=list(extra.get("said") or []) + ["refresh"])
+        extra = dict(extra, said=list(extra.get("said") or []) + ["refresh"])
         lead = "Lo último que veo:" if es else "The latest I can see:"
         return head + "\n\n" + lead + "\n" + body, ids, extra
     W = window_words(q.window, start, end, lang)
@@ -1394,7 +1394,8 @@ def _list(view, rec, q, start, end, plats, W, today, prof):
     h = hits(view, rec, q, start, end, plats)
     if not h:
         return _nothing(q, W, plats), [], {}
-    h, left, fitted = fit_hits(view, rec, q, h, plats)   # round 11 fix, A (R3); fix pass 2 (P6)
+    # round 11 fix, A (R3); fix pass 2 (P6): only with enough watched items that hold the words
+    h, left, fitted = (h, 0, False) if few_watched(view, rec, q, plats) else fit_hits(view, rec, q, h)
     if not h:
         return _nothing_fit(q, W, plats, left), [], {}
     cap = DAY_MAX if q.kind == "on_day" else LIST_MAX
@@ -1432,7 +1433,8 @@ def _first(view, rec, q, start, end, plats, W, today, prof, last=False):
     h = hits(view, rec, q, start, end, plats)
     if not h:
         return _nothing(q, W, plats), [], {}
-    h, left, fitted = fit_hits(view, rec, q, h, plats)   # round 11 fix, A (R3); fix pass 2 (P6)
+    # round 11 fix, A (R3); fix pass 2 (P6): only with enough watched items that hold the words
+    h, left, fitted = (h, 0, False) if few_watched(view, rec, q, plats) else fit_hits(view, rec, q, h)
     if not h:
         return _nothing_fit(q, W, plats, left), [], {}
     key = (lambda i: (-max(h[i]).toordinal(), i)) if last else (lambda i: (min(h[i]), i))

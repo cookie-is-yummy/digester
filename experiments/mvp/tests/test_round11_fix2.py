@@ -450,3 +450,219 @@ def test_p3_near_variants_are_not_asks(f2, monkeypatch, text):
     step(f2, "what was that video i watched about color grading")
     out, calls = step(f2, text)
     assert got.count("video_ask") == 0, (text, got)
+
+
+# ================================ P4: the shapes that still fell to the model, read by code =======================
+P4_READ = [
+    (["remind me what that video i watched about cooking rice was"], "history:recall"),
+    (["can you remind me what that video i watched about ramen broth was"], "history:recall"),
+    (["remind me what that reel i saw about squash and stretch was called"], "history:recall"),
+    (["whens the first time i watched something about color grading"], "history:first"),
+    (["when's the first time i watched cooking videos"], "history:first"),
+    (["more videos in october or september?"], "history:compare"),
+    (["more videos in october or september"], "history:compare"),
+    (["fewer reels this month than last month"], "history:compare"),
+    (["vi mas videos en octubre o en septiembre"], "history:compare"),
+    (["vi mas videos en 2025 o en 2026"], "history:compare"),
+    (["como ha cambiado lo que veo"], "history:timeline"),
+    (["como ha cambiado lo que veo de cocina con el tiempo"], "history:timeline"),
+    (["sum up what my watch history says about color grading"], "synth"),
+    (["summarize what my saves say about color grading"], "synth"),
+    (["what does my watch history say about cooking"], "synth"),
+]
+
+
+@pytest.mark.parametrize("who", ["tester", "operator"])
+@pytest.mark.parametrize("msgs,want", P4_READ, ids=[f"p4_{k:02d}" for k in range(len(P4_READ))])
+def test_p4_the_shapes_are_read_by_code(f2, monkeypatch, msgs, want, who):
+    role(monkeypatch, who)
+    got = notes(f2)
+    out, calls = None, None
+    for m in msgs:
+        out, calls = step(f2, m)
+    assert "mvp_interpret" not in calls, out
+    if want == "synth":
+        assert got[-1] == "synth", out
+    else:
+        assert last_run(f2) == want, out
+
+
+def test_p4_the_remind_me_recall_answers_like_the_recall(f2):
+    out, _ = step(f2, "remind me what that video i watched about cooking rice was")
+    assert out.startswith("You watched this video about \"cooking rice\":") or "Cooking rice on the stove" in out
+    assert "remind" not in out.lower() and "I'll" not in out
+
+
+def test_p4_whens_never_becomes_the_topic(f2):
+    out, _ = step(f2, "whens the first time i watched something about color grading")
+    assert "when's" not in out and "whens" not in out and "14 March 2026" in out
+
+
+def test_p4_the_bare_comparison_answers_first(f2):
+    out, _ = step(f2, "more videos in october or september?")
+    assert out.startswith("More in October 2026:"), out
+
+
+def test_p4_the_spanish_comparison_and_timeline_answer_in_spanish(f2):
+    out, _ = step(f2, "vi mas videos en octubre o en septiembre")
+    assert out.startswith("Más en octubre de 2026") or out.startswith("Más en octubre"), out
+    out, _ = step(f2, "como ha cambiado lo que veo de cocina con el tiempo")
+    assert "cocina" in out and "como" not in out.split("\n")[0].lower().split("cocina")[0][-12:]
+
+
+@pytest.mark.parametrize("first", ["ask the video what segments does it use", "ask them what tool do they use"])
+@pytest.mark.parametrize("text", ["can you email me that", "email me that", "email me this please"])
+def test_p4_email_me_that_after_a_video_answer_emails_the_answer(f2, monkeypatch, first, text):
+    on(monkeypatch)
+    seen(f2)
+    f2["bot"].store.set_state(f"videomany_seen:{H}", "2026-11-20T16:00:00+00:00")
+    step(f2, "what blender videos did i watch this year" if "them" in first else
+         "what was that video i watched about blender bevel")
+    step(f2, first)
+    got = notes(f2)
+    out, calls = step(f2, text)
+    assert "mvp_interpret" not in calls and got and got[-1] == "act_on_last", (out, got)
+    assert "email" in out.lower()
+
+
+def test_p4_email_me_that_after_a_summary_is_read_by_code(f2, monkeypatch):
+    step(f2, "summarize what ive learned about squash and stretch from what i watched")
+    got = notes(f2)
+    out, calls = step(f2, "can you email me that")
+    assert "mvp_interpret" not in calls and got[-1] == "act_on_last", out
+
+
+@pytest.mark.parametrize("text", ["can you email me that", "email me that"])
+def test_p4_email_me_that_after_a_pick_stays_the_interpreters(f2, text):
+    f2["bot"].store.set_last_answer(H, None, None, ["b1"], "a blender video")
+    out, calls = step(f2, text)
+    assert "mvp_interpret" in calls
+
+
+P4_TRAPS = [
+    "remind me to watch the ramen video tomorrow at 7", "remind me what that video i watched about ramen was tomorrow",
+    "remind me what that video i watched about ramen was every friday", "remind me about the cooking video later",
+    "remind me what that video was", "more videos like this", "more videos about cooking please",
+    "more videos in this style or that one", "more cooking please", "less cooking please",
+    "i watched more in 2024 than 2025", "vi un video de cocina", "como estas", "como hago pan",
+    "sum up my day", "sum up what you did for me", "summarize what my rules say about email",
+    "send me a cooking video every friday at 6pm", "find me a video about color grading", "ok thanks",
+    "email me that tomorrow", "email my brother that", "that video was so good",
+]
+
+
+@pytest.mark.parametrize("text", P4_TRAPS)
+def test_p4_near_variants_are_not_taken(text):
+    from mvp import history, synth
+    assert history.read_recall(text, TODAY) is None, text
+    q = history.read(text, TODAY)
+    assert q is None or q.kind not in ("compare", "timeline", "first"), (text, q)
+    assert synth.read(text, TODAY) is None, text
+
+
+@pytest.mark.parametrize("text", ["remind me to watch the ramen video tomorrow at 7", "more videos like this",
+                                  "email me that tomorrow", "every friday send me a cooking video", "lol"])
+def test_p4_near_variants_after_a_history_answer_reach_the_model(f2, text):
+    step(f2, "what was that video i watched about cooking rice")
+    got = notes(f2)
+    out, calls = step(f2, text)
+    assert "mvp_interpret" in calls, (text, out)
+    assert not {"history", "synth", "video_ask", "act_on_last"} & set(got), (text, got)
+
+
+# ================================ P5: wording ======================================================================
+def test_p5a_a_watched_summary_of_reels_says_reels_in_the_lead_and_the_last_line(f2):
+    out, _ = step(f2, "summarize what ive learned about squash and stretch from what i watched")
+    assert out.startswith("Here's what the reels you watched say about squash and stretch:"), out
+    assert "From 2 reels." in out and "posts" not in out and "the videos you watched" not in out
+
+
+def test_p5a_the_words_for_videos_and_reels():
+    from mvp import synth, texts
+
+    class It:
+        def __init__(self, plat, media="reel"):
+            self.platform, self.media, self.kinds, self.dates = plat, media, ["watch"], {}
+    yt, ig, photo = It("youtube", "video"), It("instagram"), It("instagram", "image")
+    assert synth.lead_words("watched", [yt, yt]) == "the videos you watched"
+    assert synth.lead_words("watched", [ig, photo]) == "the reels you watched"
+    assert synth.lead_words("watched", [yt, ig]) == "the videos and reels you watched"
+    assert synth.lead_words("any", [yt, ig]) == "the videos and reels you watched"
+    assert synth.lead_words("saved", [ig]) == "the posts you saved"
+    assert texts.synth_counts([ig, photo], reels=True) == "2 reels"
+    assert texts.synth_counts([yt, ig], reels=True) == "1 video and 1 reel"
+    assert texts.synth_counts([ig], reels=False) == "1 post"
+
+
+def test_p5b_the_new_export_hint_once_in_6_hours_and_the_end_every_time(f2):
+    outs = [step(f2, m)[0] for m in ("what did i watch last week", "how many videos did i watch this month",
+                                     "what did i watch in november", "how many reels did i watch in november")]
+    ends = "Your Instagram export ends on 3 November 2026 and your YouTube export on 12 November 2026"
+    assert REFRESH in outs[0] and all(REFRESH not in o for o in outs[1:]), outs
+    assert all(ends.lower() in o.lower() or "instagram export ends on 3 november 2026" in o.lower() for o in outs), outs
+    out, _ = step(f2, "what did i watch this week")   # wholly after the record: the hint stays, as a summary's
+    assert out.startswith("I can't see this week") and REFRESH in out
+    f2["clock"][0] += timedelta(hours=7)
+    out, _ = step(f2, "what did i watch last week")
+    assert REFRESH in out
+
+
+def test_p5b_a_summary_after_a_history_answer_leaves_the_hint_out_and_the_other_way(f2):
+    out1, _ = step(f2, "what did i watch last week")
+    out2, _ = step(f2, "summarize what i watched this month about blender")
+    assert REFRESH in out1 and REFRESH not in out2
+
+
+def test_p5c_a_slang_form_of_the_topic_word_is_not_in_a_summary(f2):
+    out, _ = step(f2, "summarize what i watched last month about cooking")
+    assert "Bro is cooked" not in out and url("kx") not in out
+    run = f2["bot"].store.q("SELECT steps FROM runs WHERE kind='synth' ORDER BY id DESC LIMIT 1")[0]
+    assert json.loads(run["steps"]).get("other_form_unfit") == 1
+
+
+def test_p5c_without_vectors_other_forms_count_as_before(env, tmp_path, monkeypatch):
+    from mvp import ytinfo
+    lib = write_library(tmp_path / "novec", vectors=False)
+    bot = env["bot"]
+    bot.store.x("UPDATE people SET library=? WHERE handle=?", (str(lib), H))
+    bot.views.clear()
+    bot.pool = WordPool(str(lib))
+    bot.max_per_minute = None
+    monkeypatch.setenv("MVP_F2_TEST_KEY", "fake-key")
+    bot.yt = ytinfo.YouTubeInfo(bot.store, fetch=fake_videos, key_env="MVP_F2_TEST_KEY")
+    env["state"]["answers"]["mvp_extract"] = fake_extract
+    env["state"]["answers"]["mvp_synth"] = fake_synth
+    env["clock"][0] = datetime(2026, 11, 20, 17, 0, tzinfo=UTC)
+    out, _ = step(env, "summarize what i watched last month about cooking")
+    run = bot.store.q("SELECT steps FROM runs WHERE kind='synth' ORDER BY id DESC LIMIT 1")[0]
+    assert "other_form_unfit" not in json.loads(run["steps"])
+
+
+def test_p5c_the_word_forms_of_the_history_answers():
+    from mvp import history
+    assert history.holds("Cooking rice", "cooking") and not history.holds("Bro is cooked", "cooking")
+
+
+# ================================ P6: few watched items: all shown, "mention" =====================================
+def test_p6_a_recall_with_few_watched_videos_shows_them_all_and_says_mention(f2):
+    out, _ = step(f2, "what was that video i watched about color grading")
+    assert out.startswith('You watched these that mention "color grading", best match first:'), out
+    assert all(url(f"c{k}") in out for k in range(3)) and "Nothing you watched" not in out
+
+
+def test_p6_a_first_answer_with_few_watched_videos_shows_them_all(f2):
+    out, _ = step(f2, "when did i first watch color grading videos")
+    assert out.startswith('The first video you watched that mentions "color grading" was on 14 March 2026:'), out
+    assert "(4 in all.)" in out and "left them out" not in out
+
+
+def test_p6_with_six_or_more_watched_the_fit_is_used_and_says_about(f2):
+    out, _ = step(f2, "what was the last cooking video i watched")
+    assert out.startswith('The last video you watched about "cooking" was on 23 October 2026:'), out
+    out, _ = step(f2, "what was that video i watched about cooking")
+    assert out.startswith('You watched these about "cooking", best match first:'), out
+
+
+def test_p6_the_threshold_is_six():
+    from mvp import history
+    assert history.FIT_WATCHED_MIN == 6 == history.FIT_MIN

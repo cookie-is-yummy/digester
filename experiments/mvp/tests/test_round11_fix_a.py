@@ -105,7 +105,7 @@ def test_r1_thirty_traps_are_never_read_as_a_recall(text):
 def test_r1_the_founders_case_gives_the_watched_videos_best_first_with_dates_and_cards(hist):
     out, calls = ask(hist, "what was that video i watched about color grading")
     assert calls == []
-    assert out.startswith("You watched these about \"color grading\", best match first:\n"
+    assert out.startswith("You watched these that mention \"color grading\", best match first:\n"
                           "1. Color grading a night scene by Grade Lab. You watched it on 8 October 2026.\n"
                           "https://www.youtube.com/watch?v=vy013\n"
                           "2. Color grading: matching two cameras by Grade Lab. You watched it on 30 October 2026.\n"
@@ -125,10 +125,10 @@ def test_r1_youtube_comes_first_and_a_watched_reel_only_when_asked_or_nothing_on
     out, _ = ask(hist, "what was that video i watched about sculpt")
     assert "Blender sculpting for beginners" in out and "speed sculpt reel" not in out
     out, _ = ask(hist, "what was that reel i watched about sculpt")
-    assert out.startswith("You watched this reel about \"sculpt\":\nBlender speed sculpt reel by @pixelforge.ig.")
+    assert out.startswith("You watched this reel that mentions \"sculpt\":\nBlender speed sculpt reel by @pixelforge.ig.")
     # a paper plane is only a watched reel: said so, then the reel
     out, _ = ask(hist, "what was that video i watched about paper planes")
-    assert out.startswith("No YouTube video you watched fits \"paper planes\". You watched this reel about")
+    assert out.startswith("No YouTube video you watched fits \"paper planes\". You watched this reel that mentions")
     assert "Paper plane fold" in out
 
 
@@ -188,7 +188,7 @@ def test_r1_the_first_is_in_view_for_a_question_and_for_ask_the_video(hist, tmp_
     hist["bot"].pool = AllPool(str(lib))
     monkeypatch.setenv("MVP_VIDEO_ASK", "1")
     out, _ = ask(hist, "what was that video i watched about grading on a cheap monitor")
-    assert out.startswith("You watched these about \"grading cheap monitor\", best match first:\n1. Grading log "
+    assert out.startswith("You watched these that mention \"grading cheap monitor\", best match first:\n1. Grading log "
                           "footage on a cheap monitor")
     hist["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "intro": ""}
     out, calls = ask(hist, "what did that video say about the settings to use", {
@@ -388,7 +388,8 @@ def test_r4_the_friends_line_and_the_range_are_said_once_in_six_hours(hist):
     assert FRIENDS not in out
     # a window that reaches the export's end always says so
     out, _ = ask(hist, "how many videos did i watch in october")
-    assert "your YouTube export on 30 October 2026, so I can't see after that." in out and REFRESH in out
+    # round 11 fix pass 2 (P5b): the end always, the hint on a new export once in 6 hours (it came with the range)
+    assert "your YouTube export on 30 October 2026, so I can't see after that." in out and REFRESH not in out
     out, _ = ask(hist, "what did i watch last week")
     assert out.startswith("I can't see the week of 9 to 15 November 2026:")
     # an all-time "last" still says where the record ends (it changes the answer)
@@ -410,7 +411,7 @@ def test_r4_spanish_too(hist):
 def test_r4_the_notes_are_the_persons_state_and_go_with_delete_my_data(hist):
     ask(hist, "which channels do i watch the most")
     st = hist["bot"].store
-    assert set(st.get_state(f"histnotes:{H}")) == {"friends", "range"}
+    assert set(st.get_state(f"histnotes:{H}")) == {"friends", "range", "refresh"}   # fix pass 2 (P5b): "refresh" too
     st.delete_all(H) if hasattr(st, "delete_all") else None
     if hasattr(st, "delete_all"):
         assert st.get_state(f"histnotes:{H}") is None

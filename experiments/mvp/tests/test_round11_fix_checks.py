@@ -317,9 +317,9 @@ MESSAGES = [
     (["what was that video i watched about white balance"], "R"),
     (["what was that clip i saw about luts"], "R"),
     (["yo whats that video i watched about the cooking simulator"], "R"),
-    (["remind me what that video i watched about chickpeas was"], "model"),        # "remind" never makes a recall
+    (["remind me what that video i watched about chickpeas was"], "R"),   # round 11 fix pass 2 (P4): was "model"
     (["when did i first start watching cooking videos"], "H:first"),
-    (["whens the first time i watched something about color grading"], "model"),
+    (["whens the first time i watched something about color grading"], "H:first"),   # fix pass 2 (P4): was "model"
     (["what was the last cooking video i watched"], "H:last"),
     (["first motion design video i watched"], "H:first"),
     (["last video i watched about after effects"], "H:last"),
@@ -330,7 +330,7 @@ MESSAGES = [
     (["wat was the frist cooking vid i watched"], "H:first"),
     (["did i watch more in 2024 or 2025"], "H:compare"),
     (["did i watch more cooking in 2025 or 2026"], "H:compare"),
-    (["more videos in october or september?"], "model"),
+    (["more videos in october or september?"], "H:compare"),   # round 11 fix pass 2 (P4): was "model"
     (["did i watch less in 2023 than 2024"], "H:compare"),
     (["vi mas videos en 2024 o en 2025?"], "H:compare"),
     (["cuantos videos vi en 2025 comparado con 2024"], "H:compare"),
@@ -341,7 +341,7 @@ MESSAGES = [
     (["how many color grading videos did i watch each month this year"], "H:timeline"),
     (["cuantos videos vi cada año"], "H:timeline"),
     (["how many videos about cooking did i watch per month in 2026"], "H:timeline"),
-    (["como ha cambiado lo que veo de cocina con el tiempo"], "model"),
+    (["como ha cambiado lo que veo de cocina con el tiempo"], "H:timeline"),   # fix pass 2 (P4): was "model"
     (["how many videos did i like on youtube"], "H:count"),
     (["que me gusto en octubre"], "H:list"),
     (["how many reels have i liked"], "H:count"),
@@ -351,7 +351,7 @@ MESSAGES = [
     (["summarize what i learned about motion design from my saves"], "synth:saved"),
     (["summarize what ive learned about motion design"], "synth"),
     (["what do the videos i watched say about easing in after effects"], "synth:watched"),
-    (["sum up what my watch history says about color grading"], "model"),
+    (["sum up what my watch history says about color grading"], "synth:watched"),   # fix pass 2 (P4): was "model"
     (["what have i learned about cooking"], "synth"),
     (["tell me what ive learned about color grading from my saves"], "synth:saved"),
     (["what was that video i watched about easing", "what did that video say about the graph editor"], "follow"),
@@ -369,7 +369,7 @@ MESSAGES = [
      "email"),
     (["what was that video i watched about color grading", "ask them", "yes", "email it to me"], "email"),
     (["which video did i watch about anticipation", "ask the video what the main move is", "ok",
-      "can you email me that"], "model"),
+      "can you email me that"], "email"),   # round 11 fix pass 2 (P4): was "model"
 ]
 assert len(MESSAGES) == 70
 WATCHED = {iid for iid, _, _, _, _, evs, _ in rows() if any(k == "watch" for k, _ in evs)}
@@ -469,7 +469,7 @@ def test_a_title_with_follow_through_is_shown_not_a_neutral_name(fc):
 
 def test_abt_is_about_in_a_recall(fc):
     out, _ = ask(fc, "wat was that vid i watched abt skin tones")
-    assert out.startswith('You watched this video about "skin tones":')
+    assert out.startswith('You watched this video that mentions "skin tones":')
 
 
 def test_reels_are_instagram_in_a_history_question(fc):
@@ -561,7 +561,7 @@ def test_ask_them_with_one_video_answered_says_watched_it(fc, monkeypatch):
 def test_r1_the_recall_lists_watched_videos_with_their_days_and_never_a_save(fc):
     out, calls = ask(fc, "what was that video i watched about color grading")
     assert calls == []
-    assert out.startswith('You watched these about "color grading", best match first:\n'
+    assert out.startswith('You watched these that mention "color grading", best match first:\n'
                           "1. Color grading skin tones in Resolve by Lumen Lab. You watched it on 14 March 2026.\n"
                           + url("c1") + "\n2. Color grading a rainy street at night by Lumen Lab. You watched it 2 "
                           "times, last on 10 September 2026.\n" + url("c2"))
@@ -638,8 +638,9 @@ def test_s3_points_that_only_say_what_the_items_are_give_the_plain_line_and_noth
     fc["state"]["answers"]["mvp_synth"] = meta
     on(monkeypatch)
     out, _ = ask(fc, "summarize what ive learned about motion design from what i watched", CHAT)
-    assert out.startswith("The titles, descriptions and captions of the 4 videos you watched about motion design say "
-                          "too little to sum up.\nThe best 3:")
+    # round 11 fix pass 2 (P5a): one word for one thing, the watched reel is a reel
+    assert out.startswith("The titles, descriptions and captions of the 3 videos and 1 reel you watched about motion "
+                          "design say too little to sum up.\nThe best 3:")
     for s in ("tutorial is for beginners", "Several videos", "explain the basics", "A channel that"):
         assert s not in out
     assert "say \"ask them\" and your question" in out
