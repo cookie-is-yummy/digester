@@ -133,7 +133,18 @@ def caption_title(it, words=8):
             continue
         line = re.split(r"(?<=[.!?])\s", line, maxsplit=1)[0]
         parts = [w for w in line.split() if not w.startswith(("#", "@", "http"))]
-        if len(parts) < 2 or PROMO_TITLE.search(line) or NOT_DETAIL.search(line) or UNSAFE_TEXT.search(line):
+        # the check of round 11's fix pass 2: a YouTube title's own hashtags ("Beggar guitar in fire #guitar
+        # #shortsfeed") are not promotion; they are left out of the name, and the rest is the name (before, any "#" made
+        # 30% of the founder's YouTube videos "A video from <channel>", which fix pass 2 never offers or asks)
+        promo = re.sub(r"(?<![\w#])#\w+", " ", line) if it.platform == "youtube" else line
+        if it.platform == "youtube" and "#" in line:   # the name ends where the title's tags start
+            parts = []
+            for w in line.split():
+                if w.startswith("#") and len(parts) >= 2:
+                    break
+                if not w.startswith(("#", "@", "http")):
+                    parts.append(w)
+        if len(parts) < 2 or PROMO_TITLE.search(line) or NOT_DETAIL.search(promo) or UNSAFE_TEXT.search(line):
             continue
         out = " ".join(parts[:words]).strip(" -:|,(")
         if len(parts) > words:

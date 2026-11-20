@@ -706,3 +706,31 @@ def test_a_window_wholly_after_the_record_keeps_the_hint_every_time(fk):
     for _ in range(3):
         out, _ = step(fk, "what did i watch yesterday")
         assert out.startswith("I can't see Thursday 19 November 2026") and REFRESH in out, out
+
+
+# ================================ 6. a YouTube title with its own hashtags is a title ===============================
+@pytest.mark.parametrize("caption,name", [
+    ("Beggar banjo in the rain #banjo #shortsfeed", "Beggar banjo in the rain"),
+    ("Banjo Translator #banjo #drums #musician# bandhumor", "Banjo Translator"),
+    ("#banjo #3d", None),                        # only tags: still no title of its own
+    ("Banjo", None),                             # one word: as before
+    ("Banjo picks with @someone", None),         # a handle: as before
+    ("Banjo strings, link in bio #banjo", None),  # promotion: as before
+])
+def test_a_youtube_title_with_hashtags_is_its_name(caption, name):
+    from mvp.compose import NEUTRAL_TITLES, display_title
+    from mvp.libview import Item
+    it = Item({"id": "y1", "platform": "youtube", "source_url": "https://www.youtube.com/watch?v=FAKEY1xxxxx",
+               "caption": caption, "interaction_kinds": ["watch"],
+               "platform_data": {"owner_name": "Banjo Hall", "video_id": "FAKEY1xxxxx"}})
+    got = display_title(it)
+    assert (got == name) if name else got.startswith(NEUTRAL_TITLES), got
+
+
+def test_an_instagram_caption_with_hashtags_keeps_its_old_name():
+    from mvp.compose import display_title
+    from mvp.libview import Item
+    it = Item({"id": "i1", "platform": "instagram", "source_url": "https://www.instagram.com/reel/Ci1FAKEX/",
+               "caption": "banjo tip: tune down #banjo", "interaction_kinds": ["save"],
+               "platform_data": {"owner_handle": "bh"}})
+    assert display_title(it).startswith("A post from")
