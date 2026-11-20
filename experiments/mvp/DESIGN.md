@@ -3842,3 +3842,96 @@ by no read (the round 11 tests). Nothing in the docs changed and no prompt chang
 a recommendation and may bring a saved post. The first-time note asks for "ask the video" twice when no offer was
 shown. Gemini's points are not checked against the video and come in its own casing. "What have I saved this month"
 stays the recent answer (slice H's choice). Spanish topic words match only Spanish titles.
+
+### 18.LA The fixes after the live check, part A: history answers (round 11 fix, A; `history.py`, `tests/test_round11_fix_a.py`)
+
+The orchestrator's live check of build 02f3581 (19 Nov, outside git) found R1 to R8; this part fixes R1, R3 to R7 and
+the history side of R2 and R8 (part B, in `synth.py` and `videoask.py`, makes the offers). Code only: no prompt, no
+model call added, no contract change, nothing in `docs/`. Every reply was reproduced first on the planted made-up
+library (`tests/h_library.py`) with the fakes; the new tests fail on 02f3581 except the guards and the behaviour that
+must not change.
+
+- **R1, recall.** Before: "what was that video i watched about color grading" went to the interpreter and the composer:
+  "I recommend <a saved post> ... because ...". Now `read_recall` (inside hook 8h, `history_reads`, after the follow-ups
+  and before the history read; no new hook) reads the shapes "what was that video i watched about X", "what's that
+  video where ...", "which video did i watch about X", "find the video i watched on X last month", "i watched something
+  about X a while ago, what was it" and "that <channel> video about X" (only when <channel> is a channel of the
+  library); never with a reminder, a schedule word, an action on it ("add it", "email me"), "should i", "recommend",
+  "summarize", "ask the video", a verdict on it ("was so good", "was too long") or a question to the bot. "find me a
+  video about X" is not read (it stays a pick), nor "what was that video about X" with no "i watched" ("that video"
+  may be a pick the bot showed). `recall_answer`: the items the person WATCHED (watch or view events; YouTube first,
+  watched reels when the message says reel or post or nothing on YouTube fits), ordered by how much of the words the
+  title holds (the whole phrase, all its words, one of them; one word only when nothing holds them all, and only in the
+  engine's top 50), then the engine's own ranking of the words (one search through `retrieve.ranked`, cached for the
+  library build; skipped over a cap or when it fails), then the R3 vectors; at most 3, each "You watched it on 8
+  October 2026." ("You watched it 3 times, last on ...") with its card; never "I recommend", never "because". A
+  window ("last month", "in september") and a channel narrow it; a window that reaches an export end says it. The
+  first is the pick in view (`last_answer` holds it alone), so "what did that video say about X" gets the honest line
+  naming it and, with `MVP_VIDEO_ASK=1`, the offer, and "ask the video" asks it; "the second one" reads the recall's
+  own list (the history state). Nothing watched fits: `Nothing you watched fits "X". You saved one about it: <title>
+  (saved on <day>).` with its card (a like when no save fits), else `Nothing you watched or saved fits "X". Try other
+  words for it, or ask "find me a video about X".` Kept like any history answer (run kind `history`, steps kind
+  `recall`, the form's shape only, never the words; deliveries; the kept answer, so "email it to me" works). 30 made-up
+  recall messages and 31 traps were written before the code (in the test file): 30 of 30 answered by code, 0 of 31
+  traps read.
+- **R2, R8 (the history side).** `best_watched_video(bot, person, topic=None, item=None, latest=False, exclude=())`
+  returns the libview `Item` of the YouTube video the person watched that fits best, or None: with `topic`, the
+  watched videos whose title holds all its words (R3's fit when the library has vectors), the best fit, or the latest
+  with `latest=True` ("the last blender video"); with `item` (an Instagram post or reel in view), the watched videos
+  whose title shares a word of 4 letters or more with its caption, then the closest by the stored vectors (cosine at
+  least `ITEM_NEAR`, 0.5), or without vectors two shared words or one of 5 letters or more. `history_topic(bot,
+  handle, now)` gives the topic words of the history answer or recall still in view (6 hours), for the offer after a
+  history list of reels. No model call, no search.
+- **R3, topics by the engine's own measure.** Before: "when did i first start watching cooking videos" showed a talk-show
+  clip first because its title says "cooking". The engine's search needs its query rewrite (a model call) and its
+  loaded process (23 s cold on the real library), so it is not used for a code answer; instead the library's own item
+  vectors are read (the ones the engine ranks with: `corpus/emb/oai3l_1024_q8` of a demo library, or
+  `corpus/emb/oai3l_1024` of a research root): the topic's vector is the trimmed centroid (the lowest quarter left out,
+  twice) of every item of the record whose text holds the word, and an item fits when its own vector is within 0.08 of
+  the median (`topic_fit`, `fit_hits`). First, last and list answers with a topic then show only fitting items, say
+  "about" instead of "that mention", and add `(94 in all. 19 more mention "cooking" but don't seem to be about it, so
+  I left them out.)`; a window whose matches all fail says `you watched no videos about "cooking". (1 more ...)`.
+  Counts and timelines stay word counts and keep "mention". Fewer than 6 matches with vectors, no vectors, or a
+  channel: unchanged. Measured on the real library (my own reading of the first 5 shown, counts only; 10 topics: 7
+  from what the founder watches, the everyday words cooking and coffee, and "running"): before 39 of 50 fit the
+  topic, after 41 of 50 (cooking 3 to 4, workout 4 to 5; the talk-show clip is gone). Not fixed: a word whose most
+  common use in the record is another topic ("running": mostly speedrunning videos, 0 of 5 before and after; "coffee":
+  mostly news stories that mention it, 2 of 5) and a gaming video titled after the topic: the vectors of titles alone
+  cannot tell. 0.2 s a topic (cached after), no model call. The word test (`holds`) now runs a substring check before
+  `contains_word` (the same answer, tested on 225 pairs; ten times faster over the record). "after effects" is one
+  topic (it was read as "effects").
+- **R4.** "Posts from friends are not counted." and the all-time range paragraph ("Your ... history here runs from ...
+  For newer history, ...") are said in the first history answer of a stretch of 6 hours (state `histnotes:<handle>`,
+  removed by "delete my data") and then left out; a window that reaches or passes an export end always says where it
+  ends, and an all-time answer about the latest items ("the last ... video") says where the record ends in one line.
+- **R5.** `More in 2025: 24,004 videos, against 13,458 in 2024 (10,546 more).` ("Fewer in ..." when the question says
+  less or fewer; Spanish `Más en 2025: ..., frente a ... (N más).`); the same count keeps "the same". Spanish
+  "comparado con" now compares (it was searched as a topic).
+- **R6.** A timeline starts at the first year (or month) with a count and says `None before 2023.` when it cut leading
+  zeros (a topic's timeline over a record that starts years earlier); the span is measured from there, so a short one
+  goes by month.
+- **R7.** A ranking's and a channel count's creators are "accounts and channels" when Instagram is among them,
+  "accounts" for Instagram alone, "channels" for YouTube alone (Spanish "cuentas y canales", "cuentas").
+
+**Live (the real library read-only, a scratch home, a fresh person, setting off; replies read in the scratchpad only).**
+R1's message gave 2 watched YouTube videos about the topic with their days and cards, no "I recommend" (23.7 s: the
+engine's first load); "what did that video say about the settings to use" then gave the honest line naming the first
+(through the interpreter, as before); R3's message gave a recipe as the first video about cooking (the talk-show clip
+left out, with the count of the 19 left out), 0.6 s; R5 answered first, 0.2 s; R6's year list starts at the first year
+watched; R4: the friends line and the range once, on the first history answer. $0.006 (the follow-up's interpreter and
+composer; the engine's search was already cached), plus $0.000002 for embedding the 10 topic words once to compare the
+engine's bare-word vectors while measuring R3 (they did no better: 40 of 50).
+
+**Changed on purpose** (each in the round 11 tests): `test_round11_h.py` H1 "(6 accounts and channels in all.)" (R7),
+the blender timeline by month from November 2025 with "None before November 2025." and the this-year one from
+September 2026 (R6), "More in October 2026: 16 videos, against 10 in September 2026 (6 more)." (R5), H5 now a recall
+by code (R1); `test_round11_checks.py` "(9 accounts and channels in all.)" (R7). **Checks:** full suite 0 failed,
+demo 10, dry self-test 136 of 136, `probe_same` byte-equal, the development phrasing set by code 73 right and 1 wrong
+(d007) for the helper lines and 1 of 40 `none` lines taken (d132, as before), the 159 rule texts and 123 phrasings
+taken by no read (with the recall), `test_round11_checks.py`'s 60 traps still not taken.
+
+**Not done.** R2's and R8's offer lines themselves (part B calls `best_watched_video`). Recall is English only. The
+item-to-video match of R2 (`ITEM_NEAR`) was read on 12 random saved Instagram posts of the real library only (offline,
+my own reading): 10 of 12 gave a watched video on the same topic, 2 a video that only shares a word. A recall reads at most
+14 words; a description with no word of the title ("the one where the guy cries at the end") finds only what the
+engine's top 50 holds with one of its words. Topics whose word means something else in most of the record (R3 above).

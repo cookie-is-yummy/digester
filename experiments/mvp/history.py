@@ -1781,10 +1781,11 @@ RECALL = [
                r"name\s+of\s+|the\s+title\s+of\s+)?|which\s+(?:one\s+)?(?:was|is)\s+|find\s+(?:me\s+)?|"
                r"look\s+up\s+|where(?:'s|\s+is)\s+|show\s+me\s+|get\s+me\s+|what\s+was\s+)?(?:that|the|this)\s+"
                + _KIND + r"\s+(?:that\s+|which\s+)?" + _SAW + r"\b(?P<rest>.*)$"),
-    # "what's that video where ...", "what was that video about X", "remember that reel with the ..."
+    # "what's that video where ...", "remember that reel with the ..." ("what was that video about X", with no "i
+    # watched", stays the interpreter's: "that video" may be a pick the bot showed)
     re.compile(_LEAD + r"(?:what(?:'s|\s+is|\s+was)\s+(?:the\s+name\s+of\s+)?|which\s+(?:one\s+)?was\s+|"
                r"(?:do\s+you\s+)?(?:remember|recall)\s+|find\s+(?:me\s+)?)that\s+" + _KIND +
-               r"\s+(?P<prep>where|with|about|on|of|from|when)\s+(?P<rest>.+)$"),
+               r"\s+(?P<prep>where|with|when)\s+(?P<rest>.+)$"),
     re.compile(_LEAD + r"what(?:'s|\s+is|\s+was)\s+the\s+" + _KIND + r"\s+(?P<prep>where|with|when)\s+(?P<rest>.+)$"),
     # "which video did i watch about X" (one video: "which videos did i watch ..." is a history list)
     re.compile(_LEAD + r"which\s+(?P<kind>video|vid|reel|clip|post|short|tutorial)\s+(?:was\s+it\s+(?:that\s+)?)?"

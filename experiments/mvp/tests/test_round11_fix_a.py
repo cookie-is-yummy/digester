@@ -50,7 +50,7 @@ RECALLS = [
     ("what was that video i watched about blender lighting", "Blender lighting basics"),
     ("do you remember that video i watched about strumming patterns?", "Strumming patterns"),
     ("what's the name of that video i watched about sourdough", "Nothing you watched or saved fits \"sourdough\""),
-    ("find that video about the multimeter", "A beginner multimeter guide"),
+    ("find that video where they explain a multimeter", "A beginner multimeter guide"),
     ("what was that clip i saw about bread", "Sunday bread bake"),
     ("which vid did i watch about barre chords", "Barre chords, week"),
     ("remember the video i saw on geometry nodes", "Blender geometry nodes intro"),
@@ -85,7 +85,7 @@ RECALL_TRAPS = [
     "what video should i watch about color grading", "email me that video i watched about color grading",
     "the video i watched about bread was so good", "show me videos about knife skills",
     "what was that video you sent me about pasta", "delete that video i watched about soldering",
-    "what's that video called",
+    "what's that video called", "what was that video about spreadsheet shortcuts",
 ]
 
 

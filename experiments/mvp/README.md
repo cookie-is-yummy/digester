@@ -380,6 +380,23 @@ each one the code answers.
   video of the library.
 <!-- end the merge of round 11 -->
 
+<!-- round 11 fix, A -->
+## History answers after the live check (round 11 fix, A; DESIGN.md section 18.LA)
+
+- "what was that video i watched about X" (and "what's that video where ...", "which video did i watch about X",
+  "find the video i watched on X last month", "that <channel> video about X") is a recall by code: up to 3 videos you
+  watched, best match first, each with the day you watched it and its card; the first is in view for "what did it say
+  about ..." and "ask the video". Nothing watched fits: said, with the saved one. "find me a video about X" is still a
+  pick.
+- First, last and list answers with a topic show only what fits it by the library's own vectors and say "about"
+  (counts still say "mention"); "did i watch more in X or Y" answers first; timelines start at the first year with a
+  count; "accounts and channels" when Instagram is counted; the friends line and the all-time range once every 6
+  hours.
+- For the offers after an Instagram post in view: `history.best_watched_video(bot, person, topic=None, item=None,
+  latest=False)`.
+- Offline checks: `python3 -m pytest -q mvp/tests/test_round11_fix_a.py` (93 tests).
+<!-- end round 11 fix, A -->
+
 <!-- round 11, slice Q -->
 ## Ask the video itself (round 11, slice Q, DESIGN.md section 18.Q; amendment A-017, Proposed; off by default)
 
