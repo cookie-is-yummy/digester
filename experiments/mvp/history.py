@@ -2051,6 +2051,7 @@ def recall_fitted(view, rec, r, platforms, how=("watch", "view")):
 
 def recall_items(bot, person, r, now, platforms=None, how=("watch", "view"), limit=RECALL_MAX, rank=None):
     """The items for a recall, best first: [(item, level, [dates])]. `how`: the event kinds counted."""
+    from .compose import NEUTRAL_TITLES, display_title
     tz = person.get("timezone") or "UTC"
     view = bot.view(person["library"])
     rec = record(view, tz)
@@ -2078,7 +2079,10 @@ def recall_items(bot, person, r, now, platforms=None, how=("watch", "view"), lim
         if fit is not None and iid in fit[0] and fit[0][iid] < fit[1]:
             continue   # R3: it holds the words, but its vector says it is about something else
         score = fit[0].get(iid, 0.0) if fit else 0.0
-        out.append((it, lv, ds, (-lv, rank.get(iid, 10 ** 9), -score, -max(ds).toordinal(), iid)))
+        # the check of fix pass 2: a video with a title of its own comes before one shown as "A video from <channel>"
+        # (the person can't tell what that one is, and it is never asked unless named by its number)
+        untitled = display_title(it).startswith(NEUTRAL_TITLES)
+        out.append((it, lv, ds, (-lv, untitled, rank.get(iid, 10 ** 9), -score, -max(ds).toordinal(), iid)))
     out.sort(key=lambda x: x[3])
     if out and out[0][1] >= 2:   # one that holds only one of the words is shown only when nothing holds them all
         out = [x for x in out if x[1] >= 2]

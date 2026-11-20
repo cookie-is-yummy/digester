@@ -734,3 +734,12 @@ def test_an_instagram_caption_with_hashtags_keeps_its_old_name():
                "caption": "banjo tip: tune down #banjo", "interaction_kinds": ["save"],
                "platform_data": {"owner_handle": "bh"}})
     assert display_title(it).startswith("A post from")
+
+
+def test_a_recall_puts_a_video_with_a_title_before_one_without(fk, monkeypatch):
+    fake = on(monkeypatch)
+    seen(fk)
+    out, _ = step(fk, "what was that video i watched about blender")   # b2 (tags only) is the latest YouTube one
+    assert out.index("Blender bevel modifier basics") < out.index("A video from Mesh Yard"), out
+    step(fk, "ask the video what tool do they use")
+    assert [FakeGemini.sent_url(r) for r in fake.requests] == [url("b1")]
