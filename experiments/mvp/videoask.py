@@ -32,7 +32,7 @@ from datetime import datetime, timedelta
 
 from . import config
 
-PROMPT_VERSION = "video_ask_v1"
+PROMPT_VERSION = "video_ask_v2"   # round 11 fix pass 2 (P1); video_ask_v1 is kept as it was measured
 PURPOSE = "mvp_video_ask"
 OFFER_MINUTES = 30
 MAX_POINTS = 5
@@ -76,11 +76,23 @@ def per_day():
     return _int_env("MVP_VIDEO_ASK_PER_DAY", 5)
 
 
-def prompt():
-    if "t" not in _PROMPT:
-        with open(os.path.join(config.HERE, "prompts", f"{PROMPT_VERSION}.md"), encoding="utf-8") as f:
-            _PROMPT["t"] = f.read()
-    return _PROMPT["t"]
+def prompt(version=None):
+    """The system prompt of `version` (PROMPT_VERSION when None). Round 11 fix pass 2: the evaluation
+    (eval_videoask.py) asks the same videos with the earlier version too."""
+    version = version or PROMPT_VERSION
+    if version not in _PROMPT:
+        with open(os.path.join(config.HERE, "prompts", f"{version}.md"), encoding="utf-8") as f:
+            _PROMPT[version] = f.read()
+    return _PROMPT[version]
+
+
+def request_for(question, vid, clip=None, version=None):
+    """The one request sent to Google: the system prompt, the video's public link (clipped at `clip` seconds when
+    given) and "Question: <the person's words>". Nothing else (no title, channel, description or caption)."""
+    from .llm import ai
+    return ai.youtube_video_request(prompt(version), "Question: " + " ".join(question.split())[:300], watch_url(vid),
+                                    end_s=clip, media_resolution="MEDIA_RESOLUTION_LOW", max_tokens=MAX_OUT,
+                                    response_schema=SCHEMA, thinking_budget=0)
 
 
 # ---------- what the person reads ----------
@@ -111,7 +123,7 @@ UNAVAILABLE = ("Google couldn't open that video (it may be private, unlisted, re
 BUSY = "Google's limit for asking videos is used up for now. Try again later."
 FAILED = "Google didn't answer that one. Nothing was kept; try again in a bit."
 REFUSED = "Google's model wouldn't answer about that video, so I have nothing from it. Nothing was kept."
-NOT_SAID = "it doesn't seem to say anything about that."
+NOT_SAID = "doesn't seem to cover"   # round 11 fix pass 2 (P1): "... doesn't seem to cover easing."
 NONE_KEPT = "nothing in the model's answer passed my checks, so I'm not passing it on."
 CLIPPED = "It's {length} long, so I asked about its first {mins} minutes only."
 CLIPPED_UNKNOWN = "I don't know its length, so I asked about its first {mins} minutes only."
@@ -328,12 +340,12 @@ def _names_other(says, titles):
     return any(w[i:i + n] in titles for n in range(3, 13) for i in range(0, max(0, len(w) - n) + 1))
 
 
-def check_points(out, length_s, clip_s, titles=None):
+def check_points(out, length_s, clip_s, titles=None, question=None, title=None):
     """(kept points [(seconds, text)], counts of what was left out by reason). The model's form is data: only its
     'at' and 'says' strings are read, as strings. `titles`: other videos' titles (other_titles), never named."""
     from .compose import ASSISTANT_NOTE
     pts = (out or {}).get("points") if isinstance(out, dict) else None
-    kept, dropped = [], {"time": 0, "other": 0, "acting": 0, "empty": 0, "repeat": 0}
+    kept, dropped = [], {"time": 0, "other": 0, "acting": 0, "empty": 0, "repeat": 0, "about_video": 0}
     end = min(x for x in (length_s, clip_s) if x) if (length_s or clip_s) else None
     for p in pts if isinstance(pts, list) else []:
         if len(kept) >= MAX_POINTS:
@@ -355,6 +367,9 @@ def check_points(out, length_s, clip_s, titles=None):
         if ACTING.search(says) or ASSISTANT_NOTE.search(says):
             dropped["acting"] += 1
             continue
+        if about_video(says, title):   # round 11 fix pass 2 (P1): what the video is, not what it says
+            dropped["about_video"] += 1
+            continue
         words = says.split()
         if len(words) > MAX_WORDS:
             says = " ".join(words[:MAX_WORDS]).rstrip(",;:") + "…"
@@ -365,6 +380,62 @@ def check_points(out, length_s, clip_s, titles=None):
         kept.append((s, says))
     kept.sort(key=lambda x: x[0])
     return kept, dropped
+
+
+# ---------- round 11 fix pass 2 (P1): a point that only says what the video is, or says its title again ----------
+ABOUT_VIDEO = re.compile(
+    r"^\W*(?:in\s+(?:this|the)\s+(?:video|tutorial|clip|lesson),?\s+)?(?:the|this)\s+(?:video|tutorial|clip|lesson|"
+    r"presenter|speaker|host|creator|narrator)\s+(?:is\s+(?:about|a|an)\b|introduces\b|welcomes\b|greets\b|thanks\b|"
+    r"covers\b|discusses\b|talks\s+about\b|goes\s+over\b|gives\s+an?\s+(?:overview|introduction|intro)\b|"
+    r"will\s+(?:show|explain|cover|teach|go\s+over)\b|is\s+going\s+to\b|begins\s+by\s+(?:introducing|explaining\s+what)\b|"
+    r"starts\s+by\s+(?:introducing|explaining\s+what)\b|explains\s+(?:what|why)\s+(?:this|the)\s+(?:video|tutorial)\b)|"
+    r"\b(?:sponsor(?:ed|s)?|discount|promo\s+code|coupon|patreon|affiliate|like\s+(?:and|&)\s+subscribe|"
+    r"leave\s+a\s+comment|comment\s+below|link\s+in\s+the\s+description)\b", re.I)
+
+
+def about_video(says, title=None):
+    """True for a point that says what the video is, who made it, a sponsor or a call to like it, rather than what it
+    says ("The presenter introduces the tutorial", "This video covers masks"), or that says its title again (every
+    content word of the point is in the title, and it holds no number)."""
+    if ABOUT_VIDEO.search(says or ""):
+        return True
+    if title:
+        x, t = _point_words(says), _point_words(title)
+        if x and len(x) <= 6 and x <= t and not any(c.isdigit() for w in x for c in w):
+            return True
+    return False
+
+
+_THING_SAY = re.compile(r"\b(?:say|says|said|talk|talks|tell|tells|mention|mentions|cover|covers|show|shows|teach|"
+                        r"teaches|explain|explains)\s+(?:me\s+|us\s+)?(?:anything\s+|much\s+|at\s+all\s+)?(?:about|on)\s+"
+                        r"(?P<x>.+)$")
+_THING_HOW = re.compile(r"^(?:(?:so|and|ok|okay)[,\s]+)?how\s+(?:do|does|can|should|did|would)\s+(?:i|you|we|they|one|he|she)"
+                        r"\s+(?P<x>.+)$")
+
+
+def asked_thing(question):
+    """The thing a question asks about, said back when a video doesn't cover it: "easing" for "What does it say about
+    easing in after effects?", "how to froth milk" for "how do i froth milk", else None ("that")."""
+    from .synth import focus
+    t = " ".join((question or "").split()).strip(" ?.!").lower()
+    if not t or len(t) > 200:
+        return None
+    m = _THING_SAY.search(t) or re.match(r"^(?:and\s+|what\s+)?about\s+(?P<x>.+)$", t)
+    if m:
+        thing, _ctx = focus(m.group("x"))
+        thing = thing.strip(" ,;:")
+        return thing if 1 <= len(thing.split()) <= 6 else None
+    m = _THING_HOW.match(t)
+    if m and len(m.group("x").split()) <= 8:
+        x = re.sub(r"\bmy\b", "your", m.group("x"))
+        return "how to " + x
+    return None
+
+
+def not_covered(question):
+    """'doesn't seem to cover easing.' (or 'that')."""
+    return f"{NOT_SAID} {asked_thing(question) or 'that'}."
+# ---------- end round 11 fix pass 2 (P1) ----------
 
 
 _PSTOP = set("""the a an and or to of in on at for with by from it its this that these those them they you your is are
@@ -395,14 +466,17 @@ def _same_point(a, b):
     return len(x & y) / len(x | y) > 0.6
 
 
-def answer_text(title, vid, kept, dropped, answered, clip_line=""):
+def answer_text(title, vid, kept, dropped, answered, clip_line="", question=""):
     head = f"{LABEL}, \"{title}\":"
     lines = [head]
     if kept:
         for s, says in kept:
             lines.append(f"• {says} ({clock(s)}: {watch_url(vid, s)})")
-    else:   # nothing that passed the checks: never a guess, the video's link to check
-        lines = [f"{head} {NONE_KEPT if answered and any(dropped.values()) else NOT_SAID}", watch_url(vid)]
+    elif answered and any(v for k, v in dropped.items() if k != "about_video"):
+        # nothing that passed the checks: never a guess, the video's link to check
+        lines = [f"{head} {NONE_KEPT}", watch_url(vid)]
+    else:   # round 11 fix pass 2 (P1): one plain line naming the thing asked, and no point
+        lines = [f"This video, \"{title}\", {not_covered(question)}", watch_url(vid)]
     left = []
     if dropped["time"]:
         left.append(f"{dropped['time']} with a time outside the video")
@@ -410,6 +484,8 @@ def answer_text(title, vid, kept, dropped, answered, clip_line=""):
         left.append(f"{dropped['other']} that pointed to another video or a link")
     if dropped["acting"]:
         left.append(f"{dropped['acting']} that read like an instruction, not an answer")
+    if dropped.get("about_video") and kept:
+        left.append(f"{dropped['about_video']} that only said what the video is")
     if left:
         lines.append("I left out " + ", ".join(left) + ".")
     if clip_line:
@@ -428,19 +504,19 @@ def estimate_usd(secs, mdl=None):
                  + TEXT_TOKENS / 1e6 * p.get("input_per_m", 0) + MAX_OUT / 1e6 * p.get("output_per_m", 0), 6)
 
 
-def call_model(mdl, request, est_tokens, person):
+def call_model(mdl, request, est_tokens, person, version=None):
     """One generateContent call through experiments/lib/ai.py (its price check, its Gemini budget guard, its ledger
     row with tokens by modality). Returns (parsed form or None, cost, raw text)."""
     from . import llm
     llm._tl.person, llm._tl.cost = person, 0.0
     try:
         out, _u, raw = llm.ai.gemini_youtube_json(mdl, request, est_tokens, purpose=PURPOSE,
-                                                   prompt_version=PROMPT_VERSION)
+                                                   prompt_version=version or PROMPT_VERSION)
         return out, llm._tl.cost, raw
     except Exception as e:
         if llm._cut_after_send(e) and not llm._tl.cost:
             # sent, but we stopped waiting: the worst case is written so both caps see it (as llm.chat_json does)
-            llm._log({"provider": "gemini", "model": mdl, "purpose": PURPOSE, "prompt_version": PROMPT_VERSION,
+            llm._log({"provider": "gemini", "model": mdl, "purpose": PURPOSE, "prompt_version": version or PROMPT_VERSION,
                       "n": 1, "in_tokens": est_tokens, "out_tokens": MAX_OUT,
                       "cost_usd": estimate_usd(est_tokens / (VIDEO_TPS + AUDIO_TPS), mdl), "estimated": True,
                       "error": type(e).__name__})
@@ -713,10 +789,7 @@ def _ask_one(bot, person, it, question, now):
         return {"line": TOTAL_ROOM, "stop": True}
     if llm.spent_today(h, person["library"]) + est > config.DAILY_CAP_USD:
         return {"line": DAILY_ROOM.format(cents=max(1, round(est * 100))), "stop": True}
-    from .llm import ai
-    req = ai.youtube_video_request(prompt(), "Question: " + " ".join(question.split())[:300], watch_url(vid),
-                                   end_s=clip, media_resolution="MEDIA_RESOLUTION_LOW", max_tokens=MAX_OUT,
-                                   response_schema=SCHEMA, thinking_budget=0)
+    req = request_for(question, vid, clip)
     try:
         out, cost, raw = call_model(model(), req, int(secs * (VIDEO_TPS + AUDIO_TPS) + TEXT_TOKENS), h)
     except Exception as e:  # noqa: BLE001 - every failure is said plainly; nothing is kept
@@ -735,7 +808,7 @@ def _ask_one(bot, person, it, question, now):
         titles = other_titles(bot.view(person["library"]), it)
     except Exception:  # noqa: BLE001 - the other checks still run
         titles = None
-    kept, dropped = check_points(out, length, clip, titles)
+    kept, dropped = check_points(out, length, clip, titles, question=question, title=display_title(it))
     answered = out.get("answered") is True
     if not answered:   # "it doesn't say": any points beside it are not passed on
         kept, dropped = [], {k: 0 for k in dropped}
@@ -746,7 +819,7 @@ def _ask_one(bot, person, it, question, now):
     _log(bot, h, "done", vid, now, points=len(kept), dropped=sum(dropped.values()), answered=answered,
          cost_usd=round(cost or 0, 6))
     return {"vid": vid, "item_id": it.id, "kept": kept, "dropped": dropped, "answered": answered,
-            "clip_line": clip_line, "title": display_title(it)}
+            "clip_line": clip_line, "title": display_title(it), "question": question}
 
 
 def run(bot, person, it, question, now):
@@ -757,7 +830,8 @@ def run(bot, person, it, question, now):
     bot.store.set_state(f"videoans:{h}", {"video_id": r["vid"], "item_id": it.id, "model": model(),
                                           "points": [{"at": s, "says": x} for s, x in r["kept"]],
                                           "at": now.isoformat(), "after_run": _newest_run(bot, h)})
-    return bot.send(h, answer_text(r["title"], r["vid"], r["kept"], r["dropped"], r["answered"], r["clip_line"]))
+    return bot.send(h, answer_text(r["title"], r["vid"], r["kept"], r["dropped"], r["answered"], r["clip_line"],
+                                   question=question))
 
 
 # ---------- round 11 fix, B (V1): "ask them": up to 3 YouTube videos of the answer in view, one question ----------
@@ -874,10 +948,12 @@ def _run_many(bot, person, items, question, nums, now):
                 lines.append(f"• {says} ({clock(s)}: {watch_url(r['vid'], s)})")
             if len(kept) > MANY_POINTS:
                 lines.append(MANY_MORE.format(n=len(kept) - MANY_POINTS))
-        else:
-            lines = [f"{head} {NONE_KEPT if r['answered'] and any(r['dropped'].values()) else NOT_SAID}",
-                     watch_url(r["vid"])]
-        left = sum(v for k, v in r["dropped"].items() if k != "repeat")   # a repeat hides nothing
+        elif r["answered"] and any(v for k, v in r["dropped"].items() if k != "about_video"):
+            lines = [f"{head} {NONE_KEPT}", watch_url(r["vid"])]
+        else:   # round 11 fix pass 2 (P1): "Video 1, "<title>": doesn't seem to cover easing."
+            lines = [f"{head} {not_covered(question)}", watch_url(r["vid"])]
+        # a repeat hides nothing, nor does a point that only said what the video is (round 11 fix pass 2)
+        left = sum(v for k, v in r["dropped"].items() if k not in ("repeat", "about_video"))
         if left:
             lines.append(f"I left out {left} that didn't pass my checks (a time outside the video, another video or a "
                          f"link, or an instruction).")
@@ -933,14 +1009,14 @@ def answer_in_view(bot, h):
             lines += ["", f"Video {v.get('n')}, \"{name(v.get('item_id'))}\":"]
             lines += [f"• {p['says']} ({clock(p['at'])}: {watch_url(v['video_id'], p['at'])})" for p in v["points"]]
             if not v["points"]:
-                lines.append(NOT_SAID[:1].upper() + NOT_SAID[1:] + " " + watch_url(v["video_id"]))
+                lines.append(f"It {NOT_SAID} what you asked. {watch_url(v['video_id'])}")   # the question is never kept
         lines += ["", MANY_KEEP]
     else:
         title = name(va.get("item_id"))
         lines = [f"{LABEL}, \"{title}\":"]
         lines += [f"• {p['says']} ({clock(p['at'])}: {watch_url(va['video_id'], p['at'])})" for p in va["points"]]
         if not va["points"]:
-            lines.append(NOT_SAID[:1].upper() + NOT_SAID[1:] + " " + watch_url(va["video_id"]))
+            lines.append(f"It {NOT_SAID} what you asked. {watch_url(va['video_id'])}")
         lines.append(KEEP)
     return {"run_id": None, "rule_id": None, "kind": "video", "goal": title or "your videos",
             "subject": f"From the video: {title}" if title else f"From your videos: {len(va['videos'])} answers",
