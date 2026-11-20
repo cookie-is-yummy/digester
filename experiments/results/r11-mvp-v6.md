@@ -1,8 +1,10 @@
 # Round 11, MVP version 6: ask your watch history anything (counts only)
 
 19 Nov 2026. Branch `experiments/search-loop`, code at 0a72c66. The design is `experiments/mvp/DESIGN.md` section 18.
-Updated 20 Nov: a live check of 02f3581 found 15 things, and a fix pass followed (code at 0484b0e). See the last
-part, "The live check and its fixes". The parts before it describe version 6 as first built.
+Updated 20 Nov: a live check of 02f3581 found 15 things, and a fix pass followed (code at 0484b0e). See the part
+"The live check and its fixes". A second live check of 25a1189 found 6 more (P1 to P6). A second fix pass and its
+check followed (code at c26c85f). See the last part, "The second live check and its fixes". The parts before those
+describe version 6 as first built.
 The round's brief and every conversation from live runs are kept outside git. No titles, channels or names appear here.
 
 The founder's watch record: 149,801 dated events, 108,997 watched videos in all (108,685 on YouTube, 312 on
@@ -382,3 +384,169 @@ The ledger (`data/mvp/ai_runs.jsonl`, 7,948 rows) reads **$21.52 of the $30 cap*
 whole spent about $1.80, against its $3.00 budget.
 
 About 49,100 lines of Python and about 43,100 lines of tests are now in `experiments/mvp`.
+
+## The second live check and its fixes (20 Nov)
+
+The orchestrator used the test page again as the founder would, on build 25a1189. It ran on his library with
+`MVP_VIDEO_ASK=1`. Twelve replies read right and were left alone. It found 6 things, P1 to P6. One fixer worked
+through them (code at f436200). Then an independent check ran, found 7 more defects and fixed them. The code is at
+c26c85f. The design is `mvp/DESIGN.md` 18.L2 and "18.L2 check". Topic words are written as X.
+
+What already read right, and still does:
+- The month's answer with both export ends, the channel ranking, and counts by topic and by year.
+- The recall with days and cards, the honest can't-tell line and its offer, and "ask the video" at once.
+- The first X video with its counts, and the timeline from its first year.
+- A summary with numbered sources, the plain line with the best 3, and "ask them".
+
+### The findings, before and after
+
+| # | Before (25a1189, live) | After (c26c85f) | Measured |
+| --- | --- | --- | --- |
+| P1 | In "ask them" about X, one video's only point had nothing to do with X. Another's points were half off. One answer gave two thin points | A new prompt, `video_ask_v2`, names the thing asked and asks for concrete names, values and steps. A video that doesn't cover it gets one plain line by code: 'This video, "...", doesn't seem to cover X.' Code drops a point that only says what the video is, or repeats its title | The evaluation below. Live: one video said it doesn't cover X; two gave 3 and 4 concrete points on X |
+| P2 | The offer named "A video from <channel>", a video with no title. The person had to type the question again | Such a video is never offered or asked unless named by its number. The typed question is kept: 'Say "ask that one" and I'll ask it: "..."' | Tests. Live: a titled video offered, the question kept, "ask that one" asked it at once |
+| P3 | "ask the video" with no question after a recall asked what to ask. "ask them" with nothing shown went to the model | It asks about the recall's topic and says "I'll ask it about X." "ask them" with nothing shown gets one plain line by code | Tests. Live: "I'll ask it about X." and the answer |
+| P4 | 7 shapes reached the model, among them "remind me what that video i watched about X was" | All 7 are read by code, each with traps beside it | 3 wordings per shape. Live: the remind-me recall, the comparison first, "email me that" asking for an address |
+| P5a | A summary of watched reels said "the videos you watched" and "From 2 posts." | "the reels you watched" and "From 2 reels."; "videos and reels" for both platforms | Tests |
+| P5b | Every history answer repeated the hint to send a new export | Where the export ends is always said. The hint comes once in 6 hours, as in summaries | 10 answers in a row, a restart, a second person, after 6 hours, a window after the record |
+| P5c | A clip using a form of X as slang was listed in a summary about X | Another word form counts only if the item also passes the library's fit | With vectors, the slang clip is not cited. Without vectors it still is |
+| P6 | For one small topic, the fit showed 2 watched videos and left out 2 that were truly about it | Fewer than 6 watched matches: all are shown and said as "mention". The fit is used only above that | Real library, below |
+
+P1's evaluation ran on 8 public tutorials of 4 to 8 minutes. They were found by a YouTube Data API search, not taken
+from the founder's library. Each got questions it covers (9 in all) and questions it doesn't (10). Four of those 10
+are on the video's own subject but another thing, the live failure's shape. The list stays outside git.
+
+| Run | Covered: answered, points, timestamps inside | Points on the question (the fixer's reading) | Not covered: said so, points shown | Cost |
+| --- | --- | --- | --- | --- |
+| Before (`video_ask_v1`) | 9 of 9, 34, 34 of 34 | 32 of 34 | 10 of 10, 0 | $0.155 |
+| After (`video_ask_v2`) | 9 of 9, 30, 30 of 30 | 30 of 30 | 10 of 10, 0 | $0.156 |
+
+The old prompt already said "doesn't cover" on all 10, so the live failure did not repeat here. The new prompt's effect
+on it is not shown by a number. The new code checks, run on the old answers, dropped nothing that should stay. The
+median answer took 3.4 seconds, against 4.8. The new prompt is terser: one "which tools" answer lost two named tools.
+The checker re-ran 4 of the cases live and got the same results, including that loss.
+
+P6 on the real library, the same 8 topics as before, counts only:
+
+| Topics | Watched matches | Before | After |
+| --- | --- | --- | --- |
+| 7 large topics | 74 to 327 each | The fit is used | Unchanged |
+| Small topic A | 4 | 2 shown, 2 left out, all 4 about it | 4 shown, 4 about it |
+| Small topic B | 4 | 2 shown, neither about it; the 2 about it left out | 4 shown, 2 about it |
+
+The checker counted again with its own script, which imports nothing of the bot. By its reading, 50 of the 66
+videos shown across the 8 topics are truly about their topic. One topic shows 2 of 9, because the word mostly means something else there.
+
+### The check of the second fix pass
+
+- 50 new made-up messages (6 in Spanish), as tester and operator, setting on.
+- At 25a1189: 6 right, 17 wrong, 27 to the model. After the fixer: 40 right, 8 wrong, 2 to the model.
+- After the check's fixes: 48 right, 0 wrong, 2 to the model.
+- Setting off, the 34 that need no video: 32 right, 0 wrong, 2 to the model. Nothing about asking videos was offered.
+- 40 traps, compared byte for byte with 25a1189 in 160 runs: 0 differ except the build line.
+- Video answers with a fake model: no points, all not covering, orders inside an answer, bad timestamps, both caps.
+  Each gave the right line, and nothing was made or kept beyond what A-017 says.
+
+Defects the check found and fixed:
+- "ask the video" with no number asked the one YouTube video in view, even with no title. It now offers a titled one.
+- When the fit kept none of 6 or more watched matches, the reply said nothing watched fits. They are now shown as "mention".
+- "and how many videos did i watch this month" after a list gave the list again. It now gives a count.
+- "ask video 2" after a recall asked which video. It now asks the second video the recall listed.
+- A single video's answer counted points that only say what the video is. The design says they are never counted.
+- Found live: any "#" in a YouTube title made it a video with no title. That was 34,560 of 115,615 YouTube items.
+- A title's own hashtags are now cut off its name. 19,782 YouTube items still have no title, mostly one word or tags only.
+- A recall now lists titled videos before untitled ones at the same match level.
+
+Live, read as the founder would (the fixer's run and the check's two runs, setting on):
+- Right: the recall; "ask the video" asked at once about the recall's topic; the plain line, best 3 and offer.
+- Right: in "ask them", one video said it doesn't cover X, and two gave concrete steps on X. No padding.
+- Right: the titled offer with the question kept; the remind-me recall; the daily limit after 5 asks.
+- Thin: one video's only point said what it shows. Two of another's points said what the speaker did, not how.
+- Noisy: three clip lines in one answer, from the minute cap set to keep the runs cheap.
+- Wrong, now fixed: two recalls led with untitled hashtag videos. The second run showed titled ones.
+
+### Checks that stay true
+
+| Check | Result |
+| --- | --- |
+| Offline tests, in 4 shards | 4,713 pass, 0 fail (4,300 at 25a1189). 413 new: the fixer 139, the check 274 |
+| Demo tests | 10 pass |
+| Dry self-test | 59 conversations, 152 of 152 steps |
+| Unchanged answers (`probe_same`) | Byte-equal |
+| Development wording set by code, setting off and on | 73 helper lines right, 1 wrong (d007). 1 of 40 "none" lines taken (d132, on purpose). All 280 replies byte-equal |
+| 159 rule texts and 123 phrasings | Taken by no new read |
+| The traps of the round 11 check and of the first fix check | Still not taken |
+| `MVP_VIDEO_ASK` unset | Nothing about asking videos is offered or run |
+
+Earlier tests changed on purpose by the fixer are listed in DESIGN 18.L2. They follow P2, P3, P4, P5a, P5b and P6.
+Three self-test conversations changed with them. The check changed no earlier test.
+
+### What is still wrong or unproven after the second fix pass
+
+History and recall:
+- The fit cannot tell a topic word used another way. On the real library one topic shows 2 of 9 truly about it.
+- Above 6 watched matches the fit can still leave out a watched video truly about the topic. This was not measured.
+- The threshold of 6 and the fit's two settings come from small readings, not a tuned evaluation.
+- Recalls chosen by words alone now say "mention" instead of "about". This is more honest, but reads differently.
+- History answers about Instagram watches still say "videos", not "reels".
+- A recall drops "and" from the topic it says back.
+- Recall is English only. A Spanish topic matches only Spanish titles, and its timeline lists months of zeros.
+- Three messages still reach the model: "can you remind me which video i watched about X was" is one.
+- The other two are the Spanish "como han cambiado mis videos con el tiempo" and "list the X videos i watched".
+- "what was that video about X", with no "i watched", is left to the model on purpose.
+- A recall by a description that shares no word with the title only finds what the search's top 50 holds.
+- The first recall waits for the search engine to load: 24 to 38 s live.
+- A YouTube title of one word still counts as no title. Such a video is offered or asked only by its number.
+- Cutting hashtags changes how every reply names such a video, not only video asking.
+- The recall's new order was confirmed on the real library offline, not live.
+
+Summaries:
+- On the real library, summaries are honest but thin. Titles and descriptions hold little.
+- A vague point that names the thing and traces to the text still passes.
+- The checks that a point answers the question work only for "X in Y" questions.
+- Another word form used as slang is caught only with the library's vectors. The topic's own word as slang still passes.
+- The fit inside a summary was not measured on the real library.
+- The prompts have no held-out set. They were tuned on one made-up set.
+
+Asking videos:
+- Nobody has checked an answer against the video itself. The evaluation read answers against their questions only.
+- The new prompt's effect on the live off-question failure is not measured. The old prompt did not repeat it.
+- Code cannot tell an off-question point from an on-question one. It checks only what a point is.
+- The new prompt gives fewer points (30 against 34). On one "which tools" question it lost two named tools, twice.
+- An older check drops a real tutorial step that says "add ... to ...", as if it were an order. Seen once live.
+- "ask video N" on a video with no title still asks it, because the person chose it.
+- After "what was the last X video i watched" (three YouTube videos), "ask the video" asks which one.
+- The first "ask them" after a recall comes as two or three messages.
+- Three clip lines in one answer are noise when videos run past the minute cap.
+- The legal footing of A-017 is unsettled. The key must be on a billed Google project; code cannot check that.
+- The evaluation's list has no held-out part.
+
+From the first fix pass and now fixed:
+- "ask the video" after a recall, and "ask them" with nothing shown.
+- The remind-me recall, and the Spanish comparison without "?".
+- The slang form (with vectors), and watched videos dropped by the fit on small topics.
+
+### What the founder must decide or do now
+
+1. Pull the branch and restart the test page. Try "what was that video i watched about X", then "ask the video".
+2. Confirm P6: below 6 watched matches, all are shown and said as "mention". The real-library numbers support it.
+3. Confirm the check's extension: when the fit keeps none of the watched matches, they are shown as "mention" too.
+4. Read a few replies that name YouTube videos whose titles held hashtags. They are now named by their words.
+5. Decide whether to tune `video_ask_v2` again for "which tools" questions. It would need its own evaluation.
+6. Decide A-017 with the other founder. It now names `video_ask_v2`. A legal read and 20+ answers checked against videos come first.
+7. The rest stands: the recall's order, "about" above 6 matches, and the summary rule.
+8. Also still open: refreshing the exports, d132, a history rule on a schedule, and A-008 to A-016.
+
+### Spend of the second fix pass
+
+| Work | Spend |
+| --- | --- |
+| The orchestrator's second live check of 25a1189 | about $0.13 |
+| The fixer (evaluation before $0.155, after $0.156, live run $0.061) | $0.373 |
+| The check (4 evaluation cases $0.041, two live runs $0.107) | $0.148 |
+| **The second fix pass** | **about $0.65** |
+| Writing these notes | $0 |
+
+The ledger (`data/mvp/ai_runs.jsonl`, 8,069 rows) reads **$22.17 of the $30 cap**. $7.83 is left. Round 11 as a
+whole spent about $2.45, against its $3.00 budget.
+
+About 49,600 lines of Python and about 44,500 lines of tests are now in `experiments/mvp`.
