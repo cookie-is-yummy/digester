@@ -116,6 +116,7 @@ def normal(text):
     t = t.replace("’", "'").replace("‘", "'").replace("¿", " ").replace("¡", " ")
     t = re.sub(r"\b[a-z]+\b", lambda m: TYPOS.get(m.group(0), m.group(0)), t)
     t = re.sub(r"\bwhats\b", "what's", t)
+    t = re.sub(r"\bwhens\b", "when's", t)   # round 11 fix pass 2 (P4): "whens the first time i watched X"
     return " ".join(t.split())
 
 
@@ -158,10 +159,14 @@ MARKERS = [
     re.compile(r"\b(?:he|has|hemos)\s+(?:estado\s+)?(?:visto|viendo|guardado|mirado)\b|\bvi\b|\bveo\b|\bmire\b|"
                r"\bguarde\b|\bme\s+gust(?:o|aron)\b|\bempece\s+a\s+ver\b|\bestuve\s+viendo\b|\bmi\s+historial\b"),
 ]
+# round 11 fix pass 2 (P4): "more videos in october or september?", "fewer reels this month than last month"
+CMP_BARE = re.compile(r"^\W*(?:(?:so|and|ok|okay|hey)[,\s]+)?(?:more|less|fewer)\s+(?:youtube\s+|instagram\s+)?"
+                      r"(?:videos?|vids?|reels?|youtube|instagram|watching)\s+(?:in|during|on|this|last)\b"
+                      r".*\b(?:or|vs\.?|versus|than|compared\s+to)\b")
 TOP_PLAIN = re.compile(r"^\W*(?:my\s+)?top\s+(?:\d+\s+|five\s+|ten\s+)?(?:channels|youtubers|creators)\b")
 STATEMENT = re.compile(r"^\W*(?:i|i've|i'm|i was|yo|lol|haha)\b")
 QUESTION = re.compile(r"\?|^\W*(?:what|which|who|when|how|show|list|tell|give|did|do|have|was|is|are|since|"
-                      r"que|cual|cuales|cuantos|cuantas|cuando|desde|quien|muestrame|dime)\b|"
+                      r"que|cual|cuales|cuantos|cuantas|cuando|desde|quien|muestrame|dime|como)\b|"
                       r"^\W*(?:the\s+)?(?:my\s+)?(?:top|most|first|last|latest|earliest|watch history|videos?|"
                       r"channels?)\b")
 SPANISH = re.compile(r"\b(?:que|cuantos|cuantas|cuando|canales|vi|veo|visto|ayer|hoy|este mes|el mes pasado|"
@@ -178,7 +183,10 @@ TIMELINE = re.compile(r"\b(?:which|what)\s+(?:month|year)\b|\bmost\s+(?:watched\
                       r"\bbusiest\b|"
                       r"\b(?:over time|over the (?:years|months)|changed?|changing|trends?|trending|grown|growing|"
                       r"(?:by|per|each|every|a)\s+(?:month|year)|monthly|yearly|month by month|year by year|"
-                      r"por mes|cada mes|por ano|cada ano)\b")
+                      r"por mes|cada mes|por ano|cada ano|"
+                      # round 11 fix pass 2 (P4): "como ha cambiado lo que veo (de cocina) (con el tiempo)"
+                      r"ha cambiado|han cambiado|cambiado|ha ido cambiando|con el tiempo|a lo largo del tiempo|"
+                      r"ha evolucionado)\b")
 FIRST = re.compile(r"\b(?:first|earliest|since when|start(?:ed)?\s+(?:watching|to watch)|began|begin|primer\w*|"
                    r"empece|desde cuando)\b")
 LAST = re.compile(r"\b(?:last|latest|most recent|newest|ultim[oa]s?|mas reciente)\b")
@@ -219,6 +227,7 @@ canales canal mas menos y o por cada desde historial cosas contenido publicacion
 fue fueron es son era eran sido ser lo le les se su sus algo alguno alguna algun nada todo todos toda todas mucho muchos
 mucha muchas cuanto cuanta cosa veces vez hace entre hasta para con sin ni tu tus te ago between until till
 comparado comparada comparando comparar comparacion frente
+como cambiado cambiando evolucionado ido tiempo largo
 """.split())
 PLATFORM_WORDS = {"youtube": "youtube", "instagram": "instagram"}
 
@@ -472,7 +481,7 @@ def _topic_and_platform(t, spans):
             continue
         if (not w2 or w2 in STOP or w2.isdigit() or w2 in MONTHS or w2 in MON_ABBR or w2 in MONTH_ES
                 or w2 in DAYS or w2 in DAYS_ES or re.fullmatch(_DAY_RE, w2) or re.fullmatch(r"\d+(?:st|nd|rd|th)", w2)
-                or w2 in ("what's", "i've", "i'm", "it's", "i'd")):
+                or w2 in ("what's", "i've", "i'm", "it's", "i'd", "when's")):
             if cur:
                 runs.append(cur)
             cur = []
@@ -497,12 +506,19 @@ def read(text, today, loose=False):
     if BOT_ASK.search(t):
         return None
     marked = any(m.search(t) for m in MARKERS) or bool(TOP_PLAIN.match(t))
+    # round 11 fix pass 2 (P4): a comparison of two windows with no "i watched" ("more videos in october or
+    # september?") and one with no question mark ("vi mas videos en 2024 o en 2025") are read only as comparisons
+    compare_only = False
+    if not marked and not loose and CMP_BARE.match(t):
+        marked = compare_only = True
     if not marked and not loose:
         return None
     if STATEMENT.match(t) and "?" not in raw and not loose:
         return None
     if not QUESTION.search(t) and not loose:
-        return None
+        if not re.search(r"\b(?:more|less|fewer|mas|menos|compar\w+)\b", t):
+            return None
+        compare_only = True
     lang = "es" if SPANISH.search(t) and not re.search(r"\b(?:what|how|which|when|did|watch\w*)\b", t) else "en"
     if not loose and re.search(r"\b(?:saved?|saves|guarde|guardado)\b", t) and not re.search(
             r"\b(?:watch\w*|liked?|visto|vi|veo)\b", t):
@@ -536,6 +552,8 @@ def read(text, today, loose=False):
     if len(windows) >= 2 and COMPARE.search(rest):
         q.update(kind="compare", window=windows[0], window2=windows[1],
                  less=bool(re.search(r"\b(?:less|fewer|menos)\b", rest)) and not re.search(r"\b(?:more|mas)\b", rest))
+    elif compare_only:
+        return None
     elif TOP_ITEMS.search(rest):
         q.update(kind="top_items", window=w1, topic=[x for x in topic if x not in ("times", "often")])
     elif TIMELINE.search(rest):
@@ -770,6 +788,7 @@ def _vector_store(lib):
             _VECS.clear()
             _VECS[lib] = (stamp, got)
             _FITS.clear()
+            _CENTS.clear()
         return got
     return None
 
@@ -806,15 +825,51 @@ def topic_fit(view, rec, phrase):
             keep = s >= np.quantile(s, FIT_TRIM)
         cut = float(np.median(s)) - FIT_CUT
         out = ({i: float(s[order[pos[i]]]) for i in have}, cut)
+        with _LOCK:
+            _CENTS[key] = c   # round 11 fix pass 2 (P5c): any other item can be scored against it
     with _LOCK:
         _FITS[key] = out
     return out
 
 
-def fit_hits(view, rec, q, h):
+_CENTS = {}
+
+
+def fit_score(view, rec, phrase, iid):
+    """Round 11 fix pass 2 (P5c): (the item's score against the topic's centroid, the cut) for any item with a stored
+    vector, also one that does not hold the words (a summary's other word forms: "cooked" for "cooking"), or None
+    when the topic's fit can't be told."""
+    import numpy as np
+    fit = topic_fit(view, rec, phrase)
+    vs = _vector_store(view.lib)
+    if fit is None or vs is None:
+        return None
+    if iid in fit[0]:
+        return fit[0][iid], fit[1]
+    pos, mat, scale = vs
+    c = _CENTS.get((view.lib, id(rec), phrase))
+    if c is None or iid not in pos:
+        return None
+    v = np.asarray(mat[pos[iid]], dtype=np.float32)
+    if scale is not None:
+        v = v * scale
+    v /= np.linalg.norm(v) + 1e-9
+    return float(v @ c), fit[1]
+
+
+FIT_WATCHED_MIN = 6   # round 11 fix pass 2 (P6): fewer items of the kind asked hold the word: all shown, "mention"
+
+
+def fit_hits(view, rec, q, h, plats=None):
     """(the hits that fit q's topic, how many were left out, whether the fit was used) for a first, last or list
-    answer; the word matches unchanged when the fit can't be told."""
+    answer; the word matches unchanged when the fit can't be told. Round 11 fix pass 2 (P6, the orchestrator's
+    decision): when fewer than FIT_WATCHED_MIN items the person watched (or liked, or saved: the kind asked) hold
+    the topic's words, in the platforms asked and at any time, they are all shown and said to "mention" it; the fit
+    (whose centroid is made of every item that holds the words, mostly saves on a real library) is used only above
+    that."""
     if not q.topic or q.channel or not h:
+        return h, 0, False
+    if plats is not None and len(hits(view, rec, q, None, None, plats)) < FIT_WATCHED_MIN:
         return h, 0, False
     fits = [topic_fit(view, rec, x) for x in q.topic]
     if any(f is None for f in fits):
@@ -1038,12 +1093,16 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
         el = ends_line(rec, plats, lang)
         head = (f"No veo {window_noun(q.window, start, end, lang)}: " if es else
                 f"I can't see {window_noun(q.window, start, end, lang)}: ") + el[:1].lower() + el[1:]
-        head += " " + REFRESH[lang]
+        hint = not ({"refresh", "range"} & set(quiet))   # round 11 fix pass 2 (P5b): the hint once in 6 hours
+        if hint:
+            head += " " + REFRESH[lang]
         w2 = shifted(q.window, start, end, newest)
         q2 = q.model_copy(update={"window": w2})
         if q.kind == "compare":
             q2 = q.model_copy(update={"kind": "count", "window": w2, "window2": None})
         body, ids, extra = answer(view, q2, today, prof, rec, said_end=True, quiet=quiet)
+        if hint:
+            extra = dict(extra, said=list(extra.get("said") or []) + ["refresh"])
         lead = "Lo último que veo:" if es else "The latest I can see:"
         return head + "\n\n" + lead + "\n" + body, ids, extra
     W = window_words(q.window, start, end, lang)
@@ -1068,8 +1127,11 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
     if said_end:
         pass
     elif q.window.kind == "all" and "range" not in quiet:
-        tail += [range_line(rec, plats, q), REFRESH[lang]]
+        tail.append(range_line(rec, plats, q))
         said.append("range")
+        if "refresh" not in quiet:   # round 11 fix pass 2 (P5b): the hint once in 6 hours
+            tail.append(REFRESH[lang])
+            said.append("refresh")
     elif q.window.kind == "all":
         # round 11 fix, A (R4): the range was said in this stretch; an answer about the latest items still says where
         # the record ends (it changes the answer), the others say nothing more
@@ -1078,8 +1140,12 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
     elif reached:
         # the round 11 check (DESIGN 18.X): each platform whose export the window reaches is said, so "October 1 to
         # 15" says Instagram's ends on the 15th even while YouTube's runs on
-        tail += [ends_line(rec, reached, lang), REFRESH[lang]]
-        said.append("refresh")   # the merge of round 11's fixes (seam d): a summary after it leaves the hint out
+        tail.append(ends_line(rec, reached, lang))
+        # round 11 fix pass 2 (P5b): where the export ends always stays (it changes the answer); the hint on sending
+        # a new export is said once in 6 hours, as summaries do (seam d)
+        if not ({"refresh", "range"} & set(quiet)):
+            tail.append(REFRESH[lang])
+            said.append("refresh")
     if q.how == "saved":
         tail.append("(Guardado cuenta lo guardado, las colecciones, lo que te enviaste y las listas.)" if es else
                     "(Saved counts saves, collections, posts you sent yourself and playlists.)")
@@ -1328,7 +1394,7 @@ def _list(view, rec, q, start, end, plats, W, today, prof):
     h = hits(view, rec, q, start, end, plats)
     if not h:
         return _nothing(q, W, plats), [], {}
-    h, left, fitted = fit_hits(view, rec, q, h)   # round 11 fix, A (R3)
+    h, left, fitted = fit_hits(view, rec, q, h, plats)   # round 11 fix, A (R3); fix pass 2 (P6)
     if not h:
         return _nothing_fit(q, W, plats, left), [], {}
     cap = DAY_MAX if q.kind == "on_day" else LIST_MAX
@@ -1366,7 +1432,7 @@ def _first(view, rec, q, start, end, plats, W, today, prof, last=False):
     h = hits(view, rec, q, start, end, plats)
     if not h:
         return _nothing(q, W, plats), [], {}
-    h, left, fitted = fit_hits(view, rec, q, h)   # round 11 fix, A (R3)
+    h, left, fitted = fit_hits(view, rec, q, h, plats)   # round 11 fix, A (R3); fix pass 2 (P6)
     if not h:
         return _nothing_fit(q, W, plats, left), [], {}
     key = (lambda i: (-max(h[i]).toordinal(), i)) if last else (lambda i: (min(h[i]), i))
@@ -1836,6 +1902,16 @@ very kind sort how way some one video videos reel reels clip clips tutorial tuto
 was were is are it this that these those like literally basically out up down off into onto back where""".split())
 
 
+REMIND_WHAT = re.compile(r"^\W*(?:(?:can|could)\s+you\s+|pls\s+|please\s+)?remind\s+me\s+(?P<wh>what|which)\s+"
+                         r"(?P<rest>(?:that|the|this)\s+(?:youtube\s+|yt\s+|insta(?:gram)?\s+)?(?:videos?|vids?|reels?|"
+                         r"posts?|clips?|shorts?|tutorials?)\s+.+?)\s+(?:was|is|was\s+called|is\s+called)$")
+
+
+def phrasing_time(t):
+    from .phrasing import TIME_WORDS
+    return bool(TIME_WORDS.search(t)) or bool(re.search(r"\b(?:later|tonight|tomorrow|in\s+an?\s+(?:hour|bit))\b", t))
+
+
 class Recall(BaseModel):
     """The form a recall is read into: the words to find, the kind said, a time window, a channel phrase."""
     words: str
@@ -1851,6 +1927,11 @@ def read_recall(text, today):
         return None
     t = normal(raw).rstrip(" ?!.")
     t = re.sub(r"\b(?:abt|abour|abut)\b", "about", t)   # round 11 fix check: "abt skin tones" said "abt" back
+    # round 11 fix pass 2 (P4): "remind me what that video i watched about X was" asks to be told now, never a
+    # reminder: read as "what was that video ..." when it names no time (a time or a repeat leaves it to the rules)
+    m0 = REMIND_WHAT.match(t)
+    if m0 and not TIMING.search(t) and not phrasing_time(t):
+        t = f"{m0.group('wh')} was {m0.group('rest')}"
     if RECALL_NOT.search(t) or BOT_ASK.search(re.sub(r"\b(?:can|could|do)\s+you\b", " ", t)):
         return None
     m, chan = None, None
@@ -1926,6 +2007,30 @@ def _recall_level(text, phrase, words):
     return 1 if got else 0
 
 
+def _few_watched(view, rec, phrase, words, platforms, how):
+    """Round 11 fix pass 2 (P6): fewer than FIT_WATCHED_MIN items of the kind counted (watched, for a recall), in the
+    platforms asked, hold the words (all of them, or the phrase), at any time."""
+    n = 0
+    for iid, evs in rec.events.items():
+        it = view.items.get(iid)
+        if it is None or (platforms and it.platform not in platforms) or not any(k in how for _, k in evs):
+            continue
+        if _recall_level(it.caption or "", phrase, words) >= 2:
+            n += 1
+            if n >= FIT_WATCHED_MIN:
+                return False
+    return True
+
+
+def recall_fitted(view, rec, r, platforms, how=("watch", "view")):
+    """True when a recall's items were chosen by the topic's fit (said "about"), False when by the words ("mention")."""
+    words = content_words(r.words)
+    phrase = " ".join(words) if len(words) <= 4 else r.words
+    if len(words) > 4 or topic_fit(view, rec, phrase) is None:
+        return False
+    return not _few_watched(view, rec, phrase, words, platforms, how)
+
+
 def recall_items(bot, person, r, now, platforms=None, how=("watch", "view"), limit=RECALL_MAX, rank=None):
     """The items for a recall, best first: [(item, level, [dates])]. `how`: the event kinds counted."""
     tz = person.get("timezone") or "UTC"
@@ -1937,6 +2042,8 @@ def recall_items(bot, person, r, now, platforms=None, how=("watch", "view"), lim
     ckey = _squash(r.chan) if r.chan else None
     rank = rank if rank is not None else {}
     fit = topic_fit(view, rec, phrase) if len(words) <= 4 else None
+    if fit is not None and _few_watched(view, rec, phrase, words, platforms, how):
+        fit = None   # round 11 fix pass 2 (P6): few of them hold the words: all shown, "mention"
     out = []
     for iid, evs in rec.events.items():
         it = view.items.get(iid)
@@ -1997,10 +2104,14 @@ def recall_answer(bot, person, r, now):
         if fell:
             lead = (f"No reel you watched{win} fits {head_bits}. " if want_ig else
                     f"No YouTube video you watched{win} fits {head_bits}. ")
+        # round 11 fix pass 2 (P6): "about" only when the topic's fit chose them, else what their words say
+        fitted = recall_fitted(view, rec, r, second if fell else first)
         if len(got) == 1:
-            lead += f"You watched this {noun_} about {head_bits}{win}:"
+            lead += (f"You watched this {noun_} about {head_bits}{win}:" if fitted else
+                     f"You watched this {noun_} that mentions {head_bits}{win}:")
         else:
-            lead += f"You watched these about {head_bits}{win}, best match first:"
+            lead += (f"You watched these about {head_bits}{win}, best match first:" if fitted else
+                     f"You watched these that mention {head_bits}{win}, best match first:")
         parts.append({"type": "text", "text": lead})
         for k, (it, lv, ds) in enumerate(got, 1):
             title = _title(it)
@@ -2032,7 +2143,12 @@ def recall_answer(bot, person, r, now):
     if r.window and r.window.start:
         newest = max(rec.ends.values(), default=None)
         if newest and (r.window.end or r.window.start) >= newest:
-            parts.append({"type": "text", "text": ends_line(rec, sorted(rec.ends), "en") + " " + REFRESH["en"]})
+            # round 11 fix pass 2 (P5b): the export's end always; the hint on a new export once in 6 hours
+            hint = not ({"refresh", "range"} & said_lately(bot, h, now))
+            parts.append({"type": "text", "text": ends_line(rec, sorted(rec.ends), "en") + (" " + REFRESH["en"]
+                                                                                          if hint else "")})
+            if hint:
+                note_said(bot, h, now, ["refresh"])
     reply = Reply(parts)
     run_id = bot.store.add_run(handle=h, kind="history", at=now_iso(now), n_candidates=len(ids), n_picks=len(ids),
                                n_dropped=0, cost_usd=0.0, status="picked" if ids else "none", prompt_version=None,

@@ -821,8 +821,8 @@ def test_ask_them_checks_the_total_and_daily_caps_before_the_second_call(fc, mon
 
 def test_ask_them_with_nothing_to_ask(fc, monkeypatch):
     fake = on(monkeypatch)
-    out, calls = ask(fc, "ask them", CHAT)       # nothing shown: the message goes on as before
-    assert "mvp_interpret" in calls and not fake.requests
+    out, calls = ask(fc, "ask them", CHAT)       # round 11 fix pass 2 (P3): nothing shown is said by code
+    assert "mvp_interpret" not in calls and not fake.requests and out.startswith("I haven't shown you any videos")
     ask(fc, "what did i watch on november 3")    # a watched reel only
     out, _ = ask(fc, "ask them what song it is")
     assert out.startswith("Those are Instagram posts, and I can only ask YouTube videos") and not fake.requests

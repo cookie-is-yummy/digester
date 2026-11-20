@@ -76,8 +76,12 @@ FORMS = [
                + _ABOUT + r"\s+" + _TOPIC + _SOURCE_TAIL + _END, re.I),
     re.compile(_LEAD + r"what\s+i(?:'ve|’ve|ve|\s+have)\s+(?:learned|learnt|picked\s+up)\s+" + _ABOUT + r"\s+"
                + _TOPIC + _SOURCE_TAIL + _END, re.I),
+    # round 11 fix pass 2 (P4): "sum up what my watch history says about X", "summarize what my saves say about X"
+    re.compile(_LEAD + _SUMMARY + r"\s+(?:for\s+me\s+)?what\s+(?:all\s+)?(?:my\s+(?:watch\s+history|history|saves|videos|"
+               r"reels|likes|library)|the\s+(?:videos|posts|reels|ones)\s+" + _I + r"\s+" + _KEPT_VERB + r")"
+               r"\s+(?:says?|teach(?:es)?\s+me|tells?\s+me)\s+" + _ABOUT + r"\s+" + _TOPIC + _SOURCE_TAIL + _END, re.I),
     # "what do my saves say about X", "what do the videos I watched say about X"
-    re.compile(_LEAD + r"what\s+do(?:es)?\s+(?:all\s+)?(?:my\s+(?:saves|videos|reels|likes|library)|the\s+(?:videos|posts|"
+    re.compile(_LEAD + r"what\s+do(?:es)?\s+(?:all\s+)?(?:my\s+(?:saves|videos|reels|likes|library|watch\s+history)|the\s+(?:videos|posts|"
                r"reels|ones)\s+" + _I + r"\s+" + _KEPT_VERB + r")(?:\s+all)?\s+(?:say|teach\s+me|tell\s+me)\s+"
                + _ABOUT + r"\s+" + _TOPIC + _SOURCE_TAIL + _END, re.I),
     # "the main ideas across what I watched on X", "key takeaways from my saves about X"
@@ -542,16 +546,34 @@ def lead_words(how, items):
     from .history import HOW_KINDS
     yt = sum(1 for it in items if it.platform == "youtube")
     noun = "videos" if yt == len(items) else "posts" if not yt else "posts and videos"
+    # round 11 fix pass 2 (P5a): one word for one thing, in the lead and the last line alike: what was watched on
+    # Instagram is a reel ("the reels you watched", "the videos and reels you watched")
+    seen_noun = "videos" if yt == len(items) else "reels" if not yt else "videos and reels"
     if how == "watched":
-        return "the videos you watched"
+        return f"the {seen_noun} you watched"
     if how in ("saved", "liked"):
         return f"the {noun} you {how}"
     watched = [it for it in items if _did(it, HOW_KINDS["watched"])]
     if items and len(watched) == len(items):
-        return "the videos you watched"
+        return f"the {seen_noun} you watched"
     if not watched:
         return f"the {noun} you saved"
     return f"the {noun} you watched and saved"
+
+
+def _other_form_unfit(view, rec, it, own, topic):
+    """Round 11 fix pass 2 (P5c): the item names the topic only in another form of its words ("cooked" for
+    "cooking": slang, or another sense), not in the forms the history answers count (history.holds), and the
+    library's vectors say it is far from the items that do. No vectors, or too few items to tell: False (as before)."""
+    from . import history as Hs
+    words = Hs.content_words(topic or "")
+    if not 0 < len(words) <= 4:
+        return False
+    phrase = " ".join(words)
+    if Hs.holds(own, phrase) or Hs.holds(it.caption or "", phrase):
+        return False
+    got = Hs.fit_score(view, rec, phrase, it.id)
+    return got is not None and got[0] < got[1]
 
 
 def _limit(bot, person, req):
@@ -660,6 +682,13 @@ def gather(bot, person, req, now, last=None):
     if n_copies:
         steps["copies"] = n_copies
     fits, maybes = [], []
+    _rec = []
+
+    def rec_of():   # slice H's record, read once and only when a word form needs the fit (P5c)
+        if not _rec:
+            from . import history as Hs
+            _rec.append(Hs.record(view, person.get("timezone") or "UTC"))
+        return _rec[0]
     for it in cands:
         own = own_text(it, extra)
         if captionmark.effective(it, cfb)[0] == "strong":   # a caption that may not be the video's: never read here
@@ -668,8 +697,14 @@ def gather(bot, person, req, now, last=None):
         if ASSISTANT_NOTE.search(own):   # text that speaks to an assistant is data we do not read at all
             steps["note_left_out"] = steps.get("note_left_out", 0) + 1
             continue
-        if req.get("these") or fits_topic(own, req["topic"]):
+        if req.get("these"):
             fits.append(it)
+        elif fits_topic(own, req["topic"]):
+            if _other_form_unfit(view, rec_of(), it, own, req["topic"]):   # round 11 fix pass 2 (P5c)
+                steps["other_form_unfit"] = steps.get("other_form_unfit", 0) + 1
+                maybes.append(it)
+            else:
+                fits.append(it)
         else:
             maybes.append(it)
     steps["candidates"], steps["fit"] = len(cands), len(fits)
@@ -817,7 +852,11 @@ def _window(bot, person, req, today, now=None):
     if newest and start and start > newest:
         bot.note(intent="synth")
         el = Hs.ends_line(rec, plats)
-        return bot.send(h, f"I can't see {said}: {el[:1].lower() + el[1:]} {Hs.REFRESH['en']}")
+        # round 11 fix pass 2 (P5b): the hint on a new export once in 6 hours, shared with the history answers
+        hint = now is None or not ({"range", "refresh"} & Hs.said_lately(bot, h, now))
+        if hint and now is not None:
+            Hs.note_said(bot, h, now, ["refresh"])
+        return bot.send(h, f"I can't see {said}: {el[:1].lower() + el[1:]}" + (f" {Hs.REFRESH['en']}" if hint else ""))
     if oldest and end and end < oldest:
         bot.note(intent="synth")
         sl = Hs.start_line(rec, plats, q)
@@ -909,7 +948,8 @@ def _video_offer(shown, thin=False):
     from . import videoask
     if not videoask.on():
         return ""
-    yt = [n for n, it in enumerate(shown, 1) if videoask.video_id(it)]
+    # round 11 fix pass 2 (P2): a video with no title of its own is never offered
+    yt = [n for n, it in enumerate(shown, 1) if videoask.video_id(it) and videoask.titled(it)]
     if not yt:
         return ""
     return T.synth_video_offer(yt, total=len(shown), thin=thin)

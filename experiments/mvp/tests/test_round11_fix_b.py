@@ -697,7 +697,8 @@ def test_r2_an_instagram_post_in_view_offers_the_watched_youtube_video(fb, monke
     assert out.startswith("I can only ask YouTube videos.")
     assert 'You also watched a YouTube video on this: "Easing in After Effects, explained" ' \
            "https://www.youtube.com/watch?v=FAKEeas0001" in out
-    assert 'Say "ask that one" and your question' in out and not fake.requests
+    # round 11 fix pass 2 (P2): the question already typed is kept and said back
+    assert 'Say "ask that one" and I\'ll ask it: "what software they use?"' in out and not fake.requests
     assert best == [("motion design easing", False)]
     out, calls = ask(fb, "ask that one")
     assert calls == [] and len(fake.requests) == 1

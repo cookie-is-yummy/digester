@@ -108,6 +108,9 @@ SELF_EMAIL = re.compile(
     r"(?:\s+(?:please|pls|too|as well))?"
     r"|send\s+(?:me\s+)?(?:it|this|that)\s+(?:to\s+me\s+)?(?:by|via|in\s+an?|over)\s+e-?mail(?:\s+(?:please|pls))?)"
     r"[\s.!]*$", re.I)
+# round 11 fix pass 2 (P4): "can you email me that", read by code only right after a video's answer or a summary
+EMAIL_THAT = re.compile(_SELF_LEAD + r"(?:e-?mail|mail)\s+me\s+(?:that|this|it|those|these)(?:\s+(?:please|pls|too|"
+                        r"as\s+well|now))?[\s.!?]*$", re.I)
 CHAT_INSIDE = re.compile(r"\b(?:json|structured|prompt|form|schema|interpreter|(?:language\s+)?model)\b", re.I)
 
 
@@ -403,9 +406,13 @@ class HandlerMixin:
         Only to the person's own address, as before. "email me that" and timed ones stay the interpreter's."""
         from . import phrasing
         t = " ".join((text or "").split())
-        if not SELF_EMAIL.match(t) or phrasing.TIME_WORDS.search(t):
-            return None
         h = person["handle"]
+        if EMAIL_THAT.match(t) and not SELF_EMAIL.match(t) and not phrasing.TIME_WORDS.search(t):
+            # round 11 fix pass 2 (P4): only after a video's answer or a summary (elsewhere it stays the interpreter's)
+            if not self._video_or_summary_in_view(h):
+                return None
+        elif not SELF_EMAIL.match(t) or phrasing.TIME_WORDS.search(t):
+            return None
         if self.open_draft(h, now) is not None or not (self._answer_seen(h) or self._plain_answer(h)) \
                 or self._export_in_view(h, now):   # round 8: "email it to me" right after an export is the export's
             return None
@@ -413,6 +420,17 @@ class HandlerMixin:
         it = Interpretation.model_validate({"intent": "act_on_last", "actions": ["email.send"]})
         self.note(intent="act_on_last")
         return self._act_on_last(person, it, t, now)
+
+    def _video_or_summary_in_view(self, h):
+        """Round 11 fix pass 2 (P4): a video's answer is the newest thing shown, or the answer in view is a summary."""
+        from . import videoask
+        if videoask.answer_in_view(self, h) is not None:
+            return True
+        last = self.store.last_answer(h) or {}
+        if not last.get("run_id"):
+            return False
+        row = self.store.one("SELECT kind FROM runs WHERE id=?", (last["run_id"],))
+        return bool(row) and row["kind"] == "synth"
 
     def _doing_part(self, person, part):
         """True when a doing helper would take this part: an email to someone else, a cancel, an apply / book / buy,

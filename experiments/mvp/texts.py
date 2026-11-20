@@ -3929,8 +3929,7 @@ def synth_counts(items, reels=False):
     watched, round 11 fix check): an Instagram video watched is a reel ("From 3 videos and 1 reel")."""
     v = sum(1 for it in items if it.platform == "youtube")
     p = len(items) - v
-    if reels and p and all((it.media or "").lower() in ("reel", "reels", "clips", "video")
-                           for it in items if it.platform != "youtube"):
+    if reels and p:   # round 11 fix pass 2 (P5a): what was watched on Instagram is a reel, as the lead says
         parts = ([_synth_count(v, "video", "videos")] if v else []) + [_synth_count(p, "reel", "reels")]
         return " and ".join(parts)
     parts = ([_synth_count(v, "video", "videos")] if v else []) + ([_synth_count(p, "post", "posts")] if p else [])
@@ -3971,7 +3970,7 @@ def synth_message(res, video_offer="", show=3):
         for n, it in enumerate(cited, 1):
             lines.append(f"{n}. {synth_source(it)}")
         silent = [it for it in res["silent"] if it.id not in num]
-        tail = f"From {synth_counts(cited, reels=res.get('how') == 'watched')}"
+        tail = f"From {synth_counts(cited, reels=lead.endswith('you watched'))}"   # P5a: the lead's own word
         if silent:   # round 11 fix check: one is "fits ... says ... its"
             tail += (f"; {len(silent)} more fit but say nothing in their text" if len(silent) > 1 else
                      "; 1 more fits but says nothing in its text")
@@ -4009,15 +4008,15 @@ def synth_thin_line(res, within=""):
     fits = res["fits"]
     yt = sum(1 for it in fits if it.platform == "youtube")
     one = len(fits) == 1
+    lead = res.get("lead") or "the posts and videos you watched or saved"
     if one:
         what = "title and description" if yt else "caption"
-        noun = "video" if yt else "post"
+        noun = "video" if yt else "reel" if lead.endswith("you watched") else "post"
     else:
         what = ("titles and descriptions" if yt == len(fits) else "captions" if not yt
                 else "titles, descriptions and captions")
-    lead = res.get("lead") or "the posts and videos you watched or saved"
     if not one:
-        noun = _synth_count(len(fits), "video", "videos") if lead.endswith("you watched") else synth_counts(fits)
+        noun = synth_counts(fits, reels=lead.endswith("you watched"))   # P5a: "4 videos and 1 reel you watched"
     verb = lead.split(" you ", 1)[1] if " you " in lead else "watched or saved"
     if within:
         verb = within.split(" you ", 1)[1]

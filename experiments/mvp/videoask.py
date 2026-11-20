@@ -225,6 +225,12 @@ GO = re.compile(r"^\W*(?:yes|yeah|yep|yup|ok|okay|sure|go(?:\s+ahead)?|go\s+for\
                 r"do\s+it))*\W*$", re.I)
 
 
+def asks_something(q):
+    """Round 11 fix pass 2 (P2): words that read as a question for a video ("what tool do they use first", "what did
+    that video say about the settings"), not a bare "ask the video" or a remark."""
+    return bool(_Q_START.match(q) or re.search(r"\?\s*$", q))
+
+
 def read_one(text):
     """The question (or '') of "ask that one ...", else None."""
     m = ASK_ONE.match(" ".join((text or "").split()))
@@ -574,6 +580,8 @@ def offer_line(bot, person, it, question, now):
 # ---------- round 11 fix, B (R2, R8): the offer of a YouTube video the person watched on the topic in view ----------
 ALSO = ("You also watched a YouTube video on this: \"{title}\" {url}\nSay \"ask that one\" and your question, and I'll "
         "ask it. Its link and your question go to Google's Gemini; I keep only the answer.")
+ALSO_ASKED = ("You also watched a YouTube video on this: \"{title}\" {url}\nSay \"ask that one\" and I'll ask it: "
+              "\"{q}\" Its link and your question go to Google's Gemini; I keep only the answer.")
 ALL_INSTAGRAM = "Those are Instagram posts, and I can only ask YouTube videos: Instagram has no way for me to ask a post."
 
 
@@ -598,25 +606,40 @@ def _history_kind(bot, h):
     return (st.get("q") or {}).get("kind")
 
 
+def titled(it):
+    """Round 11 fix pass 2 (P2): the item has a title of its own (not "A video from <channel>"): only such a video is
+    offered or asked by "ask them" (a video with no title can't be told to be on the topic)."""
+    from .compose import NEUTRAL_TITLES, display_title
+    return it is not None and not display_title(it).startswith(NEUTRAL_TITLES)
+
+
 def best_watched(bot, person, topic, now, latest=False, item=None):
     """The YouTube video the person watched that fits `topic` (else the Instagram `item` in view) best, the latest
     one with `latest`, or None. history.best_watched_video(bot, person, topic=None, item=None, latest=False,
-    exclude=()) is fixer A's (round 11 fix, A); until the merge brings it, nothing is offered."""
+    exclude=()) is fixer A's (round 11 fix, A); until the merge brings it, nothing is offered. Round 11 fix pass 2
+    (P2): a video with no title of its own is skipped for the next best."""
     if not topic and item is None:
         return None
     try:
         from .history import best_watched_video
     except ImportError:
         return None
+    skip = []
     try:
-        it = best_watched_video(bot, person, topic=topic or None, item=item, latest=latest)
-        if it is None and topic and item is not None:
-            # the merge of round 11's fixes (seam a): the request's words found no watched video; the post in view may
-            # still match one by its caption
-            it = best_watched_video(bot, person, topic=None, item=item, latest=latest)
+        for _ in range(8):
+            it = best_watched_video(bot, person, topic=topic or None, item=item, latest=latest, exclude=tuple(skip))
+            if it is None and topic and item is not None:
+                # the merge of round 11's fixes (seam a): the request's words found no watched video; the post in view
+                # may still match one by its caption
+                it = best_watched_video(bot, person, topic=None, item=item, latest=latest, exclude=tuple(skip))
+            if it is None or titled(it):
+                break
+            skip.append(it.id)
+        else:
+            it = None
     except Exception:  # noqa: BLE001 - an offer never breaks the reply it is added to
         return None
-    return it if it is not None and video_id(it) else None
+    return it if it is not None and video_id(it) and titled(it) else None
 
 
 def also_watched(bot, person, question, now, item=None):
@@ -631,6 +654,10 @@ def also_watched(bot, person, question, now, item=None):
     bot.store.set_state(f"videoask:{h}", {"item_id": it.id, "question": " ".join(str(question or "").split())[:300],
                                           "at": now.isoformat(), "also": True})
     bot.store.set_state(f"videoask_seen:{h}", now.isoformat())   # the line says what leaves this computer
+    q = " ".join(str(question or "").split())
+    if q and len(q) <= 200 and asks_something(q):
+        # round 11 fix pass 2 (P2): the question already typed is kept and said back, so "ask that one" alone asks it
+        return ALSO_ASKED.format(title=display_title(it), url=watch_url(video_id(it)), q=q.rstrip(" ?.!") + "?")
     return ALSO.format(title=display_title(it), url=watch_url(video_id(it)))
 # ---------- end round 11 fix, B ----------
 
@@ -697,6 +724,13 @@ def ask(bot, person, n, question, now):
         return bot.send(h, NOT_YOUTUBE)
     if not question and st and st.get("item_id") == it.id:
         question = st.get("question") or ""
+    lead = ""
+    if not question:
+        # round 11 fix pass 2 (P3): after a recall (or a history list) with a topic, its topic is the question, as
+        # "ask them" does, and the reply says so
+        topic = _topic_of_view(bot, h, now, it)
+        if topic:
+            question, lead = f"What does it say about {topic}?", ASK_ABOUT.format(it="it", topic=topic)
     if not question:
         bot.store.set_state(f"videoask:{h}", {"item_id": it.id, "question": "", "at": now.isoformat()})
         return bot.send(h, ASK_WHAT)
@@ -706,8 +740,24 @@ def ask(bot, person, n, question, now):
         bot.store.set_state(f"videoask:{h}", {"item_id": it.id, "question": question[:300], "at": now.isoformat()})
         bot.store.set_state(f"videoask_seen:{h}", now.isoformat())
         bot.store.set_state(f"videoask_go:{h}", {"item_id": it.id, "at": now.isoformat()})
-        return bot.send(h, FIRST_NOTE)
-    return run(bot, person, it, question, now)
+        return bot.send(h, (lead + " " if lead else "") + FIRST_NOTE)
+    return run(bot, person, it, question, now, lead=lead)
+
+
+ASK_ABOUT = "I'll ask {it} about {topic}."   # round 11 fix pass 2 (P3)
+
+
+def _topic_of_view(bot, h, now, it=None):
+    """The topic of the history answer or recall in view (6 hours), when `it` is among what it showed, else None."""
+    from . import history
+    st = bot.store.get_state(history.STATE.format(h=h)) or {}
+    topic = history.history_topic(bot, h, now)
+    if not topic:
+        return None
+    if it is not None and it.id not in (st.get("ids") or []) and it.id not in ((bot.store.last_answer(h) or {})
+                                                                                .get("items") or []):
+        return None
+    return topic
 
 
 # ---------- round 11 fix, B (V2): "yes" right after the note asks at once; any other message ends the note ----------
@@ -822,16 +872,17 @@ def _ask_one(bot, person, it, question, now):
             "clip_line": clip_line, "title": display_title(it), "question": question}
 
 
-def run(bot, person, it, question, now):
+def run(bot, person, it, question, now, lead=""):
     h = person["handle"]
     r = _ask_one(bot, person, it, question, now)
     if "line" in r:
-        return bot.send(h, r["line"])
+        return bot.send(h, (lead + "\n" if lead else "") + r["line"])
     bot.store.set_state(f"videoans:{h}", {"video_id": r["vid"], "item_id": it.id, "model": model(),
                                           "points": [{"at": s, "says": x} for s, x in r["kept"]],
                                           "at": now.isoformat(), "after_run": _newest_run(bot, h)})
-    return bot.send(h, answer_text(r["title"], r["vid"], r["kept"], r["dropped"], r["answered"], r["clip_line"],
-                                   question=question))
+    return bot.send(h, (lead + "\n" if lead else "") +
+                    answer_text(r["title"], r["vid"], r["kept"], r["dropped"], r["answered"], r["clip_line"],
+                                question=question))
 
 
 # ---------- round 11 fix, B (V1): "ask them": up to 3 YouTube videos of the answer in view, one question ----------
@@ -871,25 +922,28 @@ def _many_in_view(bot, person, k):
         ids = st["ids"]
     for n, iid in enumerate(ids, 1):
         it = view.get(iid)
-        if it is not None and it.platform == "youtube" and video_id(it):
+        if it is not None and it.platform == "youtube" and video_id(it) and titled(it):   # P2: never one with no title
             out.append((n, it))
     return out[:k], last
 
 
 def _default_question(bot, h, last, now):
-    """The question of a summary just shown ("what do the videos i watched say about easing"): its topic."""
+    """(the question, the topic to say back) of a summary just shown ("what do the videos i watched say about
+    easing"): its topic (not said back); after a recall or a history list, that answer's topic (said back, round 11
+    fix pass 2, P3); else ("", None)."""
     st = bot.store.get_state(f"videomany:{h}") or {}
     if not st or not last or st.get("run_id") != last.get("run_id"):
         # the merge of round 11's fixes (seam b): after a recall or a history list, the topic of that answer
         from . import history
         topic = history.history_topic(bot, h, now)
-        return f"What does it say about {topic}?" if topic else ""
+        return (f"What does it say about {topic}?", topic) if topic else ("", None)
+    # a summary just shown: its topic is the person's own words of a moment ago, so it is not said again
     try:
         if now - datetime.fromisoformat(st["at"]) > timedelta(minutes=MANY_MINUTES):
-            return ""
+            return "", None
     except (KeyError, TypeError, ValueError):
-        return ""
-    return f"What does it say about {st['topic']}?" if st.get("topic") else ""
+        return "", None
+    return (f"What does it say about {st['topic']}?", None) if st.get("topic") else ("", None)
 
 
 def ask_many(bot, person, k, question, now):
@@ -900,17 +954,25 @@ def ask_many(bot, person, k, question, now):
     view = bot.view(person["library"])
     shown = [x for x in (view.get(i) for i in (last or {}).get("items") or []) if x]
     if not pairs:
-        if not shown:
-            return None
         bot.note(intent="video_ask")
+        if not shown:   # round 11 fix pass 2 (P3): nothing shown is answered here, never sent to the model
+            return bot.send(h, NOTHING_SHOWN)
+        if any(x.platform == "youtube" for x in shown):   # only videos with no title of their own (P2)
+            return bot.send(h, NO_TITLED)
         line = also_watched(bot, person, question, now)
         return bot.send(h, ALL_INSTAGRAM + ("\n" + line if line else ""))
     bot.note(intent="video_ask")
-    question = question or _default_question(bot, h, last, now)
+    lead = ""
+    if not question:
+        question, topic = _default_question(bot, h, last, now)
+        if topic:   # round 11 fix pass 2 (P3): said, as for one video
+            lead = ASK_ABOUT.format(it="them" if len(pairs) > 1 else "it", topic=topic)
     if not question:
         bot.store.set_state(f"videoask:{h}", {"item_id": pairs[0][1].id, "question": "", "at": now.isoformat()})
         return bot.send(h, ASK_THEM_WHAT if len(pairs) > 1 else ASK_WHAT)
     if len(pairs) == 1:   # one video: slice Q's own ask, its own answer
+        if lead:
+            return _ask_one_with_lead(bot, person, pairs[0][1], question, now, lead)
         return ask(bot, person, pairs[0][0], question, now)
     nums, items = [n for n, _ in pairs], [it for _, it in pairs]
     if not _seen(bot, person):
@@ -918,8 +980,26 @@ def ask_many(bot, person, k, question, now):
         bot.store.set_state(f"videomany_seen:{h}", now.isoformat())
         bot.store.set_state(f"videoask_go:{h}", {"many": [it.id for it in items], "nums": nums,
                                                  "question": question[:300], "at": now.isoformat()})
-        return bot.send(h, MANY_NOTE.format(these=_these(len(items))))
+        return bot.send(h, (lead + " " if lead else "") + MANY_NOTE.format(these=_these(len(items))))
+    if lead:
+        bot.send(h, lead)
     return _run_many(bot, person, items, question, nums, now)
+
+
+NOTHING_SHOWN = ("I haven't shown you any videos to ask yet. Ask me about some first, for example \"what do the "
+                 "videos i watched say about ...\" or \"what was that video i watched about ...\".")
+NO_TITLED = "Those videos have no titles I can go by, so I won't ask them. Ask me about a topic first."
+
+
+def _ask_one_with_lead(bot, person, it, question, now, lead):
+    """One video of "ask them" with the default question: the same note the first time, else asked with the lead."""
+    h = person["handle"]
+    if not _seen(bot, person):
+        bot.store.set_state(f"videoask:{h}", {"item_id": it.id, "question": question[:300], "at": now.isoformat()})
+        bot.store.set_state(f"videoask_seen:{h}", now.isoformat())
+        bot.store.set_state(f"videoask_go:{h}", {"item_id": it.id, "at": now.isoformat()})
+        return bot.send(h, lead + " " + FIRST_NOTE)
+    return run(bot, person, it, question, now, lead=lead)
 
 
 def _run_many(bot, person, items, question, nums, now):
