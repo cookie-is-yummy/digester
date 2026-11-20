@@ -492,8 +492,8 @@ def answer_text(title, vid, kept, dropped, answered, clip_line="", question=""):
         left.append(f"{dropped['other']} that pointed to another video or a link")
     if dropped["acting"]:
         left.append(f"{dropped['acting']} that read like an instruction, not an answer")
-    if dropped.get("about_video") and kept:
-        left.append(f"{dropped['about_video']} that only said what the video is")
+    # a point that only said what the video is hides nothing: never in this line, as in "ask them" (DESIGN 18.L2; the
+    # check of fix pass 2 found one video's answer saying it)
     if left:
         lines.append("I left out " + ", ".join(left) + ".")
     if clip_line:
@@ -697,9 +697,17 @@ def ask(bot, person, n, question, now):
     it = None
     implicit = False
     if n:
-        if not last or not 1 <= n <= len(last.get("items") or []):
+        ids = (last or {}).get("items") or []
+        if last:
+            # the check of fix pass 2: a recall puts only its first video in view, but "ask video 2" asks the second
+            # one the recall numbered (as "ask them" does, seam b); before, it said "Which video? Say ask video 2"
+            from . import history
+            hst = bot.store.get_state(history.STATE.format(h=h)) or {}
+            if hst.get("recall") and hst.get("run_id") == last.get("run_id") and hst.get("ids"):
+                ids = hst["ids"]
+        if not last or not 1 <= n <= len(ids):
             return bot.send(h, WHICH if last else NO_VIDEO)
-        it = view.get(last["items"][n - 1])
+        it = view.get(ids[n - 1])
     elif st:
         it = view.get(st["item_id"])
     elif last:
