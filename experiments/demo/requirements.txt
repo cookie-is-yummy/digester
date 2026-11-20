@@ -1,0 +1,6 @@
+# Search demo (experiments/demo). Tested with Python 3.13 and numpy 2.5.3, scipy 1.18.1, scikit-learn 1.9.1,
+# wordninja 2.0.0. The round-8 search code needs scipy (sparse BM25) and scikit-learn (tokenising, normalising).
+numpy>=2.0,<3
+scipy>=1.11,<2
+scikit-learn>=1.4,<2
+wordninja==2.0.0

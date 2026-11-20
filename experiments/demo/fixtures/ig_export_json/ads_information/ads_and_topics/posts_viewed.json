@@ -1,0 +1,35 @@
+{
+ "impressions_history_posts_seen": [
+  {
+   "timestamp": 1760400000,
+   "media": [],
+   "label_values": [
+    {
+     "label": "URL",
+     "value": "https://www.instagram.com/p/SYNTHpost006/"
+    },
+    {
+     "title": "Owner",
+     "dict": [
+      {
+       "dict": [
+        {
+         "label": "URL",
+         "value": "https://www.instagram.com/synthetic_news"
+        },
+        {
+         "label": "Name",
+         "value": "Synthetic News"
+        },
+        {
+         "label": "Username",
+         "value": "synthetic_news"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

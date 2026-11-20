@@ -1,0 +1,97 @@
+[
+  {
+    "header": "YouTube",
+    "title": "Watched Synthetic Sourdough Shaping Walkthrough",
+    "titleUrl": "https://www.youtube.com/watch?v=SYNvid00001",
+    "subtitles": [{"name": "Synthetic Channel 1", "url": "https://www.youtube.com/channel/UCsynthetic0000000000001"}],
+    "time": "2025-03-06T07:00:00.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched a video that has been removed",
+    "time": "2025-03-05T10:00:00.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Synthetic Ad Spot",
+    "titleUrl": "https://www.youtube.com/watch?v=SYNad000001",
+    "time": "2025-03-05T09:59:00.000Z",
+    "products": ["YouTube"],
+    "details": [{"name": "From Google Ads"}],
+    "activityControls": ["Web & App Activity", "YouTube watch history", "YouTube search history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched https://www.youtube.com/watch?v=SYNvid00009",
+    "titleUrl": "https://www.youtube.com/watch?v=SYNvid00009",
+    "time": "2025-03-05T08:30:00.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube Music",
+    "title": "Watched Synthetic Lo-fi Loop",
+    "titleUrl": "https://music.youtube.com/watch?v=SYNvid00004",
+    "subtitles": [{"name": "Synthetic Channel 2 - Topic", "url": "https://www.youtube.com/channel/UCsynthetic0000000000002"}],
+    "time": "2025-03-04T21:15:42.511Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Synthetic Sourdough Shaping (old title)",
+    "titleUrl": "https://www.youtube.com/watch?v=SYNvid00001",
+    "subtitles": [{"name": "Synthetic Channel 1", "url": "https://www.youtube.com/channel/UCsynthetic0000000000001"}],
+    "time": "2025-03-04T18:20:11.123Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Synthetic Sourdough Shaping (old title)",
+    "titleUrl": "https://www.youtube.com/watch?v=SYNvid00001",
+    "subtitles": [{"name": "Synthetic Channel 1", "url": "https://www.youtube.com/channel/UCsynthetic0000000000001"}],
+    "time": "2025-03-04T18:20:11.123Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Synthetic Knife Skills in Ten Minutes",
+    "titleUrl": "https://www.youtube.com/watch?v=SYNvid00002",
+    "subtitles": [{"name": "Synthetic Channel 3", "url": "https://www.youtube.com/channel/UCsynthetic0000000000003"}],
+    "time": "2025-03-03T12:00:05.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Synthetic Weekend Trip Planning",
+    "titleUrl": "https://www.youtube.com/watch?v=SYNvid00003",
+    "subtitles": [{"name": "Synthetic Channel 2", "url": "https://www.youtube.com/channel/UCsynthetic0000000000002"}],
+    "time": "2025-03-02T16:45:00.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched Synthetic Thirty Second Stretch",
+    "titleUrl": "https://www.youtube.com/shorts/SYNshort001",
+    "subtitles": [{"name": "Synthetic Channel 3", "url": "https://www.youtube.com/channel/UCsynthetic0000000000003"}],
+    "time": "2025-03-02T16:40:00.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Viewed Synthetic community post",
+    "titleUrl": "https://www.youtube.com/post/UgkxSyntheticPost0001",
+    "time": "2025-03-01T11:00:00.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  }
+]

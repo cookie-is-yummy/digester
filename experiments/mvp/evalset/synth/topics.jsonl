@@ -1,0 +1,12 @@
+{"id": "s01", "topic": "sourdough", "message": "summarize what i've learned about sourdough", "fit": ["sm_sd1", "sm_sd2", "sm_sd3", "sm_sd4", "sm_sd5", "sm_sd6"]}
+{"id": "s02", "topic": "motion design", "message": "summarize what ive learned about motion design from what i watched", "fit": ["sm_md1", "sm_md2", "sm_md3", "sm_md4", "sm_md5"]}
+{"id": "s03", "topic": "color grading", "message": "what did i learn about color grading", "fit": ["sm_cg1", "sm_cg2", "sm_cg3", "sm_cg4"]}
+{"id": "s04", "topic": "strength training", "message": "summarize what i've learned about strength training", "fit": ["sm_st1", "sm_st2", "sm_st3", "sm_st4"]}
+{"id": "s05", "topic": "sleep", "message": "what have i learned about sleep", "fit": ["sm_sl1", "sm_sl2", "sm_sl3", "sm_sl4"]}
+{"id": "s06", "topic": "budgeting", "message": "the main ideas across what i saved on budgeting", "fit": ["sm_bu1", "sm_bu2", "sm_bu3", "sm_bu4", "st_y07"]}
+{"id": "s07", "topic": "houseplants", "message": "what do my saves say about houseplants", "fit": ["sm_hp1", "sm_hp2", "sm_hp3", "sm_hp4", "st_x04"]}
+{"id": "s08", "topic": "running", "message": "summarize what i've learned about running", "fit": ["sm_ru1", "sm_ru2", "sm_ru3", "sm_ru4", "st_w08", "st_w14"]}
+{"id": "s09", "topic": "blender", "message": "what are the key takeaways from my saves about blender", "fit": ["sm_bl1", "sm_bl2", "sm_bl3", "st_b01", "st_b02", "st_b03", "st_b04", "st_b05", "st_b06", "st_b07", "st_b08", "st_b09", "st_b10", "st_y04", "st_y05"]}
+{"id": "s10", "topic": "stretching", "message": "what have i learned about stretching", "fit": ["sm_sr1", "sm_sr2", "st_w09", "st_w10", "st_w11", "st_w12", "st_w13", "st_y09"]}
+{"id": "s11", "topic": "watercolor", "message": "summarize what i learned about watercolor", "fit": ["sm_wc1", "sm_wc2", "sm_wc3", "sm_wc4", "st_x06"]}
+{"id": "s12", "topic": "composting", "message": "what do the videos i watched say about composting", "fit": ["sm_co1", "sm_co2", "sm_co3", "st_y14"]}

@@ -1,0 +1,371 @@
+"""PROTOTYPE ONLY - "export my data" and "export my lists" (round 8, slice B, I2; docs/07 › Retention and deletion: "Full
+export of a user's data in open formats (JSON, CSV, Markdown)"; DESIGN.md section 15).
+
+Code only, no model call. Everything is read through the store and the library view, so friends' posts never appear.
+The files go in one folder under the person's own outbox folder (`MVP_HOME/outbox/<hashed handle>/export-<date>/`,
+the same hashed folder as every outbox file, so no number or address is in a path); a second export on the same day
+replaces that day's folder. "delete my data" removes every export folder (forget_exports).
+
+- `export my data`: rules.json, todos.csv (title, due date, notes, done: a header a to-do app can import), todos.md,
+  profile.json, answers.md (each answer as it was shown, with its links), saves.csv (id, link, platform, kept date,
+  how; never a caption: post text is third-party text), README.txt (what each file is).
+- `export my lists`: only todos.csv and todos.md, in `lists-<date>/`.
+"""
+import csv
+import io
+import json
+import os
+import shutil
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from .actions.base import outbox_dir
+
+DATA_FILES = ("rules.json", "todos.csv", "todos.md", "profile.json", "answers.md", "saves.csv", "README.txt")
+LIST_FILES = ("todos.csv", "todos.md")
+EMAIL_MAX_BYTES = 5 * 1024 * 1024    # saves.csv over this is not emailed (it stays in the folder)
+TODO_HEADER = ["title", "due date", "notes", "done"]
+SAVES_HEADER = ["id", "link", "platform", "kept date", "how"]
+
+README = """What is in this folder (made {day} at your request):
+
+rules.json    Your rules: their numbers, your own words, whether they are on, paused or finished, and when they send.
+todos.csv     Your to-dos as a table a to-do app can import: title, due date, notes (a link, and the list's name when
+              it is not your main list), done.
+todos.md      The same lists, to read or paste into a notes app.
+profile.json  What the bot knows about you: interests and levels, what you're working toward, preferences, email,
+              time zone and quiet hours, and things you told it. What each topic is to you, when you said it ("for
+              fun", "someday" ...), is with that topic; the topics you said are not you are listed under "not_me".
+answers.md    Every answer the bot kept for you, as you were shown it, with its links.
+saves.csv     Every post you kept that the bot can see (your own saves, likes, playlists and watches): its id, link,
+              platform, the date you kept it and how. No post text, and never your friends' posts.
+drafts.json   The emails the bot wrote for you to send to other people: who to, subject, the words, and what
+              happened to each. After 7 days a finished one keeps only the address's domain and what happened.
+
+Saying "delete my data" to the bot removes this folder too.
+"""
+
+
+def _local(at_iso, tz):
+    try:
+        return datetime.fromisoformat(at_iso).astimezone(ZoneInfo(tz)).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return ""
+
+
+def folder_for(handle, kind, day):
+    """The folder for this export (made empty): export-<day> or lists-<day> in the person's outbox folder."""
+    d = os.path.join(outbox_dir(handle), f"{kind}-{day}")
+    if os.path.isdir(d):
+        shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def todo_rows(store, handle, tz):
+    """Open and done to-dos (never removed ones), in the order the bot numbers them."""
+    rows = []
+    for t in store.all_todos(handle):
+        notes = [x for x in (t.get("url"),) if x]
+        if (t.get("list") or "todo") != "todo":
+            notes.append(f"list: {t['list']}")
+        rows.append({"title": t["text"], "due date": _local(t["due_at"], tz) if t.get("due_at") else "",
+                     "notes": "; ".join(notes), "done": "yes" if t.get("done_at") else "no",
+                     "list": t.get("list") or "todo", "url": t.get("url")})
+    return rows
+
+
+def todos_csv(rows):
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(TODO_HEADER)
+    for r in rows:
+        w.writerow([r[k] for k in TODO_HEADER])
+    return buf.getvalue()
+
+
+def todos_md(rows):
+    if not rows:
+        return "# Your lists\n\nYour lists are empty.\n"
+    out = ["# Your lists"]
+    for name in dict.fromkeys(r["list"] for r in rows):
+        out += ["", f"## {'To-do' if name == 'todo' else name}"]
+        for r in (x for x in rows if x["list"] == name):
+            line = f"- [{'x' if r['done'] == 'yes' else ' '}] {r['title']}"
+            if r["due date"]:
+                line += f" (due {r['due date']})"
+            if r["url"]:
+                line += f" {r['url']}"
+            out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def rules_json(store, handle):
+    from .schedule import describe
+    from .schema import RuleSpec
+    out = []
+    for r in store.q("SELECT * FROM rules WHERE handle=? ORDER BY id", (handle,)):
+        spec = json.loads(r["spec"])
+        try:
+            from .texts import TRENDS_WHEN
+            rs = RuleSpec.model_validate(spec)
+            when = TRENDS_WHEN if rs.content.source == "trends" else describe(rs.when)
+        except Exception:  # noqa: BLE001 - an old spec that no longer validates still goes out as stored
+            when = None
+        out.append({"number": r.get("number"), "your_words": r.get("text"), "status": r["status"], "when": when,
+                    "created": r.get("created_at"), "spec": spec})
+    return json.dumps(out, ensure_ascii=False, indent=1), len(out)
+
+
+def profile_json(store, handle):
+    """profile.get, plus the topics the person said are not them (merge of round 8: profile.get leaves those markers
+    out, so the theme check's labels would otherwise be lost from the export). The other labels ride on each interest
+    as `relation` and `relation_at`."""
+    from . import profile as P
+    prof = P.get(store, handle)
+    prof["not_me"] = [{"topic": i["topic"], "relation_at": i.get("relation_at")}
+                      for i in P.not_me_markers(store, handle)]
+    return json.dumps(prof, ensure_ascii=False, indent=1, default=str)
+
+
+def answers_md(store, handle, tz):
+    rows = store.q("SELECT run_id, goal, kind, parts, at FROM answers WHERE handle=? ORDER BY run_id", (handle,))
+    if not rows:
+        return "# Answers\n\nNo answers kept yet.\n"
+    out = ["# Answers"]
+    for r in rows:
+        out += ["", f"## {r['goal'] or 'An answer'} ({_local(r['at'], tz)})", ""]
+        for p in json.loads(r["parts"] or "[]"):
+            if p.get("type") == "link" and p.get("url"):
+                out.append(p["url"])
+            elif p.get("text"):
+                out.append(str(p["text"]).strip())
+    return "\n".join(out) + "\n"
+
+
+def saves_csv(view):
+    """One row per kept item the library view holds (friends' posts are not in it). No caption."""
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(SAVES_HEADER)
+    rows = sorted(view.items.values(), key=lambda it: (it.kept_on() or "", it.id), reverse=True)
+    for it in rows:
+        w.writerow([it.id, it.url or "", it.platform or "", it.kept_on() or "", "; ".join(it.how())])
+    return buf.getvalue(), len(rows)
+
+
+def _write(d, name, text):
+    path = os.path.join(d, name)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    return path
+
+
+def export(bot, person, now, lists_only=False):
+    """Writes the export. Returns {"dir", "files": [(name, path)], "saves": n, "todos": n, "rules": n}."""
+    h, tz = person["handle"], person["timezone"]
+    day = now.astimezone(ZoneInfo(tz)).date().isoformat()
+    d = folder_for(h, "lists" if lists_only else "export", day)
+    rows = todo_rows(bot.store, h, tz)
+    files = [("todos.csv", _write(d, "todos.csv", todos_csv(rows))), ("todos.md", _write(d, "todos.md", todos_md(rows)))]
+    out = {"dir": d, "files": files, "todos": len(rows), "saves": None, "rules": None}
+    if lists_only:
+        return out
+    rules, n_rules = rules_json(bot.store, h)
+    files.insert(0, ("rules.json", _write(d, "rules.json", rules)))
+    files.append(("profile.json", _write(d, "profile.json", profile_json(bot.store, h))))
+    files.append(("answers.md", _write(d, "answers.md", answers_md(bot.store, h, tz))))
+    text, n = saves_csv(bot.view(person["library"]))
+    files.append(("saves.csv", _write(d, "saves.csv", text)))
+    readme = README.format(day=day)
+    # round 9, slice B (DESIGN.md section 16.B): what the cancel helper kept, only when there is something
+    gone = [{k: r[k] for k in ("merchant_key", "route", "status", "check_rule_id", "created_at", "updated_at")}
+            for r in bot.store.cancellations(h)]
+    if gone:
+        files.append(("cancellations.json", _write(d, "cancellations.json", json.dumps(gone, indent=1))))
+        readme += ("\ncancellations.json  The subscriptions you asked the bot to help you end: which one, how, and what "
+                   "you told it. No amounts, no account numbers.\n")
+    # the round 9 merge (slice D, C3): the outside places the bot was connected to and what it made there: ids,
+    # connector, action and dates only, as they are stored (never a title or a body), only when there is something
+    conns = [{k: r[k] for k in ("connector", "status", "created_at", "checked_at")} for r in bot.store.connections_of(h)]
+    made = [{k: r[k] for k in ("id", "connector", "action", "remote_id", "run_id", "created_at", "removed_at")}
+            for r in bot.store.placements(h, open_only=False)]
+    # ---------- round 10, slice K: standing permissions (grants) and the apps with a sign-in kept, names only ------
+    grants, sign_ins = grants_rows(bot.store, h), sealed_sign_ins(h)
+    # ---------- end round 10, slice K ----------
+    # ---------- round 10, slice C: the app tools pinned when you connected by sign-in (tool names only) ----------
+    from .connectors import MCP_ROUTES
+    pinned = {k: sorted((bot.store.get_state(f"pins:{k}:{h}") or {}).get("tools") or {}) for k in MCP_ROUTES}
+    pinned = {k: v for k, v in pinned.items() if v}
+    # ---------- end round 10, slice C ----------
+    held = youtube_held(bot.store, h)   # second merge of round 10: slice Y's short-lived state, kind and time only
+    if conns or made or grants or sign_ins or held:
+        body = {"connections": conns, "placements": made}
+        if grants or sign_ins:   # round 10, slice K
+            body.update(standing_permissions=grants, sign_ins_kept=sign_ins)
+        if pinned:   # round 10, slice C
+            body.update(pinned_tools=pinned)
+        if held:   # second merge of round 10
+            body.update(youtube_held=held)
+        files.append(("connections.json", _write(d, "connections.json", json.dumps(body, indent=1))))
+        readme += ("\nconnections.json  The outside places you connected (like Reminders and Calendar on a Mac), and "
+                   "each thing the bot\n                  added there: its id there, when, and when it was taken out. No "
+                   "titles.\n")
+        if grants or sign_ins:   # round 10, slice K
+            readme += ("                  Also: the rules you let add to your apps on their own (rule number, app, "
+                       "the most per run\n                  and per day, and whether it is on), and the apps whose "
+                       "sign-in I keep (names only).\n")
+        if held:   # second merge of round 10
+            readme += ("                  youtube_held: what I'm holding for a moment about your YouTube (like your "
+                       "subscription list,\n                  kept 24 hours): what it is and since when. No titles.\n")
+    # ---------- round 10, slice S: what they said about reels whose video did not match the caption (no words) ------
+    said = [{k: r[k] for k in ("item_id", "kind", "source", "at")} for r in bot.store.caption_feedback(h)]
+    if said:
+        files.append(("reel_feedback.json", _write(d, "reel_feedback.json", json.dumps(said, indent=1))))
+        readme += ("\nreel_feedback.json  The reels you told me did not match their caption (or were fine): which "
+                   "one, when, and\n                    whether you said it in words or with a thumbs-down. No "
+                   "captions.\n")
+    # ---------- end round 10, slice S ----------
+    # ---------- round 10, slice V: the browser's site permissions and runs (counts and dates; no page words) ------
+    runs = browser_rows(bot.store, h)
+    if runs["runs"] or runs["sites_allowed"]:
+        files.append(("browser_runs.json", _write(d, "browser_runs.json", json.dumps(runs, indent=1))))
+        readme += ("\nbrowser_runs.json  The sites you let the bot press buttons on, and each time it opened a browser "
+                   "for you:\n                  which site, how it ended, how many presses, and when. No page "
+                   "words, nothing typed.\n")
+    # ---------- end round 10, slice V ----------
+    # ---------- the merge of round 11: what asking the history and the videos keeps (DESIGN 18) ----------
+    asked = round11_rows(bot.store, h)
+    if asked:
+        files.append(("history_and_videos.json", _write(d, "history_and_videos.json", json.dumps(asked, indent=1))))
+        readme += ("\nhistory_and_videos.json  What I keep from asking your watch history and asking videos: the "
+                   "last history question's\n                  form (for follow-ups, 6 hours), and each video you had "
+                   "me ask (its id, when, how it\n                  ended, and the points it answered with their "
+                   "times). Never the video or what it says in full.\n")
+    # ---------- end the merge of round 11 ----------
+    files.append(("README.txt", _write(d, "README.txt", readme)))
+    files.append(("drafts.json", _write(d, "drafts.json", drafts_json(bot.store, h))))   # round 9, slice A
+    out.update(saves=n, rules=n_rules)
+    return out
+
+
+# ---------- round 10, slice K ----------
+def grants_rows(store, h):
+    """Each grant as the export lists it: the rule's number, the app, the caps and the status. No list name, no titles."""
+    from .store import number_of
+    rules = store.q("SELECT id, number FROM rules WHERE handle=? ORDER BY id", (h,))   # every rule, ended ones too
+    return [{"rule": number_of(rules, g["rule_id"]), "app": g["connector"], "action": g["action"],
+             "per_run": g["per_run"], "per_day": g["per_day"], "status": g["status"], "created_at": g["created_at"],
+             "ended_at": g["ended_at"]} for g in store.grants_of(h, active_only=False)]
+
+
+def sealed_sign_ins(h):
+    from . import tokens
+    try:
+        return tokens.connectors_of(h)
+    except Exception:  # noqa: BLE001 - the export never fails for this list
+        return []
+# ---------- end round 10, slice K ----------
+
+
+# ---------- second merge of round 10: slice Y's short-lived state, listed by kind and time (never a title) ------
+YOUTUBE_HELD = (("ytdevice", "a YouTube sign-in code waiting"), ("ytsubs", "your YouTube subscription list (kept 24 hours)"),
+                ("ytask", "a YouTube change waiting for your yes"), ("igtap", "Instagram links waiting for done or next"),
+                ("ytundo", "what \"undo\" can take back on YouTube"), ("ytrest", "YouTube changes left for tomorrow"))
+
+
+def youtube_held(store, h):
+    out = []
+    for key, what in YOUTUBE_HELD:
+        st = store.get_state(f"{key}:{h}")
+        if st:
+            out.append({"what": what, "since": st.get("at") if isinstance(st, dict) else None})
+    return out
+# ---------- end second merge of round 10 ----------
+
+
+# ---------- the merge of round 11 ----------
+def round11_rows(store, h):
+    """{} when nothing is kept; else the history follow-up form (slice H), the video answer kept (slice Q) and each
+    ask of a video (action_log video.ask: id, status, counts, cost, when; never the question)."""
+    out = {}
+    st = store.get_state(f"history:{h}")
+    if st:
+        out["history_follow_up"] = {"form": st.get("q"), "since": st.get("at")}
+    ans = store.get_state(f"videoans:{h}")
+    if ans:
+        out["video_answer"] = ans
+    # the merge of round 11's fixes: what "ask them" and the notes of the history answers keep, by kind and time
+    many = store.get_state(f"videomany:{h}")
+    if many:
+        out["ask_them_topic"] = {"topic": many.get("topic"), "since": many.get("at")}
+    go = store.get_state(f"videoask_go:{h}")
+    if go:
+        out["video_ask_waiting_for_yes"] = {"videos": len(go.get("many") or [go.get("item_id")]), "since": go.get("at")}
+    notes = store.get_state(f"histnotes:{h}")
+    if notes:
+        out["notes_said"] = notes
+    if store.get_state(f"consent_video:{h}"):
+        out["told_about_asking_videos"] = store.get_state(f"consent_video:{h}")
+    asks = []
+    for r in store.q("SELECT status, detail, at FROM action_log WHERE handle=? AND action='video.ask' ORDER BY id",
+                     (h,)):
+        try:
+            d = json.loads(r["detail"] or "{}")
+        except ValueError:
+            d = {}
+        asks.append({"video_id": d.get("video_id"), "status": r["status"], "points": d.get("points"),
+                     "cost_usd": d.get("cost_usd"), "at": r["at"]})
+    if asks:
+        out["video_asks"] = asks
+    return out
+# ---------- end the merge of round 11 ----------
+
+
+# ---------- round 10, slice V ----------
+def browser_rows(store, h):
+    """The browser's rows as the export lists them: site keys, statuses, counts and dates. Never the merchant's quoted
+    words, a button's name or the hash."""
+    sites = [{k: g[k] for k in ("site_key", "granted_at", "revoked_at")} for g in store.site_grants_of(h)]
+    runs = [{k: r[k] for k in ("id", "site_key", "host", "status", "presses", "refusals", "walls", "started_at",
+                               "ended_at")} for r in store.browser_runs_of(h)]
+    return {"sites_allowed": sites, "runs": runs}
+# ---------- end round 10, slice V ----------
+
+
+def attachments(files):
+    """[(filename, path, maintype, subtype)] for an email: every file but one over EMAIL_MAX_BYTES; and the names
+    left out."""
+    types = {".json": ("application", "json"), ".csv": ("text", "csv"), ".md": ("text", "markdown"),
+             ".txt": ("text", "plain")}
+    att, left = [], []
+    for name, path in files:
+        if not os.path.isfile(path):
+            continue
+        if os.path.getsize(path) > EMAIL_MAX_BYTES:
+            left.append(name)
+            continue
+        main, sub = types.get(os.path.splitext(name)[1], ("application", "octet-stream"))
+        att.append((name, path, main, sub))
+    return att, left
+
+
+# ---------- round 9, slice A (DESIGN.md section 16.A) ----------
+def drafts_json(store, h):
+    """Every email draft the bot wrote for them: what they saw (recipient, subject, words) while it is kept, and
+    what happened to it."""
+    keep = ("id", "kind", "route", "to_addr", "to_name", "to_domain", "subject", "body", "version", "status",
+            "created_at", "shown_at", "done_at", "sent_at")
+    return json.dumps([{k: r.get(k) for k in keep} for r in store.drafts_of(h)], ensure_ascii=False, indent=1)
+
+
+def forget_exports(handle):
+    """'delete my data': every export and lists folder in the person's outbox folder. Returns how many went."""
+    base = outbox_dir(handle)
+    n = 0
+    for name in os.listdir(base):
+        p = os.path.join(base, name)
+        if os.path.isdir(p) and name.startswith(("export-", "lists-")):
+            shutil.rmtree(p, ignore_errors=True)
+            n += 1
+    return n

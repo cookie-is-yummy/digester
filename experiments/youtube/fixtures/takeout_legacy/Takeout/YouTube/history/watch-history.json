@@ -1,0 +1,16 @@
+[
+  {
+    "header": "YouTube",
+    "title": "Watched Synthetic Bike Repair Basics",
+    "titleUrl": "https://www.youtube.com/watch?v=SYNvid00006",
+    "subtitles": [{"name": "Synthetic Channel 4", "url": "https://www.youtube.com/channel/UCsynthetic0000000000004"}],
+    "time": "2021-05-03T19:20:00.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched a video that has been removed",
+    "time": "2021-05-02T10:00:00.000Z",
+    "products": ["YouTube"]
+  }
+]

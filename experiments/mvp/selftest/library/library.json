@@ -1,0 +1,11 @@
+{
+ "name": "Self-test library (made up)",
+ "source": "synthetic",
+ "counts": {
+  "items": 118,
+  "instagram": 100,
+  "youtube": 18,
+  "interactions": 118
+ },
+ "warnings": []
+}
