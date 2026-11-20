@@ -857,3 +857,63 @@ def test_v2_messages_after_the_note_that_are_not_a_go_ask_nothing(fb, monkeypatc
     fb["state"]["answers"]["mvp_compose"] = lambda u: {"picks": [], "none_reason": "nothing"}
     ask(fb, text, CHAT)
     assert not fake.requests
+
+
+# ================================ the live run's lessons (made-up stand-ins) =====================================
+class It:
+    def __init__(self, iid, caption, platform="youtube"):
+        self.id, self.caption, self.raw_caption, self.platform = iid, caption, caption, platform
+        self.first_line = caption.split("\n")[0]
+        self.url, self.creator, self.duration_s, self.video_id = f"https://example.com/{iid}", "Made Up", None, None
+        self.caption_mark, self.caption_reasons, self.caption_fp = None, (), None
+
+
+SELF = [It("a", "Coffee loop tutorial\nIn this tutorial, I break down a looping animation. I explore workflow, easing & "
+                "2D transitions. This tutorial is suitable for intermediate users."),
+        It("b", "Shape morph tutorial\nIn this tutorial, I use a simple & quick method to create a shape morph "
+                "animation. Add easing to the keyframes for smoother motion with the graph editor.")]
+
+
+def test_live_a_point_whose_every_quote_only_says_what_the_video_explores_is_dropped_for_a_thing_asked():
+    from mvp.synth import check_points
+    raw = {"points": [{"text": "Easing is part of the workflow and 2D transitions.",
+                       "sources": [{"n": 1, "quote": "I explore workflow, easing & 2D transitions"}]},
+                      {"text": "Add easing to the keyframes for smoother motion with the graph editor.",
+                       "sources": [{"n": 2, "quote": "Add easing to the keyframes for smoother motion"}]}],
+           "about": [1, 2]}
+    kept, dropped = check_points(raw, SELF, topic="easing in after effects")
+    assert [p["text"] for p in kept] == ["Add easing to the keyframes for smoother motion with the graph editor."]
+    assert dropped == {"about_item": 1}
+    # without a thing asked inside a subject the same point is not judged by its quote (slice M's set is unchanged)
+    kept, _ = check_points(raw, SELF, topic="after effects")
+    assert len(kept) == 2
+
+
+def test_live_a_point_whose_quotes_never_name_the_thing_asked_is_dropped():
+    from mvp.synth import check_points
+    raw = {"points": [{"text": "Easing goes with simple and quick methods for a shape morph animation.",
+                       "sources": [{"n": 2, "quote": "a simple & quick method to create a shape morph animation"}]}],
+           "about": [1, 2]}
+    assert check_points(raw, SELF, topic="easing in after effects") == ([], {"off_question": 1})
+
+
+def test_live_easy_is_not_easing():
+    from mvp.synth import off_question
+    assert off_question("A quick and easy method.", "easing in after effects")
+    assert not off_question("Use easy ease on both keyframes.", "easing in after effects")
+
+
+def test_live_ask_them_shows_4_points_a_video_and_emails_all_of_them(fb, monkeypatch):
+    summary_shown(fb, monkeypatch)
+    seen(fb)
+    FakeGemini({"answered": True, "points": [{"at": f"0:{10 * k:02d}", "says": f"easing point number {k}."}
+                                             for k in range(1, 6)]}).install(monkeypatch)
+    st = fb["bot"].store
+    st.set_email(H, "made.up.person@example.com", verified=True)
+    out, _ = ask(fb, "ask them")
+    assert out.count("• Easing point number 5.") == 0 and out.count("• Easing point number 4.") == 3
+    assert out.count('(1 more from this video in the email: say "email it to me".)') == 3
+    ask(fb, "email it to me", CHAT)
+    row = st.outbox(H)[0]
+    assert row["subject"] == "From your videos: 3 answers"
+    assert email_text(row["path"]).count("Easing point number 5.") == 3

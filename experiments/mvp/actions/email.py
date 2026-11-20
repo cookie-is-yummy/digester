@@ -127,7 +127,7 @@ def content(ctx):
                    # round 10, slice W (W1): a copy of an open draft to the person themselves, its own subject
                    "draft_copy": a.get("subject") or "Your draft",
                    # round 11 fix, B (V4): a video's answer (videoask.answer_in_view)
-                   "video": f"From the video: {a.get('goal') or ''}".strip()}.get(
+                   "video": a.get("subject") or f"From the video: {a.get('goal') or ''}".strip()}.get(
             a.get("kind"), f"From your saves: {a.get('goal') or 'your picks'}")
     links = [x for _, o in ctx.done for x in o.email_links]
     attach = [x for _, o in ctx.done for x in o.attach]

@@ -3957,7 +3957,7 @@ def synth_message(res, video_offer="", show=3):
         lines.append(f"Here's what {lead}{' ' + when if when else ''} say about {topic}:")
         lines.append("")
         for p in res["points"]:
-            refs = [str(num[i]) for i in p["ids"] if i in num][:show]
+            refs = [str(num[i]) for i in p["ids"] if i in num]   # round 11 fix, B: every source listed is cited
             lines.append(f"• {p['text']} [{', '.join(refs)}]")
         lines += ["", "Sources:"]
         for n, it in enumerate(cited, 1):

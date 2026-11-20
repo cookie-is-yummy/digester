@@ -322,7 +322,16 @@ _KIND_VERB = (r"(?:(?:is|are|was|were)\s+(?:all\s+|mostly\s+|also\s+)?(?:suitabl
               r"demonstrate|demonstrates|feature|features|include|includes|walk|walks|offer|offers|introduce|"
               r"introduces|discuss|discusses|provide|provides|explore|explores|highlight|highlights|present|presents|"
               r"go\s+over|goes\s+over|talk\s+about|talks\s+about|review|reviews|compare|compares|exist|exists|"
-              r"rank|ranks|follow|follows|document|documents)\b(?!\s+(?:that|why)\b))")
+              r"rank|ranks|follow|follows|document|documents|teach|teaches)\b(?!\s+(?:that|why)\b))")
+# a quote in which the item's maker says what the item is or does ("In this tutorial, I break down ...", "I explore
+# workflow, easing ...", "suitable for beginners"): it cannot answer what the item says about a thing asked
+SELF_DESCRIBED = re.compile(
+    r"\b(?:in\s+this\s+(?:[\w'-]+\s+){0,3}(?:tutorial|video|episode|course|lesson|class|stream|vlog|series|post|reel)|"
+    r"this\s+(?:[\w'-]+\s+){0,2}(?:tutorial|video|course|series)\s+(?:is|covers|shows|explains|will|goes)|"
+    r"i\s+(?:explore|break\s+down|show\s+you|walk\s+you|go\s+over|cover|talk\s+about|demonstrate|share\s+how|"
+    r"use\s+a\s+(?:simple|quick|easy))|we(?:'ll|\s+will)\s+(?:explore|cover|look\s+at|go\s+over|learn)|"
+    r"you(?:'ll|\s+will)\s+learn|suitable\s+for|for\s+(?:complete\s+|absolute\s+)?beginners|"
+    r"i'?m\s+(?:uploading|launching|planning|going\s+to\s+show)|follow[- ]up\s+parts?|part\s+\d+\s+of)\b", re.I)
 META = re.compile(
     r"^(?:(?:several|some|many|most|a\s+few|few|two|three|four|five|both|all|these|those|the|one|other|each|"
     r"certain|various|multiple)\s+(?:of\s+(?:the|these|them)\s+)?)?(?:[\w'-]+\s+){0,3}?" + _KIND_NOUN + r"\s+"
@@ -357,7 +366,7 @@ def _root(w):
         if len(w) > len(suf) + 2 and w.endswith(suf):
             w = w[:-len(suf)]
             break
-    return w[:-1] if len(w) > 3 and w[-1] in "ey" else w
+    return w[:-1] if len(w) > 3 and w[-1] == "e" else w
 
 
 def off_question(text, topic):
@@ -368,7 +377,7 @@ def off_question(text, topic):
         return False
     want = {_root(w) for w in content_words(thing)}
     have = {_root(w) for w in _WORD.findall((text or "").lower())}
-    return not any(a == b or (min(len(a), len(b)) >= 3 and (a.startswith(b) or b.startswith(a)))
+    return not any(a == b or (min(len(a), len(b)) >= 4 and (a.startswith(b) or b.startswith(a)))
                    for a in want for b in have)
 
 
@@ -430,7 +439,7 @@ def check_points(raw, items, extra=None, notes=None, need_about=(), topic=None):
         if off_question(text, topic):   # round 11 fix, B (S3): "easing in after effects", a point never about easing
             drop("off_question", text)
             continue
-        ids, texts = [], []
+        ids, texts, meta_quotes, quotes = [], [], 0, []
         for s in p.get("sources") or []:
             if not isinstance(s, dict):
                 continue
@@ -451,8 +460,20 @@ def check_points(raw, items, extra=None, notes=None, need_about=(), topic=None):
             if it.id not in ids:
                 ids.append(it.id)
                 texts.append(body)
+                meta_quotes += 1 if SELF_DESCRIBED.search(quote) else 0
+                quotes.append(quote)
         if not ids:
             drop("no_source", text)
+            continue
+        if topic and focus(topic)[1] and off_question(" ".join(quotes), topic):
+            # round 11 fix, B (S3): asked about one thing ("easing in after effects"), no quoted words of the items
+            # name it: the point says it, the items do not
+            drop("off_question", text)
+            continue
+        if meta_quotes == len(ids) and topic and focus(topic)[1]:
+            # round 11 fix, B (S3): asked about one thing ("easing in after effects"), every source only says what
+            # its video is ("I explore workflow, easing & ..."): that is not what it says about easing
+            drop("about_item", text)
             continue
         if _title_only(text, [getattr(x, "first_line", "") or (x.caption or "").split("\n")[0]
                               for x in items if x.id in ids], topic):   # round 11 fix, B (S3): an item's title said again is not something it says

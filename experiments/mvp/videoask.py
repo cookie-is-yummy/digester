@@ -720,7 +720,7 @@ def run(bot, person, it, question, now):
 
 # ---------- round 11 fix, B (V1): "ask them": up to 3 YouTube videos of the answer in view, one question ----------
 MANY_MAX = 3            # videos asked by one "ask them"
-MANY_POINTS = 3         # points shown per video in that answer
+MANY_POINTS = 4         # points shown per video in that answer (all of them are kept for "email it to me")
 MANY_CHARS = 3000       # the whole answer at most this long
 MANY_MINUTES = 60       # "ask them" reads the summary's topic this long after it
 ASK_THEM_WHAT = "What should I ask them? For example: \"ask them what settings they use\"."
@@ -731,7 +731,7 @@ MANY_START = "I'll ask {these}; their links and your question go to Google. I ke
 MANY_LABEL = "From the videos themselves (not checked against their text):"
 MANY_KEEP = "A model at Google watched them for this; I keep only these answers."
 MANY_STOPPED = "I stopped there. {line}"
-MANY_MORE = "(I kept its first {n} points here; \"ask video {k}\" and your question gives all of them.)"
+MANY_MORE = "({n} more from this video in the email: say \"email it to me\".)"
 
 
 def _these(n):
@@ -820,7 +820,7 @@ def _run_many(bot, person, items, question, nums, now):
             for s, says in kept[:MANY_POINTS]:
                 lines.append(f"• {says} ({clock(s)}: {watch_url(r['vid'], s)})")
             if len(kept) > MANY_POINTS:
-                lines.append(MANY_MORE.format(n=MANY_POINTS, k=n))
+                lines.append(MANY_MORE.format(n=len(kept) - MANY_POINTS))
         else:
             lines = [f"{head} {NONE_KEPT if r['answered'] and any(r['dropped'].values()) else NOT_SAID}",
                      watch_url(r["vid"])]
@@ -832,7 +832,7 @@ def _run_many(bot, person, items, question, nums, now):
             lines.append(r["clip_line"])
         blocks.append("\n".join(lines))
         kept_all.append({"video_id": r["vid"], "item_id": it.id, "n": n,
-                         "points": [{"at": s, "says": x} for s, x in kept[:MANY_POINTS]]})
+                         "points": [{"at": s, "says": x} for s, x in kept]})
     if not blocks:   # nothing asked at all: the plain line of what stopped it
         return bot.send(h, stop or FAILED)
     body = [MANY_LABEL, ""] + ["\n\n".join(blocks)]
@@ -871,7 +871,7 @@ def answer_in_view(bot, h):
         it = view.get(iid) if view is not None else None
         return display_title(it) if it is not None else "the video"
     if va.get("videos"):
-        lines, title = [MANY_LABEL], "your videos"
+        lines, title = [MANY_LABEL], ""
         for v in va["videos"]:
             lines += ["", f"Video {v.get('n')}, \"{name(v.get('item_id'))}\":"]
             lines += [f"• {p['says']} ({clock(p['at'])}: {watch_url(v['video_id'], p['at'])})" for p in v["points"]]
@@ -885,6 +885,7 @@ def answer_in_view(bot, h):
         if not va["points"]:
             lines.append(NOT_SAID[:1].upper() + NOT_SAID[1:] + " " + watch_url(va["video_id"]))
         lines.append(KEEP)
-    return {"run_id": None, "rule_id": None, "kind": "video", "goal": title,
+    return {"run_id": None, "rule_id": None, "kind": "video", "goal": title or "your videos",
+            "subject": f"From the video: {title}" if title else f"From your videos: {len(va['videos'])} answers",
             "parts": [{"type": "text", "text": "\n".join(lines)}], "picks": []}
 # ---------- end round 11 fix, B (V4) ----------
