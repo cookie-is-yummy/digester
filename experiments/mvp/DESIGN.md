@@ -3845,6 +3845,92 @@ a recommendation and may bring a saved post. The first-time note asks for "ask t
 shown. Gemini's points are not checked against the video and come in its own casing. "What have I saved this month"
 stays the recent answer (slice H's choice). Spanish topic words match only Spanish titles.
 
+### 18.L The live check of 19 Nov and its fixes (round 11; `tests/test_round11_fix_a.py`, `_fix_b.py`, `_fix_merge.py`)
+
+The orchestrator's live check of build 02f3581 (19 Nov, evening; the founder's library, `MVP_VIDEO_ASK=1`; its notes are
+outside git, no title is written here) found fifteen things. Two fixers worked in parallel on branches `r11fix/A`
+(history answers, 18.LA) and `r11fix/B` (summaries and asking videos, 18.LB); the merge (20 Nov) brought both in with
+`git merge --no-ff`, A first, and joined them where they meet. What reads right was left alone: the month and week
+windows with both export ends, the channel ranking, counts by topic and year, a day's list, the help leading with the
+watch history.
+
+| # | Found live | What changed | Where | Measured |
+| --- | --- | --- | --- | --- |
+| R1 | "what was that video i watched about X" answered "I recommend <a saved post> ... because ..." | A recall by code: up to 3 videos watched (YouTube first), best fit first, "You watched it on <day>." and the card; the first in view; nothing watched: said, with the saved one | A (`history.read_recall`, `recall_answer`, in hook 8h) | 30 of 30 made-up recalls by code, 0 of 31 traps; live: 2 watched videos, no recommendation |
+| R2 | After that post, "ask the video" got "I can only ask YouTube videos." twice | The plain line, then `You also watched a YouTube video on this: ...` and "ask that one" | B's offer (`videoask.also_watched`), A's `history.best_watched_video`; at the merge, the post's caption when the request's words fit no watched title | A: 10 of 12 real posts gave a watched video on the same topic |
+| R3 | "when did i first start watching cooking videos": a talk-show clip whose title holds the word | First, last and list keep only items that fit by the library's own item vectors and say "about" and how many were left out; counts and timelines keep "mention" | A (`topic_fit`, `fit_hits`); at the merge, a watched-only summary uses it too | Real library, first 5 of 10 topics: 39 of 50 fit before, 41 after; 0.2 s, no model call |
+| R4 | The friends line and the all-time range on every answer | Once in 6 hours (`histnotes:<handle>`); where an export ends always; at the merge, the summary's hint on a new export shares the same notes | A; the merge (`synth._window`) | Tests; self-test c54 |
+| R5 | "did i watch more in 2024 or 2025" answered with the wrong one first | `More in 2025: 24,004 videos, against 13,458 in 2024 (10,546 more).` | A | Tests |
+| R6 | A timeline with four leading years of 0 | Starts at the first year or month with a count; `None before <when>.` | A | Tests |
+| R7 | "(6,884 channels in all)" for Instagram accounts | "accounts and channels", "accounts" | A | Tests |
+| R8 | A list of watched reels, then "ask the video": "I haven't shown you a YouTube video" | `Those are Instagram posts, ...` and the latest YouTube video watched on the topic | B's line, A's `best_watched_video(latest=True)` | Tests (fake and, at the merge, A's own function) |
+| S1 | Unnumbered sources and "ask video N" | Bullets cite `[1, 3]`; one `Sources:` list; "ask video N" reads those numbers; only YouTube sources offered | B (`texts.synth_message`) | Tests; self-test c45, c55 |
+| S2 | "from what i watched" built on a saved post; the lead said "kept" | Watched, saves or likes only when said; the lead says what was read; at most 2 points from one item alone | B (`synth._limit`); at the merge, by A's record (the same item sets on the made-up eval set: 6 of 6 limited requests) | Eval: the limited requests cite 2 items each (by design) |
+| S3 | Five points that only described the videos | Prompt `synth_v5` and code checks drop "what an item is"; under 2 points left: the plain line, the best 3, the offer | B (`synth_v5`, `check_points`) | 12 requests: 62 points, 12 of 12 citing 3+, 0 outside the fit list; 5 thin topics: 11 points shown before, 1 to 2 after |
+| V1 | No way to ask several videos | "ask them" (up to 3), each through slice Q's own checks and caps | B (hook 8y, `ask_many`); at the merge, after a recall its own list | Live (B): 3 videos in 21.5 s; live (merge): a recall then "ask them", 2 videos, 15.5 s |
+| V2 | The first ask needed "ask the video" twice | The note ends `Say "yes" to go ahead.`; "yes" asks (hook 4c); a consent that named Google needs no note | B (`videoask.go_answer`) | Tests; self-test c57, c58 |
+| V3 | Points in lower case | A capital by code | B | Tests |
+| V4 | "email it to me" after a video answer emailed the earlier picks | It emails the video answer | B (`outputs._plain_answer`) | Tests; self-test c58 (the email's subject and points) |
+
+**Where the fixes meet (the merge, `tests/test_round11_fix_merge.py`, 24 tests; 13 fail on the plain merge 3a0f372, the
+rest are guards).**
+- (a) B's offer reaches A's `best_watched_video` (B's guarded import now finds it). When the request's words fit no
+  watched title, the post's own caption is tried (the merge's fallback). Slice Q's and the check's "an Instagram pick
+  is never asked" tests now expect the offer when the library holds a watched video on the topic (changed on purpose,
+  below); with none, the plain line as before. "ask the video" while the offer is open asks the offered video (the
+  offer line names what goes to Google).
+- (b) A's recall keeps only its first video in view (for a question and "ask the video"); "ask them" after a recall
+  reads the recall's own list from the history state, up to 3 in its order, and with no question asks "What does it
+  say about <the recall's topic>?" (`history.history_topic`, also after a history list).
+- (c) S2's limit reads A's record (watch or view events in the person's time zone, never a friend's share), the record
+  every history answer counts, and A's fit where the library has vectors: an item that holds the topic's words but
+  lies far from the others is left out of a watched-only summary (counted in the run's steps as `unfit`); with no
+  vectors nothing changes (the eval set has none, so its numbers stand).
+- (d) The summary's window line keeps where the export ends and says the hint on a new export once in 6 hours, shared
+  with the history answers (note `refresh`, beside `range` and `friends`); a window wholly after the record still says
+  it. History replies are unchanged.
+- (e) Hook 4c (`go_answer`) is in section 17's table and `HOOK_ORDER`, and so is the order inside `history_reads`
+  (follow-up, recall, history question), `videoask.reads` ("what leaves", "ask the video", "ask that one", "ask them")
+  and `synth_reads` (summary, "ask my videos about X").
+- (f) "what did you do for me" counts each video of an "ask them"; "export my data" lists each ask, the answers per
+  video and, new, the topic "ask them" keeps, a note waiting for "yes", the notes said and when the consent named the
+  video flow; "delete my data" removes them all. "what leaves this computer" and the consent sentence say "ask them"
+  sends up to 3 links, one at a time, each with the question (setting on only).
+- (g) The help gains one line with the setting on: `After a summary or a list of videos, "ask them" and your question
+  asks up to 3 of them.`
+- Found at the merge and fixed: "after effects" was cut to "effects" in the recall's words (`content_words`, as the
+  history read already did); a first or last answer with one item left by the fit lost that item's line to the count
+  line.
+
+**Changed on purpose** (the merge): `test_round11_q.py::test_on_an_instagram_pick_is_never_asked` (the can't-tell line
+now carries the offer of the watched video on the topic and "ask the video" asks that one, never the post; a new test
+keeps the plain line with no watched video); `test_round11_checks.py::test_an_instagram_pick_is_never_asked` (the plain
+line then the offer; nothing asked; with no watched video, the plain line). The consent sentence and the "what leaves"
+line name "ask them" (no test held their exact words). The second summary in 6 hours with a window leaves out the
+export hint.
+
+**The self-test** gains c51 to c58 (made up): a recall with its days; a recall, a question and asking it; the first
+video by the fit (made-up vectors in a dry run; a live run builds the engine's own); the range and the hint once; a
+watched-only summary with numbered sources (made-up watched reels added to that conversation's library); points that
+only say what the items are giving the plain line and the offer; "ask them" after a day's list with one video failing
+(`gemini_fail`); "email it to me" after a video answer (the new `email_has` check reads the email kept).
+
+**Live** (the founder's library read only, a scratch home, a fresh person, `MVP_VIDEO_ASK=1`, `MVP_VIDEO_ASK_MAX_MIN=10`;
+replies read in the scratchpad only): the founder's recall message gave 2 watched videos with their days and cards
+(38 s: the engine's first load); "ask them" gave the note; "yes" asked both (15.5 s; 4 points of one shown with one
+more for the email and the clip line, 3 of the other; the points answer the question from the video); "what did you do
+for me" counted 2 videos. $0.015 (the two video questions).
+
+**Checks** (offline): the full suite 0 failed (the count in the README), demo 10, the dry self-test 59 conversations
+and 152 of 152 steps, `probe_same` byte-equal, the development phrasing set by code with the setting off and on, as
+tester and operator: 73 helper lines right, 1 wrong (d007), 1 of 40 `none` lines taken (d132, on purpose), the 159 rule
+texts and 123 phrasings taken by no new read, the 60 traps of the round 11 check not taken.
+
+**Not done.** The questions for the founder stand (18.LA, 18.LB): the recall's order (watched first, a save only when
+nothing watched fits), "about" where the fit is weak, decision S2, and A-017 (still Proposed; up to 3 links per
+question). A watched-only summary of reels says "the videos you watched" and "From 2 posts". The fit in a summary was
+not measured on the real library (no live summary was run at the merge). Recall is English only.
+
 ### 18.LA The fixes after the live check, part A: history answers (round 11 fix, A; `history.py`, `tests/test_round11_fix_a.py`)
 
 The orchestrator's live check of build 02f3581 (19 Nov, outside git) found R1 to R8; this part fixes R1, R3 to R7 and
