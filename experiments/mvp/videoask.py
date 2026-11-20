@@ -98,6 +98,11 @@ NOT_YOUTUBE = ("I can only ask YouTube videos. Instagram has no way for me to as
                "caption.")
 NO_KEY = "Asking a video isn't set up on this bot yet."
 PER_DAY_USED = "I've asked {n} videos for you today, the most I do in a day. I can ask again tomorrow."
+
+
+def per_day_used(n):
+    """PER_DAY_USED with "1 video" said right (round 11 fix check)."""
+    return PER_DAY_USED.format(n=n).replace("asked 1 videos", "asked 1 video")
 DAILY_ROOM = ("Asking a video costs up to about {cents} cents, more than what's left of today's limit for you. I can "
               "ask tomorrow.")
 TOTAL_ROOM = "The test budget is too low to ask a video right now. The founders need to raise it."
@@ -328,7 +333,7 @@ def check_points(out, length_s, clip_s, titles=None):
     'at' and 'says' strings are read, as strings. `titles`: other videos' titles (other_titles), never named."""
     from .compose import ASSISTANT_NOTE
     pts = (out or {}).get("points") if isinstance(out, dict) else None
-    kept, dropped = [], {"time": 0, "other": 0, "acting": 0, "empty": 0}
+    kept, dropped = [], {"time": 0, "other": 0, "acting": 0, "empty": 0, "repeat": 0}
     end = min(x for x in (length_s, clip_s) if x) if (length_s or clip_s) else None
     for p in pts if isinstance(pts, list) else []:
         if len(kept) >= MAX_POINTS:
@@ -354,9 +359,38 @@ def check_points(out, length_s, clip_s, titles=None):
         if len(words) > MAX_WORDS:
             says = " ".join(words[:MAX_WORDS]).rstrip(",;:") + "…"
         says = says[:1].upper() + says[1:]   # round 11 fix, B (V3): each point starts with a capital, by code
+        if any(_same_point(says, x) for _, x in kept):
+            dropped["repeat"] += 1   # round 11 fix check: the live run's "press F9 to ease" three times
+            continue
         kept.append((s, says))
     kept.sort(key=lambda x: x[0])
     return kept, dropped
+
+
+_PSTOP = set("""the a an and or to of in on at for with by from it its this that these those them they you your is are
+was were be been can could will would should then than so as into onto up out over just also more most very""".split())
+
+
+def _point_words(s):
+    out = set()
+    for w in re.findall(r"[a-z0-9/]+", s.lower()):
+        if w in _PSTOP or (len(w) < 3 and not any(c.isdigit() for c in w)):
+            continue
+        for suf in ("ing", "ed", "es", "s"):
+            if w.endswith(suf) and len(w) - len(suf) >= 3:
+                w = w[:-len(suf)]
+                break
+        out.add(w.rstrip("e") if len(w) > 3 else w)
+    return out
+
+
+def _same_point(a, b):
+    """Round 11 fix check (18.L check): two points that say the same thing in other words (most of their content words
+    shared) are one point; the earlier one stays."""
+    x, y = _point_words(a), _point_words(b)
+    if len(x) < 3 or len(y) < 3:
+        return False
+    return len(x & y) / len(x | y) >= 0.6
 
 
 def answer_text(title, vid, kept, dropped, answered, clip_line=""):
@@ -660,7 +694,7 @@ def _ask_one(bot, person, it, question, now):
     if not secret("GEMINI_API_KEY"):
         return {"line": NO_KEY, "stop": True}
     if _used_today(bot, person, now) >= per_day():
-        return {"line": PER_DAY_USED.format(n=per_day()), "stop": True}
+        return {"line": per_day_used(per_day()), "stop": True}
     # the length: the library's, else YouTube's own (videos.list, cached 30 days)
     length = it.duration_s
     if not length:
@@ -817,7 +851,7 @@ def _run_many(bot, person, items, question, nums, now):
     if not bot.store.get_state(f"videomany_seen:{h}"):   # the first time: what it will send, before it starts
         bot.store.set_state(f"videomany_seen:{h}", now.isoformat())
         bot.send(h, MANY_START.format(these=_these(len(items))))
-    blocks, kept_all, stop = [], [], None
+    blocks, kept_all, stop, answered = [], [], None, 0
     for n, it in zip(nums or range(1, len(items) + 1), items):
         if stop is not None:
             break
@@ -830,6 +864,7 @@ def _run_many(bot, person, items, question, nums, now):
         if "line" in r:   # this one failed or was refused: said plainly, the others still answer
             blocks.append(f"{head} {r['line']}" if not r.get("refused") else f"{head} {r['line']}")
             continue
+        answered += 1
         kept = r["kept"]
         lines = [head]
         if kept:
@@ -840,7 +875,7 @@ def _run_many(bot, person, items, question, nums, now):
         else:
             lines = [f"{head} {NONE_KEPT if r['answered'] and any(r['dropped'].values()) else NOT_SAID}",
                      watch_url(r["vid"])]
-        left = sum(r["dropped"].values())
+        left = sum(v for k, v in r["dropped"].items() if k != "repeat")   # a repeat hides nothing
         if left:
             lines.append(f"I left out {left} that didn't pass my checks (a time outside the video, another video or a "
                          f"link, or an instruction).")
@@ -851,13 +886,17 @@ def _run_many(bot, person, items, question, nums, now):
                          "points": [{"at": s, "says": x} for s, x in kept]})
     if not blocks:   # nothing asked at all: the plain line of what stopped it
         return bot.send(h, stop or FAILED)
-    body = [MANY_LABEL, ""] + ["\n\n".join(blocks)]
+    # round 11 fix check (18.L check): when no video answered, no label and no "watched them" line (both untrue then);
+    # one answered: "watched it", as for one video
+    keep = MANY_KEEP if answered > 1 else KEEP if answered else ""
+    body = ([MANY_LABEL, ""] if answered else []) + ["\n\n".join(blocks)]
     if stop is not None:
         body += ["", MANY_STOPPED.format(line=stop)]
-    body += ["", MANY_KEEP]
+    if keep:
+        body += ["", keep]
     text = "\n".join(body)
     if len(text) > MANY_CHARS:
-        text = text[:MANY_CHARS].rsplit("\n", 1)[0] + "\n…\n" + MANY_KEEP
+        text = text[:MANY_CHARS].rsplit("\n", 1)[0] + "\n…" + ("\n" + keep if keep else "")
     if kept_all:
         bot.store.set_state(f"videoans:{h}", {"videos": kept_all, "model": model(), "at": now.isoformat(),
                                               "after_run": _newest_run(bot, h)})

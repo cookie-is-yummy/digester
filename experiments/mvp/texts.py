@@ -3924,10 +3924,15 @@ def _synth_count(n, one, many):
     return f"{n} {one if n == 1 else many}"
 
 
-def synth_counts(items):
-    """'4 videos and 2 posts' (YouTube items are videos; Instagram items are posts)."""
+def synth_counts(items, reels=False):
+    """'4 videos and 2 posts' (YouTube items are videos; Instagram items are posts). `reels` (a summary of what was
+    watched, round 11 fix check): an Instagram video watched is a reel ("From 3 videos and 1 reel")."""
     v = sum(1 for it in items if it.platform == "youtube")
     p = len(items) - v
+    if reels and p and all((it.media or "").lower() in ("reel", "reels", "clips", "video")
+                           for it in items if it.platform != "youtube"):
+        parts = ([_synth_count(v, "video", "videos")] if v else []) + [_synth_count(p, "reel", "reels")]
+        return " and ".join(parts)
     parts = ([_synth_count(v, "video", "videos")] if v else []) + ([_synth_count(p, "post", "posts")] if p else [])
     return " and ".join(parts) or "0 posts"
 
@@ -3966,9 +3971,10 @@ def synth_message(res, video_offer="", show=3):
         for n, it in enumerate(cited, 1):
             lines.append(f"{n}. {synth_source(it)}")
         silent = [it for it in res["silent"] if it.id not in num]
-        tail = f"From {synth_counts(cited)}"
-        if silent:
-            tail += f"; {len(silent)} more fit but say nothing in their text"
+        tail = f"From {synth_counts(cited, reels=res.get('how') == 'watched')}"
+        if silent:   # round 11 fix check: one is "fits ... says ... its"
+            tail += (f"; {len(silent)} more fit but say nothing in their text" if len(silent) > 1 else
+                     "; 1 more fits but says nothing in its text")
         unused = [it for it in res.get("said") or [] if it.id not in num]
         if unused:
             tail += f"; I read {len(unused)} more that I didn't use"
@@ -3985,7 +3991,8 @@ def synth_message(res, video_offer="", show=3):
         if res["points"]:
             num = {it.id: n for n, it in enumerate(listed, 1)}
             refs = [str(num[i]) for i in res["points"][0]["ids"] if i in num]
-            lines.append(f"One thing they say: {res['points'][0]['text']}" + (f" [{', '.join(refs)}]" if refs else ""))
+            one = "One thing they say" if len(res["fits"]) > 1 else "One thing it says"   # round 11 fix check
+            lines.append(f"{one}: {res['points'][0]['text']}" + (f" [{', '.join(refs)}]" if refs else ""))
         lines.append(f"The best {len(listed)}:" if len(listed) > 1 else "The best one:")
         for n, it in enumerate(listed, 1):
             lines.append(f"{n}. {synth_source(it)}")

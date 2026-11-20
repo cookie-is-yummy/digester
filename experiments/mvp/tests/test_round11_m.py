@@ -239,7 +239,8 @@ def test_a_summary_cites_many_items_and_says_what_it_read(lib_env):
     assert re.search(r"(?m)^1\. ", out) and re.search(r"(?m)^3\. ", out)
     # round 11 fix, B (S1): each point cites numbered sources, listed once (was: '   From "' under every point)
     assert out.count("\n• ") >= 3 and re.search(r"(?m)^3\. \"", out.split("Sources:\n", 1)[1])
-    assert re.search(r"From \d+ videos? and \d+ posts?; 1 more fit but say nothing in their text(; I read \d+ more that I didn.t use)?\.", out), out
+    # round 11 fix check (18.L check): one is "1 more fits but says nothing in its text"
+    assert re.search(r"From \d+ videos? and \d+ posts?; 1 more fits but says nothing in its text(; I read \d+ more that I didn.t use)?\.", out), out
     assert out.rstrip().endswith("I read titles, descriptions and captions, not what is said in the videos.")
     # the friend's post, and the post that speaks to an assistant, are never read or named
     assert "sm_sd7" not in out and "sm_sd6" not in out and "password" not in out.lower()

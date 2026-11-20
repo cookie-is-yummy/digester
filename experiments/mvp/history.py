@@ -450,6 +450,11 @@ def _topic_and_platform(t, spans):
         platform = "youtube"
     if re.search(r"\binstagram\b", rest):
         platform = None if platform else "instagram"
+    # round 11 fix check (18.L check): "reels" are Instagram's ("how many reels have i liked" counted YouTube likes,
+    # "the last color grading reel i watched" showed a YouTube video), unless videos are named beside them
+    if platform is None and not re.search(r"\b(?:youtube|yt|videos?|vids?|shorts?)\b", rest) \
+            and re.search(r"\b(?:reels?|insta|ig)\b", rest):
+        platform = "instagram"
     how = "watched"
     if re.search(r"\b(?:liked|like|likes|me gusto|me gustaron|di like)\b", rest):
         how = "liked"
@@ -1478,6 +1483,8 @@ def _peak(h, lo, hi, by_month):
     if not c:
         return None
     k, n = max(c.items(), key=lambda kv: (kv[1], kv[0]))
+    if sum(1 for v in c.values() if v == n) > 1:
+        return None   # round 11 fix check (18.L check): a tie has no "most" ("The most: November 2026, with 1." of four 1s)
     return (k, n) if n else None
 
 
@@ -1843,6 +1850,7 @@ def read_recall(text, today):
     if not raw or len(raw) > 220:
         return None
     t = normal(raw).rstrip(" ?!.")
+    t = re.sub(r"\b(?:abt|abour|abut)\b", "about", t)   # round 11 fix check: "abt skin tones" said "abt" back
     if RECALL_NOT.search(t) or BOT_ASK.search(re.sub(r"\b(?:can|could|do)\s+you\b", " ", t)):
         return None
     m, chan = None, None

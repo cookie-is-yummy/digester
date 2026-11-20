@@ -814,10 +814,27 @@ class FollowupMixin(IntegrationReadsMixin):
             if it is not None:
                 return it, True
         if last and last.get("items") and detail_kinds(text) and not ACTING.search(text) and \
-                (points_at_pick(text) or only_detail_words(text)):
+                (points_at_pick(text) or only_detail_words(text)) and not self._a_summary_asked(person, text):
             return Interpretation(intent="follow_up", question=" ".join(text.split())[:300],
                                   pick_number=pick_number(text, len(last["items"]))), True
         return None, False
+
+    # ---------- round 11 fix check (18.L check): a summary with a window is never a question on the pick ----------
+    def _a_summary_asked(self, person, text):
+        """True when the summary read (hook 8m, after this one) takes the message as a new summary of a topic: the
+        "this" of "summarize what i watched this month about cooking" is a window, not the pick in view (a recall
+        keeps one item in view, so the pick's key points came back instead)."""
+        from . import synth
+        if not synth.ON or self._answer_lang():
+            return False
+        try:
+            from zoneinfo import ZoneInfo
+            today = self.clock().astimezone(ZoneInfo(person.get("timezone") or "UTC")).date()
+            req = synth.read(text, today)
+        except Exception:  # noqa: BLE001 - the question on the pick, as before
+            return False
+        return bool(req and not req.get("these") and req.get("topic") and req.get("window") is not None)
+    # ---------- end round 11 fix check ----------
 
     # ---------- another one ----------
     def _more(self, person, it, text, lead="", easier=False, lead_none=""):

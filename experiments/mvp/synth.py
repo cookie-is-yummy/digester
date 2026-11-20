@@ -346,7 +346,9 @@ META = re.compile(
     + r"|\b(?:is|are)\s+explained\s+(?:for|to|in)\b"
     + r"|\b(?:is|are)\s+(?:a|an|just\s+a)\s+(?:vlog|recap|tier\s+list|series|walkthrough|livestream|dump|tour|"
       r"reaction|compilation|montage)\b"
-    + r"|\bpersonal\s+experience\b|\bnot\s+a\s+tutorial\b|\bfirst\s+(?:week|year|month|day)\s+(?:of|learning)\b",
+    + r"|\bpersonal\s+experience\b|\bnot\s+a\s+tutorial\b|\bfirst\s+(?:week|year|month|day)\s+(?:of|learning)\b"
+    # round 11 fix check (18.L check): "Full stream replay." says what the item is
+    + r"|^(?:the\s+)?(?:full\s+|complete\s+|whole\s+)?(?:live\s*)?stream\s+(?:replay|vod|recording)\b",
     re.I)
 
 
@@ -557,6 +559,11 @@ def _limit(bot, person, req):
     watched", "the videos i watched", "my watch history", "from my saves")."""
     from . import history as Hs
     how = req.get("how") or "any"
+    if SOURCE_LIMIT and not req.get("these") and req.get("only") is not None and req.get("dates") is not None:
+        # round 11 fix check (18.L check): a window's items (what was watched, saved or liked in it, by slice H's
+        # record) are fitted too, as a limited summary without a window is ("summarize what i watched in 2026 about
+        # cooking" cited a game stream whose title says "cooking")
+        return _unfit_out(bot, person, req, dict(req["dates"]))
     if not SOURCE_LIMIT or how == "any" or req.get("these") or req.get("only") is not None:
         return req
     kinds = set(Hs.HOW_KINDS[how])
@@ -571,6 +578,14 @@ def _limit(bot, person, req):
         ds = [d for d, k in evs if k in kinds]
         if ds:
             dates[iid] = max(ds).isoformat()
+    return _unfit_out(bot, person, req, dates)
+
+
+def _unfit_out(bot, person, req, dates):
+    """The request limited to `dates`' items, without those fix A's fit says only mention the topic."""
+    from . import history as Hs
+    view = bot.view(person["library"])
+    rec = Hs.record(view, person.get("timezone") or "UTC")
     # and fix A's fit (R3) where the library has its item vectors: an item that holds the topic's words but whose
     # vector is far from the others that hold them is left out ("mentions it but isn't about it"); items that don't
     # hold the words are left to the search. No vectors, or too few items to tell: nothing changes.

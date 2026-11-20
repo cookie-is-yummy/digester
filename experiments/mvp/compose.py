@@ -75,7 +75,9 @@ STOP = set("a an and the of for to in on with my your our this that is it at by 
            "recipe video reel post how make".split())
 
 
-PROMO_TITLE = re.compile(r"\b(comment|links?|giveaway|follow|dm|subscribe|shop|discount|code|sale|tap|click)\b", re.I)
+# round 11 fix check (18.L check): "follow through" (a motion principle) is a title's own words, not a call to follow
+PROMO_TITLE = re.compile(r"\b(comment|links?|giveaway|follow(?![\s-]+through\b)|dm|subscribe|shop|discount|code|sale|"
+                         r"tap|click)\b", re.I)
 
 
 # ---------- round 10, slice S (S4, design C4): the title shown for a pick, one rule for every display use (W-9) ----
