@@ -861,8 +861,17 @@ FIT_WATCHED_MIN = 6   # round 11 fix pass 2 (P6): fewer items of the kind asked 
 
 
 def few_watched(view, rec, q, plats):
-    """Round 11 fix pass 2 (P6): fewer than FIT_WATCHED_MIN items of the kind asked hold the topic's words."""
-    return bool(q.topic) and not q.channel and len(hits(view, rec, q, None, None, plats)) < FIT_WATCHED_MIN
+    """Round 11 fix pass 2 (P6): fewer than FIT_WATCHED_MIN items of the kind asked hold the topic's words. The check
+    of fix pass 2 (DESIGN 18.L2 check): also True when the fit keeps none of them at any time (a topic whose record
+    matches are mostly saves pointing elsewhere: "you watched no videos about X" while six watched titles say X);
+    they are then shown by their words, "mention", as below the threshold."""
+    if not q.topic or q.channel:
+        return False
+    h = hits(view, rec, q, None, None, plats)
+    if len(h) < FIT_WATCHED_MIN:
+        return True
+    kept, _left, used = fit_hits(view, rec, q, h)
+    return used and not kept
 
 
 def fit_hits(view, rec, q, h):
@@ -1719,6 +1728,9 @@ def follow_up(st, text, today, known=None):
         return None
     if "window" in changes and q.kind == "compare":
         changes.update(kind="count", window2=None)
+    elif q.kind in ("list", "on_day") and re.match(r"^\W*(?:how many|how much|cuant[oa]s?)\b", body):
+        # the check of fix pass 2: "and how many in september?" after a list is a count, not the list again
+        changes.update(kind="count", offset=0)
     return q.model_copy(update=changes)
 
 
@@ -2011,17 +2023,21 @@ def _recall_level(text, phrase, words):
 
 def _few_watched(view, rec, phrase, words, platforms, how):
     """Round 11 fix pass 2 (P6): fewer than FIT_WATCHED_MIN items of the kind counted (watched, for a recall), in the
-    platforms asked, hold the words (all of them, or the phrase), at any time."""
-    n = 0
+    platforms asked, hold the words (all of them, or the phrase), at any time. The check of fix pass 2: also True when
+    the topic's fit keeps none of them (they are then shown by their words, "mention", never "Nothing you watched
+    fits" and a save instead)."""
+    n, have = 0, []
     for iid, evs in rec.events.items():
         it = view.items.get(iid)
         if it is None or (platforms and it.platform not in platforms) or not any(k in how for _, k in evs):
             continue
         if _recall_level(it.caption or "", phrase, words) >= 2:
             n += 1
-            if n >= FIT_WATCHED_MIN:
-                return False
-    return True
+            have.append(iid)
+    if n < FIT_WATCHED_MIN:
+        return True
+    fit = topic_fit(view, rec, phrase)
+    return fit is not None and not any(i in fit[0] and fit[0][i] >= fit[1] for i in have)
 
 
 def recall_fitted(view, rec, r, platforms, how=("watch", "view")):

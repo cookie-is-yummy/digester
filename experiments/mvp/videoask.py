@@ -106,6 +106,8 @@ FIRST_NOTE = ("Before I ask: asking a video sends its link and your question to 
 ASK_WHAT = "What should I ask it? For example: \"ask the video what settings it uses\"."
 WHICH = "Which video? Say \"ask video 2 <your question>\", by its number in my last message."
 NO_VIDEO = "I haven't shown you a YouTube video to ask yet. Ask me for one first."
+# the check of fix pass 2 (P2): the one YouTube video in view has no title of its own
+UNTITLED_ONE = "The YouTube video there has no title I can go by, so I won't ask it."
 NOT_YOUTUBE = ("I can only ask YouTube videos. Instagram has no way for me to ask a post itself, so I go by its "
                "caption.")
 NO_KEY = "Asking a video isn't set up on this bot yet."
@@ -693,6 +695,7 @@ def ask(bot, person, n, question, now):
     last = bot.store.last_answer(h)
     view = bot.view(person["library"])
     it = None
+    implicit = False
     if n:
         if not last or not 1 <= n <= len(last.get("items") or []):
             return bot.send(h, WHICH if last else NO_VIDEO)
@@ -704,8 +707,15 @@ def ask(bot, person, n, question, now):
         yt = [x for x in shown if x.platform == "youtube"]
         if len(shown) == 1 or len(yt) == 1:
             it = yt[0] if yt else shown[0]
+            implicit = True
         elif len(yt) > 1:
             return bot.send(h, WHICH)
+    if implicit and it is not None and it.platform == "youtube" and on() and not titled(it):
+        # the check of fix pass 2 (P2): the one YouTube video in view has no title of its own (a list of reels and
+        # "A video from <channel>"): never asked unless the person names it by its number; the best titled video they
+        # watched on the topic is offered instead, with the question kept
+        line = also_watched(bot, person, question, now)
+        return bot.send(h, UNTITLED_ONE + ("\n" + line if line else ""))
     # ---------- round 11 fix, B (R2, R8): an Instagram post, or a list of them, in view: say so plainly and offer the
     # YouTube video the person watched on that topic, when there is one ----------
     if it is None and last and on():
