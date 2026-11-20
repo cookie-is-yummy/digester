@@ -1981,7 +1981,7 @@ second merge, 18 Nov, added Y, V and T in the rows that were kept for them).
 | | 2 | `offer_reads` | round 9 C |
 | | - | `onboard_step` (the setup's clause split and `export_reads` inside) | W |
 | `answer_normally`, after `_rule_reads`; each read tries the message, then `phrasing.normalize(text)` | 5a | `export_reads` | W |
-| | 5 | `email_reads`, then `self_email_reads` (the message itself only) | round 9 A, W |
+| | 5 | `email_reads`, then `self_email_reads` (the message itself only; "can you email me that" only right after a video's answer or a summary, 18.L2) | round 9 A, W, round 11 fix pass 2 |
 | | 5b | `ytreads.youtube_reads` (connect / disconnect YouTube, unsubscribe, a playlist, the Instagram links; the Instagram actions asked of the bot, `ig_act_reads`, beside `IG_CANT` and `UNFOLLOW`, 17.L) | Y, L |
 | | 6 | `cancel_reads` (the notice route; the browser offer inside the web route, behind `browser.available`; two or more things to cancel, `more_to_cancel`, 17.L) | round 9 B, D, V, L |
 | | 7 | `postact_reads` | round 9 C |
@@ -1991,7 +1991,7 @@ second merge, 18 Nov, added Y, V and T in the rows that were kept for them).
 | after the two tries | 8z | `split_reads` (two asks; only when no read took the whole message) | W |
 | | - | `integration_reads` (with "version") | round 8, K |
 | | 8h | `history.history_reads` (a follow-up to a history answer for 6 hours, then the recall "what was that video i watched about X", `read_recall`, then a history question; code only, 18.H, 18.LA) | round 11 H, fix A |
-| | 8y | `videoask.reads` ("what leaves this computer"; "ask the video ..." only with `MVP_VIDEO_ASK=1`, and only on a video pick already in view, else one line asking for one; then "ask that one" while its offer is open, `read_one`, and "ask them", `read_many`, only when the answer in view holds a YouTube video; 18.Q, 18.LB) | round 11 Q, fix B |
+| | 8y | `videoask.reads` ("what leaves this computer"; "ask the video ..." only with `MVP_VIDEO_ASK=1`, and only on a video pick already in view, else one line asking for one; then "ask that one" while its offer is open, `read_one`, and "ask them", `read_many`, when the answer in view holds a YouTube video, and with nothing shown one plain line, 18.L2; 18.Q, 18.LB) | round 11 Q, fix B, fix pass 2 |
 | | - | `code_reads`, then the cap check (`_over_cap`) | round 7 |
 | | 8m | `synth.synth_reads` ("summarize what I've learned about X", with one time window read by slice H's words; then "ask my videos about X" with `MVP_VIDEO_ASK=1`, `read_ask_mine`; after the cap check, it calls the model; 18.M, 18.LB) | round 11 M, fix B |
 | after `interpret`, `chat_guard` | - | `screen_guard`, then the errand form on `unsupported` / `chat` / a clash | W |
@@ -4273,3 +4273,140 @@ replies of all 280 runs the same as at the merge; the 159 rule texts and 123 phr
 **Not done.** R3's fit for a topic whose record matches are mostly saves, and the summary's stem fit ("cooked"). "ask
 the video" with no question after a recall still asks what to ask ("ask them" uses the recall's topic). "ask them"
 with nothing shown goes to the interpreter. The six messages above that reach the model. Spanish recalls.
+
+### 18.L2 Fix pass 2: the second live check of 25a1189 (20 Nov; `tests/test_round11_fix2.py`)
+
+The orchestrator's second live check of 25a1189 (the founder's library, `MVP_VIDEO_ASK=1`; its notes are outside git,
+no title is written here) found P1 to P6. Fixed in the order P1, P2, P3, P4, P6, P5. Every finding was first
+reproduced on a made-up library (`tests/test_round11_fix2.py`: a person in New York, the clock Friday 20 November
+2026, made-up vectors; titles, channels and ids invented): 139 tests, 84 of them fail on 25a1189, the rest are guards
+and near variants that must not be taken (ordinary picks, rules, reminders, feedback, chat, emails to others).
+
+**P1, a video's answer answers the question or says it doesn't cover it** (prompt `video_ask_v2`; `video_ask_v1` is
+kept as measured).
+- The prompt now names the thing asked ("What does it say about easing in after effects?": easing; After Effects is
+  only where it happens), says `answered: false` when the video covers the subject but not the thing ("a video about
+  masks in a program does not answer a question about easing in that program"), and asks for concrete points (the
+  names, values, steps, settings, amounts and shortcuts the video gives, in its own terms; up to 5 when it covers the
+  question well; never a point about what the video is, a greeting, a sponsor or a call to subscribe).
+- Code (`check_points`): beside the checks of 18.Q, a point that only says what the video is ("The presenter
+  introduces the tutorial", "This video covers masks", a sponsor, "comment below") or says its title again (every
+  content word of the point is in the title, no number) is left out (`about_video`; never counted in the "I left
+  out" line). A point with no timestamp was already left out (`time`).
+- A video that does not cover the question gets one plain line naming the thing asked, by code (`asked_thing`: the
+  words after "say/cover/show ... about", narrowed by summary M's `focus`, or "how to ..." from "how do i ..."):
+  `This video, "<title>", doesn't seem to cover easing.` and its link; in "ask them", `Video 1, "<title>": doesn't
+  seem to cover easing.` Nothing of the question is kept (the email of such an answer says `It doesn't seem to cover
+  what you asked.`).
+- **The evaluation** (`eval_videoask.py`, new; its list of public videos and questions is a file outside git: 8
+  public tutorials of 4 to 8 minutes chosen by a YouTube Data API search, not from the founder's library; 9 questions
+  each video covers and 10 it does not, 4 of those on the video's own subject but another thing, the live failure's
+  shape; one call each through slice Q's own request and code checks; `MVP_VIDEO_ASK_MAX_MIN=10`):
+
+| Run | Covered: answered / points / timestamps inside | Points that answer the question (my reading) | Not covered: said so / points shown | Left out by code | Cost |
+| --- | --- | --- | --- | --- | --- |
+| before (`video_ask_v1`, the code of 25a1189) | 9 of 9 / 34 (3 to 5 each) / 34 of 34 | 32 of 34 (2 vague: a point repeating the other two, a "use it as needed") | 10 of 10 / 0 | 1 repeat | $0.155 |
+| before, rescored with this pass's code checks | the same | the same | the same | 0 more (no false drop) | - |
+| after (`video_ask_v2`) | 9 of 9 / 30 (2 to 5 each) / 30 of 30 | 30 of 30 | 10 of 10 / 0 | 1 repeat | $0.156 |
+
+  No regression on slice Q's numbers (every covered question answered, every timestamp inside, the latest at 88% of
+  its video; median 3.4 s against 4.8 s). The off-question answer of the live check was not reproduced by v1 on these
+  videos (v1 already said "doesn't say" on all 10, the 4 hard ones included): the live failure did not repeat here,
+  so the prompt's effect on it is not measured; it stays the model's (temperature is Gemini 3's default). The cost of
+  v2, net 4 fewer points: one answer did not give its third and fourth tools (on the question, concrete), two vague
+  points went, and two steps of another answer were merged into one; one answer's 4 steps became 5, one step each.
+
+**P2, never a video with no title; the question already typed is kept.** An offer (`also_watched`, through fix A's
+`best_watched_video` with `exclude`) skips a video whose shown name is the neutral "A video from <channel>" for the
+next best (up to 8 tries), and gives the plain line when none is left; "ask them" never asks one, and a summary never
+offers one by its number (`videoask.titled`). When the person already typed a question ("ask the video what tool do
+they use first" after a list of reels), the offer says `Say "ask that one" and I'll ask it: "what tool do they use
+first?"`, and "ask that one" alone asks it (the question was kept with the offer, as before).
+
+**P3.** "ask the video" with no question while a recall or a history list with a topic is in view asks `What does it
+say about <topic>?` and says `I'll ask it about <topic>.` (in front of the first-time note too); "ask them" there says
+`I'll ask them about <topic>.` After a summary the topic is the person's own words of a moment ago and is not said
+again. "ask them", "ask those videos", "ask all 3" with nothing shown get one line by code (`I haven't shown you any
+videos to ask yet. ...`), never the interpreter; shown videos that all lack a title get their own line.
+
+**P4, read by code now** (each with traps beside it in the test file):
+- "remind me what that video i watched about X was" (and "... was called"): a recall, only with no time or repeat in
+  the message (`REMIND_WHAT`; "remind me to watch ... tomorrow", "... every friday", "remind me about ... later" stay
+  reminders).
+- "whens the first time i watched X": "whens" is "when's", never a topic word.
+- "more videos in october or september?" (`CMP_BARE`: more / less / fewer, then videos, reels or watching, then a
+  window and "or / vs / than"), and a comparison with no question mark ("vi mas videos en octubre o en septiembre"):
+  read only as a comparison of two windows, nothing else ("more videos like this" is not read).
+- The Spanish timeline: "como" asks; "ha cambiado", "con el tiempo", "a lo largo del tiempo" make a timeline.
+- "sum up what my watch history says about X", "summarize what my saves say about X", "what does my watch history
+  say about X": summaries (watched, saved and watched as said).
+- "can you email me that" / "email me that" / "email me this please": by code only right after a video's answer or a
+  summary (`EMAIL_THAT`, `_video_or_summary_in_view`); after a pick it stays the interpreter's, as round 10 decided.
+
+**P6, few watched items: all shown, "mention"** (the orchestrator's decision). When fewer than 6 items of the kind
+asked (watched, for a recall) hold the topic's words, in the platforms asked and at any time (`few_watched`,
+`_few_watched`), a recall or a first, last or list answer shows them all and says "that mention(s)"; the fit is used
+above that, and then says "about". A recall chosen by the words alone (no vectors, or few watched) now also says
+"that mention" (it said "about" before). Measured on the real library (counts only; the same 8 topics as the check of
+18.L): 7 topics have 74 to 327 watched matches and are unchanged (the fit is used before and after); for color
+grading (4 watched) the fit showed 2 and left out 2, all 4 truly about it, and now all 4 are shown (4 of 4 about it,
+against 2 of 4 found). On one more small topic (4 watched) the fit showed 2 that are not about it and left out the
+2 that are; now 4 are shown, 2 of them about it. The decision is better on these numbers, so it stands.
+
+**P5, wording.**
+- (a) What was watched on Instagram is a reel, in the lead and the last line alike: `Here's what the reels you watched
+  say ...` / `From 2 reels.`; both platforms: `the videos and reels you watched` / `From 4 videos and 1 reel.`; the
+  plain line of a thin answer the same (`... of the 3 videos and 1 reel you watched ...`).
+- (b) A history answer whose window touches or passes an export end always says where it ends; the hint `For newer
+  history, send me a new export ...` once in 6 hours (the note `refresh`, shared with summaries and the all-time
+  range), as summaries do. A window wholly after the record keeps the hint every time, for history answers and
+  summaries alike (seam d).
+- (c) A summary's other word forms (`cooked` for `cooking`: `synth.fits_topic`'s base form) now count only when the
+  item also holds the topic in the history answers' forms (`history.holds`) or its vector passes the topic's fit
+  (`history.fit_score`, scored against the fit's centroid; `steps.other_form_unfit`). With no vectors, or too few
+  items to tell, nothing changes (the made-up eval set of slice M has none, so its numbers stand). Left: a word whose
+  slang form is spelled like the topic ("cooking" as slang) is still read as the topic unless the fit drops it.
+
+**Changed on purpose in earlier tests** (each line marked "round 11 fix pass 2"): `test_round11_fix_checks.py` (the
+six "model" messages m21, m23, m34, m45, m55 and m70 are now read by code: R, H:first, H:compare, H:timeline,
+synth:watched, email; "ask them" with nothing shown; the thin line's "3 videos and 1 reel"; the recall's "that
+mention" in `test_abt_is_about_in_a_recall` and `test_r1_...`), `test_round11_fix_b.py` (the offer keeps the typed
+question; "videos and reels" in two leads), `test_round11_fix_merge.py` ("that mention" in two recalls, "videos and
+reels" in one lead, and `few_watched` set to False where a test fakes the fit), `test_round11_fix_a.py` (the recall's
+"that mention" in three tests; the second answer with an export end leaves the hint out; the notes hold `refresh`),
+`test_round11_h.py` (H5's "that mention"); the self-test's c51 ("that mention"), c55 ("the reels you watched") and c53
+(4 made-up watched reels, so 6 watched items hold the word and the fit is used, as c53 means to show).
+
+**Live** (the page operator on the real library, a scratch home, the test page on port 8795, `MVP_VIDEO_ASK=1`,
+`MVP_VIDEO_ASK_MAX_MIN=5` to keep the run cheap; the thread in the scratchpad only; $0.061: the summary's reads and
+4 video questions). The easing question gave the plain line, the best 3 and the offer; "ask them" asked 3 videos: one
+`doesn't seem to cover easing.` (in its first 5 minutes; the clip line says so), one 3 concrete steps (a key to show
+the keyframes, select them, the key for easy ease), one 4 points on easing (which property to ease and why, the graph
+editor, an ease-out and ease-in curve); every point answers the question. "what was the last blender video i
+watched" listed 3 watched reels; "ask the video what tool do they use first" offered a watched YouTube video with a
+title of its own and `Say "ask that one" and I'll ask it: "what tool do they use first?"`; "ask that one" asked it at
+once: 2 short steps (a menu, then the mesh added), and 1 left out as "read like an instruction" (slice Q's `ACTING`
+check reads a tutorial's "add ... to the scene" as an order: not changed here). Read as the founder would: the video
+answers no longer pad; the three clip lines in one "ask them" answer are noise (the 5-minute cap of this run); the
+"last blender video" being reels is the record's truth.
+
+**Checks** (offline): the full suite 0 failed (4,439: 4,300 + 139); demo 10 passed; the dry self-test 59
+conversations, 152 of 152 steps; `probe_same` byte-equal with `same_head.json`; the development phrasing set by code,
+setting off and on, tester and operator: 73 helper lines right, 1 wrong (d007), 1 of 40 `none` lines taken (d132),
+and all 280 replies byte-equal with the run of 18.L check; the 159 rule texts and 123 phrasings taken by no new read
+(`test_round9_merge`); the traps of `test_round11_checks.py` and `test_round11_fix_checks.py` still not taken; with
+`MVP_VIDEO_ASK` unset nothing about asking videos is read or offered (`test_p3_with_the_setting_off_...`).
+
+**Spend:** $0.373 of the $0.40 (the eval before $0.155, after $0.156, the live run $0.061); the ledger $21.645 before,
+$22.018 after.
+
+**Not done, or still wrong.**
+- P1: the off-question answer seen live did not repeat on the eval's videos, so v2's effect on it is not shown by a
+  number; code cannot tell an off-question point from an on-question one (it checks only what a point is, not what
+  it is about). v2 gives fewer points (30 against 34), and lost 2 concrete ones in one answer.
+- An explicit "ask video 2" on a shown video with no title of its own still asks it (the person chose it).
+- Slice Q's `ACTING` check drops a tutorial step that says "add ... to ..." (seen live once).
+- P5 (c): only other word forms are checked; the topic's own word used as slang passes when the fit can't tell.
+- P4: "can you remind me which video i watched about X was" (no "that") still goes to the model; Spanish recalls.
+- The eval has no held-out list (the prompt was written before the after run and not tuned on it, but on the
+  findings' description).
