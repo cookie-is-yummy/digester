@@ -569,3 +569,15 @@ def test_live_a_bullet_with_the_so_whats_two_shares_goes_however_it_says_shorts(
            "so_what": {"pick": "shorts_shift:up", "text": None}}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
     assert f["so_what"] and not [x for x in f["observations"] if "74%" in x and "68%" in x], f["observations"]
+
+
+def test_live_a_change_over_the_years_says_its_two_years():
+    # live, row 7: "Gaming faded from 22% to 16%, while internet culture rose from 4% to 9%." (no years)
+    I = ins()
+    s = _changed()
+    f = I.check({"answer": "-", "observations": [{"text": "{areas_change.left[0].name} faded from "
+                                                          "{areas_change.left[0].from_share} to "
+                                                          "{areas_change.left[0].to_share}, while "
+                                                          "{areas_change.arrived[0].name} rose.", "uses": []}]},
+                s, strict=True)
+    assert f["observations"] == ["Gaming faded from 22% to 16% between 2020 and 2026, while comedy rose."], f

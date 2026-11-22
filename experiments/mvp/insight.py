@@ -2044,6 +2044,15 @@ def _base_of(sheet):
     return None
 
 
+def _span_of(sheet):
+    """(first, last) period of a change's own shares (areas_change), or None."""
+    ac = (sheet or {}).get("areas_change") or {}
+    if (sheet or {}).get("kind") == "changed" and ac.get("from") and ac.get("to") and \
+            (sheet or {}).get("lang", "en") != "es":
+        return str(ac["from"]), str(ac["to"])
+    return None
+
+
 def _change_words(pl, slots):
     """Round 12, pass 3 (U7, live: "X fell from 16% to 9%" with no base; "1 points from 2024" with no direction): a
     change says its direction (a word, or from one value to the other) and its base period."""
@@ -2322,6 +2331,15 @@ def render(text, sheet, facts, strict=False, unit=None):
         if base:
             punct = tail_[-1] if tail_[-1:] in ".!" else "."
             text = tail_.rstrip(".!") + (" in " if m_end else " against ") + base + punct
+            sl = slots_of(text, sheet, lang)
+            if isinstance(sl, str):
+                return None, sl
+        span_ = _span_of(sheet)
+        mft = re.search(r"\bfrom\s+\{[^}]+\}\s+to\s+\{[^}]+\}", text)
+        if not base and span_ and mft:
+            # a change over the years (live, row 7: "Gaming faded from 22% to 16%, while ..."): its two years, right
+            # after its two values
+            text = text[:mft.end()] + f" between {span_[0]} and {span_[1]}" + text[mft.end():]
             sl = slots_of(text, sheet, lang)
             if isinstance(sl, str):
                 return None, sl
