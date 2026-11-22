@@ -136,7 +136,7 @@ def test_row6_the_exports_last_day_is_not_set_against_a_usual_day_and_its_leader
     s = copy.deepcopy(DAY)   # "the last day of your export"
     f = I.check(I.code_form(s), s)
     assert f["answer"] == "10 videos; Meme drops led with 3 of them.", f["answer"]
-    assert not any("busiest hour" in o for o in f["observations"])
+    assert not any("usual day peaks" in o or "as on a usual day" in o for o in f["observations"])
     assert any(o.endswith("on a usual day of the months before.") for o in f["observations"])
 
 

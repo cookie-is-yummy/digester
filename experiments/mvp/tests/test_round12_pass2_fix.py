@@ -309,7 +309,7 @@ def test_a_days_shorts_and_busiest_hour_against_the_usual_day_are_always_said():
     assert any(o.startswith("Shorts were 90% of the day's YouTube videos, against about 78%") for o in
                f["observations"])
     # round 12, pass 3 fix (judge A, row 6, on purpose): the export's last day has no busiest hour against a usual day
-    assert not any("busiest hour" in o for o in f["observations"])
+    assert not any("usual day peaks" in o for o in f["observations"])
     s["window"] = dict(s["window"], words="On Saturday 12 September 2026")
     f = I.fill(I.check(raw, s, strict=True), raw, s)
     assert any(o.startswith("The busiest hour was 9am, where a usual day peaks around 1am") for o in
