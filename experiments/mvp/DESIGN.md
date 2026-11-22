@@ -4654,7 +4654,29 @@ Spanish numbers and words. A model's English separators in Spanish ("1,210") are
 
 **Changed on purpose** (rule R-H, the code replies): `selftest/conversations.jsonl` c40.1 (the end in the window's
 words, no "so I can't see after that"), c40.2 (the record's start in the window's words), c54.1 (the range in the
-all-time words, no hint), c54.2 (no range the second time); the earlier test lines are listed in "Checks" below.
+all-time words, no hint), c54.2 (no range the second time); the earlier test lines are listed below.
+
+**Checks** (offline, after the work): full suite 4,786 passed, 0 failed (4,713 before and the 73 of
+`test_round12_w.py`; 4 shards); demo 10 passed; the dry self-test 59 conversations, 152 of 152 steps; `probe_same`
+byte-equal with `same_head.json`; the development phrasing set by code as tester and operator: 73 helper lines right,
+1 wrong (d007), 1 of 40 `none` lines taken (d132), as before (no read was added or changed); the 159 rule texts, the
+123 phrasings and the round 11 traps are held by the suite and still pass. Live: four runs of the 20 sheets and three
+calls of `write` on a scratch home through a real bot, $0.197 in all (ledger purpose `mvp_insight`, 83 calls).
+
+**Test lines changed on purpose by R-H** (each marked "round 12, W" in place): `test_round11_h.py`: h3 (no hint on an
+all-time ranking), the day in the person's time zone, a rewatched video (October's words), friends' posts (the friends
+line not said unless asked; October's words twice), likes and saves (twice), six heads of "the window is always said
+back" (the last 30 days, since 20 October, this year, 2026, lately, hours), a window that touches the end, the
+timeline and compare test (since December 2023, the blender timeline's head, October against September), Spanish
+October, the follow-ups (five heads), the interpreter's form; `test_round11_fix_a.py`: R4 (the friends line not said,
+no hint on the all-time ranking, the hint on October's answer, the six hours later), R4 Spanish, the notes kept
+(`{"range"}`), R5 October against September; `test_round11_checks.py`: 13 heads (this year, the Spanish last 7 days,
+a day, two weekends, 6 days ago, where likes start, "the ones i liked", today, this month, the last 7 days, 1 to 12
+November, likes in October); `test_round11_fix2.py` (the hint on a week wholly after the record once in 6 hours; the
+ends accepted in the window's words); `test_round11_fix2_checks.py` (the same, three asks: the hint the first time);
+`test_round11_fix_checks.py` (`ends_said` reads the window's words, the all-time likes' range, the friends line never,
+the end after a restart and for a second person, `REFRESH` imported); `tests/test_mvp.py`'s fixture sets
+`MVP_INSIGHT=0` (one line added).
 
 **Not done.** No real sheet yet: the writer is built and measured on made-up sheets; D's sheets may hold keys or
 meanings the check does not know (`change_vs_previous` is read as share now minus share before, a fraction;
