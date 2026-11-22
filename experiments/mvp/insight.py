@@ -38,6 +38,10 @@ OFFERS_MAX = 3
 SENT_MAX = 260          # characters in one sentence
 ANSWER_MAX = 330        # characters in the answer (1 or 2 sentences)
 CHART_ROWS = 8
+PERIOD_ROWS = 12        # round 12, fix: a year by month is 12 rows; never the oldest months cut without a word
+PERIOD_LABEL_MAX = 18   # round 12, fix: "Mar 2026 <theme>" wrapped at 430 px past about 18 characters of theme
+WEEKPART_BASELINE = 0.06
+SPREAD_SHARE = 0.20     # "mostly" / "centered on" only for a share of a fifth or more
 BAR_CELLS = 12
 LABEL_MAX = 26
 # what the model is shown of a sheet (the checks read the same trimmed sheet)
@@ -217,6 +221,13 @@ class Facts:
         self.fields = {}        # name -> its own items, days, length_hours, share (the first record of it)
         self.periods = set()
         self.period_top = {}    # period -> the theme first in it
+        # round 12, fix: "led" / "the most" of a name first only in a list under another name (a channel first under
+        # its theme) holds only where that name is said too; the order of names said with "followed by" / "then"
+        self.top_level = set()  # names first in a list of the sheet's own (themes, channels, topics)
+        self.inner_top = {}     # name -> the names above the lists it is first in
+        self.order = {}         # name -> (list key, place) in the sheet's own lists
+        self.topic_keys = set() # the question's topic(s): a list under one of them is the answer's own list
+        self.long_window = False
         self._walk()
 
     # ---------- building ----------
@@ -239,7 +250,7 @@ class Facts:
         f = {k: rec[k] for k in ("items", "days", "length_hours", "share") if _num(rec.get(k))}
         if f and key not in self.fields:
             self.fields[key] = f
-        if rec.get("new_in_window") is True:
+        if rec.get("new_in_window") is True and not self.long_window:
             self.new.add(key)
         return key
 
@@ -280,6 +291,14 @@ class Facts:
                 self.months.add(m)
                 self.years.add(y)
                 y, m = (y + (m == 12), m % 12 + 1)
+        a0, b0 = _as_date(w.get("start")), _as_date(w.get("end"))
+        # round 12, fix (judge: "was new in this window" for 2020 to now): over more than about 13 months, "new" says
+        # nothing a person can use
+        self.long_window = bool(a0 and b0 and (b0 - a0).days > 400)
+        for t in [(s.get("filters") or {}).get("topic")] + [x.get("name") for x in s.get("topics") or []
+                                                             if isinstance(x, dict)]:
+            if isinstance(t, str) and t.strip():
+                self.topic_keys.add(" ".join(_words(t)))
         if w.get("words"):
             self.allowed_phrases.append(w["words"])
             for x in re.findall(r"\b(\d{1,3})\s+(?:weeks?|days?|months?|years?|semanas?|dias?|días?|meses|anos?|años?)\b",
@@ -303,10 +322,19 @@ class Facts:
             hh = _hour(h)
             if hh is not None:
                 self.hours_of_day.add(hh)
+                if isinstance(h, dict) and _num(h.get("share")):
+                    self.glob.fracs.append(float(h["share"]))   # round 12, fix: "9am (60% of the day)"
+        self.busiest_weekday = None
         for k in ("weekday_share", "weekend_share"):
             if _num(wn.get(k)):
+                # round 12, fix (judge: "68% was on weekdays" in two answers): a split near 5 days in 7 is everyone's
+                # week, not an insight; it is not said then, nor the busiest weekday
+                if abs(float(wn.get("weekday_share") or 0) - 5 / 7) < WEEKPART_BASELINE:
+                    continue
                 self.has_weekpart = True
                 self.glob.fracs.append(float(wn[k]))
+        if self.has_weekpart and isinstance(wn.get("busiest_weekday"), str):
+            self.busiest_weekday = wn["busiest_weekday"].lower()
         for key in ("themes", "channels", "periods", "topics", "items"):
             lst = s.get(key)
             if not isinstance(lst, list):
@@ -319,6 +347,8 @@ class Facts:
             kp = self.key_pool.setdefault(part, Pool())
             for sub in ("themes", "channels"):
                 xs = blk.get(sub) or []
+                if part == "new" and sub == "channels" and self.long_window:
+                    continue   # round 12, fix: a channel "new" since 2020 says nothing (its name stays a name)
                 if xs:
                     self.lengths.add(len(xs))
                     kp.counts.add(len(xs))
@@ -332,6 +362,7 @@ class Facts:
                         target.add(key)
                         if isinstance(x, dict):
                             _scalars(x, kp)
+        self._change_rows(s.get("change") or {})
         lib = (s.get("library") or {}).get("saved_not_opened") or []
         kp = self.key_pool.setdefault("library", Pool())
         for x in lib:
@@ -375,8 +406,14 @@ class Facts:
             ent = self._entity(name, rec) if name else None
             if ent and i == 0:
                 self.top.add(ent)
+                if parent is None:
+                    self.top_level.add(ent)
+                else:
+                    self.inner_top.setdefault(ent, set()).add(parent)
             if ent:
                 self.rank[ent] = min(self.rank.get(ent, 99), i)
+                if parent is None:
+                    self.order.setdefault(ent, (key, i))
             if ent and key == "periods":
                 self.periods.add(ent)
                 m = re.match(r"^([a-z]{3})[a-z]*\.?\s+(\d{4})$", ent)
@@ -395,6 +432,33 @@ class Facts:
             if parent and ent:   # a channel's or a period theme's numbers also belong to the entity above it
                 self.entities[parent].add(_scalars(rec, Pool()))
                 self.parents.setdefault(ent, set()).add(parent)
+
+    def _change_rows(self, ch):
+        """Round 12, fix (live: "Comedy edits rose from 0.1% in 2020 to 5.6% in 2026" was dropped): the "changed"
+        sheet's rising and fading themes, with their shares then and now, their change and their peak."""
+        kp = self.key_pool.setdefault("change", Pool())
+        for part in ("rising", "fading"):
+            for k, r in enumerate(ch.get(part) or []):
+                if not isinstance(r, dict) or not r.get("name"):
+                    continue
+                self._text(r["name"])
+                self._text(str(r.get("peak_period") or ""))
+                key = " ".join(_words(r["name"]))
+                p = self.entities.setdefault(key, Pool())
+                for f in ("from_share", "to_share", "peak_share"):
+                    if _num(r.get(f)):
+                        p.fracs.append(float(r[f]))
+                        kp.fracs.append(float(r[f]))
+                if _num(r.get("change")):
+                    p.points.append(abs(float(r["change"])))
+                    kp.points.append(abs(float(r["change"])))
+                    self.change.setdefault(key, float(r["change"]) / 100)
+                if k == 0:
+                    self.top.add(key)
+                    self.inner_top.setdefault(key, set()).add("|" + part)
+        for x in (ch.get("from"), ch.get("to")):
+            if x:
+                self._text(str(x))
 
     # ---------- reading a sentence ----------
     def names_in(self, text):
@@ -463,6 +527,8 @@ def _days_in(s):
 
 
 def _hour(h):
+    if isinstance(h, dict):   # round 12, fix: D's busiest_hours are {"hour", "share"}
+        h = h.get("hour")
     if isinstance(h, int) and 0 <= h <= 23:
         return h
     if isinstance(h, str):
@@ -719,7 +785,10 @@ def _check_body(raw, facts, uses, chart_vals):
         n_facts += 1
     for i, wd in enumerate(WEEKDAYS + WEEKDAYS_ES):
         if re.search(r"\b" + wd + r"s?\b", rest_n):
-            if not any(d.weekday() == i % 7 for d in facts.dates):
+            # round 12, fix: a weekday is a listed item's or the window's own day, or the busiest weekday when the
+            # week's split is not everyone's (any date of the sheet used to do: a channel first watched on a Saturday)
+            day_of_item = facts.sheet.get("kind") in ITEM_KINDS and any(d.weekday() == i % 7 for d in facts.dates)
+            if not (day_of_item or facts.busiest_weekday == WEEKDAYS[i % 7]):
                 return "weekday"
             n_facts += 1
     for y in re.findall(r"\b(19[89]\d|20\d\d)\b(?!\s*%)", rest_n):
@@ -823,6 +892,8 @@ def _check_body(raw, facts, uses, chart_vals):
     # ---- words: a subject the sheet does not name is a made-up fact; a claim true for anyone is worthless ----
     if GENERIC_CLAIM.search(rest_n):
         return "generic_claim"
+    if _FILLER.search(rest_n):
+        return "filler"
     for tok in re.findall(r"[a-z]+(?:'[a-z]+)?", rest_n):
         w = tok.split("'")[0]
         if w not in TOPICAL and _stem(w) not in TOPICAL:
@@ -839,6 +910,10 @@ def _check_body(raw, facts, uses, chart_vals):
         if w in ALLOWED_CAPS or w in _MON or w in WEEKDAYS or w in WEEKDAYS_ES:
             continue
         if w in facts.vocab or _stem(w) in facts.vocab:
+            continue
+        # round 12, fix (live: "Stand-up Maths" was dropped): a hyphenated name is its words
+        parts = [x for x in re.split(r"[-&]", w) if x]
+        if parts and all(x in facts.vocab or _stem(x) in facts.vocab for x in parts):
             continue
         return "name:" + w
     # ---- what the words claim must agree with the sheet ----
@@ -864,8 +939,11 @@ def _check_body(raw, facts, uses, chart_vals):
         if not any(facts.period_top[p] in names for p in periods if facts.period_top[p] != p):
             return "not_top"
     elif names and (_SUPER.search(rest_n) or re.search(r"\bmost of\b|\bla mayoria\b", rest_n)) and \
-            not any(n in facts.top for n in names):
+            not _leads_ok(facts, names):
         return "not_top"
+    why = _order_claim(facts, names, rest_n) or _spread_claim(facts, names, rest_n)
+    if why:
+        return why
     if re.search(r"\b(?:saved|guardaste|guardado|guardados)\b", t) and re.search(
             r"\bnever\b|\bnot opened\b|\bunopened\b|\bnunca\b|\bsin abrir\b|\bno (?:los|las) has abierto\b", t):
         lib = (facts.sheet.get("library") or {}).get("saved_not_opened") or []
@@ -894,8 +972,8 @@ def _check_body(raw, facts, uses, chart_vals):
         if all(v in chart_vals or v in tot for v in nums) and not _INSIGHT.search(rest_n.replace("|", " ")):
             return "restates_chart"
     # "up from 19 before" when 19 is a count of days: a number said of the span before is the span before's
-    for m in re.finditer(r"\b(?:up|down|rising|falling|grew|fell|rose|climbed|dropped) from (?:about )?(\d[\d,.]*)"
-                         r"(?!\s*(?:%|percent|points?))|\b(?:against|versus|compared with) (\d[\d,.]*) (?:in )?"
+    for m in re.finditer(r"\b(?:up|down|rising|falling|grew|fell|rose|climbed|dropped) from (?:about )?(\d[\d,.]*\d|\d)"
+                         r"(?![\d,.]*\s*(?:%|percent|points?))|\b(?:against|versus|compared with) (\d[\d,.]*) (?:in )?"
                          r"(?:the (?:span|period|weeks?|months?|days?|year) )?before\b", rest_n):
         v = _parse_num(m.group(1) or m.group(2), facts.lang)
         prev = Pool()
@@ -924,6 +1002,62 @@ _DATE_RX = (r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+|de\s+)?(" + _MON_RE + r")\w
 _CMP = [(r"\b(?P<w>more|fewer|less|mas|menos)\s+(?P<a>.{2,60}?)\s+(?:than|que)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that|en|este|esta)\b|$)", 1),
         (r"(?P<a>.{2,60}?)\s+(?:was|were|had|got|fue|tuvo)\s+(?P<w>more|fewer|less|bigger|busier|mas|menos)\s+(?:than|que)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that|en|este|esta)\b|$)", 1),
         (r"(?P<a>.{2,60}?)\s+(?:beat|outnumbered|outpaced|overtook|ahead of)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that)\b|$)", 0)]
+
+
+_FILLER = re.compile(r"\beach (?:had|with|got|gave) (?:just |only )?(?:1|one|a single)\b|\ba gap of\b|"
+                     r"\bcada uno con (?:1|un)\b")
+_ORDER = re.compile(r"\b(?:followed by|then|ahead of|next came|after (?:it|that) came|seguid[oa]s? de|luego)\b")
+_SPREAD = re.compile(r"\b(?:mostly|mainly|largely|centered on|centred on|dominated|dominant|mostly into|above all|"
+                     r"sobre todo|principalmente|centrad[oa] en)\b")
+
+
+def _leads_ok(facts, names):
+    """Round 12, fix (judge: the 4th channel "led" because it was first under its theme): a name said to lead is
+    first in one of the sheet's own lists, or first in a list under a name the sentence says too (a channel under its
+    theme, a theme under its year), or under the question's topic."""
+    for n in names:
+        if n in facts.top_level:
+            return True
+        ups = facts.inner_top.get(n) or set()
+        if ups & (set(names) | facts.topic_keys) or any(u.startswith("|") for u in ups):
+            return True
+        if n in facts.top and not ups and n not in facts.order:
+            return True   # first in a list the walk does not rank (new, stopped)
+    return False
+
+
+def _order_claim(facts, names, text):
+    """'X led with 107, followed by Y with 96': names said in a ranking order must be in that order in their list."""
+    if not _ORDER.search(text):
+        return None
+    said = []   # the names in the order the sentence says them (names_in finds the longest first)
+    for ch in re.findall(r"\|([A-Z])\|", text):
+        k = ord(ch) - 65
+        if k < len(names) and names[k] not in said:
+            said.append(names[k])
+    seq = [facts.order[n] for n in said if n in facts.order]
+    for (k1, i1), (k2, i2) in zip(seq, seq[1:]):
+        if k1 == k2 and i2 < i1:
+            return "order"
+    return None
+
+
+def _spread_claim(facts, names, text):
+    """'mostly X' / 'centered on X' when X is 6% of it is false framing (a spread); 'mostly long videos' for 431
+    against 404 too."""
+    if not _SPREAD.search(text):
+        return None
+    shares = [facts.fields[n]["share"] for n in names if "share" in facts.fields.get(n, {})]
+    if shares and max(shares) < SPREAD_SHARE:
+        return "spread"
+    tot = facts.sheet.get("totals") or {}
+    sh, lo = tot.get("shorts"), tot.get("long")
+    if _num(sh) and _num(lo) and sh + lo > 0:
+        if re.search(r"\b(?:mostly|mainly|largely)\s+(?:long|longer)\b", text) and lo / (sh + lo) < 0.6:
+            return "spread"
+        if re.search(r"\b(?:mostly|mainly|largely)\s+shorts\b", text) and sh / (sh + lo) < 0.6:
+            return "spread"
+    return None
 
 
 def _first_name(facts, text):
@@ -992,6 +1126,10 @@ _SPAN_BEFORE = re.compile(r"\b(?:from|on|than|over|against) (?:the )?(?:span|per
                           r"\b(?:from|on|than|over|against) the previous (?:span|period|stretch|window)\b")
 
 
+_PLURAL_VIDEOS = re.compile(r"\b(tutorials|episodes|clips|edits|memes|vlogs|reviews|highlights|workouts|challenges|"
+                            r"projects|explainers|puzzles|pranks|mishaps|stunts|builds|games|videos) videos\b")
+
+
 def tidy(text, lang="en"):
     """A checked sentence in the house style: ISO dates in words, counts with their separators, a capital first."""
     def iso(m):
@@ -1014,12 +1152,34 @@ def tidy(text, lang="en"):
     if lang != "es":
         text = re.sub(r"\bitems\b", "videos", re.sub(r"\bitem\b", "video", text))
         text = _SPAN_BEFORE.sub(lambda m: m.group(0).split()[0] + " before", text)
+        # round 12, fix (judges: "episodes videos", "about 0.4 hours", "1 ... videos")
+        text = _PLURAL_VIDEOS.sub(r"\1", text)
+        text = re.sub(r"\b(about|around|nearly) 0\.(\d) hours\b",
+                      lambda m: f"{m.group(1)} {int(m.group(2)) * 6} minutes", text)
+        text = re.sub(r"\b(about|around|nearly) 0\.0 hours\b", r"\1 a few minutes", text)
+        text = re.sub(r"(?<![\d,.])1 ((?:[A-Za-z][\w&'-]* ){0,4}?)videos\b", r"1 \1video", text)
     return text[:1].upper() + text[1:] if text else text
 
 
 def _sentences(s):
     s = " ".join(str(s or "").split())
     return [x for x in re.split(r"(?<=[.!?])\s+(?=[A-Z¿¡ÁÉÍÓÚÑ0-9\"])", s) if x]
+
+
+NUMBERS_MAX = 4
+OBS_FILL = 3            # round 12, fix: code tops the observations up to 3 where the model's were dropped
+_ONE_DAY_SAID = re.compile(r",?\s+(?:all\s+)?(?:on|across|over|in|en)\s+(?:1|one|a single|un)\s+(?:different\s+|single\s+|"
+                           r"distintos?\s+)?(?:days?|d[ií]as?)\b")
+
+
+def n_numbers(text, facts):
+    """How many numbers a sentence says, besides the window's own words, dates and years."""
+    t = _norm(text)
+    for ph in facts.allowed_phrases:
+        t = t.replace(_norm(ph).rstrip(", "), " ")
+    t = re.sub(_DATE_RX, " ", t)
+    t = re.sub(r"\b(19[89]\d|20\d\d)\b", " ", facts.names_in(t)[1])   # "3Blue1Brown" says no number
+    return len(re.findall(r"\d[\d,.]*", re.sub(r"\|[A-Z]\|", " ", t)))
 
 
 def _unit_before(text, sheet):
@@ -1046,13 +1206,23 @@ def check(raw, sheet, chart_vals=None):
         out["dropped"].append(("form", "not_a_form", None))
         return out
     ans = raw.get("answer")
+    if isinstance(ans, str) and sheet.get("kind") == "day":
+        ans = _ONE_DAY_SAID.sub("", ans)   # round 12, fix: a day's "on 1 day" is left out, not the whole answer
+    if isinstance(ans, str) and len(ans) > ANSWER_MAX and len(_sentences(ans)) > 1 and \
+            len(_sentences(ans)[0]) <= SENT_MAX:
+        out["dropped"].append(("answer_tail", "too_long", " ".join(_sentences(ans)[1:])))
+        ans = _sentences(ans)[0]   # round 12, fix (live, Spanish): a long answer's first sentence may stand
     if isinstance(ans, str) and ans.strip() and len(ans) <= ANSWER_MAX:
         sents = _sentences(ans)
         why, n = _check(" ".join(sents), facts, maxlen=ANSWER_MAX)   # one piece: "it" in the second is the first's
         if why is None and n == 0:
             why = "generic"   # an answer that names nothing of the sheet answers nothing
+        if why is None and n_numbers(" ".join(sents), facts) > NUMBERS_MAX:
+            why = "number_run"   # round 12, fix (judge, Q5: 7 numbers in two sentences): data, not an insight
         if why and len(sents) > 1:
             w1, n1 = _check(sents[0], facts)
+            if w1 is None and n_numbers(sents[0], facts) > NUMBERS_MAX:
+                w1 = "number_run"
             if w1 is None and n1:   # the first sentence answers; a later one that fails is left out
                 out["dropped"].append(("answer_tail", why, " ".join(sents[1:])))
                 sents, why = sents[:1], None
@@ -1069,9 +1239,13 @@ def check(raw, sheet, chart_vals=None):
         text, uses = (o.get("text"), o.get("uses")) if isinstance(o, dict) else (o, None)
         if not isinstance(text, str):
             continue
+        if sheet.get("kind") == "day":
+            text = _ONE_DAY_SAID.sub("", text)
         sents = _sentences(text)
         why = None if len(sents) == 1 else "two_sentences"
         why = why or check_sentence(text, facts, uses=uses if uses is not None else [], chart_vals=chart_vals)
+        if not why and n_numbers(text, facts) > NUMBERS_MAX:
+            why = "number_run"
         key = " ".join(_words(text))
         if not why and key in seen:
             why = "repeat"
@@ -1123,9 +1297,9 @@ def _fmt(n, lang):
     return s.replace(",", ".") if lang == "es" else s
 
 
-def _label(s):
+def _label(s, n=LABEL_MAX):
     s = " ".join(str(s or "").split())
-    return s if len(s) <= LABEL_MAX else s[:LABEL_MAX - 1].rstrip() + "…"
+    return s if len(s) <= n else s[:n - 1].rstrip() + "…"
 
 
 CAPTIONS = {
@@ -1170,17 +1344,23 @@ def _rows(sheet, src, lang):
         ps = [p for p in sheet.get("periods") or [] if isinstance(p, dict) and _num(p.get("items")) and p.get("label")]
         if not ps:
             return "", []
-        ps = ps[-CHART_ROWS:]
+        cut = len(ps) > PERIOD_ROWS   # round 12, fix: a year by month is all 12 rows, never its oldest cut
+        ps = ps[-PERIOD_ROWS:]
         unit = ("mes" if lang == "es" else "month") if re.search(r"[A-Za-z]", str(ps[0]["label"])) else \
             ("año" if lang == "es" else "year")
-        has_theme = any(p.get("themes") for p in ps)
+        tops = {((p.get("themes") or [{}])[0] or {}).get("name") for p in ps if p.get("themes")}
+        # one main theme in every row says nothing per row (judge: "Minecraft PvP" 8 times): the counts instead
+        has_theme = any(p.get("themes") for p in ps) and len(tops) > 1
         cap = CAPTIONS["periods" if has_theme else "periods_plain"][lang].format(unit=unit)
         rows = []
         for p in ps:
             th = (p.get("themes") or [{}])[0]
             name = th.get("name") if isinstance(th, dict) else None
             # with a theme the row says the period and its main theme (the bar is the count): it fits a phone
-            rows.append((str(p["label"]), p["items"], name if name else _fmt(p["items"], lang), p["items"]))
+            right = _label(name, PERIOD_LABEL_MAX) if (name and has_theme) else _fmt(p["items"], lang)
+            rows.append((str(p["label"]), p["items"], right, p["items"]))
+        if cut:
+            cap = cap.rstrip(":") + (f" (los últimos {PERIOD_ROWS}):" if lang == "es" else f" (the last {PERIOD_ROWS}):")
         return cap, rows
     if src == "windows":
         tot, prev = sheet.get("totals") or {}, sheet.get("previous") or {}
@@ -1339,12 +1519,32 @@ def window_lead(answer, sheet):
     return lead[:1].upper() + lead[1:] + ", " + (answer if keep else answer[:1].lower() + answer[1:])
 
 
+def _no_title_twice(answer, sheet):
+    """Round 12, fix (judge, Q4): a first's or a last's answer that names the first item's title says it once, in
+    the list below it: the title (in quotes or not, with "by <channel>") becomes "(1 below)"."""
+    if sheet.get("kind") not in ("first", "last") or not answer:
+        return answer
+    it = next((x for x in sheet.get("items") or [] if isinstance(x, dict) and x.get("title")), None)
+    if not it:
+        return answer
+    title = " ".join(str(it["title"]).split())
+    for t in (title, _clip(title)):
+        rx = r"[\"“'‘]?" + re.escape(t) + r"[\"”'’]?" + (r"(?:\s+(?:by|de)\s+" + re.escape(str(it.get("channel") or "")) + r")?"
+                                                          if it.get("channel") else "")
+        m = re.search(rx, answer)
+        if m:
+            out = answer[:m.start()].rstrip(" :,") + (" (1 below)" if answer[:m.start()].strip() else "1 below") + \
+                answer[m.end():]
+            return re.sub(r"\s+([.,;])", r"\1", out)
+    return answer
+
+
 def layout(form, sheet, items_parts=None, extra_lines=()):
     """The message parts: the answer, the observations, the chart, the so-what, the extra lines (a hint said once in
     6 hours), the offers. For a day, a first or a last: the overview, the items' lines, their cards, then the rest."""
     lang = sheet.get("lang") or "en"
     kind = sheet.get("kind")
-    head = [window_lead(form["answer"], sheet)]
+    head = [_no_title_twice(window_lead(form["answer"], sheet), sheet)]
     if form["observations"]:
         head.append("\n".join("• " + o for o in form["observations"]))
     tail = []
@@ -1369,6 +1569,386 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
         return parts
     body = "\n\n".join(head + (["\n".join(tail)] if tail else []))
     return [{"type": "text", "text": body}]
+
+
+# ====================================== round 12, fix: the sentences code writes from the sheet ===================
+# Judges of round 12 (live, the real library): about 1 in 3 writer calls lost its answer or an observation to the check
+# and today's code reply (the top 5 by count the founder graded "filler") went out instead, the call still paid for.
+# Now a well-formed form keeps what passed and code fills the rest from the same sheet, in sentences built only from
+# its numbers and names and checked by the same check: the answer when the model's failed, observations up to the
+# minimum, the length of what was opened where no observation says it (R-D), the so-what when the model's is missing,
+# repeated or about something else. Today's code reply stays the fallback when the model fails (an error, the cap, no
+# script) or its reply is no form.
+def _pc(x, lang="en"):
+    v = float(x) * 100
+    t = f"{round(v)}%" if v >= 1 or v == 0 else f"{v:.1f}%"
+    return t.replace(".", ",") if lang == "es" else t
+
+
+def _hrs(h, lang="en"):
+    h = float(h)
+    t = f"{round(h):,}" if h >= 2 else f"{h:.1f}"
+    if lang == "es":
+        t = t.replace(",", "X").replace(".", ",").replace("X", ".")
+    return t
+
+
+def _day_words(d, lang="en"):
+    return f"{d.day} de {MONTHS_ES[d.month - 1]} de {d.year}" if lang == "es" else \
+        f"{d.day} {MONTHS[d.month - 1].capitalize()} {d.year}"
+
+
+def _rows_named(xs, need=("name",)):
+    return [x for x in xs or [] if isinstance(x, dict) and all(x.get(k) not in (None, "") for k in need)]
+
+
+def _hour_words(h):
+    h = int(h)
+    return "midnight" if h == 0 else "noon" if h == 12 else f"{h % 12}{'am' if h < 12 else 'pm'}"
+
+
+def code_form(sheet):
+    """A form written by code from the sheet alone: {"answer", "observations": [{"text", "uses"}], "so_what"}.
+    Every number and name comes from the sheet; the same check reads it before anything of it is sent."""
+    s = shown(sheet)
+    kind, lang = s.get("kind"), s.get("lang") or "en"
+    es = lang == "es"
+    f = _fmt
+    tot, prev = s.get("totals") or {}, s.get("previous") or {}
+    pw = (prev.get("words") or "").strip() if lang != "es" else ""   # the span before is said in English only
+    themes = _rows_named(s.get("themes"), ("name", "share"))
+    chans = _rows_named(s.get("channels"), ("name", "items"))
+    obs, ans, sw = [], None, None
+
+    def o(text, *uses):
+        obs.append({"text": text, "uses": list(uses)})
+
+    def shorts_long(lead=""):
+        sh, lo = tot.get("shorts"), tot.get("long")
+        if _num(sh) and _num(lo) and sh + lo > 0:
+            if es:
+                o(f"{lead}{f(sh, lang)} fueron Shorts y {f(lo, lang)} videos largos.", "totals")
+            else:
+                o(f"{lead}{f(sh, lang)} were Shorts and {f(lo, lang)} long videos.", "totals")
+
+    def length_total():
+        h, d = tot.get("length_hours"), tot.get("days_active")
+        if not (_num(h) and h > 0 and _num(d)):
+            return
+        if es:
+            o(f"Lo que abriste suma unas {_hrs(h, lang)} horas de video en {f(d, lang)} días.", "totals")
+        else:
+            t = f"What you opened adds up to about {_hrs(h)} hours of video on {f(d, lang)} days"
+            if _num(prev.get("length_hours")) and prev["length_hours"] > 0 and pw:
+                t += f", against about {_hrs(prev['length_hours'])} hours in {pw}"
+            o(t + ".", "totals", "previous")
+
+    def length_leader(rows, what):
+        rows = [r for r in rows[:8] if _num(r.get("length_hours"))]
+        if len(rows) < 2 or es:
+            return
+        x = max(rows, key=lambda r: r["length_hours"])
+        if x is rows[0] or x["length_hours"] < rows[0]["length_hours"] * 1.2:
+            return
+        own = ("' videos" if x["name"].endswith("s") else "'s videos") if what == "channels" else " videos"
+        o(f"By length the order changes: {x['name']}{own} add up to about {_hrs(x['length_hours'])} hours, "
+          f"against about {_hrs(rows[0]['length_hours'])} hours for {rows[0]['name']}.", what)
+
+    def theme_moves():
+        ch = [t for t in themes if _num(t.get("change_vs_previous")) and _num(t.get("previous_share"))]
+        up = sorted((t for t in ch if t["change_vs_previous"] >= 0.015), key=lambda t: -t["change_vs_previous"])
+        down = sorted((t for t in ch if t["change_vs_previous"] <= -0.015), key=lambda t: t["change_vs_previous"])
+        if up and pw:
+            t = up[0]
+            o((f"{t['name']} subió de {_pc(t['previous_share'], lang)} a {_pc(t['share'], lang)} frente a {pw}." if es
+               else f"{t['name']} grew from {_pc(t['previous_share'])} to {_pc(t['share'])} against {pw}."), "themes")
+        if down:
+            t = down[0]
+            o((f"{t['name']} bajó de {_pc(t['previous_share'], lang)} a {_pc(t['share'], lang)}." if es else
+               f"{t['name']} fell from {_pc(t['previous_share'])} to {_pc(t['share'])}."), "themes")
+
+    def behind(t):
+        cs = _rows_named(t.get("channels"), ("name", "items"))[:2]
+        if len(cs) == 2 and not es:
+            o(f"Behind {t['name']}: {cs[0]['name']} ({f(cs[0]['items'], lang)} videos) and {cs[1]['name']} "
+              f"({f(cs[1]['items'], lang)}).", "themes")
+
+    if kind == "top" and len(themes) >= 2:
+        t0, t1 = themes[0], themes[1]
+        if t0["share"] >= SPREAD_SHARE:
+            ans = (f"Sobre todo {t0['name']} ({_pc(t0['share'], lang)} de lo que abriste), luego {t1['name']} "
+                   f"({_pc(t1['share'], lang)})." if es else
+                   f"Mostly {t0['name']} ({_pc(t0['share'])} of what you opened), then {t1['name']} "
+                   f"({_pc(t1['share'])}).")
+        elif len(themes) >= 3:
+            t2 = themes[2]
+            ans = (f"Una mezcla amplia: primero {t0['name']} ({_pc(t0['share'], lang)}), luego {t1['name']} "
+                   f"({_pc(t1['share'], lang)}) y {t2['name']} ({_pc(t2['share'], lang)})." if es else
+                   f"A wide mix, led by {t0['name']} ({_pc(t0['share'])}), {t1['name']} ({_pc(t1['share'])}) and "
+                   f"{t2['name']} ({_pc(t2['share'])}).")
+        theme_moves()
+        behind(t0)
+        length_leader(themes, "themes")
+        length_total()
+        shorts_long()
+    elif kind == "channels" and len(chans) >= 3:
+        c0, c1, c2 = chans[:3]
+        topic = (s.get("filters") or {}).get("topic")
+        head = (f"En {topic}, " if es else f"For {topic}, ") if topic else ""
+        ans = (f"{head}{c0['name']} va primero con {f(c0['items'], lang)} videos, seguido de {c1['name']} "
+               f"({f(c1['items'], lang)}) y {c2['name']} ({f(c2['items'], lang)})." if es else
+               f"{head}{c0['name']} led with {f(c0['items'], lang)} videos, ahead of {c1['name']} "
+               f"({f(c1['items'], lang)}) and {c2['name']} ({f(c2['items'], lang)}).")
+        top5 = [c for c in chans[:5] if _num(c.get("shorts_share"))]
+        sh = [c for c in top5 if c["shorts_share"] >= 0.8][:2]
+        lo = [c for c in top5 if c["shorts_share"] <= 0.1][:2]
+        if (sh or lo) and not es:
+            bits = []
+            if sh:
+                bits.append(" and ".join(c["name"] for c in sh) + (" is" if len(sh) == 1 else " are") +
+                            " almost all Shorts (" + " and ".join(_pc(c["shorts_share"]) for c in sh) + ")")
+            if lo:
+                bits.append(" and ".join(c["name"] for c in lo) + (" has" if len(lo) == 1 else " have") +
+                            " almost no Shorts (" + " and ".join(_pc(c["shorts_share"]) for c in lo) + ")")
+            o(", while ".join(bits) + ".", "channels")
+        length_leader(chans, "channels")
+        if not es:
+            new = [c for c in _rows_named((s.get("new") or {}).get("channels"), ("name", "items"))
+                   if c["name"] in {x["name"] for x in chans[:5]}]
+            if new:
+                o(f"{new[0]['name']} is new: first opened in this span, {f(new[0]['items'], lang)} videos.", "new")
+        length_total()
+    elif kind == "count" and _num(tot.get("items")) and (s.get("filters") or {}).get("topic"):
+        topic = (s.get("filters") or {}).get("topic") or ""
+        wt = (s.get("window_totals") or {}).get("items")
+        d = tot.get("days_active")
+        if es:
+            ans = f"{f(tot['items'], lang)} videos de {topic} en {f(d, lang)} días" + (
+                f", de {f(wt, lang)} que abriste en total." if _num(wt) else ".")
+        else:
+            ans = f"{f(tot['items'], lang)} {topic} videos on {f(d, lang)} days" + (
+                f", out of {f(wt, lang)} you opened in all." if _num(wt) else ".")
+        if _num(prev.get("items")) and pw and prev["items"] != tot["items"]:
+            up = tot["items"] > prev["items"]
+            o((f"Es {'más' if up else 'menos'} que los {f(prev['items'], lang)} de {pw}." if es else
+               f"That is {'up' if up else 'down'} from {f(prev['items'], lang)} in {pw}."), "totals", "previous")
+        if len(themes) >= 2 and not es:
+            o(f"The biggest parts: {themes[0]['name']} ({_pc(themes[0]['share'])}) and {themes[1]['name']} "
+              f"({_pc(themes[1]['share'])}).", "themes")
+        theme_moves()
+        h = tot.get("length_hours")
+        sh, lo = tot.get("shorts"), tot.get("long")
+        if _num(sh) and _num(lo) and _num(h) and h > 0 and not es:
+            o(f"{f(sh, lang)} were Shorts and {f(lo, lang)} long videos, adding up to about {_hrs(h)} hours in "
+              f"length.", "totals")
+        if chans and not es:
+            o(f"{chans[0]['name']} gave the most: {f(chans[0]['items'], lang)} of them.", "channels")
+    elif kind in ("first", "last") and not es:
+        items = _rows_named(s.get("items"), ("title", "at"))
+        tp = _rows_named(s.get("topics"), ("name",))
+        topic = (s.get("filters") or {}).get("topic") or (tp[0]["name"] if tp else "")
+        d0 = _as_date(items[0]["at"]) if items else None
+        if d0 and topic:
+            ans = (f"You first opened a {topic} video on {_day_words(d0)}." if kind == "first" else
+                   f"The last {topic} video you opened was on {_day_words(d0)}.")
+        if _num(tot.get("items")) and _num(tot.get("days_active")):
+            t = (f"Since then you opened {f(tot['items'], lang)} {topic} videos on {f(tot['days_active'], lang)} days"
+                 if kind == "first" else f"In all you opened {f(tot['items'], lang)} {topic} videos on "
+                 f"{f(tot['days_active'], lang)} days")
+            if _num(tot.get("length_hours")) and tot["length_hours"] > 0:
+                t += f", adding up to about {_hrs(tot['length_hours'])} hours in length"
+            o(t + ".", "totals")
+        sh, lo = tot.get("shorts"), tot.get("long")
+        if _num(sh) and _num(lo) and sh + lo > 0:
+            o(f"{f(lo, lang)} were long videos and {f(sh, lang)} Shorts.", "totals")
+        cs = _rows_named((tp[0].get("channels") if tp else None) or s.get("channels"), ("name", "items"))[:2]
+        if len(cs) == 2:
+            o(f"{cs[0]['name']} ({f(cs[0]['items'], lang)}) and {cs[1]['name']} ({f(cs[1]['items'], lang)}) are the "
+              f"channels behind most of it.", "topics", "channels")
+        sw = _path_line(s, topic)
+    elif kind == "day" and _num(tot.get("items")):
+        n, sh = tot["items"], tot.get("shorts")
+        bits = f"{f(n, lang)} videos" + (f", {f(sh, lang)} of them Shorts" if _num(sh) and sh else "")
+        if len(themes) >= 2 and n >= 3 and not es:
+            ans = f"{bits}, led by {themes[0]['name']} ({_pc(themes[0]['share'])}) and {themes[1]['name']} " \
+                  f"({_pc(themes[1]['share'])})."
+        elif not es:
+            ans = bits + "."
+        if not es:
+            h = tot.get("length_hours")
+            if _num(h) and h > 0:
+                o(f"Together they add up to about {_hrs(h)} hours in length.", "totals")
+            bh = ((s.get("when") or {}).get("busiest_hours") or [{}])[0]
+            if isinstance(bh, dict) and _num(bh.get("hour")) and n >= 3:
+                o(f"Most of it came around {_hour_words(bh['hour'])}" +
+                  (f" ({_pc(bh['share'])} of the day)." if _num(bh.get("share")) else "."), "when")
+            if chans and chans[0]["items"] >= 2:
+                o(f"{chans[0]['name']} gave the most ({f(chans[0]['items'], lang)}).", "channels")
+    elif kind == "compare_topics":
+        tp = _rows_named(s.get("topics"), ("name", "items"))
+        if len(tp) >= 2 and not es:
+            a, b = tp[0], tp[1]
+            big, small = (a, b) if a["items"] >= b["items"] else (b, a)
+            r = big["items"] / small["items"] if small["items"] else 0
+            if small["items"] and r >= 2:
+                ans = (f"Much more {big['name']}: {f(big['items'], lang)} {big['name']} videos against "
+                       f"{f(small['items'], lang)} {small['name']} ones, about {round(r)} times as many.")
+            elif small["items"] and r >= 1.15:
+                ans = (f"More {big['name']}, but not by much: {f(big['items'], lang)} {big['name']} videos against "
+                       f"{f(small['items'], lang)} {small['name']} ones.")
+            elif small["items"]:
+                ans = (f"About even: {f(a['items'], lang)} {a['name']} videos and {f(b['items'], lang)} "
+                       f"{b['name']} ones.")
+            ta, tb = [x for x in a.get("themes") or [] if isinstance(x, str)], \
+                [x for x in b.get("themes") or [] if isinstance(x, str)]
+            if ta and tb:
+                o(f"Inside {a['name']}: {' and '.join(ta[:2])}; inside {b['name']}: {' and '.join(tb[:2])}.", "topics")
+            if all(_num(x.get("days")) for x in (a, b)):
+                o(f"{a['name'].capitalize()} came on {f(a['days'], lang)} days, {b['name']} on {f(b['days'], lang)}.",
+                  "topics")
+            if all(_num(x.get("length_hours")) and x["length_hours"] > 0 for x in (a, b)):
+                o(f"{a['name'].capitalize()} videos add up to about {_hrs(a['length_hours'])} hours in length, "
+                  f"{b['name']} ones to about {_hrs(b['length_hours'])}.", "topics")
+            if all(_num(x.get("shorts")) for x in (a, b)):
+                o(f"{f(a['shorts'], lang)} of the {a['name']} videos were Shorts, against {f(b['shorts'], lang)} of "
+                  f"the {b['name']} ones.", "topics")
+    elif kind == "changed":
+        ch = s.get("change") or {}
+        ps = {str(p.get("label")): p for p in _rows_named(s.get("periods"), ("label",))}
+        p0, p1 = ps.get(str(ch.get("from"))), ps.get(str(ch.get("to")))
+        if p0 and p1 and len(p0.get("themes") or []) >= 2 and len(p1.get("themes") or []) >= 2:
+            x, y = [t["name"] for t in p0["themes"][:2]], [t["name"] for t in p1["themes"][:2]]
+            ans = (f"{x[0]} y {x[1]} dominaban en {ch['from']}; en {ch['to']}, {y[0]} y {y[1]}." if es else
+                   f"{x[0]} and {x[1]} led in {ch['from']}; by {ch['to']}, {y[0]} and {y[1]} did.")
+        for part in ("rising", "fading"):
+            r = (_rows_named(ch.get(part), ("name", "from_share", "to_share")) or [None])[0]
+            if r:
+                if es:
+                    o(f"{r['name']} {'subió' if part == 'rising' else 'bajó'} de {_pc(r['from_share'], lang)} en "
+                      f"{ch['from']} a {_pc(r['to_share'], lang)} en {ch['to']}.", "change")
+                else:
+                    o(f"{r['name']} {'rose' if part == 'rising' else 'fell'} from {_pc(r['from_share'])} in "
+                      f"{ch['from']} to {_pc(r['to_share'])} in {ch['to']}.", "change")
+        for r in _rows_named(ch.get("rising"), ("name", "peak_period", "peak_share"))[:3]:
+            if str(r["peak_period"]) not in (str(ch.get("from")), str(ch.get("to"))):
+                o((f"{r['name']} tuvo su punto más alto en {r['peak_period']} ({_pc(r['peak_share'], lang)})." if es
+                   else f"{r['name']} peaked in {r['peak_period']} at {_pc(r['peak_share'])}."), "change")
+                break
+    return {"answer": ans, "observations": obs, "so_what": sw, "offers": []}
+
+
+def _path_line(s, topic, path_only=False):
+    """The so-what of a first or a last (judge, Q4: "what could I learn with that"): where the person is on the
+    topic, from their own record: still at it or lapsed (the last year against the busiest), and the saved videos on
+    it never opened as the next step."""
+    ps = _rows_named(s.get("periods"), ("label", "items"))
+    lib = _rows_named((s.get("library") or {}).get("saved_not_opened"), ("theme", "n"))
+    bits = []
+    if len(ps) >= 2:
+        last, peak = ps[-1], max(ps, key=lambda p: p["items"])
+        if peak is last:
+            bits.append(f"You are deeper into {topic} than ever: {_fmt(last['items'], 'en')} in {last['label']}, "
+                        f"your busiest year for it")
+        elif last["items"] >= 0.5 * peak["items"]:
+            bits.append(f"You are still at it: {_fmt(last['items'], 'en')} in {last['label']}, against "
+                        f"{_fmt(peak['items'], 'en')} in {peak['label']}, your busiest year")
+        else:
+            bits.append(f"It has faded: {_fmt(last['items'], 'en')} in {last['label']}, against "
+                        f"{_fmt(peak['items'], 'en')} in {peak['label']}")
+    path = (bits[0] + ".") if bits else None
+    if path_only:
+        return path
+    if lib:
+        x = lib[0]
+        saved = f"You saved {_fmt(x['n'], 'en')} {x['theme']} videos you never opened, a next step. Want them as a list?"
+        return (path + " " + saved) if path else saved
+    return path
+
+
+_SAVED_SW = re.compile(r"\bsaved\b|\bguardaste\b")
+
+
+def _saved_line(sheet, said_names, facts):
+    """The library's so-what for a theme the answer is about (or the question's topic), or None."""
+    lang = sheet.get("lang") or "en"
+    for x in _rows_named(((shown(sheet).get("library") or {}).get("saved_not_opened")), ("theme", "n")):
+        key = " ".join(_words(x["theme"]))
+        # a first's or a last's saved rows are on the topic's own themes: all of them are what it is about
+        if sheet.get("kind") in ("first", "last") or key in said_names or key in facts.topic_keys or any(key in facts.parents.get(n, ()) or
+                                                               key == _theme_of(facts, n) for n in said_names):
+            return (f"Guardaste {_fmt(x['n'], lang)} videos de {x['theme']} que nunca abriste. ¿Te los muestro en una "
+                    f"lista?" if lang == "es" else
+                    f"You saved {_fmt(x['n'], lang)} {x['theme']} videos you never opened. Want them as a list?")
+    return None
+
+
+def _theme_of(facts, name):
+    for c in facts.sheet.get("channels") or []:
+        if isinstance(c, dict) and " ".join(_words(c.get("name") or "")) == name and c.get("theme"):
+            return " ".join(_words(c["theme"]))
+    return None
+
+
+def fill(form, raw, sheet, chart_vals=None):
+    """Round 12, fix: the checked form with what failed filled by code (see code_form). Returns the form; its
+    "filled" says what code wrote ("answer", "observations", "so_what")."""
+    form["filled"] = []
+    if not (isinstance(raw, dict) and isinstance(raw.get("answer"), str) and
+            isinstance(raw.get("observations"), list)):
+        return form
+    facts = Facts(shown(sheet))
+    cf = check(code_form(sheet), sheet, chart_vals=chart_vals)
+    for _w, why, _t in cf["dropped"]:
+        form["dropped"].append(("code", why, None))
+    if not form["answer"] and cf["answer"]:
+        form["answer"] = cf["answer"]
+        form["filled"].append("answer")
+    # the so-what: never twice (a bullet that says it goes), never about another theme, the code's when missing
+    names = set(facts.names_in(" ".join([form["answer"] or ""] + form["observations"]))[0])
+    sw = form.get("so_what")
+    if sw and _SAVED_SW.search(_norm(sw)):
+        sw_names = set(facts.names_in(sw)[0])
+        if not sw_names & (names | facts.topic_keys | {_theme_of(facts, n) for n in names}):
+            form["dropped"].append(("so_what", "unrelated", sw))
+            sw = None
+    path = _path_line(shown(sheet), (sheet.get("filters") or {}).get("topic") or "", path_only=True) \
+        if sheet.get("kind") in ("first", "last") and facts.lang == "en" else None
+    if path and check_sentence(path, facts) is None:
+        # the person's path on the topic, from the record (judge, Q4: "what could I learn"), then the saved ones
+        if not sw:
+            sw = _saved_line(sheet, names | facts.topic_keys, facts)
+            sw = sw if sw and check_sentence(sw, facts) is None else None
+        sw = tidy(path, facts.lang) + (" " + tidy(sw, facts.lang) if sw else "")
+        form["filled"].append("so_what")
+    elif not sw:
+        sw = _saved_line(sheet, names, facts)
+        if sw and check_sentence(sw, facts) is None:
+            sw = tidy(sw, facts.lang)
+            form["filled"].append("so_what")
+        else:
+            sw = None
+    form["so_what"] = sw
+    if sw:
+        form["observations"] = [x for x in form["observations"]
+                                if not (_SAVED_SW.search(_norm(x)) and re.search(r"\bnever\b|\bnunca\b", _norm(x)))]
+    said = _signature(" ".join([form["answer"] or "", sw or ""]), facts)
+    for x in form["observations"]:
+        said |= _signature(x, facts)
+    hours = any(re.search(r"\bhours?\b|\bhoras?\b|\bminutes?\b", x) for x in form["observations"] + [form["answer"] or ""])
+    for x in cf["observations"]:
+        sig = _signature(x, facts)
+        if sig and sig <= said:
+            continue
+        need = len(form["observations"]) < OBS_FILL
+        length = (not hours and re.search(r"\badd(?:s)? up\b|\bsuma\b", x) and sheet.get("kind") in ("top", "channels")
+                  and len(form["observations"]) < OBS_MAX)
+        if need or length:
+            form["observations"].append(x)
+            said |= sig
+            hours = hours or bool(length)
+            if "observations" not in form["filled"]:
+                form["filled"].append("observations")
+    return form
 
 
 # ====================================== the one function the merger wires ========================================
@@ -1405,8 +1985,10 @@ def write(bot, person, sheet, now, info=None, say=None):
         return None
     _, chart_vals = chart(sheet)
     form = check(raw, sheet, chart_vals=chart_vals)
-    info.update(cost=cost, seconds=round(time.time() - t0, 2), kept=len(form["observations"]),
-                dropped=form["dropped"], offers=form["offers"])
+    kept = len(form["observations"])
+    form = fill(form, raw, sheet, chart_vals)   # round 12, fix: what failed, filled by code from the sheet
+    info.update(cost=cost, seconds=round(time.time() - t0, 2), kept=kept,
+                dropped=form["dropped"], offers=form["offers"], filled=form.get("filled") or [])
     if not form["answer"] or len(form["observations"]) < OBS_MIN:
         return None
     lang = sheet.get("lang") or "en"

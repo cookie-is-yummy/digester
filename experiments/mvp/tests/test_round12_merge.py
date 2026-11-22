@@ -208,7 +208,12 @@ def test_b_yes_to_the_so_what_lists_the_saved_videos_with_their_cards(wr):
     assert "youtube.com/watch" in out and "Which one" not in out
 
 
-def test_b_yes_with_no_so_what_said_is_not_taken(wr):
+def test_b_yes_with_no_so_what_said_is_not_taken(wr, monkeypatch):
+    # round 12, fix: with no so-what from the model a first now gets the code's (the path, then the saved ones), so
+    # the "not said" case is a so-what code cannot write either
+    from mvp import insight as I
+    monkeypatch.setattr(I, "_path_line", lambda *a, **k: None)
+    monkeypatch.setattr(I, "_saved_line", lambda *a, **k: None)
     wr["state"]["answers"]["mvp_insight"] = lambda u: dict(RW.fake_insight(u), so_what=None)
     ask(wr, QS["q4"])
     Hm = mods()[0]
@@ -330,7 +335,8 @@ def test_f_a_cap_reached_means_no_call_and_todays_code_reply(wr, monkeypatch):
     assert calls == [] and out == base
 
 
-@pytest.mark.parametrize("how", ["raise", "no_script", "empty", "one_observation"])
+# round 12, fix: "one_observation" left this list (code fills the observations; tests/test_round12_fix.py)
+@pytest.mark.parametrize("how", ["raise", "no_script", "empty"])
 def test_f_the_code_reply_byte_for_byte_when_the_writer_gives_nothing(wr, monkeypatch, how):
     base = code_reply(wr, monkeypatch, QS["q3"])
     later(wr)

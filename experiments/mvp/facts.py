@@ -633,6 +633,17 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             out["periods"], out["periods_unit"] = _periods(idx, facts, th, ev, None, eo, by="year")
     # things saved on the window's themes and never opened
     tids = topic_tids or [r["theme_id"] for r in rows[:3]]
+    # round 12, fix (judges: a channels answer offered saved comedy, music against cooking a travel video): the saved
+    # things are on what the answer is about, the themes of the top channels, or the two topics compared
+    if kind == "channels" and not topic_tids:
+        by_name = {r["name"]: r["theme_id"] for r in rows if r.get("name")}
+        ct = [by_name[c["theme"]] for c in out["channels"][:3] if c.get("theme") in by_name]
+        tids = list(dict.fromkeys(ct)) or tids
+    elif kind == "compare_topics" and q.topic:
+        ct = []
+        for ph in q.topic:
+            ct += [t for t in topic_items(view, rec, idx, facts, ph)[1] if t not in ct]
+        tids = ct or tids
     out["library"] = {"saved_not_opened": _saved_not_opened(view, idx, facts, th, tids)}
     out["offers"] = _offers(q, kind, out)
     out["built_s"] = round(time.monotonic() - t0, 3)

@@ -174,7 +174,7 @@ QUESTION = re.compile(r"\?|^\W*(?:what|which|who|when|how|show|list|tell|give|di
                       r"^\W*(?:the\s+)?(?:my\s+)?(?:top|most|first|last|latest|earliest|watch history|videos?|"
                       r"channels?)\b")
 SPANISH = re.compile(r"\b(?:que|cuantos|cuantas|cuando|canales|vi|veo|visto|ayer|hoy|este mes|el mes pasado|"
-                     r"semana|empece|ver|videos de|historial|mas)\b")
+                     r"semana|empece|ver|videos de|historial|mas|cambiado|gustos|intereses)\b")
 
 # ---------- the kind ----------
 HOURS = re.compile(r"\b(?:hours?|minutes?|time spent|how long|horas|minutos)\b")
@@ -246,11 +246,14 @@ NO_SHORTS = re.compile(r"[,;:(]?\s*\b(?:(?:but|and)\s+)?(?:without|excluding|exc
 INTO = re.compile(r"\bwhat\s+(?:was|were)\s+i\s+(?:really\s+|mostly\s+|most\s+)*(?:into|obsessed\s+with|"
                   r"hooked\s+on)\b|\bwhat\s+did\s+i\s+mostly\s+watch\b|\bwhat\s+was\s+i\s+(?:mostly\s+)?watching\b")
 INTO_ONLY = re.compile(r"\b(?:into|obsessed\s+with|hooked\s+on|mostly\s+watch\w*)\b")
-CHANGED_WORD = re.compile(r"\b(?:changed|changing|evolved|evolving|shifted|shifting)\b|\bhow\s+different\b")
+CHANGED_WORD = re.compile(r"\b(?:changed|changing|evolved|evolving|shifted|shifting)\b|\bhow\s+different\b|"
+                          r"\bha\s+(?:cambiado|evolucionado)\b|\bhan\s+(?:cambiado|evolucionado)\b")
 CHANGED_WHAT = re.compile(r"\bwhat\s+i(?:'ve|\s+have)?\s+(?:been\s+)?(?:watch\w*|like|liked|look\s+at|consume)\b|\bmy\s+"
                           r"(?:interests?|tastes?|watching|viewing|watch\s+history|youtube\s+habits?|habits?|feed)\b|"
-                          r"\b(?:the\s+)?(?:kind|type|sort)s?\s+of\s+(?:stuff|videos|things|content)\s+i\b")
-CHANGED_ASK = re.compile(r"^\W*(?:(?:so|and|ok|okay|hey)[,\s]+)?(?:how|what|has|have|did|in what way)\b")
+                          r"\b(?:the\s+)?(?:kind|type|sort)s?\s+of\s+(?:stuff|videos|things|content)\s+i\b|"
+                          # round 12, fix (judge: the Spanish of the brief's 7 was read as a timeline)
+                          r"\blo\s+que\s+(?:veo|miro|he\s+visto|vi|consumo)\b|\bmis\s+(?:gustos|intereses)\b")
+CHANGED_ASK = re.compile(r"^\W*(?:(?:so|and|ok|okay|hey|y)[,\s]+)?(?:how|what|has|have|did|in what way|como|que|en que)\b")
 HOW_TO = re.compile(r"\bhow\s+(?:do|can|should|could|would|to)\s+i\b|\bhow\s+to\b")
 RANK_IN = re.compile(r"^\W*(?:(?:what|which|who)\s+(?:are|were|is)\s+)?(?:my\s+)?(?:the\s+)?(?:most\s+watched|"
                      r"top(?:\s+\d+)?)\s+(?:channels|youtubers|creators)\s+(?:in|for|on|about)\s+\w")
