@@ -132,7 +132,8 @@ def test_29_february_without_a_year_is_the_latest_leap_day_never_the_last_four_w
 
 def test_this_yr_is_this_year_never_the_topic_yr(chk):
     out, calls = ask(chk, "wich chanels did i wacth the most this yr")
-    assert calls == [] and out.startswith("This year (1 January to 19 November 2026) you watched 24 videos")
+    assert calls == [] and out.startswith("This year (1 January to 15 November 2026, where your YouTube export ends"
+                                          "; your Instagram export ends on 10 November 2026) you watched 24 videos")   # round 12, W (R-H)
     assert '"yr"' not in out
 
 
@@ -144,26 +145,30 @@ def test_spanish_function_words_are_never_a_topic(chk):
 
 def test_spanish_the_last_n_days_is_that_window_never_all_time(chk):
     out, calls = ask(chk, "cuantos videos vi en los ultimos 7 dias")
-    assert calls == [] and out.startswith("En los últimos 7 días (13 a 19 de noviembre de 2026) viste 2 videos.")
+    assert calls == [] and out.startswith("En los últimos 7 días (13 a 15 de noviembre de 2026, donde termina tu "
+                                          "exportación de YouTube; la de Instagram termina el 10 de noviembre de "
+                                          "2026) viste 2 videos.")   # round 12, W (R-H)
 
 
 def test_did_i_watch_anything_on_a_day_lists_that_day(chk):
     out, calls = ask(chk, "did i watch anything on nov 10")
-    assert calls == [] and out.startswith("On Tuesday 10 November 2026 you watched 2 videos:\n")
+    assert calls == [] and out.startswith("On Tuesday 10 November 2026 (your Instagram export ends on 10 November "
+                                          "2026) you watched 2 videos:\n")   # round 12, W (R-H)
 
 
 @pytest.mark.parametrize("clock,text,head", [
-    ("2026-11-19T17:00:00+00:00", "what did i watch this past weekend",
-     "On the weekend of 14 to 15 November 2026 you watched 2 videos."),
+    ("2026-11-19T17:00:00+00:00", "what did i watch this past weekend",   # round 12, W (R-H): the ends inside
+     "On the weekend of 14 to 15 November 2026 (where your YouTube export ends; your Instagram export ends on 10 November 2026) you watched 2 videos."),
     ("2026-11-19T17:00:00+00:00", "what did i watch last weekend",
-     "On the weekend of 14 to 15 November 2026 you watched 2 videos."),
+     "On the weekend of 14 to 15 November 2026 (where your YouTube export ends; your Instagram export ends on 10 November 2026) you watched 2 videos."),
     ("2026-11-15T17:00:00+00:00", "what did i watch last weekend",          # on a Sunday: the weekend before
      "On the weekend of 7 to 8 November 2026 you watched 1 video."),
     ("2026-11-19T17:00:00+00:00", "what did i watch 2 weeks ago",
      "In the week of 2 to 8 November 2026 you watched 5 videos."),
     ("2026-11-19T17:00:00+00:00", "what did i watch between oct 1 and oct 10",
      "From 1 to 10 October 2026 you watched 4 videos."),
-    ("2026-11-19T17:00:00+00:00", "what did i watch 6 days ago", "On Friday 13 November 2026 you watched no videos."),
+    ("2026-11-19T17:00:00+00:00", "what did i watch 6 days ago",
+     "On Friday 13 November 2026 (your Instagram export ends on 10 November 2026) you watched no videos."),
     ("2026-11-19T17:00:00+00:00", "what did i watch 3 days ago", "I can't see Monday 16 November 2026: "),
 ])
 def test_weekends_ago_and_ranges_are_their_own_windows(chk, clock, text, head):
@@ -201,7 +206,7 @@ def test_like_or_save_never_counts_a_watch(chk):
 
 def test_where_likes_start_is_said_as_the_likes_never_the_history(chk):
     out, _ = ask(chk, "what did i like on youtube in october")
-    assert "Your YouTube likes here start on 18 October 2026, so I can't see before that." in out
+    assert "(your YouTube likes here start on 18 October 2026)" in out   # round 12, W (R-H): in the window's words
     assert "history here starts" not in out
 
 
@@ -229,7 +234,8 @@ def test_chat_after_a_history_answer_is_never_a_new_topic(chk, text):
 
 @pytest.mark.parametrize("text,head", [
     ("and the month before that?", "In September 2026 you watched 6 videos."),
-    ("the ones i liked", "In October 2026 you liked 2 posts and videos (1 on YouTube, 1 on Instagram)."),
+    ("the ones i liked", "In October 2026 (your Instagram likes here start on 11 October 2026) you liked 2 posts and "
+                         "videos (1 on YouTube, 1 on Instagram)."),   # round 12, W (R-H)
     ("last month?", "In October 2026 you watched 9 videos."),
     ("and cooking?", 'In October 2026 you watched 2 videos that mention "cooking"'),
     ("what about knitting", 'In October 2026 you watched 0 videos that mention "knitting"'),
@@ -282,12 +288,15 @@ def test_the_checkers_60_traps_are_never_a_history_question(text):
      "On Saturday 31 October 2026 you watched 1 video:\n1. Halloween synth sounds"),
     ("2026-11-19T17:00:00+00:00", "what did i watch on oct 1", "On Thursday 1 October 2026 you watched no videos."),
     # "today" at 23:00 in New York is still 15 November, where UTC is on the 16th
-    ("2026-11-16T04:00:00+00:00", "what did i watch today", "On Sunday 15 November 2026 you watched 1 video:"),
+    ("2026-11-16T04:00:00+00:00", "what did i watch today", "On Sunday 15 November 2026 (the last day of your YouTube "
+     "export; your Instagram export ends on 10 November 2026) you watched 1 video:"),   # round 12, W (R-H)
     # the month at 22:00 on 30 November in New York is November, not December
-    ("2026-12-01T03:00:00+00:00", "how many videos did i watch this month", "This month (1 to 30 November 2026) you"),
+    ("2026-12-01T03:00:00+00:00", "how many videos did i watch this month",
+     "This month (1 to 15 November 2026, where your YouTube export ends; your Instagram export ends on 10 November 2026) you"),   # R-H
     # "the last 7 days" counts today and the 6 days before it: 9 November is in, 8 November is not
     ("2026-11-15T20:00:00+00:00", "how many videos did i watch in the last 7 days",
-     "In the last 7 days (9 to 15 November 2026) you watched 5 videos (4 on YouTube, 1 on Instagram)."),
+     "In the last 7 days (9 to 15 November 2026, where your YouTube export ends; your Instagram export ends on 10 November 2026) you watched 5 videos "
+     "(4 on YouTube, 1 on Instagram)."),   # round 12, W (R-H)
     ("2026-11-19T17:00:00+00:00", "how many videos did i watch on feb 29 2024",
      "On Thursday 29 February 2024 you watched 1 video."),
     ("2026-11-19T17:00:00+00:00", "how many videos did i watch on christmas 2025",
@@ -315,8 +324,9 @@ def test_a_holiday_with_a_year_is_that_years():
 # ================================ 3. honesty ======================================================================
 def test_a_window_that_reaches_one_platforms_export_end_says_that_one(chk):
     out, _ = ask(chk, "what did i watch between nov 1 and nov 12")
-    assert out.startswith("From 1 to 12 November 2026 you watched 8 videos.")
-    assert "Your Instagram export ends on 10 November 2026, so I can't see after that." in out
+    assert out.startswith("From 1 to 12 November 2026 (your Instagram export ends on 10 November 2026) you watched 8 "
+                          "videos.")   # round 12, W (R-H): in the window's words, never a closing line
+    assert "so I can't see after that" not in out
     assert "YouTube export" not in out          # YouTube's runs to the 15th, past the window
 
 
@@ -333,7 +343,8 @@ def test_friends_posts_are_never_counted_nor_shown(chk):
 def test_a_like_is_never_said_as_watched(chk):
     out, _ = ask(chk, "which videos did i like last month")
     first = out.split("\n")[0]
-    assert first.startswith("In October 2026 you liked 2 posts and videos") and "watched" not in out
+    assert first.startswith("In October 2026 (your Instagram likes here start on 11 October 2026) you liked 2 posts "
+                            "and videos") and "watched" not in out   # round 12, W (R-H)
     out, _ = ask(chk, "when did i first like a video")
     assert out.startswith("The first post or video you liked was on 11 October 2026:") and "watched" not in out
 

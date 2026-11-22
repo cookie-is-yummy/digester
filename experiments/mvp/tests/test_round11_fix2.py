@@ -599,9 +599,10 @@ def test_p5b_the_new_export_hint_once_in_6_hours_and_the_end_every_time(f2):
                                      "what did i watch in november", "how many reels did i watch in november")]
     ends = "Your Instagram export ends on 3 November 2026 and your YouTube export on 12 November 2026"
     assert REFRESH in outs[0] and all(REFRESH not in o for o in outs[1:]), outs
-    assert all(ends.lower() in o.lower() or "instagram export ends on 3 november 2026" in o.lower() for o in outs), outs
-    out, _ = step(f2, "what did i watch this week")   # wholly after the record: the hint stays, as a summary's
-    assert out.startswith("I can't see this week") and REFRESH in out
+    assert all(ends.lower() in o.lower() or "instagram export ends on 3 november 2026" in o.lower()
+               or "up to 3 november, where your instagram export ends" in o.lower() for o in outs), outs   # R-H
+    out, _ = step(f2, "what did i watch this week")   # wholly after the record: round 12, W (R-H): the hint once
+    assert out.startswith("I can't see this week") and REFRESH not in out   # in 6 hours here too
     f2["clock"][0] += timedelta(hours=7)
     out, _ = step(f2, "what did i watch last week")
     assert REFRESH in out

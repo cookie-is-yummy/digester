@@ -381,7 +381,8 @@ def test_r3_after_effects_is_one_topic():
 # ================================ R4: the friends line and the range, once in a stretch ============================
 def test_r4_the_friends_line_and_the_range_are_said_once_in_six_hours(hist):
     out, _ = ask(hist, "which channels do i watch the most")
-    assert FRIENDS in out and RANGE in out and REFRESH in out
+    # round 12, W (R-H): the friends line only when asked about friends; no hint on an all-time answer
+    assert FRIENDS not in out and RANGE in out and REFRESH not in out
     out, _ = ask(hist, "how many videos about blender have i watched")
     assert FRIENDS not in out and RANGE not in out and REFRESH not in out
     out, _ = ask(hist, "how many videos did i watch in 2025")
@@ -389,7 +390,8 @@ def test_r4_the_friends_line_and_the_range_are_said_once_in_six_hours(hist):
     # a window that reaches the export's end always says so
     out, _ = ask(hist, "how many videos did i watch in october")
     # round 11 fix pass 2 (P5b): the end always, the hint on a new export once in 6 hours (it came with the range)
-    assert "your YouTube export on 30 October 2026, so I can't see after that." in out and REFRESH not in out
+    # round 12, W (R-H): the end in the window's words; the hint here, the first answer about after the export
+    assert "where your YouTube export ends" in out and REFRESH in out
     out, _ = ask(hist, "what did i watch last week")
     assert out.startswith("I can't see the week of 9 to 15 November 2026:")
     # an all-time "last" still says where the record ends (it changes the answer)
@@ -398,12 +400,12 @@ def test_r4_the_friends_line_and_the_range_are_said_once_in_six_hours(hist):
     # after six hours, once again
     hist["clock"][0] = hist["clock"][0] + timedelta(hours=6, minutes=1)
     out, _ = ask(hist, "which channels do i watch the most")
-    assert FRIENDS in out and RANGE in out
+    assert FRIENDS not in out and RANGE in out
 
 
 def test_r4_spanish_too(hist):
     out, _ = ask(hist, "cuantos videos vi en 2025")
-    assert "No cuento las publicaciones de tus amigos." in out
+    assert "No cuento las publicaciones de tus amigos." not in out   # round 12, W (R-H): only when asked
     out, _ = ask(hist, "cuantos videos vi en 2024")
     assert "No cuento las publicaciones de tus amigos." not in out
 
@@ -411,7 +413,7 @@ def test_r4_spanish_too(hist):
 def test_r4_the_notes_are_the_persons_state_and_go_with_delete_my_data(hist):
     ask(hist, "which channels do i watch the most")
     st = hist["bot"].store
-    assert set(st.get_state(f"histnotes:{H}")) == {"friends", "range", "refresh"}   # fix pass 2 (P5b): "refresh" too
+    assert set(st.get_state(f"histnotes:{H}")) == {"range"}   # round 12, W (R-H): no friends line, no hint here
     st.delete_all(H) if hasattr(st, "delete_all") else None
     if hasattr(st, "delete_all"):
         assert st.get_state(f"histnotes:{H}") is None
@@ -425,7 +427,8 @@ def test_r4_the_notes_are_the_persons_state_and_go_with_delete_my_data(hist):
     ("did i watch more cooking in 2025 or 2024",
      "More in 2025: 6 videos that mention \"cooking\", against 3 in 2024 (3 more)."),
     ("did i watch more in october or september",
-     "More in October 2026: 17 videos, against 10 in September 2026 (7 more)."),
+     "More in October 2026 (up to 30 October, where your YouTube export ends; your Instagram export ends on 15 "
+     "October 2026): 17 videos, against 10 in September 2026 (7 more)."),   # round 12, W (R-H)
     ("vi mas videos en 2024 o 2025?", "Más en 2025: 11 videos, frente a 6 en 2024 (5 más)."),
     ("cuantos videos vi en 2024 comparado con 2025", "Más en 2025: 11 videos, frente a 6 en 2024 (5 más)."),
 ])

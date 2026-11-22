@@ -1224,11 +1224,12 @@ def _carry(text, phrases, start, end, e, clause, start_clause, lang):
         j = i + len(ph)
         m = re.match(r"^(.*)\(([^()]*)\)$", ph)
         bits = [x for x in (start_clause, clause) if x]
-        if m and e and end and end > e and start and start <= e:
+        lately = "(where your export ends)" in ph or "donde termina tu exportación" in ph
+        if m and e and end and end >= e and start and start <= e and clause and not lately:
             # "This year (1 January to 19 November 2026)": the span ends where the export ends
-            span = span_words(start, e, lang) + (", " + clause if clause else "")
+            span = span_words(start, min(end, e), lang) + ", " + clause
             new = m.group(1) + "(" + "; ".join([x for x in (start_clause, span) if x]) + ")"
-        elif "(where your export ends)" in ph or "donde termina tu exportación" in ph:
+        elif lately:
             if clause and ";" not in clause and not start_clause:
                 return text, True   # "the 4 weeks up to 30 October 2026 (where your export ends)": already said
             if lang == "es":
@@ -1274,18 +1275,26 @@ def _quiet_limits(text, q, start, end, rec, plats, reached, newest, starts_on, q
         else:
             e = max((rec.ends[p] for p in reached), default=None)
             clause = _end_clause(rec, reached, lang) if reached else ""
-            if e and end and end <= e and clause and q.window.kind == "day":
+            if e and newest and e < newest:
+                # another platform's record runs past this window: never "up to" its end; only the export(s) the
+                # window passes, each with its date ("your Instagram export ends on 10 November 2026")
+                clause = "; ".join(
+                    (f"tu exportación de {PNAME.get(p, p)} termina el {day_words(rec.ends[p], 'es')}" if es else
+                     f"your {PNAME.get(p, p)} export ends on {day_words(rec.ends[p])}")
+                    for p in sorted(reached, key=lambda p: rec.ends[p], reverse=True))
+                e = None
+            if e and end and end <= e and clause and q.window.kind == "day" and clause.startswith(("where", "donde")):
                 top = PNAME.get(max(reached, key=lambda p: rec.ends[p]), "")
                 clause = re.sub(r"^(?:where your \w+ export ends|donde termina tu exportación de \w+)",
                                 f"el último día de tu exportación de {top}" if es else
                                 f"the last day of your {top} export", clause)
             sc = ""
-            if starts_on:
-                p0 = min((p for p in plats if any((p, k) in rec.starts for k in HOW_KINDS[q.how])),
-                         key=lambda p: min(rec.starts[(p, k)] for k in HOW_KINDS[q.how] if (p, k) in rec.starts),
-                         default=None)
-                sc = (f"tu historial de {PNAME.get(p0, p0)} aquí empieza el {day_words(starts_on, 'es')}" if es else
-                      f"your {PNAME.get(p0, p0)} history here starts on {day_words(starts_on)}") if p0 else ""
+            if starts_on and q.kind == "compare":   # a comparison's sentence keeps its own parentheses: a line
+                tail.append(start_line(rec, plats, q))
+            elif starts_on:   # start_line's own words (likes and saves say so), without "so I can't see ..."
+                sl = start_line(rec, plats, q)
+                sc = re.sub(r",\s*(?:so I can't see before that|así que no veo nada antes)\.?$", "", sl)
+                sc = sc[:1].lower() + sc[1:] if sc else ""
             if clause or sc:
                 phrases = _window_phrases(q.window, start, end, lang)
                 if q.kind == "compare" and q.window2 and e and q.window2.end and q.window2.end >= e and \

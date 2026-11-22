@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from mvp.tests.fakes.fake_gemini import FakeGemini  # noqa: E402
 from mvp.tests.test_mvp import env  # noqa: E402,F401  (env is a fixture)
-from mvp.tests.test_round11_h import ask  # noqa: E402
+from mvp.tests.test_round11_h import ask, REFRESH  # noqa: E402  (round 12, W: REFRESH)
 from mvp.tests.test_slice2 import H  # noqa: E402
 
 UTC = timezone.utc
@@ -260,7 +260,10 @@ def ends_said(out):
     line of an all-time answer, which names both ends."""
     low = out.lower()
     return END.lower() in low or ("history here runs from" in low and "to 3 november 2026" in low
-                                  and "to 12 november 2026" in low)
+                                  and "to 12 november 2026" in low) or (
+        # round 12, W (R-H): both ends in the window's own words
+        ("where your youtube export ends" in low or "the last day of your youtube export" in low)
+        and "your instagram export ends on 3 november 2026" in low)
 
 
 def last_run(e):
@@ -474,7 +477,8 @@ def test_abt_is_about_in_a_recall(fc):
 
 def test_reels_are_instagram_in_a_history_question(fc):
     out, _ = ask(fc, "how many reels have i liked")
-    assert out.startswith("In all your history I can see, you liked 2 posts.") and "YouTube" not in out.split("\n")[0]
+    assert out.startswith("In all your history I can see (2 October to 3 November 2026), you liked 2 posts.") and \
+        "YouTube" not in out.split("\n")[0]   # round 12, W (R-H): the range in the window's words
     out, _ = ask(fc, "what was the last color grading reel i watched")
     assert "Color grading LUT pack reel" in out and "Color grading for beginners" not in out
     out, _ = ask(fc, "how many videos and reels did i like")   # both named: both counted
@@ -715,7 +719,7 @@ def test_the_export_end_is_said_in_every_answer_whose_window_reaches_it_ten_in_a
         fc["clock"][0] += timedelta(minutes=3)
         out, calls = ask(fc, m)
         assert calls == [] and ends_said(out), (k + 1, m, out)
-        assert ("Posts from friends are not counted." in out) == (k == 0), (k + 1, out)
+        assert "Posts from friends are not counted." not in out, (k + 1, out)   # round 12, W (R-H): only when asked
 
 
 def test_the_export_end_after_a_restart_and_for_a_second_person(fc, tmp_path):
@@ -725,7 +729,7 @@ def test_the_export_end_after_a_restart_and_for_a_second_person(fc, tmp_path):
     for _ in range(3):
         fc["clock"][0] += timedelta(minutes=2)
         out, _ = ask(fc, "how many videos did i watch this month")
-        assert END in out
+        assert ends_said(out)   # round 12, W (R-H)
     old = fc["bot"]
     bot = Bot(fc["ch"], store=Store(config.DB), pool=old.pool, clock=old.clock)
     p = tmp_path / "people2.json"
@@ -745,11 +749,11 @@ def test_the_export_end_after_a_restart_and_for_a_second_person(fc, tmp_path):
         bot.on_message(h, text)
         return "\n".join(str(t) for _, _, t in fc["ch"].outbox[n0:])
     out = say2(H, "how many videos did i watch this month")
-    assert END in out and "Posts from friends" not in out        # after the restart: still said, the note kept
+    assert ends_said(out) and "Posts from friends" not in out        # after the restart: still said
     out = say2("+15550002", "how many videos did i watch this month")
-    assert END in out and "Posts from friends are not counted." in out   # a second person: their own first answer
+    assert ends_said(out) and REFRESH in out   # a second person: their own hint (round 12, W, R-H: no friends line)
     out = say2("+15550002", "what did i watch on november 12")
-    assert END in out
+    assert ends_said(out)   # round 12, W (R-H)
 
 
 def test_a_summary_whose_window_passes_the_export_end_says_it_every_time(fc):

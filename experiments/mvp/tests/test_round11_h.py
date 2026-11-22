@@ -21,6 +21,7 @@ from mvp.tests import h_library  # noqa: E402
 TODAY = date(2026, 11, 19)
 NO_MODEL = {"intent": "chat", "reply": "MODEL WAS CALLED"}
 ENDS = "your YouTube export on 30 October 2026, so I can't see after that."
+E2 = " (up to 30 October, where your YouTube export ends; your Instagram export ends on 15 October 2026)"   # round 12, W (R-H): the ends in the window's words
 REFRESH = "For newer history, send me a new export (ask \"how do I send you a new export?\" for the steps)."
 
 
@@ -72,7 +73,8 @@ def test_h3_which_channels_gives_a_ranking_with_counts_over_all_the_history(hist
     assert calls == []
     assert out.startswith("In all your history I can see, you watched 44 videos (42 on YouTube, 2 on Instagram). "
                           "Most from:\n1. Kettle & Cast: 18\n2. Chord Garden: 11\n3. Pixel Forge: 8\n")
-    assert "your YouTube history from 5 January 2024 to 30 October 2026." in out and REFRESH in out
+    # round 12, W (R-H): an all-time answer is about no time after the export's end: no hint
+    assert "your YouTube history from 5 January 2024 to 30 October 2026." in out and REFRESH not in out
 
 
 def test_h4_how_many_about_a_topic_says_watched_never_kept(hist):
@@ -116,7 +118,8 @@ def test_h5_that_video_about_is_a_recall_answered_by_code(hist):
 def test_a_watch_is_dated_in_the_persons_time_zone(hist):
     out, _ = ask(hist, "what did i watch on october 30")
     # 31 October 02:30 UTC is 30 October 22:30 in New York
-    assert out.startswith("On Friday 30 October 2026 you watched 3 videos:\n")
+    assert out.startswith("On Friday 30 October 2026 (the last day of your YouTube export; your Instagram export "
+                          "ends on 15 October 2026) you watched 3 videos:\n")   # round 12, W (R-H)
     assert "Color grading: matching two cameras by Grade Lab (30 Oct)" in out
     out, _ = ask(hist, "show me what i watched on halloween")
     assert out.startswith("I can't see Saturday 31 October 2026: ")
@@ -126,7 +129,8 @@ def test_a_video_watched_again_counts_in_each_month_and_once_in_each(hist):
     sep, _ = ask(hist, "how many videos did i watch in sept 2026")
     oct_, _ = ask(hist, "how many youtube videos did i watch in october")
     assert sep.startswith("In September 2026 you watched 10 videos.")
-    assert oct_.startswith("In October 2026 you watched 16 videos.")
+    assert oct_.startswith("In October 2026 (up to 30 October, where your YouTube export ends) you watched 16 "
+                           "videos.")   # round 12, W (R-H)
     out, _ = ask(hist, "whats my most rewatched video")
     assert "1. Blender render settings explained by Pixel Forge: 3 times, last on 20 Oct " \
            "https://www.youtube.com/watch?v=vy_rewatch" in out
@@ -134,17 +138,17 @@ def test_a_video_watched_again_counts_in_each_month_and_once_in_each(hist):
 
 def test_friends_posts_are_never_counted_not_even_their_watches(hist):
     out, _ = ask(hist, "how many posts did i save last month", {"intent": "library_stats", "stats": {"kinds": ["save"]}})
-    assert out.startswith("In October 2026 you saved 4 posts and videos.")   # the friend's save is the fifth
-    assert "Posts from friends are not counted." in out
+    assert out.startswith("In October 2026" + E2 + " you saved 4 posts and videos.")   # the friend's save: fifth
+    assert "Posts from friends are not counted." not in out   # round 12, W (R-H): only when asked about friends
     out, _ = ask(hist, "how many videos did i watch in october")
-    assert out.startswith("In October 2026 you watched 17 videos (16 on YouTube, 1 on Instagram).")
+    assert out.startswith("In October 2026" + E2 + " you watched 17 videos (16 on YouTube, 1 on Instagram).")
 
 
 def test_likes_are_liked_and_saves_are_saved(hist):
     out, _ = ask(hist, "how many things did i like last month")
-    assert out.startswith("In October 2026 you liked 3 posts and videos (2 on Instagram, 1 on YouTube).")
+    assert out.startswith("In October 2026" + E2 + " you liked 3 posts and videos (2 on Instagram, 1 on YouTube).")
     out, _ = ask(hist, "how many posts did i save in october", {"intent": "library_stats", "stats": {"kinds": ["save"]}})
-    assert out.startswith("In October 2026 you saved 4 posts and videos.")
+    assert out.startswith("In October 2026" + E2 + " you saved 4 posts and videos.")
     assert "(Saved counts saves, collections, posts you sent yourself and playlists.)" in out
     # saves stay where they were without the interpreter's form: the recent answer and the library count (rule eval
     # t-dev-014 and t-dev-049)
@@ -158,18 +162,21 @@ def test_likes_are_liked_and_saves_are_saved(hist):
 @pytest.mark.parametrize("text,head", [
     ("how many videos did i watch in 2025", "In 2025 you watched 11 videos."),
     ("how many videos have i watched in the last 30 days",
-     "In the last 30 days (21 October to 19 November 2026) you watched 5 videos."),
-    ("what have i watched since october 20", "Since 20 October 2026 you watched 6 videos. The latest 5:"),
+     "In the last 30 days (21 to 30 October 2026, where your YouTube export ends; your Instagram export ends on 15 "
+     "October 2026) you watched 5 videos."),   # round 12, W (R-H): the span ends where the export ends
+    ("what have i watched since october 20", "Since 20 October 2026" + E2 + " you watched 6 videos. The latest 5:"),
     ("how many guitar videos did i watch this year",
-     "This year (1 January to 19 November 2026) you watched 0 videos that mention \"guitar\" (of 27 you watched "
-     "then)."),
+     "This year (1 January to 30 October 2026, where your YouTube export ends; your Instagram export ends on 15 "
+     "October 2026) you watched 0 videos that mention \"guitar\" (of 27 you watched then)."),
     ("what was i watching in march 2024", "In March 2024 you watched 2 videos. The latest 2:"),
-    ("my most watched channels in 2026", "In 2026 you watched 27 videos (25 on YouTube, 2 on Instagram). Most from:"),
-    ("what have i been watching lately", "In the 4 weeks up to 30 October 2026 (where your export ends), you watched "
-                                         "16 videos. The latest 5:"),
+    ("my most watched channels in 2026", "In 2026" + E2 + " you watched 27 videos (25 on YouTube, 2 on "
+                                         "Instagram). Most from:"),
+    ("what have i been watching lately", "In the 4 weeks up to 30 October 2026 (where your YouTube export ends; your "
+                                         "Instagram export ends on 15 October 2026), you watched 16 videos. The "
+                                         "latest 5:"),
     ("how many vidoes did i wacth this week", "I can't see this week (16 to 19 November 2026): "),
     ("how many hours of youtube have i watched", "I count videos, not hours or minutes. In all your history I can "
-                                                 "see, you watched 42 videos."),
+                                                 "see (5 January 2024 to 30 October 2026), you watched 42 videos."),
 ])
 def test_the_window_is_always_said_back(hist, text, head):
     out, calls = ask(hist, text)
@@ -180,7 +187,7 @@ def test_a_window_inside_the_record_does_not_say_where_it_ends_and_one_that_touc
     out, _ = ask(hist, "how many videos did i watch in 2025")
     assert "export ends" not in out and "runs from" not in out
     out, _ = ask(hist, "how many videos did i watch in october")
-    assert ENDS in out and REFRESH in out
+    assert "where your YouTube export ends" in out and REFRESH in out and ENDS not in out   # round 12, W (R-H)
 
 
 def test_have_i_watched_anything_about_a_topic_is_answered_with_its_count(hist):
@@ -217,14 +224,17 @@ def test_timeline_compare_and_channel_questions(hist):
     assert out.startswith("I can't see 2023: your YouTube history here starts on 5 January 2024, so I can't see "
                           "before that.")
     out, _ = ask(hist, "how many videos did i watch since december 2023")
-    assert out.startswith("Since 1 December 2023 you watched 44 videos")
-    assert "Your YouTube history here starts on 5 January 2024, so I can't see before that." in out
+    assert out.startswith("Since 1 December 2023 (your YouTube history here starts on 5 January 2024; up to 30 "
+                          "October 2026, where your YouTube export ends")   # round 12, W (R-H): in the window's words
+    assert "so I can't see before that." not in out
     out, _ = ask(hist, "how many blender videos did i watch each month this year")
-    assert out.startswith("Videos you watched that mention \"blender\", by month, this year (1 January to 19 November "
-                          "2026):\nSep 2026: 2, Oct 2026: 7 (up to 30 Oct 2026). None before September 2026.")   # R6
+    assert out.startswith("Videos you watched that mention \"blender\", by month, this year (1 January to 30 October "
+                          "2026, where your YouTube export ends; your Instagram export ends on 15 October 2026):\n"
+                          "Sep 2026: 2, Oct 2026: 7 (up to 30 Oct 2026). None before September 2026.")   # R6; R-H
     out, _ = ask(hist, "how much youtube did i watch last month compared to the month before")
     # round 11 fix, A (R5): the answer first
-    assert out.startswith("More in October 2026: 16 videos, against 10 in September 2026 (6 more).")
+    assert out.startswith("More in October 2026 (up to 30 October, where your YouTube export ends): 16 videos, "
+                          "against 10 in September 2026 (6 more).")   # round 12, W (R-H)
     out, _ = ask(hist, "how many videos from kettle & cast have i watched")
     assert out.startswith("In all your history I can see, you watched 18 videos from Kettle & Cast (of 44 you watched "
                           "in all).")
@@ -250,7 +260,9 @@ def test_spanish_questions_get_spanish_answers(hist):
     assert calls == [] and out.startswith("No veo miércoles 18 de noviembre de 2026: ")
     assert "El viernes 30 de octubre de 2026 viste 3 videos:" in out
     out, _ = ask(hist, "cuántos videos vi el mes pasado")
-    assert out.startswith("En octubre de 2026 viste 17 videos (16 en YouTube, 1 en Instagram).")
+    assert out.startswith("En octubre de 2026 (hasta el 30 de octubre, donde termina tu exportación de YouTube; la "
+                          "de Instagram termina el 15 de octubre de 2026) viste 17 videos (16 en YouTube, 1 en "
+                          "Instagram).")   # round 12, W (R-H)
     out, _ = ask(hist, "¿qué canales veo más?")
     assert out.startswith("En todo tu historial, viste 44 videos") and "1. Kettle & Cast: 18" in out
 
@@ -259,21 +271,24 @@ def test_spanish_questions_get_spanish_answers(hist):
 def test_follow_ups_change_the_window_the_platform_and_the_topic_and_list_them(hist):
     ask(hist, "which channels do i watch the most")
     out, calls = ask(hist, "and last month?")
-    assert calls == [] and out.startswith("In October 2026 you watched 17 videos")
+    assert calls == [] and out.startswith("In October 2026" + E2 + " you watched 17 videos")   # round 12, W (R-H)
     out, _ = ask(hist, "what about youtube")
-    assert out.startswith("In October 2026 you watched 16 videos. Most from:")
+    assert out.startswith("In October 2026 (up to 30 October, where your YouTube export ends) you watched 16 videos. "
+                          "Most from:")
     out, _ = ask(hist, "the first one")   # after a ranking: that channel's videos
-    assert out.startswith("In October 2026 you watched 6 videos from Pixel Forge. The latest 5:")
+    assert out.startswith("In October 2026 (up to 30 October, where your YouTube export ends) you watched 6 videos "
+                          "from Pixel Forge. The latest 5:")   # round 12, W (R-H)
     out, _ = ask(hist, "more")
     assert out.startswith("The next 1:\n6. Blender donut, the easy way by Pixel Forge (1 Oct)")
     ask(hist, "how many videos did i watch in october")
     out, _ = ask(hist, "show me them")
-    assert out.startswith("In October 2026 you watched 17 videos. The latest 5:")
+    assert out.startswith("In October 2026" + E2 + " you watched 17 videos. The latest 5:")   # R-H
     out, calls = ask(hist, "the second one")
     assert calls == [] and out == "Sunday bread bake by Kettle & Cast\nhttps://www.youtube.com/watch?v=vy009"
     ask(hist, "how many videos did i watch in october")
     out, _ = ask(hist, "what about guitar")
-    assert out.startswith("In October 2026 you watched 0 videos that mention \"guitar\" (of 17 you watched then).")
+    assert out.startswith("In October 2026" + E2 + " you watched 0 videos that mention \"guitar\" (of 17 you watched "
+                          "then).")   # round 12, W (R-H)
     out, _ = ask(hist, "and in 2025?")
     assert out.startswith("In 2025 you watched 0 videos that mention \"guitar\" (of 11 you watched then).")
     out, _ = ask(hist, "what about cooking")
@@ -321,7 +336,7 @@ def test_a_library_stats_form_with_a_history_shape_gets_the_history_answer(hist,
                         history.HistoryQuery(kind="count", window=history._win("month", date(2026, 10, 1),
                                                                                   date(2026, 10, 31))))
     out, calls = ask(hist, "videos october count", {"intent": "library_stats", "stats": {"words": ["october"]}})
-    assert calls == ["mvp_interpret"] and out.startswith("In October 2026 you watched 17 videos")
+    assert calls == ["mvp_interpret"] and out.startswith("In October 2026" + E2 + " you watched 17 videos")
 
 
 def test_the_old_count_keeps_its_answer_and_loses_the_questions_own_words(hist):
