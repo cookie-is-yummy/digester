@@ -61,6 +61,7 @@ SHOW = {"themes": 8, "channels": 10, "periods": 24, "topics": 6, "items": 10, "a
 HIDDEN = ("length_hours", "length_share", "length_known_share", "over_3h", "built_s", "versions", "unthemed",
           "examples", "id", "theme_id", "area_shares")
 SHOW_INNER = 4          # channels under one theme, themes under one period
+TOPIC_ONE_AREA = 0.80   # round 12, pass 2 fix: a topic whose videos are this much of one area is not told by area
 
 
 def on():
@@ -125,6 +126,48 @@ def shown(sheet):
             out["comparison"] = F._compare(tp, None, out.get("lang") or "en")
     if long_or_day and isinstance(out.get("new"), dict):
         out["new"] = dict(out["new"], channels=[])
+    if out.get("kind") == "day":
+        # round 12, pass 2 fix (judge A, row 6: areas that "grew" against the day before, on a 10-video day): a day is
+        # compared with his usual day (`usual`), never with the one day before it
+        out.pop("previous", None)
+        for k in ("themes", "areas", "channels"):
+            out[k] = [{a: b for a, b in r.items() if a not in ("previous_share", "previous_items", "change_vs_previous")}
+                      if isinstance(r, dict) else r for r in out.get(k) or []]
+    if (out.get("filters") or {}).get("without_shorts"):
+        # round 12, pass 2 fix (live, "without shorts": "0% of its videos were Shorts"): no Shorts share is said of
+        # an answer that left the Shorts out
+        def no_sh(o):
+            if isinstance(o, dict):
+                return {k: no_sh(v) for k, v in o.items() if k not in ("shorts_share", "shorts", "day_shorts_share")}
+            if isinstance(o, list):
+                return [no_sh(v) for v in o]
+            return o
+        out = {k: (v if k in ("filters", "window", "question", "kind", "lang", "offers") else no_sh(v))
+               for k, v in out.items()}
+    if out.get("kind") == "compare_topics" and isinstance(out.get("totals"), dict):
+        # round 12, pass 2 fix (live, row 5: "your watching was mostly Shorts at 81%, the long ones about 20 minutes"
+        # under gaming against art): the window's own Shorts and lengths are of everything, not of the two sides
+        for k_ in ("areas", "themes", "channels", "fields", "top_areas"):
+            out.pop(k_, None)   # live: "your biggest area was gaming at 19%" under music against cooking
+        for k_ in ("totals", "previous"):
+            if isinstance(out.get(k_), dict):
+                out[k_] = {k: v for k, v in out[k_].items() if k not in ("shorts", "long", "shorts_share",
+                                                                         "long_median_min")}
+    if out.get("kind") == "changed":
+        # live, row 7: "Your top channels show the mix: X is <theme>, Y is <theme>": a change is told by its areas
+        # and themes, never by the whole span's channels
+        out.pop("channels", None)
+    if out.get("kind") == "changed" and isinstance(out.get("totals"), dict):
+        # live: "still mostly Shorts at 81%, but the share slipped from 80% to 77%": the change's own shares only
+        out["totals"] = {k: v for k, v in out["totals"].items() if k != "shorts_share"}
+    ar = [a for a in out.get("areas") or [] if isinstance(a, dict) and _num(a.get("share"))]
+    if (out.get("filters") or {}).get("topic") and ar and ar[0]["share"] >= TOPIC_ONE_AREA:
+        # round 12, pass 2 fix (judge A: "only gaming": "led by gaming at 100%", "X is gaming, Y is gaming"; row 3:
+        # "mostly gaming at 98%" of a game): a topic that is one area says nothing by its area
+        out.pop("areas", None)
+        out.pop("top_areas", None)
+        out["channels"] = [{a: b for a, b in c.items() if a != "area"} if isinstance(c, dict) else c
+                           for c in out.get("channels") or []]
     return out
 
 
@@ -668,7 +711,10 @@ _WATCH_TIME = re.compile(
     r"\bwatch(?:ed|ing)?\s+(?:for\s+)?(?:about\s+|around\s+|nearly\s+|over\s+|roughly\s+|almost\s+)?\d[\d,.]*\s*"
     r"(?:hours?|hrs?|h|minutes?|mins?)\b|watch[- ]?time|time (?:spent|watching)|\bspent\b|hours? (?:of|spent) "
     r"watching|minutes? (?:of|spent) watching|\bviste\s+(?:unas?\s+|casi\s+)?\d[\d.,]*\s*(?:horas?|minutos?)|"
-    r"tiempo (?:viendo|de visualizacion)|pasaste", re.I)
+    r"tiempo (?:viendo|de visualizacion)|pasaste|"
+    # round 12, pass 2 fix (judge B: "took up 22% of your viewing", "you binged X for hours"): watch time in words
+    r"\bof your viewing\b|\bviewing time\b|\bscreen time\b|\bfor hours\b|\bhours on end\b|\bbing(?:e|ed|ing)\w*",
+    re.I)
 _LIMITS = re.compile(
     r"\bi\s+can'?t\b|\bi\s+cannot\b|\bi\s+can not\b|\bunable\b|\bnot able\b|\bi\s+don'?t\s+(?:have|know|see|track)\b|"
     r"\bno (?:data|information|record)\b|\bnot (?:available|tracked|recorded|counted|included)\b|\bexports?\b|"
@@ -971,6 +1017,9 @@ def _check_body(raw, facts, uses, chart_vals):
         return "generic_claim"
     if _FILLER.search(rest_n):
         return "filler"
+    if _UNSUPPORTED.search(rest_n) and not re.search(r"\b\d[\d,.]*\s+(?:different\s+)?(?:days|dias)\b", t):
+        # (a steadiness the days say, "steadier: 190 days against 120", stands)
+        return "unsupported"   # round 12, pass 2 fix (judge A: "art was smaller but steadier": no number says so)
     for tok in re.findall(r"[a-z]+(?:'[a-z]+)?", rest_n):
         w = tok.split("'")[0]
         if w not in TOPICAL and _stem(w) not in TOPICAL:
@@ -1015,7 +1064,8 @@ def _check_body(raw, facts, uses, chart_vals):
         rest_n = rest_n[:topn.start()] + " " + rest_n[topn.end():]
     periods = [n for n in names if n in facts.period_top or n in facts.period_area]
     if periods and _SUPER.search(rest_n):
-        if not any((facts.period_top[p] in names and facts.period_top[p] != p) or facts.period_area.get(p) in names
+        if not any((facts.period_top.get(p) in names and facts.period_top.get(p) != p) or
+                   facts.period_area.get(p) in names
                    for p in periods):
             return "not_top"
     elif names and (_SUPER.search(rest_n) or re.search(r"\bmost of\b|\bla mayoria\b", rest_n)) and \
@@ -1086,13 +1136,25 @@ _CMP = [(r"\b(?P<w>more|fewer|less|mas|menos)\s+(?P<a>.{2,60}?)\s+(?:than|que)\s
 
 
 _FILLER = re.compile(r"\beach (?:had|with|got|gave) (?:just |only )?(?:1|one|a single)\b|\ba gap of\b|"
+                     r"\bthe gap (?:was|is|came to)\b|\ba difference of\b|"   # round 12, pass 2 fix (judge A)
+                     r"\b(?:all |each )?with (?:just |only )?(?:1|one|a single) video each\b|\bone video each\b|"
                      r"\bso the (?:lead|gap|difference)\b|\ba lead of \d|\beach (?:came )?from (?:just |only )?"
                      r"(?:1|one|a single)\b|"
                      r"\bcada uno con (?:1|un)\b")
 _ORDER = re.compile(r"\b(?:followed by|then|ahead of|next came|after (?:it|that) came|seguid[oa]s? de|luego)\b")
 _SPREAD = re.compile(r"\b(?:mostly|mainly|largely|centered on|centred on|dominated|dominant|mostly into|above all|"
+                     r"primarily|predominantly|overwhelmingly|chiefly|almost entirely|almost everything|"   # pass 2 fix
+                     r"nearly everything|"
                      r"the bulk of|the majority|sobre todo|principalmente|centrad[oa] en|la mayor parte)\b")
 _SPREAD_V5 = re.compile(_SPREAD.pattern + r"|\bmost of (?:it|what|your|the window|that|them)\b")
+# round 12, pass 2 fix (judge B: "overwhelmingly comedy (11%)"): these words need four in five
+_OVERWHELM = re.compile(r"\b(?:overwhelmingly|almost entirely|almost everything|nearly everything|almost all|nearly all|"
+                        r"casi todo)\b")
+OVERWHELM_SHARE = 0.80
+# words that claim a steadiness or an evenness no number of the sheet measures (judge A: "smaller but steadier")
+_UNSUPPORTED = re.compile(r"\b(?:steadier|steady|steadily|consistent(?:ly)?|more evenly|evenly|stable|constante\w*)\b")
+_ARRIVED = re.compile(r"\b(?:arriv\w*|came in|showed up|took off|appeared|lleg\w*|apareci\w*)\b")
+_CONTRAST = re.compile(r"[;]|\b(?:while|whereas|but|against|than|compared|versus|vs|unlike|mientras|frente|pero)\b")
 _MIX = re.compile(r"\b(?:a (?:wide|broad|big|real) (?:mix|spread|range)|all over the place|"
                   r"no single|una mezcla amplia|muy repartid[oa])\b")
 
@@ -1368,7 +1430,11 @@ RANKED = ("themes", "channels", "areas", "fields", "rising", "fading", "top_them
           "so_what_candidates")
 _ROLE_NAME, _ROLE_NUM, _ROLE_PHRASE = "name", "number", "phrase"
 _SUPER_V5 = re.compile(r"\b(?:the most|most[- ](?:watched|opened|seen)|biggest|largest|top|leading|led|leads|leader|"
-                       r"main|dominat\w*|number one|first place|favou?rite|ahead of all|lidera\w*|principal\w*)\b")
+                       r"main|dominat\w*|number one|first place|favou?rite|ahead of all|lidera\w*|principal\w*|"
+                       r"topped|tops|came first|the top spot)\b")   # round 12, pass 2 fix: "topped", "came first"
+_ORDINAL = re.compile(r"\b(second|third|fourth|fifth|segund[oa]|tercer[oa]?)\b")
+_ORD_N = {"second": 1, "third": 2, "fourth": 3, "fifth": 4, "segundo": 1, "segunda": 1, "tercer": 2, "tercero": 2,
+          "tercera": 2}
 _RATIO_V5 = re.compile(r"\b(?:twice|double[sd]?|two times|three times|four times|five times|\w+ times as|"
                        r"half|halved|a third|one third|a quarter|three quarters|el doble|la mitad|veces)\b")
 _DIFF_V5 = re.compile(r"^\s*(?:more|fewer|less|extra|mas|menos)\b")
@@ -1629,8 +1695,8 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                 return "order"
     # R6: "mostly" / "most of" / "centred on": half or more, by the named records' own shares (or Shorts')
     if _SPREAD_V5.search(pl):
-        sms = list(re.finditer(r"\b(?:mostly|mainly|largely|most of (?:it|them|what)\w*)\s+(long|longer|shorts?)\b",
-                               pl))
+        sms = list(re.finditer(r"\b(mostly|mainly|largely|most of (?:it|them|what)\w*|almost entirely|almost all|"
+                               r"nearly all|overwhelmingly)\s+(long|longer|shorts?)\b", pl))
         owners = {_name_owner(n) for n in names if _name_owner(n)}
         for sm in sms:
             frac = None
@@ -1647,7 +1713,8 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                 t = sheet.get("totals") or {}
                 if _num(t.get("shorts")) and _num(t.get("long")) and t["shorts"] + t["long"]:
                     frac = t["shorts"] / (t["shorts"] + t["long"])
-            if frac is None or (frac if sm.group(1).startswith("short") else 1 - frac) < LONG_SHARE:
+            need_ = 0.9 if _OVERWHELM.search(sm.group(1)) or sm.group(1) == "almost entirely" else LONG_SHARE
+            if frac is None or (frac if sm.group(2).startswith("short") else 1 - frac) < need_:
                 return "spread"
         if not sms:
             tot = 0.0
@@ -1664,6 +1731,7 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                 except KeyError:
                     tot = 0.0
                 owners = set()
+            owners = _subjects(sheet, owners, pl, slots, names)
             for o in owners:
                 try:
                     r = _resolve(sheet, _path_segs(o))
@@ -1681,8 +1749,10 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                             seen.add(o)
                     except KeyError:
                         pass
-            share_slots = [float(x.value) for x in slots if x.role == _ROLE_NUM and x.key and x.key.endswith("share")]
-            if tot < SPREAD_SHARE and not any(v >= SPREAD_SHARE for v in share_slots):
+            share_slots = [float(x.value) for x in slots if x.role == _ROLE_NUM and x.key and x.key.endswith("share")
+                           and (x.owner is None or x.owner in owners or not names)]
+            need = OVERWHELM_SHARE if _OVERWHELM.search(pl) else SPREAD_SHARE
+            if tot < need and not any(v >= need for v in share_slots):
                 return "spread"
     # R7: "a wide mix": the leader of the list it names (areas, else themes) under a fifth
     if _MIX.search(pl):
@@ -1691,6 +1761,9 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
         xs = [x for x in sheet.get(key) or [] if isinstance(x, dict) and _num(x.get("share"))]
         if not xs or xs[0]["share"] >= WIDE_MIX:
             return "mix"
+    why = _bind_more(text, pl, sheet, slots, names)
+    if why:
+        return why
     # R8: "twice", "N times", "half": two numbers of the sentence of one kind in that ratio, or the sheet's own
     rm = _RATIO_V5.search(pl)
     if rm and not any(x.key in ("ratio_words", "times") for x in slots):
@@ -1710,6 +1783,146 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                             ok = True
         if not ok:
             return "ratio"
+    return None
+
+
+def _rec(sheet, path):
+    try:
+        r = _resolve(sheet, _path_segs(path or ""))
+    except KeyError:
+        return None
+    return r if isinstance(r, dict) else None
+
+
+def _area_of_slot(sheet, n):
+    """(the area a name slot names, or None; the area its record belongs to, or None)."""
+    o = _name_owner(n)
+    if not o:
+        return None, None
+    lst = (n.list_path or "").split(".")[-1]
+    r = _rec(sheet, o)
+    if r is None:
+        return None, None
+    if lst == "areas" and n.key in (None, "name"):
+        return r.get("name"), None
+    if re.match(r"^areas\[\d+\]\.themes\[\d+\]$", o):
+        up = _rec(sheet, o.rsplit(".", 1)[0])
+        return None, (up or {}).get("name")
+    if lst in ("themes", "top_themes") and n.key in (None, "name") and isinstance(r.get("area"), str):
+        return None, r["area"]
+    return None, None
+
+
+def _subjects(sheet, owners, pl, slots, names):
+    """Round 12, pass 2 fix (judge B: "mostly into gaming at 46%, led by A at 11% and B at 6%" counted 63%): the
+    records a "mostly" is said of, without the themes inside a named area (they are part of it, not added to it)."""
+    areas = set()
+    for n in names:
+        a, _ = _area_of_slot(sheet, n)
+        if a:
+            areas.add(_norm(a))
+    if not areas:
+        return owners
+    out = set()
+    for o in owners:
+        if re.match(r"^areas\[\d+\]\.", o):
+            continue
+        r = _rec(sheet, o)
+        if r is not None and re.match(r"^(?:themes|channels)\[\d+\]$", o) and _norm(r.get("area") or "") in areas:
+            continue
+        out.add(o)
+    return out
+
+
+def _bind_more(text, pl, sheet, slots, names):
+    """Round 12, pass 2 fix: what the judges found bound to the wrong thing after the first pass (None, or why)."""
+    low = _norm(text)
+    # (a) a theme said inside, or leading, an area it does not belong to ("gaming, led by <a memes theme>")
+    for i, a in enumerate(names):
+        an, _ = _area_of_slot(sheet, a)
+        if not an:
+            continue
+        for b in names[i + 1:] + names[:i]:
+            _, ta = _area_of_slot(sheet, b)
+            if ta is None or _norm(ta) == _norm(an):
+                continue
+            between = _gap(text, a, b)
+            if not _CONTRAST.search(_norm(between)):
+                return "wrong_area"
+    # (b) the window's median long video said next to one record (judge A: art's side "typically about 20 minutes",
+    # 20 being the whole year's); a topic's own sheet is its window
+    if any(x.key == "long_median_min" and x.owner is None for x in slots):
+        for n in names:
+            o = _name_owner(n)
+            if o and not _is_question_topic(sheet, o):
+                return "median_of_window"
+    for k, x in enumerate(slots):
+        if x.role != _ROLE_NUM:
+            continue
+        after = _norm(text[x.end:x.end + 60])
+        # (c) a count said where its share belongs ("Shorts made up 12,080 of your window")
+        if x.key in COUNT_KEYS and re.match(r"^\s*of\s+(?:your|the|all|all your|everything)?\s*(?:window|span|what you "
+                                            r"opened|everything|viewing|history|videos)\b", after):
+            return "count_as_share"
+        # (d) a Shorts share said as long-form ("leaned long-form at 69%" where 69% is its Shorts share)
+        if x.key == "shorts_share":
+            clause = re.split(r"[,;:.]", _norm(text[:x.start]))[-1]
+            if not re.match(r"^\s*(?:shorts?|cortos?)\b", after) and re.search(r"\blong", clause) and \
+                    not re.search(r"\bshorts?\b", clause.split("long")[-1]):
+                return "shorts_as_long"
+            v = float(x.value)
+            pre = _norm(text[:x.start]) + " " + after[:20]
+            if re.search(r"\b(?:almost|nearly|virtually)? ?all\s+(?:long|longer)\b", pre) and v > 0.1:
+                return "spread"
+            if re.search(r"\b(?:almost|nearly|virtually) all\s+shorts\b", pre) and v < 0.9:
+                return "spread"
+    # (e) "arrived" of a thing that was there before (live: "gaming arrived" of the area that led January)
+    if _ARRIVED.search(pl):
+        for n in names:
+            r = _rec(sheet, _name_owner(n))
+            if r is None:
+                continue
+            a, b = r.get("from_share", r.get("previous_share")), r.get("to_share", r.get("share"))
+            if _num(a) and _num(b) and b > 0 and a >= 0.5 * b:
+                return "not_new"
+            if any(_norm(e.get("area") or "") == _norm(r.get("name") or "~") for e in (sheet.get("eras") or [])[:1]
+                   if isinstance(e, dict)):
+                return "not_new"
+    # (f) a direction word said of a record that moved the other way (judge B: "<area> tripled to 9%" of an area
+    # that fell from 16%): the record named nearest the word
+    for m in list(_UP.finditer(pl)) + list(_DOWN.finditer(pl)):
+        up = bool(_UP.match(pl, m.start()))
+        cand = []
+        for n in names:
+            pos = pl.find("§" + str(slots.index(n)) + "§")
+            if 0 <= pos < m.start() and m.start() - pos <= 40:
+                cand.append((m.start() - pos, n))
+        if not cand:
+            continue
+        r = _rec(sheet, _name_owner(min(cand, key=lambda t: t[0])[1]))
+        if r is None:
+            continue
+        ch = r.get("change_vs_previous")
+        if not _num(ch) and _num(r.get("from_share")) and _num(r.get("to_share")):
+            ch = r["to_share"] - r["from_share"]
+        if _num(ch) and ((up and ch < 0) or (not up and ch > 0)):
+            return "direction"
+    # (g) "opened X most", an ordinal ("came second", "your second area"): the place in its list
+    for m in re.finditer(r"\b(?:opened|watched|saw|viewed)\s+§(\d+)§\s+(?:the\s+)?most\b", pl):
+        n = slots[int(m.group(1))]
+        if n.role == _ROLE_NAME and n.index not in (None, 0) and (n.list_path or "").split(".")[-1] in RANKED:
+            return "rank"
+    for m in _ORDINAL.finditer(pl):
+        want = _ORD_N.get(m.group(1))
+        cand = []
+        for n in names:
+            pos = pl.find("§" + str(slots.index(n)) + "§")
+            if pos >= 0 and abs(pos - m.start()) <= 40 and (n.list_path or "").split(".")[-1] in RANKED:
+                cand.append((abs(pos - m.start()), n))
+        if cand and want is not None:
+            n = min(cand, key=lambda t: t[0])[1]
+            if n.index != want:
+                return "rank"
     return None
 
 
@@ -1736,6 +1949,73 @@ def _is_question_topic(sheet, owner):
         return False
     topic = (sheet.get("filters") or {}).get("topic")
     return isinstance(t, dict) and (topic is None or _norm(t.get("name")) == _norm(topic))
+
+
+def _pct_vals(text, facts=None):
+    """The numbers a sentence says: [(value, is a percent)] (years, dates and the digits of names left out)."""
+    t = re.sub(_DATE_RX, " ", _norm(text))
+    if facts is not None:
+        t = re.sub(r"\|[A-Z]\|", " ", facts.names_in(t)[1])
+    t = re.sub(r"\b(?:19[89]\d|20\d\d)\b", " ", t)
+    out = []
+    for m in re.finditer(r"(\d[\d,.]*\d|\d)(?:\s*(%|percent\b|points?\b|puntos?\b)|\s+([a-z]+))?", t):
+        try:
+            v = float(m.group(1).replace(",", ""))
+        except ValueError:
+            continue
+        out.append((v, True if m.group(2) else (m.group(3) or "")))   # a count keeps the word after it (its unit)
+    return out
+
+
+_UNITS = {"videos", "video", "days", "day", "shorts", "short", "long", "minutes", "channels", "items", "hours"}
+
+
+def _obs_more(text, answer, sheet, raw, facts):
+    """Round 12, pass 2 fix: an observation that says nothing new or nothing at all (None, or why)."""
+    low = _norm(text)
+    # every number of it was said by the answer, a point either way (judge A, row 4: "89%" right after "88%")
+    vals, avals = _pct_vals(text, facts), _pct_vals(answer, facts)
+    def same(v, p, w, q):
+        if p is True or q is True:
+            return p is True and q is True and abs(v - w) <= 1.0
+        return v == w and (p == q or p not in _UNITS or q not in _UNITS)
+    if vals and avals and all(any(same(v, p, w, q) for w, q in avals) for v, p in vals):
+        return "repeat"
+    pv = [v for v, p in vals if p is True]
+    if len(pv) >= 2 and all(any(q is True and abs(v - w) <= 1.0 for w, q in avals) for v in pv):
+        return "repeat"   # live, row 7: "Shorts grew from 4% in 2020 to 81% in 2026" right after the answer said it
+    # a direction with no number (judge A, row 7: "rose most", "fell from the early years")
+    bare = low
+    for ph in facts.allowed_phrases:
+        bare = bare.replace(_norm(ph).rstrip(", "), " ")
+    bare = re.sub(r"\b(?:19|20)\d\d\b", " ", re.sub(_DATE_RX, " ", bare))
+    bare = re.sub(r"\|[A-Z]\|", " ", facts.names_in(bare)[1])
+    if (_UP.search(low) or _DOWN.search(low) or re.search(r"\bshift\w*|\btowards?\b", low)) \
+            and not re.search(r"\d", bare):
+        return "vague"   # (live: "gaming gained share while comedy and sports lost ground" against "the 4 weeks before")
+    # the answer's own date said again, with nothing else (live: "<its date> is the first <its date> in ...")
+    ds, ads = re.findall(_DATE_RX, low), re.findall(_DATE_RX, _norm(answer))
+    if ds and (len(ds) != len(set(ds)) or (set(ds) <= set(ads) and not vals) or
+               (sheet.get("kind") in ("first", "last") and set(ds) & set(ads))):
+        return "repeat"   # (live, row 4, twice: "<its date> is the first <topic> watch date, ...")
+    cnts = [v for v, p in _pct_vals(re.sub(r"\b(\d[\d,]*) of (?:the |your |all |all your )?\1\b", " ", low), facts)
+            if p is not True and v >= 10]   # ("behind 56 of the 56 X videos" is a whole, said right)
+    if len(cnts) != len(set(cnts)):
+        return "garbled"   # live, row 4: "90 Shorts made up 90 of 300 videos"
+    kind = sheet.get("kind")
+    if kind == "day" and re.search(r"\b(?:the )?day before\b|\bel dia anterior\b", low):
+        return "filler"   # judge A, row 6: areas that "grew" against the day before, on a 10-video day
+    sl = slots_of(raw, shown(sheet), sheet.get("lang") or "en") if isinstance(raw, str) and SLOT.search(raw) else []
+    nums = [x for x in sl if isinstance(sl, list) and x.role == _ROLE_NUM] if isinstance(sl, list) else []
+    if kind in ("top", "changed", "compare_windows") and nums and \
+            all(x.key == "shorts_share" and (x.owner or "").startswith("channels[") for x in nums):
+        return "filler"   # judges, rows 1 and 8: one channel's Shorts share says nothing about what he watched
+    if kind in ("top", "changed", "compare_windows") and re.search(r"\bshorts?\b", low):
+        chs = {" ".join(_words(c.get("name") or "")) for c in sheet.get("channels") or [] if isinstance(c, dict)}
+        nm = facts.names_in(low)[0]
+        if nm and all(n in chs for n in nm):
+            return "filler"   # live, row 1: "X was your top channel and almost all Shorts, while Y leaned less on ..."
+    return None
 
 
 def free_numbers(text, facts):
@@ -1782,6 +2062,11 @@ def render(text, sheet, facts, strict=False, unit=None):
             t_ = str(int(x.value))   # live: "{totals.long_median_min} minutes" said "11 minutes minutes"
         out.append(t_)
         last = x.end
+        m_ = re.match(r"\s+of (?:everything(?: you opened)?|what you opened|all(?: you opened)?|your window)\b",
+                      text[x.end:]) if (x.key == "shorts_share" and x.owner is None) else None
+        if m_:   # round 12, pass 2 fix (live: "Shorts made up 79% of everything you opened"): of the YouTube videos
+            out.append(" of your YouTube videos")
+            last = x.end + m_.end()
     out.append(text[last:])
     r = re.sub(r"\s+", " ", "".join(out)).strip()
     r = re.sub(r"\b(points|puntos)\s+(?:points|puntos|percentage points)\b", r"\1", r)
@@ -1869,6 +2154,7 @@ def check(raw, sheet, chart_vals=None, strict=False):
         text, uses = (o.get("text"), o.get("uses")) if isinstance(o, dict) else (o, None)
         if not isinstance(text, str):
             continue
+        raw_obs = text
         if sheet.get("kind") == "day":
             text = _ONE_DAY_SAID.sub("", text)
         slotted = bool(SLOT.search(text))
@@ -1897,6 +2183,8 @@ def check(raw, sheet, chart_vals=None, strict=False):
         sig = _signature(text, facts)
         if not why and sig and sig <= said:
             why = "repeat"   # nothing new: every number and name of it was said above
+        if not why:
+            why = _obs_more(text, out["answer"] or "", sheet, raw_obs, facts)
         if not why and re.search(r"\b(?:while|whereas|but|and)\b", _norm(text)) and any(
                 len(re.findall(r"(?<![a-z0-9])" + re.escape(n) + r"(?![a-z0-9])", _norm(text))) >= 2
                 for n in facts.names_in(text)[0] if len(n) >= 4):
@@ -2212,6 +2500,9 @@ def window_lead(answer, sheet):
     first = answer.split(" ", 1)[0]
     keep = first in ("I", "YouTube", "Instagram") or any(
         e.split()[0] == _norm(first).strip(",.") for e in Facts(shown(sheet)).entities)
+    if keep and any(str(a.get("name") or "")[:1].islower() and _norm(a["name"]).split()[:1] == [_norm(first).strip(",.")]
+                    for a in sheet.get("areas") or [] if isinstance(a, dict) and a.get("name")):
+        keep = False   # round 12, pass 2 fix (judge A: a capital "Gaming" mid-sentence): an area is a common word
     return lead[:1].upper() + lead[1:] + ", " + (answer if keep else answer[:1].lower() + answer[1:])
 
 
@@ -2246,13 +2537,17 @@ def scoped(text, sheet, answer=False):
     text = re.sub(r"\b(started watching \w+|first opened \w+(?: videos?)?) in (\d{1,2} [A-Z][a-z]+ \d{4})", r"\1 on \2",
                   text)   # live: "you first started watching blender in 11 April 2020"
     topic = (sheet.get("filters") or {}).get("topic")
-    if topic and sheet.get("kind") in ("count", "first", "last") and (sheet.get("lang") or "en") == "en":
-        text = re.sub(r"\bof what you opened\b", f"of your {topic} videos", text)
+    if topic and sheet.get("kind") in ("count", "first", "last", "channels", "top") and \
+            (sheet.get("lang") or "en") == "en":
+        # round 12, pass 2 fix (judges: "<a theme> made up 96% of what you opened" in a math answer, "art and
+        # design took 89% of the window" of the blender videos): a topic's shares are of its own videos
+        text = re.sub(r"\bof (?:what you opened|everything(?: you opened)?|the window|your window|all you opened|"
+                      r"all your videos|your viewing)\b", f"of your {topic} videos", text)
     tp = (sheet.get("topics") or [{}])[0] if sheet.get("topics") else {}
     if answer and sheet.get("kind") == "count" and "themes" in str((tp or {}).get("matched_by") or "") and \
             _num((tp or {}).get("items")):
         n = _fmt(tp["items"], sheet.get("lang") or "en")
-        text = re.sub(r"(?<![\w,.])(?<!about )(?<!around )(?<!unos )" + re.escape(n) + r"(?![\w,.])",
+        text = re.sub(r"(?<![\w,.])(?<![Aa]bout )(?<![Aa]round )(?<![Uu]nos )" + re.escape(n) + r"(?![\w,.])",
                       ("unos " if sheet.get("lang") == "es" else "about ") + n, text, count=1)
     return text
 
@@ -2327,6 +2622,10 @@ def _hour_words(h):
     return "midnight" if h == 0 else "noon" if h == 12 else f"{h % 12}{'am' if h < 12 else 'pm'}"
 
 
+def _cap(x):
+    return x[:1].upper() + x[1:] if x else x
+
+
 def code_form(sheet):
     """A form written by code from the sheet alone: {"answer", "observations": [{"text", "uses"}], "so_what"}.
     Every number and name comes from the sheet; the same check reads it before anything of it is sent.
@@ -2343,8 +2642,8 @@ def code_form(sheet):
     chans = _rows_named(s.get("channels"), ("name", "items"))
     obs, ans, sw = [], None, None
 
-    def o(text, *uses):
-        obs.append({"text": text, "uses": list(uses)})
+    def o(text, *uses, must=False):
+        obs.append({"text": text, "uses": list(uses), **({"must": True} if must else {})})
 
     def pc(x):
         return _pc(x, lang)
@@ -2359,6 +2658,12 @@ def code_form(sheet):
             return (f"Sobre todo {a0['name']} ({pc(a0['share'])} de lo que abriste), luego {a1['name']} "
                     f"({pc(a1['share'])})." if es else
                     f"Mostly {a0['name']} ({pc(a0['share'])} {what}), then {a1['name']} ({pc(a1['share'])}).")
+        if a0["share"] >= 2.5 * a1["share"] and a0["share"] >= 0.25:
+            # round 12, pass 2 fix (judge A: "mostly gaming at 46%" is "mostly" under half): far ahead, said so
+            return (f"{a0['name'][:1].upper() + a0['name'][1:]} por mucho: {pc(a0['share'])} de lo que abriste, muy por "
+                    f"delante de {a1['name']} ({pc(a1['share'])})." if es else
+                    f"{a0['name']} by far: {pc(a0['share'])} {what}, well ahead of {a1['name']} "
+                    f"({pc(a1['share'])}).")
         if a0["share"] + a1["share"] >= SPREAD_SHARE:
             return (f"Sobre todo {a0['name']} ({pc(a0['share'])} de lo que abriste) y {a1['name']} "
                     f"({pc(a1['share'])})." if es else
@@ -2378,10 +2683,11 @@ def code_form(sheet):
     def inside(a):
         ts = _rows_named(a.get("themes"), ("name", "share"))[:2]
         if len(ts) == 2:
-            o((f"Dentro de {a['name']}: {ts[0]['name']} ({pc(ts[0]['share'])}) y {ts[1]['name']} "
-               f"({pc(ts[1]['share'])})." if es else
-               f"Inside {a['name']}: {ts[0]['name']} ({pc(ts[0]['share'])}) and {ts[1]['name']} "
-               f"({pc(ts[1]['share'])})."), "areas")
+            # round 12, pass 2 fix (judge B: "Inside gaming: X (5%)" read as 5% of gaming): whose share it is
+            o((f"Dentro de {a['name']}: {ts[0]['name']} ({pc(ts[0]['share'])} de todo lo que abriste) y "
+               f"{ts[1]['name']} ({pc(ts[1]['share'])})." if es else
+               f"Inside {a['name']}: {ts[0]['name']} ({pc(ts[0]['share'])} of everything you opened) and "
+               f"{ts[1]['name']} ({pc(ts[1]['share'])})."), "areas")
         elif len(ts) == 1 and ts[0]["name"].lower() != a["name"].lower():
             o((f"Dentro de {a['name']}, sobre todo {ts[0]['name']} ({pc(ts[0]['share'])})." if es else
                f"Inside {a['name']}, {ts[0]['name']} led with {pc(ts[0]['share'])}."), "areas")
@@ -2412,6 +2718,25 @@ def code_form(sheet):
             o(f"Behind {t['name']}: {cs[0]['name']} ({f(cs[0]['items'], lang)} videos) and {cs[1]['name']} "
               f"({f(cs[1]['items'], lang)}).", "themes")
 
+    def shorts_share_line(must=False):
+        """Round 12, pass 2 fix (judge A, row 8: "Shorts made up 12,080 of your window"; the summer's three quarters
+        Shorts not said): Shorts as a share of the YouTube videos, against the span before."""
+        sh, lo, m = tot.get("shorts"), tot.get("long"), tot.get("long_median_min")
+        psh, plo = prev.get("shorts"), prev.get("long")
+        if not (_num(sh) and _num(lo) and sh + lo >= 20) or es:
+            return False
+        a = tot.get("shorts_share")
+        if not _num(a):
+            return False
+        tail = f"; the long ones were typically about {int(m)} minutes" if _num(m) and lo >= 5 else ""
+        b = prev.get("shorts_share")
+        if pw and _num(b) and _num(psh) and _num(plo) and psh + plo >= 20 and abs(a - b) >= 0.05:
+            o(f"Shorts were {pc(a)} of your YouTube videos, against {pc(b)} in {pw}{tail}.", "totals", "previous",
+              must=must)
+        else:
+            o(f"Shorts were {pc(a)} of your YouTube videos{tail}.", "totals", must=must)
+        return True
+
     def shorts_long():
         sh, lo, m = tot.get("shorts"), tot.get("long"), tot.get("long_median_min")
         if _num(sh) and _num(lo) and sh + lo > 0:
@@ -2432,7 +2757,8 @@ def code_form(sheet):
         moves(themes, "themes")
         if themes:
             behind(themes[0])
-        shorts_long()
+        if not shorts_share_line(must=True):
+            shorts_long()
     elif kind == "channels" and len(chans) >= 2:
         c0, c1 = chans[:2]
         topic = (s.get("filters") or {}).get("topic")
@@ -2450,13 +2776,34 @@ def code_form(sheet):
                    f"{head}{c0['name']} led with {f(c0['items'], lang)} videos{tail0}, ahead of {c1['name']} "
                    f"({f(c1['items'], lang)}).")
         ta = s.get("top_areas") or {}
-        if not es and ta.get("area") and _num(ta.get("n")) and _num(ta.get("of")) and ta["n"] >= 2:
-            o(f"{f(ta['n'], lang)} of your top {f(ta['of'], lang)} channels are {ta['area']}"
-              + (f", and {c0['name']} leads them." if (c0.get("area") == ta["area"]) else "."), "top_areas")
-        named = [c for c in chans[:5] if c.get("area") or c.get("theme")][:3]
-        if named and not es:
-            o("What they are: " + ", ".join(f"{c['name']} is {c.get('area') or c.get('theme')}" for c in named)
-              + ".", "channels")
+        if not es and not topic and ta.get("area") and _num(ta.get("n")) and _num(ta.get("of")) and ta["n"] >= 2:
+            # round 12, pass 2 fix (judge A, row 2: "say what each top channel is and what most of the top 5 are"):
+            # one line, said whatever the writer chose (never under a topic: "X is gaming" in a gaming answer)
+            same = [c["name"] for c in chans[:5] if c.get("area") == ta["area"]]
+            other = [c for c in chans[:5] if c.get("area") and c.get("area") != ta["area"]][:2]
+            line = (f"All {f(ta['n'], lang)} of your top {f(ta['of'], lang)} are {ta['area']} channels."
+                    if ta["n"] == ta["of"] else
+                    f"{f(ta['n'], lang)} of your top {f(ta['of'], lang)} are {ta['area']} channels ("
+                    + ", ".join(same) + ")" + ("; " + " and ".join(f"{c['name']} is {c['area']}" for c in other)
+                                               if other else "") + ".")
+            o(line, "top_areas", "channels", must=True)
+        elif not es and not topic and [c for c in chans[:5] if c.get("area") or c.get("theme")]:
+            named = [c for c in chans[:5] if c.get("area") or c.get("theme")][:3]
+            o("What they are: " + ", ".join(f"{c['name']} is {c.get('area') or c.get('theme')}" for c in named) + ".",
+              "channels", must=True)
+        elif not es and topic:
+            # under a topic the area says nothing ("5 of your top 5 are math"): what each one is about inside it
+            th_ = [c for c in chans[:3] if c.get("theme") and _num(c.get("theme_share")) and c["theme_share"] >= 0.4]
+            if len(themes) >= 2:   # round 12, pass 2 fix (live, "only gaming": one bullet, the code reply went out)
+                o(f"Inside {topic}: {themes[0]['name']} ({_pc(themes[0]['share'])} of your {topic} videos) and "
+                  f"{themes[1]['name']} ({_pc(themes[1]['share'])}).", "themes")
+                moves(themes, "themes")
+            if len(th_) >= 2 and th_[0]["theme"] == th_[1]["theme"]:
+                o(f"{th_[0]['name']} and {th_[1]['name']} are both about {th_[0]['theme']} "
+                  f"({_pc(th_[0]['theme_share'])} and {_pc(th_[1]['theme_share'])} of their videos).", "channels")
+            elif len(th_) >= 2:
+                o("What they are: " + "; ".join(f"{c['name']} is about {c['theme']} ({_pc(c['theme_share'])} of its "
+                                                f"videos)" for c in th_[:2]) + ".", "channels")
         top5 = [c for c in chans[:5] if _num(c.get("shorts_share"))]
         sh = [c for c in top5 if c["shorts_share"] >= 0.8][:2]
         lo = [c for c in top5 if c["shorts_share"] <= 0.1][:2]
@@ -2543,9 +2890,10 @@ def code_form(sheet):
             else:
                 ans = f"{f(n, lang)} videos" + (f", {f(sh, lang)} of them Shorts." if _num(sh) and sh else ".")
             if _num(us.get("day_shorts_share")) and _num(us.get("shorts_share")):
+                # round 12, pass 2 fix (judge A, row 6: say the day's Shorts and busiest hour against his usual day)
                 o(f"Shorts were {_pc(us['day_shorts_share'])} of the day's YouTube videos, against "
                   + (f"about {_pc(us['shorts_share'])}" if us["shorts_share"] >= 0.01 else "none")
-                  + " on a usual day.", "usual")
+                  + " on a usual day.", "usual", must=True)
             elif _num(sh) and sh:
                 o(f"{f(sh, lang)} of them were Shorts.", "totals")
             bh = ((s.get("when") or {}).get("busiest_hours") or [{}])[0]
@@ -2553,7 +2901,10 @@ def code_form(sheet):
             if isinstance(bh, dict) and _num(bh.get("hour")) and n >= 3:
                 if _num(us.get("busiest_hour")) and abs(int(us["busiest_hour"]) - int(bh["hour"])) >= 2:
                     o(f"The busiest hour was {_hour_words(bh['hour'])}, where your usual day peaks around "
-                      f"{_hour_words(us['busiest_hour'])}.", "when", "usual")
+                      f"{_hour_words(us['busiest_hour'])}.", "when", "usual", must=True)
+                elif _num(us.get("busiest_hour")):
+                    o(f"The busiest hour was {_hour_words(bh['hour'])}, as on your usual day.", "when", "usual",
+                      must=True)
                 elif _num(bh.get("share")):
                     o(f"The busiest hour was {_hour_words(bh['hour'])}, with {_pc(bh['share'])} of the day.", "when")
                 else:
@@ -2596,8 +2947,15 @@ def code_form(sheet):
             if pw and all(_num(x.get("previous_items")) for x in (a, b)) and cmpx.get("balance"):
                 bal = {"wider": "the gap has widened", "narrower": "the gap has narrowed",
                        "about the same": "about the same balance"}[cmpx["balance"]]
-                o(f"In {pw} it was {f(big['previous_items'], lang)} {big['name']} against "
-                  f"{f(small['previous_items'], lang)} {small['name']}: {bal}.", "topics")
+                prw = cmpx.get("previous_ratio_words")
+                # round 12, pass 2 fix (judges, row 5: how the balance moved against last year was not said)
+                if prw and prw not in ("about the same", "a little more"):
+                    o(f"In {pw} it was {prw} ({f(big['previous_items'], lang)} {big['name']} against "
+                      f"{f(small['previous_items'], lang)} {small['name']}): {bal}.", "topics", "comparison",
+                      must=True)
+                else:
+                    o(f"In {pw} it was {f(big['previous_items'], lang)} {big['name']} against "
+                      f"{f(small['previous_items'], lang)} {small['name']}: {bal}.", "topics", "comparison", must=True)
             if all(_num(x.get("shorts")) for x in (a, b)) and a["shorts"] + b["shorts"] > 0:
                 o(f"{f(a['shorts'], lang)} of the {a['name']} videos were Shorts, against {f(b['shorts'], lang)} of "
                   f"the {b['name']} ones.", "topics")
@@ -2627,16 +2985,41 @@ def code_form(sheet):
         ch = s.get("change") or {}
         eras = _rows_named(s.get("eras"), ("area", "from", "to"))
         ac = s.get("areas_change") or {}
-        if len(eras) >= 2:
+        shx0 = ac.get("shorts") or {}
+        big_shorts = _num(shx0.get("from_share")) and _num(shx0.get("to_share")) and \
+            abs(shx0["to_share"] - shx0["from_share"]) >= 0.25
+
+        def span(e):
+            return e["from"] if e["from"] == e["to"] else (f"{e['from']} a {e['to']}" if es else
+                                                           f"{e['from']} to {e['to']}")
+        if len(eras) >= 2 and eras[0]["area"] == eras[-1]["area"]:
+            # round 12, pass 2 fix (judge A: "Gaming led from Jan 2026 to Mar 2026; since Oct 2026, gaming has"): the
+            # same area at both ends led most of the time; what led in between is said by its stretch
+            e0 = eras[0]
+            mid = [e for e in eras if e["area"] != e0["area"]][:2]
+            ans = (f"{e0['area'][:1].upper() + e0['area'][1:]} lideró casi todo el tiempo; entre medias, "
+                   + " y ".join(f"{e['area']} ({span(e)})" for e in mid) + "." if es else
+                   f"{e0['area'][:1].upper() + e0['area'][1:]} led most of the time; in between, "
+                   + " and ".join(f"{e['area']} led {('in ' + e['from']) if e['from'] == e['to'] else 'from ' + span(e)}"
+                                  for e in mid) + ".")
+        elif len(eras) >= 2:
             e0, e1 = eras[0], eras[-1]
-            span0 = e0["from"] if e0["from"] == e0["to"] else (f"{e0['from']} a {e0['to']}" if es else
-                                                                f"{e0['from']} to {e0['to']}")
-            ans = (f"De {span0} lideró {e0['area']}; desde {e1['from']}, lidera {e1['area']}." if es else
-                   f"{e0['area'].capitalize()} led from {span0}; since {e1['from']}, {e1['area']} has.")
+            ans = (f"De {span(e0)} lideró {e0['area']}; desde {e1['from']}, lidera {e1['area']}." if es else
+                   f"{e0['area'][:1].upper() + e0['area'][1:]} led from {span(e0)}; since {e1['from']}, {e1['area']} "
+                   f"has.")
         elif len(eras) == 1:
             e0 = eras[0]
             ar = (_rows_named(ac.get("arrived"), ("name", "from_share", "to_share")) or [None])[0]
-            if ar and not es:
+            if big_shorts:
+                # round 12, pass 2 fix (judge A, row 7: lead with the biggest change): one area led every year, and
+                # what changed most is how he watches, Shorts against long videos
+                ans = (f"{e0['area'][:1].upper() + e0['area'][1:]} lideró cada año desde {e0['from']}, pero cambió cómo "
+                       f"ves: los Shorts pasaron del {_pc(shx0['from_share'], lang)} de tus videos de YouTube en "
+                       f"{shx0['from']} al {_pc(shx0['to_share'], lang)} en {shx0['to']}." if es else
+                       f"{e0['area'][:1].upper() + e0['area'][1:]} has led every year since {e0['from']}, but how you "
+                       f"watch changed: Shorts went from {_pc(shx0['from_share'])} of your YouTube videos in "
+                       f"{shx0['from']} to {_pc(shx0['to_share'])} in {shx0['to']}.")
+            elif ar and not es:
                 # one area led throughout: the change is what grew around it (round 12, pass 2, live)
                 ans = (f"{e0['area'].capitalize()} has led every year since {e0['from']}; around it, {ar['name']} rose "
                        f"from {_pc(ar['from_share'])} in {ac['from']} to {_pc(ar['to_share'])} in {ac['to']}.")
@@ -2737,11 +3120,16 @@ def so_what_text(c, s, topic=None, lang=None):
     if k == "saved":
         return f"You saved {_fmt(c['n'], 'en')} {c['theme']} videos you never opened. Want them as a list?"
     if k == "learning_faded" and _num(c.get("faded_from")) and _num(c.get("grew_from")):
+        if c.get("from") and c.get("to"):   # round 12, pass 2 fix: a change's own years
+            return (f"The learning side gave way: {c['faded']} fell from {_pc(c['faded_from'])} in {c['from']} to "
+                    f"{_pc(c['faded_to'])} in {c['to']}, while {c['grew']} grew from {_pc(c['grew_from'])} to "
+                    f"{_pc(c['grew_to'])}.")
         return (f"{c['faded']} fell from {_pc(c['faded_from'])} to {_pc(c['faded_to'])} while {c['grew']} grew from "
                 f"{_pc(c['grew_from'])} to {_pc(c['grew_to'])}: the learning side gave way.")
     if k == "shorts_shift":
-        return (f"Shorts went {'up' if c['direction'] == 'up' else 'down'} to {_pc(c['share'])} of your YouTube "
-                f"videos, from {_pc(c['previous_share'])}" + (f" in {pw}." if pw else " before."))
+        whose = f"your {c['topic']} videos" if c.get("topic") else "your YouTube videos"
+        return (f"Shorts went {'up' if c['direction'] == 'up' else 'down'} to {_pc(c['share'])} of {whose}, "
+                f"from {_pc(c['previous_share'])}" + (f" in {pw}." if pw else " before."))
     if k == "channel_rise":
         return (f"{c['channel']} is new at the top: {_fmt(c['items'], 'en')} videos now, against "
                 f"{_fmt(c['previous_items'], 'en')}" + (f" in {pw}." if pw else " before."))
@@ -2752,7 +3140,8 @@ def so_what_text(c, s, topic=None, lang=None):
 
 
 _SAVED_SW = re.compile(r"\bsaved\b|\bguardaste\b|\bguardad[oa]s?\b")
-_SAVED_OBS = re.compile(r"\b(?:saved|guardaste|guardad[oa]s?)\b.*\b(?:never|without opening|not opened|unopened|nunca|"
+_SAVED_OBS = re.compile(r"\b(?:saved|guardaste|guardad[oa]s?)\b|"   # pass 2 fix (live: "1 ... video stayed saved")
+                        r"\b(?:saved|guardaste|guardad[oa]s?)\b.*\b(?:never|without opening|not opened|unopened|nunca|"
                         r"sin abrir)\b|\b(?:never|nunca) (?:opened|abriste)\b|\bsin abrir\b")
 
 
@@ -2797,10 +3186,21 @@ def _theme_of(facts, name):
     return None
 
 
+# the window's Shorts as the subject of a sentence (not one theme's "with 90% Shorts")
+_SHORTS_SUBJ = re.compile(r"^(?:your |the )?shorts\b|\b(?:your |the )?shorts (?:went|rose|grew|jumped|fell|dropped|were|"
+                          r"made|climbed|share|took)\b|\bshorts\b[^.;]{0,25}\bfrom\b|\b\d[\d,.]*%? (?:of (?:your|the) "
+                          r"(?:\w+ )?videos )?were shorts\b|\blong videos were typically\b|\blong ones were\b")
+_MUST_SUBJECTS = [("hour", re.compile(r"\bbusiest hour\b|\bpeak(?:s|ed)? (?:at|around)\b")),
+                  ("shorts", _SHORTS_SUBJ),
+                  ("top_areas", re.compile(r"\bof your top \d+\b|\bwhat they are\b")),
+                  ("balance", re.compile(r"\bthe gap\b|\bbalance\b"))]
+
+
 def fill(form, raw, sheet, chart_vals=None):
     """Round 12, fix: the checked form with what failed filled by code (see code_form). Returns the form; its
     "filled" says what code wrote ("answer", "observations", "so_what")."""
     form["filled"] = []
+    held = []
     if not (isinstance(raw, dict) and isinstance(raw.get("answer"), str) and
             isinstance(raw.get("observations"), list)):
         return form
@@ -2812,6 +3212,17 @@ def fill(form, raw, sheet, chart_vals=None):
         cf["observations"] = check(dict(cform, answer=form["answer"]), sheet, chart_vals=chart_vals)["observations"]
     for _w, why, _t in cf["dropped"]:
         form["dropped"].append(("code", why, None))
+    if cf["answer"] and form["answer"] and sheet.get("kind") in ("first", "last") and facts.lang == "en":
+        # round 12, pass 2 fix (live, row 4: "You first started watching <its date>."): the date is said by code,
+        # the writer's next sentence after it
+        tail = [x for x in _sentences(form["answer"])[1:] if not re.search(_DATE_RX, _norm(x))]
+        topic_ = " ".join(_words((sheet.get("filters") or {}).get("topic") or ""))
+        head_ = " ".join(_words(_sentences(form["answer"])[0]))
+        new = " ".join([cf["answer"]] + tail) if topic_ and topic_ not in head_ else form["answer"]
+        if new != form["answer"]:
+            form["dropped"].append(("answer", "code_answer", form["answer"]))
+            form["answer"] = new
+            form["filled"].append("answer")
     if cf["answer"] and (not form["answer"] or sheet.get("kind") == "compare_topics" or
                          (sheet.get("kind") == "changed" and (sheet.get("eras") or []))):
         # round 12, pass 2 (T4): a change is told as eras, by code (live: "shifted from gaming and internet culture
@@ -2822,6 +3233,13 @@ def fill(form, raw, sheet, chart_vals=None):
             form["dropped"].append(("answer", "code_answer", form["answer"]))
         form["answer"] = cf["answer"]
         form["filled"].append("answer")
+        # round 12, pass 2 fix (live, row 8: "Comedy led with 14%" right after code's answer said it): the model's
+        # bullets are new against the answer that is sent
+        keep = [x for x in form["observations"] if _obs_more(x, form["answer"], sheet, x, facts) != "repeat"]
+        held = [x for x in form["observations"] if x not in keep]   # back only if code cannot fill the minimum
+        for x in held:
+            form["dropped"].append(("observation", "repeat", x))
+        form["observations"] = keep
     # the so-what (round 12, pass 2, T5): only one of the sheet's candidates (code proposed them, with their facts),
     # picked by the writer; never about another theme; never for 1 or 2 saved clips; none on a day's list
     names = set(facts.names_in(" ".join([form["answer"] or ""] + [x for x in form["observations"]
@@ -2869,8 +3287,17 @@ def fill(form, raw, sheet, chart_vals=None):
             chosen = None
     if not sw and sheet.get("kind") not in ("first", "last", "day"):
         near = names | facts.topic_keys | {_theme_of(facts, n) for n in names}
-        c = next((c for c in cands if c.get("kind") in ("saved", "lapsed_saves") and
-                  " ".join(_words(c.get("theme") or "")) in near), None)
+        # round 12, pass 2 fix (judge A, row 1: no so-what though there were candidates): code takes the strongest
+        # candidate the writer left (a saved one only on what the answer is about)
+        on_topic = sheet.get("kind") in ("compare_topics", "channels")   # facts.py took their saved rows on topic
+
+        def saved_near(c):
+            return c.get("kind") in ("saved", "lapsed_saves") and \
+                (on_topic or " ".join(_words(c.get("theme") or "")) in near)
+        c = next((c for c in cands if c.get("kind") == "learning_faded" or
+                  (c.get("kind") == "lapsed_saves" and saved_near(c))), None) or \
+            next((c for c in cands if saved_near(c)), None) or \
+            next((c for c in cands if c.get("kind") in ("channel_rise", "seasonal", "shorts_shift")), None)
         t = so_what_text(c, shown(sheet)) if c else None
         if t and check_sentence(t, facts) is None:
             sw, chosen = tidy(t, facts.lang), c
@@ -2885,9 +3312,47 @@ def fill(form, raw, sheet, chart_vals=None):
             sw = (f"You saved {_fmt(sv['n'], 'en')} {sv['theme']} videos you never opened, a next step. Want them "
                   f"as a list?") if sv else None
             sw = sw if sw and check_sentence(sw, facts) is None else None
+        also = chosen["key"] if (sw and chosen is not None) else None
+        if sw and also is None:
+            sv_ = next((c for c in cands if c.get("kind") in ("saved", "lapsed_saves") and
+                        " ".join(_words(c.get("theme") or "")) in set(facts.names_in(sw)[0])), None)
+            also = sv_["key"] if sv_ else None
         sw = tidy(path, facts.lang) + (" " + tidy(sw, facts.lang) if sw else "")
         chosen = by_id.get(next((c["key"] for c in cands if c.get("kind") == "path"), None))
+        if chosen is not None and also and also != chosen["key"]:
+            # round 12, pass 2 fix (judges: rows 4 and 5 both said "You saved 6 <theme> tutorials"): every
+            # candidate said is kept, so the next answer says none of them again
+            chosen = dict(chosen, key=chosen["key"] + "|" + also)
         form["filled"].append("so_what")
+    if sw and chosen is not None and chosen.get("kind") not in ("saved", "lapsed_saves", "path") and \
+            not re.search(r"\d", re.sub(r"\([^)]*\)", " ", sw)) and facts.lang == "en":
+        # live, row 8: "You could compare how much more of your summer watching was Shorts than the spring before":
+        # a candidate with numbers is said with them, in code's words
+        t = so_what_text(chosen, shown(sheet))
+        if t and check_sentence(t, facts) is None:
+            form["dropped"].append(("so_what", "no_number", sw))
+            sw = tidy(t, facts.lang)
+    if sw and chosen is not None and chosen.get("kind") == "learning_faded" and chosen.get("from") and \
+            " ".join(_words(chosen.get("grew") or "")) in names and facts.lang == "en":
+        # round 12, pass 2 fix (live, row 7): what grew is said above; the so-what says what gave way
+        t = (f"The learning side gave way: {chosen['faded']} fell from {_pc(chosen['faded_from'])} in "
+             f"{chosen['from']} to {_pc(chosen['faded_to'])} in {chosen['to']}, while {chosen['grew']} grew.")
+        if check_sentence(t, facts) is None:
+            sw = tidy(t, facts.lang)
+    if sw:
+        # round 12, pass 2 fix (live: "11,932 videos were Shorts, up from 4,476" above "Shorts went up to 58% ..."):
+        # a bullet the so-what says goes
+        swv = [v for v, p in _pct_vals(sw, facts) if p is True]
+        keep = []
+        for x in form["observations"]:
+            xv = [v for v, p in _pct_vals(x, facts) if p is True]
+            shorts_move = chosen is not None and chosen.get("kind") == "shorts_shift" and \
+                _SHORTS_SUBJ.search(_norm(x)) and re.search(r"\d", x)
+            if shorts_move or (len(xv) >= 2 and all(any(abs(a - b) <= 1 for b in swv) for a in xv)):
+                form["dropped"].append(("observation", "said_by_so_what", x))
+            else:
+                keep.append(x)
+        form["observations"] = keep
     form["so_what_id"] = chosen["key"] if (sw and chosen) else None
     form["so_what"] = sw
     # things saved and never opened are said in one place, the so-what line, and only on what the answer is about
@@ -2895,6 +3360,21 @@ def fill(form, raw, sheet, chart_vals=None):
     said = _signature(" ".join([form["answer"] or "", sw or ""]), facts)
     for x in form["observations"]:
         said |= _signature(x, facts)
+    # round 12, pass 2 fix (judges: what each top channel is, a day against the usual day, the balance of a
+    # comparison against last year, the Shorts share of a window, all left out by the writer): code's MUST lines are
+    # said whatever the writer chose, in place of its last observations
+    must = []
+    for mo in [x for x in cform.get("observations") or [] if isinstance(x, dict) and x.get("must")]:
+        mc = check(dict(cform, answer=form["answer"] or "-", observations=[mo]), sheet, chart_vals=chart_vals)
+        for x in mc["observations"]:
+            sig = _signature(x, facts)
+            pv = [v for v in _pct_vals(x, facts) if v[1] is True]
+            sv_ = [v for v in _pct_vals(sw or "", facts) if v[1] is True]
+            if pv and sv_ and all(any(abs(a - b) <= 1 for b, _ in sv_) for a, _ in pv):
+                continue   # the so-what says it (live: "Shorts went up to 82%" and "Shorts were 82%")
+            if not (sig and sig <= said) and x not in form["observations"]:
+                must.append(x)
+                said |= sig
     hours = any(re.search(r"\d\s*(?:hours?|horas?|minutes?)\b", x) for x in form["observations"] + [form["answer"] or ""])
     obs_names = set(facts.names_in(" ".join(form["observations"]))[0])
     for x in cf["observations"]:
@@ -2915,6 +3395,37 @@ def fill(form, raw, sheet, chart_vals=None):
             hours = hours or bool(length)
             if "observations" not in form["filled"]:
                 form["filled"].append("observations")
+    if must:
+        # the must line is the one said on its subject (live: two "busiest hour" bullets on a day; "Shorts made up 79%"
+        # beside "Shorts were 79% of your YouTube videos")
+        subj = [r for r, rx in _MUST_SUBJECTS if any(rx.search(_norm(m)) for m in must)]
+        keep = []
+        for x in form["observations"]:
+            if x in must:
+                continue
+            if any(rx.search(_norm(x)) for r, rx in _MUST_SUBJECTS if r in subj):
+                form["dropped"].append(("observation", "said_by_code", x))
+                continue
+            keep.append(x)
+        room = max(0, OBS_MAX - len(must))
+        form["observations"] = keep[:room] + must
+        form["filled"].append("must")
+    # a bullet whose every number and name another bullet says goes (live, row 2: "<channel A> was the top
+    # channel, and 95% of its videos were Shorts" above "<channel A> and <channel B> are almost all Shorts (95% and
+    # 100%) ...")
+    sigs = [{t for t in _signature(x, facts) if not re.match(r"^(?:19|20)\d\d$", t[1])}
+            for x in form["observations"]]   # (years left out: "from 15% in Jan 2026 to 11%" is "from 15% to 11%")
+    if len(form["observations"]) < OBS_MIN and held:
+        # never at the cost of the whole answer (today's code reply would go out): a repeat comes back
+        form["observations"] = held[:OBS_MIN - len(form["observations"])] + form["observations"]
+        sigs = [{t for t in _signature(x, facts) if not re.match(r"^(?:19|20)\d\d$", t[1])}
+                for x in form["observations"]]
+    sub = [x for i, x in enumerate(form["observations"])
+           if not (sigs[i] and any(t[0] == "v" for t in sigs[i]) and any(t[0] == "n" for t in sigs[i]) and
+                                    any(j != i and sigs[i] <= sigs[j] and (sigs[i] != sigs[j] or j < i)
+                                                    for j in range(len(sigs))))]
+    if len(sub) >= OBS_MIN or len(sub) == len(form["observations"]):
+        form["observations"] = sub   # (never below the minimum: today's code reply would go out)
     return form
 
 

@@ -386,7 +386,9 @@ def test_t11_channels_say_their_area_the_ranking_says_what_and_the_offers_are_by
     assert any(o.startswith("only_topic:") and o.split(":", 1)[1] in {a["name"] for a in s["areas"]}
                for o in s["offers"])
     f = I.check(I.code_form(s), s, chart_vals=I.chart(s)[1])
-    assert any(o.startswith("What they are:") for o in f["observations"])
+    # round 12, pass 2 fix: the line says what most of the top 5 are and what the others are ("2 of your top 5 are
+    # ... channels (A, B); C is ...")
+    assert any(re.match(r"^(?:All )?\d+ of your top \d+ are .+ channels|^What they are:", o) for o in f["observations"])
 
 
 # ================================ T12: every chart row is one line at 430 px =========================================

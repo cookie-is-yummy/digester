@@ -193,8 +193,9 @@ def v5_scores():
         d = json.load(f)
     cases = {c["id"]: c for c in d["cases"]}
     out = {"planted_v5": 0, "caught_v5": 0, "true_v5": 0, "kept_v5": 0, "by_why": {}}
+    extra = (d.get("v5") or {}).get("sheets") or {}   # round 12, pass 2 fix: real-shaped made-up sheets, here only
     for x in (d.get("v5") or {}).get("cases") or []:
-        s = cases[x["case"]]["sheet"]
+        s = extra[x["case"]] if x["case"] in extra else cases[x["case"]]["sheet"]
         for t in x["true"]:
             fm = I.check({"answer": "-", "observations": [{"text": t, "uses": []}]}, s, strict=True)
             out["true_v5"] += 1

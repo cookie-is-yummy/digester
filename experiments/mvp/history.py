@@ -2341,7 +2341,9 @@ def _write_now(bot, person, q, now, follow, words, said, deadline=None):
         # round 12, pass 2 (T5): never the same so-what on two answers in a row
         last_sw = (bot.store.get_state(STATE.format(h=person["handle"])) or {}).get("so_what_id")
         if last_sw and isinstance(sheet.get("so_what_candidates"), list):
-            sheet["so_what_candidates"] = [c for c in sheet["so_what_candidates"] if c.get("key") != last_sw]
+            # round 12, pass 2 fix: a so-what can say two candidates (a first's path and its saved videos: "a|b")
+            gone = set(str(last_sw).split("|"))
+            sheet["so_what_candidates"] = [c for c in sheet["so_what_candidates"] if c.get("key") not in gone]
         # seam a: D says a theme's change_vs_previous in percentage points (12.0), W reads it as a fraction (0.12)
         sheet["themes"] = [dict(t, change_vs_previous=round(t["change_vs_previous"] / 100, 4))
                            if isinstance(t, dict) and isinstance(t.get("change_vs_previous"), (int, float)) else t
