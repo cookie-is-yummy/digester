@@ -284,7 +284,7 @@ function card(m) {
       : `<button class="thumb" data-vid="${vid}" data-mid="${m.id}" aria-label="Play on YouTube"><img src="https://i.ytimg.com/vi/${vid}/hqdefault.jpg" alt="${title}" loading="lazy"><span class="play">▶</span></button>`;
     const from = l.outside ? `<div class="note">Not from your saves · from YouTube</div>` : "";
     // an outside pick's card carries its channel and length, so no bullet line repeats it (fix pass 2, finding 55)
-    const meta = [l.caption, l.channel, l.length].filter(Boolean).map(esc).join(" · ");   // round 12, pass 3: a history card's caption
+    const meta = [l.caption].concat([l.channel, l.length]).filter(Boolean).map(esc).join(" · ");   // round 12, pass 3: a history card's caption first
     return `<div class="card yt">${media}<div class="cap"><span class="brand">YouTube</span><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div>${meta ? `<div class="note">${meta}</div>` : ""}${from}</div>`;
   }
   if (l.platform === "calendar") {

@@ -247,7 +247,7 @@ def test_u4_the_cards_caption_reaches_a_channel_that_draws_cards():
                                    "platform": "youtube", "video_id": "abc123", "caption": "1. Pixel Pencil · 25 min"})
     assert got["link"]["caption"] == "1. Pixel Pencil · 25 min"
     page = open(os.path.join(HERE, "channels", "web_page.html"), encoding="utf-8").read()
-    assert "[l.caption, l.channel, l.length]" in page
+    assert "[l.caption].concat([l.channel, l.length])" in page
 
 
 def test_u4_and_n_more_comes_after_the_cards(wr):

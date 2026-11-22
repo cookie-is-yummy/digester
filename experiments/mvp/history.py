@@ -2161,16 +2161,23 @@ def follow_up(st, text, today, known=None):
 
 def into_is_history(bot, person, text, now):
     """Round 12, pass 3 (U2): "what have i been into lately" (and "what am i into these days") is read by the round 8
-    trends hook first (what was SAVED lately); for a person whose library holds a watch history it is the history's
-    "what was watched most" over the window (the founder's row 8 in other words), so the trends hook gives way to 8h.
+    trends hook first (what was SAVED lately); for a person whose library holds a watch history and its themes it is
+    the history's "what was watched most" over the window (the founder's row 8 in other words), so the trends hook
+    gives way to 8h.
     "what have i been saving lately" and a bare "what am i into" are never this (the read takes neither)."""
     try:
         tz = person.get("timezone") or "UTC"
         q = read(text, now.astimezone(ZoneInfo(tz)).date())
         if q is None or q.kind != "top":
             return False
-        rec = record(bot.view(person["library"]), tz)
-        return any(k in HOW_KINDS["watched"] for (_p, k) in rec.starts)
+        view = bot.view(person["library"])
+        rec = record(view, tz)
+        if not any(k in HOW_KINDS["watched"] for (_p, k) in rec.starts):
+            return False
+        # the history's answer of what he was into is told by its themes: with no themes build for the library, the
+        # trends answer (round 8, from the saves) stays
+        from . import themes as T
+        return T.load(view.lib) is not None
     except Exception:  # noqa: BLE001 - the trends answer as before
         return False
 
