@@ -1990,7 +1990,7 @@ second merge, 18 Nov, added Y, V and T in the rows that were kept for them).
 | | 8 | `receipts_reads` (with what the browser pressed, 17.L), `do_it` | round 9 W9, W10, L |
 | after the two tries | 8z | `split_reads` (two asks; only when no read took the whole message) | W |
 | | - | `integration_reads` (with "version") | round 8, K |
-| | 8h | `history.history_reads` (a follow-up to a history answer for 6 hours, then the recall "what was that video i watched about X", `read_recall`, then a history question; code only, 18.H, 18.LA) | round 11 H, fix A |
+| | 8h | `history.history_reads` (a follow-up to a history answer for 6 hours, then the recall "what was that video i watched about X", `read_recall`, then a history question; code only, 18.H, 18.LA; round 12: "yes" to the so-what first, and inside `send_answer` today's code reply first, then the fact sheet and the writer's one call after its own cap check, the code reply when it gives nothing; no new hook, 19) | round 11 H, fix A, round 12 |
 | | 8y | `videoask.reads` ("what leaves this computer"; "ask the video ..." only with `MVP_VIDEO_ASK=1`, and only on a video pick already in view, else one line asking for one; then "ask that one" while its offer is open, `read_one`, and "ask them", `read_many`, when the answer in view holds a YouTube video, and with nothing shown one plain line, 18.L2; 18.Q, 18.LB) | round 11 Q, fix B, fix pass 2 |
 | | - | `code_reads`, then the cap check (`_over_cap`) | round 7 |
 | | 8m | `synth.synth_reads` ("summarize what I've learned about X", with one time window read by slice H's words; then "ask my videos about X" with `MVP_VIDEO_ASK=1`, `read_ask_mine`; after the cap check, it calls the model; 18.M, 18.LB) | round 11 M, fix B |
@@ -4548,6 +4548,70 @@ asked: "it doesn't really answer the question properly. can we please refine thi
 again?" The round's brief (outside git) gives his eight questions, his words and rules R-A to R-I. Two builders: D
 (facts, themes, lengths and the questions that were misread; part 19.D) and W (the writer; part 19.W). The seam is the
 fact sheet: a plain dict built by code for one history question, the only source of facts for the writer.
+
+**The merge (`history.send_answer`, `tests/test_round12_merge.py`).** One hook, 8h, as before (DESIGN 17's table;
+no new one, and `handler.py` does not change). `send_answer` works out today's code reply first; that reply decides,
+in one place (`_quiet_limits`), which notes are said (the export hint, the friends line, the range). Then, for every
+history kind but a plain list (a listing, "show me them", "more", the items watched more than once: their items are
+the answer), it builds the fact sheet (`facts.build`, code only) and asks the writer (`insight.write`, one call of
+`insight_v4` through `llm.chat_json`, after its own check of the daily and total caps, since 8h comes before the
+handler's). The writer's parts go out; when the sheet or the writer gives nothing (the writer off, `MVP_INSIGHT=0`;
+the cap; the call failing; the fake model with no script; the answer failing the check or fewer than 2
+observations; a window wholly after or before the record), today's code reply goes out byte for byte, so every
+earlier test stands (their fixture keeps the writer off).
+- What changed and why, by the founder's rules. R-A: the brief's 5, 7 and 8 are read by code (D) and answered as
+  asked, a comparison of the two topics, the themes that rose and faded, the themes of that season. R-B: the
+  numbers are a chart of whole block cells drawn by code (W), never a run of "2024: 6, 2025: 11"; the answer leads.
+  R-C: 2 to 4 observations, each checked against the sheet, and a count says what it is "of N then" (D's
+  `window_totals`, which the check now knows). R-D: themes (themes-v2) with their share and how it moved, the channels
+  behind them, Shorts against long videos, and the length of what was opened ("videos adding up to about N hours",
+  never time watched). R-E: the so-what only from things saved on the theme and never opened, as a question; "yes"
+  lists them, with their cards, by code. R-F: one line of offers from the sheet; each is taken by code in its own
+  words for 6 hours ("without Shorts", "only <theme>", "with the videos", "by month", "by theme", with or without
+  "yes,"), the reply opening with the offer's words ("Without Shorts:"); never once another answer (a pick, a rule) is
+  in view. An "only <theme>" the writer offered and could not answer says the sheet's counts, never today's "no
+  videos that mention ..." (a theme's name is often in no title). R-G: the answer, the observations, the chart, then
+  for a day, a first or a last the items with their cards (a day still ends "And N more", and "more" and "the first
+  one" work as before; an item of another year than the window's end says its year). R-H: where the export ends
+  rides in the window's own words as the answer opens ("In the 4 weeks up to 30 October 2026, where your export
+  ends, ..."; "On Friday 30 October 2026, the last day of your export, ..."); no closing paragraph, the hint once in 6
+  hours whichever reply says it, the friends line only when asked; a next page ("more") says none. R-I: the answer is
+  what only the record says: themes, their change, the channels behind them, what was saved and never opened.
+- Seams closed. (a) D's sheet says a theme's change in percentage points (12.0) and W reads a fraction (0.12): the
+  merge passes fractions; D's window words are bare ("the 4 weeks up to ..."), the writer opens with them ("In the
+  ...", "On Friday ..."); a first or last over all the history opens with its date, not the range; a count over more
+  than six weeks gets its periods (the chart); the sheet gets the question's language. (b) and (c) above. (d) the
+  writer takes the notes the code reply decided (`write(..., say=)`), and the code keeps them. (e) the run keeps the
+  form's shape (sheet kind, used, called, kept, dropped, so-what, offer kinds, versions, seconds), its cost and prompt
+  version; never the question's words, a title or the sheet; the history state keeps the query, the ids shown and the
+  saved ids; "delete my data" removes runs, answers and the state; the export lists the answer as shown. (f) one call
+  per answer and per follow-up; none for a list, a page, a saved list or "the first one"; the cap reached means no
+  call.
+- The live run (22 Nov, the real library, a scratch home, the page as its operator, once; titles and names not
+  written here). The 8 questions of the brief in order, each answered by the writer, one call each, 2.4 to 7.0
+  seconds (the first builds the index, 4.2 s), $0.037 for the 8 calls and $0.047 with the setup. Read as the founder
+  would: 1 (the most lately) names 8 themes with their shares, which grew against the 4 weeks before and the
+  channels behind one; answers it. 2 (channels in 2025) gives the ranking with what each channel is (mostly Shorts or
+  long, new that year, its theme) and offers to leave out Shorts; answers it. 3 (minecraft this year) gives the count,
+  the days, its themes and how they moved, a chart by month and the saved ones; answers it, more than asked. 4 (first
+  blender) gives the date, the first video, what the topic mostly was and its channels, then the items with cards;
+  answers it (the items then lacked their year; fixed). 5 (more gaming or art) says which, both counts, days, Shorts
+  against long; answers it, but one sentence read a length as a count of videos ("723.1 videos adding up to about
+  723 hours"): the check now drops a number said of videos that is not a count. 6 (30 October) gives the overview
+  (how many, Shorts, the main theme) then the items with cards; answers it ("across 1 day" is now dropped). 7 (how
+  it changed since 2020) says which themes led then and lead now, which rose and faded, a chart per year with its main
+  theme; answers the question asked (what, not how much). 8 (the summer of 2023) names that summer's themes with
+  their shares and how they moved against the spring; answers it. 8 of 8 answer the question; the founder judges.
+- Checked after the merge: full suite, demo 10, dry self-test (8 more conversations, c59 to c66, one per question of
+  the brief, with the made-up writer `tests/r12_writer.py` as `{"mvp_insight": "from_sheet"}`), `probe_same`
+  byte-equal, the dev phrasing set unchanged (73 / 1 / 1 of 40), the 159 rule texts and 123 phrasings taken by no new
+  read, the round 11 traps; numbers in the README and the round's report.
+- Not done. The writer's quality is one live reading of 8 answers, not an evaluation on the real library: the 20
+  made-up sheets of W's eval are its measure. A theme name of more than 4 words is not taken by "only <theme>". A
+  so-what's "yes" lists at most 10 saved videos. Spanish answers get the code's Spanish window words; "more X or Y"
+  and "how it changed" are read in English only (D). The selftest library has no themes built, so c65 stays today's
+  timeline; a live self-test now gets the writer's words where the dry one checks today's on the older history
+  conversations. An "only <theme>" taken with the writer off (`MVP_INSIGHT=0`) counts by words as before.
 
 ### 19.D Facts, themes, lengths and the new questions (round 12, D; `lengths.py`, `themes.py`, `facts.py`, `tests/test_round12_d.py`)
 

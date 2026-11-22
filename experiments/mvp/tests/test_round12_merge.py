@@ -448,3 +448,20 @@ def test_live_yes_to_a_so_what_on_two_themes_lists_both(wr, monkeypatch):
 def test_live_a_first_in_an_earlier_year_says_the_year_on_its_lines(wr):
     out, _ = ask(wr, QS["q4"])
     assert "(10 Jan 2025, 10 min)" in out
+
+
+def test_one_hook_8h_and_the_order_inside_it_and_its_send_path():
+    import os
+    src = open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "history.py"), encoding="utf-8").read()
+
+    def order(fn, needles):
+        body = src[src.index(f"\ndef {fn}("):]
+        body = body[:body.index("\ndef ", 1)]
+        at = [body.index(n) for n in needles]
+        assert at == sorted(at), (fn, needles)
+    order("history_reads", ['if st.get("saved") and YES_SAVED.match(normal(text))', "f = follow_up(st, text, today, known)",
+                            "r = read_recall(text, today)", "q = read(text, today)"])
+    order("send_answer", ["text, ids, extra = answer(view, q", "written, winfo, sheet = _write(bot, person, q",
+                          "note_said(bot, h, now, said)", "bot.store.add_run(handle=h, kind=\"history\""])
+    handler = open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "handler.py"), encoding="utf-8").read()
+    assert "insight" not in handler and "facts.build" not in handler   # no new hook
