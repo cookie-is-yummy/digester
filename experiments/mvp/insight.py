@@ -638,6 +638,9 @@ def _check(text, facts, uses=None, chart_vals=None, maxlen=SENT_MAX):
     return (r, 0) if isinstance(r, str) else (None, r)
 
 
+_ONE_DAY = re.compile(r"\b(?:on|en)\s+(?:1|one|un)\s+(?:different\s+|distintos?\s+)?(?:days?|dias?)\b")
+
+
 def _check_body(raw, facts, uses, chart_vals):
     t = _norm(raw)
     for ph in facts.allowed_phrases:   # the window's own words (they carry where the record ends) are always fine
@@ -647,6 +650,8 @@ def _check_body(raw, facts, uses, chart_vals):
         return "watch_time"
     if _LIMITS.search(t):
         return "limits"
+    if _ONE_DAY.search(t):   # round 12, merge: "on 1 different days" is never said (house style)
+        return "one_day"
     keys = None
     if uses is not None:
         keys = [str(k).split(".")[0].split("[")[0] for k in (uses if isinstance(uses, list) else [uses])]

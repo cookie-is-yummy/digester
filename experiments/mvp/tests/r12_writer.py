@@ -32,8 +32,11 @@ def true_form(sh):
     answer = None
     if kind == "compare_topics" and len(topics) == 2:
         a, b = sorted(topics, key=lambda t: -(t.get("items") or 0))
-        answer = f"More {a['name']}: {_n(a['items'])} videos against {_n(b['items'])} on {b['name']}."
-        if a.get("days") and b.get("days"):
+        if a["items"] == b["items"]:
+            answer = f"As many {a['name']} as {b['name']}: {_n(a['items'])} videos each."
+        else:
+            answer = f"More {a['name']}: {_n(a['items'])} videos against {_n(b['items'])} on {b['name']}."
+        if a.get("days") and b.get("days") and (a["days"], b["days"]) != (1, 1):
             obs.append({"text": f"You opened {a['name']} on {_n(a['days'])} days, {b['name']} on {_n(b['days'])}.",
                         "uses": ["topics"]})
         for t in (a, b):
@@ -50,7 +53,7 @@ def true_form(sh):
     elif kind == "count" and topics:
         t = topics[0]
         answer = f"You opened {_n(t['items'])} {t['name']} videos."
-        if t.get("days") and t["days"] != t["items"]:
+        if t.get("days") and t["days"] not in (1, t["items"]):
             obs.append({"text": f"They came on {_n(t['days'])} different days.", "uses": ["topics"]})
         wt = (sh.get("window_totals") or {}).get("items")
         if wt and wt > t["items"]:
@@ -84,12 +87,17 @@ def true_form(sh):
     if kind == "count" and topics and topics[0].get("length_hours") and topics[0]["length_hours"] >= 2:
         obs.append({"text": f"Together they add up to about {round(topics[0]['length_hours'])} hours of video.",
                     "uses": ["topics"]})
+    if kind in ("day", "first", "last") and not themes:
+        for c in chans[:2]:
+            if n and c.get("items"):
+                obs.append({"text": f"{c['name']} is behind {_n(c['items'])} of the {_n(n)} videos.",
+                            "uses": ["channels"]})
     for t in themes[:3]:
         cs = [c for c in t.get("channels") or [] if c.get("name")]
         if cs and t.get("items"):
             obs.append({"text": f"{cs[0]['name']} is behind {_n(cs[0]['items'])} of the {_n(t['items'])} "
                                 f"{t['name']} videos.", "uses": ["themes"]})
-    if tot.get("days_active") and n and kind not in ("day",) and tot["days_active"] != n:
+    if tot.get("days_active") and n and kind not in ("day",) and tot["days_active"] not in (1, n):
         obs.append({"text": f"You opened {_n(n)} videos on {_n(tot['days_active'])} different days.",
                     "uses": ["totals"]})
     if tot.get("shorts") and n:

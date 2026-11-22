@@ -317,7 +317,8 @@ def _dry_synth(user, system=None, most=4):
 
 def _dry_answer(purpose, ans):
     """A step's scripted answer; a compose answer may name words to pick candidates by instead of fixed numbers. Round
-    11: {"mvp_extract": "own_text"} and {"mvp_synth": "quote_points"} answer from the items' own text."""
+    11: {"mvp_extract": "own_text"} and {"mvp_synth": "quote_points"} answer from the items' own text. Round 12:
+    {"mvp_insight": "from_sheet"} fills the history writer's form from the fact sheet by code (tests/r12_writer.py)."""
     if purpose == "mvp_compose" and isinstance(ans, dict) and "pick_words" in ans:
         words, most = ans["pick_words"], ans.get("most", 3)
         return lambda user, system=None: _dry_compose(user, system, words, most)
@@ -325,6 +326,9 @@ def _dry_answer(purpose, ans):
         return _dry_extract
     if purpose == "mvp_synth" and ans == "quote_points":
         return _dry_synth
+    if purpose == "mvp_insight" and ans == "from_sheet":   # round 12, merge: the made-up writer of the tests
+        from mvp.tests.r12_writer import fake_insight
+        return fake_insight
     return ans
 
 

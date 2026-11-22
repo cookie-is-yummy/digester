@@ -1419,7 +1419,8 @@ def _quiet_limits(text, q, start, end, rec, plats, reached, newest, starts_on, q
                     text, done = _carry(text, phrases, s2, e2, e, clause, sc, lang)
                 else:
                     text, done = _carry(text, phrases, start, end, e, clause, sc, lang)
-                if not done:   # the window's words are not in the reply: the plain lines, as before
+                if not done and not q.offset:   # the window's words are not in the reply: the plain lines, as
+                    # before; a next page ("more") says none (round 12, merge: its first page said where it ends)
                     if sc:
                         tail.append(start_line(rec, plats, q))
                     if reached:
@@ -2203,6 +2204,12 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False,
             from . import insight
             ids = [it["id"] for it in (sheet.get("items") or [])[:insight.SHOW["items"]]
                    if isinstance(it, dict) and it.get("id") in view.items]
+            rest = int((sheet.get("totals") or {}).get("items") or 0) - len(ids)
+            if sheet["kind"] == "day" and rest > 0 and parts and parts[0].get("type") == "text":
+                # the day's list goes on as today's does: "more" gives the next page (code)
+                es = q.lang == "es"
+                parts[0]["text"] += ("\n" + (f"Y {rest} más (di \"más\" para verlos)." if es else
+                                             f"And {rest} more (say \"more\" to see them)."))
         else:
             ids = []
         if (sheet or {}).get("kind") == "channels":
