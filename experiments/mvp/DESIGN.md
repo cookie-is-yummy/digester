@@ -5004,3 +5004,161 @@ is said once in 6 hours, as the brief allows (judge A asked for it gone; the bri
 export's end). One live question (the 2021 one) once gave no reply in 300 s with no model call made, and answered in
 9 s when asked again; not reproduced. iMessage not seen; the page's 430 px layout was not screenshotted this round.
 <!-- end round 12, fix -->
+
+### 19.P2 The second pass: what was still wrong, and what changed (round 12, pass 2; `insight.py`, prompt `insight_v5`, `facts.py`, `themes.py`, `history.py`, `tests/test_round12_pass2.py`)
+
+The last strict judge of build ace4be2, grading as the founder, gave the 8 answers 3 useful and 5 partly, 6 of 8 half
+slop; the orchestrator's own reading of rows 1 and 7 on the founder's page listed T1 to T15 (outside git). Each was
+reproduced first offline on made-up data (a test of `tests/test_round12_pass2.py` that fails on ace4be2), then fixed,
+then guarded with near variants. No titles, channel, theme or field names of the real library are written here.
+
+**T1, a number bound to the wrong thing, fixed by construction.** The writer of `insight_v5` never types a number or a
+name: it writes sheet PATHS in braces ("{themes[0].channels[0].items} of your {themes[0].name} videos") and code puts
+in the value of each path (a share as "31%", a change as "12 points", counts with separators, dates and hours in
+words; a length total is no path it may use). Code then checks the binding (`bind_check`): a number of a named
+record stands only where that record is named (or is the question's own topic); the name right beside a number is its
+own record (a part of the record above only as "N of your X videos"); a share of the window is never "of your <name>"
+(a channel's Shorts share is of its own videos); "N more" is only the sheet's own difference (`comparison.difference`);
+a count is never said as a share. Words of rank and amount are read against the paths: "led", "top", "the biggest"
+need the first of its list (or the first said with it), "the top five" a place within five, "followed by", "then",
+"ahead of" the next one (periods go forward in time), "mostly", "most of", "mainly", "centred on" half or more by the
+named records' own shares (a channel's theme by its `theme_share`; a part's share of its parent by its count),
+"mostly Shorts / long" three in five, "a wide mix" a leader under a fifth, "twice", "N times", "half" two numbers of
+the sentence in that ratio (or `comparison.ratio_words`). In the strict mode (the live writer: `insight.strict()`) a
+number typed outside a path, the window's words, a date or a year is dropped, and so is a sheet name typed next to a
+path number (it could not be bound). The old check still reads every rendered sentence (dates, subjects, direction,
+new / stopped, limits). `insight_v4` stays selectable (`MVP_INSIGHT_PROMPT`); its typed forms are read as before,
+with the same new rules of rank and amount.
+
+**Planted-falsehood eval** (`eval_insight.py --mode fake`): the 20 made-up sheets' typed sentences, 89 planted and 43
+true (12 "true" sentences of round 12 said a total of video length and one said a channel was "new" in a year: they
+are planted ones now, by T2 and T7), 89 of 89 caught and 43 of 43 kept; and 31 new planted sentences in insight_v5's
+form (8 a number bound to the wrong thing, 9 a wrong rank or order word, 7 "mostly" under half or "a wide mix" over a
+fifth, 7 a made-up difference or ratio, typed or in a path) with 13 true ones: 31 of 31 caught, 13 of 13 kept.
+
+**The prompt's eval, before and after, on the same 20 sheets** (one live run each; the "after" run's forms rescored
+by the final code, the prompt unchanged since that run):
+
+| | answers the question | writer used | observations kept | a limits line | a run of counts | cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| insight_v4, code at ace4be2 (before) | 17 of 20 | 19 | 53 | 0 | 0 | $0.050 |
+| the same v4 forms, read by the final code | 17 | 18 | 49 | 0 | 0 | - |
+| insight_v5, final code (after) | 18 | 19 | 52 | 0 | 0 | $0.063 |
+
+A first v5 run (before the binding was tuned on its forms) answered 9 of 20: its forms used paths the old made-up
+sheets do not have, typed names, wrote "X and Y, with A and B" across one unsplit template, "then" between periods,
+and repeated the answer in every bullet. What changed after it: templates are split into sentences at a path, a
+number's own name beside it wins over another, a missing `previous.words` reads "before", the prompt asks for a number
+path in every observation and names only through paths, code's observations are judged new against the answer that
+is sent, a first's answer must say its date and a day's its count (else code's answer), a comparison's answer is
+code's ratio in words, and two old regex slips were fixed ("46 Minecraft" read as minutes; "by 11 points" read as a
+lead of 1). The made-up sheets lack the new keys (areas, eras, the usual day, `long_median_min`), so the real sheets
+give the writer more to say than the eval does.
+
+**T2, no total of length.** `shown()` hides `length_hours`, `length_share`, `length_known_share` and `over_3h` from the
+writer; the check drops any number of hours in any words ("hours"); code says none (its "adds up to" sentences are
+gone). Length is said only as Shorts against long videos, `totals.long_median_min` ("the long videos were typically
+about 23 minutes"), and which theme or channel is mostly long-form (`shorts_share`).
+
+**T13, the themes the founder's page could not find.** `themes.lib_key` is the sha1 of the library's REAL path (a
+`data/` reached through a symlink is the same key); when no build is under that key, `themes.find` takes the build
+whose `items_fingerprint` (a hash of the head of `corpus/items.jsonl`, written into new builds) is the library's, or
+whose rows cover 75% of the library's item vectors ("content"). `python3 -m mvp.themes status <library>` prints the
+themes build (how found, version, when built, the share of watched items with a theme) and the lengths (rows in date)
+and exits 1 with a WARNING line per problem; the page prints the same at start-up (`bot.py`, after the libraries
+load) and warms the fact index there; the trace of every history answer keeps the themes version (none when absent).
+On this machine the real library's build is found by path (no new build, no new key). The README's "Before you test
+history answers" gives the two build commands, what they cost, which key and how long.
+
+**T3, the broad picture.** The themes build already gives each theme a category from the fixed list of
+`theme_name_v2` (gaming, comedy, science, music, ...): words a person uses. The sheet now has `areas` (that category
+per theme, as a person says it; "other", none and sensitive categories are no area), each with its share of the
+window, its share before and the themes inside it. An answer to "the most", "into" or a ranking leads with the areas
+(their shares add up to most of the window), then the themes inside the biggest; the chart is by area when the areas
+cover 40% of the window or more. My reading of the real library's field names (counts only): 19 fields, 4 sensitive
+(no name), 15 named; about 9 of the 15 are names a person would use for that part of his library, 6 are too narrow
+for what the field holds, a format, or an odd pair. I did not rename them (a new derived version and its eval): the
+areas are the level the answers lead with, and the category words are the person's own; the field names are not said.
+
+**T4, a change as eras.** `eras` (stretches of years with the same leading area, from all the area shares of each
+year) and `areas_change` (what he left behind, what arrived, Shorts' share then and now). The answer is code's ("A
+led from 2020 to 2022; since 2025, B has."; with one area every year: "A has led every year since 2020; around it, C
+rose from 4% in 2020 to 9% in 2026."); the chart shows one measure, the leading area's share each year, or, when one
+area led every year, Shorts' share of the YouTube videos each year (live: 4% in 2020 to 81% in 2026).
+
+**T5, the so-what.** `facts._so_what_candidates`: an interest that lapsed while he holds 3 or more unopened saves on it,
+saved things (3 or more) on what the answer is about, a learning theme that faded against an entertainment theme that
+grew, Shorts' share moving by 10 points or more, a channel newly at the top (not over a year or more), a theme of the
+window that comes back in the same months in 3 or more years, and for a first or a last the person's path on the
+topic. None on a day's list. The writer picks at most one by its key; code drops a so-what that is no candidate, a
+saved one about a theme the answer is not about, and a question code cannot follow (said instead as code's notice);
+the key said is kept in the history state and that candidate is left out of the next answer's sheet.
+
+**T6.** No export hint on a history answer; the window's words say where the record ends. The hint is said only by the
+"I can't see ..." answer (a window wholly after the record). Where it used to be said, it is still NOTED as said
+(silently), so a summary in the next 6 hours leaves it out as before: summaries' replies are unchanged.
+
+**T7.** "new in the window" of a year or more, or of one day, is not shown to the writer; the weekday line only when the
+window's weekday share differs by 10 points from his own usual week (`when.usual_weekday_share`); a bullet that only
+repeats names already said goes; "X led in 2020, while 2026 was led by X" is filler; a comparison leads with the ratio
+in words.
+
+**T8.** A theme counts under a narrow topic by its name or first words only when 25% of its own titles say the topic
+(`themes.NAME_RATE`); a category word still maps to its category's themes. The mapping eval on the real library
+(counts only): minecraft 8 themes before, 5 after (the 3 left out have 0 to 16% of titles saying it); its all-time
+count 13,902 items before, 8,220 after (5,323 by their own words); gaming 13, art 2, math 1 and blender none,
+unchanged; the made-up library's 10 mappings unchanged. A count with themes in it is said with "about".
+
+**T9.** `comparison` (which is more, the ratio in words, the difference, the balance against the span before) and
+each topic's `top_themes` and `previous_items`; the answer is code's ("Much more gaming than art: about 9 times as many
+(3,455 against 375)"), the bullets say what is inside each side and how the balance moved.
+
+**T10.** A day's `usual` (the median count, Shorts share and busiest hour of the 90 days before) and `new_today`; the
+answer says the day's count against the usual day and its leading theme; "mostly" needs half.
+
+**T11.** Channels carry their area, theme and `theme_share`; `top_areas` says what most of the top 5 are; the offers are
+"without Shorts" and "only <area>".
+
+**T12.** Bars of 8 cells and labels cut at a word with "…" (18 characters, 16 for a period's area). Pictures of rows 1, 5
+and 7 at 430 px on the page (outside git): every chart row on one line.
+
+**T14.** The sheet and the writer run with a 20-second deadline (`MVP_INSIGHT_TIMEOUT_S`); late, the code reply goes out
+and the late worker makes no model call (`write(..., deadline=)`); the page warms the fact index at start-up. Not
+reproduced here: the two questions answered in 2.7 s and 0.1 s cold in a fresh process.
+
+**T15.** The other Spanish tenses ("cómo cambió", "han cambiado", "ha ido cambiando", "cambiaron mis intereses") are read
+as `changed`; the Spanish answer is eras in Spanish, never the run of counts.
+
+**Test lines changed on purpose** (each marked "round 12, pass 2" in place): `test_round12_w.py` (the "add up to about
+28 hours" sentence is dropped, T2; a bullet with "about 11 hours" goes, T2; the chart's bars are 8 cells, T12; the
+writer's own forms there are insight_v4's, read with that prompt; no hint on the lately answer, T6; the true form has 3
+bullets, T2); `test_round12_fix.py` ("Mostly Blender 3D (31% ...)" becomes "Mostly Blender 3D (31% ...) and home cooking
+(22%)", T1; the length is no longer said, T2; "Mostly Blender 3D at 31%" is a spread, T1; the comparison's lead is the
+ratio in words, T7 and T9; the day's lead, T10; "new" over a year is not said, T7); `test_round12_merge.py` (no hint on
+q1 or the code reply, T6; the "723 hours" sentence is dropped, T2; the history state may keep `so_what_id`, T5);
+`test_round11_h.py`, `test_round11_fix_a.py`, `test_round11_fix2.py` (three lines), `test_round11_fix2_checks.py` (two),
+`test_round11_fix_checks.py`, `test_round11_fix_merge.py` (no hint on a history answer that has a window; the "I can't
+see this week" answer says it, T6); `selftest/conversations.jsonl` c40.1 (the hint left reply_has for reply_not, T6);
+`tests/r12_writer.py` writes insight_v5's form; `eval/insight_cases.json` (13 sentences moved from true to planted, the
+v5 set added).
+
+**Live, read as the founder would** (my page on port 8795, a scratch home, the real library, three runs of the 8
+questions and the Spanish 7, $0.30 for everything this pass spent with the evals). The last run: 1 opens with the
+areas (gaming most, then comedy, with the chart by area), the themes inside gaming, what grew and faded against the 4
+weeks before with numbers, Shorts against long; 2 the channel that led with its count, what each top channel is and
+how much of each is Shorts, what most of the top 5 are; 3 about 1,094 with the themes inside and Shorts, a chart by
+month, and the so-what that Shorts' share went from 20% to 61%; 4 the date, what the topic mostly was (of its own
+videos), then the path (it has faded since its busiest year) and the saved tutorials; 5 the ratio in words with both
+counts, what is inside each side; 6 the day's count against the usual day, Shorts against the usual day, the busiest
+hour against the usual one, the new channels, then the items; 7 the eras (one area led every year; what rose around
+it) with the chart of Shorts' share by year; 8 a wide mix led by comedy, gaming's fall against the spring. Rows I would
+still not call useful: 7's bullets beyond the answer and the chart are words without numbers ("rose most", "faded from
+the early years") that the check lets through because they name the sheet's own rising and fading themes; 1 has no
+so-what (the writer picked none of the candidates); 8 says the same leader twice (answer and first bullet).
+
+**Not done.** The field names were not renamed (above). A model sentence with no number that says a direction is
+checked only against the sign of its names' change. "it", "its" after a sentence break are not bound (an observation
+whose number belongs to the answer's subject is dropped). The made-up eval sheets were not given the new keys (the
+before and after had to read the same sheets). T14's hang was not reproduced; the deadline bounds it. Spanish so-whats
+and most code observations are English only, as before.
+<!-- end round 12, pass 2 -->

@@ -493,7 +493,7 @@ def test_live_one_area_every_year_charts_the_move_to_shorts():
 @pytest.mark.parametrize("text, want", [
     ("The long videos were typically about {totals.long_median_min} minutes.",
      "The long videos were typically about 23 minutes."),
-    ("Mostly {totals.long_median_min} minute videos.", "Mostly 23 minute videos."),
+    ("Typically {totals.long_median_min} minute videos.", "Typically 23 minute videos."),
     ("Typically about {totals.long_median_min}.", "Typically about 23 minutes.")])
 def test_live_the_median_length_is_said_once_in_minutes(text, want):
     I = ins()
