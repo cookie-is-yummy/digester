@@ -1894,6 +1894,12 @@ def check(raw, sheet, chart_vals=None, strict=False):
         sig = _signature(text, facts)
         if not why and sig and sig <= said:
             why = "repeat"   # nothing new: every number and name of it was said above
+        if not why and re.search(r"\b(?:while|whereas|but|and)\b", _norm(text)) and any(
+                len(re.findall(r"(?<![a-z0-9])" + re.escape(n) + r"(?![a-z0-9])", _norm(text))) >= 2
+                for n in facts.names_in(text)[0] if len(n) >= 4):
+            # live: "2020 was led by gaming, while 2026 was led by gaming": one name on both sides says nothing
+            if not re.search(r"\d", re.sub(r"\b(?:19|20)\d\d\b", " ", text)):
+                why = "filler"
         said |= sig
         if why:
             out["dropped"].append(("observation", why, text))
@@ -2232,6 +2238,10 @@ def scoped(text, sheet, answer=False):
     (it read as 89% of everything); a count with themes in it (T8) is said with "about"."""
     if not text:
         return text
+    if sheet.get("kind") == "day":   # live: "2 channels were new today" of a day in October
+        text = re.sub(r"\btoday\b", "that day", text)
+    text = re.sub(r"\b(started watching \w+|first opened \w+(?: videos?)?) in (\d{1,2} [A-Z][a-z]+ \d{4})", r"\1 on \2",
+                  text)   # live: "you first started watching blender in 11 April 2020"
     topic = (sheet.get("filters") or {}).get("topic")
     if topic and sheet.get("kind") in ("count", "first", "last") and (sheet.get("lang") or "en") == "en":
         text = re.sub(r"\bof what you opened\b", f"of your {topic} videos", text)
@@ -2799,7 +2809,10 @@ def fill(form, raw, sheet, chart_vals=None):
         cf["observations"] = check(dict(cform, answer=form["answer"]), sheet, chart_vals=chart_vals)["observations"]
     for _w, why, _t in cf["dropped"]:
         form["dropped"].append(("code", why, None))
-    if cf["answer"] and (not form["answer"] or sheet.get("kind") == "compare_topics"):
+    if cf["answer"] and (not form["answer"] or sheet.get("kind") == "compare_topics" or
+                         (sheet.get("kind") == "changed" and (sheet.get("eras") or []))):
+        # round 12, pass 2 (T4): a change is told as eras, by code (live: "shifted from gaming and internet culture
+        # toward gaming, comedy, and internet culture")
         # round 12, pass 2 (T9): a comparison's answer is code's own (the ratio in words, then the two counts): the
         # live writer garbled it ("about 9 times as many as many gaming videos")
         if form["answer"] and form["answer"] != cf["answer"]:
@@ -2886,7 +2899,8 @@ def fill(form, raw, sheet, chart_vals=None):
         if sig and sig <= said:
             continue
         own = set(facts.names_in(x)[0])
-        if own and own <= obs_names and (_UP.search(_norm(x)) or _DOWN.search(_norm(x))):
+        if own and own <= obs_names and (_UP.search(_norm(x)) or _DOWN.search(_norm(x)) or
+                                         len(form["observations"]) >= OBS_MIN):
             continue   # the same names an observation already speaks of ("X grew to 6%" and "X grew from 3% to 6%")
         need = len(form["observations"]) < OBS_FILL
         length = (not hours and re.search(r"\badd(?:s)? up\b|\bsuma\b", x) and sheet.get("kind") in ("top", "channels")
