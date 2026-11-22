@@ -368,7 +368,7 @@ def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, f
         f = int(first[cid]) if first[cid] != big else None
         top_t = tc.most_common(1)[0][0] if tc else None
         extra = {"area": theme_area(th, top_t) if (th is not None and top_t is not None) else None,
-                 "share": _share(n, len(it))}
+                 "share": _share(n, len(it)), "theme_share": _share(tc.most_common(1)[0][1], n) if tc else 0.0}
         if pc is not None:
             extra["previous_items"] = int(pc.get(cid, 0))
         out.append({**extra, "name": idx.creators[cid], "items": int(n), "days": int(days.get(cid, 0)),
@@ -679,9 +679,9 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             prevs = [_topic_row(view, rec, idx, facts, th, ph, ev, *pbounds) for ph in q.topic]
             for r, pr in zip(out["topics"], prevs):
                 r["previous_items"] = pr["items"]
-            out["comparison"] = _compare(out["topics"], [pr["items"] for pr in prevs])
+            out["comparison"] = _compare(out["topics"], [pr["items"] for pr in prevs], q.lang)
         else:
-            out["comparison"] = _compare(out["topics"], None)
+            out["comparison"] = _compare(out["topics"], None, q.lang)
     elif q.topic and kind in ("count", "first", "last", "channels", "top"):
         out["topics"] = [_topic_row(view, rec, idx, facts, th, ph, base_ev, so, eo) for ph in q.topic]
     if kind in ("day", "first", "last") or q.kind in ("list", "top_items"):
@@ -930,7 +930,7 @@ def _seasonal(idx, facts, th, ev, start_o, end_o, theme_rows):
     return out[:1]
 
 
-def _compare(topics, prev_topics):
+def _compare(topics, prev_topics, lang="en"):
     """T9: which side is bigger and by how much, by code (the writer never works out a ratio or a gap), and the
     balance in the span before."""
     if len(topics) < 2:
@@ -944,6 +944,10 @@ def _compare(topics, prev_topics):
         out["ratio_words"] = ("about the same" if r < 1.15 else "a little more" if r < 1.5 else
                               f"about {round(r * 2) / 2:g} times as many" if r < 3 else
                               f"about {round(r)} times as many")
+        if lang == "es":
+            out["ratio_words"] = ("más o menos lo mismo" if r < 1.15 else "un poco más" if r < 1.5 else
+                                  f"unas {round(r * 2) / 2:g} veces más".replace(".", ",") if r < 3 else
+                                  f"unas {round(r)} veces más")
     if prev_topics and len(prev_topics) >= 2:
         pa, pb = prev_topics
         out["previous"] = {"a": pa, "b": pb}

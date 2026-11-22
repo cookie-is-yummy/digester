@@ -118,6 +118,11 @@ def shown(sheet):
             return [strip(v, depth + 1) for v in o]
         return o
     out = strip(out)
+    if out.get("kind") == "compare_topics" and not out.get("comparison"):
+        tp = [t for t in out.get("topics") or [] if isinstance(t, dict) and _num(t.get("items")) and t.get("name")]
+        if len(tp) >= 2:
+            from . import facts as F
+            out["comparison"] = F._compare(tp, None, out.get("lang") or "en")
     if long_or_day and isinstance(out.get("new"), dict):
         out["new"] = dict(out["new"], channels=[])
     return out
@@ -258,6 +263,7 @@ class Facts:
         self.order = {}         # name -> (list key, place) in the sheet's own lists
         self.topic_keys = set() # the question's topic(s): a list under one of them is the answer's own list
         self.long_window = False
+        self.slotted = False    # round 12, pass 2: the sentence read now came from paths (its order is bound)
         self._walk()
 
     # ---------- building ----------
@@ -655,7 +661,7 @@ _HEDGE = re.compile(r"\b(?:about|around|nearly|almost|roughly|over|under|more th
 _LINK = re.compile(r"https?://|www\.|@\w|\.com\b")
 _WATCH_TIME = re.compile(
     r"\bwatch(?:ed|ing)?\s+(?:for\s+)?(?:about\s+|around\s+|nearly\s+|over\s+|roughly\s+|almost\s+)?\d[\d,.]*\s*"
-    r"(?:hours?|hrs?|h\b|minutes?|mins?)|watch[- ]?time|time (?:spent|watching)|\bspent\b|hours? (?:of|spent) "
+    r"(?:hours?|hrs?|h|minutes?|mins?)\b|watch[- ]?time|time (?:spent|watching)|\bspent\b|hours? (?:of|spent) "
     r"watching|minutes? (?:of|spent) watching|\bviste\s+(?:unas?\s+|casi\s+)?\d[\d.,]*\s*(?:horas?|minutos?)|"
     r"tiempo (?:viendo|de visualizacion)|pasaste", re.I)
 _LIMITS = re.compile(
@@ -981,6 +987,8 @@ def _check_body(raw, facts, uses, chart_vals):
         parts = [x for x in re.split(r"[-&]", w) if x]
         if parts and all(x in facts.vocab or _stem(x) in facts.vocab for x in parts):
             continue
+        if len(parts) == 2 and parts[0] in ALLOWED_CAPS and parts[1] in ("heavy", "only", "free", "like", "style"):
+            continue   # round 12, pass 2: "Shorts-heavy"
         return "name:" + w
     # ---- what the words claim must agree with the sheet ----
     one = [n for n in names if n in facts.change]
@@ -1008,7 +1016,8 @@ def _check_body(raw, facts, uses, chart_vals):
     elif names and (_SUPER.search(rest_n) or re.search(r"\bmost of\b|\bla mayoria\b", rest_n)) and \
             not _leads_ok(facts, names):
         return "not_top"
-    why = _order_claim(facts, names, rest_n) or _spread_claim(facts, names, rest_n) or _mix_claim(facts, rest_n)
+    why = (None if facts.slotted else _order_claim(facts, names, rest_n)) or _spread_claim(facts, names, rest_n) \
+        or _mix_claim(facts, rest_n)
     if why:
         return why
     if re.search(r"\b(?:saved|guardaste|guardado|guardados)\b", t) and re.search(
@@ -1057,7 +1066,7 @@ def _check_body(raw, facts, uses, chart_vals):
             return "share_of_topic"
     # "led by 640" when it led by 428: a lead is a difference of two counts (or points)
     for m in re.finditer(r"\b(?:led|leads|ahead|more|fewer|up|down|grew|fell)\s+(?:\w+\s+)?by\s+(?:about\s+)?"
-                         r"(\d[\d,.]*)(?!\s*(?:%|percent|points?))", rest_n):
+                         r"(\d[\d,.]*)(?![\d,.])(?!\s*(?:%|percent|points?))", rest_n):
         v = _parse_num(m.group(1), facts.lang)
         if v is not None and not _diff_ok(int(v), pool.counts | facts.glob.counts):
             return "lead"
@@ -1079,7 +1088,7 @@ _ORDER = re.compile(r"\b(?:followed by|then|ahead of|next came|after (?:it|that)
 _SPREAD = re.compile(r"\b(?:mostly|mainly|largely|centered on|centred on|dominated|dominant|mostly into|above all|"
                      r"the bulk of|the majority|sobre todo|principalmente|centrad[oa] en|la mayor parte)\b")
 _SPREAD_V5 = re.compile(_SPREAD.pattern + r"|\bmost of (?:it|what|your|the window|that|them)\b")
-_MIX = re.compile(r"\b(?:a (?:wide|broad|big|real) (?:mix|spread|range)|spread (?:across|over)|all over the place|"
+_MIX = re.compile(r"\b(?:a (?:wide|broad|big|real) (?:mix|spread|range)|all over the place|"
                   r"no single|una mezcla amplia|muy repartid[oa])\b")
 
 
@@ -1234,6 +1243,9 @@ def tidy(text, lang="en"):
         text = re.sub(r"\b(\d{1,3}),(\d{3})\b(?!,\d)", r"\1.\2", text)
     if lang != "es":
         text = re.sub(r"\bitems\b", "videos", re.sub(r"\bitem\b", "video", text))
+        # round 12, pass 2: the record says a video was opened, not watched through ("you watched about 3 times as
+        # many" reads as time); the code's own sentences say "opened" too
+        text = re.sub(r"\b([Yy])ou watched\b", r"\1ou opened", text)
         text = _SPAN_BEFORE.sub(lambda m: m.group(0).split()[0] + " before", text)
         # round 12, fix (judges: "episodes videos", "about 0.4 hours", "1 ... videos")
         text = re.sub(r"\b(about|around|nearly) 0\.(\d) hours\b",
@@ -1249,7 +1261,7 @@ def tidy(text, lang="en"):
 
 def _sentences(s):
     s = " ".join(str(s or "").split())
-    return [x for x in re.split(r"(?<=[.!?])\s+(?=[A-Z¿¡ÁÉÍÓÚÑ0-9\"])", s) if x]
+    return [x for x in re.split(r"(?<=[.!?])\s+(?=[A-Z¿¡ÁÉÍÓÚÑ0-9\"{])", s) if x]   # pass 2: "{" opens a path
 
 
 NUMBERS_MAX = 4
@@ -1290,6 +1302,13 @@ def answer_shape(sheet, facts, text):
         tp = _keys(sheet.get("topics"))
         if len(tp) >= 2 and not all(t in names for t in tp[:2]):
             return "shape"
+    elif kind in ("first", "last") and (sheet.get("items") or []) and not re.search(_DATE_RX, _norm(text)):
+        return "shape"   # round 12, pass 2: "when did I first ..." is answered with the date
+    if kind == "day" and _num((sheet.get("totals") or {}).get("items")):
+        n = (sheet.get("totals") or {})["items"]
+        said = {_parse_num(x, facts.lang) for x in re.findall(r"\d[\d,.]*\d|\d", facts.names_in(text)[1])}
+        if float(n) not in said:
+            return "shape"   # round 12, pass 2 (T10): a day's overview says how many
     return None
 
 
@@ -1358,7 +1377,19 @@ def _path_segs(path):
             for m in _SEG.finditer(re.sub(r"\s+", "", path))]
 
 
+FALLBACK = {"previous.words": "before"}   # a path the prompt names that a sheet may not have
+
+
 def _resolve(sheet, segs):
+    try:
+        return _resolve_raw(sheet, segs)
+    except KeyError:
+        if _path_str(segs) in FALLBACK:
+            return FALLBACK[_path_str(segs)]
+        raise
+
+
+def _resolve_raw(sheet, segs):
     cur = sheet
     for key, idx in segs:
         if not isinstance(cur, dict) or key not in cur:
@@ -1433,6 +1464,8 @@ def slots_of(text, sheet, lang="en"):
             rec = _resolve(sheet, segs[:last_idx + 1])
             if not isinstance(rec, (dict, str)) or (isinstance(rec, dict) and not _record_name_key(rec)):
                 sl.owner = None   # a record with no name (a busiest hour): its numbers are the window's
+        if key is None and len(segs) and segs[-1][0] == "busiest_hours":
+            key = sl.key = "hour"   # "{when.busiest_hours[0]}" is an hour of the day
         if isinstance(v, str):
             sl.role = _ROLE_NAME if (key in NAME_KEYS or key is None) else _ROLE_PHRASE
             sl.text = _fmt_value(key or "name", v, lang)
@@ -1480,7 +1513,7 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
             continue
         # R1: a number of a named record stands only where that record is named
         if x.owner is not None and not any(_name_owner(n) == x.owner for n in unit_names) and \
-                not _is_question_topic(sheet, x.owner):
+                not _is_question_topic(sheet, x.owner) and not _named_as(sheet, x.owner, unit_names):
             return "unnamed_owner"
         # R2: the name next to it is its own (or the record above or below it)
         near = []
@@ -1496,13 +1529,16 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
             if not (no == x.owner or (no and x.owner.startswith(no + "."))):
                 return "bound_to_other"
             near = []
+        if near and x.owner is not None and any(_name_owner(t[2]) == x.owner or _named_as(sheet, x.owner, [t[2]])
+                                                for t in near):
+            near = []   # its own name stands right beside it
         if near:
             near.sort(key=lambda t: (t[0], not t[1]))
             gap_len, before, n = near[0]
             g = _norm(_gap(text, x, n))
             no = _name_owner(n)
             if x.owner is not None:
-                if no != x.owner:
+                if no != x.owner and not _named_as(sheet, x.owner, [n]):
                     # the record above it only as a part of it ("41 of your Blender 3D videos"), said after it
                     part = (not before and no and x.owner.startswith(no + ".") and
                             re.match(r"^\s*(?:of|out of|de)\s+(?:the|your|all|all your|its|tus|los|las|sus)?\s*$",
@@ -1527,6 +1563,13 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
     plain = SLOT.sub(lambda m: " §" + str([sl.start for sl in slots].index(m.start())) + "§ ", text)
     pl = _norm(plain)
     # R4: words of rank need the first of a ranked list (or the topic with the most, for topics)
+    for m in re.finditer(r"\btop (\d+|two|three|four|five|six|seven|eight|nine|ten)\b", pl):
+        k_ = int(m.group(1)) if m.group(1).isdigit() else _NUMWORD[m.group(1)]
+        near_ = sorted(((abs(pl.find("§" + str(slots.index(n)) + "§") - m.start()), n) for n in names),
+                       key=lambda t: t[0])
+        if near_ and near_[0][1].index is not None and near_[0][1].index >= k_:
+            return "rank"
+    pl = re.sub(r"\btop (?:\d+|two|three|four|five|six|seven|eight|nine|ten)\b", " ", pl)
     for m in _SUPER_V5.finditer(pl):
         cand = []
         for n in names:
@@ -1550,39 +1593,43 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
             except (KeyError, ValueError, TypeError):
                 return "rank"
     # R5: "followed by", "then", "ahead of": the names of one list in their own order, the next after the last
-    if _ORDER.search(pl):
-        by_list = {}
-        for n in sorted(names, key=lambda n: n.start):
-            if n.list_path and n.index is not None and n.owner == _name_owner(n):
-                by_list.setdefault(n.list_path, []).append(n)
-        for lp, ns in by_list.items():
-            idx = []
-            for n in ns:
-                if n.index not in idx:
-                    idx.append(n.index)
-            lst = lp.split(".")[-1]
-            if lst in RANKED and any(b != a + 1 for a, b in zip(idx, idx[1:])):
-                return "order"
-            if lst in ("topics", "periods"):
-                try:
-                    rows = _resolve(sheet, _path_segs(lp))
-                    vals = [rows[i].get("items") or 0 for i in idx]
-                    if any(b > a for a, b in zip(vals, vals[1:])):
-                        return "order"
-                except (KeyError, TypeError):
+    marks = {slots.index(n): n for n in names}
+    for m in _ORDER.finditer(pl):
+        before = [(pl.find("§" + str(k) + "§"), n) for k, n in marks.items()]
+        prev_ = [x for x in before if 0 <= x[0] < m.start()]
+        next_ = [x for x in before if x[0] >= m.end()]
+        if not prev_ or not next_:
+            continue
+        a = max(prev_, key=lambda x: x[0])[1]
+        b = min(next_, key=lambda x: x[0])[1]
+        if not (a.list_path and a.list_path == b.list_path and a.index is not None and b.index is not None):
+            continue
+        lst = a.list_path.split(".")[-1]
+        if lst in RANKED and b.index != a.index + 1 and b.index != a.index:
+            return "order"
+        if lst == "periods" and b.index < a.index:
+            return "order"   # periods are in time order: "then" goes forward
+        if lst == "topics":
+            try:
+                rows = _resolve(sheet, _path_segs(a.list_path))
+                if (rows[b.index].get("items") or 0) > (rows[a.index].get("items") or 0):
                     return "order"
+            except (KeyError, TypeError, IndexError):
+                return "order"
     # R6: "mostly" / "most of" / "centred on": half or more, by the named records' own shares (or Shorts')
     if _SPREAD_V5.search(pl):
-        sm = re.search(r"\b(?:mostly|mainly|largely|most of (?:it|them|what)\w*)\s+(long|longer|shorts?)\b", pl)
+        sms = list(re.finditer(r"\b(?:mostly|mainly|largely|most of (?:it|them|what)\w*)\s+(long|longer|shorts?)\b",
+                               pl))
         owners = {_name_owner(n) for n in names if _name_owner(n)}
-        if sm:
+        for sm in sms:
             frac = None
-            for o in owners:
+            prior = [(pl.find("§" + str(slots.index(n)) + "§"), n) for n in names]
+            prior = [x for x in prior if 0 <= x[0] < sm.start()]
+            if prior:   # the name said right before it ("X was mostly Shorts")
                 try:
-                    r = _resolve(sheet, _path_segs(o))
+                    r = _resolve(sheet, _path_segs(_name_owner(max(prior, key=lambda x: x[0])[1]) or ""))
                     if isinstance(r, dict) and _num(r.get("shorts_share")):
                         frac = r["shorts_share"]
-                        break
                 except KeyError:
                     pass
             if frac is None:
@@ -1591,9 +1638,21 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                     frac = t["shorts"] / (t["shorts"] + t["long"])
             if frac is None or (frac if sm.group(1).startswith("short") else 1 - frac) < LONG_SHARE:
                 return "spread"
-        else:
+        if not sms:
             tot = 0.0
             seen = set()
+            spm = _SPREAD_V5.search(pl)
+            after = [(pl.find("§" + str(slots.index(n)) + "§"), n) for n in names]
+            after = [x for x in after if x[0] >= spm.end()]
+            nxt = min(after, key=lambda x: x[0])[1] if after else None
+            if nxt is not None and nxt.key in ("theme", "area") and nxt.owner:
+                # "X is mostly <its theme>": the share of X's own videos in that theme
+                try:
+                    r = _resolve(sheet, _path_segs(nxt.owner))
+                    tot = float(r.get("theme_share") or 0) if isinstance(r, dict) else 0.0
+                except KeyError:
+                    tot = 0.0
+                owners = set()
             for o in owners:
                 try:
                     r = _resolve(sheet, _path_segs(o))
@@ -1602,6 +1661,15 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                 if isinstance(r, dict) and _num(r.get("share")) and o not in seen:
                     tot += float(r["share"])
                     seen.add(o)
+                elif isinstance(r, dict) and _num(r.get("items")) and "." in o and o not in seen:
+                    # a part under its parent ("{topics[1].channels[0].name} carried most of it"): its own count
+                    try:
+                        up = _resolve(sheet, _path_segs(o.rsplit(".", 1)[0]))
+                        if isinstance(up, dict) and _num(up.get("items")) and up["items"]:
+                            tot += r["items"] / up["items"]
+                            seen.add(o)
+                    except KeyError:
+                        pass
             share_slots = [float(x.value) for x in slots if x.role == _ROLE_NUM and x.key and x.key.endswith("share")]
             if tot < SPREAD_SHARE and not any(v >= SPREAD_SHARE for v in share_slots):
                 return "spread"
@@ -1634,6 +1702,17 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
     return None
 
 
+def _named_as(sheet, owner, names):
+    """The record is named under another path (a saved row's theme said as "{themes[0].name}")."""
+    try:
+        rec = _resolve(sheet, _path_segs(owner))
+    except KeyError:
+        return False
+    k = _record_name_key(rec) if isinstance(rec, dict) else None
+    own = _norm(rec[k]) if k else None
+    return bool(own) and any(_norm(n.text) == own for n in names)
+
+
 def _is_question_topic(sheet, owner):
     """A count's or a first's own topic (topics[k] of the question's topic) is the subject of every sentence of the
     answer: its numbers need not name it again ("They came on {topics[0].days} days")."""
@@ -1655,6 +1734,7 @@ def free_numbers(text, facts):
     for ph in facts.allowed_phrases:
         t = t.replace(_norm(ph).rstrip(", "), " ")
     t = re.sub(_DATE_RX, " ", t)
+    t = re.sub(r"\|[A-Z]\|", " ", facts.names_in(t)[1])   # a name with digits ("Blender 3D") types no number
     t = re.sub(r"\b(?:19[89]\d|20\d\d)\b", " ", t)
     t = re.sub(r"\b\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)", " ", t)
     t = re.sub(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{4}\b", " ", t)
@@ -1674,6 +1754,8 @@ def render(text, sheet, facts, strict=False, unit=None):
         return None, "free_number"
     if not sl:
         return text, None
+    if strict and any(x.role == _ROLE_NUM for x in sl) and typed_names(text, sheet, facts):
+        return None, "typed_name"
     us = None
     if unit and unit is not text:
         us = slots_of(unit, sheet, lang)
@@ -1687,7 +1769,22 @@ def render(text, sheet, facts, strict=False, unit=None):
         out.append(x.text)
         last = x.end
     out.append(text[last:])
-    return re.sub(r"\s+", " ", "".join(out)).strip(), None
+    r = re.sub(r"\s+", " ", "".join(out)).strip()
+    r = re.sub(r"\b(points|puntos)\s+(?:points|puntos|percentage points)\b", r"\1", r)
+    return r, None
+
+
+def typed_names(text, sheet, facts):
+    """Round 12, pass 2 (T1, strict): the sheet's names typed outside a path (a number next to one could not be
+    bound to it): not the question's topic, a period or a word of the window."""
+    t = _norm(SLOT.sub(" ", text))
+    for ph in facts.allowed_phrases:
+        t = t.replace(_norm(ph).rstrip(", "), " ")
+    t = re.sub(_DATE_RX, " ", t)
+    found = facts.names_in(t)[0]
+    topic = " ".join(_words((sheet.get("filters") or {}).get("topic") or ""))
+    return [n for n in found if n not in facts.periods and n != topic and n not in facts.topic_keys
+            and len(n) >= 3 and n not in ("shorts", "youtube", "instagram")]
 
 
 def uses_of(text):
@@ -1717,6 +1814,9 @@ def check(raw, sheet, chart_vals=None, strict=False):
                 break
             kept.append(r)
         ans = " ".join(kept) if kept else None
+        ans_slotted = True
+    else:
+        ans_slotted = False
     if isinstance(ans, str) and sheet.get("kind") == "day":
         ans = _ONE_DAY_SAID.sub("", ans)   # round 12, fix: a day's "on 1 day" is left out, not the whole answer
     if isinstance(ans, str) and len(ans) > ANSWER_MAX and len(_sentences(ans)) > 1 and \
@@ -1725,6 +1825,7 @@ def check(raw, sheet, chart_vals=None, strict=False):
         ans = _sentences(ans)[0]   # round 12, fix (live, Spanish): a long answer's first sentence may stand
     if isinstance(ans, str) and ans.strip() and len(ans) <= ANSWER_MAX:
         sents = _sentences(ans)
+        facts.slotted = ans_slotted
         why, n = _check(" ".join(sents), facts, maxlen=ANSWER_MAX)   # one piece: "it" in the second is the first's
         if why is None and n == 0:
             why = "generic"   # an answer that names nothing of the sheet answers nothing
@@ -1756,6 +1857,7 @@ def check(raw, sheet, chart_vals=None, strict=False):
             continue
         if sheet.get("kind") == "day":
             text = _ONE_DAY_SAID.sub("", text)
+        slotted = bool(SLOT.search(text))
         if SLOT.search(text) or strict:
             u = uses_of(text)
             text, why = render(text, s, facts, strict)
@@ -1767,6 +1869,7 @@ def check(raw, sheet, chart_vals=None, strict=False):
             text = _ONE_DAY_SAID.sub("", text)
         sents = _sentences(text)
         why = None if len(sents) == 1 else "two_sentences"
+        facts.slotted = slotted
         if not why and (text.strip().endswith("?") or re.search(r"[,;:]\s*[?.!]?\s*$", text.strip())):
             why = "unfinished"   # round 12, fix (live, Spanish: "... suman 4,?"): an observation says, never asks
         why = why or check_sentence(text, facts, uses=uses if uses is not None else [], chart_vals=chart_vals)
@@ -1787,6 +1890,7 @@ def check(raw, sheet, chart_vals=None, strict=False):
         seen.add(key)
         out["observations"].append(_unit_before(tidy(" ".join(text.split()), facts.lang), sheet))
     out["observations"] = out["observations"][:OBS_MAX]
+    facts.slotted = False
     sw = raw.get("so_what")
     if isinstance(sw, dict):   # round 12, pass 2 (T5): {"pick": a candidate's id, "text": its words}
         out["so_what_pick"] = sw.get("pick") if isinstance(sw.get("pick"), str) else None
@@ -2322,6 +2426,11 @@ def code_form(sheet):
         d = tot.get("days_active")
         tp = (_rows_named(s.get("topics"), ("name",)) or [{}])[0]
         about = "themes" in str(tp.get("matched_by") or "")   # T8: a count with themes in it is an estimate
+        if _num(tp.get("items")) and _num(tp.get("days")) and tp["items"] < tot["items"]:
+            tot = dict(tot, items=tp["items"], days_active=tp["days"], shorts=tp.get("shorts"), long=tp.get("long"),
+                       long_median_min=None)
+            wt = wt if _num(wt) else (s.get("totals") or {}).get("items")
+            d = tp["days"]
         if es:
             ans = ("Unos " if about else "") + f"{f(tot['items'], lang)} videos de {topic} en {f(d, lang)} días" + (
                 f", de {f(wt, lang)} que abriste en total." if _num(wt) else ".")
@@ -2386,12 +2495,15 @@ def code_form(sheet):
             elif _num(sh) and sh:
                 o(f"{f(sh, lang)} of them were Shorts.", "totals")
             bh = ((s.get("when") or {}).get("busiest_hours") or [{}])[0]
+            bh = {"hour": bh} if _num(bh) else bh
             if isinstance(bh, dict) and _num(bh.get("hour")) and n >= 3:
                 if _num(us.get("busiest_hour")) and abs(int(us["busiest_hour"]) - int(bh["hour"])) >= 2:
                     o(f"The busiest hour was {_hour_words(bh['hour'])}, where your usual day peaks around "
                       f"{_hour_words(us['busiest_hour'])}.", "when", "usual")
                 elif _num(bh.get("share")):
                     o(f"The busiest hour was {_hour_words(bh['hour'])}, with {_pc(bh['share'])} of the day.", "when")
+                else:
+                    o(f"The busiest hour was {_hour_words(bh['hour'])}.", "when")
             if len(themes) >= 2 and n >= 3 and _num(mi):
                 o(f"{themes[1]['name']} came next ({_pc(themes[1]['share'])}).", "themes")
             nt = s.get("new_today") or {}
@@ -2406,7 +2518,7 @@ def code_form(sheet):
         cmpx = s.get("comparison") or {}
         if not cmpx and len(tp) >= 2:
             from . import facts as F
-            cmpx = F._compare(tp, None)
+            cmpx = F._compare(tp, None, lang)
         if len(tp) >= 2 and not es:
             a, b = tp[0], tp[1]
             big, small = (a, b) if a["items"] >= b["items"] else (b, a)
@@ -2435,6 +2547,28 @@ def code_form(sheet):
             if all(_num(x.get("shorts")) for x in (a, b)) and a["shorts"] + b["shorts"] > 0:
                 o(f"{f(a['shorts'], lang)} of the {a['name']} videos were Shorts, against {f(b['shorts'], lang)} of "
                   f"the {b['name']} ones.", "topics")
+            if all(_num(x.get("days")) for x in (a, b)):
+                o(f"{a['name'].capitalize()} came on {f(a['days'], lang)} days, {b['name']} on {f(b['days'], lang)}.",
+                  "topics")
+            for x in (big, small):
+                c = (_rows_named(x.get("channels"), ("name", "items")) or [None])[0]
+                if c and not x.get("top_themes"):
+                    o(f"{c['name']} is behind {f(c['items'], lang)} of the {f(x['items'], lang)} {x['name']} videos.",
+                      "topics")
+    elif kind == "compare_windows" and not es and _num(tot.get("items")) and _num(prev.get("items")):
+        w = s.get("window") or {}
+        la = _strip_in(w.get("label") or "") or None
+        lb = _strip_in(prev.get("label") or prev.get("words") or "") or None
+        if la and lb:
+            a, b = tot["items"], prev["items"]
+            ans = (f"More in {la}: {f(a, lang)} videos, against {f(b, lang)} in {lb}." if a > b else
+                   f"Fewer in {la}: {f(a, lang)} videos, against {f(b, lang)} in {lb}." if a < b else
+                   f"As many in {la} as in {lb}: {f(a, lang)} videos.")
+        moves(themes, "themes")
+        nw_ = [x.get("name") if isinstance(x, dict) else x for x in (s.get("new") or {}).get("themes") or []]
+        if nw_:
+            o(f"{nw_[0]} is new in {la or 'it'}.", "new")
+        shorts_long()
     elif kind == "changed":
         ch = s.get("change") or {}
         eras = _rows_named(s.get("eras"), ("area", "from", "to"))
@@ -2467,6 +2601,20 @@ def code_form(sheet):
                f"{_pc(shx['to_share'])} in {shx['to']}."), "areas_change")
         ps = {str(p.get("label")): p for p in _rows_named(s.get("periods"), ("label",))}
         p0, p1 = ps.get(str(ch.get("from"))), ps.get(str(ch.get("to")))
+        if not ch:
+            full = [p for p in _rows_named(s.get("periods"), ("label",)) if not p.get("sparse")
+                    and len(p.get("themes") or []) >= 2]
+            if len(full) >= 2:
+                p0, p1 = full[0], full[-1]
+                ch = {"from": p0["label"], "to": p1["label"]}
+                st_ = [x.get("name") if isinstance(x, dict) else x for x in (s.get("stopped") or {}).get("themes") or []]
+                nw_ = [x.get("name") if isinstance(x, dict) else x for x in (s.get("new") or {}).get("themes") or []]
+                if st_ and nw_ and not es:
+                    o(f"{st_[0]} stopped and {nw_[0]} is new.", "new", "stopped")
+                tm = [x for x in themes if _num(x.get("change_vs_previous"))]
+                up = max(tm, key=lambda x: x["change_vs_previous"], default=None)
+                if up and up["change_vs_previous"] > 0 and not es:
+                    o(f"{up['name']} grew the most, to {pc(up['share'])} of what you opened.", "themes")
         if ans is None and p0 and p1 and len(p0.get("themes") or []) >= 2 and len(p1.get("themes") or []) >= 2:
             x, y = [t["name"] for t in p0["themes"][:2]], [t["name"] for t in p1["themes"][:2]]
             ans = (f"{x[0]} y {x[1]} dominaban en {ch['from']}; en {ch['to']}, {y[0]} y {y[1]}." if es else
@@ -2597,7 +2745,11 @@ def fill(form, raw, sheet, chart_vals=None):
             isinstance(raw.get("observations"), list)):
         return form
     facts = Facts(shown(sheet))
-    cf = check(code_form(sheet), sheet, chart_vals=chart_vals)
+    cform = code_form(sheet)
+    cf = check(cform, sheet, chart_vals=chart_vals)
+    if form["answer"]:
+        # round 12, pass 2: code's observations are new against the answer that is sent (the model's), not its own
+        cf["observations"] = check(dict(cform, answer=form["answer"]), sheet, chart_vals=chart_vals)["observations"]
     for _w, why, _t in cf["dropped"]:
         form["dropped"].append(("code", why, None))
     if not form["answer"] and cf["answer"]:

@@ -309,7 +309,8 @@ def test_e_the_state_keeps_the_query_and_ids_never_the_question_or_the_sheet(wr)
     Hm = mods()[0]
     ask(wr, QS["q4"])
     st = wr["bot"].store.get_state(Hm.STATE.format(h=H))
-    assert set(st) <= {"q", "at", "run_id", "ids", "channels", "saved"}
+    # round 12, pass 2 (T5): the key of the so-what said (never the same one twice in a row); no words, no titles
+    assert set(st) <= {"q", "at", "run_id", "ids", "channels", "saved", "so_what_id"}
     assert "first start" not in json.dumps(st)
 
 

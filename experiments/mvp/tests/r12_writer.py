@@ -74,6 +74,9 @@ def true_form(sh):
         for k, p in [(k, p) for k, p in enumerate(sh.get("periods") or []) if p.get("items")][:2]:
             obs.append({"text": f"You opened {{periods[{k}].items}} of them in {{periods[{k}].label}}.",
                         "uses": ["periods"]})
+    elif themes and kind == "day":   # round 12, pass 2 (T10): a day's overview says how many
+        k = themes[0][0]
+        answer = f"You opened {{totals.items}} videos; {{themes[{k}].name}} led, at {{themes[{k}].share}} of them."
     elif themes:
         k = themes[0][0]
         answer = f"{{themes[{k}].name}} led, at {{themes[{k}].share}} of what you opened."
