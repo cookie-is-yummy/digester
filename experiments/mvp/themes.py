@@ -34,8 +34,26 @@ from datetime import datetime, timezone
 
 from . import config
 
-VERSION = "themes-v1"
-PROMPT_VERSION = "theme_name_v1"
+VERSION = "themes-v2"            # v2: names by theme_name_v2 (a fixed category for each); v1 kept beside it
+PROMPT_VERSION = "theme_name_v2"  # v1: names and words only ("gaming" then mapped to a third of the gaming themes)
+CATEGORIES = ("gaming", "art and design", "music", "comedy", "film and tv", "sports", "fitness", "food and cooking",
+              "travel", "science", "technology", "math", "education", "history", "nature and animals",
+              "family and kids", "fashion and beauty", "vehicles", "diy and making", "internet culture", "news", "money",
+              "health", "relationships", "politics", "religion", "other")
+SENSITIVE_CATEGORIES = {"money", "health", "relationships", "politics", "religion"}
+# the words a person uses for a category (a topic word that is one of these maps to the category's themes)
+CATEGORY_WORDS = {"gaming": ("gaming", "games", "video games", "videogames", "gamer", "gameplay", "game"),
+                  "art and design": ("art", "arts", "drawing", "painting", "design", "artwork"),
+                  "music": ("music", "songs"), "comedy": ("comedy", "funny", "humor", "humour"),
+                  "film and tv": ("movies", "films", "film", "tv", "shows", "series"),
+                  "sports": ("sports", "sport"), "fitness": ("fitness", "workouts", "gym", "exercise"),
+                  "food and cooking": ("food", "cooking", "recipes"), "travel": ("travel",),
+                  "science": ("science",), "technology": ("tech", "technology"), "math": ("math", "maths",
+                                                                                         "mathematics"),
+                  "education": ("education", "learning", "studying"), "history": ("history",),
+                  "nature and animals": ("nature", "animals", "pets"), "fashion and beauty": ("fashion", "beauty"),
+                  "vehicles": ("cars", "vehicles"), "diy and making": ("diy", "making", "crafts"),
+                  "internet culture": ("memes", "internet culture"), "news": ("news",)}
 PCA_DIM, SUB_DIM = 24, 16
 SAMPLE, SUB_SAMPLE = 6000, 2500
 FIELDS_K, THEMES_K = (10, 20), (2, 7)
@@ -112,22 +130,38 @@ def _project(x, mean, comps):
 
 
 def _ward_k(z, kr, rng, sample):
-    """Labels of a sample of z cut at k (the biggest gap in the Ward merge heights within kr), and the sample rows."""
+    """Labels of a sample of z cut from one Ward tree at the k within kr with the best silhouette (cosine), and the
+    sample rows. (docs/05 chose k at the biggest gap in the merge heights; on the made-up library of
+    tests/r12_library.py that rule cut at 3 and put four true themes into one; the silhouette kept them apart, and on
+    the founder's library it chose a k inside the same range: DESIGN 19.D.)"""
     import numpy as np
     from scipy.cluster.hierarchy import fcluster, linkage
+    from sklearn.metrics import silhouette_score
     idx = np.arange(len(z)) if len(z) <= sample else np.sort(rng.choice(len(z), sample, replace=False))
-    lk = linkage(z[idx].astype(np.float64), method="ward")
-    h = lk[:, 2]
+    zs = z[idx].astype(np.float64)
+    lk = linkage(zs, method="ward")
     lo, hi = kr
     hi = min(hi, len(idx) - 1)
-    best, bk = -1.0, lo
+    best, bk, blab = -2.0, None, None
     for k in range(lo, hi + 1):
-        # going from k clusters to k-1 costs the merge h[-(k-1)]; the one before it is h[-k]
-        gap = h[-(k - 1)] - h[-k]
-        if gap > best:
-            best, bk = gap, k
-    lab = fcluster(lk, bk, criterion="maxclust") - 1
-    return idx, lab, bk
+        lab = fcluster(lk, k, criterion="maxclust") - 1
+        if len(set(lab.tolist())) < 2:
+            continue
+        sc = silhouette_score(zs, lab, metric="cosine")
+        if sc > best + 1e-9:
+            best, bk, blab = sc, int(lab.max()) + 1, lab
+    if blab is None:
+        blab = np.zeros(len(idx), dtype=np.int64)
+        bk = 1
+    return idx, blab, bk
+
+
+def fields_k(n):
+    """The range of the number of fields for n items: FIELDS_K for a large library (10 to 20 from 4,000 items), fewer
+    for a small one (3 to 6 for 500)."""
+    lo = max(3, min(FIELDS_K[0], n // 500))
+    hi = max(lo + 3, min(FIELDS_K[1], n // 200))
+    return lo, hi
 
 
 def _kmeans(z, cent, rounds):
@@ -243,20 +277,18 @@ def name_field(field_sample, groups, person=None, chat=None):
         raw = raw if isinstance(raw, dict) else {}
         name = _check_name(raw.get("name"), sample[2])
         words = _check_words(raw.get("words"))
+        cat = raw.get("category") if raw.get("category") in CATEGORIES else None
         source = "model"
         if name is None:
             name, source = _fallback_name(sample[1]), "code"
-        sens = bool(raw.get("sensitive")) or P.sensitive(name, " ".join(words), " ".join(sample[1]))
+        sens = bool(raw.get("sensitive")) or cat in SENSITIVE_CATEGORIES or \
+            P.sensitive(name, " ".join(words), " ".join(sample[1]))
         return {"name": None if sens else name, "words": [] if sens else words, "sensitive": sens,
-                "mixed": bool(raw.get("mixed")), "name_source": source}
+                "category": None if sens else cat, "mixed": bool(raw.get("mixed")), "name_source": source}
     f = one(got.get("field"), field_sample)
     gl = got.get("groups") if isinstance(got.get("groups"), list) else []
     gs = [one(gl[k] if k < len(gl) else None, groups[k]) for k in range(len(groups))]
-    names = [g["name"] for g in gs]
-    for k, g in enumerate(gs):   # siblings with the same name: the code's words tell them apart
-        if g["name"] and names.count(g["name"]) > 1:
-            alt = _fallback_name(groups[k][1])
-            g["name"] = (g["name"] + ": " + alt.lower()) if alt else g["name"]
+    # siblings with the same name stay apart here and are counted as one theme by name (facts.ItemFacts)
     return {"field": f, "groups": gs, "cost_usd": cost, "error": err}
 
 
@@ -295,7 +327,7 @@ def build(lib, view=None, person=None, chat=None, log=print, now=None):
     x = _rows(vs, ids)
     mean, comps = _space(x, PCA_DIM, rng)
     z = _project(x, mean, comps)
-    flab, fcent = _clusters(z, FIELDS_K, rng, SAMPLE, max(FOLD_MIN, int(0.005 * len(ids))))
+    flab, fcent = _clusters(z, fields_k(len(ids)), rng, SAMPLE, max(FOLD_MIN, int(0.005 * len(ids))))
     log(f"fields: {len(fcent)} over {len(ids)} items ({time.monotonic() - t0:.1f} s)")
     texts = [view.items[i].caption or "" for i in ids]
     df_all = Counter()
@@ -469,7 +501,8 @@ def load(lib):
     ids = [str(i) for i in z["ids"]]
     field, theme = z["field"].copy(), z["theme"].copy()
     if vs is not None:
-        new = [i for i in vs[0] if i not in set(ids)]
+        have = set(ids)
+        new = [i for i in vs[0] if i not in have]
         if new:
             subspaces = []
             for j in range(len(z["fcent"])):
@@ -487,25 +520,46 @@ def load(lib):
 
 
 # ================================================================ a topic the person names -> themes, by code
-def for_topic(view, rec, phrase, th=None):
-    """[theme ids] a topic ("math", "gaming", "art") stands for, by code: first the words of the themes' and fields'
-    names and their words; else where the items that hold the topic's words AND fit it (history.topic_fit) fall:
-    each theme holding at least 20% of them (and 3 or more). [] when neither says."""
+WORD_RATE = 0.5      # a theme whose own titles hold the topic's words this often is that topic
+RARE_IN_TITLES = 30  # fewer titles than this hold the words: the themes' words are the best evidence there is
+
+
+def for_topic(view, rec, phrase, th=None, hits=None):
+    """[theme ids] a topic ("math", "gaming", "minecraft") stands for, by code:
+    - a broad topic: the themes of the category it names (CATEGORY_WORDS: "games" is gaming, "drawing" is art and
+      design), and the themes whose name holds its words;
+    - the themes whose first two words (the model lists them broad first) hold it, or whose words hold it while at
+      least WORD_RATE of the theme's own titles do too (or the words are rare in titles: RARE_IN_TITLES);
+    - else where the items that hold the words AND fit them (history.topic_fit) fall: each theme with at least 20% of
+      them (and 3 or more), when the words are rare in titles or that theme's titles hold them at least half as
+      often as WORD_RATE.
+    [] when none says. A field's own words are not used ("blender" was the fourth word of a field of art, DIY and
+    animation). `hits`: the ids of the record's items whose text holds the words, when the caller has them."""
     from .history import holds, topic_fit
     th = th or load(view.lib)
     if th is None or not phrase:
         return []
-    p = phrase.strip().lower()
+    p = " ".join(phrase.strip().lower().split())
+    cats = {c for c, ws in CATEGORY_WORDS.items() if p in ws or p == c}
+    if hits is None:
+        hits = {i for i in rec.events if view.items.get(i) is not None and holds(view.items[i].caption or "", p)}
+    size, held = Counter(), Counter()
+    for i in rec.events:
+        t = th.theme_id(i)
+        if t is not None:
+            size[t] += 1
+            if i in hits:
+                held[t] += 1
+    rare = len(hits) < RARE_IN_TITLES
     out = []
-
-    def says(name, words):
-        texts = [name or ""] + list(words or [])
-        return any(holds(t, p) or (len(t) >= 4 and holds(p, t)) for t in texts if t)
     for tid, t in th.themes.items():
         if th.shown(tid) is None:
             continue
-        f = th.fields.get(t["field"]) or {}
-        if says(t.get("name"), t.get("words")) or says(th.field_name(t["field"]), f.get("words")):
+        cat = t.get("category") or (th.fields.get(t["field"]) or {}).get("category")
+        words = list(t.get("words") or [])
+        rate = held[tid] / size[tid] if size[tid] else 0.0
+        if cat in cats or holds(t.get("name") or "", p) or any(holds(w, p) for w in words[:2]) or \
+                (any(holds(w, p) for w in words) and (rate >= WORD_RATE or rare)):
             out.append(tid)
     if out:
         return sorted(out)
@@ -516,7 +570,9 @@ def for_topic(view, rec, phrase, th=None):
     c = Counter(th.theme_id(i) for i, s in scores.items() if s >= cut)
     c.pop(None, None)
     total = sum(c.values())
-    return sorted(t for t, n in c.items() if n >= 3 and n >= 0.2 * total and th.shown(t) is not None)
+    # a word many titles hold is its own topic (those titles); a theme is it only when its titles hold it often
+    return sorted(t for t, n in c.items() if n >= 3 and n >= 0.2 * total and th.shown(t) is not None
+                  and (rare or (size[t] and held[t] / size[t] >= WORD_RATE / 2)))
 
 
 if __name__ == "__main__":   # python3 -m mvp.themes build <library>

@@ -18,7 +18,7 @@ import os
 import threading
 import time
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from . import history as Hm
@@ -27,9 +27,11 @@ KIND_OF = {"top_channels": "channels", "top_topics": "top", "top_items": "top", 
            "on_day": "day", "first": "first", "last": "last", "timeline": "count", "compare": "compare_windows",
            "compare_topics": "compare_topics", "changed": "changed", "top": "top"}
 THEMES_MAX, CHANNELS_MAX, EXAMPLES = 8, 10, 3
-NEW_MIN_ITEMS, NEW_MIN_SHARE, ABSENT_SHARE = 5, 0.03, 0.005
+NEW_MIN_ITEMS, NEW_MIN_SHARE, ABSENT_RATIO = 5, 0.02, 0.25   # "new": at least 5 items and 2% now, and under a
+# quarter of that share in the window before ("stopped": the reverse)
 NEW_CHANNEL_MIN, NEW_CHANNEL_DAYS = 5, 2
 SAVED_KINDS = ("save", "collection", "share_self", "playlist")
+LENGTH_CAP_S = 3 * 3600   # lengths are summed for videos up to 3 hours; longer ones are counted apart (over_3h)
 _LOCK = threading.Lock()
 _IDX = {}
 
@@ -107,20 +109,32 @@ class ItemFacts:
         self.theme = np.full(n, -1, dtype=np.int32)
         self.field = np.full(n, -1, dtype=np.int32)
         self.length = np.full(n, -1, dtype=np.int64)
+        self.raw_length = np.full(n, -1, dtype=np.int64)
         self.short = np.full(n, -1, dtype=np.int8)
+        canon = {}   # two themes of one name (a field cut in two by the clusters) count as one, under the first
+        if self.th is not None:
+            for t in sorted(self.th.themes):
+                nm = self.th.shown(t)
+                if nm is not None:
+                    canon[t] = canon.get(nm.lower(), t)
+                    canon.setdefault(nm.lower(), t)
+        self.canon = {t: v for t, v in canon.items() if isinstance(t, int)}
         for k, i in enumerate(idx.ids):
             it = view.items[i]
             if self.th is not None:
                 t = self.th.theme_id(i)
-                if t is not None and self.th.shown(t) is not None:
-                    self.theme[k] = t
+                if t is not None and t in canon:
+                    self.theme[k] = canon[t]
                 f = self.th.field_id(i)
                 if f is not None:
                     self.field[k] = f
             if it.platform == "youtube":
                 ln, sh = L.length_of(it, rows)
                 if ln:
-                    self.length[k] = int(ln)
+                    self.raw_length[k] = int(ln)
+                    # a video over LENGTH_CAP_S (a stream, a 10-hour loop) is no measure of attention: it is left out
+                    # of every length sum and counted as `over_3h`
+                    self.length[k] = int(ln) if ln <= LENGTH_CAP_S else -2
                     self.short[k] = 1 if sh else 0
 
 
@@ -180,14 +194,21 @@ def topic_items(view, rec, idx, facts, phrase):
     item whose own text holds its words."""
     import numpy as np
     from . import themes as T
-    tids = T.for_topic(view, rec, phrase, facts.th) if facts.th is not None else []
-    by_theme = np.isin(facts.theme, tids) if tids else np.zeros(len(idx.ids), bool)
+    memo = facts.__dict__.setdefault("_topics", {})
+    if phrase in memo:
+        return memo[phrase]
     words = np.array([Hm.holds(view.items[i].caption or "", phrase) for i in idx.ids], dtype=bool)
-    return by_theme | words, tids, int(by_theme.sum()), int(words.sum())
+    hits = {idx.ids[k] for k in np.nonzero(words)[0].tolist()}
+    tids = T.for_topic(view, rec, phrase, facts.th, hits=hits) if facts.th is not None else []
+    # a theme counted under another of the same name (ItemFacts) is matched by that one
+    tids = sorted({int(facts.canon.get(t, t)) for t in tids})
+    by_theme = np.isin(facts.theme, tids) if tids else np.zeros(len(idx.ids), bool)
+    memo[phrase] = out = (by_theme | words, tids, int(by_theme.sum()), int(words.sum()))
+    return out
 
 
 class Scope:
-    """The events in a window, after the question's filters, and their distinct items."""
+    """The events in a window, after the question's filters, and their distinct items, with per-item counts."""
 
     def __init__(self, idx, facts, ev_mask, start_o, end_o):
         import numpy as np
@@ -197,7 +218,9 @@ class Scope:
         if end_o is not None:
             m &= idx.day <= end_o
         self.ev = m
-        self.items = np.unique(idx.it[m])
+        self.ev_items = idx.it[m]
+        self.ev_days = idx.day[m]
+        self.items = np.unique(self.ev_items)
         self.idx, self.facts = idx, facts
 
     def totals(self):
@@ -206,15 +229,48 @@ class Scope:
         it = self.items
         yt = it[idx.platform[it] == 0]
         known = yt[f.length[yt] > 0]
-        out = {"items": int(len(it)), "days_active": int(len(np.unique(idx.day[self.ev]))),
-               "length_hours": _hours(f.length[known].sum()) if len(known) else 0.0,
-               "length_known_share": _share(len(known), len(yt)),
-               "shorts": int((f.short[yt] == 1).sum()), "long": int((f.short[yt] == 0).sum()),
-               "by_platform": {"youtube": int(len(yt)), "instagram": int(len(it) - len(yt))}}
-        return out
+        return {"items": int(len(it)), "days_active": int(len(np.unique(self.ev_days))),
+                "length_hours": _hours(f.length[known].sum()) if len(known) else 0.0,
+                "length_known_share": _share(len(known), len(yt)),
+                "shorts": int((f.short[yt] == 1).sum()), "long": int((f.short[yt] == 0).sum()),
+                "over_3h": int((f.length[yt] == -2).sum()),
+                "by_platform": {"youtube": int(len(yt)), "instagram": int(len(it) - len(yt))}}
+
+    def per_item(self):
+        """(events per item, latest day per item) over the scope, as arrays the size of the index."""
+        import numpy as np
+        n = len(self.idx.ids)
+        cnt = np.bincount(self.ev_items, minlength=n)
+        last = np.full(n, -1, dtype=np.int64)
+        np.maximum.at(last, self.ev_items, self.ev_days)
+        return cnt, last
+
+    def days_by(self, key_of_item):
+        """{key: distinct days} for a per-item key array (theme, creator), over the scope's events."""
+        import numpy as np
+        k = key_of_item[self.ev_items].astype(np.int64)
+        sel = k >= 0
+        pairs = np.unique(k[sel] * 10_000_000 + self.ev_days[sel].astype(np.int64))
+        keys, counts = np.unique(pairs // 10_000_000, return_counts=True)
+        return dict(zip(keys.tolist(), counts.tolist()))
 
 
-def _theme_rows(view, sc, prev, facts, th, rank_by_events=None):
+def _length_by(it, key, facts, idx):
+    """{key: (known length seconds, known YouTube items, Shorts among them)} for the items `it`."""
+    import numpy as np
+    k = key[it].astype(np.int64)
+    ok = (k >= 0) & (idx.platform[it] == 0) & (facts.length[it] > 0)
+    kk = k[ok]
+    if not len(kk):
+        return {}
+    size = int(kk.max()) + 1
+    secs = np.bincount(kk, weights=facts.length[it][ok].astype(np.float64), minlength=size)
+    n = np.bincount(kk, minlength=size)
+    sh = np.bincount(kk, weights=(facts.short[it][ok] == 1).astype(np.float64), minlength=size)
+    return {j: (float(secs[j]), int(n[j]), int(sh[j])) for j in np.nonzero(n)[0].tolist()}
+
+
+def _theme_rows(view, sc, prev, facts, th):
     """The themes of a scope, largest first, with their share against `prev` (a Scope or None)."""
     import numpy as np
     idx = sc.idx
@@ -223,26 +279,26 @@ def _theme_rows(view, sc, prev, facts, th, rank_by_events=None):
     out = []
     if th is None or not n:
         return out, n
-    tcount = Counter(int(t) for t in facts.theme[it] if t >= 0)
-    pcount = Counter(int(t) for t in facts.theme[prev.items] if t >= 0) if prev is not None else Counter()
+    tcount = Counter(facts.theme[it][facts.theme[it] >= 0].tolist())
+    pcount = Counter(facts.theme[prev.items][facts.theme[prev.items] >= 0].tolist()) if prev is not None else Counter()
     pn = len(prev.items) if prev is not None else 0
-    ev_items = idx.it[sc.ev]
-    ev_days = idx.day[sc.ev]
+    days = sc.days_by(facts.theme)
+    lens = _length_by(it, facts.theme, facts, idx)
+    yt = it[(idx.platform[it] == 0) & (facts.length[it] > 0)]
+    total_secs = float(facts.length[yt].sum()) if len(yt) else 0.0
+    cnt, last = sc.per_item()
     for tid, c in tcount.most_common(THEMES_MAX):
         mem = it[facts.theme[it] == tid]
-        mset = np.isin(ev_items, mem)
-        yt = mem[idx.platform[mem] == 0]
-        known = yt[facts.length[yt] > 0]
-        chans = Counter(idx.creators[c2] for c2 in idx.creator[mem] if c2 >= 0).most_common(3)
-        evc = Counter(int(x) for x in ev_items[mset])
-        ex = sorted(mem, key=lambda k: (-evc.get(int(k), 0), -int(ev_days[mset][ev_items[mset] == k].max())))[:EXAMPLES]
+        chans = Counter(idx.creator[mem][idx.creator[mem] >= 0].tolist()).most_common(3)
+        order = np.lexsort((-last[mem], -cnt[mem]))[:EXAMPLES]
+        secs, known, shorts = lens.get(tid, (0.0, 0, 0))
         share = _share(c, n)
-        row = {"name": th.shown(tid), "theme_id": tid, "field": th.field_name(th.themes[tid]["field"]),
-               "items": int(c), "share": share, "days": int(len(np.unique(ev_days[mset]))),
-               "length_hours": _hours(facts.length[known].sum()) if len(known) else 0.0,
-               "shorts_share": _share(int((facts.short[known] == 1).sum()), len(known)),
-               "channels": [{"name": a, "items": int(b)} for a, b in chans],
-               "examples": [idx.ids[int(k)] for k in ex], "mixed": bool(th.themes[tid].get("mixed"))}
+        row = {"name": th.shown(tid), "theme_id": int(tid), "field": th.field_name(th.themes[tid]["field"]),
+               "items": int(c), "share": share, "days": int(days.get(tid, 0)), "length_hours": _hours(secs),
+               "length_share": _share(secs, total_secs),
+               "shorts_share": _share(shorts, known),
+               "channels": [{"name": idx.creators[a], "items": int(b)} for a, b in chans],
+               "examples": [idx.ids[int(mem[k])] for k in order], "mixed": bool(th.themes[tid].get("mixed"))}
         if prev is not None:
             ps = _share(pcount.get(tid, 0), pn)
             row["previous_share"] = ps
@@ -252,32 +308,38 @@ def _theme_rows(view, sc, prev, facts, th, rank_by_events=None):
     return out, n - sum(tcount.values())
 
 
-def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX):
+def _first_by_creator(idx, all_ev):
+    """The first day each creator was watched (in the kinds and platforms asked), over the whole record."""
+    import numpy as np
+    big = np.iinfo(np.int64).max
+    first = np.full(len(idx.creators) + 1, big, dtype=np.int64)
+    cr = idx.creator[idx.it[all_ev]].astype(np.int64)
+    sel = cr >= 0
+    np.minimum.at(first, cr[sel], idx.day[all_ev][sel].astype(np.int64))
+    return first, big
+
+
+def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, first=None):
     import numpy as np
     it = sc.items
-    c = Counter(int(x) for x in idx.creator[it] if x >= 0)
-    first = {}
-    if c:
-        cr = idx.creator[idx.it[all_ev]]
-        days = idx.day[all_ev]
-        for cid in c:
-            sel = cr == cid
-            if sel.any():
-                first[cid] = int(days[sel].min())
-    ev_items, ev_days = idx.it[sc.ev], idx.day[sc.ev]
+    c = Counter(idx.creator[it][idx.creator[it] >= 0].tolist())
+    if not c:
+        return []
+    first, big = first or _first_by_creator(idx, all_ev)
+    days = sc.days_by(idx.creator)
+    lens = _length_by(it, idx.creator, facts, idx)
     out = []
     for cid, n in c.most_common(top):
         mem = it[idx.creator[it] == cid]
-        yt = mem[idx.platform[mem] == 0]
-        known = yt[facts.length[yt] > 0]
-        tc = Counter(int(t) for t in facts.theme[mem] if t >= 0)
-        sel = np.isin(ev_items, mem)
-        out.append({"name": idx.creators[cid], "items": int(n), "days": int(len(np.unique(ev_days[sel]))),
-                    "length_hours": _hours(facts.length[known].sum()) if len(known) else 0.0,
+        tc = Counter(facts.theme[mem][facts.theme[mem] >= 0].tolist())
+        secs, known, shorts = lens.get(cid, (0.0, 0, 0))
+        f = int(first[cid]) if first[cid] != big else None
+        out.append({"name": idx.creators[cid], "items": int(n), "days": int(days.get(cid, 0)),
+                    "length_hours": _hours(secs),
                     "theme": th.shown(tc.most_common(1)[0][0]) if (th is not None and tc) else None,
-                    "shorts_share": _share(int((facts.short[known] == 1).sum()), len(known)),
-                    "first_watched": _iso(first[cid]) if cid in first else None,
-                    "new_in_window": bool(start_o is not None and cid in first and first[cid] >= start_o)})
+                    "shorts_share": _share(shorts, known),
+                    "first_watched": _iso(f) if f is not None else None,
+                    "new_in_window": bool(start_o is not None and f is not None and f >= start_o)})
     return out
 
 
@@ -305,19 +367,32 @@ def _new_stopped(sc, prev, idx, facts, th, all_ev, start_o):
     n, pn = len(sc.items), len(prev.items)
     if not n or not pn:
         return new, stopped
-    tc = Counter(int(t) for t in facts.theme[sc.items] if t >= 0)
-    pc = Counter(int(t) for t in facts.theme[prev.items] if t >= 0)
+    tc = Counter(facts.theme[sc.items][facts.theme[sc.items] >= 0].tolist())
+    pc = Counter(facts.theme[prev.items][facts.theme[prev.items] >= 0].tolist())
     for tid, c in tc.most_common():
-        if c >= NEW_MIN_ITEMS and c / n >= NEW_MIN_SHARE and pc.get(tid, 0) / pn < ABSENT_SHARE:
+        if c >= NEW_MIN_ITEMS and c / n >= NEW_MIN_SHARE and pc.get(tid, 0) / pn < ABSENT_RATIO * c / n \
+                and pc.get(tid, 0) * 2 <= c:
             new["themes"].append({"name": th.shown(tid), "items": int(c), "previous_items": int(pc.get(tid, 0))})
     for tid, c in pc.most_common():
-        if c >= NEW_MIN_ITEMS and c / pn >= NEW_MIN_SHARE and tc.get(tid, 0) / n < ABSENT_SHARE:
+        if c >= NEW_MIN_ITEMS and c / pn >= NEW_MIN_SHARE and tc.get(tid, 0) / n < ABSENT_RATIO * c / pn \
+                and tc.get(tid, 0) * 2 <= c:
             stopped["themes"].append({"name": th.shown(tid), "previous_items": int(c), "items": int(tc.get(tid, 0))})
-    for row in _channel_rows(None, sc, idx, facts, th, all_ev, start_o, top=200):
-        if row["new_in_window"] and row["items"] >= NEW_CHANNEL_MIN and row["days"] >= NEW_CHANNEL_DAYS:
-            new["channels"].append({"name": row["name"], "items": row["items"], "theme": row["theme"]})
-    now_c = Counter(int(x) for x in idx.creator[sc.items] if x >= 0)
-    for cid, c in Counter(int(x) for x in idx.creator[prev.items] if x >= 0).most_common(50):
+    if start_o is not None:
+        first, big = _first_by_creator(idx, all_ev)
+        days = sc.days_by(idx.creator)
+        now_c = Counter(idx.creator[sc.items][idx.creator[sc.items] >= 0].tolist())
+        for cid, c in now_c.most_common():
+            if c < NEW_CHANNEL_MIN:
+                break
+            if first[cid] != big and first[cid] >= start_o and days.get(cid, 0) >= NEW_CHANNEL_DAYS:
+                mem = sc.items[idx.creator[sc.items] == cid]
+                tc = Counter(facts.theme[mem][facts.theme[mem] >= 0].tolist())
+                new["channels"].append({"name": idx.creators[cid], "items": int(c),
+                                        "theme": th.shown(tc.most_common(1)[0][0]) if tc else None})
+                if len(new["channels"]) >= 5:
+                    break
+    now_c = Counter(idx.creator[sc.items][idx.creator[sc.items] >= 0].tolist())
+    for cid, c in Counter(idx.creator[prev.items][idx.creator[prev.items] >= 0].tolist()).most_common(50):
         if c >= NEW_CHANNEL_MIN and not now_c.get(cid):
             stopped["channels"].append({"name": idx.creators[cid], "previous_items": int(c)})
     new["themes"], new["channels"] = new["themes"][:5], new["channels"][:5]
@@ -355,7 +430,7 @@ def _periods(idx, facts, th, ev_mask, start_o, end_o, by=None):
         it = np.unique(idx.it[sel])
         row = {"label": label, "items": int(len(it)), "themes": []}
         if th is not None and len(it):
-            tc = Counter(int(t) for t in facts.theme[it] if t >= 0)
+            tc = Counter(facts.theme[it][facts.theme[it] >= 0].tolist())
             row["themes"] = [{"name": th.shown(t), "share": _share(c, len(it))} for t, c in tc.most_common(4)]
         out.append(row)
     return out, unit
@@ -366,17 +441,19 @@ def _saved_not_opened(view, idx, facts, th, tids, limit=3):
     import numpy as np
     if th is None or not tids:
         return []
-    saved = np.unique(idx.it[idx.kind_mask(SAVED_KINDS)])
-    watched = set(np.unique(idx.it[idx.kind_mask(("watch", "view"))]).tolist())
-    cand = [int(k) for k in saved if int(k) not in watched and idx.platform[k] == 0]
+    sm = idx.kind_mask(SAVED_KINDS)
+    saved = np.unique(idx.it[sm])
+    watched = np.unique(idx.it[idx.kind_mask(("watch", "view"))])
+    cand = saved[~np.isin(saved, watched) & (idx.platform[saved] == 0)]
+    last = np.full(len(idx.ids), -1, dtype=np.int64)
+    np.maximum.at(last, idx.it[sm], idx.day[sm])
     out = []
     for tid in tids:
-        mem = [k for k in cand if facts.theme[k] == tid]
-        if not mem:
+        mem = cand[facts.theme[cand] == tid]
+        if not len(mem):
             continue
-        last = {k: int(idx.day[(idx.it == k)].max()) for k in mem}
-        mem.sort(key=lambda k: -last[k])
-        out.append({"theme": th.shown(tid), "n": len(mem), "examples": [idx.ids[k] for k in mem[:limit]]})
+        mem = mem[np.argsort(-last[mem], kind="stable")]
+        out.append({"theme": th.shown(tid), "n": int(len(mem)), "examples": [idx.ids[int(k)] for k in mem[:limit]]})
     return out
 
 
@@ -389,7 +466,7 @@ def _item_rows(view, idx, facts, th, ids, rec, kinds, start, end):
         k = idx.pos.get(i)
         ds = [d for d, kk in rec.events.get(i, []) if kk in kinds and (start is None or d >= start)
               and (end is None or d <= end)]
-        length = int(facts.length[k]) if k is not None and facts.length[k] > 0 else None
+        length = int(facts.raw_length[k]) if k is not None and facts.raw_length[k] > 0 else None
         out.append({"id": i, "title": Hm._title(it), "channel": it.creator, "at": (max(ds) if ds else None) and
                     max(ds).isoformat(), "length_s": length,
                     "is_short": (None if k is None or facts.short[k] < 0 else bool(facts.short[k])),
@@ -512,11 +589,9 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         prev = Scope(idx, facts, ev, s2 and s2.toordinal(), e2c and e2c.toordinal())
         prev_words = window_words(q, q.window2, s2, e2, rec, plats)[0]
     elif so is not None and eo is not None and w.kind != "all" and kind != "changed":
-        span = eo - so + 1
-        ps, pe = so - span, so - 1
+        ps, pe, prev_words = before_window(w, date.fromordinal(so), date.fromordinal(eo))
         if oldest is None or pe >= oldest.toordinal():
             prev = Scope(idx, facts, ev, ps, pe)
-            prev_words = f"the {span} days before ({Hm.span_words(date.fromordinal(ps), date.fromordinal(pe))})"
             prev_clipped = bool(oldest and ps < oldest.toordinal())
     out["totals"] = sc.totals()
     if prev is not None:
@@ -530,7 +605,9 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
                          for f, c in fc.most_common(6) if th.field_name(f)]
     out["channels"] = _channel_rows(view, sc, idx, facts, th, base_ev, so)
     out["when"] = _when(idx, sc)
-    out["new"], out["stopped"] = _new_stopped(sc, prev, idx, facts, th, base_ev, so)
+    short_window = so is not None and eo is not None and eo - so + 1 < 7
+    out["new"], out["stopped"] = ({"themes": [], "channels": []}, {"themes": [], "channels": []}) if short_window \
+        else _new_stopped(sc, prev, idx, facts, th, base_ev, so)
     # ---- by kind
     if kind == "changed" or q.kind == "timeline" or q.by:
         out["periods"], unit = _periods(idx, facts, th, ev, so, eo, by=q.by)
@@ -577,7 +654,6 @@ def _topic_row(view, rec, idx, facts, th, phrase, ev, so, eo):
     if allm.any():
         row["first_watched"] = _iso(int(idx.day[allm].min()))
         row["last_watched"] = _iso(int(idx.day[allm].max()))
-    _ = np
     return row
 
 
@@ -607,7 +683,6 @@ def _change(periods, th, idx, facts, ev, so, eo, unit):
                      "peak_period": periods[peak]["label"], "peak_share": allp[peak].get(n, 0.0)})
     rising = sorted((r for r in rows if r["change"] >= 2.0), key=lambda r: -r["change"])[:5]
     fading = sorted((r for r in rows if r["change"] <= -2.0), key=lambda r: r["change"])[:5]
-    _ = shares
     return {"from": first["label"], "to": last["label"], "rising": rising, "fading": fading,
             "steady_top": [t["name"] for t in last["themes"][:3] if t["name"] in {x["name"] for x in first["themes"]}]}
 
@@ -620,6 +695,49 @@ def _period_bounds(label, unit):
     m, y = label.split()
     mo = names.index(m) + 1
     return date(int(y), mo, 1).toordinal(), Hm._month_end(int(y), mo).toordinal()
+
+
+PREV_SEASON = {"spring": "winter", "summer": "spring", "fall": "summer", "autumn": "summer", "winter": "fall"}
+
+
+def before_window(w, a, b):
+    """(start ordinal, end ordinal, words) of the window just before [a, b], as a person would say it: the day before,
+    the week before, the month before, the year before, the same part of last year for this year so far, the season
+    before, else the same number of days before."""
+    n = (b - a).days + 1
+    if w.kind == "year" and a.month == 1 and a.day == 1:
+        if b == date(a.year, 12, 31):
+            return date(a.year - 1, 1, 1).toordinal(), date(a.year - 1, 12, 31).toordinal(), str(a.year - 1)
+        try:
+            pb = b.replace(year=b.year - 1)
+        except ValueError:
+            pb = b.replace(year=b.year - 1, day=28)
+        return (date(a.year - 1, 1, 1).toordinal(), pb.toordinal(),
+                f"the same part of {a.year - 1} ({Hm.span_words(date(a.year - 1, 1, 1), pb)})")
+    if w.kind == "month" and a.day == 1:
+        y, m = (a.year, a.month - 1) if a.month > 1 else (a.year - 1, 12)
+        pa, last = date(y, m, 1), Hm._month_end(y, m)
+        pb = last if b == Hm._month_end(a.year, a.month) else min(last, date(y, m, b.day))
+        words = Hm.month_words(pa) if pb == last else f"the same days of {Hm.month_words(pa)} ({Hm.span_words(pa, pb)})"
+        return pa.toordinal(), pb.toordinal(), words
+    if w.label and w.kind == "range":
+        name = w.label.split()[1] if len(w.label.split()) > 1 else ""
+        pb = a - timedelta(days=1)
+        y, m = (a.year, a.month - 3) if a.month > 3 else (a.year - 1, a.month + 9)
+        pa = date(y, m, 1)
+        prev = PREV_SEASON.get(name)
+        words = (f"the {prev} before" if prev else "the 3 months before") + f" ({Hm.span_words(pa, pb)})"
+        return pa.toordinal(), pb.toordinal(), words
+    pa, pb = a - timedelta(days=n), a - timedelta(days=1)
+    if n == 1:
+        words = f"the day before ({Hm.day_words(pb)})"
+    elif n == 7:
+        words = f"the week before ({Hm.span_words(pa, pb)})"
+    elif n == 28:
+        words = f"the 4 weeks before ({Hm.span_words(pa, pb)})"
+    else:
+        words = f"the {n} days before ({Hm.span_words(pa, pb)})"
+    return pa.toordinal(), pb.toordinal(), words
 
 
 def _offers(q, kind, out):
