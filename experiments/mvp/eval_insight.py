@@ -152,6 +152,8 @@ def run(mode, cases, out=None, saved=None):
                 row["cost"] = round(cost, 6)
             _, cv = I.chart(s)
             form = I.check(raw, s, chart_vals=cv)
+            if mode != "fake" and hasattr(I, "fill"):   # round 12, fix: what the writer sends (code fills what failed)
+                form = I.fill(form, raw, s, cv)
             ok = bool(form["answer"]) and len(form["observations"]) >= I.OBS_MIN
             if ok:
                 parts = I.layout(form, s, [{"type": "link", "title": it.get("title"), "url": "https://example.com/v"}

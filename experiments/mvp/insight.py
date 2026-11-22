@@ -1157,7 +1157,8 @@ def tidy(text, lang="en"):
         text = re.sub(r"\b(about|around|nearly) 0\.(\d) hours\b",
                       lambda m: f"{m.group(1)} {int(m.group(2)) * 6} minutes", text)
         text = re.sub(r"\b(about|around|nearly) 0\.0 hours\b", r"\1 a few minutes", text)
-        text = re.sub(r"(?<![\d,.])1 ((?:[A-Za-z][\w&'-]* ){0,4}?)videos\b", r"1 \1video", text)
+        text = re.sub(r"\b(about|around|nearly) 1(?:\.0)? hours\b", r"\1 1 hour", text)
+        text = re.sub(r"(?<![\d,.])\b1 ((?:[\w][\w&'-]* ){0,4}?)videos\b", r"1 \1video", text)
     return text[:1].upper() + text[1:] if text else text
 
 
@@ -1691,14 +1692,21 @@ def code_form(sheet):
         length_leader(themes, "themes")
         length_total()
         shorts_long()
-    elif kind == "channels" and len(chans) >= 3:
-        c0, c1, c2 = chans[:3]
+    elif kind == "channels" and len(chans) >= 2:
+        c0, c1 = chans[:2]
         topic = (s.get("filters") or {}).get("topic")
         head = (f"En {topic}, " if es else f"For {topic}, ") if topic else ""
-        ans = (f"{head}{c0['name']} va primero con {f(c0['items'], lang)} videos, seguido de {c1['name']} "
-               f"({f(c1['items'], lang)}) y {c2['name']} ({f(c2['items'], lang)})." if es else
-               f"{head}{c0['name']} led with {f(c0['items'], lang)} videos, ahead of {c1['name']} "
-               f"({f(c1['items'], lang)}) and {c2['name']} ({f(c2['items'], lang)}).")
+        if len(chans) >= 3:
+            c2 = chans[2]
+            ans = (f"{head}{c0['name']} va primero con {f(c0['items'], lang)} videos, seguido de {c1['name']} "
+                   f"({f(c1['items'], lang)}) y {c2['name']} ({f(c2['items'], lang)})." if es else
+                   f"{head}{c0['name']} led with {f(c0['items'], lang)} videos, ahead of {c1['name']} "
+                   f"({f(c1['items'], lang)}) and {c2['name']} ({f(c2['items'], lang)}).")
+        else:
+            ans = (f"{head}{c0['name']} va primero con {f(c0['items'], lang)} videos, seguido de {c1['name']} "
+                   f"({f(c1['items'], lang)})." if es else
+                   f"{head}{c0['name']} led with {f(c0['items'], lang)} videos, ahead of {c1['name']} "
+                   f"({f(c1['items'], lang)}).")
         top5 = [c for c in chans[:5] if _num(c.get("shorts_share"))]
         sh = [c for c in top5 if c["shorts_share"] >= 0.8][:2]
         lo = [c for c in top5 if c["shorts_share"] <= 0.1][:2]
@@ -1760,8 +1768,10 @@ def code_form(sheet):
             o(t + ".", "totals")
         sh, lo = tot.get("shorts"), tot.get("long")
         if _num(sh) and _num(lo) and sh + lo > 0:
-            o(f"{f(lo, lang)} were long videos and {f(sh, lang)} Shorts.", "totals")
-        cs = _rows_named((tp[0].get("channels") if tp else None) or s.get("channels"), ("name", "items"))[:2]
+            o(f"{f(lo, lang)} were long videos and {f(sh, lang)} Shorts." if sh else
+              f"All {f(lo, lang)} were long videos, no Shorts.", "totals")
+        cs = [c for c in _rows_named((tp[0].get("channels") if tp else None) or s.get("channels"), ("name", "items"))
+              if "@" not in c["name"]][:2]
         if len(cs) == 2:
             o(f"{cs[0]['name']} ({f(cs[0]['items'], lang)}) and {cs[1]['name']} ({f(cs[1]['items'], lang)}) are the "
               f"channels behind most of it.", "topics", "channels")
@@ -1780,8 +1790,10 @@ def code_form(sheet):
                 o(f"Together they add up to about {_hrs(h)} hours in length.", "totals")
             bh = ((s.get("when") or {}).get("busiest_hours") or [{}])[0]
             if isinstance(bh, dict) and _num(bh.get("hour")) and n >= 3:
-                o(f"Most of it came around {_hour_words(bh['hour'])}" +
-                  (f" ({_pc(bh['share'])} of the day)." if _num(bh.get("share")) else "."), "when")
+                if _num(bh.get("share")) and bh["share"] >= 0.5:
+                    o(f"Most of it came around {_hour_words(bh['hour'])} ({_pc(bh['share'])} of the day).", "when")
+                elif _num(bh.get("share")):
+                    o(f"The busiest hour was {_hour_words(bh['hour'])}, with {_pc(bh['share'])} of the day.", "when")
             if chans and chans[0]["items"] >= 2:
                 o(f"{chans[0]['name']} gave the most ({f(chans[0]['items'], lang)}).", "channels")
     elif kind == "compare_topics":
