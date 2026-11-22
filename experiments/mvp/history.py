@@ -1239,8 +1239,11 @@ def _carry(text, phrases, start, end, e, clause, start_clause, lang):
             new = m.group(1) + "(" + "; ".join([m.group(2)] + bits) + ")"
         else:
             if e and end and end > e and clause:
-                bits = [x for x in (start_clause, ("hasta el " if lang == "es" else "up to ") +
-                                    day_words(e, lang) + ", " + clause) if x]
+                upto = day_words(e, lang)
+                if start and start.year == e.year:   # "In October 2026 (up to 30 October, ...)": the year once
+                    upto = re.sub(r"(?: de)? \d{4}$", "", upto)
+                bits = [x for x in (start_clause, ("hasta el " if lang == "es" else "up to ") + upto + ", " + clause)
+                        if x]
             new = ph + " (" + "; ".join(bits) + ")"
         return text[:i] + new + text[j:], True
     return text, False
