@@ -273,8 +273,11 @@ def test_u5_the_most_lately_says_what_is_changing():
            "observations": [{"text": "{themes[1].name} came on {themes[1].days} days.", "uses": []},
                             {"text": "{areas[1].name} was {areas[1].share}.", "uses": []}]}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
-    assert f["so_what"].startswith("Worth noticing: gaming grew from 12% to 22% against the 4 weeks before"), f
-    assert "sports fell from 16% to 9%" in f["so_what"] and f["so_what_id"] == "moving:gaming"
+    # round 12, pass 3 fix (judge A, row 1, on purpose): what grew leads the answer; the so-what is what fell, with the
+    # follow-up that shows it
+    assert f["answer"].startswith("Gaming nearly doubled to 22% of what you opened, from 12% in the 4 weeks before"), f
+    assert f["so_what"].startswith("Worth noticing: sports fell from 16% to 9% against the 4 weeks before"), f
+    assert 'Say "only sports"' in f["so_what"] and f["so_what_id"] == "moving:gaming"
 
 
 def test_u5_no_moving_so_what_for_a_season_or_a_long_window():

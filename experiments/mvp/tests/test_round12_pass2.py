@@ -212,7 +212,8 @@ def test_t3_the_answer_and_the_chart_are_at_the_level_of_areas(r12):
     I = ins()
     s = sheet_of(r12, QS["q1"])
     f = I.check(I.code_form(s), s, chart_vals=I.chart(s)[1])
-    assert f["answer"].startswith("Mostly gaming (48% of what you opened) and art and design (25%)")
+    # round 12, pass 3 fix (judge A, row 1, on purpose): over 4 weeks the leader's move against the 4 weeks before leads
+    assert f["answer"].startswith("Gaming doubled to 48% of what you opened, from 24% in the 4 weeks before")
     assert any(o.startswith("Inside gaming:") for o in f["observations"])
     assert I.chart(s)[0].startswith("Share of what you opened, by area:")
 

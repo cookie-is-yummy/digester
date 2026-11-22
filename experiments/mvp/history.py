@@ -2393,6 +2393,10 @@ def _write_now(bot, person, q, now, follow, words, said, deadline=None):
         sheet["lang"] = q.lang
         # round 12, pass 2 (T5): never the same so-what on two answers in a row
         last_sw = (bot.store.get_state(STATE.format(h=person["handle"])) or {}).get("so_what_id")
+        mv = next((c for c in sheet.get("so_what_candidates") or [] if isinstance(c, dict) and
+                   c.get("kind") == "moving"), None)
+        if mv is not None:   # round 12, pass 3 fix: the answer's lead says the move, asked again or not (insight)
+            sheet["moving_lead"] = mv
         if last_sw and isinstance(sheet.get("so_what_candidates"), list):
             # round 12, pass 2 fix: a so-what can say two candidates (a first's path and its saved videos: "a|b")
             gone = set(str(last_sw).split("|"))
