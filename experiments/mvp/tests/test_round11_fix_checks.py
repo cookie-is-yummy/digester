@@ -344,7 +344,7 @@ MESSAGES = [
     (["how many color grading videos did i watch each month this year"], "H:timeline"),
     (["cuantos videos vi cada año"], "H:timeline"),
     (["how many videos about cooking did i watch per month in 2026"], "H:timeline"),
-    (["como ha cambiado lo que veo de cocina con el tiempo"], "H:timeline"),   # fix pass 2 (P4): was "model"
+    (["como ha cambiado lo que veo de cocina con el tiempo"], "H:changed"),   # fix pass 2 (P4): was "model"
     (["how many videos did i like on youtube"], "H:count"),
     (["que me gusto en octubre"], "H:list"),
     (["how many reels have i liked"], "H:count"),

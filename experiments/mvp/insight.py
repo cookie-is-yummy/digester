@@ -1351,8 +1351,7 @@ def _label_words(s, n):
 
 
 def _label(s, n=LABEL_MAX):
-    s = " ".join(str(s or "").split())
-    return s if len(s) <= n else s[:n - 1].rstrip() + "…"
+    return _label_words(s, n)   # round 12, fix: cut at a word ("Minecraft building…", not "…tutori…")
 
 
 CAPTIONS = {
@@ -1911,7 +1910,8 @@ def code_form(sheet):
         if p0 and p1 and _num(p0.get("items")) and _num(p1.get("items")) and not es:
             o(f"You opened {f(p1['items'], lang)} videos in {ch['to']}, against {f(p0['items'], lang)} in "
               f"{ch['from']}.", "periods")
-        length_total()
+        if ch.get("rising") or ch.get("fading"):
+            length_total()   # with no themes to say what changed, nothing is filled: today's timeline stands
     return {"answer": ans, "observations": obs, "so_what": sw, "offers": []}
 
 

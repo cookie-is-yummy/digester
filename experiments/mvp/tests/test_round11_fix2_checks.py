@@ -250,8 +250,9 @@ M = [
     ("n24", ["vi mas videos en octubre o en septiembre"], "H:compare", dict(must=["octubre"])),
     ("n25", ["vi menos videos en 2024 que en 2025"], "H:compare", dict(must=["2024", "2025"])),
     ("n26", ["vi mas reels este mes o el mes pasado"], "H:compare", dict()),
-    ("n27", ["como ha cambiado lo que veo"], "H:timeline", dict()),
-    ("n28", ["como ha cambiado lo que veo de cocina"], "H:timeline", dict(must=["cocina"])),
+    # round 12, fix (judge: the Spanish of the brief's 7 got the old run of counts): how WHAT is watched changed
+    ("n27", ["como ha cambiado lo que veo"], "H:changed", dict()),
+    ("n28", ["como ha cambiado lo que veo de cocina"], "H:changed", dict(must=["cocina"])),
     ("n29", ["como han cambiado mis videos con el tiempo"], "model", dict()),   # no "veo": still the model's
     ("n30", ["sum up what my watch history says about color grading"], "synth:watched", dict()),
     ("n31", ["summarize what my saves say about motion design"], "synth:saved", dict()),
