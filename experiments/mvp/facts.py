@@ -657,34 +657,44 @@ def _topic_row(view, rec, idx, facts, th, phrase, ev, so, eo):
     return row
 
 
-def _change(periods, th, idx, facts, ev, so, eo, unit):
-    """From the first period to the last: the themes that rose and faded (percentage points), and each one's peak."""
-    if len(periods) < 2 or th is None:
-        return {}
-    import numpy as np
-    first, last = periods[0], periods[-1]
+SPARSE_MIN = 50   # a period with fewer items is too thin to say what was watched in it (marked "sparse")
 
-    def shares(p):
-        return {t["name"]: t["share"] for t in p["themes"]}
-    # full theme shares per period (not just the top 4)
-    allp = []
+
+def _change(periods, th, idx, facts, ev, so, eo, unit):
+    """From the first period with enough items to the last: the themes that rose and faded (percentage points), and
+    each one's peak. A record that starts with a few stray items (4 videos in its first year) would otherwise make
+    "100% to 4%" of one of them."""
+    import numpy as np
+    if th is None:
+        return {}
+    total = sum(p["items"] for p in periods)
+    floor = max(SPARSE_MIN, int(0.01 * total))
     for p in periods:
-        a, b = _period_bounds(p["label"], unit)
+        p["sparse"] = p["items"] < floor
+    full = [k for k, p in enumerate(periods) if not p["sparse"]]
+    if len(full) < 2:
+        return {}
+    i0, i1 = full[0], full[-1]
+    allp = {}
+    for k in full:
+        a, b = _period_bounds(periods[k]["label"], unit)
         sel = ev & (idx.day >= a) & (idx.day <= b)
         it = np.unique(idx.it[sel])
-        tc = Counter(int(t) for t in facts.theme[it] if t >= 0)
-        allp.append({th.shown(t): _share(c, len(it)) for t, c in tc.items()} if len(it) else {})
-    names = set().union(*[set(x) for x in allp])
+        tc = Counter(facts.theme[it][facts.theme[it] >= 0].tolist())
+        allp[k] = {th.shown(t): _share(c, len(it)) for t, c in tc.items()} if len(it) else {}
+    names = set().union(*[set(x) for x in allp.values()])
     rows = []
     for n in names:
-        a, b = allp[0].get(n, 0.0), allp[-1].get(n, 0.0)
-        peak = max(range(len(allp)), key=lambda k: allp[k].get(n, 0.0))
+        a, b = allp[i0].get(n, 0.0), allp[i1].get(n, 0.0)
+        peak = max(full, key=lambda k: allp[k].get(n, 0.0))
         rows.append({"name": n, "from_share": a, "to_share": b, "change": round((b - a) * 100, 1),
                      "peak_period": periods[peak]["label"], "peak_share": allp[peak].get(n, 0.0)})
-    rising = sorted((r for r in rows if r["change"] >= 2.0), key=lambda r: -r["change"])[:5]
-    fading = sorted((r for r in rows if r["change"] <= -2.0), key=lambda r: r["change"])[:5]
+    rising = sorted((r for r in rows if r["change"] >= 2.0), key=lambda r: (-r["change"], r["name"]))[:5]
+    fading = sorted((r for r in rows if r["change"] <= -2.0), key=lambda r: (r["change"], r["name"]))[:5]
+    first, last = periods[i0], periods[i1]
     return {"from": first["label"], "to": last["label"], "rising": rising, "fading": fading,
-            "steady_top": [t["name"] for t in last["themes"][:3] if t["name"] in {x["name"] for x in first["themes"]}]}
+            "steady_top": [t["name"] for t in last["themes"][:3] if t["name"] in {x["name"] for x in first["themes"]}],
+            "sparse_before": [p["label"] for p in periods[:i0]]}
 
 
 def _period_bounds(label, unit):

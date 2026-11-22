@@ -1759,7 +1759,7 @@ def _changed(view, rec, q, start, end, plats, W, today, prof):
         head += (" and" if up else "") + " away from " + ", ".join(
             f"{r['name']} ({round(r['from_share'] * 100)}% to {round(r['to_share'] * 100)}%)" for r in down[:3])
     lines = [head + "."]
-    for p in periods[-8:]:
+    for p in [x for x in periods if not x.get("sparse")][-8:]:
         names = [t["name"] for t in p["themes"][:3] if t.get("name")]
         if names:
             lines.append(f"{p['label']}: " + ", ".join(names))

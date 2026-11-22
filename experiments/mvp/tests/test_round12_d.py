@@ -484,6 +484,18 @@ def test_the_new_kinds_get_a_code_answer_with_no_model_call(r12):
     assert calls == [] and out.startswith("In the summer of 2023 (1 June to 31 August 2023) you watched")
 
 
+def test_a_thin_first_year_is_not_the_start_of_a_change(r12):
+    """Three stray videos in 2019 would make "100% to 0%" of their theme: the change starts at the first year with
+    enough items, and the thin years are named."""
+    extra = [{"id": f"rold{k}", "platform": "youtube", "caption": f"Speedrun of old {k}", "channel": "Frame Perfect",
+              "theme": "sr", "length": 600, "published": "2019-01-01",
+              "events": [("watch", f"2019-0{k + 1}-10T12:00:00+00:00")]} for k in range(3)]
+    R.write(r12["lib"], extra_rows=extra)
+    s = sheet(r12, "how have my interests changed")
+    assert s["periods"][0]["label"] == "2019" and s["periods"][0]["sparse"] is True
+    assert s["change"]["from"] == "2021" and s["change"]["sparse_before"] == ["2019", "2020"]
+
+
 def test_the_history_form_keeps_its_old_shape_for_the_old_kinds():
     from mvp import history as Hm
     q = Hm.read("what did i watch last week", TODAY)
