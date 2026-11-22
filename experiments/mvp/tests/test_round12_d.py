@@ -417,7 +417,7 @@ TRAPS = [
     "what did that video say about gaming", "that video about art was too long", "thanks!",
     "what's the weather like in the summer", "is it better to watch art or gaming", "gaming or art?",
     "tell me a joke", "what can you do", "how have you changed", "what do you think of my taste",
-    "delete my history from 2021", "unsubscribe from that art channel", "remind me in the summer of 2027",
+    "delete my history from 2021", "follow that art channel for me", "remind me in the summer of 2027",
     "email me my top channels", "what should i watch tonight, art or gaming", "make me a playlist of art videos",
     "i watched way too much gaming lol", "what have i been into lately", "what am i into", "what was i into",
 ]
