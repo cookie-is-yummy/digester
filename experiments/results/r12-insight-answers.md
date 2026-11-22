@@ -2,7 +2,7 @@
 
 22 Nov 2026. Branch `experiments/search-loop`, code at 1c5b77a. The design is `experiments/mvp/DESIGN.md` section 19.
 The round's brief, the judges' notes and every live conversation are kept outside git.
-The second pass, code at d7aa507, is the last part of this file ("The second pass").
+The second pass, code at d7aa507, is the part "The second pass". The third pass, code at dd2b1b0, is the last part.
 No titles, channel names, theme names of the real library, handles or captions appear here. Counts are fine.
 
 ## What was asked
@@ -403,3 +403,180 @@ Each changed line is marked "round 12, pass 2" in place. The full list is in DES
 - First fixer $0.36, the two judges about $0.21, second fixer $0.26, final judge about $0.08.
 - These notes made no model call.
 - The cap is $30: $5.78 is left, $1.38 under the $25.60 ceiling for this pass.
+
+## The third pass
+
+22 Nov 2026. Code at dd2b1b0. The design is DESIGN 19.P3 and 19.P3 fix.
+The pass's scope (U1 to U10) and the judges' notes are kept outside git.
+No titles, channel, theme or field names of the real library appear here. Counts are fine.
+
+### What it was for
+
+The second pass's final judge, on d7aa507, gave 5 useful and 3 partly (rows 1, 2, 8), with 6 of 8 half slop.
+The orchestrator typed all 8 on the founder's page and listed ten things still wrong, U1 to U10.
+- A word of direction with no number could be false and still pass the check.
+- "what have i been into lately" went to picks: one video, his own row 8 complaint.
+- Facts were said twice, and a day's items were printed twice (6,400 px tall on a phone).
+- The so-what was off topic or missing. Offers named things the answer never showed.
+- Row 7 hid the leading area's rise and fall. Row 8 did not say what set that summer apart.
+
+How it was built:
+- A first fixer, code at a0e0010: U1 to U10, 99 tests. The prompt did not change (`insight_v5`).
+- Two judges read it live. A graded as the founder. B recounted every claim.
+- A second fixer, code at dd2b1b0: the must-fixes of both judges, 28 tests, each failing on a0e0010.
+- A final judge read dd2b1b0 live on the real library, as the founder would.
+
+### Grades, row by row
+
+The judges are not the founder. They read the live answers on the real library as he would.
+
+| # | Question | Founder, before (1f9cde0) | Pass 2, final judge (d7aa507) | Pass 3, judge A (a0e0010) | Pass 3, final judge (dd2b1b0) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | what have i been watching the most lately | Partly, slop | Partly, half slop | Partly, half slop | Useful, not slop |
+| 2 | which channels did i watch the most in 2025 | Partly, slop | Partly, half slop | Partly, half slop | Useful, half slop |
+| 3 | how many minecraft videos did i watch this year | Useful, not slop | Useful, not slop | Useful, not slop | Useful, half slop |
+| 4 | when did i first start watching blender videos | Partly, not slop | Useful, half slop | Useful, not slop | Useful, not slop |
+| 5 | did i watch more gaming or more art videos this year | Not useful, slop | Useful, half slop | Useful, not slop | Useful, not slop |
+| 6 | what did i watch on october 30 | Partly, half slop | Useful, half slop | Partly, half slop | Useful, half slop |
+| 7 | how has what i watch changed since 2020 | Not useful, slop | Useful, not slop | Useful | Useful, half slop |
+| 8 | what was i into in the summer of 2023 | Not useful, slop | Partly, half slop | Partly | Partly, half slop |
+
+- Founder, before: 1 useful, 4 partly, 3 not useful. 5 of 8 slop.
+- First pass, last judge (ace4be2): 3 useful, 5 partly. 6 of 8 half slop.
+- Second pass, final judge (d7aa507): 5 useful, 3 partly. 6 of 8 half slop.
+- Third pass, judge A (a0e0010): 4 useful, 4 partly. Its slop marks for rows 7 and 8 did not reach these notes.
+- Third pass, judge B gave no grades. It found a topic's Shorts share said as a share of all his YouTube videos.
+- Third pass, final judge (dd2b1b0): 7 useful, 1 partly, 0 not useful. 3 not slop, 5 half slop.
+- The final judge said rows 1 to 7 answer the question asked. Row 8 does not quite.
+- Every number it recounted in the 8 rows was true. One follow-up held a false sentence (below).
+
+Four follow-ups the final judge typed after the 8:
+- "most watched channels in math" (his own wish): not right. One sentence is false as worded.
+- It says a topic's Shorts were 22% of "your YouTube videos". They are 22% of that topic's videos.
+- The same answer's first bullet repeats the lead's three channels.
+- "without shorts" after it: right. Nothing about Shorts is said, and the chart drops them.
+- But its lead repeats the previous lead word for word, and one bullet skips the second channel.
+- "what have i been into the last 3 months": right. Read as history, not a pick (U2 holds).
+- It covers the last 90 days the record holds, against the 90 days before. No so-what.
+- "how did my watching change from 2023 to 2025": right. Told by areas, not a timeline of counts.
+- Every share in it recounted true (U1 holds). No so-what.
+
+### What the final judge still wants, by row
+
+1. Nothing. It leads with the change and ends with what fell, with a step to take.
+2. The so-what offers saved videos on one theme but never ties them to the channel it names.
+   The text says "top 5" over a chart of 8 bars.
+3. The lead and a bullet say the same two themes. The so-what is one more share, not a step.
+   A 10-row month chart is long on a phone.
+4. Nothing. It does not say what kind of videos the topic was, and the fade comes only after the cards.
+5. Nothing. It has no so-what, which the judge called honest: nothing fitting was found.
+6. Do not offer "only <theme>" when that theme is 3 of the day's 10 videos.
+7. Drop or ground one stray theme bullet (no share, no change, "was driven by" grammar).
+   The so-what should offer something code can do. The lead is one long dense sentence.
+8. Lead with what he was into that summer (what peaked or was new), with the move to Shorts second.
+   The leading area is said twice, and Shorts twice. Drop the "little else set it apart" bullet. No so-what.
+
+### U1 to U10: what changed
+
+| | What was wrong | Now | Status |
+| --- | --- | --- | --- |
+| U1 | A word of direction with no number passed unchecked | Each word of direction or comparison needs a path whose two values support it, else the sentence goes. A change between two years is told by areas | Fixed. 15 new planted cases: 9 caught before, 15 after |
+| U2 | "what have i been into lately" went to picks | Read as the history "top" answer over the window, where the library has a watch history and themes | Fixed. "saving lately" goes where it went |
+| U3 | Shorts named inside a "without Shorts" answer; lead and chart at two levels | Nothing about Shorts with Shorts left out; the chart follows the level the answer names | Fixed in the final judge's follow-up |
+| U4 | Repeats; items printed as a list and again as cards | Two sentences on the same facts: the first stands. Lists are an overview, then cards with one caption line. Row 6 about 2,900 px tall, from 6,400 | Partly: a fact said again in other words still passes (rows 3, 8, and a repeated lead) |
+| U5 | The so-what off topic or missing | Tied to the question's subject; none rather than an unrelated one. "The most lately" says what moved, with a step | Partly: rows 3 and 7 give a statistic, row 2's is not tied to its channel, rows 5 and 8 have none |
+| U6 | Offers of things never shown | Only what the answer, bullets, chart or so-what showed; never "by month" under a month chart | Partly: row 6 offers a theme of 3 videos |
+| U7 | A move with no base; "1 points" | Every change with its direction, both values and its base in his words; "1 point" | Fixed. New: two theme bullets with "was led by" grammar |
+| U8 | Rows 7, 8 and 2 about the wrong thing | Row 7: the leading area's weight over the years and the year of the turn. Row 8: what set the season apart. Row 2: clip channels he grazed against long-form ones he kept coming back to | Partly: rows 7 and 2 fixed; row 8 leads with how he watched, not what |
+| U9 | Month bars summed above the count; "N% were Shorts" of whom | A caption says what the bars count; the Shorts share names whose | Partly: row 3 fixed; one topic answer still says its Shorts share as of all his videos |
+| U10 | The daily cap silently stopped the writer | README step 4 shows the setting; the trace says "daily cap reached" | Fixed. Not yet seen by him |
+
+In all: 5 fixed (U1, U2, U3, U7, U10), 5 partly (U4, U5, U6, U8, U9), 0 not done.
+
+What the second fixer changed after judge A and judge B, in short:
+- Row 1 leads with the area that moved most; what fell is the so-what, with "only <area>" as its step.
+- Asked again right after itself, row 1 keeps the same lead and repeats nothing.
+- One fall is never said at two levels. A span's dates are said once.
+- "The last 3 months" covers the last 90 days the record holds, against the 90 days before.
+- A day's leader is a count. The export's last day is never set against a usual day.
+- Row 4 says what its Shorts and long split is of, and its fade names its subject and the part of the year.
+- Row 5's chart has four bars: each side this year and in the same part of last year.
+- Row 2 leads in words, and the chart carries the counts. Both filters are said after two follow-ups.
+
+### What was measured
+
+The writer's eval: the same 20 made-up sheets, rescored from the saved `insight_v5` forms (no model call).
+
+| Code | Answers the question | Writer used | Observations kept | So-what said | Limits line | Run of counts |
+| --- | --- | --- | --- | --- | --- | --- |
+| a490cdd (before the pass) | 18 of 20 | 19 | 51 | 7 | 0 | 0 |
+| a0e0010 (first fixer) | 19 | 20 | 52 | 6 | 0 | 0 |
+| dd2b1b0 (second fixer) | 19 | 20 | 52 | 6 | 0 | 0 |
+
+- One so-what fewer is on purpose: a Shorts shift under a channels answer is no longer said (U5).
+- Each fixer's own rules regressed this eval on the way. Each regression was found by the rescore and fixed.
+- The prompt did not change, so no new live eval run was needed.
+
+Planted falsehoods (made-up sheets):
+- The older typed sentences: 89 of 89 false dropped, 43 of 43 true kept, before and after.
+- The path-form set: 60 of 60 false dropped, 27 of 27 true kept (45 and 19 before the new case).
+- The new case: 15 false directions with no number, 8 true ones. At a490cdd 9 of the 15 were caught; now 15.
+- All 8 true ones are kept, before and after.
+
+Themes and topics: no theme was rebuilt, and no naming prompt or topic mapping changed.
+So the naming eval and the topic mapping eval were not due.
+
+Checks at dd2b1b0 (run by the final judge):
+- Full suite, 4 shards: 5,301 passed, 0 failed (5,175 before the pass; 5,273 after the first fixer).
+- Demo: 10 passed. Dry self-test: 67 conversations, 164 of 164 steps.
+- `probe_same`: byte-equal with `same_head.json`.
+- Dev phrasing set by code: 73 helper lines right, 1 wrong (d007), 1 of 40 none lines taken (d132). Unchanged.
+- The 159 rule texts and 123 phrasings: taken by no new read. Round 11 and round 12 traps: not taken.
+- Two trap lines changed on purpose (U2, below).
+- Row 6 at 430 px: about 2,900 px tall (6,400 before the pass). Row 4: about 1,400 px, every item once.
+- No reply of picks, recalls, summaries, asking videos, rules, emails, cancels or connectors changed.
+
+Seconds and cost per answer (the final judge's live run):
+
+| Answer | The writer's call | At the page | Model calls | Cost |
+| --- | --- | --- | --- | --- |
+| The 8 questions | 2.4 to 5.6 s | 9 to 13 s | 1 each | $0.0040 to $0.0062 each, $0.042 for all 8 |
+| 4 follow-ups | - | 10 to 11 s | 1 each | $0.0045 to $0.0054 each |
+
+### What changed on purpose in earlier tests
+
+The full list, with each line, is in DESIGN 19.P3 and 19.P3 fix.
+- Two traps changed (U2): "what have i been into lately" left the round 12 D trap list.
+- In the round 11 trap list it became "what have i been saving lately".
+- A first's parts are the overview, then a caption line and a card per item (U4): `test_round12_w.py`, `test_round12_merge.py`.
+- The self-test step c62.1 reads the caption line in place of the numbered title (U4).
+- `test_round12_pass2_fix.py`: the saved order without the new "moving" candidate (U5).
+- In it too: "leaned less on Shorts" may go as an unbound direction (U1); the change's so-what no longer says what grew.
+- The second fixer: row 1's lead and so-what and row 7's turn year (`test_round12_pass3.py`).
+- A top answer over 4 weeks leads with the move; a count without "about" (`test_round12_pass2.py`, `_pass2_fix.py`).
+- The export's last day is not set against a usual day (the same two files).
+- A first's path names its subject and part of the year; a channels lead in words (`test_round12_fix.py`).
+- Both filters said after "without Shorts" then "only X" (`test_round12_merge.py`).
+- `eval/insight_cases.json`: the v5 set gets the direction case.
+- These notes changed no test.
+
+### Still wrong or unproven
+
+- Row 8 leads with how he watched (the move to Shorts), not what he was into that summer.
+- One false sentence passed in a follow-up: a topic's Shorts share said as of all his YouTube videos.
+- The second fixer had fixed one wording of it; a count with "made up" still gets through.
+- A fact said again in other words passes the repeat rule (rows 3 and 8, a repeated lead after "without shorts").
+- Some so-whats are one more share, with no step (rows 3, 7). Row 2's is not tied to its channel.
+- Two theme bullets have bad grammar ("<themes> was led by", "was driven by").
+- Row 6 is still mostly what anyone could look up. Its offer of a theme of 3 videos is pointless.
+- The writer's own bullets vary from run to run.
+- The writer is measured on 20 made-up sheets. Real sheets were replayed offline but not scored as an eval.
+- Theme and field names are not confirmed by him. The builds were never run on his Mac. iMessage was not seen.
+- Spanish so-whats are saved items only. Most code-written lines are English only.
+
+### Spend of the pass
+
+- Ledger: $24.26 before the pass, $24.89 after. This pass: $0.63.
+- First fixer $0.14, the two judges $0.21, second fixer $0.20, final judge $0.07.
+- These notes made no model call.
+- The whole round: about $2.52. The cap is $30: $5.11 is left, $0.51 under the $25.40 ceiling for this pass.

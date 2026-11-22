@@ -5,42 +5,44 @@
 - **Asked for:** "it doesn't really answer the question properly. can we please refine this so that it does before i judge again?"
 - **His grades before** (8 history questions, build 1f9cde0): 1 useful, 4 partly, 3 not useful. 5 of 8 slop.
 - **Scope:** those 8 history questions and their near wordings only. Everything else is unchanged, byte for byte.
-- **Built as:** two builders, a merge, two judges, a fix pass. Then a second pass: a fixer, two judges, a fixer, a final judge.
-- **Code now:** d7aa507 on `experiments/search-loop`.
+- **Built as:** three passes. Each had fixers, judges reading live on his library, and a final judge.
+- **Code now:** dd2b1b0 on `experiments/search-loop`.
 - **Fact sheet:** code builds one per question. It is the only source of facts the writer may use.
 - **Writer (`insight_v5`):** one model call fills a form of sheet paths. Code puts in every number and name.
-- **Check:** code checks binding, rank, amount, direction and repeats. A sentence that fails is dropped.
+- **Check:** binding, rank, amount, direction and repeats. Now also every word of direction with no number.
 - **Lengths:** the official length of 108,685 watched videos, from YouTube's own API. Used only for Shorts against long.
 - **Themes:** 19 fields and 50 themes clustered from what he watched. Each theme has a broad area. Model-named.
-- **Answers now:** the broad areas first, then the themes inside, a small chart, a so-what, one line of offers.
-- **A change:** told as eras, with what rose, what fell and Shorts per year.
-- **A day:** against his usual day (count, Shorts, busiest hour). A comparison: a ratio in words, and last year's.
-- **Gone:** totals of video length (they read as watch time). The export hint on history answers.
+- **Answers now:** the answer first, two to four observations, a small chart, a so-what, one line of offers.
+- **"The most lately":** leads with the area that moved against the 4 weeks before. What fell is the so-what, with a step.
+- **A change:** the leading area's weight over the years, the year of the turn, then Shorts. Two years: told by areas.
+- **Lists (a day, a first):** an overview, then cards with one caption line each. Row 6: about 2,900 px on a phone, from 6,400.
+- **"what have i been into lately":** now a history answer, not one picked video.
 - **Grades, first pass's last judge** (ace4be2): 3 useful, 5 partly. 6 of 8 half slop.
-- **Grades, judge A of the second pass** (2257352): 3 useful, 5 partly. All 8 half slop. Four false sentences got through.
-- **Grades, final judge** (d7aa507): 5 useful, 3 partly, 0 not useful. 2 not slop, 6 half slop.
-- **By row, final judge:** useful 3, 4, 5, 6, 7; partly 1, 2, 8. Every recounted number true.
-- **T1 to T15:** 9 fixed (T1, T2, T6, T8, T9, T10, T12, T13, T15), 6 partly (T3, T4, T5, T7, T11, T14).
-- **Writer, measured:** 18 of 20 made-up sheets answered (17 before). 0 limits lines. 0 runs of counts.
-- **Planted falsehoods:** 89 of 89 typed and 45 of 45 path-form dropped. All 62 true ones kept.
-- **Topic count:** minecraft maps to 5 themes, not 8. Its all-time count fell from 13,902 to 8,220.
-- **Per answer:** one call, $0.0038 to $0.0059, 2.8 to 8.8 seconds. A 20-second deadline falls back to code.
-- **Checks:** 5,175 offline tests pass (5,018 before the pass). Demo 10. Dry self-test 164 of 164. Byte-equal probe.
-- **Still wrong:** rows 1 and 8 are lists of shares, not a picture of him.
-- **Still wrong:** the so-what is missing (rows 1, 3), off topic (5) or said twice (8).
-- **Still wrong:** a day's and a first's items are printed twice, as a list and as cards.
-- **Still wrong:** row 7 hides the leading area's rise and fall. "the last 3 months" goes to picks.
-- **Unproven:** no eval on real sheets. Theme names not confirmed. The builds never run on his Mac. iMessage not seen.
-- **Spend:** $24.22 of the $30 cap. The second pass about $0.91; the whole round about $1.85.
+- **Grades, second pass's final judge** (d7aa507): 5 useful, 3 partly. 6 of 8 half slop.
+- **Grades, third pass, judge A** (a0e0010): 4 useful, 4 partly.
+- **Grades, third pass, final judge** (dd2b1b0): 7 useful, 1 partly, 0 not useful. 3 not slop, 5 half slop.
+- **By row, final judge:** useful 1 to 7; partly 8. Every number it recounted in the 8 rows was true.
+- **U1 to U10:** 5 fixed (U1, U2, U3, U7, U10), 5 partly (U4, U5, U6, U8, U9).
+- **Writer, measured:** 19 of 20 made-up sheets answered (18 before the pass). 0 limits lines. 0 runs of counts.
+- **Planted falsehoods:** 89 of 89 typed and 60 of 60 path-form dropped. All 70 true ones kept.
+- **New planted case:** 15 false directions with no number. 9 caught before the pass, 15 after.
+- **Per answer:** one call, $0.0040 to $0.0062. The call takes 2.4 to 5.6 s; 9 to 13 s at the page.
+- **Checks:** 5,301 offline tests pass (5,175 before the pass). Demo 10. Dry self-test 164 of 164. Byte-equal probe.
+- **Still wrong:** row 8 leads with how he watched (Shorts), not what he was into that summer.
+- **Still wrong:** one false sentence in a follow-up: a topic's Shorts share said as of all his YouTube videos.
+- **Still wrong:** a fact said again in other words (rows 3 and 8). Rows 3 and 7 end on a share, not a step.
+- **Still wrong:** row 2's so-what is not tied to the channel it names. Row 6 is mostly what anyone could look up.
+- **Unproven:** no scored eval on real sheets. Theme names not confirmed. The builds never run on his Mac. iMessage not seen.
+- **Spend:** $24.89 of the $30 cap. The third pass $0.63; the whole round about $2.52.
 - **Founder, please:**
-  1. Pull d7aa507 or later and restart the test page.
-  2. On your Mac, from `experiments/`: `python3 -m mvp.lengths <library>` (YOUTUBE_API_KEY, free, about 6 minutes).
+  1. Pull dd2b1b0 or later and restart the test page.
+  2. On your Mac, from `experiments/`: `python3 -m mvp.lengths <library>` (`YOUTUBE_API_KEY`, free, about 6 minutes).
   3. Then `python3 -m mvp.themes build <library>` (`OPENAI_API_KEY`, about $0.04, about 75 s).
   4. Check with `python3 -m mvp.themes status <library>`. The page says WARNING at start-up if either is missing.
-  5. Ask the same 8 questions and grade them. Try "without shorts", "only <area>", "most watched channels in math".
-  6. Decide: should "the most lately" lead with what changed, rather than the biggest shares?
-  7. Decide: a day's items as a list or as cards on a phone, not both.
-  8. Decide: no so-what rather than a weak one, when never-twice removes the best.
+  5. Start the page with `MVP_DAILY_CAP_USD=8` while grading, or the $1 daily cap stops the writer.
+  6. Ask the same 8 questions and grade them. Try "without shorts", "only <area>", "most watched channels in math".
+  7. Decide: should a season he moved to Shorts lead with Shorts, or with what he watched then?
+  8. Confirm: "the most lately" leads with what moved; lists as captioned cards; no so-what rather than an off-topic one.
   9. Read the 19 field and 50 theme names once. Confirm the Short rule.
   10. With the other founder, decide amendment A-019 (fact sheet, checked writer, themes from what was watched).
   11. d132 and A-008 to A-018 are still open.
