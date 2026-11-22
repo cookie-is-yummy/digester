@@ -660,8 +660,8 @@ def test_a_change_so_what_does_not_say_again_what_grew():
         {"text": "{areas_change.arrived[0].name} rose from {areas_change.arrived[0].from_share} to "
                  "{areas_change.arrived[0].to_share}.", "uses": []}]}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
-    assert f["so_what"] == "The learning side gave way: science fell from 10% in 2020 to 2% in 2026, while internet " \
-                           "culture grew."
+    # round 12, pass 3 (U4, live, row 7: what grew was said in the answer and a bullet, then a third time here)
+    assert f["so_what"] == "The learning side gave way: science fell from 10% in 2020 to 2% in 2026."
 
 
 def test_a_topics_channels_answer_has_enough_bullets_from_code():

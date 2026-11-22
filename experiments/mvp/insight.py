@@ -1272,6 +1272,23 @@ def _field_claim(facts, text):
     return None
 
 
+def _pairs(text, facts):
+    """Round 12, pass 3 (U4): the (name, percent) pairs a sentence says: each sheet name with the first percent said
+    within a few words after it ("Comedy edits (6%" -> ("comedy edits", 6))."""
+    if not text:
+        return set()
+    names, t = facts.names_in(_norm(text))
+    out = set()
+    for m in re.finditer(r"\|([A-Z])\|", t):
+        k = ord(m.group(1)) - 65
+        if k >= len(names):
+            continue
+        nxt = re.match(r"[^|%]{0,24}?(\d+(?:\.\d+)?)\s*%", t[m.end():])
+        if nxt:
+            out.add((names[k], round(float(nxt.group(1)))))
+    return out
+
+
 def _signature(text, facts):
     """The numbers and names a sentence says (for telling a repeat)."""
     if not text:
@@ -3451,7 +3468,7 @@ def code_form(sheet):
                 # round 12, pass 3 (U8, row 7: "led every year" hid that its share doubled and then fell back): WHAT
                 # changed first, the leading area's weight over the years and what took its place
                 ans = (f"{e0['area'][:1].upper() + e0['area'][1:]} led every year, but its weight moved: "
-                       f"{_pc(ys[0][1])} of {ys[0][0]}, up to {_pc(pk[1])} in {pk[0]}, then down to {_pc(ys[-1][1])} "
+                       f"{_pc(ys[0][1])} in {ys[0][0]}, up to {_pc(pk[1])} in {pk[0]}, then down to {_pc(ys[-1][1])} "
                        f"in {ys[-1][0]}" + (f", as {' and '.join(arr)} took more of it." if arr else "."))
             elif big_shorts:
                 # round 12, pass 2 fix (judge A, row 7: lead with the biggest change): one area led every year, and
@@ -3687,7 +3704,11 @@ def fill(form, raw, sheet, chart_vals=None):
             form["answer"] = new
             form["filled"].append("answer")
     if cf["answer"] and (not form["answer"] or sheet.get("kind") == "compare_topics" or
-                         (sheet.get("kind") == "changed" and (sheet.get("eras") or []))):
+                         (sheet.get("kind") == "changed" and (sheet.get("eras") or [])) or
+                         # round 12, pass 3 (U4, live, row 6: the writer's "mostly Shorts at 9 of 10" above code's
+                         # "Shorts were 90% ... against about 78% on a usual day"): a day's overview is code's, its count
+                         # against the usual day, and the writer's bullets are read against it
+                         (sheet.get("kind") == "day" and (sheet.get("usual") or {}).get("median_items"))):
         # round 12, pass 2 (T4): a change is told as eras, by code (live: "shifted from gaming and internet culture
         # toward gaming, comedy, and internet culture")
         # round 12, pass 2 (T9): a comparison's answer is code's own (the ratio in words, then the two counts): the
@@ -3810,8 +3831,9 @@ def fill(form, raw, sheet, chart_vals=None):
     if sw and chosen is not None and chosen.get("kind") == "learning_faded" and chosen.get("from") and \
             " ".join(_words(chosen.get("grew") or "")) in names and facts.lang == "en":
         # round 12, pass 2 fix (live, row 7): what grew is said above; the so-what says what gave way
+        # round 12, pass 3 (U4, live, row 7: what grew was said in the answer and a bullet, then a third time here)
         t = (f"The learning side gave way: {chosen['faded']} fell from {_pc(chosen['faded_from'])} in "
-             f"{chosen['from']} to {_pc(chosen['faded_to'])} in {chosen['to']}, while {chosen['grew']} grew.")
+             f"{chosen['from']} to {_pc(chosen['faded_to'])} in {chosen['to']}.")
         if check_sentence(t, facts) is None:
             sw = tidy(t, facts.lang)
     if sw:
@@ -3862,6 +3884,9 @@ def fill(form, raw, sheet, chart_vals=None):
         if own and own <= obs_names and (_UP.search(_norm(x)) or _DOWN.search(_norm(x)) or
                                          len(form["observations"]) >= OBS_MIN):
             continue   # the same names an observation already speaks of ("X grew to 6%" and "X grew from 3% to 6%")
+        if len(own) >= 2 and own <= set(facts.names_in(form["answer"] or "")[0]) and \
+                len(form["observations"]) >= OBS_MIN:
+            continue   # round 12, pass 3 (U4, live, row 4): the channels the answer named, named again
         need = len(form["observations"]) < OBS_FILL
         length = (not hours and re.search(r"\badd(?:s)? up\b|\bsuma\b", x) and sheet.get("kind") in ("top", "channels")
                   and len(form["observations"]) < OBS_MAX)
@@ -3884,6 +3909,16 @@ def fill(form, raw, sheet, chart_vals=None):
                 form["dropped"].append(("observation", "said_by_code", x))
                 continue
             keep.append(x)
+        # round 12, pass 3 (U4, live, row 8: "Comedy edits (6%)" in three bullets): a bullet that says a name with
+        # the same share as a MUST line goes (the MUST line says it, with more), never below the minimum
+        mp = set().union(*[_pairs(m, facts) for m in must]) if must else set()
+        if mp:
+            k2 = [x for x in keep if not (_pairs(x, facts) & mp)]
+            if len(k2) + len(must) >= OBS_MIN:
+                for x in keep:
+                    if x not in k2:
+                        form["dropped"].append(("observation", "said_by_code", x))
+                keep = k2
         room = max(0, OBS_MAX - len(must))
         form["observations"] = keep[:room] + must
         form["filled"].append("must")
@@ -3903,6 +3938,22 @@ def fill(form, raw, sheet, chart_vals=None):
                                                     for j in range(len(sigs))))]
     if len(sub) >= OBS_MIN or len(sub) == len(form["observations"]):
         form["observations"] = sub   # (never below the minimum: today's code reply would go out)
+    # round 12, pass 3 (U4, live, row 2: "X had 137 videos, ahead of A and B; 95% of its videos were Shorts" under an
+    # answer that said the 137 and a code line that said the 95%): a bullet whose every number and name the answer or
+    # another bullet says goes, the later one first
+    obs_ = list(form["observations"])
+    for i in range(len(obs_) - 1, -1, -1):
+        x = obs_[i]
+        if len(obs_) <= OBS_MIN:
+            break
+        others = " ".join([form["answer"] or ""] + [y for j, y in enumerate(obs_) if j != i])
+        mine, theirs = _pct_vals(x, facts), _pct_vals(others, facts)
+        nm, onm = set(facts.names_in(x)[0]), set(facts.names_in(others)[0])
+        if mine and nm and nm <= onm and all(any(v == w and (p is True) == (q is True) for w, q in theirs)
+                                             for v, p in mine):
+            form["dropped"].append(("observation", "said_elsewhere", x))
+            obs_.pop(i)
+    form["observations"] = obs_
     return form
 
 
