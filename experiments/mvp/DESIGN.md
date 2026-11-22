@@ -4601,8 +4601,8 @@ docs/05 names the gap rule).
   the checks (over 4 words, a channel's name, a bare "videos") gets the code's own typical words. Two themes of one name
   count as one (`facts.ItemFacts`).
 - Kept under `data/mvp/derived/themes-v2/<library key>/`: `build.json` (version, prompt version, model, embedding store
-  and model, parameters, names, counts, wall time, items a second) and `space.npz` (the transforms, centroids, each
-  vector row's field and theme). Built only by `python3 -m mvp.themes build <library>` (never while a person waits);
+  and model, parameters, names, counts, wall time, items a second), `space.npz` (the transforms, centroids, each
+  vector row's field and theme) and `themes.jsonl` (the same rows, each with the version and the embedding model). Built only by `python3 -m mvp.themes build <library>` (never while a person waits);
   an item added later gets its nearest theme by code from the frozen transforms when the build is loaded. v1 (prompt
   `theme_name_v1`, no category) is kept beside it. Real library: 98,677 watched items with vectors clustered, 121,169
   rows assigned, 19 fields and 50 themes, 7 themes and 4 field names dropped as sensitive; 75 s.

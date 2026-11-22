@@ -19,7 +19,8 @@ needs:
   its items fall under no theme. A reply that fails the checks gets the code's own typical words as its name.
 - Kept, versioned, rebuildable (AGENTS.md rule 2 and 10): <derived>/themes-v1/<library key>/build.json (the
   version, the embedding store, the parameters, the names, the counts) and space.npz (the transforms, the centroids,
-  each vector-store row's field and theme). Rebuilt only by `python3 -m mvp.themes build <library>` (a new version
+  each vector-store row's field and theme), and themes.jsonl (the same rows with the version and the embedding model in
+  each). Rebuilt only by `python3 -m mvp.themes build <library>` (a new version
   or a library that changed by more than REBUILD_SHARE); an item added later is given the nearest theme by code when
   the build is loaded, with the build's frozen transforms. Never built while a person waits.
 """
@@ -403,7 +404,24 @@ def build(lib, view=None, person=None, chat=None, log=print, now=None):
                                          "items_per_s")}))
     with _LOCK:
         _LOADED.clear()
+    write_rows(lib)
     return meta
+
+
+def write_rows(lib):
+    """themes.jsonl beside the build: one row per vector-store row with its field, theme, shown name, the version and
+    the embedding model (AGENTS.md rule 10: every derived row says what made it). space.npz is the fast copy."""
+    import numpy as np
+    d = folder(lib)
+    meta = json.load(open(os.path.join(d, "build.json"), encoding="utf-8"))
+    z = np.load(os.path.join(d, "space.npz"))
+    names = {t["id"]: (None if t.get("sensitive") else t.get("name")) for t in meta["themes"]}
+    tmp = os.path.join(d, "themes.jsonl.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        for i, fj, tj in zip(z["ids"].tolist(), z["field"].tolist(), z["theme"].tolist()):
+            f.write(json.dumps({"item_id": str(i), "field": int(fj), "theme": int(tj), "name": names.get(int(tj)),
+                                "version": meta["version"], "embedding_model": meta["embedding_model"]}) + "\n")
+    os.replace(tmp, os.path.join(d, "themes.jsonl"))
 
 
 def _sample(view, ids, members, zm, cent, rng):
@@ -580,7 +598,10 @@ def for_topic(view, rec, phrase, th=None, hits=None):
 if __name__ == "__main__":   # python3 -m mvp.themes build <library>
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["build"])
+    ap.add_argument("cmd", choices=["build", "rows"])
     ap.add_argument("library")
     a = ap.parse_args()
-    build(a.library)
+    if a.cmd == "rows":   # write themes.jsonl again from an existing build (no model call)
+        write_rows(os.path.abspath(a.library))
+    else:
+        build(a.library)

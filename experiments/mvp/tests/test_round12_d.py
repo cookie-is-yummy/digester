@@ -176,6 +176,10 @@ def test_the_build_records_its_version_the_embedding_model_and_its_numbers(r12):
     assert meta["version"] == "themes-v2" and meta["prompt_version"] == "theme_name_v2"
     assert meta["embedding_store"] == "oai3l_1024" and meta["embedding_model"].startswith("text-embedding-3-large")
     assert meta["items_clustered"] > 700 and meta["wall_s"] >= 0 and "items_per_s" in meta
+    rows = [json.loads(x) for x in open(os.path.join(T.folder(str(r12["lib"])), "themes.jsonl"))]
+    assert len(rows) == meta["rows_assigned"]
+    assert all(r["version"] == "themes-v2" and r["embedding_model"] == meta["embedding_model"] for r in rows)
+    assert not any(r["name"] == "Dating advice" for r in rows)
 
 
 def test_an_item_added_later_gets_the_nearest_theme_by_code_and_a_new_version_is_not_read(r12, tmp_path):
