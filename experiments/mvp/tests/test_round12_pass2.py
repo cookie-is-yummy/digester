@@ -464,7 +464,10 @@ def test_live_a_so_what_question_code_cannot_follow_is_said_as_a_notice():
     raw = dict(c["fake"], so_what={"pick": "shorts_shift:up", "text": "Shorts rose to {totals.shorts} videos; want to look at what changed?"})
     f = I.fill(I.check(raw, c["sheet"]), raw, c["sheet"])
     assert ("so_what", "dead_question") in [(d[0], d[1]) for d in f["dropped"]]
-    assert f["so_what"] and not f["so_what"].endswith("?") and f["so_what"].startswith("Shorts went up to")
+    # round 12, pass 4 (V4, changed on purpose): a notice with no step is a bullet, not a so-what
+    # (here the answer says the Shorts already, so it is no bullet either: one fact once)
+    assert not f["so_what"] and ("so_what", "no_step") in [(d[0], d[1]) for d in f["dropped"]], f
+    assert not any(o.endswith("?") for o in f["observations"])
 
 
 def test_live_a_comparisons_answer_is_codes_ratio_in_words():
@@ -482,10 +485,11 @@ def test_live_a_topics_share_is_of_its_own_videos_and_an_estimate_says_about():
     assert I.scoped("Art and design made up 89% of what you opened.", s) == \
         "Art and design made up 89% of your blender videos."
     # round 12, pass 3 fix (judge A, row 3, on purpose): the count as counted, with what it counts (no "about")
+    # round 12, pass 4 (V6, changed on purpose): what it counts, in words
     assert I.scoped("You opened 300 blender videos.", s, answer=True) == \
-        "You opened 300 blender videos (by their titles and themes)."
+        "You opened 300 videos whose title or theme is about blender."
     assert I.scoped("You opened about 300 blender videos.", s, answer=True) == \
-        "You opened 300 blender videos (by their titles and themes)."
+        "You opened 300 videos whose title or theme is about blender."
 
 
 def test_live_one_area_every_year_charts_the_move_to_shorts():

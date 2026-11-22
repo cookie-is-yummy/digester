@@ -446,7 +446,9 @@ def test_live_yes_to_a_so_what_on_two_themes_lists_both(wr, monkeypatch):
         s = real(*a, **k)
         if s and s.get("library", {}).get("saved_not_opened"):
             one = s["library"]["saved_not_opened"][0]
-            s["library"]["saved_not_opened"] = [dict(one, ids=None, examples=one["examples"][:2], n=2),
+            # round 12, pass 4 (V4, changed on purpose): a so-what is said only with a step code takes; the first
+            # group says the 3 saved videos the so-what's offer names (with 2, the path alone was a bullet)
+            s["library"]["saved_not_opened"] = [dict(one, ids=None, examples=one["examples"][:2], n=3),
                                                 dict(one, theme="Second theme", examples=one["examples"][2:], n=1)]
         return s
     monkeypatch.setattr(F, "build", two)
@@ -454,7 +456,8 @@ def test_live_yes_to_a_so_what_on_two_themes_lists_both(wr, monkeypatch):
     st = wr["bot"].store.get_state(Hm.STATE.format(h=H))
     assert [len(g["ids"]) for g in st["saved"]["groups"]] == [2, 1]
     out, _ = ask(wr, "yes")
-    assert "Saved on Watercolor painting and never opened:\n1. " in out and "Saved on Second theme and never opened:\n3. " in out
+    assert "Saved on Watercolor painting and never opened (the 2 saved last, of 3):\n1. " in out and \
+        "Saved on Second theme and never opened:\n3. " in out
 
 
 def test_live_a_first_in_an_earlier_year_says_the_year_on_its_lines(wr):

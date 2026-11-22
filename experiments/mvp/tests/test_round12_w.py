@@ -307,7 +307,8 @@ def test_a_day_first_or_last_gives_the_overview_then_the_items_with_their_cards(
     # round 12, merge: an item of another year than the window's end says its year (live: a first of 2020 said "11 Apr")
     assert parts[1] == {"type": "text", "text": "1. Pixel Forge · 14 Mar 2019 · 21 min", "card_alt": True}
     assert parts[2]["url"].endswith("vy1") and parts[2]["caption"] == "1. Pixel Forge · 14 Mar 2019 · 21 min"
-    assert parts[-1]["text"].endswith("Want it with the videos?")
+    # round 12, pass 4 (V5, changed on purpose): a first shows its videos already; no offer repeats them
+    assert "Want it with the videos?" not in parts[-1]["text"]
 
 
 # round 12, fix: "bad_answer" and "one_observation" left this list: a well-formed form keeps what passed and code

@@ -230,8 +230,10 @@ def test_row8_the_move_to_shorts_and_what_fell_lead_and_the_so_what_does_not_say
 
 
 def test_row8_weak_differences_are_said_as_small():
+    # round 12, pass 4 (V2, changed on purpose): "Little else set the summer apart ..." is filler; when nothing ran
+    # at twice its share of the rest of the year, nothing is said about it
     obs = [o["text"] for o in ins().code_form(_summer())["observations"]]
-    assert any(o.startswith("Little else set the summer apart from the rest of 2023:") for o in obs), obs
+    assert not any("set the summer apart" in o for o in obs), obs
 
 
 # ================================ row 4: what the split is of, the part of the year, whose Shorts ==============
@@ -282,7 +284,8 @@ def test_row3_no_about_on_a_count_and_what_it_counts_once():
     s = {"kind": "count", "lang": "en", "filters": {"topic": "block games"},
          "topics": [{"name": "block games", "items": 1094, "matched_by": "themes and words"}]}
     out = ins().scoped("This year you opened about 1,094 block games videos, mostly builds.", s, answer=True)
-    assert out == "This year you opened 1,094 block games videos (by their titles and themes), mostly builds."
+    # round 12, pass 4 (V6, changed on purpose): what it counts, in words ("by their titles and themes" read as a guess)
+    assert out == "This year you opened 1,094 videos whose title or theme is about block games, mostly builds."
 
 
 # ================================ row 2: channels ==============================================================

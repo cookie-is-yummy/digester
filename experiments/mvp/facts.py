@@ -752,6 +752,14 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             out["distinct"] = _distinct(idx, facts, th, ev, so, eo, view)
         except Exception:  # noqa: BLE001 - extra; the sheet stands without it
             out["distinct"] = {}
+    if kind == "top" and into_question(text) and so is not None and eo is not None and th is not None:
+        # round 12, pass 4 (V2, row 8: asked what he was INTO, the answer led with how he watched): the themes of the
+        # window at their highest share in any span of its length, and those new then (hidden from the writer:
+        # code's lead says them)
+        try:
+            out["into"] = _peaks_new(idx, facts, th, ev, so, eo, rows, year=(w.kind == "year"))
+        except Exception:  # noqa: BLE001 - extra; the sheet stands without it
+            out["into"] = {"peaked": [], "new": []}
     out["so_what_candidates"] = _so_what_candidates(out, kind, q)
     out["offers"] = _offers(q, kind, out)
     out["built_s"] = round(time.monotonic() - t0, 3)
@@ -1000,6 +1008,81 @@ def _seasonal(idx, facts, th, ev, start_o, end_o, theme_rows):
         if years >= 3:
             out.append({"theme": t["name"], "years": years, "of_years": seen})
     return out[:1]
+
+
+_INTO_Q = re.compile(r"\binto\b|\bback in\b|\bwatching back\b|\bmetido\b|\ben qu[eé] estaba\b", re.I)
+_MOST_Q = re.compile(r"\bmost\b|\bm[aá]s\b", re.I)
+
+
+def into_question(text):
+    """Round 12, pass 4 (V2): "what was i into in the summer of 2023", "what was i watching back in 2021", "what have i
+    been into the last 3 months": a question about WHAT he was into (never "the most", a ranking)."""
+    t = str(text or "")
+    return bool(_INTO_Q.search(t)) and not _MOST_Q.search(t)
+
+
+PEAK_TILE_MIN = 100     # V2: a span of the window's length counts with at least this many videos opened
+PEAK_TILES_MIN = 3      # and a theme "peaked then" only against at least 3 such spans
+PEAK_LIFT = 1.5         # at its highest share of any span, and at least 1.5 times its median share of them
+PEAK_NEXT = 1.1         # and at least 1.1 times its next highest (a peak a hair above another span is no peak)
+PEAK_MIN_SHARE = 0.02   # a theme of at least 2% of the window
+PEAK_MIN_ITEMS = 20     # and 20 videos
+NEW_BEFORE_MAX = 0.05   # "new then": before the window, at most 5% of its videos in the window (or 2)
+
+
+def _peaks_new(idx, facts, th, ev, so, eo, rows, year=False):
+    """Round 12, pass 4 (V2): {"peaked": [{name, area, share, items, peak_share, next_share, spans}], "new": [{name,
+    area, share, items, before}]} for the window's own top themes (the ones the writer is shown). "Peaked then": its
+    share of the window is at least 1.1 times its share in every other span of the same length the record holds
+    (calendar years for a year), and at least 1.5 times its median share of them. "New then": before the window he opened at most 5% as many
+    of it (or 2)."""
+    import numpy as np
+    days, items = idx.day[ev], idx.it[ev]
+    if not len(days):
+        return {"peaked": [], "new": []}
+    lo, hi = int(days.min()), int(days.max())
+    if year:
+        a = date.fromordinal(so).year
+        tiles = [(date(y, 1, 1).toordinal(), date(y, 12, 31).toordinal()) for y in
+                 range(date.fromordinal(lo).year, date.fromordinal(hi).year + 1) if y != a]
+    else:
+        n = eo - so + 1
+        tiles = []
+        k = 1
+        while so - k * n + n - 1 >= lo:
+            tiles.append((so - k * n, eo - k * n))
+            k += 1
+        k = 1
+        while eo + k * n - n + 1 <= hi:
+            tiles.append((so + k * n, eo + k * n))
+            k += 1
+    nth = int(facts.theme.max()) + 1 if len(facts.theme) else 0
+    shares = []
+    for a, b in tiles:
+        m = (days >= a) & (days <= b)
+        u = np.unique(items[m])
+        if len(u) < PEAK_TILE_MIN:
+            continue
+        t = facts.theme[u]
+        shares.append(np.bincount(t[t >= 0], minlength=nth) / len(u))
+    peaked, new = [], []
+    w = np.unique(items[(days >= so) & (days <= eo)])
+    before = np.unique(items[days < so])
+    bc = np.bincount(facts.theme[before][facts.theme[before] >= 0], minlength=nth) if len(before) else np.zeros(nth)
+    for r in rows[:THEMES_MAX]:
+        tid = r.get("theme_id")
+        if tid is None or not len(w) or r["share"] < PEAK_MIN_SHARE or r["items"] < PEAK_MIN_ITEMS:
+            continue
+        others = [float(s[tid]) for s in shares]
+        if len(others) >= PEAK_TILES_MIN and r["share"] >= PEAK_NEXT * max(others) and \
+                r["share"] >= PEAK_LIFT * float(np.median(others)):
+            peaked.append({"name": r["name"], "area": r.get("area"), "share": r["share"], "items": r["items"],
+                           "peak_share": r["share"], "next_share": round(max(others), 3), "spans": len(others) + 1})
+        b_ = int(bc[tid]) if tid < len(bc) else 0
+        if b_ <= max(2, NEW_BEFORE_MAX * r["items"]) and r["share"] >= 0.01:
+            new.append({"name": r["name"], "area": r.get("area"), "share": r["share"], "items": r["items"],
+                        "before": b_})
+    return {"peaked": peaked[:3], "new": [x for x in new if x["name"] not in {p["name"] for p in peaked}][:2]}
 
 
 DISTINCT_LIFT = 1.5      # U8: a theme of a season at least 1.5 times its share in the rest of that year

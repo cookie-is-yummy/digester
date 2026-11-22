@@ -228,7 +228,10 @@ def test_u4_the_windows_shorts_are_said_once_when_the_so_what_says_them():
            "so_what": {"pick": "shorts_shift:up", "text": None}}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
     said = [x for x in f["observations"] if re.search(r"\bShorts were\b", x)]
-    assert f["so_what"] and "Shorts" in f["so_what"] and not said, (f["so_what"], f["observations"])
+    # round 12, pass 4 (V4, changed on purpose): the Shorts shift has no step code can take, so it is a bullet, not a
+    # so-what; the window's Shorts are still said once
+    assert not f["so_what"] and not said, (f["so_what"], f["observations"])
+    assert sum("Shorts" in x for x in f["observations"]) == 1, f["observations"]
 
 
 def test_u4_a_day_is_the_overview_then_cards_with_one_caption_line_and_never_a_list_twice(wr):
@@ -543,7 +546,8 @@ def test_live_a_so_what_about_saved_clips_under_the_pick_of_the_shorts_shift_is_
                                                           "{library.saved_not_opened[0].n} are waiting."}}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
     assert ("so_what", "not_its_candidate") in [(d[0], d[1]) for d in f["dropped"]]
-    assert f["so_what"].startswith("Shorts went up to 74%"), f["so_what"]
+    # round 12, pass 4 (V4, changed on purpose): the shift is said in code's words, as a bullet (it has no step)
+    assert not f["so_what"] and any(x.startswith("Shorts went up to 74%") for x in f["observations"]), f
 
 
 def test_live_a_bullet_that_names_the_same_two_names_twice_is_filler():
@@ -572,7 +576,9 @@ def test_live_a_bullet_with_the_so_whats_two_shares_goes_however_it_says_shorts(
                             {"text": "{areas[1].name} was {areas[1].share}.", "uses": []}],
            "so_what": {"pick": "shorts_shift:up", "text": None}}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
-    assert f["so_what"] and not [x for x in f["observations"] if "74%" in x and "68%" in x], f["observations"]
+    # round 12, pass 4 (V4, changed on purpose): the shift is a bullet (no step), said once, in code's words
+    both = [x for x in f["observations"] if "74%" in x and "68%" in x]
+    assert not f["so_what"] and len(both) == 1 and both[0].startswith("Shorts went up"), f["observations"]
 
 
 def test_live_a_change_over_the_years_says_its_two_years():

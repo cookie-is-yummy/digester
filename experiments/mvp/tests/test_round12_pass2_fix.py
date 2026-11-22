@@ -378,8 +378,9 @@ def test_a_change_so_what_is_the_learning_side_that_gave_way_not_saved_clips():
     s["so_what_candidates"] = c
     raw = {"answer": "", "observations": []}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
+    # round 12, pass 4 (V4, changed on purpose): with the step code takes on what fell
     assert f["so_what"] == ("The learning side gave way: science fell from 10% in 2020 to 2% in 2026, while internet "
-                            "culture grew from 4% to 9%.")
+                            "culture grew from 4% to 9%. Say \"only science\" to see what you still open of it.")
 
 
 # ================================ the so-what: worth saying, never twice, code's when the writer gave none ========
@@ -416,7 +417,10 @@ def test_code_says_the_strongest_candidate_when_the_writer_picked_none():
                             {"text": "{areas[3].name} fell from {areas[3].previous_share} to {areas[3].share}.",
                              "uses": []}]}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
-    assert f["so_what"] and f["so_what"].startswith("Shorts went up to 74%") and f["so_what_id"] == "shorts_shift:up"
+    # round 12, pass 4 (V4, changed on purpose): code takes the strongest candidate; a Shorts shift has no step, so
+    # it is said as a bullet and no so-what is kept
+    assert not f["so_what"] and not f["so_what_id"] and any(o.startswith("Shorts went up to 74%")
+                                                            for o in f["observations"]), f
 
 
 def test_a_firsts_path_and_its_saved_videos_are_both_kept_as_said():
@@ -560,8 +564,9 @@ def test_an_estimate_is_said_with_about_once():
     s = {"kind": "count", "lang": "en", "filters": {"topic": "block games"},
          "topics": [{"name": "block games", "items": 1094, "matched_by": "themes and words"}]}
     # round 12, pass 3 fix (judge A, row 3, on purpose): no "about" on a number code counted; what it counts, once
+    # round 12, pass 4 (V6, changed on purpose): what it counts in words
     assert I.scoped("About 1,094 block games videos.", s, answer=True) == \
-        "1,094 block games videos (by their titles and themes)."
+        "1,094 videos whose title or theme is about block games."
 
 
 def test_the_real_shaped_top_sheet_end_to_end_says_no_false_thing():
@@ -636,7 +641,8 @@ def test_a_bullet_the_so_what_says_goes():
                             {"text": "{areas[3].name} fell from {areas[3].previous_share} to {areas[3].share}.",
                              "uses": []}]}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
-    assert f["so_what"].startswith("Shorts went up to 74%")
+    # round 12, pass 4 (V4, changed on purpose): the shift is a bullet (no step); the writer's count of it still goes
+    assert not f["so_what"] and any(o.startswith("Shorts went up to 74%") for o in f["observations"])
     assert not [o for o in f["observations"] if "up from 600" in o]
     assert ("observation", "said_by_so_what") in [(d[0], d[1]) for d in f["dropped"]]
 
@@ -667,7 +673,9 @@ def test_a_change_so_what_does_not_say_again_what_grew():
                  "{areas_change.arrived[0].to_share}.", "uses": []}]}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
     # round 12, pass 3 (U4, live, row 7: what grew was said in the answer and a bullet, then a third time here)
-    assert f["so_what"] == "The learning side gave way: science fell from 10% in 2020 to 2% in 2026."
+    # round 12, pass 4 (V4, changed on purpose): with the step code takes on what fell
+    assert f["so_what"] == ("The learning side gave way: science fell from 10% in 2020 to 2% in 2026. Say \"only "
+                            "science\" to see what you still open of it.")
 
 
 def test_a_topics_channels_answer_has_enough_bullets_from_code():
@@ -775,7 +783,9 @@ def test_a_so_what_with_no_number_is_said_in_codes_words_with_its_numbers():
                             {"text": "{areas[3].name} fell from {areas[3].previous_share} to {areas[3].share}.",
                              "uses": []}]}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
-    assert f["so_what"].startswith("Shorts went up to 74% of your YouTube videos, from 68%")
+    # round 12, pass 4 (V4, changed on purpose): said in code's words with its numbers, as a bullet (no step)
+    assert not f["so_what"] and any(o.startswith("Shorts went up to 74% of your YouTube videos, from 68%")
+                                    for o in f["observations"])
     assert not [o for o in f["observations"] if o.startswith("Shorts were 74%")]
 
 
