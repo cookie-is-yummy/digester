@@ -2,6 +2,7 @@
 
 22 Nov 2026. Branch `experiments/search-loop`, code at 1c5b77a. The design is `experiments/mvp/DESIGN.md` section 19.
 The round's brief, the judges' notes and every live conversation are kept outside git.
+The second pass, code at d7aa507, is the last part of this file ("The second pass").
 No titles, channel names, theme names of the real library, handles or captions appear here. Counts are fine.
 
 ## What was asked
@@ -222,9 +223,183 @@ Rule R-H changes closing lines, so some earlier expected replies changed. Each i
 - docs/05 clusters saves, likes and shares after the content filter. Here the watched items are clustered.
 - docs/03 keeps themes in a `themes` table with a 20-dimension frozen space. Here PCA is 24, kept in derived files.
 - These are on the prototype branch only.
+- Recorded as amendment A-019 (Proposed) in `docs/amendments.md`, with the second pass's conflicts added.
 
 ## Spend
 
 - Ledger: about $22.37 at the round's start, $23.30 now. This round: about $0.92.
 - By purpose: the writer $0.73 (208 calls), theme naming $0.12 (57 calls), the rest about $0.09.
 - Lengths cost nothing (the free YouTube quota). The cap is $30: $6.70 is left, $2.70 under the $26 ceiling.
+
+## The second pass
+
+22 Nov 2026. Code at d7aa507. The design is DESIGN 19.P2 and 19.P2 fix.
+The pass's scope (T1 to T15) and the judges' notes are kept outside git.
+No titles, channel, theme or field names of the real library appear here. Counts are fine.
+
+### What it was for
+
+The first pass's last judge, on ace4be2, gave 3 useful and 5 partly, with 6 of 8 half slop.
+All 8 answered the question. But a number could stand next to the wrong thing, and length totals read as watch time.
+The lead was often the biggest of many small slivers. The so-what was mostly "you saved N".
+The orchestrator listed fifteen things still wrong, T1 to T15. The founder's words stayed the bar.
+
+How it was built:
+- A first fixer, code at 2257352: T1 to T15, a new prompt `insight_v5`, 74 tests.
+- Two judges read it live. A graded as the founder. B recounted claims and attacked the check with a fake model.
+- A second fixer, code at d7aa507: every must-fix of both judges, 83 tests.
+- A final judge read d7aa507 live on the real library, as the founder would.
+
+### Grades, row by row
+
+The judges are not the founder. They read the live answers on the real library as he would.
+
+| # | Question | Founder, before (1f9cde0) | Judge A (2257352) | Final judge (d7aa507) |
+| --- | --- | --- | --- | --- |
+| 1 | what have i been watching the most lately | Partly, slop | Partly, half slop | Partly, half slop |
+| 2 | which channels did i watch the most in 2025 | Partly, slop | Partly, half slop | Partly, half slop |
+| 3 | how many minecraft videos did i watch this year | Useful, not slop | Useful, half slop | Useful, not slop |
+| 4 | when did i first start watching blender videos | Partly, not slop | Useful, half slop | Useful, half slop |
+| 5 | did i watch more gaming or more art videos this year | Not useful, slop | Partly, half slop | Useful, half slop |
+| 6 | what did i watch on october 30 | Partly, half slop | Useful, half slop | Useful, half slop |
+| 7 | how has what i watch changed since 2020 | Not useful, slop | Partly, half slop | Useful, not slop |
+| 8 | what was i into in the summer of 2023 | Not useful, slop | Partly, half slop | Partly, half slop |
+
+- Founder, before: 1 useful, 4 partly, 3 not useful. 5 of 8 slop.
+- First pass, last judge (ace4be2): 3 useful, 5 partly, 0 not useful. 6 of 8 half slop.
+- Judge A (2257352): 3 useful, 5 partly, 0 not useful. All 8 half slop.
+- Judge A also found four false or wrongly bound sentences that the check let through.
+- Judge B gave no grades. It found a channel's Shorts share said as 46% that is 29%, among other claims.
+- Final judge (d7aa507): 5 useful, 3 partly, 0 not useful. 2 not slop, 6 half slop.
+- Every judge said every row answers the question asked.
+- The final judge found every number it recounted true.
+
+Four follow-ups the final judge typed after the 8:
+- "without shorts" after row 8: not right. It says a channel was almost all Shorts, inside a without-Shorts answer.
+- The same answer leads by area but charts by theme, eight slivers of 2 to 4%.
+- "most watched channels in math this year" (his own wish): right. One off-topic channel sits in the top 8.
+- In that answer the Shorts move is four raw counts where two shares belong.
+- A "last 3 months" wording of row 1: not read as a history question. It went to picks and gave one video.
+- A change between two years: the judge's note did not reach these notes.
+- My own reading of it: told year by year, volume bars with a theme per year. That is the shape T4 replaced.
+
+### What the final judge still wants, by row
+
+1. Lead with what changed about him, not three shares. Say what a fall is measured against.
+   There is no so-what. The offers name themes the answer never said.
+2. "1 points from 2024" is garbled and has no direction. The so-what is about Shorts, not about the channels.
+3. The month bars add up to 1,107; the lead says about 1,094. A video opened in two months counts in each.
+   Two shares do not say whose they are. "by month" is offered under a chart by month. No so-what.
+4. The first three videos are printed as a list and then again as cards. The so-what makes no offer.
+   One Shorts bullet is filler next to the "it has faded" story.
+5. The so-what is about saved entertainment episodes. Never-twice had removed the art side's saved tutorials.
+   Say what the narrowing gap means for him: one side grew much faster than the other.
+6. The day's items are printed as a list and again as cards: 6,390 px tall at 430 px.
+   The bullet on which themes the day's few videos fell into is filler.
+7. "One area led every year" hides that its share went from about 22% to nearly half, then to about 16%.
+   The lead turns to how he watches (Shorts), where the question was what he watches.
+8. The Shorts shift is said twice, in a bullet and in the so-what. A fall is said without its base.
+   The top theme sits after two area names and reads as part of them; it belongs to a third.
+   Nothing says what made that summer his, against the year around it.
+
+### T1 to T15: what changed
+
+| | What was wrong | Now | Status |
+| --- | --- | --- | --- |
+| T1 | A number next to the wrong thing passed | The writer names sheet paths; code fills them and checks binding, rank and amount words | Fixed in the final judge's rows. One contradiction in a follow-up |
+| T2 | Length totals read as watch time | No total of length anywhere. Shorts against long, and the typical long video's minutes | Fixed |
+| T3 | Leads were small slivers | Areas first (broad categories), then the themes inside. Field names not renamed | Partly: rows 1 and 8 are still lists of shares |
+| T4 | Row 7 was a shift between slivers | Eras by area, what rose and fell, Shorts per year | Partly: misses the leader's share halving; a two-year change is still year by year |
+| T5 | The so-what was "you saved N" | Code proposes candidates; the writer picks one; never twice in a row | Partly: none on rows 1 and 3, off topic on 5, a repeat on 8 |
+| T6 | The export hint on answers | Gone from history answers; only the "I can't see" answer says it | Fixed |
+| T7 | Filler passed the check | Repeats, names-only bullets, "new" over a year, the usual weekday are dropped | Partly: some filler remains on rows 4 and 6 |
+| T8 | A topic's count too high | A theme counts only if 25% of its titles say the topic; said with "about" | Fixed. New: month bars sum above the lead |
+| T9 | Row 5 did not name each side | The ratio in words, what is inside each side, the balance against last year | Fixed. Row 5 is useful |
+| T10 | Row 6 said nothing only his record knows | Against his usual day: count, Shorts, busiest hour, new channels | Fixed. New: items printed twice |
+| T11 | Row 2 did not say what each channel is | What most of the top 5 are, which are all Shorts | Partly: not yet what the ranking says about him |
+| T12 | Chart labels wrapped at 430 px | Bars of 8 cells, labels cut at a word | Fixed (checked on real screenshots) |
+| T13 | His page found no themes | Found by the library's real path or content; a status command; loud at start-up | Fixed here. Not yet seen on his Mac |
+| T14 | Twice no reply for minutes | A 20-second deadline, then code's reply | Partly: bounded, never reproduced |
+| T15 | Spanish row 7 was a run of counts | More Spanish tenses read as a change; eras in Spanish | Fixed. Spanish so-whats are saved items only |
+
+### What was measured
+
+The writer's eval: 20 made-up sheets, the same before and after (`eval_insight.py`).
+
+| Run | Answers the question | Writer used | Observations kept | So-what said | Limits line | Run of counts |
+| --- | --- | --- | --- | --- | --- | --- |
+| `insight_v4`, code at ace4be2 | 17 of 20 | 19 | 53 | - | 0 | 0 |
+| `insight_v5`, code at 2257352 | 18 | 19 | 52 | 5 | 0 | 0 |
+| `insight_v5`, code at d7aa507 | 18 | 19 | 51 | 7 | 0 | 0 |
+
+- The live eval runs cost $0.050 (v4) and $0.063 (v5). The second fixer ran only the 2 day sheets again ($0.006).
+- A first v5 run answered 9 of 20. The binding rules were then tuned on its forms.
+- The made-up sheets lack the new keys (areas, eras, the usual day). Real sheets give the writer more to say.
+
+Planted falsehoods (made-up sheets):
+- The older typed sentences: 89 of 89 false ones dropped, 43 of 43 true ones kept, at both fixes.
+- The first fixer's path-form set: 31 of 31 false dropped, 13 of 13 true kept.
+- The second fixer added 14 false and 6 true ones shaped like the real sheets. Before its fix, 0 of the 14 were caught.
+- After it: 45 of 45 false dropped, 19 of 19 true kept.
+
+Themes and topics (real library, counts only):
+- The topic mapping eval: minecraft went from 8 themes to 5. The 3 left out had 0 to 16% of titles saying it.
+- Its all-time count went from 13,902 to 8,220; 5,323 of them say it in their own words.
+- gaming, art, math and blender mapped as before. The made-up library's 10 mappings were unchanged.
+- The theme naming eval was not run: no theme was rebuilt and the naming prompt did not change.
+- Field names read once: 15 of 19 are named, about 9 of the 15 are names a person would use. Not renamed.
+
+Checks at d7aa507:
+- Full suite, 4 shards: 5,175 passed, 0 failed (5,018 before the pass; 5,093 after the first fixer).
+- Demo: 10 passed. Dry self-test: 67 conversations, 164 of 164 steps.
+- `probe_same`: byte-equal with `same_head.json` (the final judge's capture, compared again for these notes).
+- Dev phrasing set by code: 73 helper lines right, 1 wrong (d007), 1 of 40 none lines taken (d132). Unchanged.
+- The 159 rule texts and 123 phrasings: taken by no new read. Round 11 and round 12 traps: not taken.
+- Pictures at 430 px: every chart row on one line, on rows 1, 5 and 7, then 1 and 7 again.
+- No reply of picks, recalls, summaries, asking videos, rules, emails, cancels or connectors changed.
+
+Seconds and cost per answer (the final judge's live run):
+
+| Answer | Seconds | Model calls | Cost |
+| --- | --- | --- | --- |
+| The 8 questions | 2.8 to 8.8 | 1 each | $0.0038 to $0.0059 each, $0.042 for all 8 |
+| 3 history follow-ups | about 4 | 1 each | $0.0051 to $0.0060 each |
+
+The "last 3 months" follow-up went to picks and cost $0.013.
+
+### What changed on purpose in earlier tests
+
+Each changed line is marked "round 12, pass 2" in place. The full list is in DESIGN 19.P2 and 19.P2 fix.
+- No length total (T2): lines in `test_round12_w.py`, `test_round12_fix.py` and `test_round12_merge.py`.
+- No export hint on a history answer with a window (T6): lines in `test_round12_w.py`, `test_round12_merge.py` and six round 11 files.
+- The self-test step c40.1 moved the hint from "has" to "not" (T6).
+- Bars of 8 cells (T12), "mostly" with a second share (T1), a comparison's ratio lead (T7, T9), a day's lead (T10).
+- The history state may keep the so-what said (T5).
+- `test_round12_pass2.py` T11: the channels line is said by code, whatever the writer chose.
+- `eval/insight_cases.json`: 13 sentences moved from true to planted (T2, T7); the v5 sets added.
+- These notes changed no test.
+
+### Still wrong or unproven
+
+- Rows 1 and 8 still read as lists of shares. They do not say what he is drifting toward.
+- The so-what is still uneven: none on rows 1 and 3, off topic on row 5, said twice on row 8.
+- Never-twice can push the best so-what out of the next answer and leave a weak one.
+- A day's or a first's items are printed as a list and then as cards. On a phone that doubles the length.
+- Row 7 hides the leading area's rise and fall behind "led every year".
+- A change between two years is still told year by year, with volume bars.
+- "what have i been into the last 3 months" is not read as a history question.
+- One garbled phrase ("1 points") and one contradiction (Shorts in a without-Shorts answer) passed the check.
+- Each judge round found false or garbled sentences the check let through. The check catches what it was built for.
+- The same question asked twice can lead differently.
+- The writer is measured on 20 made-up sheets, not on real ones.
+- Theme and field names are not confirmed by him. Field names were not renamed.
+- The builds were never run on his Mac. T13 is fixed here, not seen there.
+- The long wait of T14 was never reproduced; it is only bounded by the deadline.
+- Spanish so-whats and most code-written lines are English only. iMessage was not seen.
+
+### Spend of the pass
+
+- Ledger: $23.31 before the pass, $24.22 after. This pass: about $0.91.
+- First fixer $0.36, the two judges about $0.21, second fixer $0.26, final judge about $0.08.
+- These notes made no model call.
+- The cap is $30: $5.78 is left, $1.38 under the $25.60 ceiling for this pass.
