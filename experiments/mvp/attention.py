@@ -207,6 +207,9 @@ class AttentionMixin:
             self.store.set_state(f"themecheck:{h}", None)
             self.store.set_state(f"trendsoffer:{h}", None)
         if TRENDS_ASK.match(text):
+            from .history import into_is_history
+            if into_is_history(self, person, text, now):   # round 12, pass 3 (U2): the watch history answers it
+                return False, None
             return True, self._trends_answer(person, now)
         said = P.relation_said(self.store, h, text)
         if said:

@@ -43,7 +43,8 @@ def main():
                   f"{(r['cost_usd'] or 0):<7.4f} {(r['seconds'] or 0):<5} {r['error'] or ''}")
         return
     rows = store.q("SELECT i.received_at, i.channel, i.handle, i.status, i.intent, i.seconds, i.error, i.reply_ref, "
-                   "i.tapback, r.kind, r.status AS run_status, r.n_candidates, r.n_picks, r.n_dropped, r.cost_usd "
+                   "i.tapback, r.kind, r.status AS run_status, r.n_candidates, r.n_picks, r.n_dropped, r.cost_usd, "
+                   "r.error AS run_error "
                    "FROM inbound i LEFT JOIN runs r ON r.id = i.run_id WHERE i.handle LIKE ? ORDER BY i.id DESC LIMIT ?",
                    (like, a.last))
     if not rows:
@@ -55,6 +56,8 @@ def main():
         if r["kind"]:
             run = (f"{r['kind']} {r['run_status']} {r['n_candidates'] or 0}>{r['n_picks'] or 0}, "
                    f"{r['n_dropped'] or 0} removed, ${(r['cost_usd'] or 0):.4f}")
+            if r["run_error"]:   # round 12, pass 3 (U10): "daily cap reached" (the history writer was off for it)
+                run += f", {r['run_error']}"
         intent = r["intent"] or ("tapback" if r["tapback"] else "")
         print(f"{r['received_at'] or '':<21} {r['channel'] or '':<9} {tail(r['handle']):<6} {r['status'] or '':<8} "
               f"{intent:<13} {(r['seconds'] or 0):<5} {'yes' if r['reply_ref'] else 'no':<8} {run}"

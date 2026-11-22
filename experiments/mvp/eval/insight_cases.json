@@ -3769,6 +3769,83 @@
       "why": "vague"
      }
     ]
+   },
+   {
+    "case": "top_areas_fix",
+    "note": "round 12, pass 3 (U1): words of direction or comparison with no number, true and false by the sheet's own pairs of values",
+    "true": [
+     "{areas[0].name} grew against {previous.words}, while {areas[3].name} fell.",
+     "{themes[1].name} rose and {themes[3].name} faded.",
+     "You watched more {areas[0].name} than {areas[1].name}.",
+     "{areas[0].name} grew, and Shorts went up to {totals.shorts_share} from {previous.shorts_share}.",
+     "{areas[3].name} gave way to {areas[0].name}.",
+     "The mix shifted from {areas[3].name} toward {areas[0].name}.",
+     "{areas[0].name} became your biggest area, up from {areas[0].previous_share}.",
+     "Your mix narrowed around {areas[0].name}."
+    ],
+    "plants": [
+     {
+      "text": "The mix shifted from {areas[0].name} to a broader mix.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "{areas[1].name} rose against {previous.words}.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "{areas[0].name} faded while {areas[3].name} grew.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "Shorts became more of what you opened.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "{themes[3].name} grew, and {themes[1].name} gave way.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "Your watching narrowed around {areas[1].name}.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "{areas[3].name} arrived, while {areas[0].name} was left behind.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "You watched more {areas[3].name} than {areas[0].name}.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "{themes[2].name} peaked in these weeks.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "The mix grew broader, with four areas rising, while Shorts became more of it.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "{areas[2].name} shifted toward {areas[3].name}.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "{themes[0].name} lost ground to {themes[3].name}.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "Sports climbed back in these weeks.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "Your watching moved away from {areas[0].name}.",
+      "why": "direction_no_number"
+     },
+     {
+      "text": "Shorts became less of it against {previous.words}.",
+      "why": "direction_no_number"
+     }
+    ],
+    "as": "answer"
    }
   ],
   "sheets": {

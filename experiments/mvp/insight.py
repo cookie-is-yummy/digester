@@ -1501,9 +1501,9 @@ def _fmt_value(key, v, lang="en"):
         return _pc(v, lang)
     if key == "change_vs_previous":
         pts = abs(float(v)) * 100 if abs(v) <= 1 else abs(float(v))
-        return (f"{round(pts)} puntos" if lang == "es" else f"{round(pts)} points") if pts >= 1 else None
+        return _points(pts, lang) if pts >= 1 else None
     if key == "change":
-        return (f"{round(abs(float(v)))} puntos" if lang == "es" else f"{round(abs(float(v)))} points")
+        return _points(abs(float(v)), lang)
     if key == "times":
         return f"{round(v)}" if v >= 3 else f"{round(v * 2) / 2:g}"
     if key == "long_median_min":
@@ -1511,6 +1511,12 @@ def _fmt_value(key, v, lang="en"):
     if isinstance(v, int) or float(v).is_integer():
         return _fmt(int(v), lang)
     return None
+
+
+def _points(pts, lang="en"):
+    """Round 12, pass 3 (U7, live: "1 points from 2024"): "1 point", "12 points"."""
+    n = round(pts)
+    return (f"{n} punto" if n == 1 else f"{n} puntos") if lang == "es" else (f"{n} point" if n == 1 else f"{n} points")
 
 
 def slots_of(text, sheet, lang="en"):
@@ -1764,6 +1770,11 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
     why = _bind_more(text, pl, sheet, slots, names)
     if why:
         return why
+    why = _direction_check(text, pl, sheet, slots, names)   # round 12, pass 3 (U1)
+    if why:
+        return why
+    if _change_words(pl, slots) == "no_direction":   # round 12, pass 3 (U7); a missing base is added by render
+        return "no_direction"
     # R8: "twice", "N times", "half": two numbers of the sentence of one kind in that ratio, or the sheet's own
     rm = _RATIO_V5.search(pl)
     if rm and not any(x.key in ("ratio_words", "times") for x in slots):
@@ -1926,6 +1937,220 @@ def _bind_more(text, pl, sheet, slots, names):
     return None
 
 
+# ====================================== round 12, pass 3 (U1): a direction needs a path whose values support it ======
+# Live (pass 3): "the mix shifted from one area to a broader mix with four areas rising, while Shorts became more of it",
+# every direction false by recount, passed: the check bound numbers only. Now every word of direction or comparison
+# comes from a sheet path whose two values code knows, in their order, exactly as numbers do; a sentence with such a
+# word and no path that supports it is dropped.
+_D_UP = re.compile(r"\b(?:grew|grow(?:s|n|ing)?|rose|ris(?:e|es|en|ing)|climb\w*|jump\w*|gain\w*|doubl\w*|tripl\w*|"
+                   r"surg\w*|took over|overtook|picked up|up from|went up|bigger|larger|became|become|becoming|"
+                   r"arriv\w*|took off|crec\w*|subi\w*|aument\w*)\b")
+_D_DOWN = re.compile(r"\b(?:fell|fall(?:s|en|ing)?|dropp\w*|slipp\w*|shr[aiu]nk\w*|fad\w*|declin\w*|halv\w*|"
+                     r"lost(?: ground)?|losing|down from|went down|smaller|gave way|giv(?:e|es|ing) way|left behind|"
+                     r"cooled|baj\w*|cay\w*|disminu\w*)\b")
+_D_SHIFT = re.compile(r"\b(?:shift\w*|moved?|moving|toward\w*|swung|swapp\w*|replaced)\b")
+_D_SPREAD = re.compile(r"\b(?:broader|wider|narrow\w*|more varied|more spread|more focused|less varied|"
+                       r"spread out|concentrat\w*)\b")
+_D_PEAK = re.compile(r"\bpeak\w*\b")
+_D_CMP = re.compile(r"\b(?:more|less|fewer|mas|menos)\b")
+_D_AMOUNT = re.compile(r"\b(?:more|less|fewer) than (?:half|a (?:third|quarter|fifth)|§|\d|one|two|three|four|five|"
+                       r"twice|double)|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+|§\d+§) more\b|"
+                       r"\bmore of (?:the )?same\b|\bno more\b|\bonce more\b|\bany more\b|\bmore or less\b")
+_D_ANY = re.compile("|".join(x.pattern for x in (_D_UP, _D_DOWN, _D_SHIFT, _D_SPREAD, _D_PEAK, _D_CMP)))
+_COUNT_WORDS = re.compile(r"\b(?:three|four|five|six|seven|eight|nine|ten|tres|cuatro|cinco)\s+(?:\w+\s+)?"
+                          r"(?:areas?|themes?|channels?|topics?|fields?|kinds?|categories|interests|of them)\b")
+
+
+def _sign(x):
+    return 0 if not _num(x) or abs(float(x)) < 1e-9 else (1 if x > 0 else -1)
+
+
+def _rec_direction(sheet, path):
+    """+1 (rose), -1 (fell), 0 (flat) or None (no two values of it known): from the record's own pair of values."""
+    r = _rec(sheet, path)
+    if r is None:
+        return None
+    if _num(r.get("change_vs_previous")):
+        return _sign(r["change_vs_previous"])
+    if _num(r.get("change")) and path.split("[")[0].split(".")[-1] in ("left", "arrived", "rising", "fading"):
+        return _sign(r["change"])
+    for a, b in (("from_share", "to_share"), ("previous_share", "share"), ("faded_from", "faded_to"),
+                 ("previous_items", "items")):
+        if _num(r.get(a)) and _num(r.get(b)):
+            return _sign(float(r[b]) - float(r[a]))
+    if r.get("kind") == "shorts_shift" and r.get("direction") in ("up", "down"):
+        return 1 if r["direction"] == "up" else -1
+    if r.get("kind") == "channel_rise":
+        return 1
+    if r.get("kind") == "path" and r.get("how") in ("deeper", "faded", "still"):
+        return {"deeper": 1, "faded": -1, "still": 0}[r["how"]]
+    return None
+
+
+def _shorts_direction(sheet, slots):
+    """The window's Shorts against the span before, when the sentence says a path of either."""
+    paths = {x.path for x in slots}
+    t, p = sheet.get("totals") or {}, sheet.get("previous") or {}
+    if paths & {"totals.shorts_share", "previous.shorts_share", "totals.shorts", "previous.shorts"} and \
+            _num(t.get("shorts_share")) and _num(p.get("shorts_share")):
+        return _sign(t["shorts_share"] - p["shorts_share"])
+    ac = (sheet.get("areas_change") or {}).get("shorts") or {}
+    if any(x.path.startswith("areas_change.shorts") for x in slots) and _num(ac.get("from_share")) and \
+            _num(ac.get("to_share")):
+        return _sign(ac["to_share"] - ac["from_share"])
+    for x in slots:
+        if x.path.startswith("so_what_candidates[") and x.owner:
+            r = _rec(sheet, x.owner)
+            if r and r.get("kind") == "shorts_shift":
+                return 1 if r.get("direction") == "up" else -1
+    return None
+
+
+_CHANGE_KEYS = ("change_vs_previous", "change", "previous_share", "previous_items", "from_share", "faded_from",
+                "grew_from")
+_BASE_WORDS = re.compile(r"\b(?:before|against|than|compared|last year|earlier|previous|prior|since|the spring|"
+                         r"the summer|the autumn|the fall|the winter|(?:in|from) (?:19|20)\d\d|antes|frente)\b")
+
+
+def _base_of(sheet):
+    """The span a change is against, in the person's words (the sheet's own), or None."""
+    pw = str(((sheet or {}).get("previous") or {}).get("words") or "").strip()
+    if pw and (sheet or {}).get("lang", "en") != "es":
+        return re.sub(r"^(?:in|en)\s+", "", pw)
+    return None
+
+
+def _change_words(pl, slots):
+    """Round 12, pass 3 (U7, live: "X fell from 16% to 9%" with no base; "1 points from 2024" with no direction): a
+    change says its direction (a word, or from one value to the other) and its base period."""
+    if not any(x.role == _ROLE_NUM and x.key in _CHANGE_KEYS for x in slots):
+        return None
+    if not (_D_UP.search(pl) or _D_DOWN.search(pl) or re.search(r"\bfrom\b[^.;]*\bto\b|\b(?:up|down|higher|lower|"
+                                                                r"more|less|fewer)\b", pl)):
+        return "no_direction"
+    if not (_BASE_WORDS.search(pl) or any(x.path in ("previous.words",) or x.key in ("from", "to", "label",
+                                                                                    "peak_period", "previous_words")
+                                          for x in slots)):
+        return "no_base"
+    return None
+
+
+def _same_list_pair(owners, at):
+    """[the first record said after `at`, the nearest one before it] when both are rows of one list, else None."""
+    def lst(o):
+        return re.sub(r"\[\d+\]$", "", o)
+    before = [(p, o) for p, o, _n in owners if p < at and re.search(r"\[\d+\]$", o)]
+    after = [(p, o) for p, o, _n in owners if p > at and re.search(r"\[\d+\]$", o)]
+    if not before or not after:
+        return None
+    a, b = min(after)[1], max(before)[1]
+    return [a, b] if lst(a) == lst(b) and a != b else None
+
+
+def _direction_check(text, pl, sheet, slots, names):
+    """None, or why a word of direction or comparison is not supported by a path of the sentence (U1)."""
+    if not _D_ANY.search(pl):
+        return None
+    pos = {id(n): pl.find("§" + str(slots.index(n)) + "§") for n in slots}
+    owners = []   # (position, owner path, slot) of the records the sentence names or gives a number of
+    for n in slots:
+        o = _name_owner(n) if n.role == _ROLE_NAME else n.owner
+        if o:
+            owners.append((pos[id(n)], o, n))
+    shorts_said = bool(re.search(r"\bshorts?\b", pl))
+
+    def near(at, before=48, after=36):
+        c = [(at - p, o, n) for p, o, n in owners if 0 <= at - p <= before] + \
+            [(p - at + 0.5, o, n) for p, o, n in owners if 0 < p - at <= after]
+        return [o for _d, o, _n in sorted(c, key=lambda t: t[0])]
+
+    def supported(at, want):
+        # the record named nearest the word, or Shorts (the window's, or a candidate's) when the sentence is about them
+        for o in near(at):
+            d = _rec_direction(sheet, o)
+            if d is not None:
+                return d == want or (want == 0)
+            if o.startswith("eras["):
+                return True   # eras are in time order: what took over is the later one
+        if shorts_said:
+            d = _shorts_direction(sheet, slots)
+            if d is not None:
+                return d == want
+        return False
+
+    am = _D_AMOUNT.sub(" ", pl)
+    # "more X than Y", "less", "fewer": the two records named, by the sheet's own order (or the comparison's)
+    for m in _D_CMP.finditer(am):
+        cmpx = sheet.get("comparison") or {}
+        tail = am[m.end():m.end() + 80]
+        if re.search(r"\b(?:than|que|against|over)\b", tail) or re.match(r"\s+§\d+§", tail):
+            a_ = [o for p, o, n in owners if p > m.start()]
+            b_ = [o for p, o, n in owners if p < m.start()]
+            sides = (a_[:2] if len(a_) >= 2 else (b_[-1:] + a_[:1])) if (a_ or b_) else []
+            if any(x.key in ("more", "less", "ratio_words", "difference") for x in slots) and cmpx:
+                continue   # the comparison's own paths say which is more
+            if len(sides) < 2:
+                # "more of it", "Shorts became more of what you opened": a direction against the span before
+                if not supported(m.start(), 1 if m.group(0) in ("more", "mas") else -1):
+                    return "direction_unbound"
+                continue
+        elif _same_list_pair(owners, m.start()):
+            # "Aug 2026 led, then Sep 2026, with far fewer in Jul 2026": the first one after against the one before
+            sides = _same_list_pair(owners, m.start())
+        else:
+            if not supported(m.start(), 1 if m.group(0) in ("more", "mas") else -1):
+                return "direction_unbound"
+            continue
+        ra, rb = _rec(sheet, sides[0]), _rec(sheet, sides[1])
+        va = next((ra[k] for k in ("items", "share") if ra and _num(ra.get(k))), None)
+        vb = next((rb[k] for k in ("items", "share") if rb and _num(rb.get(k))), None)
+        if va is None or vb is None:
+            return "direction_unbound"
+        if (m.group(0) in ("more", "mas")) != (va > vb):
+            return "direction"
+    for m in _D_UP.finditer(pl):
+        if m.group(0) in ("became", "become", "becoming") and not re.match(r"\s+(?:more|bigger|larger|the|your|a)\b",
+                                                                          pl[m.end():]):
+            continue
+        if not supported(m.start(), 1):
+            return "direction_unbound"
+    for m in _D_DOWN.finditer(pl):
+        if not supported(m.start(), -1):
+            return "direction_unbound"
+    for m in _D_SHIFT.finditer(pl):
+        # a shift from A to B: A fell and B rose (or the eras' own order)
+        win = sorted({(p, o) for p, o, _n in owners if -60 <= p - m.start() <= 80})
+        if any(o.startswith("eras[") for _p, o in win):
+            continue
+        pi = [int(re.match(r"^periods\[(\d+)\]", o).group(1)) for _p, o in win if re.match(r"^periods\[\d+\]", o)]
+        if len(pi) >= 2 and pi[0] < pi[-1]:
+            continue   # from what led an earlier period to what led a later one: the periods' own order
+        if shorts_said and _shorts_direction(sheet, slots) is not None and len(owners) <= 1:
+            continue   # "a shift to Shorts" said with the window's Shorts paths: the sign was read above
+        ds = [_rec_direction(sheet, o) for _p, o in win]
+        if len(ds) >= 2:
+            ok_ = ds[0] == -1 and ds[-1] == 1   # from the first one said (it fell) to the last (it rose)
+        elif len(ds) == 1:
+            away = bool(re.search(r"\baway\b", pl[m.start():max(m.start(), win[0][0])]))
+            # "toward X": X rose; "X shifted away", "moved away from X": X fell
+            ok_ = ds[0] == (1 if win[0][0] > m.start() and not away else -1)
+        else:
+            ok_ = False
+        if not ok_:
+            return "direction_unbound"
+    for m in _D_SPREAD.finditer(pl):
+        # broader / narrower: the leader of its list lost / gained share against the span before
+        lead_ = [o for o in near(m.start(), before=80, after=80) if re.match(r"^(?:areas|themes)\[0\]$", o)]
+        d = _rec_direction(sheet, lead_[0]) if lead_ else None
+        broad = bool(re.match(r"broader|wider|more varied|more spread|spread out", m.group(0)))
+        if d is None or d == 0 or (d == -1) != broad:
+            return "direction_unbound"
+    for m in _D_PEAK.finditer(pl):
+        if not any(x.key in ("peak_period", "peak_share", "peak_label", "peak_items") for x in slots):
+            return "direction_unbound"
+    return None
+
+
 def _named_as(sheet, owner, names):
     """The record is named under another path (a saved row's theme said as "{themes[0].name}")."""
     try:
@@ -2043,7 +2268,11 @@ def render(text, sheet, facts, strict=False, unit=None):
         return None, sl
     if strict and free_numbers(text, facts):
         return None, "free_number"
+    if strict and _COUNT_WORDS.search(_norm(SLOT.sub(" ", text))):
+        return None, "free_number"   # round 12, pass 3 (U1, live: "with four areas rising"): a count typed in words
     if not sl:
+        if strict and _D_ANY.search(_D_AMOUNT.sub(" ", _norm(text))):
+            return None, "direction_unbound"   # round 12, pass 3 (U1): a direction with no path to support it
         return text, None
     if strict and any(x.role == _ROLE_NUM for x in sl) and typed_names(text, sheet, facts):
         return None, "typed_name"
@@ -2054,6 +2283,24 @@ def render(text, sheet, facts, strict=False, unit=None):
     why = bind_check(text, sheet, sl, facts, unit_slots=us)
     if why:
         return None, why
+    plain_ = _norm(SLOT.sub(lambda m: " §" + str([x.start for x in sl].index(m.start())) + "§ ", text))
+    if _change_words(plain_, sl) == "no_base":
+        # round 12, pass 3 (U7, live: "X fell from 16% to 9%", no base): code says the base period, in the person's
+        # words, where the writer left it out; a change "from" a count, or with no base the sheet knows, is dropped
+        # (a sheet that names no span before, a made-up one, keeps the sentence as it was)
+        base = _base_of(sheet)
+        tail_ = text.rstrip()
+        m_end = re.search(r"from\s+(\{[^}]+\})\s*[.!]?$", tail_)
+        if base and re.search(r"\bfrom\b", text) and not m_end:
+            return None, "no_base"
+        if base and m_end and not (next((x for x in sl if x.start == m_end.start(1)), None).key or "").endswith("share"):
+            return None, "no_base"
+        if base:
+            punct = tail_[-1] if tail_[-1:] in ".!" else "."
+            text = tail_.rstrip(".!") + (" in " if m_end else " against ") + base + punct
+            sl = slots_of(text, sheet, lang)
+            if isinstance(sl, str):
+                return None, sl
     out, last = [], 0
     for x in sl:
         out.append(text[last:x.start])
@@ -2069,7 +2316,7 @@ def render(text, sheet, facts, strict=False, unit=None):
             last = x.end + m_.end()
     out.append(text[last:])
     r = re.sub(r"\s+", " ", "".join(out)).strip()
-    r = re.sub(r"\b(points|puntos)\s+(?:points|puntos|percentage points)\b", r"\1", r)
+    r = re.sub(r"\b(points?|puntos?)\s+(?:points?|puntos?|percentage points?)\b", r"\1", r)
     return r, None
 
 
@@ -2084,6 +2331,35 @@ def typed_names(text, sheet, facts):
     topic = " ".join(_words((sheet.get("filters") or {}).get("topic") or ""))
     return [n for n in found if n not in facts.periods and n != topic and n not in facts.topic_keys
             and len(n) >= 3 and n not in ("shorts", "youtube", "instagram")]
+
+
+def _fact_paths(text, sheet):
+    """Round 12, pass 3 (U4): the sheet paths of the numbers a template sentence says (the facts it rests on), the
+    window's own words and dates left out; a record's share now is one fact, its share before (or its change) another."""
+    if not isinstance(text, str) or not SLOT.search(text):
+        return set()
+    sl = slots_of(text, sheet, (sheet or {}).get("lang") or "en")
+    if not isinstance(sl, list):
+        return set()
+    out = set()
+    for x in sl:
+        if x.role != _ROLE_NUM or x.path.startswith("window."):
+            continue
+        k = x.key or ""
+        base = x.owner or x.path.rsplit(".", 1)[0]
+        out.add((base, "share" if k in ("share", "to_share") else
+                 "change" if k in ("previous_share", "change_vs_previous", "from_share", "change") else k))
+    return out
+
+
+def shorts_left_out(text, sheet):
+    """Round 12, pass 3 (U3, live: a "without Shorts" answer said a channel is "almost all Shorts"): with the Shorts
+    filtered out, nothing is said about Shorts but that they are left out."""
+    if not ((sheet or {}).get("filters") or {}).get("without_shorts"):
+        return False
+    t = re.sub(r"\b(?:without|leaving out|left out|no|sin)\s+(?:the\s+)?shorts\b|\bshorts\s+(?:left\s+)?out\b", " ",
+               _norm(text))
+    return bool(re.search(r"\bshorts?\b|\bcortos?\b", t))
 
 
 def uses_of(text):
@@ -2141,6 +2417,8 @@ def check(raw, sheet, chart_vals=None, strict=False):
             if w1 is None and n1:   # the first sentence answers; a later one that fails is left out
                 out["dropped"].append(("answer_tail", why, " ".join(sents[1:])))
                 sents, why = sents[:1], None
+        if not why and sents and shorts_left_out(" ".join(sents), sheet):
+            why = "shorts_left_out"
         if sents and not why and len(sents) <= 3:
             out["answer"] = _unit_before(tidy(" ".join(sents), facts.lang), sheet)
         else:
@@ -2149,6 +2427,7 @@ def check(raw, sheet, chart_vals=None, strict=False):
         out["dropped"].append(("answer", "missing" if not ans else "too_long", ans))
     obs = raw.get("observations") if isinstance(raw.get("observations"), list) else []
     seen = set()
+    said_paths = [_fact_paths(raw.get("answer"), s)] if out["answer"] and isinstance(raw.get("answer"), str) else []
     said = _signature(out["answer"] or "", facts)
     for o in obs[:OBS_MAX + 2]:
         text, uses = (o.get("text"), o.get("uses")) if isinstance(o, dict) else (o, None)
@@ -2173,6 +2452,8 @@ def check(raw, sheet, chart_vals=None, strict=False):
         if not why and (text.strip().endswith("?") or re.search(r"[,;:]\s*[?.!]?\s*$", text.strip())):
             why = "unfinished"   # round 12, fix (live, Spanish: "... suman 4,?"): an observation says, never asks
         why = why or check_sentence(text, facts, uses=uses if uses is not None else [], chart_vals=chart_vals)
+        if not why and shorts_left_out(text, sheet):
+            why = "shorts_left_out"
         if not why and n_numbers(text, facts) > NUMBERS_MAX:
             why = "number_run"
         key = " ".join(_words(text))
@@ -2183,6 +2464,12 @@ def check(raw, sheet, chart_vals=None, strict=False):
         sig = _signature(text, facts)
         if not why and sig and sig <= said:
             why = "repeat"   # nothing new: every number and name of it was said above
+        if not why and slotted:
+            # round 12, pass 3 (U4, live, row 1: the first bullet said the lead again): two sentences that rest on the
+            # same sheet paths are a repeat; the first stands
+            mine = _fact_paths(raw_obs, s)
+            if mine and any(mine <= other for other in said_paths):
+                why = "repeat"
         if not why:
             why = _obs_more(text, out["answer"] or "", sheet, raw_obs, facts)
         if not why and re.search(r"\b(?:while|whereas|but|and)\b", _norm(text)) and any(
@@ -2196,6 +2483,8 @@ def check(raw, sheet, chart_vals=None, strict=False):
             out["dropped"].append(("observation", why, text))
             continue
         seen.add(key)
+        if slotted:
+            said_paths.append(_fact_paths(raw_obs, s))
         out["observations"].append(_unit_before(tidy(" ".join(text.split()), facts.lang), sheet))
     out["observations"] = out["observations"][:OBS_MAX]
     facts.slotted = False
@@ -2212,6 +2501,8 @@ def check(raw, sheet, chart_vals=None, strict=False):
             sw = r
     if isinstance(sw, str) and sw.strip():
         why = check_sentence(sw, facts) if len(_sentences(sw)) <= 2 else "too_long"
+        if not why and shorts_left_out(sw, sheet):
+            why = "shorts_left_out"
         if not why and re.search(r"\bonly\b|\bwithout shorts\b|\bby (?:month|theme)\b|\bsolo\b|\bsin shorts\b|"
                                  r"\bcloser look\b", _norm(sw)) and not re.search(r"\bsaved\b|\bguard", _norm(sw)):
             why = "offer_repeat"   # the offers line says it
@@ -2279,12 +2570,24 @@ CHART_KINDS = {"top": ("areas", "themes", "channels"), "channels": ("channels",)
                "compare_topics": ("topics", "themes")}
 
 
-def chart(sheet):
+def chart(sheet, level=None):
     """(text, values shown) of the small chart for the sheet's kind, or (None, set()). At most 8 rows and one caption;
-    each row is a bar of the same width, then its number, then its label."""
+    each row is a bar of the same width, then its number, then its label. `level` (round 12, pass 3, U3): the level
+    the answer leads with ("areas" or "themes"): the chart is drawn at the same level."""
     kind = sheet.get("kind")
     lang = sheet.get("lang") or "en"
     for src in CHART_KINDS.get(kind, ()):
+        if level == "themes" and src == "areas":
+            continue
+        if level == "areas" and src == "areas" and kind == "top":
+            ts = [t for t in sheet.get("areas") or [] if isinstance(t, dict) and _num(t.get("share")) and t.get("name")]
+            if len(ts) >= 2:   # the answer leads with the areas: so does the chart, whatever they cover
+                rows = [(f"{round(t['share'] * 100)}%", t["share"], t["name"], round(t["share"] * 100))
+                        for t in ts[:CHART_ROWS]]
+                top = max(v for _, v, _, _ in rows) or 1
+                lines = [CAPTIONS["areas"][lang]] + [f"{bar(v, top)} {left} {_label(right)}".rstrip()
+                                                     for left, v, right, _ in rows]
+                return "\n".join(lines), {x for *_, x in rows}
         cap, rows = _rows(sheet, src, lang)
         if len(rows) >= 2:
             top = max(v for _, v, _, _ in rows) or 1
@@ -2468,6 +2771,24 @@ def _item_line(k, it, lang, year=None):
     return f"{k}. {_clip(title)}{_clip(by)}" + (f" ({', '.join(bits)})" if bits else "")
 
 
+def item_caption(k, it, lang="en", year=None, day=False):
+    """Round 12, pass 3 (U4): a card's one caption line: its number, the channel, the day, the length ("2. Pixel
+    Pencil · 30 Oct · 25 min"); the title is the card's own."""
+    bits = [f"{k}."]
+    if it.get("channel"):
+        bits.append(_clip(" ".join(str(it["channel"]).split())[:60]))
+    d = _as_date(it.get("at"))
+    if d and not day:   # a day's cards are all that day (the overview says it)
+        bits.append(f"{d.day} {(MONTHS_ES if lang == 'es' else MONTHS)[d.month - 1][:3].capitalize()}"
+                    + (f" {d.year}" if year and d.year != year else ""))
+    if _num(it.get("length_s")) and it["length_s"] > 0:
+        mins = int(round(it["length_s"] / 60))
+        bits.append(f"{mins} min" if mins >= 1 else f"{int(it['length_s'])} s")
+    if it.get("is_short"):
+        bits.append("Short")
+    return bits[0] + " " + " · ".join(bits[1:]) if len(bits) > 1 else bits[0]
+
+
 def window_lead(answer, sheet):
     """The answer begins with the window's words when the window is not all time (they carry where the record
     ends); code adds them when the model left them out: for a window that passes an export end, when the answer does
@@ -2552,6 +2873,27 @@ def scoped(text, sheet, answer=False):
     return text
 
 
+def areas_drawn(sheet):
+    """The areas cover enough of the window to be its picture (the chart's own rule): the level a top answer leads
+    with (round 12, pass 3, U3: lead and chart at the same level)."""
+    ts = [t for t in (sheet or {}).get("areas") or [] if isinstance(t, dict) and _num(t.get("share")) and t.get("name")]
+    return len(ts) >= 2 and sum(t["share"] for t in ts) >= 0.4
+
+
+def answer_level(answer, sheet):
+    """"areas" or "themes": the level the answer names (an area's name first), or None."""
+    if not answer or (sheet or {}).get("kind") != "top":
+        return None
+    a = " " + " ".join(_words(answer)) + " "
+    if any(" " + " ".join(_words(x.get("name") or "")) + " " in a for x in sheet.get("areas") or []
+           if isinstance(x, dict) and x.get("name")):
+        return "areas"
+    if any(" " + " ".join(_words(x.get("name") or "")) + " " in a for x in sheet.get("themes") or []
+           if isinstance(x, dict) and x.get("name")):
+        return "themes"
+    return None
+
+
 def layout(form, sheet, items_parts=None, extra_lines=()):
     """The message parts: the answer, the observations, the chart, the so-what, the extra lines (a hint said once in
     6 hours), the offers. For a day, a first or a last: the overview, the items' lines, their cards, then the rest."""
@@ -2563,7 +2905,7 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
     if form["observations"]:
         head.append("\n".join("• " + o for o in form["observations"]))
     tail = []
-    ch, _ = chart(sheet) if kind not in ITEM_KINDS else (None, set())
+    ch, _ = chart(sheet, answer_level(form["answer"], sheet)) if kind not in ITEM_KINDS else (None, set())
     if ch:
         head.append(ch)
     if form.get("so_what"):
@@ -2575,10 +2917,21 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
     items = [it for it in sheet.get("items") or [] if isinstance(it, dict)] if kind in ITEM_KINDS else []
     if items:
         end = _as_date((sheet.get("window") or {}).get("end"))
-        head.append("\n".join(_item_line(k, it, lang, end.year if end else None)
-                              for k, it in enumerate(items[:SHOW["items"]], 1)))
+        year = end.year if end else None
         parts = [{"type": "text", "text": "\n\n".join(head)}]
-        parts += list(items_parts or [])
+        cards = list(items_parts or [])
+        if not cards:   # no cards to show: the items as lines, as before
+            parts[0]["text"] += "\n\n" + "\n".join(_item_line(k, it, lang, year)
+                                                    for k, it in enumerate(items[:SHOW["items"]], 1))
+        for k, card in enumerate(cards, 1):
+            # round 12, pass 3 (U4, live: every item twice, a numbered list and then the same items as cards; row 6
+            # was 6,400 px tall on a phone): the overview, then each card with one short caption line (its number, the
+            # channel, the day, the length); a channel that draws cards shows the caption on the card itself
+            it = card.get("item") if isinstance(card.get("item"), dict) else (items[k - 1] if k <= len(items) else {})
+            cap = card.get("caption") or item_caption(k, it, lang, year, day=(kind == "day"))
+            card = {a: b for a, b in card.items() if a != "item"}
+            parts.append({"type": "text", "text": cap, "card_alt": True})
+            parts.append(dict(card, caption=cap))
         if tail:
             parts.append({"type": "text", "text": "\n".join(tail)})
         return parts
@@ -2699,17 +3052,18 @@ def code_form(sheet):
               and (round(t["previous_share"], 2), round(t["share"], 2)) not in said_moves]
         up = sorted((t for t in ch if t["change_vs_previous"] >= 0.015), key=lambda t: -t["change_vs_previous"])
         down = sorted((t for t in ch if t["change_vs_previous"] <= -0.015), key=lambda t: t["change_vs_previous"])
+        # round 12, pass 3 (U7): every move said the same way: its direction, both values and the base period
         if up and pw:
             t = up[0]
             o(f"{t['name']} grew from {pc(t['previous_share'])} to {pc(t['share'])} against {pw}.", key)
         elif up and es:
             t = up[0]
             o(f"{t['name']} subió de {pc(t['previous_share'])} a {pc(t['share'])}.", key)
-        if down:
+        if down and (pw or es):
             t = down[0]
             o((f"{t['name']} bajó de {pc(t['previous_share'])} a {pc(t['share'])}." if es else
-               f"{t['name']} fell from {pc(t['previous_share'])} to {pc(t['share'])}."), key)
-        for t in (up[:1] if (pw or es) else []) + down[:1]:   # an area of one theme says the same move once
+               f"{t['name']} fell from {pc(t['previous_share'])} to {pc(t['share'])} against {pw}."), key)
+        for t in (up[:1] + down[:1]) if (pw or es) else []:   # an area of one theme says the same move once
             said_moves.add((round(t["previous_share"], 2), round(t["share"], 2)))
 
     def behind(t):
@@ -2750,8 +3104,11 @@ def code_form(sheet):
                    f"{f(sh, lang)} were Shorts and {f(lo, lang)} long videos{tail}."), "totals")
 
     if kind == "top" and (len(areas) >= 2 or len(themes) >= 2):
-        ans = lead(areas) if len(areas) >= 2 else lead(themes)
-        if len(areas) >= 2:
+        # round 12, pass 3 (U3): the areas lead only where the chart draws them (live, "without Shorts": a lead by
+        # area over a chart by theme)
+        by_area = len(areas) >= 2 and (areas_drawn(s) or len(themes) < 2)
+        ans = lead(areas) if by_area else lead(themes)
+        if by_area:
             inside(areas[0])
             moves(areas, "areas")
         moves(themes, "themes")
@@ -3346,8 +3703,8 @@ def fill(form, raw, sheet, chart_vals=None):
         keep = []
         for x in form["observations"]:
             xv = [v for v, p in _pct_vals(x, facts) if p is True]
-            shorts_move = chosen is not None and chosen.get("kind") == "shorts_shift" and \
-                _SHORTS_SUBJ.search(_norm(x)) and re.search(r"\d", x)
+            shorts_move = ((chosen is not None and chosen.get("kind") == "shorts_shift") or
+                           _SHORTS_SUBJ.search(_norm(sw))) and _SHORTS_SUBJ.search(_norm(x)) and re.search(r"\d", x)
             if shorts_move or (len(xv) >= 2 and all(any(abs(a - b) <= 1 for b in swv) for a in xv)):
                 form["dropped"].append(("observation", "said_by_so_what", x))
             else:
@@ -3372,6 +3729,8 @@ def fill(form, raw, sheet, chart_vals=None):
             sv_ = [v for v in _pct_vals(sw or "", facts) if v[1] is True]
             if pv and sv_ and all(any(abs(a - b) <= 1 for b, _ in sv_) for a, _ in pv):
                 continue   # the so-what says it (live: "Shorts went up to 82%" and "Shorts were 82%")
+            if sw and _SHORTS_SUBJ.search(_norm(sw)) and _SHORTS_SUBJ.search(_norm(x)):
+                continue   # round 12, pass 3 (U4, live, row 8): the window's Shorts said once, in the so-what
             if not (sig and sig <= said) and x not in form["observations"]:
                 must.append(x)
                 said |= sig
@@ -3449,8 +3808,12 @@ def write(bot, person, sheet, now, info=None, say=None, deadline=None):
     if not on() or not isinstance(sheet, dict) or not sheet.get("kind"):
         return None
     try:
-        if bot._over_cap(person):
+        cap = bot._over_cap(person)
+        if cap:
             info["dropped"].append(("form", "cap", None))
+            # round 12, pass 3 (U10): the founder met the cap while grading and saw the old code reply with no word
+            # why; the trace says it ("daily cap reached")
+            info["error"] = "total cap reached" if cap == "total" else "daily cap reached"
             return None
     except Exception:  # noqa: BLE001 - a cap check that fails sends the code reply, never a paid call
         return None
@@ -3502,7 +3865,7 @@ def write(bot, person, sheet, now, info=None, say=None, deadline=None):
             for it in (sheet.get("items") or [])[:SHOW["items"]]:
                 x = view.items.get(it.get("id")) if isinstance(it, dict) else None
                 if x is not None and x.url:
-                    cards.append(link_part(x, " ".join(str(it.get("title") or "").split())[:90]))
+                    cards.append(dict(link_part(x, " ".join(str(it.get("title") or "").split())[:90]), item=it))
         except Exception:  # noqa: BLE001 - no cards: the lines alone
             cards = []
     parts = layout(form, sheet, cards, extra)

@@ -167,6 +167,8 @@ class WebChannel(Channel):
         card = {"url": url, "title": str(part.get("title") or "")[:200], "platform": part.get("platform"),
                 "video_id": vid, "permalink": instagram_permalink(url) if part.get("platform") == "instagram" else None,
                 "outside": bool(part.get("outside"))}   # an outside pick: the card says it is not from their saves
+        if part.get("caption"):   # round 12, pass 3 (U4): a history card's one caption line (number, channel, day)
+            card["caption"] = str(part.get("caption") or "")[:160]
         if part.get("outside"):   # fix pass 2, finding 55: the card carries YouTube's channel name and the length
             card.update(channel=str(part.get("channel") or "")[:100] or None, length=part.get("length") or None)
         if part.get("platform") == "calendar":   # finding 56: a calendar card, with the .ics from the outbox beside it

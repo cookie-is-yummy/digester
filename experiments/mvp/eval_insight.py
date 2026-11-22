@@ -196,17 +196,25 @@ def v5_scores():
     extra = (d.get("v5") or {}).get("sheets") or {}   # round 12, pass 2 fix: real-shaped made-up sheets, here only
     for x in (d.get("v5") or {}).get("cases") or []:
         s = extra[x["case"]] if x["case"] in extra else cases[x["case"]]["sheet"]
+        # round 12, pass 3 (U1): a case "as": "answer" reads each sentence as the answer (a bullet with a direction and
+        # no number is dropped as vague anyway; the live false lead of pass 3 was an answer)
+        as_answer = x.get("as") == "answer"
+
+        def kept(t):
+            if as_answer:
+                return bool(I.check({"answer": t, "observations": []}, s, strict=True)["answer"])
+            return bool(I.check({"answer": "-", "observations": [{"text": t, "uses": []}]}, s, strict=True)
+                        ["observations"])
         for t in x["true"]:
-            fm = I.check({"answer": "-", "observations": [{"text": t, "uses": []}]}, s, strict=True)
             out["true_v5"] += 1
-            out["kept_v5"] += bool(fm["observations"])
+            out["kept_v5"] += kept(t)
         for p in x["plants"]:
-            fm = I.check({"answer": "-", "observations": [{"text": p["text"], "uses": []}]}, s, strict=True)
+            caught = not kept(p["text"])
             out["planted_v5"] += 1
-            out["caught_v5"] += not fm["observations"]
+            out["caught_v5"] += caught
             b = out["by_why"].setdefault(p["why"], [0, 0])
             b[0] += 1
-            b[1] += not fm["observations"]
+            b[1] += caught
     return out
 
 

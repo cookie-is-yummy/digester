@@ -245,13 +245,22 @@ NO_SHORTS = re.compile(r"[,;:(]?\s*\b(?:(?:but|and)\s+)?(?:without|excluding|exc
                        r"[,;:(]?\s*\blong(?:er)?(?:-?form)?\s+videos?\s+only\b\)?")
 # past tense only: "what have i been into lately" is a round 11 trap (a question about the person, not the record)
 INTO = re.compile(r"\bwhat\s+(?:was|were)\s+i\s+(?:really\s+|mostly\s+|most\s+)*(?:into|obsessed\s+with|"
-                  r"hooked\s+on)\b|\bwhat\s+did\s+i\s+mostly\s+watch\b|\bwhat\s+was\s+i\s+(?:mostly\s+)?watching\b")
+                  r"hooked\s+on)\b|\bwhat\s+did\s+i\s+mostly\s+watch\b|\bwhat\s+was\s+i\s+(?:mostly\s+)?watching\b|"
+                  # round 12, pass 3 (U2): "what have i been into lately / the last 3 months" is the founder's row 8 in
+                  # other words (it went to one recommended video); with a window only (bare, it stays the trends')
+                  r"\bwhat\s+(?:have|has)\s+i\s+been\s+(?:really\s+|mostly\s+)*(?:into|obsessed\s+with|hooked\s+on)\b|"
+                  r"\bwhat\s+i(?:'ve|\s+have)\s+been\s+(?:really\s+|mostly\s+)*into\b")
+# round 12, pass 3 (U2): "what am i into lately / these days / right now": the last 4 weeks the record holds
+INTO_NOW = re.compile(r"\bwhat\s+am\s+i\s+(?:really\s+|mostly\s+)*into\s+(?:lately|recently|these\s+days|right\s+now|"
+                      r"nowadays|at\s+the\s+moment)\s*[?.!]*\s*$")
 INTO_ONLY = re.compile(r"\b(?:into|obsessed\s+with|hooked\s+on|mostly\s+watch\w*)\b")
 CHANGED_WORD = re.compile(r"\b(?:changed|changing|evolved|evolving|shifted|shifting)\b|\bhow\s+different\b|"
                           r"\bha\s+(?:cambiado|evolucionado)\b|\bhan\s+(?:cambiado|evolucionado)\b|"
                           # round 12, pass 2 (T15): the other Spanish tenses ("como cambio lo que veo", "como ha ido
                           # cambiando", "como cambiaron mis gustos")
-                          r"\bcambi(?:o|aron|ando)\b|\bevolucion(?:o|aron|ando)\b|\bha\s+ido\s+cambiando\b")
+                          r"\bcambi(?:o|aron|ando)\b|\bevolucion(?:o|aron|ando)\b|\bha\s+ido\s+cambiando\b|"
+                          # round 12, pass 3 (U1): "how did my watching change from 2023 to 2025" (read as a timeline)
+                          r"\b(?:did|does|has|have)\s+(?:my\s+\w+(?:\s+\w+)?|what\s+i\s+watch\w*)\s+change\b")
 CHANGED_WHAT = re.compile(r"\bwhat\s+i(?:'ve|\s+have)?\s+(?:been\s+)?(?:watch\w*|like|liked|look\s+at|consume)\b|\bmy\s+"
                           r"(?:interests?|tastes?|watching|viewing|watch\s+history|youtube\s+habits?|habits?|feed)\b|"
                           r"\b(?:the\s+)?(?:kind|type|sort)s?\s+of\s+(?:stuff|videos|things|content)\s+i\b|"
@@ -260,6 +269,9 @@ CHANGED_WHAT = re.compile(r"\bwhat\s+i(?:'ve|\s+have)?\s+(?:been\s+)?(?:watch\w*
                           r"estoy\s+viendo)\b|\bmis\s+(?:gustos|intereses|habitos)\b|\bmi\s+(?:forma|manera)\s+de\s+"
                           r"ver\b")
 CHANGED_ASK = re.compile(r"^\W*(?:(?:so|and|ok|okay|hey|y)[,\s]+)?(?:how|what|has|have|did|in what way|como|que|en que)\b")
+# round 12, pass 3 (U1): two years compared by WHAT was watched, not by how much
+WHAT_TWO = re.compile(r"\bwhat\s+(?:did\s+)?i\s+(?:watch\w*|was\s+watching|was\s+into)\b|\bmy\s+(?:interests?|tastes?)\b")
+HOW_MUCH = re.compile(r"\bhow\s+(?:much|many|often)\b|\bmore\s+(?:videos?|in|on)\b|\b(?:did|do)\s+i\s+watch\s+more\b")
 HOW_TO = re.compile(r"\bhow\s+(?:do|can|should|could|would|to)\s+i\b|\bhow\s+to\b")
 RANK_IN = re.compile(r"^\W*(?:(?:what|which|who)\s+(?:are|were|is)\s+)?(?:my\s+)?(?:the\s+)?(?:most\s+watched|"
                      r"top(?:\s+\d+)?)\s+(?:channels|youtubers|creators)\s+(?:in|for|on|about)\s+\w")
@@ -593,9 +605,12 @@ def read(text, today, loose=False):
     t = " ".join(BACK.sub("", t).split())
     changed = bool(CHANGED_WORD.search(t) and CHANGED_WHAT.search(t) and CHANGED_ASK.match(t)
                    and not HOW_TO.search(t))
-    into = bool(INTO.search(t))
-    marked_r12 = changed or bool(RANK_IN.match(t)) or (into and bool(INTO_ONLY.search(t))
-                                                       and bool(find_windows(t, today)))
+    into_now = bool(INTO_NOW.search(t))   # round 12, pass 3 (U2)
+    if into_now:
+        t = " ".join(re.sub(r"\b(?:these\s+days|right\s+now|nowadays|at\s+the\s+moment|recently)\b", "lately", t).split())
+    into = bool(INTO.search(t)) or into_now
+    marked_r12 = changed or bool(RANK_IN.match(t)) or into_now or (into and bool(INTO_ONLY.search(t))
+                                                                   and bool(find_windows(t, today)))
     # ---------- end round 12, D ----------
     marked = any(m.search(t) for m in MARKERS) or bool(TOP_PLAIN.match(t)) or marked_r12
     # round 11 fix pass 2 (P4): a comparison of two windows with no "i watched" ("more videos in october or
@@ -623,7 +638,7 @@ def read(text, today, loose=False):
     before = next((w for w, _ in wins if isinstance(w, str)), None)
     topic, platform, how = _topic_and_platform(t, spans)
     if changed or into:   # round 12, D: "my tastes", "obsessed with" are the question's own words, not a topic
-        extra = [m.span() for rx_ in (CHANGED_WHAT, CHANGED_WORD, INTO) for m in rx_.finditer(t)]
+        extra = [m.span() for rx_ in (CHANGED_WHAT, CHANGED_WORD, INTO, INTO_NOW) for m in rx_.finditer(t)]
         topic = _topic_and_platform(t, spans + extra)[0]
     hint = bool(topic) and len(topic) == 1 and bool(
         re.search(r"\b(?:from|by)\s+(?:the\s+)?" + re.escape(topic[0]) + r"\b", t)
@@ -646,9 +661,16 @@ def read(text, today, loose=False):
         windows = [windows[0], w2] if w2 else windows
     if no_shorts:
         q["without_shorts"] = True   # round 12, D
+    what_two = (len(windows) == 2 and all(w.kind == "year" and w.start for w in windows) and windows[0].start !=
+                windows[1].start and bool(WHAT_TWO.search(t)) and not HOW_MUCH.search(t) and COMPARE.search(rest))
     if changed:
         # round 12, D: how WHAT is watched changed ("since 2020", "over the years", none: all the history)
         q.update(kind="changed", window=w1 if windows else Window())
+    elif what_two:
+        # round 12, pass 3 (U1): "what i watched in 2023 vs 2025" is about WHAT: a change between the two years, told
+        # with areas and themes (the first and the last year of the span), never a count of each
+        a, b = sorted(windows, key=lambda w: w.start)
+        q.update(kind="changed", window=_win("range", a.start, b.end))
     elif len(windows) >= 2 and COMPARE.search(rest):
         q.update(kind="compare", window=windows[0], window2=windows[1],
                  less=bool(re.search(r"\b(?:less|fewer|menos)\b", rest)) and not re.search(r"\b(?:more|mas)\b", rest))
@@ -2137,6 +2159,22 @@ def follow_up(st, text, today, known=None):
     return q.model_copy(update=changes)
 
 
+def into_is_history(bot, person, text, now):
+    """Round 12, pass 3 (U2): "what have i been into lately" (and "what am i into these days") is read by the round 8
+    trends hook first (what was SAVED lately); for a person whose library holds a watch history it is the history's
+    "what was watched most" over the window (the founder's row 8 in other words), so the trends hook gives way to 8h.
+    "what have i been saving lately" and a bare "what am i into" are never this (the read takes neither)."""
+    try:
+        tz = person.get("timezone") or "UTC"
+        q = read(text, now.astimezone(ZoneInfo(tz)).date())
+        if q is None or q.kind != "top":
+            return False
+        rec = record(bot.view(person["library"]), tz)
+        return any(k in HOW_KINDS["watched"] for (_p, k) in rec.starts)
+    except Exception:  # noqa: BLE001 - the trends answer as before
+        return False
+
+
 def history_reads(bot, person, text, now):
     """Hook 8h (answer_normally, after integration_reads, before the model): a history question or a follow-up to a
     history answer, read and answered by code. Returns the reply's reference, or None."""
@@ -2223,8 +2261,13 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False,
             if sheet["kind"] == "day" and rest > 0 and parts and parts[0].get("type") == "text":
                 # the day's list goes on as today's does: "more" gives the next page (code)
                 es = q.lang == "es"
-                parts[0]["text"] += ("\n" + (f"Y {rest} más (di \"más\" para verlos)." if es else
-                                             f"And {rest} more (say \"more\" to see them)."))
+                more = (f"Y {rest} más (di \"más\" para verlos)." if es else
+                        f"And {rest} more (say \"more\" to see them).")
+                last = max((k for k, p in enumerate(parts) if p.get("type") == "link"), default=None)
+                if last is None:
+                    parts[0]["text"] += "\n" + more
+                else:   # round 12, pass 3 (U4): after the cards (the overview no longer lists the items)
+                    parts.insert(last + 1, {"type": "text", "text": more})
         else:
             ids = []
         if (sheet or {}).get("kind") == "channels":
@@ -2255,7 +2298,10 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False,
                                n_dropped=0, cost_usd=float(winfo.get("cost") or 0.0),
                                status="picked" if ids else "none",
                                prompt_version=winfo.get("prompt_version") if winfo.get("called") else None,
-                               seconds=round((datetime.now() - t0).total_seconds(), 3), steps=steps)
+                               seconds=round((datetime.now() - t0).total_seconds(), 3), steps=steps,
+                               # round 12, pass 3 (U10): "daily cap reached" in the trace when the writer was off for it
+                               **({"error": winfo["error"]} if str(winfo.get("error") or "").endswith("cap reached")
+                                  else {}))
     bot.note(run_id=run_id)
     recs = []
     for k, i in enumerate(ids, 1):
