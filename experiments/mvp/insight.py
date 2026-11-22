@@ -434,7 +434,7 @@ class Facts:
                 self.parents.setdefault(ent, set()).add(parent)
 
     def _change_rows(self, ch):
-        """Round 12, fix (live: "Comedy edits rose from 0.1% in 2020 to 5.6% in 2026" was dropped): the "changed"
+        """Round 12, fix (live: "<theme> rose from 0.1% in 2020 to 5.6% in 2026" was dropped): the "changed"
         sheet's rising and fading themes, with their shares then and now, their change and their peak."""
         kp = self.key_pool.setdefault("change", Pool())
         for part in ("rising", "fading"):
@@ -911,7 +911,7 @@ def _check_body(raw, facts, uses, chart_vals):
             continue
         if w in facts.vocab or _stem(w) in facts.vocab:
             continue
-        # round 12, fix (live: "Stand-up Maths" was dropped): a hyphenated name is its words
+        # round 12, fix (live: a channel named "Stand-up <word>" was dropped): a hyphenated name is its words
         parts = [x for x in re.split(r"[-&]", w) if x]
         if parts and all(x in facts.vocab or _stem(x) in facts.vocab for x in parts):
             continue
@@ -1219,7 +1219,7 @@ def n_numbers(text, facts):
         t = t.replace(_norm(ph).rstrip(", "), " ")
     t = re.sub(_DATE_RX, " ", t)
     years = len(re.findall(r"\b(?:19[89]\d|20\d\d)\b", t))
-    t = re.sub(r"\b(19[89]\d|20\d\d)\b", " ", facts.names_in(t)[1])   # "3Blue1Brown" says no number
+    t = re.sub(r"\b(19[89]\d|20\d\d)\b", " ", facts.names_in(t)[1])   # a name with digits ("Mesh3D") says no number
     n = len(re.findall(r"\d[\d,.]*", re.sub(r"\|[A-Z]\|", " ", t)))
     return n if years <= NUMBERS_MAX else n + years   # "in 2020, 2021, 2022, ... and 2026" is a run too
 
@@ -1346,7 +1346,7 @@ def _fmt(n, lang):
 
 
 def _label_words(s, n):
-    """A label cut at a word ("Motion graphics…", not "Motion graphics t…")."""
+    """A label cut at a word ("Watercolor painting…", not "Watercolor paint…")."""
     s = " ".join(str(s or "").split())
     if len(s) <= n:
         return s
@@ -1355,7 +1355,7 @@ def _label_words(s, n):
 
 
 def _label(s, n=LABEL_MAX):
-    return _label_words(s, n)   # round 12, fix: cut at a word ("Minecraft building…", not "…tutori…")
+    return _label_words(s, n)   # round 12, fix: cut at a word, never inside one
 
 
 CAPTIONS = {
@@ -1405,7 +1405,7 @@ def _rows(sheet, src, lang):
         unit = ("mes" if lang == "es" else "month") if re.search(r"[A-Za-z]", str(ps[0]["label"])) else \
             ("año" if lang == "es" else "year")
         tops = {((p.get("themes") or [{}])[0] or {}).get("name") for p in ps if p.get("themes")}
-        # one main theme in every row says nothing per row (judge: "Minecraft PvP" 8 times): the counts instead
+        # one main theme in every row says nothing per row (judge: one theme 8 times): the counts instead
         has_theme = any(p.get("themes") for p in ps) and len(tops) > 1
         cap = CAPTIONS["periods" if has_theme else "periods_plain"][lang].format(unit=unit)
         rows = []
@@ -1998,7 +1998,7 @@ def fill(form, raw, sheet, chart_vals=None):
         sw_names = set(facts.names_in(sw)[0])
         near = names | facts.topic_keys | {_theme_of(facts, n) for n in names}
         if sheet.get("kind") not in ("first", "last") and (not sw_names & near or (sw_names - near)):
-            # every theme it names is one the answer is about (live: a day's so-what added 11 Math puzzles)
+            # every theme it names is one the answer is about (live: a day's so-what added a theme of another day)
             form["dropped"].append(("so_what", "unrelated", sw))
             sw = None
     path = _path_line(shown(sheet), (sheet.get("filters") or {}).get("topic") or "", path_only=True) \

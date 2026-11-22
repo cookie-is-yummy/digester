@@ -4910,3 +4910,97 @@ writer is not wired (the merge puts it in `history.send_answer`, D's facts first
 (`MVP_INSIGHT=0` in `tests/test_mvp.py`'s fixture) so earlier tests that count model calls stay as they are.
 iMessage was not seen (no Mac here); the chart was checked in the test page's bubble only.
 <!-- end round 12, W -->
+
+### 19.F What the judges found and what changed (round 12, fix; `insight.py`, `history.py`, `facts.py`, `tests/test_round12_fix.py`)
+
+Two judges read the live answers of the merge (build 2bbed61, the real library, 19 history messages each; no titles
+or names here). Their main finding, reproduced: about 1 in 3 writer calls lost its answer or an observation to the
+check and today's code reply went out (the top 5 by count the founder graded "filler", with its export closing
+line), the call still paid for. Run again offline on 13 captured forms of a scratch run, the causes were: a day's
+answer saying "on 1 day" (the whole answer dropped), a Spanish answer over the length, an answer with two true
+sentences and a third the check refused, a hyphenated name, D's "changed" rows the check did not know (so "rose
+from 0.1% in 2020 to 5.6%" was dropped), and observations that fell below the minimum of 2.
+
+**Code fills what failed** (`fill`, `code_form`). A well-formed form (an answer string and a list of observations)
+keeps what passed; code writes the rest from the same sheet, in sentences built only from its numbers and names and
+read by the same check: the answer when the model's failed (per kind: the share of the leading themes, "a wide mix,
+led by ..." under a fifth; the channel that led with its count and the two after it; the count, its days and "out of
+N you opened in all"; the date of a first or a last, never its title; a day's count, its Shorts and its two leading
+themes; "much more X: N against M, about K times as many"; which themes led the first and the last period of a
+change), observations up to 3 (the theme that grew and the one that fell against the span before, the channels
+behind the leading theme, which top channels are almost all Shorts and which have almost none, the length leader
+when it differs from the count leader ("By length the order changes: ..."), the total length against the span
+before, a first's channels, the themes inside each side of a comparison, a change's peak and its second risers and
+fallers), and the length of what was opened on "the most" and "channels" answers where no observation says it
+(R-D: "judge by watch time" can only be the length of what was opened). Today's code reply stays the fallback when
+the model fails, the cap is reached, the fake model has no script, the reply is no form, or nothing is left to fill
+(a "changed" sheet with no themes keeps today's timeline).
+
+**The check, tightened** (each a sentence dropped, so code's sentence takes its place where it is the answer):
+- rank words: "led", "the most", "biggest" of a name first only in a list under another name (a channel first under
+  its theme) hold only where that name, or the question's topic, is said too; names said with "followed by", "then",
+  "ahead of" must be in the order of their list (judge: the 4th channel "led", the 5th and 6th "followed");
+- "mostly", "centered on", "mainly" only for a share of a fifth or more; "mostly long videos" only for 60% or more;
+- a weekday split within 10 points of 5 days in 7 is not said, nor the busiest weekday then (computed per window:
+  the judge's two identical "68% on weekdays" were 68.2% of 116,953 events and 67.8% of 16,545); a channel "new"
+  over more than about 13 months is not said;
+- an answer or observation with more than 4 numbers (besides dates and the window's words), or running through more
+  than 4 years, is a run of data; an answer naming more than 5 names is a run of names; "a gap of N", "a lead of N",
+  "so the lead is", "each had 1 video" are filler; an observation that ends unfinished is dropped;
+- the answer names what was asked: a channel with its count for "which channels", a theme for "the most" and a day,
+  both topics of a comparison (live: "which channels ... in 2025" was answered with two themes);
+- a day's "on 1 day" is left out of the sentence, not the answer; a long answer's first sentence may stand;
+- the "changed" sheet's rising and fading rows are facts (shares then and now, the change, the peak); a hyphenated
+  name is its words; busiest hours are D's `{"hour", "share"}`; "rose from 0.1%" is read as a percent.
+
+**The so-what** is said once (a bullet about things saved and never opened goes; they are said in the so-what line
+only), names only themes the answer or its observations are about (or the question's topic, or a top channel's
+theme), and when the model's is missing or about something else code writes it from `library.saved_not_opened`
+("You saved 1 X video you never opened. Want to see it?"). For a first or a last it opens with the person's path on
+the topic from the record (the judge's Q4: "what could I learn"): "It has faded: 12 in 2026, against 131 in 2023."
+or "You are still at it: ..." from the topic's years, then the saved ones as the next step. `facts.py` now picks the
+saved things of a channels answer from its top channels' themes and those of a comparison from the two topics'
+themes (judges: comedy saves on a channels answer, a travel video on music against cooking).
+
+**The chart and the words.** A year by month keeps its 12 rows (`PERIOD_ROWS`; the judge's "this year" chart began in
+March), a cut beyond 12 is said in the caption ("(the last 12)"); a period's theme label is cut at a word at 18
+characters (it wrapped at 430 px), every label at a word; one main theme in every row gives the counts instead;
+a row with no theme is blank, never "0". A first's title said in its answer becomes "(the first video below)".
+"about 0.4 hours" is said in minutes, "about 457.7 hours" as 458, "1 X videos" as "1 X video", "tutorials videos" as
+"tutorials". **Spanish**: "¿cómo ha cambiado lo que veo desde 2020?" and "mis gustos" are read as how WHAT is watched
+changed (`CHANGED_*` in `history.py`), and "Desde el 1 de enero de 2020" says where it ends ("hasta el 30 de octubre
+de 2026, donde termina tu exportación").
+
+**Evaluation** (`eval_insight.py` now scores what is sent: `check` then `fill`). The 20 made-up sheets, one live run
+of insight_v4 ($0.051, the prompt unchanged), rescored by the code before (2bbed61) and after on the same replies:
+writer used 18 and 20 of 20, answers the question 18 and 18, observations kept 51 and 57, a limits line 0 and 0, a run
+of counts 0 and 0. The fake run: 76 of 76 planted false sentences dropped, 56 of 56 true ones kept (as before). No
+prompt changed, so the theme names' eval does not apply.
+
+**Live, read as the founder would** (an in-process console run of the real library on a scratch home, the same
+handler and hook as the page; 4 runs, 51 writer calls). Before the fix, 4 of 13 calls fell back offline; after it, 0
+of 54 captured calls do (all 5 captured runs re-checked offline), and in the last live run 11 of 11 were the writer's
+answer. Every one of the 8 answers its question first: 1 a wide mix led by three themes, which grew and fell, the
+channels behind one, and the length leader; 2 the channel that led with its count, which top channels are Shorts,
+and the length; "without Shorts" and "most watched channels in math" get the same shape; 3 the count, its days and
+the total, the themes inside it and how they moved, a chart of all 10 months; 4 the date, what the topic mostly is,
+its channels, then the path ("It has faded: ... against ... in 2023") and the saved tutorials; 5 which, with both
+counts, the days and the themes inside each; 6 the day's count, its Shorts and its leading themes, then the items;
+7 which themes led then and now, what rose and fell, the peak; 8 a wide mix led by three themes, what grew against
+the spring, the length leader. The Spanish 7 is the same answer in Spanish.
+
+**Test lines changed on purpose** (each marked "round 12, fix" in place): `test_round12_w.py` (a chart of 14 periods
+is 12 rows with "(the last 12)"; "bad_answer" and "one_observation" left the list of forms that give None: code fills
+them now), `test_round12_merge.py` ("one_observation" left the byte-for-byte list; "yes with no so-what said" patches
+out the code's so-what, which a first now gets), `test_round11_fix2.py` p4_10 and p4_11, `test_round11_fix2_checks.py`
+n27 and n28, `test_round11_fix_checks.py` m45 ("como ha cambiado lo que veo ..." is read as changed, no longer a
+timeline).
+
+**Not done.** A PvP theme whose name holds the topic's word is counted under that topic by its name (`themes.for_topic`), though most
+of its items do not say the word (judge B sampled 7 to 9 of 20): the count can be high by about 15 to 20%; changing
+the topic mapping needs D's mapping eval and was left. A model observation can still be true and garbled ("made up
+81% of your videos adding up to about 30 minutes": a share of length read as a share of videos). The export hint
+is said once in 6 hours, as the brief allows (judge A asked for it gone; the brief keeps it when the window passes an
+export's end). One live question (the 2021 one) once gave no reply in 300 s with no model call made, and answered in
+9 s when asked again; not reproduced. iMessage not seen; the page's 430 px layout was not screenshotted this round.
+<!-- end round 12, fix -->
