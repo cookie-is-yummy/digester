@@ -4674,7 +4674,7 @@ period's leading themes (today's timeline without themes), `top` today's ranking
   files as it does rounds 10 and 11 (else the set grew from 123 to 127). The env fixture of `test_mvp.py` sets
   MVP_DERIVED_HOME to the test's own folder (tests never read the real lengths or themes).
 
-**Checks.** Full suite (see the README count), demo 10 passed, dry self-test 59 conversations and 152 of 152 steps,
+**Checks.** Full suite 4,838 passed and 0 failed (4,713 before and the 125 of `test_round12_d.py`; 4 shards), demo 10 passed, dry self-test 59 conversations and 152 of 152 steps,
 `probe_same` byte-equal with `same_head.json`; the development phrasing set by code, tester and operator: 73 helper
 lines right, 1 wrong (d007), 1 of 40 `none` lines taken (d132, as before), every other line's hooks the same as the
 round 11 run; the 159 rule texts and 123 phrasings taken by no new read; the round 11 traps not taken. No reply of an
