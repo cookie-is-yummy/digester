@@ -37,7 +37,9 @@ from pydantic import BaseModel, Field
 
 from .retrieve import contains_word
 
-KINDS = ("top_channels", "top_topics", "top_items", "count", "list", "first", "last", "timeline", "on_day", "compare")
+KINDS = ("top_channels", "top_topics", "top_items", "count", "list", "first", "last", "timeline", "on_day", "compare",
+         # round 12, D (DESIGN 19.D): two topics in one window, how WHAT is watched changed, what was watched most
+         "compare_topics", "changed", "top")
 HOW_KINDS = {"watched": ("watch", "view"), "liked": ("like",), "saved": ("save", "collection", "share_self", "playlist"),
              "any": ("watch", "view", "like", "save", "collection", "share_self", "playlist"),
              # the round 11 check (DESIGN 18.X): "did I like or save" never counts a watch
@@ -51,6 +53,7 @@ class Window(BaseModel):
     start: Optional[date] = None
     end: Optional[date] = None          # inclusive
     this: bool = False                  # "this week / month / year": up to today
+    label: Optional[str] = None         # round 12, D: a season said back, "the summer of 2023" (kind range)
 
 
 class HistoryQuery(BaseModel):
@@ -71,6 +74,7 @@ class HistoryQuery(BaseModel):
     offset: int = 0                     # "more" after a list
     by: Optional[Literal["month", "year"]] = None   # timeline: "by year", "per month"
     less: bool = False                  # round 11 fix, A (R5): compare asked "less / fewer", so its answer leads so
+    without_shorts: bool = False        # round 12, D: "without shorts", "only long videos": Shorts and reels left out
 
 
 # ====================================== reading the message ======================================================
@@ -231,6 +235,69 @@ como cambiado cambiando evolucionado ido tiempo largo
 """.split())
 PLATFORM_WORDS = {"youtube": "youtube", "instagram": "instagram"}
 
+# ---------- round 12, D (DESIGN 19.D): the questions that were misread ----------
+# "without shorts", "no shorts", "only long videos": a filter, taken out before the topic is read
+NO_SHORTS = re.compile(r"[,;:(]?\s*\b(?:(?:but|and)\s+)?(?:without|excluding|exclude|minus|not\s+counting|leave\s+out|"
+                       r"leaving\s+out|skip|skipping|ignore|ignoring|no)\s+(?:the\s+|any\s+)?(?:yt\s+|youtube\s+)?"
+                       r"shorts?(?:\s+(?:and|or)\s+(?:the\s+)?(?:reels|clips))?\b\)?|[,;:(]?\s*\b(?:(?:but|and)\s+)?"
+                       r"(?:only|just)\s+(?:the\s+)?long(?:er)?(?:-?form)?(?:\s+(?:videos?|ones|vids))?\b\)?|"
+                       r"[,;:(]?\s*\blong(?:er)?(?:-?form)?\s+videos?\s+only\b\)?")
+# past tense only: "what have i been into lately" is a round 11 trap (a question about the person, not the record)
+INTO = re.compile(r"\bwhat\s+(?:was|were)\s+i\s+(?:really\s+|mostly\s+|most\s+)*(?:into|obsessed\s+with|"
+                  r"hooked\s+on)\b|\bwhat\s+did\s+i\s+mostly\s+watch\b|\bwhat\s+was\s+i\s+(?:mostly\s+)?watching\b")
+INTO_ONLY = re.compile(r"\b(?:into|obsessed\s+with|hooked\s+on|mostly\s+watch\w*)\b")
+CHANGED_WORD = re.compile(r"\b(?:changed|changing|evolved|evolving|shifted|shifting)\b|\bhow\s+different\b")
+CHANGED_WHAT = re.compile(r"\bwhat\s+i(?:'ve|\s+have)?\s+(?:been\s+)?(?:watch\w*|like|liked|look\s+at|consume)\b|\bmy\s+"
+                          r"(?:interests?|tastes?|watching|viewing|watch\s+history|youtube\s+habits?|habits?|feed)\b|"
+                          r"\b(?:the\s+)?(?:kind|type|sort)s?\s+of\s+(?:stuff|videos|things|content)\s+i\b")
+CHANGED_ASK = re.compile(r"^\W*(?:(?:so|and|ok|okay|hey)[,\s]+)?(?:how|what|has|have|did|in what way)\b")
+HOW_TO = re.compile(r"\bhow\s+(?:do|can|should|could|would|to)\s+i\b|\bhow\s+to\b")
+RANK_IN = re.compile(r"^\W*(?:(?:what|which|who)\s+(?:are|were|is)\s+)?(?:my\s+)?(?:the\s+)?(?:most\s+watched|"
+                     r"top(?:\s+\d+)?)\s+(?:channels|youtubers|creators)\s+(?:in|for|on|about)\s+\w")
+BACK = re.compile(r"\bback\s+(?=in\b|then\b|when\b|during\b)")
+TOPIC_OR = re.compile(r"\b(?:or|vs\.?|versus|than|compared\s+(?:to|with)|against)\b")
+SEASONS = {"spring": (3, 5), "summer": (6, 8), "fall": (9, 11), "autumn": (9, 11), "winter": (12, 2)}
+
+
+def _season(name, year):
+    a, b = SEASONS[name]
+    if name == "winter":
+        return date(year, 12, 1), _month_end(year + 1, 2)
+    return date(year, a, 1), _month_end(year, b)
+
+
+def season_windows(t, today):
+    """[(Window, span)] for "the summer of 2023", "summer 2023", "last summer", "this spring": a range said back with its
+    season's name. Winter Y runs from December Y to February Y+1."""
+    out = []
+    for m in re.finditer(r"\b(?:(?:in|during|over|for|of)\s+)?(?:the\s+)?(?:(last|this|past)\s+)?(spring|summer|fall|autumn|"
+                         r"winter)(?:\s+(?:of\s+)?((?:19|20)\d\d))?\b", t):
+        rel, name, yy = m.group(1), m.group(2), m.group(3)
+        if not (rel or yy):
+            continue
+        if yy:
+            y = int(yy)
+        else:
+            y = today.year
+            a, b = _season(name, y)
+            if rel in ("last", "past") and b >= today:
+                y -= 1
+            elif rel == "this" and a > today:
+                y -= 1
+        a, b = _season(name, y)
+        if a > today:
+            continue
+        label = f"the {name} of {y}" if name != "winter" else f"the winter of {y} to {y + 1}"
+        out.append((Window(kind="range", start=a, end=min(b, today), label=label), m.span()))
+    return out
+
+
+def strip_shorts(t):
+    """(the text without its "without shorts" words, whether they were there)."""
+    t2 = NO_SHORTS.sub(" ", t)
+    return (" ".join(t2.split()), True) if t2 != t else (t, False)
+# ---------- end round 12, D ----------
+
 
 def _num(s):
     s = (s or "").strip()
@@ -297,6 +364,11 @@ def find_windows(t, today):
 
     def rx(p):
         return re.finditer(p, t)
+    # round 12, D: seasons ("the summer of 2023") before the years and months
+    for w, (a, b) in season_windows(t, today):
+        if not any(a < y and x < b for x, y in taken):
+            taken.append((a, b))
+            found.append((a, w, (a, b)))
     # ---- the round 11 check (DESIGN 18.X): "2 weeks ago", weekends, Spanish "los ultimos 7 dias" ----
     for m in rx(r"\b(" + _NUM_RE + r"|an?)\s+(day|week|month|year)s?\s+ago\b|\bhace\s+(" + _NUM_ES +
                 r")\s+(dias?|semanas?|meses|mes|anos?)\b"):
@@ -433,8 +505,8 @@ def find_windows(t, today):
             taken.append((sp1[0], sp2[1]))
             break
     # "since <window>": from its start to today; a window never runs past today ("in 2026" is up to today)
-    found = [(s, _win(w.kind, w.start, min(w.end, today) if w.end else w.end, w.this) if isinstance(w, Window) else w,
-              span) for s, w, span in found]
+    found = [(s, w.model_copy(update={"end": min(w.end, today) if w.end else w.end})   # round 12, D: keeps a label
+              if isinstance(w, Window) else w, span) for s, w, span in found]
     out = []
     for s, w, span in sorted(found, key=lambda x: x[0]):
         if isinstance(w, Window) and re.search(r"\b(?:since|desde)\s+(?:the\s+)?(?:start\s+of\s+)?$", t[:s] + " ") \
@@ -505,7 +577,18 @@ def read(text, today, loose=False):
         return None
     if BOT_ASK.search(t):
         return None
-    marked = any(m.search(t) for m in MARKERS) or bool(TOP_PLAIN.match(t))
+    # ---------- round 12, D (DESIGN 19.D): a "without shorts" filter, "back in", how WHAT is watched changed, "what
+    # was i into", "most watched channels in X" ----------
+    t, no_shorts = strip_shorts(t)
+    back = bool(BACK.search(t))
+    t = " ".join(BACK.sub("", t).split())
+    changed = bool(CHANGED_WORD.search(t) and CHANGED_WHAT.search(t) and CHANGED_ASK.match(t)
+                   and not HOW_TO.search(t))
+    into = bool(INTO.search(t))
+    marked_r12 = changed or bool(RANK_IN.match(t)) or (into and bool(INTO_ONLY.search(t))
+                                                       and bool(find_windows(t, today)))
+    # ---------- end round 12, D ----------
+    marked = any(m.search(t) for m in MARKERS) or bool(TOP_PLAIN.match(t)) or marked_r12
     # round 11 fix pass 2 (P4): a comparison of two windows with no "i watched" ("more videos in october or
     # september?") and one with no question mark ("vi mas videos en 2024 o en 2025") are read only as comparisons
     compare_only = False
@@ -530,6 +613,9 @@ def read(text, today, loose=False):
     windows = [w for w, _ in wins if isinstance(w, Window)]
     before = next((w for w, _ in wins if isinstance(w, str)), None)
     topic, platform, how = _topic_and_platform(t, spans)
+    if changed or into:   # round 12, D: "my tastes", "obsessed with" are the question's own words, not a topic
+        extra = [m.span() for rx_ in (CHANGED_WHAT, CHANGED_WORD, INTO) for m in rx_.finditer(t)]
+        topic = _topic_and_platform(t, spans + extra)[0]
     hint = bool(topic) and len(topic) == 1 and bool(
         re.search(r"\b(?:from|by)\s+(?:the\s+)?" + re.escape(topic[0]) + r"\b", t)
         or re.search(r"\bchannel\b", t))
@@ -549,9 +635,18 @@ def read(text, today, loose=False):
     if before and windows:
         w2 = _before(windows[0], before.split(":", 1)[1])
         windows = [windows[0], w2] if w2 else windows
-    if len(windows) >= 2 and COMPARE.search(rest):
+    if no_shorts:
+        q["without_shorts"] = True   # round 12, D
+    if changed:
+        # round 12, D: how WHAT is watched changed ("since 2020", "over the years", none: all the history)
+        q.update(kind="changed", window=w1 if windows else Window())
+    elif len(windows) >= 2 and COMPARE.search(rest):
         q.update(kind="compare", window=windows[0], window2=windows[1],
                  less=bool(re.search(r"\b(?:less|fewer|menos)\b", rest)) and not re.search(r"\b(?:more|mas)\b", rest))
+    elif len(topic) == 2 and len(windows) <= 1 and TOPIC_OR.search(rest) and lang == "en":
+        # round 12, D: "did i watch more gaming or more art videos this year": two topics, one window
+        q.update(kind="compare_topics", window=w1,
+                 less=bool(re.search(r"\b(?:less|fewer)\b", rest)) and not re.search(r"\bmore\b", rest))
     elif compare_only:
         return None
     elif TOP_ITEMS.search(rest):
@@ -571,6 +666,9 @@ def read(text, today, loose=False):
                                             r"(?:any|anything|something|videos?)\b", t):
         # the round 11 check (DESIGN 18.X): "did I watch anything on nov 10" lists that day
         q.update(kind="on_day" if w1.kind == "day" else "list", window=w1)
+    elif into and (INTO_ONLY.search(t) or back or w1.kind == "year" or (w1.kind == "range" and w1.label)):
+        # round 12, D: "what was i into in the summer of 2023", "what was i watching back in 2021": what was watched most
+        q.update(kind="top", window=w1 if windows else _win("lately", None, None), topics_too=True)
     elif LAST.search(rest):
         q.update(kind="last", window=w1)
     elif TOPIC_WORD.search(rest) and MOST.search(rest):
@@ -617,6 +715,7 @@ class Record:
 
     def __init__(self, view, tz):
         zone = ZoneInfo(tz)
+        self.tz = tz   # round 12, D: the fact sheet reads the hours in the same zone
         self.events = defaultdict(list)
         path = os.path.join(view.lib, "corpus", "interactions.jsonl")
         if os.path.exists(path):
@@ -736,6 +835,10 @@ def hits(view, rec, q, start, end, plats):
     kinds = set(HOW_KINDS[q.how])
     ckey = _squash(q.channel) if q.channel else None
     out = {}
+    rows = None
+    if q.without_shorts:   # round 12, D
+        from . import lengths
+        rows = lengths.load()
     for iid, evs in rec.events.items():
         it = view.items.get(iid)
         if it is None or it.platform not in plats:
@@ -743,8 +846,18 @@ def hits(view, rec, q, start, end, plats):
         ds = [d for d, k in evs if k in kinds and (start is None or d >= start) and (end is None or d <= end)]
         if not ds or not matches(it, q, ckey):
             continue
+        if q.without_shorts and _is_short_or_reel(it, rows):   # round 12, D
+            continue
         out[iid] = ds
     return out
+
+
+def _is_short_or_reel(it, rows=None):
+    """Round 12, D: a YouTube Short (lengths.is_short) or an Instagram reel or post, left out by "without shorts"."""
+    if it.platform != "youtube":
+        return True
+    from . import lengths
+    return bool(lengths.length_of(it, rows)[1])
 
 
 # ---------- round 11 fix, A (R3): a topic's items must fit it by the engine's own item vectors, not only hold the
@@ -997,6 +1110,8 @@ def window_words(w, start, end, lang="en", cap=True):
     elif w.kind == "weekend":
         s = (f"El fin de semana del {span_words(start, end, lang)}" if es else
              f"On the weekend of {span_words(start, end, lang)}")
+    elif w.kind == "range" and w.label and not es:   # round 12, D: "In the summer of 2023 (1 June to 31 August 2023)"
+        s = f"In {w.label} ({span_words(start, end, lang)})"
     elif w.kind == "range" or (w.kind == "days" and start == end):
         s = (("Del " if es else "From ") + span_words(start, end, lang)) if start != end else \
             (("El " if es else "On ") + day_words(start, lang, weekday=True))
@@ -1130,7 +1245,7 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
         tail.append(start_line(rec, plats, q))
     fn = {"top_channels": _top_channels, "top_topics": _top_topics, "top_items": _top_items, "count": _count,
           "list": _list, "on_day": _list, "first": _first, "last": _last, "timeline": _timeline,
-          "compare": _compare}[q.kind]
+          "compare": _compare, "compare_topics": _compare_topics, "changed": _changed, "top": _top}[q.kind]
     text, ids, extra = fn(view, rec, q, start, end, plats, W, today, prof)
     said = []
     if said_end:
@@ -1596,6 +1711,67 @@ def _compare(view, rec, q, start, end, plats, W, today, prof):
     return s + diff, [], {}
 
 
+# ---------- round 12, D (DESIGN 19.D): today's code answers for the new kinds. Builder W's writer answers from the
+# fact sheet (facts.build); these stay as the fallback (the model fails, the cap is reached, no writer). ----------
+def _sheet(view, rec, q, today):
+    try:
+        from . import facts
+        return facts.sheet(view, rec, q, today, getattr(rec, "tz", "UTC"))
+    except Exception:  # noqa: BLE001 - the fallback words stand without the sheet
+        return None
+
+
+def _compare_topics(view, rec, q, start, end, plats, W, today, prof):
+    """Two topics in one window: which one more, and both counts (a topic's themes and the titles that say it)."""
+    sh = _sheet(view, rec, q, today)
+    rows = (sh or {}).get("topics") or []
+    if len(rows) == 2:
+        (a, na), (b, nb) = (rows[0]["name"], rows[0]["items"]), (rows[1]["name"], rows[1]["items"])
+        how = "about"
+    else:
+        a, b = q.topic[0], q.topic[1]
+        na = len(hits(view, rec, q.model_copy(update={"topic": [a]}), start, end, plats))
+        nb = len(hits(view, rec, q.model_copy(update={"topic": [b]}), start, end, plats))
+        how = "that mention"
+    if na == nb:
+        return f'{W} you watched as many {noun(q, 2, plats)} {how} "{a}" as {how} "{b}": {num(na)} each.', [], {}
+    hi, hn, lo, ln = (a, na, b, nb) if (na > nb) != q.less else (b, nb, a, na)
+    word = "fewer" if q.less else "more"
+    return (f'{W} you watched {word} {noun(q, 2, plats)} {how} "{hi}" than {how} "{lo}": {num(hn)} against '
+            f'{num(ln)}.'), [], {}
+
+
+def _changed(view, rec, q, start, end, plats, W, today, prof):
+    """How WHAT is watched changed: the themes that rose and faded between the first and the last period, with each
+    period's leading themes; without themes, today's timeline."""
+    sh = _sheet(view, rec, q, today)
+    ch = (sh or {}).get("change") or {}
+    periods = (sh or {}).get("periods") or []
+    if not ch or not periods:
+        return _timeline(view, rec, q.model_copy(update={"kind": "timeline"}), start, end, plats, W, today, prof)
+    up = [r for r in ch.get("rising") or [] if r.get("name")]
+    down = [r for r in ch.get("fading") or [] if r.get("name")]
+    head = f"{W} what you watch moved"
+    if up:
+        head += " towards " + ", ".join(f"{r['name']} ({round(r['from_share'] * 100)}% in {ch['from']}, "
+                                         f"{round(r['to_share'] * 100)}% in {ch['to']})" for r in up[:3])
+    if down:
+        head += (" and" if up else "") + " away from " + ", ".join(
+            f"{r['name']} ({round(r['from_share'] * 100)}% to {round(r['to_share'] * 100)}%)" for r in down[:3])
+    lines = [head + "."]
+    for p in [x for x in periods if not x.get("sparse")][-8:]:
+        names = [t["name"] for t in p["themes"][:3] if t.get("name")]
+        if names:
+            lines.append(f"{p['label']}: " + ", ".join(names))
+    return "\n".join(lines), [], {}
+
+
+def _top(view, rec, q, start, end, plats, W, today, prof):
+    """What was watched most in a window: today's ranking with the profile's topics."""
+    return _top_channels(view, rec, q.model_copy(update={"topics_too": True}), start, end, plats, W, today, prof)
+# ---------- end round 12, D ----------
+
+
 # ====================================== on the bot ===============================================================
 STATE = "history:{h}"
 # ---------- round 11 fix, A (R4): the friends line and the all-time range, once in a stretch of 6 hours ----------
@@ -1663,6 +1839,53 @@ def _fresh_state(bot, h, now):
     return st
 
 
+# ---------- round 12, D (DESIGN 19.D): the follow-ups the fact sheet's offers name ----------
+FU_FILL = set("""and ok okay so now but yes yeah yep sure please pls again it that this those them the same do show
+me can you could with one list ranking answer videos vids instead then just""".split())
+FU_WITH_SHORTS = re.compile(r"^\W*(?:(?:and|ok|okay|so|now|but)[,\s]+)?(?:(?:with|including|include|incl\.?)\s+(?:the\s+)?"
+                            r"shorts(?:\s+(?:again|too|back))?|(?:put|bring)\s+(?:the\s+)?shorts\s+back(?:\s+in)?)"
+                            r"(?:\s+please)?\s*[?.!]*\s*$")
+FU_ONLY = re.compile(r"^\W*(?:(?:and|ok|okay|so|now|but)[,\s]+)?(?:(?P<only>only)|just)\s+(?:the\s+|my\s+)?"
+                     r"(?P<x>[a-z0-9&'+-]+(?:\s+[a-z0-9&'+-]+){0,3}?)(?P<suffix>\s+(?:ones|videos|vids|stuff|channels|"
+                     r"content|clips))?(?:\s+please)?\s*[?.!]*\s*$")
+FU_ONLY_NOT = set("""kidding joking me you if once curious wondering asking checking a one that this those these the them
+today now first second third last latest next more less few some all it thanks thank ok okay sure yes no maybe looking
+browsing do go wanted want need like said saying thought thinking for in on to with""".split())
+FU_BY = re.compile(r"^\W*(?:(?:and|ok|okay|so|now|can\s+you|could\s+you|please)[,\s]+)*(?:(?:show|break|split|do|give|"
+                   r"sort|group)\s+(?:it|that|this|them|me|those)?\s*(?:down\s+|up\s+)?)?(?:(?:by|per|each|every)\s+"
+                   r"(?P<u>month|year|theme|topic|subject|interest|category)s?|(?P<u2>month|year)\s+by\s+(?:month|year))"
+                   r"(?:\s+please)?\s*[?.!]*\s*$")
+
+
+def follow_r12(q, t, known=None):
+    """A changed query for the round 12 follow-ups ("without shorts", "only <topic>", "by month", "by theme"), or
+    None."""
+    rest, had = strip_shorts(t)
+    if had and all(w in FU_FILL for w in re.findall(r"[a-z']+", rest)):
+        return q.model_copy(update={"without_shorts": True, "offset": 0})
+    if FU_WITH_SHORTS.match(t) and q.without_shorts:
+        return q.model_copy(update={"without_shorts": False, "offset": 0})
+    m = FU_BY.match(t)
+    if m:
+        u = m.group("u") or m.group("u2")
+        if u in ("month", "year"):
+            if q.kind == "changed":
+                return q.model_copy(update={"by": u})
+            return q.model_copy(update={"kind": "timeline", "by": u, "offset": 0, "window2": None, "unit": "items"})
+        return q.model_copy(update={"kind": "top", "topics_too": True, "offset": 0, "window2": None, "unit": "items"})
+    m = FU_ONLY.match(t)
+    if m and (m.group("only") or m.group("suffix")):
+        x = " ".join(m.group("x").split())
+        words = x.split()
+        if words and not any(w in FU_ONLY_NOT for w in words[:1]) and not words[0].isdigit() and \
+                (known is None or known(x)):
+            kind = "top" if q.kind in ("compare_topics", "compare") else q.kind
+            return q.model_copy(update={"topic": [x], "channel": None, "offset": 0, "kind": kind,
+                                        "window2": None if kind == "top" else q.window2})
+    return None
+# ---------- end round 12, D ----------
+
+
 def follow_up(st, text, today, known=None):
     """A changed query for a follow-up to the history answer in `st`, ("pick", n), or None. `known(topic)`: whether
     anything in the record mentions a topic (an "and X?" topic is taken only then)."""
@@ -1672,6 +1895,9 @@ def follow_up(st, text, today, known=None):
         return None
     if REMIND.search(t) or ACTING.search(t) or EVERY.search(t):
         return None
+    r12 = follow_r12(q, t, known)   # round 12, D
+    if r12 is not None:
+        return r12
     m = ONES.match(t)
     if m:
         return q.model_copy(update={"how": m.group(1), "offset": 0})
@@ -1744,6 +1970,14 @@ def history_reads(bot, person, text, now):
     if st:
         def known(x):
             view = bot.view(person["library"])
+            # round 12, D: a theme's name is known too ("only minecraft builds")
+            try:
+                from . import themes as T
+                th = T.load(view.lib)
+            except Exception:  # noqa: BLE001 - the words alone then
+                th = None
+            if th is not None and any(holds(th.shown(t) or "", x) for t in th.themes):
+                return True
             return any(holds(it.caption or "", x) for it in view.items.values())
         f = follow_up(st, text, today, known)
         if isinstance(f, tuple):

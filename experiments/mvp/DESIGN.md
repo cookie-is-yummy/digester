@@ -4539,3 +4539,172 @@ asking videos is offered or run (the 34 messages above, tester and operator, and
 - After "what was the last cooking video i watched" (three YouTube videos), "ask the video" asks which one; R3's fit
   still lets "running" mean speedrunning on the real library.
 - A one-word YouTube title ("Guitar") is still no title, so it is not offered or asked unless named by its number.
+
+
+## 19. History answers that give insight, not data (round 12, 22 Nov 2026)
+
+The founder graded the first 8 rows of his sheet on build 1f9cde0 (1 useful, 4 partly, 3 not useful; 5 of 8 slop) and
+asked: "it doesn't really answer the question properly. can we please refine this so that it does before i judge
+again?" The round's brief (outside git) gives his eight questions, his words and rules R-A to R-I. Two builders: D
+(facts, themes, lengths and the questions that were misread; part 19.D) and W (the writer; part 19.W). The seam is the
+fact sheet: a plain dict built by code for one history question, the only source of facts for the writer.
+
+### 19.D Facts, themes, lengths and the new questions (round 12, D; `lengths.py`, `themes.py`, `facts.py`, `tests/test_round12_d.py`)
+
+**Before (offline, the fakes, a made-up library).** "what have i been watching the most lately": a count and a top 5
+of channels; "which channels ... in 2025 without shorts": "without" read as a topic ("no videos that mention
+"without""); "did i watch more X or more Y this year": the interpreter and the composer (with the fakes, the error
+line); "how has what i watch changed since 2020": counts per year and per month (how much, not what); "what was i
+into in the summer of 2023": the interpreter (live: one recommended video); "what was i watching back in 2021": "no
+videos that mention "back""; "most watched channels in math": the interpreter; "how have my interests changed": the
+interpreter. Nothing in the code knew a theme, a length or a Short.
+
+**(1) Lengths and Shorts (`lengths.py`, `lengths-v1`).** The official length of every YouTube video the person
+watched, from the YouTube Data API's videos.list (`contentDetails.duration`, and `snippet.publishedAt` for the Short
+rule; `fields` keeps the answer to those two), 50 ids a call, one quota unit a call, the key from YOUTUBE_API_KEY in the
+X-Goog-Api-Key header (never in a URL, never logged); nothing else is fetched. The derived file
+`data/mvp/derived/lengths-v1/lengths.jsonl` holds per video id: `length_s` (None: no answer), `published`, `fetched_at`,
+`refresh_by` (30 days, Developer Policies III.E.4; a row past it is asked again and not used until then), `version`.
+It is keyed by video id only (public content, no person in it). Resumable (each batch appended as it comes back); each
+run appends its numbers to `runs.jsonl`. Real library (22 Nov): 108,685 watched YouTube videos asked, 2,174 calls and
+quota units, 0 errors, 318 s, 342 items a second; 98,086 with a length, 10,599 with no answer (deleted or private);
+97,986 of the 98,086 equal the corpus's own `duration_s` (an earlier import of the same field). $0.
+- **The Short rule, chosen from the data.** How many of the founder's 98,086 watched videos with a length each candidate
+  calls Short: at most 60 s, 46,895; at most 180 s, 58,044; the title's own mark (#shorts and its spellings), 8,819;
+  at most 60 s or (at most 180 s, a mark and published on or after 15 Oct 2024), 47,640; at most 60 s or (at most 180 s
+  and published on or after 15 Oct 2024), 52,320; at most 60 s or (at most 180 s and a mark), 47,790. The lengths
+  decided it: among videos published on or after 15 October 2024 (when Shorts could run to 3 minutes) every 15-second
+  bin from 60 to 180 s holds 270 to 2,970 videos and the bins from 195 to 300 s hold 37 to 46 each, a cliff at 180 s;
+  the older videos show no cliff there (about 600 a bin on both sides). A spike at 61 s (1,312, against about 200 at
+  62 s) is 60-second Shorts given as 61. Chosen: **at most 61 s; or at most 180 s for a video published on or after 15
+  October 2024; or, with no date known, at most 180 s with the title's mark** (53,184 of the 98,086). The base rate of
+  long videos of that age at 61 to 180 s (about 40 a bin) puts the ones this rule wrongly calls Short at about 320.
+- A video longer than 3 hours (a stream, a loop: 624 of them watched since 2020; one reported 179 million seconds) is
+  left out of every length sum and counted apart (`over_3h`): it is no measure of attention.
+
+**(2) Themes (`themes.py`, `themes-v2`; prompt `theme_name_v2`).** Every watched item gets a theme by code from the
+library's own stored item vectors (the ones `history._vector_store` finds). Ported from docs/05 stage 3: centre, L2
+normalise, PCA to 24 dimensions, normalise again; a Ward tree on a fixed sample of 6,000, every item then given to the
+nearest centroid and four rounds of spherical k-means over all of them (a Ward tree over 100,000 items does not fit in
+memory). Two levels: fields (k in 10 to 20 for a large library, 3 to 6 for 500 items) and themes inside each field in
+the field's own centred PCA space (k in 2 to 7; a field under 80 items is one theme; groups under 15 items or 4% of the
+field folded into the nearest). **Changed from docs/05:** k is chosen by the best silhouette (cosine) on the sample, not
+at the biggest gap in the merge heights: on the made-up library the gap rule cut at 3 and put four true themes into
+one, the silhouette kept every one apart; on the founder's library both chose 19 fields (flagged for an amendment:
+docs/05 names the gap rule).
+- Names: one model call per field (19 on the real library), which names the field and each of its themes from a sample
+  of titles (the 14 nearest the centroid and 10 others) and the words code finds typical of each (share x log1p(lift),
+  docs/05 step 6); never a call per item. Titles are data in the prompt. Each name gets a `category` from a fixed list
+  (v2), `words` (broad first), `mixed`, `sensitive`. A name the code finds sensitive (`profile.sensitive` on the name,
+  its words and the typical words), the model marks sensitive, or whose category is money, health, relationships,
+  politics or religion, is dropped with its words and typical words: its items fall under no theme. A reply that fails
+  the checks (over 4 words, a channel's name, a bare "videos") gets the code's own typical words. Two themes of one name
+  count as one (`facts.ItemFacts`).
+- Kept under `data/mvp/derived/themes-v2/<library key>/`: `build.json` (version, prompt version, model, embedding store
+  and model, parameters, names, counts, wall time, items a second), `space.npz` (the transforms, centroids, each
+  vector row's field and theme) and `themes.jsonl` (the same rows, each with the version and the embedding model). Built only by `python3 -m mvp.themes build <library>` (never while a person waits);
+  an item added later gets its nearest theme by code from the frozen transforms when the build is loaded. v1 (prompt
+  `theme_name_v1`, no category) is kept beside it. Real library: 98,677 watched items with vectors clustered, 121,169
+  rows assigned, 19 fields and 50 themes, 7 themes and 4 field names dropped as sensitive; 75 s.
+- **Topics to themes, by code (`themes.for_topic`).** A broad topic maps to the themes of the category it names (a small
+  table of the words people use: "games" is gaming, "drawing" is art and design) and to the themes whose name holds it;
+  a narrower one to the themes whose first two words hold it, or whose words hold it while at least half the theme's
+  own titles do (or the words are rare in titles, under 30); else to where the items that hold the words and fit them
+  (`history.topic_fit`) fall, only when the words are rare in titles or that theme's titles hold them at least a quarter
+  of the time. A field's own words are not used ("blender" was the fourth word of a field of art, DIY and animation, and
+  mapped "blender" to 1,469 items; now its 300 titles). On the real library: gaming 13 themes, art 2, math 1, minecraft
+  8, blender none (its own 300 titles). With v1 (no category) "gaming" reached 4 themes and none of the 7
+  of the Minecraft field. The sheet's topic items are the mapped themes' items and every item whose text holds the
+  words.
+- **Evaluation.** Made-up library (`tests/r12_library.py`, 9 made-up themes with known vector directions, 768 items):
+  every non-sensitive item lands in a theme of its own made-up theme only and each made-up theme is under one name (8 of
+  8; the sensitive one has no name and no words). Real library, my own reading of 12 themes x 10 sampled watched items
+  (counts only): 93 of 120 items truly belong; names that fit: theme_name_v2 8 of 12 (2 more partly), theme_name_v1 8 of
+  12, the code's own two typical words 7 of 12. One theme of the 12 is a mixed bag (4 of 10 belong). The prompt's gain
+  is the category (the mapping above), not the names. Share of watched items with a topic: before (the profile's 7
+  interests, today's "By topic" line) 3,086 of 108,997 (2.8%); after (a shown theme) 84,344 (77.4%).
+
+**(3) The fact sheet (`facts.py`, `facts.build(bot, person, q, now, text=None) -> dict or None`).** Code only, from the
+history record (re-read with each event's local hour into numpy arrays, cached per library file), the themes and the
+lengths. Keys as agreed (question, kind, window, filters, totals, previous, themes, channels, periods, topics, when, new,
+stopped, library, items, offers); D's additions: `fields`, `change` (from, to, rising, fading with each theme's peak
+period, sparse_before), `unthemed`, `window_totals` (a count's "of N"), `cannot_see`, `versions`, `built_s`; in totals
+`over_3h` and `by_platform`; in themes `theme_id`, `field`, `length_share`, `previous_share`, `previous_items`,
+`mixed`; in periods `sparse`.
+- The window's words carry the export end ("the 4 weeks up to 30 October 2026, where your export ends", "this year up to
+  30 October 2026, where your export ends", "Friday 30 October 2026, the last day of your export"); a season is said
+  with its dates. `previous` is the window just before as a person would say it: the day before, the week before, the
+  month before, 2024 for 2025, "the same part of 2025 (1 January to 30 October 2025)" for this year so far, "the spring
+  before" for a summer, else "the N days before".
+- New and stopped: a theme with at least 5 items and 2% of the window, at least twice its items before and under a
+  quarter of its share before (stopped: the reverse); a channel first watched in the window with 5 items on 2 days; a
+  channel with 5 items before and none now. None for a window under a week. Periods: by year, or by month for a span
+  under 18 months, or as asked; a period under 50 items (or 1% of the window) is `sparse` and a change starts after it.
+- "Without shorts" leaves out YouTube Shorts (the rule above) and Instagram reels and posts, and says how many
+  (`filters.left_out`). The themes, channels and saved-never-opened items carry only safe names.
+- Speed on the real library: the first sheet 4.4 s (the index), the first of a new topic up to 2.9 s (its word scan
+  and fit), then 0.05 to 1.1 s each (8 questions, second round).
+- **Recount.** 12 numbers of the real sheets recounted by a script that shares no code with the bot (it reads the two
+  library files, the lengths file and the themes build): 12 of 12 the same (the 4 weeks' items, length hours, Shorts,
+  busiest hour's share and top theme; 2025's items and top channel; this year's gaming items; 30 October's items; 2021's
+  items; the summer of 2023's items and the spring before). The first pass had 11: its own "gaming" word match was
+  whole-word only, where the engine's also takes longer words that end in it.
+
+**(4) The questions that were misread, read by code in `history.py` (blocks marked "round 12, D").** New kinds of
+`HistoryQuery`: `compare_topics` (two topics, one window: "did i watch more gaming or more art videos this year"),
+`changed` (how WHAT is watched changed: "how has what i watch changed since 2020", "how have my interests changed",
+"how has my taste changed"), `top` ("what was i into in the summer of 2023", "what was i watching back in 2021", "what
+was i obsessed with in 2022"; past tense with a window only); new fields `without_shorts` ("without shorts", "no
+shorts", "excluding shorts", "only long videos": taken out before the topic is read) and `Window.label` (a season:
+summer is June to August, winter Y is December Y to February Y+1, "last summer" the latest one ended); "most watched
+channels in X" is a ranking with that topic; "back in" is never a topic. Follow-ups for the 6 hours a history answer is
+in view (`follow_r12`): "without shorts" / "with shorts", "only <topic>" (a word of the record or a theme's name;
+"just kidding", "only if you want", "only the first one" are not), "show the videos" (as before), "by month" / "by year"
+(a timeline, or a change by month), "by theme" (the top kind). "what did i watch on october 30" keeps its list; its
+sheet adds the day's overview. Until W's writer is merged, `send_answer` sends today's reply; the new kinds get a code
+answer (also the fallback afterwards): `compare_topics` "This year (...) you watched more videos about "gaming" than
+about "art": 3,455 against 375.", `changed` the themes that moved between the first full and the last period and each
+period's leading themes (today's timeline without themes), `top` today's ranking.
+- Tests (`test_round12_d.py`, 125): the lengths (resumable, refresh_by, no key refused, the Short rule, no answer), the
+  themes (right theme, one call per field, sensitive, versions, an item added later, 10 topic mappings), the sheet of
+  each of the 8 questions with numbers counted in the test from the made-up rows, 23 readings and 43 traps, the
+  follow-ups and 12 follow-up traps, the code answers. Two round 11 lines made me change the read, not the tests: the
+  trap "what have i been watching ..." is not "what was i into" (past tense only), and "what was i watching in march
+  2024" stays a list (a month is not read as "into"). `test_round9_merge.rule_phrasings` leaves out the round 12 test
+  files as it does rounds 10 and 11 (else the set grew from 123 to 127). The env fixture of `test_mvp.py` sets
+  MVP_DERIVED_HOME to the test's own folder (tests never read the real lengths or themes).
+
+**Checks.** Full suite 4,838 passed and 0 failed (4,713 before and the 125 of `test_round12_d.py`; 4 shards), demo 10 passed, dry self-test 59 conversations and 152 of 152 steps,
+`probe_same` byte-equal with `same_head.json`; the development phrasing set by code, tester and operator: 73 helper
+lines right, 1 wrong (d007), 1 of 40 `none` lines taken (d132, as before), every other line's hooks the same as the
+round 11 run; the 159 rule texts and 123 phrasings taken by no new read; the round 11 traps not taken. No reply of an
+earlier test changed.
+
+**Live (the real library read-only, a scratch home, a fresh person).** The 8 questions and 5 more ("without shorts",
+"most watched channels in math", "by month", "what was i watching back in 2021", "how have my interests changed"): all
+13 by code, no model call, 0.25 to 6 s (the first loads the record and the index). Read as the founder would, the
+replies are still today's (the writer is W's): the ranking answers are still lists of channels; the new kinds now
+answer the question asked (more gaming than art this year, by how much; what moved since 2020 by theme, with each
+year's leading themes; the summer of 2023 and 2021 as windows, never a pick or a topic "back"); "without shorts" halves
+2025's count and changes the ranking. The sheets hold what the brief's shape needs (themes with share and change, the
+channels behind them, Shorts against long, hours of the day, new and stopped, things saved and never opened); whether
+it reads as insight depends on W's writer.
+
+**Spend.** $0.116: 57 naming calls in three builds of the real library (v1 with the gap rule, v1 with the silhouette,
+v2), about $0.04 each; the lengths and the live run cost nothing. The ledger read $22.373 at the start, $22.678 at the
+end (the rest was spent by the other builder).
+
+**Not done or still wrong.**
+- The names are model names checked by code, not confirmed by the person; 4 of 12 read did not fit (too narrow, the
+  format instead of the topic, one mixed bag). Theme membership is 93 of 120 on the 12 read.
+- Item-level sensitivity: a non-sensitive theme can hold sensitive items (one of 10 read in a family theme was about a
+  health condition); only theme names are filtered, as the brief asks, not the examples.
+- Themes are built from titles' vectors; reels without captions and the 10,320 watched items with no vector have no
+  theme (`unthemed`).
+- `compare_topics` and `changed` read English only; seasons are the northern hemisphere's; "what am i into" and "what
+  have i been into lately" are not read (a round 11 trap).
+- The fallback answers of the old kinds are unchanged (today's counts by words: "805 that mention minecraft" where the
+  sheet's topic, its 8 themes and its words, holds 1,711).
+- Conflicts with docs/ (for the orchestrator): docs/05 stage 3 chooses k at the biggest gap in the merge heights and
+  clusters saves, likes and shares; here k is chosen by silhouette and the watched items are clustered (the question is
+  about watching).
