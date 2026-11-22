@@ -5299,3 +5299,153 @@ differently (the writer at temperature 0 varies a little, and the so-what said i
 answer that names its topic but not "on" its date ("Your first <topic> watch was <its date>") stands. Spend: $0.26
 by the ledger ($23.88 before, $24.14 after), the live runs and the eval's 2 day sheets.
 <!-- end round 12, pass 2 fix -->
+
+### 19.P3 The third pass: what was still wrong, and what changed (round 12, pass 3; `insight.py`, `facts.py`, `history.py`, `attention.py`, `trace.py`, `channels/web.py`, `eval_insight.py`, `tests/test_round12_pass3.py`)
+
+The last strict judge of build a490cdd, grading as the founder, gave the 8 answers 5 useful and 3 partly (rows 1, 2, 8);
+the orchestrator's own reading on the founder's page listed U1 to U10 (outside git). Each was reproduced first on made-up
+data (a test of `tests/test_round12_pass3.py` that fails on a490cdd), fixed, and guarded with near variants; then the 8
+questions were asked on my own page three times, read as the founder would, and what that reading found was fixed the
+same way. No titles, channel, theme or field names of the real library are written here. The prompt is unchanged
+(`insight_v5`): every change is in what the check accepts and in what code writes.
+
+**U1, a direction needs a path that supports it.** A sentence of the writer with a word of direction or comparison and
+no number (live: "the mix shifted from one area to a broader mix with four areas rising, while Shorts became more of
+it", every direction false by recount) passed, because the check bound numbers only. Now (`_direction_check`, read with
+the sentence's paths) every such word comes from a path whose two values code knows, in their order: "rose", "grew",
+"gained", "became", "arrived", "went up" need the record named nearest the word to have risen against the span before
+(its `change_vs_previous`, `previous_share` and `share`, `from_share` and `to_share`, `previous_items` and `items`, a
+so-what candidate's own direction), "fell", "faded", "lost", "gave way", "left behind" the reverse; Shorts' direction
+comes from the window's Shorts against the span before (shares, or counts when the shares are missing) when the
+sentence says one of their paths; "shifted" / "moved" / "toward" need the first record said to have fallen and the last
+to have risen (or eras or periods in their time order); "broader" / "narrower" need the leader of its list to have lost
+or gained share; "peaked" needs a peak path; "more X than Y", "less", "fewer" compare the two records' own counts or
+shares (or the comparison's own paths), "more of it" is a direction against the span before. A sentence with such a
+word and no path that supports it is dropped (`direction_unbound`); one that names a path that moved the other way is
+dropped as before (`direction`); a plain sentence of the strict writer with such a word is dropped; a count typed in
+words ("four areas rising") is a number typed outside a path. Reads: "how did my watching change from 2023 to 2025"
+(`did ... change`) and "what (did) i watch(ed) in 2023 vs 2025" (`WHAT_TWO`, never with "how many" or "more videos") are
+the `changed` kind over the two years, told by eras and areas, never a timeline of counts; "how many videos ... 2023 vs
+2025" stays a comparison of counts.
+- Planted-falsehood eval (`eval_insight.py --mode fake`): 15 new planted sentences with a false direction and no number
+  (the v5 set's new case, read as the answer, `"as": "answer"`) and 8 true ones. Code at a490cdd: 9 of the 15 caught,
+  8 of 8 kept; after: 15 of 15 caught, 8 of 8 kept. All the earlier sets unchanged: 89 of 89 typed planted caught and
+  43 of 43 true kept; the v5 set 60 of 60 caught and 27 of 27 kept (45 and 19 before the new case).
+- The writer's eval on the same 20 sheets (no prompt changed, so the last live forms of insight_v5, rescored by the code
+  at a490cdd and by the final code; no model call): answers the question 18 and 19 of 20, writer used 19 and 20, bullets
+  kept 51 and 52, so-what said 7 and 6 (a Shorts shift under a channels answer is no longer said, U5), a limits line 0
+  and 0, a run of counts 0 and 0. On the way, three of my own rules regressed it (a typed "two" read as a count, "came
+  in Aug" read as "arrived", a shift from one period's leader to a later one's): each was found by this rescore and
+  fixed before it was kept. No naming prompt or topic mapping changed (`themes.py` untouched), so those evals do not
+  apply.
+
+**U2, "what have i been into lately" is a history question.** `history.INTO` now takes "what have i been into" with a
+window ("lately", "the last 3 months", "the past 3 months", "this year") and `INTO_NOW` "what am i into lately / these
+days / right now" (the last 4 weeks the record holds); a bare "what am i into" and "what have i been into" stay out, and
+"what have i been saving lately" goes where it went. The round 8 trends hook reads these phrasings first; it gives way to
+hook 8h (`history.into_is_history`) when the person's library holds a watch history and a themes build, so a library with
+neither keeps the trends answer of round 8 byte for byte (its tests unchanged). Changed on purpose: the round 11 trap
+"what have i been into lately" (`test_round11_h.py`'s trap list now holds "what have i been saving lately" in its
+place) and the round 12 D trap list (`test_round12_d.py`: the line left the list).
+
+**U3, without Shorts.** With the Shorts filtered out, any sentence, so-what or answer that speaks of Shorts but to say
+they were left out is dropped (`shorts_left_out`), and no Shorts shift is a so-what. Lead and chart are at one level: a
+top answer leads with its areas only where the chart draws them (they cover 40% of the window), else with its themes,
+and the chart follows the level the sent answer names (`answer_level`, `chart(sheet, level)`).
+
+**U4, one fact once.** Two sentences of the writer that rest on the same sheet facts (`_fact_paths`: a record's share
+now, its share before or change, its count) are a repeat, the first stands; a bullet whose every number and name the
+answer or another bullet says goes (live, row 2: the leader's count and Shorts share, both said elsewhere); a MUST line
+takes the bullets that say one of its (name, share) pairs (live, row 8: one theme's share in three bullets); a bullet
+that says the window's Shorts (or two of the so-what's shares) goes when the so-what says them; a bullet that names the
+same two names twice is filler; code's bullets never name again the two channels the answer named. A day's overview is
+code's (its count against the usual day), the writer's bullets read against it (live: "mostly Shorts at 9 of 10" above
+"90% ... against about 78% on a usual day"). Lists: the overview, then each card with ONE caption line (its number, the
+channel, the day unless it is a day's list, the length, "Short"): on a channel that draws cards (the page) the caption
+is on the card itself (`caption`, shown on the card's note line), elsewhere (iMessage) it is its own line before the
+link (`card_alt`); no numbered text list of the same items. "And N more" comes after the cards. Live, row 6 at 430 px:
+2,970 px tall, from 6,400; row 4: 1,385 px, every item once.
+
+**U5, the so-what is about the question's subject.** `SW_KINDS`: a ranking of channels takes only a channel newly at the
+top or saved videos on a named channel's theme; a comparison only saved videos on a theme inside one of its two sides
+(the themes its bullets name); a first or a last its path and its saved ones; none on a day. A saved one is always on a
+theme the answer or its bullets name (the comparison's exception is gone), so when the fitting one was said on the
+answer before, none is said rather than an unrelated one (live, row 5: no so-what after row 4 said the saved tutorials).
+For "the most" over a short window (not a season, not over 400 days) `facts` proposes "moving": the area that grew most
+and the one that fell most against the weeks before (3 points or more each), said by code as something to notice
+("Worth noticing: gaming grew from 12% to 22% against the 4 weeks before (...), while sports fell from 16% to 9%."),
+first of the candidates and code's whatever the writer picked; the bullets that say the same moves go. A so-what's
+words must be about the candidate picked (`_sw_says`), else code says that candidate (live, row 8: a so-what about saved
+clips under the pick of the Shorts shift).
+
+**U6, offers.** `offers_fit`: only an "only X" whose X the answer, its bullets, the chart or the so-what showed; "by
+month" never under a chart by month; the writer's checked pick first, else the sheet's own, areas before themes; at most
+two. `facts._offers` now proposes a top answer's two areas, then its two themes.
+
+**U7, every change the same way.** "1 point" (never "1 points"). A sentence of the writer with a change (a share before,
+a change in points, a from-share) needs a direction (a word, or from one value to the other) else it is dropped
+(`no_direction`), and its base: where it has none, code adds the sheet's span before in the person's words ("... against
+the 4 weeks before (5 September to 2 October 2026)", "... from 12% in the 4 weeks before ...") or, for a change over the
+years, its two years right after its two values ("from 22% to 16% between 2020 and 2026"); a change "from" a count is
+dropped. Code's own falls say their base like its rises.
+
+**U8, what the answer is about.** Row 7: when one area led every year but its share moved (its peak at least 1.4 times
+both ends), code's answer says that first ("Gaming led every year, but its weight moved: 22% in 2020, up to 48% in
+2022, then down to 16% in 2026, as internet culture and film and TV took more of it."), the chart is that area's share
+each year, and the move to Shorts is a bullet; a steady leader keeps the Shorts answer of pass 2. The change's so-what
+no longer says again what grew. Row 8: `facts._distinct` gives the themes of a season at least 1.5 times their share of
+the rest of that year (2% of the season or more, 1.5 points above; on the real library no theme of that summer doubled),
+and a MUST line says them ("What set the summer apart from the rest of 2023: X (6%, against 4%) and Y (4%, against
+2%)."). Row 2: a MUST line says what the ranking says about him ("A and B are clip channels you grazed (95% and 100%
+Shorts); C and D are long-form channels you kept coming back to (on 92 and 97 days)."), and no so-what that is not about
+channels.
+
+**U9.** A count's month bars that add up to more than its answer's count say what they count ("(a video opened in two
+months counts in both)"); "N% of them were Shorts" says whose ("of your minecraft videos").
+
+**U10.** The README's "Before you test history answers" says the writer stops at the daily cap, what it costs, and how
+to start the page with a higher one for grading (`MVP_DAILY_CAP_USD=8`); such an answer's run says "daily cap reached"
+(or "total cap reached") in the runs table and in `python3 -m mvp.trace --web`, and in its steps (`writer.error`).
+
+**Live, read as the founder would** (my page on port 8795, a scratch home, the real library, the founder's profile;
+`MVP_DAILY_CAP_USD=8`; three runs of the 8 questions with a picture of each at 430 px, the last after the fixes of the
+first two). Last run: 1 the areas, the themes inside gaming, the fall that matters with its base, Shorts and the typical
+long video, and "worth noticing" what grew and what fell; 2 the ranking, what the top five are and which of them he
+grazes against the ones he keeps coming back to; 3 about the count with its leading themes, its rise against last year,
+and Shorts' rise as the so-what, the month chart saying what it counts; 4 the date, the bullets, three captioned cards
+and the path ("It has faded: ...") with the saved tutorials; 5 the ratio in words, what is inside each side, the gap
+against last year, and no so-what (the fitting one was said on row 4); 6 the day against the usual day (count, Shorts,
+busiest hour), then eight captioned cards and "And 2 more"; 7 gaming's weight over the years and what took its place,
+Shorts as a bullet, the learning side that gave way; 8 what fell and rose against the spring, what set the summer apart
+from the rest of the year, Shorts as the so-what. In the pictures of rows 1, 4, 6 and 8 no item is shown twice and no
+fact is said twice. Rows I would still not call useful: 6 (beyond the comparison with the usual day, its first bullet,
+which themes of 10% made a 10-video day, is filler the check cannot tell from information, and a day's list is still
+mostly what anyone could look up); 3 (the writer's third bullet varies from run to run and is sometimes clumsy, "98%
+shows how Shorts-heavy one was", or a list of channels that came and went). Row 1 stays a picture by shares: "the most"
+cannot be judged by watch time, which the export does not hold.
+
+**Checks** (after the work): full suite 5,273 passed and 0 failed (4 shards; the 99 of `test_round12_pass3.py` added, one
+round 12 D trap line removed); demo 10 passed; dry self-test 67 conversations, 164 of 164 steps; `probe_same` byte-equal
+with `same_head.json`; the development phrasing set by code: 73 helper lines right, 1 wrong (d007), 1 of 40 none lines
+taken (d132), the same score as before; the 159 rule texts, the 123 phrasings and the round 11 and round 12 traps are
+held by the suite and pass (the two trap lines above changed on purpose). No reply of picks, recalls, summaries, asking
+videos, rules, emails, cancels or connectors changed.
+
+**Test lines changed on purpose**: `test_round12_d.py` (the trap "what have i been into lately" left the list, U2);
+`test_round11_h.py` (that trap became "what have i been saving lately", U2); `test_round12_w.py` (a first's parts are the
+overview, then a caption line and a card per item, U4); `test_round12_merge.py` (a first's item in an earlier year is
+said on its caption line, "1. <channel> · 10 Jan 2025 · 10 min", U4); `test_round12_pass2_fix.py` (the saved
+order is read without the new "moving" candidate, U5; "leaned less on Shorts" may go as `direction_unbound` before the
+filler rule, U1; the change's so-what no longer says what grew, U4); `selftest/conversations.jsonl` c62.1 (the caption
+line in place of the numbered title, U4); `eval/insight_cases.json` (the v5 set gets the direction case, read as the
+answer).
+
+**Spend**: $0.137 by the ledger ($24.264 before, $24.402 after): the page's setup and three live runs of the 8 questions
+(24 writer calls, $0.004 to $0.006 each). The writer's eval was rescored from the saved forms (no call).
+
+**Not done.** The model's own wording still varies a little from run to run (temperature 0); a direction word code does
+not list ("ballooned", "slid") is read only by the older check of its names' change. "between 2020 and 2026" is added
+only after a "from X to Y" of a change sheet; a change of a sheet with no span before (the eval's made-up ones) keeps
+the writer's words. Spanish so-whats are still only the saved ones, and the Spanish month bars' caption is the only
+Spanish line added. The console channel (a developer's) shows a list's captions without titles (the card is the URL).
+<!-- end round 12, pass 3 -->
