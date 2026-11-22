@@ -123,7 +123,8 @@ def text_of(parts):
     return "\n".join(p.get("text") or ("[card] " + str(p.get("title"))) for p in parts)
 
 
-def run(mode, cases, out=None):
+def run(mode, cases, out=None, saved=None):
+    """`saved` (rescore): {case id: {"raw": form, "cost": ..., "seconds": ...}} from an earlier live run's file."""
     rows = []
     for c in cases:
         s = c["sheet"]
@@ -137,6 +138,9 @@ def run(mode, cases, out=None):
             if mode == "fake":
                 raw = dict(c["fake"])
                 raw["observations"] = list(raw["observations"]) + list(c["plants"])
+            elif mode == "rescore":
+                got = (saved or {}).get(c["id"]) or {}
+                raw, row["cost"], row["model_seconds"] = got.get("raw") or {}, got.get("cost", 0.0), got.get("seconds")
             else:
                 try:
                     raw, cost = I.call(s)
@@ -166,7 +170,7 @@ def run(mode, cases, out=None):
                 true_kept = sum(1 for o in c["fake"]["observations"] if o["text"] in form["observations"])
                 row.update(planted=len(caught), caught=sum(caught), true_obs=len(c["fake"]["observations"]),
                            true_kept=true_kept)
-            row["raw"] = raw if mode == "live" else None
+            row["raw"] = raw if mode in ("live", "rescore") else None
         row["seconds"] = round(time.time() - t0, 2)
         row["text"] = full
         rows.append(row)
@@ -194,13 +198,18 @@ def summary(rows, mode):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=("before", "fake", "live"), default="fake")
+    ap.add_argument("--mode", choices=("before", "fake", "live", "rescore"), default="fake")
+    ap.add_argument("--raw", default="", help="rescore: the --out file of an earlier live run (no model call)")
     ap.add_argument("--cases", default="")
     ap.add_argument("--out", default="")
     a = ap.parse_args(argv)
     ids = [x for x in a.cases.split(",") if x]
     t0 = time.time()
-    rows = run(a.mode, load(ids), a.out or None)
+    saved = None
+    if a.mode == "rescore":
+        with open(a.raw, encoding="utf-8") as f:
+            saved = {r["id"]: r for r in (json.loads(x) for x in f if x.strip())}
+    rows = run(a.mode, load(ids), a.out or None, saved)
     s = summary(rows, a.mode)
     wall = time.time() - t0
     s.update(wall_seconds=round(wall, 2), items_per_second=round(len(rows) / wall, 2) if wall else None)

@@ -486,50 +486,33 @@ el la los las un una unos unas de del al en con por para y o u que como cuando d
 fueron era eran ser estar esta este estos estas ese esa esos esas lo le les se su sus tu tus mi mis nos muy mas menos
 tambien solo ya aun sin sobre entre hasta desde hacia durante tras pero ni porque si no ha han has he hay""".split())
 
-GENERIC = set("""watch watched watching rewatch rewatched rewatching opened open opening opens saved save saving saves
-liked like likes view viewed views video videos vid vids clip clips short shorts long longer longest length lengths
-reel reels post posts item items channel channels creator creators account accounts youtuber youtubers theme themes
-topic topics subject subjects interest interests mix mixed variety kind kinds type types stuff content
-share shares part parts portion slice chunk bulk majority minority rest others lot lots plenty handful couple dozen
-dozens hundreds thousands grew grow grows growing growth rose rise rises rising risen climbed climb climbing jumped
-jump jumps spike spiked surge surged doubled double doubling tripled triple halved half halves quarter quarters third
-thirds twice times fell fall falls falling fallen dropped drop drops dropping slipped slip shrank shrink shrinking
-shrunk faded fade fades fading declined decline cooled cooling quiet quieter vanished disappeared gone stopped stop
-paused new newer newest fresh first start started starting began begin beginning since returned return back
-steady steadily stable similar constant consistent consistently regular regularly usual usually often occasional
-occasionally rarely sometimes always never still yet already now lately recently recent latest earlier earliest
-last previous prior later period stretch window phase spell streak burst bursts wave day days daily week weeks
-weekly month months monthly year years yearly time hour hours minute minutes min mins late evening evenings night
-nights nightly morning mornings afternoon afternoons weekend weekends weekday weekdays total totals together adding
-add adds added sum overall altogether combined nearly almost roughly close exactly mainly mostly largely chiefly
-heavily partly top leading lead leads led ahead behind main biggest big bigger largest large larger smaller smallest
-small second fourth fifth next dominated dominate dominates dominant took take takes taking overtook replaced
-replace shift shifted moved move swapped switch switched turned turn focus focused came come comes coming deep
-dive binge binged marathon heavy light lighter compared compare versus vs one ones thing things way something
-nothing anything everything everyone whole full entire single alone apart outside inside each want wanted try
-pick finish queue list lists playlist library revisit go going see look check keep set aside plan learn learning
-practice practise build make follow skip cut limit trim balance worth unopened unwatched yet sitting waiting left
-leaving pile ready offer show shows showed shown spread split even ratio count counts number numbers figure
-picture favourite favorite pull pulled pulls draw drew drawn hold holds held stayed stay stays kept keep keeps
-mean means meaning suggests suggest seems looks clear clearly bit little lot gap edge tie tied level same share
-compared beat beats beating outnumbered outpaced trailing trail percent rest tail mid around amount
-busiest busier busy different differ went gave give gives way extra steadier steady slightly wins win won beat
-points point percent tutorial tutorials guide guides lesson lessons recipe recipes episode episodes series review
-reviews explainer walkthrough highlight highlights compilation compilations vlog vlogs stream streams fan return
-whole mostly spread across sessions session evenings nothing alone almost all came latest earliest kept stuck
-ver vi viste vistes visto videos video nunca paso pasa pasamos te ti puntos punto por ciento sesion sesiones
-yes yeah no si brought bring brings work through clips corto cortos largos largo canal canales cuenta cuentas tema temas
-diferencia menor mayor ventaja gana ganan gano supera superan supero frente seguido seguida juntos juntas casi
-todo toda todos todas cada uno una lideraste empezaste volviste vuelve volvio quedo quedan queda habia hubo tuviste
-mientras aunque apenas solamente mucha poca
-mitad tercio cuarto doble veces vez casi cerca unos unas alrededor total suman sumaban duracion horas hora minutos
-dia dias semana semanas mes meses ano anos tarde tardes noche noches manana mananas fin finde semana entre
-creciste crecio crecieron subio subieron bajo bajaron cayo cayeron nuevo nueva nuevos nuevas empezaste empezo
-dejaste dejo parado guardaste guardado guardados abriste abierto abiertos sin aun todavia lista quieres quieres
-puedes podrias probar ver revisar mayoria parte resto principal principales primero primera ultimo ultima
-recientes reciente antes despues mismo igual mas menos mucho muchos poco pocos varios lleva llevan sobre todo
-sobretodo destaca destacan domina dominan lidera lideran detras viene vienen ahora ultimamente entonces luego
-""".split())
+# Words that name a subject (a genre, a hobby, a kind of content). One of them in a sentence must be in the sheet: a
+# theme the sheet does not name is a made-up fact ("you got into knitting", "gaming is a popular genre"). Every other
+# plain word is allowed; names are checked as names (a capitalised word must be a word of the sheet's names).
+TOPICAL = set("""gaming game games gamer gamers videogame videogames minecraft fortnite roblox esports speedrun speedruns
+speedrunning anime manga cartoon cartoons comic comics music song songs singing singer rap hiphop pop rock jazz kpop
+concert concerts guitar piano drums bass cooking cook cooks recipe recipes baking bake food foods meal meals diet
+nutrition vegan fitness workout workouts gym exercise exercises yoga running runner sport sports football soccer
+basketball baseball tennis golf hockey cricket boxing mma wrestling racing cars car automotive motorcycle motorcycles
+bike bikes biking cycling travel travelling traveling trips news politics political election elections science
+physics chemistry biology math maths mathematics philosophy psychology economics finance financial money investing
+investment investments stocks crypto bitcoin business startup startups entrepreneurship marketing tech technology
+programming coding code software gadgets phones art arts drawing painting sketching illustration animation design
+fashion beauty makeup skincare hair knitting crochet sewing crafts craft diy woodworking gardening garden plants pets
+dogs dog cats cat animals nature wildlife comedy memes meme pranks asmr horror crime podcast podcasts documentary
+documentaries film films movie movies cinema trailers anime reality education study studying school college
+languages chess photography editing architecture cleaning productivity motivation meditation religion spirituality
+relationships dating parenting kids family health medical fishing hunting camping hiking climbing skating skateboarding
+surfing dance dancing theater theatre poetry books book reading writing geography space astronomy
+cocina cocinar receta recetas comida juegos juego videojuegos musica canciones deporte deportes futbol baloncesto
+viajes viajar noticias politica ciencia matematicas finanzas dinero tecnologia programacion arte dibujo pintura moda
+belleza maquillaje manualidades jardineria mascotas perros gatos comedia peliculas cine documentales educacion idiomas
+ajedrez fotografia salud ejercicio gimnasio guitarra baile libros lectura""".split())
+# sentences that would be true for anyone (rule I)
+GENERIC_CLAIM = re.compile(r"\b(?:popular|genre|genres|great way|good way|it'?s (?:good|great|important|fun)|many "
+                           r"people|everyone|people love|known for|a lot of people|worth learning|good for you|"
+                           r"healthy|relaxing|fun to|muy popular|mucha gente|es bueno)\b")
+
 
 _HEDGE = re.compile(r"\b(?:about|around|nearly|almost|roughly|over|under|more than|less than|close to|some|just over|"
                     r"just under|approximately|cerca de|casi|unos|unas|alrededor de|mas de|menos de)\s*$")
@@ -562,7 +545,11 @@ _SUPER = re.compile(r"\b(?:the most|most[- ](?:watched|opened|seen)|(?:watched|o
 _RELATION = re.compile(r"\b(?:than|more|less|fewer|grew|rose|fell|faded|up|down|twice|half|double\w*|since|before|"
                        r"previous|new|stopped|while|whereas|against|compared|behind|from|only|most|top|biggest|"
                        r"mostly|main|each|per|every|days?|hours?|shorts?|long|saved|never|que|frente|mas|menos|"
-                       r"antes|nuevo|mitad|doble|desde|solo)\b")
+                       r"antes|nuevo|mitad|doble|desde|solo|ahead|lead|leads|led|versus|vs|lidera)\b")
+# what makes a sentence more than a count the chart shows: a comparison, a change, Shorts against long, length, days
+_INSIGHT = re.compile(r"\b(?:than|more|less|fewer|grew|rose|fell|faded|up|down|twice|half|double\w*|tripl\w*|since|"
+                      r"before|previous|new|stopped|while|whereas|against|compared|versus|vs|ahead|shorts?|long|days?|"
+                      r"hours?|saved|never|que|frente|mas|menos|antes|nuevo|mitad|doble|desde|dias?|horas?|cortos?)\b|%")
 _RATIO = [(re.compile(r"\b(?:twice|double[sd]?|doubling|two times|el doble|dos veces)\b"), 2.0),
           (re.compile(r"\b(?:three times|tripled|triple|tres veces|el triple)\b"), 3.0),
           (re.compile(r"\b(?:four times|cuatro veces)\b"), 4.0)]
@@ -583,7 +570,11 @@ FIELDS = {"shorts": re.compile(r"\bshorts\b|\bcortos\b"),
 def _parse_num(s, lang):
     s = s.strip()
     if lang == "es":
-        s = s.replace(".", "").replace(",", ".") if re.match(r"^\d{1,3}(?:\.\d{3})+(?:,\d+)?$", s) or "," in s else s
+        if re.match(r"^\d{1,3}(?:,\d{3})+$", s):
+            s = s.replace(",", "")
+        else:
+            s = s.replace(".", "").replace(",", ".") if re.match(r"^\d{1,3}(?:\.\d{3})+(?:,\d+)?$", s) or "," in s \
+                else s
     else:
         s = s.replace(",", "")
     try:
@@ -629,13 +620,13 @@ def check_sentence(text, facts, uses=None, chart_vals=None, need_fact=True):
     return why
 
 
-def _check(text, facts, uses=None, chart_vals=None):
+def _check(text, facts, uses=None, chart_vals=None, maxlen=SENT_MAX):
     """(why it is dropped or None, how many of the sheet's facts it names)."""
     from . import profile as P
     raw = " ".join(str(text or "").split())
     if not raw:
         return "empty", 0
-    if len(raw) > SENT_MAX:
+    if len(raw) > maxlen:
         return "too_long", 0
     if _LINK.search(raw):
         return "link", 0
@@ -742,7 +733,7 @@ def _check_body(raw, facts, uses, chart_vals):
             n_facts += 1
     rest_n = re.sub(r"\b(?:twice|double[sd]?|doubling|half|halved|a third|a quarter)\b", " ", rest_n)
     # ---- numbers ----
-    num_re = (r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:,\d+)?)" if facts.lang == "es" else
+    num_re = (r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{1,3}(?:,\d{3})+|\d+(?:,\d+)?)" if facts.lang == "es" else
               r"(?<![\w.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)")
     nums = []
     for m in re.finditer(num_re + r"\s+(?:of\s+(?:the\s+|your\s+)?|del?\s+|los\s+|las\s+)?\|([A-Z])\|", rest_n):
@@ -757,6 +748,11 @@ def _check_body(raw, facts, uses, chart_vals):
         own = Pool()
         for n in names:
             own.add(facts.entities.get(n) or Pool())
+        topic = " ".join(_words((facts.sheet.get("filters") or {}).get("topic") or ""))
+        if topic and topic in names[idx]:
+            tot = (facts.sheet.get("totals") or {}).get("items")
+            if _num(tot):
+                own.counts.add(int(tot))
         hedged = bool(_HEDGE.search(rest_n[:m.start()]))
         hours_ok = re.search(r"\bhours?\b|\bhoras?\b", t) and any(
             abs(v - h) <= max(0.6, h * (0.15 if hedged else 0.06)) for h in own.hours)
@@ -777,11 +773,12 @@ def _check_body(raw, facts, uses, chart_vals):
             if "point" in m.group(2) or "punto" in m.group(2):
                 if not any(abs(v - p) <= (3 if hedged else 1) for p in pool.points):
                     return "points"
-            elif not (_near_frac(v, pool.fracs, hedged) or any(abs(v - p) <= (3 if hedged else 1) for p in pool.points)):
+            elif not (_near_frac(v, pool.fracs, hedged) or any(abs(v - p) <= (3 if hedged else 1) for p in pool.points)
+                      or _share_of_total(v, facts, names, hedged)):
                 return "percent"
         elif m.group(3):
             if not re.search(r"add(?:s|ed|ing)? up|in length|\blong\b|length|worth of|of videos?|total|suman|"
-                             r"duracion|de videos?", t):
+                             r"duracion|de videos?|\bsuma\b", t):
                 return "hours_not_length"
             if not any(abs(v - h) <= max(0.6, h * (0.15 if hedged else 0.06)) for h in pool.hours):
                 return "hours"
@@ -797,6 +794,8 @@ def _check_body(raw, facts, uses, chart_vals):
                                                           and _RELATION.search(t))
                   or (re.search(r"\bhours?\b|\bhoras?\b", t) and
                       any(abs(v - h) <= max(0.6, h * (0.15 if hedged else 0.06)) for h in pool.hours))
+                  or (v == int(v) and int(v) in facts.hours_of_day
+                      and re.search(r"\bbusiest\b|\bhours?\b|\bhoras?\b", t))
                   or (topn and v <= 10 and any(L >= v for L in facts.lengths)))
             if not ok:
                 return "number"
@@ -805,14 +804,14 @@ def _check_body(raw, facts, uses, chart_vals):
             if n not in pool.counts and n not in facts.lengths and not _diff_ok(n, pool.counts):
                 return "number_word"
             n_facts += 1
-    # ---- words: a word outside the sheet and outside plain words is a made-up fact ----
+    # ---- words: a subject the sheet does not name is a made-up fact; a claim true for anyone is worthless ----
+    if GENERIC_CLAIM.search(rest_n):
+        return "generic_claim"
     for tok in re.findall(r"[a-z]+(?:'[a-z]+)?", rest_n):
         w = tok.split("'")[0]
-        if len(w) < 3 or w in STOP or w in GENERIC or _stem(w) in GENERIC or w in _NUMWORD or w in _TIME_WORD:
+        if w not in TOPICAL and _stem(w) not in TOPICAL:
             continue
-        if w in _MON or w in WEEKDAYS or w in WEEKDAYS_ES or w.rstrip("s") in WEEKDAYS or w in SEASONS:
-            continue
-        if w in ALLOWED_CAPS or w in facts.vocab or _stem(w) in facts.vocab:
+        if w in facts.vocab or _stem(w) in facts.vocab:
             continue
         return "word:" + w
     # a capitalised word inside a sentence that is no word of the sheet's names (a made-up channel of plain words)
@@ -851,6 +850,13 @@ def _check_body(raw, facts, uses, chart_vals):
     elif names and (_SUPER.search(rest_n) or re.search(r"\bmost of\b|\bla mayoria\b", rest_n)) and \
             not any(n in facts.top for n in names):
         return "not_top"
+    if re.search(r"\b(?:saved|guardaste|guardado|guardados)\b", t) and re.search(
+            r"\bnever\b|\bnot opened\b|\bunopened\b|\bnunca\b|\bsin abrir\b|\bno (?:los|las) has abierto\b", t):
+        lib = (facts.sheet.get("library") or {}).get("saved_not_opened") or []
+        ns = {int(x["n"]) for x in lib if isinstance(x, dict) and _num(x.get("n"))}
+        said = {int(v) for v in nums if v == int(v)}
+        if not ns or (said and not said & ns) or not said:
+            return "library"
     if not names:
         why = _field_claim(facts, rest_n)
         if why:
@@ -861,15 +867,39 @@ def _check_body(raw, facts, uses, chart_vals):
         if not cmp:
             continue
         g = cmp.groupdict()
-        a, _ = facts.names_in(g["a"])
-        b, _ = facts.names_in(g["b"])
-        if a and b and a[0] in facts.items_of and b[0] in facts.items_of:
-            more = facts.items_of[a[0]] > facts.items_of[b[0]]
+        a, b = _first_name(facts, g["a"]), _first_name(facts, g["b"])
+        if a and b and a != b and a in facts.items_of and b in facts.items_of:
+            more = facts.items_of[a] > facts.items_of[b]
             want_more = g.get("w") in ("more", "mas", "bigger", "busier") if order else True
             if want_more != more:
                 return "comparison"
-    if chart_vals and nums and all(v in chart_vals for v in nums) and not _RELATION.search(rest_n.replace("|", " ")):
-        return "restates_chart"
+    if chart_vals and nums:
+        tot = {float(v) for v in ((facts.sheet.get("totals") or {}).get("items"),) if _num(v)}
+        if all(v in chart_vals or v in tot for v in nums) and not _INSIGHT.search(rest_n.replace("|", " ")):
+            return "restates_chart"
+    # "up from 19 before" when 19 is a count of days: a number said of the span before is the span before's
+    for m in re.finditer(r"\b(?:up|down|rising|falling|grew|fell|rose|climbed|dropped) from (?:about )?(\d[\d,.]*)"
+                         r"(?!\s*(?:%|percent|points?))|\b(?:against|versus|compared with) (\d[\d,.]*) (?:in )?"
+                         r"(?:the (?:span|period|weeks?|months?|days?|year) )?before\b", rest_n):
+        v = _parse_num(m.group(1) or m.group(2), facts.lang)
+        prev = Pool()
+        _scalars(facts.sheet.get("previous") or {}, prev)
+        for per in facts.periods:
+            prev.add(facts.entities.get(per) or Pool())
+        if v is not None and not (_near_count(v, prev.counts, bool(re.search(r"about", m.group(0))))
+                                  or any(abs(v - h) <= max(0.6, h * 0.15) for h in prev.hours)):
+            return "previous"
+    # "22% of your cooking videos" when 22% is a share of everything opened
+    for m in re.finditer(r"(\d[\d.,]*)\s*%\s+of\s+(?:your|the|all)\s+(?:\|[A-Z]\||(?!what\b)[a-z]+(?: [a-z]+)?)\s+"
+                         r"(?:videos|posts|items)", rest_n):
+        if not re.search(r"\bshorts?\b|\blong\b|\bcortos?\b|\blargos?\b", rest_n):
+            return "share_of_topic"
+    # "led by 640" when it led by 428: a lead is a difference of two counts (or points)
+    for m in re.finditer(r"\b(?:led|leads|ahead|more|fewer|up|down|grew|fell)\s+(?:\w+\s+)?by\s+(?:about\s+)?"
+                         r"(\d[\d,.]*)(?!\s*(?:%|percent|points?))", rest_n):
+        v = _parse_num(m.group(1), facts.lang)
+        if v is not None and not _diff_ok(int(v), pool.counts | facts.glob.counts):
+            return "lead"
     return n_facts
 
 
@@ -878,6 +908,20 @@ _DATE_RX = (r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+|de\s+)?(" + _MON_RE + r")\w
 _CMP = [(r"\b(?P<w>more|fewer|less|mas|menos)\s+(?P<a>.{2,60}?)\s+(?:than|que)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that|en|este|esta)\b|$)", 1),
         (r"(?P<a>.{2,60}?)\s+(?:was|were|had|got|fue|tuvo)\s+(?P<w>more|fewer|less|bigger|busier|mas|menos)\s+(?:than|que)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that|en|este|esta)\b|$)", 1),
         (r"(?P<a>.{2,60}?)\s+(?:beat|outnumbered|outpaced|overtook|ahead of)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that)\b|$)", 0)]
+
+
+def _first_name(facts, text):
+    """The sheet's name that comes first in a piece of text (not the longest)."""
+    t = " " + _norm(text) + " "
+    best = None
+    pats = [(k, k) for k in facts.entities] + list(facts.alias.items())
+    for pat, key in pats:
+        if len(pat) < 2:
+            continue
+        m = re.search(r"(?<![a-z0-9])" + r"[\W_]+".join(re.escape(w) for w in pat.split()) + r"(?![a-z0-9])", t)
+        if m and (best is None or (m.start(), -len(pat)) < (best[0], -len(best[2]))):
+            best = (m.start(), key, pat)
+    return best[1] if best else None
 
 
 def _ratio_bound(r, facts, names, text, pool):
@@ -896,6 +940,15 @@ def _ratio_bound(r, facts, names, text, pool):
     return _ratio_ok(r, pool)
 
 
+def _share_of_total(p, facts, names, hedged):
+    """'about 1% of everything you opened': a named count over the window's total, worked out here."""
+    tot = (facts.sheet.get("totals") or {}).get("items")
+    if not (_num(tot) and tot > 0):
+        return False
+    tol = 1.0 if hedged else 0.5
+    return any(abs(100 * facts.items_of[n] / tot - p) <= tol for n in names if n in facts.items_of)
+
+
 def _field_claim(facts, text):
     """'Shorts grew', 'long videos fell': the totals against the span before must agree."""
     for f, rx in FIELDS.items():
@@ -910,9 +963,61 @@ def _field_claim(facts, text):
     return None
 
 
+def _signature(text, facts):
+    """The numbers and names a sentence says (for telling a repeat)."""
+    if not text:
+        return set()
+    names, rest = facts.names_in(_norm(text))
+    nums = {x.replace(",", "").replace(".", "") for x in re.findall(r"\d[\d,.]*\d|\d", rest)}
+    return {("n", n) for n in names} | {("v", v) for v in nums}
+
+
+_SPAN_BEFORE = re.compile(r"\b(?:from|on|than|over|against) (?:the )?(?:span|period|stretch|window) before\b|"
+                          r"\b(?:from|on|than|over|against) the previous (?:span|period|stretch|window)\b")
+
+
+def tidy(text, lang="en"):
+    """A checked sentence in the house style: ISO dates in words, counts with their separators, a capital first."""
+    def iso(m):
+        d = _as_date(m.group(0))
+        if not d:
+            return m.group(0)
+        return (f"{d.day} de {MONTHS_ES[d.month - 1]} de {d.year}" if lang == "es" else
+                f"{d.day} {MONTHS[d.month - 1].capitalize()} {d.year}")
+    text = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", iso, text)
+
+    def sep(m):
+        n = int(m.group(0))
+        if 1900 <= n <= 2099:
+            return m.group(0)   # a year
+        return _fmt(n, lang)
+    text = re.sub(r"(?<![\d.,:%])\d{4,}(?![\d.,:%])", sep, text)
+    text = re.sub(r"\b(\d+)\.0\b(?!\d)", r"\1", text)
+    if lang == "es":
+        text = re.sub(r"\b(\d{1,3}),(\d{3})\b(?!,\d)", r"\1.\2", text)
+    if lang != "es":
+        text = re.sub(r"\bitems\b", "videos", re.sub(r"\bitem\b", "video", text))
+        text = _SPAN_BEFORE.sub(lambda m: m.group(0).split()[0] + " before", text)
+    return text[:1].upper() + text[1:] if text else text
+
+
 def _sentences(s):
     s = " ".join(str(s or "").split())
     return [x for x in re.split(r"(?<=[.!?])\s+(?=[A-Z¿¡ÁÉÍÓÚÑ0-9\"])", s) if x]
+
+
+def _unit_before(text, sheet):
+    """'up 15 points on the weeks before' when the span before is no weeks: 'before' alone."""
+    said = _norm(" ".join(str(x) for x in ((sheet.get("window") or {}).get("words"),
+                                            (sheet.get("previous") or {}).get("words")) if x))
+
+    def fix(m):
+        unit = m.group(2).rstrip("s")
+        return m.group(0) if unit in said else m.group(1) + " before"
+    text = re.sub(r"\b(from|on|than|over|against) the (weeks?|months?|days?|years?) before\b", fix, text)
+    if sheet.get("kind") == "day":
+        text = re.sub(r",? (?:all )?on (?:1|one) (?:different )?day\b", "", text)
+    return text
 
 
 def check(raw, sheet, chart_vals=None):
@@ -927,18 +1032,23 @@ def check(raw, sheet, chart_vals=None):
     ans = raw.get("answer")
     if isinstance(ans, str) and ans.strip() and len(ans) <= ANSWER_MAX:
         sents = _sentences(ans)
-        res = [_check(x, facts) for x in sents]
-        bad = [w for w, _ in res if w]
-        if not bad and sum(n for _, n in res) == 0:
-            bad = ["generic"]   # an answer that names nothing of the sheet answers nothing
-        if sents and not bad and len(sents) <= 3:
-            out["answer"] = " ".join(sents)
+        why, n = _check(" ".join(sents), facts, maxlen=ANSWER_MAX)   # one piece: "it" in the second is the first's
+        if why is None and n == 0:
+            why = "generic"   # an answer that names nothing of the sheet answers nothing
+        if why and len(sents) > 1:
+            w1, n1 = _check(sents[0], facts)
+            if w1 is None and n1:   # the first sentence answers; a later one that fails is left out
+                out["dropped"].append(("answer_tail", why, " ".join(sents[1:])))
+                sents, why = sents[:1], None
+        if sents and not why and len(sents) <= 3:
+            out["answer"] = _unit_before(tidy(" ".join(sents), facts.lang), sheet)
         else:
-            out["dropped"].append(("answer", bad[0] if bad else "shape", ans))
+            out["dropped"].append(("answer", why or "shape", ans))
     else:
         out["dropped"].append(("answer", "missing" if not ans else "too_long", ans))
     obs = raw.get("observations") if isinstance(raw.get("observations"), list) else []
     seen = set()
+    said = _signature(out["answer"] or "", facts)
     for o in obs[:OBS_MAX + 2]:
         text, uses = (o.get("text"), o.get("uses")) if isinstance(o, dict) else (o, None)
         if not isinstance(text, str):
@@ -951,19 +1061,26 @@ def check(raw, sheet, chart_vals=None):
             why = "repeat"
         if not why and out["answer"] and key == " ".join(_words(out["answer"])):
             why = "repeat"
+        sig = _signature(text, facts)
+        if not why and sig and sig <= said:
+            why = "repeat"   # nothing new: every number and name of it was said above
+        said |= sig
         if why:
             out["dropped"].append(("observation", why, text))
             continue
         seen.add(key)
-        out["observations"].append(" ".join(text.split()))
+        out["observations"].append(_unit_before(tidy(" ".join(text.split()), facts.lang), sheet))
     out["observations"] = out["observations"][:OBS_MAX]
     sw = raw.get("so_what")
     if isinstance(sw, str) and sw.strip():
         why = check_sentence(sw, facts) if len(_sentences(sw)) <= 2 else "too_long"
+        if not why and re.search(r"\bonly\b|\bwithout shorts\b|\bby (?:month|theme)\b|\bsolo\b|\bsin shorts\b|"
+                                 r"\bcloser look\b", _norm(sw)) and not re.search(r"\bsaved\b|\bguard", _norm(sw)):
+            why = "offer_repeat"   # the offers line says it
         if why:
             out["dropped"].append(("so_what", why, sw))
         else:
-            out["so_what"] = " ".join(sw.split())
+            out["so_what"] = tidy(" ".join(sw.split()), facts.lang)
     offers = sheet.get("offers") or []
     for x in raw.get("offers") or []:
         if isinstance(x, str) and x in offers and x not in out["offers"]:
