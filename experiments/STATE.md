@@ -1,5 +1,42 @@
 # State
 
+## Founders' summary - round 12, MVP version 7 (22 Nov 2026; `BRIEF-10.md` section 21, `results/r12-insight-answers.md`, `mvp/DESIGN.md` section 19)
+
+- **Asked for:** "it doesn't really answer the question properly. can we please refine this so that it does before i judge again?"
+- **His grades before** (8 history questions, build 1f9cde0): 1 useful, 4 partly, 3 not useful. 5 of 8 slop.
+- **Scope:** those 8 history questions and their near wordings only. Everything else is unchanged.
+- **Built as:** D (facts, themes, lengths), W (the writer), a merge, two judges, a fix pass, a final judge.
+- **Lengths:** the official length of 108,685 watched videos from YouTube's own API. 98,086 have one. $0.
+- **Shorts:** at most 61 s, or at most 180 s if published from 15 Oct 2024. It calls 53,184 Shorts.
+- **Themes:** 19 fields and 50 themes on his library, named by one call per field. 7 sensitive themes have no name.
+- **Themes, measured:** 93 of 120 items read belong. 8 of 12 names fit. Items with a topic: 2.8% before, 77.4% after.
+- **Fact sheet:** code builds one per question. It is the only source of facts the writer may use.
+- **Writer:** one model call fills a form. Code checks every number, date, name and rank against the sheet.
+- **Writer, measured:** 76 of 76 planted false sentences dropped, 56 of 56 true ones kept. 12 of 12 numbers recounted.
+- **Fix pass:** at the merge, 6 of 19 answers fell back to the old reply. After it, 0 of 54 captured, 11 of 11 live.
+- **Answers now:** the answer first, 2 to 4 observations, a small chart, a so-what, one line of offers.
+- **Offers taken by code:** "without Shorts", "only <theme>", "by month", "by theme", "with the videos".
+- **Quiet limits:** no closing paragraph. The export end rides in the window's words. The hint at most once in 6 hours.
+- **Final judge** (1c5b77a, rows 1 to 7): 3 useful, 4 partly, 0 not useful. 0 slop, 5 half slop.
+- **Merge judge** (2bbed61, rows 1 to 7): 2 useful, 5 partly. Row 8 of both judges did not reach the notes.
+- **Per answer:** one call, $0.0044 to $0.0051, 2.8 to 5.3 seconds.
+- **Checks:** 5,018 offline tests pass (4,713 before). Demo 10. Dry self-test 164 of 164. Unchanged answers byte-equal.
+- **Still wrong:** the lead is often the biggest of many 5% slivers, with no broad picture.
+- **Still wrong:** length totals over a year read as watch time (about 9 hours a day in 2025).
+- **Still wrong:** a topic's count can be far too high (row 3: 842 of 1,711 carry the word).
+- **Still wrong:** the so-what is mostly "you saved N and never opened them". The export hint still shows once.
+- **Unproven:** no evaluation of the writer on real sheets; theme names not confirmed; iMessage not seen.
+- **Spend:** $23.30 of the $30 cap. This round about $0.92.
+- **Founder, please:**
+  1. Pull and restart the test page at 1c5b77a. The lengths and themes for `data/all` are already built.
+  2. Ask the same 8 questions and grade them again. Try "without shorts" and "only <topic>" after an answer.
+  3. Decide the export hint: gone from answers, or once in 6 hours as the brief says.
+  4. Decide how lengths are said: drop totals over long windows, or keep "videos adding up to about N hours".
+  5. Decide how a topic is counted: by its word only, or by its themes too, said as "about".
+  6. Confirm the Short rule, and read the 50 theme names once.
+  7. With the other founder, decide the amendment on docs/05's themes (k by silhouette, watched items clustered).
+  8. d132, A-008 to A-017 are still open.
+
 ## Founders' summary - round 11, MVP version 6 (19 to 20 Nov 2026; `BRIEF-10.md` section 20, `results/r11-mvp-v6.md`, `mvp/DESIGN.md` section 18)
 
 - **Asked for:** "treat it like 'ask your watch history anything'", with a screenshot of a transcript archive that answers with timestamps.

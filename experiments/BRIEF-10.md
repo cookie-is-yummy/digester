@@ -497,3 +497,44 @@ Decisions still open after version 6:
 39. **Few watched matches (P6):** below 6 watched items holding the topic's words, all are shown and said as "mention"; the same when the fit keeps none of them (the orchestrator's decision and the check's extension, for the founder to confirm). This also answers 37 below 6 matches.
 40. **YouTube titles with hashtags** are now named by their words, in every reply. The founder may want to read a few on his library.
 41. **The video prompt:** `video_ask_v2` is terser than v1 and lost two named tools on one question. Tune it again (with its own evaluation), or keep it.
+
+## 21. Version 7 (22 Nov, round 12): history answers that give insight, not data
+
+The design is `mvp/DESIGN.md` section 19. Results are in `results/r12-insight-answers.md`. Nothing in `docs/` changed.
+Everything runs on this prototype branch only.
+
+The founder graded 8 history questions on build 1f9cde0: 1 useful, 4 partly, 3 not useful, 5 of 8 slop. He asked:
+"it doesn't really answer the question properly. can we please refine this so that it does before i judge again?"
+He gave nine rules, R-A to R-I. In short: answer the question asked; insight, not data; give more than asked; name
+themes. Add a so-what and follow-ups. Put the overview first. No limits lines. Say what only his history can say.
+
+It was built by two builders (D: facts, themes, lengths; W: the writer), then a merge. Two judges read the merge live.
+A fix pass followed, then a final judge. Code is at 1c5b77a.
+
+| Asked | Built | Limit |
+| --- | --- | --- |
+| Judge by watch time | The official length of each watched YouTube video, from YouTube's own API. Said as "videos adding up to about N hours" | The export has no watch time. A year's total reads as watch time (about 9 hours a day) |
+| Leave out Shorts | A Short rule chosen from the data (53,184 of 98,086). "without Shorts" after any answer | About 320 long videos are wrongly called Short |
+| Name themes | 19 fields and 50 themes by code from the library's own vectors, one naming call per field. Sensitive themes unnamed | Names not confirmed by him. 93 of 120 items read belong |
+| Filter by topic | "most watched channels in math", "only <theme>" after an answer | A topic's count can be far too high where a theme is matched by its name |
+| Answer the question asked | "more X or Y", "how has what I watch changed", "what was I into in <season>" read by code | English only for "more X or Y" |
+| Insight, not data | A fact sheet by code, a writer that fills a form, and code that checks every sentence. Code fills what was dropped | The lead is often the biggest of many small slivers |
+| So what? | Saved but never opened on the answer's themes. For a first or last, the path ("it has faded") | Mostly the same "you saved N" line |
+| Overview, then items | A day, a first or a last: the overview, then the items with cards | Some bullets repeat the overview |
+| No limits lines | The export end in the window's own words. The hint once in 6 hours. Friends only when asked | The hint still shows on the first answer |
+
+Measured: 5,018 offline tests pass (4,713 before). Made-up sheets: 76 of 76 planted false sentences dropped, 56 of 56
+true ones kept. 12 of 12 real numbers matched an independent recount. At the merge, 6 of 19 live answers fell back to
+the old reply. After the fix, 0 of 54 captured answers and 11 of 11 live ones did. The final judge graded rows 1 to 7:
+3 useful, 4 partly, 0 not useful, 0 slop. Row 8 of both judges did not reach the notes. Each answer is one call,
+$0.0044 to $0.0051 and 2.8 to 5.3 seconds. Spend: $23.30 of the $30 cap (about $0.92 this round).
+
+Decisions still open after version 7:
+42. **The export hint:** drop it from history answers, or keep it once in 6 hours as the brief allows. He asked for no limits lines; two judges asked for it gone.
+43. **Lengths:** the summed length of what was opened, over a year, reads as watch time. Drop totals over long windows, or keep them with "videos adding up to".
+44. **How a topic is counted:** by its word only, or also by themes matched by name, said as "about". Row 3's count is 1,711; 842 carry the word.
+45. **The Short rule:** at most 61 s, or at most 180 s if published from 15 Oct 2024. Confirm, or name another.
+46. **Theme names:** 50 model names checked by code, not confirmed by him. Read them once; say which to rename or merge.
+47. **The themes amendment** (both founders): docs/05 stage 3 picks k at the biggest gap and clusters saves; here k is by silhouette and watched items are clustered. docs/03 names a 20-dimension space; here it is 24, in derived files.
+48. **The lead of a wide mix:** say the broad picture by field ("mostly X and Y"), as the final judge asks. Not built yet.
+49. **d132 and A-008 to A-017** are still open.

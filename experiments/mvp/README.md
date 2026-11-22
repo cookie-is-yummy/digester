@@ -294,8 +294,8 @@ channel has no Outbox panel): then the answer comes in the thread too, with that
   the time zone; "cancel my spotify and my gym membership" handles the first and names the second; with the browser on
   but a site not switched on, the reply says so (`MVP_BROWSER_MERCHANTS`, in the round 10 settings below, switches it on). Tests:
   `tests/test_round10_livefix.py`.
-- **Round 10, the self-test** (DESIGN.md section 17.T, slice T): `python3 -m mvp.selftest` plays 59 everyday
-  conversations (every example a founder gave, paraphrased; c40 to c50 are round 11's, c51 to c58 its fixes; 152 steps) against the bot on a made-up library and checks plain
+- **Round 10, the self-test** (DESIGN.md section 17.T, slice T): `python3 -m mvp.selftest` plays 67 everyday
+  conversations (every example a founder gave, paraphrased; c40 to c50 are round 11's, c51 to c58 its fixes, c59 to c66 round 12's; 164 steps) against the bot on a made-up library and checks plain
   things per step: no refusal, no "didn't catch that", no claimed outcome the store does not show, no inside words, no
   meme reel leading, no friend's post, plus each step's own. Set `MVP_HOME` to a new folder, `MVP_TOTAL_CAP_USD=30` and
   `MVP_LEDGER_HOME` first; it stops at `MVP_SELFTEST_CAP_USD` (default $1.00). `--dry` uses a fake model ($0),
@@ -519,7 +519,7 @@ each one the code answers.
 
 - The writer: `insight.write(bot, person, sheet, now)` turns one fact sheet (built by code for one history question)
   into the answer first, 2 to 4 observations, a small chart of block bars, a "so what" and one line of offers ("Want
-  it without Shorts, only Blender 3D, or by theme?"); one model call (prompt `insight_v4`, about $0.0025 and 2 seconds)
+  it without Shorts, only Blender 3D, or by theme?"); one model call (prompt `insight_v4`, about $0.0025 and 2 seconds on a made-up sheet; on a real library of 100,000 watched videos about $0.0045 and 3 to 5 seconds)
   fills the form and code checks every number, date and name against the sheet. A failed check, a failed call or the
   cap: today's code reply. `MVP_INSIGHT=0` turns it off (the tests' default). The merge wires it.
 - Quiet limits on every history answer: where the window passes an export's end, the window's own words say so ("This
