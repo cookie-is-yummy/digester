@@ -1005,7 +1005,8 @@ _CMP = [(r"\b(?P<w>more|fewer|less|mas|menos)\s+(?P<a>.{2,60}?)\s+(?:than|que)\s
 
 
 _FILLER = re.compile(r"\beach (?:had|with|got|gave) (?:just |only )?(?:1|one|a single)\b|\ba gap of\b|"
-                     r"\bso the (?:lead|gap|difference) (?:is|was)\b|"
+                     r"\bso the (?:lead|gap|difference)\b|\ba lead of \d|\beach (?:came )?from (?:just |only )?"
+                     r"(?:1|one|a single)\b|"
                      r"\bcada uno con (?:1|un)\b")
 _ORDER = re.compile(r"\b(?:followed by|then|ahead of|next came|after (?:it|that) came|seguid[oa]s? de|luego)\b")
 _SPREAD = re.compile(r"\b(?:mostly|mainly|largely|centered on|centred on|dominated|dominant|mostly into|above all|"
@@ -1986,7 +1987,8 @@ def fill(form, raw, sheet, chart_vals=None):
         form["answer"] = cf["answer"]
         form["filled"].append("answer")
     # the so-what: never twice (a bullet that says it goes), never about another theme, the code's when missing
-    names = set(facts.names_in(" ".join([form["answer"] or ""] + form["observations"]))[0])
+    names = set(facts.names_in(" ".join([form["answer"] or ""] + [x for x in form["observations"]
+                                                                   if not _SAVED_OBS.search(_norm(x))]))[0])
     sw = form.get("so_what")
     if sw and _SAVED_SW.search(_norm(sw)):
         sw_names = set(facts.names_in(sw)[0])
@@ -2010,12 +2012,12 @@ def fill(form, raw, sheet, chart_vals=None):
         else:
             sw = None
     form["so_what"] = sw
-    if sw:
-        form["observations"] = [x for x in form["observations"] if not _SAVED_OBS.search(_norm(x))]
+    # things saved and never opened are said in one place, the so-what line, and only on what the answer is about
+    form["observations"] = [x for x in form["observations"] if not _SAVED_OBS.search(_norm(x))]
     said = _signature(" ".join([form["answer"] or "", sw or ""]), facts)
     for x in form["observations"]:
         said |= _signature(x, facts)
-    hours = any(re.search(r"\bhours?\b|\bhoras?\b|\bminutes?\b", x) for x in form["observations"] + [form["answer"] or ""])
+    hours = any(re.search(r"\d\s*(?:hours?|horas?|minutes?)\b", x) for x in form["observations"] + [form["answer"] or ""])
     obs_names = set(facts.names_in(" ".join(form["observations"]))[0])
     for x in cf["observations"]:
         sig = _signature(x, facts)

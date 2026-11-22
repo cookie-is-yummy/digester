@@ -327,3 +327,52 @@ def test_the_code_form_reads_every_kind_of_the_brief_on_the_made_up_library(wr):
         cf = I.check(I.code_form(s), s, chart_vals=I.chart(s)[1])
         assert cf["answer"], (key, cf["dropped"])
         assert not re.search(r"\b20\d\d: \d", cf["answer"])
+
+
+# ================================ 7. after the live reading: the answer names what was asked =====================
+def test_a_channels_answer_that_names_no_channel_and_count_is_written_by_code():
+    c = case("channels_2025")
+    raw = dict(c["fake"], answer="In 2025 you opened 9,654 videos, led by speedrun clips at 20%.")
+    f = checked(raw, c["sheet"])
+    assert f["answer"].startswith("Lantern Speedruns led with 820 videos, ahead of Prime Number Club (610)")
+    raw = dict(c["fake"], answer="In 2025 Lantern Speedruns and Prime Number Club were your top channels.")
+    assert ins().check(raw, c["sheet"])["dropped"][0][:2] == ("answer", "shape")
+
+
+def test_an_answer_that_is_a_run_of_names_is_written_by_code():
+    c = case("day_oct30")
+    s = c["sheet"]
+    s["themes"] += [{"name": n, "share": 0.02} for n in ("cozy gaming", "chess openings", "film essays",
+                                                          "math explainers")]
+    raw = dict(c["fake"], answer="On Friday 30 October 2026 you opened 31 videos: speedrun clips, Blender 3D, home "
+                                 "cooking, cozy gaming, chess openings, film essays and math explainers.")
+    f = checked(raw, s)
+    assert ("answer", "name_run") in [(d[0], d[1]) for d in f["dropped"]] and "answer" in f["filled"]
+    assert f["answer"].startswith("31 videos, 18 of them Shorts, led by speedrun clips (45%) and Blender 3D (26%)")
+
+
+def test_a_saved_bullet_about_another_theme_goes_and_its_so_what_too():
+    c = case("top_lately")
+    c["sheet"]["library"]["saved_not_opened"].append({"theme": "guitar practice", "n": 4, "examples": ["s9"]})
+    raw = dict(c["fake"], observations=list(c["fake"]["observations"][:2]) + [
+        {"text": "Guitar practice had 4 saved videos you never opened.", "uses": ["library"]}],
+        so_what="You saved 4 guitar practice videos you never opened; want them as a list?")
+    f = checked(raw, c["sheet"])
+    assert not any("guitar" in o.lower() for o in f["observations"])
+    assert "guitar" not in (f["so_what"] or "").lower()
+
+
+@pytest.mark.parametrize("text", ["Gaming had 640 and art 212, so the lead there is only 428.",
+                                  "You opened 640 gaming videos, a lead of 428 over art."])
+def test_a_lead_said_as_a_bare_difference_is_filler(text):
+    s = case("cmp_gaming_art")["sheet"]
+    assert ins().check_sentence(text, facts_of(s)) == "filler"
+
+
+def test_busiest_hours_are_no_length_so_the_length_is_still_said():
+    c = case("top_lately")
+    raw = dict(c["fake"], observations=[
+        {"text": "Blender 3D grew to 31% of what you opened, up 12 points on the 4 weeks before.", "uses": ["themes"]},
+        {"text": "Your busiest hours are after 9pm.", "uses": ["when"]}])
+    f = checked(raw, c["sheet"])
+    assert any("adds up to about 62 hours" in o for o in f["observations"])
