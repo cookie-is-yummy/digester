@@ -40,7 +40,7 @@ ANSWER_MAX = 330        # characters in the answer (1 or 2 sentences)
 CHART_ROWS = 8
 PERIOD_ROWS = 12        # round 12, fix: a year by month is 12 rows; never the oldest months cut without a word
 PERIOD_LABEL_MAX = 18   # round 12, fix: "Mar 2026 <theme>" wrapped at 430 px past about 18 characters of theme
-WEEKPART_BASELINE = 0.06
+WEEKPART_BASELINE = 0.10
 SPREAD_SHARE = 0.20     # "mostly" / "centered on" only for a share of a fifth or more
 BAR_CELLS = 12
 LABEL_MAX = 26
@@ -1005,6 +1005,7 @@ _CMP = [(r"\b(?P<w>more|fewer|less|mas|menos)\s+(?P<a>.{2,60}?)\s+(?:than|que)\s
 
 
 _FILLER = re.compile(r"\beach (?:had|with|got|gave) (?:just |only )?(?:1|one|a single)\b|\ba gap of\b|"
+                     r"\bso the (?:lead|gap|difference) (?:is|was)\b|"
                      r"\bcada uno con (?:1|un)\b")
 _ORDER = re.compile(r"\b(?:followed by|then|ahead of|next came|after (?:it|that) came|seguid[oa]s? de|luego)\b")
 _SPREAD = re.compile(r"\b(?:mostly|mainly|largely|centered on|centred on|dominated|dominant|mostly into|above all|"
@@ -1153,12 +1154,14 @@ def tidy(text, lang="en"):
         text = re.sub(r"\bitems\b", "videos", re.sub(r"\bitem\b", "video", text))
         text = _SPAN_BEFORE.sub(lambda m: m.group(0).split()[0] + " before", text)
         # round 12, fix (judges: "episodes videos", "about 0.4 hours", "1 ... videos")
-        text = _PLURAL_VIDEOS.sub(r"\1", text)
         text = re.sub(r"\b(about|around|nearly) 0\.(\d) hours\b",
                       lambda m: f"{m.group(1)} {int(m.group(2)) * 6} minutes", text)
         text = re.sub(r"\b(about|around|nearly) 0\.0 hours\b", r"\1 a few minutes", text)
         text = re.sub(r"\b(about|around|nearly) 1(?:\.0)? hours\b", r"\1 1 hour", text)
+        text = re.sub(r"\b(about|around|nearly|almost|over) (\d{2,}|\d{1,3}(?:,\d{3})+)(\.\d+) hours\b",
+                      lambda m: f"{m.group(1)} {round(float(m.group(2).replace(',', '') + m.group(3))):,} hours", text)
         text = re.sub(r"(?<![\d,.])\b1 ((?:[\w][\w&'-]* ){0,4}?)videos\b", r"1 \1video", text)
+        text = _PLURAL_VIDEOS.sub(r"\1", text)
     return text[:1].upper() + text[1:] if text else text
 
 
@@ -1171,6 +1174,41 @@ NUMBERS_MAX = 4
 OBS_FILL = 3            # round 12, fix: code tops the observations up to 3 where the model's were dropped
 _ONE_DAY_SAID = re.compile(r",?\s+(?:all\s+)?(?:on|across|over|in|en)\s+(?:1|one|a single|un)\s+(?:different\s+|single\s+|"
                            r"distintos?\s+)?(?:days?|d[ií]as?)\b")
+
+
+NAMES_MAX = 5
+
+
+def _keys(xs):
+    return [" ".join(_words(x.get("name") or "")) for x in xs or [] if isinstance(x, dict) and x.get("name")]
+
+
+def answer_shape(sheet, facts, text):
+    """Round 12, fix (live: "which channels ... in 2025" answered with two themes; a day with 9 theme names): the
+    answer names what was asked, a channel for a channels question, a theme for "the most" and a day, both topics
+    of a comparison; and it is no run of names."""
+    names = facts.names_in(text)[0]
+    if len([n for n in names if n not in facts.periods]) > NAMES_MAX:   # "2020" or "Oct 2026" is a time, not a name
+        return "name_run"
+    kind = sheet.get("kind")
+    if kind == "channels":
+        cs = _keys(sheet.get("channels"))[:5]
+        if cs and not any(n in cs for n in names):
+            return "shape"
+        top = next((c for c in sheet.get("channels") or [] if isinstance(c, dict) and c.get("name")), None)
+        if top and cs and cs[0] in names and _num(top.get("items")):
+            said = {_parse_num(x, facts.lang) for x in re.findall(r"\d[\d,.]*\d|\d", facts.names_in(text)[1])}
+            if float(top["items"]) not in said:
+                return "shape"   # the channel that led, with its count: the answer to "which channels the most"
+    elif kind in ("top", "day"):
+        ts = _keys(sheet.get("themes"))
+        if ts and (sheet.get("totals") or {}).get("items", 0) >= 3 and not any(n in ts for n in names):
+            return "shape"
+    elif kind == "compare_topics":
+        tp = _keys(sheet.get("topics"))
+        if len(tp) >= 2 and not all(t in names for t in tp[:2]):
+            return "shape"
+    return None
 
 
 def n_numbers(text, facts):
@@ -1220,10 +1258,14 @@ def check(raw, sheet, chart_vals=None):
             why = "generic"   # an answer that names nothing of the sheet answers nothing
         if why is None and n_numbers(" ".join(sents), facts) > NUMBERS_MAX:
             why = "number_run"   # round 12, fix (judge, Q5: 7 numbers in two sentences): data, not an insight
+        if why is None:
+            why = answer_shape(sheet, facts, " ".join(sents))
         if why and len(sents) > 1:
             w1, n1 = _check(sents[0], facts)
             if w1 is None and n_numbers(sents[0], facts) > NUMBERS_MAX:
                 w1 = "number_run"
+            if w1 is None:
+                w1 = answer_shape(sheet, facts, sents[0])
             if w1 is None and n1:   # the first sentence answers; a later one that fails is left out
                 out["dropped"].append(("answer_tail", why, " ".join(sents[1:])))
                 sents, why = sents[:1], None
@@ -1298,6 +1340,15 @@ def _fmt(n, lang):
     return s.replace(",", ".") if lang == "es" else s
 
 
+def _label_words(s, n):
+    """A label cut at a word ("Motion graphics…", not "Motion graphics t…")."""
+    s = " ".join(str(s or "").split())
+    if len(s) <= n:
+        return s
+    cut = s[:n - 1].rsplit(" ", 1)[0] if " " in s[:n - 1] else s[:n - 1]
+    return cut.rstrip(" ,;:-") + "…"
+
+
 def _label(s, n=LABEL_MAX):
     s = " ".join(str(s or "").split())
     return s if len(s) <= n else s[:n - 1].rstrip() + "…"
@@ -1358,7 +1409,7 @@ def _rows(sheet, src, lang):
             th = (p.get("themes") or [{}])[0]
             name = th.get("name") if isinstance(th, dict) else None
             # with a theme the row says the period and its main theme (the bar is the count): it fits a phone
-            right = _label(name, PERIOD_LABEL_MAX) if (name and has_theme) else _fmt(p["items"], lang)
+            right = (_label_words(name, PERIOD_LABEL_MAX) if name else "") if has_theme else _fmt(p["items"], lang)
             rows.append((str(p["label"]), p["items"], right, p["items"]))
         if cut:
             cap = cap.rstrip(":") + (f" (los últimos {PERIOD_ROWS}):" if lang == "es" else f" (the last {PERIOD_ROWS}):")
@@ -1534,8 +1585,9 @@ def _no_title_twice(answer, sheet):
                                                           if it.get("channel") else "")
         m = re.search(rx, answer)
         if m:
-            out = answer[:m.start()].rstrip(" :,") + (" (1 below)" if answer[:m.start()].strip() else "1 below") + \
-                answer[m.end():]
+            pre = re.sub(r"(?:,?\s+(?:with|watching|starting with|from|on|by opening|opening)|\s*[:,])\s*$", "",
+                         answer[:m.start()].rstrip())
+            out = pre + (" (the first video below)" if pre.strip() else "The first video below") + answer[m.end():]
             return re.sub(r"\s+([.,;])", r"\1", out)
     return answer
 
@@ -1710,7 +1762,7 @@ def code_form(sheet):
         top5 = [c for c in chans[:5] if _num(c.get("shorts_share"))]
         sh = [c for c in top5 if c["shorts_share"] >= 0.8][:2]
         lo = [c for c in top5 if c["shorts_share"] <= 0.1][:2]
-        if (sh or lo) and not es:
+        if (sh or lo) and not es and not (s.get("filters") or {}).get("without_shorts"):
             bits = []
             if sh:
                 bits.append(" and ".join(c["name"] for c in sh) + (" is" if len(sh) == 1 else " are") +
@@ -1820,8 +1872,8 @@ def code_form(sheet):
                   "topics")
             if all(_num(x.get("length_hours")) and x["length_hours"] > 0 for x in (a, b)):
                 o(f"{a['name'].capitalize()} videos add up to about {_hrs(a['length_hours'])} hours in length, "
-                  f"{b['name']} ones to about {_hrs(b['length_hours'])}.", "topics")
-            if all(_num(x.get("shorts")) for x in (a, b)):
+                  f"{b['name']} ones to about {_hrs(b['length_hours'])} hours.", "topics")
+            if all(_num(x.get("shorts")) for x in (a, b)) and a["shorts"] + b["shorts"] > 0:
                 o(f"{f(a['shorts'], lang)} of the {a['name']} videos were Shorts, against {f(b['shorts'], lang)} of "
                   f"the {b['name']} ones.", "topics")
     elif kind == "changed":
@@ -1846,6 +1898,19 @@ def code_form(sheet):
                 o((f"{r['name']} tuvo su punto más alto en {r['peak_period']} ({_pc(r['peak_share'], lang)})." if es
                    else f"{r['name']} peaked in {r['peak_period']} at {_pc(r['peak_share'])}."), "change")
                 break
+        for part in ("rising", "fading"):   # the second of each, when the first was said already
+            r = (_rows_named(ch.get(part), ("name", "from_share", "to_share"))[1:2] or [None])[0]
+            if r:
+                if es:
+                    o(f"{r['name']} {'subió' if part == 'rising' else 'bajó'} de {_pc(r['from_share'], lang)} a "
+                      f"{_pc(r['to_share'], lang)}.", "change")
+                else:
+                    o(f"{r['name']} {'rose' if part == 'rising' else 'fell'} from {_pc(r['from_share'])} to "
+                      f"{_pc(r['to_share'])}.", "change")
+        if p0 and p1 and _num(p0.get("items")) and _num(p1.get("items")) and not es:
+            o(f"You opened {f(p1['items'], lang)} videos in {ch['to']}, against {f(p0['items'], lang)} in "
+              f"{ch['from']}.", "periods")
+        length_total()
     return {"answer": ans, "observations": obs, "so_what": sw, "offers": []}
 
 
@@ -1877,7 +1942,9 @@ def _path_line(s, topic, path_only=False):
     return path
 
 
-_SAVED_SW = re.compile(r"\bsaved\b|\bguardaste\b")
+_SAVED_SW = re.compile(r"\bsaved\b|\bguardaste\b|\bguardad[oa]s?\b")
+_SAVED_OBS = re.compile(r"\b(?:saved|guardaste|guardad[oa]s?)\b.*\b(?:never|without opening|not opened|unopened|nunca|"
+                        r"sin abrir)\b|\b(?:never|nunca) (?:opened|abriste)\b|\bsin abrir\b")
 
 
 def _saved_line(sheet, said_names, facts):
@@ -1888,8 +1955,11 @@ def _saved_line(sheet, said_names, facts):
         # a first's or a last's saved rows are on the topic's own themes: all of them are what it is about
         if sheet.get("kind") in ("first", "last") or key in said_names or key in facts.topic_keys or any(key in facts.parents.get(n, ()) or
                                                                key == _theme_of(facts, n) for n in said_names):
-            return (f"Guardaste {_fmt(x['n'], lang)} videos de {x['theme']} que nunca abriste. ¿Te los muestro en una "
-                    f"lista?" if lang == "es" else
+            if lang == "es":
+                return f"Guardaste {_fmt(x['n'], lang)} videos de {x['theme']} que nunca abriste. ¿Te los muestro en " \
+                       f"una lista?"
+            one = x["n"] == 1
+            return (f"You saved 1 {x['theme']} video you never opened. Want to see it?" if one else
                     f"You saved {_fmt(x['n'], lang)} {x['theme']} videos you never opened. Want them as a list?")
     return None
 
@@ -1941,22 +2011,26 @@ def fill(form, raw, sheet, chart_vals=None):
             sw = None
     form["so_what"] = sw
     if sw:
-        form["observations"] = [x for x in form["observations"]
-                                if not (_SAVED_SW.search(_norm(x)) and re.search(r"\bnever\b|\bnunca\b", _norm(x)))]
+        form["observations"] = [x for x in form["observations"] if not _SAVED_OBS.search(_norm(x))]
     said = _signature(" ".join([form["answer"] or "", sw or ""]), facts)
     for x in form["observations"]:
         said |= _signature(x, facts)
     hours = any(re.search(r"\bhours?\b|\bhoras?\b|\bminutes?\b", x) for x in form["observations"] + [form["answer"] or ""])
+    obs_names = set(facts.names_in(" ".join(form["observations"]))[0])
     for x in cf["observations"]:
         sig = _signature(x, facts)
         if sig and sig <= said:
             continue
+        own = set(facts.names_in(x)[0])
+        if own and own <= obs_names:
+            continue   # the same names an observation already speaks of ("X grew to 6%" and "X grew from 3% to 6%")
         need = len(form["observations"]) < OBS_FILL
         length = (not hours and re.search(r"\badd(?:s)? up\b|\bsuma\b", x) and sheet.get("kind") in ("top", "channels")
                   and len(form["observations"]) < OBS_MAX)
         if need or length:
             form["observations"].append(x)
             said |= sig
+            obs_names |= own
             hours = hours or bool(length)
             if "observations" not in form["filled"]:
                 form["filled"].append("observations")

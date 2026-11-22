@@ -464,8 +464,9 @@ P4_READ = [
     (["fewer reels this month than last month"], "history:compare"),
     (["vi mas videos en octubre o en septiembre"], "history:compare"),
     (["vi mas videos en 2025 o en 2026"], "history:compare"),
-    (["como ha cambiado lo que veo"], "history:timeline"),
-    (["como ha cambiado lo que veo de cocina con el tiempo"], "history:timeline"),
+    # round 12, fix (judge: the Spanish of the brief's 7 got the old run of counts): how WHAT is watched changed
+    (["como ha cambiado lo que veo"], "history:changed"),
+    (["como ha cambiado lo que veo de cocina con el tiempo"], "history:changed"),
     (["sum up what my watch history says about color grading"], "synth"),
     (["summarize what my saves say about color grading"], "synth"),
     (["what does my watch history say about cooking"], "synth"),

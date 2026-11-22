@@ -2346,6 +2346,9 @@ def opening_words(win, q):
         except (KeyError, TypeError, ValueError):
             return words
         base = window_words(q.window, a, b, "es").rstrip(",")
+        if win.get("clipped") and "donde termina" not in base and day_words(b, "es") not in base and \
+                f"{b.day} de " not in base:
+            base += f" hasta el {day_words(b, 'es')}"   # round 12, fix: "Desde el 1 de enero de 2020, donde termina ..."
         if win.get("clipped") and "donde termina" not in base:
             base += ", donde termina tu exportación"
         return base
