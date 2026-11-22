@@ -5163,3 +5163,139 @@ whose number belongs to the answer's subject is dropped). The made-up eval sheet
 before and after had to read the same sheets). T14's hang was not reproduced; the deadline bounds it. Spanish so-whats
 and most code observations are English only, as before.
 <!-- end round 12, pass 2 -->
+
+### 19.P2 fix What two judges still found after the first fix of the pass, and what changed (round 12, pass 2, the second fixer; `insight.py`, `facts.py`, `history.py`, `eval_insight.py`, `tests/test_round12_pass2_fix.py`)
+
+Two judges read the live answers of build 2257352 (no titles or names here). Judge A, as the founder: 3 useful, 5
+partly, slop half on all 8, and four false or wrongly bound sentences the checks let through. Judge B checked each claim
+against the record and attacked the check with a fake model. Each finding was reproduced first, on the real sheets
+offline (a scratch folder, counts only) and as a made-up test of `tests/test_round12_pass2_fix.py` (83 tests: 50 of
+its first 59 failed on 2257352, the other 9 guard the true variants); then fixed; then the 8 questions were asked again
+on my own page, read as the founder would, and what that reading found was fixed the same way (three more rounds).
+
+**Must fix, both judges.**
+- *A theme said inside an area it is not in* ("gaming ..., led by <a memes theme of internet culture>"; "<science and
+  technology themes> inside gaming"): `bind_check` drops a sentence naming an area and a theme of another area with no
+  contrast word between them ("while", "against", "than", "but", ";") (`wrong_area`). A theme said through
+  `areas[i].themes[k]` is that area's by construction. Code's own line says whose share it is: "Inside gaming: X (5% of
+  everything you opened) and Y (5%)".
+- *"mostly" under half* ("mostly into gaming at 46%, led by A at 11% and B at 6%" counted 63%): the themes inside a named
+  area are part of it, never added to it; "primarily", "predominantly", "chiefly" are "mostly"; "overwhelmingly",
+  "almost entirely", "almost all" need four in five (and nine in ten of a Shorts share). Code's lead says "gaming by
+  far: 46% of what you opened, well ahead of comedy (6%)" where the leader is 2.5 times the next.
+- *Eras that come back* ("Gaming led from Jan 2026 to Mar 2026; since Oct 2026, gaming has"): "gaming led most of the
+  time; in between, comedy led from Apr 2026 to May 2026 and sports led in Sep 2026". "Arrived", "came in", "appeared"
+  of a record whose share before was half its share now, or of the first era's area, is dropped (`not_new`).
+- *The window's median long video bound to one side or one channel* ("art ... typically about 20 minutes"): a sentence
+  with `totals.long_median_min` that names any record but the question's own topic is dropped (`median_of_window`); a
+  comparison is not shown the window's Shorts, long videos, median, areas, themes or channels at all (they are of
+  everything; live: "your biggest area was gaming at 19%" under music against cooking).
+- *A channel's Shorts share of 46% that is 29%* (judge B: 6 of its 17 videos run over 3 hours and were left out of the
+  share): `facts._length_by` leaves a video over 3 hours out of the length sums only; a Shorts share is over every video
+  whose Short status is known.
+- *A Shorts share said as long-form* ("leaned more long-form at 69%"; "almost all long videos, with 46% Shorts"):
+  `shorts_as_long`, and "almost all long" needs a Shorts share of 10% or less.
+
+**Should fix.**
+- *What each top channel is* (row 2): a MUST line by code, said whatever the writer chose, in place of its last
+  bullet: "3 of your top 5 are gaming channels (A, B, C); D is science and E is film and TV." Under a topic or an area
+  filter no channel is told by its area ("X is gaming, Y is gaming" in a gaming answer; the sheet's `areas`,
+  `top_areas` and the channels' area are not shown when one area is 80% of the topic); the topic's own themes and their
+  moves are said instead, and what the top two channels are about inside it.
+- *The same so-what twice* (rows 4 and 5, "You saved 6 <theme> tutorials"): a so-what that says two candidates (a
+  first's path and its saved videos) keeps both keys (`path:faded|saved:<theme>`); `history._write_now` leaves out
+  every one of them on the next answer.
+- *Row 5's balance against last year* and its "steadier": a MUST line with the ratio then in words (`facts._compare`
+  now gives `previous_ratio_words`): "In the same part of 2025 it was about 14 times as many (3,093 gaming against 221
+  art): the gap has narrowed." "Steadier", "steady", "consistent", "evenly" are dropped unless the sentence carries its
+  days (`unsupported`). A side's top theme is one of 5% of it or more (judge A: a 2-video theme "inside cooking").
+- *So-whats not worth saying* (reopen saved memes, viral videos, funny edits): saved things of the comedy and internet
+  culture areas or with clip words in their name (clips, memes, edits, compilations, moments, viral, pranks, reactions)
+  are no candidate; saved things of a learning area come first. A change gets the learning side that gave way, from
+  its own years ("The learning side gave way: science fell from 10% in 2020 to 2% in 2026, while internet culture grew
+  from 4% to 9%."). A topic's Shorts shift says whose videos ("of your minecraft videos"); a comparison has none (its
+  totals are of everything). When the writer picks none, code says the strongest left (row 1 had none to say: see
+  below). A so-what with no number for a candidate that has numbers is said in code's words.
+- *A topic's share said of everything* ("<a theme> made up 96% of what you opened" in a math answer; "took 89% of the window"): a
+  topic's answer says "of your math videos" (channels and top answers too).
+- *A count where its share belongs* ("Shorts made up 12,080 of your window"; "12,080 of your videos"): dropped
+  (`count_as_share`); the sheet's totals now carry `shorts_share`, said "of your YouTube videos" (code rewrites "of
+  everything you opened" after it). A top answer always says Shorts as a share against the span before (a MUST line:
+  "Shorts were 82% of your YouTube videos, against 29% in the spring before"), unless the so-what says it.
+- *Tautologies and a false "new"* ("led by gaming at 100%"; "grew sharply and became new" with 35 videos the year
+  before): the one-area rule above; a theme is "new" (or "stopped") only with at most 5 videos on the other side.
+- *Bullets that repeat the lead or each other*: a bullet whose every number the answer said (a point either way for a
+  share; a count with the same unit), whose two or more shares the answer said, that says the answer's date again (a
+  first or a last), or that says one count twice ("90 Shorts made up 90 of 300"), goes; a bullet whose numbers and names
+  another bullet says in full goes (years aside); a MUST line takes the writer's bullet on its subject (the busiest
+  hour, the window's Shorts, the top five's areas, the balance); a bullet the so-what says goes. A bullet with a
+  direction and no number of its own ("gaming gained share while comedy lost ground", "the biggest shift is from X
+  toward Y") is `vague`. On a top or change answer, one channel's Shorts share is filler. When code wrote the answer,
+  the writer's bullets are read against it, and a repeat comes back only if code cannot fill the minimum (never at the
+  cost of the whole answer).
+- *A day* (row 6): the writer is not shown the day before (`previous`, the changes against it); a bullet on the day
+  before is filler; the day's Shorts and busiest hour against the usual day are MUST lines.
+- *Rank, direction and watch-time words* (judge B's probe): "you opened X most", "topped", "came first", ordinals ("came
+  second", "your second area") need the place in the list; "tripled", "grew", "fell" said of a record that moved the
+  other way are dropped (`direction`); "of your viewing", "viewing time", "for hours", "binged" are watch time.
+- *Wording*: an area after the window's words is not capitalised; "about about 1,094" is gone; "one video each" and "the
+  gap was" are filler; a first's answer without its topic ("You first started watching <its date>.") is code's date
+  sentence, the writer's next sentence after it; a change is not shown the whole span's channels ("your top channels
+  show the mix: ...").
+
+**Where a judge was wrong.** Judge A, row 1: "no so-what, though the sheet has candidates". On the real sheet of "lately"
+the candidates are none: 2 saved themes with 1 saved video each (under the 3 T5 asks for), Shorts moved under 10 points
+against the 4 weeks before, no learning theme faded. T5 says a so-what is worth saying or absent, so absent is right;
+code now says the strongest candidate whenever there is one and the writer picked none.
+
+**The prompt's eval.** The prompt is unchanged (`insight_v5`); what the writer is shown changed (a day, a comparison, a
+change, without Shorts, a topic of one area). Of the 20 made-up sheets only the 2 day sheets' messages changed: those 2
+were run live once ($0.006), the 18 others rescored from the first fixer's live forms, before (code at 2257352) and
+after (final code) on the same forms:
+
+| | answers the question | writer used | observations kept | so-what said | a limits line | a run of counts |
+| --- | --- | --- | --- | --- | --- | --- |
+| before (2257352) | 18 of 20 | 19 | 52 | 5 | 0 | 0 |
+| after | 18 | 19 | 51 | 7 | 0 | 0 |
+
+The one observation fewer is three bullets dropped as repeats of their answer (a first's and a last's date and title
+said again; a day's two shares said again) and two more kept on the channels sheets (the true "what they are" lines).
+Planted-falsehood eval: the 89 typed planted sentences caught and the 43 true kept, as before; insight_v5's set grows by
+a made-up sheet shaped like the real ones (areas, themes with their area; kept in the eval file's `v5.sheets`, so the
+20 cases' sheets are unchanged) and 14 planted sentences (6 bound to the wrong thing, 3 rank, 2 "mostly", one each of
+direction, watch time and a vague move) with 6 true ones: before 0 of the 14 caught, after 45 of 45 caught and 19 of 19
+kept. No naming prompt or topic mapping changed (`themes.py` untouched), so those evals do not apply.
+
+**Live, read as the founder would** (my page on port 8798, a scratch home, the real library; the per-person daily cap
+of $1.00 had been used by the judges' runs today, so my scratch page ran with `MVP_DAILY_CAP_USD=1.40`; four runs of
+the 8 questions and their variants, then pictures at 430 px of rows 1 and 7: every chart row on one line). The last
+run: 1 the areas with the themes inside gaming, what grew and fell, Shorts as a share; no so-what (none worth saying).
+2 the ranking, what the top five are, which are all Shorts, and the Shorts shift as the so-what; "without Shorts" and
+"only gaming" with no tautology. 3 about 1,094 with the themes inside it and the topic's own Shorts shift. 4 the date,
+the path, the saved tutorials. 5 the ratio in words, what is inside each side, the balance against last year (the gap
+has narrowed), and a different so-what from row 4. 6 the day against the usual day (count, Shorts, busiest hour). 7
+led by the move to Shorts (4% to 81%), what rose, and the learning side that gave way. 8 a wide mix led by comedy,
+gaming's fall against the spring, Shorts 82% against 29%. Rows I would still not call useful: 1 ("the most lately" is
+told by the share of what was opened, never by how much was watched, and it ends with no so-what: a list of facts
+about areas, true but not yet a picture of him) and 8 (it says what the summer was not, a wide mix, and not what made
+it his: its distinctive themes are not ranked against the year around it). 6's first bullets (which themes of 10%
+came on a day of 10 videos) are still filler the check cannot tell from information.
+
+**Checks** (after the work): full suite 5,175 passed and 0 failed (4 shards; the 83 of `test_round12_pass2_fix.py`
+added); demo 10 passed; dry self-test 67 conversations, 164 of 164 steps (one of my own changes had made c62.1 fall back
+to the code reply: a bullet whose numbers another says is dropped only while 2 bullets are left, never below the
+minimum); `probe_same` byte-equal with `same_head.json`; the development phrasing set by code: 73 helper lines right, 1
+wrong (d007), 1 of 40 none lines taken (d132), as before; the 159 rule texts, the 123 phrasings and the round 11 and
+round 12 traps are held by the suite and still pass. No reply of picks, recalls, summaries, asking videos, rules,
+emails, cancels or connectors changed.
+
+**Test lines changed on purpose**: `test_round12_pass2.py` T11 (the channels line is "N of your top 5 are X channels
+(...)", or "What they are:" where no area holds two of the five, said by code whatever the writer chose).
+`eval/insight_cases.json` gets `v5.sheets` and one v5 case; the 20 cases are unchanged.
+
+**Not done.** Spanish answers: their bullets with no number are not read as vague, and their so-whats are the saved
+ones only. "including X and Y" when they are all the new channels. The same question asked twice can still lead
+differently (the writer at temperature 0 varies a little, and the so-what said is left out of the next sheet). A first's
+answer that names its topic but not "on" its date ("Your first <topic> watch was <its date>") stands. Spend: $0.26
+by the ledger ($23.88 before, $24.14 after), the live runs and the eval's 2 day sheets.
+<!-- end round 12, pass 2 fix -->
