@@ -182,12 +182,13 @@ def test_the_chart_is_block_bars_of_one_width_at_most_8_rows_with_one_caption():
     s = case("changed_since_2020")["sheet"]
     text, vals = I.chart(s)
     lines = text.split("\n")
-    assert lines[0] == "Videos opened per year, with the main theme:"
+    assert lines[0] == "Videos opened per year (the bar) and the main theme:"
     rows = lines[1:]
     assert 2 <= len(rows) <= 8
     assert {len(r.split(" ")[0]) for r in rows} == {I.BAR_CELLS}
-    assert all(set(r.split(" ")[0]) <= set("█▏▎▍▌▋▊▉░") for r in rows)
-    assert "████████▏░ 2020 8,088 · film essays" == rows[0]
+    assert all(set(r.split(" ")[0]) <= set("█░") for r in rows)   # whole cells only (partial blocks gap on a phone)
+    assert rows[0] == "██████████░░ 2020 film essays" and rows[-1] == "██████████░░ 2026 Blender 3D"
+    assert all(len(r) <= 40 for r in rows)   # one line in the page's bubble at 430 px
     many = dict(s, periods=[{"label": str(2010 + i), "items": 10 + i} for i in range(14)])
     assert len(I.chart(many)[0].split("\n")) == 1 + 8
 
@@ -250,7 +251,7 @@ def test_write_lays_out_answer_observations_chart_so_what_and_one_line_of_offers
     blocks = parts[0]["text"].split("\n\n")
     assert blocks[0].startswith("In the 4 weeks up to 30 October 2026, where your export ends, mostly Blender 3D")
     assert blocks[1].startswith("• Blender 3D grew to 31%") and blocks[1].count("• ") == 4
-    assert blocks[2].startswith("Share of what you opened, by theme:\n██████████ 31% Blender 3D")
+    assert blocks[2].startswith("Share of what you opened, by theme:\n████████████ 31% Blender 3D")
     assert blocks[3].split("\n") == ["You saved 7 Blender 3D videos you never opened; want them as a list?",
                                      I.REFRESH_SHORT["en"], "Want it without Shorts or only Blender 3D?"]
     assert info["kept"] == 4 and info["prompt_version"] == I.PROMPT_VERSION and info["used"]

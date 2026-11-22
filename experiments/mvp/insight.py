@@ -38,7 +38,7 @@ OFFERS_MAX = 3
 SENT_MAX = 260          # characters in one sentence
 ANSWER_MAX = 330        # characters in the answer (1 or 2 sentences)
 CHART_ROWS = 8
-BAR_CELLS = 10
+BAR_CELLS = 12
 LABEL_MAX = 26
 # what the model is shown of a sheet (the checks read the same trimmed sheet)
 SHOW = {"themes": 8, "channels": 10, "periods": 24, "topics": 6, "items": 10}
@@ -1090,20 +1090,16 @@ def check(raw, sheet, chart_vals=None):
 
 
 # ====================================== the chart (code only) ====================================================
-_EIGHTHS = " ▏▎▍▌▋▊▉"
-
-
 def bar(v, top, cells=BAR_CELLS):
-    """A bar of block characters, always `cells` wide (the empty part in light shade), so the labels after it line
-    up in any font where the block characters share one width."""
+    """A bar of whole block characters, always `cells` wide (the empty part in light shade), so the labels after it
+    line up. Whole cells only: the partial blocks (▏▎▍) come from another font on a phone and leave gaps (seen in the
+    page's bubble at 430 px)."""
     if top <= 0:
         return "░" * cells
-    eighths = int(round(max(0.0, min(1.0, v / top)) * cells * 8))
-    if v > 0 and eighths == 0:
-        eighths = 1
-    full, part = divmod(eighths, 8)
-    s = "█" * full + (_EIGHTHS[part] if part else "")
-    return s + "░" * (cells - len(s))
+    n = int(round(max(0.0, min(1.0, v / top)) * cells))
+    if v > 0 and n == 0:
+        n = 1
+    return "█" * n + "░" * (cells - n)
 
 
 def _fmt(n, lang):
@@ -1119,7 +1115,8 @@ def _label(s):
 CAPTIONS = {
     "themes": {"en": "Share of what you opened, by theme:", "es": "Parte de lo que abriste, por tema:"},
     "channels": {"en": "Videos opened, by channel:", "es": "Videos abiertos, por canal:"},
-    "periods": {"en": "Videos opened per {unit}, with the main theme:", "es": "Videos abiertos por {unit}, con el tema principal:"},
+    "periods": {"en": "Videos opened per {unit} (the bar) and the main theme:",
+                "es": "Videos abiertos por {unit} (la barra) y el tema principal:"},
     "periods_plain": {"en": "Videos opened per {unit}:", "es": "Videos abiertos por {unit}:"},
     "topics": {"en": "Videos opened, by topic:", "es": "Videos abiertos, por tema:"},
     "windows": {"en": "Videos opened:", "es": "Videos abiertos:"},
@@ -1166,8 +1163,8 @@ def _rows(sheet, src, lang):
         for p in ps:
             th = (p.get("themes") or [{}])[0]
             name = th.get("name") if isinstance(th, dict) else None
-            rows.append((str(p["label"]), p["items"], _fmt(p["items"], lang) + (f" · {name}" if name else ""),
-                         p["items"]))
+            # with a theme the row says the period and its main theme (the bar is the count): it fits a phone
+            rows.append((str(p["label"]), p["items"], name if name else _fmt(p["items"], lang), p["items"]))
         return cap, rows
     if src == "windows":
         tot, prev = sheet.get("totals") or {}, sheet.get("previous") or {}
@@ -1178,8 +1175,8 @@ def _rows(sheet, src, lang):
         lb = prev.get("label") or prev.get("words") or ""
         if not la or not lb:
             return "", []
-        return CAPTIONS["windows"][lang], [(_fmt(prev["items"], lang), prev["items"], _strip_in(lb), prev["items"]),
-                                           (_fmt(tot["items"], lang), tot["items"], _strip_in(la), tot["items"])]
+        return CAPTIONS["windows"][lang], [(_strip_in(lb) + ":", prev["items"], _fmt(prev["items"], lang), prev["items"]),
+                                           (_strip_in(la) + ":", tot["items"], _fmt(tot["items"], lang), tot["items"])]
     return "", []
 
 

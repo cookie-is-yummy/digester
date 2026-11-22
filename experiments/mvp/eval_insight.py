@@ -169,7 +169,8 @@ def run(mode, cases, out=None, saved=None):
                 facts = I.Facts(I.shown(s))
                 caught = [I.check_sentence(p["text"], facts, uses=p["uses"], chart_vals=cv) is not None
                           for p in c["plants"]]
-                true_kept = sum(1 for o in c["fake"]["observations"] if o["text"] in form["observations"])
+                kept_low = [x.lower()[:30] for x in form["observations"]]   # the kept text is in the house style
+                true_kept = sum(1 for o in c["fake"]["observations"] if I.tidy(o["text"]).lower()[:30] in kept_low)
                 row.update(planted=len(caught), caught=sum(caught), true_obs=len(c["fake"]["observations"]),
                            true_kept=true_kept)
             row["raw"] = raw if mode in ("live", "rescore") else None
