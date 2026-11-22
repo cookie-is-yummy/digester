@@ -265,3 +265,33 @@ def test_v6_a_count_code_counted_says_what_it_counts():
         "This year you opened 1,094 videos whose title or theme is about minecraft, mostly memes."
     assert I.scoped("You opened 1,094 videos.", s, answer=True) == \
         "You opened 1,094 videos whose title or theme is about minecraft."
+
+
+# ================================ the live reading of this pass (made-up stand-ins) =============================
+def test_live_one_fall_said_twice_in_two_bullets_and_a_bullet_the_so_what_says_go():
+    I = ins()
+    s = _summer()
+    facts = I.Facts(I.shown(s))
+    must = "You moved to Shorts: 82% of your YouTube videos, from 29% in the spring before, while gaming fell from 33% to 10%."
+    form = {"answer": "You were into comedy (14% of what you opened) and gaming (10%).", "so_what": None, "dropped": [],
+            "observations": ["Against the spring before, comedy rose by 6 points while gaming fell by 23 points.",
+                             "Inside comedy: Sketch edits (4% of everything you opened).", must], "_must": [must]}
+    assert I._pass4(form, s, facts)["observations"] == ["Inside comedy: Sketch edits (4% of everything you opened).",
+                                                        must]
+    t = top()
+    form2 = {"answer": "You were into gaming (22% of what you opened) and comedy (11%).", "dropped": [],
+             "so_what": "Worth noticing: gaming grew from 12% to 22% against the 4 weeks before, while sports fell from 16% "
+                        "to 9%.", "so_what_kind": "moving", "so_what_faded": "sports",
+             "observations": ["Gaming grew from 12% to 22% against the 4 weeks before.", "Pixel Forge came on 12 days.",
+                              "Doggo Plays came on 9 days."]}
+    out = I._pass4(form2, t, I.Facts(I.shown(t)))
+    assert out["observations"] == ["Pixel Forge came on 12 days.", "Doggo Plays came on 9 days."], out["observations"]
+    assert out["so_what"].endswith('Say "only sports" to see what you still open of it.')
+
+
+def test_live_a_themes_share_the_answer_says_is_not_added_to_its_channels_bullet():
+    I = ins()
+    s = top()
+    form = {"answer": "You were into gaming by far the most; Meme drops peaked then, at 6%.", "so_what": None,
+            "dropped": [], "observations": ["Meme drops was led by Meme Vault.", "Pixel Forge came on 12 days."]}
+    assert I._pass4(form, s, I.Facts(I.shown(s)))["observations"][0] == "Behind Meme drops: Meme Vault."

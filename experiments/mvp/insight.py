@@ -4633,6 +4633,14 @@ def _claims(text, facts):
     return out
 
 
+def _half_moved(c, said):
+    """V3: a bullet of moves, half of which are said already (the other claims too): one fall said twice."""
+    mv = {n for n, m in c if m == "move"}
+    sm = {n for n, m in said if m == "move"}
+    rest = {x for x in c if x[1] != "move"}
+    return bool(mv) and 2 * len(mv & sm) >= len(mv) and rest <= said
+
+
 def _pass4(form, sheet, facts):
     """Round 12, pass 4: the bullets and the so-what read once more against the whole answer (never below the minimum:
     a bullet dropped below it is replaced by one of code's that says something new, else it comes back)."""
@@ -4653,16 +4661,27 @@ def _pass4(form, sheet, facts):
         m = _LED_BY.match(x or "")
         r = shares.get(" ".join(_words(m.group("n")))) if m else None
         if r is not None and "%" not in m.group("n"):
-            pct = "" if _pc(r["share"]) in m.group("r") else f" ({_pc(r['share'])} of what you opened)"
+            said_ = (n_ := " ".join(_words(m.group("n")))) and any(p_[0] == n_ for p_ in _pairs(form["answer"], facts))
+            pct = "" if (_pc(r["share"]) in m.group("r") or said_) else f" ({_pc(r['share'])} of what you opened)"
             obs[i] = f"Behind {m.group('n')}{pct}: {m.group('r')}"
     said = _claims(form["answer"], facts)
     lead_names = set(facts.names_in(form["answer"])[0])
     # a record the answer names, named again with its share (or again with nothing), is the same
     said |= {(n, m) for n in lead_names for m in ("share", "mention")}
+    # the chart under the bullets says its rows' shares and counts (live, row 1: "Gaming was 22% of what you opened,
+    # ahead of comedy at 11% and internet culture at 9%" above the chart of those three)
+    if (sheet or {}).get("kind") not in ITEM_KINDS:
+        ch_ = chart(sheet, answer_level(form["answer"], sheet))[0] or ""
+        for src in ("areas", "themes", "channels"):
+            if ch_.startswith(CAPTIONS[src][facts.lang if facts.lang in ("en", "es") else "en"]):
+                rows_ = [r for r in (sheet or {}).get(src) or [] if isinstance(r, dict) and r.get("name")][:CHART_ROWS]
+                said |= {(" ".join(_words(r["name"])), "share" if src != "channels" else "count") for r in rows_}
     for x in obs:
         if x in musts:
             said |= _claims(x, facts)   # code's MUST lines say their fact first (a writer's bullet of it goes)
     keep, dropped = [], []
+    swc = _claims(form.get("so_what"), facts) if _STEP.search(_norm(form.get("so_what") or "")) or \
+        form.get("so_what_kind") in ("moving", "learning_faded") else set()
     for x in obs:
         c = _claims(x, facts)
         why = None
@@ -4674,6 +4693,10 @@ def _pass4(form, sheet, facts):
             why = "into_filler"   # V2: how he watched, said to a question about what he was into
         elif c and c <= said:
             why = "same_fact"     # V3: every record and measure of it said before, in other words
+        elif c and c <= said | swc:
+            why = "said_by_so_what"   # (live, 2021: "Gaming grew from 22% to 46%" above the so-what that says it)
+        elif _half_moved(c, said):
+            why = "same_fact"     # (live, row 8: "gaming fell by 23 points" beside "while gaming fell from 33% to 10%")
         if why:
             dropped.append((why, x))
         else:
