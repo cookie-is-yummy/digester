@@ -38,16 +38,18 @@ def _fmt(n):
     return f"{int(n):,}"
 
 
-def before_reply(sheet):
+def before_reply(sheet, quiet=False):
     """Today's code reply in today's words (history.py, 18.H and 18.LA), for the sheet's facts: a count, a top 5 by
-    count, the export-end and friends paragraph when the window passes the export's end. Answer first line."""
+    count, the export-end and friends paragraph when the window passes the export's end. Answer first line.
+    quiet: the code reply after rule R-H (the fallback of this round): the window's words carry where the export ends,
+    no closing paragraph."""
     k = sheet.get("kind")
     w = (sheet.get("window") or {}).get("words") or "In all your history I can see,"
-    W = w.split(",")[0].split(" (")[0].strip() if "export" in w else w.rstrip(",")
+    W = w.split(",")[0].split(" (")[0].strip() if "export" in w and not quiet else w.rstrip(",")
     tot = sheet.get("totals") or {}
     es = sheet.get("lang") == "es"
     tail = []
-    if (sheet.get("window") or {}).get("clipped"):
+    if (sheet.get("window") or {}).get("clipped") and not quiet:
         tail = ["Your YouTube export ends on 30 October 2026, so I can't see after that.",
                 "For newer history, send me a new export (ask \"how do I send you a new export?\" for the steps).",
                 "Posts from friends are not counted."]
@@ -73,7 +75,7 @@ def before_reply(sheet):
                          f"{d.day} {I.MONTHS[d.month - 1].capitalize()} {d.year}:")
             lines += [I._item_line(i, it, "en") for i, it in enumerate(items[:3], 1)]
             lines.append(f"({_fmt(tot.get('items', len(items)))} in all.)")
-        tail = ["Your YouTube history here runs from 19 September 2015 to 30 October 2026."]
+        tail = [] if quiet else ["Your YouTube history here runs from 19 September 2015 to 30 October 2026."]
     elif k == "day":
         lines.append(f"{W} you watched {_fmt(tot.get('items', 0))} videos:")
         lines += [I._item_line(i, it, "en") for i, it in enumerate((sheet.get("items") or [])[:8], 1)]
@@ -157,7 +159,7 @@ def run(mode, cases, out=None, saved=None):
                 full = text_of(parts)
                 ans = I.window_lead(form["answer"], s)
             else:
-                full = before_reply(s)   # the fallback: today's code reply
+                full = before_reply(s, quiet=True)   # the fallback: the code reply (after rule R-H)
                 ans = full.split("\n")[0]
             row.update(score(c, ans, full), used=ok, kept=len(form["observations"]),
                        dropped=len([d for d in form["dropped"] if d[0] == "observation"]),

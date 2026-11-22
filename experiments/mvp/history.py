@@ -1079,10 +1079,11 @@ def item_line(i, it, d, lang, today, url=True, times=None):
 
 
 # ====================================== the answers ==============================================================
-def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
+def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=(), friends_asked=False):
     """(text, [item ids shown in order], extra) for a query. `extra`: {"channels": [...] for a ranking, "cards": True
     when the items go out as link cards, "said": the notes said}. `said_end`: the reply already says where the export
-    ends. `quiet` (round 11 fix, A, R4): notes said already in this stretch ("friends", "range"), left out now."""
+    ends. `quiet` (round 11 fix, A, R4): notes said already in this stretch ("friends", "range"), left out now.
+    `friends_asked` (round 12, W, rule R-H): the question is about friends, so the friends line may be said."""
     rec = rec or record(view, "UTC")
     plats = _scope_platforms(q, view, rec)
     if q.topic and not q.channel and len(q.topic) == 1:
@@ -1105,13 +1106,15 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
         el = ends_line(rec, plats, lang)
         head = (f"No veo {window_noun(q.window, start, end, lang)}: " if es else
                 f"I can't see {window_noun(q.window, start, end, lang)}: ") + el[:1].lower() + el[1:]
-        head += " " + REFRESH[lang]   # wholly after the record: the hint always stays (as a summary's, seam d)
+        hint = not (QUIET_LIMITS and "refresh" in quiet)   # round 12, W (R-H): the hint once in 6 hours
+        if hint:
+            head += " " + REFRESH[lang]
         w2 = shifted(q.window, start, end, newest)
         q2 = q.model_copy(update={"window": w2})
         if q.kind == "compare":
             q2 = q.model_copy(update={"kind": "count", "window": w2, "window2": None})
         body, ids, extra = answer(view, q2, today, prof, rec, said_end=True, quiet=quiet)
-        extra = dict(extra, said=list(extra.get("said") or []) + ["refresh"])
+        extra = dict(extra, said=list(extra.get("said") or []) + (["refresh"] if hint else []))
         lead = "Lo último que veo:" if es else "The latest I can see:"
         return head + "\n\n" + lead + "\n" + body, ids, extra
     W = window_words(q.window, start, end, lang)
@@ -1126,13 +1129,19 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
         sl = start_line(rec, plats, q)
         return ((f"No veo {window_noun(q.window, start, end, lang)}: " if es else
                  f"I can't see {window_noun(q.window, start, end, lang)}: ") + sl[:1].lower() + sl[1:]), [], {}
-    if oldest and start and start < oldest and q.window.kind != "all":
+    starts_late = bool(oldest and start and start < oldest and q.window.kind != "all")
+    if starts_late and not QUIET_LIMITS:
         tail.append(start_line(rec, plats, q))
     fn = {"top_channels": _top_channels, "top_topics": _top_topics, "top_items": _top_items, "count": _count,
           "list": _list, "on_day": _list, "first": _first, "last": _last, "timeline": _timeline,
           "compare": _compare}[q.kind]
     text, ids, extra = fn(view, rec, q, start, end, plats, W, today, prof)
     said = []
+    if QUIET_LIMITS:   # round 12, W (rule R-H): the limits ride in the window's own words, no closing paragraph
+        text, tail, said = _quiet_limits(text, q, start, end, rec, plats, reached, newest, oldest if starts_late
+                                         else None, quiet, said_end, friends_asked)
+        extra = dict(extra, tail=" ".join(x for x in tail if x), said=said)
+        return text + ("\n\n" + extra["tail"] if extra["tail"] else ""), ids, extra
     if said_end:
         pass
     elif q.window.kind == "all" and "range" not in quiet:
@@ -1163,6 +1172,144 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=()):
         said.append("friends")   # round 11 fix, A (R4): once in a stretch of 6 hours
     extra = dict(extra, tail=" ".join(x for x in tail if x), said=said)
     return text + ("\n\n" + extra["tail"] if extra["tail"] else ""), ids, extra
+
+
+# ---------- round 12, W (DESIGN 19.W, rule R-H of the brief): quiet limits ----------
+# The founder: "The user shouldn't constantly be made aware of what we cannot do, so don't say that at the end." Where
+# a window passes an export's end, the window's own words carry it ("This year (1 January to 30 October 2026, where
+# your YouTube export ends) you watched ..."); where it starts before the record, they say where the record starts;
+# over all the history the range rides in the window words once in 6 hours. No closing paragraph. The hint on sending
+# a new export: once in 6 hours, and only when the question is about a time after an export's end. The friends line:
+# once in 6 hours, and only when the question is about friends. MVP_QUIET_LIMITS=0 gives the round 11 replies back.
+QUIET_LIMITS = os.environ.get("MVP_QUIET_LIMITS", "1") != "0"
+FRIENDS_ASK = re.compile(r"\bfriends?\b|\bamig[oa]s?\b")
+
+
+def _window_phrases(w, start, end, lang):
+    out = []
+    for cap in (True, False):
+        x = window_words(w, start, end, lang, cap=cap).rstrip(",")
+        if x and x not in out:
+            out.append(x)
+    return out
+
+
+def _end_clause(rec, reached, lang, first=None):
+    """'where your YouTube export ends' (+ '; your Instagram export ends on 15 October 2026')."""
+    order = sorted(reached, key=lambda p: rec.ends[p], reverse=True)
+    if not order:
+        return ""
+    top = order[0]
+    if lang == "es":
+        s = f"donde termina tu exportación de {PNAME.get(top, top)}"
+        rest = [f"la de {PNAME.get(p, p)} termina el {day_words(rec.ends[p], 'es')}" for p in order[1:]
+                if rec.ends[p] != rec.ends[top]]
+    else:
+        s = f"where your {PNAME.get(top, top)} export ends"
+        rest = [f"your {PNAME.get(p, p)} export ends on {day_words(rec.ends[p])}" for p in order[1:]
+                if rec.ends[p] != rec.ends[top]]
+    same = [p for p in order[1:] if rec.ends[p] == rec.ends[top]]
+    if same:
+        s = (f"donde terminan tus exportaciones de {PNAME.get(top, top)} y {PNAME.get(same[0], same[0])}" if lang == "es"
+             else f"where your {PNAME.get(top, top)} and {PNAME.get(same[0], same[0])} exports end")
+    return "; ".join([s] + rest)
+
+
+def _carry(text, phrases, start, end, e, clause, start_clause, lang):
+    """The window's first words in the text with where the record ends (and starts) put into them. (text, done)."""
+    for ph in phrases:
+        i = text.find(ph)
+        if i < 0:
+            continue
+        j = i + len(ph)
+        m = re.match(r"^(.*)\(([^()]*)\)$", ph)
+        bits = [x for x in (start_clause, clause) if x]
+        if m and e and end and end > e and start and start <= e:
+            # "This year (1 January to 19 November 2026)": the span ends where the export ends
+            span = span_words(start, e, lang) + (", " + clause if clause else "")
+            new = m.group(1) + "(" + "; ".join([x for x in (start_clause, span) if x]) + ")"
+        elif "(where your export ends)" in ph or "donde termina tu exportación" in ph:
+            if clause and ";" not in clause and not start_clause:
+                return text, True   # "the 4 weeks up to 30 October 2026 (where your export ends)": already said
+            if lang == "es":
+                new = ph.replace("donde termina tu exportación", "; ".join([x for x in (start_clause, clause) if x]))
+            else:
+                new = ph.replace("(where your export ends)", "(" + "; ".join(bits) + ")")
+        elif m:
+            new = m.group(1) + "(" + "; ".join([m.group(2)] + bits) + ")"
+        else:
+            if e and end and end > e and clause:
+                bits = [x for x in (start_clause, ("hasta el " if lang == "es" else "up to ") +
+                                    day_words(e, lang) + ", " + clause) if x]
+            new = ph + " (" + "; ".join(bits) + ")"
+        return text[:i] + new + text[j:], True
+    return text, False
+
+
+def _quiet_limits(text, q, start, end, rec, plats, reached, newest, starts_on, quiet, said_end, friends_asked):
+    """(text with the limits in the window's words, the few lines that stay, the notes said)."""
+    lang = q.lang
+    es = lang == "es"
+    tail, said = [], []
+    if not said_end:
+        if q.window.kind == "all":
+            if "range" not in quiet:
+                rl = range_line(rec, plats, q)
+                span = re.sub(r"^(?:Your|Tu|Lo que)\s.*?(?:runs from|run from|va del)\s+", "", rl).rstrip(".")
+                if span and len([p for p in plats if p in rec.ends]) == 1 and \
+                        ("In all your history I can see," in text or "En todo tu historial," in text):
+                    if es:
+                        text = text.replace("En todo tu historial,", f"En todo tu historial (del {span}),", 1)
+                    else:
+                        text = text.replace("In all your history I can see,", f"In all your history I can see ({span}),",
+                                            1)
+                else:
+                    tail.append(rl)
+                said.append("range")
+            elif q.kind in ("last", "list", "on_day") and reached:
+                tail.append(ends_line(rec, reached, lang))   # "the last ..." changes with where the record ends
+        else:
+            e = max((rec.ends[p] for p in reached), default=None)
+            clause = _end_clause(rec, reached, lang) if reached else ""
+            if e and end and end <= e and clause and q.window.kind == "day":
+                top = PNAME.get(max(reached, key=lambda p: rec.ends[p]), "")
+                clause = re.sub(r"^(?:where your \w+ export ends|donde termina tu exportación de \w+)",
+                                f"el último día de tu exportación de {top}" if es else
+                                f"the last day of your {top} export", clause)
+            sc = ""
+            if starts_on:
+                p0 = min((p for p in plats if any((p, k) in rec.starts for k in HOW_KINDS[q.how])),
+                         key=lambda p: min(rec.starts[(p, k)] for k in HOW_KINDS[q.how] if (p, k) in rec.starts),
+                         default=None)
+                sc = (f"tu historial de {PNAME.get(p0, p0)} aquí empieza el {day_words(starts_on, 'es')}" if es else
+                      f"your {PNAME.get(p0, p0)} history here starts on {day_words(starts_on)}") if p0 else ""
+            if clause or sc:
+                phrases = _window_phrases(q.window, start, end, lang)
+                if q.kind == "compare" and q.window2 and e and q.window2.end and q.window2.end >= e and \
+                        not (end and end >= e):
+                    s2, e2 = q.window2.start, q.window2.end
+                    phrases = _window_phrases(q.window2, s2, e2, lang)
+                    text, done = _carry(text, phrases, s2, e2, e, clause, sc, lang)
+                else:
+                    text, done = _carry(text, phrases, start, end, e, clause, sc, lang)
+                if not done:   # the window's words are not in the reply: the plain lines, as before
+                    if sc:
+                        tail.append(start_line(rec, plats, q))
+                    if reached:
+                        tail.append(ends_line(rec, reached, lang))
+            # the hint: only about a time after an export's end, once in 6 hours
+            if reached and newest and (end is None or end > newest or q.window.kind == "lately") and \
+                    "refresh" not in quiet:
+                tail.append(REFRESH[lang])
+                said.append("refresh")
+    if q.how == "saved":
+        tail.append("(Guardado cuenta lo guardado, las colecciones, lo que te enviaste y las listas.)" if es else
+                    "(Saved counts saves, collections, posts you sent yourself and playlists.)")
+    if friends_asked and "instagram" in plats and "friends" not in quiet:
+        tail.append("No cuento las publicaciones de tus amigos." if es else "Posts from friends are not counted.")
+        said.append("friends")
+    return text, tail, said
+# ---------- end round 12, W ----------
 
 
 def _record_start(rec, plats, q):
@@ -1760,10 +1907,10 @@ def history_reads(bot, person, text, now):
     q = read(text, today)
     if q is None:
         return None
-    return send_answer(bot, person, q, now)
+    return send_answer(bot, person, q, now, friends_asked=bool(FRIENDS_ASK.search(normal(text))))   # round 12, W
 
 
-def send_answer(bot, person, q, now, follow=False, lead=""):
+def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False):
     from .render import Reply, link_part
     from .store import now_iso
     from . import profile as P
@@ -1774,7 +1921,7 @@ def send_answer(bot, person, q, now, follow=False, lead=""):
     rec = record(view, tz)
     t0 = datetime.now()
     quiet = said_lately(bot, h, now)
-    text, ids, extra = answer(view, q, today, P.get(bot.store, h), rec, quiet=quiet)
+    text, ids, extra = answer(view, q, today, P.get(bot.store, h), rec, quiet=quiet, friends_asked=friends_asked)
     note_said(bot, h, now, extra.get("said") or ())
     bot.note(intent="history")
     tail = extra.get("tail") or ""

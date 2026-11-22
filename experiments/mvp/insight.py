@@ -28,7 +28,7 @@ from datetime import date, datetime
 
 from . import llm
 
-PROMPT_VERSION = os.environ.get("MVP_INSIGHT_PROMPT", "insight_v1")
+PROMPT_VERSION = os.environ.get("MVP_INSIGHT_PROMPT", "insight_v4")   # v1 to v3 stay as measured (DESIGN 19.W)
 PURPOSE = "mvp_insight"
 MAX_TOKENS = 700
 TEMPERATURE = 0

@@ -71,6 +71,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(_config, "JUDGE_MODEL", "")
     # round 10, slice W: the errand form (errand.py) is off unless a test turns it on (test_round10_errand.py)
     monkeypatch.setenv("MVP_ERRAND_PER_DAY", "0")
+    # round 12, W: the history writer (insight.py) is off unless a test turns it on (tests/test_round12_w.py)
+    monkeypatch.setenv("MVP_INSIGHT", "0")
 
     class FakePool:
         max_resident = 4
