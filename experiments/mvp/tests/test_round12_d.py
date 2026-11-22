@@ -372,7 +372,6 @@ READS = [
     ("what was i watching back in 2021", "top"),
     ("what was i obsessed with in 2022", "top"),
     ("what was i into in spring 2024?", "top"),
-    ("what am i into lately", "top"),
     ("which channels did i watch the most in 2025 without shorts", "top_channels"),
     ("which channels did i watch the most in 2025, no shorts", "top_channels"),
     ("my top channels this year excluding shorts", "top_channels"),
@@ -420,7 +419,7 @@ TRAPS = [
     "tell me a joke", "what can you do", "how have you changed", "what do you think of my taste",
     "delete my history from 2021", "unsubscribe from that art channel", "remind me in the summer of 2027",
     "email me my top channels", "what should i watch tonight, art or gaming", "make me a playlist of art videos",
-    "i watched way too much gaming lol",
+    "i watched way too much gaming lol", "what have i been into lately", "what am i into", "what was i into",
 ]
 
 

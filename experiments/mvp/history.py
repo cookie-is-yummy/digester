@@ -242,7 +242,8 @@ NO_SHORTS = re.compile(r"[,;:(]?\s*\b(?:(?:but|and)\s+)?(?:without|excluding|exc
                        r"shorts?(?:\s+(?:and|or)\s+(?:the\s+)?(?:reels|clips))?\b\)?|[,;:(]?\s*\b(?:(?:but|and)\s+)?"
                        r"(?:only|just)\s+(?:the\s+)?long(?:er)?(?:-?form)?(?:\s+(?:videos?|ones|vids))?\b\)?|"
                        r"[,;:(]?\s*\blong(?:er)?(?:-?form)?\s+videos?\s+only\b\)?")
-INTO = re.compile(r"\bwhat\s+(?:was|were|am|have|had)\s+i\s+(?:been\s+|really\s+|mostly\s+|most\s+)*(?:into|obsessed\s+with|"
+# past tense only: "what have i been into lately" is a round 11 trap (a question about the person, not the record)
+INTO = re.compile(r"\bwhat\s+(?:was|were)\s+i\s+(?:really\s+|mostly\s+|most\s+)*(?:into|obsessed\s+with|"
                   r"hooked\s+on)\b|\bwhat\s+did\s+i\s+mostly\s+watch\b|\bwhat\s+was\s+i\s+(?:mostly\s+)?watching\b")
 INTO_ONLY = re.compile(r"\b(?:into|obsessed\s+with|hooked\s+on|mostly\s+watch\w*)\b")
 CHANGED_WORD = re.compile(r"\b(?:changed|changing|evolved|evolving|shifted|shifting)\b|\bhow\s+different\b")
@@ -584,7 +585,8 @@ def read(text, today, loose=False):
     changed = bool(CHANGED_WORD.search(t) and CHANGED_WHAT.search(t) and CHANGED_ASK.match(t)
                    and not HOW_TO.search(t))
     into = bool(INTO.search(t))
-    marked_r12 = changed or bool(RANK_IN.match(t)) or (into and bool(INTO_ONLY.search(t)))
+    marked_r12 = changed or bool(RANK_IN.match(t)) or (into and bool(INTO_ONLY.search(t))
+                                                       and bool(find_windows(t, today)))
     # ---------- end round 12, D ----------
     marked = any(m.search(t) for m in MARKERS) or bool(TOP_PLAIN.match(t)) or marked_r12
     # round 11 fix pass 2 (P4): a comparison of two windows with no "i watched" ("more videos in october or

@@ -52,7 +52,8 @@ def rule_phrasings():
     out = set()
     for path in glob.glob(os.path.join(HERE, "test_*.py")):
         if os.path.basename(path).startswith(("test_round9_", "test_round10_",
-                                              "test_round11_")):   # round 10, slice K: the set stays the round 9 one
+                                              "test_round11_", "test_round12_")):   # round 10, slice K: the set
+            # stays the round 9 one (round 12: its test files are left out as round 10's and 11's are)
             continue
         for node in ast.walk(ast.parse(open(path, encoding="utf-8").read())):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and 2 <= len(node.value) <= 120 \
