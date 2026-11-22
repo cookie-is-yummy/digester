@@ -37,7 +37,9 @@ from pydantic import BaseModel, Field
 
 from .retrieve import contains_word
 
-KINDS = ("top_channels", "top_topics", "top_items", "count", "list", "first", "last", "timeline", "on_day", "compare")
+KINDS = ("top_channels", "top_topics", "top_items", "count", "list", "first", "last", "timeline", "on_day", "compare",
+         # round 12, D (DESIGN 19.D): two topics in one window, how WHAT is watched changed, what was watched most
+         "compare_topics", "changed", "top")
 HOW_KINDS = {"watched": ("watch", "view"), "liked": ("like",), "saved": ("save", "collection", "share_self", "playlist"),
              "any": ("watch", "view", "like", "save", "collection", "share_self", "playlist"),
              # the round 11 check (DESIGN 18.X): "did I like or save" never counts a watch
@@ -51,6 +53,7 @@ class Window(BaseModel):
     start: Optional[date] = None
     end: Optional[date] = None          # inclusive
     this: bool = False                  # "this week / month / year": up to today
+    label: Optional[str] = None         # round 12, D: a season said back, "the summer of 2023" (kind range)
 
 
 class HistoryQuery(BaseModel):
@@ -71,6 +74,7 @@ class HistoryQuery(BaseModel):
     offset: int = 0                     # "more" after a list
     by: Optional[Literal["month", "year"]] = None   # timeline: "by year", "per month"
     less: bool = False                  # round 11 fix, A (R5): compare asked "less / fewer", so its answer leads so
+    without_shorts: bool = False        # round 12, D: "without shorts", "only long videos": Shorts and reels left out
 
 
 # ====================================== reading the message ======================================================
