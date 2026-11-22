@@ -475,6 +475,7 @@ def _periods(idx, facts, th, ev_mask, start_o, end_o, by=None):
             row["themes"] = [{"name": th.shown(t), "share": _share(c, len(it))} for t, c in tc.most_common(4)]
             ac = Counter(facts.area[it][facts.area[it] >= 0].tolist())   # round 12, pass 2 (T4): eras by area
             row["areas"] = [{"name": facts.area_names[a], "share": _share(c, len(it))} for a, c in ac.most_common(3)]
+            row["area_shares"] = {facts.area_names[a]: _share(c, len(it)) for a, c in ac.items()}   # all of them
         yt = it[(idx.platform[it] == 0) & (facts.short[it] >= 0)] if len(it) else it
         if len(yt) >= 20:
             row["shorts_share"] = _share(int((facts.short[yt] == 1).sum()), len(yt))
@@ -786,8 +787,8 @@ def _area_change(periods):
     rows = [p for p in periods if not p.get("sparse") and p.get("areas")]
     if len(rows) < 2:
         return {}
-    a = {x["name"]: x["share"] for x in rows[0]["areas"]}
-    b = {x["name"]: x["share"] for x in rows[-1]["areas"]}
+    a = rows[0].get("area_shares") or {x["name"]: x["share"] for x in rows[0]["areas"]}
+    b = rows[-1].get("area_shares") or {x["name"]: x["share"] for x in rows[-1]["areas"]}
     moves = [{"name": k, "from_share": a.get(k, 0.0), "to_share": b.get(k, 0.0),
               "change": round((b.get(k, 0.0) - a.get(k, 0.0)) * 100, 1)} for k in sorted(set(a) | set(b))]
     left = sorted((m for m in moves if m["change"] <= -3), key=lambda m: m["change"])[:2]

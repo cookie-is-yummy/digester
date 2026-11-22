@@ -443,3 +443,48 @@ def test_t15_the_spanish_change_answer_is_eras_not_a_run_of_numbers(r12):
     s = sheet_of(r12, "¿cómo ha cambiado lo que veo desde 2020?")
     f = I.check(I.code_form(s), s, chart_vals=I.chart(s)[1])
     assert f["answer"].startswith("De 2021 a 2022 lideró gaming") and not re.search(r"\b20\d\d: \d", f["answer"])
+
+
+# ================================ the live reading on the real library (made-up stand-ins) ======================
+def test_live_a_count_said_as_a_share_is_dropped():
+    s = case("cmp_years")["sheet"]   # totals.shorts and previous.shorts are counts
+    kept, whys = strict_obs("Your Shorts share jumped from {previous.shorts} to {totals.shorts}.", s)
+    assert kept is None and whys == ["count_as_share"]
+    kept, _ = strict_obs("Shorts went from {previous.shorts} to {totals.shorts} videos.", s)
+    assert kept == "Shorts went from 3,400 to 11,000 videos."
+
+
+def test_live_a_so_what_question_code_cannot_follow_is_said_as_a_notice():
+    I = ins()
+    c = case("cmp_years")
+    raw = dict(c["fake"], so_what={"pick": "shorts_shift:up", "text": "Shorts rose to {totals.shorts} videos; want to look at what changed?"})
+    f = I.fill(I.check(raw, c["sheet"]), raw, c["sheet"])
+    assert ("so_what", "dead_question") in [(d[0], d[1]) for d in f["dropped"]]
+    assert f["so_what"] and not f["so_what"].endswith("?") and f["so_what"].startswith("Shorts went up to")
+
+
+def test_live_a_comparisons_answer_is_codes_ratio_in_words():
+    I = ins()
+    c = case("cmp_gaming_art")
+    raw = dict(c["fake"], answer="This year you opened gaming about 3 times as many as many gaming videos as art.")
+    f = I.fill(I.check(raw, c["sheet"]), raw, c["sheet"])
+    assert f["answer"].startswith("Much more gaming than art: about 3 times as many (640 against 212)")
+
+
+def test_live_a_topics_share_is_of_its_own_videos_and_an_estimate_says_about():
+    I = ins()
+    s = {"kind": "count", "lang": "en", "filters": {"topic": "blender"},
+         "topics": [{"name": "blender", "items": 300, "matched_by": "themes and words"}]}
+    assert I.scoped("Art and design made up 89% of what you opened.", s) == \
+        "Art and design made up 89% of your blender videos."
+    assert I.scoped("You opened 300 blender videos.", s, answer=True) == "You opened about 300 blender videos."
+    assert I.scoped("You opened about 300 blender videos.", s, answer=True) == "You opened about 300 blender videos."
+
+
+def test_live_one_area_every_year_charts_the_move_to_shorts():
+    I = ins()
+    s = {"kind": "changed", "lang": "en", "periods": [
+        {"label": str(y), "items": 100, "areas": [{"name": "gaming", "share": 0.3}], "shorts_share": sh}
+        for y, sh in ((2020, 0.04), (2023, 0.5), (2026, 0.81))]}
+    lines = I.chart(s)[0].split("\n")
+    assert lines[0] == "Shorts' share of your YouTube videos, by year:" and lines[-1].endswith("2026 81%")
