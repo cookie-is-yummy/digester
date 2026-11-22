@@ -1388,8 +1388,10 @@ def answer_shape(sheet, facts, text):
         top = next((c for c in sheet.get("channels") or [] if isinstance(c, dict) and c.get("name")), None)
         if top and cs and cs[0] in names and _num(top.get("items")):
             said = {_parse_num(x, facts.lang) for x in re.findall(r"\d[\d,.]*\d|\d", facts.names_in(text)[1])}
-            if float(top["items"]) not in said:
-                return "shape"   # the channel that led, with its count: the answer to "which channels the most"
+            if said and float(top["items"]) not in said:
+                # the channel that led, with its count: the answer to "which channels the most"; round 12, pass 3 fix
+                # (judge A, row 2): or in words only, the chart under it carrying the counts
+                return "shape"
     elif kind in ("top", "day"):
         ts = _keys(sheet.get("themes")) + _keys(sheet.get("areas"))   # round 12, pass 2 (T3): an area leads too
         if ts and (sheet.get("totals") or {}).get("items", 0) >= 3 and not any(n in ts for n in names):
@@ -2620,6 +2622,7 @@ CAPTIONS = {
                 "es": "Videos abiertos por {unit} (la barra) y el tema principal:"},
     "periods_plain": {"en": "Videos opened per {unit}:", "es": "Videos abiertos por {unit}:"},
     "topics": {"en": "Videos opened, by topic:", "es": "Videos abiertos, por tema:"},
+    "topics_then": {"en": "Videos opened, by topic, against {then}:", "es": "Videos abiertos, por tema, frente a {then}:"},
     "windows": {"en": "Videos opened:", "es": "Videos abiertos:"},
 }
 CHART_KINDS = {"top": ("areas", "themes", "channels"), "channels": ("channels",), "count": ("periods", "topics"),
@@ -2685,6 +2688,23 @@ def _rows(sheet, src, lang):
         return CAPTIONS["era_periods"][lang].format(unit=unit), [
             (str(p["label"]), p["areas"][0]["share"], _label_words(p["areas"][0]["name"], PERIOD_LABEL_MAX),
              round(p["areas"][0]["share"] * 100)) for p in ps]
+    if src == "topics" and sheet.get("kind") == "compare_topics":
+        # round 12, pass 3 fix (judge A, row 5: two bars that repeat the answer's two numbers): each side now and in the
+        # span before, which the answer does not draw
+        xs = [c for c in sheet.get("topics") or [] if isinstance(c, dict) and _num(c.get("items")) and c.get("name")
+              and _num(c.get("previous_items"))][:2]
+        pv = sheet.get("previous") or {}
+        w = sheet.get("window") or {}
+        y0 = (re.findall(r"\b((?:19|20)\d\d)\b", str(pv.get("words") or "")) or [""])[-1]
+        y1 = str(w.get("start") or "")[:4]
+        if len(xs) == 2 and re.match(r"^\d{4}$", y0) and re.match(r"^\d{4}$", y1) and y0 != y1:
+            then = re.sub(r"\s*\([^)]*\)\s*$", "", str(pv.get("words") or "")).strip() or y0
+            rows = []
+            for c in xs:
+                rows += [(_fmt(c["items"], lang), c["items"], f"{c['name']} {y1}", c["items"]),
+                         (_fmt(c["previous_items"], lang), c["previous_items"], f"{c['name']} {y0}",
+                          c["previous_items"])]
+            return CAPTIONS["topics_then"][lang].format(then=then), rows
     if src in ("channels", "topics"):
         xs = [c for c in sheet.get(src) or [] if isinstance(c, dict) and _num(c.get("items")) and c.get("name")]
         return CAPTIONS[src][lang], [(_fmt(c["items"], lang), c["items"], c["name"], c["items"])
@@ -2960,6 +2980,10 @@ def scoped(text, sheet, answer=False):
         text = re.sub(r"\bof (?:what you opened|everything(?: you opened)?|the window|your window|all you opened|"
                       r"all your videos|your viewing)\b", f"of your {topic} videos", text)
     if topic and sheet.get("kind") in ("count", "first", "last") and (sheet.get("lang") or "en") == "en":
+        # round 12, pass 3 fix (judge B, row 4: "31% of your YouTube videos watched was Shorts" was the topic's share):
+        # a topic's Shorts share is of its own videos
+        text = re.sub(r"\bof (?:all )?your YouTube videos(?: watched| opened)?\b", f"of your {topic} videos on YouTube",
+                      text)
         # round 12, pass 3 (U9): "N% of them were Shorts" says whose
         text = re.sub(r"\b(\d[\d.,]*%) of (?:them|those|these)( were (?:YouTube )?Shorts)\b",
                       lambda m: f"{m.group(1)} of your {topic} videos{m.group(2)}", text)
@@ -2967,6 +2991,13 @@ def scoped(text, sheet, answer=False):
     if answer and sheet.get("kind") == "count" and "themes" in str((tp or {}).get("matched_by") or "") and \
             _num((tp or {}).get("items")):
         n = _fmt(tp["items"], sheet.get("lang") or "en")
+        if (sheet.get("lang") or "en") == "en":
+            # round 12, pass 3 fix (judge A, row 3: "about 1,094" on a number code counted reads as a guess): the count
+            # as counted, with what it counts
+            text = re.sub(r"\b(?:[Aa]bout|[Aa]round|[Rr]oughly) (" + re.escape(n) + r")(?![\w,.])", r"\1", text)
+            m = re.search(r"(?<![\w,.])" + re.escape(n) + r"(?: [\w'-]+){0,3}? videos\b", text)
+            if m:
+                return text[:m.end()] + " (by their titles and themes)" + text[m.end():]
         text = re.sub(r"(?<![\w,.])(?<![Aa]bout )(?<![Aa]round )(?<![Uu]nos )" + re.escape(n) + r"(?![\w,.])",
                       ("unos " if sheet.get("lang") == "es" else "about ") + n, text, count=1)
     return text
@@ -3289,7 +3320,13 @@ def code_form(sheet):
         topic = (s.get("filters") or {}).get("topic")
         head = (f"En {topic}, " if es else f"For {topic}, ") if topic else ""
         tail0 = ""
-        if len(chans) >= 3:
+        if len(chans) >= 3 and not es and len(_rows(s, "channels", lang)[1]) >= 3:
+            # round 12, pass 3 fix (judge A, row 2: "the lead's three numbers are printed again as the chart's top
+            # three bars"): the lead in words, the chart carries the counts
+            c2 = chans[2]
+            ans = f"{head}{c0['name']} led, ahead of {c1['name']} and {c2['name']}."
+            moving_said = "words"
+        elif len(chans) >= 3:
             c2 = chans[2]
             ans = (f"{head}{c0['name']} va primero con {f(c0['items'], lang)} videos, seguido de {c1['name']} "
                    f"({f(c1['items'], lang)}) y {c2['name']} ({f(c2['items'], lang)})." if es else
@@ -3399,8 +3436,7 @@ def code_form(sheet):
         if _num(sh) and _num(lo) and sh + lo > 0:
             m = tot.get("long_median_min")
             tail = f", typically about {int(m)} minutes" if _num(m) and lo else ""
-            o(f"{f(lo, lang)} were long videos{tail}, and {f(sh, lang)} Shorts." if sh else
-              f"All {f(lo, lang)} were long videos, no Shorts.", "totals")
+            o(_split_line(tot, lang), "totals")
         cs = [c for c in _rows_named((tp[0].get("channels") if tp else None) or s.get("channels"), ("name", "items"))
               if "@" not in c["name"]][:2]
         if len(cs) == 2:
@@ -3415,7 +3451,7 @@ def code_form(sheet):
         # set against a usual day's count or hour; "a usual day" says what it is (a day of the 3 months before, with
         # anything opened, not the same weekday); a small day's leading theme is said as a count ("3 of them")
         last_day = "last day of your export" in str((s.get("window") or {}).get("words") or "")
-        usual_w = "a usual day of the 3 months before"
+        usual_w = "a usual day of the three months before"
         t0 = themes[0] if themes and _num(themes[0].get("items")) and n >= 3 else None
         led = (f"; {t0['name']} led with {f(t0['items'], lang)} of them." if t0 and t0["items"] >= 2 else
                f"; {themes[0]['name']} led with {_pc(themes[0]['share'])}." if themes and n >= 3 and not t0 else ".")
@@ -3437,7 +3473,8 @@ def code_form(sheet):
                 # round 12, pass 2 fix (judge A, row 6: say the day's Shorts and busiest hour against his usual day)
                 o(f"Shorts were {_pc(us['day_shorts_share'])} of the day's YouTube videos, against "
                   + (f"about {_pc(us['shorts_share'])}" if us["shorts_share"] >= 0.01 else "none")
-                  + f" on {usual_w}.", "usual", must=True)
+                  + (" on a usual day of the months before." if usual_w.endswith("before") else f" on {usual_w}."),
+                  "usual", must=True)
                 usual_w = "a usual day"
             elif _num(sh) and sh:
                 o(f"{f(sh, lang)} of them were Shorts.", "totals")
@@ -3742,9 +3779,15 @@ def so_what_text(c, s, topic=None, lang=None):
     if k == "path":
         topic = topic or (s.get("filters") or {}).get("topic") or "it"
         li, ll, pi, pl = _fmt(c["last_items"], "en"), c["last_label"], _fmt(c["peak_items"], "en"), c["peak_label"]
-        return {"deeper": f"You are deeper into {topic} than ever: {li} in {ll}, your busiest year for it.",
-                "still": f"You are still at it: {li} in {ll}, against {pi} in {pl}, your busiest year.",
-                "faded": f"It has faded: {li} in {ll}, against {pi} in {pl}."}.get(c.get("how"))
+        # round 12, pass 3 fix (judge A, row 4: "It has faded: 12 in 2026, against 131 in 2023": a part of a year set
+        # against a whole one with no word of it, and "It" after three cards): the subject named, the part said
+        end = _as_date((s.get("window") or {}).get("end"))
+        part = (f"in {ll} up to {end.day} {MONTHS[end.month - 1].capitalize()}" if end and str(end.year) == str(ll)
+                and (end.month, end.day) != (12, 31) else f"in {ll}")
+        return {"deeper": f"You are deeper into {topic} than ever: {li} {part}, your busiest year for it.",
+                "still": f"You are still at it: {li} {part}, against {pi} in {pl}, your busiest year.",
+                "faded": f"Your {topic} watching has faded: {li} {part}, against {pi} in {pl}, your busiest year "
+                         f"for it."}.get(c.get("how"))
     if k == "lapsed_saves":
         return (f"{c['theme']} has faded, and you still have {_fmt(c['n'], 'en')} saved {c['theme']} videos you never "
                 f"opened. Want them as a list?")
@@ -3902,6 +3945,58 @@ def _nested_move(x, others, sheet, facts):
                for t in (sheet or {}).get("themes") or [] if isinstance(t, dict) and t.get("name") and t.get("area")}
     mine = {n: d for n, d in mine.items() if not any(n != m and n in m for m in mine)}   # "sports" in "action sports"
     return all(theirs.get(n) == d or (area_of.get(n) and theirs.get(area_of[n]) == d) for n, d in mine.items())
+
+
+def _split_line(tot, lang="en"):
+    """A first's or a last's Shorts against long videos. Round 12, pass 3 fix (judge A, row 4: "201 long ... and 90
+    Shorts" under 300 read as a sum gone wrong): the split says what it is of (the YouTube ones, or those of known
+    length) when it adds up to less than the total."""
+    sh, lo, m, n = tot.get("shorts"), tot.get("long"), tot.get("long_median_min"), tot.get("items")
+    if not (_num(sh) and _num(lo) and sh + lo > 0):
+        return None
+    tail = f", typically about {int(m)} minutes" if _num(m) and lo else ""
+    yt = (tot.get("by_platform") or {}).get("youtube")
+    of = ""
+    if _num(n) and sh + lo < n:
+        of = (f"Of the {_fmt(yt, lang)} on YouTube, " if _num(yt) and yt == sh + lo else
+              f"Of the {_fmt(sh + lo, lang)} of known length, ")
+    if of:
+        return of + (f"{_fmt(lo, lang)} were long videos{tail}, and {_fmt(sh, lang)} Shorts." if sh else
+                     f"all {_fmt(lo, lang)} were long videos, no Shorts.")
+    return (f"{_fmt(lo, lang)} were long videos{tail}, and {_fmt(sh, lang)} Shorts." if sh else
+            f"All {_fmt(lo, lang)} were long videos, no Shorts.")
+
+
+_COUNT_CHANGE = re.compile(r"\b(?:jump\w*|grew|rose|climb\w*|went|fell|dropp\w*|slipp\w*) (?:up |down )?from "
+                           r"\d[\d,]*(?![\d.,]*%)(?: (?:videos?|in (?:19|20)\d\d))*,? to \d[\d,]*(?![\d.,]*%)")
+_RANK_WORD = re.compile(r"\b(?:was|is) (?:your |the )?(?:top|biggest|leading|main|number one|most[- ]watched)\b|"
+                        r"\bled (?:with|the)\b|\btopped\b")
+
+
+def _leader_again(text, answer, sheet, facts):
+    """Round 12, pass 3 fix: a channels answer's bullet that says again that the answer's leader led."""
+    if (sheet or {}).get("kind") != "channels" or not answer:
+        return False
+    top = next((c for c in (sheet or {}).get("channels") or [] if isinstance(c, dict) and c.get("name")), None)
+    if not top:
+        return False
+    k = " ".join(_words(top["name"]))
+    nx, na = facts.names_in(text)[0], facts.names_in(answer)[0]
+    low = _norm(text)
+    first = min(nx, key=lambda n: low.find(n) if low.find(n) >= 0 else 10 ** 6) if nx else None
+    return first == k and k in na and bool(_RANK_WORD.search(low))
+
+
+def _split_no_base(text, sheet):
+    """Round 12, pass 3 fix (judge A, row 4: "90 Shorts and 201 long videos" under "300 videos"): the Shorts and long
+    counts said without what they are of, where they add up to less than the total said above them."""
+    tot = (sheet or {}).get("totals") or {}
+    sh, lo, n = tot.get("shorts"), tot.get("long"), tot.get("items")
+    if not (_num(sh) and _num(lo) and _num(n) and sh and lo and sh + lo < n):
+        return False
+    nums = {int(x.replace(",", "")) for x in re.findall(r"(?<![\d.,])\d[\d,]*(?![\d.,]*%)", text or "")}
+    yt = (tot.get("by_platform") or {}).get("youtube")
+    return {int(sh), int(lo)} <= nums and int(sh + lo) not in nums and not (_num(yt) and int(yt) in nums)
 
 
 _DAY_FILLER = re.compile(r"\bcame next\b|\bweekend (?:watching|viewing)\b|\bweekday (?:watching|viewing)\b|"
@@ -4101,6 +4196,14 @@ def fill(form, raw, sheet, chart_vals=None):
         if t and check_sentence(t, facts) is None:
             form["dropped"].append(("so_what", "no_number", sw))
             sw = tidy(t, facts.lang)
+    if sw and chosen is not None and chosen.get("kind") in ("saved", "lapsed_saves") and "?" not in sw and \
+            sheet.get("kind") not in ("first", "last"):
+        # round 12, pass 3 fix (live, math: "You saved 11 Math puzzles."): saved things are said with what they are
+        # and the offer code takes ("want them as a list?")
+        t = so_what_text(chosen, shown(sheet))
+        if t and check_sentence(t, facts) is None:
+            form["dropped"].append(("so_what", "no_offer", sw))
+            sw = tidy(t, facts.lang)
     if sw and chosen is not None and chosen.get("kind") == "learning_faded" and chosen.get("from") and \
             " ".join(_words(chosen.get("grew") or "")) in names and facts.lang == "en":
         # round 12, pass 2 fix (live, row 7): what grew is said above; the so-what says what gave way
@@ -4241,14 +4344,28 @@ def _last_reads(form, sheet, facts):
                      # judges, rows 6 and "september 12": "X came next (8%)" and "the day was all weekend watching"
                      # say nothing on a day
                      ("filler", lambda x, rest: day and bool(_DAY_FILLER.search(_norm(x)))),
-                     ("nested_move", lambda x, rest: _nested_move(x, rest, sheet, facts))):
+                     ("nested_move", lambda x, rest: _nested_move(x, rest, sheet, facts)),
+                     ("split_no_base", lambda x, rest: _split_no_base(x, sheet)),
+                     # judge A, "without shorts": "<the leader> was your top channel ..." under the answer that says it
+                     ("leader_again", lambda x, rest: _leader_again(x, form["answer"], sheet, facts)),
+                     # judge A, "only gaming": "jumped from 35 in 2024 to 341", a change from a count
+                     ("count_change", lambda x, rest: bool(_COUNT_CHANGE.search(x or ""))),
+                     # live, "without shorts": "Gaming slipped from 22% in 2024", a move with one value
+                     ("half_move", lambda x, rest: bool(re.search(r"\bfrom \d+(?:[.,]\d+)?%", x or "")) and
+                      len(re.findall(r"\d+(?:[.,]\d+)?%", x or "")) == 1 and
+                      not re.search(r"\b(?:points?|puntos?)\b", x or ""))):
         for x in list(obs):
-            if len(obs) <= OBS_MIN:
+            if len(obs) <= OBS_MIN and why != "split_no_base":
                 break
             rest = [form["answer"] or "", form.get("so_what") or ""] + [y for y in obs if y != x]
             if bad(x, [form["answer"] or "", form.get("so_what") or ""] if why == "nested_move" else rest):
-                obs.remove(x)
                 form["dropped"].append(("observation", why, x))
+                alt = _split_line((sheet or {}).get("totals") or {}) if why == "split_no_base" else None
+                if alt and check_sentence(alt, facts) is None and alt not in obs:
+                    obs.remove(x)
+                    obs.append(alt)   # after the total it is of
+                else:
+                    obs.remove(x)
     form["observations"] = obs
     return form
 

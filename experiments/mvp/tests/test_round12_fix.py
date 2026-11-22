@@ -286,7 +286,9 @@ def test_a_firsts_so_what_says_the_path_on_the_topic_and_its_title_is_said_once(
     title = s["items"][0]["title"]
     raw = dict(c["fake"], answer=f"You first opened a blender video on 14 March 2019: \"{title}\".")
     f = checked(raw, s)
-    assert f["so_what"].startswith("It has faded: 40 in 2026, against 300 in 2023.")
+    # round 12, pass 3 fix (judge A, row 4, on purpose): the subject named, the part of the year said
+    assert f["so_what"].startswith("Your blender watching has faded: 40 in 2026 up to 30 October, against 300 in 2023, "
+                                   "your busiest year for it.")
     assert "You saved 18 Blender 3D videos" in f["so_what"]
     head = I.layout(f, s)[0]["text"]
     assert head.count(title) == 1 and head.startswith("You first opened a blender video on 14 March 2019 (the first video below).")
@@ -343,7 +345,8 @@ def test_a_channels_answer_that_names_no_channel_and_count_is_written_by_code():
     c = case("channels_2025")
     raw = dict(c["fake"], answer="In 2025 you opened 9,654 videos, led by speedrun clips at 20%.")
     f = checked(raw, c["sheet"])
-    assert f["answer"].startswith("Lantern Speedruns led with 820 videos, ahead of Prime Number Club (610)")
+    # round 12, pass 3 fix (judge A, row 2, on purpose): the lead in words, the chart carries the counts
+    assert f["answer"].startswith("Lantern Speedruns led, ahead of Prime Number Club and")
     raw = dict(c["fake"], answer="In 2025 Lantern Speedruns and Prime Number Club were your top channels.")
     assert ins().check(raw, c["sheet"])["dropped"][0][:2] == ("answer", "shape")
 

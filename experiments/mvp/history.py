@@ -2502,6 +2502,11 @@ def _taken_words(taken, q, sheet):
             names = (sheet or {}).get("filters", {}).get("topic_themes") or []
             nm = next((n for n in names if n and _squash(n) == _squash(x)), None)
             taken = "only_topic:" + (nm or x)
+            if getattr(q, "without_shorts", False):
+                # round 12, pass 3 fix (judge A: "without shorts" then "only gaming" said only "Only gaming:"): both
+                # filters said
+                line = insight.taken_line(taken, lang).rstrip(":")
+                return line + (", sin Shorts:" if lang == "es" else ", without Shorts:")
         return insight.taken_line(taken, lang)
     except Exception:  # noqa: BLE001
         return ""

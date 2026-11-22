@@ -418,8 +418,9 @@ def _changed():
 def test_u8_row7_one_area_every_year_says_how_its_weight_moved_and_what_took_its_place():
     I = ins()
     a = I.code_form(_changed())["answer"]
-    assert a == ("Gaming led every year, but its weight moved: 22% in 2020, up to 48% in 2022, then down to 16% in "
-                 "2026, as comedy took more of it."), a
+    # round 12, pass 3 fix (judge A, row 7, on purpose): the year of the turn is said
+    assert a == ("Gaming led every year, but its weight moved: 22% in 2020, up to 48% in 2022, then down to 30% in "
+                 "2023, and 16% in 2026; comedy took more of it."), a
     assert I.chart(_changed())[0].startswith("The share of gaming in each year:")
     assert any("Shorts went from 4%" in x["text"] for x in I.code_form(_changed())["observations"])
 

@@ -719,7 +719,12 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     # things are on what the answer is about, the themes of the top channels, or the two topics compared
     if kind == "channels" and not topic_tids:
         by_name = {r["name"]: r["theme_id"] for r in rows if r.get("name")}
-        ct = [by_name[c["theme"]] for c in out["channels"][:3] if c.get("theme") in by_name]
+        if th is not None:
+            # round 12, pass 3 fix (judge A, row 2: no so-what on the channels he keeps coming back to): a top
+            # channel's theme is found among all the themes, not only the window's biggest
+            for t_ in th.themes:
+                by_name.setdefault(th.shown(t_), t_)
+        ct = [by_name[c["theme"]] for c in out["channels"][:5] if c.get("theme") in by_name]
         tids = list(dict.fromkeys(ct)) or tids
     elif kind == "compare_topics" and q.topic:
         ct = []

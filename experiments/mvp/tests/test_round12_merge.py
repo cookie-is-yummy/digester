@@ -154,7 +154,8 @@ def test_b_the_reply_to_an_offer_taken_opens_with_its_words_and_answers_again(wr
     out, calls = ask(wr, "without Shorts")
     assert out.startswith("Without Shorts:\n\n") and "Clip Factory" not in out and calls == ["mvp_insight"]
     out, calls = ask(wr, "only Digital drawing")
-    assert out.startswith("Only Digital drawing:\n\n") and calls == ["mvp_insight"]
+    # round 12, pass 3 fix (judge A, on purpose): both filters said after "without Shorts" then "only X"
+    assert out.startswith("Only Digital drawing, without Shorts:\n\n") and calls == ["mvp_insight"]
     assert "Pixel Pencil" in out and "Wet Paper" not in out
 
 
