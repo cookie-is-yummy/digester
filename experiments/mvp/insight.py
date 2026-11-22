@@ -2341,7 +2341,16 @@ def render(text, sheet, facts, strict=False, unit=None):
         if base and any(x is not None and x.role == _ROLE_NUM and not (x.key or "").endswith("share") and
                         x.key not in ("faded_from", "grew_from") for x in froms):
             return None, "no_base"   # a change "from" a count ("down 3 points from 980")
-        if base:
+        last_v = list(re.finditer(r"\b(?:from|to)\s+\{[^}]+\}", tail_))
+        if base and last_v and not m_end and tail_[last_v[-1].end():].strip(" .!"):
+            # round 12, pass 3 fix (judge A, "the last 3 months": "...; what would you like to lean into next? against
+            # the 67 days before"): the base goes right after the change's last value, never after what follows it
+            e_ = last_v[-1].end()
+            text = tail_[:e_] + " against " + base + tail_[e_:]
+            sl = slots_of(text, sheet, lang)
+            if isinstance(sl, str):
+                return None, sl
+        elif base:
             punct = tail_[-1] if tail_[-1:] in ".!" else "."
             text = tail_.rstrip(".!") + (" in " if m_end else " against ") + base + punct
             sl = slots_of(text, sheet, lang)
@@ -3269,7 +3278,9 @@ def code_form(sheet):
         # the question is asked again; history._write_now keeps it)
         mv_ = (sheet.get("moving_lead") if isinstance(sheet.get("moving_lead"), dict) else None) or \
             next((c for c in candidates(s) if c.get("kind") == "moving"), None)
-        ml = _moving_lead(areas, mv_, pw) if (by_area and mv_ and not es) else None
+        # (asked again, the fall was said by the answer before: the lead says both sides of the move, no so-what)
+        again = mv_ is not None and not any(c.get("kind") == "moving" for c in candidates(s))
+        ml = _moving_lead(areas, mv_, pw, both=again) if (by_area and mv_ and not es) else None
         if ml:
             # round 12, pass 3 fix (judge A, row 1: "lead with the change, not the ranking"): the leader's move against
             # the weeks before is the answer to "lately"; what is said here is no so-what again
@@ -3481,7 +3492,9 @@ def code_form(sheet):
             bh = ((s.get("when") or {}).get("busiest_hours") or [{}])[0]
             bh = {"hour": bh} if _num(bh) else bh
             if isinstance(bh, dict) and _num(bh.get("hour")) and n >= 3 and last_day:
-                pass   # a day the export cuts off: its busiest hour says when the export ended, not when he watches
+                # a day the export cuts off is never set against a usual day's hour (its hours stop where the export
+                # does); its own busiest hour is said plainly
+                o(f"The busiest hour was {_hour_words(bh['hour'])}.", "when")
             elif isinstance(bh, dict) and _num(bh.get("hour")) and n >= 3:
                 if _num(us.get("busiest_hour")) and abs(int(us["busiest_hour"]) - int(bh["hour"])) >= 2:
                     o(f"The busiest hour was {_hour_words(bh['hour'])}, where {usual_w} peaks around "
@@ -3725,7 +3738,7 @@ def _grew_words(a, b):
             "doubled" if r >= 1.95 else "nearly doubled" if r >= 1.75 else "grew")
 
 
-def _moving_lead(areas, mv, pw):
+def _moving_lead(areas, mv, pw, both=False):
     """Round 12, pass 3 fix (judge A, row 1): a top answer over a short window led by what moved, when the leader is
     one of the two areas that moved most against the span before: (the answer, "grew" / "faded" / "both": which of
     the move's two sides it says), or None."""
@@ -3736,6 +3749,10 @@ def _moving_lead(areas, mv, pw):
     a0, a1 = areas[0], areas[1]
     pws = pw.strip()   # (its dates are said once: later sentences say it without them, see _once_spans)
     n0 = " ".join(_words(a0["name"]))
+    if n0 == " ".join(_words(mv["grew"])) and both:
+        return (f"{a0['name']} {_grew_words(mv['grew_from'], mv['grew_to'])} to {_pc(mv['grew_to'])} of what you "
+                f"opened, from {_pc(mv['grew_from'])} in {pws}, while {mv['faded']} fell from {_pc(mv['faded_from'])} "
+                f"to {_pc(mv['faded_to'])}."), "both"
     if n0 == " ".join(_words(mv["grew"])):
         return (f"{a0['name']} {_grew_words(mv['grew_from'], mv['grew_to'])} to {_pc(mv['grew_to'])} of what you "
                 f"opened, from {_pc(mv['grew_from'])} in {pws}; {a1['name']} came next ({_pc(a1['share'])})."), "grew"
@@ -3967,6 +3984,7 @@ def _split_line(tot, lang="en"):
             f"All {_fmt(lo, lang)} were long videos, no Shorts.")
 
 
+_SMALL_TOP = re.compile(r"\b(?:the |your )?(?:biggest|top|main|leading) theme(?: now)?(?: is| was)?\b")
 _COUNT_CHANGE = re.compile(r"\b(?:jump\w*|grew|rose|climb\w*|went|fell|dropp\w*|slipp\w*) (?:up |down )?from "
                            r"\d[\d,]*(?![\d.,]*%)(?: (?:videos?|in (?:19|20)\d\d))*,? to \d[\d,]*(?![\d.,]*%)")
 _RANK_WORD = re.compile(r"\b(?:was|is) (?:your |the )?(?:top|biggest|leading|main|number one|most[- ]watched)\b|"
@@ -4350,6 +4368,10 @@ def _last_reads(form, sheet, facts):
                      ("leader_again", lambda x, rest: _leader_again(x, form["answer"], sheet, facts)),
                      # judge A, "only gaming": "jumped from 35 in 2024 to 341", a change from a count
                      ("count_change", lambda x, rest: bool(_COUNT_CHANGE.search(x or ""))),
+                     # judge A, row 7: "the biggest theme now is X at 3%" says nothing (a top theme of 3% is a
+                     # fragmented mix, and the sentence does not say that)
+                     ("filler", lambda x, rest: bool(_SMALL_TOP.search(_norm(x or ""))) and
+                      all(float(v) < 5 for v in re.findall(r"(\d+(?:\.\d+)?)%", x or ""))),
                      # live, "without shorts": "Gaming slipped from 22% in 2024", a move with one value
                      ("half_move", lambda x, rest: bool(re.search(r"\bfrom \d+(?:[.,]\d+)?%", x or "")) and
                       len(re.findall(r"\d+(?:[.,]\d+)?%", x or "")) == 1 and
