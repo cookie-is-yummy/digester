@@ -3846,6 +3846,96 @@
      }
     ],
     "as": "answer"
+   },
+   {
+    "case": "channels_math",
+    "as": "sent",
+    "true": [
+     {
+      "text": "{themes[0].name} made up {themes[0].share} of what you opened.",
+      "good": "90% of your number puzzles videos"
+     },
+     {
+      "text": "{totals.shorts} Shorts made up {totals.shorts_share} of your YouTube videos.",
+      "good": "23% of your number puzzles videos on YouTube"
+     },
+     {
+      "text": "{channels[0].name} came on {channels[0].days} days, while {channels[1].name} was close behind at {channels[1].items}."
+     },
+     {
+      "text": "{channels[1].name} came next with {channels[1].items} videos."
+     }
+    ],
+    "plants": [
+     {
+      "text": "{totals.shorts} Shorts made up {totals.shorts_share} of your YouTube videos.",
+      "bad": "of your YouTube videos",
+      "why": "base"
+     },
+     {
+      "text": "Shorts were {totals.shorts_share} of all your YouTube videos.",
+      "bad": "of all your YouTube",
+      "why": "base"
+     },
+     {
+      "text": "{totals.shorts_share} of the YouTube videos you watched were Shorts.",
+      "bad": "of the YouTube videos",
+      "why": "base"
+     },
+     {
+      "text": "{themes[0].name} made up {themes[0].share} of what you opened.",
+      "bad": "of what you opened",
+      "why": "base"
+     },
+     {
+      "text": "{themes[1].name} was {themes[1].share} of everything you opened.",
+      "bad": "of everything",
+      "why": "base"
+     },
+     {
+      "text": "Shorts made up {totals.shorts_share} of what you watched.",
+      "bad": "of what you watched",
+      "why": "base"
+     },
+     {
+      "text": "{channels[0].name} came on {channels[0].days} days, while {channels[2].name} was close behind at {channels[2].items}.",
+      "why": "rank_word"
+     },
+     {
+      "text": "{channels[2].name} came next with {channels[2].items} videos.",
+      "why": "rank_word"
+     },
+     {
+      "text": "{channels[3].name} was the runner-up with {channels[3].items} videos.",
+      "why": "rank_word"
+     },
+     {
+      "text": "{channels[2].name} was right behind {channels[0].name} at {channels[2].items}.",
+      "why": "rank_word"
+     }
+    ]
+   },
+   {
+    "case": "top_one_channel",
+    "as": "sent",
+    "true": [
+     {
+      "text": "{themes[0].name} made up {themes[0].share} of the videos you opened from {channels[0].name}.",
+      "good": "of the videos you opened from Proof Lab"
+     }
+    ],
+    "plants": [
+     {
+      "text": "{themes[0].name} made up {themes[0].share} of what you opened.",
+      "bad": "of what you opened\\b(?! from)",
+      "why": "base"
+     },
+     {
+      "text": "{themes[1].name} was {themes[1].share} of your videos.",
+      "bad": "of your videos\\b(?! from)",
+      "why": "base"
+     }
+    ]
    }
   ],
   "sheets": {
@@ -4054,6 +4144,140 @@
     "offers": [
      "without_shorts"
     ]
+   },
+   "channels_math": {
+    "question": "most watched channels in number puzzles",
+    "kind": "channels",
+    "lang": "en",
+    "filters": {
+     "topic": "number puzzles",
+     "without_shorts": false,
+     "platform": null,
+     "channel": null
+    },
+    "window": {
+     "words": "all your history (1 March 2016 to 30 October 2026, where your export ends)",
+     "start": "2016-03-01",
+     "end": "2026-10-30",
+     "clipped": true
+    },
+    "totals": {
+     "items": 400,
+     "days_active": 210,
+     "shorts": 90,
+     "long": 300,
+     "shorts_share": 0.231,
+     "long_median_min": 13
+    },
+    "themes": [
+     {
+      "name": "Prime puzzles",
+      "area": "science",
+      "items": 360,
+      "share": 0.9,
+      "days": 190,
+      "channels": [
+       {
+        "name": "Prime Number Club",
+        "items": 110
+       },
+       {
+        "name": "Proof Lab",
+        "items": 104
+       }
+      ]
+     },
+     {
+      "name": "Geometry tricks",
+      "area": "science",
+      "items": 30,
+      "share": 0.075,
+      "days": 25,
+      "channels": []
+     }
+    ],
+    "channels": [
+     {
+      "name": "Prime Number Club",
+      "items": 110,
+      "days": 84,
+      "shorts_share": 0.04,
+      "theme": "Prime puzzles"
+     },
+     {
+      "name": "Proof Lab",
+      "items": 104,
+      "days": 80,
+      "shorts_share": 0.01,
+      "theme": "Prime puzzles"
+     },
+     {
+      "name": "Chalk Theorem",
+      "items": 98,
+      "days": 70,
+      "shorts_share": 0.02,
+      "theme": "Prime puzzles"
+     },
+     {
+      "name": "Ruler Hacks",
+      "items": 28,
+      "days": 20,
+      "shorts_share": 0.9,
+      "theme": "Geometry tricks"
+     }
+    ],
+    "offers": [
+     "without_shorts",
+     "show_videos"
+    ]
+   },
+   "top_one_channel": {
+    "question": "what did i watch from proof lab",
+    "kind": "top",
+    "lang": "en",
+    "filters": {
+     "topic": null,
+     "without_shorts": false,
+     "platform": null,
+     "channel": "Proof Lab"
+    },
+    "window": {
+     "words": "all your history",
+     "start": "2016-03-01",
+     "end": "2026-10-30",
+     "clipped": false
+    },
+    "totals": {
+     "items": 104,
+     "days_active": 80,
+     "shorts": 1,
+     "long": 103,
+     "shorts_share": 0.01
+    },
+    "themes": [
+     {
+      "name": "Prime puzzles",
+      "area": "science",
+      "items": 90,
+      "share": 0.865,
+      "days": 70
+     },
+     {
+      "name": "Geometry tricks",
+      "area": "science",
+      "items": 14,
+      "share": 0.135,
+      "days": 12
+     }
+    ],
+    "channels": [
+     {
+      "name": "Proof Lab",
+      "items": 104,
+      "days": 80
+     }
+    ],
+    "offers": []
    }
   }
  }

@@ -199,17 +199,33 @@ def v5_scores():
         # round 12, pass 3 (U1): a case "as": "answer" reads each sentence as the answer (a bullet with a direction and
         # no number is dropped as vague anyway; the live false lead of pass 3 was an answer)
         as_answer = x.get("as") == "answer"
+        # round 12, pass 4 (V1): a case "as": "sent" reads each sentence as a bullet and as it is sent (the layout's
+        # base words included): a planted one is caught when it is dropped or goes out without its false words
+        # ("bad", a pattern); a true one is kept, with its "good" words when it gives them
+        as_sent = x.get("as") == "sent"
 
-        def kept(t):
+        def sent(t):
+            f = I.check({"answer": "-", "observations": [{"text": t, "uses": []}]}, s, strict=True)
+            return I.scoped(f["observations"][0], s) if f["observations"] else None
+
+        def kept(t, bad=None, good=None):
+            if as_sent:
+                out_ = sent(t)
+                if out_ is None:
+                    return False
+                if bad and re.search(bad, out_):
+                    return True
+                return not bad and (not good or good in out_)
             if as_answer:
                 return bool(I.check({"answer": t, "observations": []}, s, strict=True)["answer"])
             return bool(I.check({"answer": "-", "observations": [{"text": t, "uses": []}]}, s, strict=True)
                         ["observations"])
         for t in x["true"]:
+            t, good = (t["text"], t.get("good")) if isinstance(t, dict) else (t, None)
             out["true_v5"] += 1
-            out["kept_v5"] += kept(t)
+            out["kept_v5"] += kept(t, good=good)
         for p in x["plants"]:
-            caught = not kept(p["text"])
+            caught = not kept(p["text"], bad=p.get("bad")) if as_sent else not kept(p["text"])
             out["planted_v5"] += 1
             out["caught_v5"] += caught
             b = out["by_why"].setdefault(p["why"], [0, 0])

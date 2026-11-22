@@ -4614,6 +4614,8 @@ def _claims(text, facts):
         out.add(("long", "length"))
     names, t = facts.names_in(re.sub(r"\b(?:19|20)\d\d\b", " ", re.sub(_DATE_RX, " ", low)))
     moves = _moves_of(text, facts)
+    if re.search(r"\bnew\b|\bstopped\b|\bfirst (?:opened|watched|seen)\b|\bleft behind\b", low):
+        out |= {(n, "new") for n in names if n not in ("shorts", "youtube", "instagram")}
     for m in re.finditer(r"\|([A-Z])\|", t):
         k = ord(m.group(1)) - 65
         if k >= len(names) or names[k] in ("shorts", "youtube", "instagram"):
@@ -4626,6 +4628,8 @@ def _claims(text, facts):
             out.add((n, "share"))
         elif re.match(r"[^|%]{0,12}?\(?\d[\d,]*\)?(?!\s*%)", nxt):
             out.add((n, "count"))
+        else:
+            out.add((n, "mention"))   # a name said with no number of its own is something said too
     return out
 
 
@@ -4649,12 +4653,12 @@ def _pass4(form, sheet, facts):
         m = _LED_BY.match(x or "")
         r = shares.get(" ".join(_words(m.group("n")))) if m else None
         if r is not None and "%" not in m.group("n"):
-            pct = "" if re.search(r"\d+(?:\.\d+)?\s*%", m.group("r").split(";")[0]) else \
-                f" ({_pc(r['share'])} of what you opened)"
+            pct = "" if _pc(r["share"]) in m.group("r") else f" ({_pc(r['share'])} of what you opened)"
             obs[i] = f"Behind {m.group('n')}{pct}: {m.group('r')}"
     said = _claims(form["answer"], facts)
     lead_names = set(facts.names_in(form["answer"])[0])
-    said |= {(n, "share") for n in lead_names}   # a record the answer names, named again with its share, is the same
+    # a record the answer names, named again with its share (or again with nothing), is the same
+    said |= {(n, m) for n in lead_names for m in ("share", "mention")}
     for x in obs:
         if x in musts:
             said |= _claims(x, facts)   # code's MUST lines say their fact first (a writer's bullet of it goes)
@@ -4684,18 +4688,21 @@ def _pass4(form, sheet, facts):
             said |= c
     while len(keep) < OBS_MIN and dropped:
         keep.append(dropped.pop(0)[1])   # never at the cost of the whole answer
+    keep.sort(key=lambda x: obs.index(x) if x in obs else len(obs))   # (in the order they came)
     for why, x in dropped:
         form["dropped"].append(("observation", why, x))
     form["observations"] = keep
     # V4: a so-what is a step code can take, tied to what the answer named; a notice with none is a bullet
     sw = form.get("so_what")
-    if os.environ.get("MVP_DBG4"):
-        print("DBG4 so_what:", repr(sw), form.get("so_what_kind"), [(c.get("key"), c.get("n")) for c in (sheet or {}).get("so_what_candidates") or []], (sheet.get("library") or {}).get("saved_not_opened"))
     if sw and not _STEP.search(_norm(sw)):
         c = form.get("so_what_kind")
         faded = form.get("so_what_faded")
         if c in ("moving", "learning_faded") and faded:
             form["so_what"] = sw.rstrip() + f" Say \"only {faded}\" to see what you still open of it."
+        elif _SAVED_SW.search(_norm(sw)) and (any(isinstance(x, dict) and x.get("kind") in ("saved", "lapsed_saves")
+                                                   for x in (sheet or {}).get("so_what_candidates") or []) or
+                                               ((sheet or {}).get("library") or {}).get("saved_not_opened")):
+            form["so_what"] = sw.rstrip() + " Want them as a list?"   # "yes" lists them (code takes it)
         else:
             cl = _claims(sw, facts)
             if len(form["observations"]) < OBS_MAX and not (cl and cl <= said):
