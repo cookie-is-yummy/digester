@@ -284,9 +284,13 @@ class Library:
         if key not in memo:
             out = {t.lower() for t in said}
             w = words.lower().strip()
-            for area, ws in CATEGORY_WORDS.items():
-                if w in ws or w == area.lower():
-                    out |= {self.theme_of[i] for i in self.area_of if self.area_of[i] == area and i in self.theme_of}
+            # a complete list (the sheet's filters.topic_themes) is taken as given; a list cut at 4 (a topic row as the
+            # writer is shown it) is completed by the themes of the area the word names
+            if len(out) == 4 or not out:
+                for area, ws in CATEGORY_WORDS.items():
+                    if w in ws or w == area.lower():
+                        out |= {self.theme_of[i] for i in self.area_of if self.area_of[i] == area and
+                                i in self.theme_of}
             memo[key] = out
         return memo[key]
 
@@ -433,8 +437,6 @@ def resolve(spec, lib, today):
         prev = (a - n, a - 1)
     else:
         a, b = None, newest
-    if a is not None and oldest is not None and a < oldest:
-        a = max(a, oldest)
     if prev is not None and oldest is not None and prev[1] < oldest:
         prev = None
     return a, b, prev
@@ -521,7 +523,7 @@ class Ctx:
         self._sc = {}
         said = {}
         if topic:
-            said[topic.lower()] = list(fl.get("topic_themes") or [])
+            said[topic.lower()] = list(fl.get("topic_themes") or []) or ["(none)"]
         for t in self.sheet.get("topics") or []:
             if isinstance(t, dict) and t.get("name"):
                 said.setdefault(t["name"].lower(), list(t.get("themes") or []))
@@ -600,10 +602,20 @@ def audit_sheet(ctx, F):
         F.add("sheet", kind, ok, said, rec, where=path, note="used" if path in used else "")
 
     w = sh.get("window") or {}
-    if w.get("start") and ctx.a is not None:
-        chk("window.start", date.fromisoformat(w["start"]).toordinal(), ctx.a, "window")
-    if w.get("end") and ctx.b is not None:
-        chk("window.end", date.fromisoformat(w["end"]).toordinal(), ctx.b, "window")
+    a0 = ctx.a if ctx.a is not None else lib.oldest
+    if w.get("start") and w.get("end") and a0 is not None:
+        ws, we = date.fromisoformat(w["start"]).toordinal(), date.fromisoformat(w["end"]).toordinal()
+        ok = (ws, we) == (a0, ctx.b)
+        F.add("sheet", "window read", ok, f"{w['start']}..{w['end']}",
+              f"{_d(a0).isoformat()}..{_d(ctx.b).isoformat() if ctx.b else None}" if a0 <= (ctx.b or 0) else
+              f"{_d(a0).isoformat()} (after the record)", where="window", note="used", severity=2.0)
+        if not ok:
+            ctx.window_differs = True
+            return   # every count of another window would differ: the window is the one finding
+    topic = (sh.get("filters") or {}).get("topic")
+    if topic and re.search(r"\b" + re.escape(topic.lower()) + r"\s+(?:and|&)\s+\w+", ctx.ans.get("text", "").lower()):
+        F.add("sheet", "topic read (cut)", False, topic, "the question's longer name", where="filters.topic",
+              note="used", severity=1.5)
     S = ctx.sc("filt")
     ids = list(S)
     n = len(ids)
@@ -783,7 +795,7 @@ def rk_t(lib, ids, name):
 
 
 # ============================================================================ 2 and 3. the sent text
-_PCT = re.compile(r"(\d+(?:\.\d+)?)\s?%")
+_PCT = re.compile(r"(\d+(?:[.,]\d{1,2})?)\s?%")
 _BAR = re.compile(r"^[█░▏▎▍▌▋▊▉]+\s+")
 _BASE = [   # (pattern after the number, base key); the first that matches the words right after the number
     (re.compile(r"^\s*of (?:everything|all|what) you (?:opened|watched)|^\s*of everything\b|^\s*of your watching|"
@@ -796,7 +808,7 @@ _BASE = [   # (pattern after the number, base key); the first that matches the w
     (re.compile(r"^\s*of your (?P<x>[a-z0-9][a-z0-9 &'-]*?) videos"), "x"),
     (re.compile(r"^\s*of (?:their|its|his|her) (?:own )?videos"), "own"),
     (re.compile(r"^\s*of the videos you opened from (?P<x>.+?)(?:[,.;)]|$)"), "chan"),
-    (re.compile(r"^\s*of them\b"), "them"),
+    (re.compile(r"^\s*of (?:them|it|these|those)\b"), "them"),
 ]
 _CAPTION_BASE = [(re.compile(r"^share of what you opened", re.I), "all"),
                  (re.compile(r"shorts' share of your youtube videos", re.I), "yt"),
@@ -970,6 +982,8 @@ class TextAudit:
                 return "filt" if self.ctx.f.get("without_shorts") else "long"
             if key == "chan":
                 return ("ownof", ("channel", m.group("x").strip()))
+            if key == "them":
+                return ("them", None)
             return key
         return None
 
@@ -1033,6 +1047,15 @@ class TextAudit:
         if not m:
             return
         val, pct, label = m.group(1).replace(",", ""), m.group(2), m.group(3).strip()
+        scope = "cur"
+        ym = re.search(r"\s(20\d\d)$", label)
+        if ym:
+            label = label[:ym.start()].strip()
+            if self.ctx.prev and date.fromordinal(self.ctx.prev[1]).year == int(ym.group(1)) and \
+                    date.fromordinal(self.ctx.b).year != int(ym.group(1)):
+                scope = "prev"
+        elif cap and "against" in cap.lower():
+            return   # a cut label of a two-span chart: which span it is cannot be read
         e = self.names.found.get(label.lower().rstrip("…"))
         if e is None and label.endswith("…"):
             pre = label[:-1].lower()
@@ -1044,17 +1067,29 @@ class TextAudit:
             got = cands.get(base) if isinstance(base, str) else self.share_of_base(base, e)
             self.judge_share(float(val), base, cands, got, e, "chart share", about=False)
         elif not pct and e is not None and not re.fullmatch(r"20\d\d", val):
-            n = _count_of(self.lib, self.base_ids("filt"), e)
-            self.F.add("base", "chart count", n == int(val), int(val), n, where=ent_code(e))
+            n = _count_of(self.lib, self.base_ids("filt", scope=scope), e)
+            self.F.add("base", "chart count", n == int(val), int(val), n, where=ent_code(e),
+                       note="the span before" if scope == "prev" else "")
 
     def judge_share(self, said, base, cands, got, e, kind, about=False, sub=None):
         fits = sorted(k for k, v in cands.items() if close_share(said, v, about))
         where = ent_code(e) + (" in " + ent_code(sub) if sub else "")
         if base is None:
-            vals = {round(v * 100, 1) for v in cands.values()}
-            if len(vals) > 1 and not (max(vals) - min(vals) <= 1.0):
-                self.F.add("base", "no base said", bool(fits), said, {k: round(v * 100, 1) for k, v in cands.items()},
-                           where=where, note="fits: " + ",".join(fits), severity=0.6 if fits else 1.0)
+            # what a reader could take it as: of everything, of the YouTube videos (with a known length, for Shorts),
+            # or, on a filtered answer, of the filtered videos; a share with no base said where those differ by more
+            # than 2 points is reported (U9: "N% of them were Shorts" must say whose)
+            keys = ["all", "filt"] if self.filtered else ["all", "yt"]
+            if e[0] in ("shorts", "long"):
+                keys = ["all", "yt", "known"] + (["filt", "filt_known"] if self.filtered else [])
+            plaus = {k: round(cands[k] * 100, 1) for k in keys if k in cands}
+            if len(plaus) > 1 and max(plaus.values()) - min(plaus.values()) > 2.0:
+                self.F.add("base", "no base said", False, said, plaus, where=where,
+                           note="fits: " + (",".join(fits) or "none"), severity=0.4 if fits else 1.0)
+            elif not fits and cands:
+                self.F.add("base", "share (no base said, fits no base)", False, said,
+                           {k: round(v * 100, 1) for k, v in cands.items()}, where=where, severity=1.0)
+            else:
+                self.F.add("base", "share (no base said, bases agree)", True, said, plaus, where=where)
             return
         if got is None:
             self.F.add("base", kind + " (base not recounted)", True, said, None, where=where, note=str(base))
@@ -1077,7 +1112,7 @@ class TextAudit:
         low = s.lower()
         ms = list(_PCT.finditer(s))
         out = []
-        years = [int(y) for y in re.findall(r"\bin (20\d\d)\b", s)]
+        years = [int(y) for y in re.findall(r"\b(?:in|en) (20\d\d)\b", s)]
         for k, m in enumerate(ms):
             before, after = s[:m.start()], s[m.end():]
             if re.match(r"^\s*on a usual day", after.lower()):
@@ -1124,9 +1159,22 @@ class TextAudit:
                 e = ents[-1][2]
             # "from X% (in Y1) to Y% (in Y2)": X before, Y now (or the two years of a change)
             scope = "cur"
-            per = re.match(r"^\s*in (20\d\d)\b", after)
-            frm = re.search(r"\bfrom\s*$", before[-6:].lower())
-            to = re.search(r"\bto\s*$", before[-4:].lower()) and re.search(r"from \d+(?:\.\d+)?%[^%]*$", before.lower())
+            per = re.match(r"^\s*(?:in|en) (20\d\d)\b", after)
+            frm = re.search(r"\b(?:from|de)\s*$", before[-6:].lower())
+            to = re.search(r"\b(?:to|a)\s*$", before[-4:].lower()) and \
+                re.search(r"(?:from|de) \d+(?:[.,]\d+)?%[^%]*$", before.lower())
+            # "N% were Shorts", "58% of your YouTube videos were Shorts", "100% of it was Shorts": the record after
+            wr = re.match(r"^\s*(?:of [^,.;%]*?\s)?(?:were|was|are|is)\s+(?:all\s+)?(Shorts|long)\b", after)
+            if wr:
+                e = ("shorts", "Shorts") if wr.group(1) == "Shorts" else ("long", "long videos")
+            # "up to 61% of your minecraft videos, from 20% in ...": the same record, its value before
+            if out and frm:
+                gap = s[out[-1]["m"].end():m.start()]
+                gap_wo = re.sub(r"of (?:your|the) [^,;]*?videos(?: on youtube)?", "", gap, flags=re.I)
+                if not re.search(r"\bwhile\b|;", gap) and not any(out[-1]["m"].end() <= sp[0] < m.start() and
+                                                                    gap_wo.find(s[sp[0]:sp[1]]) >= 0 for sp in spans):
+                    e = out[-1]["e"]
+                    after = out[-1]["after"] if not re.match(r"^\s*of ", after) else after
             if per:
                 scope = self.year_scope(int(per.group(1)))
             elif ctx.kind == "changed" and (frm or to) and len(years) >= 2:
@@ -1141,6 +1189,8 @@ class TextAudit:
                 scope = "prev"
             elif re.match(r"^\s*(?:in|against) (20\d\d)\b", after) and ctx.prev:
                 scope = "prev"
+            if frm and ctx.kind != "changed" and not per:
+                scope = "prev" if ctx.prev else scope
             # whose base: the words after the number (or after the last number of its run)
             last = m
             j = k
@@ -1148,10 +1198,10 @@ class TextAudit:
                 j += 1
                 last = ms[j]
             their = re.match(r"^\s*of (?:their|its) (?:own )?videos", s[last.end():].lower())
-            if per and out and out[-1]["scope"].startswith("period:") and \
-                    not re.search(r"\bwhile\b|;|\bagainst\b", s[out[-1]["m"].end():m.start()]):
+            if per and out and out[-1]["scope"].startswith("period:") and not wr and \
+                    not re.search(r"\bwhile\b|;|\bagainst\b|\bmientras\b", s[out[-1]["m"].end():m.start()]):
                 e = out[-1]["e"]   # "22% in 2020, up to 48% in 2022, ... and 16% in 2026": one record's years
-            out.append({"m": m, "said": float(m.group(1)), "about": about, "e": e, "scope": scope,
+            out.append({"m": m, "said": float(m.group(1).replace(",", ".")), "about": about, "e": e, "scope": scope,
                         "after": s[last.end():], "their": bool(their), "names": ents, "pos": pos,
                         "run_start": first.start()})
         return out
@@ -1169,7 +1219,10 @@ class TextAudit:
                 # "A and B are both about T (100% and 99% of their videos)": T's share of each channel's videos
                 chans = [sp[2] for sp in spans if sp[1] <= p["run_start"] and sp[2][0] == "channel"]
                 subs = [sp[2] for sp in spans if sp[1] <= p["m"].start() and sp[2][0] in ("theme", "area", "topic")]
-                if e[0] != "channel" and chans and len(chans) > p["pos"]:
+                one = not re.match(r"^\s*(?:,|and)\s*\d", s[p["m"].end():]) and p["pos"] == 0
+                if one and chans:
+                    e = chans[-1]   # "X is about T (44% of its videos)": the channel right before
+                elif e[0] != "channel" and chans and len(chans) > p["pos"]:
                     e = chans[p["pos"]]
                 if e[0] == "channel" and subs:
                     cands = self.candidates(e, sub=subs[-1], scope=scope)
@@ -1179,6 +1232,12 @@ class TextAudit:
                 if e[0] in ("theme", "area") and chans:
                     continue
             base = self.said_base(p["after"], e)
+            if base == ("them", None):   # "100% of it was Shorts": of the record named before
+                prior = [sp[2] for sp in spans if sp[1] <= p["m"].start() and sp[2] != e and
+                         sp[2][0] in ("theme", "area", "topic", "channel")]
+                base = ("ownof", prior[-1]) if prior else None
+                if base is None:
+                    continue
             if base is None and sentence_base is not None and base_kind == e[0]:
                 base = sentence_base   # "comedy (14% of what you opened) and gaming (10%)"
             if base is None and re.search(r"\byour watching\b|\bwhat you opened\b|\bof everything\b", low) and \
@@ -1198,12 +1257,44 @@ class TextAudit:
         self.words(s, spans, sentence_base)
         return sentence_base
 
+    def context_ids(self, s, spans, at=None):
+        """The scope a sentence speaks of: the window's filtered videos, narrowed by "Behind <theme>:", "Inside
+        <area>," or "its top channels" (the theme named before), and by one year named in it ("2020 leaned most on",
+        "In 2021, ...") when the window runs over several years."""
+        lib, ctx = self.lib, self.ctx
+        ids = self.base_ids("filt")
+        low = s.lower()
+        m = re.match(r"^\s*(?:behind|inside|in|within)\s+", low)
+        if m:
+            e = next((sp[2] for sp in spans if sp[0] == m.end()), None)
+            if e is not None and e[0] in ("theme", "area", "topic"):
+                ids = [i for i in ids if lib.member(i, e)]
+        elif re.search(r"\b(?:its|their) (?:top |main )?channels\b|\bthe channels behind\b|\bthe main channels behind\b",
+                       low):
+            e = next((sp[2] for sp in reversed(spans) if sp[2][0] in ("theme", "area") and (at is None or sp[0] < at)),
+                     None)
+            if e is None:
+                e = next((sp[2] for sp in spans if sp[2][0] in ("theme", "area")), None)
+            if e is not None:
+                ids = [i for i in ids if lib.member(i, e)]
+        yrs = set(re.findall(r"(?<![\d,])(20\d\d)(?![\d,])", s))
+        a0 = ctx.a if ctx.a is not None else lib.oldest
+        if len(yrs) == 1 and date.fromordinal(a0).year != date.fromordinal(ctx.b).year and \
+                not re.search(r"\b\d{1,2} [a-z]+ 20\d\d\b", low) and not re.search(r"\bsince\b", low):
+            y = int(next(iter(yrs)))
+            a_, b_ = date(y, 1, 1).toordinal(), date(y, 12, 31).toordinal()
+            ids = [i for i in ids if any(a_ <= e_[0] <= b_ for e_ in ctx.sc("filt")[i])]
+        return ids
+
     def counts(self, s, spans):
         lib, ctx = self.lib, self.ctx
         filt = self.base_ids("filt")
+        low = s.lower()
+        done = set()
         # "N of the M <X> videos" / "behind N of the M <X>"
         for m in re.finditer(r"\b(\d[\d,]*) of (?:the|your|its|their) (\d[\d,]*)\b", s):
             a_, b_ = int(m.group(1).replace(",", "")), int(m.group(2).replace(",", ""))
+            done |= {m.start(1), m.start(2)}
             after = s[m.end():]
             sub = next((sp[2] for sp in spans if sp[0] >= m.end() and sp[0] - m.end() < 6), None)
             subj = next((sp[2] for sp in reversed(spans) if sp[1] <= m.start()), None)
@@ -1224,66 +1315,140 @@ class TextAudit:
         # "on N (different) days"
         for m in re.finditer(r"\bon (\d[\d,]*) (?:different |separate )?days\b", s):
             n = int(m.group(1).replace(",", ""))
-            subj = next((sp[2] for sp in reversed(spans) if sp[1] <= m.start()), None)
+            done.add(m.start(1))
+            subj = next((sp[2] for sp in reversed(spans) if sp[1] <= m.start() and sp[2][0] != "shorts"), None)
+            if subj is not None and subj[0] == "topic" and subj[1].lower() == (ctx.f.get("topic") or "").lower():
+                subj = None
             sc = ctx.sc("filt")
             if subj is not None:
                 sc = {i: v for i, v in sc.items() if lib.member(i, subj)}
             d = lib.days(sc)
             self.F.add("base", "days", d == n, n, d, where=ent_code(subj) if subj else "window")
-        # "N long videos", "N Shorts", "N videos", "N total videos", "N <X> videos"
-        for m in re.finditer(r"\b(\d[\d,]*) (total |long |more )?(videos|shorts|ones)\b", s, re.I):
-            n = int(m.group(1).replace(",", ""))
-            if 1900 < n < 2100 and "," not in m.group(1):
+        # "<name> (48 videos)", "<name> (538)", "<name> led with 1,187 videos", "<name> at 767"
+        for m in re.finditer(r"\((\d[\d,]*)(?: videos?)?\)|\b(?:led with|at|with) (\d[\d,]*)(?: videos?)?(?=[ ,;.)]|$)", s):
+            g = m.group(1) or m.group(2)
+            pos = m.start(1) if m.group(1) else m.start(2)
+            if pos in done or re.match(r"^\d[\d,]*(?:[.,]\d)?\s*(?:%|in 20)", s[pos:]) or \
+                    re.match(r"^[.,]\d", s[m.end():]):
+                continue
+            n = int(g.replace(",", ""))
+            if 1900 < n < 2100 and "," not in g:
+                continue
+            e = next((sp for sp in reversed(spans) if sp[1] <= m.start() and m.start() - sp[1] <= 3), None)
+            if e is None or e[2][0] not in ("theme", "area", "channel", "topic"):
+                continue
+            done.add(pos)
+            ids = self.context_ids(s, spans, at=e[0])
+            got = _count_of(lib, ids, e[2])
+            self.F.add("base", "count of a record", got == n, n, got, where=ent_code(e[2]))
+        # "N in 2021", "against 4,474 in 2021": the topic's (or the window's) videos that year
+        for m in re.finditer(r"\b(\d[\d,]*) in (20\d\d)\b", s):
+            if m.start(1) in done or "%" in m.group(0):
+                continue
+            n, y = int(m.group(1).replace(",", "")), int(m.group(2))
+            done.add(m.start(1))
+            a_, b_ = date(y, 1, 1).toordinal(), date(y, 12, 31).toordinal()
+            ids = list(lib.scope(a_, b_, ctx.f))
+            e = next((sp[2] for sp in reversed(spans) if sp[1] <= m.start() and sp[2][0] in ("theme", "area", "channel")
+                      and not re.search(r"[;.]|\bwhile\b", s[sp[1]:m.start()])), None)
+            if e is not None:
+                ids = [i for i in ids if lib.member(i, e)]
+            got = len(ids)
+            self.F.add("base", "count in a year", got == n, n, got, where=(ent_code(e) + " " if e else "") + str(y))
+        # "N long videos", "N Shorts", "N videos", "N total videos", "N <name> videos"
+        for m in re.finditer(r"\b(\d[\d,]*)\s+([A-Za-z][A-Za-z '&-]{0,40}?\s)?(videos|video|Shorts|ones)\b", s):
+            if m.start(1) in done:
+                continue
+            g = m.group(1)
+            n = int(g.replace(",", ""))
+            if 1900 < n < 2100 and "," not in g:
                 continue
             pre = s[max(0, m.start() - 12):m.start()].lower()
-            if re.search(r"\bof (?:the|your)\s*$|\babout\s*$|\bfrom\s*$|\bto\s*$", pre) or m.group(2) == "more ":
+            if re.search(r"\bof (?:the|your)\s*$|\bfrom\s*$|\bto\s*$", pre):
                 continue
-            what = (m.group(2) or "").strip().lower() + " " + m.group(3).lower()
-            if "long" in what:
-                got = sum(1 for i in filt if lib.short.get(i) is False)
-                kind = "count of long videos"
-            elif "shorts" in what:
-                got = sum(1 for i in filt if lib.short.get(i) is True)
-                kind = "count of Shorts"
+            mid = (m.group(2) or "").strip()
+            words = mid.lower().split()
+            if any(w in ("more", "fewer", "less", "per", "a") for w in words):
+                continue
+            about = bool(re.search(r"\babout\s*$", pre))
+            ids = self.context_ids(s, spans, at=m.start())
+            rest = " ".join(w for w in words if w not in ("total", "different", "other", "youtube"))
+            what = m.group(3).lower()
+            ent = None
+            if rest.startswith("long") or what == "ones" and "long" in low[max(0, m.start() - 30):m.start()]:
+                ent, kind = ("long", ""), "count of long videos"
+                rest = rest[4:].strip()
+            elif what == "shorts":
+                ent, kind = ("shorts", ""), "count of Shorts"
             else:
-                got = len(filt)
                 kind = "count of videos"
-            # "1,094 minecraft videos" / "N gaming videos": the name right before
-            nm = next((sp[2] for sp in spans if sp[1] <= m.start() + len(m.group(0)) and sp[0] > m.start()), None)
-            if nm is not None and nm[0] in ("theme", "area", "topic", "channel") and \
-                    (self.ctx.f.get("topic") or "").lower() != nm[1].lower():
-                got = sum(1 for i in filt if lib.member(i, nm))
-                kind = "count of a record's videos"
-            self.F.add("base", kind, got == n, n, got, where=ent_code(nm) if nm else "window")
-        # "N against M" (a comparison's sides)
+            if rest:
+                e = self.names.found.get(rest)
+                if e is None:
+                    continue   # words this audit cannot bind ("whose title or theme is about")
+                if not (e[0] == "topic" and e[1].lower() == (ctx.f.get("topic") or "").lower()):
+                    ids = [i for i in ids if lib.member(i, e)]
+                    kind = "count of a record's videos"
+            if ent is not None:
+                ids = [i for i in ids if lib.member(i, ent)]
+            if re.search(r"\byou saved\b", low[:m.start()]):
+                # "You saved 5 <theme> videos (you never opened)": saved, never opened, on that theme
+                e = self.names.found.get(rest) if rest else None
+                ids = [i for i in lib.saved if i not in lib.opens and lib.items[i]["p"] == "youtube" and
+                       (e is None or lib.member(i, e))]
+                kind = "count of saved, never opened"
+            got = len(ids)
+            self.F.add("base", kind, close_count(n, got, about), n, got, where=ent_code(ent) if ent else "window")
+        # "N against M" (a comparison's two sides, now or in the span before)
         for m in re.finditer(r"\((\d[\d,]*) (?:[a-z ]+ )?against (\d[\d,]*)", s):
             tops = [t for t in self.ctx.sheet.get("topics") or [] if isinstance(t, dict) and t.get("name")]
             if len(tops) == 2:
-                vals = sorted([len(self.ctx.sc("topic:" + t["name"] + "|" + ";".join(t.get("themes") or [])))
-                               for t in tops], reverse=True)
-                said = [int(m.group(1).replace(",", "")), int(m.group(2).replace(",", ""))]
-                if "before" not in s[m.end():m.end() + 60] and not re.search(r"same part|in 20\d\d", s[:m.start()]):
-                    self.F.add("base", "comparison counts", said == vals, "/".join(map(str, said)),
-                               "/".join(map(str, vals)))
+                said = sorted([int(m.group(1).replace(",", "")), int(m.group(2).replace(",", ""))], reverse=True)
+                cur = sorted([len(self.ctx.sc("topic:" + t["name"] + "|")) for t in tops], reverse=True)
+                prev = []
+                if ctx.prev:
+                    f0 = {k: x for k, x in ctx.f.items() if k not in ("topic", "topic_themes")}
+                    prev = sorted([len(lib.scope(*ctx.prev, dict(f0, topic=t["name"]))) for t in tops], reverse=True)
+                yrs = {int(y) for y in re.findall(r"\b(?:in|en) (20\d\d)\b", s, re.I)}
+                before = bool(re.search(r"\bbefore\b|same part|\blast year\b", s, re.I)) or \
+                    bool(yrs and date.fromordinal(ctx.b).year not in yrs)
+                ok = said == (prev if before else cur)
+                self.F.add("base", "comparison counts", ok, "/".join(map(str, said)),
+                           "/".join(map(str, prev if before else cur)), note="the span before" if before else "")
 
     # ---------------------------------------------------------------- words
     def words(self, s, spans, base):
         lib, ctx = self.lib, self.ctx
         low = s.lower()
-        # mostly / most of / mainly: half
+        # mostly / most of / mainly: half, by the named records together ("mostly A and B"), of the scope it speaks of
         m = re.search(r"\b(?:mostly|mainly|primarily|predominantly|chiefly|most of (?:it|them|your \w+) (?:was|were))"
                       r"\s+(?:on |about |into )?", low)
         if m:
-            e = next((sp[2] for sp in spans if sp[0] >= m.end() - 1 and sp[0] - m.end() < 4), None)
-            if e is not None:
-                b = base or ("all" if not re.search(r"\bof your\b", low) else None)
-                share = self.share_of_base(b, e) if b else None
-                if share is None and b is None:
-                    share = self.share_of_base("all", e)
-                    b = "all"
-                if share is not None:
+            grp = []
+            for sp in spans:
+                if sp[0] < m.end() - 1:
+                    continue
+                gap = s[(grp[-1][1] if grp else m.end()):sp[0]]
+                if not grp and len(gap.strip()) > 4:
+                    break
+                if grp and not re.fullmatch(r"(?:\s*at \d+(?:[.,]\d+)?%)?\s*(?:,|and|,\s*and|\(\d+%\)\s*and)\s*", gap):
+                    break
+                grp.append(sp)
+            if grp:
+                ents = [g[2] for g in grp]
+                if ents[0][0] in ("shorts", "long"):
+                    ents = ents[:1]
+                b_ = base
+                if b_ is None:
+                    b_ = "filt" if (self.filtered and not re.search(r"\bof (?:everything|what you opened)\b", low)) \
+                        else "all"
+                if ents[0][0] in ("shorts", "long") and b_ in ("all", "filt"):
+                    b_ = b_   # Shorts "mostly" of everything (or the filtered scope) unless a base is said
+                ids = self.base_ids(b_) if isinstance(b_, str) and b_ not in ("own",) else None
+                if ids:
+                    share = sum(1 for i in ids if any(lib.member(i, e) for e in ents)) / len(ids)
                     self.F.add("word", "mostly (half)", share >= 0.5, ">=50%", round(share * 100, 1),
-                               where=ent_code(e), note="base " + (b if isinstance(b, str) else b[0]))
+                               where="+".join(ent_code(e) for e in ents), note="base " + b_, severity=1.0)
         # led / top / came first / ahead of / followed by / came next / close behind
         if re.search(r"\b(?:led|leads|top|topped|came first|ahead of|followed by|came next|close behind|then)\b", low):
             self.order(s, spans)
@@ -1315,45 +1480,51 @@ class TextAudit:
                            severity=1.0)
 
     def order(self, s, spans):
-        """Names said in an order of rank: the first 'led', then 'ahead of' / 'followed by' / 'then' the next ones."""
+        """Names said in an order of rank: the first 'led', then 'ahead of' / 'followed by' / 'then' the next ones,
+        ranked inside the scope the sentence speaks of (context_ids)."""
         lib = self.lib
         low = s.lower()
         named = [sp for sp in spans if sp[2][0] in ("theme", "area", "channel")]
         if not named:
             return
-        scope_ids = self.base_ids("filt")
-        y = re.search(r"\bin (20\d\d)\b", s)
-        if y and self.ctx.kind == "changed":
-            yy = int(y.group(1))
-            scope_ids = list(self.ctx.sc(f"period:{date(yy, 1, 1).toordinal()}:{min(date(yy, 12, 31).toordinal(), self.ctx.b)}"))
-        led = re.search(r"\b(led|leads|top|topped|came first)\b", low)
-        if led:
-            e = next((sp[2] for sp in reversed(named) if sp[1] <= led.start()), None) or \
-                next((sp[2] for sp in named if sp[0] >= led.end()), None)
-            if e is not None and not re.search(r"\bled by\b|\bwas led\b", low):
-                rk = _rank(lib, scope_ids, e[0])
-                key = e[1].lower() if e[0] == "theme" else e[1]
-                top = rk.most_common(1)[0] if rk else (None, 0)
-                ok = rk.get(key, 0) >= top[1]
-                self.F.add("word", "led (first)", ok, rk.get(key, 0), top[1], where=ent_code(e), severity=1.0)
-        seq = re.search(r"\b(ahead of|followed by|then|came next|close behind)\b", low)
+        led = re.search(r"\b(led|leads|topped|came first)\b|\bwas (?:the )?top\b", low)
+        if led and not re.search(r"\bled by\b|\bwas led\b|\bled every\b|\bled each\b", low):
+            e = next((sp for sp in reversed(named) if sp[1] <= led.start()), None) or \
+                next((sp for sp in named if sp[0] >= led.end()), None)
+            lead_in = re.match(r"^\s*(?:inside|in|within|behind)\s+", low)
+            if e is not None:
+                ids = self.context_ids(s, spans, at=e[0])
+                if lead_in and e is named[0] and e[0] == lead_in.end():
+                    e = named[1] if len(named) > 1 else None
+                if e is not None:
+                    e = e[2]
+                    rk = _rank(lib, ids, e[0])
+                    key = e[1].lower() if e[0] == "theme" else e[1]
+                    top = rk.most_common(1)[0] if rk else (None, 0)
+                    self.F.add("word", "led (first)", rk.get(key, 0) >= top[1], rk.get(key, 0), top[1],
+                               where=ent_code(e), severity=1.0)
+        seq = re.search(r"\b(ahead of|followed by|then|came next|close behind|with [^,.;]+ next)\b", low)
         if seq:
             kinds = Counter(sp[2][0] for sp in named)
             kind = kinds.most_common(1)[0][0]
-            chain = [sp[2] for sp in named if sp[2][0] == kind]
+            chain = [sp for sp in named if sp[2][0] == kind]
+            lead_in = re.match(r"^\s*(?:behind|inside|in|within)\s+", low)
+            if lead_in and chain and chain[0][0] == lead_in.end():
+                chain = chain[1:]
             if len(chain) >= 2:
-                rk = _rank(lib, scope_ids, kind)
-                vals = [rk.get(c[1].lower() if kind == "theme" else c[1], 0) for c in chain]
+                ids = self.context_ids(s, spans, at=chain[0][0])
+                rk = _rank(lib, ids, kind)
+                vals = [rk.get(c[2][1].lower() if kind == "theme" else c[2][1], 0) for c in chain]
                 ok = all(vals[k] >= vals[k + 1] for k in range(len(vals) - 1))
                 self.F.add("word", "order", ok, "/".join(map(str, vals)), "non-increasing",
-                           where=">".join(ent_code(c) for c in chain), severity=1.0)
+                           where=">".join(ent_code(c[2]) for c in chain), severity=1.0)
                 if re.search(r"\b(came next|close behind|followed by)\b", low) and ok:
                     order = [k for k, _ in rk.most_common()]
-                    k0 = chain[0][1].lower() if kind == "theme" else chain[0][1]
-                    k1 = chain[1][1].lower() if kind == "theme" else chain[1][1]
+                    k0 = chain[0][2][1].lower() if kind == "theme" else chain[0][2][1]
+                    k1 = chain[1][2][1].lower() if kind == "theme" else chain[1][2][1]
                     if k0 in order and k1 in order:
                         self.F.add("word", "next place", order.index(k1) == order.index(k0) + 1, order.index(k1) + 1,
-                                   order.index(k0) + 2, where=ent_code(chain[1]), severity=1.0)
+                                   order.index(k0) + 2, where=ent_code(chain[1][2]), severity=1.0)
 
     def ratio(self, s, m, spans):
         word = m.group(1)
@@ -1473,7 +1644,9 @@ def audit_first_last(ctx, F, text):
         return
     days = [e[0] for v in sc.values() for e in v]
     want = min(days) if ctx.kind == "first" else max(days)
-    m = re.search(r"\b(\d{1,2}) (" + "|".join(MONTHS) + r") (20\d\d)\b", text.lower())
+    first = (text or "").split("\n")[0]
+    F.sentence = first
+    m = re.search(r"\b(\d{1,2}) (" + "|".join(MONTHS) + r") (20\d\d)\b", first.lower())
     if m:
         said = date(int(m.group(3)), MONTHS.index(m.group(2)) + 1, int(m.group(1))).toordinal()
         F.add("base", "first or last date", said == want, _d(said).isoformat(), _d(want).isoformat(), severity=1.0)
@@ -1484,7 +1657,7 @@ def shape_of(ans):
     sh = ans.get("sheet") or {}
     f = sh.get("filters") or {}
     spec = ans.get("window") or {}
-    bits = [sh.get("kind") or "code-only", spec.get("kind") or "?"]
+    bits = [sh.get("kind") or "code-only", spec.get("kind") or "?", ans.get("how") or "?"]
     if f.get("topic"):
         bits.append("topic")
     if f.get("without_shorts"):
@@ -1514,8 +1687,9 @@ def audit_answer(lib, ans, today):
     F = Findings(ans["id"], shape_of(ans))
     if ctx.sheet:
         audit_sheet(ctx, F)
-        TextAudit(ctx, F).run(ans.get("sent") or "")
-        audit_first_last(ctx, F, ans.get("sent") or "")
+        if not getattr(ctx, "window_differs", False):
+            TextAudit(ctx, F).run(ans.get("sent") or "")
+            audit_first_last(ctx, F, ans.get("sent") or "")
     return F.rows
 
 
@@ -1575,12 +1749,11 @@ def capture(qfile, out, live=0, today=None):
     from mvp.store import Store
     from mvp.tests.r12_writer import fake_insight
     real = llm.chat_json
-    box = {"live_left": live, "seen": [], "spent": 0.0}
+    box = {"live_left": live, "seen": [], "spent": 0.0, "other": []}
 
     def door(system, user, purpose, prompt_version, **kw):
-        if purpose != "mvp_insight":
-            if box["mode"] == "live":
-                return real(system, user, purpose, prompt_version, **kw)
+        if purpose != "mvp_insight":   # a question code did not read as history: no paid call, its error reply
+            box["other"].append(purpose)
             raise RuntimeError("no model call but the writer's in a capture: " + purpose)
         if box["mode"] == "live" and box["live_left"] > 0:
             box["live_left"] -= 1
@@ -1613,7 +1786,7 @@ def capture(qfile, out, live=0, today=None):
         for k, text in enumerate(q["msgs"]):
             if k == 0:
                 store.set_state("history:" + h, {})   # a fresh conversation: no follow-up of the one before
-            box["seen"] = []
+            box["seen"], box["other"] = [], []
             n0 = len(ch.outbox)
             t0 = time.time()
             bot.on_message(h, text)
@@ -1629,7 +1802,8 @@ def capture(qfile, out, live=0, today=None):
             spec = (q.get("windows") or [None] * len(q["msgs"]))[k] if q.get("windows") else \
                 (q.get("window") if k == 0 else None)
             rec = {"id": aid, "text": text, "follow": k > 0, "sent": sent, "sheet": sheet,
-                   "form": seen["form"] if seen else None, "how": seen["how"] if seen else "code",
+                   "form": seen["form"] if seen else None,
+                   "how": seen["how"] if seen else ("not read by code" if box["other"] else "code"),
                    "cost": seen["cost"] if seen else 0.0, "seconds": round(time.time() - t0, 2),
                    "library": person["library"], "timezone": person.get("timezone") or "UTC",
                    "today": (today or date.today()).isoformat()}
