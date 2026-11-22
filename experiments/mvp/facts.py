@@ -736,6 +736,11 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             out["seasonal"] = _seasonal(idx, facts, th, ev, so, eo, rows)
         except Exception:  # noqa: BLE001 - extra; the sheet stands without it
             out["seasonal"] = []
+    if getattr(q.window, "label", None) and kind == "top" and so is not None and eo is not None and th is not None:
+        try:   # round 12, pass 3 (U8, row 8): what set the season apart from the rest of its year
+            out["distinct"] = _distinct(idx, facts, th, ev, so, eo, view)
+        except Exception:  # noqa: BLE001 - extra; the sheet stands without it
+            out["distinct"] = {}
     out["so_what_candidates"] = _so_what_candidates(out, kind, q)
     out["offers"] = _offers(q, kind, out)
     out["built_s"] = round(time.monotonic() - t0, 3)
@@ -752,6 +757,7 @@ LEARNING = {"education", "science", "math", "technology", "history", "diy and ma
 FUN = {"gaming", "comedy", "internet culture", "film and tv", "film and TV", "music", "sports"}
 SAVED_MIN = 3          # T5: a so-what about saved things needs at least 3 of them (never "1 video and 1 video")
 SHIFT_POINTS = 0.10    # T5: Shorts' share moved by at least 10 points against the span before
+MOVE_MIN = 0.03        # U5: an area's share moved by at least 3 points against the weeks before
 
 
 def _area_rows(sc, prev, facts, theme_rows):
@@ -902,6 +908,17 @@ def _so_what_candidates(out, kind, q):
                       "items": c0["items"], "previous_items": c0["previous_items"], "share": c0.get("share")})
     for x in out.get("seasonal") or []:
         c.append(dict(x, key="seasonal:" + x["theme"], kind="seasonal"))
+    if kind == "top" and prev and not getattr(getattr(q, "window", None), "label", None) and not long_w:
+        # round 12, pass 3 (U5, row 1): for "the most lately" the so-what is what is changing: what grew and what
+        # faded against the weeks before, said as something to notice (areas, a share moved by 3 points or more)
+        ar = [x for x in out.get("areas") or [] if isinstance(x.get("change_vs_previous"), (int, float))
+              and isinstance(x.get("previous_share"), (int, float))]
+        up = max(ar, key=lambda x: x["change_vs_previous"], default=None)
+        dn = min(ar, key=lambda x: x["change_vs_previous"], default=None)
+        if up and dn and up["change_vs_previous"] >= MOVE_MIN and dn["change_vs_previous"] <= -MOVE_MIN:
+            c.append({"key": "moving:" + up["name"], "kind": "moving", "grew": up["name"],
+                      "grew_from": up["previous_share"], "grew_to": up["share"], "faded": dn["name"],
+                      "faded_from": dn["previous_share"], "faded_to": dn["share"], "previous_words": prev.get("words")})
     if kind in ("first", "last"):
         ps = [p for p in out.get("periods") or [] if p.get("items")]
         if len(ps) >= 2:
@@ -909,8 +926,8 @@ def _so_what_candidates(out, kind, q):
             how = "deeper" if peak is last else ("still" if last["items"] >= 0.5 * peak["items"] else "faded")
             c.insert(0, {"key": "path:" + how, "kind": "path", "how": how, "last_label": last["label"],
                          "last_items": last["items"], "peak_label": peak["label"], "peak_items": peak["items"]})
-    order = {"path": 0, "lapsed_saves": 1, "learning_faded": 2, "channel_rise": 3, "seasonal": 4, "shorts_shift": 5,
-             "saved": 6}
+    order = {"path": 0, "moving": 1, "lapsed_saves": 1, "learning_faded": 2, "channel_rise": 3, "seasonal": 4,
+             "shorts_shift": 5, "saved": 6}
     # round 12, pass 2 fix: among saved things, a learning theme's first (a next step), then the most saved
     c.sort(key=lambda x: (order.get(x["kind"], 9),
                           0 if (themes.get(x.get("theme")) or {}).get("area") in LEARNING else 1, -(x.get("n") or 0)))
@@ -972,6 +989,41 @@ def _seasonal(idx, facts, th, ev, start_o, end_o, theme_rows):
         if years >= 3:
             out.append({"theme": t["name"], "years": years, "of_years": seen})
     return out[:1]
+
+
+DISTINCT_LIFT = 1.5      # U8: a theme of a season at least 1.5 times its share in the rest of that year
+DISTINCT_MIN = 0.02      # at least 2% of the season
+DISTINCT_POINTS = 0.015  # and at least 1.5 points above the rest of the year
+
+
+def _distinct(idx, facts, th, ev, so, eo, view=None):
+    """Round 12, pass 3 (U8, row 8: "say what made that season distinct against the year around it"): the themes whose
+    share of the season is at least 1.5 times their share of the rest of the same year (2% of the season or more, 1.5
+    points above it; on the real library no theme of a summer doubled), with both shares, and the words for the rest
+    of the year; {} when none."""
+    import numpy as np
+    a, b = date.fromordinal(so), date.fromordinal(eo)
+    ys, ye = date(a.year, 1, 1).toordinal(), date(a.year, 12, 31).toordinal()
+    inside = Scope(idx, facts, ev, so, eo)
+    year = Scope(idx, facts, ev, ys, ye)
+    rest = np.setdiff1d(year.items, inside.items)
+    n_in, n_rest = len(inside.items), len(rest)
+    if n_in < 50 or n_rest < 100:
+        return {}
+    t_in = Counter(facts.theme[inside.items][facts.theme[inside.items] >= 0].tolist())
+    t_rest = Counter(facts.theme[rest][facts.theme[rest] >= 0].tolist())
+    rows = []
+    for tid, c in t_in.items():
+        s_in, s_rest = c / n_in, t_rest.get(tid, 0) / n_rest
+        name = th.shown(tid)
+        if name and s_in >= DISTINCT_MIN and s_in >= DISTINCT_LIFT * max(s_rest, 1e-9) and \
+                s_in - s_rest >= DISTINCT_POINTS:
+            rows.append({"name": name, "share": round(s_in, 3), "rest_share": round(s_rest, 3), "items": int(c),
+                         "area": theme_area(th, tid)})
+    rows.sort(key=lambda r: -(r["share"] - r["rest_share"]))
+    if not rows:
+        return {}
+    return {"rest_words": f"the rest of {a.year}", "themes": rows[:3]}
 
 
 def _compare(topics, prev_topics, lang="en"):
@@ -1132,8 +1184,13 @@ def _offers(q, kind, out):
     if not getattr(q, "without_shorts", False) and (t.get("shorts") or 0) > 0 and kind not in ("first", "last"):
         offers.append("without_shorts")
     # round 12, pass 2 (T11): a ranking of channels is narrowed by its broad areas ("only gaming"), not by a theme
-    for r in ((out.get("areas") or []) if kind == "channels" else (out.get("themes") or []))[:2]:
-        if r.get("name") and not q.topic:
+    # round 12, pass 3 (U6): a top answer (or a change) leads with its areas: those are offered first, then its
+    # themes; the layout says only the ones the answer showed
+    rows_ = ((out.get("areas") or []) if kind == "channels" else
+             ((out.get("areas") or [])[:2] + (out.get("themes") or [])[:2]) if kind in ("top", "changed") else
+             (out.get("themes") or []))
+    for r in rows_[:4] if kind in ("top", "changed") else rows_[:2]:
+        if r.get("name") and not q.topic and "only_topic:" + r["name"] not in offers:
             offers.append("only_topic:" + r["name"])
     if kind not in ("day", "first", "last") and q.kind not in ("list", "on_day"):
         offers.append("show_videos")

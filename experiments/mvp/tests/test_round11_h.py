@@ -390,7 +390,7 @@ TRAPS = [json.loads(x) for x in """
 {"text": "remind me in october to renew my passport"}
 {"text": "add watch the new season to my list"}
 {"text": "every month send me a recipe i saved"}
-{"text": "what have i been into lately"}
+{"text": "what have i been saving lately"}
 {"text": "how many rules do i have"}
 {"text": "did my export come in"}
 {"text": "email me the last video i watched"}

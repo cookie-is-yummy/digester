@@ -458,7 +458,7 @@ def test_live_yes_to_a_so_what_on_two_themes_lists_both(wr, monkeypatch):
 
 def test_live_a_first_in_an_earlier_year_says_the_year_on_its_lines(wr):
     out, _ = ask(wr, QS["q4"])
-    assert "(10 Jan 2025, 10 min)" in out
+    assert "1. Wet Paper · 10 Jan 2025 · 10 min" in out   # round 12, pass 3 (U4): the card's caption line
 
 
 def test_one_hook_8h_and_the_order_inside_it_and_its_send_path():

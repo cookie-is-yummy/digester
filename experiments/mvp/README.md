@@ -561,6 +561,12 @@ each one the code answers.
    the same lines when it starts, with a WARNING when either is missing or stale; the trace of every history answer
    has the themes version (empty when there were none). The build is found by the library's real path (a `data/`
    folder reached through a symlink is the same library) or, failing that, by its content.
+4. The writer stops for a person whose spend today has reached the daily cap (`MVP_DAILY_CAP_USD`, $1.00 by default;
+   each history answer costs about $0.003 to $0.006): the code's own reply goes out instead, the shorter one with
+   counts. That is right for testers, but when you are grading answers, start the page with a higher cap for the day,
+   for example `MVP_DAILY_CAP_USD=8 python3 -m mvp.bot --channel web` (the total cap, `MVP_TOTAL_CAP_USD`, still holds). An
+   answer the cap kept from the writer says so in the trace (`python3 -m mvp.trace --web`): "daily cap reached" (or
+   "total cap reached") at the end of its run.
 
 What changed (the founder's grades of round 12 and the second judge's findings):
 - The writer (prompt `insight_v5`) never types a number: it names sheet paths ("{themes[0].share}") and code fills

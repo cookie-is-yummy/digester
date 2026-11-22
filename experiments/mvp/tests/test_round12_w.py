@@ -298,12 +298,16 @@ def test_a_day_first_or_last_gives_the_overview_then_the_items_with_their_cards(
     wr["bot"].view = lambda lib: View()
     wr["state"]["answers"]["mvp_insight"] = lambda u: c["fake"]
     parts = I.write(wr["bot"], wr["person"], c["sheet"], wr["clock"][0])
-    assert [p["type"] for p in parts] == ["text", "link", "link", "text"]
+    # round 12, pass 3 (U4): the overview, then each card with one caption line (no numbered list of the same items
+    # above them; the caption is its own line where a channel draws no cards, and on the card where it does)
+    assert [p["type"] for p in parts] == ["text", "text", "link", "text", "link", "text"]
     head = parts[0]["text"]
     assert head.startswith("You first opened a blender video on 14 March 2019")
+    assert "• " in head and "1. Blender donut" not in head
     # round 12, merge: an item of another year than the window's end says its year (live: a first of 2020 said "11 Apr")
-    assert head.index("• ") < head.index("1. Blender donut, part 1 by Pixel Forge (14 Mar 2019, 21 min)")
-    assert parts[1]["url"].endswith("vy1") and parts[-1]["text"].endswith("Want it with the videos?")
+    assert parts[1] == {"type": "text", "text": "1. Pixel Forge · 14 Mar 2019 · 21 min", "card_alt": True}
+    assert parts[2]["url"].endswith("vy1") and parts[2]["caption"] == "1. Pixel Forge · 14 Mar 2019 · 21 min"
+    assert parts[-1]["text"].endswith("Want it with the videos?")
 
 
 # round 12, fix: "bad_answer" and "one_observation" left this list: a well-formed form keeps what passed and code

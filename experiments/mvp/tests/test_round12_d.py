@@ -423,7 +423,9 @@ TRAPS = [
     "tell me a joke", "what can you do", "how have you changed", "what do you think of my taste",
     "delete my history from 2021", "follow that art channel for me", "remind me in the summer of 2027",
     "email me my top channels", "what should i watch tonight, art or gaming", "make me a playlist of art videos",
-    "i watched way too much gaming lol", "what have i been into lately", "what am i into", "what was i into",
+    # round 12, pass 3 (U2): "what have i been into lately" is read as the history's "the most" over the last 4 weeks
+    # (it left this list on purpose); "what am i into" and "what was i into" with no window stay out
+    "i watched way too much gaming lol", "what am i into", "what was i into",
 ]
 
 

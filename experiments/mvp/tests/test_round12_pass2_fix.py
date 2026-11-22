@@ -385,7 +385,8 @@ def test_saved_clips_are_no_so_what_and_saved_learning_comes_first():
     s["themes"].append({"name": "Paint basics", "area": "art and design", "items": 20, "share": 0.02})
     s["library"]["saved_not_opened"] = [{"theme": "Sketch edits", "n": 9}, {"theme": "Meme drops", "n": 7},
                                         {"theme": "Block battles", "n": 8}, {"theme": "Paint basics", "n": 3}]
-    keys = [x["key"] for x in F._so_what_candidates(s, "top", None)]
+    # round 12, pass 3 (U5): a top answer's "what is changing" (moving) comes first; the saved order is unchanged
+    keys = [x["key"] for x in F._so_what_candidates(s, "top", None) if x["kind"] != "moving"]
     assert keys[:2] == ["saved:Paint basics", "saved:Block battles"] and not [k for k in keys if "edits" in k
                                                                               or "memes" in k]
 
@@ -792,7 +793,8 @@ def test_channel_shorts_trivia_with_no_number_is_filler_on_a_top_answer():
     """Live, row 1 (picture): "X was your top channel and almost all Shorts, while Y leaned less on Shorts"."""
     kept, why = obs("{channels[0].name} was your top channel and almost all Shorts, while {channels[1].name} leaned "
                     "less on Shorts.")
-    assert kept is None and why == ["filler"]
+    # round 12, pass 3 (U1): "less on Shorts" names no path that supports it, so it goes before the filler rule
+    assert kept is None and why in (["filler"], ["direction_unbound"])
 
 
 def test_a_repeat_of_codes_answer_goes_when_code_can_fill_the_minimum():
