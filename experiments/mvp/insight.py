@@ -4661,7 +4661,8 @@ def _pass4(form, sheet, facts):
         m = _LED_BY.match(x or "")
         r = shares.get(" ".join(_words(m.group("n")))) if m else None
         if r is not None and "%" not in m.group("n"):
-            said_ = (n_ := " ".join(_words(m.group("n")))) and any(p_[0] == n_ for p_ in _pairs(form["answer"], facts))
+            n_ = " ".join(_words(m.group("n")))
+            said_ = n_ in set(facts.names_in(form["answer"])[0]) and _pc(r["share"]) in form["answer"]
             pct = "" if (_pc(r["share"]) in m.group("r") or said_) else f" ({_pc(r['share'])} of what you opened)"
             obs[i] = f"Behind {m.group('n')}{pct}: {m.group('r')}"
     said = _claims(form["answer"], facts)

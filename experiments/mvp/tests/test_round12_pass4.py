@@ -295,3 +295,7 @@ def test_live_a_themes_share_the_answer_says_is_not_added_to_its_channels_bullet
     form = {"answer": "You were into gaming by far the most; Meme drops peaked then, at 6%.", "so_what": None,
             "dropped": [], "observations": ["Meme drops was led by Meme Vault.", "Pixel Forge came on 12 days."]}
     assert I._pass4(form, s, I.Facts(I.shown(s)))["observations"][0] == "Behind Meme drops: Meme Vault."
+    # live, 2021: "<A> and <B> peaked then, at 11% and 5%" (the share not right after its name)
+    form = dict(form, dropped=[], answer="You were into gaming; Meme drops and Speed runs peaked then, at 6% and 5%.",
+                observations=["Meme drops was led by Meme Vault.", "Pixel Forge came on 12 days."])
+    assert I._pass4(form, s, I.Facts(I.shown(s)))["observations"][0] == "Behind Meme drops: Meme Vault."

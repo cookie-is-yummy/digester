@@ -5552,3 +5552,107 @@ the year; a channels lead in words); `test_round12_merge.py` (both filters said 
 ($0.086 with a setup), one stray call of my debugging script ($0.006), and the live run (a setup and 18 messages,
 $0.104). The writer's eval was rescored from saved forms (no call).
 <!-- end round 12, pass 3 fix -->
+
+### 19.P4 The fourth pass: what the fourth reading found, and what changed (round 12, pass 4; `insight.py`, `facts.py`, `eval_insight.py`, `eval/insight_cases.json`, `tests/test_round12_pass4.py`)
+
+The orchestrator's reading of dfdd68c listed V1 to V6 (outside git). Each was reproduced first on the real sheets (built by
+code, no model) with the writer's earlier live forms replayed offline, then on made-up data in
+`tests/test_round12_pass4.py` (17 tests, every one fails on dfdd68c). No titles, channel, theme or field names of the real
+library are written here. The prompt is unchanged (`insight_v5`): every change is in code's words and checks, and in one
+new fact of the sheet that the writer is not shown.
+
+**V1, a filtered sheet's base (a false sentence).** "440 Shorts made up 22% of your YouTube videos" on "most watched
+channels in math": 440 and 22% are the math videos' own (recount on the real sheet: 440 Shorts of the 1,956 math videos
+on YouTube with a known length, 22.5%), and "31% ... of your YouTube videos" on a first was the topic's own share (90 of
+291). Three places could lose the base: the writer's words ("of what you opened", "of everything", "of your YouTube
+videos", "of the YouTube videos you watched"; the prompt tells it a share is "of what you opened"), code's render, which
+turns a Shorts share "of everything" into "of your YouTube videos", and code's own templates and chart captions ("Share
+of what you opened", "Shorts' share of your YouTube videos", "Videos opened"). Now one function (`bases`, `based`,
+`based_chart`) words every sent sentence, the so-what and the chart caption of a filtered sheet with its own base, for
+every kind and whoever wrote it: a topic, an area or a theme ("of your math videos", "of your math videos on YouTube",
+"Math videos opened, by channel:"), a channel ("of the videos you opened from <channel>"), "without Shorts" ("of your long
+videos", "of your long gaming videos"), one platform; an unfiltered sheet is as it was. Planted cases (`"as": "sent"`, a
+sentence read through the check and the layout; caught when it is dropped or goes out without its false words): 8 base
+plants, code at dfdd68c 4 of 8 caught, after 8 of 8; the true ones kept with their base.
+
+**V2, asked what he was into.** `facts.into_question` ("into", "back in", "watching back", never "the most") gives a top
+sheet `into` (hidden from the writer): the window's own top themes that peaked then (its share at least 1.1 times its
+share in every other span of the same length the record holds, calendar years for a year, at least three such spans
+with 100 videos, and 1.5 times its median share of them; 2% and 20 videos at least) and those new then (before the
+window at most 5% as many). Code's lead answers what he was into: the biggest areas with their shares and what peaked
+or was new ("you were into comedy (14% of what you opened) and gaming (10%); your <theme> watching peaked then, at 5%,
+more than in any other three months"; a year one area led by far: "you were into gaming by far the most: 46% ..., well
+ahead of comedy (6%); <two themes> peaked then, at 11% and 5%, more than in any other year"); at most four numbers. The
+move to Shorts of a season is the first bullet (a MUST line), never the lead nor the so-what. The typical long video and
+the busiest hour are filler there and go; "Little else set the summer apart ..." is never said (only what ran at twice
+its share). On the real library: summer 2023 one theme peaked, 2021 two, the last 90 days one, the last 4 weeks none;
+no theme was new then in any. "What have i been watching the most lately" keeps row 1's lead.
+
+**V3, one fact once in other words.** `_claims`: what a sentence says as (record, measure) pairs: a sheet name with its
+share, its move, its count, its being new, or only its name; the window's Shorts by share or by count alike (with a
+number); the busiest hour; the typical long video. A bullet whose every claim the answer, code's MUST lines, the chart's
+rows or an earlier bullet said goes (keep the first; code's MUST line, with its comparison, counts as first); a bullet
+the so-what says goes; a bullet of moves half of which are said already goes (one fall in two bullets); never below the
+minimum (a bullet of code's that says something new takes its place, else it stays). A move the answer does not say is no
+repeat of its two numbers (live: "comedy grew from 9% to 14%" went as a repeat of "comedy (14%) and gaming (10%)"). A
+span's dates were already said once (19.P3 fix).
+
+**V4, a so-what is a step.** A so-what keeps its place only with a step code takes (a quoted "only X", "want them as a
+list?", "want to open them next?"): what fell (the learning side, the weeks' move) gets `Say "only <it>" to see what you
+still open of it.`, a saved one gets "Want them as a list?"; a notice with no step (the Shorts shift, a path with nothing
+saved) is a bullet when it says something new, else nothing.
+
+**V5, offers.** No "only <theme>" of fewer than 10 videos in the answer (live: "only <a theme>" of 3 videos under a day);
+no "by month" or "with the videos" under a first or a last (its videos and its path are shown).
+
+**V6, wording.** A word of the next place ("close behind", "came next", "runner-up", "trailing", "right behind") is said of
+the record right after the one before it in its list, else dropped as `rank` (live: the third channel "close behind" the
+first); 4 rank plants, code at dfdd68c 2 of 4 caught, after 4 of 4. "<theme> was led by / driven by A, B and C" is said
+"Behind <theme> (6% of what you opened): A, B and C", the share added unless the answer says it. A count code counted
+says what it counts: "1,094 videos whose title or theme is about minecraft" (never "about 1,094", nor "(by their titles
+and themes)").
+
+**Evals.** The planted-falsehood eval: 89 of 89 typed planted caught and 43 of 43 true kept, before and after; the v5 set
+60 of 60 and 27 of 27 before; with the two new made-up sheets (`channels_math`, `top_one_channel`) 72 planted and 32
+true: dfdd68c 66 caught and 31 kept, after 72 and 32. The writer's eval rescored from the last saved insight_v5 forms on
+the same 20 sheets (no model call), dfdd68c against the final code: answers 19 and 19, writer used 20 and 20, bullets kept
+52 and 52, a limits line 0 and 0, a run of counts 0 and 0, so-what 6 and 5 (cmp_years' Shorts shift has no step and the
+answer says the Shorts: none, V4). The other changes on those 20: firsts and lasts offer neither "by month" nor "with the
+videos" (V5), two saved so-whats get "Want them as a list?", a topic's chart caption says its videos, a bullet that said
+the chart's three rows again goes. No naming prompt or topic mapping changed (`themes.py` untouched), so those evals do not
+apply.
+
+**Live, read as the founder would** (my page on port 8795, a scratch home, the real library, `MVP_DAILY_CAP_USD=8`; the 8
+questions, "most watched channels in math", "what was i watching back in 2021", "what have i been into the last 3 months",
+then rows 8 and 2021 again after the fixes their reading found; 14 writer calls, 10 to 18 seconds each at the page,
+$0.004 to $0.006 a call; pictures at 430 px of rows 2, 6 and 8). Row 8 now answers what he was into (the areas, the theme
+that peaked that summer), the move to Shorts as its first bullet, nothing said twice, no hour or length filler; 2021 says
+gaming by far and the two themes that peaked that year, with what grew and fell as a so-what with its step; math says the
+Shorts of the math videos as theirs; row 4 says "31% of your blender videos on YouTube" and offers nothing the cards show;
+row 3's Shorts move is a bullet, not a so-what; row 6 offers only "without Shorts". Found by that reading and fixed (tests
+above): a bullet saying the chart's rows again, one fall in two bullets, a bullet the so-what says, a theme's share added
+that the answer said. Still not useful as the founder would read them: row 6 (a day's list is mostly what anyone could look
+up; its bullets on a 10-video day are thin); "the last 3 months" partly (its writer bullets, the channels behind a theme and
+a small theme's growth, are thin, and the peak it names is a small one). The writer's own bullets still vary from run to run.
+
+**Checks** (after the work): full suite 5,318 passed and 0 failed (4 shards); demo 10 passed; dry self-test 67
+conversations, 164 of 164 steps; `probe_same` byte-equal with `same_head.json`; the development phrasing set by code: 73
+helper lines right, 1 wrong (d007), 1 of 40 none lines taken (d132), the score file identical to the third pass's; the 159
+rule texts, the 123 phrasings and the round 11 and round 12 traps are held by the suite and pass. No reply of picks,
+recalls, summaries, asking videos, rules, emails, cancels or connectors changed.
+
+**Test lines changed on purpose**: `test_round12_pass3_fix.py` ("Little else set the summer apart" is never said, V2; a
+count says what it counts, V6); `test_round12_pass3.py` (three: the Shorts shift is a bullet, not a so-what, V4);
+`test_round12_pass2_fix.py` (the learning side's so-what with its step, twice, V4; the Shorts shift as a bullet, three
+times, V4; a count says what it counts, V6); `test_round12_pass2.py` (a notice with no step is no so-what, and here no
+bullet either as the answer says the Shorts, V4/V3; a count says what it counts, twice, V6); `test_round12_w.py` (a first
+offers no "with the videos", V5); `test_round12_merge.py` ("yes" to a so-what on two themes: the first group says the 3
+saved videos the so-what's offer names, since a path with no step is a bullet, V4).
+
+**Spend**: $0.075 by the ledger ($24.939 before, $25.014 after): 14 writer calls at the page, no setup (the page's store
+was copied from the third pass's). The evals were rescored from saved forms (no call).
+
+**Not done.** Spanish answers keep their words (the base, the into lead, the steps and the claims are English only). A
+theme "new then" is rare on a record where every theme recurs (none on the real library's windows asked). The claims are
+read from the sentence's names and numbers: a repeat said with no number and no sheet name is not seen.
+<!-- end round 12, pass 4 -->
