@@ -41,6 +41,7 @@ import re
 import statistics
 import sys
 import time
+import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -100,11 +101,12 @@ def holds(text, phrase):
     want = [_stem(w) for w in _TOK.findall(phrase.lower())]
     if not want:
         return False
-    toks = [_stem(t) for t in _TOK.findall((text or "").lower())]
+    text = unicodedata.normalize("NFKC", text or "")   # the text as it reads: "ᵃʳᵗ" is "art"
+    toks = [_stem(t) for t in _TOK.findall(text.lower())]
     if len(want) > 1:
         return any(toks[i:i + len(want)] == want for i in range(len(toks) - len(want) + 1))
     w = want[0]
-    raw = _TOK.findall((text or "").lower())
+    raw = _TOK.findall(text.lower())
     return any(t == w or (len(w) >= 4 and t.endswith(w)) or (r.startswith(w) and r[len(w):] in ("y", "ey", "ed", "ing"))
                for t, r in zip(toks, raw))
 
@@ -272,7 +274,8 @@ class Library:
         if f.get("channel") and it["c"] != f["channel"]:
             return False
         if f.get("topic"):
-            if not self.on_topic(i, f["topic"], f.get("topic_themes") or ()):
+            if not self.on_topic(i, f["topic"], f.get("topic_themes") or ()) and \
+                    not any(holds(it["cap"], w) for w in f.get("topic_also") or ()):
                 return False
         return True
 
@@ -513,6 +516,9 @@ class Ctx:
         if topic:
             self.f["topic"] = topic
             self.f["topic_themes"] = fl.get("topic_themes") or []
+            m = re.search(r"\b" + re.escape(topic.lower()) + r"\s+(?:and|&)\s+(\w+)", (ans.get("text") or "").lower())
+            if m:   # "art and design" read by code as two topics (art or design), its sheet saying only the first
+                self.f["topic_also"] = [m.group(1)]
         if fl.get("without_shorts"):
             self.f["without_shorts"] = True
         if fl.get("channel"):
@@ -539,7 +545,8 @@ class Ctx:
         elif which == "all":
             v = lib.scope(self.a, self.b, {k: x for k, x in self.f.items() if k == "platform"})
         elif which == "nofilt_topic":   # the window without the topic (a count's "of N then")
-            v = lib.scope(self.a, self.b, {k: x for k, x in self.f.items() if k not in ("topic", "topic_themes")})
+            v = lib.scope(self.a, self.b, {k: x for k, x in self.f.items()
+                                           if k not in ("topic", "topic_themes", "topic_also")})
         elif which == "prev":
             v = lib.scope(*self.prev, self.f) if self.prev else {}
         elif which == "prev_all":
@@ -549,7 +556,7 @@ class Ctx:
             v = lib.scope(int(a), int(b), self.f)
         elif which.startswith("topic:"):
             word, themes = which[6:].split("|", 1)
-            f = {k: x for k, x in self.f.items() if k not in ("topic", "topic_themes")}
+            f = {k: x for k, x in self.f.items() if k not in ("topic", "topic_themes", "topic_also")}
             f.update(topic=word, topic_themes=[t for t in themes.split(";") if t])
             v = lib.scope(self.a, self.b, f)
         else:
@@ -614,8 +621,8 @@ def audit_sheet(ctx, F):
             return   # every count of another window would differ: the window is the one finding
     topic = (sh.get("filters") or {}).get("topic")
     if topic and re.search(r"\b" + re.escape(topic.lower()) + r"\s+(?:and|&)\s+\w+", ctx.ans.get("text", "").lower()):
-        F.add("sheet", "topic read (cut)", False, topic, "the question's longer name", where="filters.topic",
-              note="used", severity=1.5)
+        F.add("sheet", "topic read (cut)", False, "1 topic named", "2 topics counted (the second word too)",
+              where="filters.topic", note="used", severity=1.5)
     S = ctx.sc("filt")
     ids = list(S)
     n = len(ids)
@@ -801,7 +808,8 @@ _BASE = [   # (pattern after the number, base key); the first that matches the w
     (re.compile(r"^\s*of (?:everything|all|what) you (?:opened|watched)|^\s*of everything\b|^\s*of your watching|"
                 r"^\s*of the window|^\s*of all your videos"), "all"),
     (re.compile(r"^\s*of (?:your|the) youtube videos with a (?:known )?length"), "known"),
-    (re.compile(r"^\s*of (?:your|the) youtube videos|^\s*of the youtube videos you"), "yt"),
+    (re.compile(r"^\s*of (?:your|the|the day's|that day's|the window's|the season's|the year's) youtube videos|"
+                r"^\s*of the youtube videos you"), "yt"),
     (re.compile(r"^\s*of your long (?P<x>[a-z][a-z &'-]*?) videos"), "long_x"),
     (re.compile(r"^\s*of your long videos|^\s*of the long videos"), "long_filt"),
     (re.compile(r"^\s*of your (?P<x>[a-z][a-z &'-]*?) videos on youtube"), "x_yt"),
@@ -1078,7 +1086,7 @@ class TextAudit:
             # what a reader could take it as: of everything, of the YouTube videos (with a known length, for Shorts),
             # or, on a filtered answer, of the filtered videos; a share with no base said where those differ by more
             # than 2 points is reported (U9: "N% of them were Shorts" must say whose)
-            keys = ["all", "filt"] if self.filtered else ["all", "yt"]
+            keys = ["all", "filt"] if self.filtered else ["all"]
             if e[0] in ("shorts", "long"):
                 keys = ["all", "yt", "known"] + (["filt", "filt_known"] if self.filtered else [])
             plaus = {k: round(cands[k] * 100, 1) for k in keys if k in cands}
@@ -1198,6 +1206,16 @@ class TextAudit:
                 j += 1
                 last = ms[j]
             their = re.match(r"^\s*of (?:their|its) (?:own )?videos", s[last.end():].lower())
+            if re.match(r"^\s*Shorts\b", s[last.end():]) and not wr:
+                # "A and B are clip channels (95% and 100% Shorts)": each channel's own Shorts share
+                chans = [sp[2] for sp in spans if sp[1] <= first.start() and sp[2][0] == "channel"]
+                grp = chans[-(j - run_start + 1):] if len(chans) >= j - run_start + 1 else []
+                if grp:
+                    out.append({"m": m, "said": float(m.group(1).replace(",", ".")), "about": about,
+                                "e": ("shorts", "Shorts"), "scope": scope, "after": " of its videos",
+                                "their": False, "names": ents, "pos": pos, "run_start": first.start(),
+                                "base": ("ownof", grp[pos])})
+                    continue
             if per and out and out[-1]["scope"].startswith("period:") and not wr and \
                     not re.search(r"\bwhile\b|;|\bagainst\b|\bmientras\b", s[out[-1]["m"].end():m.start()]):
                 e = out[-1]["e"]   # "22% in 2020, up to 48% in 2022, ... and 16% in 2026": one record's years
@@ -1231,7 +1249,7 @@ class TextAudit:
                     continue
                 if e[0] in ("theme", "area") and chans:
                     continue
-            base = self.said_base(p["after"], e)
+            base = p.get("base") or self.said_base(p["after"], e)
             if base == ("them", None):   # "100% of it was Shorts": of the record named before
                 prior = [sp[2] for sp in spans if sp[1] <= p["m"].start() and sp[2] != e and
                          sp[2][0] in ("theme", "area", "topic", "channel")]
@@ -1779,8 +1797,11 @@ def capture(qfile, out, live=0, today=None):
         for m in ("I agree", "skip", "skip", "skip"):
             bot.on_message(h, m)
         store.set_state("claims_setup:" + h, {"done": True})
-    with open(qfile, encoding="utf-8") as f:
-        qs = [json.loads(line) for line in f if line.strip()]
+    if qfile == "made-up":
+        qs = MADE_UP_QUESTIONS
+    else:
+        with open(qfile, encoding="utf-8") as f:
+            qs = [json.loads(line) for line in f if line.strip()]
     for q in qs:
         box["mode"] = "live" if q.get("live") else "fake"
         for k, text in enumerate(q["msgs"]):
@@ -1816,6 +1837,27 @@ def capture(qfile, out, live=0, today=None):
             print(aid, rec["how"], rec["seconds"], "s", file=sys.stderr)
     print(f"spent {box['spent']:.4f}", file=sys.stderr)
     return box["spent"]
+
+
+# ============================================================================ the made-up questions (in git)
+# Every kind, window and filter of DESIGN 19 in generic words; the real ones (the founder's and those generated from
+# his record) stay in scratch. `capture made-up` sends these.
+MADE_UP_QUESTIONS = [
+    {"id": "m01", "msgs": ["what have i been watching the most lately", "without shorts"], "window": {"kind": "lately"}},
+    {"id": "m02", "msgs": ["which channels did i watch the most in 2025"], "window": {"kind": "year", "year": 2025}},
+    {"id": "m03", "msgs": ["how many cooking videos did i watch this year"], "window": {"kind": "this_year"}},
+    {"id": "m04", "msgs": ["when did i first start watching cooking videos"], "window": {"kind": "all"}},
+    {"id": "m05", "msgs": ["did i watch more gaming or more cooking videos this year"], "window": {"kind": "this_year"}},
+    {"id": "m06", "msgs": ["what did i watch on october 30"], "window": {"kind": "day", "month": 10, "day": 30}},
+    {"id": "m07", "msgs": ["how has what i watch changed since 2024"], "window": {"kind": "since", "year": 2024}},
+    {"id": "m08", "msgs": ["what was i into in the summer of 2025"],
+     "window": {"kind": "season", "season": "summer", "year": 2025}},
+    {"id": "m09", "msgs": ["most watched channels in gaming", "without shorts"], "window": {"kind": "all"}},
+    {"id": "m10", "msgs": ["what have i been into the last 3 months"], "window": {"kind": "last_days", "days": 90}},
+    {"id": "m11", "msgs": ["how did my watching change from 2024 to 2025"],
+     "window": {"kind": "years", "from": 2024, "to": 2025}},
+    {"id": "m12", "msgs": ["what was i watching back in 2025"], "window": {"kind": "year", "year": 2025}},
+]
 
 
 # ============================================================================ questions from the record
@@ -1869,7 +1911,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("capture")
-    c.add_argument("questions")
+    c.add_argument("questions", help='a .jsonl of {"id", "msgs": [...], "window": {...}, "live": bool}, or made-up')
     c.add_argument("--out", required=True)
     c.add_argument("--live", type=int, default=0, help="at most this many live writer calls (questions marked live)")
     a = sub.add_parser("audit")

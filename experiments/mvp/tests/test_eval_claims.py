@@ -116,7 +116,7 @@ def test_window_reading():
         oldest = date(2019, 1, 1).toordinal()
     for text, kind in (("what have i been watching the most lately", "lately"),
                        ("what was i into in the summer of 2023", "season"),
-                       ("how did my watching change from 2023 to 2025", "years"),
+                       ("what did i watch from 2023 to 2025", "years"),
                        ("what did i watch in 2023 vs 2025", "years"), ("how has what i watch changed since 2020", "since"),
                        ("what have i been into the last 3 months", "last_days"),
                        ("which channels did i watch the most in 2025", "year"), ("what did i watch on october 30", "day"),
@@ -144,8 +144,8 @@ def _june_lib(tmp_path):
 
 def test_sheet_true_and_planted(tmp_path):
     lib, der = _june_lib(tmp_path)
-    spec = {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"}
-    true = {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"},
+    spec = dict(kind="range", start="2025-06-01", end="2025-06-30")
+    true = {"kind": "top", "filters": {}, "window": dict(start="2025-06-01", end="2025-06-30"),
             "totals": {"items": 100, "shorts": 50, "long": 30, "shorts_share": 0.625,
                        "by_platform": {"youtube": 80, "instagram": 20}},
             "themes": [{"name": "Block building", "items": 40, "share": 0.4, "previous_share": 0.0,
@@ -176,8 +176,8 @@ def test_base_of_shorts_and_of_everything(tmp_path):
     rows += [{"ch": "@igsome.one", "theme": None, "len": None, "p": "instagram", "at": [day(2025, 6, 5)]}
              for _ in range(20)]
     lib, der = make_lib(tmp_path, rows)
-    spec = {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"}
-    sheet = {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"},
+    spec = dict(kind="range", start="2025-06-01", end="2025-06-30")
+    sheet = {"kind": "top", "filters": {}, "window": dict(start="2025-06-01", end="2025-06-30"),
              "totals": {"items": 100}}
     for sent, ok in (("Your watching was mostly Shorts at 71%.", False),           # 71% is of the known; of all, 50%
                      ("Shorts were 71% of your YouTube videos.", False),           # of all YouTube videos: 62%
@@ -200,9 +200,9 @@ def test_base_of_their_videos_under_a_topic(tmp_path):
         if r["theme"] == 2:
             r["cap"] = "a math puzzle"
     lib, der = make_lib(tmp_path, rows)
-    spec = {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"}
+    spec = dict(kind="range", start="2025-06-01", end="2025-06-30")
     sheet = {"kind": "channels", "filters": {"topic": "math", "topic_themes": ["Number puzzles"]},
-             "window": {"start": "2025-06-01", "end": "2025-06-30"},
+             "window": dict(start="2025-06-01", end="2025-06-30"),
              "channels": [{"name": "Quiet Math", "items": 20}, {"name": "Sum Club", "items": 15}]}
     false = "Quiet Math and Sum Club are both about Number puzzles (100% and 100% of their videos)."
     rows_, _ = audit(lib, der, "most watched channels in math", sheet, spec, false)
@@ -216,8 +216,8 @@ def test_base_of_their_videos_under_a_topic(tmp_path):
 def test_counts_with_their_base(tmp_path):
     """(c): "You opened 30 long videos and only 31 total videos" on a without-Shorts answer."""
     lib, der = _june_lib(tmp_path)
-    spec = {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"}
-    sheet = {"kind": "top", "filters": {"without_shorts": True}, "window": {"start": "2025-06-01", "end": "2025-06-30"}}
+    spec = dict(kind="range", start="2025-06-01", end="2025-06-30")
+    sheet = {"kind": "top", "filters": {"without_shorts": True}, "window": dict(start="2025-06-01", end="2025-06-30")}
     rows_, _ = audit(lib, der, "what did i watch in june without shorts", sheet, spec,
                      "You opened 30 long videos and only 31 total videos.")
     got = {(r["kind"], r["said"], r["recount"]) for r in bad(rows_, "base")}
@@ -241,7 +241,7 @@ def test_peaked_against_every_span(tmp_path, may_bump, ok):
     """(a): the summer's 16% is the highest of the calendar seasons, but May to July (28 of 150) is higher."""
     lib, der = _season_lib(tmp_path, may_bump)
     spec = {"kind": "season", "season": "summer", "year": 2025}
-    sheet = {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-08-31"}}
+    sheet = {"kind": "top", "filters": {}, "window": dict(start="2025-06-01", end="2025-08-31")}
     sent = ("In the summer of 2025 (1 June to 31 August 2025), your Number puzzles watching peaked then, at 16%, "
             "more than in any other three months.")
     rows_, _ = audit(lib, der, "what was i into in the summer of 2025", sheet, spec, sent)
@@ -257,8 +257,8 @@ def test_word_claims(tmp_path):
                        year=2025)
     rows += rows_months({3: [("Pixel Forge", 1, 900, 40), ("Orbit Kitchen", 0, 900, 10)]}, year=2024)
     lib, der = make_lib(tmp_path, rows)
-    spec = {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"}
-    sheet = {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"},
+    spec = dict(kind="range", start="2025-06-01", end="2025-06-30")
+    sheet = {"kind": "top", "filters": {}, "window": dict(start="2025-06-01", end="2025-06-30"),
              "channels": [{"name": n} for n in ("Orbit Kitchen", "Pixel Forge", "Clip Barn")]}
     cases = [
         ("Mostly Pixel Forge.", "mostly", False),                       # 30 of 100
@@ -288,11 +288,11 @@ def test_every_year(tmp_path):
     lib, der = make_lib(tmp_path, rows)
     spec = {"kind": "years", "from": 2024, "to": 2025}
     sheet = {"kind": "changed", "filters": {}}
-    rows_, _ = audit(lib, der, "how did my watching change from 2024 to 2025", sheet, spec,
+    rows_, _ = audit(lib, der, "what did i watch in 2024 vs 2025", sheet, spec,
                      "Gaming led every year.")
     b = bad(rows_, "word", "every year")
     assert b and b[0]["recount"] == "2025"
-    rows_, _ = audit(lib, der, "how did my watching change from 2024 to 2025", sheet, spec,
+    rows_, _ = audit(lib, der, "what did i watch in 2024 vs 2025", sheet, spec,
                      "From 1 January 2024 to 31 December 2025, gaming fell from 67% in 2024 to 33% in 2025.")
     assert not bad(rows_), bad(rows_)
 
@@ -302,11 +302,11 @@ def test_summary_prints_codes_only(tmp_path, capsys):
     lib, der = _june_lib(tmp_path)
     out = tmp_path / "answers"
     out.mkdir()
-    sheet = {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"},
+    sheet = {"kind": "top", "filters": {}, "window": dict(start="2025-06-01", end="2025-06-30"),
              "totals": {"items": 99}, "channels": [{"name": "Pixel Forge"}, {"name": "Orbit Kitchen"}]}
     rec = {"id": "q1", "text": "what did i watch in june", "sent": "Mostly Pixel Forge, ahead of Orbit Kitchen.",
            "sheet": sheet, "form": {"answer": "{totals.items} videos"}, "library": lib, "timezone": "America/New_York",
-           "today": TODAY.isoformat(), "window": {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"}}
+           "today": TODAY.isoformat(), "window": dict(kind="range", start="2025-06-01", end="2025-06-30")}
     json.dump(rec, open(out / "a_q1.json", "w"))
     os.environ["MVP_DERIVED_HOME"] = der
     try:
@@ -319,3 +319,26 @@ def test_summary_prints_codes_only(tmp_path, capsys):
     for name in ("Pixel Forge", "Orbit Kitchen", "Block building", "gaming"):
         assert name not in printed and name not in json.dumps(summ)
     assert E.paths_of({"answer": "{themes[0].name} at {themes[0].share}"}) == {"themes[0].name", "themes[0].share"}
+
+
+# ---------------------------------------------------------------------------------------------- 5. against the product
+from mvp.tests.test_mvp import env  # noqa: E402,F401  (env is a fixture)
+from mvp.tests.test_round12_d import r12, person, mods, no_real_keys  # noqa: E402,F401  (fixtures)
+from mvp.tests.test_round12_merge import QS  # noqa: E402
+
+
+@pytest.mark.parametrize("key", sorted(QS))
+def test_the_auditor_agrees_with_the_sheets_of_the_made_up_library(r12, key):
+    """The brief's eight questions on the round 12 made-up library: every number the auditor can recount on the sheet
+    as the writer is shown it is the product's own (two readings of DESIGN 19 that share no code agree)."""
+    Hm, F, _L, _T = mods()
+    from mvp import insight as I
+    q = Hm.read(QS[key], TODAY)
+    s = F.build(r12["bot"], person(r12), q, r12["clock"][0], text=QS[key])
+    s["themes"] = [dict(t, change_vs_previous=round(t["change_vs_previous"] / 100, 4))
+                   if isinstance(t.get("change_vs_previous"), (int, float)) else t for t in s.get("themes") or []]
+    shown = json.loads(json.dumps(I.shown(s), default=str))
+    L = E.Library(str(r12["lib"]), None, "America/New_York", now=NOW)
+    rows = E.audit_answer(L, {"id": key, "text": QS[key], "sheet": shown, "sent": "", "form": None}, TODAY)
+    assert len([r for r in rows if r["audit"] == "sheet"]) >= 10, key
+    assert not bad(rows, "sheet"), [(r["where"], r["said"], r["recount"]) for r in bad(rows, "sheet")]
