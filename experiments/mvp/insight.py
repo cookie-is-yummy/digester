@@ -2496,6 +2496,9 @@ def check(raw, sheet, chart_vals=None, strict=False):
                 why = "repeat"
         if not why:
             why = _obs_more(text, out["answer"] or "", sheet, raw_obs, facts)
+        if not why and sum(1 for n in facts.names_in(text)[0] if len(n) >= 3 and len(re.findall(
+                r"(?<![a-z0-9])" + re.escape(n) + r"(?![a-z0-9])", _norm(text))) >= 2) >= 2:
+            why = "filler"   # round 12, pass 3 (U4, live, row 6: "A and B were new that day; A and B were also ...")
         if not why and re.search(r"\b(?:while|whereas|but|and)\b", _norm(text)) and any(
                 len(re.findall(r"(?<![a-z0-9])" + re.escape(n) + r"(?![a-z0-9])", _norm(text))) >= 2
                 for n in facts.names_in(text)[0] if len(n) >= 4):
@@ -3604,7 +3607,21 @@ def so_what_text(c, s, topic=None, lang=None):
     return None
 
 
-_SAVED_SW = re.compile(r"\bsaved\b|\bguardaste\b|\bguardad[oa]s?\b")
+_SAVED_SW = re.compile(r"\bsaved?\b|\bunopened\b|\bnever opened\b|\bguardaste\b|\bguardad[oa]s?\b")
+
+
+def _sw_says(sw, c, facts):
+    """Round 12, pass 3 (U5): the so-what's words are about its candidate (its theme, channel or areas; Shorts for a
+    Shorts shift; the topic's path for a first or a last)."""
+    k = c.get("kind")
+    low = _norm(sw)
+    if k == "shorts_shift":
+        return bool(re.search(r"\bshorts?\b|\bcortos?\b", low)) and not _SAVED_SW.search(low)
+    if k == "path":
+        return True
+    keys = [c.get(x) for x in ("theme", "channel", "faded", "grew") if c.get(x)]
+    said = set(facts.names_in(sw)[0]) | {w for w in [" ".join(_words(x)) for x in keys] if w and w in low}
+    return any(" ".join(_words(x)) in said for x in keys)
 _SAVED_OBS = re.compile(r"\b(?:saved|guardaste|guardad[oa]s?)\b|"   # pass 2 fix (live: "1 ... video stayed saved")
                         r"\b(?:saved|guardaste|guardad[oa]s?)\b.*\b(?:never|without opening|not opened|unopened|nunca|"
                         r"sin abrir)\b|\b(?:never|nunca) (?:opened|abriste)\b|\bsin abrir\b")
@@ -3751,6 +3768,11 @@ def fill(form, raw, sheet, chart_vals=None):
         if chosen is None and sheet.get("kind") not in ("first", "last"):
             form["dropped"].append(("so_what", "not_a_candidate", sw))
             sw = None
+    if sw and chosen is not None and not _sw_says(sw, chosen, facts):
+        # round 12, pass 3 (U5, live, row 8: a so-what about saved clips under the pick of the Shorts shift): the words
+        # are about the candidate picked, else code says that candidate in its own words
+        form["dropped"].append(("so_what", "not_its_candidate", sw))
+        sw = None
     if sw and chosen is not None and _SAVED_SW.search(_norm(sw)) and chosen.get("kind") not in ("saved",
                                                                                                   "lapsed_saves"):
         form["dropped"].append(("so_what", "not_its_candidate", sw))
@@ -3845,7 +3867,7 @@ def fill(form, raw, sheet, chart_vals=None):
             xv = [v for v, p in _pct_vals(x, facts) if p is True]
             shorts_move = ((chosen is not None and chosen.get("kind") == "shorts_shift") or
                            _SHORTS_SUBJ.search(_norm(sw))) and _SHORTS_SUBJ.search(_norm(x)) and re.search(r"\d", x)
-            if shorts_move or (len(xv) >= 2 and all(any(abs(a - b) <= 1 for b in swv) for a in xv)):
+            if shorts_move or (len(xv) >= 2 and sum(any(abs(a - b) <= 1 for b in swv) for a in xv) >= 2):
                 form["dropped"].append(("observation", "said_by_so_what", x))
             else:
                 keep.append(x)

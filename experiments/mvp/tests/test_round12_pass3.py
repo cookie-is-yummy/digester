@@ -519,3 +519,53 @@ def test_guard_a_top_sheet_copy_is_untouched_by_the_checks():
     I.fill(I.check({"answer": "{areas[0].name} led.", "observations": []}, s, strict=True),
            {"answer": "{areas[0].name} led.", "observations": []}, s)
     assert s == before and TOP["areas"][0]["share"] == 0.22
+
+
+# ================================ what my own live reading found (the real library; made-up data here) ==========
+def test_live_a_so_what_about_saved_clips_under_the_pick_of_the_shorts_shift_is_said_as_the_shift():
+    # live, row 8: "You might want to save the <clips theme> you left unopened: 6 are waiting." went out under the pick
+    # of the Shorts shift (its saved clips are no candidate)
+    I = ins()
+    s = top()
+    s["areas"][3]["change_vs_previous"] = -0.01   # no "what is changing" so-what
+    s["library"] = {"saved_not_opened": [{"theme": "Sketch edits", "n": 6}]}
+    s["so_what_candidates"] = [{"key": "shorts_shift:up", "kind": "shorts_shift", "direction": "up", "share": 0.737,
+                                "previous_share": 0.5}]
+    raw = {"answer": "{areas[0].name} led with {areas[0].share}.",
+           "observations": [{"text": "{themes[1].name} came on {themes[1].days} days.", "uses": []},
+                            {"text": "{areas[1].name} was {areas[1].share}.", "uses": []}],
+           "so_what": {"pick": "shorts_shift:up", "text": "You might want to save the "
+                                                          "{library.saved_not_opened[0].theme} you left unopened: "
+                                                          "{library.saved_not_opened[0].n} are waiting."}}
+    f = I.fill(I.check(raw, s, strict=True), raw, s)
+    assert ("so_what", "not_its_candidate") in [(d[0], d[1]) for d in f["dropped"]]
+    assert f["so_what"].startswith("Shorts went up to 74%"), f["so_what"]
+
+
+def test_live_a_bullet_that_names_the_same_two_names_twice_is_filler():
+    # live, row 6: "2 channels were new that day: A and B; A and B were also first watched that day."
+    kept, why = obs("{new.channels[0]} and {new.channels[1]} were new, with {channels[0].days} days; "
+                    "{new.channels[0]} and {new.channels[1]} were also first opened then.",
+                    top(new={"themes": [], "channels": ["Pixel Forge", "Doggo Plays"]}))
+    assert kept is None and why == ["filler"], why
+    kept, why = obs("{channels[0].name} came on {channels[0].days} days and {channels[1].name} on "
+                    "{channels[1].days}.")
+    assert kept and not why
+
+
+def test_live_a_bullet_with_the_so_whats_two_shares_goes_however_it_says_shorts():
+    # live, row 3: "minecraft rose from 20% shorts to 61%, and <theme> gained 20 points ..." above the so-what
+    # "Shorts went up to 61% of your minecraft videos, from 20% ..."
+    I = ins()
+    s = top()
+    s["areas"][3]["change_vs_previous"] = -0.01
+    s["so_what_candidates"] = [{"key": "shorts_shift:up", "kind": "shorts_shift", "direction": "up", "share": 0.737,
+                                "previous_share": 0.682}]
+    raw = {"answer": "{areas[0].name} led with {areas[0].share}.",
+           "observations": [{"text": "Your videos rose from {previous.shorts_share} shorts to {totals.shorts_share} "
+                                     "against {previous.words}.", "uses": []},
+                            {"text": "{themes[1].name} came on {themes[1].days} days.", "uses": []},
+                            {"text": "{areas[1].name} was {areas[1].share}.", "uses": []}],
+           "so_what": {"pick": "shorts_shift:up", "text": None}}
+    f = I.fill(I.check(raw, s, strict=True), raw, s)
+    assert f["so_what"] and not [x for x in f["observations"] if "74%" in x and "68%" in x], f["observations"]
