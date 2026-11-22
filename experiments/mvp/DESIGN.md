@@ -5143,7 +5143,8 @@ see this week" answer says it, T6); `selftest/conversations.jsonl` c40.1 (the hi
 v5 set added).
 
 **Live, read as the founder would** (my page on port 8795, a scratch home, the real library, three runs of the 8
-questions and the Spanish 7, $0.30 for everything this pass spent with the evals). The last run: 1 opens with the
+questions and the Spanish 7, and 3 pictures at 430 px; this whole pass spent $0.36 by the ledger, $23.31 before and
+$23.67 after, the three eval runs included). The last run: 1 opens with the
 areas (gaming most, then comedy, with the chart by area), the themes inside gaming, what grew and faded against the 4
 weeks before with numbers, Shorts against long; 2 the channel that led with its count, what each top channel is and
 how much of each is Shorts, what most of the top 5 are; 3 about 1,094 with the themes inside and Shorts, a chart by
