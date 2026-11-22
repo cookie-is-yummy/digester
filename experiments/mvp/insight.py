@@ -1223,14 +1223,19 @@ def offer_phrase(o, lang="en"):
     return w["es" if lang == "es" else "en"].format(topic=arg.strip())
 
 
+def offers_shown(sheet, chosen=None):
+    """The offers the line says (round 12, merge): the model's checked pick, else the sheet's first two; at most 3."""
+    allowed = [o for o in (sheet or {}).get("offers") or [] if isinstance(o, str)]
+    picks = [o for o in (chosen or []) if o in allowed] or allowed[:2]
+    return [o for o in picks[:OFFERS_MAX] if offer_phrase(o)]
+
+
 def offers_line(sheet, chosen=None, lang=None):
     """One line of follow-ups in words a person would type: 'Want it without Shorts, only cooking, or by month?'.
     `chosen` (the model's pick, checked) falls back to the sheet's first offers; only the sheet's offers are said."""
     lang = lang or (sheet or {}).get("lang") or "en"
-    allowed = [o for o in (sheet or {}).get("offers") or [] if isinstance(o, str)]
-    picks = [o for o in (chosen or []) if o in allowed] or allowed[:2]
     phrases = []
-    for o in picks[:OFFERS_MAX]:
+    for o in offers_shown(sheet, chosen):
         p = offer_phrase(o, lang)
         if p and p not in phrases:
             phrases.append(p)
@@ -1353,12 +1358,16 @@ def _ask_time_after(sheet):
     return bool(w.get("clipped"))
 
 
-def write(bot, person, sheet, now, info=None):
+def write(bot, person, sheet, now, info=None, say=None):
     """The history answer for one fact sheet, as message parts, or None (the caller sends today's code reply): the
     writer off, the cap reached, the model failing, the answer failing the check, or fewer than 2 observations left.
-    `info` (a dict, optional) gets the run's numbers: cost, seconds, kept, dropped, prompt_version."""
+    `info` (a dict, optional) gets the run's numbers: cost, seconds, kept, dropped, prompt_version.
+    `say` (round 12, merge; seam d): the notes the caller decided to say ("refresh", "friends"), decided in one place
+    (history._quiet_limits) for this reply and today's code reply alike; the caller then keeps the notes said. None:
+    the writer decides and keeps them itself (as built by W)."""
     info = info if info is not None else {}
-    info.update(prompt_version=PROMPT_VERSION, cost=0.0, seconds=0.0, kept=0, dropped=[], used=False)
+    info.update(prompt_version=PROMPT_VERSION, cost=0.0, seconds=0.0, kept=0, dropped=[], used=False, called=False,
+                so_what=False, offers_shown=[])
     if not on() or not isinstance(sheet, dict) or not sheet.get("kind"):
         return None
     try:
@@ -1369,6 +1378,7 @@ def write(bot, person, sheet, now, info=None):
         return None
     t0 = time.time()
     h = person.get("handle")
+    info["called"] = True
     try:
         raw, cost = call(sheet, person=h)
     except Exception as e:  # noqa: BLE001 - a failed call: today's code reply
@@ -1382,18 +1392,24 @@ def write(bot, person, sheet, now, info=None):
         return None
     lang = sheet.get("lang") or "en"
     extra, said = [], []
-    quiet = set()
-    try:
-        from . import history as Hs
-        quiet = Hs.said_lately(bot, h, now)
-    except Exception:  # noqa: BLE001 - no notes kept: the hint stays out
-        quiet = {"refresh", "friends"}
-    if _ask_time_after(sheet) and "refresh" not in quiet:
-        extra.append(REFRESH_SHORT[lang])
-        said.append("refresh")
-    if FRIENDS_ASK.search(str(sheet.get("question") or "")) and "friends" not in quiet:
-        extra.append(FRIENDS_LINE[lang])
-        said.append("friends")
+    if say is not None:   # round 12, merge (seam d): the caller decided, in one place for both replies
+        if "refresh" in say:
+            extra.append(REFRESH_SHORT[lang])
+        if "friends" in say:
+            extra.append(FRIENDS_LINE[lang])
+    else:
+        quiet = set()
+        try:
+            from . import history as Hs
+            quiet = Hs.said_lately(bot, h, now)
+        except Exception:  # noqa: BLE001 - no notes kept: the hint stays out
+            quiet = {"refresh", "friends"}
+        if _ask_time_after(sheet) and "refresh" not in quiet:
+            extra.append(REFRESH_SHORT[lang])
+            said.append("refresh")
+        if FRIENDS_ASK.search(str(sheet.get("question") or "")) and "friends" not in quiet:
+            extra.append(FRIENDS_LINE[lang])
+            said.append("friends")
     cards = []
     if sheet.get("kind") in ITEM_KINDS:
         try:
@@ -1412,5 +1428,6 @@ def write(bot, person, sheet, now, info=None):
             Hs.note_said(bot, h, now, said)
         except Exception:  # noqa: BLE001
             pass
-    info.update(used=True, said=said)
+    info.update(used=True, said=said, so_what=bool(form.get("so_what")),
+                offers_shown=offers_shown(sheet, form.get("offers")))
     return parts

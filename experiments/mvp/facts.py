@@ -436,7 +436,7 @@ def _periods(idx, facts, th, ev_mask, start_o, end_o, by=None):
     return out, unit
 
 
-def _saved_not_opened(view, idx, facts, th, tids, limit=3):
+def _saved_not_opened(view, idx, facts, th, tids, limit=10):   # round 12, merge: up to 10 ids, the list "yes" shows
     """YouTube videos the person saved (a playlist, a save) and never watched, on each of the themes `tids`."""
     import numpy as np
     if th is None or not tids:

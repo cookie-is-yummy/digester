@@ -2055,6 +2055,8 @@ def follow_up(st, text, today, known=None):
     if REMIND.search(t) or ACTING.search(t) or EVERY.search(t):
         return None
     r12 = follow_r12(q, t, known)   # round 12, D
+    if r12 is None and OFFER_LEAD.match(t):   # round 12, merge (seam b): "yes, without shorts", "sure, by month"
+        r12 = follow_r12(q, OFFER_LEAD.sub("", t, count=1), known)
     if r12 is not None:
         return r12
     m = ONES.match(t)
@@ -2063,7 +2065,7 @@ def follow_up(st, text, today, known=None):
     m = PICK.match(t)
     if m:
         return ("pick", ORD.get(m.group(1)) or int(m.group(1)))
-    if SHOW_THEM.match(t):
+    if SHOW_THEM.match(t) or WITH_VIDEOS.match(t):   # round 12, merge (seam b): the offer "with the videos"
         if q.kind in ("list", "on_day", "first", "last", "top_items"):
             return None
         kind = "on_day" if q.window.kind == "day" else "list"
@@ -2138,11 +2140,15 @@ def history_reads(bot, person, text, now):
             if th is not None and any(holds(th.shown(t) or "", x) for t in th.themes):
                 return True
             return any(holds(it.caption or "", x) for it in view.items.values())
+        if st.get("saved") and YES_SAVED.match(normal(text)):   # round 12, merge: the so-what's own offer
+            return _saved_list(bot, person, st, now)
         f = follow_up(st, text, today, known)
         if isinstance(f, tuple):
             return _pick(bot, person, st, f[1], now, today)
         if f is not None:
-            return send_answer(bot, person, f, now, follow=True)
+            prev = HistoryQuery.model_validate(st["q"])
+            taken = taken_offer(prev, f) if offer_words(normal(text)) else None
+            return send_answer(bot, person, f, now, follow=True, words=text, taken=taken)
     # ---------- round 11 fix, A (R1): "what was that video i watched about X" is a recall of the record ----------
     r = read_recall(text, today)
     if r is not None:
@@ -2153,10 +2159,16 @@ def history_reads(bot, person, text, now):
     q = read(text, today)
     if q is None:
         return None
-    return send_answer(bot, person, q, now, friends_asked=bool(FRIENDS_ASK.search(normal(text))))   # round 12, W
+    return send_answer(bot, person, q, now, friends_asked=bool(FRIENDS_ASK.search(normal(text))),   # round 12, W
+                       words=text)
 
 
-def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False):
+def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False, words=None, taken=None):
+    """Hook 8h's reply. Round 12, merge (DESIGN 19): today's code reply is worked out first (it decides, in one place,
+    which notes are said: the export hint, the friends line, the range); then, for every history kind but a plain
+    list, the fact sheet (facts.build, code) and the writer's parts (insight.write, one model call) take its place.
+    Either returning None, the model failing, a cap reached or the fake model having no script: the code reply goes
+    out, as before. `words`: the person's message (the sheet's question; never stored). `taken`: the offer taken."""
     from .render import Reply, link_part
     from .store import now_iso
     from . import profile as P
@@ -2168,10 +2180,36 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False)
     t0 = datetime.now()
     quiet = said_lately(bot, h, now)
     text, ids, extra = answer(view, q, today, P.get(bot.store, h), rec, quiet=quiet, friends_asked=friends_asked)
-    note_said(bot, h, now, extra.get("said") or ())
+    said = list(extra.get("said") or ())
+    written, winfo, sheet = _write(bot, person, q, now, follow, words, said)   # round 12, merge
+    note_said(bot, h, now, said)
     bot.note(intent="history")
     tail = extra.get("tail") or ""
-    if extra.get("cards") and (not tail or text.endswith(tail)):
+    tl = _taken_words(taken, q, sheet) if taken else ""
+    if tl:   # round 12, merge (seam b): the reply to an offer taken opens with its words ("Without Shorts:")
+        lead = (lead + "\n\n" + tl) if lead else tl
+    if written is None and taken and taken.startswith("only_topic:") and \
+            ((sheet or {}).get("filters") or {}).get("topic_themes") and ((sheet or {}).get("totals") or {}).get("items"):
+        # an "only <theme>" the writer's own line offered: today's word count can miss a theme's name ("no videos
+        # that mention ..."), so the code reply says the sheet's counts
+        text, ids, extra = _sheet_text(sheet, q), [], dict(extra, channels=[c["name"] for c in
+                                                                           (sheet.get("channels") or [])[:5]])
+        tail = ""
+    if written is not None:   # round 12, merge: the writer's parts, the items of a day / first / last under them
+        parts = [dict(p) for p in written]
+        if lead and parts and parts[0].get("type") == "text":
+            parts[0]["text"] = lead + "\n\n" + parts[0]["text"]
+        if (sheet or {}).get("kind") in ("day", "first", "last"):
+            from . import insight
+            ids = [it["id"] for it in (sheet.get("items") or [])[:insight.SHOW["items"]]
+                   if isinstance(it, dict) and it.get("id") in view.items]
+        else:
+            ids = []
+        if (sheet or {}).get("kind") == "channels":
+            from . import insight
+            extra = dict(extra, channels=[c["name"] for c in (sheet.get("channels") or [])[:insight.CHART_ROWS]
+                                          if isinstance(c, dict) and c.get("name")])
+    elif extra.get("cards") and (not tail or text.endswith(tail)):
         # the cards of the first or last items go right under their lines, before where the record ends
         body = text[:-len(tail)].rstrip() if tail else text
         parts = [{"type": "text", "text": (lead + "\n\n" if lead else "") + body}]
@@ -2181,12 +2219,21 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False)
     else:
         parts = [{"type": "text", "text": (lead + "\n\n" if lead else "") + text}]
     reply = Reply(parts)
+    steps = {"history": {"kind": q.kind, "how": q.how, "platform": q.platform,
+                         "window": q.window.kind, "topic_words": len(q.topic),
+                         "channel": bool(q.channel), "follow_up": follow}}
+    if winfo.get("tried"):   # round 12, merge (seam e): the form's shape and the sheet's kind; never words or titles
+        steps["writer"] = {"sheet_kind": (sheet or {}).get("kind"), "used": written is not None,
+                           "called": bool(winfo.get("called")), "kept": int(winfo.get("kept") or 0),
+                           "dropped": len(winfo.get("dropped") or ()), "so_what": bool(winfo.get("so_what")),
+                           "offers": [str(o).split(":", 1)[0] for o in winfo.get("offers_shown") or []],
+                           "without_shorts": bool(q.without_shorts), "error": winfo.get("error"),
+                           "sheet_s": (sheet or {}).get("built_s"), "versions": (sheet or {}).get("versions")}
     run_id = bot.store.add_run(handle=h, kind="history", at=now_iso(now), n_candidates=len(ids), n_picks=len(ids),
-                               n_dropped=0, cost_usd=0.0, status="picked" if ids else "none", prompt_version=None,
-                               seconds=round((datetime.now() - t0).total_seconds(), 3),
-                               steps={"history": {"kind": q.kind, "how": q.how, "platform": q.platform,
-                                                  "window": q.window.kind, "topic_words": len(q.topic),
-                                                  "channel": bool(q.channel), "follow_up": follow}})
+                               n_dropped=0, cost_usd=float(winfo.get("cost") or 0.0),
+                               status="picked" if ids else "none",
+                               prompt_version=winfo.get("prompt_version") if winfo.get("called") else None,
+                               seconds=round((datetime.now() - t0).total_seconds(), 3), steps=steps)
     bot.note(run_id=run_id)
     recs = []
     for k, i in enumerate(ids, 1):
@@ -2200,9 +2247,186 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False)
     bot.store.set_state(f"linekinds:{h}", {i: None for i in ids})
     bot.store.set_state(f"facts:{h}", {i: {} for i in ids})
     bot._keep_answer(run_id, h, None, goal, "history", reply, recs)
-    bot.store.set_state(STATE.format(h=h), {"q": q.model_dump(mode="json"), "at": now_iso(now), "run_id": run_id,
-                                            "ids": list(ids), "channels": extra.get("channels") or []})
+    st = {"q": q.model_dump(mode="json"), "at": now_iso(now), "run_id": run_id, "ids": list(ids),
+          "channels": extra.get("channels") or []}
+    if written is not None and winfo.get("so_what"):   # round 12, merge: what "yes" to the so-what lists (ids only)
+        sv = ((sheet or {}).get("library") or {}).get("saved_not_opened") or []
+        if sv and sv[0].get("examples"):
+            st["saved"] = {"theme": sv[0].get("theme"), "n": int(sv[0].get("n") or 0),
+                           "ids": [i for i in sv[0]["examples"] if i in view.items][:10]}
+    bot.store.set_state(STATE.format(h=h), st)
     return bot.send(h, reply, run_id)
+
+
+# ---------- round 12, merge (DESIGN 19): the writer in front of today's code reply ----------
+# One hook (8h), no new one: history_reads reads the message as before, send_answer works out today's code reply,
+# then builds the fact sheet (facts.build, code only) and asks the writer (insight.write, one model call checked by
+# code). A plain list (a listing, "show me them", "more", the items watched more than once) stays code: its items are
+# the answer. So does a window wholly after or before the record (the sheet's cannot_see: the code reply says so).
+WRITER_SKIP = ("list", "top_items")
+OFFER_LEAD = re.compile(r"^\W*(?:yes|yeah|yep|yup|sure|ok|okay|please|si|vale)\b[,!.\s]+(?=\S)")
+WITH_VIDEOS = re.compile(r"^\W*(?:(?:yes|yeah|sure|ok|okay|and|so)[,\s]+)?(?:(?:with|show(?:\s+me)?|con)\s+)"
+                         r"(?:the\s+|los\s+)?videos(?:\s+please)?\s*[?.!]*\s*$")
+YES_SAVED = re.compile(r"^\W*(?:(?:yes|yeah|yep|yup|sure|ok|okay|si|vale|claro)(?:[,!.\s]+(?:please|pls|thanks|"
+                       r"thank\s+you|por\s+favor|go\s+ahead|do\s+it))?|please(?:\s+do)?|go\s+ahead|yes\s+i\s+do|"
+                       r"(?:yes[,\s]+)?(?:show|send|list|give)\s+(?:me\s+)?(?:them|those)\s+(?:saved\s+ones|ones)|"
+                       r"(?:yes[,\s]+)?(?:as\s+a\s+list|the\s+saved\s+ones))\s*[?.!]*\s*$")
+
+
+def _write(bot, person, q, now, follow, words, said):
+    """(the writer's parts or None, its numbers, the sheet or None). Never raises: today's code reply stands."""
+    info = {}
+    try:
+        from . import insight
+        if not insight.on() or q.kind in WRITER_SKIP or q.offset or (follow and q.kind in ("list", "on_day")):
+            return None, info, None
+        from . import facts
+        info["tried"] = True
+        sheet = facts.build(bot, person, q, now, text=words)
+        if not isinstance(sheet, dict) or sheet.get("cannot_see") or not (sheet.get("totals") or {}).get("items"):
+            return None, info, sheet if isinstance(sheet, dict) else None
+        sheet["lang"] = q.lang
+        if isinstance(sheet.get("window"), dict) and sheet["window"].get("words"):
+            if sheet.get("kind") in ("first", "last") and q.window.kind == "all":
+                # "when did I first ...": the date is the answer; "In all your history (...)" before it is noise
+                sheet["window"] = dict(sheet["window"], words="")
+            else:
+                sheet["window"] = dict(sheet["window"], words=opening_words(sheet["window"], q))
+        parts = insight.write(bot, person, sheet, now, info, say=[x for x in said if x in ("refresh", "friends")])
+        return parts, info, sheet
+    except Exception as e:  # noqa: BLE001 - a sheet or writer that fails: today's code reply goes out
+        info["error"] = type(e).__name__
+        return None, info, None
+
+
+def offer_words(t):
+    """Whether a follow-up is said in the words of an offer line ("without shorts", "only X", "by month", "by
+    theme"; with a "yes," before them): only then does the reply open with the offer's words."""
+    t = OFFER_LEAD.sub("", t, count=1)
+    if strip_shorts(t)[1] or FU_WITH_SHORTS.match(t) or FU_BY.match(t):
+        return True
+    m = FU_ONLY.match(t)
+    return bool(m and (m.group("only") or m.group("suffix")))
+
+
+_WEEKDAY_LEAD = re.compile(r"^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\s+[a-z]+\s+\d{4})\b",
+                           re.I)
+
+
+def opening_words(win, q):
+    """The sheet's window words as the answer opens with them (seam a): "In the 4 weeks up to 30 October 2026, where
+    your export ends", "On Friday 30 October 2026, the last day of your export", "In 2025", "This year up to ...".
+    The sheet says them bare ("the 4 weeks up to ...", "2025"), as a span named inside a sentence; Spanish gets the
+    code's own Spanish words, with where the export ends when the window passes it."""
+    words = str(win.get("words") or "").strip().rstrip(",")
+    if q.lang == "es":
+        try:
+            a, b = date.fromisoformat(win["start"]), date.fromisoformat(win["end"])
+        except (KeyError, TypeError, ValueError):
+            return words
+        base = window_words(q.window, a, b, "es").rstrip(",")
+        if win.get("clipped") and "donde termina" not in base:
+            base += ", donde termina tu exportación"
+        return base
+    low = words.lower()
+    if re.match(r"^(?:in|on|this|since|from|between|during)\b", low):
+        return words[:1].upper() + words[1:]
+    if _WEEKDAY_LEAD.match(words):
+        return "On " + words
+    return "In " + words
+
+
+def taken_offer(prev, q):
+    """The offer of the writer's line that a follow-up took ("without_shorts", "only_topic:<x>", "by_month",
+    "by_theme"), or None. The reply then opens with its words (insight.taken_line)."""
+    if q.without_shorts and not prev.without_shorts:
+        return "without_shorts"
+    if q.topic and q.topic != prev.topic and q.kind == (prev.kind if prev.kind not in ("compare_topics", "compare")
+                                                         else "top"):
+        return "only_topic:" + q.topic[0]
+    if q.by == "month" and prev.by != "month":
+        return "by_month"
+    if q.kind == "top" and q.topics_too and prev.kind != "top":
+        return "by_theme"
+    return None
+
+
+def _sheet_text(sheet, q):
+    """A code reply from the fact sheet alone (no model): the count on the topic, the channels, the themes."""
+    tot = sheet.get("totals") or {}
+    topic = (sheet.get("filters") or {}).get("topic") or ""
+    head = opening_words(sheet.get("window") or {}, q.model_copy(update={"lang": "en"}))
+    s = f"{head}, you opened {tot['items']:,} videos on {topic}"
+    if tot.get("days_active") and sheet.get("kind") != "day":
+        s += f", on {tot['days_active']:,} different days"
+    lines = [s + "."]
+    chans = [c for c in sheet.get("channels") or [] if c.get("name")][:5]
+    if chans:
+        lines.append("Most from:\n" + "\n".join(f"{k}. {c['name']}: {c['items']:,}" for k, c in enumerate(chans, 1)))
+    ths = [t for t in sheet.get("themes") or [] if t.get("name")][:3]
+    if len(ths) > 1:
+        lines.append("By theme: " + ", ".join(f"{t['name']} ({round(t['share'] * 100)}%)" for t in ths) + ".")
+    return "\n".join(lines)
+
+
+def _taken_words(taken, q, sheet):
+    try:
+        from . import insight
+        lang = q.lang
+        if taken.startswith("only_topic:"):
+            x = taken.split(":", 1)[1]
+            names = (sheet or {}).get("filters", {}).get("topic_themes") or []
+            nm = next((n for n in names if n and _squash(n) == _squash(x)), None)
+            taken = "only_topic:" + (nm or x)
+        return insight.taken_line(taken, lang)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _saved_list(bot, person, st, now):
+    """"yes" to the so-what ("You saved 7 ... you never opened; want them as a list?"): the saved videos with their
+    cards, newest saved first. The pick in view is the list, so "the first one" and "add it to my list" work."""
+    from .render import Reply, link_part, by
+    from .store import now_iso
+    h = person["handle"]
+    view = bot.view(person["library"])
+    sv = st.get("saved") or {}
+    ids = [i for i in sv.get("ids") or [] if i in view.items]
+    if not ids:
+        return None
+    q = HistoryQuery.model_validate(st["q"])
+    es = q.lang == "es"
+    n = int(sv.get("n") or len(ids))
+    theme = sv.get("theme") or ""
+    head = ((f"Guardados de {theme} y nunca abiertos" if es else f"Saved on {theme} and never opened") +
+            (f" ({len(ids)} de {n}, los últimos guardados):" if es and n > len(ids) else
+             f" (the {len(ids)} saved last, of {n}):" if n > len(ids) else ":"))
+    lines = [f"{k}. {_title(view.items[i])}{by(view.items[i], 'es' if es else None, title=_title(view.items[i]))}"
+             for k, i in enumerate(ids, 1)]
+    parts = [{"type": "text", "text": head + "\n" + "\n".join(lines)}]
+    parts += [link_part(view.items[i], _title(view.items[i])) for i in ids if view.items[i].url]
+    bot.note(intent="history")
+    run_id = bot.store.add_run(handle=h, kind="history", at=now_iso(now), n_candidates=len(ids), n_picks=len(ids),
+                               n_dropped=0, cost_usd=0.0, status="picked", prompt_version=None, seconds=0.0,
+                               steps={"history": {"kind": "saved_not_opened", "follow_up": True}})
+    bot.note(run_id=run_id)
+    recs = []
+    for k, i in enumerate(ids, 1):
+        it = view.items[i]
+        bot.store.add_delivery(h, None, run_id, i, k, at=now)
+        recs.append({"item_id": i, "title": _title(it), "url": it.url, "platform": it.platform,
+                     "video_id": it.video_id, "creator": it.creator, "facts": {}, "lines": [], "line_kinds": None})
+    goal = "history: saved_not_opened"
+    reply = Reply(parts)
+    bot.store.set_last_answer(h, run_id, None, list(ids), goal)
+    bot.store.set_state(f"lines:{h}", {i: [] for i in ids})
+    bot.store.set_state(f"linekinds:{h}", {i: None for i in ids})
+    bot.store.set_state(f"facts:{h}", {i: {} for i in ids})
+    bot._keep_answer(run_id, h, None, goal, "history", reply, recs)
+    bot.store.set_state(STATE.format(h=h), dict(st, at=now_iso(now), run_id=run_id, ids=list(ids), channels=[],
+                                                saved=None))
+    return bot.send(h, reply, run_id)
+# ---------- end round 12, merge ----------
 
 
 def _pick(bot, person, st, n, now, today):
