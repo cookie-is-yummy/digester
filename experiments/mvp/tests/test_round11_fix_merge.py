@@ -265,7 +265,7 @@ def test_d_a_summary_with_a_window_says_the_hint_once_and_where_the_export_ends_
 
 def test_d_after_a_history_answer_said_it_the_summary_leaves_it_out(fb):
     out, _ = ask(fb, "what did i watch in october")
-    assert REFRESH in out
+    assert REFRESH not in out   # round 12, pass 2 (T6): not said on a history answer, but noted: the summary is as it was
     out, _ = ask(fb, WINDOW, CHAT)
     assert "so I can't see after that." in out and REFRESH not in out
 

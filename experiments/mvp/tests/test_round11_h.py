@@ -187,7 +187,8 @@ def test_a_window_inside_the_record_does_not_say_where_it_ends_and_one_that_touc
     out, _ = ask(hist, "how many videos did i watch in 2025")
     assert "export ends" not in out and "runs from" not in out
     out, _ = ask(hist, "how many videos did i watch in october")
-    assert "where your YouTube export ends" in out and REFRESH in out and ENDS not in out   # round 12, W (R-H)
+    # round 12, W (R-H); round 12, pass 2 (T6): the end in the window's words, no export hint
+    assert "where your YouTube export ends" in out and REFRESH not in out and ENDS not in out
 
 
 def test_have_i_watched_anything_about_a_topic_is_answered_with_its_count(hist):

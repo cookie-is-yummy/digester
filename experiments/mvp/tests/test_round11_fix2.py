@@ -599,20 +599,23 @@ def test_p5b_the_new_export_hint_once_in_6_hours_and_the_end_every_time(f2):
     outs = [step(f2, m)[0] for m in ("what did i watch last week", "how many videos did i watch this month",
                                      "what did i watch in november", "how many reels did i watch in november")]
     ends = "Your Instagram export ends on 3 November 2026 and your YouTube export on 12 November 2026"
-    assert REFRESH in outs[0] and all(REFRESH not in o for o in outs[1:]), outs
+    assert all(REFRESH not in o for o in outs), outs   # round 12, pass 2 (T6): no hint on an answer that has one
     assert all(ends.lower() in o.lower() or "instagram export ends on 3 november 2026" in o.lower()
                or "up to 3 november, where your instagram export ends" in o.lower() for o in outs), outs   # R-H
     out, _ = step(f2, "what did i watch this week")   # wholly after the record: round 12, W (R-H): the hint once
-    assert out.startswith("I can't see this week") and REFRESH not in out   # in 6 hours here too
+    # round 12, pass 2 (T6): the one history answer that says the hint (its whole window is after the record)
+    assert out.startswith("I can't see this week") and REFRESH in out
     f2["clock"][0] += timedelta(hours=7)
     out, _ = step(f2, "what did i watch last week")
-    assert REFRESH in out
+    assert REFRESH not in out
 
 
 def test_p5b_a_summary_after_a_history_answer_leaves_the_hint_out_and_the_other_way(f2):
     out1, _ = step(f2, "what did i watch last week")
     out2, _ = step(f2, "summarize what i watched this month about blender")
-    assert REFRESH in out1 and REFRESH not in out2
+    # round 12, pass 2 (T6): the history answer no longer says the hint; it is still noted, so the summary's reply
+    # is as it was
+    assert REFRESH not in out1 and REFRESH not in out2
 
 
 def test_p5c_a_slang_form_of_the_topic_word_is_not_in_a_summary(f2):

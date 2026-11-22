@@ -26,6 +26,7 @@ import json
 import os
 import re
 import threading
+import time
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -247,12 +248,17 @@ INTO = re.compile(r"\bwhat\s+(?:was|were)\s+i\s+(?:really\s+|mostly\s+|most\s+)*
                   r"hooked\s+on)\b|\bwhat\s+did\s+i\s+mostly\s+watch\b|\bwhat\s+was\s+i\s+(?:mostly\s+)?watching\b")
 INTO_ONLY = re.compile(r"\b(?:into|obsessed\s+with|hooked\s+on|mostly\s+watch\w*)\b")
 CHANGED_WORD = re.compile(r"\b(?:changed|changing|evolved|evolving|shifted|shifting)\b|\bhow\s+different\b|"
-                          r"\bha\s+(?:cambiado|evolucionado)\b|\bhan\s+(?:cambiado|evolucionado)\b")
+                          r"\bha\s+(?:cambiado|evolucionado)\b|\bhan\s+(?:cambiado|evolucionado)\b|"
+                          # round 12, pass 2 (T15): the other Spanish tenses ("como cambio lo que veo", "como ha ido
+                          # cambiando", "como cambiaron mis gustos")
+                          r"\bcambi(?:o|aron|ando)\b|\bevolucion(?:o|aron|ando)\b|\bha\s+ido\s+cambiando\b")
 CHANGED_WHAT = re.compile(r"\bwhat\s+i(?:'ve|\s+have)?\s+(?:been\s+)?(?:watch\w*|like|liked|look\s+at|consume)\b|\bmy\s+"
                           r"(?:interests?|tastes?|watching|viewing|watch\s+history|youtube\s+habits?|habits?|feed)\b|"
                           r"\b(?:the\s+)?(?:kind|type|sort)s?\s+of\s+(?:stuff|videos|things|content)\s+i\b|"
                           # round 12, fix (judge: the Spanish of the brief's 7 was read as a timeline)
-                          r"\blo\s+que\s+(?:veo|miro|he\s+visto|vi|consumo)\b|\bmis\s+(?:gustos|intereses)\b")
+                          r"\blo\s+que\s+(?:veo|miro|he\s+visto|vi|consumo|veia|miraba|he\s+estado\s+viendo|"
+                          r"estoy\s+viendo)\b|\bmis\s+(?:gustos|intereses|habitos)\b|\bmi\s+(?:forma|manera)\s+de\s+"
+                          r"ver\b")
 CHANGED_ASK = re.compile(r"^\W*(?:(?:so|and|ok|okay|hey|y)[,\s]+)?(?:how|what|has|have|did|in what way|como|que|en que)\b")
 HOW_TO = re.compile(r"\bhow\s+(?:do|can|should|could|would|to)\s+i\b|\bhow\s+to\b")
 RANK_IN = re.compile(r"^\W*(?:(?:what|which|who)\s+(?:are|were|is)\s+)?(?:my\s+)?(?:the\s+)?(?:most\s+watched|"
@@ -1224,7 +1230,10 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=(), friend
         el = ends_line(rec, plats, lang)
         head = (f"No veo {window_noun(q.window, start, end, lang)}: " if es else
                 f"I can't see {window_noun(q.window, start, end, lang)}: ") + el[:1].lower() + el[1:]
-        hint = not (QUIET_LIMITS and "refresh" in quiet)   # round 12, W (R-H): the hint once in 6 hours
+        # round 12, W (R-H): the hint once in 6 hours; round 12, pass 2 (T6): this is the one history answer that
+        # says it, so a hint only NOTED by an earlier answer (silent, for summaries) does not keep it out here
+        hint = not (QUIET_LIMITS and (("refresh" in quiet and "refresh_silent" not in quiet) or
+                                      "refresh_real" in quiet))
         if hint:
             head += " " + REFRESH[lang]
         w2 = shifted(q.window, start, end, newest)
@@ -1232,7 +1241,7 @@ def answer(view, q, today, prof=None, rec=None, said_end=False, quiet=(), friend
         if q.kind == "compare":
             q2 = q.model_copy(update={"kind": "count", "window": w2, "window2": None})
         body, ids, extra = answer(view, q2, today, prof, rec, said_end=True, quiet=quiet)
-        extra = dict(extra, said=list(extra.get("said") or []) + (["refresh"] if hint else []))
+        extra = dict(extra, said=list(extra.get("said") or []) + (["refresh", "refresh_real"] if hint else []))
         lead = "Lo último que veo:" if es else "The latest I can see:"
         return head + "\n\n" + lead + "\n" + body, ids, extra
     W = window_words(q.window, start, end, lang)
@@ -1431,7 +1440,11 @@ def _quiet_limits(text, q, start, end, rec, plats, reached, newest, starts_on, q
             # round 12, pass 2 (T6; the founder: "The user shouldnt constantly be made aware of what we cannot do, so
             # dont say that at the end"): no export hint on a history answer; the window's own words say where the
             # record ends, and the hint is said only when the question's whole window lies after an export's end
-            # (the "I can't see ..." answer above)
+            # (the "I can't see ..." answer above). Where it used to be said it is still NOTED as said (silently),
+            # so a summary in the next 6 hours leaves it out as before: summaries' replies stay as they were
+            if reached and newest and (end is None or end > newest or q.window.kind == "lately") and \
+                    "refresh" not in quiet:
+                said += ["refresh", "refresh_silent"]
     if q.how == "saved":
         tail.append("(Guardado cuenta lo guardado, las colecciones, lo que te enviaste y las listas.)" if es else
                     "(Saved counts saves, collections, posts you sent yourself and playlists.)")
@@ -2258,6 +2271,8 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False,
     bot._keep_answer(run_id, h, None, goal, "history", reply, recs)
     st = {"q": q.model_dump(mode="json"), "at": now_iso(now), "run_id": run_id, "ids": list(ids),
           "channels": extra.get("channels") or []}
+    if written is not None and winfo.get("so_what_id"):   # round 12, pass 2 (T5): the so-what said, by its key
+        st["so_what_id"] = winfo["so_what_id"]
     if written is not None and winfo.get("so_what"):   # round 12, merge: what "yes" to the so-what lists (ids only)
         sv = [x for x in ((sheet or {}).get("library") or {}).get("saved_not_opened") or [] if x.get("examples")]
         groups, left = [], 10
@@ -2289,7 +2304,28 @@ YES_SAVED = re.compile(r"^\W*(?:(?:yes|yeah|yep|yup|sure|ok|okay|si|vale|claro)(
                        r"(?:yes[,\s]+)?(?:as\s+a\s+list|the\s+saved\s+ones))\s*[?.!]*\s*$")
 
 
+WRITE_TIMEOUT_S = float(os.environ.get("MVP_INSIGHT_TIMEOUT_S", "20"))
+
+
 def _write(bot, person, q, now, follow, words, said):
+    """Round 12, pass 2 (T14): `_write_now` with a deadline. Twice on the founder's page a history question got no
+    reply for minutes with no model call (and answered in seconds when asked again: a cold index or the first sheet
+    of a new topic); a sheet and a writer that are not ready in WRITE_TIMEOUT_S seconds send today's code reply, and
+    the late worker makes no model call (it only warms the caches for the next question)."""
+    box = {}
+    deadline = time.time() + WRITE_TIMEOUT_S
+
+    def run():
+        box["out"] = _write_now(bot, person, q, now, follow, words, said, deadline)
+    th = threading.Thread(target=run, daemon=True, name="history-writer")
+    th.start()
+    th.join(WRITE_TIMEOUT_S)
+    if "out" in box:
+        return box["out"]
+    return None, {"tried": True, "error": "late", "late_s": WRITE_TIMEOUT_S}, None
+
+
+def _write_now(bot, person, q, now, follow, words, said, deadline=None):
     """(the writer's parts or None, its numbers, the sheet or None). Never raises: today's code reply stands."""
     info = {}
     try:
@@ -2302,6 +2338,10 @@ def _write(bot, person, q, now, follow, words, said):
         if not isinstance(sheet, dict) or sheet.get("cannot_see") or not (sheet.get("totals") or {}).get("items"):
             return None, info, sheet if isinstance(sheet, dict) else None
         sheet["lang"] = q.lang
+        # round 12, pass 2 (T5): never the same so-what on two answers in a row
+        last_sw = (bot.store.get_state(STATE.format(h=person["handle"])) or {}).get("so_what_id")
+        if last_sw and isinstance(sheet.get("so_what_candidates"), list):
+            sheet["so_what_candidates"] = [c for c in sheet["so_what_candidates"] if c.get("key") != last_sw]
         # seam a: D says a theme's change_vs_previous in percentage points (12.0), W reads it as a fraction (0.12)
         sheet["themes"] = [dict(t, change_vs_previous=round(t["change_vs_previous"] / 100, 4))
                            if isinstance(t, dict) and isinstance(t.get("change_vs_previous"), (int, float)) else t
@@ -2312,7 +2352,9 @@ def _write(bot, person, q, now, follow, words, said):
                 sheet["window"] = dict(sheet["window"], words="")
             else:
                 sheet["window"] = dict(sheet["window"], words=opening_words(sheet["window"], q))
-        parts = insight.write(bot, person, sheet, now, info, say=[x for x in said if x in ("refresh", "friends")])
+        # round 12, pass 2 (T6): the writer never says the export hint (a noted "refresh" is a silent one)
+        parts = insight.write(bot, person, sheet, now, info, say=[x for x in said if x == "friends"],
+                              deadline=deadline)
         return parts, info, sheet
     except Exception as e:  # noqa: BLE001 - a sheet or writer that fails: today's code reply goes out
         info["error"] = type(e).__name__

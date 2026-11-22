@@ -63,7 +63,7 @@ def test_a_failed_answer_is_written_by_code_from_the_sheet_and_the_models_observ
     f = checked(raw, c["sheet"])
     assert f["answer"] and "filled" in f and "answer" in f["filled"]
     # round 12, pass 2 (T1): "mostly" only for half or more: Blender 3D's 31% with home cooking's 22% is 53%
-    assert f["answer"].startswith("Mostly Blender 3D and home cooking: 31% and 22% of what you opened")
+    assert f["answer"].startswith("Mostly Blender 3D (31% of what you opened) and home cooking (22%)")
     assert any("grew to 31%" in o for o in f["observations"])
 
 
@@ -158,6 +158,9 @@ def test_new_of_a_channel_over_six_years_is_not_said_but_over_a_month_it_is():
     s = case("channels_2025")["sheet"]
     s["channels"][2]["new_in_window"] = True
     I = ins()
+    # round 12, pass 2 (T7): "new in the window" of a year or more is filler too; over a month it is said
+    assert I.check_sentence("Pixel Forge is new, with 540 videos.", facts_of(s)) == "not_new"
+    s["window"].update(start="2025-10-01", end="2025-10-31")
     assert I.check_sentence("Pixel Forge is new, with 540 videos.", facts_of(s)) is None
     s["window"].update(start="2020-01-01", end="2026-10-30")
     assert I.check_sentence("Pixel Forge is new, with 540 videos.", facts_of(s)) == "not_new"

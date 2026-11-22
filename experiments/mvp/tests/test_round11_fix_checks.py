@@ -751,7 +751,8 @@ def test_the_export_end_after_a_restart_and_for_a_second_person(fc, tmp_path):
     out = say2(H, "how many videos did i watch this month")
     assert ends_said(out) and "Posts from friends" not in out        # after the restart: still said
     out = say2("+15550002", "how many videos did i watch this month")
-    assert ends_said(out) and REFRESH in out   # a second person: their own hint (round 12, W, R-H: no friends line)
+    # a second person (round 12, W, R-H: no friends line; round 12, pass 2, T6: no export hint, the end said)
+    assert ends_said(out) and REFRESH not in out
     out = say2("+15550002", "what did i watch on november 12")
     assert ends_said(out)   # round 12, W (R-H)
 

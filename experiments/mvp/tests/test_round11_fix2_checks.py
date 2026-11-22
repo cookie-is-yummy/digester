@@ -658,11 +658,12 @@ def test_the_export_end_is_in_every_answer_and_the_hint_once_in_six_hours(fk):
     for k, m in enumerate(WINDOWS):
         out, calls = step(fk, m)
         assert calls == [] and _ends(out), (k, m, out)
-        hints.append(REFRESH in out)
-    assert hints[0] and not any(hints[1:]), hints
+        hints.append(REFRESH in out and not out.startswith("I can't see"))
+    # round 12, pass 2 (T6): no export hint on an answer that has one; the end in its words every time
+    assert not any(hints), hints
     fk["clock"][0] += timedelta(hours=6, minutes=1)
     out, _ = step(fk, WINDOWS[0])
-    assert _ends(out) and REFRESH in out
+    assert _ends(out) and (REFRESH not in out or out.startswith("I can't see"))
 
 
 def test_the_export_end_after_a_restart_and_for_a_second_person(fk, tmp_path):
@@ -699,8 +700,8 @@ def test_the_export_end_after_a_restart_and_for_a_second_person(fk, tmp_path):
     for m in WINDOWS[:3]:    # a second person: the end every time, their own hint once
         out = say2(two, m)
         assert _ends(out), out
-        said.append(REFRESH in out)
-    assert said == [True, False, False]
+        said.append(REFRESH in out and not out.startswith("I can't see"))
+    assert said == [False, False, False]   # round 12, pass 2 (T6): no hint on an answer that has one
 
 
 def test_a_window_wholly_after_the_record_keeps_the_hint_every_time(fk):

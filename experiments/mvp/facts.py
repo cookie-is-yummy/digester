@@ -380,18 +380,22 @@ def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, f
     return out
 
 
-def _when(idx, sc):
+def _when(idx, sc, base_ev=None):
     import numpy as np
     n = int(sc.ev.sum())
     if not n:
         return {}
+    usual = {}
+    if base_ev is not None and base_ev.any():   # round 12, pass 2 (T7): his own usual week, over his whole record
+        wb = np.bincount(idx.wd[base_ev].astype(np.int64), minlength=7)
+        usual = {"usual_weekday_share": _share(int(wb[:5].sum()), int(base_ev.sum()))}
     h = np.bincount(idx.hour[sc.ev].astype(np.int64), minlength=24)
     wd = np.bincount(idx.wd[sc.ev].astype(np.int64), minlength=7)
     top = sorted(range(24), key=lambda x: (-h[x], x))[:3]
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     return {"busiest_hours": [{"hour": int(x), "share": _share(int(h[x]), n)} for x in top if h[x]],
             "weekday_share": _share(int(wd[:5].sum()), n), "weekend_share": _share(int(wd[5:].sum()), n),
-            "busiest_weekday": days[int(np.argmax(wd))], "events": n}
+            "busiest_weekday": days[int(np.argmax(wd))], "events": n, **usual}
 
 
 def _new_stopped(sc, prev, idx, facts, th, all_ev, start_o):
@@ -654,7 +658,7 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         if top5:
             a, k = Counter(c["area"] for c in top5).most_common(1)[0]
             out["top_areas"] = {"area": a, "n": int(k), "of": len(out["channels"][:5])}
-    out["when"] = _when(idx, sc)
+    out["when"] = _when(idx, sc, base_ev)
     short_window = so is not None and eo is not None and eo - so + 1 < 7
     out["new"], out["stopped"] = ({"themes": [], "channels": []}, {"themes": [], "channels": []}) if short_window \
         else _new_stopped(sc, prev, idx, facts, th, base_ev, so)
@@ -707,6 +711,9 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     # ---- round 12, pass 2: the day against the person's usual day (T10); what comes back each year (T5)
     if kind == "day" and so is not None:
         out["usual"] = _usual_day(idx, facts, base_ev, so)
+        t = out["totals"]
+        if out["usual"] and (t.get("shorts", 0) + t.get("long", 0)):
+            out["usual"]["day_shorts_share"] = _share(t["shorts"], t["shorts"] + t["long"])
         first, big = _first_by_creator(idx, base_ev)
         fresh = [c for c in out["channels"] if c.get("first_watched") == eff_start.isoformat()]
         out["new_today"] = {"channels": len(fresh), "names": [c["name"] for c in fresh[:3]]}

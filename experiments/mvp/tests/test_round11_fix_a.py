@@ -391,7 +391,7 @@ def test_r4_the_friends_line_and_the_range_are_said_once_in_six_hours(hist):
     out, _ = ask(hist, "how many videos did i watch in october")
     # round 11 fix pass 2 (P5b): the end always, the hint on a new export once in 6 hours (it came with the range)
     # round 12, W (R-H): the end in the window's words; the hint here, the first answer about after the export
-    assert "where your YouTube export ends" in out and REFRESH in out
+    assert "where your YouTube export ends" in out and REFRESH not in out   # round 12, pass 2 (T6): no hint
     out, _ = ask(hist, "what did i watch last week")
     assert out.startswith("I can't see the week of 9 to 15 November 2026:")
     # an all-time "last" still says where the record ends (it changes the answer)

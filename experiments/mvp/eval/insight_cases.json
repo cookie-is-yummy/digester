@@ -758,12 +758,6 @@
     "answer": "In 2025 Lantern Speedruns led with 820 videos, but 92% of them were Shorts; Prime Number Club was close behind with 610 long ones.",
     "observations": [
      {
-      "text": "Pixel Forge is new in your top 5, all Blender 3D.",
-      "uses": [
-       "channels"
-      ]
-     },
-     {
       "text": "You opened Kettle & Cast on 150 different days, more spread out than any other.",
       "uses": [
        "channels"
@@ -813,6 +807,13 @@
       "channels"
      ],
      "why": "length_total (round 12, pass 2, T2: no total of video length)"
+    },
+    {
+     "text": "Pixel Forge is new in your top 5, all Blender 3D.",
+     "uses": [
+      "channels"
+     ],
+     "why": "new_in_a_year (round 12, pass 2, T7: \"new in the window\" of a year or more is filler)"
     }
    ]
   },

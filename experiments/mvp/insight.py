@@ -46,7 +46,7 @@ SENT_MAX = 260          # characters in one sentence
 ANSWER_MAX = 330        # characters in the answer (1 or 2 sentences)
 CHART_ROWS = 8
 PERIOD_ROWS = 12        # round 12, fix: a year by month is 12 rows; never the oldest months cut without a word
-PERIOD_LABEL_MAX = 14   # round 12, pass 2 (T12): every chart row is one line at 430 px (seen in a screenshot)
+PERIOD_LABEL_MAX = 16   # round 12, pass 2 (T12): every chart row is one line at 430 px (seen in a screenshot)
 WEEKPART_BASELINE = 0.10
 SPREAD_SHARE = 0.50     # round 12, pass 2 (T1): "mostly" / "most of" / "centred on" only for half or more
 WIDE_MIX = 0.20         # "a wide mix" only when the leader is under a fifth
@@ -126,7 +126,7 @@ def shown(sheet):
 def _long_or_one_day(sheet):
     w = (sheet or {}).get("window") or {}
     a, b = _as_date(w.get("start")), _as_date(w.get("end"))
-    return bool(a and b and ((b - a).days >= 365 or (b - a).days < 1))
+    return bool(a and b and ((b - a).days >= 360 or (b - a).days < 1))
 
 
 def user_message(sheet):
@@ -359,8 +359,9 @@ class Facts:
             if _num(wn.get(k)):
                 # round 12, fix (judge: "68% was on weekdays" in two answers): a split near 5 days in 7 is everyone's
                 # week, not an insight; it is not said then, nor the busiest weekday
-                if abs(float(wn.get("weekday_share") or 0) - 5 / 7) < WEEKPART_BASELINE:
-                    continue
+                base = float(wn["usual_weekday_share"]) if _num(wn.get("usual_weekday_share")) else 5 / 7
+                if abs(float(wn.get("weekday_share") or 0) - base) < WEEKPART_BASELINE:
+                    continue   # round 12, pass 2 (T7): against his own usual week when the sheet has it
                 self.has_weekpart = True
                 self.glob.fracs.append(float(wn[k]))
         if self.has_weekpart and isinstance(wn.get("busiest_weekday"), str):
@@ -1837,7 +1838,9 @@ def _label_words(s, n):
     s = " ".join(str(s or "").split())
     if len(s) <= n:
         return s
-    cut = s[:n - 1].rsplit(" ", 1)[0] if " " in s[:n - 1] else s[:n - 1]
+    cut = s[:n - 1]
+    if s[n - 1] != " " and " " in cut:   # round 12, pass 2: a whole last word that fits stays
+        cut = cut.rsplit(" ", 1)[0]
     return cut.rstrip(" ,;:-") + "…"
 
 
@@ -2199,9 +2202,9 @@ def code_form(sheet):
                     f"({pc(a1['share'])})." if es else
                     f"Mostly {a0['name']} ({pc(a0['share'])} {what}), then {a1['name']} ({pc(a1['share'])}).")
         if a0["share"] + a1["share"] >= SPREAD_SHARE:
-            return (f"Sobre todo {a0['name']} y {a1['name']}: {pc(a0['share'])} y {pc(a1['share'])} de lo que "
-                    f"abriste." if es else
-                    f"Mostly {a0['name']} and {a1['name']}: {pc(a0['share'])} and {pc(a1['share'])} {what}.")
+            return (f"Sobre todo {a0['name']} ({pc(a0['share'])} de lo que abriste) y {a1['name']} "
+                    f"({pc(a1['share'])})." if es else
+                    f"Mostly {a0['name']} ({pc(a0['share'])} {what}) and {a1['name']} ({pc(a1['share'])}).")
         if a2 and a0["share"] + a1["share"] + a2["share"] >= SPREAD_SHARE:
             return (f"La mayor parte fue {a0['name']} ({pc(a0['share'])}), {a1['name']} ({pc(a1['share'])}) y "
                     f"{a2['name']} ({pc(a2['share'])})." if es else
@@ -2225,8 +2228,11 @@ def code_form(sheet):
             o((f"Dentro de {a['name']}, sobre todo {ts[0]['name']} ({pc(ts[0]['share'])})." if es else
                f"Inside {a['name']}, {ts[0]['name']} led with {pc(ts[0]['share'])}."), "areas")
 
+    said_moves = set()
+
     def moves(rows, key):
-        ch = [t for t in rows if _num(t.get("change_vs_previous")) and _num(t.get("previous_share"))]
+        ch = [t for t in rows if _num(t.get("change_vs_previous")) and _num(t.get("previous_share"))
+              and (round(t["previous_share"], 2), round(t["share"], 2)) not in said_moves]
         up = sorted((t for t in ch if t["change_vs_previous"] >= 0.015), key=lambda t: -t["change_vs_previous"])
         down = sorted((t for t in ch if t["change_vs_previous"] <= -0.015), key=lambda t: t["change_vs_previous"])
         if up and pw:
@@ -2239,6 +2245,8 @@ def code_form(sheet):
             t = down[0]
             o((f"{t['name']} bajó de {pc(t['previous_share'])} a {pc(t['share'])}." if es else
                f"{t['name']} fell from {pc(t['previous_share'])} to {pc(t['share'])}."), key)
+        for t in (up[:1] if (pw or es) else []) + down[:1]:   # an area of one theme says the same move once
+            said_moves.add((round(t["previous_share"], 2), round(t["share"], 2)))
 
     def behind(t):
         cs = _rows_named(t.get("channels"), ("name", "items"))[:2]
@@ -2251,8 +2259,12 @@ def code_form(sheet):
         if _num(sh) and _num(lo) and sh + lo > 0:
             tail = (f", the long ones typically about {int(m)} minutes" if _num(m) and lo else "") if not es else \
                 (f", los largos de unos {int(m)} minutos" if _num(m) and lo else "")
-            o((f"{f(sh, lang)} fueron Shorts y {f(lo, lang)} videos largos{tail}." if es else
-               f"{f(sh, lang)} were Shorts and {f(lo, lang)} long videos{tail}."), "totals")
+            if not sh:
+                o((f"Ningún Short: {f(lo, lang)} videos largos{tail}." if es else
+                   f"No Shorts: {f(lo, lang)} long videos{tail}."), "totals")
+            else:
+                o((f"{f(sh, lang)} fueron Shorts y {f(lo, lang)} videos largos{tail}." if es else
+                   f"{f(sh, lang)} were Shorts and {f(lo, lang)} long videos{tail}."), "totals")
 
     if kind == "top" and (len(areas) >= 2 or len(themes) >= 2):
         ans = lead(areas) if len(areas) >= 2 else lead(themes)
@@ -2322,7 +2334,8 @@ def code_form(sheet):
         if len(themes) >= 2 and not es:
             o(f"The biggest parts: {themes[0]['name']} ({_pc(themes[0]['share'])}) and {themes[1]['name']} "
               f"({_pc(themes[1]['share'])}).", "themes")
-        moves(themes, "themes")
+        if len(themes) >= 2:
+            moves(themes, "themes")
         shorts_long()
         if chans and not es:
             o(f"{chans[0]['name']} gave the most: {f(chans[0]['items'], lang)} of them.", "channels")
@@ -2366,10 +2379,10 @@ def code_form(sheet):
                     f"({_pc(themes[1]['share'])})."
             else:
                 ans = f"{f(n, lang)} videos" + (f", {f(sh, lang)} of them Shorts." if _num(sh) and sh else ".")
-            yt = (tot.get("shorts") or 0) + (tot.get("long") or 0)
-            if _num(sh) and yt and _num(us.get("shorts_share")):
-                o(f"{f(sh, lang)} of the {f(yt, lang)} YouTube videos were Shorts, against about "
-                  f"{_pc(us['shorts_share'])} on a usual day.", "totals", "usual")
+            if _num(us.get("day_shorts_share")) and _num(us.get("shorts_share")):
+                o(f"Shorts were {_pc(us['day_shorts_share'])} of the day's YouTube videos, against "
+                  + (f"about {_pc(us['shorts_share'])}" if us["shorts_share"] >= 0.01 else "none")
+                  + " on a usual day.", "usual")
             elif _num(sh) and sh:
                 o(f"{f(sh, lang)} of them were Shorts.", "totals")
             bh = ((s.get("when") or {}).get("busiest_hours") or [{}])[0]
@@ -2380,7 +2393,7 @@ def code_form(sheet):
                 elif _num(bh.get("share")):
                     o(f"The busiest hour was {_hour_words(bh['hour'])}, with {_pc(bh['share'])} of the day.", "when")
             if len(themes) >= 2 and n >= 3 and _num(mi):
-                o(f"After it, {themes[1]['name']} ({_pc(themes[1]['share'])}).", "themes")
+                o(f"{themes[1]['name']} came next ({_pc(themes[1]['share'])}).", "themes")
             nt = s.get("new_today") or {}
             if _num(nt.get("channels")) and nt["channels"] >= 1 and nt.get("names"):
                 o(f"{nt['names'][0]} was new that day" + (f", one of {f(nt['channels'], lang)} channels you opened "
@@ -2426,24 +2439,32 @@ def code_form(sheet):
         ch = s.get("change") or {}
         eras = _rows_named(s.get("eras"), ("area", "from", "to"))
         ac = s.get("areas_change") or {}
-        if len(eras) >= 2 and not es:
+        if len(eras) >= 2:
             e0, e1 = eras[0], eras[-1]
-            span0 = e0["from"] if e0["from"] == e0["to"] else f"{e0['from']} to {e0['to']}"
-            ans = f"{e0['area'].capitalize()} led from {span0}; since {e1['from']}, {e1['area']} has."
-        elif len(eras) == 1 and not es:
+            span0 = e0["from"] if e0["from"] == e0["to"] else (f"{e0['from']} a {e0['to']}" if es else
+                                                                f"{e0['from']} to {e0['to']}")
+            ans = (f"De {span0} lideró {e0['area']}; desde {e1['from']}, lidera {e1['area']}." if es else
+                   f"{e0['area'].capitalize()} led from {span0}; since {e1['from']}, {e1['area']} has.")
+        elif len(eras) == 1:
             e0 = eras[0]
-            ans = f"{e0['area'].capitalize()} has led every year since {e0['from']}, at about {_pc(e0['share'])} " \
-                  f"of each year."
-        for part, verb in (("left", "fell"), ("arrived", "rose")):
+            ans = (f"{e0['area'].capitalize()} lidera cada año desde {e0['from']}, con cerca del {_pc(e0['share'], lang)}"
+                   f" de cada año." if es else
+                   f"{e0['area'].capitalize()} has led every year since {e0['from']}, at about {_pc(e0['share'])} "
+                   f"of each year.")
+        for part, verb, verb_es in (("left", "fell", "bajó"), ("arrived", "rose", "subió")):
             r = (_rows_named(ac.get(part), ("name", "from_share", "to_share")) or [None])[0]
-            if r and not es:
-                o(f"{r['name'].capitalize()} {verb} from {_pc(r['from_share'])} in {ac['from']} to "
-                  f"{_pc(r['to_share'])} in {ac['to']}.", "areas_change")
+            if r:
+                o((f"{r['name'].capitalize()} {verb_es} de {_pc(r['from_share'], lang)} en {ac['from']} a "
+                   f"{_pc(r['to_share'], lang)} en {ac['to']}." if es else
+                   f"{r['name'].capitalize()} {verb} from {_pc(r['from_share'])} in {ac['from']} to "
+                   f"{_pc(r['to_share'])} in {ac['to']}."), "areas_change")
         shx = ac.get("shorts") or {}
-        if _num(shx.get("from_share")) and _num(shx.get("to_share")) and not es and \
+        if _num(shx.get("from_share")) and _num(shx.get("to_share")) and \
                 abs(shx["to_share"] - shx["from_share"]) >= 0.05:
-            o(f"Shorts went from {_pc(shx['from_share'])} of the YouTube videos in {shx['from']} to "
-              f"{_pc(shx['to_share'])} in {shx['to']}.", "areas_change")
+            o((f"Los Shorts pasaron del {_pc(shx['from_share'], lang)} de los videos de YouTube en {shx['from']} al "
+               f"{_pc(shx['to_share'], lang)} en {shx['to']}." if es else
+               f"Shorts went from {_pc(shx['from_share'])} of the YouTube videos in {shx['from']} to "
+               f"{_pc(shx['to_share'])} in {shx['to']}."), "areas_change")
         ps = {str(p.get("label")): p for p in _rows_named(s.get("periods"), ("label",))}
         p0, p1 = ps.get(str(ch.get("from"))), ps.get(str(ch.get("to")))
         if ans is None and p0 and p1 and len(p0.get("themes") or []) >= 2 and len(p1.get("themes") or []) >= 2:
