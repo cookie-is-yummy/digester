@@ -609,7 +609,10 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     out["new"], out["stopped"] = ({"themes": [], "channels": []}, {"themes": [], "channels": []}) if short_window \
         else _new_stopped(sc, prev, idx, facts, th, base_ev, so)
     # ---- by kind
-    if kind == "changed" or q.kind == "timeline" or q.by:
+    if kind == "changed" or q.kind == "timeline" or q.by or (kind == "count" and so is not None and eo is not None
+                                                             and eo - so >= 45):
+        # round 12, merge (seam a): a count over more than about six weeks gets its periods too, the chart W's
+        # layout draws for a count ("how many minecraft videos this year": by month)
         out["periods"], unit = _periods(idx, facts, th, ev, so, eo, by=q.by)
         out["periods_unit"] = unit
         if kind == "changed":

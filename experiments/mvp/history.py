@@ -2286,6 +2286,10 @@ def _write(bot, person, q, now, follow, words, said):
         if not isinstance(sheet, dict) or sheet.get("cannot_see") or not (sheet.get("totals") or {}).get("items"):
             return None, info, sheet if isinstance(sheet, dict) else None
         sheet["lang"] = q.lang
+        # seam a: D says a theme's change_vs_previous in percentage points (12.0), W reads it as a fraction (0.12)
+        sheet["themes"] = [dict(t, change_vs_previous=round(t["change_vs_previous"] / 100, 4))
+                           if isinstance(t, dict) and isinstance(t.get("change_vs_previous"), (int, float)) else t
+                           for t in sheet.get("themes") or []]
         if isinstance(sheet.get("window"), dict) and sheet["window"].get("words"):
             if sheet.get("kind") in ("first", "last") and q.window.kind == "all":
                 # "when did I first ...": the date is the answer; "In all your history (...)" before it is noise

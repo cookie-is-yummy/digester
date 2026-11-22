@@ -290,7 +290,9 @@ class Facts:
         for k, v in (s.get("filters") or {}).items():
             if isinstance(v, str):
                 self._text(v)
-        for k in ("totals", "previous"):
+            elif k == "left_out" and isinstance(v, dict):   # round 12, merge: the Shorts and reels left out
+                self.glob.counts |= {int(x) for x in v.values() if _num(x)}
+        for k in ("totals", "previous", "window_totals"):   # round 12, merge: D's window_totals ("of N then")
             if isinstance(s.get(k), dict):
                 _scalars(s[k], self.glob)
                 self._text(s[k].get("words") or s[k].get("label") or "")

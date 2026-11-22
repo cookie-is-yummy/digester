@@ -50,8 +50,16 @@ def true_form(sh):
     elif kind == "count" and topics:
         t = topics[0]
         answer = f"You opened {_n(t['items'])} {t['name']} videos."
-        if t.get("days"):
+        if t.get("days") and t["days"] != t["items"]:
             obs.append({"text": f"They came on {_n(t['days'])} different days.", "uses": ["topics"]})
+        wt = (sh.get("window_totals") or {}).get("items")
+        if wt and wt > t["items"]:
+            obs.append({"text": f"That is {_n(t['items'])} of the {_n(wt)} videos you opened then.",
+                        "uses": ["totals"]})
+        if t.get("channels"):
+            c = t["channels"][0]
+            obs.append({"text": f"{c['name']} is behind " + ("all of them." if c["items"] == t["items"] else
+                                                               f"{_n(c['items'])} of them."), "uses": ["topics"]})
     elif kind in ("first", "last") and (sh.get("items") or []) and (sh.get("items")[0].get("at")):
         d = sh["items"][0]["at"][:10]
         y, m, dd = int(d[:4]), int(d[5:7]), int(d[8:10])
