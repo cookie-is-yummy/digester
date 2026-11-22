@@ -397,6 +397,24 @@ each one the code answers.
 - Offline checks: `python3 -m pytest -q mvp/tests/test_round11_fix_a.py` (93 tests).
 <!-- end round 11 fix, A -->
 
+<!-- round 12, D -->
+## Lengths, themes and the fact sheet of a history question (round 12, D; DESIGN.md section 19.D)
+
+- `python3 -m mvp.lengths <library>`: the official length of every YouTube video watched (videos.list, 50 ids a call,
+  YOUTUBE_API_KEY from the environment), into `data/mvp/derived/lengths-v1/` (kept 30 days, resumable; each run's
+  numbers in `runs.jsonl`). A Short: at most 61 s, or at most 180 s for a video published from 15 Oct 2024.
+- `python3 -m mvp.themes build <library>`: themes by code from the library's own item vectors, named by one model call
+  per field (prompt `theme_name_v2`, about $0.04 for a library of 100,000 watched videos), into
+  `data/mvp/derived/themes-v2/<library key>/`. Never built while a person waits; later items get the nearest theme.
+- `facts.build(bot, person, q, now)`: the fact sheet of a history question, by code (no model, no network), for the
+  writer. New questions read by code: "did i watch more X or more Y this year", "how has what i watch changed since
+  2020", "what was i into in the summer of 2023", "what was i watching back in 2021", "most watched channels in X",
+  "... without shorts"; and, after a history answer, "without shorts", "only X", "by month", "by theme".
+- `MVP_DERIVED_HOME` moves the derived folder (the tests set it to their own).
+- Offline checks: `python3 -m pytest -q mvp/tests/test_round12_d.py` (125 tests, the made-up library
+  `tests/r12_library.py`).
+<!-- end round 12, D -->
+
 <!-- round 11 fix, B -->
 ## Summaries that say something, and asking several videos (round 11 fix B, DESIGN.md section 18.LB)
 
@@ -889,6 +907,7 @@ still hold the handle (`ledger_rows_with_handle`).
 | `dates.py`, `answers.py` | Round 7: posted dates (the Instagram link's shortcode, YouTube's publishedAt), time-sensitive requests, dates read from a post's text (passed, old, ahead), no stale claims; the date order of picks and the choice of the items answer |
 | `attention.py`, `digest.py` | Round 8: what they have been into lately (windows, shares, labels, the live count script) and the theme check's messages; the recap and its one suggested rule (DESIGN.md section 14) |
 | `history.py` | Round 11, slice H: history questions read and answered by code (the form, the record of every event, windows, rankings, first and last, timelines, follow-ups; DESIGN.md 18.H); the merge: the help's and the setup's examples from the person's own counts and topics |
+| `lengths.py`, `themes.py`, `facts.py`, `prompts/theme_name_v2.md` | Round 12, D: the official lengths of watched videos and the Short rule; themes by code with names by one call per field, a topic mapped to themes by code; the fact sheet of a history question (DESIGN.md 19.D) |
 | `synth.py`, `eval_synth.py`, `evalset/synth/` | Round 11, slice M: summaries across many items, each point traced by code (DESIGN.md 18.M), its made-up evaluation; the merge: one time window by slice H's words |
 | `videoask.py`, `eval_videoask.py`, `tests/fakes/fake_gemini.py` | Round 11, slice Q: asking a YouTube video itself through Gemini, off unless `MVP_VIDEO_ASK=1` (DESIGN.md 18.Q; A-017, Proposed), its evaluation (fix pass 2, 18.L2; the list of videos is a file outside git), its fake |
 | `render.py` | What the person reads, as parts (text and link), the items answer among them: a channel that shows link previews sends each link alone; the same answer as an email (plain text and simple HTML) |
