@@ -62,7 +62,8 @@ def test_a_failed_answer_is_written_by_code_from_the_sheet_and_the_models_observ
     raw = dict(c["fake"], answer="Gaming is a popular genre.")
     f = checked(raw, c["sheet"])
     assert f["answer"] and "filled" in f and "answer" in f["filled"]
-    assert f["answer"].startswith("Mostly Blender 3D (31% of what you opened), then home cooking (22%)")
+    # round 12, pass 2 (T1): "mostly" only for half or more: Blender 3D's 31% with home cooking's 22% is 53%
+    assert f["answer"].startswith("Mostly Blender 3D and home cooking: 31% and 22% of what you opened")
     assert any("grew to 31%" in o for o in f["observations"])
 
 
@@ -71,7 +72,8 @@ def test_one_observation_left_is_topped_up_by_code_to_three():
     raw = dict(c["fake"], observations=c["fake"]["observations"][:1])
     f = checked(raw, c["sheet"])
     assert 3 <= len(f["observations"]) <= 4 and "observations" in f["filled"]
-    assert any("up to about" in o and "hours" in o for o in f["observations"])   # R-D: the length is said
+    # round 12, pass 2 (T2): no total of video length any more (it read as watch time)
+    assert not any("hours" in o for o in f["observations"])
 
 
 @pytest.mark.parametrize("raw", [{}, "a list, not a form", {"answer": 3}, None])
@@ -135,7 +137,10 @@ def test_mostly_for_a_small_share_is_a_spread_not_a_lead():
     s2 = case("top_lately")["sheet"]
     s2["totals"].update(shorts=404, long=431)
     assert I.check_sentence("It was mostly long videos: 431 of them.", facts_of(s2)) == "spread"
-    assert I.check_sentence("Mostly Blender 3D at 31%.", facts_of(case("top_lately")["sheet"])) is None
+    # round 12, pass 2 (T1): "mostly" needs half or more; 31% is a lead, not "mostly"
+    assert I.check_sentence("Mostly Blender 3D at 31%.", facts_of(case("top_lately")["sheet"])) == "spread"
+    assert I.check_sentence("Mostly Blender 3D and home cooking, 31% and 22%.",
+                            facts_of(case("top_lately")["sheet"])) is None
 
 
 @pytest.mark.parametrize("share, ok", [(0.68, False), (0.72, False), (0.92, True)])
@@ -164,8 +169,9 @@ def test_an_answer_that_is_a_run_of_numbers_is_written_by_code():
                                  "against 60, adding up to about 120 hours against 95.")
     f = checked(raw, c["sheet"])
     assert "gap of" not in f["answer"] and "answer" in f["filled"]
-    assert f["answer"].startswith("Much more gaming: 640 gaming videos against 212 art ones, about 3 times as many")
-    assert any(d[1] in ("number_run", "filler") for d in f["dropped"] if d[0] == "answer")
+    # round 12, pass 2 (T7, T9): the lead is the ratio in words, with the two counts after it
+    assert f["answer"].startswith("Much more gaming than art: about 3 times as many (640 against 212)")
+    assert any(d[1] in ("number_run", "filler", "hours") for d in f["dropped"] if d[0] == "answer")   # pass 2: T2
 
 
 def test_filler_each_had_one_video_is_dropped():
@@ -348,7 +354,8 @@ def test_an_answer_that_is_a_run_of_names_is_written_by_code():
                                  "cooking, cozy gaming, chess openings, film essays and math explainers.")
     f = checked(raw, s)
     assert ("answer", "name_run") in [(d[0], d[1]) for d in f["dropped"]] and "answer" in f["filled"]
-    assert f["answer"].startswith("31 videos, 18 of them Shorts, led by speedrun clips (45%) and Blender 3D (26%)")
+    # round 12, pass 2 (T10): the day's own words (no usual day in this made-up sheet)
+    assert f["answer"].startswith("31 videos, 18 of them Shorts; speedrun clips (45%) led, then Blender 3D (26%)")
 
 
 def test_a_saved_bullet_about_another_theme_goes_and_its_so_what_too():
@@ -375,7 +382,8 @@ def test_busiest_hours_are_no_length_so_the_length_is_still_said():
         {"text": "Blender 3D grew to 31% of what you opened, up 12 points on the 4 weeks before.", "uses": ["themes"]},
         {"text": "Your busiest hours are after 9pm.", "uses": ["when"]}])
     f = checked(raw, c["sheet"])
-    assert any("adds up to about 62 hours" in o for o in f["observations"])
+    # round 12, pass 2 (T2): no total of video length; Shorts against long videos instead
+    assert not any("add up" in o or "adds up" in o for o in f["observations"]) and len(f["observations"]) >= 3
 
 
 def test_an_unfinished_observation_and_a_run_of_years_are_dropped():

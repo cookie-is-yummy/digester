@@ -81,11 +81,82 @@ def derived_home():
 
 
 def lib_key(lib):
-    return hashlib.sha1(os.path.abspath(lib).encode()).hexdigest()[:12]
+    """Round 12, pass 2 (T13): the library's REAL path (a data/ folder reached through a symlink gives the same key
+    as the folder itself; the founder's page found no themes because his path was typed another way)."""
+    return hashlib.sha1(os.path.realpath(os.path.abspath(lib)).encode()).hexdigest()[:12]
+
+
+def _path_folder(lib):
+    return os.path.join(derived_home(), VERSION, lib_key(lib))
+
+
+FINGERPRINT_BYTES = 1 << 20
+MATCH_SHARE = 0.75      # a build whose rows cover this share of the library's item vectors is that library's
+
+
+def fingerprint(lib):
+    """The library's content, not its path: a hash of the first MiB of corpus/items.jsonl (items are appended as the
+    library grows, so the head stays the same), or None."""
+    try:
+        with open(os.path.join(lib, "corpus", "items.jsonl"), "rb") as f:
+            return hashlib.sha1(f.read(FINGERPRINT_BYTES)).hexdigest()[:16]
+    except OSError:
+        return None
+
+
+_FOUND = {}
+
+
+def find(lib):
+    """(folder, how) of the library's build: by its real path ("path"); else by its content ("content": a build
+    whose items_fingerprint is the library's, or whose rows cover MATCH_SHARE of its item vectors); else
+    (the path folder, None). Cached per library and the builds' stamps."""
+    import numpy as np
+    lib = os.path.realpath(os.path.abspath(lib))
+    pf = _path_folder(lib)
+    if os.path.exists(os.path.join(pf, "build.json")):
+        return pf, "path"
+    root = os.path.join(derived_home(), VERSION)
+    try:
+        cands = sorted(d for d in os.listdir(root) if os.path.exists(os.path.join(root, d, "build.json")))
+    except OSError:
+        cands = []
+    key = (lib, tuple((d, os.stat(os.path.join(root, d, "build.json")).st_mtime_ns) for d in cands))
+    with _LOCK:
+        if _FOUND.get(lib, (None,))[0] == key:
+            return _FOUND[lib][1]
+    got = (pf, None)
+    fp = fingerprint(lib)
+    for d in cands:
+        try:
+            with open(os.path.join(root, d, "build.json"), encoding="utf-8") as f:
+                meta = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if fp and meta.get("items_fingerprint") == fp:
+            got = (os.path.join(root, d), "content")
+            break
+    if got[1] is None and cands:
+        from .history import _vector_store
+        vs = _vector_store(lib)
+        if vs is not None and len(vs[0]):
+            have = set(vs[0])
+            for d in cands:
+                try:
+                    ids = np.load(os.path.join(root, d, "space.npz"))["ids"]
+                except (OSError, ValueError, KeyError):
+                    continue
+                if sum(1 for i in ids.tolist() if str(i) in have) >= MATCH_SHARE * len(have):
+                    got = (os.path.join(root, d), "content")
+                    break
+    with _LOCK:
+        _FOUND[lib] = (key, got)
+    return got
 
 
 def folder(lib):
-    return os.path.join(derived_home(), VERSION, lib_key(lib))
+    """Where the library's build is (or is to be written): see find()."""
+    return find(lib)[0]
 
 
 def store_name(lib):
@@ -315,7 +386,7 @@ def build(lib, view=None, person=None, chat=None, log=print, now=None):
     from .history import _vector_store
     from .libview import LibraryView
     t0 = time.monotonic()
-    lib = os.path.abspath(lib)
+    lib = os.path.realpath(os.path.abspath(lib))
     view = view or LibraryView(lib)
     vs = _vector_store(lib)
     if vs is None:
@@ -376,7 +447,7 @@ def build(lib, view=None, person=None, chat=None, log=print, now=None):
             themes[first_theme + k].update(g, typical=[] if g["sensitive"] else groups[k][1])
         log(f"field {fj + 1}/{len(fcent)}: {len(groups)} themes")
     wall = round(time.monotonic() - t0, 2)
-    out_dir = folder(lib)
+    out_dir = _path_folder(lib)   # a new build goes beside the old ones, under the real path's key
     os.makedirs(out_dir, exist_ok=True)
     # every vector-store row gets a field and a theme (watched rows as clustered; the others by nearest centroid)
     all_ids = sorted(pos, key=lambda i: pos[i])
@@ -392,7 +463,7 @@ def build(lib, view=None, person=None, chat=None, log=print, now=None):
                         **{f"sub_cent_{j}": s[2] for j, s in enumerate(subspaces) if s[2] is not None})
     meta = {"version": VERSION, "prompt_version": PROMPT_VERSION, "model": config.MODEL,
             "embedding_store": store_name(lib), "embedding_model": EMBEDDING_MODEL.get(store_name(lib)),
-            "library_key": lib_key(lib), "built_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
+            "library_key": lib_key(lib), "items_fingerprint": fingerprint(lib), "built_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
             "items_clustered": len(ids), "rows_assigned": len(all_ids),
             "params": {"pca_dim": PCA_DIM, "sub_dim": SUB_DIM, "sample": SAMPLE, "fields_k": FIELDS_K,
                        "themes_k": THEMES_K, "sub_min": SUB_MIN, "fold_min": FOLD_MIN, "seed": SEED},
@@ -404,6 +475,7 @@ def build(lib, view=None, person=None, chat=None, log=print, now=None):
                                          "items_per_s")}))
     with _LOCK:
         _LOADED.clear()
+        _FOUND.clear()
     write_rows(lib)
     return meta
 
@@ -542,6 +614,7 @@ def load(lib):
 # ================================================================ a topic the person names -> themes, by code
 WORD_RATE = 0.5      # a theme whose own titles hold the topic's words this often is that topic
 RARE_IN_TITLES = 30  # fewer titles than this hold the words: the themes' words are the best evidence there is
+NAME_RATE = 0.25     # round 12, pass 2 (T8): a theme named after the topic needs this share of its titles to say it
 
 
 def for_topic(view, rec, phrase, th=None, hits=None):
@@ -578,7 +651,11 @@ def for_topic(view, rec, phrase, th=None, hits=None):
         cat = t.get("category") or (th.fields.get(t["field"]) or {}).get("category")
         words = list(t.get("words") or [])
         rate = held[tid] / size[tid] if size[tid] else 0.0
-        if cat in cats or holds(t.get("name") or "", p) or any(holds(w, p) for w in words[:2]) or \
+        # round 12, pass 2 (T8): a theme counts under a topic by its name or its first words only when a measured
+        # share of its own titles say the topic too (NAME_RATE); a theme named after the topic whose titles do not
+        # say it (a PvP theme: 0 to 16% on the founder's library) made a topic's count 15 to 20% high
+        named = holds(t.get("name") or "", p) or any(holds(w, p) for w in words[:2])
+        if cat in cats or (named and (rate >= NAME_RATE or rare)) or \
                 (any(holds(w, p) for w in words) and (rate >= WORD_RATE or rare)):
             out.append(tid)
     if out:
@@ -595,13 +672,88 @@ def for_topic(view, rec, phrase, th=None, hits=None):
                   and (rare or (size[t] and held[t] / size[t] >= WORD_RATE / 2)))
 
 
+# ================================================================ round 12, pass 2 (T13): say so when they are missing
+STALE_SHARE = 0.75   # fewer of the library's watched items than this with a theme: the build is stale
+
+
+def status(lib):
+    """What the history answers can use for this library, by code (no model, no network): the themes build (found
+    by path or by content, its version, when built, how much of the watched record it covers) and the lengths (how
+    many rows, how many of them past their 30 days). `ok` is False when either is missing or stale; `problems` says
+    why, in words for the start-up log and the trace."""
+    from . import lengths as L
+    lib = os.path.realpath(os.path.abspath(lib))
+    d, how = find(lib)
+    out = {"library": lib, "key": lib_key(lib), "folder": d, "found": how, "version": VERSION, "problems": []}
+    meta = None
+    try:
+        with open(os.path.join(d, "build.json"), encoding="utf-8") as f:
+            meta = json.load(f)
+    except (OSError, ValueError):
+        pass
+    watched = []
+    try:
+        from .libview import LibraryView
+        view = LibraryView(lib)
+        watched = _watched_ids(view, lib)
+    except Exception:  # noqa: BLE001 - a library that does not load: said below
+        out["problems"].append("the library did not load")
+    if meta is None:
+        out["problems"].append(f"no themes build ({VERSION}) for this library: history answers name no themes; "
+                               f"run: python3 -m mvp.themes build {lib}")
+    else:
+        th = load(lib)
+        covered = sum(1 for i in watched if th is not None and th.theme_id(i) is not None)
+        out.update(built_at=meta.get("built_at"), prompt_version=meta.get("prompt_version"),
+                   items_clustered=meta.get("items_clustered"), watched=len(watched),
+                   themed_share=round(covered / len(watched), 3) if watched else None,
+                   fields=len(meta.get("fields") or []), themes=len(meta.get("themes") or []))
+        if th is None:
+            out["problems"].append(f"the themes build is of another version ({meta.get('version')}); run: "
+                                   f"python3 -m mvp.themes build {lib}")
+        elif watched and covered < STALE_SHARE * len(watched):
+            out["problems"].append(f"the themes build covers only {covered:,} of {len(watched):,} watched items; "
+                                   f"run: python3 -m mvp.themes build {lib}")
+    path = os.path.join(L.folder(), "lengths.jsonl")
+    rows = L._read_rows(path) if os.path.exists(path) else {}
+    live = L.load()
+    out["lengths"] = {"file": path, "rows": len(rows), "in_date": len(live), "version": L.VERSION}
+    if not rows:
+        out["problems"].append(f"no video lengths ({L.VERSION}): no Shorts against long videos; run: "
+                               f"python3 -m mvp.lengths {lib} (needs YOUTUBE_API_KEY)")
+    elif len(live) < 0.5 * len(rows):
+        out["problems"].append(f"{len(rows) - len(live):,} of {len(rows):,} video lengths are past their 30 days "
+                               f"and not used; run: python3 -m mvp.lengths {lib} (needs YOUTUBE_API_KEY)")
+    out["ok"] = not out["problems"]
+    return out
+
+
+def status_lines(st):
+    """The status in a few lines a person can read (start-up log, `python3 -m mvp.themes status`)."""
+    head = ("History answers: themes and lengths ready" if st["ok"] else
+            "WARNING: history answers are missing what they need") + f" for {st['library']}"
+    lines = [head]
+    if st.get("built_at"):
+        lines.append(f"  themes: {st['version']}, built {st['built_at']}, found by {st['found']}, "
+                     f"{st.get('fields')} fields and {st.get('themes')} themes, "
+                     f"{round(100 * (st.get('themed_share') or 0))}% of the watched items have a theme")
+    ln = st.get("lengths") or {}
+    lines.append(f"  lengths: {ln.get('in_date', 0):,} of {ln.get('rows', 0):,} rows in date ({ln.get('version')})")
+    lines += ["  WARNING: " + p for p in st["problems"]]
+    return lines
+
+
 if __name__ == "__main__":   # python3 -m mvp.themes build <library>
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["build", "rows"])
+    ap.add_argument("cmd", choices=["build", "rows", "status"])
     ap.add_argument("library")
     a = ap.parse_args()
     if a.cmd == "rows":   # write themes.jsonl again from an existing build (no model call)
         write_rows(os.path.abspath(a.library))
+    elif a.cmd == "status":   # round 12, pass 2 (T13): what history answers can use, read by code
+        st = status(a.library)
+        print("\n".join(status_lines(st)))
+        raise SystemExit(0 if st["ok"] else 1)
     else:
         build(a.library)

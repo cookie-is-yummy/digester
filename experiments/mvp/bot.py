@@ -68,6 +68,18 @@ def main():
                 channel.problem = "A library did not load. Look at the terminal that runs the bot."
         channel.ready = True
         print("A library did not load." if getattr(channel, "problem", None) else "Libraries loaded.", file=sys.stderr)
+        # ---------- round 12, pass 2 (T13, T14): what history answers need, said loudly; the fact index warmed ----------
+        from . import facts as F
+        from . import themes as T
+        for lib in libs:
+            try:
+                for line in T.status_lines(T.status(lib)):
+                    print(line, file=sys.stderr)
+                for p in store.q("SELECT timezone FROM people WHERE library = ?", (lib,))[:1]:
+                    F.index(bot.view(lib), p["timezone"] or "UTC")
+            except Exception as e:  # noqa: BLE001 - the status is a report; the bot runs without it
+                print(f"WARNING: history answers: status not read ({type(e).__name__})", file=sys.stderr)
+        # ---------- end round 12, pass 2 ----------
         # ---------- round 10, slice S: each library's caption marks, after the libraries are ready (until a file
         # exists no item is marked, today's behaviour; a first answer never waits for this) ----------
         if config.CM_BUILD_AT_START:

@@ -119,12 +119,26 @@ class ItemFacts:
                     canon[t] = canon.get(nm.lower(), t)
                     canon.setdefault(nm.lower(), t)
         self.canon = {t: v for t, v in canon.items() if isinstance(t, int)}
+        # round 12, pass 2 (T3): the broad level, the AREA of each theme (its category in the fixed list of
+        # theme_name_v2: "gaming", "comedy", "science"; words a person uses), so an answer can say what most of a
+        # window was; 50 themes of 5% each say nothing at the top
+        self.area = np.full(n, -1, dtype=np.int32)
+        self.area_names = []
+        area_of = {}
+        if self.th is not None:
+            for t in self.canon.values():
+                a = theme_area(self.th, t)
+                if a is not None:
+                    if a not in self.area_names:
+                        self.area_names.append(a)
+                    area_of[t] = self.area_names.index(a)
         for k, i in enumerate(idx.ids):
             it = view.items[i]
             if self.th is not None:
                 t = self.th.theme_id(i)
                 if t is not None and t in canon:
                     self.theme[k] = canon[t]
+                    self.area[k] = area_of.get(canon[t], -1)
                 f = self.th.field_id(i)
                 if f is not None:
                     self.field[k] = f
@@ -136,6 +150,20 @@ class ItemFacts:
                     # of every length sum and counted as `over_3h`
                     self.length[k] = int(ln) if ln <= LENGTH_CAP_S else -2
                     self.short[k] = 1 if sh else 0
+
+
+AREA_SHOWN = {"film and tv": "film and TV", "diy and making": "DIY and making", "nature and animals": "nature and animals",
+              "family and kids": "family and kids", "art and design": "art and design", "food and cooking": "food and cooking"}
+
+
+def theme_area(th, tid):
+    """The area (category) of a theme as a person says it, or None ("other", none, or a sensitive one)."""
+    from . import themes as T
+    t = th.themes.get(tid) or {}
+    cat = t.get("category") or (th.fields.get(t.get("field")) or {}).get("category")
+    if not cat or cat == "other" or cat in T.SENSITIVE_CATEGORIES or th.shown(tid) is None:
+        return None
+    return AREA_SHOWN.get(cat, cat)
 
 
 def index(view, tz):
@@ -229,7 +257,9 @@ class Scope:
         it = self.items
         yt = it[idx.platform[it] == 0]
         known = yt[f.length[yt] > 0]
-        return {"items": int(len(it)), "days_active": int(len(np.unique(self.ev_days))),
+        lo = known[f.short[known] == 0]
+        med = {"long_median_min": int(round(float(np.median(f.length[lo])) / 60))} if len(lo) >= 5 else {}
+        return {**med, "items": int(len(it)), "days_active": int(len(np.unique(self.ev_days))),
                 "length_hours": _hours(f.length[known].sum()) if len(known) else 0.0,
                 "length_known_share": _share(len(known), len(yt)),
                 "shorts": int((f.short[yt] == 1).sum()), "long": int((f.short[yt] == 0).sum()),
@@ -298,7 +328,8 @@ def _theme_rows(view, sc, prev, facts, th):
                "length_share": _share(secs, total_secs),
                "shorts_share": _share(shorts, known),
                "channels": [{"name": idx.creators[a], "items": int(b)} for a, b in chans],
-               "examples": [idx.ids[int(mem[k])] for k in order], "mixed": bool(th.themes[tid].get("mixed"))}
+               "examples": [idx.ids[int(mem[k])] for k in order], "mixed": bool(th.themes[tid].get("mixed")),
+               "area": theme_area(th, tid)}
         if prev is not None:
             ps = _share(pcount.get(tid, 0), pn)
             row["previous_share"] = ps
@@ -319,9 +350,10 @@ def _first_by_creator(idx, all_ev):
     return first, big
 
 
-def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, first=None):
+def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, first=None, prev=None):
     import numpy as np
     it = sc.items
+    pc = Counter(idx.creator[prev.items][idx.creator[prev.items] >= 0].tolist()) if prev is not None else None
     c = Counter(idx.creator[it][idx.creator[it] >= 0].tolist())
     if not c:
         return []
@@ -334,7 +366,12 @@ def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, f
         tc = Counter(facts.theme[mem][facts.theme[mem] >= 0].tolist())
         secs, known, shorts = lens.get(cid, (0.0, 0, 0))
         f = int(first[cid]) if first[cid] != big else None
-        out.append({"name": idx.creators[cid], "items": int(n), "days": int(days.get(cid, 0)),
+        top_t = tc.most_common(1)[0][0] if tc else None
+        extra = {"area": theme_area(th, top_t) if (th is not None and top_t is not None) else None,
+                 "share": _share(n, len(it))}
+        if pc is not None:
+            extra["previous_items"] = int(pc.get(cid, 0))
+        out.append({**extra, "name": idx.creators[cid], "items": int(n), "days": int(days.get(cid, 0)),
                     "length_hours": _hours(secs),
                     "theme": th.shown(tc.most_common(1)[0][0]) if (th is not None and tc) else None,
                     "shorts_share": _share(shorts, known),
@@ -432,6 +469,11 @@ def _periods(idx, facts, th, ev_mask, start_o, end_o, by=None):
         if th is not None and len(it):
             tc = Counter(facts.theme[it][facts.theme[it] >= 0].tolist())
             row["themes"] = [{"name": th.shown(t), "share": _share(c, len(it))} for t, c in tc.most_common(4)]
+            ac = Counter(facts.area[it][facts.area[it] >= 0].tolist())   # round 12, pass 2 (T4): eras by area
+            row["areas"] = [{"name": facts.area_names[a], "share": _share(c, len(it))} for a, c in ac.most_common(3)]
+        yt = it[(idx.platform[it] == 0) & (facts.short[it] >= 0)] if len(it) else it
+        if len(yt) >= 20:
+            row["shorts_share"] = _share(int((facts.short[yt] == 1).sum()), len(yt))
         out.append(row)
     return out, unit
 
@@ -583,6 +625,7 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     sc = Scope(idx, facts, ev, so, eo)
     # the equal window just before (or the other window of a comparison)
     prev, prev_words, prev_clipped = None, None, False
+    pbounds = None
     if q.kind == "compare" and q.window2:
         s2, e2 = Hm.resolve(q.window2, rec, plats, today)
         e2c = min(e2, newest) if (e2 and newest) else e2
@@ -592,6 +635,7 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         ps, pe, prev_words = before_window(w, date.fromordinal(so), date.fromordinal(eo))
         if oldest is None or pe >= oldest.toordinal():
             prev = Scope(idx, facts, ev, ps, pe)
+            pbounds = (ps, pe)
             prev_clipped = bool(oldest and ps < oldest.toordinal())
     out["totals"] = sc.totals()
     if prev is not None:
@@ -603,7 +647,13 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         fc = Counter(int(f) for f in facts.field[sc.items] if f >= 0)
         out["fields"] = [{"name": th.field_name(f), "items": int(c), "share": _share(c, len(sc.items))}
                          for f, c in fc.most_common(6) if th.field_name(f)]
-    out["channels"] = _channel_rows(view, sc, idx, facts, th, base_ev, so)
+    out["channels"] = _channel_rows(view, sc, idx, facts, th, base_ev, so, prev=prev)
+    out["areas"] = _area_rows(sc, prev, facts, out["themes"])
+    if kind == "channels":   # round 12, pass 2 (T11): what the ranking says: the area most of the top 5 are
+        top5 = [c for c in out["channels"][:5] if c.get("area")]
+        if top5:
+            a, k = Counter(c["area"] for c in top5).most_common(1)[0]
+            out["top_areas"] = {"area": a, "n": int(k), "of": len(out["channels"][:5])}
     out["when"] = _when(idx, sc)
     short_window = so is not None and eo is not None and eo - so + 1 < 7
     out["new"], out["stopped"] = ({"themes": [], "channels": []}, {"themes": [], "channels": []}) if short_window \
@@ -617,8 +667,17 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         out["periods_unit"] = unit
         if kind == "changed":
             out["change"] = _change(out["periods"], th, idx, facts, ev, so, eo, unit)
+            out["eras"] = _eras(out["periods"])   # round 12, pass 2 (T4): what each stretch of years mostly was
+            out["areas_change"] = _area_change(out["periods"])
     if kind == "compare_topics":
         out["topics"] = [_topic_row(view, rec, idx, facts, th, ph, ev, so, eo) for ph in q.topic]
+        if pbounds:   # round 12, pass 2 (T9): the same two topics in the span before
+            prevs = [_topic_row(view, rec, idx, facts, th, ph, ev, *pbounds) for ph in q.topic]
+            for r, pr in zip(out["topics"], prevs):
+                r["previous_items"] = pr["items"]
+            out["comparison"] = _compare(out["topics"], [pr["items"] for pr in prevs])
+        else:
+            out["comparison"] = _compare(out["topics"], None)
     elif q.topic and kind in ("count", "first", "last", "channels", "top"):
         out["topics"] = [_topic_row(view, rec, idx, facts, th, ph, base_ev, so, eo) for ph in q.topic]
     if kind in ("day", "first", "last") or q.kind in ("list", "top_items"):
@@ -645,11 +704,247 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             ct += [t for t in topic_items(view, rec, idx, facts, ph)[1] if t not in ct]
         tids = ct or tids
     out["library"] = {"saved_not_opened": _saved_not_opened(view, idx, facts, th, tids)}
+    # ---- round 12, pass 2: the day against the person's usual day (T10); what comes back each year (T5)
+    if kind == "day" and so is not None:
+        out["usual"] = _usual_day(idx, facts, base_ev, so)
+        first, big = _first_by_creator(idx, base_ev)
+        fresh = [c for c in out["channels"] if c.get("first_watched") == eff_start.isoformat()]
+        out["new_today"] = {"channels": len(fresh), "names": [c["name"] for c in fresh[:3]]}
+    if getattr(q, "season", None) or (so is not None and eo is not None and eo - so <= 100 and kind == "top"
+                                      and w.kind not in ("lately", "day")):
+        try:
+            out["seasonal"] = _seasonal(idx, facts, th, ev, so, eo, rows)
+        except Exception:  # noqa: BLE001 - extra; the sheet stands without it
+            out["seasonal"] = []
+    out["so_what_candidates"] = _so_what_candidates(out, kind, q)
     out["offers"] = _offers(q, kind, out)
     out["built_s"] = round(time.monotonic() - t0, 3)
     out["versions"] = {"themes": (th.meta.get("version") if th is not None else None),
                        "themes_embedding": (th.meta.get("embedding_model") if th is not None else None),
                        "lengths": __import__("mvp.lengths", fromlist=["x"]).VERSION}
+    return out
+
+
+# ================================================================ round 12, pass 2: the broad picture and the so-what
+AREAS_MAX = 5
+LEARNING = {"education", "science", "math", "technology", "history", "diy and making", "DIY and making",
+            "art and design"}
+FUN = {"gaming", "comedy", "internet culture", "film and tv", "film and TV", "music", "sports"}
+SAVED_MIN = 3          # T5: a so-what about saved things needs at least 3 of them (never "1 video and 1 video")
+SHIFT_POINTS = 0.10    # T5: Shorts' share moved by at least 10 points against the span before
+
+
+def _area_rows(sc, prev, facts, theme_rows):
+    """T3: the areas of a scope, largest first: items, share of everything opened, the share before and its change
+    (a FRACTION, as the writer reads it), and the themes inside each (from the scope's theme rows)."""
+    it = sc.items
+    n = len(it)
+    if facts.th is None or not n:
+        return []
+    ac = Counter(facts.area[it][facts.area[it] >= 0].tolist())
+    pn = len(prev.items) if prev is not None else 0
+    pcnt = Counter(facts.area[prev.items][facts.area[prev.items] >= 0].tolist()) if pn else Counter()
+    out = []
+    for a, c in ac.most_common(AREAS_MAX):
+        name = facts.area_names[a]
+        row = {"name": name, "items": int(c), "share": _share(c, n),
+               "themes": [{"name": t["name"], "share": t["share"]} for t in theme_rows
+                          if t.get("area") == name and t.get("name")][:3]}
+        if pn:
+            row["previous_share"] = _share(pcnt.get(a, 0), pn)
+            row["change_vs_previous"] = round(row["share"] - row["previous_share"], 3)
+        out.append(row)
+    return out
+
+
+def _eras(periods):
+    rows = [p for p in periods if not p.get("sparse") and p.get("areas")]
+    out = []
+    for p in rows:
+        a = p["areas"][0]
+        if out and out[-1]["area"] == a["name"]:
+            out[-1]["to"] = p["label"]
+            out[-1]["shares"].append(a["share"])
+        else:
+            out.append({"from": p["label"], "to": p["label"], "area": a["name"], "shares": [a["share"]]})
+    for e in out:
+        sh = e.pop("shares")
+        e["share"] = round(sum(sh) / len(sh), 3)
+    return out
+
+
+def _area_change(periods):
+    """T4: the areas' shares in the first and the last full period: what he left behind (fell most), what arrived
+    (rose most), each with its shares then and now (fractions)."""
+    rows = [p for p in periods if not p.get("sparse") and p.get("areas")]
+    if len(rows) < 2:
+        return {}
+    a = {x["name"]: x["share"] for x in rows[0]["areas"]}
+    b = {x["name"]: x["share"] for x in rows[-1]["areas"]}
+    moves = [{"name": k, "from_share": a.get(k, 0.0), "to_share": b.get(k, 0.0),
+              "change": round((b.get(k, 0.0) - a.get(k, 0.0)) * 100, 1)} for k in sorted(set(a) | set(b))]
+    left = sorted((m for m in moves if m["change"] <= -3), key=lambda m: m["change"])[:2]
+    arrived = sorted((m for m in moves if m["change"] >= 3), key=lambda m: -m["change"])[:2]
+    sh = [(p["label"], p["shorts_share"]) for p in rows if isinstance(p.get("shorts_share"), (int, float))]
+    out = {"from": rows[0]["label"], "to": rows[-1]["label"], "left": left, "arrived": arrived}
+    if len(sh) >= 2:
+        out["shorts"] = {"from": sh[0][0], "from_share": sh[0][1], "to": sh[-1][0], "to_share": sh[-1][1]}
+    return out
+
+
+def _usual_day(idx, facts, base_ev, day_o, prev_days=90):
+    """T10: the person's usual day over the 90 days before a day (days with anything opened): the median count, the
+    median Shorts share and the busiest hour; and how the day compares."""
+    import numpy as np
+    m = base_ev & (idx.day >= day_o - prev_days) & (idx.day < day_o)
+    if not m.any():
+        return {}
+    days = idx.day[m]
+    per = []
+    sh = []
+    for d in np.unique(days):
+        it = np.unique(idx.it[m & (idx.day == d)])
+        per.append(len(it))
+        yt = it[(idx.platform[it] == 0) & (facts.short[it] >= 0)]
+        if len(yt):
+            sh.append(float((facts.short[yt] == 1).mean()))
+    if len(per) < 5:
+        return {}
+    h = np.bincount(idx.hour[m].astype(np.int64), minlength=24)
+    return {"days": int(len(per)), "median_items": int(np.median(per)),
+            "shorts_share": round(float(np.median(sh)), 3) if sh else None, "busiest_hour": int(np.argmax(h))}
+
+
+def _so_what_candidates(out, kind, q):
+    """T5: things worth saying after the answer, each with its facts, proposed by code; the writer picks at most one.
+    Ranked by code (the strongest first). None on a day's list; never for 1 or 2 saved clips."""
+    c = []
+    if kind == "day":
+        return c
+    themes = {t["name"]: t for t in out.get("themes") or [] if t.get("name")}
+    stopped = {x.get("name") if isinstance(x, dict) else x for x in (out.get("stopped") or {}).get("themes") or []}
+    for x in (out.get("library") or {}).get("saved_not_opened") or []:
+        t = themes.get(x.get("theme"))
+        if (x.get("n") or 0) < SAVED_MIN:
+            continue
+        faded = x.get("theme") in stopped or (t is not None and isinstance(t.get("change_vs_previous"), (int, float))
+                                              and t["change_vs_previous"] <= -1.0)
+        c.append({"key": ("lapsed_saves:" if faded else "saved:") + str(x["theme"]),
+                  "kind": "lapsed_saves" if faded else "saved", "theme": x["theme"], "n": int(x["n"]),
+                  **({"share": t["share"], "previous_share": t.get("previous_share")} if t is not None else {})})
+    ts = [t for t in out.get("themes") or [] if isinstance(t.get("change_vs_previous"), (int, float))]
+    learn = sorted((t for t in ts if t.get("area") in LEARNING and t["change_vs_previous"] <= -1.5),
+                   key=lambda t: t["change_vs_previous"])
+    fun = sorted((t for t in ts if t.get("area") in FUN and t["change_vs_previous"] >= 1.5),
+                 key=lambda t: -t["change_vs_previous"])
+    if learn and fun and kind in ("top", "count", "channels"):
+        a, b = learn[0], fun[0]
+        c.append({"key": "learning_faded:" + a["name"], "kind": "learning_faded", "faded": a["name"],
+                  "faded_from": a.get("previous_share"), "faded_to": a["share"], "grew": b["name"],
+                  "grew_from": b.get("previous_share"), "grew_to": b["share"]})
+    tot, prev = out.get("totals") or {}, out.get("previous") or {}
+    if all(isinstance(x.get(k), int) for x in (tot, prev) for k in ("shorts", "long")) and             tot["shorts"] + tot["long"] >= 30 and prev["shorts"] + prev["long"] >= 30 and kind != "changed":
+        a = tot["shorts"] / (tot["shorts"] + tot["long"])
+        b = prev["shorts"] / (prev["shorts"] + prev["long"])
+        if abs(a - b) >= SHIFT_POINTS:
+            c.append({"key": "shorts_shift:" + ("up" if a > b else "down"), "kind": "shorts_shift",
+                      "direction": "up" if a > b else "down", "share": round(a, 3), "previous_share": round(b, 3),
+                      "previous_words": prev.get("words")})
+    w = out.get("window") or {}
+    try:
+        long_w = (date.fromisoformat(w["end"]) - date.fromisoformat(w["start"])).days > 400
+    except (KeyError, TypeError, ValueError):
+        long_w = True
+    chans = out.get("channels") or []
+    if chans and not long_w and kind in ("top", "channels") and isinstance(chans[0].get("previous_items"), int):
+        c0 = chans[0]
+        pn = (prev.get("items") or 0)
+        if c0.get("share", 0) >= 0.05 and pn and c0["previous_items"] / pn < c0["share"] / 3:
+            c.append({"key": "channel_rise:" + c0["name"], "kind": "channel_rise", "channel": c0["name"],
+                      "items": c0["items"], "previous_items": c0["previous_items"], "share": c0.get("share")})
+    for x in out.get("seasonal") or []:
+        c.append(dict(x, key="seasonal:" + x["theme"], kind="seasonal"))
+    if kind in ("first", "last"):
+        ps = [p for p in out.get("periods") or [] if p.get("items")]
+        if len(ps) >= 2:
+            last, peak = ps[-1], max(ps, key=lambda p: p["items"])
+            how = "deeper" if peak is last else ("still" if last["items"] >= 0.5 * peak["items"] else "faded")
+            c.insert(0, {"key": "path:" + how, "kind": "path", "how": how, "last_label": last["label"],
+                         "last_items": last["items"], "peak_label": peak["label"], "peak_items": peak["items"]})
+    order = {"path": 0, "lapsed_saves": 1, "learning_faded": 2, "channel_rise": 3, "seasonal": 4, "shorts_shift": 5,
+             "saved": 6}
+    c.sort(key=lambda x: order.get(x["kind"], 9))
+    return c[:4]
+
+
+def _seasonal(idx, facts, th, ev, start_o, end_o, theme_rows):
+    """T5: a theme of the window he returns to in the same months every year: in at least 3 years its share in those
+    months is at least 1.5 times its share over that whole year (and 3 items or more)."""
+    import numpy as np
+    if th is None or start_o is None or end_o is None or end_o - start_o > 100:
+        return []
+    a, b = date.fromordinal(start_o), date.fromordinal(end_o)
+    months = set()
+    d = a
+    while d <= b:
+        months.add(d.month)
+        d = date(d.year + (d.month == 12), d.month % 12 + 1, 1)
+    m_all = ev.copy()
+    days = idx.day[m_all]
+    if not len(days):
+        return []
+    mo = np.array([date.fromordinal(int(x)).month for x in range(int(days.min()), int(days.max()) + 1)])
+    base = int(days.min())
+    ev_month = mo[idx.day[m_all] - base]
+    ev_year = np.array([date.fromordinal(int(x)).year for x in idx.day[m_all]]) if len(days) < 400000 else None
+    if ev_year is None:
+        return []
+    items = idx.it[m_all]
+    out = []
+    for t in theme_rows[:5]:
+        tid = t.get("theme_id")
+        if tid is None:
+            continue
+        years = 0
+        seen = 0
+        for y in sorted(set(ev_year.tolist())):
+            sel_y = ev_year == y
+            it_y = np.unique(items[sel_y])
+            it_s = np.unique(items[sel_y & np.isin(ev_month, list(months))])
+            if len(it_s) < 20 or len(it_y) < 100:
+                continue
+            seen += 1
+            s_in = float((facts.theme[it_s] == tid).mean())
+            s_y = float((facts.theme[it_y] == tid).mean())
+            if s_in >= 1.5 * s_y and (facts.theme[it_s] == tid).sum() >= 3 and s_y > 0:
+                years += 1
+        if years >= 3:
+            out.append({"theme": t["name"], "years": years, "of_years": seen})
+    return out[:1]
+
+
+def _compare(topics, prev_topics):
+    """T9: which side is bigger and by how much, by code (the writer never works out a ratio or a gap), and the
+    balance in the span before."""
+    if len(topics) < 2:
+        return {}
+    a, b = topics[0], topics[1]
+    big, small = (a, b) if a["items"] >= b["items"] else (b, a)
+    out = {"more": big["name"], "less": small["name"], "difference": int(big["items"] - small["items"])}
+    if small["items"]:
+        r = big["items"] / small["items"]
+        out["times"] = round(r, 1)
+        out["ratio_words"] = ("about the same" if r < 1.15 else "a little more" if r < 1.5 else
+                              f"about {round(r * 2) / 2:g} times as many" if r < 3 else
+                              f"about {round(r)} times as many")
+    if prev_topics and len(prev_topics) >= 2:
+        pa, pb = prev_topics
+        out["previous"] = {"a": pa, "b": pb}
+        if pb and pa:
+            pr = (pa / pb) if big is a else (pb / pa)
+            r2 = big["items"] / small["items"] if small["items"] else None
+            if r2:
+                out["balance"] = "wider" if r2 > pr * 1.15 else "narrower" if r2 < pr / 1.15 else "about the same"
     return out
 
 
@@ -662,6 +957,10 @@ def _topic_row(view, rec, idx, facts, th, phrase, ev, so, eo):
            "length_known_share": t["length_known_share"], "shorts": t["shorts"], "long": t["long"],
            "themes": [th.shown(x) for x in tids] if th is not None else [],
            "matched_by": ("themes and words" if tids else "words"),
+           # round 12, pass 2 (T9): what is inside the topic in the window, by count
+           "top_themes": [{"name": th.shown(t), "items": int(n)} for t, n in
+                          Counter(int(x) for x in facts.theme[sc.items] if x >= 0).most_common(2)
+                          if th.shown(t)] if th is not None else [],
            "channels": [{"name": idx.creators[c], "items": int(n)} for c, n in
                         Counter(int(x) for x in idx.creator[sc.items] if x >= 0).most_common(3)]}
     allm = ev & m[idx.it]
@@ -769,7 +1068,8 @@ def _offers(q, kind, out):
     t = out.get("totals") or {}
     if not getattr(q, "without_shorts", False) and (t.get("shorts") or 0) > 0 and kind not in ("first", "last"):
         offers.append("without_shorts")
-    for r in (out.get("themes") or [])[:2]:
+    # round 12, pass 2 (T11): a ranking of channels is narrowed by its broad areas ("only gaming"), not by a theme
+    for r in ((out.get("areas") or []) if kind == "channels" else (out.get("themes") or []))[:2]:
         if r.get("name") and not q.topic:
             offers.append("only_topic:" + r["name"])
     if kind not in ("day", "first", "last") and q.kind not in ("list", "on_day"):

@@ -151,7 +151,7 @@ def run(mode, cases, out=None, saved=None):
                     row["error"] = type(e).__name__
                 row["cost"] = round(cost, 6)
             _, cv = I.chart(s)
-            form = I.check(raw, s, chart_vals=cv)
+            form = I.check(raw, s, chart_vals=cv, strict=(mode != "fake" and I.strict()))
             if mode != "fake" and hasattr(I, "fill"):   # round 12, fix: what the writer sends (code fills what failed)
                 form = I.fill(form, raw, s, cv)
             ok = bool(form["answer"]) and len(form["observations"]) >= I.OBS_MIN
@@ -186,6 +186,29 @@ def run(mode, cases, out=None, saved=None):
     return rows
 
 
+def v5_scores():
+    """Round 12, pass 2 (T1): the insight_v5 sentences (sheet paths) of the eval file, read in the strict mode:
+    every planted one dropped, every true one kept, by kind of falsehood."""
+    with open(CASES, encoding="utf-8") as f:
+        d = json.load(f)
+    cases = {c["id"]: c for c in d["cases"]}
+    out = {"planted_v5": 0, "caught_v5": 0, "true_v5": 0, "kept_v5": 0, "by_why": {}}
+    for x in (d.get("v5") or {}).get("cases") or []:
+        s = cases[x["case"]]["sheet"]
+        for t in x["true"]:
+            fm = I.check({"answer": "-", "observations": [{"text": t, "uses": []}]}, s, strict=True)
+            out["true_v5"] += 1
+            out["kept_v5"] += bool(fm["observations"])
+        for p in x["plants"]:
+            fm = I.check({"answer": "-", "observations": [{"text": p["text"], "uses": []}]}, s, strict=True)
+            out["planted_v5"] += 1
+            out["caught_v5"] += not fm["observations"]
+            b = out["by_why"].setdefault(p["why"], [0, 0])
+            b[0] += 1
+            b[1] += not fm["observations"]
+    return out
+
+
 def summary(rows, mode):
     n = len(rows)
     s = {"mode": mode, "cases": n, "answers": sum(r["answers"] for r in rows),
@@ -198,6 +221,7 @@ def summary(rows, mode):
     if mode == "fake":
         s.update(planted=sum(r["planted"] for r in rows), caught=sum(r["caught"] for r in rows),
                  true_obs=sum(r["true_obs"] for r in rows), true_kept=sum(r["true_kept"] for r in rows))
+        s.update(v5_scores())
     return s
 
 

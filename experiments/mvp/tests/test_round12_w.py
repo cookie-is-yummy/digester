@@ -98,8 +98,9 @@ def test_never_you_watched_n_hours_only_videos_adding_up_to():
     I = ins()
     s = case("top_lately")["sheet"]
     f = I.Facts(I.shown(s))
+    # round 12, pass 2 (T2): no total of video length in any words (it read as watch time: 9 hours a day)
     assert I.check_sentence("Your Blender 3D videos add up to about 28 hours, on 19 different days.", f,
-                            uses=["themes"]) is None
+                            uses=["themes"]) == "hours"
     for bad in ("You watched 28 hours of Blender 3D.", "Blender 3D was 28 hours.", "Blender 3D took about 28 hours.",
                 "Your watch time on Blender 3D was about 28 hours."):
         assert I.check_sentence(bad, f, uses=["themes"]) is not None, bad
@@ -126,7 +127,7 @@ def test_a_sentence_that_only_repeats_the_chart_or_the_answer_is_dropped():
          "uses": ["channels"]}]}, s, chart_vals=cv)
     why = [d[1] for d in form["dropped"]]
     assert "restates_chart" in why and "repeat" in why
-    assert len(form["observations"]) == 2
+    assert len(form["observations"]) == 1   # round 12, pass 2 (T2): the "about 11 hours" one goes too
 
 
 def test_a_title_that_speaks_to_the_model_is_data_inside_the_sheet_and_its_order_is_dropped():
@@ -187,7 +188,8 @@ def test_the_chart_is_block_bars_of_one_width_at_most_8_rows_with_one_caption():
     assert 2 <= len(rows) <= 8
     assert {len(r.split(" ")[0]) for r in rows} == {I.BAR_CELLS}
     assert all(set(r.split(" ")[0]) <= set("█░") for r in rows)   # whole cells only (partial blocks gap on a phone)
-    assert rows[0] == "██████████░░ 2020 film essays" and rows[-1] == "██████████░░ 2026 Blender 3D"
+    # round 12, pass 2 (T12): bars of 8 cells (each row one line at 430 px, seen in a screenshot)
+    assert rows[0] == "███████░ 2020 film essays" and rows[-1] == "███████░ 2026 Blender 3D"
     assert all(len(r) <= 40 for r in rows)   # one line in the page's bubble at 430 px
     many = dict(s, periods=[{"label": str(2010 + i), "items": 10 + i} for i in range(14)])
     # round 12, fix (judge: a year's chart began in March): up to 12 periods, and a cut is said in the caption
@@ -237,6 +239,9 @@ def test_the_reply_texts_when_an_offer_is_taken():
 @pytest.fixture()
 def wr(env, monkeypatch):
     monkeypatch.setenv("MVP_INSIGHT", "1")
+    # round 12, pass 2: these forms are insight_v4's (typed numbers), which stays selectable; insight_v5's (sheet
+    # paths, strict) are in tests/test_round12_pass2.py
+    monkeypatch.setattr("mvp.insight.PROMPT_VERSION", "insight_v4")
     env["person"] = {"handle": H, "library": str(env["lib"]), "timezone": "America/New_York"}
     return env
 
@@ -251,11 +256,13 @@ def test_write_lays_out_answer_observations_chart_so_what_and_one_line_of_offers
     assert [p["type"] for p in parts] == ["text"]
     blocks = parts[0]["text"].split("\n\n")
     assert blocks[0].startswith("In the 4 weeks up to 30 October 2026, where your export ends, mostly Blender 3D")
-    assert blocks[1].startswith("• Blender 3D grew to 31%") and blocks[1].count("• ") == 4
-    assert blocks[2].startswith("Share of what you opened, by theme:\n████████████ 31% Blender 3D")
+    # round 12, pass 2 (T2): the true form's "about 2 hours" sentence is a planted one now (no length totals)
+    assert blocks[1].startswith("• Blender 3D grew to 31%") and blocks[1].count("• ") == 3
+    # round 12, pass 2: bars of 8 cells (T12); no export hint on an answer that has one (T6)
+    assert blocks[2].startswith("Share of what you opened, by theme:\n████████ 31% Blender 3D")
     assert blocks[3].split("\n") == ["You saved 7 Blender 3D videos you never opened; want them as a list?",
-                                     I.REFRESH_SHORT["en"], "Want it without Shorts or only Blender 3D?"]
-    assert info["kept"] == 4 and info["prompt_version"] == I.PROMPT_VERSION and info["used"]
+                                     "Want it without Shorts or only Blender 3D?"]
+    assert info["kept"] == 3 and info["prompt_version"] == I.PROMPT_VERSION and info["used"]
     assert "friends" not in parts[0]["text"] and "can't" not in parts[0]["text"]
 
 
@@ -267,7 +274,8 @@ def test_the_hint_on_a_new_export_once_in_six_hours_and_the_friends_line_only_wh
     first = I.write(wr["bot"], wr["person"], c["sheet"], now)[0]["text"]
     again = I.write(wr["bot"], wr["person"], c["sheet"], now + timedelta(hours=2))[0]["text"]
     later = I.write(wr["bot"], wr["person"], c["sheet"], now + timedelta(hours=7))[0]["text"]
-    assert I.REFRESH_SHORT["en"] in first and I.REFRESH_SHORT["en"] not in again and I.REFRESH_SHORT["en"] in later
+    # round 12, pass 2 (T6, the founder: "dont say that at the end"): no export hint on an answer at all
+    assert I.REFRESH_SHORT["en"] not in first + again + later
     assert "friends" not in first
     asked = dict(c["sheet"], question="what have my friends and i been watching lately")
     assert I.FRIENDS_LINE["en"] in I.write(wr["bot"], wr["person"], asked, now + timedelta(hours=20))[0]["text"]
@@ -360,7 +368,7 @@ def test_rh_lately_has_no_closing_paragraph_the_window_words_carry_the_ends(hist
     assert out.startswith("In the 4 weeks up to 30 October 2026 (where your YouTube export ends; your Instagram export "
                           "ends on 15 October 2026), you watched 16 videos (15 on YouTube, 1 on Instagram). Most from:")
     assert ENDS_PARA not in out and "Posts from friends" not in out
-    assert out.endswith(REFRESH)   # about a time after the export's end: the hint, once
+    assert REFRESH not in out   # round 12, pass 2 (T6): no export hint on a history answer that has one
     out2, _ = ask(hist, "what have i been watching the most lately")
     assert REFRESH not in out2 and ENDS_PARA not in out2
 

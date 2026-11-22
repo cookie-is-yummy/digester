@@ -1428,11 +1428,10 @@ def _quiet_limits(text, q, start, end, rec, plats, reached, newest, starts_on, q
                         tail.append(start_line(rec, plats, q))
                     if reached:
                         tail.append(ends_line(rec, reached, lang))
-            # the hint: only about a time after an export's end, once in 6 hours
-            if reached and newest and (end is None or end > newest or q.window.kind == "lately") and \
-                    "refresh" not in quiet:
-                tail.append(REFRESH[lang])
-                said.append("refresh")
+            # round 12, pass 2 (T6; the founder: "The user shouldnt constantly be made aware of what we cannot do, so
+            # dont say that at the end"): no export hint on a history answer; the window's own words say where the
+            # record ends, and the hint is said only when the question's whole window lies after an export's end
+            # (the "I can't see ..." answer above)
     if q.how == "saved":
         tail.append("(Guardado cuenta lo guardado, las colecciones, lo que te enviaste y las listas.)" if es else
                     "(Saved counts saves, collections, posts you sent yourself and playlists.)")

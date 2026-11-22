@@ -259,12 +259,6 @@
       ]
      },
      {
-      "text": "Most speedrun clips were Shorts, so they add up to only about 2 hours.",
-      "uses": [
-       "themes"
-      ]
-     },
-     {
       "text": "Your busiest hours are after 9pm.",
       "uses": [
        "when"
@@ -319,6 +313,13 @@
      "uses": [
       "window"
      ]
+    },
+    {
+     "text": "Most speedrun clips were Shorts, so they add up to only about 2 hours.",
+     "uses": [
+      "themes"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -757,12 +758,6 @@
     "answer": "In 2025 Lantern Speedruns led with 820 videos, but 92% of them were Shorts; Prime Number Club was close behind with 610 long ones.",
     "observations": [
      {
-      "text": "Prime Number Club's 610 videos add up to about 240 hours, four times Lantern Speedruns' 60.",
-      "uses": [
-       "channels"
-      ]
-     },
-     {
       "text": "Pixel Forge is new in your top 5, all Blender 3D.",
       "uses": [
        "channels"
@@ -811,6 +806,13 @@
      "uses": [
       "channels"
      ]
+    },
+    {
+     "text": "Prime Number Club's 610 videos add up to about 240 hours, four times Lantern Speedruns' 60.",
+     "uses": [
+      "channels"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -963,18 +965,6 @@
        "channels",
        "new"
       ]
-     },
-     {
-      "text": "Almost all of Lantern Speedruns was Shorts, adding up to only about 11 hours.",
-      "uses": [
-       "channels"
-      ]
-     },
-     {
-      "text": "Pixel Forge's 180 videos add up to about 70 hours, the most of any channel.",
-      "uses": [
-       "channels"
-      ]
      }
     ],
     "so_what": null,
@@ -1007,6 +997,20 @@
      "uses": [
       "channels"
      ]
+    },
+    {
+     "text": "Almost all of Lantern Speedruns was Shorts, adding up to only about 11 hours.",
+     "uses": [
+      "channels"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
+    },
+    {
+     "text": "Pixel Forge's 180 videos add up to about 70 hours, the most of any channel.",
+     "uses": [
+      "channels"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -1117,12 +1121,6 @@
       "uses": [
        "topics"
       ]
-     },
-     {
-      "text": "Together they add up to about 12 hours of video.",
-      "uses": [
-       "topics"
-      ]
      }
     ],
     "so_what": null,
@@ -1155,6 +1153,13 @@
      "uses": [
       "topics"
      ]
+    },
+    {
+     "text": "Together they add up to about 12 hours of video.",
+     "uses": [
+      "topics"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -1271,12 +1276,6 @@
       ]
      },
      {
-      "text": "Your blender videos add up to about 510 hours in length.",
-      "uses": [
-       "topics"
-      ]
-     },
-     {
       "text": "2025 was the busiest year, with 380, up from 40 in 2021.",
       "uses": [
        "periods"
@@ -1312,6 +1311,13 @@
      "uses": [
       "topics"
      ]
+    },
+    {
+     "text": "Your blender videos add up to about 510 hours in length.",
+     "uses": [
+      "topics"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -2050,12 +2056,6 @@
       ]
      },
      {
-      "text": "Pixel Forge's 6 Blender 3D videos were the long ones, about 3 hours in length.",
-      "uses": [
-       "channels"
-      ]
-     },
-     {
       "text": "Most of it came late, after 10pm.",
       "uses": [
        "when"
@@ -2092,6 +2092,13 @@
      "uses": [
       "themes"
      ]
+    },
+    {
+     "text": "Pixel Forge's 6 Blender 3D videos were the long ones, about 3 hours in length.",
+     "uses": [
+      "channels"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -2214,12 +2221,6 @@
        "channels",
        "when"
       ]
-     },
-     {
-      "text": "Only 1 of the 9 was a Short; together they add up to about 3 hours.",
-      "uses": [
-       "totals"
-      ]
      }
     ],
     "so_what": null,
@@ -2245,6 +2246,13 @@
      "uses": [
       "themes"
      ]
+    },
+    {
+     "text": "Only 1 of the 9 was a Short; together they add up to about 3 hours.",
+     "uses": [
+      "totals"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -2808,13 +2816,6 @@
       "uses": [
        "themes"
       ]
-     },
-     {
-      "text": "By length the gap is smaller: about 4,100 hours of videos against 3,300.",
-      "uses": [
-       "totals",
-       "previous"
-      ]
      }
     ],
     "so_what": null,
@@ -2841,6 +2842,14 @@
      "uses": [
       "totals"
      ]
+    },
+    {
+     "text": "By length the gap is smaller: about 4,100 hours of videos against 3,300.",
+     "uses": [
+      "totals",
+      "previous"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -3060,12 +3069,6 @@
     "answer": "This year, up to 30 October 2026 where your export ends, more gaming: 640 videos, three times the 212 on art.",
     "observations": [
      {
-      "text": "By length the gap is much smaller: about 120 hours of gaming videos against 95 of art.",
-      "uses": [
-       "topics"
-      ]
-     },
-     {
       "text": "Moss Village is behind 300 of the gaming ones; Brush & Water behind 150 of the art.",
       "uses": [
        "topics"
@@ -3108,6 +3111,13 @@
      "uses": [
       "topics"
      ]
+    },
+    {
+     "text": "By length the gap is much smaller: about 120 hours of gaming videos against 95 of art.",
+     "uses": [
+      "topics"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -3194,12 +3204,6 @@
       ]
      },
      {
-      "text": "By length guitar wins: about 140 hours of videos against 60.",
-      "uses": [
-       "topics"
-      ]
-     },
-     {
       "text": "Chord Garden is behind 310 of the 380 guitar videos.",
       "uses": [
        "topics"
@@ -3230,6 +3234,13 @@
      "uses": [
       "topics"
      ]
+    },
+    {
+     "text": "By length guitar wins: about 140 hours of videos against 60.",
+     "uses": [
+      "topics"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   },
@@ -3460,12 +3471,6 @@
     "answer": "Más cocina: 1.210 videos, el triple de los 402 de guitarra.",
     "observations": [
      {
-      "text": "Por duración la diferencia es menor: unas 180 horas de videos de cocina frente a 150.",
-      "uses": [
-       "topics"
-      ]
-     },
-     {
       "text": "Kettle & Cast está detrás de 700 de los de cocina.",
       "uses": [
        "topics"
@@ -3495,8 +3500,206 @@
      "uses": [
       "topics"
      ]
+    },
+    {
+     "text": "Por duración la diferencia es menor: unas 180 horas de videos de cocina frente a 150.",
+     "uses": [
+      "topics"
+     ],
+     "why": "length_total (round 12, pass 2, T2: no total of video length)"
     }
    ]
   }
- ]
+ ],
+ "v5": {
+  "about": "Round 12, pass 2 (T1, DESIGN 19.P2): sentences in insight_v5's form (sheet paths in braces), read in the strict mode. 'true' must all be kept; every 'plants' one must be dropped: a number bound to the wrong thing, a wrong rank word, 'mostly' under half, a made-up difference or ratio.",
+  "cases": [
+   {
+    "case": "top_lately",
+    "true": [
+     "{themes[0].name} grew to {themes[0].share} of what you opened, up {themes[0].change_vs_previous}.",
+     "{themes[0].channels[0].name} is behind {themes[0].channels[0].items} of your {themes[0].items} {themes[0].name} videos.",
+     "{totals.shorts} of the {totals.items} were Shorts."
+    ],
+    "plants": [
+     {
+      "text": "{channels[2].name} is behind {channels[2].items} of your {themes[0].name} videos.",
+      "why": "bound"
+     },
+     {
+      "text": "{themes[1].name} came on {themes[2].days} days.",
+      "why": "bound"
+     },
+     {
+      "text": "{themes[2].name} led the window with {themes[2].share}.",
+      "why": "rank"
+     },
+     {
+      "text": "Mostly {themes[0].name} lately ({themes[0].share}).",
+      "why": "mostly"
+     },
+     {
+      "text": "{themes[0].name} had {themes[0].items}, {themes[1].items} more than {themes[1].name}.",
+      "why": "difference"
+     },
+     {
+      "text": "{themes[0].name} led, followed by {themes[2].name} and {themes[1].name}.",
+      "why": "rank"
+     },
+     {
+      "text": "{themes[0].name} had 28 more videos than {themes[1].name}.",
+      "why": "difference"
+     },
+     {
+      "text": "A wide mix, led by {themes[0].name} at {themes[0].share}.",
+      "why": "mostly"
+     },
+     {
+      "text": "{themes[0].name} had twice the videos of {themes[1].name} ({themes[0].items} against {themes[1].items}).",
+      "why": "difference"
+     },
+     {
+      "text": "{themes[0].share} of your {themes[1].name} videos came from {themes[0].name}.",
+      "why": "bound"
+     }
+    ]
+   },
+   {
+    "case": "channels_2025",
+    "true": [
+     "{channels[0].name} led with {channels[0].items} videos, ahead of {channels[1].name} ({channels[1].items}).",
+     "{channels[0].name} is almost all Shorts ({channels[0].shorts_share})."
+    ],
+    "plants": [
+     {
+      "text": "{channels[1].name} came on {channels[0].days} days.",
+      "why": "bound"
+     },
+     {
+      "text": "{channels[0].name} gave {channels[0].items} of your {themes[1].name} videos.",
+      "why": "bound"
+     },
+     {
+      "text": "{channels[2].name} was your top channel with {channels[2].items} videos.",
+      "why": "rank"
+     },
+     {
+      "text": "{channels[1].name} is mostly Shorts.",
+      "why": "mostly"
+     },
+     {
+      "text": "{channels[0].name} led, followed by {channels[2].name}.",
+      "why": "rank"
+     },
+     {
+      "text": "{channels[0].name} had {channels[0].items}, {channels[3].items} more than {channels[3].name}.",
+      "why": "difference"
+     }
+    ]
+   },
+   {
+    "case": "top_summer",
+    "true": [
+     "Mostly {themes[0].name} and {themes[1].name} ({themes[0].share} and {themes[1].share} of what you opened).",
+     "{themes[0].channels[0].name} is behind {themes[0].channels[0].items} of your {themes[0].name} videos."
+    ],
+    "plants": [
+     {
+      "text": "Mostly {themes[0].name} that summer, at {themes[0].share}.",
+      "why": "mostly"
+     },
+     {
+      "text": "{channels[0].name} is behind {channels[0].items} of your {themes[1].name} videos.",
+      "why": "bound"
+     },
+     {
+      "text": "{themes[1].name} was the biggest theme of the summer.",
+      "why": "rank"
+     },
+     {
+      "text": "{themes[0].name} grew by 21 points.",
+      "why": "difference"
+     }
+    ]
+   },
+   {
+    "case": "cmp_gaming_art",
+    "true": [
+     "{topics[0].name} came on {topics[0].days} days, {topics[1].name} on {topics[1].days}.",
+     "{topics[0].name} led with {topics[0].items} videos against {topics[1].items} on {topics[1].name}."
+    ],
+    "plants": [
+     {
+      "text": "{topics[0].name} had four times as many as {topics[1].name} ({topics[0].items} against {topics[1].items}).",
+      "why": "difference"
+     },
+     {
+      "text": "{topics[1].name} came out on top with {topics[1].items}.",
+      "why": "rank"
+     },
+     {
+      "text": "{topics[0].name} was ahead by 428 videos.",
+      "why": "difference"
+     },
+     {
+      "text": "{topics[0].name} had {topics[1].items} videos.",
+      "why": "bound"
+     }
+    ]
+   },
+   {
+    "case": "day_oct30",
+    "true": [
+     "{themes[0].name} ({themes[0].share}) and {themes[1].name} ({themes[1].share}) led the day.",
+     "{channels[0].name} gave {channels[0].items} of the {totals.items} videos."
+    ],
+    "plants": [
+     {
+      "text": "Mostly {themes[0].name} that day ({themes[0].share}).",
+      "why": "mostly"
+     },
+     {
+      "text": "{channels[1].name} gave {channels[0].items} videos.",
+      "why": "bound"
+     },
+     {
+      "text": "{themes[2].name} was the main theme of the day.",
+      "why": "rank"
+     }
+    ]
+   },
+   {
+    "case": "changed_since_2020",
+    "true": [
+     "{themes[0].name} grew to {themes[0].share}, up {themes[0].change_vs_previous}."
+    ],
+    "plants": [
+     {
+      "text": "Mostly {themes[0].name} since 2020 ({themes[0].share}).",
+      "why": "mostly"
+     },
+     {
+      "text": "{themes[2].name} led the change, up {themes[2].change_vs_previous}.",
+      "why": "rank"
+     }
+    ]
+   },
+   {
+    "case": "es_top",
+    "true": [
+     "{themes[0].channels[0].name} está detrás de {themes[0].channels[0].items} de tus videos de {themes[0].name}."
+    ],
+    "plants": [
+     {
+      "text": "Sobre todo {themes[0].name} ({themes[0].share}).",
+      "why": "mostly"
+     },
+     {
+      "text": "{themes[2].name} lidera con {themes[2].share}.",
+      "why": "rank"
+     }
+    ]
+   }
+  ]
+ }
 }

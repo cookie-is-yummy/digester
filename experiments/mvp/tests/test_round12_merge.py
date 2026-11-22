@@ -253,15 +253,17 @@ def test_c_the_second_one_after_a_channels_answer_is_the_charts_second_channel(w
 # ================================ (d) one place decides the hint and the friends line ============================
 def test_d_the_hint_once_in_6_hours_across_the_writer_and_the_code_reply(wr):
     from mvp import insight as I
+    # round 12, pass 2 (T6, the founder: "dont say that at the end"): no export hint on a history answer, from the
+    # writer or the code reply; the window's own words say where the record ends
     out, _ = ask(wr, QS["q1"])
-    assert I.REFRESH_SHORT["en"] in out
+    assert I.REFRESH_SHORT["en"] not in out
     wr["state"]["answers"]["mvp_insight"] = lambda u: {}   # the writer fails: today's code reply
     later(wr, 1)
     out, _ = ask(wr, "what have i been watching lately")
     assert "send me a new export" not in out
     later(wr, 7)
     out, _ = ask(wr, "what have i been watching lately")
-    assert "send me a new export" in out   # the code reply says it now, once
+    assert "send me a new export" not in out and "where your" in out
     wr["state"]["answers"]["mvp_insight"] = RW.fake_insight
     later(wr, 1)
     out, _ = ask(wr, QS["q1"])
@@ -425,8 +427,10 @@ def test_live_an_hours_figure_said_as_videos_and_one_day_are_dropped(text, why):
 def test_live_the_true_sentences_of_that_answer_stay():
     from mvp import insight as I
     s = _topics_sheet()
-    for text in ("Gaming videos add up to about 723 hours, art videos to about 23.",
-                 "You opened gaming on 287 days, art on 153.",
+    # round 12, pass 2 (T2): "Gaming videos add up to about 723 hours, ..." left: no total of video length
+    assert I.check_sentence("Gaming videos add up to about 723 hours, art videos to about 23.", I.Facts(I.shown(s)),
+                            ["topics"]) == "hours"
+    for text in ("You opened gaming on 287 days, art on 153.",
                  "Gaming had 2,236 Shorts and 1,182 long videos."):
         assert I.check_sentence(text, I.Facts(I.shown(s)), ["topics"]) is None, text
 
