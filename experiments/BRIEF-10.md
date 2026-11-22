@@ -500,7 +500,8 @@ Decisions still open after version 6:
 
 ## 21. Version 7 (22 Nov, round 12): history answers that give insight, not data
 
-The design is `mvp/DESIGN.md` section 19. Results are in `results/r12-insight-answers.md`. Nothing in `docs/` changed.
+The design is `mvp/DESIGN.md` section 19 (19.P2 and 19.P2 fix for the second pass). Results are in
+`results/r12-insight-answers.md`. Nothing in `docs/` changed but one new amendment, A-019 (Proposed).
 Everything runs on this prototype branch only.
 
 The founder graded 8 history questions on build 1f9cde0: 1 useful, 4 partly, 3 not useful, 5 of 8 slop. He asked:
@@ -508,33 +509,38 @@ The founder graded 8 history questions on build 1f9cde0: 1 useful, 4 partly, 3 n
 He gave nine rules, R-A to R-I. In short: answer the question asked; insight, not data; give more than asked; name
 themes. Add a so-what and follow-ups. Put the overview first. No limits lines. Say what only his history can say.
 
-It was built by two builders (D: facts, themes, lengths; W: the writer), then a merge. Two judges read the merge live.
-A fix pass followed, then a final judge. Code is at 1c5b77a.
+The first pass: two builders (D: facts, themes, lengths; W: the writer), a merge, two judges, a fix pass and a final
+judge (1c5b77a). A later strict judge of ace4be2 gave 3 useful and 5 partly. Fifteen things were still wrong (T1 to
+T15). The second pass: a fixer (2257352), two judges, a second fixer and a final judge. Code is at d7aa507.
 
 | Asked | Built | Limit |
 | --- | --- | --- |
-| Judge by watch time | The official length of each watched YouTube video, from YouTube's own API. Said as "videos adding up to about N hours" | The export has no watch time. A year's total reads as watch time (about 9 hours a day) |
-| Leave out Shorts | A Short rule chosen from the data (53,184 of 98,086). "without Shorts" after any answer | About 320 long videos are wrongly called Short |
-| Name themes | 19 fields and 50 themes by code from the library's own vectors, one naming call per field. Sensitive themes unnamed | Names not confirmed by him. 93 of 120 items read belong |
-| Filter by topic | "most watched channels in math", "only <theme>" after an answer | A topic's count can be far too high where a theme is matched by its name |
-| Answer the question asked | "more X or Y", "how has what I watch changed", "what was I into in <season>" read by code | English only for "more X or Y" |
-| Insight, not data | A fact sheet by code, a writer that fills a form, and code that checks every sentence. Code fills what was dropped | The lead is often the biggest of many small slivers |
-| So what? | Saved but never opened on the answer's themes. For a first or last, the path ("it has faded") | Mostly the same "you saved N" line |
-| Overview, then items | A day, a first or a last: the overview, then the items with cards | Some bullets repeat the overview |
-| No limits lines | The export end in the window's own words. The hint once in 6 hours. Friends only when asked | The hint still shows on the first answer |
+| Judge by watch time | The official length of each watched YouTube video, from YouTube's own API. Used for Shorts against long videos and the typical long video's minutes | The export has no watch time. No total of length is said: it read as watch time |
+| Leave out Shorts | A Short rule chosen from the data (53,184 of 98,086). "without Shorts" after any answer | About 320 long videos are wrongly called Short. One "without Shorts" answer still named a Shorts share |
+| Name themes | 19 fields and 50 themes clustered from what he watched, each with a broad area. Answers lead with the areas | Names not confirmed by him. Field names not renamed (about 9 of 15 usable) |
+| Filter by topic | "most watched channels in math", "only <area>" after an answer | One off-topic channel reached a topic's top 8 |
+| Answer the question asked | "more X or Y", "how has what I watch changed", "what was I into in <season>" read by code | "the last 3 months" goes to picks. A change between two years is told year by year |
+| Insight, not data | A fact sheet by code. The writer names sheet paths; code fills every number and checks every sentence | Rows 1 and 8 still read as lists of shares |
+| So what? | Code's candidates (a lapsed interest with saves, a learning side that gave way, Shorts moving); never twice in a row | None on rows 1 and 3, off topic on 5, a repeat on 8 |
+| Overview, then items | A day against his usual day; a first with its path; then the items with cards | A day's and a first's items are printed as a list and again as cards |
+| No limits lines | The export end in the window's own words. No export hint on a history answer | - |
 
-Measured: 5,018 offline tests pass (4,713 before). Made-up sheets: 76 of 76 planted false sentences dropped, 56 of 56
-true ones kept. 12 of 12 real numbers matched an independent recount. At the merge, 6 of 19 live answers fell back to
-the old reply. After the fix, 0 of 54 captured answers and 11 of 11 live ones did. The final judge graded rows 1 to 7:
-3 useful, 4 partly, 0 not useful, 0 slop. Row 8 of both judges did not reach the notes. Each answer is one call,
-$0.0044 to $0.0051 and 2.8 to 5.3 seconds. Spend: $23.30 of the $30 cap (about $0.92 this round).
+Measured: 5,175 offline tests pass (4,713 before the round). Made-up sheets: the writer answers 18 of 20 (4 of 20 for
+the old code reply), with 0 limits lines and 0 runs of counts. Planted false sentences: 89 of 89 typed and 45 of 45
+in the path form dropped; 62 of 62 true ones kept. A topic's count: minecraft maps to 5 themes, not 8. The final judge
+graded all 8: 5 useful, 3 partly, 0 not useful, 2 not slop, 6 half slop. It found every number it recounted true.
+Each answer is one call, $0.0038 to $0.0059 and 2.8 to 8.8 seconds. Spend: $24.22 of the $30 cap (about $1.85 this
+round, $0.91 of it in the second pass).
 
 Decisions still open after version 7:
-42. **The export hint:** drop it from history answers, or keep it once in 6 hours as the brief allows. He asked for no limits lines; two judges asked for it gone.
-43. **Lengths:** the summed length of what was opened, over a year, reads as watch time. Drop totals over long windows, or keep them with "videos adding up to".
-44. **How a topic is counted:** by its word only, or also by themes matched by name, said as "about". Row 3's count is 1,711; 842 carry the word.
+42. **The export hint:** gone from history answers (T6); only the "I can't see" answer says it. Confirm.
+43. **Lengths:** no total of length anywhere (T2). Confirm, or ask for "videos adding up to" back.
+44. **How a topic is counted:** its own words, plus a theme only where 25% of its titles say the topic, said "about". Confirm.
 45. **The Short rule:** at most 61 s, or at most 180 s if published from 15 Oct 2024. Confirm, or name another.
-46. **Theme names:** 50 model names checked by code, not confirmed by him. Read them once; say which to rename or merge.
-47. **The themes amendment** (both founders): docs/05 stage 3 picks k at the biggest gap and clusters saves; here k is by silhouette and watched items are clustered. docs/03 names a 20-dimension space; here it is 24, in derived files.
-48. **The lead of a wide mix:** say the broad picture by field ("mostly X and Y"), as the final judge asks. Not built yet.
-49. **d132 and A-008 to A-017** are still open.
+46. **Theme and field names:** 50 theme and 19 field names by a model, checked by code. Read them once; say which to rename.
+47. **The themes amendment** is now A-019 (both founders): the fact sheet, the checked writer, themes from what was watched.
+48. **The lead of "the most lately":** the biggest areas now; the last judge asks for what changed about him first.
+49. **A day's or a first's items:** a list and cards today; on a phone, choose one.
+50. **The so-what:** when never-twice removes the best one, say none, or the next best (today: the next best).
+51. **Before he tests:** run `python3 -m mvp.lengths <library>` and `python3 -m mvp.themes build <library>` on his Mac.
+52. **d132 and A-008 to A-018** are still open.
