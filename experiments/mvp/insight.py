@@ -211,6 +211,12 @@ class Facts:
         self.hours_of_day = set()
         self.has_weekpart = False
         self.allowed_phrases = []
+        self.alias = {}         # another way to say a name ("october 2026" for the period "Oct 2026")
+        self.parents = {}       # a channel under a theme or topic, a theme under a period -> the names above it
+        self.rank = {}          # name -> its best place in any list (0 = first)
+        self.fields = {}        # name -> its own items, days, length_hours, share (the first record of it)
+        self.periods = set()
+        self.period_top = {}    # period -> the theme first in it
         self._walk()
 
     # ---------- building ----------
@@ -230,6 +236,9 @@ class Facts:
             self.change[key] = rec["change_vs_previous"]
         if _num(rec.get("items")):
             self.items_of[key] = max(self.items_of.get(key, 0), rec["items"])
+        f = {k: rec[k] for k in ("items", "days", "length_hours", "share") if _num(rec.get(k))}
+        if f and key not in self.fields:
+            self.fields[key] = f
         if rec.get("new_in_window") is True:
             self.new.add(key)
         return key
@@ -273,7 +282,8 @@ class Facts:
                 y, m = (y + (m == 12), m % 12 + 1)
         if w.get("words"):
             self.allowed_phrases.append(w["words"])
-            for x in re.findall(r"\b\d{1,3}\b", w["words"]):
+            for x in re.findall(r"\b(\d{1,3})\s+(?:weeks?|days?|months?|years?|semanas?|dias?|días?|meses|anos?|años?)\b",
+                                w["words"]):
                 self.glob.counts.add(int(x))   # "the 4 weeks up to ...": the 4 may be said
         self._text(s.get("question") or "")
         self._text(w.get("words") or "")
@@ -350,13 +360,31 @@ class Facts:
             for k in ("channel", "theme", "words"):
                 if isinstance(rec.get(k), str):
                     self._text(rec[k])
+                    if k != "words":
+                        self._entity(rec[k], {})   # an item's channel is a name too ("Sunday Pan" is no weekday)
             for k in ("at", "first_watched"):
                 d = _as_date(rec.get(k))
                 if d:
                     self._date(d)
+                if k == "at" and isinstance(rec.get(k), str):
+                    m = re.match(r"^\d{4}-\d{2}-\d{2}[T ](\d{2}):", rec[k])
+                    if m:
+                        self.hours_of_day.add(int(m.group(1)))
             ent = self._entity(name, rec) if name else None
             if ent and i == 0:
                 self.top.add(ent)
+            if ent:
+                self.rank[ent] = min(self.rank.get(ent, 99), i)
+            if ent and key == "periods":
+                self.periods.add(ent)
+                m = re.match(r"^([a-z]{3})[a-z]*\.?\s+(\d{4})$", ent)
+                if m and m.group(1) in _MON:   # "Oct 2026" is also said "October 2026"
+                    full = MONTHS[_MON[m.group(1)] - 1] + " " + m.group(2)
+                    self.alias[full] = ent
+                    self.alias[m.group(1) + " " + m.group(2)] = ent
+                th = (rec.get("themes") or [None])[0]
+                if isinstance(th, dict) and th.get("name"):
+                    self.period_top[ent] = " ".join(_words(th["name"]))
             _scalars(rec, kp)
             for sub in ("channels", "themes"):
                 if isinstance(rec.get(sub), list):
@@ -364,26 +392,35 @@ class Facts:
                     self._list(rec[sub], kp, sub, parent=ent)
             if parent and ent:   # a channel's or a period theme's numbers also belong to the entity above it
                 self.entities[parent].add(_scalars(rec, Pool()))
+                self.parents.setdefault(ent, set()).add(parent)
 
     # ---------- reading a sentence ----------
     def names_in(self, text):
         """The sheet's names a sentence holds (longest first, each once) and the text with them taken out."""
-        t = " " + " ".join(_words(text)) + " "
+        t = " " + _norm(text) + " "
         found = []
-        for key in sorted(self.entities, key=len, reverse=True):
-            if len(key) < 2:
+        pats = [(k, k) for k in self.entities] + list(self.alias.items())
+        for pat, key in sorted(pats, key=lambda x: len(x[0]), reverse=True):
+            if len(pat) < 2:
                 continue
-            pat = " " + key + " "
-            if pat in t:
-                found.append(key)
-                t = t.replace(pat, " | ")
+            rx = r"(?<![a-z0-9])" + r"[\W_]+".join(re.escape(w) for w in pat.split()) + r"(?:'s)?(?![a-z0-9])"
+            if re.search(rx, t):
+                if key not in found:
+                    found.append(key)
+                t = re.sub(rx, f" |{chr(65 + found.index(key))}| ", t)
         return found, t
 
     def pool_for(self, keys, names):
         p = Pool().add(self.glob)
+        if self.sheet.get("kind") in ("compare_topics", "compare_windows"):
+            # a comparison may say the other side's number without naming it again ("140 hours against 60")
+            for k in ("topics", "themes"):
+                p.add(self.key_pool.get(k) or Pool())
         if names:
             for n in names:
                 p.add(self.entities.get(n) or Pool())
+                for up in self.parents.get(n, ()):
+                    p.add(self.entities.get(up) or Pool())
         else:
             for k in keys or self.key_pool:
                 p.add(self.key_pool.get(k) or Pool())
@@ -476,7 +513,15 @@ leaving pile ready offer show shows showed shown spread split even ratio count c
 picture favourite favorite pull pulled pulls draw drew drawn hold holds held stayed stay stays kept keep keeps
 mean means meaning suggests suggest seems looks clear clearly bit little lot gap edge tie tied level same share
 compared beat beats beating outnumbered outpaced trailing trail percent rest tail mid around amount
-ver vi viste vistes visto videos video clips corto cortos largos largo canal canales cuenta cuentas tema temas
+busiest busier busy different differ went gave give gives way extra steadier steady slightly wins win won beat
+points point percent tutorial tutorials guide guides lesson lessons recipe recipes episode episodes series review
+reviews explainer walkthrough highlight highlights compilation compilations vlog vlogs stream streams fan return
+whole mostly spread across sessions session evenings nothing alone almost all came latest earliest kept stuck
+ver vi viste vistes visto videos video nunca paso pasa pasamos te ti puntos punto por ciento sesion sesiones
+yes yeah no si brought bring brings work through clips corto cortos largos largo canal canales cuenta cuentas tema temas
+diferencia menor mayor ventaja gana ganan gano supera superan supero frente seguido seguida juntos juntas casi
+todo toda todos todas cada uno una lideraste empezaste volviste vuelve volvio quedo quedan queda habia hubo tuviste
+mientras aunque apenas solamente mucha poca
 mitad tercio cuarto doble veces vez casi cerca unos unas alrededor total suman sumaban duracion horas hora minutos
 dia dias semana semanas mes meses ano anos tarde tardes noche noches manana mananas fin finde semana entre
 creciste crecio crecieron subio subieron bajo bajaron cayo cayeron nuevo nueva nuevos nuevas empezaste empezo
@@ -512,7 +557,7 @@ _DOWN = re.compile(r"\b(?:fell|fall(?:s|en|ing)?|dropp\w*|slipp\w*|shr[aiu]nk\w*
                    r"down from|down \d|quieter|baj\w*|cay\w*|disminu\w*)\b")
 _NEW = re.compile(r"\b(?:new(?:ly)?|first time|picked up|nuevos?|nuevas?)\b")
 _STOPPED = re.compile(r"\b(?:stopped|disappeared|vanished|gone|dropped off|no longer|dejaste|desaparec\w*)\b")
-_SUPER = re.compile(r"\b(?:most|biggest|largest|top|main|mostly|leading|dominat\w*|favou?rite|number one|"
+_SUPER = re.compile(r"\b(?:the most|most[- ](?:watched|opened|seen)|(?:watched|opened|saw) (?:the )?most|biggest|largest|top|main|mostly|leading|led|leads|dominat\w*|favou?rite|number one|"
                     r"sobre todo|principal\w*|mayoria|domina\w*|lidera\w*)\b")
 _RELATION = re.compile(r"\b(?:than|more|less|fewer|grew|rose|fell|faded|up|down|twice|half|double\w*|since|before|"
                        r"previous|new|stopped|while|whereas|against|compared|behind|from|only|most|top|biggest|"
@@ -528,6 +573,11 @@ _NUMWORD = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "e
             "eleven": 11, "twelve": 12, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7,
             "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12}
 ALLOWED_CAPS = {"i", "youtube", "instagram", "shorts", "short", "tv"}
+SEASONS = {"spring": (3, 4, 5), "summer": (6, 7, 8), "autumn": (9, 10, 11), "winter": (12, 1, 2),
+           "primavera": (3, 4, 5), "verano": (6, 7, 8), "otono": (9, 10, 11), "invierno": (12, 1, 2)}
+# what the totals call Shorts and long videos, for "Shorts doubled" and "long videos grew"
+FIELDS = {"shorts": re.compile(r"\bshorts\b|\bcortos\b"),
+          "long": re.compile(r"\blong(?:er)? (?:videos|ones)\b|\blong-form\b|\bvideos largos\b|\blargos\b")}
 
 
 def _parse_num(s, lang):
@@ -610,18 +660,9 @@ def _check_body(raw, facts, uses, chart_vals):
         keys = [k for k in keys if k in facts.sheet]
         if not keys:
             return "no_keys"
-    names, rest = facts.names_in(raw)
-    # quoted words must be a name or part of a title of the sheet
-    for q in re.findall(r"\"([^\"]{3,80})\"", t):
-        qn = " ".join(_words(q))
-        if qn and not any(qn in e for e in facts.entities):
-            return "quote"
-    pool = facts.pool_for(keys, names)
-    n_facts = len(names)
-    # ---- dates, months, years, hours of the day (taken out of the text once read) ----
-    rest_n = rest
-    for m in re.finditer(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+|de\s+)?(" + _MON_RE + r")\w*\.?(?:,?\s+(?:de\s+)?(\d{4}))?|"
-                         r"\b(" + _MON_RE + r")\w*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?", rest_n):
+    # ---- dates first (a day before a month is never a count), then the sheet's names ----
+    n_facts = 0
+    for m in re.finditer(_DATE_RX, t):
         d, mon, y = (m.group(1), m.group(2), m.group(3)) if m.group(1) else (m.group(5), m.group(4), m.group(6))
         mo = _MON[mon]
         ok = (any(x.month == mo and x.day == int(d) and x.year == int(y) for x in facts.dates) or
@@ -629,8 +670,17 @@ def _check_body(raw, facts, uses, chart_vals):
         if not ok:
             return "date"
         n_facts += 1
-    rest_n = re.sub(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+|de\s+)?(" + _MON_RE + r")\w*\.?(?:,?\s+(?:de\s+)?(\d{4}))?|"
-                    r"\b(" + _MON_RE + r")\w*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?", " ", rest_n)
+    t2 = re.sub(_DATE_RX, " ", t)
+    names, rest = facts.names_in(t2)
+    # quoted words must be a name or part of a title of the sheet
+    for q in re.findall(r"\"([^\"]{3,80})\"", t):
+        qn = " ".join(_words(q))
+        if qn and not any(qn in e for e in facts.entities):
+            return "quote"
+    pool = facts.pool_for(keys, names)
+    n_facts += len(names)
+    # ---- months, years, hours of the day (taken out of the text once read) ----
+    rest_n = rest
     for m in re.finditer(r"\b(" + _MON_RE + r")\b(?:\s+(?:de\s+)?(\d{4}))?", rest_n):
         mo = _MON[m.group(1)]
         if m.group(1) == "may" and not m.group(2):
@@ -658,6 +708,11 @@ def _check_body(raw, facts, uses, chart_vals):
             if not any(h in _TIME_WORD[w] for h in facts.hours_of_day):
                 return "time_of_day"
             n_facts += 1
+    for w, months in SEASONS.items():
+        if re.search(r"\b" + w + r"\b", rest_n):
+            if not any(m in facts.months for m in months):
+                return "season"
+            n_facts += 1
     if _WEEKPART.search(rest_n):
         if not facts.has_weekpart:
             return "weekpart"
@@ -675,9 +730,11 @@ def _check_body(raw, facts, uses, chart_vals):
     # ---- ratio and fraction words ----
     for rx, r in _RATIO:
         if rx.search(rest_n):
-            if not _ratio_ok(r, pool):
+            if not _ratio_bound(r, facts, names, rest_n, pool):
                 return "ratio"
             n_facts += 1
+            rest_n = rx.sub(" ", rest_n)
+    rest_n = re.sub(r"\b(\w+) times\b", lambda m: " " if m.group(1) in _NUMWORD else m.group(0), rest_n)
     for rx, f in _FRAC:
         if rx.search(rest_n):
             if not (any(abs(x - f) <= 0.07 for x in pool.fracs) or _ratio_ok(1 / f, pool)):
@@ -688,6 +745,24 @@ def _check_body(raw, facts, uses, chart_vals):
     num_re = (r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:,\d+)?)" if facts.lang == "es" else
               r"(?<![\w.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)")
     nums = []
+    for m in re.finditer(num_re + r"\s+(?:of\s+(?:the\s+|your\s+)?|del?\s+|los\s+|las\s+)?\|([A-Z])\|", rest_n):
+        v = _parse_num(m.group(1), facts.lang)
+        idx = ord(m.group(2)) - 65
+        if v is None or idx >= len(names):
+            continue
+        if names[idx] in facts.period_top or names[idx] in facts.periods:
+            continue
+        # a number said right before a name ("13 Blender 3D videos") is a count of a name of the sentence, never a
+        # total that happens to be equal
+        own = Pool()
+        for n in names:
+            own.add(facts.entities.get(n) or Pool())
+        hedged = bool(_HEDGE.search(rest_n[:m.start()]))
+        hours_ok = re.search(r"\bhours?\b|\bhoras?\b", t) and any(
+            abs(v - h) <= max(0.6, h * (0.15 if hedged else 0.06)) for h in own.hours)
+        if own.counts and not _near_count(v, own.counts, hedged) and not _diff_ok(int(v), own.counts) \
+                and not hours_ok:
+            return "number_of_name"
     for m in re.finditer(num_re + r"(\s*%|\s*percent|\s*per cent|\s*por ciento|\s*points?|\s*puntos?)?"
                          r"(\s*(?:hours?|hrs?|h\b|horas?))?(\s*(?:minutes?|mins?|minutos?))?(\s*(?:times|x\b|veces))?",
                          rest_n):
@@ -720,6 +795,8 @@ def _check_body(raw, facts, uses, chart_vals):
             topn = re.search(r"\b(?:top|first|primer\w*|los)\s*$", before)
             ok = (_near_count(v, pool.counts, hedged) or (v == int(v) and _diff_ok(int(v), pool.counts)
                                                           and _RELATION.search(t))
+                  or (re.search(r"\bhours?\b|\bhoras?\b", t) and
+                      any(abs(v - h) <= max(0.6, h * (0.15 if hedged else 0.06)) for h in pool.hours))
                   or (topn and v <= 10 and any(L >= v for L in facts.lengths)))
             if not ok:
                 return "number"
@@ -733,7 +810,7 @@ def _check_body(raw, facts, uses, chart_vals):
         w = tok.split("'")[0]
         if len(w) < 3 or w in STOP or w in GENERIC or _stem(w) in GENERIC or w in _NUMWORD or w in _TIME_WORD:
             continue
-        if w in _MON or w in WEEKDAYS or w in WEEKDAYS_ES or w.rstrip("s") in WEEKDAYS:
+        if w in _MON or w in WEEKDAYS or w in WEEKDAYS_ES or w.rstrip("s") in WEEKDAYS or w in SEASONS:
             continue
         if w in ALLOWED_CAPS or w in facts.vocab or _stem(w) in facts.vocab:
             continue
@@ -751,7 +828,7 @@ def _check_body(raw, facts, uses, chart_vals):
         return "name:" + w
     # ---- what the words claim must agree with the sheet ----
     one = [n for n in names if n in facts.change]
-    if len(one) == 1 and len(names) == 1:
+    if len(one) == 1:
         ch = facts.change[one[0]]
         if _UP.search(rest_n) and not _DOWN.search(rest_n) and ch <= 0:
             return "direction"
@@ -761,19 +838,76 @@ def _check_body(raw, facts, uses, chart_vals):
         return "not_new"
     if names and _STOPPED.search(rest_n) and not any(n in facts.stopped for n in names):
         return "not_stopped"
-    if names and _SUPER.search(rest_n) and not any(n in facts.top for n in names):
+    topn = re.search(r"\btop (\d{1,2}|three|five|ten)\b", rest_n)
+    if topn:
+        k = int(topn.group(1)) if topn.group(1).isdigit() else _NUMWORD[topn.group(1)]
+        if names and not any(facts.rank.get(n, 99) < k for n in names):
+            return "not_top"
+        rest_n = rest_n[:topn.start()] + " " + rest_n[topn.end():]
+    periods = [n for n in names if n in facts.period_top]
+    if periods and _SUPER.search(rest_n):
+        if not any(facts.period_top[p] in names for p in periods if facts.period_top[p] != p):
+            return "not_top"
+    elif names and (_SUPER.search(rest_n) or re.search(r"\bmost of\b|\bla mayoria\b", rest_n)) and \
+            not any(n in facts.top for n in names):
         return "not_top"
-    cmp = re.search(r"\b(more|fewer|less)\s+(.{2,60}?)\s+than\s+(.{2,60}?)(?:[,.;]|$)", " ".join(_words(raw)))
-    if cmp:
-        a, _ = facts.names_in(cmp.group(2))
-        b, _ = facts.names_in(cmp.group(3))
+    if not names:
+        why = _field_claim(facts, rest_n)
+        if why:
+            return why
+    flat = " ".join(_words(raw))
+    for rx, order in _CMP:
+        cmp = re.search(rx, flat)
+        if not cmp:
+            continue
+        g = cmp.groupdict()
+        a, _ = facts.names_in(g["a"])
+        b, _ = facts.names_in(g["b"])
         if a and b and a[0] in facts.items_of and b[0] in facts.items_of:
             more = facts.items_of[a[0]] > facts.items_of[b[0]]
-            if (cmp.group(1) == "more") != more:
+            want_more = g.get("w") in ("more", "mas", "bigger", "busier") if order else True
+            if want_more != more:
                 return "comparison"
     if chart_vals and nums and all(v in chart_vals for v in nums) and not _RELATION.search(rest_n.replace("|", " ")):
         return "restates_chart"
     return n_facts
+
+
+_DATE_RX = (r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+|de\s+)?(" + _MON_RE + r")\w*\.?(?:,?\s+(?:de\s+)?(\d{4}))?|"
+            r"\b(" + _MON_RE + r")\w*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?!\d)(?:,?\s+(\d{4}))?")
+_CMP = [(r"\b(?P<w>more|fewer|less|mas|menos)\s+(?P<a>.{2,60}?)\s+(?:than|que)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that|en|este|esta)\b|$)", 1),
+        (r"(?P<a>.{2,60}?)\s+(?:was|were|had|got|fue|tuvo)\s+(?P<w>more|fewer|less|bigger|busier|mas|menos)\s+(?:than|que)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that|en|este|esta)\b|$)", 1),
+        (r"(?P<a>.{2,60}?)\s+(?:beat|outnumbered|outpaced|overtook|ahead of)\s+(?P<b>.{2,60}?)(?:\s(?:this|in|on|that)\b|$)", 0)]
+
+
+def _ratio_bound(r, facts, names, text, pool):
+    """'twice', 'three times': between the two names when two are named (their items, days or length), between
+    this span and the one before for Shorts or long videos, else between any two numbers the sentence may use."""
+    named = [n for n in names if n in facts.fields]
+    if len(named) >= 2:
+        a, b = facts.fields[named[0]], facts.fields[named[1]]
+        pairs = [(a[k], b[k]) for k in a if k in b]
+        return any(min(x, y) > 0 and abs(max(x, y) / min(x, y) - r) <= r * 0.15 for x, y in pairs)
+    for f, rx in FIELDS.items():
+        if rx.search(text):
+            now, before = (facts.sheet.get("totals") or {}).get(f), (facts.sheet.get("previous") or {}).get(f)
+            if _num(now) and _num(before) and min(now, before) > 0:
+                return abs(max(now, before) / min(now, before) - r) <= r * 0.15
+    return _ratio_ok(r, pool)
+
+
+def _field_claim(facts, text):
+    """'Shorts grew', 'long videos fell': the totals against the span before must agree."""
+    for f, rx in FIELDS.items():
+        if rx.search(text):
+            now, before = (facts.sheet.get("totals") or {}).get(f), (facts.sheet.get("previous") or {}).get(f)
+            if not (_num(now) and _num(before)):
+                continue
+            if _UP.search(text) and not _DOWN.search(text) and now <= before:
+                return "direction"
+            if _DOWN.search(text) and not _UP.search(text) and now >= before:
+                return "direction"
+    return None
 
 
 def _sentences(s):
@@ -1036,18 +1170,37 @@ def _item_line(k, it, lang):
 
 def window_lead(answer, sheet):
     """The answer begins with the window's words when the window is not all time (they carry where the record
-    ends); code adds them when the model left them out."""
+    ends); code adds them when the model left them out: for a window that passes an export end, when the answer does
+    not say the end's date; otherwise when it does not say the window."""
     w = (sheet.get("window") or {}).get("words") or ""
     if not w or not answer:
         return answer
-    core = re.sub(r"^(?:in|en|on|el)\s+", "", _norm(w).strip().rstrip(","))
-    core = re.sub(r"\s*\(?where your (?:\w+ )?export ends\)?,?$|,?\s*donde termina tu exportacion.*$", "", core)
-    if core and core[:24] in _norm(answer):
-        return answer
+    a = _norm(answer)
+    if (sheet.get("window") or {}).get("clipped"):
+        end = _as_date((sheet.get("window") or {}).get("end"))
+        days = _days_in(w)
+        need = [f"{d} {MONTHS[m - 1]}" for m, d in days] + [f"{MONTHS[m - 1]} {d}" for m, d in days]
+        if end:
+            need += [f"{end.day} {MONTHS[end.month - 1]}", f"{MONTHS[end.month - 1]} {end.day}",
+                     f"{end.day} de {MONTHS_ES[end.month - 1]}"]
+        need += [f"{d} de {MONTHS_ES[m - 1]}" for m, d in days]
+        if not need or any(x in a for x in need) or re.search(r"export ends|termina tu exportacion", a):
+            return answer
+    else:
+        core = re.split(r"[(,]", _norm(w))[0].strip()
+        core = re.sub(r"^(?:in|en|on|el|since|desde|from|del)\s+", "", core)
+        if not core or core in a:
+            return answer
     lead = w.strip().rstrip(",")
+    said = re.split(r"[(,]", w)[0].strip()
+    if said and a.startswith(_norm(said)) and len(said) < len(lead):
+        # the answer opens with the window's first words only ("Since 2020 you ..."): the full words take their place
+        rest = answer[len(said):].lstrip(" ,")
+        return lead[:1].upper() + lead[1:] + ", " + rest
     first = answer.split(" ", 1)[0]
-    keep_cap = first in ("I", "YouTube", "Instagram") or _norm(first) in {e.split()[0] for e in Facts(shown(sheet)).entities}
-    return lead[:1].upper() + lead[1:] + ", " + (answer if keep_cap else answer[:1].lower() + answer[1:])
+    keep = first in ("I", "YouTube", "Instagram") or any(
+        e.split()[0] == _norm(first).strip(",.") for e in Facts(shown(sheet)).entities)
+    return lead[:1].upper() + lead[1:] + ", " + (answer if keep else answer[:1].lower() + answer[1:])
 
 
 def layout(form, sheet, items_parts=None, extra_lines=()):
