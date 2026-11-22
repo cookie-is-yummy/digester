@@ -4708,3 +4708,141 @@ end (the rest was spent by the other builder).
 - Conflicts with docs/ (for the orchestrator): docs/05 stage 3 chooses k at the biggest gap in the merge heights and
   clusters saves, likes and shares; here k is chosen by silhouette and the watched items are clustered (the question is
   about watching).
+
+<!-- round 12, W -->
+### 19.W The writer, the chart, the layout, offers and quiet limits (builder W; `insight.py`, prompt `insight_v4`, `eval_insight.py`, `tests/test_round12_w.py`)
+
+**Reproduced first** (offline, `tests/h_library.py`, the fakes; no titles here). "what have i been watching the most
+lately": a count, a top 5 of channels by count, then a paragraph on both export ends, the export hint and the
+friends line. "which channels ... in 2025": a top 5 by count, nothing else. "how many ... this year": one count and
+the export-end paragraph. "when did i first ...": the date, three items with cards, a count, the all-time range as a
+closing line. "more gaming or more art this year" and "what was i into in the summer of 2023": not read by code (the
+model path; D's reads). "what did i watch on october 30": the list, then the export-end paragraph. "how has what i
+watch changed since 2020": "2024: 6, 2025: 11, 2026: 27", the months the same way, the peak, the total, then where
+the record starts and ends. The same shapes the founder graded.
+
+**The writer** (`insight.write(bot, person, sheet, now, info=None)` -> message parts, or None; the merge wires it in
+front of today's code reply). One call (`llm.chat_json`, purpose `mvp_insight`, so it lands in the ledger with the
+person's ref) fills a form: `answer` (1 to 2 sentences), `observations` (2 to 4, each with the sheet keys it used),
+`so_what` (or null), `offers` (at most 3 of the sheet's own). The sheet goes to the model trimmed (`shown`: the longest
+lists cut, ids out, angle brackets neutralised) inside `<sheet>` tags; titles and names are data. None, and the code
+reply goes out, when: `MVP_INSIGHT=0`, the sheet has no kind, the person or the build is over its cap (no call made),
+the call fails, the answer fails the check, or fewer than 2 observations are left.
+
+**The check** (`check`, `check_sentence`; code only, against the same trimmed sheet). A sentence is dropped when:
+- a number is not the sheet's: counts exact, or with "about" within 10%; a percent from a share (1 point, 3 with
+  "about"), from change_vs_previous in points, or a named count over the window's total; hours only as the length of
+  the videos ("adding up to", "in length"; a sentence with hours in other words is dropped as watch time); a
+  difference of two counts only beside a comparison word; "twice", "three times", "half", "a third" only where two
+  numbers of the same field of the two names said (items, days, length), or Shorts and long against the span before,
+  show it; a number said right before a name must be a count of a name of that sentence, never a total that happens
+  to be equal ("13 Blender 3D videos" when 13 is the long videos); "led by N" must be a difference; "up from N" must
+  be the span before's own;
+- a date, month, year, weekday, season, hour ("9pm") or time-of-day word ("evenings") is not the sheet's;
+- a capitalised word inside a sentence is no word of the sheet's names, a quoted phrase is no part of a name or title,
+  or a subject word (a list of about 250 genre, hobby and content words, English and Spanish) is not in the sheet;
+- it claims what the sheet contradicts: "grew" of a theme whose share fell, "new" or "stopped" of a name not in
+  `new` / `stopped`, "the most" / "top" / "led" of a name not first in its list (or not first in the period named),
+  "more X than Y" the wrong way, "N% of your X videos" for a share of everything, "saved and never opened" with no
+  such row in `library.saved_not_opened`;
+- it says what the bot cannot do (exports, friends, "I can't", sorry), speaks of watch time, is true for anyone
+  ("popular genre", "a great way"), links, names a sensitive topic (`profile.sensitive`), only repeats a count the
+  chart shows, or adds no number and no name to what the answer and the observations above it said;
+- an observation names no sheet key it used. The answer is checked as one piece ("it" in its second sentence is the
+  first's); when that fails, its first sentence alone may stand. A so-what that repeats an offer is dropped.
+
+Kept sentences get the house style (`tidy`): ISO dates in words, separators in counts (1,284; Spanish 1.284),
+"videos" for "items", "the span before" said as "before", a unit ("the weeks before") the window never named left
+out, and no "on 1 day" for one day.
+
+**The layout** (code). The answer first, starting with the window's words (code adds them when the model left them
+out, and, for a window that passes an export's end, when the answer does not say the end's date); the observations as
+"• " lines; a chart where the kind has numbers over time or across themes (top: themes by share, else channels;
+channels: channels; count: by month, else topics; changed: periods with their main theme; compare_windows: the two
+spans; compare_topics: the topics): one caption, at most 8 rows, each a bar of 12 whole block cells padded with light
+shade so the labels line up, then the number, then the label. Partial blocks (▏▎▍) were tried first and left gaps in
+the page's bubble at 430 px (another font draws them); whole cells read well (screenshots of the test page's own
+bubble CSS at 430 px, outside git). Period rows say only the period and its main theme (with the count they wrapped
+at 430 px). Then the so-what, the hint (below) and ONE line of offers ("Want it without Shorts, only Blender 3D, or by
+theme?"). For day, first and last: the overview, then the numbered items (title, channel, day, length, "Short"), their
+cards, then the so-what and the offers.
+
+**Offers** (texts only; D reads what the person says): `OFFER_WORDS`, `offers_line(sheet, chosen, lang)` (only the
+sheet's offers; the model's pick, else the sheet's first two), `taken_line(offer, lang)` ("Without Shorts:", "Only
+math explainers:") and `taken_empty` ("Without Shorts there is nothing left in ...").
+
+**Quiet limits (R-H)**, in the writer and in the code replies (`history._quiet_limits`; `MVP_QUIET_LIMITS=0` gives
+round 11's replies back). Where a window passes an export's end, its own words carry it: "This year (1 January to 30
+October 2026, where your YouTube export ends; your Instagram export ends on 15 October 2026) you watched ...", "In
+October 2026 (up to 30 October, where your YouTube export ends)", "On Friday 30 October 2026 (the last day of your
+YouTube export)"; a window that starts before the record says where it starts in the same parentheses; an all-time
+answer carries the range in its words ("In all your history I can see (5 January 2024 to 30 October 2026),") once in
+6 hours (with two platforms, and for first and last, the range line stays as it was, once in 6 hours). The hint on
+sending a new export: once in 6 hours, and only when the window is about a time after an export's end (no longer on
+all-time answers; a window wholly after the record keeps its "I can't see ..." answer, the hint once in 6 hours). The
+friends line: only when the question is about friends (`friends_asked`, read in `history_reads`), once in 6 hours.
+The notes are the existing `histnotes:<handle>` ones, shared with summaries (whose replies are unchanged).
+
+**Evaluation** (`eval/insight_cases.json`: 20 made-up sheets, two per kind and two in Spanish, each with the
+question, what the answer must hold and must not hold, a true form and 3 to 7 planted false sentences; `python3 -m
+mvp.eval_insight --mode before|fake|live|rescore`). Before = today's code reply in today's words written out from the
+sheet (an emulation: a made-up sheet has no library behind it).
+
+| | answers the question | a limits / friends line | a run of "2020: N, 2021: N" | writer used | observations kept |
+| --- | --- | --- | --- | --- | --- |
+| before (today's code reply) | 4 of 20 | 7 | 2 | - | - |
+| insight_v1 | 7 | 1 | 2 | 7 | 29 |
+| insight_v2 | 11 | 0 | 0 | 8 | 36 |
+| insight_v3 | 14 | 0 | 0 | 12 | 37 |
+| insight_v4 (default) | 17 | 0 | 0 | 18 | 52 |
+
+(Each prompt's live replies rescored with the final check; where the writer falls back, the code reply after R-H is
+scored.) The fake run: 76 of 76 planted false sentences dropped, 56 of 56 true ones kept. Per answer: $0.0021 to
+$0.0032 (mean $0.0025 with v4), 1.3 to 2.4 seconds; four live runs of the 20 sheets, $0.189 in all (ledger rows
+`mvp_insight`). What v1 to v3 taught: the model writes vague sentences with no numbers ("grew from the previous
+span"), says "items", invents a so-what ("You saved 7 ... never opened" with no library row), says hours without
+"adding up to", repeats the answer in the observations and reads a theme's share as a share of a topic. v4 asks for
+a number in every observation, something new in each, at most 2 of one kind, hours only as "videos adding up to about
+N hours", the date and title for first and last, and the so-what only from `saved_not_opened`. Read as the founder
+would: v4's answers name themes with their share and how they moved, who is behind a theme, Shorts against long,
+when, what is new and what stopped, and for "changed" which theme led each stretch; still data-like in places (a
+channel answer lists five channels with counts; a timeline adds "61,000 videos on 2,400 days"); the so-what is only
+ever "you saved N on that theme and never opened them".
+
+**Spanish**: the writer answers in Spanish when the sheet says `lang: es` (both Spanish sheets used); the check reads
+Spanish numbers and words. A model's English separators in Spanish ("1,210") are read and written back as 1.210.
+
+**Changed on purpose** (rule R-H, the code replies): `selftest/conversations.jsonl` c40.1 (the end in the window's
+words, no "so I can't see after that"), c40.2 (the record's start in the window's words), c54.1 (the range in the
+all-time words, no hint), c54.2 (no range the second time); the earlier test lines are listed below.
+
+**Checks** (offline, after the work): full suite 4,786 passed, 0 failed (4,713 before and the 73 of
+`test_round12_w.py`; 4 shards); demo 10 passed; the dry self-test 59 conversations, 152 of 152 steps; `probe_same`
+byte-equal with `same_head.json`; the development phrasing set by code as tester and operator: 73 helper lines right,
+1 wrong (d007), 1 of 40 `none` lines taken (d132), as before (no read was added or changed); the 159 rule texts, the
+123 phrasings and the round 11 traps are held by the suite and still pass. Live: four runs of the 20 sheets and three
+calls of `write` on a scratch home through a real bot, $0.197 in all (ledger purpose `mvp_insight`, 83 calls).
+
+**Test lines changed on purpose by R-H** (each marked "round 12, W" in place): `test_round11_h.py`: h3 (no hint on an
+all-time ranking), the day in the person's time zone, a rewatched video (October's words), friends' posts (the friends
+line not said unless asked; October's words twice), likes and saves (twice), six heads of "the window is always said
+back" (the last 30 days, since 20 October, this year, 2026, lately, hours), a window that touches the end, the
+timeline and compare test (since December 2023, the blender timeline's head, October against September), Spanish
+October, the follow-ups (five heads), the interpreter's form; `test_round11_fix_a.py`: R4 (the friends line not said,
+no hint on the all-time ranking, the hint on October's answer, the six hours later), R4 Spanish, the notes kept
+(`{"range"}`), R5 October against September; `test_round11_checks.py`: 13 heads (this year, the Spanish last 7 days,
+a day, two weekends, 6 days ago, where likes start, "the ones i liked", today, this month, the last 7 days, 1 to 12
+November, likes in October); `test_round11_fix2.py` (the hint on a week wholly after the record once in 6 hours; the
+ends accepted in the window's words); `test_round11_fix2_checks.py` (the same, three asks: the hint the first time);
+`test_round11_fix_checks.py` (`ends_said` reads the window's words, the all-time likes' range, the friends line never,
+the end after a restart and for a second person, `REFRESH` imported); `tests/test_mvp.py`'s fixture sets
+`MVP_INSIGHT=0` (one line added).
+
+**Not done.** No real sheet yet: the writer is built and measured on made-up sheets; D's sheets may hold keys or
+meanings the check does not know (`change_vs_previous` is read as share now minus share before, a fraction;
+`previous.words` names the span before). The subject list is a list: a made-up subject not in it gets through. A wrong
+reading the numbers allow (a share said of the wrong whole beyond the "N% of your X videos" shape) is not caught. The
+writer is not wired (the merge puts it in `history.send_answer`, D's facts first); the test env turns it off
+(`MVP_INSIGHT=0` in `tests/test_mvp.py`'s fixture) so earlier tests that count model calls stay as they are.
+iMessage was not seen (no Mac here); the chart was checked in the test page's bubble only.
+<!-- end round 12, W -->

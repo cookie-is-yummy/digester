@@ -703,9 +703,10 @@ def test_the_export_end_after_a_restart_and_for_a_second_person(fk, tmp_path):
 
 
 def test_a_window_wholly_after_the_record_keeps_the_hint_every_time(fk):
-    for _ in range(3):
+    # round 12, W (R-H): the answer ("I can't see ...", where the exports end) every time, the hint once in 6 hours
+    for k in range(3):
         out, _ = step(fk, "what did i watch yesterday")
-        assert out.startswith("I can't see Thursday 19 November 2026") and REFRESH in out, out
+        assert out.startswith("I can't see Thursday 19 November 2026") and (REFRESH in out) == (k == 0), out
 
 
 # ================================ 6. a YouTube title with its own hashtags is a title ===============================
