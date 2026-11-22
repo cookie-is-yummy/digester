@@ -5449,3 +5449,106 @@ only after a "from X to Y" of a change sheet; a change of a sheet with no span b
 the writer's words. Spanish so-whats are still only the saved ones, and the Spanish month bars' caption is the only
 Spanish line added. The console channel (a developer's) shows a list's captions without titles (the card is the URL).
 <!-- end round 12, pass 3 -->
+
+### 19.P3 fix What two judges still found after the third pass, and what changed (round 12, pass 3, the second fixer; `insight.py`, `facts.py`, `history.py`, `tests/test_round12_pass3_fix.py`)
+
+Two judges read the live answers of a0e0010 (judge A grading as the founder: rows 3, 4, 5, 7 useful, rows 1, 2, 6, 8
+partly; judge B recounting every claim). Each finding was reproduced first on the real sheets (built by code, no model)
+with the writer's live forms cached once and replayed offline after every change, then on made-up data in
+`tests/test_round12_pass3_fix.py` (28 tests, every one fails on a0e0010). No titles, channel, theme or field names of the
+real library are written here. The prompt is unchanged (`insight_v5`): every change is in code's words and checks.
+
+**Row 1, "the most lately".** The move leads: when the leading area is one of the two areas that moved most against the
+weeks before (facts' `moving` candidate), code's answer says it ("gaming nearly doubled to 22% of what you opened, from
+12% in the 4 weeks before (...); comedy came next (11%)"; "doubled", "nearly doubled" and "more than doubled" are read
+by the check as a ratio of the record's own share against its share before, `_ratio_bound`). The so-what is then what
+fell, with the follow-up code takes ("Worth noticing: sports fell from 16% to 9% against the 4 weeks before. Say \"only
+sports\" to see what in it you opened less."; a quoted "only X" is allowed when X is a sheet name). Asked again right
+after itself the lead stays the same and says both sides (the move kept in `sheet["moving_lead"]`, hidden from the
+model), and no so-what is said. One fall at two levels is said once (`_nested_move`: a bullet whose moves the answer or
+the so-what say the same way, its theme's area included, or half of them, goes). A span's dates are said once, the first
+time (`_once_spans`).
+
+**"The last 3 months".** It said "the last 90 days up to 30 October" over 67 days: a `days` window the export cuts is now
+the last N days the record holds, as "lately" is (`facts.sheet`), and its base is the N days before it. A base added by
+code goes right after the change's last value, never after a question that follows it (live: "...; what would you like
+to lean into next? against the 67 days before"). A move whose two values read the same ("from 17% ... to 17%") goes.
+
+**Shorts said once** (row 6, "into lately"). A count of Shorts ("9 of 10 videos were Shorts", "867 of your 1,437 videos
+were Shorts", "mostly Shorts") is the same fact as code's Shorts share (`_SHORTS_SUBJ`); code's line stands.
+
+**Row 6, a day.** The export's last day may hold only part of that day: it is never set against a usual day's count or
+hour (its busiest hour is said plainly); a whole day says what a usual day is ("fewer than on a usual day of the three
+months before (39)": the median of the 90 days before with anything opened, not the same weekday); a day's leading theme
+is a count ("<a theme> led with 3 of them"); "X came next (8%)", "all weekend watching" and a bullet that says the
+usual day's count again are filler.
+
+**Changes over years.** A closed span whose leader grew is said once ("Gaming led every year and grew, from 14% in 2023 to
+18% in 2025, while comedy fell from 13% to 9%"; never "since 2023; around it, gaming rose"). Row 7 names the year of the
+turn and ties it to the move to Shorts when that is the year Shorts jumped most ("... then down to 14% in 2023, the year
+you moved to Shorts, and 16% in 2026; ..."); the Spanish answer is the same answer with the same chart (it led with
+Shorts before). A bullet calling a theme of a few percent "the biggest theme" is filler.
+
+**Row 8, a season.** A season whose Shorts share rose 25 points or more against the season before leads with it and with
+the area that fell most ("you moved to Shorts: 82% of your YouTube videos, from 29% in the spring before, while gaming
+fell from 33% to 10%; comedy came first in a wide mix"); no so-what says the Shorts again; themes that ran under twice
+their share of the rest of the year are said as small ("Little else set the summer apart ...").
+
+**Row 2, channels.** The lead is in words ("In 2025, A led, ahead of B and C"), the chart under it carries the counts
+(`answer_shape` takes a channels answer with no number); saved videos on the top five channels' themes are found among
+all the themes, so the long-form channels he keeps coming back to get their so-what; a bullet that says the leader led
+again, a change "from" a count, and a move with one value go; "without Shorts" then "only gaming" says both ("Only gaming,
+without Shorts:"); a saved so-what with no offer gets code's words ("... you never opened. Want them as a list?").
+
+**Rows 3, 4, 5.** A count code counted is said without "about", with what it counts ("1,094 minecraft videos (by their
+titles and themes)"). A first's Shorts and long split says what it is of ("Of the 291 on YouTube, 201 were long ..."; a
+writer's split with no base is replaced by it); its path names its subject and the part of the year ("Your blender
+watching has faded: 12 in 2026 up to 30 October, against 131 in 2023, your busiest year for it"); a topic's Shorts share
+"of your YouTube videos" is of the topic's own videos (judge B). A comparison's chart sets each side against the span
+before (four bars) instead of repeating the answer's two numbers.
+
+**Where a judge was wrong or nothing could be done.** Judge A, math: "the offer 'without Shorts' is useless when the
+leaders have no Shorts": 22% of the math videos are Shorts, so the ranking can change without them; the offer stays.
+Judge A, row 5: "the narrowing gap is the hook (you saved N painting videos)": the sheet holds no saved unopened videos on
+the comparison's themes but the one said on row 4 just before (never twice in a row); asked on its own, row 5 says it.
+Judge B, row 3: the count leaves out a gaming theme with the topic's word in its name: that is the topic mapping
+(`themes.for_topic`, its own eval), not changed here. A card titled "A video from <channel>" (no title in the export) is
+the shared card code, left as it is.
+
+**Evals.** The writer's eval rescored on the same 20 sheets from the last saved insight_v5 forms (no model call), a0e0010
+against the final code: answers 19 and 19, writer used 20 and 20, bullets kept 52 and 52, so-what 6 and 6, a limits line 0
+and 0, a run of counts 0 and 0 (one of my rules regressed it on the way, the export's last day losing its plain busiest
+hour; found by this rescore and fixed before it was kept). The planted-falsehood eval: 89 of 89 typed planted caught and
+43 of 43 true kept, the v5 set 60 of 60 caught and 27 of 27 kept, before and after. No prompt, naming or topic mapping
+changed, so those evals do not apply.
+
+**Live, read as the founder would** (my page on port 8798, a scratch home, the real library, `MVP_DAILY_CAP_USD=8`; the 8
+questions and 10 follow-ups, 9 to 12 seconds each at the page, $0.004 to $0.006 a call; pictures at 430 px of rows 1, 6
+and 8). Row 1 leads with the move and ends with the fall to look into; asked again right after, the same lead with both
+sides and no repeat. Row 2 names the clip channels he grazed and the long-form ones he keeps coming back to and offers
+the saved videos of one of those. Row 3 says the count as counted, its rise against last year and the move to Shorts.
+Row 4 says the date, what the topic mostly was, the split of the YouTube ones, three captioned cards, and the fade with
+its part of the year. Row 5 the ratio, what is inside each side, the gap against last year and a four-bar chart. Row 6
+the day's count and its leader as counts, the Shorts against a usual day, eight captioned cards (3,012 px at 430 px).
+Row 7 the leading area's weight over the years with the year of the turn. Row 8 the summer he moved to Shorts and what
+fell, little else that set it apart. Still not useful, as the founder would read them: row 6 (a day's list is mostly
+what anyone could look up; its bullets on a 10-video day are thin, and the writer still adds one, which themes made the
+day); and a half of row 2's follow-ups ("only gaming", math), where the writer's bullets are filler (busiest hours,
+channels that stopped) that the check cannot tell from information. The writer's own bullets vary from run to run.
+
+**Checks** (after the work): full suite 5,301 passed and 0 failed (4 shards); demo 10 passed; dry self-test 67
+conversations, 164 of 164 steps; `probe_same` byte-equal with `same_head.json`; the development phrasing set by code: 73
+helper lines right, 1 wrong (d007), 1 of 40 none lines taken (d132), the score file identical to the third pass's; the
+159 rule texts, the 123 phrasings and the round 11 and round 12 traps are held by the suite and pass. No reply of picks,
+recalls, summaries, asking videos, rules, emails, cancels or connectors changed.
+
+**Test lines changed on purpose**: `test_round12_pass3.py` (row 1's lead and so-what; row 7's turn year);
+`test_round12_pass2.py` (a top answer over 4 weeks leads with the move; the export's last day not against a usual day;
+a count without "about"); `test_round12_pass2_fix.py` (a count without "about"; the export's last day has no busiest
+hour against a usual day, a whole day keeps it); `test_round12_fix.py` (a first's path names its subject and the part of
+the year; a channels lead in words); `test_round12_merge.py` (both filters said after "without Shorts" then "only X").
+
+**Spend**: $0.204 by the ledger ($24.616 before, $24.820 after): the forms of the judges' 18 messages cached once
+($0.086 with a setup), one stray call of my debugging script ($0.006), and the live run (a setup and 18 messages,
+$0.104). The writer's eval was rescored from saved forms (no call).
+<!-- end round 12, pass 3 fix -->

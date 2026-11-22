@@ -337,7 +337,7 @@ def test_row2_both_filters_are_said_on_a_chained_follow_up():
 
 
 def test_a_saved_so_what_with_no_offer_gets_codes_words():
-    # live, math: "You saved 11 Math puzzles."
+    # live, math: "You saved 11 <a theme>."
     I = ins()
     s = _channels()
     s["so_what_candidates"] = [{"key": "saved:Space talks", "kind": "saved", "theme": "Space talks", "n": 11}]
@@ -362,3 +362,26 @@ def test_row7_a_biggest_theme_of_a_few_percent_is_filler():
     f["observations"][0] = "The biggest theme now is Space talks at 14%."
     assert len(I._last_reads(copy.deepcopy(f), s, I.Facts(I.shown(s)))["observations"]) == 3
 
+
+
+# ================================ the live reading of this fix: half a repeat, the usual day said twice =========
+def test_live_a_bullet_whose_moves_the_answer_half_says_goes():
+    # live, row 8: "comedy rose by 6 points and gaming fell by 23 points" under "while gaming fell from 33% to 10%"
+    I = ins()
+    s = _summer()
+    f = I.Facts(I.shown(s))
+    x = "Compared with the spring before, comedy rose by 6 points and gaming fell by 23 points."
+    assert I._nested_move(x, ["You moved to Shorts, while gaming fell from 33% to 10%."], s, f)
+    assert not I._nested_move(x, ["You moved to Shorts."], s, f)
+
+
+def test_live_a_days_bullet_that_says_the_usual_day_again_goes():
+    # live, 12 September: "2pm was the busiest hour, and 39 is your usual day's median" under the answer that says 39
+    I = ins()
+    s = copy.deepcopy(DAY)
+    s["window"] = dict(s["window"], words="On Saturday 12 September 2026")
+    f = {"answer": "10 videos, fewer than on a usual day of the three months before (32).", "so_what": None,
+         "dropped": [], "observations": ["2pm was the busiest hour, and 32 is your usual day's median.",
+                                         "Pixel Forge gave 2 of them.", "Block battles had 1."]}
+    assert I._last_reads(f, s, I.Facts(I.shown(s)))["observations"] == ["Pixel Forge gave 2 of them.",
+                                                                        "Block battles had 1."]

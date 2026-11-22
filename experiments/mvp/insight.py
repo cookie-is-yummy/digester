@@ -3940,7 +3940,8 @@ def _move_dir(text):
 def _moves_of(text, facts):
     """The names a sentence moves, each with its direction ("X grew ..., while Y fell ...": X up, Y down)."""
     out = {}
-    for part in re.split(r";|\bwhile\b|\bwhereas\b|\bbut\b|(?<=[.!?])\s", text or ""):
+    for part in re.split(r";|\bwhile\b|\bwhereas\b|\bbut\b|\band\b(?=[^,;]*\b(?:rose|grew|fell|faded|dropped|"
+                         r"climbed|jumped|slipped)\b)|(?<=[.!?])\s", text or ""):
         d = _move_dir(part)
         if d:
             for n in facts.names_in(part)[0]:
@@ -3961,7 +3962,10 @@ def _nested_move(x, others, sheet, facts):
     area_of = {" ".join(_words(t.get("name") or "")): " ".join(_words(t.get("area") or ""))
                for t in (sheet or {}).get("themes") or [] if isinstance(t, dict) and t.get("name") and t.get("area")}
     mine = {n: d for n, d in mine.items() if not any(n != m and n in m for m in mine)}   # "sports" in "action sports"
-    return all(theirs.get(n) == d or (area_of.get(n) and theirs.get(area_of[n]) == d) for n, d in mine.items())
+    said = [n for n, d in mine.items() if theirs.get(n) == d or (area_of.get(n) and theirs.get(area_of[n]) == d)]
+    # every move said already, or (live, row 8: "comedy rose by 6 points and gaming fell by 23 points" under an answer
+    # that says gaming's fall) half of them: the bullet goes, one fact once
+    return bool(said) and 2 * len(said) >= len(mine)
 
 
 def _split_line(tot, lang="en"):
@@ -4003,6 +4007,14 @@ def _leader_again(text, answer, sheet, facts):
     low = _norm(text)
     first = min(nx, key=lambda n: low.find(n) if low.find(n) >= 0 else 10 ** 6) if nx else None
     return first == k and k in na and bool(_RANK_WORD.search(low))
+
+
+def _usual_again(text, answer, sheet):
+    mi = ((sheet or {}).get("usual") or {}).get("median_items")
+    if not (_num(mi) and answer):
+        return False
+    rx = r"(?<![\d.,])" + re.escape(_fmt(mi, "en")) + r"(?![\d.,]*%)(?![\d,.]*\d)"
+    return bool(re.search(rx, answer)) and bool(re.search(rx, text or "")) and "usual" in _norm(text)
 
 
 def _split_no_base(text, sheet):
@@ -4216,7 +4228,7 @@ def fill(form, raw, sheet, chart_vals=None):
             sw = tidy(t, facts.lang)
     if sw and chosen is not None and chosen.get("kind") in ("saved", "lapsed_saves") and "?" not in sw and \
             sheet.get("kind") not in ("first", "last"):
-        # round 12, pass 3 fix (live, math: "You saved 11 Math puzzles."): saved things are said with what they are
+        # round 12, pass 3 fix (live, math: "You saved 11 <a theme>."): saved things are said with what they are
         # and the offer code takes ("want them as a list?")
         t = so_what_text(chosen, shown(sheet))
         if t and check_sentence(t, facts) is None:
@@ -4364,6 +4376,8 @@ def _last_reads(form, sheet, facts):
                      ("filler", lambda x, rest: day and bool(_DAY_FILLER.search(_norm(x)))),
                      ("nested_move", lambda x, rest: _nested_move(x, rest, sheet, facts)),
                      ("split_no_base", lambda x, rest: _split_no_base(x, sheet)),
+                     # live, 12 September: "39 is your usual day's median" under the answer that says it
+                     ("said_by_answer", lambda x, rest: day and _usual_again(x, form["answer"], sheet)),
                      # judge A, "without shorts": "<the leader> was your top channel ..." under the answer that says it
                      ("leader_again", lambda x, rest: _leader_again(x, form["answer"], sheet, facts)),
                      # judge A, "only gaming": "jumped from 35 in 2024 to 341", a change from a count
