@@ -4613,7 +4613,7 @@ docs/05 names the gap rule).
   (`history.topic_fit`) fall, only when the words are rare in titles or that theme's titles hold them at least a quarter
   of the time. A field's own words are not used ("blender" was the fourth word of a field of art, DIY and animation, and
   mapped "blender" to 1,469 items; now its 300 titles). On the real library: gaming 13 themes, art 2, math 1, minecraft
-  8, chess 1, blender and football none (their own titles). With v1 (no category) "gaming" reached 4 themes and none of the 7
+  8, blender none (its own 300 titles). With v1 (no category) "gaming" reached 4 themes and none of the 7
   of the Minecraft field. The sheet's topic items are the mapped themes' items and every item whose text holds the
   words.
 - **Evaluation.** Made-up library (`tests/r12_library.py`, 9 made-up themes with known vector directions, 768 items):
