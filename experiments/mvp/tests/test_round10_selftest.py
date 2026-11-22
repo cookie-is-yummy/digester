@@ -313,7 +313,8 @@ def test_every_conversation_is_well_formed():
             assert set(s.get("do") or []) <= {"google_approve", "mcp_allow", "mcp_change_tool"}
             assert set(s.get("dry") or {}) <= {"mvp_interpret", "mvp_compose", "mvp_extract", "mvp_profile_merge",
                                                "mvp_profile_guess", "mvp_first_requests", "mvp_errand",
-                                               "mvp_synth"}   # the merge of round 11: a summary (c45, c46)
+                                               "mvp_synth",   # the merge of round 11: a summary (c45, c46)
+                                               "mvp_insight"}   # the merge of round 12: the history writer (c59-c66)
 
 
 def test_design_and_verdict_conversations_and_every_founder_example_are_there():

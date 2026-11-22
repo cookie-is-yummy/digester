@@ -390,3 +390,61 @@ def test_a_the_writer_reads_a_themes_change_as_a_fraction_and_may_say_of_n_then(
     later(wr)
     out, _ = ask(wr, QS["q3"])
     assert "That is 12 of the 246 videos you opened then." in out
+
+
+# ================================ the live run's defects (22 Nov, the real library; made-up words here) ==========
+def _topics_sheet():
+    return {"kind": "compare_topics", "lang": "en", "question": "did i watch more gaming or more art this year",
+            "window": {"words": "This year up to 30 October 2026, where your export ends", "start": "2026-01-01",
+                       "end": "2026-10-30", "clipped": True},
+            "totals": {"items": 3830, "days_active": 290},
+            "topics": [{"name": "gaming", "items": 3455, "days": 287, "length_hours": 723.1, "shorts": 2236,
+                        "long": 1182},
+                       {"name": "art", "items": 375, "days": 153, "length_hours": 23.4, "shorts": 259, "long": 53}],
+            "offers": ["without_shorts"]}
+
+
+@pytest.mark.parametrize("text, why", [
+    ("Gaming also reached 723.1 videos adding up to about 723 hours.", "count_of_videos"),
+    ("Art reached 23 videos adding up to about 23 hours.", "count_of_videos"),
+    ("You opened 10 videos across 1 day.", "one_day"),
+    ("You opened them on one single day.", "one_day"),
+])
+def test_live_an_hours_figure_said_as_videos_and_one_day_are_dropped(text, why):
+    from mvp import insight as I
+    s = _topics_sheet()
+    assert I.check_sentence(text, I.Facts(I.shown(s)), ["topics"]) == why
+
+
+def test_live_the_true_sentences_of_that_answer_stay():
+    from mvp import insight as I
+    s = _topics_sheet()
+    for text in ("Gaming videos add up to about 723 hours, art videos to about 23.",
+                 "You opened gaming on 287 days, art on 153.",
+                 "Gaming had 2,236 Shorts and 1,182 long videos."):
+        assert I.check_sentence(text, I.Facts(I.shown(s)), ["topics"]) is None, text
+
+
+def test_live_yes_to_a_so_what_on_two_themes_lists_both(wr, monkeypatch):
+    Hm = mods()[0]
+    from mvp import facts as F
+    real = F.build
+
+    def two(*a, **k):
+        s = real(*a, **k)
+        if s and s.get("library", {}).get("saved_not_opened"):
+            one = s["library"]["saved_not_opened"][0]
+            s["library"]["saved_not_opened"] = [dict(one, ids=None, examples=one["examples"][:2], n=2),
+                                                dict(one, theme="Second theme", examples=one["examples"][2:], n=1)]
+        return s
+    monkeypatch.setattr(F, "build", two)
+    ask(wr, QS["q4"])
+    st = wr["bot"].store.get_state(Hm.STATE.format(h=H))
+    assert [len(g["ids"]) for g in st["saved"]["groups"]] == [2, 1]
+    out, _ = ask(wr, "yes")
+    assert "Saved on Watercolor painting and never opened:\n1. " in out and "Saved on Second theme and never opened:\n3. " in out
+
+
+def test_live_a_first_in_an_earlier_year_says_the_year_on_its_lines(wr):
+    out, _ = ask(wr, QS["q4"])
+    assert "(10 Jan 2025, 10 min)" in out

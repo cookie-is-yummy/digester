@@ -292,7 +292,8 @@ def test_a_day_first_or_last_gives_the_overview_then_the_items_with_their_cards(
     assert [p["type"] for p in parts] == ["text", "link", "link", "text"]
     head = parts[0]["text"]
     assert head.startswith("You first opened a blender video on 14 March 2019")
-    assert head.index("• ") < head.index("1. Blender donut, part 1 by Pixel Forge (14 Mar, 21 min)")
+    # round 12, merge: an item of another year than the window's end says its year (live: a first of 2020 said "11 Apr")
+    assert head.index("• ") < head.index("1. Blender donut, part 1 by Pixel Forge (14 Mar 2019, 21 min)")
     assert parts[1]["url"].endswith("vy1") and parts[-1]["text"].endswith("Want it with the videos?")
 
 

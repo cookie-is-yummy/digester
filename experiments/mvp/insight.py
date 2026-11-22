@@ -638,7 +638,9 @@ def _check(text, facts, uses=None, chart_vals=None, maxlen=SENT_MAX):
     return (r, 0) if isinstance(r, str) else (None, r)
 
 
-_ONE_DAY = re.compile(r"\b(?:on|en)\s+(?:1|one|un)\s+(?:different\s+|distintos?\s+)?(?:days?|dias?)\b")
+_ONE_DAY = re.compile(r"\b(?:on|across|over|in|en)\s+(?:1|one|un)\s+(?:different\s+|distintos?\s+|single\s+)?"
+                      r"(?:days?|dias?)\b")
+_COUNTED = re.compile(r"\s+(?:[a-z0-9&'-]+\s+){0,2}?(?:videos?|posts?|shorts?|clips?|vids?|reels?|publicaciones)\b")
 
 
 def _check_body(raw, facts, uses, chart_vals):
@@ -797,6 +799,13 @@ def _check_body(raw, facts, uses, chart_vals):
                 return "ratio"
         else:
             topn = re.search(r"\b(?:top|first|primer\w*|los)\s*$", before)
+            if _COUNTED.match(rest_n[m.end():]):
+                # round 12, merge (live: "723.1 videos adding up to about 723 hours"): a number said of videos is
+                # a count, never an hours figure that happens to sit in the same sentence
+                if v != int(v) or not (_near_count(v, pool.counts, hedged) or topn or
+                                       (_diff_ok(int(v), pool.counts) and _RELATION.search(t))):
+                    return "count_of_videos"
+                continue
             ok = (_near_count(v, pool.counts, hedged) or (v == int(v) and _diff_ok(int(v), pool.counts)
                                                           and _RELATION.search(t))
                   or (re.search(r"\bhours?\b|\bhoras?\b", t) and
@@ -1278,13 +1287,14 @@ FRIENDS_ASK = re.compile(r"\bfriends?\b|\bamig[oa]s?\b", re.I)
 FRIENDS_LINE = {"en": "Posts from friends are not counted.", "es": "No cuento las publicaciones de tus amigos."}
 
 
-def _item_line(k, it, lang):
+def _item_line(k, it, lang, year=None):
     title = " ".join(str(it.get("title") or "").split())[:90] or ("Un video" if lang == "es" else "A video")
     ch = it.get("channel")
     d = _as_date(it.get("at"))
     bits = []
     if d:
-        bits.append(f"{d.day} {(MONTHS_ES if lang == 'es' else MONTHS)[d.month - 1][:3].capitalize()}")
+        bits.append(f"{d.day} {(MONTHS_ES if lang == 'es' else MONTHS)[d.month - 1][:3].capitalize()}"
+                    + (f" {d.year}" if year and d.year != year else ""))   # round 12, merge: a first in 2020
     if _num(it.get("length_s")) and it["length_s"] > 0:
         mins = int(round(it["length_s"] / 60))
         bits.append(f"{mins} min" if mins >= 1 else f"{int(it['length_s'])} s")
@@ -1349,7 +1359,9 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
         tail.append(ol)
     items = [it for it in sheet.get("items") or [] if isinstance(it, dict)] if kind in ITEM_KINDS else []
     if items:
-        head.append("\n".join(_item_line(k, it, lang) for k, it in enumerate(items[:SHOW["items"]], 1)))
+        end = _as_date((sheet.get("window") or {}).get("end"))
+        head.append("\n".join(_item_line(k, it, lang, end.year if end else None)
+                              for k, it in enumerate(items[:SHOW["items"]], 1)))
         parts = [{"type": "text", "text": "\n\n".join(head)}]
         parts += list(items_parts or [])
         if tail:

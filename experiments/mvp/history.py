@@ -2257,10 +2257,17 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False,
     st = {"q": q.model_dump(mode="json"), "at": now_iso(now), "run_id": run_id, "ids": list(ids),
           "channels": extra.get("channels") or []}
     if written is not None and winfo.get("so_what"):   # round 12, merge: what "yes" to the so-what lists (ids only)
-        sv = ((sheet or {}).get("library") or {}).get("saved_not_opened") or []
-        if sv and sv[0].get("examples"):
-            st["saved"] = {"theme": sv[0].get("theme"), "n": int(sv[0].get("n") or 0),
-                           "ids": [i for i in sv[0]["examples"] if i in view.items][:10]}
+        sv = [x for x in ((sheet or {}).get("library") or {}).get("saved_not_opened") or [] if x.get("examples")]
+        groups, left = [], 10
+        for x in sv:
+            ids_ = [i for i in x["examples"] if i in view.items][:left]
+            if ids_:
+                groups.append({"theme": x.get("theme"), "n": int(x.get("n") or 0), "ids": ids_})
+                left -= len(ids_)
+            if left <= 0:
+                break
+        if groups:
+            st["saved"] = {"groups": groups}
     bot.store.set_state(STATE.format(h=h), st)
     return bot.send(h, reply, run_id)
 
@@ -2401,20 +2408,25 @@ def _saved_list(bot, person, st, now):
     from .store import now_iso
     h = person["handle"]
     view = bot.view(person["library"])
-    sv = st.get("saved") or {}
-    ids = [i for i in sv.get("ids") or [] if i in view.items]
-    if not ids:
-        return None
+    groups = [g for g in (st.get("saved") or {}).get("groups") or [] if g.get("ids")]
     q = HistoryQuery.model_validate(st["q"])
     es = q.lang == "es"
-    n = int(sv.get("n") or len(ids))
-    theme = sv.get("theme") or ""
-    head = ((f"Guardados de {theme} y nunca abiertos" if es else f"Saved on {theme} and never opened") +
-            (f" ({len(ids)} de {n}, los últimos guardados):" if es and n > len(ids) else
-             f" (the {len(ids)} saved last, of {n}):" if n > len(ids) else ":"))
-    lines = [f"{k}. {_title(view.items[i])}{by(view.items[i], 'es' if es else None, title=_title(view.items[i]))}"
-             for k, i in enumerate(ids, 1)]
-    parts = [{"type": "text", "text": head + "\n" + "\n".join(lines)}]
+    ids, blocks = [], []
+    for g in groups:
+        gi = [i for i in g["ids"] if i in view.items and i not in ids]
+        if not gi:
+            continue
+        n, theme = int(g.get("n") or len(gi)), g.get("theme") or ""
+        head = ((f"Guardados de {theme} y nunca abiertos" if es else f"Saved on {theme} and never opened") +
+                (f" ({len(gi)} de {n}, los últimos guardados):" if es and n > len(gi) else
+                 f" (the {len(gi)} saved last, of {n}):" if n > len(gi) else ":"))
+        lines = [f"{len(ids) + k}. {_title(view.items[i])}"
+                 f"{by(view.items[i], 'es' if es else None, title=_title(view.items[i]))}" for k, i in enumerate(gi, 1)]
+        ids += gi
+        blocks.append(head + "\n" + "\n".join(lines))
+    if not ids:
+        return None
+    parts = [{"type": "text", "text": "\n\n".join(blocks)}]
     parts += [link_part(view.items[i], _title(view.items[i])) for i in ids if view.items[i].url]
     bot.note(intent="history")
     run_id = bot.store.add_run(handle=h, kind="history", at=now_iso(now), n_candidates=len(ids), n_picks=len(ids),
