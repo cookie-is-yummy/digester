@@ -496,6 +496,22 @@ each one the code answers.
   code, setting on or off; the Gemini line only while it is on. The consent message names the flow while it is on.
 <!-- end round 11, slice Q -->
 
+<!-- round 12, W -->
+## History answers that give insight (round 12, builder W; DESIGN.md section 19.W)
+
+- The writer: `insight.write(bot, person, sheet, now)` turns one fact sheet (built by code for one history question)
+  into the answer first, 2 to 4 observations, a small chart of block bars, a "so what" and one line of offers ("Want
+  it without Shorts, only Blender 3D, or by theme?"); one model call (prompt `insight_v4`, about $0.0025 and 2 seconds)
+  fills the form and code checks every number, date and name against the sheet. A failed check, a failed call or the
+  cap: today's code reply. `MVP_INSIGHT=0` turns it off (the tests' default). The merge wires it.
+- Quiet limits on every history answer: where the window passes an export's end, the window's own words say so ("This
+  year (1 January to 30 October 2026, where your YouTube export ends)"); no closing paragraph; the "send me a new
+  export" hint once in 6 hours and only about a time after the export's end; the friends line only when you ask about
+  friends. `MVP_QUIET_LIMITS=0` gives round 11's replies back.
+- Its evaluation: `python3 -m mvp.eval_insight --mode before|fake|live` on the 20 made-up sheets of
+  `eval/insight_cases.json`. Offline checks: `python3 -m pytest -q mvp/tests/test_round12_w.py`.
+<!-- end round 12, W -->
+
 ## New picks from outside the saves, and keeping the library fresh
 
 - **Outside picks** (`outside.py`): when someone asks for new things ("…and show me a few new ones from outside my
