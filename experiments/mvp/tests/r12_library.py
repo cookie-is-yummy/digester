@@ -176,6 +176,12 @@ FIELD_NAMES = {"minecraft": ("Gaming", ["gaming", "video games"]), "speedrun": (
                "number": ("Math", ["math"]), "cooking": ("Cooking", ["cooking"]), "dating": ("Dating", ["dating"])}
 
 
+CATEGORY = {"Minecraft builds": "gaming", "Speedruns": "gaming", "Gaming clips": "gaming", "Gaming": "gaming",
+            "Watercolor painting": "art and design", "Digital drawing": "art and design", "Art": "art and design",
+            "Calculus lessons": "math", "Number puzzles": "math", "Math": "math", "Home cooking": "food and cooking",
+            "Cooking": "food and cooking", "Dating advice": "relationships", "Dating": "relationships"}
+
+
 def fake_namer(calls=None):
     """A fake of the naming call: names each block by the first known word among its titles' words."""
     import re
@@ -197,6 +203,8 @@ def fake_namer(calls=None):
         groups = []
         for n, b in enumerate(blocks[1:], 1):
             name, words = pick(b, NAMES)
-            groups.append({"n": n, "name": name, "words": words, "mixed": False, "sensitive": name == "Dating advice"})
-        return {"field": {"name": fname, "words": fwords, "mixed": False, "sensitive": False}, "groups": groups}, 0.0
+            groups.append({"n": n, "name": name, "words": words, "mixed": False, "category": CATEGORY.get(name, "other"),
+                           "sensitive": name == "Dating advice"})
+        return {"field": {"name": fname, "words": fwords, "mixed": False, "sensitive": False,
+                          "category": CATEGORY.get(fname, "other")}, "groups": groups}, 0.0
     return chat

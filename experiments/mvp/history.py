@@ -579,6 +579,7 @@ def read(text, today, loose=False):
     # ---------- round 12, D (DESIGN 19.D): a "without shorts" filter, "back in", how WHAT is watched changed, "what
     # was i into", "most watched channels in X" ----------
     t, no_shorts = strip_shorts(t)
+    back = bool(BACK.search(t))
     t = " ".join(BACK.sub("", t).split())
     changed = bool(CHANGED_WORD.search(t) and CHANGED_WHAT.search(t) and CHANGED_ASK.match(t)
                    and not HOW_TO.search(t))
@@ -663,7 +664,7 @@ def read(text, today, loose=False):
                                             r"(?:any|anything|something|videos?)\b", t):
         # the round 11 check (DESIGN 18.X): "did I watch anything on nov 10" lists that day
         q.update(kind="on_day" if w1.kind == "day" else "list", window=w1)
-    elif into and (INTO_ONLY.search(t) or w1.kind in ("year", "month", "range", "since", "all", "lately")):
+    elif into and (INTO_ONLY.search(t) or back or w1.kind == "year" or (w1.kind == "range" and w1.label)):
         # round 12, D: "what was i into in the summer of 2023", "what was i watching back in 2021": what was watched most
         q.update(kind="top", window=w1 if windows else _win("lately", None, None), topics_too=True)
     elif LAST.search(rest):

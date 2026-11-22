@@ -367,10 +367,12 @@ def build(lib, view=None, person=None, chat=None, log=print, now=None):
         named = name_field(fs, groups, person=person, chat=chat)
         calls += 1
         cost += named.get("cost_usd") or 0.0
-        fields.append(dict(named["field"], id=fj, n=int(len(members)), typical=fs[1], themes=list(
+        # a sensitive group keeps no words of its own in the build (its typical words would say what it is)
+        fields.append(dict(named["field"], id=fj, n=int(len(members)),
+                           typical=[] if named["field"]["sensitive"] else fs[1], themes=list(
             range(first_theme, len(themes))), error=named.get("error")))
         for k, g in enumerate(named["groups"]):
-            themes[first_theme + k].update(g, typical=groups[k][1])
+            themes[first_theme + k].update(g, typical=[] if g["sensitive"] else groups[k][1])
         log(f"field {fj + 1}/{len(fcent)}: {len(groups)} themes")
     wall = round(time.monotonic() - t0, 2)
     out_dir = folder(lib)
