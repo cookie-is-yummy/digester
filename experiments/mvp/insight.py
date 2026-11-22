@@ -1218,8 +1218,10 @@ def n_numbers(text, facts):
     for ph in facts.allowed_phrases:
         t = t.replace(_norm(ph).rstrip(", "), " ")
     t = re.sub(_DATE_RX, " ", t)
+    years = len(re.findall(r"\b(?:19[89]\d|20\d\d)\b", t))
     t = re.sub(r"\b(19[89]\d|20\d\d)\b", " ", facts.names_in(t)[1])   # "3Blue1Brown" says no number
-    return len(re.findall(r"\d[\d,.]*", re.sub(r"\|[A-Z]\|", " ", t)))
+    n = len(re.findall(r"\d[\d,.]*", re.sub(r"\|[A-Z]\|", " ", t)))
+    return n if years <= NUMBERS_MAX else n + years   # "in 2020, 2021, 2022, ... and 2026" is a run too
 
 
 def _unit_before(text, sheet):
@@ -1287,6 +1289,8 @@ def check(raw, sheet, chart_vals=None):
             text = _ONE_DAY_SAID.sub("", text)
         sents = _sentences(text)
         why = None if len(sents) == 1 else "two_sentences"
+        if not why and (text.strip().endswith("?") or re.search(r"[,;:]\s*[?.!]?\s*$", text.strip())):
+            why = "unfinished"   # round 12, fix (live, Spanish: "... suman 4,?"): an observation says, never asks
         why = why or check_sentence(text, facts, uses=uses if uses is not None else [], chart_vals=chart_vals)
         if not why and n_numbers(text, facts) > NUMBERS_MAX:
             why = "number_run"
@@ -1992,7 +1996,9 @@ def fill(form, raw, sheet, chart_vals=None):
     sw = form.get("so_what")
     if sw and _SAVED_SW.search(_norm(sw)):
         sw_names = set(facts.names_in(sw)[0])
-        if not sw_names & (names | facts.topic_keys | {_theme_of(facts, n) for n in names}):
+        near = names | facts.topic_keys | {_theme_of(facts, n) for n in names}
+        if sheet.get("kind") not in ("first", "last") and (not sw_names & near or (sw_names - near)):
+            # every theme it names is one the answer is about (live: a day's so-what added 11 Math puzzles)
             form["dropped"].append(("so_what", "unrelated", sw))
             sw = None
     path = _path_line(shown(sheet), (sheet.get("filters") or {}).get("topic") or "", path_only=True) \

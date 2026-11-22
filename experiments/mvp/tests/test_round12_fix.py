@@ -376,3 +376,24 @@ def test_busiest_hours_are_no_length_so_the_length_is_still_said():
         {"text": "Your busiest hours are after 9pm.", "uses": ["when"]}])
     f = checked(raw, c["sheet"])
     assert any("adds up to about 62 hours" in o for o in f["observations"])
+
+
+def test_an_unfinished_observation_and_a_run_of_years_are_dropped():
+    c = case("changed_since_2020")
+    s = c["sheet"]
+    I = ins()
+    raw = dict(c["fake"], observations=list(c["fake"]["observations"]) + [
+        {"text": "Blender 3D and film essays add up to 4,?", "uses": ["periods"]},
+        {"text": "Blender 3D was there in 2020, 2021, 2022, 2023, 2024 and 2026.", "uses": ["periods"]}])
+    f = I.check(raw, s)
+    whys = {(d[2] or "")[:20]: d[1] for d in f["dropped"] if d[0] == "observation"}
+    assert whys["Blender 3D and film "] == "unfinished" and whys["Blender 3D was there"] == "number_run"
+
+
+def test_a_so_what_that_adds_a_theme_the_answer_never_named_is_the_codes_on_the_named_one():
+    c = case("top_lately")
+    c["sheet"]["library"]["saved_not_opened"].append({"theme": "guitar practice", "n": 4, "examples": ["s9"]})
+    raw = dict(c["fake"], so_what="You saved 7 Blender 3D videos and 4 guitar practice videos you never opened; want "
+                                  "them as a list?")
+    f = checked(raw, c["sheet"])
+    assert f["so_what"] == "You saved 7 Blender 3D videos you never opened. Want them as a list?"
