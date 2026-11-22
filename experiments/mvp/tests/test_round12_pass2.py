@@ -488,3 +488,14 @@ def test_live_one_area_every_year_charts_the_move_to_shorts():
         for y, sh in ((2020, 0.04), (2023, 0.5), (2026, 0.81))]}
     lines = I.chart(s)[0].split("\n")
     assert lines[0] == "Shorts' share of your YouTube videos, by year:" and lines[-1].endswith("2026 81%")
+
+
+@pytest.mark.parametrize("text, want", [
+    ("The long videos were typically about {totals.long_median_min} minutes.",
+     "The long videos were typically about 23 minutes."),
+    ("Mostly {totals.long_median_min} minute videos.", "Mostly 23 minute videos."),
+    ("Typically about {totals.long_median_min}.", "Typically about 23 minutes.")])
+def test_live_the_median_length_is_said_once_in_minutes(text, want):
+    I = ins()
+    s = {"kind": "top", "lang": "en", "totals": {"items": 10, "long_median_min": 23}}
+    assert I.render(text, I.shown(s), I.Facts(I.shown(s)), True)[0] == want

@@ -1777,7 +1777,10 @@ def render(text, sheet, facts, strict=False, unit=None):
     out, last = [], 0
     for x in sl:
         out.append(text[last:x.start])
-        out.append(x.text)
+        t_ = x.text
+        if x.key == "long_median_min" and re.match(r"^\s*-?\s*(?:min|minut)", text[x.end:x.end + 12], re.I):
+            t_ = str(int(x.value))   # live: "{totals.long_median_min} minutes" said "11 minutes minutes"
+        out.append(t_)
         last = x.end
     out.append(text[last:])
     r = re.sub(r"\s+", " ", "".join(out)).strip()
