@@ -3477,6 +3477,8 @@ def p6_words(s, sheet, names):
                           ((sheet.get("filters") or {}).get("topic") or "").lower()):
                 continue   # "216 Vocal music videos": a record's own count, said with its name
             want = counts[v][1]
+            if nm and re.match(r"^\s*(?:whose|that|which|about|on the topic)\b", s[m.end() + nm.end():]):
+                continue   # "1,094 videos whose title or theme is about minecraft": the clause says what they are
             if nm and nm.group("n").lower() != want.lower():
                 out.append(s[last:m.end()] + " " + want)
                 last = m.end() + nm.end()
@@ -4180,16 +4182,21 @@ def code_form(sheet):
             # round 12, pass 3 fix (judge A, row 1: "lead with the change, not the ranking"): the leader's move against
             # the weeks before is the answer to "lately"; what is said here is no so-what again
             ans, moving_said = ml
-        if by_area:
+        sea = re.match(r"^(?:in\s+)?the\s+(summer|spring|autumn|fall|winter)\b", str((s.get("window") or {}).get(
+            "words") or "").strip(), re.I)
+        # round 12, pass 6 (X17, row 8: "it compares only with the season before"): what he was into in a past season
+        # is said against the year around it, what was new then and the move to Shorts first; the moves against the
+        # season before come after them
+        season_into = bool(sea) and moving_said == "into" and not es
+        if by_area and not season_into:
             inside(areas[0])
             moves(areas, "areas")
-        moves(themes, "themes")
-        if themes:
+        if not season_into:
+            moves(themes, "themes")
+        if themes and not season_into:
             behind(themes[0])
         dt = _rows_named((s.get("distinct") or {}).get("themes"), ("name", "share", "rest_share"))[:2]
         rw = (s.get("distinct") or {}).get("rest_words")
-        sea = re.match(r"^(?:in\s+)?the\s+(summer|spring|autumn|fall|winter)\b", str((s.get("window") or {}).get(
-            "words") or "").strip(), re.I)
         story = None
         a_sh, b_sh = tot.get("shorts_share"), prev.get("shorts_share")
         fell = sorted((a for a in areas if _num(a.get("change_vs_previous")) and _num(a.get("previous_share"))
@@ -4198,9 +4205,10 @@ def code_form(sheet):
                 not (s.get("filters") or {}).get("without_shorts") and moving_said == "into":
             # round 12, pass 4 (V2): the move to Shorts is the second point, the first bullet
             pws_ = re.sub(r"\s*\([^)]*\)\s*$", "", pw).strip()
-            o(f"You moved to Shorts: {pc(a_sh)} of your YouTube videos, from {pc(b_sh)} in {pws_}" +
-              (f", while {fell[0]['name']} fell from {pc(fell[0]['previous_share'])} to {pc(fell[0]['share'])}."
-               if fell else "."), "totals", "previous", must=True)
+            # round 12, pass 6 (X17, row 8: "... while gaming fell from 33% to 10%" hung off a sentence with another
+            # base): the move to Shorts is one bullet with its own base and nothing else
+            o(f"You moved to Shorts: {pc(a_sh)} of your YouTube videos, from {pc(b_sh)} in {pws_}.", "totals",
+              "previous", must=True)
             story = "bullet"
         elif sea and by_area and pw and not es and not ml and _num(a_sh) and _num(b_sh) and a_sh - b_sh >= 0.25 and \
                 not (s.get("filters") or {}).get("without_shorts"):
@@ -4217,13 +4225,30 @@ def code_form(sheet):
             # round 12, pass 3 (U8, row 8: "say what made that season distinct against the year around it"): the
             # themes that ran well above their share of the rest of that year, first among the bullets
             what = f"the {sea.group(1).lower()}" if sea else "this stretch"
-            items_ = " and ".join(f"{t['name']} ({pc(t['share'])}, against {pc(t['rest_share'])})" for t in dt)
-            dt = [t for t in dt if round(t["share"], 3) >= 2 * round(t["rest_share"], 3)]
+            # round 12, pass 3 fix (judge A, row 8: weak differences shown as the distinct thing); round 12, pass 4
+            # (V2: "Little else set the summer apart ..." is filler); round 12, pass 6 (X17, row 8: "compared only
+            # with the spring, not the year around it"): what ran at least 1.5 times its share of the rest of that
+            # year, as facts computed it (facts.DISTINCT_LIFT), each with both shares and two points apart or more
+            dt = [t for t in dt if round(t["share"] * 100) - round(t["rest_share"] * 100) >= 2]
             items_ = " and ".join(f"{t['name']} ({pc(t['share'])}, against {pc(t['rest_share'])})" for t in dt)
             if dt:
-                # round 12, pass 3 fix (judge A, row 8: weak differences shown as the distinct thing); round 12, pass 4
-                # (V2: "Little else set the summer apart ..." is filler): only what ran at twice its share is said
                 o(f"What set {what} apart from {rw}: {items_}.", "distinct", must=True)
+        from . import profile as P_
+        nw = [x for x in _rows_named((s.get("new") or {}).get("channels"), ("name", "items"))
+              if isinstance(x.get("since_items"), int) and x["items"] >= 20 and not P_.sensitive(x["name"]) and
+              not any(c.get("kind") == "then_not_since" and c.get("channel") == x["name"]   # the so-what's own
+                      for c in s.get("so_what_candidates") or [] if isinstance(c, dict))][:2]
+        if sea and nw and not es and moving_said == "into":
+            # round 12, pass 6 (X17): what was new then, and how much of it he has opened since
+            def since_(x):
+                return "none since" if x["since_items"] == 0 else f"{f(x['since_items'], lang)} since"
+            o(f"New that {sea.group(1).lower()}: " + " and ".join(
+                f"{x['name']} ({f(x['items'], lang)} videos, {since_(x)})" for x in nw) + ".", "new", must=True)
+        if season_into:
+            if by_area:
+                moves(areas, "areas")
+            if themes:
+                behind(themes[0])
         if story:
             pass   # the Shorts are the answer's own (or its first bullet)
         elif moving_said == "into":
@@ -4833,6 +4858,11 @@ def so_what_text(c, s, topic=None, lang=None):
     if k == "channel_rise":
         return (f"{c['channel']} is new at the top: {_fmt(c['items'], 'en')} videos now, against "
                 f"{_fmt(c['previous_items'], 'en')}" + (f" in {pw}." if pw else " before."))
+    if k == "then_not_since":
+        # round 12, pass 6 (X17): what he did then and has not since, with the step code takes
+        since = "none since" if not c.get("since") else f"{_fmt(c['since'], 'en')} since"
+        return (f"{c['channel']} was a thing of that time: {_fmt(c['items'], 'en')} videos then, {since}. Say "
+                f"\"only {c['theme']}\" to see the rest of {c['theme']} you opened then.")
     if k == "seasonal":
         return (f"{c['theme']} comes back at this time of year: in {_fmt(c['years'], 'en')} of {_fmt(c['of_years'], 'en')} "
                 f"years it ran well above its share of the year.")
@@ -5201,7 +5231,8 @@ def fill(form, raw, sheet, chart_vals=None):
         c = next((c for c in cands if c.get("kind") == "learning_faded" or
                   (c.get("kind") == "lapsed_saves" and saved_near(c))), None) or \
             next((c for c in cands if saved_near(c)), None) or \
-            next((c for c in cands if c.get("kind") in ("channel_rise", "seasonal", "shorts_shift")), None)
+            next((c for c in cands if c.get("kind") in ("channel_rise", "then_not_since", "seasonal",
+                                                         "shorts_shift")), None)
         t = so_what_text(c, shown(sheet)) if c else None
         if t and check_sentence(t, facts) is None:
             sw, chosen = tidy(t, facts.lang), c

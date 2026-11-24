@@ -232,8 +232,11 @@ def test_row8_the_move_to_shorts_and_what_fell_lead_and_the_so_what_does_not_say
 def test_row8_weak_differences_are_said_as_small():
     # round 12, pass 4 (V2, changed on purpose): "Little else set the summer apart ..." is filler; when nothing ran
     # at twice its share of the rest of the year, nothing is said about it
+    # round 12, pass 6 (X17, changed on purpose: "compare it with the YEAR around it"): what ran at 1.5 times its share
+    # of the rest of the year, as facts computed it, is said with both shares, two points apart or more
     obs = [o["text"] for o in ins().code_form(_summer())["observations"]]
-    assert not any("set the summer apart" in o for o in obs), obs
+    assert any(o.startswith("What set the summer apart from the rest of 2023: Sketch edits (6%, against 4%)")
+               for o in obs), obs
 
 
 # ================================ row 4: what the split is of, the part of the year, whose Shorts ==============

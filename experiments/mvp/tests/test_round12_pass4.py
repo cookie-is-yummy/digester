@@ -106,9 +106,11 @@ def test_v2_the_into_lead_names_the_areas_and_what_peaked_then_and_the_shorts_mo
     assert cf["answer"] == ("you were into comedy (14% of what you opened) and gaming (10%); your Meme drops watching "
                             "peaked then, at 6%, more than in any other three months."), cf["answer"]
     texts = [o["text"] for o in cf["observations"]]
-    assert any(t.startswith("You moved to Shorts: 82% of your YouTube videos, from 29% in the spring before, while "
-                            "gaming fell from 33% to 10%.") for t in texts), texts
-    assert not any("set the summer apart" in t for t in texts), texts   # nothing ran at twice its share: nothing said
+    # round 12, pass 6 (X17, on purpose): the move to Shorts is one bullet with its own base and nothing hung off it;
+    # what ran above its share of the rest of the year is said with both shares
+    assert "You moved to Shorts: 82% of your YouTube videos, from 29% in the spring before." in texts, texts
+    assert not any("while gaming fell" in t for t in texts), texts
+    assert any("set the summer apart" in t for t in texts), texts
     raw = {"answer": "{areas[0].name} led with {areas[0].share}.",
            "observations": [{"text": "Your long videos were typically about {totals.long_median_min} minutes, and "
                                      "{when.busiest_hours[0].hour} was your busiest hour.", "uses": []},

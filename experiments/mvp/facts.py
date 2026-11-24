@@ -741,9 +741,18 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             a, k = Counter(c["area"] for c in top5).most_common(1)[0]
             out["top_areas"] = {"area": a, "n": int(k), "of": len(out["channels"][:5])}
     out["when"] = _when(idx, sc, base_ev)
+    season_ = bool(getattr(q, "season", None) or getattr(q.window, "label", None))
     short_window = so is not None and eo is not None and eo - so + 1 < 7
     out["new"], out["stopped"] = ({"themes": [], "channels": []}, {"themes": [], "channels": []}) if short_window \
         else _new_stopped(sc, prev, idx, facts, th, base_ev, so)
+    if season_ and eo is not None and kind == "top":
+        # round 12, pass 6 (X17, row 8: "what he did then and has not since"): each channel new then, with the videos
+        # of it opened after the season, up to where the record ends
+        after = base_ev & (idx.day > eo)
+        for c in (out["new"] or {}).get("channels") or []:
+            if isinstance(c, dict) and c.get("name") in idx.creators:
+                cid = idx.creators.index(c["name"])
+                c["since_items"] = int(len(np.unique(idx.it[after & (idx.creator[idx.it] == cid)])))
     # ---- by kind
     if kind == "changed" or q.kind == "timeline" or q.by or (kind == "count" and so is not None and eo is not None
                                                              and eo - so >= 45):
@@ -1045,6 +1054,17 @@ def _so_what_candidates(out, kind, q):
             c.append({"key": "moving:" + up["name"], "kind": "moving", "grew": up["name"],
                       "grew_from": up["previous_share"], "grew_to": up["share"], "faded": dn["name"],
                       "faded_from": dn["previous_share"], "faded_to": dn["share"], "previous_words": prev.get("words")})
+    if kind == "top" and (getattr(getattr(q, "window", None), "label", None) or getattr(q, "season", None)):
+        # round 12, pass 6 (X17): a channel new in a past season that has all but gone since, as something to
+        # notice, with the step code takes (its theme, "only <theme>")
+        from . import profile as P_
+        nc = [x for x in (out.get("new") or {}).get("channels") or [] if isinstance(x, dict) and
+              isinstance(x.get("since_items"), int) and (x.get("items") or 0) >= 20 and x.get("theme") and
+              x["since_items"] <= 0.1 * x["items"] and not P_.sensitive(str(x.get("name")) + " " + str(x["theme"]))]
+        if nc:
+            x = max(nc, key=lambda x: x["items"])
+            c.append({"key": "then_not_since:" + x["name"], "kind": "then_not_since", "channel": x["name"],
+                      "items": int(x["items"]), "since": int(x["since_items"]), "theme": x["theme"]})
     if kind in ("first", "last"):
         ps = [p for p in out.get("periods") or [] if p.get("items")]
         if len(ps) >= 2:
@@ -1052,8 +1072,8 @@ def _so_what_candidates(out, kind, q):
             how = "deeper" if peak is last else ("still" if last["items"] >= 0.5 * peak["items"] else "faded")
             c.insert(0, {"key": "path:" + how, "kind": "path", "how": how, "last_label": last["label"],
                          "last_items": last["items"], "peak_label": peak["label"], "peak_items": peak["items"]})
-    order = {"path": 0, "moving": 1, "lapsed_saves": 1, "learning_faded": 2, "channel_rise": 3, "seasonal": 4,
-             "shorts_shift": 5, "saved": 6}
+    order = {"path": 0, "moving": 1, "lapsed_saves": 1, "learning_faded": 2, "then_not_since": 2, "channel_rise": 3,
+             "seasonal": 4, "shorts_shift": 5, "saved": 6}
     # round 12, pass 2 fix: among saved things, a learning theme's first (a next step), then the most saved
     c.sort(key=lambda x: (order.get(x["kind"], 9),
                           0 if (themes.get(x.get("theme")) or {}).get("area") in LEARNING else 1, -(x.get("n") or 0)))
