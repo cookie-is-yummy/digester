@@ -77,7 +77,7 @@ The credits are there to use. The OpenAI and Gemini total cap of the build is ne
 - It pays for the next rounds of building and checking from credits that are already bought, instead of raising the OpenAI and Gemini cap.
 - It is a setting, not a rewrite: one model name moves the calls, the evaluation of each prompt runs on any model by the same setting, and `eval_models.py` puts them side by side (quality, median and worst latency, cost) with a spend ceiling per model.
 - The checks stay as they are: the model fills a form, code checks it and acts. Every call is in the ledger with its cost.
-- Measured so far: only that the path is wired. A request with a made-up key came back `401 authentication_error` from `api.anthropic.com` through the container's proxy; 39 offline tests pass. Nothing about Claude's quality, speed or cost on these prompts is measured yet.
+- Measured so far: only that the path is wired. A request with a made-up key came back `401 authentication_error` from `api.anthropic.com` through the container's proxy; 39 offline tests pass, and 10 more from a review (DESIGN.md 20.10: two calls at the cap, a fixed judge in `eval_models.py`, the stored consent version on a start over). Nothing about Claude's quality, speed or cost on these prompts is measured yet.
 
 **Costs and risks**
 - **A third company sees the text.** While a Claude model is set, the person's messages, the lines kept about them, and the captions and titles of the posts considered go to Anthropic as well as OpenAI (search words still go to OpenAI for the embeddings), until OpenAI is dropped for text. The consent and "what leaves this computer" say so by code while a Claude model is set, but people who agreed before were told OpenAI only, and nothing asks them again.

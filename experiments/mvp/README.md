@@ -35,9 +35,11 @@ The text calls can go to Claude instead of OpenAI. Nothing changes until you set
 - Compare models on every prompt's evaluation before switching anything (live calls; set the shared ledger and cap):
   `MVP_LEDGER_HOME=../data/mvp MVP_TOTAL_CAP_USD=30 python3 -m mvp.eval_models --models claude-haiku-5-5,gpt-5.4-mini
   --out <folder outside git> [--max-usd 3]`. One table comes out: `<out>/comparison.md`. `--dry` runs it on fakes
-  ($0); `--list` shows every prompt and its evaluation.
-- Caps: Claude spend has its own total, `MVP_CLAUDE_CAP_USD` (default $10). `MVP_TOTAL_CAP_USD` then counts only
-  OpenAI and Gemini. The daily cap per person (`MVP_DAILY_CAP_USD`) counts all three.
+  ($0); `--list` shows every prompt and its evaluation. The judge is the same for every model (the bot's own,
+  gpt-5.5, unless `--judge-model` names another), and the table names it. A second run needs a new `--out` (or
+  `--overwrite`).
+- Caps: Claude spend has its own total, `MVP_CLAUDE_CAP_USD` (default $10; the evaluations count toward it, so raise
+  it for a run of several models). `MVP_TOTAL_CAP_USD` then counts only OpenAI and Gemini. The daily cap per person (`MVP_DAILY_CAP_USD`) counts all three.
 - Optional: `MVP_CLAUDE_THINKING=adaptive` (default `off`), `MVP_CLAUDE_EFFORT` (default `low`),
   `MVP_CLAUDE_FALLBACKS=0` (Sonnet and Opus: no second model on a refusal).
 - What stays where it is: search words and the library's vectors stay on OpenAI (`text-embedding-3-large`), and

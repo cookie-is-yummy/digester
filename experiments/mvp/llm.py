@@ -68,7 +68,8 @@ def rows_naming(handle):
 
 
 _run_lock = threading.Lock()
-_RUN = {"usd": 0.0}   # section 20: this process's spend, for MVP_RUN_MAX_USD (eval_models.py sets it per eval)
+# section 20: this process's spend, and the worst case of its calls still waiting, for MVP_RUN_MAX_USD (eval_models.py)
+_RUN = {"usd": 0.0, "pending": 0.0}
 
 
 def _log(row):
@@ -199,16 +200,26 @@ def _run_room(system, user, max_tokens, model):
     """MVP_RUN_MAX_USD (set by eval_models.py for one eval): refuse a call whose worst case would pass it."""
     cap = os.environ.get("MVP_RUN_MAX_USD")
     if not cap:
-        return
+        return 0.0
     est = estimate_usd(system, user, max_tokens, model)
-    with _run_lock:
-        spent = _RUN["usd"]
-    if spent + est > float(cap):
+    with _run_lock:   # review: the calls still waiting (eval_rules runs 4 at once) count at their worst case
+        spent = _RUN["usd"] + _RUN["pending"]
+        ok = spent + est <= float(cap)
+        if ok:
+            _RUN["pending"] += est
+    if not ok:
         mark = os.environ.get("MVP_RUN_STOP_FILE")   # eval_models.py: the evaluation says "ceiling reached"
         if mark:
             with open(mark, "a", encoding="utf-8") as f:
                 f.write("refused\n")
         raise RuntimeError(f"budget stop (run): spent ${spent:.3f} + est ${est:.3f} > ${float(cap):.2f}")
+    return est
+
+
+def _run_release(hold):
+    if hold:
+        with _run_lock:
+            _RUN["pending"] = max(0.0, _RUN["pending"] - hold)
 
 
 def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=1200, temperature=None, seed=None,
@@ -221,8 +232,9 @@ def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=120
     _tl.person, _tl.cost = person, 0.0
     model = model or config.MODEL
     claude = config.is_claude(model)
+    hold = 0.0
     try:
-        _run_room(system, user, max_tokens, model)
+        hold = _run_room(system, user, max_tokens, model)
         if claude:
             thinking, effort, fallbacks = claude_knobs(model, reasoning_effort)
             dropped = [k for k, v in (("temperature", temperature), ("seed", seed)) if v is not None]
@@ -247,6 +259,7 @@ def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=120
         raise
     finally:
         _tl.person = None
+        _run_release(hold)
 
 
 def budget_stop(e):

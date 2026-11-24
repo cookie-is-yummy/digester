@@ -5798,7 +5798,8 @@ setting that runs it on Claude; no evaluation file changed. **`eval_models.py`**
 each evaluation in its own process with the model set, a new `MVP_HOME` and its own folder `<out>/<model>/<eval>/`.
 Per model it records the evaluation's own numbers, the calls' latency (median and worst, from the rows its run tag
 marks) and the cost. It stops a model at `--max-usd` (default $3; mid-evaluation too, through `MVP_RUN_MAX_USD`), and
-writes one table to `<out>/comparison.md` and `.json`. `--judge-model` sets the judge (default: the model under test).
+writes one table to `<out>/comparison.md` and `.json`. The judge is the same for every model, and the table names it
+(20.10; `--judge-model` names another).
 It fails at once with no key (or no `MVP_LEDGER_HOME` / `MVP_TOTAL_CAP_USD`). `--dry` runs the same processes on fakes
 with every real key taken out of their environment ($0; run here on two models, and in the tests). The order is
 insight, drafts, synth, selftest, rules, kinds (cheapest first, so a ceiling stops the dearest). Synth and the
@@ -5820,4 +5821,57 @@ $0.15, Sonnet about $3, Opus about $6. With the default $3, Sonnet may and Opus 
 - People who agreed to the consent before were told OpenAI only. Before a Claude default they should be told (or asked
   again); `consent_version` says who saw which.
 - The key sits in an environment variable: anyone who can use that environment can read it.
+### 20.10 Review (24 Nov 2026)
+A second pass read the whole change against the claude-api skill and the installed SDK (2.13.0), and tried to break it
+with fakes. No money was spent and no live call was made.
+
+What held:
+- Every request is a shape the current API takes. Through the real SDK over a fake transport the bodies are: Haiku
+  `thinking: {"type": "disabled"}` with `output_config.effort` low; Sonnet 5.5 `{"type": "between_tools"}` with
+  `fallbacks: "default"` and the `server-side-fallback-2026-07-01` beta; Opus 5.5 no thinking field, effort low and the
+  fallback; a schema as `output_config.format` `json_schema`. No `temperature`, no `budget_tokens`, no prefill, no forced
+  tool choice. The request goes to `https://api.anthropic.com/v1/messages` with API version 2026-10-21, and the
+  machine's own base URL, auth token and extra headers (`ANTHROPIC_CUSTOM_HEADERS`) never reach it. The fake's objects
+  have the fields of the SDK's own `BetaMessage` and `BetaUsage` (iterations included).
+- A planted key was in no log line, ledger row, error text or trace, with the SDK's debug log asked for.
+- With no Claude model set, the bot is as it was. With no key, the call stops with the error that names both
+  variables; nothing goes to OpenAI instead.
+- Rows with no `provider` field (old rows) still count toward the OpenAI and Gemini cap. The daily cap counts all.
+- The writer's 20 s deadline holds when a Claude call hangs: it is the thread join in `history._write`.
+
+What was wrong, and is fixed (tests in `tests/test_claude_review.py`, each failing on 1f2a601):
+- **Two calls at the cap both went through.** Each read the ledger before the other had answered. The Claude guard
+  now counts the worst case of this process's calls still waiting (`ai._pending`), and so does the run ceiling of an
+  evaluation (`MVP_RUN_MAX_USD`; `eval_rules` runs 4 calls at once). Two separate processes can still both pass, as on
+  the OpenAI path.
+- **The judge moved with the model under test** in `eval_models.py`, so kinds and the self-test compared two changes at
+  once. The judge is now fixed: the bot's own (`MVP_JUDGE_MODEL`, else gpt-5.5) for every model, named in the table.
+  `--judge-model same` is still there, and the table then says not to compare those rows.
+- **A second run into the same `--out` wiped the first run's results** (paid for) before it started. It now stops at
+  once unless `--overwrite`.
+- **Keys checked too late.** A Claude-only run whose judge is on OpenAI, or that searches (synth, self-test, kinds:
+  query embeddings stay on OpenAI), failed inside the evaluation after some calls were paid. Those keys are now checked
+  before anything is sent.
+- **The test page's "start over"** stored `mvp-consent-v1+anthropic` for a person who had agreed to the OpenAI-only
+  text, while a Claude model was set. It now keeps the version the person agreed to.
+- The SDK's HTTP library logs as `httpcore2`, not `httpcore`; its debug log is now off as well (it held no key).
+
+What is left (not fixed here):
+- **People who agreed before.** Setting a Claude model on a running bot sends the text of people who agreed to the
+  OpenAI-only consent to Anthropic, with no new question. Their stored version (`mvp-consent-v1`, without `+anthropic`)
+  shows who they are. The founder decides: tell them, ask again, or keep their calls on OpenAI (code that does not
+  exist yet).
+- **Opus 5.5 always thinks.** No thinking field is sent, but it thinks at low effort, and that thinking counts toward
+  `max_tokens`, which was sized for an OpenAI form. More `max_tokens` stops (a failed form: today's code reply) are
+  likely on Opus than on Haiku or Sonnet. The evaluations will show it.
+- **The Claude cap and the evaluations.** `MVP_CLAUDE_CAP_USD` (default $10) is a total over every Claude row of the
+  shared ledger, the evaluations' too. Three models at `--max-usd 8` would pass it; raise it for such a run.
+- **The cap margin.** The executor says "the budget is used up" when the spend is within $0.05 of a cap. One Opus
+  compose can cost more than that, so near the Claude cap the guard may refuse first; the person then gets the code
+  reply for a failed call, not the budget message.
+- **The writer's trace** (`insight.write`, another builder's file) says "daily cap reached" for any cap that is not
+  "total". The executor answers "total" for the Claude cap too, so this does not show today.
+- While a client is built, the `ANTHROPIC_*` names are taken out of the process's environment for a moment (under a
+  lock). Only `ANTHROPIC_CUSTOM_HEADERS` (and `ANTHROPIC_LOG`, read at import) would otherwise reach it, since the key,
+  the base URL and the signing key are passed in. A thread that copies the environment in that moment misses them.
 <!-- end section 20 -->

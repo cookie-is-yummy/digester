@@ -451,7 +451,7 @@ def test_the_path_test_sends_the_invalid_key_and_reads_the_authentication_error(
 def _args(tmp_path, **kw):
     from types import SimpleNamespace
     a = dict(models="claude-haiku-5-5,gpt-5.4-mini", out=str(tmp_path / "cmp"), evals="insight,drafts", library="",
-             max_usd=3.0, judge_model="same", quick=True, dry=True, timeout=600.0)
+             max_usd=3.0, judge_model="", quick=True, dry=True, timeout=600.0)
     a.update(kw)
     return SimpleNamespace(**a)
 
@@ -511,7 +511,9 @@ def test_eval_models_dry_children_get_no_real_key_and_a_new_home_each(cl, monkey
     for cmd, env in envs:
         assert cmd[1:5] == ["-m", "mvp.eval_models", "--child", "--"]
         assert "OPENAI_API_KEY" not in env and env["DIGESTER_ANTHROPIC_API_KEY"] == "dry-run-not-a-key"
-        assert env["MVP_MODEL"] == env["MVP_JUDGE_MODEL"] == "claude-sonnet-5-5" and env["MVP_EVAL_DRY"] == "1"
+        # section 20 review: the judge is fixed (the bot's own, gpt-5.5 here), not the model under test
+        assert env["MVP_MODEL"] == "claude-sonnet-5-5" and env["MVP_JUDGE_MODEL"] == "gpt-5.5"
+        assert env["MVP_EVAL_DRY"] == "1"
     assert len({env["MVP_HOME"] for _c, env in envs}) == 4
 
 

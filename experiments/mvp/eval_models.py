@@ -2,12 +2,15 @@
 
     python3 -m mvp.eval_models --models claude-haiku-5-5,gpt-5.4-mini --out <folder outside git>
                                [--evals insight,drafts,synth,selftest,rules] [--library <library>] [--max-usd 3]
-                               [--judge-model same|<id>] [--quick] [--dry]
+                               [--judge-model <id>|same] [--quick] [--dry] [--overwrite]
     python3 -m mvp.eval_models --list                    # every prompt the bot sends, with its evaluation
 
-from `experiments/`. Each evaluation runs in its own process with MVP_MODEL (and MVP_JUDGE_MODEL: "same" = the model
-under test, the default) set to the model, a new MVP_HOME, and its own folder <out>/<model>/<eval>/, so runs of two
-models never overwrite each other. Per model it records the evaluation's own quality numbers, the model calls'
+from `experiments/`. Each evaluation runs in its own process with MVP_MODEL set to the model, a new MVP_HOME, and its
+own folder <out>/<model>/<eval>/, so runs of two models never overwrite each other (and a folder an earlier run wrote
+is never wiped: the run stops at once unless --overwrite). The judge (MVP_JUDGE_MODEL, used by kinds and the self-test)
+is the same model for every model compared, and the table names it: by default the bot's own judge (MVP_JUDGE_MODEL
+as set, else gpt-5.5); --judge-model <id> names another; --judge-model same puts the judge on the model under test, and
+the table then says its numbers measure two changes at once. Per model it records the evaluation's own quality numbers, the model calls'
 latency (median and worst, from the ledger rows the run tagged with MVP_RUN_TAG), and the cost; it stops a model's
 evaluations once --max-usd has been spent on it (MVP_RUN_MAX_USD refuses the call that would pass it, mid-evaluation
 too). One table for all: <out>/comparison.md and <out>/comparison.json.
@@ -77,6 +80,8 @@ ORDER = ("insight", "drafts", "synth", "selftest", "rules", "kinds")   # cheapes
 ROUTER = os.path.join(os.path.dirname(EXP), "data", "all", "r7", "router.npz")
 # what an evaluation prints when a ceiling refused a call (MVP_RUN_MAX_USD, its own --max-usd / --cap, the self-test's)
 STOP_WORDS = ("budget stop (run)", "eval budget used up", "this eval's own cap", "budget stop")
+USES_JUDGE = ("selftest", "kinds")            # the evaluations whose numbers pass through the judge (judge.py)
+USES_SEARCH = ("synth", "selftest", "kinds")   # the evaluations that search: query embeddings stay on OpenAI
 SECRETS = ("OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "DIGESTER_ANTHROPIC_API_KEY", "YOUTUBE_API_KEY",
            "ANTHROPIC_AUTH_TOKEN")   # a --dry run's processes get none of these: a call that escaped the fakes fails
 
@@ -204,18 +209,34 @@ def call_numbers(rows, model):
             "model_cost_usd": round(sum(r.get("cost_usd") or 0 for r in mine), 6)}
 
 
-def key_problem(models, environ):
-    """Fail fast: the error a live run would meet first (a missing key), or None."""
+def judge_for(a):
+    """The judge every model's runs get: None for "same" (the model under test), "" for none (the judge is off in the
+    bot's settings), else one model id."""
+    if a.judge_model == "same":
+        return None
+    if a.judge_model:
+        return a.judge_model
+    from mvp import config   # the bot's own judge: MVP_JUDGE_MODEL as set, else its default
+    return config.JUDGE_MODEL
+
+
+def key_problem(models, environ, judge=None, evals=()):
+    """Fail fast: the error a live run would meet first (a missing key), or None. `judge` (when the evaluations that
+    use it run) and the searches' embeddings (OpenAI) need their keys too."""
     from mvp import config   # config only: nothing is sent, no key is read but by name
     sys.path.insert(0, os.path.join(EXP, "lib"))
     import ai
-    if any(config.is_claude(m) for m in models):
+    callers = list(models) + ([judge] if judge and any(e in USES_JUDGE for e in evals) else [])
+    if any(config.is_claude(m) for m in callers):
         try:
             ai.anthropic_key()
         except ai.MissingKey as e:
             return str(e)
-    if any(not config.is_claude(m) for m in models) and not environ.get("OPENAI_API_KEY"):
-        return "no OpenAI key: set OPENAI_API_KEY to run a non-Claude model; nothing was sent"
+    if any(not config.is_claude(m) for m in callers) and not environ.get("OPENAI_API_KEY"):
+        return "no OpenAI key: set OPENAI_API_KEY to run a non-Claude model or judge; nothing was sent"
+    if any(e in USES_SEARCH for e in evals) and not environ.get("OPENAI_API_KEY"):
+        return ("no OpenAI key: set OPENAI_API_KEY (" + ", ".join(e for e in evals if e in USES_SEARCH)
+                + " search, and query embeddings stay on OpenAI); nothing was sent")
     for need in ("MVP_LEDGER_HOME", "MVP_TOTAL_CAP_USD"):
         if not environ.get(need):
             return f"Set {need} first (the shared caps must count every call)."
@@ -229,6 +250,14 @@ def safe(model):
 def run_all(a, out=print):
     models = [m.strip() for m in a.models.split(",") if m.strip()]
     evals = [e for e in ORDER if e in [x.strip() for x in a.evals.split(",")]] if a.evals else list(ORDER)
+    judge = judge_for(a)
+    runnable = [e for e in evals if plan(e, os.devnull, a.quick, a.library, 1.0)[0] is not None]
+    if not getattr(a, "overwrite", False):
+        old = [os.path.join(safe(m), e) for m in models for e in runnable
+               if os.path.exists(os.path.join(os.path.abspath(a.out), safe(m), e))]
+        if old:
+            out(f"{a.out} already holds results ({', '.join(old)}): give a new --out, or --overwrite to replace them")
+            return 2, None
     os.makedirs(a.out, exist_ok=True)
     env0 = dict(os.environ)
     if a.dry:
@@ -239,20 +268,21 @@ def run_all(a, out=print):
             env0.pop(k, None)
         env0["DIGESTER_ANTHROPIC_API_KEY"] = "dry-run-not-a-key"   # the fake client is built with it; never sent
     else:
-        why = key_problem(models, env0)
+        why = key_problem(models, env0, judge, runnable)
         if why:
             out(why)
             return 2, None
     ledger = os.path.join(env0["MVP_LEDGER_HOME"], "ai_runs.jsonl")
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     table = {"at": stamp, "dry": bool(a.dry), "max_usd_per_model": a.max_usd, "models": models, "evals": evals,
-             "rows": []}
+             "judge_model": "same (the model under test)" if judge is None else (judge or "off"), "rows": []}
     for m in models:
         spent = 0.0
         for e in evals:
             d = os.path.join(os.path.abspath(a.out), safe(m), e)
             room = a.max_usd - spent
-            row = {"model": m, "eval": e, "dir": d}
+            row = {"model": m, "eval": e, "dir": d,
+                   "judge_model": (m if judge is None else (judge or "off")) if e in USES_JUDGE else None}
             steps, why = plan(e, d, a.quick, a.library, room)
             if steps is None:
                 row.update(status=why, headline="", details={})
@@ -267,8 +297,7 @@ def run_all(a, out=print):
             os.makedirs(d)
             tag = f"eval_models:{stamp}:{safe(m)}:{e}"
             env = dict(env0, MVP_MODEL=m, MVP_RUN_TAG=tag, MVP_RUN_MAX_USD=f"{room:.6f}",
-                       MVP_SELFTEST_CAP_USD=f"{room:.6f}", MVP_JUDGE_MODEL=m if a.judge_model == "same" else
-                       a.judge_model)
+                       MVP_SELFTEST_CAP_USD=f"{room:.6f}", MVP_JUDGE_MODEL=m if judge is None else judge)
             env.pop("MVP_ERRAND_MODEL", None)
             outs, rcs, t0, hit = [], [], time.time(), False
             for i, (argv, new_home) in enumerate(steps):
@@ -314,6 +343,10 @@ def write_table(table, out):
     lines = [f"# Prompts on {', '.join(table['models'])} ({table['at']}{', dry run on fakes' if table['dry'] else ''})",
              "", f"Ceiling ${table['max_usd_per_model']:.2f} per model. Latency is per model call (the ledger rows of "
              "the run); cost is everything the run logged (search embeddings included).", "",
+             f"Judge (kinds and the self-test): {table.get('judge_model')}"
+             + (", the same for every model." if not str(table.get("judge_model", "")).startswith("same") else
+                ". It changes with the model, so those two rows measure two changes at once: do not compare them "
+                "across models."), "",
              "| eval | model | quality | calls | median s | worst s | cost $ | status |",
              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for r in sorted(table["rows"], key=lambda r: (ORDER.index(r["eval"]), table["models"].index(r["model"]))):
@@ -386,7 +419,9 @@ def main(argv=None):
     ap.add_argument("--evals", default="", help=f"a subset of {','.join(ORDER)}")
     ap.add_argument("--library", default="", help="a real library (kinds); without it, kinds is skipped")
     ap.add_argument("--max-usd", type=float, default=3.0, help="spend ceiling per model")
-    ap.add_argument("--judge-model", default="same", help="MVP_JUDGE_MODEL for the runs ('same': the model)")
+    ap.add_argument("--judge-model", default="", help="MVP_JUDGE_MODEL for every model's runs (default: the bot's own "
+                    "judge, MVP_JUDGE_MODEL or gpt-5.5; 'same': the model under test, not comparable across models)")
+    ap.add_argument("--overwrite", action="store_true", help="replace results an earlier run left in --out")
     ap.add_argument("--quick", action="store_true", help="a few cases of each (a check of the harness)")
     ap.add_argument("--dry", action="store_true", help="fake model clients: no network, $0")
     ap.add_argument("--timeout", type=float, default=3600.0, help="seconds per evaluation process")

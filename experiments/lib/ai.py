@@ -43,13 +43,16 @@ def spent(provider=None):
     return sum(r.get("cost_usd", 0) for r in rows if provider is None or r.get("provider") == provider)
 
 
-def _guard(provider, model, est_in_tokens, max_out_tokens):
+def _guard(provider, model, est_in_tokens, max_out_tokens, pending=0.0):
+    """pending (Claude only, section 20 review): the worst case of this process's calls still waiting for an answer,
+    so two calls at the cap cannot both pass it."""
     p = prices().get(model)
     if p is None:
         raise RuntimeError(f"no verified price for {model}; add it to lib/ai_prices.json first")
     est = est_in_tokens / 1e6 * p["input_per_m"] + max_out_tokens / 1e6 * p.get("output_per_m", 0)
-    if spent(provider) + est > budget(provider):
-        raise RuntimeError(f"budget stop ({provider}): spent ${spent(provider):.3f} + est ${est:.3f} > ${budget(provider):.2f}")
+    if spent(provider) + pending + est > budget(provider):
+        raise RuntimeError(f"budget stop ({provider}): spent ${spent(provider):.3f} + est ${est:.3f} > ${budget(provider):.2f}"
+                           + (f" (${pending:.3f} of it on calls still waiting)" if pending else ""))
     return p
 
 
@@ -201,7 +204,7 @@ def anthropic_client(key=None):
         finally:
             os.environ.update(hidden)
         # the SDK reads ANTHROPIC_LOG once, at import: whatever it said, its request logs stay off here
-        for n in ("anthropic", "httpx2", "httpx", "httpcore"):
+        for n in ("anthropic", "httpx2", "httpcore2", "httpx", "httpcore"):
             logging.getLogger(n).setLevel(logging.WARNING)
         if not explicit:
             _client_cache.update(client=c, key=key, transport=ANTHROPIC_TRANSPORT)
@@ -319,9 +322,27 @@ def anthropic_chat_json(model, system, user, max_tokens=400, purpose="", prompt_
     JSON_LINE and the reply is read by parse_json_object. thinking / effort: sent as given (claude_thinking).
     fallbacks: the server-side fallback ("default") on a policy decline (Sonnet 5.5 and Opus 5.5 only).
     dropped: the caller's settings this API does not take (temperature, seed), named in the row."""
-    p = _guard("anthropic", model, (len(system) + len(user)) / 3.5, max_tokens)
-    if p.get("provider") != "anthropic":
-        raise RuntimeError(f"{model} is not a Claude model in lib/ai_prices.json")
+    est_in = (len(system) + len(user)) / 3.5
+    with _pending_lock:   # review: two calls at the cap; the second sees the first's worst case until it answers
+        p = _guard("anthropic", model, est_in, max_tokens, pending=_pending["usd"])
+        if p.get("provider") != "anthropic":
+            raise RuntimeError(f"{model} is not a Claude model in lib/ai_prices.json")
+        hold = est_in / 1e6 * p["input_per_m"] + max_tokens / 1e6 * p.get("output_per_m", 0)
+        _pending["usd"] += hold
+    try:
+        return _anthropic_call(model, system, user, max_tokens, purpose, prompt_version, schema, thinking, effort,
+                               fallbacks, dropped)
+    finally:
+        with _pending_lock:
+            _pending["usd"] = max(0.0, _pending["usd"] - hold)
+
+
+_pending_lock = threading.Lock()
+_pending = {"usd": 0.0}
+
+
+def _anthropic_call(model, system, user, max_tokens, purpose, prompt_version, schema, thinking, effort, fallbacks,
+                    dropped):
     client = anthropic_client()
     oc = {}
     if effort:
