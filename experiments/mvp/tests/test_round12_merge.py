@@ -203,7 +203,7 @@ def test_b_the_offer_traps_are_not_taken(wr, text):
 def test_b_yes_to_the_so_what_lists_the_saved_videos_with_their_cards(wr):
     out, _ = ask(wr, QS["q4"])
     # round 12, pass 6 (X15, on purpose): a first's saved videos as the step to take
-    assert "You still have 3 Watercolor painting videos you saved and never opened: want them as a list" in out
+    assert "You saved and never opened 3 Watercolor painting videos: want them as a list" in out
     out, calls = ask(wr, "yes please")
     assert calls == [] and out.startswith("Saved on Watercolor painting and never opened:\n1. ")
     assert out.count("youtube.com/watch") == 3

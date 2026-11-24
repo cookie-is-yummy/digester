@@ -846,8 +846,15 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             if (t.get("by_platform") or {}).get("youtube"):   # round 12, pass 5: "of the day's YouTube videos"
                 out["usual"]["day_shorts_yt_share"] = _share(t["shorts"], t["by_platform"]["youtube"])
         first, big = _first_by_creator(idx, base_ev)
-        fresh = [c for c in out["channels"] if c.get("first_watched") == eff_start.isoformat()]
-        out["new_today"] = {"channels": len(fresh), "names": [c["name"] for c in fresh[:3]]}
+        # round 12, pass 6 (X19, the auditor: a day of 26 channels said "2 were new" where 5 were): the count is
+        # over every channel of the day, not the sheet's top list; the names lead with the top list's, by count
+        cr_ = idx.creator[sc.items]
+        day_c = Counter(cr_[cr_ >= 0].tolist())
+        fresh_ids = [cid for cid, _n in day_c.most_common()
+                     if first[cid] != big and _iso(int(first[cid])) == eff_start.isoformat()]
+        top_names = [c["name"] for c in out["channels"] if c.get("first_watched") == eff_start.isoformat()]
+        names = top_names + [idx.creators[cid] for cid in fresh_ids if idx.creators[cid] not in top_names]
+        out["new_today"] = {"channels": len(fresh_ids), "names": names[:3]}
     if getattr(q, "season", None) or (so is not None and eo is not None and eo - so <= 100 and kind == "top"
                                       and w.kind not in ("lately", "day")):
         try:

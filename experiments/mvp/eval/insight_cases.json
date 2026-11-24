@@ -3955,8 +3955,8 @@
       "good": "from 3%"
      },
      {
-      "text": "You have {library.saved_not_opened[0].n} {library.saved_not_opened[0].theme} videos you saved and never opened.",
-      "good": "you saved and never opened"
+      "text": "You saved and never opened {library.saved_not_opened[0].n} {library.saved_not_opened[0].theme} videos.",
+      "good": "You saved and never opened 5"
      }
     ],
     "plants": [

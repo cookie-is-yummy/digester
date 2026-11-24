@@ -3120,7 +3120,11 @@ def day_cards(sheet):
     n = len([it for it in sheet.get("items") or [] if isinstance(it, dict)])
     if n <= SHOW["items"]:
         return n
-    return int(sheet.get("_cards") or DAY_PAGE)
+    return int(sheet.get("_cards") or day_page())
+
+
+def day_page():
+    return min(DAY_PAGE, SHOW["items"])
 
 
 def _named_first(sheet, text):
@@ -3136,9 +3140,9 @@ def _named_first(sheet, text):
     def named(it):
         c = " ".join(_words(str(it.get("channel") or "")))
         return bool(c) and len(c) >= 3 and f" {c} " in low
-    page = items[:DAY_PAGE]
+    page = items[:day_page()]
     extra = []
-    for it in items[DAY_PAGE:]:
+    for it in items[day_page():]:
         if named(it) and not any(x.get("channel") == it.get("channel") for x in page + extra):
             extra.append(it)
     rest = [it for it in items if all(it is not x for x in page + extra)]
@@ -3504,7 +3508,7 @@ def p6_words(s, sheet, names):
     if m and int(m.group("n").replace(",", "")) in sv and not re.search(
             r"\b(?:never|not yet|have not|haven't|did not|didn't)\b", m.group("t") + s[m.end():m.end() + 30]):
         y = "You" if m.group("y") == "You" else "you"
-        s = s[:m.start()] + f"{y} have {m.group('n')} {m.group('t')} you saved and never opened" + s[m.end():]
+        s = s[:m.start()] + f"{y} saved and never opened {m.group('n')} {m.group('t')}" + s[m.end():]
     return s
 
 
@@ -4252,9 +4256,15 @@ def code_form(sheet):
         if sea and nw and not es and moving_said == "into":
             # round 12, pass 6 (X17): what was new then, and how much of it he has opened since
             def since_(x):
-                return "none since" if x["since_items"] == 0 else f"{f(x['since_items'], lang)} since"
-            o(f"New that {sea.group(1).lower()}: " + " and ".join(
-                f"{x['name']} ({f(x['items'], lang)} videos, {since_(x)})" for x in nw) + ".", "new", must=True)
+                return "none" if x["since_items"] == 0 else f"{f(x['since_items'], lang)} more"
+            if len(nw) == 2:
+                tail_ = (f"; since then you opened {since_(nw[0])} of the first and {since_(nw[1])} of the second"
+                         .replace("none of the first", "none from the first").replace("none of the second",
+                                                                                      "none from the second"))
+            else:
+                tail_ = f"; since then you opened {since_(nw[0])}" + (" from it" if nw[0]["since_items"] == 0 else "")
+            o(f"New that {sea.group(1).lower()}, by videos opened: " + " and ".join(
+                f"{x['name']} ({f(x['items'], lang)})" for x in nw) + tail_ + ".", "new", must=True)
         if season_into:
             if by_area:
                 moves(areas, "areas")
@@ -4801,8 +4811,8 @@ def _path_line(s, topic, path_only=False):
         how = (c or {}).get("how")
         step = {"faded": "to pick it up again", "still": "to go on from there",
                 "deeper": "to go further"}.get(how, "as a next step")
-        saved = (f"You still have {_fmt(sv['n'], 'en')} {_videos_of(sv['theme'])} you saved and never opened: want "
-                 f"them as a list, {step}?")
+        saved = (f"You saved and never opened {_fmt(sv['n'], 'en')} {_videos_of(sv['theme'])}: want them as a list, "
+                 f"{step}?")
         return (path + " " + saved) if path else saved
     return path
 
@@ -4838,7 +4848,7 @@ def so_what_text(c, s, topic=None, lang=None):
         # round 12, pass 6 (X15): the arc as something to notice (when it peaked, what it is now)
         return {"deeper": f"You are deeper into {topic} than ever: {li} {part}, your busiest year for it.",
                 "still": f"You are still at it: {li} {part}, against {pi} in {pl}, your busiest year.",
-                "faded": f"You were deepest into {topic} in {pl} ({pi} videos); {part} it was {li}."}.get(c.get("how"))
+                "faded": f"Your {topic} watching peaked at {pi} in {pl}; {part} it was {li}."}.get(c.get("how"))
     if k == "lapsed_saves":
         return (f"{c['theme']} has faded, and you still have {_fmt(c['n'], 'en')} saved {c['theme']} videos you never "
                 f"opened. Want them as a list?")
@@ -4872,8 +4882,8 @@ def so_what_text(c, s, topic=None, lang=None):
     if k == "then_not_since":
         # round 12, pass 6 (X17): what he did then and has not since, with the step code takes
         since = "none since" if not c.get("since") else f"{_fmt(c['since'], 'en')} since"
-        return (f"{c['channel']} was a thing of that time: {_fmt(c['items'], 'en')} videos then, {since}. Say "
-                f"\"only {c['theme']}\" to see the rest of {c['theme']} you opened then.")
+        return (f"{c['channel']} was a thing of that time: you opened {_fmt(c['items'], 'en')} of their videos then "
+                f"and {since}. Say \"only {c['theme']}\" to see the rest of {c['theme']} you opened then.")
     if k == "seasonal":
         return (f"{c['theme']} comes back at this time of year: in {_fmt(c['years'], 'en')} of {_fmt(c['of_years'], 'en')} "
                 f"years it ran well above its share of the year.")

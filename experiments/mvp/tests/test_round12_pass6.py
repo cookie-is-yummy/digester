@@ -160,10 +160,10 @@ def test_x8_saved_and_never_opened_is_said_so():
     s = top()
     s["library"] = {"saved_not_opened": [{"theme": "Speed runs", "n": 5}]}
     out, _ = gate("You saved 5 Speed runs videos; want to open them next?", s)
-    assert out == "You have 5 Speed runs videos you saved and never opened; want to open them next?", out
+    assert out == "You saved and never opened 5 Speed runs videos; want to open them next?", out
     out, _ = gate("You saved 6 Block battles tutorials; want them?", dict(s, library={"saved_not_opened": [
         {"theme": "Block battles tutorials", "n": 6}]}))
-    assert out.startswith("You have 6 Block battles tutorials you saved and never opened"), out
+    assert out.startswith("You saved and never opened 6 Block battles tutorials"), out
 
 
 # ================================ X9: one fact once, in whatever words ===========================================
@@ -278,9 +278,8 @@ def test_x15_a_firsts_so_what_is_the_arc_then_the_saved_videos_as_a_step():
     s = {"window": {"end": "2026-10-30"}, "filters": {"topic": "blender"},
          "so_what_candidates": [c, {"kind": "saved", "theme": "Render tutorials", "n": 6}]}
     line = I._path_line(s, "blender")
-    assert line == ("You were deepest into blender in 2023 (131 videos); in 2026 up to 30 October it was 12. You "
-                    "still have 6 Render tutorials you saved and never opened: want them as a list, to pick it up "
-                    "again?"), line
+    assert line == ("Your blender watching peaked at 131 in 2023; in 2026 up to 30 October it was 12. You saved and "
+                    "never opened 6 Render tutorials: want them as a list, to pick it up again?"), line
 
 
 # ================================ X16: a list of more than 3 as compact rows, nothing named hidden ================
@@ -331,8 +330,8 @@ def test_x17_a_seasons_shorts_move_is_its_own_bullet_and_what_was_new_is_said():
                                             "since_items": 9}]}
     texts = [o["text"] for o in I.code_form(s)["observations"]]
     assert "You moved to Shorts: 82% of your YouTube videos, from 29% in the spring before." in texts, texts
-    assert any(t.startswith("New that summer: Kite Lab (40 videos, 2 since) and Moss Den (30 videos, 9 since)")
-               for t in texts), texts
+    assert any(t.startswith("New that summer, by videos opened: Kite Lab (40) and Moss Den (30); since then you opened "
+                            "2 more of the first and 9 more of the second") for t in texts), texts
 
 
 def test_x17_what_he_did_then_and_not_since_is_a_so_what_with_a_step():
@@ -343,8 +342,8 @@ def test_x17_what_he_did_then_and_not_since_is_a_so_what_with_a_step():
     c = [x for x in F._so_what_candidates(out, "top", q) if x["kind"] == "then_not_since"]
     assert c and c[0]["channel"] == "Kite Lab" and c[0]["since"] == 2, c
     t = ins().so_what_text(c[0], {})
-    assert t == ("Kite Lab was a thing of that time: 40 videos then, 2 since. Say \"only Speed runs\" to see the rest "
-                 "of Speed runs you opened then."), t
+    assert t == ("Kite Lab was a thing of that time: you opened 40 of their videos then and 2 since. Say \"only Speed "
+                 "runs\" to see the rest of Speed runs you opened then."), t
 
 
 # ================================ X18: two base phrases at most, one for the answer's own base =====================
@@ -358,3 +357,33 @@ def test_x18_one_phrase_for_the_answers_own_base():
     text = I.layout(copy.deepcopy(form), s)[0]["text"]
     assert "of everything" not in text and "of all you watched" not in text, text
     assert text.count("of what you opened") >= 2, text
+
+
+# ================================ X19: a day's new channels counted over all the day's channels ===================
+def test_x19_new_channels_of_a_day_are_counted_over_every_channel_of_the_day(r12, monkeypatch):
+    """The auditor: a day of 26 channels said "2 channels were new that day" where 5 were (it counted the sheet's
+    top list only). Here the top list is cut to the channels that are not new: the count still sees the new one."""
+    from mvp import facts as F
+    orig = F._channel_rows
+
+    def cut(*a, **k):
+        return [c for c in orig(*a, **k) if c["name"] != "Clip Factory"]
+    monkeypatch.setattr(F, "_channel_rows", cut)
+    s = sheet_of(r12, "what did i watch on october 1")
+    assert all(c["name"] != "Clip Factory" for c in s["channels"]), s["channels"]
+    assert s["new_today"] == {"channels": 1, "names": ["Clip Factory"]}, s["new_today"]
+
+
+# ================================ X20: a first's items of one day in the order of their instants ==================
+def test_x20_a_firsts_items_of_one_day_are_in_the_order_they_were_opened():
+    """The auditor: a first answer's cards of 18 May were opened at 07:36, 10:23 and 07:28 (in that order on the
+    page); the 07:28 one comes first."""
+    from mvp import facts as F
+    idx = SimpleNamespace(pos={"a": 0, "b": 1, "c": 2}, it=np.array([0, 1, 2, 1]), day=np.array([1, 1, 1, 2]),
+                          sec=np.array([_ts("2020-05-18T11:36:00+00:00"), _ts("2020-05-18T14:23:00+00:00"),
+                                        _ts("2020-05-18T11:28:00+00:00"), _ts("2020-05-19T11:00:00+00:00")]),
+                          zone=ZoneInfo("America/New_York"))
+    items = [{"id": "a", "at": "2020-05-18"}, {"id": "b", "at": "2020-05-18"}, {"id": "c", "at": "2020-05-18"}]
+    F._by_instant(items, idx, np.array([True, True, True, True]), None, "first")
+    assert [it["id"] for it in items] == ["c", "a", "b"], items
+    assert [it["at_time"] for it in items] == ["7:28 am", "7:36 am", "10:23 am"], items

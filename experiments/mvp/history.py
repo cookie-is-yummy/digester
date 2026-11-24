@@ -2291,7 +2291,7 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False,
                    if isinstance(it, dict) and it.get("id") in view.items]
             # round 12, pass 6 (X16): "more" pages on from the day's first page (a named channel's card after it is
             # not counted twice)
-            rest = int((sheet.get("totals") or {}).get("items") or 0) - min(len(ids), insight.DAY_PAGE) \
+            rest = int((sheet.get("totals") or {}).get("items") or 0) - min(len(ids), insight.day_page()) \
                 if (sheet["kind"] == "day" and n_ < len(sheet.get("items") or [])) else \
                 int((sheet.get("totals") or {}).get("items") or 0) - len(ids)
             if sheet["kind"] == "day" and rest > 0 and parts and parts[0].get("type") == "text":
