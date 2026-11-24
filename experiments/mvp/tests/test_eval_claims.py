@@ -297,6 +297,34 @@ def test_every_year(tmp_path):
     assert not bad(rows_), bad(rows_)
 
 
+def test_first_date_channel_shorts_and_a_cut_topic(tmp_path):
+    rows = rows_months({5: [("Orbit Kitchen", 0, 900, 3)], 6: [("Orbit Kitchen", 0, 900, 5)]})
+    for r in rows:
+        r["cap"] = "cooking at home"
+    rows += rows_months({6: [("Quiet Math", 2, 30, 10), ("Quiet Math", 0, 900, 10)]})
+    for r in rows[-20:-10]:
+        r["cap"] = "a math puzzle"
+    lib, der = make_lib(tmp_path, rows)
+    first = {"kind": "first", "filters": {"topic": "cooking", "topic_themes": ["Pan recipes"]}}
+    rows_, _ = audit(lib, der, "when did i first start watching cooking videos", first, {"kind": "all"},
+                     "You first opened a cooking video on 10 June 2025.")
+    b = bad(rows_, "base", "first or last date")
+    assert b and b[0]["said"] == "2025-06-10" and b[0]["recount"] == "2025-05-02"
+    rows_, _ = audit(lib, der, "when did i first start watching cooking videos", first, {"kind": "all"},
+                     "You first opened a cooking video on 2 May 2025.")
+    assert not bad(rows_, "base")
+    math = {"kind": "channels", "filters": {"topic": "math", "topic_themes": ["Number puzzles"]},
+            "channels": [{"name": "Quiet Math"}]}
+    spec = dict(kind="range", start="2025-06-01", end="2025-06-30")
+    rows_, _ = audit(lib, der, "most watched channels in math", math, spec,
+                     "Quiet Math is a clip channel you grazed (100% Shorts).")
+    b = bad(rows_, "base", "Shorts share of a channel")
+    assert b and b[0]["recount"] == 50.0 and "own_filt_known" in b[0]["note"]
+    cut = {"kind": "count", "filters": {"topic": "cooking", "topic_themes": ["Pan recipes"]}}
+    rows_, _ = audit(lib, der, "how many cooking and math videos did i watch in june", cut, spec, "")
+    assert bad(rows_, "sheet", "topic read (cut)")
+
+
 # ---------------------------------------------------------------------------------------------- 4. the summary
 def test_summary_prints_codes_only(tmp_path, capsys):
     lib, der = _june_lib(tmp_path)

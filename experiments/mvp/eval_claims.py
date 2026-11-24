@@ -516,7 +516,8 @@ class Ctx:
         if topic:
             self.f["topic"] = topic
             self.f["topic_themes"] = fl.get("topic_themes") or []
-            m = re.search(r"\b" + re.escape(topic.lower()) + r"\s+(?:and|&)\s+(\w+)", (ans.get("text") or "").lower())
+            m = re.search(r"\b" + re.escape(topic.lower()) + r"\s+(?:and|&)\s+(\w+)",
+                          ((ans.get("text") or "") + " " + (ans.get("parent_text") or "")).lower())
             if m:   # "art and design" read by code as two topics (art or design), its sheet saying only the first
                 self.f["topic_also"] = [m.group(1)]
         if fl.get("without_shorts"):
@@ -620,7 +621,8 @@ def audit_sheet(ctx, F):
             ctx.window_differs = True
             return   # every count of another window would differ: the window is the one finding
     topic = (sh.get("filters") or {}).get("topic")
-    if topic and re.search(r"\b" + re.escape(topic.lower()) + r"\s+(?:and|&)\s+\w+", ctx.ans.get("text", "").lower()):
+    if topic and re.search(r"\b" + re.escape(topic.lower()) + r"\s+(?:and|&)\s+\w+",
+                           (ctx.ans.get("text", "") + " " + (ctx.ans.get("parent_text") or "")).lower()):
         F.add("sheet", "topic read (cut)", False, "1 topic named", "2 topics counted (the second word too)",
               where="filters.topic", note="used", severity=1.5)
     S = ctx.sc("filt")
@@ -840,9 +842,13 @@ def sentences(text):
             continue
         caption = None
         s = s.lstrip("•").strip()
+        parts = []
         for part in re.split(r"(?<=[.!?])\s+(?=[A-Z\"“])", s):
-            if part:
-                out.append(("text", part, None))
+            if parts and re.search(r"(?:^|\s)[A-Z]\.$", parts[-1]):
+                parts[-1] += " " + part   # an initial ("D. Films") ends no sentence
+            elif part:
+                parts.append(part)
+        out += [("text", part, None) for part in parts]
     return out
 
 
@@ -911,6 +917,10 @@ class TextAudit:
         ctx, lib = self.ctx, self.lib
         if scope == "prev":
             filt, allv = ctx.sc("prev"), ctx.sc("prev_all")
+        elif scope.startswith("rest:"):   # the rest of a season's year (the season's own days left out)
+            y = int(scope[5:])
+            sc = lib.scope(date(y, 1, 1).toordinal(), date(y, 12, 31).toordinal(), ctx.f)
+            filt = allv = {i: v for i, v in sc.items() if any(not (ctx.a <= e[0] <= ctx.b) for e in v)}
         elif scope.startswith("period:"):
             filt = ctx.sc(scope)
             _, a, b = scope.split(":")
@@ -1026,6 +1036,8 @@ class TextAudit:
 
     # ---------------------------------------------------------------- the sentences
     def run(self, text):
+        if (self.ctx.sheet.get("lang") or "en") == "es":
+            text = re.sub(r"(?<=\d)\.(?=\d{3}\b)", "", text)   # "3.630" is 3630 in Spanish
         caption_base = None
         prev_base = None
         for typ, s, cap in sentences(text):
@@ -1197,6 +1209,9 @@ class TextAudit:
                 scope = "prev"
             elif re.match(r"^\s*(?:in|against) (20\d\d)\b", after) and ctx.prev:
                 scope = "prev"
+            rest = re.search(r"apart from the rest of (20\d\d)", s)
+            if rest and re.search(r",\s*against\s*$", before[-12:]) and ctx.a is not None:
+                scope = "rest:" + rest.group(1)
             if frm and ctx.kind != "changed" and not per:
                 scope = "prev" if ctx.prev else scope
             # whose base: the words after the number (or after the last number of its run)
@@ -1214,7 +1229,7 @@ class TextAudit:
                     out.append({"m": m, "said": float(m.group(1).replace(",", ".")), "about": about,
                                 "e": ("shorts", "Shorts"), "scope": scope, "after": " of its videos",
                                 "their": False, "names": ents, "pos": pos, "run_start": first.start(),
-                                "base": ("ownof", grp[pos])})
+                                "chan_shorts": grp[pos]})
                     continue
             if per and out and out[-1]["scope"].startswith("period:") and not wr and \
                     not re.search(r"\bwhile\b|;|\bagainst\b|\bmientras\b", s[out[-1]["m"].end():m.start()]):
@@ -1233,6 +1248,18 @@ class TextAudit:
         # ---------------- percents
         for p in self.percents(s, spans):
             said, about, e, scope = p["said"], p["about"], p["e"], p["scope"]
+            if p.get("chan_shorts"):
+                # "X is a clip channel you grazed (100% Shorts)": the Shorts of all its videos then, or (on a filtered
+                # answer) of its filtered ones
+                ch = p["chan_shorts"]
+                cands = {}
+                for key in ("own_known", "own_filt_known"):
+                    ids = self.base_ids(key, ch, scope=scope)
+                    if ids:
+                        cands[key] = sum(1 for i in ids if lib.member(i, ("shorts", ""))) / len(ids)
+                self.judge_share(said, "own_known", cands, cands.get("own_known"), ch, "Shorts share of a channel",
+                                 about)
+                continue
             if p["their"]:
                 # "A and B are both about T (100% and 99% of their videos)": T's share of each channel's videos
                 chans = [sp[2] for sp in spans if sp[1] <= p["run_start"] and sp[2][0] == "channel"]
@@ -1267,7 +1294,9 @@ class TextAudit:
                 sentence_base, base_kind = base, e[0]
             cands = self.candidates(e, scope=scope)
             got = cands.get(base) if isinstance(base, str) else self.share_of_base(base, e, scope=scope)
-            kind = "share" + (" before" if scope == "prev" else (" in a year" if scope.startswith("period") else ""))
+            kind = "share" + (" before" if scope == "prev" else (" in a year" if scope.startswith("period") else
+                                                                 (" in the rest of the year" if scope.startswith("rest")
+                                                                  else "")))
             self.judge_share(said, base, cands, got, e, kind, about)
         # ---------------- counts
         self.counts(s, spans)
@@ -1295,7 +1324,9 @@ class TextAudit:
                 e = next((sp[2] for sp in spans if sp[2][0] in ("theme", "area")), None)
             if e is not None:
                 ids = [i for i in ids if lib.member(i, e)]
-        yrs = set(re.findall(r"(?<![\d,])(20\d\d)(?![\d,])", s))
+        span_years = range(date.fromordinal(lib.oldest).year, date.fromordinal(lib.newest).year + 1)
+        yrs = {y for y in re.findall(r"(?<![\d,.])(20\d\d)(?![\d,.])(?! (?:videos|different|days|of))", s)
+               if int(y) in span_years}
         a0 = ctx.a if ctx.a is not None else lib.oldest
         if len(yrs) == 1 and date.fromordinal(a0).year != date.fromordinal(ctx.b).year and \
                 not re.search(r"\b\d{1,2} [a-z]+ 20\d\d\b", low) and not re.search(r"\bsince\b", low):
@@ -1400,6 +1431,11 @@ class TextAudit:
                 ent, kind = ("shorts", ""), "count of Shorts"
             else:
                 kind = "count of videos"
+            if not rest and re.search(r",\s*$", s[:m.start()]) and spans and spans[0][0] == 0 and \
+                    spans[0][2][0] in ("channel", "theme", "area"):
+                # "<channel> is new: first opened in this span, 12 videos.": the sentence's own subject
+                ids = [i for i in ids if lib.member(i, spans[0][2])]
+                kind = "count of a record's videos"
             if rest:
                 e = self.names.found.get(rest)
                 if e is None:
@@ -1409,6 +1445,12 @@ class TextAudit:
                     kind = "count of a record's videos"
             if ent is not None:
                 ids = [i for i in ids if lib.member(i, ent)]
+            mention = re.match(r'^\s*that mention "([^"]+)"(?: or "([^"]+)")?', s[m.end():])
+            if mention:   # today's code reply: "N videos that mention "x"": the words alone
+                ws = [w for w in mention.groups() if w]
+                f0 = {k: x for k, x in ctx.f.items() if k not in ("topic", "topic_themes", "topic_also")}
+                ids = [i for i in lib.scope(ctx.a, ctx.b, f0) if any(holds(lib.items[i]["cap"], w) for w in ws)]
+                kind = "count of videos that mention the word"
             if re.search(r"\byou saved\b", low[:m.start()]):
                 # "You saved 5 <theme> videos (you never opened)": saved, never opened, on that theme
                 e = self.names.found.get(rest) if rest else None
@@ -1471,8 +1513,8 @@ class TextAudit:
         if re.search(r"\b(?:led|leads|top|topped|came first|ahead of|followed by|came next|close behind|then)\b", low):
             self.order(s, spans)
         # twice / N times / doubled
-        m = re.search(r"\b(more than doubled|nearly doubled|doubled|tripled|twice|(?:about )?(\d+|two|three|four|five|"
-                      r"six|seven|eight|nine|ten) times)\b", low)
+        m = re.search(r"\b(more than doubled|nearly doubled|doubled|tripled|twice|(?:about )?(\d+(?:\.\d+)?|two|three|"
+                      r"four|five|six|seven|eight|nine|ten) times)\b", low)
         if m:
             self.ratio(s, m, spans)
         # peaked
@@ -1557,14 +1599,16 @@ class TextAudit:
                           "tripled": (2.7, 3.4)}.get(word, (0, 99))
                 self.F.add("word", "ratio word", lo <= r <= hi, word, round(r, 2), severity=1.0)
             return
-        n = 2 if word == "twice" else (int(m.group(2)) if (m.group(2) or "").isdigit() else NUM_WORDS.get(m.group(2)))
+        g2 = m.group(2) or ""
+        n = 2 if word == "twice" else (float(g2) if re.fullmatch(r"\d+(?:\.\d+)?", g2) else NUM_WORDS.get(g2))
         pair = re.search(r"\((\d[\d,]*)[^()]*?against (\d[\d,]*)", s) or re.search(r"(\d[\d,]*) against (\d[\d,]*)", s)
         if pair and n:
             a_, b_ = int(pair.group(1).replace(",", "")), int(pair.group(2).replace(",", ""))
             r = a_ / b_ if b_ else 0
             about = "about" in word or "about" in s.lower()
-            ok = (abs(r - n) <= 0.5) if about else (abs(r - n) <= 0.25 * n)
-            self.F.add("word", "ratio word", ok, f"{n}x", round(r, 2), severity=1.0)
+            ok = (abs(r - n) <= max(0.5, 0.15 * n) if n >= 2 else abs(r - n) <= 0.25) if about else \
+                (abs(r - n) <= 0.25 * n)
+            self.F.add("word", "ratio word", ok, f"{n:g}x", round(r, 2), severity=1.0)
 
     def peaked(self, s, spans):
         """'<theme> peaked then, at 5%, more than in any other three months': the theme's share in the window against
@@ -1742,6 +1786,11 @@ def audit_folder(folder, library=None, derived=None, tz=None, today=None, json_o
     tz = tz or answers[0].get("timezone") or "UTC"
     today = today or date.fromisoformat(answers[0].get("today") or date.today().isoformat())
     lib = Library(lib_path, derived, tz)
+    by_id = {a["id"]: a for a in answers}
+    for a in answers:   # a follow-up ("without shorts") is read with the question it follows
+        if a.get("follow") and "." in a["id"] and not a.get("parent_text"):
+            first = by_id.get(a["id"].rsplit(".", 1)[0] + ".0")
+            a["parent_text"] = (first or {}).get("text") or ""
     rows = []
     for a in answers:
         rows += audit_answer(lib, a, today)
@@ -1822,7 +1871,8 @@ def capture(qfile, out, live=0, today=None):
             aid = q["id"] + (f".{k}" if len(q["msgs"]) > 1 else "")
             spec = (q.get("windows") or [None] * len(q["msgs"]))[k] if q.get("windows") else \
                 (q.get("window") if k == 0 else None)
-            rec = {"id": aid, "text": text, "follow": k > 0, "sent": sent, "sheet": sheet,
+            rec = {"id": aid, "text": text, "follow": k > 0, "parent_text": q["msgs"][0] if k > 0 else "",
+                   "sent": sent, "sheet": sheet,
                    "form": seen["form"] if seen else None,
                    "how": seen["how"] if seen else ("not read by code" if box["other"] else "code"),
                    "cost": seen["cost"] if seen else 0.0, "seconds": round(time.time() - t0, 2),
