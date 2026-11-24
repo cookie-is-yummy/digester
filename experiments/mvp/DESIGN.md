@@ -5778,3 +5778,222 @@ $25.567 after): 41 live writer calls of the auditor's live questions ($0.216) an
 ("while 1 point versus 2024 shows it slipped a bit") passes when its numbers bind. `eval_claims.py` does not read
 `eval_claims_allow.json` (the one case is listed by hand). Spanish answers keep their words (the gate is English only).
 <!-- end round 12, pass 5 -->
+
+## 20. Claude as the text model (24 Nov 2026; amendment A-020, Proposed)
+
+The founder has $100 of Claude API credits and said: "feel free to use claude api tokens instead of openai or gemini".
+This section adds the Claude path beside OpenAI's. **It does not switch the default.** With no Claude model set, every
+call, every ledger row and every reply is what it was (the round 7 probe of the founder's examples is byte-equal on this
+build and on b745cfd).
+
+### 20.1 The switch
+- A model id that starts with `claude-` goes to Anthropic (`lib/ai.py`, `anthropic_chat_json`); any other stays on
+  OpenAI (`openai_chat_json`). `llm.chat_json` picks by the name, so `MVP_MODEL=claude-haiku-5-5` moves every text
+  call, `MVP_JUDGE_MODEL` the judge, `MVP_ERRAND_MODEL` the errand form, and a call's own `model=` still wins.
+- Models priced (`lib/ai_prices.json`, from the claude-api skill's table of 3 Nov 2026; confirm on Anthropic's page
+  before the first paid run): `claude-haiku-5-5` $0.10 / $0.50 per M tokens in / out ($0.50 / $2.50 when a prompt is
+  over 100K tokens), `claude-sonnet-5-5` $2 / $10, `claude-opus-5-5` $4 / $20. Cache reads and writes are priced too.
+  `claude-sonnet-5`, `claude-opus-5` and `claude-opus-4-8` are priced only because a server-side fallback can land on
+  them (20.3).
+- The key: `DIGESTER_ANTHROPIC_API_KEY`, then `ANTHROPIC_API_KEY`, read by name when a Claude call is made. No key:
+  `ai.MissingKey`, naming both variables; never a quiet fall back to OpenAI.
+- The client: the official SDK (`anthropic==2.13.0`, `requirements.txt`), built with
+  `base_url="https://api.anthropic.com"` and the key passed in. Nothing of the machine's own `ANTHROPIC_*` settings
+  reaches it: the SDK reads some of them while a client is built (a base URL, an auth token, extra headers, a
+  profile), so `ai.anthropic_client` hides them for that moment and puts them back. The SDK's own request logs and its
+  OpenTelemetry spans are off. No retries (the OpenAI path has none either), and `ai.TIMEOUT` per call
+  (`MVP_MODEL_TIMEOUT`, 60 s in the bot).
+
+### 20.2 Today's knobs, said to Claude
+| Today (OpenAI) | On Claude | Why |
+| --- | --- | --- |
+| `max_tokens` | `max_tokens` | the same meaning |
+| `temperature`, `seed` | not sent; the row names them in `not_sent` | the three models take no temperature but the default (a 400), SDK 2.x sends API version 2026-10-21 where any `temperature` is a 400, and the API has no `seed` |
+| `reasoning_effort` | `output_config.effort` (`none` and `minimal` become `low`) | effort is the API's control of depth |
+| (none) | `MVP_CLAUDE_EFFORT`, default `low` | used when a call names no effort; "" sends none (the model's own default: medium on Haiku and Opus 5.5) |
+| (none) | `MVP_CLAUDE_THINKING`: `off` (default) or `adaptive` | below |
+| `response_format: json_object` | with a schema: structured output (`output_config.format`); without: one line added to the system prompt ("Reply with one JSON object only ..."), and the reply read strictly | below |
+
+**Thinking off by default.** These are small form-filling calls under deadlines (the history writer has 20 s), and their
+`max_tokens` are sized for the form: thinking adds seconds and spends the same `max_tokens`, so a form could be cut
+before it is written. "Off" is said per model as the API takes it: Haiku 5.5 `{"type": "disabled"}`, Sonnet 5.5
+`{"type": "between_tools"}` (each only at effort high or below; a higher effort is lowered to high). Opus 5.5 cannot
+turn thinking off (`disabled` is a 400), so no thinking field is sent and the effort is its only control. `adaptive`
+sends `{"type": "adaptive"}` to all three.
+
+**JSON.** No caller passes a schema yet (`chat_json(..., schema=...)` is there for the next prompt that has one; the
+OpenAI path ignores it). Without one, the reply's first complete JSON object is read: only white space or a ```json
+fence may come before it, and anything after it is not read. Text that is not one object raises
+`ai.ClaudeStop("not_json")`, a `ValueError`, as a parse failure is on the OpenAI path, so every caller handles it as it
+does today. The added system line is the provider's wrapper, not a prompt change: the prompt files and their versions
+are the same.
+
+**Stops.** `refusal`, `max_tokens` and a reply with no text raise `ai.ClaudeStop` (its `stop_reason` says which) and are
+never parsed. The call's row is written first (it may be billed).
+
+**Timeouts.** The writer's 20 s deadline is `history._write`'s thread join, whatever the provider, so it holds on this
+path too. A call cut by our own timeout writes a worst-case row with `"provider": "anthropic"` (`estimated`), as on
+OpenAI (review fix X4); a connection never made writes none. Real latency under the 20 s deadline is not measured yet
+(`eval_models.py` measures it per model).
+
+### 20.3 Refusals and the server-side fallback
+Sonnet 5.5 and Opus 5.5 are sent the server-side fallback (`betas: ["server-side-fallback-2026-07-01"]`,
+`fallbacks: "default"`), as the skill advises: on a policy decline the API runs the same request on a model it picks
+and answers once. `MVP_CLAUDE_FALLBACKS=0` turns it off. Haiku 5.5 has no fallback, and none is sent. A rescued call is
+priced per attempt from `usage.iterations`, each at its own model's price; the row says `served_model` and `fallback`.
+A model with no price entry is priced at the requested one's and marked `price_assumed`. The per-call guard estimates
+at the requested model's price, so a rescued Opus call can cost up to a quarter more than its guard thought (rare).
+
+### 20.4 The ledger and the caps
+- A Claude row: `provider` "anthropic", `model`, `purpose`, `prompt_version`, `in_tokens`, `out_tokens`,
+  `cache_read_tokens` and `cache_write_tokens` when reported, `cost_usd` from the price table, `seconds`, the `person`
+  ref as before, and `stop_reason`, `served_model`, `fallback`, `not_sent` when they apply. No prompt or reply text, no
+  key.
+- **Caps, in one place** (`llm.cap_reached(libraries)`, read by `executor._over_cap` and the MCP server):
+  `MVP_TOTAL_CAP_USD` now counts only the rows that are not Claude's (OpenAI and Gemini; `llm.spent_total`). Claude has
+  its own total, `MVP_CLAUDE_CAP_USD` (default $10, `llm.spent_claude`), read only while a Claude model is set. Either
+  one reached answers "total" (no paid call), with the same margin as before. The per-person daily cap (`spent_today`)
+  counts every provider. The per-call guard of `ai.py` refuses a Claude call whose worst case would pass
+  `DIGESTER_ANTHROPIC_BUDGET_USD`, which `llm.py` sets from `MVP_CLAUDE_CAP_USD` (as it sets OpenAI's from the total
+  cap). The library builds, "ask the video" and the import checks read `spent_total` as before, so they now see OpenAI
+  and Gemini only, which is what they spend.
+- For evaluations: `MVP_RUN_TAG` puts a `run` field on each row, and `MVP_RUN_MAX_USD` refuses (as a budget stop) a call
+  that would pass a ceiling for this process. Both are unset in the bot.
+
+### 20.5 What stays on OpenAI and Gemini
+- **Search embeddings stay on OpenAI.** The library's vectors are `text-embedding-3-large` at 1,024 dimensions; a
+  query must be embedded by the same model, so every search still sends its words to OpenAI. The theme clusters use the
+  same vectors.
+- **Asking a YouTube video stays on Gemini** (`videoask.py`, A-017): Gemini watches a public video from its link; Claude
+  does not.
+- The demo search app (`experiments/demo`) and the research scripts are not touched.
+
+### 20.6 What the person is told
+While a Claude model is set (`config.claude_models()`: the text model, the judge or the errand model), and only then:
+the consent says "Your requests and the text of posts I consider go to OpenAI and Anthropic (Claude) to understand
+them" (`texts.consent()`); "what leaves this computer" says "OpenAI and Anthropic (Claude): your messages, ..."
+(`videoask.leaves_text`); and an agreement is stored as `mvp-consent-v1+anthropic` (`texts.consent_version()`), so the
+store says which text each person agreed to. "What do you send to anthropic" (or "to claude") is read like "to
+openai". People who agreed before were told OpenAI only; nothing asks them again (20.9).
+
+### 20.7 Checks without spending
+- `python3 -m mvp.llm path-test`: one request with the key "invalid-key-for-path-test" through the client the bot
+  builds. Run on 24 Nov 2026 from this container (through its proxy, with the machine's own `ANTHROPIC_BASE_URL` set):
+  `{"ok": true, "status": 401, "kind": "authentication_error", "host": "api.anthropic.com"}`. So DNS, the proxy, TLS
+  and the base URL are right, and nothing was billed.
+- `python3 -m mvp.llm smoke [model ...]`: once a key exists, one tiny form call per Claude model set (or named),
+  through `chat_json`, so the ledger and the caps see it. It prints the model, seconds, tokens and cost, never the key;
+  exit 1 when a call fails or fills the form wrong, 2 when no model is set or no key. Not run (no key in this session).
+- `tests/test_claude_backend.py` (39 tests, each failing on b745cfd): routing; no change with no Claude model; the
+  ambient `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_CUSTOM_HEADERS` never reach the request; the key
+  from the two names in order; no key is a clear error and no OpenAI call; the knobs per model; a schema; strict JSON
+  and its failures; refusal, `max_tokens`, no text (through the real SDK over a fake transport too); the ledger row;
+  prices per attempt and the long-prompt card; a timeout's worst-case row; an HTTP error with only its status; both
+  caps, the executor's check and the daily cap; the guard; the run ceiling; the consent texts and the stored version; a
+  planted key that appears in no reply, row, file, log, trace or error text of a whole bot message plus a refusal, an
+  error, a timeout and a smoke run; the smoke command; the path test; `eval_models.py` (no key, a dry run of two
+  models, the ceiling, the children's environment). The fakes are in `tests/fakes/fake_anthropic.py`: a client for
+  `ai.ANTHROPIC_CLIENT`, or the real SDK over an `httpx2` transport in `ai.ANTHROPIC_TRANSPORT`.
+
+### 20.8 Every prompt, and its evaluation on any model
+`python3 -m mvp.eval_models --list` prints this table.
+
+| Prompt (version) | Where | Its evaluation | Command |
+| --- | --- | --- | --- |
+| interpret (`interpret_v5`) | interpret.py | rules (3 files, 159 cases), selftest | `python3 -m mvp.eval_rules mvp/evalset/rules_dev_timing.jsonl --out F` (and `_content`, `_extra`) |
+| compose (`compose_v5`) | compose.py | kinds (real library), selftest | `python3 -m mvp.eval_kinds mvp/evalset/kinds_dev.jsonl <library> --out DIR` |
+| extract (`extract_v4`) | extract.py | kinds (real library), selftest | the same |
+| judge (`judge_kind_v2`, on `MVP_JUDGE_MODEL`) | judge.py | kinds (real library) | the same |
+| draft (`draft_v2`) | drafts.py | drafts (25 cases) | `python3 -m mvp.eval_drafts --out DIR` |
+| errand (`errand_v2`) | errand.py | selftest only: no scored set of its own in the repo | `python3 -m mvp.selftest` |
+| profile_guess (`profile_guess_v3`) | profile.py | selftest only | the same |
+| profile_merge (`profile_merge_v3`) | profile.py | selftest; rules has the interpreter's side | the same |
+| first_requests (`first_requests_v1`) | onboarding.py | selftest only | the same |
+| synth (`synth_v5`) | synth.py | synth (12 made-up topics) | `python3 -m mvp.eval_synth mvp/evalset/synth --mode after --out DIR` |
+| insight (`insight_v5`) | insight.py | insight (20 made-up sheets); claims (real library). Its planted-falsehood sets test the code check, so they do not change with the model | `python3 -m mvp.eval_insight --mode live --out F` |
+| theme_name (`theme_name_v2`) | themes.py | none scored: the names were read by hand (19.D) | `MVP_MODEL=<model> python3 -m mvp.themes build <library>`, then read the names |
+| video_ask (`video_ask_v2`) | videoask.py | videoask; stays on Gemini | `python3 -m mvp.eval_videoask ...` |
+| smoke (`smoke_v1`) | llm.py | it is the check | `python3 -m mvp.llm smoke` |
+
+Every evaluation already reaches the model through `llm.chat_json`, so `MVP_MODEL` (and `MVP_JUDGE_MODEL`) is the
+setting that runs it on Claude; no evaluation file changed. **`eval_models.py`** runs the list for a list of models:
+each evaluation in its own process with the model set, a new `MVP_HOME` and its own folder `<out>/<model>/<eval>/`.
+Per model it records the evaluation's own numbers, the calls' latency (median and worst, from the rows its run tag
+marks) and the cost. It stops a model at `--max-usd` (default $3; mid-evaluation too, through `MVP_RUN_MAX_USD`), and
+writes one table to `<out>/comparison.md` and `.json`. The judge is the same for every model, and the table names it
+(20.10; `--judge-model` names another).
+It fails at once with no key (or no `MVP_LEDGER_HOME` / `MVP_TOTAL_CAP_USD`). `--dry` runs the same processes on fakes
+with every real key taken out of their environment ($0; run here on two models, and in the tests). The order is
+insight, drafts, synth, selftest, rules, kinds (cheapest first, so a ceiling stops the dearest). Synth and the
+self-test need `data/all/r7/router.npz` (the search router of a real library, which the self-test always had), and
+kinds needs `--library`: without them they are skipped, and the table says why. The history audit (`eval_claims`,
+another builder's file this round) and the theme names are run by hand on one model (`--list` gives the commands).
+
+Rough cost of insight, drafts and rules from the prompts' sizes (about 1.1M tokens in and 0.1M out): Haiku about
+$0.15, Sonnet about $3, Opus about $6. With the default $3, Sonnet may and Opus will stop inside rules; use
+`--max-usd 8`, or run `--evals insight,drafts` first.
+
+### 20.9 Not done, and open
+- Nothing ran live: no key in this session, and no spend was allowed. No quality, latency or cost of any Claude model
+  is known yet. The default does not change until every prompt's evaluation is no worse on the chosen Claude model
+  (A-020).
+- No prompt was tuned for Claude. They were written and measured on gpt-5.4-mini and gpt-5.5.
+- Prompt caching is not used. The interpreter's prompt (about 3,500 tokens) is the same on every call and would cache;
+  that is a later saving, to be measured first.
+- People who agreed to the consent before were told OpenAI only. Before a Claude default they should be told (or asked
+  again); `consent_version` says who saw which.
+- The key sits in an environment variable: anyone who can use that environment can read it.
+### 20.10 Review (24 Nov 2026)
+A second pass read the whole change against the claude-api skill and the installed SDK (2.13.0), and tried to break it
+with fakes. No money was spent and no live call was made.
+
+What held:
+- Every request is a shape the current API takes. Through the real SDK over a fake transport the bodies are: Haiku
+  `thinking: {"type": "disabled"}` with `output_config.effort` low; Sonnet 5.5 `{"type": "between_tools"}` with
+  `fallbacks: "default"` and the `server-side-fallback-2026-07-01` beta; Opus 5.5 no thinking field, effort low and the
+  fallback; a schema as `output_config.format` `json_schema`. No `temperature`, no `budget_tokens`, no prefill, no forced
+  tool choice. The request goes to `https://api.anthropic.com/v1/messages` with API version 2026-10-21, and the
+  machine's own base URL, auth token and extra headers (`ANTHROPIC_CUSTOM_HEADERS`) never reach it. The fake's objects
+  have the fields of the SDK's own `BetaMessage` and `BetaUsage` (iterations included).
+- A planted key was in no log line, ledger row, error text or trace, with the SDK's debug log asked for.
+- With no Claude model set, the bot is as it was. With no key, the call stops with the error that names both
+  variables; nothing goes to OpenAI instead.
+- Rows with no `provider` field (old rows) still count toward the OpenAI and Gemini cap. The daily cap counts all.
+- The writer's 20 s deadline holds when a Claude call hangs: it is the thread join in `history._write`.
+
+What was wrong, and is fixed (tests in `tests/test_claude_review.py`, each failing on 1f2a601):
+- **Two calls at the cap both went through.** Each read the ledger before the other had answered. The Claude guard
+  now counts the worst case of this process's calls still waiting (`ai._pending`), and so does the run ceiling of an
+  evaluation (`MVP_RUN_MAX_USD`; `eval_rules` runs 4 calls at once). Two separate processes can still both pass, as on
+  the OpenAI path.
+- **The judge moved with the model under test** in `eval_models.py`, so kinds and the self-test compared two changes at
+  once. The judge is now fixed: the bot's own (`MVP_JUDGE_MODEL`, else gpt-5.5) for every model, named in the table.
+  `--judge-model same` is still there, and the table then says not to compare those rows.
+- **A second run into the same `--out` wiped the first run's results** (paid for) before it started. It now stops at
+  once unless `--overwrite`.
+- **Keys checked too late.** A Claude-only run whose judge is on OpenAI, or that searches (synth, self-test, kinds:
+  query embeddings stay on OpenAI), failed inside the evaluation after some calls were paid. Those keys are now checked
+  before anything is sent.
+- **The test page's "start over"** stored `mvp-consent-v1+anthropic` for a person who had agreed to the OpenAI-only
+  text, while a Claude model was set. It now keeps the version the person agreed to.
+- The SDK's HTTP library logs as `httpcore2`, not `httpcore`; its debug log is now off as well (it held no key).
+
+What is left (not fixed here):
+- **People who agreed before.** Setting a Claude model on a running bot sends the text of people who agreed to the
+  OpenAI-only consent to Anthropic, with no new question. Their stored version (`mvp-consent-v1`, without `+anthropic`)
+  shows who they are. The founder decides: tell them, ask again, or keep their calls on OpenAI (code that does not
+  exist yet).
+- **Opus 5.5 always thinks.** No thinking field is sent, but it thinks at low effort, and that thinking counts toward
+  `max_tokens`, which was sized for an OpenAI form. More `max_tokens` stops (a failed form: today's code reply) are
+  likely on Opus than on Haiku or Sonnet. The evaluations will show it.
+- **The Claude cap and the evaluations.** `MVP_CLAUDE_CAP_USD` (default $10) is a total over every Claude row of the
+  shared ledger, the evaluations' too. Three models at `--max-usd 8` would pass it; raise it for such a run.
+- **The cap margin.** The executor says "the budget is used up" when the spend is within $0.05 of a cap. One Opus
+  compose can cost more than that, so near the Claude cap the guard may refuse first; the person then gets the code
+  reply for a failed call, not the budget message.
+- **The writer's trace** (`insight.write`, another builder's file) says "daily cap reached" for any cap that is not
+  "total". The executor answers "total" for the Claude cap too, so this does not show today.
+- While a client is built, the `ANTHROPIC_*` names are taken out of the process's environment for a moment (under a
+  lock). Only `ANTHROPIC_CUSTOM_HEADERS` (and `ANTHROPIC_LOG`, read at import) would otherwise reach it, since the key,
+  the base URL and the signing key are passed in. A thread that copies the environment in that moment misses them.
+<!-- end section 20 -->

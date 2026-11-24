@@ -18,8 +18,6 @@ from .schema import RuleSpec
 from .store import by_number, now_iso, numbered
 from .texts import (
     AGREE,
-    CONSENT,
-    CONSENT_VERSION,
     NEGATION,
     NO,
     NOTHING_PENDING,
@@ -161,7 +159,7 @@ class HandlerMixin:
         if not person["consent_version"]:
             self.note(intent="consent")
             if text and AGREE.match(text) and not NEGATION.search(text):
-                self.store.set_consent(handle, CONSENT_VERSION)
+                self.store.set_consent(handle, T.consent_version())   # section 20: "+anthropic" when it said so
                 ref = self.onboard_start(person, now)   # slice 6: the setup starts with the read of the person
                 self._contact_card(handle)
                 return ref
@@ -172,7 +170,7 @@ class HandlerMixin:
             self.store.set_state(f"consent_shown:{handle}", now_iso(now))
             # ---------- round 11, slice Q: the consent names asking a video while MVP_VIDEO_ASK is on ----------
             from .videoask import consent_note   # round 11 fix, B (V2): remembered when it holds the Google line
-            return self.send(handle, CONSENT + consent_note(self.store, handle, now))
+            return self.send(handle, T.consent() + consent_note(self.store, handle, now))   # section 20: T.consent
             # ---------- end round 11, slice Q ----------
         pending = self._live_pending(handle, now)
         if tapback:

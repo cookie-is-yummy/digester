@@ -229,21 +229,23 @@ class WebChannel(Channel):
                 # "Start over" (with_welcome) runs the whole setup again from its first message (slice 6): consent,
                 # then the read of the person; the other button keeps the consent and the setup
                 agreed = bool(person and person["consent_version"]) and not c.get("with_welcome")
+                # section 20 review: the version the person agreed to is kept as it was (never "+anthropic" for a
+                # person who was shown the OpenAI-only text)
+                kept_version = person["consent_version"] if agreed else None
                 bot.store.delete_person_data(handle)
                 bot.load_people()
                 if agreed and bot.store.person(handle):
-                    from ..core import CONSENT_VERSION
-                    bot.store.set_consent(handle, CONSENT_VERSION)
+                    bot.store.set_consent(handle, kept_version)
                 with self.lock:
                     self.threads[handle] = []
                     self.busy[handle] = 0
                 self.offset = timedelta(0)
                 if c.get("with_welcome") and bot.store.person(handle):
-                    from ..texts import CONSENT
+                    from ..texts import consent   # section 20: names Anthropic while a Claude model is set
                     from ..videoask import consent_note   # round 11, slice Q
                     # the setup's first message, as a new person gets it (round 11 fix, B, V2: remembered when it
                     # holds the Google line)
-                    bot.send(handle, CONSENT + consent_note(bot.store, handle))
+                    bot.send(handle, consent() + consent_note(bot.store, handle))
         self._tick = True
 
     def state(self, handle):

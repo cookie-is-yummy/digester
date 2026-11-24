@@ -57,6 +57,43 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
+### A-020 · Text calls may go to Claude (Anthropic) instead of OpenAI
+- **Date:** 2026-11-24
+- **Requested by:** the founder, who has $100 of Claude API credits: "feel free to use claude api tokens instead of openai or gemini". Written by the coding agent.
+- **Status:** Proposed
+- **Conflicts with:**
+  - `docs/02-tech-stack.md` › Stack, row "LLM calls" ("One wrapper `scrolldigest/ai/` around the provider SDK(s)"): met in shape (one wrapper, `experiments/lib/ai.py`, one more SDK in it), but a third provider's SDK, `anthropic`, is added to the stack. Row "HTTP clients" ("`httpx` … Timeouts and retries on every external call"): the SDK brings its own HTTP client (`httpx2`); our calls set a timeout and no retries, as the OpenAI path does. Row "Packaging" (`uv`, one lockfile): the prototype pins it in `experiments/mvp/requirements.txt`, as it pins its other packages.
+  - `docs/07-privacy-and-safety.md` › Third-party text and LLMs ("Model providers are used under terms that exclude training on our data."): must hold for Anthropic too. Its commercial API terms exclude training on API data by default; nobody has checked the account's own settings yet.
+  - Same section ("Every LLM call is logged (`ai_runs`) with purpose, model, prompt version and cost"): met (rows say provider "anthropic").
+  - Neither doc names OpenAI or Gemini. The providers are named in the prototype's amendments and in what testers were told: A-008 › Costs and risks ("item text and requests go to OpenAI") and A-018 › Costs and risks and gate 8 (the consent names OpenAI). The consent testers agreed to (`mvp-consent-v1`) says "go to OpenAI". A Claude model sends the same text to a third company.
+
+**What is requested**
+Let the bot's text calls (the interpreter, the composer, the details, the judge, the drafts, the errand form, the setup's calls, the summaries, the history writer, the theme names) go to a Claude model when one is set: a model name starting with `claude-` (for example `MVP_MODEL=claude-haiku-5-5`). The default stays on OpenAI. Search embeddings stay on OpenAI and "ask the video" stays on Gemini. Claude spend gets its own total cap. (`experiments/lib/ai.py` `anthropic_chat_json`, `experiments/mvp/llm.py`, `config.py`, `eval_models.py`; DESIGN.md section 20.)
+
+**Why the requester wants it**
+The credits are there to use. The OpenAI and Gemini total cap of the build is nearly spent ($25.31 of $30). And if Claude does as well on every prompt's evaluation, the text calls could later need one provider fewer.
+
+**Why it is better than the current approach**
+- It pays for the next rounds of building and checking from credits that are already bought, instead of raising the OpenAI and Gemini cap.
+- It is a setting, not a rewrite: one model name moves the calls, the evaluation of each prompt runs on any model by the same setting, and `eval_models.py` puts them side by side (quality, median and worst latency, cost) with a spend ceiling per model.
+- The checks stay as they are: the model fills a form, code checks it and acts. Every call is in the ledger with its cost.
+- Measured so far: only that the path is wired. A request with a made-up key came back `401 authentication_error` from `api.anthropic.com` through the container's proxy; 39 offline tests pass, and 10 more from a review (DESIGN.md 20.10: two calls at the cap, a fixed judge in `eval_models.py`, the stored consent version on a start over). Nothing about Claude's quality, speed or cost on these prompts is measured yet.
+
+**Costs and risks**
+- **A third company sees the text.** While a Claude model is set, the person's messages, the lines kept about them, and the captions and titles of the posts considered go to Anthropic as well as OpenAI (search words still go to OpenAI for the embeddings), until OpenAI is dropped for text. The consent and "what leaves this computer" say so by code while a Claude model is set, but people who agreed before were told OpenAI only, and nothing asks them again.
+- **Embeddings stay on OpenAI.** The library's vectors are `text-embedding-3-large`; a query must use the same model. So OpenAI is not dropped by this change, and its cap still matters.
+- **The key** sits in an environment variable; anyone who can use that environment can read it. It is never printed, logged or put in an error (tested with a planted key).
+- **The prompts were tuned on another model** (gpt-5.4-mini, gpt-5.5). Claude may read them differently: a form filled another way, a check that drops more. Temperature and seed cannot be sent (the API refuses them), so "the same question gives the same answer" may hold less well.
+- **Latency is unknown.** The history writer has a 20 s deadline; how often a Claude model meets it is measured only by the evaluations, not yet run.
+- **Refusals.** Claude models can decline a request (a safety classifier). The bot treats it as a failed form (code's reply). On Sonnet and Opus a server-side fallback re-runs it on another model, priced at that model's rate.
+- **Two caps to watch** instead of one, and a new SDK to keep up to date (version 2.13.0 pinned).
+
+**Agent's assessment**
+Agree, with the condition below. The change is small and boring where it matters (one switch, one more wrapper beside the old, the same checks and ledger), it is off by default, and it uses money that is already spent. The privacy cost is real but stated: a third company sees the text while a Claude model is set. My honest view: this is worth it as a measurement tool now, and as a default only if the numbers hold. **Condition:** no default switch until every prompt's evaluation (`python3 -m mvp.eval_models --list`) is no worse on the chosen Claude model than on today's, the 20 s deadline holds, and testers who agreed to the OpenAI-only consent have been told.
+
+**Affected**
+Docs: `02-tech-stack.md` (the LLM row names the SDKs in use), `07-privacy-and-safety.md` (the providers and their terms), `10-decisions.md` (a row pointing here) · Code: `experiments/lib/ai.py`, `experiments/lib/ai_prices.json`, `experiments/mvp/llm.py`, `config.py`, `texts.py`, `videoask.py`, `handler.py`, `channels/web.py`, `executor.py`, `mcp_server.py`, `eval_models.py`, `requirements.txt`, `tests/test_claude_backend.py`, `tests/fakes/fake_anthropic.py` · Contract change: no · Needs both founders: **yes** (the stack)
+
 ### A-019 · History answers written from a fact sheet, with themes clustered from what was watched
 - **Date:** 2026-11-22
 - **Requested by:** Derrick, after grading 8 history answers on his own library (build 1f9cde0: 1 useful, 4 partly, 3 not useful; 5 of 8 slop): "it doesn't really answer the question properly"; "Id expect it to judge by watch time, identify themes and more"; "Always give more than what was asked"; "Cuz 'so what?', you know?". He asked for answers that give insight, name themes and say more than was asked. Written by the coding agent.

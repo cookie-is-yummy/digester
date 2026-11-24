@@ -38,6 +38,28 @@ CONSENT = ("Hi! I'm a prototype that finds things in your own saved and watched 
            "them only to fix problems. Your requests and the text of posts I consider go to OpenAI to understand them "
            "(not used for training). You can say "
            "\"delete my data\" at any time. Reply \"I agree\" to start, and confirm you're 18 or over.")
+
+
+# ---------- section 20: the companies named follow the models set ----------
+CLAUDE_TEXT_NOTE = "go to OpenAI and Anthropic (Claude) to understand them"
+
+
+def consent():
+    """The consent text: CONSENT as it stands with no Claude model set; with one set (config.claude_models), the
+    sentence that names where text goes names Anthropic too (OpenAI stays: search words are embedded there)."""
+    from . import config
+    if not config.claude_models():
+        return CONSENT
+    return CONSENT.replace("go to OpenAI to understand them", CLAUDE_TEXT_NOTE)
+
+
+def consent_version():
+    """CONSENT_VERSION, or that version marked "+anthropic" when the consent shown named Anthropic (so the store
+    says which text a person agreed to)."""
+    from . import config
+    return CONSENT_VERSION + ("+anthropic" if config.claude_models() else "")
+
+
 WELCOME = "Thanks! " + HELP
 SCHEDULED_FOOTER = "Not for you? Reply 👎. Want one more now? Reply \"another\". To pause these, reply \"pause {n}\"."
 LAST_SEND = "That was the last one of this rule."
