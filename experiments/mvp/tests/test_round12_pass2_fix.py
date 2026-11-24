@@ -435,7 +435,7 @@ def test_a_firsts_path_and_its_saved_videos_are_both_kept_as_said():
     s = c["sheet"]
     s["periods"] = [{"label": "2019", "items": 12}, {"label": "2023", "items": 300}, {"label": "2026", "items": 40}]
     f = I.fill(I.check(c["fake"], s), c["fake"], s)
-    assert "You saved" in f["so_what"]
+    assert "you saved and never opened" in f["so_what"]   # round 12, pass 6 (X15, on purpose): code's step
     assert f["so_what_id"].startswith("path:") and "|saved:" in f["so_what_id"]
 
 

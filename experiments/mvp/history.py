@@ -2383,6 +2383,7 @@ YES_SAVED = re.compile(r"^\W*(?:(?:yes|yeah|yep|yup|sure|ok|okay|si|vale|claro)(
                        r"(?:yes[,\s]+)?(?:as\s+a\s+list|the\s+saved\s+ones))\s*[?.!]*\s*$")
 
 
+HANDFUL = 10   # round 12, pass 6 (X12): a topic of fewer videos than this, by their words alone, gets code's reply
 WRITE_TIMEOUT_S = float(os.environ.get("MVP_INSIGHT_TIMEOUT_S", "20"))
 
 
@@ -2414,8 +2415,32 @@ def _write_now(bot, person, q, now, follow, words, said, deadline=None):
         from . import facts
         info["tried"] = True
         sheet = facts.build(bot, person, q, now, text=words)
-        if not isinstance(sheet, dict) or sheet.get("cannot_see") or not (sheet.get("totals") or {}).get("items"):
+        cs = sheet.get("cannot_see") if isinstance(sheet, dict) else None
+        # round 12, pass 6 (X11, the hand check: "the last 10 days" asked after the export's end got the old code
+        # reply, a paragraph on what cannot be seen, then a channel list): a window wholly after the record is
+        # answered like any other, over the latest stretch of that length the record holds, its words saying in one
+        # clause where the record ends; a window before the record, a day, a first or a last keeps the code reply
+        after_ok = bool(cs) and cs.get("reason") == "after" and sheet.get("kind") not in ("first", "last", "day") \
+            and q.lang == "en"
+        if not isinstance(sheet, dict) or (cs and not after_ok) or not (sheet.get("totals") or {}).get("items"):
             return None, info, sheet if isinstance(sheet, dict) else None
+        f_ = sheet.get("filters") or {}
+        if f_.get("topic") and not f_.get("topic_themes") and (sheet.get("totals") or {}).get("items", 0) < HANDFUL:
+            # round 12, pass 6 (X12): a topic that is a handful of videos by their own words is code's count with its
+            # items; no writer call (the writer was paid to write over two unrelated themes, 3,111 items)
+            info["skipped"] = "handful"
+            return None, info, sheet
+        if after_ok:
+            try:
+                a_, b_ = date.fromisoformat(sheet["window"]["start"]), date.fromisoformat(sheet["window"]["end"])
+                n_ = (b_ - a_).days + 1
+                sheet["window"] = dict(sheet["window"], clipped=True, words=(
+                    f"the last {n_} days of your export ({span_words(a_, b_)}; nothing after {day_words(b_)} is in "
+                    f"it)"))
+                sheet.pop("cannot_see", None)
+                sheet["after_export"] = True
+            except (KeyError, TypeError, ValueError):
+                return None, info, sheet
         sheet["lang"] = q.lang
         # round 12, pass 2 (T5): never the same so-what on two answers in a row
         last_sw = (bot.store.get_state(STATE.format(h=person["handle"])) or {}).get("so_what_id")
@@ -2435,10 +2460,14 @@ def _write_now(bot, person, q, now, follow, words, said, deadline=None):
             if sheet.get("kind") in ("first", "last") and q.window.kind == "all":
                 # "when did I first ...": the date is the answer; "In all your history (...)" before it is noise
                 sheet["window"] = dict(sheet["window"], words="")
+            elif sheet.get("after_export"):
+                sheet["window"] = dict(sheet["window"], words="In " + sheet["window"]["words"])
             else:
                 sheet["window"] = dict(sheet["window"], words=opening_words(sheet["window"], q))
         # round 12, pass 2 (T6): the writer never says the export hint (a noted "refresh" is a silent one)
-        parts = insight.write(bot, person, sheet, now, info, say=[x for x in said if x == "friends"],
+        # round 12, pass 6 (X11): past the export's end the hint may be said, once in 6 hours, as one line
+        parts = insight.write(bot, person, sheet, now, info, say=[x for x in said if x == "friends" or
+                                                                  (after_ok and x == "refresh")],
                               deadline=deadline)
         return parts, info, sheet
     except Exception as e:  # noqa: BLE001 - a sheet or writer that fails: today's code reply goes out

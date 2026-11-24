@@ -615,6 +615,8 @@ def load(lib):
 WORD_RATE = 0.5      # a theme whose own titles hold the topic's words this often is that topic
 RARE_IN_TITLES = 30  # fewer titles than this hold the words: the themes' words are the best evidence there is
 NAME_RATE = 0.25     # round 12, pass 2 (T8): a theme named after the topic needs this share of its titles to say it
+RARE_RATE = 0.2      # round 12, pass 6 (X12): a rare word maps to a theme by its words or the fit only when this share
+                     # of the theme's own titles say it ("origami", 17 titles, was mapped to two themes of 5,082 items)
 
 
 def for_topic(view, rec, phrase, th=None, hits=None):
@@ -656,7 +658,7 @@ def for_topic(view, rec, phrase, th=None, hits=None):
         # say it (a PvP theme: 0 to 16% on the founder's library) made a topic's count 15 to 20% high
         named = holds(t.get("name") or "", p) or any(holds(w, p) for w in words[:2])
         if cat in cats or (named and (rate >= NAME_RATE or rare)) or \
-                (any(holds(w, p) for w in words) and (rate >= WORD_RATE or rare)):
+                (any(holds(w, p) for w in words) and (rate >= WORD_RATE or (rare and rate >= RARE_RATE))):
             out.append(tid)
     if out:
         return sorted(out)
@@ -668,8 +670,9 @@ def for_topic(view, rec, phrase, th=None, hits=None):
     c.pop(None, None)
     total = sum(c.values())
     # a word many titles hold is its own topic (those titles); a theme is it only when its titles hold it often
+    # round 12, pass 6 (X12): a measured share of the theme's own titles says the words, rare or not (T8's rule)
     return sorted(t for t, n in c.items() if n >= 3 and n >= 0.2 * total and th.shown(t) is not None
-                  and (rare or (size[t] and held[t] / size[t] >= WORD_RATE / 2)))
+                  and size[t] and held[t] / size[t] >= (RARE_RATE if rare else WORD_RATE / 2))
 
 
 # ================================================================ round 12, pass 2 (T13): say so when they are missing

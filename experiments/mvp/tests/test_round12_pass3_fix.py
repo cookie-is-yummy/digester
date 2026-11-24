@@ -251,8 +251,9 @@ def test_row4_the_path_names_its_subject_and_the_part_of_the_year():
     c = {"kind": "path", "how": "faded", "last_label": "2026", "last_items": 12, "peak_label": "2023",
          "peak_items": 131}
     s = {"window": {"end": "2026-10-30"}, "filters": {"topic": "blender"}}
-    assert I.so_what_text(c, s, topic="blender") == ("Your blender watching has faded: 12 in 2026 up to 30 October, "
-                                                     "against 131 in 2023, your busiest year for it.")
+    # round 12, pass 6 (X15, on purpose): the arc as something to notice, when it peaked and what it is now
+    assert I.so_what_text(c, s, topic="blender") == ("You were deepest into blender in 2023 (131 videos); in 2026 up to "
+                                                     "30 October it was 12.")
 
 
 def test_row4_a_topics_shorts_share_is_of_its_own_videos():

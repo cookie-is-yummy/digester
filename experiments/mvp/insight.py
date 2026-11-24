@@ -3111,6 +3111,31 @@ def _item_line(k, it, lang, year=None):
     return f"{k}. {_clip(title)}{_clip(by)}" + (f" ({', '.join(bits)})" if bits else "")
 
 
+def _named_first(sheet, text):
+    """Round 12, pass 6 (X16, the hand check: the overview named a channel whose card was hidden behind "more"): a
+    day's cards are the first SHOW["items"] of its items, with every channel the overview names among them (an item
+    of a named channel moves up in place of the last one of a channel it does not name). In place: the caller's list
+    of ids reads the same order."""
+    items = [it for it in sheet["items"] if isinstance(it, dict)]
+    n = SHOW["items"]
+    if len(items) <= n:
+        return
+    low = " " + _norm(text) + " "
+
+    def named(it):
+        c = " ".join(_words(str(it.get("channel") or "")))
+        return bool(c) and len(c) >= 3 and f" {c} " in low
+    shown_ = items[:n]
+    for it in items[n:]:
+        if named(it) and not any(x.get("channel") == it.get("channel") for x in shown_):
+            k = next((j for j in range(len(shown_) - 1, -1, -1) if not named(shown_[j])), None)
+            if k is None:
+                break
+            shown_[k] = it
+    rest = [it for it in items if all(it is not x for x in shown_)]
+    sheet["items"] = shown_ + rest
+
+
 def item_caption(k, it, lang="en", year=None, day=False):
     """Round 12, pass 3 (U4): a card's one caption line: its number, the channel, the day, the length ("2. Pixel
     Pencil · 30 Oct · 25 min"); the title is the card's own."""
@@ -3121,6 +3146,8 @@ def item_caption(k, it, lang="en", year=None, day=False):
     if d and not day:   # a day's cards are all that day (the overview says it)
         bits.append(f"{d.day} {(MONTHS_ES if lang == 'es' else MONTHS)[d.month - 1][:3].capitalize()}"
                     + (f" {d.year}" if year and d.year != year else ""))
+    elif day and isinstance(it.get("at_time"), str) and it["at_time"]:
+        bits.append(it["at_time"])   # round 12, pass 6 (X16): a day's row says its time
     if _num(it.get("length_s")) and 0 < it["length_s"] <= 3 * 3600:   # round 12, pass 5: no "53945 min" (19.D)
         mins = int(round(it["length_s"] / 60))
         bits.append(f"{mins} min" if mins >= 1 else f"{int(it['length_s'])} s")
@@ -3376,8 +3403,8 @@ _P6_GAP = re.compile(r"\bthe (?:gap|difference|lead)\b[^.;]{0,30}\b(?:widen\w*|n
 _P6_INSIDE = re.compile(r"\b(?:inside|within)\b", re.I)
 _P6_NOUN = re.compile(r"^(?P<sp>\s+)(?P<n>(?:(?:long|long-form|short|youtube|YouTube)\s+)?(?:[a-z][a-z&'-]*\s+){0,2}?"
                       r"(?:videos?|Shorts|ones|clips|posts))\b(?! (?:from|on|of)\b)")
-_P6_SAVED = re.compile(r"\b(?P<y>[Yy]ou) saved (?P<n>\d[\d,]*) (?P<t>(?:[^\s;,.]+ ){0,5}?)(?P<v>videos?)\b"
-                       r"(?! (?:you |that you )?(?:never|have not|haven't|did not|didn't))")
+_P6_SAVED = re.compile(r"\b(?P<y>[Yy]ou) saved (?P<n>\d[\d,]*) (?P<t>[^;,.?!:]+?)"
+                       r"(?=\s*(?:[;,.?!:]|\s(?:and|but|want|from|in|on|that|which)\b|$))")
 
 
 def _p6_counts(sheet):
@@ -3461,10 +3488,10 @@ def p6_words(s, sheet, names):
         if isinstance(c, dict) and c.get("kind") in ("saved", "lapsed_saves", "arc") and _num(c.get("n")):
             sv.add(int(c["n"]))
     m = _P6_SAVED.search(s)
-    if m and int(m.group("n").replace(",", "")) in sv:
+    if m and int(m.group("n").replace(",", "")) in sv and not re.search(
+            r"\b(?:never|not yet|have not|haven't|did not|didn't)\b", m.group("t") + s[m.end():m.end() + 30]):
         y = "You" if m.group("y") == "You" else "you"
-        s = s[:m.start()] + f"{y} have {m.group('n')} {m.group('t')}{m.group('v')} you saved and never opened" + \
-            s[m.end():]
+        s = s[:m.start()] + f"{y} have {m.group('n')} {m.group('t')} you saved and never opened" + s[m.end():]
     return s
 
 
@@ -3907,6 +3934,10 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
     gated = gate_form(form, sheet)   # round 12, pass 5: every percent with its base
     form = dict(gated, answer=gated["answer"] or form["answer"])
     form = p6_once(form, sheet)   # round 12, pass 6 (X9): one fact once, in whatever words
+    if kind == "day" and form["observations"]:
+        # round 12, pass 6 (X16): what only his record knows comes first: how the day differs from his usual day
+        us_ = [o for o in form["observations"] if re.search(r"\busual day\b", o)]
+        form["observations"] = us_ + [o for o in form["observations"] if o not in us_]
     head = [_no_title_twice(window_lead(form["answer"], sheet), sheet)]
     if form["observations"]:
         head.append("\n".join("• " + o for o in form["observations"]))
@@ -3929,6 +3960,9 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
         year = end.year if end else None
         parts = [{"type": "text", "text": "\n\n".join(head)}]
         cards = list(items_parts or [])
+        # round 12, pass 6 (X16, row 6 was 2,991 px tall on a phone, 8 full-size cards): a list of more than 3 items
+        # is drawn as compact rows (a channel that draws cards: a small picture, the title, the caption, one row each)
+        compact = len(cards) > 3
         if not cards:   # no cards to show: the items as lines, as before
             parts[0]["text"] += "\n\n" + "\n".join(_item_line(k, it, lang, year)
                                                     for k, it in enumerate(items[:SHOW["items"]], 1))
@@ -3940,7 +3974,7 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
             cap = card.get("caption") or item_caption(k, it, lang, year, day=(kind == "day"))
             card = {a: b for a, b in card.items() if a != "item"}
             parts.append({"type": "text", "text": cap, "card_alt": True})
-            parts.append(dict(card, caption=cap))
+            parts.append(dict(card, caption=cap, **({"compact": True} if compact else {})))
         if tail:
             parts.append({"type": "text", "text": "\n".join(tail)})
         return parts
@@ -4323,12 +4357,17 @@ def code_form(sheet):
             # wrong channel>"): the item is the sheet's first, ordered by the instant of the open; code says its day,
             # its time and its channel
             it0 = items[0]
-            at_ = f" at {it0['at_time']}" if isinstance(it0.get("at_time"), str) and it0["at_time"] else ""
+            at_ = ""   # its time is put in by fill, after the check (a time of day is no hour of the sheet's)
             ch_ = it0.get("channel") if isinstance(it0.get("channel"), str) and "@" not in it0.get("channel") else None
             ans = (f"You first opened {an_} {topic} video on {_day_words(d0)}{at_}" + (f", from {ch_}." if ch_ else ".")
                    if kind == "first" else
                    f"The last {topic} video you opened was " + (f"from {ch_}, " if ch_ else "") +
                    f"on {_day_words(d0)}{at_}.")
+            t0_ = themes[0] if themes and _num(themes[0].get("items")) and _num(tot.get("items")) else None
+            if kind == "first" and t0_ and t0_["share"] >= SPREAD_SHARE and tot["items"] >= 10:
+                # what it became, said by code (the writer's "it quickly became mostly <theme>" was in the sentence
+                # code's answer replaces)
+                ans += f" Most of it has been {t0_['name']} ({f(t0_['items'], lang)} of {f(tot['items'], lang)})."
         if _num(tot.get("items")) and _num(tot.get("days_active")):
             o((f"Since then you opened {f(tot['items'], lang)} {topic} videos on {f(tot['days_active'], lang)} days."
                if kind == "first" else f"In all you opened {f(tot['items'], lang)} {topic} videos on "
@@ -4721,9 +4760,22 @@ def _path_line(s, topic, path_only=False):
     sv = next((x for x in s.get("so_what_candidates") or [] if isinstance(x, dict) and
                x.get("kind") in ("saved", "lapsed_saves")), None)
     if sv:
-        saved = f"You saved {_fmt(sv['n'], 'en')} {sv['theme']} videos you never opened, a next step. Want them as a list?"
+        # round 12, pass 6 (X15, row 4: "suggest what I could learn with that information"): the arc the sheet
+        # holds, then what he saved on it and never opened, as the step to take
+        how = (c or {}).get("how")
+        step = {"faded": "to pick it up again", "still": "to go on from there",
+                "deeper": "to go further"}.get(how, "as a next step")
+        saved = (f"You still have {_fmt(sv['n'], 'en')} {_videos_of(sv['theme'])} you saved and never opened: want "
+                 f"them as a list, {step}?")
         return (path + " " + saved) if path else saved
     return path
+
+
+def _videos_of(theme):
+    """"Motion graphics tutorials" stays as it is; "Watercolor painting" is "Watercolor painting videos"."""
+    return theme if re.search(r"\b(?:tutorials|episodes|clips|edits|memes|vlogs|reviews|highlights|workouts|"
+                              r"challenges|projects|explainers|puzzles|pranks|mishaps|stunts|builds|games|videos|"
+                              r"lessons|shorts|streams|guides)\s*$", str(theme).lower()) else f"{theme} videos"
 
 
 def so_what_text(c, s, topic=None, lang=None):
@@ -4747,10 +4799,10 @@ def so_what_text(c, s, topic=None, lang=None):
         end = _as_date((s.get("window") or {}).get("end"))
         part = (f"in {ll} up to {end.day} {MONTHS[end.month - 1].capitalize()}" if end and str(end.year) == str(ll)
                 and (end.month, end.day) != (12, 31) else f"in {ll}")
+        # round 12, pass 6 (X15): the arc as something to notice (when it peaked, what it is now)
         return {"deeper": f"You are deeper into {topic} than ever: {li} {part}, your busiest year for it.",
                 "still": f"You are still at it: {li} {part}, against {pi} in {pl}, your busiest year.",
-                "faded": f"Your {topic} watching has faded: {li} {part}, against {pi} in {pl}, your busiest year "
-                         f"for it."}.get(c.get("how"))
+                "faded": f"You were deepest into {topic} in {pl} ({pi} videos); {part} it was {li}."}.get(c.get("how"))
     if k == "lapsed_saves":
         return (f"{c['theme']} has faded, and you still have {_fmt(c['n'], 'en')} saved {c['theme']} videos you never "
                 f"opened. Want them as a list?")
@@ -5008,6 +5060,12 @@ def fill(form, raw, sheet, chart_vals=None):
         # round 12, pass 6 (X1): a first's or a last's answer is always code's (its item ordered by the instant, its
         # day and time); the writer's sentences after it stay unless they say a date
         new = " ".join([cf["answer"]] + tail)
+        it0 = next((x for x in sheet.get("items") or [] if isinstance(x, dict) and x.get("at")), None)
+        d0_ = _as_date(it0.get("at")) if it0 else None
+        if d0_ and isinstance(it0.get("at_time"), str) and re.fullmatch(r"\d{1,2}:\d\d [ap]m", it0["at_time"]):
+            dw = _day_words(d0_)
+            if dw in new.split(".")[0]:
+                new = new.replace(dw, f"{dw} at {it0['at_time']}", 1)
         obs_ = [x for x in form["observations"] if not (re.search(r"\b(?:first|last)\b", _norm(x)) and
                                                         re.search(_DATE_RX, _norm(x)))]
         for x in form["observations"]:
@@ -5153,6 +5211,14 @@ def fill(form, raw, sheet, chart_vals=None):
         if sheet.get("kind") in ("first", "last") and facts.lang == "en" else None
     if path and check_sentence(path, facts) is None:
         # the person's path on the topic, from the record (judge, Q4: "what could I learn"), then the saved ones
+        # round 12, pass 6 (X15): both in code's words, the saved ones as the step to take
+        full = _path_line(dict(shown(sheet), so_what_candidates=cands), (sheet.get("filters") or {}).get("topic") or "")
+        sv0 = next((c for c in cands if c.get("kind") in ("saved", "lapsed_saves")), None)
+        if full and full != path and sv0 is not None and check_sentence(full[len(path):].strip(), facts) is None:
+            if sw:
+                form["dropped"].append(("so_what", "code_arc", sw))
+            sw = full[len(path):].strip()
+            chosen = sv0
         if not sw:
             sv = next((c for c in cands if c.get("kind") in ("saved", "lapsed_saves")), None)
             sw = (f"You saved {_fmt(sv['n'], 'en')} {sv['theme']} videos you never opened, a next step. Want them "
@@ -5590,6 +5656,8 @@ def write(bot, person, sheet, now, info=None, say=None, deadline=None):
         if FRIENDS_ASK.search(str(sheet.get("question") or "")) and "friends" not in quiet:
             extra.append(FRIENDS_LINE[lang])
             said.append("friends")
+    if sheet.get("kind") == "day" and isinstance(sheet.get("items"), list):
+        _named_first(sheet, " ".join([form["answer"] or ""] + list(form["observations"])))
     cards = []
     if sheet.get("kind") in ITEM_KINDS:
         try:

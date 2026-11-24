@@ -169,6 +169,8 @@ class WebChannel(Channel):
                 "outside": bool(part.get("outside"))}   # an outside pick: the card says it is not from their saves
         if part.get("caption"):   # round 12, pass 3 (U4): a history card's one caption line (number, channel, day)
             card["caption"] = str(part.get("caption") or "")[:160]
+        if part.get("compact"):   # round 12, pass 6 (X16): a list of more than 3 items, one compact row each
+            card["compact"] = True
         if part.get("outside"):   # fix pass 2, finding 55: the card carries YouTube's channel name and the length
             card.update(channel=str(part.get("channel") or "")[:100] or None, length=part.get("length") or None)
         if part.get("platform") == "calendar":   # finding 56: a calendar card, with the .ics from the outbox beside it

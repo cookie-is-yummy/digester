@@ -549,7 +549,10 @@ def _item_rows(view, idx, facts, th, ids, rec, kinds, start, end, first=False):
     return out
 
 
-def _by_instant(items, idx, ev, eo, kind):
+DAY_ITEMS_MAX = 60   # round 12, pass 6 (X16): a day's items on the sheet (the cards are chosen from them)
+
+
+def _by_instant(items, idx, ev, eo, kind, sort=True):
     """Round 12, pass 6 (X1, the hand check: "the last minecraft video" named the one opened at 00:04, not the one at
     09:12 the same day): a first's or a last's items in the order of the instant of their first (or last) open, the
     newest first for a last and a day; each item's local time of that open as "at_time" ("9:12 am"). The sentence,
@@ -577,7 +580,8 @@ def _by_instant(items, idx, ev, eo, kind):
             h = d.hour % 12 or 12
             it["at_time"] = f"{h}:{d.minute:02d} {'am' if d.hour < 12 else 'pm'}"
             it["_t"] = t
-    items.sort(key=lambda it: (it.get("_t") is None, (it.get("_t") or 0) * (1 if kind == "first" else -1)))
+    if sort:   # a first and a day in the order they were opened; a last newest first
+        items.sort(key=lambda it: (it.get("_t") is None, (it.get("_t") or 0) * (-1 if kind == "last" else 1)))
     for it in items:
         it.pop("_t", None)
 
@@ -784,9 +788,20 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
                 if len(seen_) >= 10:
                     break
             ids = [idx.ids[i1] for i1 in seen_]
+        if kind == "day":
+            # round 12, pass 6 (X16, the hand check: the overview named a channel whose card was behind "more"): every
+            # item of the day is on the sheet (the code reply's list first, then the rest by the time of the open);
+            # the model is shown the first SHOW["items"], the cards are chosen from all of them
+            m_ = ev & ((idx.day >= so) if so is not None else True) & ((idx.day <= eo) if eo is not None else True)
+            last_t = {}
+            for p_, t_ in zip(idx.it[m_].tolist(), idx.sec[m_].tolist()):
+                last_t[p_] = max(t_, last_t.get(p_, t_))
+            have = set(ids)
+            ids = list(ids) + [idx.ids[p_] for p_, _t in sorted(last_t.items(), key=lambda x: -x[1])
+                               if idx.ids[p_] not in have][:DAY_ITEMS_MAX]
         out["items"] = _item_rows(view, idx, facts, th, ids, rec, kinds, eff_start if kind == "day" else None,
                                   eff_end if kind == "day" else None, first=(kind == "first"))
-        if kind in ("first", "last"):
+        if kind in ("first", "last", "day"):
             _by_instant(out["items"], idx, ev, eo, kind)
         if kind in ("first", "last") and q.topic:
             out["periods"], out["periods_unit"] = _periods(idx, facts, th, ev, None, eo, by="year")

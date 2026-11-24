@@ -237,7 +237,8 @@ def test_u4_the_windows_shorts_are_said_once_when_the_so_what_says_them():
 def test_u4_a_day_is_the_overview_then_cards_with_one_caption_line_and_never_a_list_twice(wr):
     out, _ = ask(wr, "what did i watch on october 30")
     assert "on the 30th by Pixel Pencil (30 Oct" not in out   # the numbered text list of the same items is gone
-    assert "1. Pixel Pencil · 25 min\nhttps://www.youtube.com/watch?v=vrday1" in out, out
+    # round 12, pass 6 (X16, on purpose): a day's row says the time it was opened
+    assert "1. Pixel Pencil · 10:00 am · 25 min\nhttps://www.youtube.com/watch?v=vrday1" in out, out
     assert out.count("vrday1") == 1
 
 
@@ -261,7 +262,8 @@ def test_u4_and_n_more_comes_after_the_cards(wr):
         out, _ = ask(wr, "what did i watch on october 30")
     finally:
         I.SHOW["items"] = old
-    assert out.index("vrday2") < out.index("And 2 more"), out
+    # round 12, pass 6 (X16, on purpose): a day's items in the order they were opened (the second is vrday3, at noon)
+    assert out.index("vrday3") < out.index("And 2 more"), out
 
 
 # ================================ U5: the so-what is about the question's subject ================================

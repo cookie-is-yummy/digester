@@ -84,6 +84,14 @@
   .card .embed { margin: 6px 4px 0; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
                  border-radius: 10px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
   .card .note { font-size: 12px; color: var(--quiet); margin: 4px; }
+  /* round 12, pass 6 (X16): a history list of more than 3 items, one compact row each (about 70 px on a phone) */
+  .card.row1 { display: flex; gap: 8px; align-items: center; padding: 6px; width: 100%; box-sizing: border-box; }
+  .card.row1 .mini { flex: 0 0 auto; display: block; }
+  .card.row1 .mini img { width: 96px; height: 54px; object-fit: cover; border-radius: 6px; display: block; background: #000; }
+  .card.row1 .mtxt { min-width: 0; }
+  .card.row1 .mt { font-size: 13.5px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; }
+  .card.row1 .note { margin: 2px 0 0; }
   .list { margin-bottom: 8px; font-size: 13.5px; }
   .list b { font-size: 12.5px; }
   .list ol { margin: 4px 0 2px; padding-left: 22px; }
@@ -278,6 +286,12 @@ const playing = new Set();
 const ytPlayer = (vid, auto) => `<iframe width="480" height="270" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(vid)}?playsinline=1${auto ? "&autoplay=1" : ""}" title="YouTube video player" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
 function card(m) {
   const l = m.link, title = esc(l.title || l.url), url = esc(l.url);
+  if (l.compact) {   // round 12, pass 6 (X16): a small picture, the title, the caption line
+    const meta = [l.caption].filter(Boolean).map(esc).join(" · ");
+    const pic = (l.platform === "youtube" && l.video_id)
+      ? `<a class="mini" href="${url}" target="_blank" rel="noopener noreferrer"><img src="https://i.ytimg.com/vi/${esc(l.video_id)}/mqdefault.jpg" alt="" loading="lazy"></a>` : "";
+    return `<div class="card row1 ${l.platform === "youtube" ? "yt" : "ig"}">${pic}<div class="mtxt"><a class="mt" href="${url}" target="_blank" rel="noopener noreferrer">${title}</a>${meta ? `<div class="note">${meta}</div>` : ""}</div></div>`;
+  }
   if (l.platform === "youtube" && l.video_id) {
     const vid = esc(l.video_id);
     const media = playing.has(m.id) ? ytPlayer(l.video_id, false)

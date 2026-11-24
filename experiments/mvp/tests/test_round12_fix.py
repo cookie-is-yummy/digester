@@ -287,9 +287,10 @@ def test_a_firsts_so_what_says_the_path_on_the_topic_and_its_title_is_said_once(
     raw = dict(c["fake"], answer=f"You first opened a blender video on 14 March 2019: \"{title}\".")
     f = checked(raw, s)
     # round 12, pass 3 fix (judge A, row 4, on purpose): the subject named, the part of the year said
-    assert f["so_what"].startswith("Your blender watching has faded: 40 in 2026 up to 30 October, against 300 in 2023, "
-                                   "your busiest year for it.")
-    assert "You saved 18 Blender 3D videos" in f["so_what"]
+    # round 12, pass 6 (X15, on purpose): the arc as something to notice, then the saved ones as the step to take
+    assert f["so_what"].startswith("You were deepest into blender in 2023 (300 videos); in 2026 up to 30 October it "
+                                   "was 40.")
+    assert "You still have 18 Blender 3D videos you saved and never opened" in f["so_what"]
     head = I.layout(f, s)[0]["text"]
     # round 12, pass 6 (X1, on purpose): a first's answer is code's, with the first item's channel
     assert head.count(title) == 1 and head.startswith("You first opened a blender video on 14 March 2019, from ")
