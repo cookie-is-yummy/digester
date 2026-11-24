@@ -1220,6 +1220,7 @@ def _topic_row(view, rec, idx, facts, th, phrase, ev, so, eo):
     row = {"name": phrase, "items": t["items"], "days": t["days_active"], "length_hours": t["length_hours"],
            "length_known_share": t["length_known_share"], "shorts": t["shorts"], "long": t["long"],
            **({"shorts_share": t["shorts_share"]} if "shorts_share" in t else {}),
+           **({"shorts_yt_share": t["shorts_yt_share"]} if "shorts_yt_share" in t else {}),
            "themes": [th.shown(x) for x in tids] if th is not None else [],
            "matched_by": ("themes and words" if tids else "words"),
            # round 12, pass 2 (T9): what is inside the topic in the window, by count

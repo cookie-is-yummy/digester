@@ -3100,7 +3100,16 @@ _G_BASE = re.compile(
     r"of (?:your|the|the day's|that day's|the window's|the season's|the year's) youtube videos|of the youtube videos|"
     r"of your long [a-z][a-z0-9 &'-]*? videos|of your long videos|of the long videos|"
     r"of your [a-z0-9][a-z0-9 &'-]*? videos(?: on youtube)?|of (?:their|its) (?:own )?videos|"
-    r"of the videos you opened from\b|shorts\b|on a usual day\b|de lo que abriste|de todo lo que abriste)", re.I)
+    r"of the videos you opened from\b|of (?:it|them|those|these)\b|shorts\b|on a usual day\b|de lo que abriste|"
+    r"de todo lo que abriste)", re.I)
+_G_SPAN_AFTER = re.compile(r"^\s*(?:in|against|for|over|during)\s+(?:(?:19|20)\d\d\b|the\b|that\b|this\b|"
+                           r"[A-Z][a-z]+ (?:19|20)\d\d\b)")
+# the words between "Shorts" and a number that make the number a Shorts share ("Shorts were 79%", "moved to Shorts:
+# 82%", "Shorts climbed from 4% to 81%"); "the year you moved to Shorts, and 16% in 2026" is a record's share
+_G_SHORTS_LINK = re.compile(r"^\s*(?:[:(]|(?:were|was|are|is|made up|went|rose|grew|climbed|jumped|fell|dropped|"
+                            r"took|at|share|from|to|up|down|of|then|now|stood)\b)")
+_G_MOSTLY_LIST = re.compile(r"\b(?P<w>mostly|mainly|largely)\s+(?P<a>[^,;%()]+?) at (?P<x>\d+(?:\.\d)?%)"
+                            r"(?:,)? and (?P<b>[^,;%()]+?) at (?P<y>\d+(?:\.\d)?%)")
 _G_OPENED_SAID = re.compile(r"\bof (?:everything|all|what) you (?:opened|watched)\b|\bof everything\b", re.I)
 _G_WERE_SHORTS = re.compile(r"^\s*(?:of [^,.;%]*?\s)?(?:were|was|are|is)\s+(?:all\s+)?Shorts\b")
 _G_LONG = re.compile(r"\blong(?:-form)? (?:videos|ones)\b", re.I)
@@ -3145,6 +3154,20 @@ def base_phrase(sheet, subject):
     return "of " + b["opened"] if b else "of what you opened"
 
 
+def _gate_subject(s, cues, first, after):
+    """"shorts" when a number is a Shorts share ("Shorts were 79%", "moved to Shorts: 82%", "Shorts moved from 64%",
+    "45% were Shorts", "(95% Shorts)"), else "record" ("the year you moved to Shorts, and 16% in 2026")."""
+    if _G_WERE_SHORTS.match(after) or re.match(r"^\s*Shorts\b", after):
+        return "shorts"
+    prior = [c for c in cues if c[1] <= first.start()]
+    if prior and prior[-1][2] == "shorts":
+        between = s[prior[-1][1]:first.start()]
+        if _G_PCT.search(between) or _G_SHORTS_LINK.match(between) or (
+                len(between) <= 40 and not re.search(r"[;]|,\s*(?:and|while|but)\b|\b(?:while|but|whereas)\b", between)):
+            return "shorts"
+    return "record"
+
+
 def gate_sentence(s, sheet, names, state):
     """(the sentence with every percent based, None) or (None, why). `state["opened_said"]`: the answer said "of what
     you opened" already (an unfiltered record share needs it only once)."""
@@ -3154,6 +3177,11 @@ def gate_sentence(s, sheet, names, state):
         return s, None
     filtered = bool(bases(sheet))
     ws = bool((sheet.get("filters") or {}).get("without_shorts"))
+    m_ = _G_MOSTLY_LIST.search(s)
+    if m_ and filtered and not _G_BASE.match(s[m_.end("x"):]):
+        # "mostly A at 34% and B at 21%": one list, its base after its numbers ("mostly A and B (34% and 21% of ...)")
+        s = (s[:m_.start()] + f"{m_.group('w')} {m_.group('a')} and {m_.group('b')} ({m_.group('x')} and "
+             f"{m_.group('y')} {base_phrase(sheet, 'record')})" + s[m_.end():])
     cues = _cues(s, names)
     ms = list(_G_PCT.finditer(s))
     # runs: "11% and 5%", "85% and 100% Shorts": the base after the run's last number
@@ -3171,10 +3199,7 @@ def gate_sentence(s, sheet, names, state):
     for run in runs:
         first, last = run[0], run[-1]
         after = s[last.end():]
-        prior = [c for c in cues if c[1] <= first.start()]
-        subj = prior[-1][2] if prior else ("shorts" if _G_WERE_SHORTS.match(after) else "record")
-        if _G_WERE_SHORTS.match(after) or re.match(r"^\s*Shorts\b", after):
-            subj = "shorts"
+        subj = _gate_subject(s, cues, first, after)
         if subj == "shorts" and ws:
             return None, "shorts_left_out"
         if _G_BASE.match(after):
@@ -3184,16 +3209,35 @@ def gate_sentence(s, sheet, names, state):
             continue
         if subj in based_kinds:
             continue   # an earlier number of the sentence about the same kind of thing says it
-        if subj == "record" and not filtered and state.get("opened_said"):
+        move = bool(re.search(r"\bfrom\s*$", s[max(0, first.start() - 6):first.start()]) and
+                    re.match(r"^\s*to\s+\d", after))
+        if subj == "record" and not filtered and (state.get("opened_said") or _G_SPAN_AFTER.match(after) or move):
+            # the answer's own base (everything opened in the span said), said once; a share of a year or of the
+            # span before ("22% in 2020"), or a move ("from 33% to 10%"), is of what was opened then, its only reading
             based_kinds.add(subj)
-            continue   # the answer's own base, said once
+            continue
         words = base_phrase(sheet, subj)
+        later = next((r2 for r2 in runs[runs.index(run) + 1:] if _gate_subject(s, cues, r2[0], s[r2[-1].end():]) == subj
+                      and _G_BASE.match(s[r2[-1].end():])), None)
+        if later is not None:
+            # "Shorts moved from 64% in 2023 to 70% of your YouTube videos in 2026": the base said once, after the
+            # first number of its kind
+            mb = _G_BASE.match(s[later[-1].end():])
+            said_ = s[later[-1].end():later[-1].end() + mb.end()]
+            if said_.strip().lower().startswith("of ") and not re.search(r"\bof (?:it|them|those|these)\b", said_):
+                full = re.match(r"\s*of [^,.;()]*?videos(?: on YouTube)?|\s*of what you (?:opened|watched)", s[later[-1].end():])
+                if full:
+                    words = full.group(0).strip()
+                    inserts.append((later[-1].end(), None, len(full.group(0))))
         inserts.append((last.end(), " " + words))
         based_kinds.add(subj)
         if subj == "record" and not filtered:
             state["opened_said"] = True
-    for pos, w in sorted(inserts, reverse=True):
-        s = s[:pos] + w + s[pos:]
+    for x in sorted(inserts, key=lambda x: x[0], reverse=True):
+        if len(x) == 3:   # a base moved to an earlier number
+            s = s[:x[0]] + s[x[0] + x[2]:]
+        else:
+            s = s[:x[0]] + x[1] + s[x[0]:]
     if _G_OPENED_SAID.search(s):
         state["opened_said"] = True
     return s, None
