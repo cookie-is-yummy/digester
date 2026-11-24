@@ -47,8 +47,8 @@ def test_a_percent_with_no_base_gets_the_sheets_own_base_whoever_wrote_it():
     out, why = I.gate_sentence("Speed runs led with 23%, then Block battles (11%).", s, names, {})
     assert why is None and out == "Speed runs led with 23% of your gaming videos, then Block battles (11%).", out
     # a Shorts share and a record's share in one sentence: each kind its own base
-    out, _ = I.gate_sentence("Shorts were 40%, while Speed runs fell to 9%.", s, names, {})
-    assert out == ("Shorts were 40% of your gaming videos on YouTube, while Speed runs fell to 9% of your gaming "
+    out, _ = I.gate_sentence("Shorts were 68%, while Speed runs fell to 9%.", s, names, {})
+    assert out == ("Shorts were 68% of your gaming videos on YouTube, while Speed runs fell to 9% of your gaming "
                    "videos."), out
     # a run of numbers takes the base after its last one ("at 11% and 5%")
     out, _ = I.gate_sentence("Speed runs and Block battles peaked then, at 11% and 5%.", s, names, {})
@@ -62,10 +62,18 @@ def test_an_unfiltered_answer_says_of_what_you_opened_once_and_shorts_every_time
     st = {}
     a, _ = I.gate_sentence("Speed runs led with 23%, then Block battles (11%).", s, names, st)
     b, _ = I.gate_sentence("Meme drops grew from 3% to 7% against the 4 weeks before.", s, names, st)
-    c, _ = I.gate_sentence("Shorts were 79%; the long ones were typically about 12 minutes.", s, names, st)
+    c, _ = I.gate_sentence("Shorts were 68%; the long ones were typically about 12 minutes.", s, names, st)
     assert a == "Speed runs led with 23% of what you opened, then Block battles (11%)." and st["opened_said"]
     assert b == "Meme drops grew from 3% to 7% against the 4 weeks before.", b   # said once in the answer
-    assert c.startswith("Shorts were 79% of your YouTube videos;"), c
+    assert c.startswith("Shorts were 68% of your YouTube videos;"), c
+    # a Shorts share that is none of the spans' own (a theme's, or a number the sheet does not hold) is not said
+    # "of your YouTube videos": its number, its clause or its sentence goes
+    d, why = I.gate_sentence("Shorts were 79% of your YouTube videos.", s, names, st)
+    assert d is None and why == "own_shorts_share"
+    e, _ = I.gate_sentence("Behind Speed runs (5% of what you opened): Pixel Forge; 15% of it was Shorts.", s, names, st)
+    assert e == "Behind Speed runs (5%): Pixel Forge.", e   # (said once: the answer said it above)
+    f, _ = I.gate_sentence("Inside gaming: Speed runs (5% of everything you opened) and Meme drops (7%).", s, names, st)
+    assert "(5% of everything you opened)" in f   # "Inside <area>:" keeps it (else it reads as of the area)
 
 
 def test_a_shorts_share_in_an_answer_without_shorts_is_not_sent():

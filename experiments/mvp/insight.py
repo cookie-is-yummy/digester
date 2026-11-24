@@ -3133,7 +3133,8 @@ def _gate_names(sheet):
 def _cues(text, names):
     """[(start, end, "shorts" | "record")] of the sentence: the word Shorts (or long videos) and the sheet's names."""
     out = []
-    taken = []
+    # the words of a base ("of your long videos", "of your gaming videos on YouTube") name no subject
+    taken = [m.span() for m in re.finditer(r"\bof (?:your|the|all your) [^,;.()%]*?videos(?: on YouTube)?", text, re.I)]
     for n in names:
         for m in re.finditer(r"(?<![\w])" + re.escape(n) + r"(?![\w])", text, re.I):
             if not any(a <= m.start() < b for a, b in taken):
@@ -3168,6 +3169,53 @@ def _gate_subject(s, cues, first, after):
     return "record"
 
 
+_G_MOVE = re.compile(
+    r"\b(?P<v>fell|grew|rose|dropped|climbed|went (?:up|down)|moved|slipped|jumped|shrank)\s+from\s+"
+    r"(?P<a>\d+(?:\.\d)?%)(?P<ab>\s+of [^,;%]*?(?:videos(?: on YouTube)?|what you opened))?"
+    r"(?P<sa>\s+(?:in|against) [^,;%]+?)?\s+to\s+(?P<b>\d+(?:\.\d)?%)"
+    r"(?P<bb>\s+of [^,;%]*?(?:videos(?: on YouTube)?|what you opened))?(?P<sb>\s+in (?:19|20)\d\d)?(?=[\s,;.]|$)")
+
+
+def _yt_vals(sheet):
+    """The Shorts shares of a span (the window, the one before, a period, a topic, a day) as code says them: the only
+    Shorts shares that are "of your YouTube videos" (a theme's or a channel's own is of its videos)."""
+    s = shown(sheet)
+    out = set()
+    for k in ("totals", "previous", "window_totals"):
+        if _num((s.get(k) or {}).get("shorts_share")):
+            out.add(_pc(s[k]["shorts_share"]))
+    for k in ("periods", "topics"):
+        for r in s.get(k) or []:
+            if isinstance(r, dict) and _num(r.get("shorts_share")):
+                out.add(_pc(r["shorts_share"]))
+    us = s.get("usual") or {}
+    for k in ("day_shorts_share", "shorts_share"):
+        if _num(us.get(k)):
+            out.add(_pc(us[k]))
+    sh = (s.get("areas_change") or {}).get("shorts") or {}
+    for k in ("from_share", "to_share"):
+        if _num(sh.get(k)):
+            out.add(_pc(sh[k]))
+    for c in s.get("so_what_candidates") or []:
+        if isinstance(c, dict) and c.get("kind") == "shorts_shift":
+            out |= {_pc(c[k]) for k in ("share", "previous_share") if _num(c.get(k))}
+    return out
+
+
+def _drop_clause(s, at):
+    """`s` without the clause holding position `at` (after a ";" or ", and" / ", while"), or None when it is the
+    sentence's first clause."""
+    cuts = [m for m in re.finditer(r";\s*|,\s*(?:and|while|but)\s+", s)]
+    starts = [0] + [m.end() for m in cuts]
+    k = max(i for i, a in enumerate(starts) if a <= at)
+    if k == 0:
+        return None
+    end = cuts[k].start() if k < len(cuts) else len(s)
+    head, tail = s[:cuts[k - 1].start()], s[end:]
+    out = (head + tail).rstrip()
+    return out if out.endswith((".", "!", "?")) else out.rstrip(",;") + "."
+
+
 def gate_sentence(s, sheet, names, state):
     """(the sentence with every percent based, None) or (None, why). `state["opened_said"]`: the answer said "of what
     you opened" already (an unfiltered record share needs it only once)."""
@@ -3182,6 +3230,56 @@ def gate_sentence(s, sheet, names, state):
         # "mostly A at 34% and B at 21%": one list, its base after its numbers ("mostly A and B (34% and 21% of ...)")
         s = (s[:m_.start()] + f"{m_.group('w')} {m_.group('a')} and {m_.group('b')} ({m_.group('x')} and "
              f"{m_.group('y')} {base_phrase(sheet, 'record')})" + s[m_.end():])
+    # a Shorts share that is a theme's or a channel's own (not one of the spans' shares) under a filter, or said "of
+    # your YouTube videos": its number goes ("Comedy edits was almost all Shorts at 100%"), or its clause, or the
+    # sentence (a reader takes it as all the YouTube videos)
+    if "_yv" not in state:
+        state["_yv"] = _yt_vals(sheet)
+    yv = state["_yv"]
+    if ws and any(_gate_subject(s, _cues(s, names), m, s[m.end():]) == "shorts" for m in _G_PCT.finditer(s)):
+        return None, "shorts_left_out"
+    for _ in range(4):
+        cues = _cues(s, names)
+        bad = None
+        for m in _G_PCT.finditer(s):
+            after = s[m.end():]
+            if _gate_subject(s, cues, m, after) != "shorts" or m.group(0).replace(" ", "") in yv:
+                continue
+            prior = [c for c in cues if c[1] <= m.start()]
+            own_chan = re.match(r"^\s*Shorts\b", after) and prior and prior[-1][2] == "record"
+            if own_chan and not filtered:
+                continue   # "<channel> (95% Shorts)": its own videos then
+            bad = m
+            break
+        if bad is None:
+            break
+        pre = s[:bad.start()]
+        if re.search(r"\s+at\s*$", pre):
+            mb = _G_BASE.match(s[bad.end():])
+            s = re.sub(r"\s+at\s*$", "", pre) + s[bad.end() + (mb.end() if mb and not mb.group(0).strip().lower()
+                                                                   .startswith("shorts") else 0):]
+            continue
+        par = re.search(r"\s*\((?:[^()]*?)$", pre)
+        if par and re.match(r"^[^()]*\)", s[bad.end():]):
+            s = pre[:par.start()] + s[bad.end():].split(")", 1)[1]
+            continue
+        cut = _drop_clause(s, bad.start())
+        if cut is None:
+            return None, "own_shorts_share"
+        s = cut
+    # a filtered move ("Gaming fell from 45% of your long videos in 2022 to 23%") said with its base after its newer
+    # number ("fell to 23% of your long videos, from 45% in 2022"): the base's own words name no other thing
+    mv = _G_MOVE.search(s)
+    if mv and filtered:
+        years = re.findall(r"(?:19|20)\d\d", (mv.group("sa") or "") + (mv.group("sb") or ""))
+        if not (mv.group("sb") and len(set(years)) >= 2):
+            prior = _cues(s[:mv.start()], names)
+            subj = "shorts" if prior and prior[-1][2] == "shorts" else "record"
+            base = (mv.group("bb") or mv.group("ab") or " " + base_phrase(sheet, subj)).strip()
+            v = mv.group("v")
+            v = {"went up": "went up", "went down": "went down"}.get(v, v)
+            s = (s[:mv.start()] + f"{v} to {mv.group('b')} {base}{mv.group('sb') or ''}, from {mv.group('a')}"
+                 f"{mv.group('sa') or ''}" + s[mv.end():])
     cues = _cues(s, names)
     ms = list(_G_PCT.finditer(s))
     # runs: "11% and 5%", "85% and 100% Shorts": the base after the run's last number
@@ -3203,6 +3301,12 @@ def gate_sentence(s, sheet, names, state):
         if subj == "shorts" and ws:
             return None, "shorts_left_out"
         if _G_BASE.match(after):
+            mo = re.match(r"\s*of (?:everything|all|what) you (?:opened|watched)\b|\s*of everything\b", after)
+            if mo and subj == "record" and not filtered and state.get("opened_said") and subj not in based_kinds \
+                    and not re.match(r"^\s*Inside\b", s):
+                # the answer said "of what you opened" already: said once, not again in every sentence ("Inside
+                # <area>:" keeps it: its shares read as of the area otherwise)
+                inserts.append((last.end(), None, mo.end()))
             based_kinds.add(subj)
             if _G_OPENED_SAID.match(after.strip()):
                 state["opened_said"] = True
@@ -3233,12 +3337,13 @@ def gate_sentence(s, sheet, names, state):
         based_kinds.add(subj)
         if subj == "record" and not filtered:
             state["opened_said"] = True
+    said_before = state.get("opened_said")
     for x in sorted(inserts, key=lambda x: x[0], reverse=True):
-        if len(x) == 3:   # a base moved to an earlier number
+        if len(x) == 3:   # a base moved to an earlier number, or said again
             s = s[:x[0]] + s[x[0] + x[2]:]
         else:
             s = s[:x[0]] + x[1] + s[x[0]:]
-    if _G_OPENED_SAID.search(s):
+    if _G_OPENED_SAID.search(s) or said_before:
         state["opened_said"] = True
     return s, None
 
@@ -4892,6 +4997,7 @@ _INTO_FILLER = re.compile(r"\bbusiest hour\b|\btypically about \d+ minutes\b|\bl
                           r"\b(?:weekday|weekend) share\b|\bof (?:your )?activity\b")
 _STEP = re.compile(r"\bsay \"[^\"]+\"|\bwant (?:them|it|those|these|to (?:open|see|watch)\b)[^?]*\?|"
                    r"\b(?:quieres|te los muestro)\b[^?]*\?")
+_LED_AHEAD = re.compile(r"^(?P<a>[^,;]+?) led (?P<n>[^,;]+?), (?:followed by|then|ahead of) (?P<r>[^;]+?)\.?$")
 _LED_BY = re.compile(r"^(?P<n>.+?) (?:was|were|is|are) (?:led|driven|powered|carried|fu?elled|dominated) by (?P<r>.+)$")
 
 
@@ -4957,6 +5063,11 @@ def _pass4(form, sheet, facts):
             for t_ in _rows_named(r.get("themes"), ("name", "share")):
                 shares.setdefault(" ".join(_words(t_["name"])), t_)
     for i, x in enumerate(obs):
+        m2 = _LED_AHEAD.match(x or "")
+        if m2 and shares.get(" ".join(_words(m2.group("n")))) is not None and "%" not in x:
+            # round 12, pass 5 (the audit: "A led <theme>, followed by B and C" read as A first of everything): the
+            # rank inside the theme, said as such
+            x = obs[i] = f"{m2.group('n')} was led by {m2.group('a')}, then {m2.group('r')}"
         m = _LED_BY.match(x or "")
         r = shares.get(" ".join(_words(m.group("n")))) if m else None
         if r is not None and "%" not in m.group("n"):
