@@ -2379,6 +2379,16 @@ def render(text, sheet, facts, strict=False, unit=None):
         return text, None
     if strict and any(x.role == _ROLE_NUM for x in sl) and typed_names(text, sheet, facts):
         return None, "typed_name"
+    # round 12, pass 6 (X5, X14): a change is two values of one measure, or it is not said; a move under 3 points is
+    # not said (filler)
+    text2, why = p6_change(text, sheet, sl)
+    if why:
+        return None, why
+    if text2 != text:
+        text = text2
+        sl = slots_of(text, sheet, lang)
+        if isinstance(sl, str):
+            return None, sl
     us = None
     if unit and unit is not text:
         us = slots_of(unit, sheet, lang)
@@ -2441,6 +2451,114 @@ def render(text, sheet, facts, strict=False, unit=None):
     r = re.sub(r"\s+", " ", "".join(out)).strip()
     r = re.sub(r"\b(points?|puntos?)\s+(?:points?|puntos?|percentage points?)\b", r"\1", r)
     return r, None
+
+
+SMALL_MOVE = 0.03   # round 12, pass 6 (X14): a move of a share under 3 points is not said
+_P6_VERB = re.compile(r"\b(?:grew|grow(?:s|n|ing)?|rose|ris(?:e|es|en|ing)|climb\w*|jump\w*|doubl\w*|gain\w*|up|"
+                      r"fell|fall(?:s|en|ing)?|dropp?\w*|slipp?\w*|shr[aiu]nk\w*|fad\w*|declin\w*|halv\w*|down|"
+                      r"went|moved?|shift\w*|from|since)\b", re.I)
+_P6_NOW = {"previous_share": "share", "previous_items": "items", "faded_from": "faded_to", "grew_from": "grew_to",
+           "from_share": "to_share"}
+_P6_MEASURE = {"share": "share", "previous_share": "share", "items": "items", "previous_items": "items",
+               "faded_from": "share", "faded_to": "share", "grew_from": "share", "grew_to": "share",
+               "from_share": "share", "to_share": "share", "shorts_share": "share", "shorts": "items", "long": "items"}
+
+
+def _p6_twin(sl, sheet):
+    """The path of a "before" slot's "now" value of the same measure, or None."""
+    k = sl.key or ""
+    if sl.path.startswith("previous.") and k in ("items", "shorts", "long", "shorts_share", "days_active"):
+        tw = "totals." + k
+    elif k in _P6_NOW and "." in sl.path:
+        tw = sl.path.rsplit(".", 1)[0] + "." + _P6_NOW[k]
+    else:
+        return None
+    try:
+        v = _resolve(sheet, _path_segs(tw))
+    except KeyError:
+        return None
+    return tw if _num(v) and not isinstance(v, bool) else None
+
+
+def p6_change(text, sheet, sl):
+    """(the template with every change said by two values of one measure, None) or (None, why). A "before" value
+    whose "now" value of the same measure is not in the sentence gets it ("faded from {x.previous_items}" is "faded
+    from {x.previous_share} to {x.share}"); a share against a count of one record ("climbed to {x.share} from
+    {x.previous_items} videos before") is said in shares; a move under 3 points is dropped."""
+    if not isinstance(sl, list) or not sl or not _P6_VERB.search(SLOT.sub(" ", text)):
+        return text, None
+    for x in sl:
+        if x.key == "change_vs_previous" and _num(x.value):
+            v = abs(float(x.value))
+            if (v if v <= 1 else v / 100) < SMALL_MOVE - 1e-9:
+                return None, "small_move"
+    paths = {x.path for x in sl}
+    edits = []   # (start, end, new text)
+    for x in sl:
+        if x.role != _ROLE_NUM:
+            continue
+        k = x.key or ""
+        before = k in _P6_NOW or (x.path.startswith("previous.") and k in ("items", "shorts", "long", "shorts_share"))
+        if not before:
+            continue
+        own = x.path.rsplit(".", 1)[0]
+        mine = _P6_MEASURE.get(k)
+        # the same record's "now" value of the other measure in the sentence: say the change in shares
+        other = None if own == "previous" else next(
+            (y for y in sl if y is not x and y.role == _ROLE_NUM and y.path.rsplit(".", 1)[0] == own and
+             _P6_MEASURE.get(y.key or "") not in (None, mine) and (y.key or "") not in _P6_NOW), None)
+        if other is not None and mine == "items" and "." in x.path:
+            alt = own + ".previous_share"
+            try:
+                ok = _num(_resolve(sheet, _path_segs(alt)))
+            except KeyError:
+                ok = False
+            if not ok:
+                return None, "mixed_change"
+            tail = re.match(r"\s+(?:[a-z]+\s+)?videos\b", text[x.end:])
+            edits.append((x.start, x.end + (tail.end() if tail else 0), "{" + alt + "}"))
+            paths.add(alt)
+            continue
+        if other is not None and mine == "share":
+            tail = re.match(r"\s+(?:[a-z]+\s+)?videos\b", text[other.end:])
+            alt = own + ".share"
+            edits.append((other.start, other.end + (tail.end() if tail else 0), "{" + alt + "}"))
+            paths.add(alt)
+            continue
+        if k == "previous_items" and own != "previous" and re.search(r"\bfrom\s*$", text[max(0, x.start - 8):x.start]):
+            try:
+                ok = _num(_resolve(sheet, _path_segs(own + ".previous_share"))) and \
+                    _num(_resolve(sheet, _path_segs(own + ".share")))
+            except KeyError:
+                ok = False
+            if ok and own + ".items" not in paths:
+                # "faded from {x.previous_items}": a record's change in shares, both values
+                tail = re.match(r"\s+(?:[a-z]+\s+)?videos\b", text[x.end:])
+                edits.append((x.start, x.end + (tail.end() if tail else 0),
+                              "{" + own + ".previous_share} to {" + own + ".share}"))
+                paths |= {own + ".previous_share", own + ".share"}
+                continue
+        tw = _p6_twin(x, sheet)
+        if tw and tw not in paths and re.search(r"\bfrom\s*$", text[max(0, x.start - 8):x.start]):
+            # one value: "faded from {x.previous_share}" says where it went, "to {x.share}"
+            edits.append((x.end, x.end, " to {" + tw + "}"))
+            paths.add(tw)
+    for a, b, t in sorted(edits, key=lambda e: e[0], reverse=True):
+        text = text[:a] + t + text[b:]
+    # a move under 3 points: both values of one record present
+    sl2 = slots_of(text, sheet, (sheet or {}).get("lang") or "en") if edits else sl
+    if isinstance(sl2, list):
+        byp = {x.path: x for x in sl2 if x.role == _ROLE_NUM}
+        for x in sl2:
+            tw = _p6_twin(x, sheet) if x.role == _ROLE_NUM else None
+            if tw and tw in byp and (_P6_MEASURE.get(x.key or "") == "share" or (x.key or "") == "shorts_share"):
+                try:
+                    a_, b_ = float(x.value), float(byp[tw].value)
+                except (TypeError, ValueError):
+                    continue
+                if abs(round(a_ * 100) - round(b_ * 100)) < SMALL_MOVE * 100:
+                    return None, "small_move"
+    return text, None
 
 
 def typed_names(text, sheet, facts):
@@ -2710,19 +2828,43 @@ def chart(sheet, level=None):
             continue
         if level == "areas" and src == "areas" and kind == "top":
             ts = [t for t in sheet.get("areas") or [] if isinstance(t, dict) and _num(t.get("share")) and t.get("name")]
-            if len(ts) >= 2:   # the answer leads with the areas: so does the chart, whatever they cover
-                rows = [(f"{round(t['share'] * 100)}%", t["share"], t["name"], round(t["share"] * 100))
-                        for t in ts[:CHART_ROWS]]
+            rows = _p6_rows(sheet, "areas", [(f"{round(t['share'] * 100)}%", t["share"], t["name"],
+                                               round(t["share"] * 100)) for t in ts[:CHART_ROWS]])
+            if len(rows) >= 2:   # the answer leads with the areas: so does the chart, whatever they cover
                 top = max(v for _, v, _, _ in rows) or 1
                 lines = [CAPTIONS["areas"][lang]] + [f"{bar(v, top)} {left} {_label(right)}".rstrip()
                                                      for left, v, right, _ in rows]
                 return "\n".join(lines), {x for *_, x in rows}
         cap, rows = _rows(sheet, src, lang)
+        rows = _p6_rows(sheet, src, rows)
         if len(rows) >= 2:
             top = max(v for _, v, _, _ in rows) or 1
             lines = [cap] + [f"{bar(v, top)} {left} {_label(right)}".rstrip() for left, v, right, _ in rows]
             return "\n".join(lines), {x for *_, x in rows}
     return None, set()
+
+
+def _p6_rows(sheet, src, rows):
+    """Round 12, pass 6 (X10, the hand check: "Share of your long music videos, by area: 98% music, 0% gaming, 0%
+    travel, ..." under "only music"): a share chart says something or is not drawn. A row that rounds to 0% is left
+    out, and a chart whose first row is 90% or more is not drawn (under a topic the next kind, its themes or its
+    months, is tried); X13: a share's row is worked out from its count where the sheet has both."""
+    if src not in ("themes", "areas"):
+        return rows
+    tot = ((sheet.get("totals") or {}).get("items"))
+    by = {t.get("name"): t for t in sheet.get(src) or [] if isinstance(t, dict)}
+    out = []
+    for left, v, right, n in rows:
+        t = by.get(right) or {}
+        if _num(t.get("items")) and _num(tot) and tot and abs(t["items"] / tot - v) < 0.0006:
+            v = t["items"] / tot
+            left, n = f"{round(v * 100)}%", round(v * 100)
+        if n == 0:
+            continue
+        out.append((left, v, right, n))
+    if out and out[0][1] >= 0.9:
+        return []
+    return out
 
 
 def _rows(sheet, src, lang):
@@ -3220,15 +3362,129 @@ def _drop_clause(s, at):
     return out if out.endswith((".", "!", "?")) else out.rstrip(",;") + "."
 
 
+# ====================================== round 12, pass 6: the parts that can be false, worded by code ==============
+# The hand check of 18 live answers (build 7a689e2) found five must-fix sentences the automatic audit passed. Each class
+# is now worded by code, whoever wrote the sentence (the writer's paths, code's templates, MUST lines, the so-what):
+# the subject of a count from the filters in force (X4), a Shorts share's word and base (X3), one phrase per base
+# (X18), an "Inside <area>" share's base said in its own sentence (X2), what a saved count counts (X8).
+_P6_OPENED = re.compile(r"\bof (?:everything(?: (?:else )?you (?:opened|watched))?|all (?:that )?you (?:opened|watched)|"
+                        r"what you watched)\b(?! (?:from|on) )")
+_P6_YT = re.compile(r"\bof (?:all )?(?:the |all the )?YouTube videos(?: (?:you )?(?:watched|opened))?\b(?! (?:from|on) )")
+_P6_SHORTS = re.compile(r"(?<![\w-])shorts(?![\w-])")
+_P6_GAP = re.compile(r"\bthe (?:gap|difference|lead)\b[^.;]{0,30}\b(?:widen\w*|narrow\w*|grew|shr[aiu]nk\w*|closed|"
+                     r"opened)\b|\b(?:widen\w*|narrow\w*)\b[^.;]{0,12}\bthe (?:gap|difference)\b", re.I)
+_P6_INSIDE = re.compile(r"\b(?:inside|within)\b", re.I)
+_P6_NOUN = re.compile(r"^(?P<sp>\s+)(?P<n>(?:(?:long|long-form|short|youtube|YouTube)\s+)?(?:[a-z][a-z&'-]*\s+){0,2}?"
+                      r"(?:videos?|Shorts|ones|clips|posts))\b(?! (?:from|on|of)\b)")
+_P6_SAVED = re.compile(r"\b(?P<y>[Yy]ou) saved (?P<n>\d[\d,]*) (?P<t>(?:[^\s;,.]+ ){0,5}?)(?P<v>videos?)\b"
+                       r"(?! (?:you |that you )?(?:never|have not|haven't|did not|didn't))")
+
+
+def _p6_counts(sheet):
+    """{count value: (path, noun)}: the counts of the whole scope the sheet holds (its totals, the span before, the
+    count's window) with the noun code says for them under the filters in force ("long music videos", "music
+    Shorts")."""
+    b = bases(sheet)
+    if not b:
+        return {}
+    f = sheet.get("filters") or {}
+    topic, chan, ws = f.get("topic"), f.get("channel"), bool(f.get("without_shorts"))
+    out = {}
+
+    def noun(key, with_topic=True):
+        t = f"{topic} " if (topic and with_topic) else ""
+        frm = f" from {chan}" if chan else ""
+        if key == "shorts":
+            return f"{t}Shorts{frm}"
+        if key == "long" or ws:
+            return f"long {t}videos{frm}"
+        return f"{t}videos{frm}" if (t or frm) else "videos"
+    for blk, with_topic in (("totals", True), ("previous", True), ("window_totals", False)):
+        o = sheet.get(blk) or {}
+        for key in ("items", "long", "shorts"):
+            v = o.get(key)
+            if _num(v) and not isinstance(v, bool) and v >= 2 and (key != "shorts" or not ws):
+                out.setdefault(int(v), (f"{blk}.{key}", noun(key, with_topic)))
+    return out
+
+
+def _p6_area_and_theme(s, sheet):
+    """Whether a sentence names an area and one of that area's themes (a theme's share then reads as of the area)."""
+    low = s.lower()
+    ar = {a.get("name", "").lower() for a in sheet.get("areas") or [] if isinstance(a, dict) and a.get("name")}
+    for t in sheet.get("themes") or []:
+        if isinstance(t, dict) and t.get("name") and str(t.get("area") or "").lower() in ar and \
+                re.search(r"(?<![\w])" + re.escape(t["name"].lower()) + r"(?![\w])", low) and \
+                re.search(r"(?<![\w])" + re.escape(str(t["area"]).lower()) + r"(?![\w])", low):
+            return True
+    return False
+
+
+def p6_words(s, sheet, names):
+    """The words of a sentence that can be false, put right by code (round 12, pass 6): "shorts" as the format is
+    "Shorts" (X3); a record's base is the answer's one phrase, "of what you opened", and a Shorts base "of your
+    YouTube videos" (X18; a filtered sheet's bases are its own); a count of the whole scope under filters says every
+    filter in force, the noun after it code's (X4: "431 long videos" of the long music videos is "431 long music
+    videos"); "You saved N <theme> videos" of the saved ones never opened says so (X8)."""
+    if not isinstance(s, str) or not s:
+        return s
+    low_names = [n for n in names if "shorts" in n.lower()]
+    taken = [m.span() for n in low_names for m in re.finditer(re.escape(n), s, re.I)]
+    s = _P6_SHORTS.sub(lambda m: m.group(0) if any(a <= m.start() < b for a, b in taken) else "Shorts", s)
+    if not bases(sheet):
+        s = _P6_OPENED.sub("of what you opened", s)
+    s = _P6_YT.sub("of your YouTube videos", s)
+    s = re.sub(r"\bof your YouTube videos videos\b", "of your YouTube videos", s)
+    counts = _p6_counts(sheet)
+    if counts:
+        out, last = [], 0
+        for m in re.finditer(r"(?<![\w.,%$])(\d{1,3}(?:,\d{3})+|\d+)(?![\w%.,]\d|\s?%)", s):
+            try:
+                v = int(m.group(1).replace(",", ""))
+            except ValueError:
+                continue
+            if v not in counts or re.match(r"^\s*(?:of|in|days?|minutes?|hours?|times?|channels?|points?)\b", s[m.end():]):
+                continue
+            nm = _P6_NOUN.match(s[m.end():])
+            if nm and any(n.lower() in nm.group("n").lower() for n in names if n.lower() not in
+                          ((sheet.get("filters") or {}).get("topic") or "").lower()):
+                continue   # "216 Vocal music videos": a record's own count, said with its name
+            want = counts[v][1]
+            if nm and nm.group("n").lower() != want.lower():
+                out.append(s[last:m.end()] + " " + want)
+                last = m.end() + nm.end()
+        out.append(s[last:])
+        s = "".join(out)
+    sv = {int(x.get("n")) for x in ((sheet.get("library") or {}).get("saved_not_opened") or [])
+          if isinstance(x, dict) and _num(x.get("n"))}
+    for c in sheet.get("so_what_candidates") or []:
+        if isinstance(c, dict) and c.get("kind") in ("saved", "lapsed_saves", "arc") and _num(c.get("n")):
+            sv.add(int(c["n"]))
+    m = _P6_SAVED.search(s)
+    if m and int(m.group("n").replace(",", "")) in sv:
+        y = "You" if m.group("y") == "You" else "you"
+        s = s[:m.start()] + f"{y} have {m.group('n')} {m.group('t')}{m.group('v')} you saved and never opened" + \
+            s[m.end():]
+    return s
+
+
 def gate_sentence(s, sheet, names, state):
     """(the sentence with every percent based, None) or (None, why). `state["opened_said"]`: the answer said "of what
     you opened" already (an unfiltered record share needs it only once)."""
+    if (sheet.get("lang") or "en") == "en":
+        s = p6_words(s, sheet, names)
+        if _P6_GAP.search(s):
+            return None, "gap_words"   # X13: a "gap" said by the ratio while the difference may move the other way
     if (sheet.get("lang") or "en") != "en" or "%" not in s:
         if _G_OPENED_SAID.search(s or ""):
             state["opened_said"] = True
         return s, None
     filtered = bool(bases(sheet))
     ws = bool((sheet.get("filters") or {}).get("without_shorts"))
+    # round 12, pass 6 (X2, the hand check: "Inside gaming, <theme> led with 3%." read as 3% of gaming; it was of
+    # everything opened): a share in a sentence that sets a theme inside an area says its base in that sentence,
+    # never only once for the answer
+    inside_ = bool(_P6_INSIDE.search(s)) or _p6_area_and_theme(s, sheet)
     m_ = _G_MOSTLY_LIST.search(s)
     if m_ and filtered and not _G_BASE.match(s[m_.end("x"):]):
         # "mostly A at 34% and B at 21%": one list, its base after its numbers ("mostly A and B (34% and 21% of ...)")
@@ -3288,7 +3544,7 @@ def gate_sentence(s, sheet, names, state):
     # you opened) and B (5%) were ..." (else the shares read as of the area named before them)
     m_ = _G_WITH_RUN.match(s)
     if m_ and all(any(n.lower() == m_.group(g).strip().lower() for n in names) for g in ("a", "b")):
-        base_w = base_phrase(sheet, "record") if filtered else "of everything you opened"
+        base_w = base_phrase(sheet, "record")   # round 12, pass 6 (X18): the answer's one phrase
         rest_ = re.sub(r"\s+(?:of|in) (?:what|everything|all) you (?:opened|watched)$", "", m_.group("rest"))
         s = (f"{m_.group('a')} ({m_.group('x')} {base_w}) and {m_.group('b')} ({m_.group('y')}) {m_.group('v')} "
              f"{rest_}{m_.group('tail')}")
@@ -3315,7 +3571,7 @@ def gate_sentence(s, sheet, names, state):
         if _G_BASE.match(after):
             mo = re.match(r"\s*of what you (?:opened|watched)\b", after)   # ("of everything" is code's, said apart)
             if mo and subj == "record" and not filtered and state.get("opened_said") and subj not in based_kinds \
-                    and not re.match(r"^\s*Inside\b", s):
+                    and not inside_:
                 # the answer said "of what you opened" already: said once, not again in every sentence ("Inside
                 # <area>:" keeps it: its shares read as of the area otherwise)
                 inserts.append((last.end(), None, mo.end()))
@@ -3327,7 +3583,8 @@ def gate_sentence(s, sheet, names, state):
             continue   # an earlier number of the sentence about the same kind of thing says it
         move = bool(re.search(r"\bfrom\s*$", s[max(0, first.start() - 6):first.start()]) and
                     re.match(r"^\s*to\s+\d", after))
-        if subj == "record" and not filtered and (state.get("opened_said") or _G_SPAN_AFTER.match(after) or move):
+        if subj == "record" and not filtered and ((state.get("opened_said") and not inside_) or
+                                                  _G_SPAN_AFTER.match(after) or move):
             # the answer's own base (everything opened in the span said), said once; a share of a year or of the
             # span before ("22% in 2020"), or a move ("from 33% to 10%"), is of what was opened then, its only reading
             based_kinds.add(subj)
@@ -3443,6 +3700,91 @@ def gate_form(form, sheet):
     out["so_what"] = one(form.get("so_what"), "so_what")
     out["dropped"] = dropped
     return out
+
+
+_P6_MOVE = re.compile(r"\b(?:grew|grow(?:s|n)?|rose|risen|climb\w*|jump\w*|gain\w*|fell|fallen|dropp\w*|slipp\w*|"
+                      r"shr[aiu]nk\w*|fad\w*|declin\w*|went (?:up|down)|moved|up|down)\b"
+                      r"(?=[^.;]{0,40}?(?:\d+(?:\.\d)?\s?%|\d+ points?))", re.I)
+
+
+def _p6_moved(text, names):
+    """{name} of the records a sentence says a move of (a name, then a move word with a share or points after it)."""
+    out = set()
+    for m in _P6_MOVE.finditer(text or ""):
+        pre = text[max(0, m.start() - 70):m.start()]
+        best = None
+        for n in names:
+            for mm in re.finditer(r"(?<![\w])" + re.escape(n) + r"(?![\w])", pre, re.I):
+                if best is None or mm.end() > best[0]:
+                    best = (mm.end(), n.lower())
+        if best is not None and not re.search(r"[;]|\b(?:while|whereas|but)\b", pre[best[0]:]):
+            out.add(best[1])
+    return out
+
+
+def _p6_drop(text, at):
+    """The sentence without the clause at `at`, or None (the whole sentence goes)."""
+    return _drop_clause(text, at)
+
+
+def p6_once(form, sheet):
+    """Round 12, pass 6 (X9, the hand check: "<theme> rose by 16 points" then "<theme> grew to 54%, from 38%"; "2
+    channels were new that day" then "<channel> was new that day, one of 2 channels you opened for the first time"):
+    one fact once in an answer, in whatever words. A move of one record said twice (as points, or as its two values)
+    is one fact: the later or poorer saying goes (its clause, or its sentence). A count of new channels and a named
+    new channel are one fact: the sentence that names the channel stays."""
+    names = _gate_names(shown(sheet))
+    obs = list(form.get("observations") or [])
+    dropped = list(form.get("dropped") or [])
+    ans = form.get("answer") or ""
+    said = _p6_moved(ans, names)
+
+    def richer(a, b):
+        return len(_G_PCT.findall(a)) >= len(_G_PCT.findall(b))
+    out = []
+    for o in obs:
+        mv = _p6_moved(o, names)
+        both = mv & said
+        if both:
+            # an earlier bullet said it as points and this one says the two values: keep this one
+            prev = next((k for k, x in enumerate(out) if _p6_moved(x, names) & both), None)
+            if prev is not None and not richer(out[prev], o):
+                dropped.append(("observation", "repeat_move", out[prev]))
+                out.pop(prev)
+                said = set().union(*[_p6_moved(x, names) for x in out]) | _p6_moved(ans, names)
+            else:
+                cut = None
+                for m in _P6_MOVE.finditer(o):
+                    pre = o[max(0, m.start() - 70):m.start()]
+                    if any(re.search(re.escape(n), pre, re.I) for n in both):
+                        cut = _p6_drop(o, m.start())
+                        break
+                dropped.append(("observation", "repeat_move", o))
+                if cut and not (_p6_moved(cut, names) & said):
+                    out.append(cut)
+                    said |= _p6_moved(cut, names)
+                continue
+        out.append(o)
+        said |= mv
+    nt = (sheet.get("new_today") or {}) if isinstance(sheet.get("new_today"), dict) else {}
+    k = nt.get("channels")
+    if _num(k) and k >= 2:
+        rx = re.compile(r"\b" + re.escape(_fmt(int(k), "en")) + r"\b[^.;]{0,40}\bnew\b|\bnew\b[^.;]{0,60}\b" +
+                        re.escape(_fmt(int(k), "en")) + r" channels\b", re.I)
+        hits = [i for i, o in enumerate(out) if rx.search(o)]
+        if len(hits) >= 2:
+            nm = [i for i in hits if any(re.search(re.escape(n), out[i]) for n in nt.get("names") or [])
+                  and re.search(r"\bwas new\b", out[i])]
+            keep = nm[0] if nm else hits[-1]
+            for i in sorted((h for h in hits if h != keep), reverse=True):
+                m = rx.search(out[i])
+                cut = _p6_drop(out[i], m.start())
+                dropped.append(("observation", "repeat_new", out[i]))
+                if cut:
+                    out[i] = cut
+                else:
+                    out.pop(i)
+    return dict(form, observations=out, dropped=dropped)
 
 
 def bases(sheet):
@@ -3564,6 +3906,7 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
     form = _once_spans(form)
     gated = gate_form(form, sheet)   # round 12, pass 5: every percent with its base
     form = dict(gated, answer=gated["answer"] or form["answer"])
+    form = p6_once(form, sheet)   # round 12, pass 6 (X9): one fact once, in whatever words
     head = [_no_title_twice(window_lead(form["answer"], sheet), sheet)]
     if form["observations"]:
         head.append("\n".join("• " + o for o in form["observations"]))
@@ -3707,19 +4050,20 @@ def code_form(sheet):
             # round 12, pass 2 fix (judge B: "Inside gaming: X (5%)" read as 5% of gaming): whose share it is
             o((f"Dentro de {a['name']}: {ts[0]['name']} ({pc(ts[0]['share'])} de todo lo que abriste) y "
                f"{ts[1]['name']} ({pc(ts[1]['share'])})." if es else
-               f"Inside {a['name']}: {ts[0]['name']} ({pc(ts[0]['share'])} of everything you opened) and "
+               f"Inside {a['name']}: {ts[0]['name']} ({pc(ts[0]['share'])} of what you opened) and "
                f"{ts[1]['name']} ({pc(ts[1]['share'])})."), "areas")
         elif len(ts) == 1 and ts[0]["name"].lower() != a["name"].lower():
             o((f"Dentro de {a['name']}, sobre todo {ts[0]['name']} ({pc(ts[0]['share'])})." if es else
-               f"Inside {a['name']}, {ts[0]['name']} led with {pc(ts[0]['share'])}."), "areas")
+               f"Inside {a['name']}, {ts[0]['name']} led with {pc(ts[0]['share'])} of what you opened."), "areas")
 
     said_moves = set()
 
     def moves(rows, key):
         ch = [t for t in rows if _num(t.get("change_vs_previous")) and _num(t.get("previous_share"))
               and (round(t["previous_share"], 2), round(t["share"], 2)) not in said_moves]
-        up = sorted((t for t in ch if t["change_vs_previous"] >= 0.015), key=lambda t: -t["change_vs_previous"])
-        down = sorted((t for t in ch if t["change_vs_previous"] <= -0.015), key=lambda t: t["change_vs_previous"])
+        # round 12, pass 6 (X14): a move under 3 points is filler, never said
+        up = sorted((t for t in ch if t["change_vs_previous"] >= SMALL_MOVE), key=lambda t: -t["change_vs_previous"])
+        down = sorted((t for t in ch if t["change_vs_previous"] <= -SMALL_MOVE), key=lambda t: t["change_vs_previous"])
         # round 12, pass 3 (U7): every move said the same way: its direction, both values and the base period
         # round 12, pass 5 (the audit: "X grew from 10% to 15% against 2023" in a gaming answer, of the gaming videos,
         # said with no base): a filtered sheet's move says its base right after its first value
@@ -3975,8 +4319,16 @@ def code_form(sheet):
         d0 = _as_date(items[0]["at"]) if items else None
         if d0 and topic:
             an_ = "an" if topic[:1].lower() in "aeiou" else "a"   # round 12, pass 5: "an art video"
-            ans = (f"You first opened {an_} {topic} video on {_day_words(d0)}." if kind == "first" else
-                   f"The last {topic} video you opened was on {_day_words(d0)}.")
+            # round 12, pass 6 (X1, the hand check: "You last watched 30 October 2026, and it was <theme> from <the
+            # wrong channel>"): the item is the sheet's first, ordered by the instant of the open; code says its day,
+            # its time and its channel
+            it0 = items[0]
+            at_ = f" at {it0['at_time']}" if isinstance(it0.get("at_time"), str) and it0["at_time"] else ""
+            ch_ = it0.get("channel") if isinstance(it0.get("channel"), str) and "@" not in it0.get("channel") else None
+            ans = (f"You first opened {an_} {topic} video on {_day_words(d0)}{at_}" + (f", from {ch_}." if ch_ else ".")
+                   if kind == "first" else
+                   f"The last {topic} video you opened was " + (f"from {ch_}, " if ch_ else "") +
+                   f"on {_day_words(d0)}{at_}.")
         if _num(tot.get("items")) and _num(tot.get("days_active")):
             o((f"Since then you opened {f(tot['items'], lang)} {topic} videos on {f(tot['days_active'], lang)} days."
                if kind == "first" else f"In all you opened {f(tot['items'], lang)} {topic} videos on "
@@ -4078,17 +4430,20 @@ def code_form(sheet):
                 elif len(tt) == 1:
                     o(f"Inside {x['name']}, {tt[0]['name']} led with {f(tt[0]['items'], lang)}.", "topics")
             if pw and all(_num(x.get("previous_items")) for x in (a, b)) and cmpx.get("balance"):
-                bal = {"wider": "the gap has widened", "narrower": "the gap has narrowed",
-                       "about the same": "about the same balance"}[cmpx["balance"]]
                 prw = cmpx.get("previous_ratio_words")
                 # round 12, pass 2 fix (judges, row 5: how the balance moved against last year was not said)
+                # round 12, pass 6 (X13, the hand check: "the gap has narrowed" by the ratio while the difference in
+                # videos grew): the balance is said by the ratio in words, then and now, never as a "gap"
+                rw_ = cmpx.get("ratio_words")
+                now_ = (f"; now it is {rw_}" if rw_ and rw_ not in ("about the same", "a little more") and rw_ != prw
+                        else "")
                 if prw and prw not in ("about the same", "a little more"):
                     o(f"In {pw} it was {prw} ({f(big['previous_items'], lang)} {big['name']} against "
-                      f"{f(small['previous_items'], lang)} {small['name']}): {bal}.", "topics", "comparison",
+                      f"{f(small['previous_items'], lang)} {small['name']}){now_}.", "topics", "comparison",
                       must=True)
                 else:
                     o(f"In {pw} it was {f(big['previous_items'], lang)} {big['name']} against "
-                      f"{f(small['previous_items'], lang)} {small['name']}: {bal}.", "topics", "comparison", must=True)
+                      f"{f(small['previous_items'], lang)} {small['name']}{now_}.", "topics", "comparison", must=True)
             if all(_num(x.get("shorts")) for x in (a, b)) and a["shorts"] + b["shorts"] > 0:
                 o(f"{f(a['shorts'], lang)} of the {a['name']} videos were Shorts, against {f(b['shorts'], lang)} of "
                   f"the {b['name']} ones.", "topics")
@@ -4519,7 +4874,7 @@ _SHORTS_SUBJ = re.compile(r"^(?:your |the )?shorts\b|\b(?:your |the )?shorts (?:
 _MUST_SUBJECTS = [("hour", re.compile(r"\bbusiest hour\b|\bpeak(?:s|ed)? (?:at|around)\b")),
                   ("shorts", _SHORTS_SUBJ),
                   ("top_areas", re.compile(r"\bof your top \d+\b|\bwhat they are\b")),
-                  ("balance", re.compile(r"\bthe gap\b|\bbalance\b"))]
+                  ("balance", re.compile(r"\bthe gap\b|\bbalance\b|\btimes as many\b.*\bnow\b"))]
 
 
 def _move_dir(text):
@@ -4650,9 +5005,15 @@ def fill(form, raw, sheet, chart_vals=None):
         # round 12, pass 2 fix (live, row 4: "You first started watching <its date>."): the date is said by code,
         # the writer's next sentence after it
         tail = [x for x in _sentences(form["answer"])[1:] if not re.search(_DATE_RX, _norm(x))]
-        topic_ = " ".join(_words((sheet.get("filters") or {}).get("topic") or ""))
-        head_ = " ".join(_words(_sentences(form["answer"])[0]))
-        new = " ".join([cf["answer"]] + tail) if topic_ and topic_ not in head_ else form["answer"]
+        # round 12, pass 6 (X1): a first's or a last's answer is always code's (its item ordered by the instant, its
+        # day and time); the writer's sentences after it stay unless they say a date
+        new = " ".join([cf["answer"]] + tail)
+        obs_ = [x for x in form["observations"] if not (re.search(r"\b(?:first|last)\b", _norm(x)) and
+                                                        re.search(_DATE_RX, _norm(x)))]
+        for x in form["observations"]:
+            if x not in obs_:
+                form["dropped"].append(("observation", "said_by_answer", x))
+        form["observations"] = obs_ if len(obs_) >= 1 else form["observations"]
         if new != form["answer"]:
             form["dropped"].append(("answer", "code_answer", form["answer"]))
             form["answer"] = new

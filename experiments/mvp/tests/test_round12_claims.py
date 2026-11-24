@@ -32,6 +32,10 @@ def test_a_filtered_channels_answers_moves_say_their_base_after_the_first_number
     I = ins()
     s = top(kind="channels", filters={"topic": "gaming"})
     s["themes"] = [dict(t, share=v) for t, v in zip(s["themes"], (0.15, 0.14, 0.11, 0.1))]
+    # round 12, pass 6: each change_vs_previous is its own share's move (moves under 3 points are not said; the
+    # made-up "fell" from 6% to 10% was a rise)
+    s["themes"] = [dict(t, previous_share=p, change_vs_previous=round(t["share"] - p, 3))
+                   for t, p in zip(s["themes"], (0.08, 0.12, 0.02, 0.06))]
     raw = {"answer": "", "observations": []}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
     moves = [o for o in f["observations"] if re.search(r"\b(?:grew|fell) ", o)]
@@ -73,7 +77,8 @@ def test_an_unfiltered_answer_says_of_what_you_opened_once_and_shorts_every_time
     e, _ = I.gate_sentence("Behind Speed runs (5% of what you opened): Pixel Forge; 15% of it was Shorts.", s, names, st)
     assert e == "Behind Speed runs (5%): Pixel Forge.", e   # (said once: the answer said it above)
     f, _ = I.gate_sentence("Inside gaming: Speed runs (5% of everything you opened) and Meme drops (7%).", s, names, st)
-    assert "(5% of everything you opened)" in f   # "Inside <area>:" keeps it (else it reads as of the area)
+    # "Inside <area>:" keeps its base (else it reads as of the area); round 12, pass 6 (X18): in the answer's one phrase
+    assert "(5% of what you opened)" in f
 
 
 def test_a_run_of_shares_after_an_areas_name_goes_next_to_its_own_names():
@@ -83,7 +88,8 @@ def test_a_run_of_shares_after_an_areas_name_goes_next_to_its_own_names():
     names = I._gate_names(I.shown(s))
     out, _ = I.gate_sentence("Speed runs and Block battles were the biggest gaming themes, with 5% and 5%.", s, names,
                              {"opened_said": True})
-    assert out == "Speed runs (5% of everything you opened) and Block battles (5%) were the biggest gaming themes.", out
+    # round 12, pass 6 (X18): the answer's one phrase for its base
+    assert out == "Speed runs (5% of what you opened) and Block battles (5%) were the biggest gaming themes.", out
 
 
 def test_a_change_over_the_years_says_each_value_with_its_year():
@@ -118,7 +124,7 @@ def test_a_shorts_share_said_of_your_youtube_videos_is_of_all_of_them(r12):
     I = ins()
     s = sheet_of(r12, "what have i been watching the most lately")
     t = s["totals"]
-    assert t["shorts_yt_share"] == round(t["shorts"] / t["by_platform"]["youtube"], 3)
+    assert t["shorts_yt_share"] == round(t["shorts"] / t["by_platform"]["youtube"], 4)   # pass 6 (X13): 4 places
     assert I.shown(s, model=True)["totals"]["shorts_share"] == t["shorts_share"]   # the model reads it as built
     assert "shorts_yt_share" not in I.user_message(s)
     assert I.shown(s)["totals"]["shorts_share"] == t["shorts_yt_share"]           # code says it as said

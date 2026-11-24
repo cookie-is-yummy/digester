@@ -250,7 +250,8 @@ def test_a_bullet_whose_every_number_the_answer_said_is_a_repeat():
                              "uses": []}]}
     f = I.check(raw, s, strict=True)
     assert ("observation", "repeat") in [(d[0], d[1]) for d in f["dropped"]]
-    assert f["observations"] == ["Gaming grew from 12% against before."]
+    # round 12, pass 6 (X5): a change says both its values ("from 12%" alone says where it went)
+    assert f["observations"] == ["Gaming grew from 12% to 89% against before."]
 
 
 def test_a_direction_with_no_number_is_vague():
@@ -521,8 +522,9 @@ def test_a_comparison_says_the_balance_against_last_year_with_its_ratio_then():
                                            {"text": "2,236 of the gaming videos were Shorts.", "uses": ["topics"]},
                                            {"text": "Art had 259 Shorts.", "uses": ["topics"]}]}
     f = I.fill(I.check(raw, s), raw, s)
-    assert ("In the same part of 2025 it was about 14 times as many (3,093 gaming against 221 art): the gap has "
-            "narrowed.") in f["observations"]
+    # round 12, pass 6 (X13): the balance by the ratio in words, then and now, never "the gap has narrowed"
+    assert ("In the same part of 2025 it was about 14 times as many (3,093 gaming against 221 art); now it is about 9 "
+            "times as many.") in f["observations"]
 
 
 # ================================ facts: a Shorts share counts the long streams, "new" means new ===================
@@ -583,7 +585,8 @@ def test_the_real_shaped_top_sheet_end_to_end_says_no_false_thing():
     f = I.fill(I.check(raw, s, strict=True), raw, s)
     text = "\n".join(p["text"] for p in I.layout(f, s))
     assert "gaming led with 22% of what you opened" in text
-    assert "Inside gaming: Speed runs (5% of everything you opened) and Block battles (5%)" in text
+    # round 12, pass 6 (X18): the answer's one phrase for its base
+    assert "Inside gaming: Speed runs (5% of what you opened) and Block battles (5%)" in text
     assert re.search(r"Shorts were 74% of your YouTube videos", text)
     assert not re.search(r"\bmostly\b|hours|of your window", text)
 
@@ -726,7 +729,8 @@ def test_a_firsts_answer_without_its_topic_is_codes_date_sentence():
     s = c["sheet"]
     raw = dict(c["fake"], answer="You first started watching 14 March 2019. Blender 3D was most of it.")
     f = I.fill(I.check(raw, s), raw, s)
-    assert f["answer"].startswith("You first opened a blender video on 14 March 2019.")
+    # round 12, pass 6 (X1): code's answer names the first item's channel too
+    assert f["answer"].startswith("You first opened a blender video on 14 March 2019, from ")
 
 
 def test_codes_must_line_takes_the_writers_bullet_on_the_same_subject():

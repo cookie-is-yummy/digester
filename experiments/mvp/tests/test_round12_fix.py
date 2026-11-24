@@ -291,7 +291,8 @@ def test_a_firsts_so_what_says_the_path_on_the_topic_and_its_title_is_said_once(
                                    "your busiest year for it.")
     assert "You saved 18 Blender 3D videos" in f["so_what"]
     head = I.layout(f, s)[0]["text"]
-    assert head.count(title) == 1 and head.startswith("You first opened a blender video on 14 March 2019 (the first video below).")
+    # round 12, pass 6 (X1, on purpose): a first's answer is code's, with the first item's channel
+    assert head.count(title) == 1 and head.startswith("You first opened a blender video on 14 March 2019, from ")
 
 
 @pytest.mark.parametrize("raw, want", [

@@ -113,7 +113,8 @@ def test_a_the_answer_opens_with_the_window_and_where_the_export_ends(wr):
     assert out.startswith("On Friday 30 October 2026, the last day of your export, ")
     later(wr)
     out, _ = ask(wr, QS["q4"])
-    assert out.startswith("You first opened a watercolor video on 10 January 2025.")   # the date is the answer
+    # the date is the answer; round 12, pass 6 (X1, on purpose): with its time and channel, the first by the instant
+    assert out.startswith("You first opened a watercolor video on 10 January 2025 at ")
 
 
 def test_a_a_window_wholly_after_the_record_keeps_todays_honest_reply(wr, monkeypatch):

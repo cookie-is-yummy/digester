@@ -55,7 +55,7 @@ class Index:
         zone = ZoneInfo(tz)
         self.ids = sorted(view.items)
         self.pos = {i: k for k, i in enumerate(self.ids)}
-        it_, day_, hour_, wd_, kind_ = [], [], [], [], []
+        it_, day_, hour_, wd_, kind_, sec_ = [], [], [], [], [], []
         self.kinds = ["watch", "view", "like", "save", "collection", "share_self", "playlist"]
         kcode = {k: n for n, k in enumerate(self.kinds)}
         path = os.path.join(view.lib, "corpus", "interactions.jsonl")
@@ -75,8 +75,9 @@ class Index:
                         d = datetime.fromisoformat(at)
                     except ValueError:
                         continue
-                    d = d.astimezone(zone) if d.tzinfo else d
+                    d = d.astimezone(zone) if d.tzinfo else d.replace(tzinfo=zone)
                     it_.append(k)
+                    sec_.append(int(d.timestamp()))
                     day_.append(d.toordinal())
                     hour_.append(d.hour)
                     wd_.append(d.weekday())
@@ -86,6 +87,10 @@ class Index:
         self.hour = np.array(hour_, dtype=np.int8)
         self.wd = np.array(wd_, dtype=np.int8)
         self.kind = np.array(kind_, dtype=np.int8)
+        # round 12, pass 6 (X1: "the last" was the day's first video): every event's instant, so a first or a last
+        # is ordered by its time (the person's local time for the words, the instant for the order)
+        self.sec = np.array(sec_, dtype=np.int64)
+        self.zone = zone
         self.platform = np.array([0 if view.items[i].platform == "youtube" else 1 for i in self.ids], dtype=np.int8)
         names = sorted({view.items[i].creator for i in self.ids if view.items[i].creator})
         self.creators = names
@@ -216,7 +221,8 @@ def _hours(seconds):
 
 
 def _share(a, b):
-    return round(a / b, 3) if b else 0.0
+    # round 12, pass 6 (X13: 113 of 1,514 is 7.46%, stored as 0.075 and said 8%): four places, so a share rounds once
+    return round(a / b, 4) if b else 0.0
 
 
 def topic_items(view, rec, idx, facts, phrase):
@@ -543,6 +549,39 @@ def _item_rows(view, idx, facts, th, ids, rec, kinds, start, end, first=False):
     return out
 
 
+def _by_instant(items, idx, ev, eo, kind):
+    """Round 12, pass 6 (X1, the hand check: "the last minecraft video" named the one opened at 00:04, not the one at
+    09:12 the same day): a first's or a last's items in the order of the instant of their first (or last) open, the
+    newest first for a last and a day; each item's local time of that open as "at_time" ("9:12 am"). The sentence,
+    the cards and the sheet read this one order."""
+    import numpy as np
+    if not items:
+        return
+    pos = [idx.pos.get(it.get("id")) for it in items]
+    m = ev & np.isin(idx.it, [p for p in pos if p is not None])
+    if eo is not None:
+        m &= idx.day <= eo
+    first_t, last_t = {}, {}
+    for p, t in zip(idx.it[m].tolist(), idx.sec[m].tolist()):
+        if p not in first_t or t < first_t[p]:
+            first_t[p] = t
+        if p not in last_t or t > last_t[p]:
+            last_t[p] = t
+    use = first_t if kind == "first" else last_t
+    for it, p in zip(items, pos):
+        t = use.get(p)
+        if t is not None:
+            d = datetime.fromtimestamp(t, idx.zone)
+            if it.get("at") and d.date().isoformat() != it["at"]:
+                continue   # an open outside the sheet's own events: the row keeps its day
+            h = d.hour % 12 or 12
+            it["at_time"] = f"{h}:{d.minute:02d} {'am' if d.hour < 12 else 'pm'}"
+            it["_t"] = t
+    items.sort(key=lambda it: (it.get("_t") is None, (it.get("_t") or 0) * (1 if kind == "first" else -1)))
+    for it in items:
+        it.pop("_t", None)
+
+
 # ================================================================ the window's words
 def window_words(q, w, start, end, rec, plats, lang="en"):
     """The window as said back, already carrying where the export ends."""
@@ -644,14 +683,22 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             topic_tids += [t for t in tids if t not in topic_tids]
         out["filters"]["topic_themes"] = [th.shown(t) for t in topic_tids] if th is not None else []
     if getattr(q, "without_shorts", False):
-        sh = (facts.short == 1) | (idx.platform == 1)
+        # round 12, pass 6 (X6, the hand check: "22% of your long videos" was of every YouTube video not known to be a
+        # Short, 8% of them of no known length: 24% of the long ones): without Shorts is the videos KNOWN to be long,
+        # the set its words name ("of your long videos"); a video of no known length may be a Short and is left out
+        sh = facts.short != 0
         cut = ev & sh[idx.it]
-        left_out = {"shorts": int(len(np.unique(idx.it[cut & (idx.platform[idx.it] == 0)]))),
-                    "reels": int(len(np.unique(idx.it[cut & (idx.platform[idx.it] == 1)])))}
         ev &= ~sh[idx.it]
-        out["filters"]["left_out"] = left_out
     so = eff_start.toordinal() if eff_start else None
     eo = eff_end.toordinal() if eff_end else None
+    if getattr(q, "without_shorts", False):
+        cut_w = cut & ((idx.day >= so) if so is not None else True) & ((idx.day <= eo) if eo is not None else True)
+        left_out = {"shorts": int(len(np.unique(idx.it[cut_w & (idx.platform[idx.it] == 0) &
+                                                        (facts.short[idx.it] == 1)]))),
+                    "reels": int(len(np.unique(idx.it[cut_w & (idx.platform[idx.it] == 1)]))),
+                    "unknown_length": int(len(np.unique(idx.it[cut_w & (idx.platform[idx.it] == 0) &
+                                                               (facts.short[idx.it] == -1)])))}
+        out["filters"]["left_out"] = left_out
     if topic_mask is not None and kind == "count":
         out["window_totals"] = Scope(idx, facts, ev, so, eo).totals()   # the count's "of N you watched then"
     ev_pre = ev.copy()   # round 12, pass 5: the other filters (without Shorts, a channel), the topic not yet applied
@@ -727,17 +774,20 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             # round 12, pass 5 (the audit: "You first opened a gaming video on 5 April 2020" where the sheet's own
             # topic, its themes and its words, holds one from 21 August 2019): a first or a last is of the sheet's
             # own scope, its items in the order of their first (or last) open
-            d_, i_ = idx.day[ev], idx.it[ev]
+            d_, i_, t_ = idx.day[ev], idx.it[ev], idx.sec[ev]
             if eo is not None:
-                d_, i_ = d_[d_ <= eo], i_[d_ <= eo]
+                d_, i_, t_ = d_[d_ <= eo], i_[d_ <= eo], t_[d_ <= eo]
             seen_ = {}
-            for d1, i1 in sorted(zip(d_.tolist(), i_.tolist()), reverse=(kind == "last")):
-                seen_.setdefault(i1, d1)
+            # round 12, pass 6 (X1: items of one day were in the order of their ids): by the instant of the open
+            for t1, i1 in sorted(zip(t_.tolist(), i_.tolist()), reverse=(kind == "last")):
+                seen_.setdefault(i1, t1)
                 if len(seen_) >= 10:
                     break
             ids = [idx.ids[i1] for i1 in seen_]
         out["items"] = _item_rows(view, idx, facts, th, ids, rec, kinds, eff_start if kind == "day" else None,
                                   eff_end if kind == "day" else None, first=(kind == "first"))
+        if kind in ("first", "last"):
+            _by_instant(out["items"], idx, ev, eo, kind)
         if kind in ("first", "last") and q.topic:
             out["periods"], out["periods_unit"] = _periods(idx, facts, th, ev, None, eo, by="year")
     # things saved on the window's themes and never opened
@@ -877,18 +927,24 @@ def _usual_day(idx, facts, base_ev, day_o, prev_days=90):
         return {}
     days = idx.day[m]
     per = []
-    sh = []
+    sh, sh_yt = [], []
     for d in np.unique(days):
         it = np.unique(idx.it[m & (idx.day == d)])
         per.append(len(it))
         yt = it[(idx.platform[it] == 0) & (facts.short[it] >= 0)]
         if len(yt):
             sh.append(float((facts.short[yt] == 1).mean()))
+        yt_all = it[idx.platform[it] == 0]
+        if len(yt_all):
+            # round 12, pass 6 (X7: the day's "90% of the day's YouTube videos" against a usual day's share of the
+            # known-length ones): the usual day's twin on the same base, of all its YouTube videos
+            sh_yt.append(float((facts.short[yt_all] == 1).mean()))
     if len(per) < 5:
         return {}
     h = np.bincount(idx.hour[m].astype(np.int64), minlength=24)
     return {"days": int(len(per)), "median_items": int(np.median(per)),
-            "shorts_share": round(float(np.median(sh)), 3) if sh else None, "busiest_hour": int(np.argmax(h))}
+            "shorts_share": round(float(np.median(sh)), 3) if sh else None, "busiest_hour": int(np.argmax(h)),
+            **({"shorts_yt_share": round(float(np.median(sh_yt)), 3)} if sh_yt and sh else {})}
 
 
 def _so_what_candidates(out, kind, q):

@@ -253,9 +253,13 @@ def test_q2_without_shorts_leaves_the_shorts_out_and_says_how_many(r12):
     ids = watched(date(2026, 1, 1), date(2026, 10, 30))
     clips = {i for i in ids if is_clip(i)}
     ig = {i for i in ids if row_of(i)["platform"] == "instagram"}
+    # round 12, pass 6 (X6, on purpose): without Shorts is the videos known to be long; one of no known length (a
+    # deleted video) may be a Short and is left out too, and counted apart
+    unknown = {i for i in ids if row_of(i)["platform"] == "youtube" and row_of(i).get("length") is None}
     assert s["filters"]["without_shorts"] is True and s["filters"]["left_out"] == {"shorts": len(clips),
-                                                                                  "reels": len(ig)}
-    assert s["totals"]["shorts"] == 0 and s["totals"]["items"] == len(ids - clips - ig)
+                                                                                  "reels": len(ig),
+                                                                                  "unknown_length": len(unknown)}
+    assert s["totals"]["shorts"] == 0 and s["totals"]["items"] == len(ids - clips - ig - unknown)
     assert "Clip Factory" not in [c["name"] for c in s["channels"]] and "without_shorts" not in s["offers"]
 
 
