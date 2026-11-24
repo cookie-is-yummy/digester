@@ -1,0 +1,14 @@
+{
+ "about": "Round 12, pass 5 (DESIGN.md 19.A): findings of eval_claims.py that a hand count on the raw files shows to be the auditor's reading, not a false sentence. Each case is a shape of sentence (no title, channel, theme or area name of a real library), the kind of finding, both counts and why. eval_claims.py's recount is unchanged and does not read this file: a finding that matches a case is listed in the round's report as 'auditor wrong', never dropped silently.",
+ "cases": [
+  {
+   "kind": "word/mostly (half)",
+   "shape": "<channel> was mostly <theme>, with N% of its videos in that theme.",
+   "seen": "a 'without Shorts' follow-up of 'which channels did i watch the most in <year>' (live writer, 24 Nov 2026)",
+   "said": "the channel's long videos that year: 76% in its top theme",
+   "hand_count": "162 of the channel's 213 long YouTube videos opened that year (New York time) are in that theme (76.1%); the sheet's channels[k].theme_share is 0.761 and the auditor's own sheet recount of that path agrees",
+   "auditor": "2.0%: that theme's share of every video of the window's scope (by hand, 225 of the window's 8,378 long videos with a known length, 2.7%), because its 'mostly' reads the window, not the sentence's subject (the channel named before 'was mostly')",
+   "why_allowed": "the sentence's subject is the channel; 'mostly' is said of the channel's own videos and holds (76% >= 50%)"
+  }
+ ]
+}

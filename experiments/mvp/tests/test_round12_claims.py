@@ -76,6 +76,35 @@ def test_an_unfiltered_answer_says_of_what_you_opened_once_and_shorts_every_time
     assert "(5% of everything you opened)" in f   # "Inside <area>:" keeps it (else it reads as of the area)
 
 
+def test_a_run_of_shares_after_an_areas_name_goes_next_to_its_own_names():
+    """Live: "A and B were the biggest gaming themes, with 5% and 5%" (of everything opened, read as of gaming)."""
+    I = ins()
+    s = top()
+    names = I._gate_names(I.shown(s))
+    out, _ = I.gate_sentence("Speed runs and Block battles were the biggest gaming themes, with 5% and 5%.", s, names,
+                             {"opened_said": True})
+    assert out == "Speed runs (5% of everything you opened) and Block battles (5%) were the biggest gaming themes.", out
+
+
+def test_a_change_over_the_years_says_each_value_with_its_year():
+    """Live: "Shorts rose from 4% to 70% between 2020 and 2026" (read as the whole span's share)."""
+    I = ins()
+    s = top(kind="changed")
+    s.pop("previous", None)   # a change has no span before: its two years
+    s["window"] = dict(s["window"], start="2020-01-01", end="2026-10-30")
+    s["periods"] = [{"label": "2020", "items": 900, "themes": [], "shorts_share": 0.04},
+                    {"label": "2026", "items": 950, "themes": [], "shorts_share": 0.7}]
+    s["areas_change"] = {"from": "2020", "to": "2026", "left": [], "arrived": [],
+                         "shorts": {"from": "2020", "from_share": 0.04, "to": "2026", "to_share": 0.7}}
+    f = I.check({"answer": "-", "observations": [{"text": "Shorts rose from {areas_change.shorts.from_share} to "
+                                                          "{areas_change.shorts.to_share}.", "uses": []}]}, s,
+                strict=True)
+    o = f["observations"][0] if f["observations"] else ""
+    assert "4% in 2020 to 70% in 2026" in o and "between" not in o, (o, f["dropped"])
+    g, _ = I.gate_sentence(o, s, I._gate_names(I.shown(s)), {})
+    assert g == "Shorts rose from 4% of your YouTube videos in 2020 to 70% in 2026.", g
+
+
 def test_a_shorts_share_in_an_answer_without_shorts_is_not_sent():
     I = ins()
     s = top(filters={"without_shorts": True})

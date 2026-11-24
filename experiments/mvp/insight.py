@@ -2414,11 +2414,13 @@ def render(text, sheet, facts, strict=False, unit=None):
             if isinstance(sl, str):
                 return None, sl
         span_ = _span_of(sheet)
-        mft = re.search(r"\bfrom\s+\{[^}]+\}\s+to\s+\{[^}]+\}", text)
+        mft = re.search(r"\bfrom\s+(\{[^}]+\})\s+to\s+(\{[^}]+\})", text)
         if not base and span_ and mft:
             # a change over the years (live, row 7: "Gaming faded from 22% to 16%, while ..."): its two years, right
-            # after its two values
-            text = text[:mft.end()] + f" between {span_[0]} and {span_[1]}" + text[mft.end():]
+            # after its two values; round 12, pass 5 (the audit read "from 4% to 70% between 2020 and 2026" as the
+            # whole span's share): each value with its own year, "from 4% in 2020 to 70% in 2026"
+            text = (text[:mft.end(1)] + f" in {span_[0]}" + text[mft.end(1):mft.end(2)] + f" in {span_[1]}" +
+                    text[mft.end(2):])
             sl = slots_of(text, sheet, lang)
             if isinstance(sl, str):
                 return None, sl
@@ -3108,6 +3110,8 @@ _G_SPAN_AFTER = re.compile(r"^\s*(?:in|against|for|over|during)\s+(?:(?:19|20)\d
 # 82%", "Shorts climbed from 4% to 81%"); "the year you moved to Shorts, and 16% in 2026" is a record's share
 _G_SHORTS_LINK = re.compile(r"^\s*(?:[:(]|(?:were|was|are|is|made up|went|rose|grew|climbed|jumped|fell|dropped|"
                             r"took|at|share|from|to|up|down|of|then|now|stood)\b)")
+_G_WITH_RUN = re.compile(r"^(?P<a>[^,;()%]+?) and (?P<b>[^,;()%]+?) (?P<v>were|are|was|is) (?P<rest>[^,;()%]+?),? "
+                         r"(?:with|at) (?P<x>\d+(?:\.\d)?%) and (?P<y>\d+(?:\.\d)?%)(?P<tail>[^%]*)$")
 _G_MOSTLY_LIST = re.compile(r"\b(?P<w>mostly|mainly|largely)\s+(?P<a>[^,;%()]+?) at (?P<x>\d+(?:\.\d)?%)"
                             r"(?:,)? and (?P<b>[^,;%()]+?) at (?P<y>\d+(?:\.\d)?%)")
 _G_OPENED_SAID = re.compile(r"\bof (?:everything|all|what) you (?:opened|watched)\b|\bof everything\b", re.I)
@@ -3280,6 +3284,13 @@ def gate_sentence(s, sheet, names, state):
             v = {"went up": "went up", "went down": "went down"}.get(v, v)
             s = (s[:mv.start()] + f"{v} to {mv.group('b')} {base}{mv.group('sb') or ''}, from {mv.group('a')}"
                  f"{mv.group('sa') or ''}" + s[mv.end():])
+    # "A and B were the biggest gaming themes, with 5% and 5%": each number next to its own name, "A (5% of everything
+    # you opened) and B (5%) were ..." (else the shares read as of the area named before them)
+    m_ = _G_WITH_RUN.match(s)
+    if m_ and all(any(n.lower() == m_.group(g).strip().lower() for n in names) for g in ("a", "b")):
+        base_w = base_phrase(sheet, "record") if filtered else "of everything you opened"
+        s = (f"{m_.group('a')} ({m_.group('x')} {base_w}) and {m_.group('b')} ({m_.group('y')}) {m_.group('v')} "
+             f"{m_.group('rest')}{m_.group('tail')}")
     cues = _cues(s, names)
     ms = list(_G_PCT.finditer(s))
     # runs: "11% and 5%", "85% and 100% Shorts": the base after the run's last number
@@ -3301,7 +3312,7 @@ def gate_sentence(s, sheet, names, state):
         if subj == "shorts" and ws:
             return None, "shorts_left_out"
         if _G_BASE.match(after):
-            mo = re.match(r"\s*of (?:everything|all|what) you (?:opened|watched)\b|\s*of everything\b", after)
+            mo = re.match(r"\s*of what you (?:opened|watched)\b", after)   # ("of everything" is code's, said apart)
             if mo and subj == "record" and not filtered and state.get("opened_said") and subj not in based_kinds \
                     and not re.match(r"^\s*Inside\b", s):
                 # the answer said "of what you opened" already: said once, not again in every sentence ("Inside

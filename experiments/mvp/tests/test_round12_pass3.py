@@ -591,4 +591,5 @@ def test_live_a_change_over_the_years_says_its_two_years():
                                                           "{areas_change.left[0].to_share}, while "
                                                           "{areas_change.arrived[0].name} rose.", "uses": []}]},
                 s, strict=True)
-    assert f["observations"] == ["Gaming faded from 22% to 16% between 2020 and 2026, while comedy rose."], f
+    # round 12, pass 5: each value with its own year (the audit read "between 2020 and 2026" as the whole span's)
+    assert f["observations"] == ["Gaming faded from 22% in 2020 to 16% in 2026, while comedy rose."], f
