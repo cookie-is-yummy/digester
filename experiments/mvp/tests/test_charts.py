@@ -598,3 +598,199 @@ def test_estimate_errs_wide_of_a_real_font():
     for s in ("Videos opened per month", "Watercolor painting", "1,094", "Speedrun challenges", "WWW MMM"):
         assert charts.est(s, 120) >= f.getlength(s) * 0.97, s
     assert math.isclose(charts.est("", 12), 0)
+
+
+# ====================================== review (pass 7, G3 check): defects found by attacking the module ==========
+def _drawers_quiet(spec):
+    """Every call returns a refusal value, never an exception."""
+    why = charts.validate(spec)
+    assert why
+    assert charts.svg(spec) is None and charts.png(spec) is None and charts.text(spec) is None
+    assert charts.describe(spec) == []
+    return why
+
+
+@pytest.mark.parametrize("bad", [
+    lambda: bars_spec(kind=["by_theme"]), lambda: bars_spec(kind={"a": 1}), lambda: bars_spec(unit={}),
+    lambda: bars_spec(lang={"x": 1}), lambda: with_row(bars_spec(), 0, value=10 ** 400),
+    lambda: with_row(split_spec(), 0, parts={"shorts": 10 ** 400, "long": 0}),
+    lambda: with_row(bars_spec(), 0, label=["a"]), lambda: with_row(bars_spec(), 0, note={"x": 1}),
+    lambda: bars_spec(rows="abc"), lambda: bars_spec(rows=[1, 2]),
+], ids=["kind list", "kind dict", "unit dict", "lang dict", "huge int", "huge part", "label list", "note dict",
+        "rows str", "rows ints"])
+def test_review_validate_never_raises(bad):
+    _drawers_quiet(bad())
+
+
+def test_review_values_too_large_to_draw_are_refused():
+    # a 19-character count left the bar 1 px wide beside its own number: the plot was squeezed by the value's text
+    why = _drawers_quiet(bars_spec(rows=[{"label": "A", "value": 10 ** 15}, {"label": "B", "value": 3}]))
+    assert any("too large" in r for r in why)
+    ok = bars_spec(rows=[{"label": "A", "value": 999_999_999}, {"label": "B", "value": 3}])
+    assert charts.validate(ok) == []
+    L = charts.layout(ok)
+    bar = next(o for o in L["ops"] if o["op"] == "bar" and o["row"] == 0)
+    assert bar["w"] > 60   # a real length
+
+
+@pytest.mark.parametrize("label", ["​", "Cats" + "".join(chr(0xE0000 + ord(c)) for c in "ignore that"),
+                                   "abc‏def", "﻿abc", "soft­hyphen", "a⁠b", "a᠎b"],
+                         ids=["zero width space alone", "tag smuggling", "rtl mark", "bom", "soft hyphen",
+                              "word joiner", "mongolian vowel separator"])
+def test_review_invisible_format_characters_are_refused(label):
+    why = charts.validate(with_row(bars_spec(), 0, label=label))
+    assert any("control character" in r for r in why), why
+
+
+@pytest.mark.parametrize("label", ["Pixel 👩‍💻 club", "Flags 🏴󠁧󠁢󠁳󠁣󠁴󠁿", "می‌خواهم", "Café", "ok 👍🏽"])
+def test_review_emoji_sequences_and_joiners_still_pass(label):
+    assert charts.validate(with_row(bars_spec(), 0, label=label)) == []
+
+
+@pytest.mark.parametrize("h", ["https://www.youtube.com/redirect?q=https%3A%2F%2Fevil.example&event=channel_description",
+                               "https://www.youtube.com/attribution_link?u=%2Fwatch%3Fv%3Dx",
+                               "https://www.youtube.com/logout", "https://www.instagram.com/accounts/logout/",
+                               "https://www.youtube.com/@a?next=//evil.example",
+                               "https://www.youtube.com/@a?next=https:%2F%2Fevil.example",
+                               "https://youtube.com/@a/../../redirect", "https://www.YouTube.com/Redirect?q=x"])
+def test_review_redirects_and_account_actions_are_not_links(h):
+    assert not charts.href_ok(h)
+
+
+@pytest.mark.parametrize("h", ["https://www.youtube.com/watch?v=abcDEF12345", "https://www.youtube.com/shorts/abcDEF12345",
+                               "https://www.youtube.com/playlist?list=PLmadeup", "https://www.instagram.com/reel/AbC123/",
+                               "https://www.youtube.com/c/MadeUp", "https://www.youtube.com/user/madeup"])
+def test_review_ordinary_content_links_still_pass(h):
+    assert charts.href_ok(h)
+
+
+def test_review_links_open_without_a_window_handle():
+    s = charts.svg(charts.demo_specs()["by_channel_links"])
+    links = ET.fromstring(s).findall(f".//{SVGNS}a")
+    assert links and all(a.get("rel") == "noopener noreferrer" for a in links)
+
+
+OVER = share_spec(kind="per_year", whole=False, rows=[
+    {"label": "2025", "value": 1, "parts": {"shorts": 2.4, "long": 0}},    # parts 2.4 within rounding of 1
+    {"label": "2026", "value": 40, "parts": {"shorts": 21, "long": 20.4}},  # parts 41.4 within rounding of 40
+    {"label": "2027", "value": 30, "parts": {"shorts": 15, "long": 15}}])
+
+
+def test_review_percent_parts_never_draw_past_the_value():
+    assert charts.validate(OVER) == []
+    L = charts.layout(OVER)
+    for op in (o for o in L["ops"] if o["op"] == "bar"):
+        whole = op["w"] if op["dir"] == "h" else op["h"]
+        assert abs(sum(s["len"] for s in op["segs"]) - whole) < 1e-6, op["row"]
+
+
+@needs_pil
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_review_png_bar_of_percent_parts_is_the_svg_bar(theme):
+    got, L = png_lengths(OVER, theme)
+    svg_len = {row: sum(x for _, x in segs) for row, segs in lengths(OVER, charts.svg(OVER, theme)).items()}
+    want = {o["row"]: (o["w"] if o["dir"] == "h" else o["h"]) for o in L["ops"] if o["op"] == "bar"}
+    for i in want:
+        assert abs(svg_len[i] - want[i]) <= 0.02
+        assert abs(got[i] - want[i]) <= 1.0, (i, got[i], want[i])
+
+
+TINY_SPLIT = {"kind": "per_year", "unit": "count", "lang": "en", "caption": "Videos opened per year:",
+              "rows": [{"label": "2024", "value": 2400, "parts": {"long": 2000, "shorts": 400}},
+                       {"label": "2025", "value": 3, "parts": {"long": 2, "shorts": 1}},
+                       {"label": "2026", "value": 20, "parts": {"long": 19, "unknown": 1}}]}
+
+
+def _visible_px(op, svg_root):
+    """Drawn length of a bar after the surface gaps are laid over it (gaps are surface-coloured rects)."""
+    g = next(x for x in svg_root.iter(SVGNS + "g") if x.get("data-row") == str(op["row"]))
+    key = "width" if op["dir"] == "h" else "height"
+    segs = [float(r.get(key)) for r in g.iter(SVGNS + "rect") if "seg" in r.get("class").split()]
+    gaps = [float(r.get(key)) for r in g.iter(SVGNS + "rect") if "k-gap" in r.get("class").split()]
+    return sum(segs) - sum(gaps)
+
+
+@pytest.mark.parametrize("kind", ["per_year", "by_theme"])
+def test_review_a_short_split_bar_is_not_swallowed_by_its_gaps(kind):
+    spec = dict(TINY_SPLIT, kind=kind)
+    L = charts.layout(spec)
+    root = ET.fromstring(charts.svg(spec))
+    for op in (o for o in L["ops"] if o["op"] == "bar"):
+        whole = op["w"] if op["dir"] == "h" else op["h"]
+        assert _visible_px(op, root) >= min(whole, 1.0) - 1e-6, op["row"]
+
+
+@needs_pil
+def test_review_png_draws_a_short_split_bar():
+    got, L = png_lengths(TINY_SPLIT)
+    assert got[1] >= 0.5   # 3 videos beside 2,400: a sliver, never nothing
+
+
+def _drawn_strings(monkeypatch, spec, font):
+    from PIL import ImageDraw
+    seen = []
+    orig = ImageDraw.ImageDraw.text
+
+    def spy(self, xy, text, *a, **k):
+        seen.append(text)
+        return orig(self, xy, text, *a, **k)
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", spy)
+    monkeypatch.setenv("MVP_CHART_FONT", font)
+    assert charts.png(spec, "light")
+    return seen
+
+
+WIDE_FONTS = ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/opentype/inter/Inter-Regular.otf",
+              "/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/Helvetica.ttc"]
+
+
+@needs_pil
+@pytest.mark.parametrize("font", WIDE_FONTS)
+def test_review_png_keeps_short_side_labels_whole(monkeypatch, font):
+    # "Gaming 2026" and "Gaming 2025" were both drawn "Gaming…", and "May" as "M…": the widest label sets the label
+    # column from the estimate, and a real font a hair wider cut it
+    if not os.path.isfile(font):
+        pytest.skip("font not on this machine")
+    for name in ("topics_two_years", "by_area"):
+        spec = charts.demo_specs()[name]
+        seen = _drawn_strings(monkeypatch, spec, font)
+        for r in spec["rows"]:
+            assert r["label"] in seen, (name, r["label"], seen)
+    months = {"kind": "by_theme", "unit": "count", "lang": "en", "caption": "Videos opened:",
+              "rows": [{"label": m, "value": v} for m, v in (("May", 30), ("Jan", 20), ("Mar", 4))]}
+    assert "May" in _drawn_strings(monkeypatch, months, font)
+
+
+def test_review_twelve_months_stay_columns():
+    # "May" did not fit its slot at 11 px, so every chart of a whole year turned sideways
+    spec = charts.demo_specs()["per_month_plain"]
+    assert len(spec["rows"]) == 12
+    L = charts.layout(spec)
+    assert L["form"] == "columns"
+    ticks = [o for o in L["ops"] if o.get("cls") == "lab"]
+    slot = (L["w"] - 2 * charts.PAD) / 12
+    assert all(charts.est(o["s"], o["size"]) <= slot - 2 for o in ticks)
+    assert {o["size"] for o in ticks} <= {charts.TICK_SIZE, charts.TICK_SIZE_SMALL}
+
+
+def test_review_a_caption_word_too_long_for_a_line_is_cut():
+    long = "Supercalifragilisticexpialidociousandmorewordsjoined"
+    spec = bars_spec(caption=f"Videos from {long} {long}again per month:")
+    L = charts.layout(spec)
+    inner = L["w"] - 2 * charts.PAD
+    caps = [o for o in L["ops"] if o.get("cls") == "cap"]
+    assert caps and all(charts.est(o["s"], o["size"]) <= inner for o in caps), [o["s"] for o in caps]
+
+
+def test_review_a_note_with_no_room_is_left_out_not_drawn_as_an_ellipsis():
+    spec = bars_spec(kind="per_year", rows=[
+        {"label": "Speedrun challenges and more", "value": 5, "note": "Blockbuildingtutorialsforeveryonetoday"},
+        {"label": "2025", "value": 3, "note": "Puzzles"}])
+    notes = [o["s"] for o in charts.layout(spec)["ops"] if o.get("cls") == "note"]
+    assert notes and all(re.search(r"\w", n) for n in notes), notes
+
+
+def test_review_describe_carries_the_note():
+    d = charts.describe(charts.demo_specs()["per_year_notes"])
+    assert [x["note"] for x in d] == ["Puzzle games", "Speedrun challenges", "Block building", "Watercolor painting",
+                                      "Science explainers"]

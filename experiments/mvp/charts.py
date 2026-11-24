@@ -65,12 +65,19 @@ DESIGN (the dataviz method: form first, colour last, validated)
   surface gap between stacked parts (centred on the boundary, so the whole bar keeps its exact length); a part above
   zero is drawn at least 3 px wide, the largest part of that bar giving up the difference (the bar's length stays
   exact, and 2 videos of unknown length beside 900 are still seen); a hairline baseline; no gridlines (every value
-  is printed). A value above zero is never thinner than 1 px.
+  is printed). A value above zero is never thinner than 1 px. The parts' lengths are scaled to add up to the bar's
+  own length exactly (percent parts may differ from the value by rounding; the bar is the value, never more). A bar
+  too short for the gaps (under 6 px a part) is drawn without them, so 3 videos beside 2,400 are a sliver, not
+  nothing.
 
   Type at the bubble's width (300 px is the chat bubble's content at a 430 px phone): caption 13 px secondary ink,
   wrapped at words onto at most 3 lines; labels 12 px primary ink, cut with "…" at a word where it can, never
   wrapped; values 12 px (10.5 px on column caps); legend 11.5 px, on one line, or one item per line when the items do
-  not fit (never broken mid-item); period labels 11 px. System sans everywhere.
+  not fit (never broken mid-item); period labels 11 px, 10 px when 11 does not fit (12 months at phone width:
+  "May"), before a column chart turns sideways. System sans everywhere. A caption word too long for a line is cut.
+  The PNG's real font may be a little wider than the estimate: a label beside the bars may use most of the gap
+  before the baseline, then is drawn up to 10% smaller, and only then cut (review: "Gaming 2026" and "Gaming 2025"
+  were both drawn "Gaming…", "May" was "M…").
 
   Width. The default is 300 logical px: the page's bubble at 430 px holds about 300 px of content. The SVG carries a
   viewBox; the web channel sets it to width 100% and height auto so it scales with the bubble.
@@ -88,7 +95,12 @@ DESIGN (the dataviz method: form first, colour last, validated)
   letters stay unjoined). A character no font has is left out of the PNG's label, never drawn as a box.
 
   Safety. Every label, caption, note, legend word and href is third-party text: validate() refuses control and bidi
-  override characters and any link that is not https on youtube.com, youtu.be or instagram.com (and www/m hosts);
+  override characters, invisible format characters (zero-width space, direction marks, soft hyphen, BOM, and tag
+  characters outside a flag emoji, which can carry hidden words to a model that reads describe()), and any link
+  that is not https on youtube.com, youtu.be or instagram.com (and www/m hosts), or that is a redirect or an account
+  action there (/redirect, /attribution_link, /logout, /accounts/..., a "." or ".." segment, an address inside the
+  query); links carry rel="noopener noreferrer"; values of a billion or more are refused (their text crushed the
+  plot to 1 px bars), and validate() never raises, whatever the spec holds;
   svg() escapes everything for XML; the SVG has no script, no event attribute, no foreignObject, no external
   reference (url() only to its own #ids, scoped by a hash of the spec so two charts on one page never share an id),
   and its <style> only sets colours and fonts.
@@ -106,7 +118,7 @@ import math
 import os
 import sys
 import unicodedata
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 KINDS = {"by_area": "bars", "by_theme": "bars", "by_channel": "bars", "topics_by_year": "bars",
          "per_month": "columns", "per_year": "columns"}
@@ -125,6 +137,12 @@ TEXT_MAX = 200          # characters in a label, caption, note or legend word
 HREF_MAX = 500
 SHARE_SAYS_NOTHING = 90  # a share chart whose top row is this much or more says nothing a sentence does not
 BIDI_CONTROLS = frozenset("\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069\u061c")
+JOINERS = frozenset("\u200c\u200d")   # the only invisible format characters a label may hold (emoji, Persian, Indic)
+BLACK_FLAG = "\U0001f3f4"            # tag characters are allowed only in a flag sequence that starts with it
+MAX_VALUE = 10 ** 9                  # a count this large is not a person's history; its text would crush the plot
+# first path segments that act or send elsewhere: a link in a chart names a channel or a video, nothing else
+LINK_REFUSED_SEGMENTS = frozenset({"redirect", "attribution_link", "logout", "signout", "signin", "login", "accounts",
+                                   "oauth", "oauth2", "share", ".", ".."})
 
 # the text chart (insight.py's look: 8 whole cells, a label cut at a word with "…")
 TEXT_CELLS = 8
@@ -161,6 +179,7 @@ COL_MAX_W = 24
 COL_PLOT_H = 112
 COL_VALUE_SIZE = 10.5
 TICK_SIZE = 11
+TICK_SIZE_SMALL = 10    # 12 months at phone width: "May" needs it, and a year of months stays a column chart
 END_R = 4
 GAP = 2
 MIN_PART = 3        # px: the thinnest part drawn, so the gap never swallows one
@@ -187,15 +206,37 @@ def _num(v):
 
 
 def _finite(v):
-    return _num(v) and math.isfinite(v)
+    """A real, finite number. An int too big for a float is not one (math.isfinite would raise on it)."""
+    if not _num(v):
+        return False
+    try:
+        return math.isfinite(v)
+    except OverflowError:
+        return False
+
+
+def _drawable(v):
+    """A finite number from 0 up to MAX_VALUE."""
+    return _finite(v) and 0 <= v < MAX_VALUE
 
 
 def _bad_text(s):
     """True when a piece of third-party text holds a character a chart must not draw: a control character (a
-    newline, a tab), a line or paragraph separator, a bidi override or isolate, a lone surrogate, a noncharacter."""
+    newline, a tab), a line or paragraph separator, a bidi override or isolate, a lone surrogate, a noncharacter, or
+    an invisible format character (a zero-width space, a direction mark, a soft hyphen, a byte-order mark, tag
+    characters that can smuggle hidden words). Allowed: the zero-width joiner and non-joiner, and tag characters inside
+    a flag sequence (black flag, tags)."""
+    flag = False
     for c in s:
         cp = ord(c)
-        if unicodedata.category(c) in ("Cc", "Cs", "Zl", "Zp") or c in BIDI_CONTROLS:
+        cat = unicodedata.category(c)
+        if 0xE0020 <= cp <= 0xE007F and flag:   # a subdivision flag: black flag, tag letters, cancel tag
+            flag = cp != 0xE007F
+            continue
+        flag = c == BLACK_FLAG
+        if cat in ("Cc", "Cs", "Zl", "Zp") or c in BIDI_CONTROLS:
+            return True
+        if cat == "Cf" and c not in JOINERS:
             return True
         if 0xFDD0 <= cp <= 0xFDEF or (cp & 0xFFFE) == 0xFFFE:
             return True
@@ -217,11 +258,18 @@ def href_ok(h):
     if u.scheme != "https" or port is not None or u.username is not None or u.password is not None:
         return False
     host = (u.hostname or "").lower()
-    return bool(host) and u.netloc.lower() == host and host in LINK_HOSTS
+    if not (host and u.netloc.lower() == host and host in LINK_HOSTS):
+        return False
+    segs = [x.lower() for x in u.path.split("/")]
+    if any(x in LINK_REFUSED_SEGMENTS for x in segs) or "//" in u.path:
+        return False   # a redirect, an account action, or a path that climbs out of itself
+    rest = unquote(unquote(u.query + "#" + u.fragment)).lower()
+    return "//" not in rest and "http:" not in rest and "https:" not in rest   # no address inside the address
 
 
 def _form(spec):
-    return KINDS.get(spec.get("kind"))
+    k = spec.get("kind")
+    return KINDS.get(k) if isinstance(k, str) else None
 
 
 def _whole(spec):
@@ -252,7 +300,7 @@ def _parts_used(spec):
     rows = spec.get("rows") or []
     if not rows or not all(isinstance(r, dict) and isinstance(r.get("parts"), dict) for r in rows):
         return ()
-    return tuple(p for p in PARTS if any(_num(r["parts"].get(p)) and r["parts"].get(p) > 0 for r in rows))
+    return tuple(p for p in PARTS if any(_finite(r["parts"].get(p)) and r["parts"].get(p) > 0 for r in rows))
 
 
 # ====================================== validate =================================================================
@@ -323,7 +371,10 @@ def validate(spec):
         elif len(lab) > TEXT_MAX:
             why.append(f"{n}: the label is longer than {TEXT_MAX} characters")
         v = r.get("value")
-        if not _finite(v):
+        if _num(v) and (isinstance(v, int) or _finite(v)) and v >= MAX_VALUE:
+            why.append(f"{n}: the value is too large to draw (a billion or more)")
+            v = None
+        elif not _finite(v):
             why.append(f"{n}: the value is not a finite number")
             v = None
         elif v < 0:
@@ -342,8 +393,8 @@ def validate(spec):
             elif set(parts) - set(PARTS):
                 why.append(f"two measures in one chart: {n} has parts that are not shorts, long or unknown: "
                            f"{', '.join(sorted(map(str, set(parts) - set(PARTS))))}")
-            elif not all(_finite(x) and x >= 0 for x in parts.values()):
-                why.append(f"{n}: a part is not a finite number at zero or above")
+            elif not all(_drawable(x) for x in parts.values()):
+                why.append(f"{n}: a part is not a finite number at zero or above (and under a billion)")
             elif unit == "count" and any(x != int(x) for x in parts.values()):
                 why.append(f"{n}: a part that is not a whole number")
             elif v is not None:
@@ -495,7 +546,7 @@ def _wrap(s, maxw, size, lines):
                 best = (max(wa, wb), [a, b])
         if best:
             out = best[1]
-    return out
+    return [cut(x, maxw, size) for x in out]   # a single word wider than a line is cut too, never run off the card
 
 
 # ====================================== layout (one geometry for the SVG and the PNG) ============================
@@ -512,14 +563,31 @@ def _row_parts(r, parts_used):
     return [(p, r["parts"].get(p, 0)) for p in parts_used if (r["parts"].get(p) or 0) > 0]
 
 
+def _segs(spec, r, parts_used, length):
+    """The bar's segments, [{part, role, off, len}], their lengths in proportion to the parts and adding up to
+    `length` exactly: the bar is as long as its value whatever the parts add up to (percent parts may differ from the
+    value by rounding), so the SVG and the PNG never draw past the value."""
+    pv = _row_parts(r, parts_used)
+    tot = sum(v for _, v in pv)
+    segs, off = [], 0.0
+    for part, v in pv:
+        ln = length * v / tot if tot > 0 else 0.0
+        segs.append({"part": part, "role": _role(spec, r, part), "off": off, "len": ln})
+        off += ln
+    return segs
+
+
+def _gaps(segs):
+    """True when the bar is long enough for a 2 px surface gap between its parts; a shorter bar is drawn without gaps
+    (they would swallow it: 3 videos beside 2,400 were drawn as nothing)."""
+    return len(segs) >= 2 and sum(s["len"] for s in segs) >= MIN_PART * len(segs) * 2
+
+
 def _visible_parts(segs):
     """A part above zero but thinner than MIN_PART px is drawn MIN_PART px (the 2 px gap would swallow it), the
     largest part giving up the difference: the bar's whole length stays exact and a few videos of unknown length
-    stay visible beside the rest. Offsets are recomputed in order."""
-    if len(segs) < 2:
-        return segs
-    total = sum(s["len"] for s in segs)
-    if total < MIN_PART * len(segs) * 2:
+    stay visible beside the rest. Offsets are recomputed in order. A bar too short for gaps is left as it is."""
+    if not _gaps(segs):
         return segs
     small = [s for s in segs if 0 < s["len"] < MIN_PART]
     if small:
@@ -553,17 +621,19 @@ def _legend_items(spec):
 
 
 def _columns_fit(spec, inner):
+    """The period labels' font size when every value and period fits its column's slot, else None (the chart turns
+    sideways). The periods drop to TICK_SIZE_SMALL before giving up."""
     rows = spec["rows"]
     slot = inner / len(rows)
     lang = spec.get("lang", "en")
     if any(r.get("note") for r in rows):
-        return False
-    for r in rows:
-        if est(fmt_value(r["value"], spec["unit"], lang), COL_VALUE_SIZE) > slot - 2:
-            return False
-        if est(" ".join(r["label"].split()), TICK_SIZE) > slot - 2:
-            return False
-    return True
+        return None
+    if any(est(fmt_value(r["value"], spec["unit"], lang), COL_VALUE_SIZE) > slot - 2 for r in rows):
+        return None
+    for size in (TICK_SIZE, TICK_SIZE_SMALL):
+        if all(est(" ".join(r["label"].split()), size) <= slot - 2 for r in rows):
+            return size
+    return None
 
 
 def layout(spec, width=DEFAULT_WIDTH):
@@ -603,7 +673,8 @@ def layout(spec, width=DEFAULT_WIDTH):
     parts_used = _parts_used(spec)
     top = max(r["value"] for r in rows) or 1
     form = _form(spec)
-    if form == "columns" and _columns_fit(spec, inner):
+    tick = _columns_fit(spec, inner) if form == "columns" else None
+    if tick:
         form = "columns"
         slot = inner / len(rows)
         cw = min(COL_MAX_W, slot * 0.62)
@@ -612,21 +683,14 @@ def layout(spec, width=DEFAULT_WIDTH):
             cx = PAD + slot * (i + 0.5)
             h = r["value"] / top * COL_PLOT_H
             if r["value"] > 0:
-                h = max(h, 1.0)
-            segs, off = [], 0.0
-            for part, v in _row_parts(r, parts_used):
-                ln = v / top * COL_PLOT_H
-                segs.append({"part": part, "role": _role(spec, r, part), "off": off, "len": ln})
-                off += ln
-            if segs and off < h:   # a value too small to see is drawn 1 px tall
-                segs[-1]["len"] += h - off
-            _visible_parts(segs)
+                h = max(h, 1.0)   # a value too small to see is drawn 1 px tall
+            segs = _visible_parts(_segs(spec, r, parts_used, h))
             ops.append({"op": "bar", "dir": "v", "x": cx - cw / 2, "y": base, "w": cw, "h": h, "segs": segs,
-                        "row": i})
+                        "row": i, "gaps": _gaps(segs)})
             ops.append({"op": "text", "x": cx, "y": base - h - 4, "s": fmt_value(r["value"], unit, lang),
                         "size": COL_VALUE_SIZE, "role": "ink", "anchor": "middle", "cls": "val"})
             ops.append({"op": "text", "x": cx, "y": base + TICK_SIZE + 4, "s": " ".join(r["label"].split()),
-                        "size": TICK_SIZE, "role": "ink2", "anchor": "middle", "cls": "lab", "href": r.get("href"),
+                        "size": tick, "role": "ink2", "anchor": "middle", "cls": "lab", "href": r.get("href"),
                         "rtl": _rtl(r["label"])})
         ops.append({"op": "line", "x1": PAD, "y1": base, "x2": PAD + inner, "y2": base, "role": "base"})
         y = base + TICK_SIZE + 8
@@ -661,27 +725,24 @@ def layout(spec, width=DEFAULT_WIDTH):
             w = r["value"] / top * plot
             if r["value"] > 0:
                 w = max(w, 1.0)
-            segs, off = [], 0.0
-            for part, v in _row_parts(r, parts_used):
-                ln = v / top * plot
-                segs.append({"part": part, "role": _role(spec, r, part), "off": off, "len": ln})
-                off += ln
-            if segs and off < w:
-                segs[-1]["len"] += w - off
-            _visible_parts(segs)
+            segs = _visible_parts(_segs(spec, r, parts_used, w))
             rtl = _rtl(labels[i])
             room = lw if not notes[i] else inner * 0.6
             lab = cut(labels[i], room, LABEL_SIZE)
+            # maxw is the room the PNG's real font may use before it cuts again: beside the bars that is the label
+            # column and most of the 8 px before the baseline, since the estimate is only an estimate
             ops_rows.append({"op": "text", "x": PAD + lw if rtl else PAD, "y": ly, "s": lab, "size": LABEL_SIZE,
                              "role": "ink", "anchor": "end" if rtl else "start", "cls": "lab", "href": r.get("href"),
-                             "rtl": rtl, "maxw": room})
+                             "rtl": rtl, "maxw": room + (6 if side and not rtl else 0)})
             if notes[i]:   # after the name, in secondary ink (the estimate errs wide, so they never touch)
                 nx = PAD + (0 if rtl else est(lab, LABEL_SIZE) + 6)
-                ops_rows.append({"op": "text", "x": nx, "y": ly, "s": cut("· " + notes[i], inner - (nx - PAD) - (
-                    est(lab, LABEL_SIZE) + 6 if rtl else 0), LABEL_SIZE), "size": LABEL_SIZE, "role": "ink2",
-                    "anchor": "start", "cls": "note", "rtl": False,
-                    "maxw": inner - (nx - PAD) - (est(lab, LABEL_SIZE) + 6 if rtl else 0)})
-            ops_rows.append({"op": "bar", "dir": "h", "x": x0, "y": by, "w": w, "h": BAR_H, "segs": segs, "row": i})
+                nroom = inner - (nx - PAD) - (est(lab, LABEL_SIZE) + 6 if rtl else 0)
+                ns = cut("· " + notes[i], nroom, LABEL_SIZE)
+                if ns.strip("·… "):   # a note cut down to "…" says nothing: it is left out
+                    ops_rows.append({"op": "text", "x": nx, "y": ly, "s": ns, "size": LABEL_SIZE, "role": "ink2",
+                                     "anchor": "start", "cls": "note", "rtl": False, "maxw": nroom})
+            ops_rows.append({"op": "bar", "dir": "h", "x": x0, "y": by, "w": w, "h": BAR_H, "segs": segs, "row": i,
+                             "gaps": _gaps(segs)})
             ops_rows.append({"op": "text", "x": x0 + w + 5, "y": mid, "s": vals[i], "size": VALUE_SIZE, "role": "ink",
                              "anchor": "start", "cls": "val"})
             yy += pitch
@@ -772,7 +833,7 @@ def svg(spec, theme="light", width=DEFAULT_WIDTH):
             el = f"<text {attrs}>{_esc(op['s'])}</text>"
             if op.get("href"):
                 h = _esc(op["href"])
-                el = f'<a href="{h}" xlink:href="{h}" target="_blank">{el}</a>'
+                el = f'<a href="{h}" xlink:href="{h}" target="_blank" rel="noopener noreferrer">{el}</a>'
             out.append(el)
         elif t == "line":
             out.append(f'<line class="k-{op["role"]}" x1="{_n(op["x1"])}" y1="{_n(op["y1"])}" x2="{_n(op["x2"])}" '
@@ -805,8 +866,8 @@ def svg(spec, theme="light", width=DEFAULT_WIDTH):
                     g.append(f'<rect class="c-{s["role"]} seg"{part} x="{_n(op["x"])}" '
                              f'y="{_n(op["y"] - s["off"] - s["len"])}" width="{_n(op["w"])}" '
                              f'height="{_n(s["len"])}"/>')
-            for s in op["segs"][1:]:   # the 2 px surface gap, centred on each inner boundary
-                if op["dir"] == "h":
+            for s in (op["segs"][1:] if op.get("gaps") else []):   # the 2 px surface gap, centred on each inner
+                if op["dir"] == "h":                                      # boundary
                     g.append(f'<rect class="k-gap" x="{_n(op["x"] + s["off"] - GAP / 2)}" y="{_n(op["y"])}" '
                              f'width="{GAP}" height="{_n(op["h"])}"/>')
                 else:
@@ -832,6 +893,8 @@ EMOJI_FONTS = ("/System/Library/Fonts/Apple Color Emoji.ttc", "/usr/share/fonts/
                "C:/Windows/Fonts/seguiemj.ttf")
 EMOJI_SIZES = (109, 160, 96, 64, 48, 40, 32, 20)   # colour bitmap fonts load only at their own strike sizes
 SUPERSAMPLE = 2
+SHRINK_MIN = 0.9   # the PNG draws a label up to 10% smaller rather than cut it ("Gaming 2026" and "Gaming 2025" were
+                   # both drawn "Gaming…" when the real font was 0.3% wider than the estimate)
 
 
 class _Fonts:
@@ -967,7 +1030,10 @@ def _png_text(img, draw, fonts, op, color, ss, raqm):
 
     total = width(pieces)
     maxw = op.get("maxw")
-    if maxw and total > maxw * ss and op["s"] != "…":   # the real font is wider than the estimate: cut again
+    if maxw and total > maxw * ss and total * SHRINK_MIN <= maxw * ss:   # a hair wider than the estimate: a slightly
+        return _png_text(img, draw, fonts, dict(op, size=size * maxw * ss / total * 0.995, maxw=None),  # smaller size
+                         color, ss, raqm)                                                   # keeps the whole label
+    if maxw and total > maxw * ss and op["s"] != "…":   # the real font is much wider than the estimate: cut again
         def m(x):
             return width([("text", x, fonts.main or "", False)]) / ss
         op = dict(op, s=cut(op["s"], maxw, size, measure=m), maxw=None)
@@ -1056,7 +1122,7 @@ def _png(spec, theme, scale, width):
                     draw.rounded_rectangle(box, radius=r, fill=c[s["role"]], corners=corners)
                 else:
                     draw.rectangle(box, fill=c[s["role"]])
-            for s in segs[1:]:
+            for s in (segs[1:] if op.get("gaps") else []):
                 if op["dir"] == "h":
                     gx = R(op["x"] + s["off"] - GAP / 2)
                     draw.rectangle([gx, R(op["y"]), gx + R(GAP) - 1, R(op["y"] + op["h"]) - 1], fill=c["surface"])
@@ -1068,7 +1134,7 @@ def _png(spec, theme, scale, width):
     if SUPERSAMPLE != 1:
         img = img.resize((int(round(W * scale)), int(round(L["h"] * scale))), resample=Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=False, compress_level=9)
+    img.save(buf, format="PNG", optimize=False, compress_level=6)   # 9 took half the time for 2-3% fewer bytes
     return buf.getvalue()
 
 
@@ -1106,6 +1172,9 @@ def _cells(r, top, parts_used, cells=TEXT_CELLS):
     order = sorted(range(len(raw)), key=lambda i: (-(raw[i][1] - k[i]), i))
     for i in order[:n - sum(k)]:
         k[i] += 1
+    # A part whose share rounds to no cell gets none: one cell is an eighth of the widest bar, so lifting 1 video of
+    # 46 to a cell would draw it as a fifth of its bar (tried in review and reverted). The picture shows it (MIN_PART) and the
+    # SVG's desc and describe() carry its number.
     return "".join(CELL[p] * m for (p, _), m in zip(ps, k)) + EMPTY_CELL * (cells - n)
 
 
@@ -1154,6 +1223,7 @@ def describe(spec):
             base["series"] = spec["series"][r["series"]]
         if r.get("href"):
             base["href"] = r["href"]
+        base["note"] = " ".join(r["note"].split()) if r.get("note") else None
         out.append(dict(base, part=None, value=r["value"], shown=fmt_value(r["value"], spec["unit"], lang),
                         of=cap, printed=True))
         for p in used:
