@@ -324,7 +324,7 @@ class ExecutorMixin:
         libs = [p["library"] for p in self.store.q("SELECT library FROM people")]
         # review fix X6: ai.py refuses a call whose worst case would pass the total, so spend settles just below it;
         # the room of one large call is kept, so that window reads as "the budget is used up", not "try again"
-        if llm.spent_total(libs) + config.TOTAL_CAP_MARGIN_USD >= config.TOTAL_CAP_USD:
+        if llm.cap_reached(libs):   # section 20: the OpenAI+Gemini cap, or the Claude cap while a Claude model is set
             return "total"
         if llm.spent_today(person["handle"], person["library"]) >= config.DAILY_CAP_USD:
             return "daily"

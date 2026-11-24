@@ -54,6 +54,33 @@ TOTAL_CAP_USD = float(os.environ.get("MVP_TOTAL_CAP_USD", "10.00"))    # whole b
 # review fix X6: more than the worst case of the largest single call (a full compose: about $0.03)
 TOTAL_CAP_MARGIN_USD = float(os.environ.get("MVP_TOTAL_CAP_MARGIN_USD", "0.05"))
 
+# ---------- Claude as the text model (DESIGN.md section 20) ----------
+# A model id starting with "claude-" (MVP_MODEL, MVP_JUDGE_MODEL, MVP_ERRAND_MODEL, or one call's model=) goes to
+# Anthropic; any other stays on OpenAI. Nothing here changes a default: with no claude- model set, nothing below is used.
+# Claude spend has its own total cap, counted from the ledger rows whose provider is "anthropic"; TOTAL_CAP_USD above
+# then counts only the other rows (OpenAI and Gemini). The per-person daily cap counts everything.
+CLAUDE_CAP_USD = float(os.environ.get("MVP_CLAUDE_CAP_USD", "10.00"))
+# "off" (default): the small form-filling calls run without thinking where the model allows it (latency under the
+# writer's 20 s deadline, and thinking would eat the max_tokens sized for the form); "adaptive": the model decides
+CLAUDE_THINKING = os.environ.get("MVP_CLAUDE_THINKING", "off").strip().lower()
+# output_config.effort when the caller names none ("" sends none: the model's own default, medium on Haiku and Opus 5.5)
+CLAUDE_EFFORT = os.environ.get("MVP_CLAUDE_EFFORT", "low").strip().lower()
+# the server-side fallback on a policy decline (Sonnet 5.5 and Opus 5.5; Haiku 5.5 has none). "0" turns it off.
+CLAUDE_FALLBACKS = os.environ.get("MVP_CLAUDE_FALLBACKS", "1") != "0"
+
+
+def is_claude(model):
+    """True for a model id that goes to Anthropic (it starts with "claude-")."""
+    return str(model or "").strip().lower().startswith("claude-")
+
+
+def claude_models():
+    """The Claude models the bot's own settings name (text model, judge, errand model), sorted; [] when none does.
+    The consent and "what leaves this computer" name Anthropic only when this is not empty."""
+    names = (MODEL, JUDGE_MODEL, os.environ.get("MVP_ERRAND_MODEL") or "")
+    return sorted({str(m).strip() for m in names if is_claude(m)})
+# ---------- end Claude ----------
+
 # ---------- outputs (DESIGN.md sections 6 and 11, slice 4) ----------
 # SMTP comes from the environment only, read when an email is sent (names only here; values are never printed).
 SMTP_ENV = ("MVP_SMTP_HOST", "MVP_SMTP_PORT", "MVP_SMTP_USER", "MVP_SMTP_PASSWORD", "MVP_SMTP_FROM")

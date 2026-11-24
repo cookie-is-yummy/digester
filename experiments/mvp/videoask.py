@@ -157,15 +157,17 @@ LEAVES = re.compile(
     r"^\W*(?:(?:so|ok|okay|hey)[\s,]+)?(?:"
     r"what\s+(?:data\s+|info(?:rmation)?\s+|stuff\s+)?(?:leaves|goes\s+out\s+of|gets\s+sent\s+(?:out\s+)?(?:from|of)|"
     r"is\s+sent\s+(?:out\s+)?(?:from|of))\s+(?:this|my|the|your)\s+(?:computer|mac|machine|laptop|server)"
-    r"|what\s+(?:do\s+you|does\s+the\s+bot)\s+send\s+(?:out\s+)?to\s+(?:google|openai|gemini|youtube|anyone|other\s+companies)"
+    r"|what\s+(?:do\s+you|does\s+the\s+bot)\s+send\s+(?:out\s+)?to\s+(?:google|openai|gemini|anthropic|claude|youtube|anyone|other\s+companies)"
     r"|where\s+does\s+my\s+data\s+go"
     r"|who\s+(?:else\s+)?(?:sees|gets)\s+my\s+data"
     r")\W*$", re.I)
 
 
 def leaves_text():
+    # section 20: Anthropic is named while a Claude model is set (config.claude_models), and only then
+    who = "OpenAI and Anthropic (Claude)" if config.claude_models() else "OpenAI"
     lines = ["What leaves this computer when I work for you:",
-             "• OpenAI: your messages, the lines I keep about you, and the text of posts I consider (titles, captions, "
+             f"• {who}: your messages, the lines I keep about you, and the text of posts I consider (titles, captions, "
              "descriptions), to understand and answer you. Not used for training.",
              "• YouTube's official API: the ids of YouTube videos I show you (for their length and description) and, "
              "when you ask for new videos, search words from your message.",

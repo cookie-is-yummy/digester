@@ -21,6 +21,7 @@ from . import config
 LEDGER_HOME = os.path.abspath(os.environ.get("MVP_LEDGER_HOME", os.path.join(config.REPO, "data", "mvp")))
 os.environ["DIGESTER_DATA"] = LEDGER_HOME
 os.environ["DIGESTER_OPENAI_BUDGET_USD"] = str(config.TOTAL_CAP_USD)
+os.environ["DIGESTER_ANTHROPIC_BUDGET_USD"] = str(config.CLAUDE_CAP_USD)   # section 20: Claude has its own cap
 sys.path.insert(0, os.path.join(config.EXP, "lib"))
 import ai  # noqa: E402
 
@@ -66,11 +67,20 @@ def rows_naming(handle):
     return sum(1 for r in _rows(ai.LEDGER) if r.get("person") == handle)
 
 
+_run_lock = threading.Lock()
+_RUN = {"usd": 0.0}   # section 20: this process's spend, for MVP_RUN_MAX_USD (eval_models.py sets it per eval)
+
+
 def _log(row):
     row = dict(row)
     if getattr(_tl, "person", None):
         row["person"] = person_ref(_tl.person)
+    tag = os.environ.get("MVP_RUN_TAG")
+    if tag:   # section 20: eval_models.py finds its own rows (cost, latency) by this tag; unset in the bot
+        row["run"] = tag[:80]
     _tl.cost = getattr(_tl, "cost", 0.0) + (row.get("cost_usd") or 0.0)  # this thread's calls only
+    with _run_lock:
+        _RUN["usd"] += row.get("cost_usd") or 0.0
     _orig_log(row)
 
 
@@ -139,25 +149,89 @@ def started_at():
     return open(path).read().strip()
 
 
+CLAUDE = "anthropic"   # the ledger's provider name for Claude rows (section 20)
+
+
 def spent_total(libraries):
-    """Build-and-test spend: the MVP ledger plus the libraries' search calls since the MVP started."""
+    """Build-and-test spend on OpenAI and Gemini: the MVP ledger plus the libraries' search calls since the MVP
+    started. Section 20: Claude rows (provider "anthropic") have their own cap (spent_claude) and are not counted here."""
     since = started_at()
-    total = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER))
+    total = sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER) if r.get("provider") != CLAUDE)
     for lib in set(libraries):
-        total += sum(r.get("cost_usd", 0) for r in _lib_rows(lib) if str(r.get("at", "")) >= since)
+        total += sum(r.get("cost_usd", 0) for r in _lib_rows(lib) if str(r.get("at", "")) >= since
+                     and r.get("provider") != CLAUDE)
     return total
 
 
+def spent_claude():
+    """Section 20: Claude spend, from the MVP ledger's rows whose provider is "anthropic" (config.CLAUDE_CAP_USD)."""
+    return sum(r.get("cost_usd", 0) for r in _rows(ai.LEDGER) if r.get("provider") == CLAUDE)
+
+
+def cap_reached(libraries):
+    """The one place the total caps are read (section 20). "total": the OpenAI+Gemini spend is within the margin of
+    config.TOTAL_CAP_USD; "claude": a Claude model is set and its spend is within the margin of config.CLAUDE_CAP_USD.
+    None: room left. The per-person daily cap is spent_today's (it counts every provider)."""
+    if spent_total(libraries) + config.TOTAL_CAP_MARGIN_USD >= config.TOTAL_CAP_USD:
+        return "total"
+    if config.claude_models() and spent_claude() + config.TOTAL_CAP_MARGIN_USD >= config.CLAUDE_CAP_USD:
+        return "claude"
+    return None
+
+
+# ---------- section 20: the knobs a Claude call takes ----------
+EFFORT = {"none": "low", "minimal": "low", "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh",
+          "max": "max"}   # an OpenAI reasoning_effort, said as Claude's output_config.effort
+FALLBACK_MODELS = ("claude-sonnet-5-5", "claude-opus-5-5")   # Haiku 5.5 has no server-side fallback
+
+
+def claude_knobs(model, reasoning_effort=None):
+    """(thinking, effort, fallbacks) for one Claude call from the settings (config.CLAUDE_*) and the caller's
+    reasoning_effort (which wins over MVP_CLAUDE_EFFORT)."""
+    eff = reasoning_effort if reasoning_effort else (config.CLAUDE_EFFORT or None)
+    eff = EFFORT.get(str(eff).strip().lower()) if eff else None
+    mode = "adaptive" if config.CLAUDE_THINKING == "adaptive" else "off"
+    thinking, eff = ai.claude_thinking(model, mode, eff)
+    return thinking, eff, bool(config.CLAUDE_FALLBACKS and model in FALLBACK_MODELS)
+
+
+def _run_room(system, user, max_tokens, model):
+    """MVP_RUN_MAX_USD (set by eval_models.py for one eval): refuse a call whose worst case would pass it."""
+    cap = os.environ.get("MVP_RUN_MAX_USD")
+    if not cap:
+        return
+    est = estimate_usd(system, user, max_tokens, model)
+    with _run_lock:
+        spent = _RUN["usd"]
+    if spent + est > float(cap):
+        mark = os.environ.get("MVP_RUN_STOP_FILE")   # eval_models.py: the evaluation says "ceiling reached"
+        if mark:
+            with open(mark, "a", encoding="utf-8") as f:
+                f.write("refused\n")
+        raise RuntimeError(f"budget stop (run): spent ${spent:.3f} + est ${est:.3f} > ${float(cap):.2f}")
+
+
 def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=1200, temperature=None, seed=None,
-              model=None, reasoning_effort=None):
+              model=None, reasoning_effort=None, schema=None):
     """One JSON call. Returns (parsed, cost_usd). temperature and seed are sent only when given. Round 9, slice U:
     `model` names another priced model for one call (a measurement; config.MODEL otherwise), with its
-    `reasoning_effort` when given."""
+    `reasoning_effort` when given. Section 20: a model id starting with "claude-" goes to Anthropic (ai.py,
+    anthropic_chat_json), which takes no temperature or seed (both are left out and named in the ledger row);
+    `schema` (a JSON schema) is used there as structured output; the OpenAI path ignores it."""
     _tl.person, _tl.cost = person, 0.0
-    extra = {k: v for k, v in (("temperature", temperature), ("seed", seed), ("reasoning_effort", reasoning_effort))
-             if v is not None}
     model = model or config.MODEL
+    claude = config.is_claude(model)
     try:
+        _run_room(system, user, max_tokens, model)
+        if claude:
+            thinking, effort, fallbacks = claude_knobs(model, reasoning_effort)
+            dropped = [k for k, v in (("temperature", temperature), ("seed", seed)) if v is not None]
+            out, _ = ai.anthropic_chat_json(model, system, user, max_tokens=max_tokens, purpose=purpose,
+                                            prompt_version=prompt_version, schema=schema, thinking=thinking,
+                                            effort=effort, fallbacks=fallbacks, dropped=dropped)
+            return out, _tl.cost
+        extra = {k: v for k, v in (("temperature", temperature), ("seed", seed), ("reasoning_effort", reasoning_effort))
+                 if v is not None}
         out, _ = ai.openai_chat_json(model, system, user, max_tokens=max_tokens, purpose=purpose,
                                      prompt_version=prompt_version, **extra)
         return out, _tl.cost
@@ -165,7 +239,8 @@ def chat_json(system, user, purpose, prompt_version, person=None, max_tokens=120
         if _cut_after_send(e) and not _tl.cost:
             # review fix X4: we stopped waiting, but the request was sent and the server may finish and bill it. A
             # worst-case estimate is written, so both caps see it (ai.py logs only after a reply has come back)
-            _log({"provider": "openai", "model": model, "purpose": purpose, "prompt_version": prompt_version,
+            _log({"provider": CLAUDE if claude else "openai", "model": model, "purpose": purpose,
+                  "prompt_version": prompt_version,
                   "n": 1, "in_tokens": int((len(system) + len(user)) / 3.5), "out_tokens": max_tokens,
                   "cost_usd": estimate_usd(system, user, max_tokens, model), "estimated": True,
                   "error": type(e).__name__})
@@ -192,6 +267,10 @@ def _cut_after_send(e):
     import http.client
     import socket
     import urllib.error
+    if isinstance(e, ai.ClaudeConnection):   # section 20: the SDK's own errors, as ai.py turns them
+        return e.maybe_sent
+    if isinstance(e, (ai.ClaudeHTTPError, ai.MissingKey, ai.ClaudeStop)):
+        return False
     if isinstance(e, urllib.error.HTTPError):
         return False
     if isinstance(e, urllib.error.URLError):
@@ -202,3 +281,64 @@ def _cut_after_send(e):
         return False
     return isinstance(e, (TimeoutError, socket.timeout, ConnectionResetError, ConnectionAbortedError,
                           http.client.RemoteDisconnected, http.client.IncompleteRead))
+
+
+# ---------- section 20: `python3 -m mvp.llm smoke [model]` and `python3 -m mvp.llm path-test` ----------
+SMOKE_SYSTEM = "You fill in a small form. Answer with the form as JSON."
+SMOKE_USER = ('Form: {"sum": <the number>, "sky": "<one word>"}. Fill it in: "sum" is 2 + 3; "sky" is the colour of '
+              'a clear sky at noon.')
+
+
+def smoke(models=None, out=print):
+    """One tiny form call per Claude model (the configured ones, or `models`), through chat_json (so the ledger and
+    the caps see it). Prints model, seconds, tokens and cost per call; never the key. Returns 0 when every call came
+    back with the form filled, else 1; 2 when there is nothing to run or no key."""
+    import time
+    models = list(models or config.claude_models())
+    if not models:
+        out("No Claude model is set (MVP_MODEL, MVP_JUDGE_MODEL or MVP_ERRAND_MODEL). Name one: "
+            "python3 -m mvp.llm smoke claude-haiku-5-5")
+        return 2
+    bad = [m for m in models if not config.is_claude(m)]
+    if bad:
+        out(f"Not a Claude model: {', '.join(bad)}")
+        return 2
+    try:
+        name, _ = ai.anthropic_key()
+    except ai.MissingKey as e:
+        out(str(e))
+        return 2
+    out(f"key: from {name} (value not shown); base URL {ai.ANTHROPIC_URL}; ledger {ai.LEDGER}")
+    rc = 0
+    for m in models:
+        n0 = len(_rows(ai.LEDGER))
+        t0 = time.time()
+        try:
+            got, cost = chat_json(SMOKE_SYSTEM, SMOKE_USER, "mvp_smoke", "smoke_v1", max_tokens=300, model=m)
+            rows = _rows(ai.LEDGER)[n0:]
+            r = rows[-1] if rows else {}
+            ok = isinstance(got, dict) and str(got.get("sum")).strip() == "5" and bool(got.get("sky"))
+            out(f"{m}: {'ok' if ok else 'FORM WRONG'} {time.time() - t0:.2f} s, in {r.get('in_tokens')} out "
+                f"{r.get('out_tokens')} tokens, ${cost:.6f}"
+                + (f", served by {r['served_model']}" if r.get("served_model") else ""))
+            rc |= 0 if ok else 1
+        except Exception as e:  # noqa: BLE001 - our errors never hold the key or the reply's text
+            out(f"{m}: FAILED {time.time() - t0:.2f} s: {type(e).__name__}: {e}")
+            rc = 1
+    return rc
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["smoke"]:
+        return smoke(argv[1:] or None)
+    if argv[:1] == ["path-test"]:
+        r = ai.anthropic_path_test(*(argv[1:2] or []))
+        print(json.dumps(r))
+        return 0 if r["ok"] else 1
+    print("usage: python3 -m mvp.llm smoke [model ...] | python3 -m mvp.llm path-test")
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

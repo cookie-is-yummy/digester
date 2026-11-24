@@ -7,3 +7,5 @@ cryptography==50.0.1
 # round 10, slice V: the browser that cancels (browser_host.py, browser_vm.py); the version that matches the installed
 # Chromium (never run "playwright install" on a shared machine; MVP_CHROMIUM may name a binary)
 playwright==1.63.0
+# DESIGN section 20: Claude as the text model (lib/ai.py, anthropic_chat_json); only needed when a claude- model is set
+anthropic==2.13.0

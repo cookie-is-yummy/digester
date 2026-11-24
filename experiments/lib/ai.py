@@ -1,6 +1,7 @@
 """PROTOTYPE ONLY - every paid AI call in experiments goes through here.
 
-- Keys come from environment variables only: OPENAI_API_KEY, GEMINI_API_KEY. Never write, print or log them.
+- Keys come from environment variables only: OPENAI_API_KEY, GEMINI_API_KEY, and for Claude
+  DIGESTER_ANTHROPIC_API_KEY (then ANTHROPIC_API_KEY). Never write, print or log them.
 - Each call is logged to $DIGESTER_DATA/ai_runs.jsonl: provider, model, purpose, tokens, cost, seconds
   (AGENTS.md rule 11).
 - Hard budget per provider: a call is refused if that provider's spend so far, plus a worst-case
@@ -8,6 +9,7 @@
   processes and sessions. Caps:
     DIGESTER_OPENAI_BUDGET_USD  (default 4.00)
     DIGESTER_GEMINI_BUDGET_USD  (default 4.00)
+    DIGESTER_ANTHROPIC_BUDGET_USD  (default 4.00)
 - Prices come from lib/ai_prices.json. Check them against the provider's pricing page before the first
   paid run and record the date. A model with no price entry is refused.
 - Ledger costs are estimates from list prices. Compare them with the provider's billing page now and
@@ -16,6 +18,7 @@
 import base64
 import json
 import os
+import threading
 import time
 import urllib.request
 
@@ -102,6 +105,284 @@ def openai_chat_json(model, system, user, max_tokens=400, purpose="", prompt_ver
         row["cached_tokens"] = cached
     _log(row)
     return json.loads(r["choices"][0]["message"]["content"]), u
+
+
+# ---------------- Anthropic (Claude) ----------------
+# Text calls only, through the official SDK (`anthropic`, imported on the first Claude call, so the OpenAI and Gemini
+# paths work without it). The key is read from DIGESTER_ANTHROPIC_API_KEY, then ANTHROPIC_API_KEY, by name; it is
+# never printed, logged or put in an error. The client is built with an explicit base URL and the explicit key, so
+# nothing of the ambient ANTHROPIC_* settings (a base URL, an auth token, a profile, extra headers, the SDK's own
+# logging) reaches it. No retries (as the OpenAI path) and TIMEOUT per call. A refusal, a cut by max_tokens or a reply
+# with no JSON object raises ClaudeStop (a ValueError, as a JSON parse failure is on the OpenAI path), after the
+# call's row is in the ledger (it was billed).
+ANTHROPIC_URL = "https://api.anthropic.com"
+ANTHROPIC_KEY_NAMES = ("DIGESTER_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
+ANTHROPIC_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+# Ambient names the SDK would read while a client is built; they are hidden for that moment (a lock keeps two builds
+# from racing). The bot's own two key names are read here, never by the SDK.
+_SDK_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS",
+            "ANTHROPIC_PROFILE", "ANTHROPIC_CONFIG_DIR", "ANTHROPIC_WEBHOOK_SIGNING_KEY", "ANTHROPIC_IDENTITY_TOKEN",
+            "ANTHROPIC_IDENTITY_TOKEN_FILE", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_ORGANIZATION_ID",
+            "ANTHROPIC_SERVICE_ACCOUNT_ID", "ANTHROPIC_WORKSPACE_ID", "ANTHROPIC_LOG")
+JSON_LINE = "Reply with one JSON object only: no other text before or after it, no code fence."
+ANTHROPIC_CLIENT = None    # tests put a fake here (tests/fakes/fake_anthropic.py); None: the SDK client, built once
+ANTHROPIC_TRANSPORT = None  # tests: an httpx2 transport under the real SDK client (nothing leaves the process)
+_client_cache = {}
+_client_lock = threading.Lock()
+
+
+class MissingKey(RuntimeError):
+    """No Claude key in the environment. Never falls back to another provider."""
+
+
+class ClaudeStop(ValueError):
+    """The reply holds no usable JSON: a refusal, a cut by max_tokens, no text, or text that is not one JSON object.
+    `stop_reason` says which; the message never holds the reply's text."""
+
+    def __init__(self, stop_reason, detail=""):
+        self.stop_reason = stop_reason
+        super().__init__(f"claude stopped: {stop_reason}" + (f" ({detail})" if detail else ""))
+
+
+class ClaudeHTTPError(RuntimeError):
+    """The API answered with an error (nothing billed). Only the status, the error type and the host are kept."""
+
+    def __init__(self, status, kind, host):
+        self.status, self.kind, self.host = status, kind, host
+        super().__init__(f"anthropic http {status} {kind} from {host}")
+
+
+class ClaudeTimeout(TimeoutError):
+    """Sent, but no answer in TIMEOUT seconds: the server may still finish and bill it."""
+
+
+class ClaudeConnection(ConnectionError):
+    """No answer for a network reason. `maybe_sent` is False only when the connection was never made."""
+
+    def __init__(self, maybe_sent, kind):
+        self.maybe_sent = maybe_sent
+        super().__init__(f"anthropic connection failed: {kind}")
+
+
+def anthropic_key():
+    """(name, value) of the first of ANTHROPIC_KEY_NAMES that is set. Raises MissingKey naming both variables.
+    Read under the client lock: a client being built hides ANTHROPIC_API_KEY for a moment."""
+    with _client_lock:
+        found = [(n, (os.environ.get(n) or "").strip()) for n in ANTHROPIC_KEY_NAMES]
+    for name, v in found:
+        if v:
+            return name, v
+    raise MissingKey(f"no Claude key: set {ANTHROPIC_KEY_NAMES[0]} (or {ANTHROPIC_KEY_NAMES[1]}) in the environment "
+                     f"to use a claude- model; nothing was sent")
+
+
+def anthropic_client(key=None):
+    """The client for the key now in the environment (or `key`, for the path test: never cached): a fake when
+    ANTHROPIC_CLIENT is set, else the SDK's own."""
+    explicit = key is not None
+    if not explicit:
+        _name, key = anthropic_key()
+    if ANTHROPIC_CLIENT is not None:
+        return ANTHROPIC_CLIENT(api_key=key, base_url=ANTHROPIC_URL)
+    with _client_lock:
+        c = _client_cache.get("client")
+        if (c is not None and _client_cache.get("key") == key and not explicit
+                and _client_cache.get("transport") is ANTHROPIC_TRANSPORT):
+            return c
+        import logging
+        hidden = {n: os.environ.pop(n) for n in _SDK_ENV if n in os.environ}
+        try:
+            import anthropic
+            kw = {}
+            if ANTHROPIC_TRANSPORT is not None:   # tests: the real SDK over a fake transport (no network)
+                kw["http_client"] = anthropic.DefaultHttpxClient(transport=ANTHROPIC_TRANSPORT)
+            c = anthropic.Anthropic(api_key=key, base_url=ANTHROPIC_URL, max_retries=0, webhook_key="",
+                                    open_telemetry=False, **kw)
+        finally:
+            os.environ.update(hidden)
+        # the SDK reads ANTHROPIC_LOG once, at import: whatever it said, its request logs stay off here
+        for n in ("anthropic", "httpx2", "httpx", "httpcore"):
+            logging.getLogger(n).setLevel(logging.WARNING)
+        if not explicit:
+            _client_cache.update(client=c, key=key, transport=ANTHROPIC_TRANSPORT)
+        return c
+
+
+PATH_TEST_KEY = "invalid-key-for-path-test"
+
+
+def anthropic_path_test(model="claude-haiku-5-5"):
+    """One request with an obviously invalid key, through the same client the bot builds: an authentication error
+    from api.anthropic.com shows that DNS, the proxy, TLS and the base URL are right. Nothing is billed or logged.
+    Returns {"ok", "status", "kind", "host"} (ok: the answer was 401 authentication_error from that host)."""
+    client = anthropic_client(key=PATH_TEST_KEY)
+    try:
+        client.beta.messages.create(model=model, max_tokens=1, messages=[{"role": "user", "content": "ping"}],
+                                    timeout=30)
+    except Exception as e:  # noqa: BLE001
+        mine = _sdk_error(e) or e
+        if isinstance(mine, ClaudeHTTPError):
+            return {"ok": mine.status == 401 and mine.kind == "authentication_error"
+                    and mine.host == ANTHROPIC_URL.split("//")[1], "status": mine.status, "kind": mine.kind,
+                    "host": mine.host}
+        return {"ok": False, "status": None, "kind": type(mine).__name__, "host": None, "detail": str(mine)[:200]}
+    return {"ok": False, "status": 200, "kind": "accepted an invalid key", "host": None}
+
+
+def claude_thinking(model, mode, effort):
+    """(thinking, effort) to send. mode "adaptive": {"type": "adaptive"}. mode "off" (the default for the small form
+    calls): Haiku 5.5 takes {"type": "disabled"} and Sonnet 5.5 {"type": "between_tools"}, each only at effort high or
+    below (a higher effort is lowered to high); Opus 5.5 cannot turn thinking off, so nothing is sent and the effort
+    is the only control. None means "send no thinking field"."""
+    if mode == "adaptive":
+        return {"type": "adaptive"}, effort
+    off = {"claude-haiku-5-5": {"type": "disabled"}, "claude-sonnet-5-5": {"type": "between_tools"}}.get(model)
+    if off and effort in ("xhigh", "max"):
+        effort = "high"
+    return off, effort
+
+
+def claude_price(p, in_tokens):
+    """(input, output, cache read, cache write) per M tokens; a long-prompt rate card when the entry has one."""
+    long_ = p.get("long_prompt_over_tokens")
+    if long_ and in_tokens > long_:
+        li = p["long_input_per_m"]
+        return (li, p["long_output_per_m"], p.get("long_cache_read_per_m", 0.1 * li),
+                p.get("long_cache_write_per_m", 1.25 * li))
+    return (p["input_per_m"], p["output_per_m"], p.get("cache_read_per_m", 0.1 * p["input_per_m"]),
+            p.get("cache_write_per_m", 1.25 * p["input_per_m"]))
+
+
+def claude_cost(model, usage):
+    """Cost of one reply from its usage. With a server-side fallback, `usage.iterations` holds every attempt, each
+    priced at its own model (a model with no price entry at the requested model's price, marked in the row)."""
+    table = prices()
+    req = table[model]
+    its = [i for i in (_field(usage, "iterations") or []) if _field(i, "type") in ("message", "fallback_message")]
+    parts = its or [usage]
+    cost, assumed, served = 0.0, False, []
+    for it in parts:
+        m = _field(it, "model") or model
+        p = table.get(m)
+        if p is None or p.get("provider") != "anthropic":
+            p, assumed = req, True
+        tin = _field(it, "input_tokens") or 0
+        cr, cw = _field(it, "cache_read_input_tokens") or 0, _field(it, "cache_creation_input_tokens") or 0
+        pi, po, pr, pw = claude_price(p, tin + cr + cw)
+        cost += (tin * pi + (_field(it, "output_tokens") or 0) * po + cr * pr + cw * pw) / 1e6
+        served.append(m)
+    return cost, assumed, served
+
+
+def _field(o, k):
+    return o.get(k) if isinstance(o, dict) else getattr(o, k, None)
+
+
+def parse_json_object(text):
+    """The first complete JSON object of a reply, read strictly: only white space (or a ```json fence) may come before
+    it. Raises ClaudeStop("not_json") otherwise; anything after the object is ignored."""
+    t = (text or "").strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[1] if "\n" in t else ""
+    t = t.lstrip()
+    if not t.startswith("{"):
+        raise ClaudeStop("not_json", "no object at the start")
+    try:
+        obj, _end = json.JSONDecoder().raw_decode(t)
+    except ValueError:
+        raise ClaudeStop("not_json", "the object does not parse") from None
+    if not isinstance(obj, dict):
+        raise ClaudeStop("not_json", "not an object")
+    return obj
+
+
+def _sdk_error(e):
+    """The SDK's exception as one of ours, with nothing of the request (headers, key) or the reply's body text."""
+    import anthropic
+    if isinstance(e, anthropic.APIStatusError):
+        body = e.body if isinstance(e.body, dict) else {}
+        kind = ((body.get("error") or {}) if isinstance(body.get("error"), dict) else {}).get("type") or "error"
+        host = getattr(getattr(e.response, "request", None), "url", None)
+        return ClaudeHTTPError(e.status_code, str(kind)[:40], getattr(host, "host", "?"))
+    if isinstance(e, anthropic.APITimeoutError):
+        return ClaudeTimeout(f"no answer from {ANTHROPIC_URL} in {TIMEOUT} s")
+    if isinstance(e, anthropic.APIConnectionError):
+        cause = type(e.__cause__).__name__ if e.__cause__ is not None else "unknown"
+        return ClaudeConnection(cause not in ("ConnectError", "ConnectTimeout", "ProxyError"), cause)
+    return None
+
+
+def anthropic_chat_json(model, system, user, max_tokens=400, purpose="", prompt_version="", schema=None,
+                        thinking=None, effort=None, fallbacks=False, dropped=()):
+    """One Messages call that must return a JSON object. Returns (parsed_json, usage dict), as openai_chat_json.
+    schema: a JSON schema for structured outputs (output_config.format); without one the system prompt gains
+    JSON_LINE and the reply is read by parse_json_object. thinking / effort: sent as given (claude_thinking).
+    fallbacks: the server-side fallback ("default") on a policy decline (Sonnet 5.5 and Opus 5.5 only).
+    dropped: the caller's settings this API does not take (temperature, seed), named in the row."""
+    p = _guard("anthropic", model, (len(system) + len(user)) / 3.5, max_tokens)
+    if p.get("provider") != "anthropic":
+        raise RuntimeError(f"{model} is not a Claude model in lib/ai_prices.json")
+    client = anthropic_client()
+    oc = {}
+    if effort:
+        oc["effort"] = effort
+    if schema:
+        oc["format"] = {"type": "json_schema", "schema": schema}
+    body = {"model": model, "max_tokens": max_tokens, "system": system if schema else f"{system}\n\n{JSON_LINE}",
+            "messages": [{"role": "user", "content": user}]}
+    if oc:
+        body["output_config"] = oc
+    if thinking:
+        body["thinking"] = thinking
+    if fallbacks:
+        body["betas"] = [ANTHROPIC_FALLBACK_BETA]
+        body["fallbacks"] = "default"
+    t = time.time()
+    try:
+        r = client.beta.messages.create(**body, timeout=TIMEOUT)
+    except Exception as e:  # noqa: BLE001 - the SDK's errors become ours, without the request in them
+        mine = _sdk_error(e) if not isinstance(e, (ClaudeHTTPError, ClaudeTimeout, ClaudeConnection)) else e
+        if mine is None:
+            raise
+        raise mine from None
+    u = r.usage
+    cost, assumed, _served = claude_cost(model, u)
+    tin, tout = _field(u, "input_tokens") or 0, _field(u, "output_tokens") or 0
+    its = [i for i in (_field(u, "iterations") or []) if _field(i, "type") in ("message", "fallback_message")]
+    if its:   # every attempt's tokens (top-level usage covers only the one that answered)
+        tin = sum(_field(i, "input_tokens") or 0 for i in its)
+        tout = sum(_field(i, "output_tokens") or 0 for i in its)
+    row = {"provider": "anthropic", "model": model, "purpose": purpose, "prompt_version": prompt_version, "n": 1,
+           "in_tokens": tin, "out_tokens": tout, "cost_usd": cost, "seconds": round(time.time() - t, 2)}
+    parts = its or [u]
+    cr = sum(_field(i, "cache_read_input_tokens") or 0 for i in parts)
+    cw = sum(_field(i, "cache_creation_input_tokens") or 0 for i in parts)
+    if cr:
+        row["cache_read_tokens"] = cr
+    if cw:
+        row["cache_write_tokens"] = cw
+    if getattr(r, "model", model) != model:
+        row["served_model"] = r.model
+    if any(_field(i, "type") == "fallback_message" for i in its):
+        row["fallback"] = True
+    if assumed:
+        row["price_assumed"] = True
+    if r.stop_reason != "end_turn":
+        row["stop_reason"] = r.stop_reason
+    if dropped:
+        row["not_sent"] = sorted(dropped)
+    _log(row)
+    if r.stop_reason == "refusal":
+        cat = _field(getattr(r, "stop_details", None), "category")
+        raise ClaudeStop("refusal", f"category {cat}" if cat else "")
+    if r.stop_reason == "max_tokens":
+        raise ClaudeStop("max_tokens", f"max_tokens {max_tokens}")
+    text = "".join(_field(b, "text") or "" for b in r.content if _field(b, "type") == "text")
+    if not text.strip():
+        raise ClaudeStop("no_text", f"stop_reason {r.stop_reason}")
+    usage = {"input_tokens": tin, "output_tokens": tout, "cache_read_input_tokens": cr,
+             "cache_creation_input_tokens": cw}
+    return parse_json_object(text), usage
 
 
 # ---------------- Gemini ----------------

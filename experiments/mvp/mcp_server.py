@@ -227,7 +227,7 @@ class Agent:
             if kind is None:
                 raise Refused("kept_how is one of: save, collection, share_self, playlist, like, watch, view.")
         libs = [r["library"] for r in self.store.q("SELECT library FROM people")]
-        if llm.spent_total(libs) + config.TOTAL_CAP_MARGIN_USD >= config.TOTAL_CAP_USD \
+        if llm.cap_reached(libs) \
                 or llm.spent_today(person["handle"], person["library"]) >= config.DAILY_CAP_USD:
             e = Refused("Today's limit for searches is used up. Try again tomorrow.")
             e.status = "over_cap"

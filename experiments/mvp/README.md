@@ -19,6 +19,31 @@ sessions.
 4. `export OPENAI_API_KEY=...` in the terminal that runs the bot. Never put keys in files. Optional:
    `export YOUTUBE_API_KEY=...` for YouTube lengths and descriptions and for new picks from outside the saves.
 
+## Using a Claude model (DESIGN.md section 20; amendment A-020, Proposed; off by default)
+
+The text calls can go to Claude instead of OpenAI. Nothing changes until you set a Claude model.
+
+- The key: `export DIGESTER_ANTHROPIC_API_KEY=...` (or `ANTHROPIC_API_KEY`; the first one wins). Never in a file. The
+  bot reads only these two names; other `ANTHROPIC_*` settings on the machine are ignored.
+- The switch: a model name that starts with `claude-` goes to Anthropic. `MVP_MODEL=claude-haiku-5-5` moves every text
+  call; `MVP_JUDGE_MODEL` and `MVP_ERRAND_MODEL` move the judge and the errand form on their own. Models priced:
+  `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`.
+- Check it once the key is set (one tiny call per Claude model you set, well under a cent each; prints time, tokens
+  and cost, never the key): `python3 -m mvp.llm smoke` (or `python3 -m mvp.llm smoke claude-haiku-5-5`).
+  `python3 -m mvp.llm path-test` sends one call with a made-up key and costs nothing: it should say
+  `401 authentication_error` from `api.anthropic.com`.
+- Compare models on every prompt's evaluation before switching anything (live calls; set the shared ledger and cap):
+  `MVP_LEDGER_HOME=../data/mvp MVP_TOTAL_CAP_USD=30 python3 -m mvp.eval_models --models claude-haiku-5-5,gpt-5.4-mini
+  --out <folder outside git> [--max-usd 3]`. One table comes out: `<out>/comparison.md`. `--dry` runs it on fakes
+  ($0); `--list` shows every prompt and its evaluation.
+- Caps: Claude spend has its own total, `MVP_CLAUDE_CAP_USD` (default $10). `MVP_TOTAL_CAP_USD` then counts only
+  OpenAI and Gemini. The daily cap per person (`MVP_DAILY_CAP_USD`) counts all three.
+- Optional: `MVP_CLAUDE_THINKING=adaptive` (default `off`), `MVP_CLAUDE_EFFORT` (default `low`),
+  `MVP_CLAUDE_FALLBACKS=0` (Sonnet and Opus: no second model on a refusal).
+- What stays where it is: search words and the library's vectors stay on OpenAI (`text-embedding-3-large`), and
+  "ask the video" stays on Gemini. While a Claude model is set, the consent and "what leaves this computer" name
+  Anthropic too.
+
 ## Test it without a phone
 
 From `experiments/`:
