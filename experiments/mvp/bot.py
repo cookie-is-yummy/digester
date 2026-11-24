@@ -5,6 +5,7 @@
     python -m mvp.bot --channel mac          # iMessage through this Mac's Messages app (founders, build days)
     python -m mvp.bot --channel mac --self-chat +15551234567   # the same, tested alone: text your own number
     python -m mvp.bot --channel sendblue     # Sendblue webhook on 127.0.0.1:8787, behind a tunnel (testers)
+    python -m mvp.bot --channel photon       # Photon webhook on 127.0.0.1:8788, behind a tunnel (testers)
 
 Run from experiments/. People come from MVP_HOME/people.json: {"<handle>": {"name", "library", "timezone"}}.
 Keys only from the environment. Stop with Ctrl+C.
@@ -33,13 +34,16 @@ def make_channel(name, store, port, host="127.0.0.1", self_chat=None):
     if name == "sendblue":
         from .channels.sendblue import SendblueChannel
         return SendblueChannel(port=port or 8787)
+    if name == "photon":
+        from .channels.photon import PhotonChannel
+        return PhotonChannel(store, port=8788 if port is None else port)
     raise SystemExit(f"unknown channel {name}")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--channel", default="web", choices=["web", "console", "mac", "sendblue"])
-    ap.add_argument("--port", type=int, default=None, help="web: 8765 by default; sendblue: 8787")
+    ap.add_argument("--channel", default="web", choices=["web", "console", "mac", "sendblue", "photon"])
+    ap.add_argument("--port", type=int, default=None, help="web: 8765 by default; sendblue: 8787; photon: 8788")
     ap.add_argument("--host", default="127.0.0.1", help="web only: the address the test page listens on")
     ap.add_argument("--self-chat", default=None, metavar="HANDLE",
                     help="mac only: your own number or Apple Account email; text yourself and the bot answers there")

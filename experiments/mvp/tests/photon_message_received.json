@@ -1,0 +1,61 @@
+{
+ "id": "pho_evt_madeup01",
+ "apiVersion": "2026-07-01",
+ "type": "message.received",
+ "source": "imessage.photon",
+ "timestamp": "2026-11-21T10:00:00.000Z",
+ "data": {
+  "object": {
+   "content": {
+    "format": "plain",
+    "text": "hi",
+    "type": "text"
+   },
+   "createdAt": "2026-11-21T10:00:00.000Z",
+   "updatedAt": "2026-11-21T10:00:00.000Z",
+   "id": "pho_msg_madeup02",
+   "metadata": {
+    "transport": "imessage"
+   },
+   "platform": "imessage",
+   "projectId": "pho_prj_madeup03",
+   "receivedBy": {
+    "details": {
+     "type": "shared"
+    },
+    "handle": "+15559999",
+    "id": "pho_usr_madeup04",
+    "kind": "agent",
+    "metadata": {},
+    "platform": "imessage",
+    "projectId": "pho_prj_madeup03"
+   },
+   "sentBy": {
+    "details": {},
+    "handle": "+15550001",
+    "id": "pho_usr_madeup05",
+    "kind": "human",
+    "metadata": {},
+    "platform": "imessage",
+    "projectId": "pho_prj_madeup03"
+   },
+   "space": {
+    "details": {},
+    "id": "pho_spc_madeup06",
+    "kind": "direct",
+    "metadata": {},
+    "participantIds": [
+     "pho_usr_madeup05",
+     "pho_usr_madeup04"
+    ],
+    "platform": "imessage",
+    "projectId": "pho_prj_madeup03"
+   },
+   "status": "received",
+   "timestamps": {
+    "receivedAt": "2026-11-21T10:00:00.000Z"
+   }
+  },
+  "projectId": "pho_prj_madeup03"
+ }
+}

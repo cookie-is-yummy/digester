@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>digestr</title>
+<style nonce="__NONCE__">
+:root { --bg: #ffffff; --ink: #1f2322; --soft: #6f7472; --line: #d9dbd8; --mark: #dcebe2; --warn: #a23a26; --ok: #2f5d50; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #121413; --ink: #ecebe6; --soft: #9a9e9b; --line: #353a37; --mark: #24453a; --warn: #f0a394; --ok: #9fd0be; }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
+  font: 400 22px/1.32 "Iowan Old Style", "Palatino Linotype", Palatino, ui-serif, "New York", Georgia, serif;
+  letter-spacing: -.01em; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+@media (min-width: 720px) { body { font-size: 24px; line-height: 1.3; } }
+.sans { font: 400 13px/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; letter-spacing: 0; }
+header { display: flex; justify-content: space-between; align-items: flex-start; padding: max(32px, env(safe-area-inset-top)) 32px 0; }
+@media (min-width: 720px) { header { padding: 36px 36px 0; } }
+.mark { display: block; width: 34px; height: 72px; color: var(--ink); }
+header .sans { color: var(--ink); padding-top: 4px; }
+main { flex: 1; width: 100%; max-width: 728px; padding: 56px 32px 40px; }
+@media (min-width: 720px) { main { padding: 60px 36px 48px; } }
+main p { margin: 0 0 1.25em; text-wrap: pretty; }
+.lead { font-weight: 500; }
+h2 { font: inherit; font-weight: 500; margin: 0 0 .35em; text-wrap: balance; }
+.note { color: var(--soft); }
+section { margin-top: 2.1em; }
+#s0 { margin-top: 1.6em; }
+#s0 button { margin-top: 0; padding: 15px 26px; border-radius: 999px; background: #1f4a3d; color: #fff; text-decoration: none;
+  font: 600 17px/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; letter-spacing: 0; }
+#s0 button::after { content: "\2192"; }
+@media (prefers-color-scheme: dark) { #s0 button { background: #bfe3d2; color: #10201a; } }
+#pitch[hidden] + .sr + section, #pitch[hidden] ~ section { margin-top: 0; }
+#stepno { color: var(--soft); margin: 0 0 14px; }
+label.field { display: block; color: var(--soft); margin: 1.1em 0 0; }
+input[type=text], input[type=tel] { display: block; width: 100%; max-width: 420px; font: inherit; letter-spacing: inherit; color: var(--ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 6px 0 8px; outline: none;
+  -webkit-appearance: none; appearance: none; transition: border-color .15s; }
+input::placeholder { color: var(--line); opacity: 1; }
+input[type=text]:focus-visible, input[type=tel]:focus-visible { border-bottom-color: var(--ink); box-shadow: 0 1px 0 var(--ink); }
+.check { display: flex; gap: 12px; align-items: flex-start; margin: 1.5em 0 0; color: var(--ink); max-width: 520px; }
+.check input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--ink); flex: none; }
+details { margin: 14px 0 0; color: var(--soft); max-width: 560px; }
+summary { cursor: pointer; color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+  text-decoration-color: var(--line); list-style: none; display: inline-block; padding: 4px 0; }
+summary::-webkit-details-marker { display: none; }
+details ul { margin: 10px 0 0; padding-left: 18px; }
+details li { margin: 6px 0; }
+/* links that act: words with a soft mark under them and an arrow */
+button, a.btn { display: inline-block; font: inherit; font-weight: 500; letter-spacing: inherit; color: var(--ink); background: none; border: 0;
+  padding: 0; margin: 1.5em 0 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-thickness: 1px;
+  text-underline-offset: 4px; text-decoration-color: var(--ink); border-radius: 2px;
+  background-image: linear-gradient(var(--mark), var(--mark)); background-repeat: no-repeat; background-size: 100% .34em; background-position: 0 92%; }
+button::after, a.btn::after { content: "\203A"; display: inline-block; margin-left: .45em; text-decoration: none; transition: transform .15s; }
+button:hover::after, a.btn:hover::after { transform: translateX(3px); }
+button[disabled] { opacity: .45; cursor: default; }
+button.quiet { font: 400 13px/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; letter-spacing: 0;
+  color: var(--soft); background-image: none; text-decoration-color: var(--line); margin: 0; padding: 6px 0; }
+button.quiet::after { content: none; }
+button:focus-visible, a:focus-visible, summary:focus-visible, .drop:focus-visible, .check input:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.err { display: none; margin: 1.1em 0 0; color: var(--warn); max-width: 560px; }
+.err.show { display: block; }
+.code { font-size: 2.1em; line-height: 1.1; letter-spacing: .08em; font-weight: 500; font-variant-numeric: tabular-nums lining-nums; margin: .5em 0 0; user-select: all; }
+.num { color: var(--soft); margin: 1.2em 0 0; }
+.num b { color: var(--ink); font-weight: 500; user-select: all; white-space: nowrap; }
+.wait { display: flex; align-items: center; gap: 10px; color: var(--soft); margin: 22px 0 10px; }
+.spin { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--line); border-top-color: var(--ink); animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 4s; } * { transition: none !important; } }
+ol.how { margin: 0 0 1.2em; padding-left: 1.15em; }
+ol.how li { margin: .45em 0; padding-left: .2em; }
+ol.how b { font-weight: 500; }
+.drop { display: block; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 1em 0; cursor: pointer; max-width: 560px;
+  transition: border-color .15s, background-color .15s; }
+.drop.over { border-color: var(--ink); background: var(--mark); }
+.drop b { font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.drop span { display: block; color: var(--soft); margin-top: 4px; }
+.bar { height: 1px; background: var(--line); max-width: 560px; margin-top: 14px; display: none; }
+.bar.show { display: block; }
+.bar i { display: block; height: 100%; width: 0; background: var(--ink); box-shadow: 0 0 0 .5px var(--ink); transition: width .2s; }
+.ok { display: none; margin: 1.1em 0 0; color: var(--ok); max-width: 560px; }
+.ok.show { display: block; }
+footer { padding: 0 32px max(28px, env(safe-area-inset-bottom)); color: var(--ink); display: flex; flex-wrap: wrap; gap: 6px 24px; }
+@media (min-width: 720px) { footer { padding: 0 36px 32px; } }
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* ---------- the steps: one card in the middle of the page, boxed field, pill button ---------- */
+:root { --paper: #f3f5f0; --card: #ffffff; --accent: #1f4a3d; --accent-ink: #ffffff; --head: #17251f; --grey: #5f6763; --edge: #dde1da; --field: #f8f9f6; }
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #0f1412; --card: #171d1a; --accent: #bfe3d2; --accent-ink: #10201a; --head: #e9efea; --grey: #9aa39e; --edge: #2c3531; --field: #111714; }
+}
+body.steps { background: var(--paper); }
+body.steps header, body.steps footer { display: none; }
+body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
+@media (min-width: 720px) { body.steps main { padding-top: 16vh; } }
+.sheet { margin-top: 0; padding: 26px 22px 28px; background: var(--card); border: 1px solid var(--edge); border-radius: 24px;
+  box-shadow: 0 1px 2px rgba(20, 40, 30, .04), 0 12px 32px -18px rgba(20, 40, 30, .18); color: var(--grey); font: 400 17px/1.55 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; letter-spacing: 0; }
+@media (min-width: 720px) { .sheet { padding: 34px 36px 36px; } }
+.prog { display: flex; align-items: center; gap: 6px; margin: 0 0 26px; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--grey); }
+.prog i { width: 22px; height: 4px; border-radius: 4px; background: var(--edge); }
+.prog i.on { background: var(--accent); }
+.prog span { margin-left: 6px; }
+.sheet h2 { font: 650 27px/1.18 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; letter-spacing: -.02em;
+  color: var(--head); margin: 0 0 12px; }
+.sheet .sub { margin: 0 0 28px; color: var(--grey); }
+.sheet .box { display: flex; align-items: center; width: 100%; min-height: 60px; background: var(--field); border: 1px solid var(--edge);
+  border-radius: 14px; transition: border-color .15s, box-shadow .15s; }
+.sheet .box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.sheet .cc { display: flex; align-items: center; gap: 8px; padding: 0 14px 0 18px; margin-right: 14px; border-right: 1px solid var(--edge);
+  color: var(--head); align-self: stretch; }
+.sheet .flag { font-size: 22px; line-height: 1; }
+.sheet .box input { flex: 1; min-width: 0; max-width: none; height: 58px; padding: 0 16px 0 0; border: 0; box-shadow: none; background: transparent;
+  font: inherit; font-size: 17px; color: var(--head); }
+.sheet .box input::placeholder { color: color-mix(in srgb, var(--grey) 60%, transparent); }
+.sheet .box input:focus-visible { box-shadow: none; }
+.sheet button.primary, .sheet a.primary, .sheet button.secondary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 58px;
+  margin: 0; padding: 0 18px; border-radius: 999px; font: 600 17px/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif;
+  letter-spacing: 0; text-decoration: none; background-image: none; text-align: center; transition: opacity .15s, transform .08s; }
+.sheet button.primary, .sheet a.primary { background: var(--accent); color: var(--accent-ink); margin-top: 28px; }
+.sheet button.secondary { background: transparent; color: var(--head); border: 1px solid var(--edge); margin-top: 12px; }
+.sheet .primary::after, .sheet .secondary::after { content: none; }
+.sheet #b1::after { content: "\2192"; margin-left: .5em; }
+.sheet .primary:active, .sheet .secondary:active { transform: scale(.99); }
+.sheet button[disabled] { opacity: .55; }
+.sheet .primary:focus-visible, .sheet .secondary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.sheet .fine { margin: 26px 0 0; font-size: 16px; color: var(--grey); max-width: none; }
+.sheet .fine b { color: var(--head); font-weight: 600; user-select: all; white-space: nowrap; }
+.sheet details.fine { margin-top: 10px; }
+.sheet summary { color: var(--grey); text-decoration-color: currentColor; }
+.sheet details ul { padding-left: 20px; }
+.sheet button.quiet { font: inherit; color: var(--grey); text-decoration-color: currentColor; padding: 0; }
+.sheet .err { margin: 12px 0 0; color: var(--warn); font-size: 15px; max-width: none; }
+.sheet .ok { margin: 14px 0 0; font-size: 16px; max-width: none; }
+.sheet .code { justify-content: center; font: 600 30px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .16em; color: var(--head);
+  min-height: 76px; margin: 0; user-select: all; }
+.sheet .wait { margin: 26px 0 0; font-size: 15px; color: var(--grey); }
+.sheet .spin { border-top-color: var(--accent); }
+.sheet ol.how { margin: 0 0 22px; padding-left: 22px; }
+.sheet ol.how li { margin: 8px 0; }
+.sheet ol.how b { color: var(--head); font-weight: 600; }
+.sheet .drop { flex-direction: column; justify-content: center; gap: 2px; min-height: 96px; padding: 18px; border-style: dashed; text-align: center; cursor: pointer; max-width: none; }
+.sheet .drop b { color: var(--head); font-weight: 600; text-decoration: none; }
+.sheet .drop span { margin: 0; font-size: 15px; color: var(--grey); }
+.sheet .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--field)); }
+.sheet .bar { max-width: none; height: 4px; border-radius: 4px; overflow: hidden; }
+.sheet .bar i { background: var(--accent); box-shadow: none; }
+</style>
+</head>
+<body>
+<header>
+  <svg class="mark" viewBox="0 0 34 72" role="img" aria-label="digestr" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 6.5c5.5-2.4 12.800-1.200 15.600 3.100 2.600 4-.4 9.300-6.100 10.400-5.800 1.100-11.700-1.300-12.900-5.700-.9-3.300 .7-6.300 3.400-7.800z" stroke-width="2.6"/>
+    <path d="M7.500 30.500h19" stroke-width="2.400"/>
+    <path d="M7.500 41h13.500" stroke-width="2.400"/>
+    <path d="M7.500 51.500h17" stroke-width="2.400"/>
+    <path d="M8 63.500l4.600 4.300 9.800-9.600" stroke-width="2.600"/>
+  </svg>
+  <span class="sans">Private test · by invitation</span>
+</header>
+<main>
+  <div id="pitch">
+  <p class="lead">digestr turns what you save and watch into things you actually do.</p>
+  <p>There is nothing to install. You text one number, and it answers from your own saved posts.</p>
+  <p>It can find that recipe you saved in spring, remind you the night before something you meant to go to, keep the places you want to try, or tell you what you've been into lately.</p>
+  </div>
+
+  <p class="sr" id="live" aria-live="polite"></p>
+
+  <section id="s-closed" hidden>
+    <h2>This test is by invitation.</h2>
+    <p class="note">Open the link you were sent, exactly as it was sent. If you still see this, ask the person who invited you for a new one.</p>
+  </section>
+
+  <section id="s0" hidden>
+    <h2 class="sr">Get started</h2>
+    <button id="go" type="button">Get started</button>
+  </section>
+
+  <section id="s1" class="sheet" hidden>
+    <div class="prog"><i class="on"></i><i></i><i></i><span>Step 1 of 3</span></div>
+    <h2>Sign up for digestr</h2>
+    <p class="sub">Your number is your account. There's no password.</p>
+    <form id="f1" novalidate>
+      <label class="sr" for="phone">Mobile number</label>
+      <div class="box">
+        <span class="cc" aria-hidden="true"><span class="flag">🇺🇸</span>+1</span>
+        <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(555) 000-0000" maxlength="24" required>
+      </div>
+      <div class="err" id="e1" role="alert"></div>
+      <button class="primary" id="b1" type="submit">Continue</button>
+    </form>
+    <p class="fine">By clicking "Continue", I confirm I'm 18 or over and agree to what's described below.</p>
+    <details class="fine">
+      <summary>What you're sharing</summary>
+      <ul>
+        <li>Your number and the messages you send the bot. They are stored on the test organiser's own computer so the bot works.</li>
+        <li>Your messages travel through Photon, the service that carries the texts.</li>
+        <li>Your requests, and the captions of posts the bot considers for an answer, go to OpenAI to be understood. OpenAI says this is not used for training.</li>
+        <li>If you add an Instagram export: only saved posts, likes and who you follow are read. Message folders are never opened, and posts by people you follow back are left out.</li>
+        <li>Text "delete my data" at any time and everything held about you is removed.</li>
+        <li>This is an early test run by people you know. It is not a finished product.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section id="s2" class="sheet" hidden>
+    <div class="prog"><i class="on"></i><i class="on"></i><i></i><span>Step 2 of 3</span></div>
+    <h2>Send one text so we know it's you</h2>
+    <p class="sub">Tap the button and press send. The code is already typed.</p>
+    <div class="box code" id="code" aria-label="Your code"></div>
+    <a class="btn primary" id="open" href="#">Open Messages</a>
+    <button class="secondary" id="copy" type="button">Copy number</button>
+    <p class="fine">Or text the code to <b id="bot"></b> yourself.</p>
+    <div class="wait" id="waiting"><span class="spin" aria-hidden="true"></span><span>Waiting for your text…</span></div>
+    <div class="err" id="e2" role="alert"></div>
+    <p class="fine"><button class="quiet" id="back" type="button">Use a different number</button></p>
+  </section>
+
+  <section id="s3" class="sheet" hidden>
+    <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><span>Step 3 of 3</span></div>
+    <h2>You're in</h2>
+    <p class="sub">The bot has replied in your thread, so keep texting that number. To let it answer from your own saves, add your Instagram export, now or later.</p>
+    <ol class="how">
+      <li>Open <a id="ig" href="https://accountscenter.instagram.com/info_and_permissions/dyi/" target="_blank" rel="noopener noreferrer">Instagram's export page</a> and choose <b>Download or transfer information</b>.</li>
+      <li>Pick <b>Some of your information</b>: Saved, Likes, and Followers and following. Leave Messages unticked.</li>
+      <li>Choose <b>Download to device</b>, format <b>JSON</b>, date range <b>All time</b>.</li>
+      <li>When Instagram emails you the file, come back to this link and add it below.</li>
+    </ol>
+    <label class="box drop" id="drop" tabindex="0" for="file"><b>Choose your export</b><span>or drop the .zip here (up to __MAX_MB__ MB)</span></label>
+    <input class="sr" id="file" type="file" accept=".zip,application/zip">
+    <div class="bar" id="bar"><i id="fill"></i></div>
+    <div class="ok" id="ok" role="status"></div>
+    <div class="err" id="e3" role="alert"></div>
+  </section>
+</main>
+<footer class="sans"><span>Private test</span><span>Nothing here is shared or sold</span><span>Text "delete my data" at any time</span></footer>
+<script nonce="__NONCE__">
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const MAX_MB = Number("__MAX_MB__");
+  const invite = new URLSearchParams(location.hash.slice(1)).get("invite") || "";
+  const KEY = "digestr-signup";
+  const WORDS = {
+    invite: "This link isn't valid any more. Ask for a new invite.",
+    phone: "That doesn't look like a mobile number. Include the area code, or start with + and your country code.",
+    full: "The test is full for now. Ask the person who invited you.",
+    ask_founder: "This number asked for its data to be deleted. Ask the person who invited you to add it again.",
+    slow_down: "Too many tries. Wait a few minutes and try again.",
+    try_later: "Something went wrong on our side. Please try again in a minute.",
+    claim: "That took a while, so the code expired. Please start again.",
+    ticket: "Please verify your number again to add a file.",
+    too_big: "That file is over " + MAX_MB + " MB. In Instagram, pick only Saved, Likes, and Followers and following, in JSON.",
+    html: "That export is in HTML format. Request it again and choose JSON.",
+    not_export: "That isn't an Instagram export. Choose the .zip Instagram emailed you.",
+    cut_off: "The upload was interrupted. Please try again.",
+    length: "The upload was interrupted. Please try again.",
+    body: "Something went wrong. Please try again.",
+    offline: "You seem to be offline. Check your connection and try again.",
+  };
+  let state = null, timer = null;
+  const say = (text) => { $("live").textContent = text; };
+  const fail = (el, code) => { el.textContent = WORDS[code] || WORDS.try_later; el.classList.add("show"); say(el.textContent); };
+  const clear = (el) => { el.textContent = ""; el.classList.remove("show"); };
+  const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* private mode */ } };
+  const forget = () => { state = null; try { sessionStorage.removeItem(KEY); } catch (e) { /* private mode */ } };
+
+  function show(step) {
+    for (const id of ["s-closed", "s0", "s1", "s2", "s3"]) $(id).hidden = id !== step;
+    $("pitch").hidden = step !== "s0" && step !== "s-closed";   // the words first; the steps on a page of their own
+    window.scrollTo(0, 0);
+    document.body.classList.toggle("steps", step === "s1" || step === "s2" || step === "s3");
+    const first = $(step).querySelector("input:not([type=checkbox]):not([type=file]), a.btn");
+    if (first && step !== "s3") first.focus({ preventScroll: true });
+    say($(step).querySelector("h2").textContent);
+  }
+
+  async function post(path, body) {
+    let res;
+    try {
+      res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(Object.assign({ invite }, body)), cache: "no-store" });
+    } catch (e) { throw new Error("offline"); }
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* not JSON */ }
+    if (!res.ok) throw new Error(data.error || "try_later");
+    return data;
+  }
+
+  function pretty(e164) {
+    const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
+    return m ? "+1 (" + m[1] + ") " + m[2] + "-" + m[3] : e164;
+  }
+
+  function verifyStep() {
+    $("code").textContent = state.code;
+    $("bot").textContent = pretty(state.botNumber);
+    const text = encodeURIComponent("Hi digestr " + state.code);
+    const android = /android/i.test(navigator.userAgent);
+    $("open").href = "sms:" + state.botNumber + (android ? "?" : "&") + "body=" + text;
+    clear($("e2"));
+    $("waiting").hidden = false;
+    show("s2");
+    poll();
+  }
+
+  function poll() {
+    clearTimeout(timer);
+    if (!state || state.ticket) return;
+    timer = setTimeout(async () => {
+      try {
+        const r = await post("/api/status", { claim: state.claim, secret: state.secret });
+        if (r.verified) { state.ticket = r.ticket; save(); return show("s3"); }
+      } catch (e) {
+        if (e.message === "claim" || e.message === "invite") { forget(); clearTimeout(timer); $("waiting").hidden = true; fail($("e2"), e.message); return; }
+      }
+      poll();
+    }, 2000);
+  }
+
+  $("f1").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    clear($("e1"));
+    const phone = $("phone").value.trim();
+    if (phone.replace(/\D/g, "").length < 10) { $("phone").focus(); return fail($("e1"), "phone"); }
+    $("b1").disabled = true; $("b1").textContent = "One moment…";
+    try {
+      let timezone = "";
+      try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { /* default on the server */ }
+      state = await post("/api/start", { phone, timezone });
+      save();
+      verifyStep();
+    } catch (e) { fail($("e1"), e.message); }
+    $("b1").disabled = false; $("b1").textContent = "Continue";
+  });
+
+  $("back").addEventListener("click", () => { clearTimeout(timer); forget(); show("s1"); });
+  $("go").addEventListener("click", () => show("s1"));
+  $("copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(state.botNumber); $("copy").textContent = "Copied"; }
+    catch (e) { $("copy").textContent = "Press and hold the number"; }
+    setTimeout(() => { $("copy").textContent = "Copy number"; }, 2500);
+  });
+
+  function upload(file) {
+    clear($("e3")); $("ok").classList.remove("show");
+    if (!file) return;
+    if (!/\.zip$/i.test(file.name)) return fail($("e3"), "not_export");
+    if (file.size > MAX_MB * 1048576) return fail($("e3"), "too_big");
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/upload");
+    xhr.setRequestHeader("X-Invite", invite);
+    xhr.setRequestHeader("X-Ticket", state.ticket);
+    xhr.setRequestHeader("X-Filename", file.name.replace(/[^\w.\- ]+/g, "_").slice(0, 120));
+    xhr.setRequestHeader("Content-Type", "application/zip");
+    $("bar").classList.add("show"); $("fill").style.width = "0";
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) $("fill").style.width = Math.round(100 * e.loaded / e.total) + "%"; };
+    xhr.onerror = () => { $("bar").classList.remove("show"); fail($("e3"), "offline"); };
+    xhr.onload = () => {
+      $("bar").classList.remove("show");
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ }
+      if (xhr.status === 200 && data.ok) {
+        $("ok").textContent = "Got it. The bot will text you when it has been added, usually within a few minutes.";
+        $("ok").classList.add("show"); say($("ok").textContent);
+      } else {
+        if (data.error === "ticket") { forget(); }
+        fail($("e3"), data.error || (xhr.status === 413 ? "too_big" : "try_later"));
+      }
+    };
+    xhr.send(file);
+  }
+  $("file").addEventListener("change", () => { upload($("file").files[0]); $("file").value = ""; });
+  const drop = $("drop");
+  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+  for (const t of ["dragenter", "dragover"]) drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); });
+  for (const t of ["dragleave", "drop"]) drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); });
+  drop.addEventListener("drop", (e) => upload(e.dataTransfer.files[0]));
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => e.preventDefault());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && state && !state.ticket) poll(); });
+
+  if (invite.length < 16) return show("s-closed");
+  try { state = JSON.parse(sessionStorage.getItem(KEY) || "null"); } catch (e) { state = null; }
+  if (state && state.ticket) show("s3");
+  else if (state && state.claim) verifyStep();
+  else show("s0");
+})();
+</script>
+</body>
+</html>
