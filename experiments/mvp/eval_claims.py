@@ -31,6 +31,22 @@ The audit, per answer:
    (ratio), "peaked / more than in any other <span>" (every span of that length, sliding by a month), "new" (absent
    before by the floor), "every year" (each year), "from X to Y" (both values and the direction).
 4. A summary with codes only (no title, channel, theme or area name is printed: names become T12, A3, C5f2a).
+
+Pass 6 (the hand check of build 7a689e2 found 5 must-fix sentences the audit had missed, and 38 false flags):
+- reads: a calendar month and the month before it; a follow-up's window through its chain of messages; a topic row's
+  full themes (its top themes when the row is cut at 4); "new" and a count bound to their own clause; "<channel> led
+  <topic>" ranked inside the topic; a chart's labels by its caption ("by area"); a year outside the window.
+- classes: a first or last by its INSTANT (the sentence's channel and theme, the first card, the cards' order, a date
+  with no object); a share after "Inside <record>" with no base (read as of the record); a count of the whole scope
+  recounted under the filters its own words say; a change of two values of one measure (no share against a count,
+  no lone value); a move in points recounted, and under 3 points reported; "of your long videos" as the videos KNOWN
+  to be long; a usual day on the base of the day's own share; "you saved N" against every video saved; one fact in
+  two sentences; a chart row of 90% or more first, or of 0%; a bar within half a point of its share; "the gap" where
+  the ratio and the difference move apart; limits said as a sentence; a narrow topic's themes whose items do not say
+  its word; a channel named whose card is hidden; more than two base phrasings; "shorts" without its capital.
+- eval_claims_allow.json is read: a mismatch of an allowed shape is marked `allowed` and listed apart.
+- `python3 -m mvp.eval_claims planted` runs eval/claims_planted.json (a made-up record; a defect and a clean answer
+  per item): every defect flagged with its kind, nothing flagged on a clean answer.
 """
 import argparse
 import bisect
@@ -1879,11 +1895,16 @@ class TextAudit:
             t2 = re.sub(r"\b\d+ (?:weeks?|months?|days?|years?|hours?|minutes?|min|times)\b", " ", t2)
             vals = [(float(x.replace(",", "")), unit.strip()) for x, unit in
                     re.findall(r"(\d[\d,]*(?:\.\d+)?)(\s?%|\s?points?\b)?", t2)]
-            if not vals:
-                continue
             subj = [sp for sp in spans if c0 <= sp[0] and sp[1] <= c0 + v.start()]
             rec = subj[-1][2] if subj else None
             where = ent_code(rec) if rec else ""
+            if not vals:
+                # "while music slipped": a change said with no value at all (X5: two values, or it is not said);
+                # "has faded: 12 in 2026 ..., against 131 in 2023" says its values after the colon
+                if not cl.rstrip().endswith(":"):
+                    self.F.add("word", "change with no value", False, v.group(1), "two values of one measure",
+                               where=where, severity=0.5)
+                continue
             pts = [x for x, u in vals if u.startswith("point")]
             if pts:
                 for x in pts:
@@ -2285,7 +2306,7 @@ NAME_RATE_FLOOR = 0.25   # my reading of 19.P2's T8: a theme is a narrow topic's
 
 
 def audit_topic_mapping(ctx, F):
-    """pass 6 (X12): a narrow topic word ("origami") takes a theme only when a measured share of that theme's own
+    """pass 6 (X12): a narrow topic word ("quilling") takes a theme only when a measured share of that theme's own
     items say the word (an area word, "gaming", takes its area's themes). The mapping is the sheet's, recounted."""
     lib = ctx.lib
     sh = ctx.sheet
