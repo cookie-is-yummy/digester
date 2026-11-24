@@ -202,11 +202,18 @@ def v5_scores():
         # round 12, pass 4 (V1): a case "as": "sent" reads each sentence as a bullet and as it is sent (the layout's
         # base words included): a planted one is caught when it is dropped or goes out without its false words
         # ("bad", a pattern); a true one is kept, with its "good" words when it gives them
-        as_sent = x.get("as") == "sent"
+        as_sent = x.get("as") in ("sent", "gated")
+        # round 12, pass 6: a case "as": "gated" reads each sentence as it is sent through the gate as well (the
+        # words code puts right on every sentence, whoever wrote it: a count's noun, a base, "Shorts"), with the
+        # answer's own base said before it ("opened_said")
+        gated = x.get("as") == "gated"
 
         def sent(t):
             f = I.check({"answer": "-", "observations": [{"text": t, "uses": []}]}, s, strict=True)
-            return I.scoped(f["observations"][0], s) if f["observations"] else None
+            out_ = I.scoped(f["observations"][0], s) if f["observations"] else None
+            if out_ is not None and gated:
+                out_, _why = I.gate_sentence(out_, s, I._gate_names(I.shown(s)), {"opened_said": True})
+            return out_
 
         def kept(t, bad=None, good=None):
             if as_sent:

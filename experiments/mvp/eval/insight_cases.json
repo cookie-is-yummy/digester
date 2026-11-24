@@ -3936,6 +3936,89 @@
       "why": "base"
      }
     ]
+   },
+   {
+    "case": "p6_top",
+    "as": "gated",
+    "about": "round 12, pass 6: the hand check's classes, each worded by code",
+    "true": [
+     {
+      "text": "Inside {areas[0].name}: {themes[1].name} at {themes[1].share} of what you opened.",
+      "good": "9% of what you opened"
+     },
+     {
+      "text": "Shorts rose from {previous.shorts_share} to {totals.shorts_share}.",
+      "good": "of your YouTube videos"
+     },
+     {
+      "text": "{themes[1].name} climbed to {themes[1].share} from {themes[1].previous_share} against {previous.words}.",
+      "good": "from 3%"
+     },
+     {
+      "text": "You have {library.saved_not_opened[0].n} {library.saved_not_opened[0].theme} videos you saved and never opened.",
+      "good": "you saved and never opened"
+     }
+    ],
+    "plants": [
+     {
+      "text": "Inside {areas[0].name}: {themes[1].name} at {themes[1].share}.",
+      "bad": "at 9%\\.$",
+      "why": "inside_base"
+     },
+     {
+      "text": "Your shorts share rose from {previous.shorts_share} to {totals.shorts_share}.",
+      "bad": "from 68% to|shorts share",
+      "why": "shorts_base"
+     },
+     {
+      "text": "{themes[1].name} climbed to {themes[1].share} from {themes[1].previous_items} videos before.",
+      "bad": "from \\d+ videos",
+      "why": "mixed_change"
+     },
+     {
+      "text": "{themes[3].name} faded from {themes[3].previous_items}.",
+      "bad": "faded from \\d+\\.$",
+      "why": "one_value"
+     },
+     {
+      "text": "{areas[1].name} slipped by {areas[1].change_vs_previous}.",
+      "bad": "slipped",
+      "why": "small_move"
+     },
+     {
+      "text": "You saved {library.saved_not_opened[0].n} {library.saved_not_opened[0].theme} videos.",
+      "bad": "^You saved 5",
+      "why": "saved_count"
+     },
+     {
+      "text": "The gap between {areas[0].name} and {areas[1].name} has narrowed.",
+      "bad": "gap",
+      "why": "gap_words"
+     }
+    ]
+   },
+   {
+    "case": "p6_music_long",
+    "as": "gated",
+    "about": "round 12, pass 6 (X4): a count names every filter in force",
+    "true": [
+     {
+      "text": "You opened {totals.long} long music videos.",
+      "good": "431 long music videos"
+     }
+    ],
+    "plants": [
+     {
+      "text": "You opened {totals.long} long videos.",
+      "bad": "431 long videos",
+      "why": "count_subject"
+     },
+     {
+      "text": "You opened {totals.items} videos.",
+      "bad": "431 videos\\b",
+      "why": "count_subject"
+     }
+    ]
    }
   ],
   "sheets": {
@@ -4278,6 +4361,423 @@
      }
     ],
     "offers": []
+   },
+   "p6_top": {
+    "question": "what have i been watching the most lately",
+    "kind": "top",
+    "lang": "en",
+    "filters": {
+     "topic": null,
+     "without_shorts": false
+    },
+    "window": {
+     "words": "In the 4 weeks up to 30 October 2026, where your export ends",
+     "start": "2026-10-03",
+     "end": "2026-10-30",
+     "clipped": true
+    },
+    "totals": {
+     "items": 1000,
+     "days_active": 28,
+     "shorts": 700,
+     "long": 250,
+     "shorts_share": 0.737,
+     "long_median_min": 23
+    },
+    "previous": {
+     "items": 900,
+     "days_active": 28,
+     "shorts": 600,
+     "long": 280,
+     "shorts_share": 0.682,
+     "words": "the 4 weeks before (5 September to 2 October 2026)"
+    },
+    "areas": [
+     {
+      "name": "gaming",
+      "items": 220,
+      "share": 0.22,
+      "previous_share": 0.12,
+      "change_vs_previous": 0.1,
+      "themes": [
+       {
+        "name": "Speed runs",
+        "share": 0.05
+       },
+       {
+        "name": "Block battles",
+        "share": 0.049
+       }
+      ]
+     },
+     {
+      "name": "comedy",
+      "items": 110,
+      "share": 0.11,
+      "previous_share": 0.14,
+      "change_vs_previous": -0.02,
+      "themes": [
+       {
+        "name": "Sketch edits",
+        "share": 0.035
+       }
+      ]
+     },
+     {
+      "name": "internet culture",
+      "items": 93,
+      "share": 0.093,
+      "previous_share": 0.09,
+      "change_vs_previous": 0.003,
+      "themes": [
+       {
+        "name": "Meme drops",
+        "share": 0.065
+       }
+      ]
+     },
+     {
+      "name": "sports",
+      "items": 86,
+      "share": 0.086,
+      "previous_share": 0.16,
+      "change_vs_previous": -0.074,
+      "themes": [
+       {
+        "name": "Trick shots",
+        "share": 0.036
+       }
+      ]
+     }
+    ],
+    "themes": [
+     {
+      "name": "Meme drops",
+      "area": "internet culture",
+      "items": 65,
+      "share": 0.065,
+      "previous_share": 0.05,
+      "previous_items": 45,
+      "change_vs_previous": 0.015,
+      "shorts_share": 0.69,
+      "days": 20,
+      "channels": [
+       {
+        "name": "Meme Vault",
+        "items": 20
+       }
+      ]
+     },
+     {
+      "name": "Speed runs",
+      "area": "gaming",
+      "items": 50,
+      "share": 0.09,
+      "previous_share": 0.03,
+      "previous_items": 27,
+      "change_vs_previous": 0.06,
+      "shorts_share": 0.4,
+      "days": 18,
+      "channels": [
+       {
+        "name": "Pixel Forge",
+        "items": 30
+       }
+      ]
+     },
+     {
+      "name": "Block battles",
+      "area": "gaming",
+      "items": 49,
+      "share": 0.049,
+      "previous_share": 0.05,
+      "previous_items": 45,
+      "change_vs_previous": -0.001,
+      "shorts_share": 0.5,
+      "days": 17,
+      "channels": [
+       {
+        "name": "Doggo Plays",
+        "items": 17
+       }
+      ]
+     },
+     {
+      "name": "Sketch edits",
+      "area": "comedy",
+      "items": 35,
+      "share": 0.02,
+      "previous_share": 0.07,
+      "previous_items": 63,
+      "change_vs_previous": -0.05,
+      "shorts_share": 0.97,
+      "days": 15,
+      "channels": [
+       {
+        "name": "Laugh Lab",
+        "items": 12
+       }
+      ]
+     }
+    ],
+    "channels": [
+     {
+      "name": "Pixel Forge",
+      "items": 30,
+      "days": 12,
+      "share": 0.03,
+      "area": "gaming",
+      "theme": "Speed runs",
+      "theme_share": 0.9,
+      "shorts_share": 0.95,
+      "previous_items": 20
+     },
+     {
+      "name": "Doggo Plays",
+      "items": 17,
+      "days": 9,
+      "share": 0.017,
+      "area": "gaming",
+      "theme": "Block battles",
+      "theme_share": 1.0,
+      "shorts_share": 0.29,
+      "previous_items": 15
+     }
+    ],
+    "when": {
+     "busiest_hours": [
+      {
+       "hour": 21,
+       "share": 0.12
+      }
+     ]
+    },
+    "new": {
+     "themes": [],
+     "channels": []
+    },
+    "stopped": {
+     "themes": [],
+     "channels": []
+    },
+    "library": {
+     "saved_not_opened": [
+      {
+       "theme": "Speed runs",
+       "n": 5
+      }
+     ]
+    },
+    "so_what_candidates": [],
+    "offers": [
+     "without_shorts"
+    ]
+   },
+   "p6_music_long": {
+    "question": "what have i been watching the most lately",
+    "kind": "top",
+    "lang": "en",
+    "filters": {
+     "topic": "music",
+     "without_shorts": true
+    },
+    "window": {
+     "words": "In the 4 weeks up to 30 October 2026, where your export ends",
+     "start": "2026-10-03",
+     "end": "2026-10-30",
+     "clipped": true
+    },
+    "totals": {
+     "items": 431,
+     "days_active": 28,
+     "shorts": 0,
+     "long": 431,
+     "shorts_share": 0.737,
+     "long_median_min": 23
+    },
+    "previous": {
+     "items": 900,
+     "days_active": 28,
+     "shorts": 600,
+     "long": 280,
+     "shorts_share": 0.682,
+     "words": "the 4 weeks before (5 September to 2 October 2026)"
+    },
+    "areas": [
+     {
+      "name": "gaming",
+      "items": 220,
+      "share": 0.22,
+      "previous_share": 0.12,
+      "change_vs_previous": 0.1,
+      "themes": [
+       {
+        "name": "Speed runs",
+        "share": 0.05
+       },
+       {
+        "name": "Block battles",
+        "share": 0.049
+       }
+      ]
+     },
+     {
+      "name": "comedy",
+      "items": 110,
+      "share": 0.11,
+      "previous_share": 0.14,
+      "change_vs_previous": -0.03,
+      "themes": [
+       {
+        "name": "Sketch edits",
+        "share": 0.035
+       }
+      ]
+     },
+     {
+      "name": "internet culture",
+      "items": 93,
+      "share": 0.093,
+      "previous_share": 0.09,
+      "change_vs_previous": 0.003,
+      "themes": [
+       {
+        "name": "Meme drops",
+        "share": 0.065
+       }
+      ]
+     },
+     {
+      "name": "sports",
+      "items": 86,
+      "share": 0.086,
+      "previous_share": 0.16,
+      "change_vs_previous": -0.074,
+      "themes": [
+       {
+        "name": "Trick shots",
+        "share": 0.036
+       }
+      ]
+     }
+    ],
+    "themes": [
+     {
+      "name": "Meme drops",
+      "area": "internet culture",
+      "items": 65,
+      "share": 0.065,
+      "previous_share": 0.05,
+      "previous_items": 45,
+      "change_vs_previous": 0.015,
+      "shorts_share": 0.69,
+      "days": 20,
+      "channels": [
+       {
+        "name": "Meme Vault",
+        "items": 20
+       }
+      ]
+     },
+     {
+      "name": "Speed runs",
+      "area": "gaming",
+      "items": 50,
+      "share": 0.05,
+      "previous_share": 0.01,
+      "previous_items": 9,
+      "change_vs_previous": 0.04,
+      "shorts_share": 0.4,
+      "days": 18,
+      "channels": [
+       {
+        "name": "Pixel Forge",
+        "items": 30
+       }
+      ]
+     },
+     {
+      "name": "Block battles",
+      "area": "gaming",
+      "items": 49,
+      "share": 0.049,
+      "previous_share": 0.05,
+      "previous_items": 45,
+      "change_vs_previous": -0.001,
+      "shorts_share": 0.5,
+      "days": 17,
+      "channels": [
+       {
+        "name": "Doggo Plays",
+        "items": 17
+       }
+      ]
+     },
+     {
+      "name": "Sketch edits",
+      "area": "comedy",
+      "items": 35,
+      "share": 0.035,
+      "previous_share": 0.06,
+      "previous_items": 54,
+      "change_vs_previous": -0.025,
+      "shorts_share": 0.97,
+      "days": 15,
+      "channels": [
+       {
+        "name": "Laugh Lab",
+        "items": 12
+       }
+      ]
+     }
+    ],
+    "channels": [
+     {
+      "name": "Pixel Forge",
+      "items": 30,
+      "days": 12,
+      "share": 0.03,
+      "area": "gaming",
+      "theme": "Speed runs",
+      "theme_share": 0.9,
+      "shorts_share": 0.95,
+      "previous_items": 20
+     },
+     {
+      "name": "Doggo Plays",
+      "items": 17,
+      "days": 9,
+      "share": 0.017,
+      "area": "gaming",
+      "theme": "Block battles",
+      "theme_share": 1.0,
+      "shorts_share": 0.29,
+      "previous_items": 15
+     }
+    ],
+    "when": {
+     "busiest_hours": [
+      {
+       "hour": 21,
+       "share": 0.12
+      }
+     ]
+    },
+    "new": {
+     "themes": [],
+     "channels": []
+    },
+    "stopped": {
+     "themes": [],
+     "channels": []
+    },
+    "library": {
+     "saved_not_opened": []
+    },
+    "so_what_candidates": [],
+    "offers": [
+     "without_shorts"
+    ]
    }
   }
  }

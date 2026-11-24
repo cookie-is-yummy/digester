@@ -2286,9 +2286,14 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False,
             parts[0]["text"] = lead + "\n\n" + parts[0]["text"]
         if (sheet or {}).get("kind") in ("day", "first", "last"):
             from . import insight
-            ids = [it["id"] for it in (sheet.get("items") or [])[:insight.SHOW["items"]]
+            n_ = insight.day_cards(sheet) if sheet["kind"] == "day" else insight.SHOW["items"]
+            ids = [it["id"] for it in (sheet.get("items") or [])[:n_]
                    if isinstance(it, dict) and it.get("id") in view.items]
-            rest = int((sheet.get("totals") or {}).get("items") or 0) - len(ids)
+            # round 12, pass 6 (X16): "more" pages on from the day's first page (a named channel's card after it is
+            # not counted twice)
+            rest = int((sheet.get("totals") or {}).get("items") or 0) - min(len(ids), insight.DAY_PAGE) \
+                if (sheet["kind"] == "day" and n_ < len(sheet.get("items") or [])) else \
+                int((sheet.get("totals") or {}).get("items") or 0) - len(ids)
             if sheet["kind"] == "day" and rest > 0 and parts and parts[0].get("type") == "text":
                 # the day's list goes on as today's does: "more" gives the next page (code)
                 es = q.lang == "es"
@@ -2425,7 +2430,8 @@ def _write_now(bot, person, q, now, follow, words, said, deadline=None):
         if not isinstance(sheet, dict) or (cs and not after_ok) or not (sheet.get("totals") or {}).get("items"):
             return None, info, sheet if isinstance(sheet, dict) else None
         f_ = sheet.get("filters") or {}
-        if f_.get("topic") and not f_.get("topic_themes") and (sheet.get("totals") or {}).get("items", 0) < HANDFUL:
+        if f_.get("topic") and not f_.get("topic_themes") and sheet.get("kind") in ("count", "top", "channels") and \
+                (sheet.get("totals") or {}).get("items", 0) < HANDFUL:
             # round 12, pass 6 (X12): a topic that is a handful of videos by their own words is code's count with its
             # items; no writer call (the writer was paid to write over two unrelated themes, 3,111 items)
             info["skipped"] = "handful"

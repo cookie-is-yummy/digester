@@ -3111,29 +3111,39 @@ def _item_line(k, it, lang, year=None):
     return f"{k}. {_clip(title)}{_clip(by)}" + (f" ({', '.join(bits)})" if bits else "")
 
 
+DAY_PAGE = 8   # history.DAY_MAX: a day the cards do not show whole shows its first page, as "more" pages on
+
+
+def day_cards(sheet):
+    """How many of a day's items its cards show: all of them up to SHOW["items"], else the first page (then "more")
+    and the cards of channels the overview names (`_named_first`)."""
+    n = len([it for it in sheet.get("items") or [] if isinstance(it, dict)])
+    if n <= SHOW["items"]:
+        return n
+    return int(sheet.get("_cards") or DAY_PAGE)
+
+
 def _named_first(sheet, text):
     """Round 12, pass 6 (X16, the hand check: the overview named a channel whose card was hidden behind "more"): a
-    day's cards are the first SHOW["items"] of its items, with every channel the overview names among them (an item
-    of a named channel moves up in place of the last one of a channel it does not name). In place: the caller's list
-    of ids reads the same order."""
+    day of at most SHOW["items"] items shows them all; a longer one shows its first page and, after it, one item of
+    each channel the overview names that the page does not hold. In place: the caller's list of ids reads the same
+    order, and `sheet["_cards"]` says how many cards there are."""
     items = [it for it in sheet["items"] if isinstance(it, dict)]
-    n = SHOW["items"]
-    if len(items) <= n:
+    if len(items) <= SHOW["items"]:
         return
     low = " " + _norm(text) + " "
 
     def named(it):
         c = " ".join(_words(str(it.get("channel") or "")))
         return bool(c) and len(c) >= 3 and f" {c} " in low
-    shown_ = items[:n]
-    for it in items[n:]:
-        if named(it) and not any(x.get("channel") == it.get("channel") for x in shown_):
-            k = next((j for j in range(len(shown_) - 1, -1, -1) if not named(shown_[j])), None)
-            if k is None:
-                break
-            shown_[k] = it
-    rest = [it for it in items if all(it is not x for x in shown_)]
-    sheet["items"] = shown_ + rest
+    page = items[:DAY_PAGE]
+    extra = []
+    for it in items[DAY_PAGE:]:
+        if named(it) and not any(x.get("channel") == it.get("channel") for x in page + extra):
+            extra.append(it)
+    rest = [it for it in items if all(it is not x for x in page + extra)]
+    sheet["items"] = page + extra + rest
+    sheet["_cards"] = len(page) + len(extra)
 
 
 def item_caption(k, it, lang="en", year=None, day=False):
@@ -3398,7 +3408,7 @@ _P6_OPENED = re.compile(r"\bof (?:everything(?: (?:else )?you (?:opened|watched)
                         r"what you watched)\b(?! (?:from|on) )")
 _P6_YT = re.compile(r"\bof (?:all )?(?:the |all the )?YouTube videos(?: (?:you )?(?:watched|opened))?\b(?! (?:from|on) )")
 _P6_SHORTS = re.compile(r"(?<![\w-])shorts(?![\w-])")
-_P6_GAP = re.compile(r"\bthe (?:gap|difference|lead)\b[^.;]{0,30}\b(?:widen\w*|narrow\w*|grew|shr[aiu]nk\w*|closed|"
+_P6_GAP = re.compile(r"\bthe (?:gap|difference|lead)\b[^.;]{0,60}?\b(?:widen\w*|narrow\w*|grew|shr[aiu]nk\w*|closed|"
                      r"opened)\b|\b(?:widen\w*|narrow\w*)\b[^.;]{0,12}\bthe (?:gap|difference)\b", re.I)
 _P6_INSIDE = re.compile(r"\b(?:inside|within)\b", re.I)
 _P6_NOUN = re.compile(r"^(?P<sp>\s+)(?P<n>(?:(?:long|long-form|short|youtube|YouTube)\s+)?"
@@ -5695,7 +5705,8 @@ def write(bot, person, sheet, now, info=None, say=None, deadline=None):
         try:
             from .render import link_part
             view = bot.view(person["library"])
-            for it in (sheet.get("items") or [])[:SHOW["items"]]:
+            n_ = day_cards(sheet) if sheet.get("kind") == "day" else SHOW["items"]
+            for it in (sheet.get("items") or [])[:n_]:
                 x = view.items.get(it.get("id")) if isinstance(it, dict) else None
                 if x is not None and x.url:
                     cards.append(dict(link_part(x, " ".join(str(it.get("title") or "").split())[:90]), item=it))

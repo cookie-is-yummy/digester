@@ -550,6 +550,7 @@ def _item_rows(view, idx, facts, th, ids, rec, kinds, start, end, first=False):
 
 
 DAY_ITEMS_MAX = 60   # round 12, pass 6 (X16): a day's items on the sheet (the cards are chosen from them)
+DAY_ALL = 10         # a day of this many items or fewer is shown whole (insight.SHOW["items"])
 
 
 def _by_instant(items, idx, ev, eo, kind, sort=True):
@@ -811,7 +812,10 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         out["items"] = _item_rows(view, idx, facts, th, ids, rec, kinds, eff_start if kind == "day" else None,
                                   eff_end if kind == "day" else None, first=(kind == "first"))
         if kind in ("first", "last", "day"):
-            _by_instant(out["items"], idx, ev, eo, kind)
+            # a day of more items than the cards show keeps the code reply's order (its "more" pages on from it); a
+            # day the cards show whole is in the order it was opened
+            _by_instant(out["items"], idx, ev, eo, kind,
+                        sort=(kind != "day" or len(out["items"]) <= DAY_ALL))
         if kind in ("first", "last") and q.topic:
             out["periods"], out["periods_unit"] = _periods(idx, facts, th, ev, None, eo, by="year")
     # things saved on the window's themes and never opened
