@@ -3401,8 +3401,9 @@ _P6_SHORTS = re.compile(r"(?<![\w-])shorts(?![\w-])")
 _P6_GAP = re.compile(r"\bthe (?:gap|difference|lead)\b[^.;]{0,30}\b(?:widen\w*|narrow\w*|grew|shr[aiu]nk\w*|closed|"
                      r"opened)\b|\b(?:widen\w*|narrow\w*)\b[^.;]{0,12}\bthe (?:gap|difference)\b", re.I)
 _P6_INSIDE = re.compile(r"\b(?:inside|within)\b", re.I)
-_P6_NOUN = re.compile(r"^(?P<sp>\s+)(?P<n>(?:(?:long|long-form|short|youtube|YouTube)\s+)?(?:[a-z][a-z&'-]*\s+){0,2}?"
-                      r"(?:videos?|Shorts|ones|clips|posts))\b(?! (?:from|on|of)\b)")
+_P6_NOUN = re.compile(r"^(?P<sp>\s+)(?P<n>(?:(?:long|long-form|short|youtube|YouTube)\s+)?"
+                      r"(?:(?!(?:were|was|are|is|of|the|your|them|those|these|and|or|in|on|at|as|than|then|all)\b)"
+                      r"[a-z][a-z&'-]*\s+){0,2}?(?:videos?|Shorts|ones|clips|posts))\b(?! (?:from|on|of)\b)")
 _P6_SAVED = re.compile(r"\b(?P<y>[Yy]ou) saved (?P<n>\d[\d,]*) (?P<t>[^;,.?!:]+?)"
                        r"(?=\s*(?:[;,.?!:]|\s(?:and|but|want|from|in|on|that|which)\b|$))")
 
@@ -4216,10 +4217,10 @@ def code_form(sheet):
             # leads with it, and with the area that fell most; what led is said after
             ssn = sea.group(1).lower()
             pws_ = re.sub(r"\s*\([^)]*\)\s*$", "", pw).strip()   # (the window words say the season's dates)
+            # round 12, pass 6 (X17): nothing with another base hangs off the move to Shorts (what fell is a bullet)
             story = (f"you moved to Shorts: {pc(a_sh)} of your YouTube videos, from {pc(b_sh)} in {pws_}" +
-                     (f", while {fell[0]['name']} fell from {pc(fell[0]['previous_share'])} to {pc(fell[0]['share'])}"
-                      if fell else "") + f"; {areas[0]['name']} came first in a wide mix." if areas[0]["share"] < WIDE_MIX
-                     else f"; {areas[0]['name']} came first.")
+                     (f"; {areas[0]['name']} came first in a wide mix." if areas[0]["share"] < WIDE_MIX
+                      else f"; {areas[0]['name']} came first."))
             ans, moving_said = story, "story"
         if dt and rw and not es:
             # round 12, pass 3 (U8, row 8: "say what made that season distinct against the year around it"): the

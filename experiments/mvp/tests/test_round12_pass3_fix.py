@@ -223,8 +223,10 @@ def _summer():
 def test_row8_the_move_to_shorts_and_what_fell_lead_and_the_so_what_does_not_say_them_again():
     s = _summer()
     cf = ins().code_form(s)
-    assert cf["answer"].startswith("you moved to Shorts: 82% of your YouTube videos, from 29% in the spring before, "
-                                   "while gaming fell from 33% to 10%"), cf["answer"]
+    # round 12, pass 6 (X17, on purpose): nothing with another base hangs off the move to Shorts; what fell is a bullet
+    assert cf["answer"].startswith("you moved to Shorts: 82% of your YouTube videos, from 29% in the spring before; "
+                                   ), cf["answer"]
+    assert any(o["text"].lower().startswith("gaming fell from 33% to 10%") for o in cf["observations"]), cf
     f = written(s)
     assert f["answer"].lower() == cf["answer"].lower() and not (f["so_what"] or "").startswith("Shorts")
 
