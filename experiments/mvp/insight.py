@@ -3235,7 +3235,7 @@ def gate_sentence(s, sheet, names, state):
         s = (s[:m_.start()] + f"{m_.group('w')} {m_.group('a')} and {m_.group('b')} ({m_.group('x')} and "
              f"{m_.group('y')} {base_phrase(sheet, 'record')})" + s[m_.end():])
     # a Shorts share that is a theme's or a channel's own (not one of the spans' shares) under a filter, or said "of
-    # your YouTube videos": its number goes ("Comedy edits was almost all Shorts at 100%"), or its clause, or the
+    # your YouTube videos": its number goes ("<theme> was almost all Shorts at 100%"), or its clause, or the
     # sentence (a reader takes it as all the YouTube videos)
     if "_yv" not in state:
         state["_yv"] = _yt_vals(sheet)
@@ -3289,8 +3289,9 @@ def gate_sentence(s, sheet, names, state):
     m_ = _G_WITH_RUN.match(s)
     if m_ and all(any(n.lower() == m_.group(g).strip().lower() for n in names) for g in ("a", "b")):
         base_w = base_phrase(sheet, "record") if filtered else "of everything you opened"
+        rest_ = re.sub(r"\s+(?:of|in) (?:what|everything|all) you (?:opened|watched)$", "", m_.group("rest"))
         s = (f"{m_.group('a')} ({m_.group('x')} {base_w}) and {m_.group('b')} ({m_.group('y')}) {m_.group('v')} "
-             f"{m_.group('rest')}{m_.group('tail')}")
+             f"{rest_}{m_.group('tail')}")
     cues = _cues(s, names)
     ms = list(_G_PCT.finditer(s))
     # runs: "11% and 5%", "85% and 100% Shorts": the base after the run's last number

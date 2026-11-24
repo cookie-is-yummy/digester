@@ -5656,3 +5656,125 @@ was copied from the third pass's). The evals were rescored from saved forms (no 
 theme "new then" is rare on a record where every theme recurs (none on the real library's windows asked). The claims are
 read from the sentence's names and numbers: a repeat said with no number and no sheet name is not seen.
 <!-- end round 12, pass 4 -->
+
+<!-- round 12, pass 5 -->
+### 19.A The audit: every claim recounted by code, and the bases and peaks worded as computed (round 12, pass 5; `eval_claims.py`, `insight.py`, `facts.py`, `history.py`, `tests/test_round12_claims.py`)
+
+Four passes (19.P2 to 19.P4) each ended with a checker who found, by hand recount, three or four false or wrongly based
+sentences the pass had added: a peak worded wider than computed ("more than in any other three months", true only
+against calendar seasons), a channel's theme share "of their videos" that was of their math videos, "1,516 long videos
+and only 1,517 total videos" with no base, "mostly Shorts at 79%" where 79% was of the YouTube videos with a known
+length. This pass makes the recount automatic and the wording structural. No titles, channel, theme or area names of
+the real library are written here.
+
+**The audit (`eval_claims.py`, the auditor's, unchanged by this pass).** An independent recount: it never imports facts,
+insight, history or themes; it reads the raw records, the lengths rows and the themes rows, and counts again with its
+own reading of 19.D. `capture` sends questions through the bot in process (the first N through the live writer, the
+rest through the made-up writer of the tests, which fills the form from the sheet's paths, so code's templates, MUST
+lines and bases are what goes out) and keeps the sent text, the sheet as the writer was shown it and the form; `audit`
+recounts each answer:
+- SHEET: every number of the shown sheet in the window read from the question (the window's dates too; a topic cut from
+  a two-word name).
+- BASE: every percent and count of the sent text with the phrase that says what it is of ("of what you opened", "of your
+  YouTube videos", "of your YouTube videos with a known length", "of your <topic> videos", "... on YouTube", "of your long
+  videos", "of its videos", "(N% Shorts)", "of them"); every candidate base recounted (everything opened, YouTube, known
+  length, the filtered scope, long videos, a record's own videos); a said base that does not give the number, or none
+  said where the candidates differ by more than 2 points, is a mismatch. A share's scope: the window, the span before
+  ("from N%", "in the 4 weeks before"), a year ("in 2021"), the rest of a season's year; a first or last date.
+- WORD: "mostly" (half), led / ahead of / followed by / then (order, in the sentence's own scope: "Behind <theme>:"),
+  twice / N times (ratio), "peaked" / "more than in any other <span>" (EVERY span of that length the record holds, whole
+  months sliding by one), "new", "every year", "from X% to Y%" with a direction.
+- What it cannot check: the theme assignment, the topic-to-themes mapping and the lengths (taken as given); a direction
+  word with no number ("broader", "shifted"); grammar, the so-what's fit, the offers, bar lengths, cards' dates; text
+  other than English (Spanish thousands only); a "mostly" whose subject is a record named before it (it reads the
+  window: the one case of `eval_claims_allow.json`).
+- `python3 -m mvp.eval_claims capture QUESTIONS.jsonl --out DIR [--live N]` then `python3 -m mvp.eval_claims audit DIR
+  [--json OUT]`; `capture made-up` sends the 12 made-up questions in the file (the real ones stay in scratch).
+
+**What changed (structural, by kind of finding).**
+1. **Every percent with its base, worded by code** (`insight.gate_form`, `gate_sentence`, in `layout`, on every sent
+   sentence whoever wrote it: the writer's paths, code's templates, MUST lines, the so-what). The base is said right after
+   the number, or after the last number of a run ("at 11% and 5% of ..."), unless an earlier number of the same sentence
+   about the same kind of thing (a record's share; a Shorts share) says it. The base labels, by sheet: a record's share of
+   an unfiltered sheet is "of what you opened" (its only reading: said once in the answer, then not again; "Inside
+   <area>:" keeps code's "of everything you opened", else its shares read as of the area; a year's or a move's share,
+   "22% in 2020", "from 33% to 10%", has no other reading); a filtered sheet's is its own base (`bases`: "of your <topic>
+   videos", "of your long videos", "of the videos you opened from <channel>"), in every sentence that says one; a Shorts
+   share is "of your YouTube videos" ("of your <topic> videos on YouTube" under a topic). A Shorts share that is a
+   theme's or a channel's own (none of the spans' shares, `_yt_vals`) is never said "of your YouTube videos": its number,
+   its clause or its sentence goes; "<channel> (95% Shorts)" stays where unfiltered. A sentence the gate cannot base is
+   not sent; under "without Shorts" a Shorts share is never sent. Rewordings the recount showed to be needed: a filtered
+   move is said with its base after its newer number ("fell to 23% of your long videos, from 45% in 2022"); a base said
+   later in a sentence moves to the first number of its kind; "mostly A at 34% and B at 21%" is "mostly A and B (34% and
+   21% of ...)"; "A and B were the biggest gaming themes, with 5% and 5%" is "A (5% of everything you opened) and B (5%)
+   were ..."; a change over the years says each value's year ("from 4% in 2020 to 70% in 2026", never "between 2020 and
+   2026"); "A led <theme>, followed by B and C" is "<theme> was led by A, then B and C", then 19.P4's "Behind <theme>".
+2. **Shorts of all the YouTube videos.** The sheet keeps the known-length share the model reads (`shorts_share`, the
+   auditor's sheet recount); a hidden `shorts_yt_share` beside it in totals, previous, periods and topic rows (and a day's
+   `day_shorts_yt_share`) is what code and the writer's paths say "of your YouTube videos" (`insight.shown(sheet)` reads
+   it, `shown(sheet, model=True)` and the user message do not: no prompt change). The Shorts-shift so-what, the eras'
+   Shorts then and now and the chart of Shorts per period use it too. Real library, the 4 weeks: 77% (was 79%, of the
+   known-length ones; of everything opened it is 60%).
+3. **A channel under a filter.** Its theme share is of its videos on that topic, so "A and B are both about T (100% and
+   99% of their videos)" is "In <topic>, A and B are both about T"; a clip channel's Shorts share is not said as a number
+   under a topic or a channel filter.
+4. **Peaks as computed** (`facts._peaks_new`, `span_months`, `_month_spans`; `insight._span_noun`). "Peaked then ... more
+   than in any other <span>" now holds against EVERY span of the window's length the record holds, whole months sliding
+   by one (a span holding the window, or the window itself, left out; spans of 100 videos or more), at least 1.1 times
+   every span apart from the window and 1.5 times the median; the span is named as computed (month, two / three / four /
+   six months, year, four weeks). Real library: the summer of 2023 no longer says a peak (the three months from May held
+   more).
+5. **The topic's own scope.** A topic row is counted under the sheet's other filters (a "without Shorts" follow-up's row
+   kept its Shorts: 8,005 against 1,875); a first or a last is of the sheet's own topic (its themes and its words), its
+   items in the order of their first (or last) open and each item's day its first open for a first ("You first opened a
+   gaming video on 5 April 2020" where the topic holds one from 2019); "an art video".
+6. **Reads.** An area's own name with "and" is one topic ("most watched channels in art and design" was read as "art"
+   and counted "design" too; "did i watch more music or more film and TV videos" was not read at all: 6 of 6 such
+   questions); a season named by its year that has not begun is that season, after the record ("the winter of 2026" in
+   November was the topic "winter" over 2026), and gets the code reply that says where the export ends; a range past the
+   export says its end once ("From 1 January 2024 to 30 October 2026, where your export ends", not "... to 24 November
+   2026 up to 30 October 2026"); a card's caption says no length over 3 hours (19.D: "53945 min").
+7. **The trace** (`insight.sentence_paths`, `steps["writer"]["sentences"]`): for each sent sentence (the chart's caption
+   and bars left out), the sheet paths its numbers rest on, by code (a percent is a share of that value, a count a count;
+   where several, those of a record the sentence names). Paths only, no words.
+
+**Numbers (the auditor's report, then this build).** The auditor (build fa6e55e): 194 answers of 174 questions (41
+through the live writer), 39,728 claims, 264 mismatches in 103 answers: no base said 98, share of their videos 35, share
+22, topic read (cut) 22, peaked 16, sheet count 12, sheet days 12, first or last date 11, share in a year 9, count of
+videos 8, days 8, a channel's Shorts share 6, share before 4, window read 1. The same questions through code and the
+made-up writer on af7befb: 236. After, the same 174 questions (194 answers, 191 with a sheet) through code
+and the made-up writer on the final build: 37,982 claims (35,675 sheet, 2,083 base, 224 word: fewer word claims, as no
+peak is said that does not hold), 0 mismatches; the auditor's 36 live questions (41 answers) through the live writer on this pass's build: 7 (3 Shorts shares of
+a theme or channel said of the YouTube videos, a filtered move with its base inside, "between 2020 and 2026", a rank
+inside a theme, the "mostly" of the allow-list), each fixed in code; the same 41 live forms replayed on the final build
+(no model call): 1, the allow-listed case. The 8 questions of the brief, live once more on the final build: 3 (a run of
+shares after an area's name, "between 2020 and 2026"), fixed; replayed: 0.
+
+**Tests** (`tests/test_round12_claims.py`, 19, made-up data; every one fails on af7befb). Test lines changed on purpose:
+`test_round12_pass4.py` (the peak's made-up record is four calendar months: the spans are whole months now);
+`test_round12_pass3.py` ("61% of your minecraft videos on YouTube were Shorts": a Shorts share is of the YouTube videos;
+"Gaming faded from 22% in 2020 to 16% in 2026": each value with its year); `test_round12_pass2_fix.py` (the topic's
+Shorts shift "of your block games videos on YouTube", its share of all its YouTube videos); `test_round12_merge.py` (the
+run's writer step has "sentences", paths only).
+
+**Evals.** The writer's eval rescored on its 20 made-up sheets from the saved insight_v5 forms (no model call), af7befb
+against this build: answers 19 and 19, writer used 20 and 20, bullets kept 52 and 52, so-what 5 and 5, violations 0 and
+0, a run of counts 0 and 0. The planted-falsehood eval: 89 of 89 typed planted caught and 43 of 43 true kept, the v5
+set 72 of 72 and 32 of 32, before and after. No prompt, naming or topic mapping changed (`themes.py` untouched; an area's
+two-word name now reaches `themes.for_topic` whole, which maps it by its category as before).
+
+**Live, read as the founder would** (the 8 questions, the real library, a scratch home, the live writer, then the
+replay on the final build). Row 1 leads with the move (gaming nearly doubled, of what you opened), the two biggest gaming
+themes with "of everything you opened" (a reader no longer takes 5% as of gaming), Shorts 77% of the YouTube videos;
+row 3 says the topic's set once in full ("1,094 videos whose title or theme is about minecraft") and then "of your
+minecraft videos"; row 7 says each value with its year; row 8 no longer names a peak (none holds against every three
+months) and keeps the move to Shorts. Nothing reads worse; filtered answers say their base in each sentence with a share
+(row 3 three times, once "on YouTube"): the recount needs a base per sentence and no shorter words name the same set.
+
+**Checks** and **spend**: see the README's count and the round's report. Spend $0.258 by the ledger ($25.308 before,
+$25.567 after): 41 live writer calls of the auditor's live questions ($0.216) and the 8 questions once more ($0.043).
+
+**Not done.** Filtered answers repeat their base phrase (up to three times). A writer's sentence with an odd fragment
+("while 1 point versus 2024 shows it slipped a bit") passes when its numbers bind. `eval_claims.py` does not read
+`eval_claims_allow.json` (the one case is listed by hand). Spanish answers keep their words (the gate is English only).
+<!-- end round 12, pass 5 -->
