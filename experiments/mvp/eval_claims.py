@@ -154,6 +154,7 @@ class Library:
                                        "vid": pd.get("video_id") if p == "youtube" else None,
                                        "dur": dur if isinstance(dur, (int, float)) else None}
         self.opens = defaultdict(list)      # item -> sorted [(ordinal, hour, weekday)] of watch / view events
+        self.open_at = defaultdict(list)    # item -> sorted instants (UTC seconds) of the same events (pass 6, A1)
         self.saved = set()
         self.ends = {}
         self.first_open = {}
@@ -173,10 +174,12 @@ class Library:
                 self.ends[p] = max(self.ends.get(p, o), o)
                 if r["kind"] in OPEN:
                     self.opens[r["item_id"]].append((o, d.hour, d.weekday()))
+                    self.open_at[r["item_id"]].append((d if d.tzinfo else d.replace(tzinfo=self.zone)).timestamp())
                 elif r["kind"] in SAVED:
                     self.saved.add(r["item_id"])
         for i in self.opens:
             self.opens[i].sort()
+            self.open_at[i].sort()
         self.open_days = {i: [e[0] for e in ev] for i, ev in self.opens.items()}
         # ---- lengths (the derived rows still inside their 30 days; the corpus's own duration when no row)
         rows = {}
@@ -285,11 +288,11 @@ class Library:
         key = (words.lower(), tuple(sorted(t.lower() for t in said)))
         memo = self.__dict__.setdefault("_tt", {})
         if key not in memo:
-            out = {t.lower() for t in said}
+            out = {t.lower() for t in said if t != "(none)"}
             w = words.lower().strip()
-            # a complete list (the sheet's filters.topic_themes) is taken as given; a list cut at 4 (a topic row as the
-            # writer is shown it) is completed by the themes of the area the word names
-            if len(out) == 4 or not out:
+            # the sheet's list (filters.topic_themes, or a topic row's themes with its top_themes) is taken as given;
+            # a word that names an area also holds that area's themes (pass 6, A3: no longer a guess from a list of 4)
+            if True:
                 for area, ws in CATEGORY_WORDS.items():
                     if w in ws or w == area.lower():
                         out |= {self.theme_of[i] for i in self.area_of if self.area_of[i] == area and
@@ -348,12 +351,35 @@ def _d(o):
     return date.fromordinal(o) if o is not None else None
 
 
+_CLAUSE = re.compile(r";|:|\bwhile\b|\bwhereas\b|\bbut\b|,\s*and\b|—|\s-\s")
+
+
+def _clause_start(low, at):
+    """Where the clause holding position `at` starts (after the last ';', ':', 'while', 'but', ', and', dash)."""
+    st = 0
+    for m in _CLAUSE.finditer(low, 0, at):
+        st = m.end()
+    return st
+
+
 def season_bounds(name, year):
     m = SEASON_START[name]
     a = date(year, m, 1)
     b_m, b_y = (m + 2, year) if m + 2 <= 12 else (m + 2 - 12, year + 1)
     b = (date(b_y, b_m + 1, 1) if b_m < 12 else date(b_y + 1, 1, 1)) - timedelta(days=1)
     return a, b
+
+
+def _month_end(y, m):
+    return (date(y, m + 1, 1) if m < 12 else date(y + 1, 1, 1)) - timedelta(days=1)
+
+
+def _whole_month(spec):
+    try:
+        a, b = date.fromisoformat(spec["start"]), date.fromisoformat(spec["end"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return a.day == 1 and (a.year, a.month) == (b.year, b.month) and b == _month_end(a.year, a.month)
 
 
 def read_window(text, lib, today):
@@ -381,6 +407,14 @@ def read_window(text, lib, today):
     m = re.search(r"\bon (" + "|".join(MON3) + r")\.? (\d{1,2})\b", t)
     if m:
         return {"kind": "day", "month": MON3[m.group(1)], "day": int(m.group(2))}
+    # pass 6 (A3): a calendar month, "in march 2024" or "march 2024"; "in march" alone is the latest March begun
+    m = re.search(r"(?<!\d )\b(" + "|".join(MONTHS) + r"|sept?|oct|nov|dec|jan|feb|mar|apr|jun|jul|aug) (20\d\d)\b", t)
+    if m:
+        return {"kind": "month", "month": MON3[m.group(1)], "year": int(m.group(2))}
+    m = re.search(r"\b(?:in|during|for) (" + "|".join(x for x in MONTHS if x != "may") + r")\b(?! \d)", t)
+    if m:
+        mo = MON3[m.group(1)]
+        return {"kind": "month", "month": mo, "year": today.year if mo <= today.month else today.year - 1}
     if years:
         return {"kind": "year", "year": years[0]}
     return {"kind": "all"}
@@ -434,6 +468,21 @@ def resolve(spec, lib, today):
             d = date(y - 1, spec["month"], spec["day"])
         a = b = d.toordinal()
         prev = (a - 1, a - 1)
+    elif k == "month" or (k == "range" and _whole_month(spec)):
+        # pass 6 (A3): a calendar month's span before is the month before (its same days when the month is cut by
+        # the record's end), never the 31 days before
+        if k == "range":
+            s0 = date.fromisoformat(spec["start"])
+            y, mo = s0.year, s0.month
+        else:
+            y, mo = int(spec["year"]), int(spec["month"])
+        a, end = date(y, mo, 1), _month_end(y, mo)
+        b = end.toordinal() if k == "range" else min(end.toordinal(), newest)
+        py, pm = (y, mo - 1) if mo > 1 else (y - 1, 12)
+        pa, plast = date(py, pm, 1), _month_end(py, pm)
+        pb = plast if b == end.toordinal() else min(plast, date(py, pm, date.fromordinal(b).day))
+        a = a.toordinal()
+        prev = (pa.toordinal(), pb.toordinal())
     elif k == "range":
         a, b = date.fromisoformat(spec["start"]).toordinal(), date.fromisoformat(spec["end"]).toordinal()
         n = b - a + 1
@@ -501,6 +550,26 @@ def close_count(said, n, about=False):
 
 
 # ============================================================================ 1. the sheet
+def row_themes(t):
+    """A topic row's themes as its sheet says them, in full (pass 6, A3): the row's `themes` (cut at 4 when the writer
+    is shown it), its `top_themes` (which can hold one the cut left out) and a full list where the sheet carries one."""
+    out = []
+    for k in ("all_themes", "themes_all", "themes"):
+        for x in t.get(k) or []:
+            nm = x.get("name") if isinstance(x, dict) else x
+            if isinstance(nm, str) and nm and nm not in out:
+                out.append(nm)
+    full = bool(t.get("all_themes") or t.get("themes_all"))
+    cut = len(t.get("themes") or []) >= 4 and "themes" in str(t.get("matched_by") or "themes")
+    if cut and not full:
+        # a list of 4 may be cut: a top theme of a row matched by its themes is one of them (a row matched by words
+        # alone has no themes: its top themes are those of the items its words found, never the topic's own)
+        for x in t.get("top_themes") or []:
+            if isinstance(x, dict) and x.get("name") and x["name"] not in out:
+                out.append(x["name"])
+    return out
+
+
 class Ctx:
     """One answer's recount context: the window, its scopes and the record's entities said in it."""
 
@@ -509,6 +578,14 @@ class Ctx:
         self.ans = ans
         self.sheet = ans.get("sheet") or {}
         self.spec = ans.get("window") or read_window(ans["text"], lib, today)
+        if not ans.get("window") and ans.get("follow") and self.spec.get("kind") == "all":
+            # pass 6 (A3): a follow-up that names no window ("without shorts", then "only music") keeps the window of
+            # the message it follows, through any number of follow-ups
+            for t in reversed(ans.get("chain") or [ans.get("parent_text") or ""]):
+                sp = read_window(t, lib, today)
+                if sp.get("kind") != "all":
+                    self.spec = sp
+                    break
         self.a, self.b, self.prev = resolve(self.spec, lib, today)
         fl = self.sheet.get("filters") or {}
         self.f = {}
@@ -533,7 +610,7 @@ class Ctx:
             said[topic.lower()] = list(fl.get("topic_themes") or []) or ["(none)"]
         for t in self.sheet.get("topics") or []:
             if isinstance(t, dict) and t.get("name"):
-                said.setdefault(t["name"].lower(), list(t.get("themes") or []))
+                said.setdefault(t["name"].lower(), row_themes(t))
         lib.said_themes = said
 
     def sc(self, which="filt"):
@@ -780,7 +857,7 @@ def audit_sheet(ctx, F):
     for k, t in enumerate(sh.get("topics") or []):
         if not isinstance(t, dict) or not t.get("name"):
             continue
-        tsc = ctx.sc("topic:" + t["name"] + "|" + ";".join(t.get("themes") or ctx.f.get("topic_themes") or []))
+        tsc = ctx.sc("topic:" + t["name"] + "|" + ";".join(row_themes(t) or ctx.f.get("topic_themes") or []))
         tid = list(tsc)
         chk(f"topics[{k}].items", t.get("items"), len(tid), "count")
         if "days" in t:
@@ -879,7 +956,7 @@ class Names:
         topic = (sh.get("filters") or {}).get("topic")
         if topic:
             found[topic.lower()] = ("topic", topic)
-        self.topic_said = {r["name"].lower(): r.get("themes") or [] for r in sh.get("topics") or []
+        self.topic_said = {r["name"].lower(): row_themes(r) for r in sh.get("topics") or []
                            if isinstance(r, dict) and r.get("name")}
         self.found = found
         self.pat = re.compile(r"(?<![\w])(" + "|".join(re.escape(k) for k in sorted(found, key=len, reverse=True)
@@ -910,6 +987,8 @@ class TextAudit:
         self.ctx, self.F, self.lib = ctx, F, ctx.lib
         self.names = Names(ctx)
         self.filtered = bool(ctx.f.get("topic") or ctx.f.get("channel") or ctx.f.get("without_shorts"))
+        self.facts = []   # (kind, record, value, sentence index): one fact said in two sentences is a repeat (X9)
+        self.si = 0
 
     # ---------------------------------------------------------------- bases
     def base_ids(self, key, ent=None, x=None, scope="cur"):
@@ -1048,6 +1127,7 @@ class TextAudit:
             if typ == "bar":
                 self.bar(s, cap, caption_base)
                 continue
+            self.si += 1
             prev_base = self.sentence(s, prev_base)
 
     def caption_base(self, s):
@@ -1077,6 +1157,15 @@ class TextAudit:
         elif cap and "against" in cap.lower():
             return   # a cut label of a two-span chart: which span it is cannot be read
         e = self.names.found.get(label.lower().rstrip("…"))
+        bym = re.search(r"\bby (area|theme|channel|topic)\b", (cap or "").lower())
+        if bym and e is not None and e[0] != bym.group(1):
+            # pass 6 (A3): a chart "by area" names areas ("music" is the area there, not the topic of the filter)
+            k = bym.group(1)
+            if k == "area":
+                hit = next((a for a in set(self.lib.area_of.values()) if a.lower() == label.lower()), None)
+                e = ("area", hit) if hit else e
+            elif k == "theme" and label.lower() in self.lib.theme_names:
+                e = ("theme", self.lib.theme_names[label.lower()])
         if e is None and label.endswith("…"):
             pre = label[:-1].lower()
             hits = [v for k, v in self.names.found.items() if k.startswith(pre)]
@@ -1120,10 +1209,16 @@ class TextAudit:
 
     def year_scope(self, y):
         ctx = self.ctx
-        a = date(y, 1, 1).toordinal()
-        if ctx.a is not None:
+        a, b = date(y, 1, 1).toordinal(), date(y, 12, 31).toordinal()
+        if ctx.prev and ctx.kind != "changed" and ctx.a is not None and ctx.a > b and \
+                date.fromordinal(ctx.prev[0]).year == y == date.fromordinal(ctx.prev[1]).year:
+            return "prev"   # the span before, said by its year ("from 14% in 2023" in a 2024 answer)
+        if ctx.a is not None and ctx.a <= b and a <= ctx.b:
+            # a year the window holds: the window's part of it; a year outside the window (pass 6: "from 64% in 2023"
+            # in a 2024 answer was the empty span) is that whole year, to the record's end
             a = max(a, ctx.a) if ctx.kind != "changed" else a
-        return f"period:{a}:{min(date(y, 12, 31).toordinal(), ctx.b)}"
+            b = min(b, ctx.b)
+        return f"period:{a}:{min(b, self.lib.newest)}"
 
     def percents(self, s, spans):
         """Each percent of a sentence with its subject, its scope (the window, the span before, a year) and the base
@@ -1431,10 +1526,25 @@ class TextAudit:
                 ent, kind = ("shorts", ""), "count of Shorts"
             else:
                 kind = "count of videos"
+            bound = None
             if not rest and re.search(r",\s*$", s[:m.start()]) and spans and spans[0][0] == 0 and \
                     spans[0][2][0] in ("channel", "theme", "area"):
                 # "<channel> is new: first opened in this span, 12 videos.": the sentence's own subject
-                ids = [i for i in ids if lib.member(i, spans[0][2])]
+                bound = spans[0][2]
+            if not rest and bound is None:
+                # pass 6 (A3): "<channel> had 137 videos", "<channel> adds another 11 videos": the record the verb
+                # follows, in the number's own clause
+                cl = _clause_start(low, m.start())
+                near = [sp for sp in spans if cl <= sp[0] and sp[1] <= m.start() and
+                        sp[2][0] in ("channel", "theme", "area", "topic")]
+                if near and re.fullmatch(r"\s*(?:had|has|have|adds?|added|supplied|gave|brought|contributed|"
+                                         r"accounts? for|accounted for|made up|with|was behind|is behind)"
+                                         r"(?:\s+(?:another|more|just|only|about|over|some|nearly|almost))*\s*",
+                                         s[near[-1][1]:m.start()]):
+                    bound = near[-1][2]
+            if bound is not None:
+                if not (bound[0] == "topic" and bound[1].lower() == (ctx.f.get("topic") or "").lower()):
+                    ids = [i for i in ids if lib.member(i, bound)]
                 kind = "count of a record's videos"
             if rest:
                 e = self.names.found.get(rest)
@@ -1523,9 +1633,20 @@ class TextAudit:
         # new
         m = re.search(r"\b(?:was|were|is|are) new\b|\bnew (?:then|that year|this year|in 20\d\d)\b", low)
         if m:
-            for sp in spans:
-                if sp[1] <= m.start() and sp[2][0] in ("theme", "channel"):
-                    self.new_claim(sp[2])
+            # pass 6 (A3): "new" goes with the names of its own clause ("A, B and C each supplied one, while 2 channels
+            # were new" says nothing of A, B or C), and "N channels were new" is a count of the channels first opened
+            cl = _clause_start(low, m.start())
+            cnt = re.search(r"\b(\d+) (?:other |more )?(?:channels?|creators?) (?:were|was|are|is) new\b", low[cl:])
+            if cnt:
+                self.new_channels_count(int(cnt.group(1)))
+            else:
+                for sp in spans:
+                    if cl <= sp[0] and sp[1] <= m.start() and sp[2][0] in ("theme", "channel"):
+                        self.new_claim(sp[2])
+        for m in re.finditer(r"\bone of (\d+) (?:new )?channels you opened for the first time\b|"
+                             r"\b(\d+) (?:channels?|creators?) (?:you opened |you watched )?for the first time\b|"
+                             r"\b(\d+) new channels\b", low):
+            self.new_channels_count(int(next(g for g in m.groups() if g)))
         # every year
         if re.search(r"\bevery year\b|\beach year\b", low):
             self.every_year(s, spans)
@@ -1556,6 +1677,11 @@ class TextAudit:
                 ids = self.context_ids(s, spans, at=e[0])
                 if lead_in and e is named[0] and e[0] == lead_in.end():
                     e = named[1] if len(named) > 1 else None
+                # pass 6 (A3): "<channel> led <topic>": ranked inside the record named right after "led"
+                after = next((sp for sp in spans if sp[0] == led.end() + 1 and
+                              sp[2][0] in ("topic", "theme", "area")), None)
+                if after is not None and e is not None and after[2] != e[2]:
+                    ids = [i for i in ids if lib.member(i, after[2])]
                 if e is not None:
                     e = e[2]
                     rk = _rank(lib, ids, e[0])
@@ -1673,6 +1799,16 @@ class TextAudit:
         ok = before <= 5 and before * 2 <= cur
         self.F.add("word", "new (absent before)", ok, f"{cur} now", f"{before} before", where=ent_code(e), severity=1.0)
 
+    def new_channels_count(self, n):
+        """"2 channels were new that day": the channels of the window first opened in it."""
+        lib, ctx = self.lib, self.ctx
+        if ctx.a is None:
+            return
+        chans = {lib.items[i]["c"] for i in ctx.sc("filt") if lib.items[i]["c"]}
+        new = [c for c in chans if (lib.first_watch(c) or 0) >= ctx.a]
+        self.F.add("word", "new channels (count)", len(new) == n, n, len(new), severity=1.0)
+        self.facts.append(("new channels", None, n, self.si))
+
     def every_year(self, s, spans):
         lib, ctx = self.lib, self.ctx
         named = [sp[2] for sp in spans if sp[2][0] in ("theme", "area", "channel")]
@@ -1764,6 +1900,27 @@ def load_answers(folder):
     return out
 
 
+def link_follow_ups(answers):
+    """A follow-up ("without shorts") is read with the messages it follows: `chain` holds their texts in order."""
+    by_id = {a["id"]: a for a in answers}
+    for a in answers:
+        if not a.get("follow") or "." not in a["id"]:
+            continue
+        stem, k = a["id"].rsplit(".", 1)
+        chain = []
+        if k.isdigit():
+            for j in range(int(k)):
+                p = by_id.get(f"{stem}.{j}")
+                if p is not None:
+                    chain.append(p.get("text") or "")
+        if not chain and a.get("parent_text"):
+            chain = [a["parent_text"]]
+        a["chain"] = chain
+        if not a.get("parent_text") and chain:
+            a["parent_text"] = chain[0]
+    return answers
+
+
 def summarise(rows, answers):
     bad = [r for r in rows if not r["ok"]]
     by = Counter((r["audit"], r["kind"]) for r in bad)
@@ -1786,11 +1943,7 @@ def audit_folder(folder, library=None, derived=None, tz=None, today=None, json_o
     tz = tz or answers[0].get("timezone") or "UTC"
     today = today or date.fromisoformat(answers[0].get("today") or date.today().isoformat())
     lib = Library(lib_path, derived, tz)
-    by_id = {a["id"]: a for a in answers}
-    for a in answers:   # a follow-up ("without shorts") is read with the question it follows
-        if a.get("follow") and "." in a["id"] and not a.get("parent_text"):
-            first = by_id.get(a["id"].rsplit(".", 1)[0] + ".0")
-            a["parent_text"] = (first or {}).get("text") or ""
+    link_follow_ups(answers)
     rows = []
     for a in answers:
         rows += audit_answer(lib, a, today)
