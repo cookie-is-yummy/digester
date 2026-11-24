@@ -403,7 +403,12 @@ def test_a_topics_shorts_shift_says_whose_videos_and_a_comparison_has_none():
     s["previous"]["shorts"], s["previous"]["long"] = 200, 680
     c = [x for x in F._so_what_candidates(s, "count", None) if x["kind"] == "shorts_shift"]
     assert c and c[0]["topic"] == "block games"
-    assert I.so_what_text(c[0], s).startswith("Shorts went up to 74% of your block games videos, from 23%")
+    # round 12, pass 5: of the topic's YouTube videos (all of them, not those with a known length)
+    sh = s["totals"]["shorts"]
+    assert c[0]["share"] == round(sh / s["totals"]["by_platform"]["youtube"], 3) if (s["totals"].get("by_platform") or
+                                                                                   {}).get("youtube") else True
+    assert I.so_what_text(c[0], s).startswith(f"Shorts went up to {I._pc(c[0]['share'])} of your block games videos on "
+                                              "YouTube, from ")
     assert not [x for x in F._so_what_candidates(s, "compare_topics", None) if x["kind"] == "shorts_shift"]
 
 

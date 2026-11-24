@@ -92,9 +92,32 @@ def _clip(x):
     return x
 
 
-def shown(sheet):
+def _yt_shares(o, model):
+    """Round 12, pass 5 (the audit, (d): "79% of your YouTube videos" was of the ones with a known length; of all of
+    them it was 77%): every Shorts share code says "of your YouTube videos" is of all of them. The model reads the
+    sheet as built (`model`: the known-length share, its own key dropped); code's checks, templates and slots read the
+    share as it is said."""
+    if isinstance(o, dict):
+        r = {k: _yt_shares(v, model) for k, v in o.items() if k != "shorts_yt_share"}
+        if not model and _num(o.get("shorts_yt_share")) and "shorts_share" in o:
+            r["shorts_share"] = o["shorts_yt_share"]
+        r.pop("day_shorts_yt_share", None)
+        if not model and _num(o.get("day_shorts_yt_share")) and "day_shorts_share" in o:
+            r["day_shorts_share"] = o["day_shorts_yt_share"]
+        return r
+    if isinstance(o, list):
+        return [_yt_shares(v, model) for v in o]
+    return o
+
+
+def shown(sheet, model=False):
     """The sheet trimmed to what the model reads (and the checks read): the longest lists cut, item ids and example
-    ids left out (they mean nothing to a reader), every string with its angle brackets neutralised."""
+    ids left out (they mean nothing to a reader), every string with its angle brackets neutralised. `model`: as the
+    model reads it (round 12, pass 5: the Shorts shares as built, see `_yt_shares`)."""
+    return _yt_shares(_shown(sheet), model)
+
+
+def _shown(sheet):
     s = {}
     for k, v in (sheet or {}).items():
         if k in SHOW and isinstance(v, list):
@@ -179,7 +202,7 @@ def _long_or_one_day(sheet):
 
 
 def user_message(sheet):
-    s = shown(sheet)
+    s = shown(sheet, model=True)
     lang = s.get("lang") or "en"
     return ("Question (the person's words, data): " + json.dumps(s.get("question") or "", ensure_ascii=False)
             + "\nKind: " + str(s.get("kind") or "") + "\nlang: " + lang
@@ -836,6 +859,16 @@ _ONE_DAY = re.compile(r"\b(?:on|across|over|in|en)\s+(?:1|one|un)\s+(?:different
 _COUNTED = re.compile(r"\s+(?:[a-z0-9&'-]+\s+){0,2}?(?:videos?|posts?|shorts?|clips?|vids?|reels?|publicaciones)\b")
 
 
+def _own_base(raw, sheet):
+    """Round 12, pass 5: every "N% of your <x> videos" of the sentence is of the sheet's own filtered base."""
+    b = bases(sheet)
+    if not b:
+        return False
+    said = re.findall(r"\d\s*%\s+of\s+((?:your|the|all)\s+[^,.;()]*?(?:videos|posts|items)(?: on YouTube)?)", raw or "")
+    own = {b.get("opened"), b.get("yt")}
+    return bool(said) and all(x in own for x in said)
+
+
 def _check_body(raw, facts, uses, chart_vals):
     t = _norm(raw)
     for ph in facts.allowed_phrases:   # the window's own words (they carry where the record ends) are always fine
@@ -1121,7 +1154,8 @@ def _check_body(raw, facts, uses, chart_vals):
     # "22% of your cooking videos" when 22% is a share of everything opened
     for m in re.finditer(r"(\d[\d.,]*)\s*%\s+of\s+(?:your|the|all)\s+(?:\|[A-Z]\||(?!what\b)[a-z]+(?: [a-z]+)?)\s+"
                          r"(?:videos|posts|items)", rest_n):
-        if not re.search(r"\bshorts?\b|\blong\b|\bcortos?\b|\blargos?\b", rest_n):
+        if not re.search(r"\bshorts?\b|\blong\b|\bcortos?\b|\blargos?\b", rest_n) and \
+                not _own_base(raw, facts.sheet):
             return "share_of_topic"
     # "led by 640" when it led by 428: a lead is a difference of two counts (or points)
     for m in re.finditer(r"\b(?:led|leads|ahead|more|fewer|up|down|grew|fell)\s+(?:\w+\s+)?by\s+(?:about\s+)?"
@@ -2666,6 +2700,7 @@ def chart(sheet, level=None):
     """(text, values shown) of the small chart for the sheet's kind, or (None, set()). At most 8 rows and one caption;
     each row is a bar of the same width, then its number, then its label. `level` (round 12, pass 3, U3): the level
     the answer leads with ("areas" or "themes"): the chart is drawn at the same level."""
+    sheet = _yt_shares(sheet, False)   # round 12, pass 5: a Shorts bar is of all the YouTube videos, as its caption says
     kind = sheet.get("kind")
     lang = sheet.get("lang") or "en"
     for src in CHART_KINDS.get(kind, ()):
@@ -2923,7 +2958,7 @@ def _item_line(k, it, lang, year=None):
     if d:
         bits.append(f"{d.day} {(MONTHS_ES if lang == 'es' else MONTHS)[d.month - 1][:3].capitalize()}"
                     + (f" {d.year}" if year and d.year != year else ""))   # round 12, merge: a first in 2020
-    if _num(it.get("length_s")) and it["length_s"] > 0:
+    if _num(it.get("length_s")) and 0 < it["length_s"] <= 3 * 3600:   # round 12, pass 5: no "53945 min" (19.D)
         mins = int(round(it["length_s"] / 60))
         bits.append(f"{mins} min" if mins >= 1 else f"{int(it['length_s'])} s")
     if it.get("is_short"):
@@ -2942,7 +2977,7 @@ def item_caption(k, it, lang="en", year=None, day=False):
     if d and not day:   # a day's cards are all that day (the overview says it)
         bits.append(f"{d.day} {(MONTHS_ES if lang == 'es' else MONTHS)[d.month - 1][:3].capitalize()}"
                     + (f" {d.year}" if year and d.year != year else ""))
-    if _num(it.get("length_s")) and it["length_s"] > 0:
+    if _num(it.get("length_s")) and 0 < it["length_s"] <= 3 * 3600:   # round 12, pass 5: no "53945 min" (19.D)
         mins = int(round(it["length_s"] / 60))
         bits.append(f"{mins} min" if mins >= 1 else f"{int(it['length_s'])} s")
     if it.get("is_short"):
@@ -3027,7 +3062,7 @@ def scoped(text, sheet, answer=False):
     if topic and sheet.get("kind") in ("count", "first", "last") and (sheet.get("lang") or "en") == "en":
         # round 12, pass 3 (U9): "N% of them were Shorts" says whose
         text = re.sub(r"\b(\d[\d.,]*%) of (?:them|those|these)( were (?:YouTube )?Shorts)\b",
-                      lambda m: f"{m.group(1)} of your {topic} videos{m.group(2)}", text)
+                      lambda m: f"{m.group(1)} of your {topic} videos on YouTube{m.group(2)}", text)
     tp = (sheet.get("topics") or [{}])[0] if sheet.get("topics") else {}
     if answer and sheet.get("kind") == "count" and "themes" in str((tp or {}).get("matched_by") or "") and \
             _num((tp or {}).get("items")):
@@ -3049,6 +3084,204 @@ def scoped(text, sheet, answer=False):
         text = re.sub(r"(?<![\w,.])(?<![Aa]bout )(?<![Aa]round )(?<![Uu]nos )" + re.escape(n) + r"(?![\w,.])",
                       ("unos " if sheet.get("lang") == "es" else "about ") + n, text, count=1)
     return text
+
+
+# ====================================== round 12, pass 5: every percent with its base (the audit) ===================
+# Four passes ended with a checker finding, by hand, a share said "of your YouTube videos" that was of the known-length
+# ones, a channel's share "of its videos" that was of its math videos, a Shorts share of everything opened. The base
+# of a percent is now worded by code, on every sent sentence, whoever wrote it: right after the number (or after the
+# last number of a run "11% and 5%"), unless an earlier number of the same sentence about the same kind of thing (a
+# record's share, Shorts) says it. A filtered sheet's shares are "of your <topic> videos" (`bases`); Shorts are "of
+# your YouTube videos" (of all of them: `_yt_shares`), "of your <topic> videos on YouTube" under a topic; an
+# unfiltered record's share is "of what you opened", said once in the answer (the base every other record share has).
+_G_PCT = re.compile(r"(?<![\w.,])(\d+(?:[.,]\d{1,2})?)\s?%")
+_G_BASE = re.compile(
+    r"^\s*(?:of (?:everything|all|what) you (?:opened|watched)|of everything\b|of all your videos|"
+    r"of (?:your|the|the day's|that day's|the window's|the season's|the year's) youtube videos|of the youtube videos|"
+    r"of your long [a-z][a-z0-9 &'-]*? videos|of your long videos|of the long videos|"
+    r"of your [a-z0-9][a-z0-9 &'-]*? videos(?: on youtube)?|of (?:their|its) (?:own )?videos|"
+    r"of the videos you opened from\b|shorts\b|on a usual day\b|de lo que abriste|de todo lo que abriste)", re.I)
+_G_OPENED_SAID = re.compile(r"\bof (?:everything|all|what) you (?:opened|watched)\b|\bof everything\b", re.I)
+_G_WERE_SHORTS = re.compile(r"^\s*(?:of [^,.;%]*?\s)?(?:were|was|are|is)\s+(?:all\s+)?Shorts\b")
+_G_LONG = re.compile(r"\blong(?:-form)? (?:videos|ones)\b", re.I)
+
+
+def _gate_names(sheet):
+    out = set()
+    for k in ("themes", "areas", "channels", "topics", "fields"):
+        for r in sheet.get(k) or []:
+            if isinstance(r, dict) and isinstance(r.get("name"), str) and len(r["name"].strip()) >= 2:
+                out.add(r["name"].strip())
+                for c in r.get("channels") or [] if isinstance(r.get("channels"), list) else []:
+                    if isinstance(c, dict) and isinstance(c.get("name"), str) and len(c["name"].strip()) >= 2:
+                        out.add(c["name"].strip())
+    f = (sheet.get("filters") or {}).get("topic")
+    if isinstance(f, str) and f.strip():
+        out.add(f.strip())
+    return sorted(out, key=len, reverse=True)
+
+
+def _cues(text, names):
+    """[(start, end, "shorts" | "record")] of the sentence: the word Shorts (or long videos) and the sheet's names."""
+    out = []
+    taken = []
+    for n in names:
+        for m in re.finditer(r"(?<![\w])" + re.escape(n) + r"(?![\w])", text, re.I):
+            if not any(a <= m.start() < b for a, b in taken):
+                out.append((m.start(), m.end(), "record"))
+                taken.append((m.start(), m.end()))
+    for rx in (re.compile(r"\bShorts\b"), _G_LONG):
+        for m in rx.finditer(text):
+            if not any(a <= m.start() < b for a, b in taken):
+                out.append((m.start(), m.end(), "shorts"))
+    return sorted(out)
+
+
+def base_phrase(sheet, subject):
+    """The words of a base, as code says them: a record's share or a Shorts share, for this sheet's filters."""
+    b = bases(sheet)
+    if subject == "shorts":
+        return "of " + b["yt"] if b and b.get("yt") else "of your YouTube videos"
+    return "of " + b["opened"] if b else "of what you opened"
+
+
+def gate_sentence(s, sheet, names, state):
+    """(the sentence with every percent based, None) or (None, why). `state["opened_said"]`: the answer said "of what
+    you opened" already (an unfiltered record share needs it only once)."""
+    if (sheet.get("lang") or "en") != "en" or "%" not in s:
+        if _G_OPENED_SAID.search(s or ""):
+            state["opened_said"] = True
+        return s, None
+    filtered = bool(bases(sheet))
+    ws = bool((sheet.get("filters") or {}).get("without_shorts"))
+    cues = _cues(s, names)
+    ms = list(_G_PCT.finditer(s))
+    # runs: "11% and 5%", "85% and 100% Shorts": the base after the run's last number
+    runs, cur = [], [ms[0]] if ms else []
+    for a, b in zip(ms, ms[1:]):
+        if re.fullmatch(r"\s*(?:,|and|,\s*and)\s*", s[a.end():b.start()]):
+            cur.append(b)
+        else:
+            runs.append(cur)
+            cur = [b]
+    if cur:
+        runs.append(cur)
+    based_kinds = set()
+    inserts = []   # (position, words)
+    for run in runs:
+        first, last = run[0], run[-1]
+        after = s[last.end():]
+        prior = [c for c in cues if c[1] <= first.start()]
+        subj = prior[-1][2] if prior else ("shorts" if _G_WERE_SHORTS.match(after) else "record")
+        if _G_WERE_SHORTS.match(after) or re.match(r"^\s*Shorts\b", after):
+            subj = "shorts"
+        if subj == "shorts" and ws:
+            return None, "shorts_left_out"
+        if _G_BASE.match(after):
+            based_kinds.add(subj)
+            if _G_OPENED_SAID.match(after.strip()):
+                state["opened_said"] = True
+            continue
+        if subj in based_kinds:
+            continue   # an earlier number of the sentence about the same kind of thing says it
+        if subj == "record" and not filtered and state.get("opened_said"):
+            based_kinds.add(subj)
+            continue   # the answer's own base, said once
+        words = base_phrase(sheet, subj)
+        inserts.append((last.end(), " " + words))
+        based_kinds.add(subj)
+        if subj == "record" and not filtered:
+            state["opened_said"] = True
+    for pos, w in sorted(inserts, reverse=True):
+        s = s[:pos] + w + s[pos:]
+    if _G_OPENED_SAID.search(s):
+        state["opened_said"] = True
+    return s, None
+
+
+def _leaves(o, path="", owner=None, out=None):
+    """[(path, key, value, owner name)] of every number of the sheet as shown."""
+    out = [] if out is None else out
+    if isinstance(o, dict):
+        nm = _record_name_key(o)
+        own = o.get(nm) if nm else owner
+        for k, v in o.items():
+            p = f"{path}.{k}" if path else k
+            if isinstance(v, (dict, list)):
+                _leaves(v, p, own, out)
+            elif _num(v) and not isinstance(v, bool):
+                out.append((p, k, v, own))
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            _leaves(v, f"{path}[{i}]", owner, out)
+    return out
+
+
+def sentence_paths(text, sheet):
+    """Round 12, pass 5 (the audit: the trace kept no sentence's paths): for each sent sentence of `text` (bars and
+    captions of the chart left out), the sheet paths its numbers rest on, by code: a percent is a share whose value
+    says it, a count a count of that value; where several do, those of a record the sentence names. Paths only (no
+    words): the trace keeps them."""
+    sh = shown(sheet)
+    leaves = _leaves(sh)
+    names = _gate_names(sh)
+    out = []
+    for line in (text or "").split("\n"):
+        ln = line.strip().lstrip("•").strip()
+        if not ln or re.match(r"^[█░▏▎▍▌▋▊▉]", ln) or (ln.endswith(":") and len(ln) < 90):
+            continue
+        for sent in _sentences(ln):
+            low = sent.lower()
+            named = {n.lower() for n in names if re.search(r"(?<![\w])" + re.escape(n.lower()) + r"(?![\w])", low)}
+            paths = []
+            for m in re.finditer(r"(?<![\w.,])(\d[\d,]*(?:\.\d+)?)(\s?%)?", sent):
+                tok, pct = m.group(1), bool(m.group(2))
+                if not pct and re.fullmatch(r"(?:19|20)\d\d", tok):
+                    continue   # a year
+                try:
+                    v = float(tok.replace(",", ""))
+                except ValueError:
+                    continue
+                if pct:
+                    c = [(p, o) for p, k, x, o in leaves if (k.endswith("share") or k in ("faded_from", "faded_to",
+                         "grew_from", "grew_to")) and _pc(x) == f"{tok}%"]
+                else:
+                    c = [(p, o) for p, k, x, o in leaves if not k.endswith("share") and float(x) == v]
+                best = [p for p, o in c if isinstance(o, str) and o.lower() in named] or [p for p, _ in c]
+                paths += [p for p in best[:3] if p not in paths]
+            out.append(paths)
+    return out
+
+
+def gate_form(form, sheet):
+    """Round 12, pass 5: the form's answer, observations and so-what with every percent based (`gate_sentence`); a
+    sentence that cannot be is dropped (recorded in form["dropped"])."""
+    names = _gate_names(shown(sheet))
+    state = {}
+    out = dict(form)
+    dropped = list(form.get("dropped") or [])
+
+    def one(text, where):
+        if not isinstance(text, str) or not text:
+            return text
+        kept = []
+        for sent in _sentences(text):
+            r, why = gate_sentence(sent, sheet, names, state)
+            if why:
+                dropped.append((where, why, sent))
+                continue
+            kept.append(r)
+        return " ".join(kept) if kept else None
+    out["answer"] = one(form.get("answer"), "answer")
+    obs = []
+    for o in form.get("observations") or []:
+        r = one(o, "observation")
+        if r:
+            obs.append(r)
+    out["observations"] = obs
+    out["so_what"] = one(form.get("so_what"), "so_what")
+    out["dropped"] = dropped
+    return out
 
 
 def bases(sheet):
@@ -3168,6 +3401,8 @@ def layout(form, sheet, items_parts=None, extra_lines=()):
                 observations=[scoped(o, sheet) for o in form["observations"]],
                 so_what=scoped(form.get("so_what"), sheet))   # round 12, pass 4 (V1): the so-what with its base too
     form = _once_spans(form)
+    gated = gate_form(form, sheet)   # round 12, pass 5: every percent with its base
+    form = dict(gated, answer=gated["answer"] or form["answer"])
     head = [_no_title_twice(window_lead(form["answer"], sheet), sheet)]
     if form["observations"]:
         head.append("\n".join("• " + o for o in form["observations"]))
@@ -3325,16 +3560,24 @@ def code_form(sheet):
         up = sorted((t for t in ch if t["change_vs_previous"] >= 0.015), key=lambda t: -t["change_vs_previous"])
         down = sorted((t for t in ch if t["change_vs_previous"] <= -0.015), key=lambda t: t["change_vs_previous"])
         # round 12, pass 3 (U7): every move said the same way: its direction, both values and the base period
+        # round 12, pass 5 (the audit: "X grew from 10% to 15% against 2023" in a gaming answer, of the gaming videos,
+        # said with no base): a filtered sheet's move says its base right after its first value
+        bw = (bases(s) or {}).get("opened") if not es else None
+        pws = re.sub(r"\s*\([^)]*\)\s*$", "", pw).strip() if pw else pw
+
+        def mv(t, verb):
+            if bw:
+                return f"{t['name']} {verb} to {pc(t['share'])} of {bw}, from {pc(t['previous_share'])} in {pws}."
+            return f"{t['name']} {verb} from {pc(t['previous_share'])} to {pc(t['share'])} against {pw}."
         if up and pw:
             t = up[0]
-            o(f"{t['name']} grew from {pc(t['previous_share'])} to {pc(t['share'])} against {pw}.", key)
+            o(mv(t, "grew"), key)
         elif up and es:
             t = up[0]
             o(f"{t['name']} subió de {pc(t['previous_share'])} a {pc(t['share'])}.", key)
         if down and (pw or es):
             t = down[0]
-            o((f"{t['name']} bajó de {pc(t['previous_share'])} a {pc(t['share'])}." if es else
-               f"{t['name']} fell from {pc(t['previous_share'])} to {pc(t['share'])} against {pw}."), key)
+            o((f"{t['name']} bajó de {pc(t['previous_share'])} a {pc(t['share'])}." if es else mv(t, "fell")), key)
         for t in (up[:1] + down[:1]) if (pw or es) else []:   # an area of one theme says the same move once
             said_moves.add((round(t["previous_share"], 2), round(t["share"], 2)))
 
@@ -3494,21 +3737,29 @@ def code_form(sheet):
                 o(f"Inside {topic}: {themes[0]['name']} ({_pc(themes[0]['share'])} of your {topic} videos) and "
                   f"{themes[1]['name']} ({_pc(themes[1]['share'])}).", "themes")
                 moves(themes, "themes")
+            # round 12, pass 5 (the audit, (b): "A and B are both about T (100% and 99% of their videos)" in a math
+            # answer: 100% and 99% were of their math videos, 93% and 82% of all their videos): a channel's theme
+            # share under a topic is of its videos on that topic, so the sentence names that set and says no percent
+            # that a reader takes as all its videos
             if len(th_) >= 2 and th_[0]["theme"] == th_[1]["theme"]:
-                o(f"{th_[0]['name']} and {th_[1]['name']} are both about {th_[0]['theme']} "
-                  f"({_pc(th_[0]['theme_share'])} and {_pc(th_[1]['theme_share'])} of their videos).", "channels")
+                o(f"In {topic}, {th_[0]['name']} and {th_[1]['name']} are both about {th_[0]['theme']}.", "channels")
             elif len(th_) >= 2:
-                o("What they are: " + "; ".join(f"{c['name']} is about {c['theme']} ({_pc(c['theme_share'])} of its "
-                                                f"videos)" for c in th_[:2]) + ".", "channels")
+                o(f"What they are in {topic}: " + "; ".join(f"{c['name']} is about {c['theme']}" for c in th_[:2]) +
+                  ".", "channels")
         top5 = [c for c in chans[:5] if _num(c.get("shorts_share"))]
         sh = [c for c in top5 if c["shorts_share"] >= 0.8][:2]
         lo = [c for c in top5 if c["shorts_share"] <= 0.1][:2]
+        fl_ = s.get("filters") or {}
+        # round 12, pass 5 (the audit: "X is a clip channel (85% Shorts)" in a gaming answer was of its gaming videos;
+        # of all its videos then it was 74%): under a filter a channel's Shorts share is not said as a number
+        pc_sh = (lambda c: "") if (fl_.get("topic") or fl_.get("channel")) else (lambda c: _pc(c["shorts_share"]))
         if sh and lo and not es and not (s.get("filters") or {}).get("without_shorts") and \
                 all(_num(c.get("days")) for c in lo):
             # round 12, pass 3 (U8, row 2: "say what the ranking says about him"): the clip channels he grazes
             # against the long-form ones he keeps coming back to, from each one's Shorts share and days
             o(" and ".join(c["name"] for c in sh) + (" is a clip channel" if len(sh) == 1 else " are clip channels") +
-              " you grazed (" + " and ".join(_pc(c["shorts_share"]) for c in sh) + " Shorts); " +
+              (" you grazed (" + " and ".join(pc_sh(c) for c in sh) + " Shorts); " if pc_sh(sh[0]) else
+               " you grazed; ") +
               " and ".join(c["name"] for c in lo) + (" is a long-form channel" if len(lo) == 1 else " are long-form channels") +
               " you kept coming back to (on " + " and ".join(f(c["days"], lang) for c in lo) + " days).", "channels",
               must=True)
@@ -3516,10 +3767,12 @@ def code_form(sheet):
             bits = []
             if sh:
                 bits.append(" and ".join(c["name"] for c in sh) + (" is" if len(sh) == 1 else " are") +
-                            " almost all Shorts (" + " and ".join(_pc(c["shorts_share"]) for c in sh) + ")")
+                            " almost all Shorts" + (" (" + " and ".join(pc_sh(c) for c in sh) + ")"
+                                                    if pc_sh(sh[0]) else ""))
             if lo:
                 bits.append(" and ".join(c["name"] for c in lo) + (" has" if len(lo) == 1 else " have") +
-                            " almost no Shorts (" + " and ".join(_pc(c["shorts_share"]) for c in lo) + ")")
+                            " almost no Shorts" + (" (" + " and ".join(pc_sh(c) for c in lo) + ")"
+                                                   if pc_sh(lo[0]) else ""))
             o(", while ".join(bits) + ".", "channels")
         if not es and not _long_or_one_day(s):
             new = [c for c in _rows_named((s.get("new") or {}).get("channels"), ("name", "items"))
@@ -3560,7 +3813,8 @@ def code_form(sheet):
         topic = (s.get("filters") or {}).get("topic") or (tp[0]["name"] if tp else "")
         d0 = _as_date(items[0]["at"]) if items else None
         if d0 and topic:
-            ans = (f"You first opened a {topic} video on {_day_words(d0)}." if kind == "first" else
+            an_ = "an" if topic[:1].lower() in "aeiou" else "a"   # round 12, pass 5: "an art video"
+            ans = (f"You first opened {an_} {topic} video on {_day_words(d0)}." if kind == "first" else
                    f"The last {topic} video you opened was on {_day_words(d0)}.")
         if _num(tot.get("items")) and _num(tot.get("days_active")):
             o((f"Since then you opened {f(tot['items'], lang)} {topic} videos on {f(tot['days_active'], lang)} days."
@@ -3903,7 +4157,8 @@ def _span_noun(sheet):
         return "three months"   # (in words: the answer's numbers are its facts)
     if n % 7 == 0 and n // 7 in words:
         return f"{words[n // 7]} weeks"
-    return None
+    # round 12, pass 5: the span facts._peaks_new compared with (whole months, sliding by a month)
+    return {1: "month", 2: "two months", 4: "four months", 6: "six months", 12: "year"}.get(max(1, round(n / 30.4)))
 
 
 def _into_lead(areas, into, sheet):
@@ -4004,7 +4259,7 @@ def so_what_text(c, s, topic=None, lang=None):
         return (f"Worth noticing: {c['faded']} fell from {_pc(c['faded_from'])} to {_pc(c['faded_to'])}{base}. Say "
                 f"\"only {c['faded']}\" to see what in it you watched less.")
     if k == "shorts_shift":
-        whose = f"your {c['topic']} videos" if c.get("topic") else "your YouTube videos"
+        whose = f"your {c['topic']} videos on YouTube" if c.get("topic") else "your YouTube videos"
         return (f"Shorts went {'up' if c['direction'] == 'up' else 'down'} to {_pc(c['share'])} of {whose}, "
                 f"from {_pc(c['previous_share'])}" + (f" in {pw}." if pw else " before."))
     if k == "channel_rise":
@@ -4819,6 +5074,11 @@ def write(bot, person, sheet, now, info=None, say=None, deadline=None):
         except Exception:  # noqa: BLE001 - no cards: the lines alone
             cards = []
     parts = layout(form, sheet, cards, extra)
+    try:   # round 12, pass 5: what each sent sentence rests on, for the trace (paths only)
+        info["sentence_paths"] = sentence_paths("\n".join(p.get("text") or "" for p in parts
+                                                           if p.get("type") == "text" and not p.get("card_alt")), sheet)
+    except Exception:  # noqa: BLE001 - the trace is extra
+        info["sentence_paths"] = None
     if said:
         try:
             from . import history as Hs

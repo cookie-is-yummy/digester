@@ -306,7 +306,14 @@ def season_windows(t, today):
             elif rel == "this" and a > today:
                 y -= 1
         a, b = _season(name, y)
+        if a > today and not yy:
+            continue
         if a > today:
+            # round 12, pass 5 (the audit: "the winter of 2026", asked in November 2026, was read as the topic
+            # "winter" over 2026): a season named by its year that has not begun is still that season, after the
+            # record (the answer says where the export ends)
+            out.append((Window(kind="range", start=a, end=b, label=f"the {name} of {y}" if name != "winter" else
+                               f"the winter of {y} to {y + 1}"), m.span()))
             continue
         label = f"the {name} of {y}" if name != "winter" else f"the winter of {y} to {y + 1}"
         out.append((Window(kind="range", start=a, end=min(b, today), label=label), m.span()))
@@ -526,7 +533,9 @@ def find_windows(t, today):
             taken.append((sp1[0], sp2[1]))
             break
     # "since <window>": from its start to today; a window never runs past today ("in 2026" is up to today)
-    found = [(s, w.model_copy(update={"end": min(w.end, today) if w.end else w.end})   # round 12, D: keeps a label
+    found = [(s, w.model_copy(update={"end": min(w.end, today) if w.end and not (w.label and w.start and
+                                                                               w.start > today) else w.end})
+              # round 12, D: keeps a label; round 12, pass 5: a season not begun keeps its own end
               if isinstance(w, Window) else w, span) for s, w, span in found]
     out = []
     for s, w, span in sorted(found, key=lambda x: x[0]):
@@ -538,6 +547,10 @@ def find_windows(t, today):
             w = _win("since", w.start, today)
         out.append((w, span))
     return out
+
+
+AREA_AND = ("art and design", "film and tv", "food and cooking", "nature and animals", "fashion and beauty",
+            "diy and making")   # round 12, pass 5: the areas' own names with "and" (themes.CATEGORY_WORDS)
 
 
 def _topic_and_platform(t, spans):
@@ -565,10 +578,21 @@ def _topic_and_platform(t, spans):
     if re.search(r"\b(?:watch\w*|viewed|seen|visto|vi|veo|viendo)\b", rest) and how != "watched":
         how = "watched" if how == "liked" and re.search(r"\bwatch\w*\b", rest) and not re.search(r"\bliked\b", rest) \
             else how
+    # round 12, pass 5 (the audit: "most watched channels in art and design" was read as "art" alone, its sheet then
+    # counting "design" too): an area's own name with "and" in it ("art and design", "film and tv") is one topic
+    for k_, ph in enumerate(AREA_AND):
+        rest = re.sub(r"\b" + re.escape(ph) + r"\b", f"areaphrase{k_}x", rest)
     toks = re.findall(r"[a-z0-9&'+.#-]+", rest)
     runs, cur = [], []
     for k, w in enumerate(toks):
         w2 = w.strip(".'-")
+        m_ = re.fullmatch(r"areaphrase(\d+)x", w2)
+        if m_:
+            if cur:
+                runs.append(cur)
+            runs.append([AREA_AND[int(m_.group(1))]])
+            cur = []
+            continue
         if w2 == "after" and k + 1 < len(toks) and toks[k + 1].strip(".'-") == "effects":
             cur.append(w2)   # round 11 fix, A: "after effects" is a name, not "after" and a topic "effects"
             continue
@@ -2300,7 +2324,9 @@ def send_answer(bot, person, q, now, follow=False, lead="", friends_asked=False,
                            "dropped": len(winfo.get("dropped") or ()), "so_what": bool(winfo.get("so_what")),
                            "offers": [str(o).split(":", 1)[0] for o in winfo.get("offers_shown") or []],
                            "without_shorts": bool(q.without_shorts), "error": winfo.get("error"),
-                           "sheet_s": (sheet or {}).get("built_s"), "versions": (sheet or {}).get("versions")}
+                           "sheet_s": (sheet or {}).get("built_s"), "versions": (sheet or {}).get("versions"),
+                           # round 12, pass 5 (the audit): the sheet paths each sent sentence rests on (paths only)
+                           "sentences": winfo.get("sentence_paths")}
     run_id = bot.store.add_run(handle=h, kind="history", at=now_iso(now), n_candidates=len(ids), n_picks=len(ids),
                                n_dropped=0, cost_usd=float(winfo.get("cost") or 0.0),
                                status="picked" if ids else "none",

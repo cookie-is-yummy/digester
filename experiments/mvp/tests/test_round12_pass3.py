@@ -486,7 +486,8 @@ def test_u9_month_bars_that_add_up_to_more_than_the_count_say_what_they_count():
 def test_u9_a_share_of_them_says_whose():
     I = ins()
     s = {"kind": "count", "lang": "en", "filters": {"topic": "minecraft"}, "topics": [{"name": "minecraft"}]}
-    assert I.scoped("61% of them were Shorts.", s) == "61% of your minecraft videos were Shorts."
+    # round 12, pass 5: a Shorts share is of the YouTube videos, so under a topic "of your <topic> videos on YouTube"
+    assert I.scoped("61% of them were Shorts.", s) == "61% of your minecraft videos on YouTube were Shorts."
 
 
 # ================================ U10: the daily cap in the trace ===============================================

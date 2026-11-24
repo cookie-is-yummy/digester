@@ -293,7 +293,11 @@ def test_e_the_run_keeps_the_forms_shape_and_the_sheets_kind_never_words_or_titl
     ask(wr, QS["q6"])
     st = last_steps(wr)
     assert set(st["writer"]) == {"sheet_kind", "used", "called", "kept", "dropped", "so_what", "offers",
-                                 "without_shorts", "error", "sheet_s", "versions"}
+                                 "without_shorts", "error", "sheet_s", "versions", "sentences"}
+    # round 12, pass 5: the sheet paths each sent sentence rests on, paths only (no words)
+    assert isinstance(st["writer"]["sentences"], list) and all(
+        isinstance(p, list) and all(re.fullmatch(r"[a-z_]+(?:\[\d+\])?(?:\.[a-z_]+(?:\[\d+\])?)*", x) for x in p)
+        for p in st["writer"]["sentences"])
     blob = json.dumps(st).lower()
     titles = {r["caption"].lower() for r in R.rows()} | {r["channel"].lower() for r in R.rows() if r.get("channel")} | \
         {"october 30", "what did i watch"}

@@ -265,6 +265,10 @@ class Scope:
         # round 12, pass 2 fix: the Shorts share of the YouTube videos is the sheet's own number (said as a share,
         # never as a count: "Shorts made up 12,080 of your window")
         shs = {"shorts_share": _share(nsh, nsh + nlo)} if nsh + nlo else {}
+        if nsh + nlo and len(yt):
+            # round 12, pass 5 (the audit, (d): "79% of your YouTube videos" was of those with a known length; of all
+            # of them it was 77%): the share said "of your YouTube videos" is of all of them (hidden from the writer)
+            shs["shorts_yt_share"] = _share(nsh, len(yt))
         return {**med, **shs, "items": int(len(it)), "days_active": int(len(np.unique(self.ev_days))),
                 "length_hours": _hours(f.length[known].sum()) if len(known) else 0.0,
                 "length_known_share": _share(len(known), len(yt)),
@@ -491,6 +495,8 @@ def _periods(idx, facts, th, ev_mask, start_o, end_o, by=None):
         yt = it[(idx.platform[it] == 0) & (facts.short[it] >= 0)] if len(it) else it
         if len(yt) >= 20:
             row["shorts_share"] = _share(int((facts.short[yt] == 1).sum()), len(yt))
+            yta = it[idx.platform[it] == 0]   # round 12, pass 5: of all the period's YouTube videos (as said)
+            row["shorts_yt_share"] = _share(int((facts.short[yta] == 1).sum()), len(yta))
         out.append(row)
     return out, unit
 
@@ -516,7 +522,8 @@ def _saved_not_opened(view, idx, facts, th, tids, limit=10):   # round 12, merge
     return out
 
 
-def _item_rows(view, idx, facts, th, ids, rec, kinds, start, end):
+def _item_rows(view, idx, facts, th, ids, rec, kinds, start, end, first=False):
+    """The items' rows; "at" is the day an item was last opened (its first open for a first: round 12, pass 5)."""
     out = []
     for i in ids:
         it = view.items.get(i)
@@ -526,8 +533,9 @@ def _item_rows(view, idx, facts, th, ids, rec, kinds, start, end):
         ds = [d for d, kk in rec.events.get(i, []) if kk in kinds and (start is None or d >= start)
               and (end is None or d <= end)]
         length = int(facts.raw_length[k]) if k is not None and facts.raw_length[k] > 0 else None
-        out.append({"id": i, "title": Hm._title(it), "channel": it.creator, "at": (max(ds) if ds else None) and
-                    max(ds).isoformat(), "length_s": length,
+        at = (min(ds) if first else max(ds)) if ds else None
+        out.append({"id": i, "title": Hm._title(it), "channel": it.creator, "at": at and at.isoformat(),
+                    "length_s": length,
                     "is_short": (None if k is None or facts.short[k] < 0 else bool(facts.short[k])),
                     "theme": th.shown(int(facts.theme[k])) if (th is not None and k is not None and
                                                                facts.theme[k] >= 0) else None,
@@ -558,6 +566,9 @@ def window_words(q, w, start, end, rec, plats, lang="en"):
             label = base.split(" (")[0]
             if w.kind in ("day",):
                 return f"{base}, the last day of your export", True
+            m_ = re.match(r"^(from .+?) to \d{1,2} [A-Za-z]+ \d{4}$", label)
+            if m_:   # round 12, pass 5 (the audit: "From 1 January 2024 to 24 November 2026 up to 30 October 2026")
+                return f"{m_.group(1)} to {Hm.day_words(newest)}, where your export ends", True
             return f"{label} up to {Hm.day_words(newest)}, where your export ends", True
     return base, False
 
@@ -643,6 +654,7 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     eo = eff_end.toordinal() if eff_end else None
     if topic_mask is not None and kind == "count":
         out["window_totals"] = Scope(idx, facts, ev, so, eo).totals()   # the count's "of N you watched then"
+    ev_pre = ev.copy()   # round 12, pass 5: the other filters (without Shorts, a channel), the topic not yet applied
     if topic_mask is not None:
         ev = ev & topic_mask[idx.it]
     sc = Scope(idx, facts, ev, so, eo)
@@ -702,15 +714,30 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         else:
             out["comparison"] = _compare(out["topics"], None, q.lang)
     elif q.topic and kind in ("count", "first", "last", "channels", "top"):
-        out["topics"] = [_topic_row(view, rec, idx, facts, th, ph, base_ev, so, eo) for ph in q.topic]
+        # round 12, pass 5 (the audit: a "without Shorts" follow-up's topic row kept its Shorts, 8,005 against 1,875):
+        # the topic's own row under the sheet's other filters
+        out["topics"] = [_topic_row(view, rec, idx, facts, th, ph, ev_pre, so, eo) for ph in q.topic]
     if kind in ("day", "first", "last") or q.kind in ("list", "top_items"):
         try:
             _text, ids, _extra = Hm.answer(view, q, today, prof, rec, said_end=True, quiet=("friends", "range",
                                                                                             "refresh"))
         except Exception:  # noqa: BLE001 - the list is extra; the sheet stands without it
             ids = []
+        if kind in ("first", "last") and topic_mask is not None:
+            # round 12, pass 5 (the audit: "You first opened a gaming video on 5 April 2020" where the sheet's own
+            # topic, its themes and its words, holds one from 21 August 2019): a first or a last is of the sheet's
+            # own scope, its items in the order of their first (or last) open
+            d_, i_ = idx.day[ev], idx.it[ev]
+            if eo is not None:
+                d_, i_ = d_[d_ <= eo], i_[d_ <= eo]
+            seen_ = {}
+            for d1, i1 in sorted(zip(d_.tolist(), i_.tolist()), reverse=(kind == "last")):
+                seen_.setdefault(i1, d1)
+                if len(seen_) >= 10:
+                    break
+            ids = [idx.ids[i1] for i1 in seen_]
         out["items"] = _item_rows(view, idx, facts, th, ids, rec, kinds, eff_start if kind == "day" else None,
-                                  eff_end if kind == "day" else None)
+                                  eff_end if kind == "day" else None, first=(kind == "first"))
         if kind in ("first", "last") and q.topic:
             out["periods"], out["periods_unit"] = _periods(idx, facts, th, ev, None, eo, by="year")
     # things saved on the window's themes and never opened
@@ -738,6 +765,8 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         t = out["totals"]
         if out["usual"] and (t.get("shorts", 0) + t.get("long", 0)):
             out["usual"]["day_shorts_share"] = _share(t["shorts"], t["shorts"] + t["long"])
+            if (t.get("by_platform") or {}).get("youtube"):   # round 12, pass 5: "of the day's YouTube videos"
+                out["usual"]["day_shorts_yt_share"] = _share(t["shorts"], t["by_platform"]["youtube"])
         first, big = _first_by_creator(idx, base_ev)
         fresh = [c for c in out["channels"] if c.get("first_watched") == eff_start.isoformat()]
         out["new_today"] = {"channels": len(fresh), "names": [c["name"] for c in fresh[:3]]}
@@ -830,7 +859,9 @@ def _area_change(periods):
               "change": round((b.get(k, 0.0) - a.get(k, 0.0)) * 100, 1)} for k in sorted(set(a) | set(b))]
     left = sorted((m for m in moves if m["change"] <= -3), key=lambda m: m["change"])[:2]
     arrived = sorted((m for m in moves if m["change"] >= 3), key=lambda m: -m["change"])[:2]
-    sh = [(p["label"], p["shorts_share"]) for p in rows if isinstance(p.get("shorts_share"), (int, float))]
+    # round 12, pass 5: the Shorts then and now as said, of all the period's YouTube videos
+    sh = [(p["label"], p.get("shorts_yt_share", p["shorts_share"])) for p in rows
+          if isinstance(p.get("shorts_share"), (int, float))]
     out = {"from": rows[0]["label"], "to": rows[-1]["label"], "left": left, "arrived": arrived}
     if len(sh) >= 2:
         out["shorts"] = {"from": sh[0][0], "from_share": sh[0][1], "to": sh[-1][0], "to_share": sh[-1][1]}
@@ -905,6 +936,11 @@ def _so_what_candidates(out, kind, q):
             kind not in ("changed", "compare_topics"):   # pass 2 fix: a comparison's totals are of everything
         a = tot["shorts"] / (tot["shorts"] + tot["long"])
         b = prev["shorts"] / (prev["shorts"] + prev["long"])
+        # round 12, pass 5 (the audit: "Shorts went up to 94% of your <topic> videos" was of those with a known
+        # length): the shares said are of all the YouTube videos ("of your YouTube videos", "... on YouTube")
+        ya, yb = (tot.get("by_platform") or {}).get("youtube"), (prev.get("by_platform") or {}).get("youtube")
+        if ya and yb:
+            a, b = tot["shorts"] / ya, prev["shorts"] / yb
         if abs(a - b) >= SHIFT_POINTS:
             c.append({"key": "shorts_shift:" + ("up" if a > b else "down"), "kind": "shorts_shift",
                       "direction": "up" if a > b else "down", "share": round(a, 3), "previous_share": round(b, 3),
@@ -1030,54 +1066,75 @@ PEAK_MIN_ITEMS = 20     # and 20 videos
 NEW_BEFORE_MAX = 0.05   # "new then": before the window, at most 5% of its videos in the window (or 2)
 
 
+def _month_spans(lo, hi, months):
+    """Round 12, pass 5: every span of `months` whole calendar months the record holds from `lo` to `hi` (ordinals),
+    sliding by one month: [(first day, last day)], none past `hi`."""
+    a0 = date.fromordinal(lo)
+    y, m = a0.year, a0.month
+    out = []
+    while True:
+        y1, m1 = y + (m - 1 + months - 1) // 12, (m - 1 + months - 1) % 12 + 1
+        end = (date(y1 + (m1 == 12), m1 % 12 + 1, 1) - timedelta(days=1)).toordinal()
+        if end > hi:
+            break
+        out.append((date(y, m, 1).toordinal(), end))
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def span_months(so, eo, year=False):
+    """Round 12, pass 5: how many months one span of the window's length is (a year 12; 90 days 3; 4 weeks 1)."""
+    return 12 if year else max(1, round((eo - so + 1) / 30.4))
+
+
 def _peaks_new(idx, facts, th, ev, so, eo, rows, year=False):
     """Round 12, pass 4 (V2): {"peaked": [{name, area, share, items, peak_share, next_share, spans}], "new": [{name,
-    area, share, items, before}]} for the window's own top themes (the ones the writer is shown). "Peaked then": its
-    share of the window is at least 1.1 times its share in every other span of the same length the record holds
-    (calendar years for a year), and at least 1.5 times its median share of them. "New then": before the window he opened at most 5% as many
-    of it (or 2)."""
+    area, share, items, before}]} for the window's own top themes (the ones the writer is shown). "New then": before
+    the window he opened at most 5% as many of it (or 2).
+    Round 12, pass 5 (the audit, (a): "peaked then, at 5%, more than in any other three months" was true only against
+    the calendar seasons; the three months starting a month earlier held 5.4%): "peaked then" is computed exactly as
+    it is said: its share of the window is at least its share in EVERY span of the window's length the record holds,
+    sliding by a month (whole calendar months; a span that holds the window, or is the window, is not another span;
+    spans of at least 100 videos), at least 1.1 times its share in every such span apart from the window, and 1.5 times
+    its median share of them."""
     import numpy as np
     days, items = idx.day[ev], idx.it[ev]
     if not len(days):
         return {"peaked": [], "new": []}
-    lo, hi = int(days.min()), int(days.max())
-    if year:
-        a = date.fromordinal(so).year
-        tiles = [(date(y, 1, 1).toordinal(), date(y, 12, 31).toordinal()) for y in
-                 range(date.fromordinal(lo).year, date.fromordinal(hi).year + 1) if y != a]
-    else:
-        n = eo - so + 1
-        tiles = []
-        k = 1
-        while so - k * n + n - 1 >= lo:
-            tiles.append((so - k * n, eo - k * n))
-            k += 1
-        k = 1
-        while eo + k * n - n + 1 <= hi:
-            tiles.append((so + k * n, eo + k * n))
-            k += 1
+    lo, hi = int(days.min()), max(int(days.max()), int(eo))
+    months = span_months(so, eo, year)
     nth = int(facts.theme.max()) + 1 if len(facts.theme) else 0
-    shares = []
-    for a, b in tiles:
+    shares, apart = [], []
+    for a, b in _month_spans(lo, hi, months):
+        if (a <= so and b >= eo) or (abs(a - so) <= 3 and abs(b - eo) <= 3):
+            continue   # the window itself, or a span that holds it
         m = (days >= a) & (days <= b)
         u = np.unique(items[m])
         if len(u) < PEAK_TILE_MIN:
             continue
         t = facts.theme[u]
-        shares.append(np.bincount(t[t >= 0], minlength=nth) / len(u))
+        sh = np.bincount(t[t >= 0], minlength=nth) / len(u)
+        shares.append(sh)
+        if b < so or a > eo:
+            apart.append(sh)
     peaked, new = [], []
     w = np.unique(items[(days >= so) & (days <= eo)])
+    wt = facts.theme[w] if len(w) else np.zeros(0, int)
+    wsh = np.bincount(wt[wt >= 0], minlength=nth) / len(w) if len(w) else np.zeros(nth)
     before = np.unique(items[days < so])
     bc = np.bincount(facts.theme[before][facts.theme[before] >= 0], minlength=nth) if len(before) else np.zeros(nth)
     for r in rows[:THEMES_MAX]:
         tid = r.get("theme_id")
         if tid is None or not len(w) or r["share"] < PEAK_MIN_SHARE or r["items"] < PEAK_MIN_ITEMS:
             continue
+        here = float(wsh[tid]) if tid < len(wsh) else 0.0
         others = [float(s[tid]) for s in shares]
-        if len(others) >= PEAK_TILES_MIN and r["share"] >= PEAK_NEXT * max(others) and \
-                r["share"] >= PEAK_LIFT * float(np.median(others)):
+        far = [float(s[tid]) for s in apart] or others
+        if len(others) >= PEAK_TILES_MIN and here >= max(others) and here >= PEAK_NEXT * max(far) and \
+                here >= PEAK_LIFT * float(np.median(others)):
             peaked.append({"name": r["name"], "area": r.get("area"), "share": r["share"], "items": r["items"],
-                           "peak_share": r["share"], "next_share": round(max(others), 3), "spans": len(others) + 1})
+                           "peak_share": r["share"], "next_share": round(max(others), 3), "spans": len(others) + 1,
+                           "span_months": months})
         b_ = int(bc[tid]) if tid < len(bc) else 0
         if b_ <= max(2, NEW_BEFORE_MAX * r["items"]) and r["share"] >= 0.01:
             new.append({"name": r["name"], "area": r.get("area"), "share": r["share"], "items": r["items"],

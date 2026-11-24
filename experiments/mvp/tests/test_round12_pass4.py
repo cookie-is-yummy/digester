@@ -151,12 +151,15 @@ def test_v2_a_peak_is_higher_than_every_other_span_of_its_length():
     import numpy as np
     from types import SimpleNamespace as NS
     F = mods()[1]
-    # 4 spans of 10 days; theme 1 is 30% of the last span, at most 10% of the others; theme 2 is flat
+    # 4 calendar months (round 12, pass 5: the spans are whole months, sliding by one); theme 1 is 30% of the last
+    # month, 10% of the others; theme 2 is flat
+    from datetime import date
+    starts = [date(2025, m, 1).toordinal() for m in (1, 2, 3, 4)]
     day, it, theme = [], [], []
     k = 0
     for span in range(4):
         for j in range(120):
-            day.append(span * 10 + j % 10)
+            day.append(starts[span] + j % 28)
             it.append(k)
             theme.append(1 if (span == 3 and j < 36) or (span < 3 and j < 12) else 2)
             k += 1
@@ -164,7 +167,7 @@ def test_v2_a_peak_is_higher_than_every_other_span_of_its_length():
     facts = NS(theme=np.array(theme))
     rows = [{"name": "Peak theme", "theme_id": 1, "share": 0.3, "items": 36},
             {"name": "Flat theme", "theme_id": 2, "share": 0.7, "items": 84}]
-    out = F._peaks_new(idx, facts, None, np.ones(len(day), bool), 30, 39, rows)
+    out = F._peaks_new(idx, facts, None, np.ones(len(day), bool), starts[3], date(2025, 4, 30).toordinal(), rows)
     assert [p["name"] for p in out["peaked"]] == ["Peak theme"] and out["peaked"][0]["next_share"] == 0.1, out
 
 
