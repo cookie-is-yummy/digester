@@ -9,3 +9,4 @@ cryptography==50.0.1
 playwright==1.63.0
 # DESIGN section 20: Claude as the text model (lib/ai.py, anthropic_chat_json); only needed when a claude- model is set
 anthropic==2.13.0
+pillow==12.3.0  # charts.py: the chart picture for text channels (png); without it png() returns None and the text chart is sent
