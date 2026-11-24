@@ -93,6 +93,7 @@ Grades and queued searches are saved in the library's `feedback/` folder on your
 
 1. **Request your exports.**
    - **Instagram:** Accounts Center → *Your information and permissions* → *Download your information*. Choose **JSON** format and *All time*. Include saved posts, likes, messages, followers and following.
+     - If you already have an export in **HTML** format, convert it instead of requesting a new one: `python3 experiments/demo/ig_html_to_json.py <html-export.zip> data/<name>-json.zip --tz <your timezone, e.g. America/Los_Angeles>`, then add the new zip. HTML exports have no timezone on their dates and no participants line on one-to-one DM threads, so times depend on `--tz` and the self-thread check uses the thread title.
    - **YouTube:** go to [takeout.google.com](https://takeout.google.com) and select *YouTube and YouTube Music*. Optionally also select *My Activity*, which can hold extra watch history. Takeout may split the export into several zips; add them all.
 2. In the app, click **Libraries & uploads**.
 3. **Add the zips.** Either choose the files, or paste each zip's path on your computer. Pasting the path avoids copying a large file.
@@ -127,6 +128,7 @@ Grades and queued searches are saved in the library's `feedback/` folder on your
   - `app.py`: the server.
   - `engine.py`: the round-8 processors, run in one process per library.
   - `ig_import.py`, `ingest.py`: the importers.
+  - `ig_html_to_json.py`: turns an HTML-format Instagram export into the JSON-format zip `ig_import.py` reads.
   - `make_pack.py`: builds the data pack.
   - `parity.py`: compares the demo's rankings with the round-8 runner's.
   - `test_demo.py`: the tests.

@@ -120,6 +120,7 @@ def create_library(root, name, ig_zips=(), yt_zips=(), own_names=(), router_from
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
     LIB.ensure_empty_te_files(lib)
+    plat = {it["platform"] for it in items}
     for src in router_from:
         rp = os.path.join(src, "r7", "router.npz")
         if os.path.isfile(rp):
@@ -127,12 +128,13 @@ def create_library(root, name, ig_zips=(), yt_zips=(), own_names=(), router_from
             shutil.copyfile(rp, os.path.join(lib, "r7", "router.npz"))
             break
     else:
-        warnings.append("No platform router found to copy (r7/router.npz from the preloaded library); "
-                        "Q8 and FM need it.")
-    plat = [it["platform"] for it in items]
+        if len(plat) > 1:  # with one platform the prior is fixed and the router is never read
+            warnings.append("No platform router found to copy (r7/router.npz from the preloaded library); "
+                            "a library with both Instagram and YouTube needs it.")
+    plats = [it["platform"] for it in items]
     LIB.write_json(os.path.join(lib, "library.json"), {
         "name": name or base, "source": "uploaded exports", "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "counts": {"items": len(items), "instagram": plat.count("instagram"), "youtube": plat.count("youtube"),
+        "counts": {"items": len(items), "instagram": plats.count("instagram"), "youtube": plats.count("youtube"),
                    "interactions": len(inter)},
         "import_stats": stats, "warnings": warnings, "import_s": round(time.time() - t0, 1)})
     return lib

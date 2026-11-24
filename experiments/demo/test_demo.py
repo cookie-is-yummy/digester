@@ -87,6 +87,84 @@ def test_ig_import_rejects_html_export(tmp_path):
         ig_import.import_export([str(p)])
 
 
+def _html_entry(url, caption, username, date, tags=()):
+    box = '<div class="pam _3-95 _2ph- _a6-g uiBoxWhite noborder">'
+    tag_html = "".join(f'<div>{box}<div class="_a6-p">{t}</div></div></div>' for t in tags)
+    hashtags = (f'<tr><td colspan="2" class="_a6_q"><div>{box}<h2 class="_3-95 _2pim _a6-h _a6-i">Hashtags</h2>'
+                f'<div class="_a6-p"><div><div class="_2ph_ _a6_q">Name</div><div>{tag_html}</div></div></div>'
+                f"</div></div></td></tr>") if tags else ""
+    return (f'{box}<div class="_3-95 _a6-p">{box}<div class="_a6-p"><table style="table-layout: fixed;">'
+            f'<tr><td colspan="2" class="_a6_q">URL<div><a target="_blank" href="{url}">{url}</a></div></td></tr>'
+            f'<tr><td class="_a6_q">Caption</td><td class="_2piu _a6_r">{caption}</td></tr>{hashtags}'
+            f'<tr><td colspan="2" class="_a6_q"><div>{box}<h2 class="_3-95 _2pim _a6-h _a6-i">Owner</h2>'
+            f'<div class="_a6-p"><table><tr><td class="_a6_q">URL</td><td class="_2piu _a6_r">https://example.com'
+            f'</td></tr><tr><td class="_a6_q">Username</td><td class="_2piu _a6_r">{username}</td></tr></table>'
+            f'</div></div></div></td></tr></table></div></div></div><div class="_3-94 _a6-o">{date}</div></div>')
+
+
+def _html_dm(sender, date, share=None):
+    box = '<div class="pam _3-95 _2ph- _a6-g uiBoxWhite noborder">'
+    obj = (f'<div><div><div>{share[0]}</div><div>{share[1]}</div><div><a target="_blank" href="{share[2]}">'
+           f"{share[2]}</a></div></div></div>") if share else "<div></div>"
+    return (f'{box}<h2 class="_3-95 _2pim _a6-h _a6-i">{sender}</h2><div class="_3-95 _a6-p"><div><div></div>'
+            f'<div>SYNTHETIC-DM-TEXT hello</div>{obj}<div></div></div></div><div class="_3-94 _a6-o">{date}</div></div>')
+
+
+def test_html_export_converts_to_json_export(tmp_path):
+    import ig_html_to_json
+
+    def page(body, title=""):
+        return f'<html><head><title>{title}</title></head><body><main class="_a706" role="main">{body}</main></body></html>'
+
+    box = '<div class="pam _3-95 _2ph- _a6-g uiBoxWhite noborder">'
+    src, dst = tmp_path / "html.zip", tmp_path / "json.zip"
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr("your_instagram_activity/saved/saved_posts.html", page(_html_entry(
+            "https://www.instagram.com/reel/SYNTHreel001/", "Synthetic café &amp; bread \U0001f35e", "synthetic_baker",
+            "Jan 2, 2026 3:04 pm", tags=("baking", "bread"))))
+        z.writestr("your_instagram_activity/likes/liked_posts.html", page(
+            _html_entry("https://www.instagram.com/reel/SYNTHreel001/", "Synthetic café &amp; bread \U0001f35e",
+                        "synthetic_baker", "Jan 3, 2026 9:00 am")
+            + _html_entry("https://www.instagram.com/p/SYNTHpost009/", "Synthetic friend post", "sample_pal",
+                          "Jan 4, 2026 9:00 am")))
+        z.writestr("connections/followers_and_following/followers_1.html", page(
+            f'{box}<div class="_a6-p"><div><div><a target="_blank" href="https://www.instagram.com/sample_pal">'
+            f"sample_pal</a></div><div>Jan 1, 2026 1:00 pm</div></div></div></div>"))
+        z.writestr("connections/followers_and_following/following.html", page(
+            f'{box}<h2 class="_3-95 _2pim _a6-h _a6-i">sample_pal</h2><div class="_a6-p"><div><div>'
+            f'<a target="_blank" href="https://www.instagram.com/_u/sample_pal">https://www.instagram.com/_u/sample_pal'
+            f"</a></div><div>Jan 1, 2026 1:00 pm</div></div></div></div>"))
+        z.writestr("your_instagram_activity/messages/inbox/samplepal_2002/message_1.html", page(
+            _html_dm("Test Owner", "Jan 5, 2026 8:00 am",
+                     ("Synthetic desk setup #desksetup", "synthetic_desks", "https://www.instagram.com/p/SYNTHpost002/"))
+            + _html_dm("Sample Pal", "Jan 5, 2026 8:01 am",
+                       ("Synthetic received reel", "someone_else", "https://www.instagram.com/reel/SYNTHreel008/"))
+            + _html_dm("Test Owner", "Jan 5, 2026 8:02 am"), title="Sample Pal"))
+    stats = ig_html_to_json.convert(str(src), str(dst), "UTC")
+    assert stats["saved_posts"] == {"entries": 1, "unparsed": 0} and stats["liked_posts"]["entries"] == 2
+    assert stats["dm"]["shares"] == 2 and stats["dm"]["messages"] == 3
+    with zipfile.ZipFile(dst) as z:
+        blob = "".join(z.read(n).decode() for n in z.namelist())
+    assert "SYNTHETIC-DM-TEXT" not in blob  # message text never leaves the HTML
+    items, _inter, st = ig_import.import_export([str(dst)])
+    by = {it["dedup_key"].split(":", 1)[1]: it for it in items}
+    assert set(by) == {"SYNTHreel001", "SYNTHpost002"}  # friend's post removed, received share not added
+    reel = by["SYNTHreel001"]
+    assert reel["caption"] == "Synthetic café & bread \U0001f35e"
+    assert reel["first_seen_at"] == "2026-01-02T15:04:00+00:00"
+    assert reel["platform_data"]["owner_handle"] == "synthetic_baker"
+    assert reel["platform_data"]["hashtags"] == ["baking", "bread"]
+    assert by["SYNTHpost002"]["interaction_kinds"] == ["share_friend"]
+    assert st["friends_posts_removed"] == 1 and st["received_not_added"] == 1
+
+
+def test_single_platform_library_needs_no_router(ig_zip, tmp_path):
+    lib = ingest.create_library(str(tmp_path), "Only Instagram", [ig_zip], [], router_from=[])
+    man = LIB.read_json(os.path.join(lib, "library.json"))
+    assert not any("router" in w for w in man["warnings"])
+    assert not LIB.needs_router(lib) and LIB.status(lib)["state"] == "needs_prepare"
+
+
 def test_create_library_from_both_exports(ig_zip, yt_zip, tmp_path):
     lib = ingest.create_library(str(tmp_path), "Synthetic Person", [ig_zip], [yt_zip], router_from=[])
     st = LIB.status(lib)

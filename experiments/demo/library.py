@@ -9,7 +9,9 @@ A library is a folder with the same layout as data/all, holding only what the ro
   enrich/te-v1c_ig_gemini-3.1-flash-lite.jsonl        Instagram te-v1c rows; enrich/text_<same>.json their texts
   yt_enrich/te-v1c_allowed_gemini-3.1-flash-lite.jsonl YouTube te summaries (only read by the refine's candidate
                                                       lines); yt_enrich/text_<same>.json is {} (Q8 ranks no YouTube te)
-  r7/router.npz                                       the round-7 platform head the prior reads (query vector only)
+  r7/router.npz                                       the round-7 platform head the prior reads (query vector only).
+                                                      Only read when the library holds both platforms: with one
+                                                      platform the engine fixes the prior (engine.FixedPrior)
 Written while the demo runs (all local): ai_runs.jsonl (cost ledger), cache/ (rewrite and refine responses),
 corpus/emb/oai3l_1024_queries and c4_queries (vectors of the searches typed), prepare_status.json.
 """
@@ -62,6 +64,15 @@ def write_json(path, obj):
     os.replace(tmp, path)
 
 
+def needs_router(lib):
+    """The platform prior reads r7/router.npz only when the library holds both platforms (see engine.FixedPrior).
+    A manifest without counts is treated as needing it."""
+    c = (read_json(p(lib, "library.json"), {}) or {}).get("counts") or {}
+    if "instagram" not in c or "youtube" not in c:
+        return True
+    return bool(c["instagram"]) and bool(c["youtube"])
+
+
 def status(lib):
     """ready | needs_prepare | preparing | prepare_failed, plus what is present (no text)."""
     man = read_json(p(lib, "library.json"), {}) or {}
@@ -72,7 +83,7 @@ def status(lib):
     job = read_json(p(lib, "prepare_status.json"), {}) or {}
     if job.get("state") == "running":
         st = "preparing"
-    elif has_vec and has_router:
+    elif has_vec and (has_router or not needs_router(lib)):
         st = "ready"
     elif job.get("state") == "error":
         st = "prepare_failed"

@@ -121,7 +121,23 @@ def load_env(lib):
     S.V = qmat_from_parts(q[keep], s)  # what swap_to_3l + QMat produce, read from disk
     S.QV = G.QueryVecs3L()
     S.emb_name = f"{G.EMB3L_MODEL}@{G.EMB3L_DIM}"
-    return S88.Env(S=S)
+    if os.path.exists(LIB.p(lib, "r7", "router.npz")):
+        return S88.Env(S=S)
+    if len({it["platform"] for it in items}) > 1:
+        raise RuntimeError("router.npz missing (copy r7/router.npz from the preloaded library)")
+    real = S88.H.Router  # one platform: Engine swaps the prior for FixedPrior, which never asks the router
+    S88.H.Router = NoRouter
+    try:
+        return S88.Env(S=S)
+    finally:
+        S88.H.Router = real
+
+
+class NoRouter:
+    """Stands in for c7_lib.Router in a single-platform library without r7/router.npz. Never consulted there."""
+
+    def predict(self, v):
+        raise RuntimeError("router.npz missing: the platform prior cannot read this search")
 
 
 class FixedPrior:
@@ -529,7 +545,7 @@ def prepare(lib, te=True, te_cap=1.0, workers=6):
     man = LIB.read_json(LIB.p(lib, "library.json"), {}) or {}
     try:
         LIB.ensure_empty_te_files(lib)
-        if not os.path.exists(LIB.p(lib, "r7", "router.npz")):
+        if LIB.needs_router(lib) and not os.path.exists(LIB.p(lib, "r7", "router.npz")):
             raise RuntimeError("router.npz missing (copy r7/router.npz from the preloaded library)")
         if not has_key("openai"):
             raise RuntimeError("OPENAI_API_KEY is not set")
