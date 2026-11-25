@@ -3512,10 +3512,34 @@ def p6_words(s, sheet, names):
     return s
 
 
+_P6_CHANGE_VERB = re.compile(r"\b(?:grew|grown|rose|risen|climbed|jumped|doubled|gained|fell|fallen|dropped|slipped|"
+                             r"faded|declined|shrank|shrunk|halved|went (?:up|down)|picked up|cooled)\b"
+                             r"(?! on\b| into\b| in love\b)", re.I)
+_P6_SIDE = re.compile(r"(?:,\s*|\s+)(?:while|whereas|but)\s+|;\s+")
+
+
+def p6_values(s, sheet):
+    """Round 12, pass 6 (X5, the auditor's replays: "Gaming fell to 30%, from 49% in 2022, while comedy and music
+    grew"; "<theme> fell from 11% to 8% in 2021" in an answer about 2022): a change is said with its two values and
+    each value with its own span. A side clause ("while ...", "; ...") that says a change with no number goes; "from A
+    to B in <the span before>" is "from A in <the span before> to B"."""
+    for m in reversed(list(_P6_SIDE.finditer(s))):
+        end = re.search(r"[.;!?]", s[m.end():])
+        seg = s[m.start():m.end() + (end.start() if end else len(s) - m.end())]
+        if _P6_CHANGE_VERB.search(seg) and not re.search(r"\d", seg):
+            s = s[:m.start()] + s[m.start() + len(seg):]
+    base = _base_of(sheet)
+    if base and re.fullmatch(r"(?:19|20)\d\d", base):
+        s = re.sub(r"\bfrom (\d+(?:\.\d+)?%) to (\d+(?:\.\d+)?%)((?: of [^,.;()]*?)?) in " + re.escape(base) +
+                   r"\b(?! (?:to|and)\b)", lambda m: f"from {m.group(1)} in {base} to {m.group(2)}{m.group(3)}", s)
+    return s
+
+
 def gate_sentence(s, sheet, names, state):
     """(the sentence with every percent based, None) or (None, why). `state["opened_said"]`: the answer said "of what
     you opened" already (an unfiltered record share needs it only once)."""
     if (sheet.get("lang") or "en") == "en":
+        s = p6_values(s, sheet)
         s = p6_words(s, sheet, names)
         if _P6_GAP.search(s):
             return None, "gap_words"   # X13: a "gap" said by the ratio while the difference may move the other way
@@ -3828,6 +3852,26 @@ def p6_once(form, sheet):
                     out[i] = cut
                 else:
                     out.pop(i)
+    # round 12, pass 6 (X9, the auditor's replays: "Gaming grew from 12% to 22% ..." as a bullet, then the so-what
+    # "Worth noticing: gaming grew from 12% to 22% ..., while sports fell"): a move the so-what says is not a bullet too
+    sw_mv = _p6_moved(form.get("so_what") or "", names) - _p6_moved(ans, names)
+    if sw_mv:
+        keep = []
+        for o in out:
+            both = _p6_moved(o, names) & sw_mv
+            if not both:
+                keep.append(o)
+                continue
+            cut = None
+            for m in _P6_MOVE.finditer(o):
+                pre = o[max(0, m.start() - 70):m.start()]
+                if any(re.search(re.escape(n), pre, re.I) for n in both):
+                    cut = _p6_drop(o, m.start())
+                    break
+            dropped.append(("observation", "repeat_so_what", o))
+            if cut and not (_p6_moved(cut, names) & sw_mv):
+                keep.append(cut)
+        out = keep
     return dict(form, observations=out, dropped=dropped)
 
 
@@ -4877,7 +4921,10 @@ def so_what_text(c, s, topic=None, lang=None):
         return (f"Shorts went {'up' if c['direction'] == 'up' else 'down'} to {_pc(c['share'])} of {whose}, "
                 f"from {_pc(c['previous_share'])}" + (f" in {pw}." if pw else " before."))
     if k == "channel_rise":
-        return (f"{c['channel']} is new at the top: {_fmt(c['items'], 'en')} videos now, against "
+        # round 12, pass 6 (X4, the auditor: "12 videos now" under "without Shorts"): the count's noun names the
+        # filters in force
+        noun = (bases(s) or {}).get("videos") or "videos"
+        return (f"{c['channel']} is new at the top: {_fmt(c['items'], 'en')} {noun} now, against "
                 f"{_fmt(c['previous_items'], 'en')}" + (f" in {pw}." if pw else " before."))
     if k == "then_not_since":
         # round 12, pass 6 (X17): what he did then and has not since, with the step code takes

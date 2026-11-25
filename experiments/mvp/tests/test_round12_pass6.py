@@ -387,3 +387,47 @@ def test_x20_a_firsts_items_of_one_day_are_in_the_order_they_were_opened():
     F._by_instant(items, idx, np.array([True, True, True, True]), None, "first")
     assert [it["id"] for it in items] == ["c", "a", "b"], items
     assert [it["at_time"] for it in items] == ["7:28 am", "7:36 am", "10:23 am"], items
+
+
+# ================================ X5 (the auditor's replays): no change without its values, each with its span =====
+def test_x5_a_side_clause_with_a_change_and_no_number_goes():
+    """The auditor, on the replayed live forms: "Gaming fell to 30% ..., from 49% in 2022, while comedy and music
+    grew." (no values for comedy and music)."""
+    out, why = gate("Gaming grew to 22%, from 12% in the 4 weeks before, while comedy and sports fell.", top(),
+                    said=True)
+    assert why is None and out == "Gaming grew to 22%, from 12% in the 4 weeks before.", out
+    out, _ = gate("Gaming grew to 22%, while sports fell to 9%.", top(), said=True)
+    assert "while sports fell to 9%" in out, out   # a side clause with its number stays
+
+
+def test_x5_a_change_from_the_year_before_says_that_year_on_its_own_value():
+    """The auditor: "<theme> fell from 11% to 8% in 2021" in an answer about 2022 (8% was 2022's, 11% was 2021's)."""
+    s = top()
+    s["window"] = {"words": "In 2022", "start": "2022-01-01", "end": "2022-12-31", "clipped": False}
+    s["previous"] = dict(s["previous"], words="in 2021")
+    out, _ = gate("Speed runs fell from 11% to 8% in 2021.", s, said=True)
+    assert out == "Speed runs fell from 11% in 2021 to 8%.", out
+
+
+# ================================ X9 (the auditor's replays): the so-what's move is not a bullet too ===============
+def test_x9_a_move_the_so_what_says_is_not_also_a_bullet():
+    I = ins()
+    f = {"answer": "In the 4 weeks up to 30 October 2026, you were into gaming, comedy and internet culture.",
+         "dropped": [], "observations": [
+             "Inside gaming: Speed runs and Block battles.",
+             "Gaming grew from 12% to 22% against the 4 weeks before (5 September to 2 October 2026)."],
+         "so_what": "Worth noticing: gaming grew from 12% to 22% against the 4 weeks before, while sports fell from "
+                    "16% to 9%. Say \"only sports\" to see what you still open of it."}
+    out = I.p6_once(f, top())["observations"]
+    assert out == ["Inside gaming: Speed runs and Block battles."], out
+
+
+# ================================ X4 (the auditor's replays): a channel's rise says the filters of its count ========
+def test_x4_a_channels_rise_under_without_shorts_counts_long_videos():
+    """The auditor: "<channel> is new at the top: 12 videos now" after "without shorts" (12 long videos)."""
+    I = ins()
+    c = {"kind": "channel_rise", "channel": "Kite Lab", "items": 12, "previous_items": 0}
+    s = top(filters={"topic": None, "without_shorts": True})
+    t = I.so_what_text(c, s)
+    assert t.startswith("Kite Lab is new at the top: 12 long videos now, against 0"), t
+    assert I.so_what_text(c, top()).startswith("Kite Lab is new at the top: 12 videos now"), t
