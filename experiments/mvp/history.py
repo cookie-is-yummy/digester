@@ -77,6 +77,14 @@ class HistoryQuery(BaseModel):
     less: bool = False                  # round 11 fix, A (R5): compare asked "less / fewer", so its answer leads so
     without_shorts: bool = False        # round 12, D: "without shorts", "only long videos": Shorts and reels left out
     weekday: Optional[int] = Field(default=None, ge=0, le=6)   # round 12, pass 6, second round: "on sundays" (0 Monday)
+    # ---------- the brain's tools, step 1 (design/brain_v1/SPEC.md 11.3): the scope of a tool call, set by code from
+    # the tool's arguments (refs as brain/names.py writes them: area:, theme:, channel:, collection:, words:). The
+    # defaults mean "as before": a query read from a message never sets them, and facts.sheet is unchanged with them.
+    only_refs: list[str] = Field(default_factory=list)      # counted: items of ANY of these
+    exclude_refs: list[str] = Field(default_factory=list)   # left out: items of any of these
+    length: Literal["any", "long", "short"] = "any"         # long = KNOWN long videos (as without_shorts); short = Shorts
+    order: Literal["most", "least"] = "most"                # the rows of themes, channels and areas
+    top: Optional[int] = Field(default=None, ge=1, le=25)   # how many rows of each (None: facts.py's own caps)
 
 
 # ====================================== reading the message ======================================================
