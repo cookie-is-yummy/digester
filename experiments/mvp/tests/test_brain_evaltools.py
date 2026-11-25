@@ -118,8 +118,8 @@ def test_the_held_out_cases_on_the_made_up_library(harness):
     from mvp import eval_brain as E
 
     def verdicts(m, calls):
-        _hand, readings, fails = E.hand_readings(harness, m)
-        assert fails == []
+        _hand, readings, windows, _errors = E.hand_readings(harness, m)
+        assert windows == []
         rec, _t = model_rec(harness, m["text"], calls)
         g = E.g2_of(readings, E.model_keys(rec))
         return g["verdict"], g["verdict_strict"]
@@ -156,57 +156,57 @@ def test_the_held_out_cases_on_the_made_up_library(harness):
 AUDIT_CASES = [
     ("A01.3", "true", "which channels did I watch the most in October?",
      [("breakdown", {"by": "channel", "window": OCT})], "r1",
-     "Pan Theory[r1.channels[1]] came next with 32[r1.channels[1].items] videos, and Pixel Pencil[r1.channels[2]] "
-     "had 29[r1.channels[2].items].", False),
+     ("Pan Theory[r1.channels[1]] came next with 32[r1.channels[1].items] videos, and Pixel Pencil[r1.channels[2]] "
+      "had 29[r1.channels[2].items]."), False),
     ("A05.0", "true", "which channels did I watch the most in October?",
      [("breakdown", {"by": "channel", "window": OCT})], "r1",
      "Pixel Pencil[r1.channels[2]] was third with 29[r1.channels[2].items] videos.", False),
     ("C01.0", "true", "which channels did i watch the least in october",
      [("breakdown", {"by": "channel", "window": OCT, "order": "least"})], "r1",
-     "In October 2026, Wet Paper[r1.channels[0]] was the channel you opened least, with 1[r1.channels[0].items] video "
-     "of 142[r1.totals.items] you opened.", False),
+     ("In October 2026, Wet Paper[r1.channels[0]] was the channel you opened least, with 1[r1.channels[0].items] video "
+      "of 142[r1.totals.items] you opened."), False),
     ("A01.1", "true", "no. i meant what topics have i been into recently",
      [("breakdown", {"by": "theme", "window": {"words": "recently"}, "compare": "previous"})], "r1",
-     "In the 4 weeks up to 30 October 2026, Gaming clips[r1.themes[0]] led what you opened, with "
-     "59[r1.themes[0].items] of 130[r1.totals.items] videos.", False),
+     ("In the 4 weeks up to 30 October 2026, Gaming clips[r1.themes[0]] led what you opened, with "
+      "59[r1.themes[0].items] of 130[r1.totals.items] videos."), False),
     ("B01.0", "true", "what am i most into right now",
      [("breakdown", {"by": "area", "window": {"words": "right now"}})], "r1",
-     "Gaming clips[r1.themes[0]] alone made 59[r1.themes[0].items] videos, 56[r1.channels[0].items] of them from "
-     "Clip Factory[r1.channels[0]].", False),
+     ("Gaming clips[r1.themes[0]] alone made 59[r1.themes[0].items] videos, 56[r1.channels[0].items] of them from "
+      "Clip Factory[r1.channels[0]]."), False),
     ("C06.0", "true", "gaming vs art this year",
      [("breakdown", {"by": "area", "window": {"preset": "this_year"}, "top": 25})], "r1",
-     "Digital drawing[r1.themes[0]] was the top theme with 92[r1.themes[0].items] videos, and Gaming "
-     "clips[r1.themes[1]] had 66[r1.themes[1].items].", False),
+     ("Digital drawing[r1.themes[0]] was the top theme with 92[r1.themes[0].items] videos, and Gaming "
+      "clips[r1.themes[1]] had 66[r1.themes[1].items]."), False),
     ("B02.0", "true", "without gaming",
      [("breakdown", {"by": "area", "window": LATELY, "scope": {"exclude": ["gaming"]}})], "r1",
-     "In the 4 weeks up to 30 October 2026, without gaming, art and design[r1.areas[0]] led with "
-     "48%[r1.areas[0].share] of what you opened.", False),
+     ("In the 4 weeks up to 30 October 2026, without gaming, art and design[r1.areas[0]] led with "
+      "48%[r1.areas[0].share] of what you opened."), False),
     ("C02.0", "true", "without minecraft",
      [("breakdown", {"by": "area", "window": LATELY, "compare": "previous", "scope": {"exclude": ["minecraft"]}})],
-     "r1", "Without Minecraft builds, art and design[r1.areas[1]] fell to 26%[r1.areas[1].share] of what you opened, "
-     "down 40 points[r1.areas[1].change_pts] on the 4 weeks before.", False),
+     "r1", ("Without Minecraft builds, art and design[r1.areas[1]] fell to 26%[r1.areas[1].share] of what you opened, "
+      "down 40 points[r1.areas[1].change_pts] on the 4 weeks before."), False),
     ("F05.0", "false", "am i addicted to gaming clips",
      [("breakdown", {"by": "none", "window": ALL, "scope": {"only": ["gaming"]}})], "r1",
-     "Minecraft builds[r1.themes[0]] is still the largest gaming theme, at 51%[r1.themes[0].share] of what you "
-     "opened.", True),
+     ("Minecraft builds[r1.themes[0]] is still the largest gaming theme, at 51%[r1.themes[0].share] of what you "
+      "opened."), True),
     # the false sentences it misses: framing faults no rule of the auditor reads
     ("I02.0", "false", "my partner thinks i watched a lot of dating advice in 2024, did i?",
      [("breakdown", {"by": "none", "window": {"words": "2024"}, "scope": {"only": ["dating advice"]}}),
       ("breakdown", {"by": "none", "window": {"words": "2024"}})], "r2",
-     "In 2024 you opened 58[r2.totals.items] videos, and the top theme was Home cooking[r2.themes[0]] with "
-     "8[r2.themes[0].items].", False),
+     ("In 2024 you opened 58[r2.totals.items] videos, and the top theme was Home cooking[r2.themes[0]] with "
+      "8[r2.themes[0].items]."), False),
     ("F11.0", "false", "was october my biggest month ever",
      [("timeline", {"unit": "month", "window": ALL}), ("timeline", {"unit": "month", "window": {"preset": "this_year"}}),
       ("timeline", {"unit": "year", "window": ALL})], "r3",
-     "Your full years before 2026 were 134[r3.periods[0].items] in 2021, 108[r3.periods[1].items] in 2022 and "
-     "157[r3.periods[2].items] in 2023.", False),
+     ("Your full years before 2026 were 134[r3.periods[0].items] in 2021, 108[r3.periods[1].items] in 2022 and "
+      "157[r3.periods[2].items] in 2023."), False),
     ("C04.0", "false", "what do i usually watch on sundays",
      [("breakdown", {"by": "area", "window": ALL, "scope": {"weekday": 6}})], "r1",
      "art and design[r1.areas[1]] came next at 25%[r1.areas[1].share] of what you opened on Sundays.", False),
     ("B05.0", "false", "which channels did I drop",
      [("changes", {"level": "channel", "window": LATELY, "against": "previous"})], "r1",
-     "The biggest drop in count was Pixel Pencil[r1.channels[2]], from 29[r1.channels[2].previous_items] videos to "
-     "27[r1.channels[2].items] of what you opened.", False),
+     ("The biggest drop in count was Pixel Pencil[r1.channels[2]], from 29[r1.channels[2].previous_items] videos to "
+      "27[r1.channels[2].items] of what you opened."), False),
 ]
 
 
@@ -347,8 +347,7 @@ def made_up_fresh(path):
              "good": good, "tags": []}]},
     ]
     with open(path, "w", encoding="utf-8") as f:
-        for x in lines:
-            f.write(json.dumps(x) + "\n")
+        f.writelines(json.dumps(x) + "\n" for x in lines)
     return a, b
 
 
@@ -401,6 +400,7 @@ def test_a_fresh_conversation_runs_through_the_live_loop_with_the_fake_provider(
     assert [r["key"] for r in recs] == [f"{a}.0", f"{a}.2"]
     r0, r2 = recs
     assert r0["set"] == "fresh" and r0["half"] == "a" and r0["reading_window_failed"] == []
+    assert r0["reading_errors"] == []
     # the model read "what did i watch" by area: the second reading, not the preferred one
     assert r0["g2"]["verdict"] == "understood" and r0["g2"]["reading"] == 1 and r0["g2"]["readings"] == 2
     assert r0["g2"]["verdict_strict"] == "other_plan"

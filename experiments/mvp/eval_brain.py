@@ -4,13 +4,21 @@
     python3 -m mvp.eval_brain plans [--json OUT] [--only A01,B07]
     python3 -m mvp.eval_brain insight
     python3 -m mvp.eval_brain run --half tune --out DIR [--limit N] [--ids A02,B04] [--parallel N] [--max-usd 1.5]
+    python3 -m mvp.eval_brain run --set fresh --half a|b|all --out DIR [--set-file F]   (evalset/brain_fresh.jsonl)
+    python3 -m mvp.eval_brain audit --run DIR      (offline: auditor hints and G2 again)
+    python3 -m mvp.eval_brain read --run DIR [--out FILE]      (offline: the plain-text reading sheet)
+    python3 -m mvp.eval_brain marks --run DIR --marks FILE     (offline: the hand marks into summary.json)
     python3 -m mvp.eval_brain count [--out DIR]
 
 `run` (step 2's thin live slice, LIVE: claude-haiku-5-5, paid, needs the Claude key and MVP_LEDGER_HOME): every "plan"
 message of the half (the split: half_of) through brain/loop.run_turn on the same made-up library, the screen carried
 from message to message; per message one JSON (calls with results, forms, verdicts, the repair, the answer sent,
-lead_source, sentence counts, seconds, tokens, cost, G2 against the hand plan, the auditor's findings on what was
-sent) and summary.json (G1 to G6). `count`: count_tokens (free) on the prefix and a typical turn.
+lead_source, sentence counts, seconds, tokens, cost, G2 against every acceptable reading, the auditor's hints on what
+was sent) and summary.json (G1 to G6). G1 (false or wrongly based sentences sent) needs a hand recount: it stays empty
+until `marks` fills it; the auditor's findings are `auditor_hints`, not a G1 figure (mvp22: on the held-out half it
+caught 1 of 5 false sentences). `read` writes one sheet for a hand reader (eval/brain_reading_rubric.md); `marks`
+fills summary.json's `reading` fields and the hand G1 from it. `count`: count_tokens (free) on the prefix and a
+typical turn.
 
 `planted`: eval/brain_planted.json through the verifier (brain/planted.py's scorer): every false sentence dropped (and
 with which reason), every true one kept, by class.
@@ -619,7 +627,9 @@ def _counted(env):
         if isinstance(o, dict):
             out = {}
             for k, v in o.items():
-                if isinstance(v, (dict, list)):
+                if k == "by_platform":
+                    out[k] = v
+                elif isinstance(v, (dict, list)):
                     c = clean(v)
                     if c:
                         out[k] = c
@@ -781,15 +791,19 @@ def readings_of(m):
 def hand_readings(h, m, screen="", last=None):
     """Every acceptable reading of a message replayed through the tools (the fake brain) from the hand chain's screen
     and last window. -> (the preferred reading's record, on which the chain goes on, or None; [hand_keys of each
-    reading]; [a reading's window that is not the one it states: a fault of the set, not of the model])."""
+    reading]; and the set's faults, not the model's: [a reading's window that is not the one it states], [a tool error
+    of a reading, a reading with no counting result])."""
     recs = []
     for r in readings_of(m):
         recs.append(run_message(h, {"n": m["n"], "text": m["text"], "rounds": r["rounds"], "window": r["window"]},
                                 screen, last, audit=False))
-    fails = []
+    windows, errors = [], []
     for k, x in enumerate(recs):
-        fails += [f"reading {k}: {f}" for f in x["window_failed"]]
-    return (recs[0] if recs else None), [hand_keys(x) for x in recs], fails
+        windows += [f"reading {k}: {f}" for f in x["window_failed"]]
+        errors += [f"reading {k}: tool error {e}" for e in x["errors"]]
+        if not hand_keys(x):
+            errors.append(f"reading {k}: no counting call with a result (the reading scores nothing)")
+    return (recs[0] if recs else None), [hand_keys(x) for x in recs], windows, errors
 
 
 def hand_keys(hand_rec):
@@ -815,9 +829,11 @@ def model_keys(rec):
 
 
 def audit_sent(h, results, unlock, rec, question):
-    """The auditor on what was SENT: every value marker of the model's sentences that went out recounted
-    (eval_claims.audit_ledger on their marker form), each such sentence read by TextAudit over the result it cites, and
-    a code lead through audit_lead. `results`: {rid: envelope} of the turn. -> [finding rows not ok], rows checked."""
+    """The auditor on what was SENT, one sentence at a time (audit_sentence: its value markers through
+    eval_claims.audit_ledger, its words through TextAudit over the result it cites), and a code lead through
+    audit_lead. Hints for a hand recount, not a count of false sentences (mvp22). `results`: {rid: envelope} of the
+    turn. -> [rows not ok, each naming its sentence], rows checked. Reading one sentence at a time leaves out the
+    auditor's answer-level checks (a fact said twice, more than two base phrasings)."""
     calls = calls_of(rec)
     rows = []
     src = rec["lead_source"]
@@ -894,7 +910,7 @@ def _g2_again(h, rec, chains, path=None):
             st = {"screen": b["lead"] or "", "last": b["_window"]}
         chains[rec["id"]] = st
     m = next(x for x in p["messages"] if x["n"] == rec["n"])
-    hand, readings, _fails = hand_readings(h, m, st["screen"], st["last"])
+    hand, readings, _windows, _errors = hand_readings(h, m, st["screen"], st["last"])
     if hand is not None:
         st["screen"], st["last"] = hand["lead"] or st["screen"], hand["_window"] or st["last"]
     return g2_of(readings, model_keys(rec))
@@ -919,11 +935,12 @@ def reaudit(a, h=None):
     h = h or Harness.scratch()
     recs = []
     chains = {}
+    set_file = set_file_of(a.run, getattr(a, "set_file", None))
     for f, rec in run_records(a.run):
         results = {c["rid"]: c["result"] for c in rec["calls"] if c.get("rid")}
         bad, checked = audit_sent(h, results, h.turn(rec["message"]).unlock, rec, rec["message"])
         rec["audit"] = {"checked": checked, "findings": bad}
-        rec["g2"] = _g2_again(h, rec, chains, path=getattr(a, "set_file", None))
+        rec["g2"] = _g2_again(h, rec, chains, path=set_file)
         with open(f, "w", encoding="utf-8") as fh:
             json.dump(rec, fh, indent=1, default=str, ensure_ascii=False)
         recs.append(rec)
@@ -986,7 +1003,7 @@ def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log
             outs.append({"id": p["id"], "n": m["n"], "key": f"{p['id']}.{m['n']}", "set": set_name,
                          "message": m["text"], "skipped": "budget"})
             continue
-        hand, readings, rfails = hand_readings(h, m, hscreen, hlast)
+        hand, readings, rwindows, rerrors = hand_readings(h, m, hscreen, hlast)
         if hand is not None:
             hscreen, hlast = hand["lead"] or hscreen, hand["_window"] or hlast
         t = h.turn(m["text"], screen="", last_window=last, search=FakeEngine(), learned=fake_learned)
@@ -995,7 +1012,8 @@ def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log
         bad, checked = audit_sent(h, t.results, t.unlock, rec, m["text"])
         rec.update(id=p["id"], n=m["n"], key=f"{p['id']}.{m['n']}", set=set_name, half=half_of(p["id"], set_name),
                    g2=g2, hand_plan=[{"tool": c["tool"], "args": c["args"]} for c in (hand or {}).get("calls", [])],
-                   reading_window_failed=rfails, audit={"checked": checked, "findings": bad}, dropped=dropped_of(rec))
+                   reading_window_failed=rwindows, reading_errors=rerrors,
+                   audit={"checked": checked, "findings": bad}, dropped=dropped_of(rec))
         screen = BL.screen_after(rec, NOW_WORDS)
         last = BL.last_window(t, rec) or last
         if out_dir:
@@ -1065,6 +1083,8 @@ def summarize(recs, settings=None):
                           "later_rounds_missed": [r["key"] for r in done if r["g2"].get("later_rounds_missed")],
                           "reading_window_failed": {r["key"]: r["reading_window_failed"] for r in done
                                                     if r.get("reading_window_failed")},
+                          "reading_errors": {r["key"]: r["reading_errors"] for r in done if r.get("reading_errors")},
+                          "no_hand_plan_list": [r["key"] for r in done if r["g2"]["verdict"] == "no_hand_plan"],
                           "other_plan_list": [r["key"] for r in done if r["g2"]["verdict"] == "other_plan"],
                           "differs_list": {r["key"]: r["g2"]["diffs"] for r in done
                                            if r["g2"]["verdict"] == "differs"}},
@@ -1090,10 +1110,12 @@ def summarize(recs, settings=None):
         "auditor_hints": {"messages_with_hints": len(findings), "hints": sum(len(v) for v in findings.values()),
                           "by_message": findings,
                           "note": "eval_claims' own reading of the sent sentences, for a hand recount to look at "
-                                  "first; NOT a count of false sentences. Measured on the held-out first look of the "
-                                  "brain slice (110 sent sentences recounted by hand), after its two fixes of mvp22: "
-                                  "it flagged 1 of the 5 false sentences (by a wrong reading of the subject) and 2 of "
-                                  "the 105 true ones (the word 'shorts' in lower case)."},
+                                  "first; NOT a count of false sentences. Measured after its two fixes of mvp22 on "
+                                  "the brain slice's held-out half, recounted by hand: of the 110 sent sentences of "
+                                  "the first look it flagged 1 of 5 false (by reading the wrong subject) and 2 of 105 "
+                                  "true (lower-case 'shorts'); of every sentence the model wrote (first and repair "
+                                  "forms) it flagged 2 of 11 false and 24 of 185 true (first look), 1 of 12 false and "
+                                  "19 of 171 true (second look)."},
         "reading": empty_reading(n),
         "requests": {"count": len(req), "per_message_mean": round(len(req) / n, 3) if n else None,
                      "stop_reasons": _counts(q["stop_reason"] for q in req),
@@ -1107,10 +1129,12 @@ def summarize(recs, settings=None):
         "dropped": {r["key"]: r["dropped"] for r in done if r["dropped"]},
         "dropped_reasons": _counts(x for r in done for d in r["dropped"] for x in d["reasons"]),
         "definitions": {
-            "G2": "per plan message: every hand-plan counting call (evalset/brain_plans.jsonl, run on its own hand "
-                  "chain) has a model call with the same tool, what it ranks by, window days, base, scope "
-                  "(meta.filters_said) and order; 'other_plan' = same window, base, scope and order but another tool "
-                  "or ranking (for a human to judge, not counted); share = understood / messages with a hand plan. "
+            "G2": "per plan message, for the best of its acceptable readings (each run on its own hand chain): every "
+                  "counting call of the reading's first round with one (later rounds are reported in "
+                  "later_rounds_missed, not required) has a model call with the same tool, what it ranks by, window "
+                  "days, base, scope (meta.filters_said) and order, under the rules of G2_rules; 'other_plan' = same "
+                  "window, base, scope and order but another tool or ranking (for a human to judge, not counted); "
+                  "share = understood / messages with a reading that ran (no_hand_plan_list: those left out). "
                   "A compare's window is both windows (the second read from previous.words). Any matching model "
                   "call earns the credit, even when the answer cites another call; extra calls do not count against "
                   "it",
@@ -1295,6 +1319,20 @@ def _texts_of(conv):
     return out
 
 
+def set_file_of(run_dir, given=None):
+    """The set file of a run: the one given, else the one its summary.json settings name (relative to this folder),
+    else None (the set's default file)."""
+    if given:
+        return given
+    sp = os.path.join(run_dir, "summary.json")
+    if os.path.exists(sp):
+        with open(sp, encoding="utf-8") as f:
+            rel = ((json.load(f).get("settings") or {}).get("set_file"))
+        if rel and os.path.exists(os.path.join(HERE, rel)):
+            return os.path.join(HERE, rel)
+    return None
+
+
 def reading_sheet(run_dir, set_file=None):
     """One plain-text file for a hand reader: every message of the run in conversation order, the earlier messages of
     its conversation (with the first line of what was sent to each), and the answer EXACTLY as sent (answer.text,
@@ -1302,6 +1340,7 @@ def reading_sheet(run_dir, set_file=None):
     (eval/brain_reading_rubric.md). Messages not run (budget) and failed turns are listed too."""
     recs = [r for _f, r in run_records(run_dir)]
     set_name = next((r.get("set") for r in recs if r.get("set")), "plans")
+    set_file = set_file_of(run_dir, set_file)
     convs, before, tiers = {}, {}, {}
     if set_name == "plans":
         convs = {c["id"]: c for c in load_jsonl(CORE)}

@@ -111,4 +111,5 @@ number, name or date is wrong, or when its framing is wrong. The framing faults 
 - a false absence: "no such theme" while a private theme holds it.
 
 The eval's auditor (`auditor_hints` in summary.json) can show where to look first. It is not a recount. On the
-held-out look it was measured on, it flagged 1 of 5 false sentences, so most false sentences carry no hint.
+held-out half it was measured on, it flagged 1 of the 5 false sentences sent, and 3 of the 23 false sentences the
+model wrote in all, so most false sentences carry no hint.
