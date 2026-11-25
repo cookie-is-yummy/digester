@@ -6234,9 +6234,10 @@ examples give the same probe (md5 4335bfb5 on both trees), and the dry self-test
 ### 21.2 The close of step 1: two independent audits, and what changed
 Two auditors attacked the tools and the verifier on real tool results of the made-up brain library (`check_tools`,
 `check_verify`; their written reports were refused by the harness, so their lists come from their notes and data
-files). Each class was reproduced first by a failing test (`tests/test_brain_step1_fix.py`: 50 tests; 48 of them
-written before the fixes, of which 45 fail on b86e4d9 and the 3 that pass are the true twins), then fixed by a rule
-over a class, not a sentence.
+files; the tools list was rebuilt from them). The audits' own runners reproduced each class on b86e4d9 first (the
+verifier audit's `test_cv_run.py` and the tools audit's dump and recount scripts, re-run on this branch after the
+fixes). The tests were written with the fixes and shown to fail on b86e4d9: `tests/test_brain_step1_fix.py` holds 53;
+50 of them fail on b86e4d9 and the 3 that pass are true twins. Each fix is a rule over a class, not a sentence.
 
 The tools (`brain/tools.py`, `results.py`, `names.py`, `windows.py`; one gated line in `facts.py`):
 - `items` oldest read from the window's start and stopped at 10: a scoped first now reads from the start and pages on
@@ -6253,6 +6254,12 @@ The tools (`brain/tools.py`, `results.py`, `names.py`, `windows.py`; one gated l
 - Two field rows named "Gaming": the fields of one shown name are one row (the auditor accepts the sum).
 - Instagram photo posts were said "short": only a reel or a video post is short.
 - `meta.rows_of`: how many rows each ranking holds, shown or not.
+- Found when the tools audit's scripts were re-run on the branch: `insight.shown` empties a year's new channels for
+  its writer's style, so the tools showed "no new channels" for 2025 while facts found Wet Paper: a list shown empty
+  that facts filled is absent now (the audit's script still reads an absent list as empty: 4 rows of its recount).
+  Under a title-word scope the count of private items left out was 17 for one word and 0 for another (private titles
+  probed word by word): under a title-word scope it is a constant, with the rank flag set. A scoped first of a window
+  now says each item's first open inside the window (the library has no re-opens, so no test reaches this one).
 
 The verifier (`brain/verify.py`; each line is the audit's class, then the rule):
 - A scope passed when the sentence named the scoped row itself ("Speedruns led" of a result scoped to Speedruns,
@@ -6291,9 +6298,11 @@ since Oct 2026, at about 51%" where art and design led this year: no `code_form`
 not years. The private line is asked for any number of a result with hidden items, as the verifier.
 
 ### 21.3 What was measured (offline, $0)
-- **Planted set** (`python3 -m mvp.eval_brain planted`): 332 of 332 false sentences dropped, every one with an
-  expected reason (the 195 of before and the audit's 137, 4 of them on a synthetic re-open ledger); 78 of 78 true
-  kept. The audit's own 61 true sentences are scored apart: 42 kept (38 before), 19 dropped. Of those 19: 5 "N of the
+- **Planted set** (`python3 -m mvp.eval_brain planted`), by source: the 195 false sentences of before, 195 dropped,
+  each with one of its expected reasons; the audit's 137 (4 on a synthetic re-open ledger): 135 dropped, and 2 (F46,
+  F46b: "In 2024 you opened 8 videos" of 58 with the private topic) kept with the private line asked for, which the
+  planted set counts as handled (no step 1 code renders that line yet: step 2's renderer must); the audit's cases carry
+  no expected reason, so their reasons are not checked. 78 of 78 true kept. The audit's own 61 true sentences are scored apart: 42 kept (38 before), 19 dropped. Of those 19: 5 "N of the
   videos you opened" (insight's count-as-share rule), 3 "from N to M" or "down from N" changes (insight's base and
   rewrite rules; 2 more of this shape are kept now), 2 weekday shares (house style), 2 period cells with no name, 2
   "about half" / "45% more" number words, 1 "busiest hour" as watch time, 1 least on a most result, 1 Spanish on an
@@ -6308,7 +6317,7 @@ not years. The private line is asked for any number of a result with hidden item
 - **The 20 insight questions** (`eval_brain insight`): 9 identical to today's sheet after the tools' own presentation
   steps (4 of them cut to size), 2 the same numbers, 4 no match (0 today), 5 not mapped.
 - **Byte for byte**: 20 of 20 and 20 of 20 raw-identical sheets against the search-loop tree; probe md5 4335bfb5.
-- **The whole suite**: 5845 passed and 2 skipped, 0 failed, in 4 shards on b7ce43a (1499, 1396, 1412 with the 2 skips, 1538); before the close, on b86e4d9: 5795 passed and 2 skipped. `demo/test_demo.py` 10 passed.
+- **The whole suite**: 5848 passed and 2 skipped, 0 failed, in 4 shards on fadebf3 (1512, 1396, 1412 with the 2 skips, 1528); before the close, on b86e4d9: 5795 passed and 2 skipped. `demo/test_demo.py` 10 passed; the dry self-test 67 conversations, 164 of 164 steps, $0.
 
 ### 21.4 What the proof found
 - The spec's least sure assumption (16.1 item 3) holds: `insight.render` and `insight.check_sentence` check one marked
