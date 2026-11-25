@@ -83,3 +83,46 @@ The founder's answers to step 1's questions:
 - Scheduled Takeout is accepted as a route for recurring exports. If a more frequent official route exists for
   Instagram, the same is wanted for YouTube and Google. Being researched against official sources; the result goes
   to A-022 (part 5), which stays Proposed.
+
+## After the thin live slice (25 Nov 2026)
+
+The slice is merged (DESIGN.md section 22). Nothing in the message path changed. **The gate was missed.** On the
+held-out half, first look (53 messages, the only fresh figures):
+
+| Line | Bar | Measured |
+|---|---|---|
+| False or wrongly based sentences sent | 0 | 5 of 110, by an independent recount |
+| Understood | 90% | 79% by the eval's hand plans; 91% to 94% by the independent reader |
+| Answers led by the model's own sentence | 85% | 68% |
+| Model sentences missing after one repair | 15% | 32% |
+| Speed, median and p90 | 6 s and 10 s | 7.6 s and 11.0 s |
+| Cost, mean | 0.5 cents | 0.16 cents |
+
+What the figures say:
+- The checker costs more truth than it protects. Of the dropped sentences that were sampled and recounted, 27 of
+  33 were true. All 5 false sentences went out in answers where code's own lead had replaced
+  the model's.
+- Rules on free English do not converge. The tuning pass made 16 more true sentences pass and opened 24 new false
+  passes. The fix pass closed them and still drops about a third of true sentences (19 of 60 and 12 of 61).
+- The cell checks held: no wrong number or wrong calculation passed in the attack. Every pass class and the main
+  wrongful drops are framing words: the window, the base, the scope, the direction, "only" and "all".
+- A code lead reads badly: 0 of 17 read as good, none carried an offer, and many gave a bare total.
+- About 3 of 53 answers said what the numbers mean. The gate never measured that.
+- The speed is structural: two or three model requests a message, plus a repair in about a fifth.
+- The eval's automatic auditor is not a source for the first line: 1 of its 24 findings was true and it missed 4
+  of the 5 false sentences.
+
+Decided by the build session, pending the founder:
+- No more rules are added to the free-English checker, and step 2 proper is not built on it.
+- Next, before any replacement is built: recount every sentence the model wrote on the held-out half (its raw
+  false rate), fix the tool faults the checkers found, repair or retire the auditor, and write and lock a fresh
+  set of messages. Both halves of the present set have been read.
+- The next gate adds two lines: how the answers read to the founder's rules, and whether an answer says what the
+  numbers mean. The hand recount stays.
+
+Questions for the founder:
+- Is a median of 7 to 8 seconds acceptable for a history answer?
+- May code word the framing of a sentence (window, base, scope) from fields the model fills, with the model
+  writing the rest? This sits beside the earlier answer "small model words it".
+
+The run records and the recount are in `eval/runs/brain_slice_2026-11-25.tgz` (made-up library and messages only).
