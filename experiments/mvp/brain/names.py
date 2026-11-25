@@ -118,11 +118,13 @@ def _channels(lib):
         return lib._memo["channels"]
     import numpy as np
     idx = lib.idx
+    n = len(idx.creators)
+    has = idx.creator >= 0
+    total = np.bincount(idx.creator[has], minlength=n)
+    hid = np.bincount(idx.creator[has], weights=lib.hidden[has].astype(np.float64), minlength=n)
     out = {}
     for cid, name in enumerate(idx.creators):
-        mem = np.nonzero(idx.creator == cid)[0]
-        hid = float(lib.hidden[mem].mean()) if len(mem) else 0.0
-        out[name] = hid >= SENSITIVE_CHANNEL
+        out[name] = bool(total[cid]) and hid[cid] / total[cid] >= SENSITIVE_CHANNEL
     lib._memo["channels"] = out
     return out
 
