@@ -278,6 +278,7 @@ class Outcome:
     hidden_rank: bool = False
     layer: Optional[str] = None   # where it failed: "marker" (verify's own steps) or "insight" (step 3.8)
     insight: Optional[str] = None  # insight's own verdict on the sentence (step 3.8), when it ran
+    notes: dict = field(default_factory=dict)   # reason -> its first detail (the repair text's words)
 
     @property
     def kept(self):
@@ -1048,6 +1049,7 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
             fail.append(r)
         if d:
             out.details.append(d)
+            out.notes.setdefault(r, d)
     for b in bad:
         add(b, "a bracket that is not a marker of this turn's results")
     for mk in markers:
@@ -1252,15 +1254,19 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     # (a sentence with no marker is read by insight against the turn's first result: insight's strict render drops a
     # direction or a number with no path, "the mix narrowed")
     ires = res if res is not None else (wres if not markers else None)
-    if ires is not None and ires.is_sheet and (not fail or probe):
+    # insight also runs after a failed value or name check, so the repair names every fault at once (its slots hold
+    # the cells' true values); not after a marker that does not parse or resolve
+    structural = {"bad_ref", "bad_marker", "two_results", "wrong_name", "too_long"}
+    if ires is not None and ires.is_sheet and (not fail or probe or not (set(fail) & structural)):
         try:
             why = insight_check(raw, markers, plain_names, cited_names, ires, where)
         except Exception as e:   # noqa: BLE001  (a sentence insight cannot read is dropped, never sent)
             why = ("insight_error", type(e).__name__)
         out.insight = why[0] if why else None
-        if why and not fail:
+        if why and (not fail or not (set(fail) & structural)):
+            if not fail:
+                out.layer = "insight"
             add(*why)
-            out.layer = "insight"
     elif not fail and res is not None and not res.is_sheet:
         why = _non_sheet(raw, markers, res, low)
         if why:
@@ -1377,6 +1383,18 @@ def slotted(raw, markers, plain_names, cited_names, res):
             edits.append((a, b, "{" + rest + "}"))
         elif nk:
             edits.append((a, b, "{" + rest + "." + nk + "}"))
+    # the window said in the model's own words ("the 4 weeks to 30 Oct"), checked by step 15: its count of weeks is
+    # no number of the sheet's, so it is taken out ("the weeks to 30 Oct") rather than read as a free number
+    words = " ".join(_window_phrases(res)).lower()
+    exact = [(m.start(), m.end()) for ph in _window_phrases(res) for m in re.finditer(re.escape(ph), raw, re.I)]
+    for m in _SPAN_N.finditer(raw):
+        if any(x < m.end() and m.start() < y for x, y in spans) or any(a < m.end() and m.start() < b for a, b, _t in
+                                                                        edits):
+            continue
+        if any(x <= m.start() and m.end() <= y for x, y in exact):
+            continue   # the window's own words as the sheet says them: insight reads those itself
+        if re.search(r"\b" + m.group(1) + r"\s+" + m.group(2).lower().rstrip("s"), words):
+            edits.append((m.start(1), m.end(1) + 1, ""))
     s = raw
     for a, b, t in sorted(edits, key=lambda e: e[0], reverse=True):
         s = s[:a] + t + s[b:]
@@ -1477,7 +1495,10 @@ def insight_check(raw, markers, plain_names, cited_names, res, where):
         return gwhy, _insight_detail(gwhy)
     if _norm_cmp(g) != _norm_cmp(text):
         ins, only = _inserted(_norm_cmp(text), _norm_cmp(g))
-        return _rewrite_reason(ins, only), "code would have to add: " + _clip(" / ".join(ins), 80)
+        # the gate takes out a second "of what you opened" (the answer's base, said once): words it removes that are
+        # the result's own base change nothing the sentence claims
+        if not all(re.fullmatch(r"-of (?:what|everything|all) you (?:opened|watched)", x) for x in ins):
+            return _rewrite_reason(ins, only), "code would have to add: " + _clip(" / ".join(ins), 80)
     return None
 
 
@@ -1563,7 +1584,8 @@ def check_outside(entry, ledger, kept_rows, turn=None):
         except KeyError:
             row = None
         if isinstance(row, dict):
-            own = {_low(n) for n in _row_names(row, rest)}
+            # its own names, and what its row says of it (its theme, its area)
+            own = {_low(n) for n in _row_names(row, rest)} | {_low(x) for x in row.values() if isinstance(x, str)}
     for a, b, n in _name_spans(t, ledger.all_names(), turn.names):
         if n not in own:
             reasons.append("other_name")
@@ -1732,11 +1754,11 @@ def repair_message(verdict):
             where = f"lead sentence {o.index + 1}"
         bits = []
         for r in o.reasons:
-            bits.append(REASON_TEXT.get(r, _insight_detail(r)))
-        bits += [d for d in o.details if d]
+            # the true values when the step gave them ("'38%' is r1.areas[0].share = 0.356 (36%)"), else the rule
+            bits.append(o.notes.get(r) or REASON_TEXT.get(r) or _insight_detail(r))
         seen, uniq = set(), []
         for b in bits:
-            b = _clip(b, 160)
+            b = b if len(b) <= 160 else b[:159] + "…"
             if b not in seen:
                 seen.add(b)
                 uniq.append(b)

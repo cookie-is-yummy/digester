@@ -174,7 +174,9 @@ def rows():
                 fill_t = I._unit_before(I.tidy(fill or ""), s)
                 ins, only = V._inserted(V._norm_cmp(fill_t), V._norm_cmp(prod or ""))
                 bw_ = " ".join(re.findall(r"[\w%'’]+", str(I._base_of(V._strip_added(sheet)) or "@@").lower()))
-                row["insight_added"] = [w for w in ins if w not in ("against " + bw_, "in " + bw_)]
+                # (the comparison period appended, and a second "of what you opened" taken out, claim nothing new)
+                row["insight_added"] = [w for w in ins if w not in ("against " + bw_, "in " + bw_) and not
+                                        re.fullmatch(r"-of (?:what|everything|all) you (?:opened|watched)", w)]
                 if row["insight_added"]:
                     row["class"] = "true_rewritten"
             out.append(row)
