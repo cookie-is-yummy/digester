@@ -2435,6 +2435,16 @@ def render(text, sheet, facts, strict=False, unit=None):
         sl = slots_of(text, sheet, lang)
         if isinstance(sl, str):
             return None, sl
+    # round 12, pass 6, second round (the hand check's c06, replayed: "2024 and 2025 show the shift toward Shorts, from
+    # 19% ... to 34%", read as the whole window's 34%): two periods' values each say their own period
+    mpp = re.search(r"\bfrom\s+\{(periods\[\d+\])\.(\w+)\}(?!\s+in\b)\s+to\s+\{(periods\[\d+\])\.\2\}(?!\s+in\b)", text)
+    if mpp and lang == "en":
+        text = (text[:mpp.start()] + "from {" + mpp.group(1) + "." + mpp.group(2) + "} in {" + mpp.group(1) +
+                ".label} to {" + mpp.group(3) + "." + mpp.group(2) + "} in {" + mpp.group(3) + ".label}" +
+                text[mpp.end():])
+        sl = slots_of(text, sheet, lang)
+        if isinstance(sl, str):
+            return None, sl
     us = None
     if unit and unit is not text:
         us = slots_of(unit, sheet, lang)
@@ -3569,6 +3579,10 @@ def p6_words(s, sheet, names):
     videos"); "You saved N <theme> videos" of the saved ones never opened says so (X8)."""
     if not isinstance(s, str) or not s:
         return s
+    # round 12, pass 6, second round (the hand check, c05.2: "split between 50% of your long music videos <theme> and
+    # 48% <theme>"): a share said before its record's name is said after it, "<theme> (50%)", so its base follows it
+    for n in sorted((n for n in names if n and n[:1].isupper()), key=len, reverse=True):
+        s = re.sub(r"(?<![\w.,])(\d+(?:\.\d+)?%) (" + re.escape(n) + r")(?![\w])(?! \()", r"\2 (\1)", s)
     low_names = [n for n in names if "shorts" in n.lower()]
     taken = [m.span() for n in low_names for m in re.finditer(re.escape(n), s, re.I)]
     s = _P6_SHORTS.sub(lambda m: m.group(0) if any(a <= m.start() < b for a, b in taken) else "Shorts", s)
@@ -3629,8 +3643,11 @@ def p6_words(s, sheet, names):
                   r"from|in|on|that|which)\b|$))", s)
     if m and int(m.group("n").replace(",", "")) in rows_:
         x = rows_[int(m.group("n").replace(",", ""))]
-        if " ".join(_words(x["theme"])) in " ".join(_words(m.group("t"))) and (x.get("noun") or "videos") != "videos":
-            s = s[:m.start("t")] + _saved_what(x) + s[m.end("t"):]
+        if " ".join(_words(x["theme"])) in " ".join(_words(m.group("t"))) and (x.get("noun") or "videos") != "videos" \
+                and not s[m.start("t"):].startswith(_saved_what(x)):
+            t_end = m.end("t")
+            tail_ = re.match(r"\s+videos?\b", s[t_end:])
+            s = s[:m.start("t")] + _saved_what(x) + s[t_end + (tail_.end() if tail_ else 0):]
     return s
 
 
@@ -5590,6 +5607,11 @@ def fill(form, raw, sheet, chart_vals=None):
         # round 12, pass 6 (X15): both in code's words, the saved ones as the step to take
         full = _path_line(dict(shown(sheet), so_what_candidates=cands), (sheet.get("filters") or {}).get("topic") or "")
         sv0 = next((c for c in cands if c.get("kind") in ("saved", "lapsed_saves")), None)
+        if sw and sv0 is None and _SAVED_SW.search(_norm(sw)):
+            # round 12, pass 6, second round (the hand check's c06, replayed: "5 saved <memes theme> are still
+            # waiting"): saved things are said only from a saved candidate, in code's words
+            form["dropped"].append(("so_what", "saved_not_a_candidate", sw))
+            sw = None
         if full and full != path and sv0 is not None and check_sentence(full[len(path):].strip(), facts) is None:
             if sw:
                 form["dropped"].append(("so_what", "code_arc", sw))

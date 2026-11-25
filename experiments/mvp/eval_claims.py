@@ -281,14 +281,23 @@ class Library:
                 continue
             if f and not self.passes(i, f):
                 continue
-            out[i] = self.opens[i][lo:hi]
+            ev = self.opens[i][lo:hi]
+            if f.get("weekday") is not None:   # pass 6, second round: "on sundays" (0 Monday); "weekday_not": the rest
+                ev = [e for e in ev if e[2] == f["weekday"]]
+            elif f.get("weekday_not") is not None:
+                ev = [e for e in ev if e[2] != f["weekday_not"]]
+            if ev:
+                out[i] = ev
         return out
 
     def passes(self, i, f):
         it = self.items[i]
         if f.get("platform") and it["p"] != f["platform"]:
             return False
-        if f.get("without_shorts") and (it["p"] != "youtube" or self.short.get(i) is True):
+        # pass 6, second round (the hand check: all 234 sheet flags on 30 answers were on the 7 without-Shorts ones, the
+        # not-known-Short set against the sheet's known-long set): "without Shorts" is the YouTube videos KNOWN to be
+        # long (DESIGN 19.P6, X6); a video of no known length may be a Short and is left out
+        if f.get("without_shorts") and (it["p"] != "youtube" or self.short.get(i) is not False):
             return False
         if f.get("channel") and it["c"] != f["channel"]:
             return False
@@ -619,6 +628,17 @@ class Ctx:
             self.f["channel"] = fl["channel"]
         if fl.get("platform"):
             self.f["platform"] = fl["platform"]
+        # pass 6, second round: a weekday asked as a habit ("what do i usually watch on sundays"), read from the
+        # question's own words; its span before is the other days of the same window
+        mwd = re.search(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s\b|\ba (monday|tuesday|wednesday|"
+                        r"thursday|friday|saturday|sunday)\b|\b(?:usually|normally|typically)\b.*\bon (monday|tuesday|"
+                        r"wednesday|thursday|friday|saturday|sunday)\b",
+                        ((ans.get("parent_text") or "") + " " + (ans.get("text") or "")).lower())
+        if mwd:
+            wd = DAYS_EN.index(next(g for g in mwd.groups() if g))
+            self.f["weekday"] = wd
+            self.prev = (self.a, self.b)
+            self.prev_f = {k: x for k, x in self.f.items() if k != "weekday"} | {"weekday_not": wd}
         self.kind = self.sheet.get("kind")
         self._sc = {}
         said = {}
@@ -637,14 +657,15 @@ class Ctx:
         if which == "filt":
             v = lib.scope(self.a, self.b, self.f)
         elif which == "all":
-            v = lib.scope(self.a, self.b, {k: x for k, x in self.f.items() if k == "platform"})
+            v = lib.scope(self.a, self.b, {k: x for k, x in self.f.items() if k in ("platform", "weekday")})
         elif which == "nofilt_topic":   # the window without the topic (a count's "of N then")
             v = lib.scope(self.a, self.b, {k: x for k, x in self.f.items()
                                            if k not in ("topic", "topic_themes", "topic_also")})
         elif which == "prev":
-            v = lib.scope(*self.prev, self.f) if self.prev else {}
+            v = lib.scope(*self.prev, getattr(self, "prev_f", None) or self.f) if self.prev else {}
         elif which == "prev_all":
-            v = lib.scope(*self.prev, {k: x for k, x in self.f.items() if k == "platform"}) if self.prev else {}
+            v = lib.scope(*self.prev, {k: x for k, x in (getattr(self, "prev_f", None) or self.f).items()
+                                       if k in ("platform", "weekday_not")}) if self.prev else {}
         elif which.startswith("period:"):
             _, a, b = which.split(":")
             v = lib.scope(int(a), int(b), self.f)
@@ -898,6 +919,7 @@ def rk_t(lib, ids, name):
 
 
 # ============================================================================ 2 and 3. the sent text
+DAYS_EN = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 _PCT = re.compile(r"(\d+(?:[.,]\d{1,2})?)\s?%")
 _BAR = re.compile(r"^[█░▏▎▍▌▋▊▉]+\s+")
 _BASE = [   # (pattern after the number, base key); the first that matches the words right after the number
@@ -1369,9 +1391,14 @@ class TextAudit:
             # "from 64% in 2023 to 33%": the value after "to" is the same record's, in the same clause
             if out and to and not wr:
                 gap = s[out[-1]["m"].end():m.start()]
-                if not re.search(r"\bwhile\b|;", gap) and not any(out[-1]["m"].end() <= sp[0] < m.start()
-                                                                    for sp in spans):
+                # pass 6, second round (the hand check's false flags, c06, n06.1: "from 19% of your minecraft videos on
+                # YouTube to 34%"): the base said with the first value names no record of its own
+                gap_wo = re.sub(r"of (?:your|the) [^,;]*?videos(?: on youtube)?", "", gap, flags=re.I)
+                if not re.search(r"\bwhile\b|;", gap) and not any(out[-1]["m"].end() <= sp[0] < m.start() and
+                                                                    gap_wo.find(s[sp[0]:sp[1]]) >= 0 for sp in spans):
                     e = out[-1]["e"]
+                    if not re.match(r"^\s*of ", after):
+                        after = out[-1]["after"]
             # "up to 61% of your minecraft videos, from 20% in ...": the same record, its value before
             if out and frm:
                 gap = s[out[-1]["m"].end():m.start()]
@@ -1635,7 +1662,25 @@ class TextAudit:
             d = lib.days(sc)
             self.F.add("base", "days", d == n, n, d, where=ent_code(subj) if subj else "window")
         # "<name> (48 videos)", "<name> (538)", "<name> led with 1,187 videos", "<name> at 767"
-        for m in re.finditer(r"\((\d[\d,]*)(?: videos?)?\)|\b(?:led with|at|with) (\d[\d,]*)(?: videos?)?(?=[ ,;.)]|$)", s):
+        # pass 6, second round (the hand check's false flags, n06.1, c03: "<ch> (14 long videos)", "<A> and <B> ...,
+        # with 15 and 9 long videos"): a record's own count says "long" under "without Shorts"; two records, two counts
+        for m in re.finditer(r"\b(?:with|at) (\d[\d,]*) and (\d[\d,]*)(?: long)? videos?\b", s):
+            recs = [sp for sp in spans if sp[1] <= m.start() and sp[2][0] == "channel"]
+            if len(recs) < 2:
+                recs = [sp for sp in spans if sp[1] <= m.start() and sp[2][0] in ("theme", "area", "channel")]
+            if len(recs) < 2:
+                continue
+            inside_t = next((x[2] for x in reversed(spans) if x[1] <= m.start() and x[2][0] == "theme"), None)
+            for g_, sp in ((1, recs[-2]), (2, recs[-1])):
+                done.add(m.start(g_))
+                n = int(m.group(g_).replace(",", ""))
+                ids = self.context_ids(s, spans, at=sp[0])
+                if inside_t is not None and sp[2][0] == "channel":   # "the biggest <theme> channels, with 15 and 9"
+                    ids = [i for i in ids if lib.member(i, inside_t)]
+                got = _count_of(lib, ids, sp[2])
+                self.F.add("base", "count of a record", got == n, n, got, where=ent_code(sp[2]))
+        for m in re.finditer(r"\((\d[\d,]*)(?: long)?(?: videos?)?\)|\b(?:led with|at|with) (\d[\d,]*)(?: long)?"
+                             r"(?: videos?)?(?=[ ,;.)]|$)", s):
             g = m.group(1) or m.group(2)
             pos = m.start(1) if m.group(1) else m.start(2)
             if pos in done or re.match(r"^\d[\d,]*(?:[.,]\d)?\s*(?:%|in 20)", s[pos:]) or \
