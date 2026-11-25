@@ -2031,8 +2031,8 @@ def _bind_more(text, pl, sheet, slots, names):
             n = min(cand, key=lambda t: t[0])[1]
             if n.index != want:
                 return "rank"
-    # round 12, pass 4 (V6, live: "MindYourDecisions came on 84 days and 106 videos, while 3Blue1Brown was close
-    # behind at 98", the third channel): a word of the next place ("close behind", "came next", "runner-up") is said of
+    # round 12, pass 4 (V6, live: "<first channel> came on N days and M videos, while <third channel> was close
+    # behind at K", the third channel): a word of the next place ("close behind", "came next", "runner-up") is said of
     # the record right after the one before it in the same list (the first one said, else the leader)
     for m in _NEXT_PLACE.finditer(pl):
         ranked = [n for n in names if (n.list_path or "").split(".")[-1] in RANKED and n.index is not None]
