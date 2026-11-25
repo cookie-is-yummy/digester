@@ -67,7 +67,7 @@ _RATIO_WORDS = (r"(?:(?:nearly|almost|about|roughly|more than|over|just over|jus
                 r"doubling|tripled|triple|thrice|halved|half|a third|a quarter|" + _NUM_RX +
                 r"\s+times|(?:two|three|four|five|six|seven|eight|nine|ten) times)")
 CALC_TAIL = re.compile(r"(?:(?P<words>\b" + _RATIO_WORDS + r")|(?:(?P<hedge>\b" + _HEDGE_RX + r")\s+)?(?P<num>" +
-                       _NUM_RX + r")(?P<unit>\s?%|\s?percent|\s?per cent|\s+percentage points?|\s+points?|\s+pts|"
+                       _NUM_RX + r")(?P<unit>\s?%\s+(?:more|fewer|less)|\s?%|\s?percent|\s?per cent|\s+percentage points?|\s+points?|\s+pts|"
                        r"\s+more|\s+fewer|\s+times)?)\s*$", re.I)
 HOUR_TAIL = re.compile(r"(?P<num>\d{1,2})(?::\d\d)?\s*(?P<ap>am|pm|a\.m\.|p\.m\.)\s*$", re.I)
 
@@ -114,7 +114,7 @@ OUTCOME = re.compile(r"\bi(?:'ve| have)? (?:sent|set up|scheduled|saved|created|
                      re.I)
 LIMITS = re.compile(r"\b(?:can'?t|cannot|can not|unable to|don'?t have|do not have|no access|export ends|"
                     r"doesn'?t (?:record|show|include)|not recorded)\b", re.I)
-WATCH_TIME = re.compile(r"\bhours?\b(?:'|’)?(?: (?:of|worth|watching|watched|spent|on))?|\bminutes? (?:of|watching|"
+WATCH_TIME = re.compile(r"(?<!busiest )(?<!peak )(?<!top )(?<!usual )\bhours?\b(?!\s+of\s+the\s+day)(?:'|’)?(?: (?:of|worth|watching|watched|spent|on))?|\bminutes? (?:of|watching|"
                         r"watched|spent)\b|\bwatch(?:ing)? time\b|\btime spent\b|\bscreen time\b|\bbinge[- ]?hours\b",
                         re.I)
 _LEAST = re.compile(r"\b(?:least|fewest|barely|lowest|smallest|bottom)\b", re.I)
@@ -208,6 +208,7 @@ REASON_TEXT = {
     "language": "the checks read English only: write the sentence in English",
     "first_last": "a first or a last is said by the date of the result's first item",
     "private_total": "an 'all' claim on a result that left private topics out",
+    "platform_word": "a count of every platform said as one platform's",
 }
 
 
@@ -1377,6 +1378,12 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
                         (up and not down and pts < 0) or (down and not up and pts > 0):
                     add("direction", f"{mk.path} = {round(pts, 1)} points")
         elif mk.kind == "row":
+            if not mk.said and re.fullmatch(r"points\[\d+\]", mk.rest) and getattr(ledger.get(mk.rid), "tool", None) \
+                    == "learned" and re.fullmatch(r"\s*\[" + re.escape(mk.path) + r"\]\s*\.?\s*", raw):
+                # mvp20 tune (the live run's B10): SPEC 4.3 step 4's own shape for a learned point, the point being
+                # exactly its marker ("[r1.points[0]]"), failed here as a row marker with no name before it; it is the
+                # shape the learned rule (_non_sheet) requires, and code puts in the point's checked text
+                continue
             if not mk.said:
                 nm = _row_names(mk.value, mk.rest)
                 if isinstance(mk.value, dict) and mk.value.get("title"):
@@ -1491,7 +1498,11 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     for mk in markers:
         if mk.kind == "row" and (_APPOSITIVE.match(raw[mk.end:]) or _KNOWN_FOR.match(raw[mk.end:])):
             add("outside_in_history")
-        elif mk.kind == "row" and not re.match(r"^items\[", mk.rest) and _ENTITY_PRESENT.match(raw[mk.end:]):
+        elif mk.kind == "row" and not re.match(r"^items\[", mk.rest) and not re.match(r"^(?:themes|areas|fields)\[",
+                                                                                     mk.rest) and \
+                _ENTITY_PRESENT.match(raw[mk.end:]):
+            # (mvp20 tune, the live run's I05: "3 Home cooking[r1.themes[1]] posts." read "posts" as a verb: an area
+            # or a theme posts, makes or is nothing in the world; what a CHANNEL is or does stays outside knowledge)
             cl_end = _BREAKS.search(raw, mk.end)
             cl = raw[mk.end:cl_end.start() if cl_end else len(raw)]
             if not _BRACKET.search(cl):
@@ -1550,7 +1561,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         r_ = _close_check(low, markers, res)
         if r_:
             add(*r_)
-        if (_RANK.search(low) or _LEAST.search(low) or re.search(r"\bmost[- ]\w+", low)) and rows0:
+        if (_RANK.search(low) or _LEAST.search(low) or re.search(r"\bmost[- ]\w+|\bbusiest\b|\bpeak\b", low)) and rows0:
+            # ("busiest" / "peak": mvp20 tune, once "your busiest hour" is no longer read as watch time, a busiest hour
+            # tied with the next one is a tie like any other rank word's)
             for mk in rows0:
                 tie = _tie(res, mk.owner, opens=((res.meta or {}).get("order") == "most_opened"))
                 if tie:
@@ -1623,6 +1636,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         if r:
             add(*r)
         r = _verb_dropped(raw, markers, res, low)
+        if r:
+            add(*r)
+        r = _platform_said(raw, markers, res)
         if r:
             add(*r)
     # 3.8 insight's checks, one sentence (sheets only), or the rules of a result that is not a sheet (step 4)
@@ -1819,12 +1835,18 @@ def _first_last(low, markers, res):
     return None
 
 
+_VERB_LIST = re.compile(r"\b(?:opened|watched),\s+(?:liked|saved)(?:,)?\s+(?:or|and)\s+(?:saved|liked)\b", re.I)
+
+
 def _bare_clause(raw, markers, res):
     """A clause of a marked sentence that holds no marker and still claims something about their history (a rank, a
     peak, a direction, a 'before'): the claim is of no cell (step 1 fix, F39, F37b)."""
     spans = [(mk.start, mk.end) for mk in markers]
     win = [p.lower() for p in _window_phrases(res)] if res else []
-    cuts = [0] + [m.end() for m in _CLAUSE_BREAKS.finditer(raw)] + [len(raw) + 1]
+    # (mvp20 tune, the live run's B04: "you opened, liked or saved 192[r2.totals.items] items" was cut at its comma and
+    # its bare "you opened" read as a claim): the base's own list of verbs is one phrase, not two clauses
+    cut_text = _VERB_LIST.sub(lambda m: m.group(0).replace(",", " "), raw)
+    cuts = [0] + [m.end() for m in _CLAUSE_BREAKS.finditer(cut_text)] + [len(raw) + 1]
     for a, b in zip(cuts, cuts[1:]):
         cl = raw[a:b - 1] if b <= len(raw) else raw[a:]
         if not cl.strip() or any(x < b and a < y for x, y in spans):
@@ -1999,6 +2021,36 @@ def _verb_dropped(raw, markers, res, low):
     return None
 
 
+_PLAT_NOUN = re.compile(r"^\s*(?:[\w'’-]+\s+){0,2}?(?P<p>youtube|instagram)\b|^\s*(?:[\w'’-]+\s+){0,2}?(?:videos?|items?|"
+                        r"clips?|posts?|reels?|shorts)\s+(?:on|from)\s+(?P<q>youtube|instagram)\b", re.I)
+
+
+def _platform_said(raw, markers, res):
+    """mvp20 tune (found while loosening the platform words of a platform-scoped result): a count of the window
+    ("142[r1.totals.items] YouTube videos", "130[r1.totals.items] videos on YouTube") or of an area or a theme said as
+    one platform's, of a result the tools did NOT scope to that platform, is true only when every item of it is that
+    platform's (totals.by_platform); a channel's own count is its platform's by construction."""
+    plats = {w for p in scope_parts(res) if p["kind"] == "platform" for w in p["words"]}
+    for mk in markers:
+        if mk.kind != "value" or mk.rid != res.rid or _family(mk.rest) != "count" or \
+                not isinstance(mk.value, (int, float)) or isinstance(mk.value, bool):
+            continue
+        if not re.match(r"^(?:totals|previous|areas\[\d+\]|themes\[\d+\])\.", mk.rest) or ".by_platform." in mk.rest:
+            continue
+        m = _PLAT_NOUN.match(raw[mk.end:mk.end + 50])
+        if not m:
+            continue
+        p = (m.group("p") or m.group("q")).lower()
+        if p in plats:
+            continue
+        blk = (res.sheet.get(mk.rest.split(".", 1)[0]) or {}) if mk.rest.startswith(("totals.", "previous.")) else {}
+        byp = blk.get("by_platform") if isinstance(blk, dict) else None
+        if isinstance(byp, dict) and mk.rest.endswith(".items") and byp.get(p) == mk.value:
+            continue
+        return "platform_word", f"{mk.path} counts every platform, not only {p.capitalize()}"
+    return None
+
+
 def _sensitive(text, turn):
     from .. import profile as P
     # a sensitive name as whole words (merge seam: Turn.of fills sensitive_names from a real library, where a short
@@ -2014,6 +2066,12 @@ def _sensitive(text, turn):
 
 # ------------------------------------------------------------------ step 3.8: insight's checks, one sentence
 _NEUTRAL = "changed"
+
+
+_OF_VIDEOS = re.compile(r"\s+of\s+(?:(?:the|your|all(?: the)?|all your)\s+)?(?:[A-Za-z][\w'’&-]*\s+){0,3}?(?:videos?|items?|"
+                        r"clips?|posts?|reels?)(?:\s+(?:that\s+)?you(?:'ve| have)?\s+(?:opened|watched|saved|liked)"
+                        r"(?:,\s*liked\s+or\s+saved)?)?(?![\w\[])|\s+of\s+(?:what|everything)\s+you(?:'ve| have)?\s+"
+                        r"(?:opened|watched|saved|liked)(?:,\s*liked\s+or\s+saved)?(?![\w\[])", re.I)
 
 
 def slotted(raw, markers, plain_names, cited_names, res):
@@ -2124,6 +2182,76 @@ def slotted(raw, markers, plain_names, cited_names, res):
             continue   # the window's own words as the sheet says them: insight reads those itself
         if re.search(r"\b" + m.group(1) + r"\s+" + m.group(2).lower().rstrip("s"), words):
             edits.append((m.start(1), m.end(1) + 1, ""))
+    # mvp20 tune (the live run's D06.1, E07 and the audit's T17, T23, T37, T54, T55: "Wet Paper[r1.channels[1]] came next
+    # with 37[r1.channels[1].items] of your art videos", "Clip Factory made 61[...] of the videos you opened" failed
+    # insight's count_as_share, a rule against a count said where its share belongs ("12,080 of your window"): a row's
+    # count of videos said as "N of the (art) videos you opened" / "N of what you opened" is a count of videos, read by
+    # insight as "N videos". The verb is still checked against the base (_verb_dropped, on the raw text), the scope
+    # words by the scope rule, and a count of openings or of days never takes this path.
+    for mk in markers:
+        if mk.kind != "value" or not mk.owner or mk.key not in ITEM_KEYS or mk.rid != res.rid or \
+                not isinstance(mk.value, (int, float)):
+            continue
+        m = _OF_VIDEOS.match(raw, mk.end)
+        if not m:
+            continue
+        inside = [e for e in edits if e[0] < m.end() and m.start() < e[1]]
+        if any(x < m.end() and m.start() < y for x, y in spans) or any(
+                e[2] or e[0] < m.start() or e[1] > m.end() for e in inside):
+            continue
+        # (a scope word inside it, "art" of "of your art videos", was a deletion: the span replaces it)
+        edits = [e for e in edits if e not in inside]
+        edits.append((m.start(), m.end(), " videos"))
+    # mvp20 tune (the live run's C03, F07 and the audit's T25: "In 2021 you opened 134[r1.periods[0].items] videos",
+    # "6[r2.periods[0].items] in September 2026" failed insight's unnamed_owner): a period row's name is its label, which
+    # the model says in words ("2021", "Sep 2026" as "September 2026"); the label typed in the sentence, outside every
+    # marker, is that row's name slot. A label of another period stays as typed (still unnamed_owner, or wrong_window).
+    for mk in markers:
+        own = mk.owner if mk.kind == "value" else None
+        if not own or not re.fullmatch(r"periods\[\d+\]", own) or mk.rid != res.rid:
+            continue
+        try:
+            row = _resolve(res.sheet, own)
+        except KeyError:
+            continue
+        lab = str((row or {}).get("label") or "").strip() if isinstance(row, dict) else ""
+        if not lab:
+            continue
+        alts = {lab}
+        mm = re.fullmatch(r"([A-Za-z]{3})\w* (\d{4})", lab)
+        if mm:
+            full = next((x for x in _MONTHS if x[:3] == mm.group(1).lower()), None)
+            if full:
+                alts |= {f"{full} {mm.group(2)}", f"{mm.group(1)} {mm.group(2)}"}
+        for alt in sorted(alts, key=len, reverse=True):
+            hit = None
+            for m in re.finditer(r"(?<![\w-])" + re.escape(alt) + r"(?![\w-])", raw, re.I):
+                if any(x < m.end() and m.start() < y for x, y in spans) or any(
+                        a < m.end() and m.start() < b for a, b, _t in edits):
+                    continue
+                hit = m
+                break
+            if hit:
+                edits.append((hit.start(), hit.end(), "{" + own + ".label}"))
+                break
+    # mvp20 tune (the live run's C07, F01: "you opened 24[r1.totals.items] YouTube videos" of a result the tools scoped
+    # to YouTube only failed as a rewrite: insight does not know the tools' platform scope and took "YouTube" out): the
+    # platform of a result scoped to that platform is its scope said (the scope rule has checked it), so insight reads
+    # the sentence without it, as it reads a scope word of a name
+    plats = {w for p in scope_parts(res) if p["kind"] == "platform" for w in p["words"]}
+    for m in re.finditer(r"\b(?:on |from |of |in )?(youtube|instagram)\b", raw, re.I):
+        if m.group(1).lower() not in plats:
+            continue
+        if any(x < m.end() and m.start() < y for x, y in spans) or any(a < m.end() and m.start() < b for a, b, _t in
+                                                                        edits):
+            continue
+        edits.append((m.start(), m.end(), ""))
+    # mvp20 tune (the live run's D05.1: "what you opened fell into these 4[r1.areas.count] areas" failed insight's
+    # direction_unbound): "fell into" / "falls into" is where things sit, not a fall; any other "fell" stays
+    for m in re.finditer(r"\b(?:fell|falls?|falling)\s+into\b", raw, re.I):
+        if not any(x < m.end() and m.start() < y for x, y in spans) and not any(
+                a < m.end() and m.start() < b for a, b, _t in edits):
+            edits.append((m.start(), m.end(), "sat in"))
     s = raw
     for a, b, t in sorted(edits, key=lambda e: e[0], reverse=True):
         s = s[:a] + t + s[b:]
@@ -2194,6 +2322,15 @@ def _mask_unlocked(text, unlock):
     return re.sub(r"[A-Za-z][A-Za-z'’-]*", sub, text)
 
 
+def _change_and_value(markers):
+    """A row's move (change_pts / change_vs_previous, a value marker) and the same row's value now (its share, or its
+    items for a move of a count) both cited in the sentence."""
+    moves = {mk.owner for mk in markers if mk.kind == "value" and mk.owner and
+             _segs(mk.rest)[-1][0] in ("change_pts", "change_vs_previous")}
+    nows = {mk.owner for mk in markers if mk.kind == "value" and mk.owner and _segs(mk.rest)[-1][0] == "share"}
+    return bool(moves & nows)
+
+
 def insight_check(raw, markers, plain_names, cited_names, res, where, unlock=None):
     """None or (reason, detail): the sentence through insight's own checks against the cited result's sheet."""
     s = slotted(raw, markers, plain_names, cited_names, res)
@@ -2211,6 +2348,14 @@ def insight_check(raw, markers, plain_names, cited_names, res, where, unlock=Non
         base = I._base_of(sheet)
         bw_ = " ".join(re.findall(r"[\w%'’]+", str(base or "").lower()))
         benign = only and bool(base) and all(x in ("against " + bw_, "in " + bw_) for x in ins)
+        if not benign and only and _change_and_value(markers) and all(
+                re.fullmatch(r"from [\d.,]+(?: ?%| points?)?(?: (?:against|in) " + re.escape(bw_) + r")?", x) or
+                x in ("against " + bw_, "in " + bw_) for x in ins):
+            # mvp20 tune (the live run's K01, B04: "rose to 30%[r2.areas[1].share] ..., up 17
+            # points[r2.areas[1].change_pts]"): a change said with its move AND its value now, both cells of the same
+            # row checked by code (the move's sign against the direction words), says the value before as well
+            # (30 - 17): insight's "from 13%" adds nothing the sentence does not already claim
+            benign = True
         if not benign:
             return _rewrite_reason(ins, only), "code would have to add: " + _clip(" / ".join(ins), 80)
         text = fill
@@ -2391,6 +2536,68 @@ def _lead_names_window(lead_text, ledger, rid):
     return False
 
 
+def scope_said(text, res):
+    """The text says every part of the result's scope (the tools' meta.filters_said: a name with "only" / "without",
+    a weekday, a platform; and a length filter): the words _scope_dropped and _filter_dropped look for."""
+    low = strip_markers(text or "").lower()
+    for p in scope_parts(res):
+        hit = any(re.search(r"\b" + re.escape(w) + r"(?:s|es)?\b", low) for w in p["words"])
+        if p["kind"] == "without" and not _EXCLUDE_WORDS.search(low):
+            hit = False
+        if not hit:
+            return False
+    f = res.sheet.get("filters") or {}
+    said = " ".join(str(x) for x in ((res.meta or {}).get("filters_said"), (res.meta or {}).get("base")) if x).lower()
+    length = f.get("length") or ("long" if f.get("without_shorts") or re.search(r"\blong\b|without shorts", said)
+                                 else ("short" if re.search(r"\bonly shorts\b|\bshorts only\b", said) else None))
+    if length == "long" and not re.search(r"\blong\b|without shorts|no shorts", low):
+        return False
+    if length == "short" and not re.search(r"\b(?:short|shorts|reels?)\b", low):
+        return False
+    return True
+
+
+_UNSCOPED_BASE = re.compile(r"\bof (?:what|everything|all(?: of)? (?:what|the|your)) (?:you|videos|items)\b|\b(?:videos?|"
+                            r"items?|clips?|posts?|things) (?:that )?you(?:'ve| have)? (?:opened|watched|saved|liked)\b",
+                            re.I)
+
+
+def _waive_scope_repeats(v, ledger, lead_text):
+    """mvp20 tune, the scope rule of the brief's (c): a point dropped ONLY because it did not repeat its result's
+    filter is kept when the lead that goes out with it cites the SAME filtered result and says that filter. The answer
+    then prints code's scope line for that result (answer.build: the first kept sentence's result, which is the lead's),
+    so the filter is said twice already. A point on another result, or under a lead that failed (a code lead takes its
+    place), keeps the rule: nothing is waived."""
+    lead_os = [o for o in v.outcomes if o.where == "lead"]
+    if not lead_os or not all(o.kept for o in lead_os):
+        return
+    lrid = next((o.rid for o in lead_os if o.rid), None)
+    res = ledger.get(lrid) if lrid else None
+    if res is None or not (scope_parts(res) or (res.sheet.get("filters") or {}).get("without_shorts") or
+                           (res.sheet.get("filters") or {}).get("length") in ("long", "short")):
+        return
+    if not scope_said(lead_text, res):
+        return
+    for o in v.outcomes:
+        if o.where != "point" or o.kept or o.rid != lrid or o.reasons != ["filter_dropped"]:
+            continue
+        if str(o.notes.get("filter_dropped") or "").startswith("code would have to add"):
+            continue   # insight's own rewrite (a clause it would add), not the scope said again
+        mks, _b = parse(" ".join(o.text.split()), ledger)
+        if any(mk.kind == "calc" or (mk.kind == "value" and (_family(mk.rest) in ("share", "points") or
+                                                            re.match(r"^(?:totals|previous)\.", mk.rest)))
+               for mk in mks) or _UNSCOPED_BASE.search(strip_markers(o.text)):
+            # a share, a move, a total of the window, or a base said in words ("of what you opened", "the 107 items
+            # you opened") claims the WHOLE base: said without the scope it is wrongly based, whatever the line under
+            # it says ("85% of what you opened" of only gaming is 43% of what they opened). Only a row's own count, a
+            # rank or a day of the scoped result may lean on the lead and the scope line.
+            continue
+        o.reasons = []
+        o.details = []
+        o.notes = {"scope_waived": f"the lead says {res.rid}'s scope"}
+        o.sent = " ".join(strip_markers(" ".join(o.text.split())).split())
+
+
 def check_answer(form, ledger, turn=None):
     """The form against the ledger -> Verdict (SPEC 4.3). `form`: an AnswerForm or its dict; `ledger`: a Ledger, or
     the turn's result envelopes (a list, or a dict by rid)."""
@@ -2432,6 +2639,7 @@ def check_answer(form, ledger, turn=None):
             r = ledger.get(rid) if rid else None
             lead_os[0].details.append(f"say the window: '{_clip((r.meta or {}).get('window_said') if r else '', 90)}'")
             lead_os[0].sent = None
+    _waive_scope_repeats(v, ledger, f.lead)
     # 3.14 once: the same cells said again (the later sentence goes)
     for o in v.outcomes:
         if not o.kept:

@@ -164,10 +164,21 @@ def test_one_repair_only_and_a_failed_point_alone_is_dropped_without_one(harness
     assert rec["n_requests"] == 3 and "repair_without_answer" in rec["events"] and rec["lead_source"] == "code"
 
 
+def test_an_invented_top_level_key_is_dropped_before_the_check_and_spends_no_repair(harness):
+    # mvp20 tune: run1 spent 12 of its 30 repairs on keys like "understood_note": "x"; the key is left out (its value
+    # is never read or sent) and the form is checked as it is
+    rec, prov, _t = run(harness, [[bd()], [ga(TRUE_LEAD, [TRUE_POINT], understood_note="x", lead_fix=None)]])
+    assert rec["repair_message"] is None and rec["lead_source"] == "model" and rec["n_requests"] == 2
+    assert "form_keys_dropped" in rec["events"] and rec["dropped_keys"] == [["lead_fix", "understood_note"]]
+    assert "understood_note" not in rec["forms"][0] and rec["sentences"]["kept_first_pass"] == 2
+
+
 def test_a_form_that_does_not_validate_is_repaired_with_the_field_named(harness):
-    rec, _p, _t = run(harness, [[bd()], [ga(TRUE_LEAD, [TRUE_POINT], understood_note="x")],
-                                [ga(TRUE_LEAD, [TRUE_POINT])]])
-    assert "'understood_note': not a field of give_answer" in rec["repair_message"]
+    # an unknown key INSIDE a field (an offer here) still fails validation and is named in the repair
+    bad = ga(TRUE_LEAD, [TRUE_POINT])
+    bad["input"]["offers"] = [{"kind": "by_month", "label_text": "x"}]
+    rec, _p, _t = run(harness, [[bd()], [bad], [ga(TRUE_LEAD, [TRUE_POINT])]])
+    assert "not a field of give_answer" in rec["repair_message"] and "label_text" in rec["repair_message"]
     assert rec["lead_source"] == "model_after_repair"
     assert rec["sentences"] == {"written": 2, "kept_first_pass": 0, "kept_sent": 2}
 

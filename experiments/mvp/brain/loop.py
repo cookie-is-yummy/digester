@@ -29,7 +29,7 @@ from . import tools as TL
 from . import verify as V
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROMPT_VERSION = "brain_v1"
+PROMPT_VERSION = os.environ.get("MVP_BRAIN_PROMPT", "brain_v2")   # mvp20 tune: v2 (v1 kept for reference)
 PROMPT_PATH = os.path.join(os.path.dirname(HERE), "prompts", f"{PROMPT_VERSION}.md")
 GIVE_ANSWER = "give_answer"
 ROUNDS = int(os.environ.get("MVP_BRAIN_ROUNDS", "3"))
@@ -166,7 +166,7 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
             for u in reads:
                 results.append(_err(u["id"], REPAIR_ONLY))
             if ga:
-                form = ga[0].get("input") or {}
+                form = _take_form(ga[0], rec)
                 forms.append(form)
                 v = V.check_answer(form, turn.results, vturn)
                 verdicts.append(v)
@@ -174,7 +174,7 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
                 rec["events"].append("repair_without_answer")
             break
         if ga and not reads:
-            form = ga[0].get("input") or {}
+            form = _take_form(ga[0], rec)
             forms.append(form)
             v = V.check_answer(form, turn.results, vturn)
             verdicts.append(v)
@@ -233,6 +233,31 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
     rec["cost_usd"] = round(sum(q["cost_usd"] for q in rec["requests"]), 6)
     rec["n_requests"] = len(rec["requests"])
     return rec
+
+
+FORM_FIELDS = frozenset(V.AnswerForm.model_fields) | frozenset(
+    f.alias for f in V.AnswerForm.model_fields.values() if f.alias)
+
+
+def clean_form(form):
+    """(form, dropped keys): the give_answer input with its unknown TOP-LEVEL keys left out before it is checked.
+    give_answer is sent without strict (all ten tools strict is a grammar the API refuses), and the live run showed the
+    model adding keys of its own ("understood_note": "x", "lead_fix": null) to an otherwise good form; one such key made
+    the whole form fail validation and spent the one repair on it. What a dropped key held is never read or sent; keys
+    inside the fields are still validated as before (an unknown key in an offer or an item still fails)."""
+    if not isinstance(form, dict):
+        return form, []
+    extra = sorted(k for k in form if k not in FORM_FIELDS)
+    return {k: v for k, v in form.items() if k in FORM_FIELDS}, extra
+
+
+def _take_form(use, rec):
+    """The give_answer input of a tool_use, cleaned (clean_form); dropped keys are recorded, never their values."""
+    form, extra = clean_form(use.get("input") or {})
+    if extra:
+        rec["events"].append("form_keys_dropped")
+        rec.setdefault("dropped_keys", []).append(extra[:12])
+    return form
 
 
 def _form_error_text(form):

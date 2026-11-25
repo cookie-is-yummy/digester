@@ -835,6 +835,11 @@ def summarize(recs, settings=None):
         "G2_understood": {"understood": g2.get("understood", 0), "other_plan": g2.get("other_plan", 0),
                           "differs": g2.get("differs", 0), "no_hand_plan": g2.get("no_hand_plan", 0),
                           "share": round(g2.get("understood", 0) / planned, 4) if planned else None, "bar": 0.90,
+                          # mvp20 tune: the gate's own four fields (window, base, scope, order): "other_plan" (same
+                          # four, another tool or ranking) counts as understood here; "share" above stays the strict
+                          # figure (tool and ranking too), both reported
+                          "share_gate_fields": round((g2.get("understood", 0) + g2.get("other_plan", 0)) / planned, 4)
+                          if planned else None,
                           "other_plan_list": [r["key"] for r in done if r["g2"]["verdict"] == "other_plan"],
                           "differs_list": {r["key"]: r["g2"]["diffs"] for r in done
                                            if r["g2"]["verdict"] == "differs"}},

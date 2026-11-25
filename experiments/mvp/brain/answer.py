@@ -108,6 +108,24 @@ def offers_of(form, ledger):
     return out
 
 
+def _learned_point(ledger, text):
+    """SPEC 4.3 step 4: a kept point that is exactly a learned result's point marker ("[r1.points[0]]") goes out as that
+    point's text, which the tool already traced to their own items (synth.check_points); anything else: None."""
+    import re
+    m = re.fullmatch(r"\s*\[(r\d+)\.points\[(\d+)\]\]\s*\.?\s*", text or "")
+    if not m:
+        return None
+    r = ledger.get(m.group(1))
+    if r is None or r.tool != "learned":
+        return None
+    pts = r.sheet.get("points") if isinstance(r.sheet, dict) else None
+    k = int(m.group(2))
+    if not isinstance(pts, list) or k >= len(pts) or not isinstance(pts[k], dict):
+        return None
+    t = " ".join(str(pts[k].get("text") or "").split())
+    return t or None
+
+
 def build(ledger, verdict=None, code=None, form=None, also=()):
     """The answer that goes out. `verdict`: the verdict whose sentences are sent (the model's), or None when `code`
     (fallback.answer's dict) is sent; `also`: every verdict of the turn (the private line is OR'd over them all).
@@ -116,7 +134,8 @@ def build(ledger, verdict=None, code=None, form=None, also=()):
         ledger = V.Ledger(ledger)
     if verdict is not None:
         lead = " ".join(o.sent for o in verdict.lead if o.kept and o.sent)
-        points = [s for s in verdict.kept_text("point") if s]
+        points = [s for s in (o.sent or _learned_point(ledger, o.text) for o in verdict.outcomes
+                              if o.where == "point" and o.kept) if s]
     else:
         lead = (code or {}).get("lead") or ""
         points = list((code or {}).get("points") or [])

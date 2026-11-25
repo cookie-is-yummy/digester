@@ -53,6 +53,12 @@ def _from_code_form(res):
         # the sheet's filters, so code_form's words would leave it out ("Clip Factory led" of only gaming); and its
         # lead of a length-filtered sheet ranks without saying "long" ("Pan Theory led" of the long videos only)
         return None
+    if ((res.meta or {}).get("base") or "of what you opened") != "of what you opened":
+        # mvp20 tune (the live run's I04, I05: "mostly art and design (50% of what you opened), then food and cooking
+        # (50%)" of a breakdown of SAVES, a wrongly based lead that went out, and "mostly" on a 50/50 tie): code_form
+        # writes "of what you opened" whatever the tools counted; a result of saves, likes or everything gets a
+        # template, which says the base's own verb
+        return None
     if sheet.get("kind") == "changed" and not all(re.fullmatch(r"(?:19|20)\d\d", str((p or {}).get("label") or ""))
                                                   for p in sheet.get("periods") or [{}]):
         # step 1 fix (the verifier audit's code leads chg and chgy: "gaming has led every year since Oct 2026, at about
@@ -192,7 +198,8 @@ def templates(res):
                 out.append(f"{lead}{name}[{rid}.{key}[0]] was the one you {verb} least, with "
                            f"{n}[{rid}.{key}[0].items] {_n(n, noun1_, noun_)}{scope}.")
             else:
-                out.append(f"{lead}{name}[{rid}.{key}[0]] led, with {n}[{rid}.{key}[0].items] "
+                # (mvp20 tune: the base's verb said, "led what you saved", so a lead of saves never reads as opens)
+                out.append(f"{lead}{name}[{rid}.{key}[0]] led what you {verb}, with {n}[{rid}.{key}[0].items] "
                            f"{_n(n, noun1_, noun_)}{scope}.")
         if total_line and kind != "count":
             out.append(total_line)

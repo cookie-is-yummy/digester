@@ -210,7 +210,7 @@ def test_only_long_videos(brain):
     kept(t, vt, f"In October 2026, {top[0][0]}[r1.channels[0]] led the long videos you opened, with "
                 f"{top[0][1]}[r1.channels[0].items].")
     lead = code_lead(t, vt, "template", [top[0][1], len(lo)])
-    assert f"{top[0][0]} led, with {top[0][1]} long videos." in lead
+    assert f"{top[0][0]} led what you opened, with {top[0][1]} long videos." in lead   # (mvp20: the base's verb)
 
 
 # ================================================================ 7. least
