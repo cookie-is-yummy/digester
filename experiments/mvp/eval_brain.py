@@ -189,6 +189,11 @@ def check_expect(results, expect):
     return bad
 
 
+def _has_content(env):
+    s = (env or {}).get("sheet") or {}
+    return bool(s.get("points") or s.get("items") or s.get("names") or (s.get("totals") or {}).get("items"))
+
+
 def _window_of(env):
     w = ((env or {}).get("sheet") or {}).get("window") or {}
     return [w.get("start"), w.get("end")] if isinstance(w, dict) else [None, None]
@@ -222,17 +227,39 @@ def run_message(h, m, screen="", last_window=None, audit=True):
     vt = V.Turn.of(t)
     cl = FB.code_lead(t.results, turn=vt)
     rec.update(lead=cl["lead"], lead_how=cl["how"], private_line=cl["private_line"])
-    marker_form = None
+    marker_form, issues = None, []
+    ledger = V.Ledger(t.results)
     if cl["how"] == "template":
-        res = V.Ledger(t.results).get(cl["rid"])
+        res = ledger.get(cl["rid"])
         forms = [x for x in FB.templates(res) if V.strip_markers(x) == cl["lead"]]
         marker_form = forms[0] if forms else None
-        rec["lead_ok"] = bool(marker_form) and V.check_answer({"lead": marker_form, "points": []}, t.results,
-                                                               vt).lead_ok
+        if not (marker_form and V.check_answer({"lead": marker_form, "points": []}, t.results, vt).lead_ok):
+            issues.append("the template does not pass the verifier")
     elif cl["how"] == "code_form":
-        rec["lead_ok"] = True    # code_form's answer passed today's checks inside fallback (insight._check, gate)
-    else:
-        rec["lead_ok"] = cl["lead"] == FB.PLAIN
+        # code_form's answer passed today's checks inside fallback (insight._check, the gate); the verifier's own
+        # rule for a lead (SPEC 4.3 step 2: it names its window) is checked here, and a sentence starts as one
+        if not V._lead_names_window(cl["lead"], ledger, cl["rid"]):
+            issues.append("window_missing")
+    if cl["lead"][:1].islower():
+        issues.append("starts in lower case")
+    core = re.split(r"[(,]", (((t.results.get(cl["rid"]) or {}).get("meta") or {}).get("window_said") or ""))[0]
+    if cl["how"] == "code_form" and core.strip() and core.strip().lower() not in cl["lead"].lower():
+        # the verifier's window rule (verify._lead_names_window, through insight.window_lead) passed it; the eval's
+        # own reading: the lead holds the core words of its result's window
+        issues.append("does not say its own window")
+    if cl["how"] == "plain" and any(_has_content(env) for env in t.results.values()):
+        # the plain line ("I couldn't check an answer to that in time") while a result holds what was asked
+        issues.append("plain line with a result in hand")
+    if cl["how"] != "plain" and cl["rid"] is None:
+        issues.append("no result named")
+    env0 = (t.results.get(cl["rid"]) or {}) if cl["rid"] else {}
+    first_last = env0.get("tool") == "first_last"
+    said = (env0.get("meta") or {}).get("window_said") or ""
+    bare = cl["lead"].replace(said, " ") if said else cl["lead"]   # the window's own dates are not the item's day
+    if first_last and not re.search(r"\b\d{1,2} (?:January|February|March|April|May|June|July|August|September|"
+                                    r"October|November|December) \d{4}\b", bare):
+        issues.append("a first or a last without the item's day")
+    rec["lead_ok"], rec["lead_issues"] = not issues, issues
     rec["marker_form"] = marker_form
     if audit:
         from mvp import eval_claims as EC
@@ -336,7 +363,7 @@ def plans(h, only=None):
             s["window_failed"] += [f"{where}: {e}" for e in m["window_failed"]]
             s["lead_how"][m["lead_how"]] = s["lead_how"].get(m["lead_how"], 0) + 1
             if not m["lead_ok"]:
-                s["lead_not_ok"].append(where)
+                s["lead_not_ok"].append(f"{where}: {'; '.join(m.get('lead_issues') or [])}")
             s["numbers_in_results"] += m.get("numbers", 0)
             s["numbers_recounted"] += m.get("recounted", 0)
             for p in m.get("not_recounted", []):

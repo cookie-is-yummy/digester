@@ -25,9 +25,13 @@ CORE = os.path.join(MVP, "evalset", "brain_core.jsonl")
 PLANS = os.path.join(MVP, "evalset", "brain_plans.jsonl")
 DRAFT = os.path.join(MVP, "design", "brain_v1", "eval_messages.draft.jsonl")
 # the plans whose results hold a number the auditor does not recount true today (each a finding of the report):
-# C13 eras[].share is the mean of the yearly shares, not the era's share; G06 code_form's "mostly <area> (44%) and
-# <area> (26%)"; I05 an Instagram photo post's length word "short"
-KNOWN_NOT_TRUE = {"C13", "G06", "I05"}
+# B05 and C13 eras[].share is the mean of the yearly shares, not the era's share; G06 code_form's "mostly <area>
+# (44%) and <area> (26%)"; I05 an Instagram photo post's length word "short"
+KNOWN_NOT_TRUE = {"B05", "C13", "G06", "I05"}
+# the code leads that fail the eval's reading (fallback findings): B10 the plain line with two checked points in hand
+# (learned's template fails its own verifier); C06 and K03 code_form leads that start in lower case and name only
+# the window before; C08 and F04 a last with no day (the template fails insight's date check)
+KNOWN_LEAD_NOT_OK = {"B10.0", "C06.0", "K03.0", "C08.0", "F04.0"}
 
 
 def rows(path):
@@ -105,11 +109,15 @@ def test_the_plans_run_recount_and_say_their_findings(harness):
     assert s["conversations"] == 111 and s["messages"] == 130 and s["planned_messages"] == 91
     assert s["with_a_plan"] == 76 and s["waiting"] == {"step2": 17, "step3": 18}
     assert s["tool_errors"] == [] and s["expect_failed"] == [] and s["window_failed"] == []
-    assert s["lead_not_ok"] == []          # every code lead made from the results passed its check
-    # every number of every result recounted, but the 4 of a season's "since" counts
-    assert s["numbers_in_results"] - s["numbers_recounted"] <= 4
-    assert set(s["not_recounted"]) <= {"breakdown/top:new.channels[].since_items",
-                                       "breakdown/top:new.channels[].since_new"}
+    # every code lead is checked (a template through the verifier; code_form for its own window and its case; the
+    # plain line counts as a failure when a result holds what was asked)
+    assert {x.split(":")[0] for x in s["lead_not_ok"]} == KNOWN_LEAD_NOT_OK
+    # every number of every result recounted (the sheet's and the meta's counts), but a season's "since" counts and
+    # a few meta counts the auditor does not read (a length-filtered result's private count, a search's, a learned's,
+    # friends on a result that saw nothing)
+    assert s["numbers_in_results"] - s["numbers_recounted"] <= 25
+    assert all(p.endswith(("since_items", "since_new", "meta.hidden.sensitive", "meta.hidden.friends"))
+               for p in s["not_recounted"]), s["not_recounted"]
     assert {x["id"] for x in s["recount_not_true"]} == KNOWN_NOT_TRUE
     assert s["recount_true"] == s["with_a_plan"] - len(KNOWN_NOT_TRUE)
     assert [f["at"] for f in s["findings"]["window"]] == ["G04.0"]          # "late october" read as October
@@ -300,6 +308,18 @@ def test_audit_ledger_recounts_each_cited_cell_its_base_and_its_rank(brain):
     lie = good.replace(f"{n1}[r1.channels[1].items]", f"{n1 + 2}[r1.channels[1].items]")
     assert [x["where"] for x in EC.audit_ledger(lib, EC.cited_cells(lie), {"r1": r}, calls, "", TODAY)
             if not x["ok"]] == ["r1.channels[1].items"]
+    # a date marker: the row's date recounted, and the date typed before the marker compared with it
+    f_args = {"subject": "watercolor", "which": "first"}
+    fr, lib2 = _audit(brain, "first_last", f_args, "when did i start watercolor")
+    fcalls = {"r1": {"tool": "first_last", "args": f_args}}
+    ok = "You first opened a watercolor video on 10 January 2025[r1.items[0].when]."
+    assert all(x["ok"] for x in EC.audit_ledger(lib2, EC.cited_cells(ok), {"r1": fr}, fcalls, "", TODAY))
+    for wrong in ("on 16 January 2025[r1.items[0].when]", "in March 2025[r1.items[0].when]", "on[r1.items[0].when]"):
+        rows_ = EC.audit_ledger(lib2, EC.cited_cells("You first opened one " + wrong + "."), {"r1": fr}, fcalls, "",
+                                TODAY)
+        assert rows_ and not all(x["ok"] for x in rows_), wrong
+    assert all(x["ok"] for x in EC.audit_ledger(lib2, EC.cited_cells("It was in January 2025[r1.items[0].when]."),
+                                                {"r1": fr}, fcalls, "", TODAY))
 
 
 def test_audit_lead_reads_a_code_form_lead_with_the_text_audit(brain):

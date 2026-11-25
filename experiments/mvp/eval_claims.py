@@ -180,11 +180,13 @@ class Library:
         derived = derived or os.environ.get("MVP_DERIVED_HOME") or os.path.join(REPO, "data", "mvp", "derived")
         now_s = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%S")
         self.items = {}
+        self.friends = 0
         with open(os.path.join(self.lib, "corpus", "items.jsonl"), encoding="utf-8") as f:
             for line in f:
                 r = json.loads(line)
                 pd = r.get("platform_data") or {}
                 if pd.get("owner_relation") in FRIENDS:
+                    self.friends += 1
                     continue   # friends' posts are never counted
                 p = r.get("platform")
                 handle = (pd.get("owner_handle") or "").strip().lstrip("@")
@@ -319,11 +321,13 @@ class Library:
     def _hide(self, unlock):
         """Leave the items of a sensitive theme out of everything (the brain's audit), but those about `unlock`."""
         words = UNLOCK_WORDS.get(unlock or "", ())
+        self.hidden_acts = {}
         for i in sorted(self.sensitive_items):
             it = self.items.get(i)
             if it is None or (words and any(holds(it["cap"], w) for w in words)):
                 continue
             self.hidden_items.add(i)
+            self.hidden_acts[i] = (it, list(self.acts.get(i, [])))
             for d in (self.items, self.opens, self.open_at, self.open_days, self.acts, self.theme_of, self.area_of,
                       self.field_of, self.field_id_of):
                 d.pop(i, None)
@@ -3101,6 +3105,7 @@ def audit_results(lib, env, call=None, question="", today=None, earlier=None, la
     ctx, wrows = brain_ctx(lib, env, call, question, today, earlier, last_window)
     for kind, ok, said, rec, words in wrows:
         F.add("window", kind, ok, said, rec, where="window", note=words, severity=2.0)
+    _meta_audit(ctx, F, env, call)
     if question:
         q = read_call_window(question, lib, today)
         st = stated_window(sh)
@@ -3320,9 +3325,58 @@ def _brain_extra(ctx, F, sh):
             sum(1 for i in base if lib.items[i]["p"] == "youtube" and lib.short.get(i) is None), "count")
 
 
+META_NUMBERS = ("hidden.sensitive", "hidden.friends", "rows_total")
+
+
+def _meta_audit(ctx, F, env, call):
+    """The numbers of a result's meta: friends' posts left out (the library's), the private items left out in the
+    window (of the kind counted, on the platform asked), and how many entities the asked ranking ran over."""
+    lib, meta = ctx.lib, (env or {}).get("meta") or {}
+    hid = meta.get("hidden") or {}
+    saw_nothing = bool(((env or {}).get("sheet") or {}).get("cannot_see"))
+    if "friends" in hid and not saw_nothing:
+        # the library's count of friends' posts left out (the tools' reading: not the window's)
+        F.add("results", "count", hid["friends"] == lib.friends, hid["friends"], lib.friends,
+              where="meta.hidden.friends")
+    if "sensitive" in hid and ctx.a is not None and getattr(lib, "hidden_acts", None) is not None:
+        # the private items left out: those the scope would have counted (an item of a private theme has no area
+        # nor theme of its own, so an area or a theme scope holds none of them)
+        f = ctx.f
+        kinds = HOW_EVENTS.get(f.get("how") or "opened", OPEN)
+
+        def in_scope(it, acts):
+            if f.get("platform") and it["p"] != f["platform"]:
+                return False
+            refs_ok = (lambda r: (r.split(":", 1)[0] == "channel" and bool(it["c"]) and channel_key(it["c"]) ==
+                                  r.split(":", 1)[1]) or (r.startswith("words:") and holds(it["cap"], r[6:])) or
+                       (r.startswith("collection:") and any(slug(c) == r[11:] for c in it.get("coll") or [])))
+            if f.get("only_refs") and not any(refs_ok(r) for r in f["only_refs"]):
+                return False
+            if f.get("exclude_refs") and any(refs_ok(r) for r in f["exclude_refs"]):
+                return False
+            ev = [x for x in acts if x[3] in kinds and ctx.a <= x[0] <= ctx.b and
+                  (f.get("weekday") is None or x[2] == f["weekday"])]
+            return bool(ev)
+        n = sum(1 for it, acts in lib.hidden_acts.values() if in_scope(it, acts)) \
+            if not (f.get("without_shorts") or f.get("short")) else None
+        if n is not None:
+            F.add("results", "count", hid["sensitive"] == n, hid["sensitive"], n, where="meta.hidden.sensitive")
+    by = ((call or {}).get("args") or {}).get("by") or ((call or {}).get("args") or {}).get("level")
+    if isinstance(meta.get("rows_total"), int) and by in ("area", "theme", "channel"):
+        n = len(_rank(lib, list(ctx.sc("filt")), by))
+        F.add("results", "count", meta["rows_total"] == n, meta["rows_total"], n, where="meta.rows_total")
+
+
 def coverage(env, rows):
-    """(numbers in the result's sheet, of them recounted, the paths not recounted)."""
+    """(numbers in the result's sheet and its meta's counts, of them recounted, the paths not recounted)."""
     nums = [p for p, _v in _numbers_of((env or {}).get("sheet") or {})]
+    meta = (env or {}).get("meta") or {}
+    for p in META_NUMBERS:
+        o = meta
+        for k in p.split("."):
+            o = o.get(k) if isinstance(o, dict) else None
+        if isinstance(o, (int, float)) and not isinstance(o, bool):
+            nums.append("meta." + p)
     seen = {r["where"].split(" ")[0] for r in rows}
     miss = [p for p in nums if p not in seen]
     return len(nums), len(nums) - len(miss), miss
@@ -3345,6 +3399,28 @@ def cited_cells(marked):
     return out
 
 
+def _typed_date(said):
+    """(day or None, month or None, year) of the date typed before a marker ("on 10 January 2025", "in March 2021",
+    "in 2023"), or None."""
+    t = (said or "").lower()
+    m = re.search(r"\b(\d{1,2}) (" + _MONTHS_RX + r")(?: (20\d\d))?\b", t) or \
+        re.search(r"\b(" + _MONTHS_RX + r") (\d{1,2})(?:,? (20\d\d))?\b", t)
+    if m:
+        a, b, y = m.groups()
+        day, mon = (int(a), MON3[b]) if a.isdigit() else (int(b), MON3[a])
+        return day, mon, int(y) if y else None
+    m = re.search(r"\b(" + _MONTHS_RX + r") (20\d\d)\b", t)
+    if m:
+        return None, MON3[m.group(1)], int(m.group(2))
+    m = re.search(r"\b(20\d\d)\b", t)
+    return (None, None, int(m.group(1))) if m else None
+
+
+def _date_said_ok(typed, d):
+    day, mon, y = typed
+    return (day is None or day == d.day) and (mon is None or mon == d.month) and (y is None or y == d.year)
+
+
 def audit_ledger(lib, cited, results, calls=None, question="", today=None, F=None):
     """Every cited cell recounted: its value, its result's base total (totals.items) and, for a row's cell, the
     row's rank in its list. `results`: {rid: envelope}; `calls`: {rid: the call that made it}. -> Findings rows."""
@@ -3361,9 +3437,13 @@ def audit_ledger(lib, cited, results, calls=None, question="", today=None, F=Non
         rows = recs[rid]
         said = c["said"]
         if rest.endswith(".when") or rest.endswith(".date"):
+            # the row's date recounted, and the date typed before the marker is that date (at the precision said)
             r = rows.get(rest)
-            ok = r is not None and r["ok"]
-            F.add("ledger", "date", ok, said, r["recount"] if r else "not recounted", where=c["path"], severity=2.0)
+            cell = r["said"] if r else None
+            typed = _typed_date(said)
+            ok = r is not None and r["ok"] and typed is not None and cell is not None and \
+                _date_said_ok(typed, date.fromisoformat(str(cell)[:10]))
+            F.add("ledger", "date", ok, said, cell if r else "not recounted", where=c["path"], severity=2.0)
             continue
         m = None
         for m in _NUM.finditer(said):
