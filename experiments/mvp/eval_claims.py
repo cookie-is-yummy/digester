@@ -1177,6 +1177,13 @@ class Names:
         return out
 
 
+def _rank_count_gap(gap):
+    """mvp22: the words between a record and its count, when they rank it and end in "with" or "at" ("came next
+    with", "was third with", "was the top theme, with", "was the largest long theme at", "alone made"): no number, no
+    other clause, and no "videos" (in "<area> videos, with 5" the record is a word of another phrase)."""
+    return not re.search(r"\d|[;:]|\bvideos?\b", gap) and bool(re.search(r"\b(?:with|at|made)\s*$", gap))
+
+
 def ent_code(e):
     return {"shorts": "Shorts", "long": "Long", "all": "All"}.get(e[0]) or code_of(e[0], e[1])
 
@@ -1188,6 +1195,7 @@ class TextAudit:
         self.filtered = bool(ctx.f.get("topic") or ctx.f.get("channel") or ctx.f.get("without_shorts"))
         self.facts = []   # (kind, record, value, sentence index): one fact said in two sentences is a repeat (X9)
         self.si = 0
+        self.scoped = False   # mvp22: the sentence being read says the call's own filter (said_scope)
 
     # ---------------------------------------------------------------- bases
     def base_ids(self, key, ent=None, x=None, scope="cur"):
@@ -1612,6 +1620,7 @@ class TextAudit:
     def sentence(self, s, prev_base):
         lib, ctx = self.lib, self.ctx
         spans = self.names.spans(s)
+        self.scoped = self.said_scope(s, spans)
         low = s.lower()
         sentence_base = None
         base_kind = None
@@ -1675,6 +1684,11 @@ class TextAudit:
                 self.judge_share(said, base, cands, got, e, "share inside a record (no base said: of the record)",
                                  about)
                 continue
+            if base == "all" and self.scoped:
+                # mvp22 (the brain slice's held-out look, B02.0 and C02.0): "Without gaming, art and design led with
+                # 48% of what you opened": the sentence says the call's own filter as its scope, so "what you opened"
+                # is the filtered videos
+                base = "filt"
             if base is not None:
                 sentence_base, base_kind = base, e[0]
             cands = self.candidates(e, scope=scope)
@@ -1688,6 +1702,34 @@ class TextAudit:
         # ---------------- words
         self.words(s, spans, sentence_base)
         return sentence_base
+
+    def said_scope(self, s, spans):
+        """mvp22: the sentence says one of the call's own record filters as a scope phrase: "without <record>" for an
+        exclude ref of the brain's call, "only <record>" for an only ref. (A record named as a subject, "the largest
+        gaming theme", is not a scope phrase.)"""
+        f, low = self.ctx.f, s.lower()
+        for key, word in (("exclude_refs", "without"), ("only_refs", "only")):
+            refs = f.get(key) or []
+            for sp in spans:
+                if sp[2][0] in ("theme", "area", "channel") and re.search(r"\b" + word + r"\s+$", low[:sp[0]]) and \
+                        any(self._is_ref(sp[2], r) for r in refs):
+                    return True
+        return False
+
+    def _is_ref(self, e, ref):
+        form, _, val = (ref or "").partition(":")
+        if form != e[0]:
+            return False
+        if form == "area":
+            return slug(e[1]) == val
+        if form == "channel":
+            return channel_key(e[1]) == val
+        if form == "theme":
+            try:
+                return (self.lib.theme_by_id.get(int(val)) or "").lower() == e[1].lower()
+            except ValueError:
+                return False
+        return False
 
     def usual_medians(self):
         """A day's usual day (DESIGN 19.P2, T10, my reading): the 90 days before it with anything opened; on each, the
@@ -1913,6 +1955,13 @@ class TextAudit:
                                          r"accounts? for|accounted for|made up|with|was behind|is behind)"
                                          r"(?:\s+(?:another|more|just|only|about|over|some|nearly|almost))*\s*",
                                          s[near[-1][1]:m.start()]):
+                    bound = near[-1][2]
+                elif near and _rank_count_gap(s[near[-1][1]:m.start()]) and \
+                        not re.search(r"\b\d[\d,]* of\s*$", s[:m.start()]):
+                    # mvp22 (the brain slice's held-out look: 17 of its 24 findings): "<record> came next with 32
+                    # videos", "<record> was the top theme, with 23 videos", "<record> was the channel you opened
+                    # least, with 1 video": the count of the record named before it in the clause, never the window's
+                    # total ("59 of 130 videos" stays the whole: the number after "N of")
                     bound = near[-1][2]
             if bound is not None:
                 if not (bound[0] == "topic" and bound[1].lower() == (ctx.f.get("topic") or "").lower()):
@@ -2149,7 +2198,7 @@ class TextAudit:
                     self.facts.append(("move", rec, x, self.si))
                     if rec is not None and rec[0] in ("theme", "area", "topic", "channel") and self.ctx.prev:
                         # the move itself: the record's share now less its share in the span before, in points
-                        b_ = "filt" if self.filtered else "all"
+                        b_ = "filt" if (self.filtered or self.scoped) else "all"
                         now_ids, pre_ids = self.base_ids(b_), self.base_ids(b_, scope="prev")
                         if now_ids and pre_ids:
                             d = 100 * (sum(1 for i in now_ids if self.lib.member(i, rec)) / len(now_ids) -

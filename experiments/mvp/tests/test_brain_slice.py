@@ -385,7 +385,7 @@ def test_the_summary_arithmetic():
     assert s["G4_sentences"]["missing_after_repair"] == 0.2
     assert s["G5_seconds"]["median"] == 6.5 and s["G5_seconds"]["p90"] == 10.8
     assert s["G6_cost"]["mean_cents"] == 0.15 and s["G6_cost"]["total_usd"] == 0.006
-    assert s["G1_auditor"]["findings"] == 1 and list(s["G1_auditor"]["by_message"]) == ["C.0"]
+    assert s["auditor_hints"]["hints"] == 1 and list(s["auditor_hints"]["by_message"]) == ["C.0"]
     assert s["dropped_reasons"] == {"wrong_value": 2, "base": 1} and s["repairs"] == 1
     assert s["requests"]["count"] == 4 and s["requests"]["cache_read_input_tokens"] == 12
 
