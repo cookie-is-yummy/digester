@@ -6203,3 +6203,140 @@ What is left (not fixed here):
   lock). Only `ANTHROPIC_CUSTOM_HEADERS` (and `ANTHROPIC_LOG`, read at import) would otherwise reach it, since the key,
   the base URL and the signing key are passed in. A thread that copies the environment in that moment misses them.
 <!-- end section 20 -->
+
+
+## 21. The brain on the processor's tools, step 1 (25 Nov 2026; design/brain_v1/SPEC.md and DECISIONS.md, A-021)
+
+Step 1 of the spec's migration (SPEC 12.2): the processor's read tools, the answer verifier, the code lead, the
+planted set and the offline eval, with **no model call and nothing in the message path**. With nothing switched on,
+today's bot behaves byte for byte as before: the 20 `insight_cases` questions give raw-identical `facts.sheet`s to the
+search-loop tree on both made-up libraries (20 of 20 and 20 of 20, no brain keyword passed), the founder's earlier
+examples give the same probe (md5 4335bfb5 on both trees), and the dry self-test passes 164 of 164 steps at $0.
+
+### 21.1 What exists
+- `brain/tools.py`: nine read tools (`find`, `breakdown`, `timeline`, `changes`, `compare`, `first_last`, `items`,
+  `search`, `learned`) and two declared propose tools, one registry, strict Pydantic arguments, byte-stable schemas.
+  Each counting tool builds a `HistoryQuery` from its arguments and reads `facts.build` with the private topics left
+  out (`hide_sensitive=True`, unlocked per topic by their own message only). `search` and `learned` take injected
+  backends (fakes in every test). `brain/results.py` shapes the envelope of SPEC 2.3 (every string neutralised, a
+  `ref` on every row, results cut to about 6,000 characters), `brain/names.py` reads their names into refs (area,
+  theme, channel, collection, title words), `brain/windows.py` reads their window words with history.py's readers.
+- `brain/verify.py`: the marker grammar of SPEC 4.2 and the steps of 4.3, one sentence at a time, with insight's own
+  checks run on each sentence in its slotted form. `brain/fallback.py`: the code lead (insight's `code_form` where it
+  can be trusted, else a template that passes the verifier, else the plain line) and its private line.
+- `brain/planted.py` and `eval/brain_planted.json` (built by `eval/build_brain_planted.py`): the planted set.
+  `eval_brain.py` modes `planted`, `plans` (a hand plan per eval conversation, replayed with a fake brain and
+  recounted by the auditor), `insight` (the 20 questions as tool calls against today's sheet); `run` refuses (step 2).
+  `evalset/brain_core.jsonl` (111 conversations, 130 messages) and `evalset/brain_plans.jsonl`.
+- `eval_claims.py` (still importing nothing of the bot): `audit_results`, `audit_ledger`, `audit_lead`, the auditor's
+  own reading of every ref form, of the call's window words and of their message's (`understood_window`).
+
+### 21.2 The close of step 1: two independent audits, and what changed
+Two auditors attacked the tools and the verifier on real tool results of the made-up brain library (`check_tools`,
+`check_verify`; their written reports were refused by the harness, so their lists come from their notes and data
+files). Each class was reproduced first by a failing test (`tests/test_brain_step1_fix.py`: 50 tests; 48 of them
+written before the fixes, of which 45 fail on b86e4d9 and the 3 that pass are the true twins), then fixed by a rule
+over a class, not a sentence.
+
+The tools (`brain/tools.py`, `results.py`, `names.py`, `windows.py`; one gated line in `facts.py`):
+- `items` oldest read from the window's start and stopped at 10: a scoped first now reads from the start and pages on
+  (`facts.py`, only when the brain's scope is set: today's reads are unchanged).
+- A `compare` with a window after where the export ends gave October against October, or a 0: refused, with the end.
+- `new` and `stopped` shown as empty lists where no window before exists ("nothing is new"): taken out with a note
+  (`results.honest`), and the floors that make a row new are said in the notes.
+- `first_watched` on a base of saves was the first save: taken out on any base but opened.
+- `find("dating")` resolved title words of a private topic with no unlock (a count oracle): a name in a sensitive
+  topic resolves only when their own message unlocked it, with no options and no count.
+- A `learned` point that rested on a hidden source kept its text when only the source was stripped: the point goes.
+- "early October", "late October", "the first week of October" were read as all of October and said so: a part of a
+  period is refused until a reader exists (the eval plan G04 now asks for October).
+- Two field rows named "Gaming": the fields of one shown name are one row (the auditor accepts the sum).
+- Instagram photo posts were said "short": only a reel or a video post is short.
+- `meta.rows_of`: how many rows each ranking holds, shown or not.
+
+The verifier (`brain/verify.py`; each line is the audit's class, then the rule):
+- A scope passed when the sentence named the scoped row itself ("Speedruns led" of a result scoped to Speedruns,
+  "art and design led" of only art and design): the cited rows' own names are blanked before the scope is looked for.
+- Numbers of a result that left private items out (2024: 8 shown, 58 with the private topic): any number of such a
+  result asks for code's private line, and an "all" claim ("everything", "100%") is dropped (SPEC 4.3 step 13 widened
+  from rank words; a spec disagreement, below).
+- A row placed in a group its own row does not name ("Gaming Daily, part of Minecraft builds"): a child row must sit
+  in one of the cited groups that have no number of their own.
+- Ordinals and ties: "came second" must be the row's place, with no tie beside it; "most-watched" of an item list where
+  every row was opened once is a tie.
+- A calc said of another row ("32 more than Pan Theory", where 32 was against Pixel Pencil): a calc's two rows are the
+  only rows of their list named, and both are named.
+- A month said of the 4 weeks to 30 October passed at a 0.85 tolerance: a calendar period said is the window itself
+  (the same first day; the last day, or the export's end).
+- A claim in a clause with no marker ("its busiest month", "as it did the month before"): refused.
+- Outside knowledge with no comma ("posts a new Short every day", "is a huge channel", "the channel you have
+  followed longest"): an entity in the present tense after its row marker, and following or subscribing, are outside
+  text. **Partly by construction**: it is a list of verbs; a predicate outside it still passes.
+- A first or a last by another cell (a channel's `first_watched`), or with no marker at all: a first or a last is said
+  by the date of the result's first item; a dated first or last with no marker is an uncited claim.
+- The wrong base: every verb said must be one of the base's; a base of three verbs is said with all three or none;
+  on `find` (its counts are of anything opened, liked or saved) and `search` too.
+- A cell under another measure: days said as videos, openings as distinct items, a median as an average.
+- A count marker of a list the tools cut ("7 channels" of 8): only as "the top 7".
+- Spanish wording on an English result passed checks that read English only: refused on an English result (insight's
+  Spanish rules still run on a Spanish sheet). Step 2 must give the brain the turn's language.
+- A close search match said as "exactly what you asked for": only a clear fit.
+- Two true shapes the verifier dropped are kept now: a last's day (`items[0].when`, checked against its cell, is not
+  read again by insight's date rule) and "down from 31 in September" (a time phrase of the window before beside its
+  cell is insight's base slot).
+
+The code lead (`brain/fallback.py`): a last's lead said "Speedruns led, with 90 videos" (the template of its day failed
+insight's date rule); it now says the day. `code_form` of a changes result by month said "gaming has led every year
+since Oct 2026, at about 51%" where art and design led this year: no `code_form` on a changes result whose periods are
+not years. The private line is asked for any number of a result with hidden items, as the verifier.
+
+### 21.3 What was measured (offline, $0)
+- **Planted set** (`python3 -m mvp.eval_brain planted`): 332 of 332 false sentences dropped, every one with an
+  expected reason (the 195 of before and the audit's 137, 4 of them on a synthetic re-open ledger); 78 of 78 true
+  kept. The audit's own 61 true sentences are scored apart: 42 kept (38 before), 19 dropped. Of those 19: 5 "N of the
+  videos you opened" (insight's count-as-share rule), 3 "from N to M" or "down from N" changes (insight's base and
+  rewrite rules; 2 more of this shape are kept now), 2 weekday shares (house style), 2 period cells with no name, 2
+  "about half" / "45% more" number words, 1 "busiest hour" as watch time, 1 least on a most result, 1 Spanish on an
+  English result, 1 a base said with "on Instagram", 1 "nearly all of what you opened was on YouTube".
+  Each drop is safe (nothing false is sent); each costs a repair or a code lead.
+- **Plans** (`eval_brain plans`): 111 conversations, 130 messages, 76 with a plan (91 planned messages, 97 calls), 0
+  tool errors, 0 expect failures, 0 hand-window failures; 8,692 of 8,715 numbers recounted; 73 of 76 plans recount
+  true (72 before: I05 now does). The 3 that do not: B05 and C13 (`eras[].share` is the mean of the yearly shares,
+  the auditor reads the era's pooled share: 0.697 against 0.592) and G06 (`code_form`'s "mostly gaming (44%) and art
+  and design (26%)"). Code leads: 38 `code_form`, 50 template, 3 plain; 3 not ok (B10 the plain line with checked
+  points in hand; C06 and K03 a `code_form` lead in lower case that names only the window before), 5 before.
+- **The 20 insight questions** (`eval_brain insight`): 9 identical to today's sheet after the tools' own presentation
+  steps (4 of them cut to size), 2 the same numbers, 4 no match (0 today), 5 not mapped.
+- **Byte for byte**: 20 of 20 and 20 of 20 raw-identical sheets against the search-loop tree; probe md5 4335bfb5.
+- **The whole suite**: 5845 passed and 2 skipped, 0 failed, in 4 shards on b7ce43a (1499, 1396, 1412 with the 2 skips, 1538); before the close, on b86e4d9: 5795 passed and 2 skipped. `demo/test_demo.py` 10 passed.
+
+### 21.4 What the proof found
+- The spec's least sure assumption (16.1 item 3) holds: `insight.render` and `insight.check_sentence` check one marked
+  sentence at a time against a tool result, with two adaptations (the tools' added keys stripped; every rewrite insight
+  would make is a failure, never applied).
+- Insight's checks do not know the tools' scope (filters live in `meta.filters_said`), their item rows (`when`, not
+  `at`), their base unions, or the tools' window cuts; each needed a rule in verify, not a change to insight.
+- A rule that reads the words around a number (bases, measures, outside text, the language) is only as wide as its
+  word lists. The marker grammar proves which cell a number is; it cannot prove what the words around it claim. The
+  audit found 36 false sentences the verifier kept (1 of them synthetic); a third
+  audit would find more of the word-list kind.
+- The private line had to widen from rank words to every number: a count over a window that holds private items is a
+  count of what is shown.
+
+### 21.5 Not built, and what step 2 must know
+- Not built: the loop, the providers, the prompt, the handler hooks, the answer renderer (`brain/answer.py`: the scope
+  line, the private line), `capture --brain`, `eval_brain run`. `count_tokens` on the real prefix (SPEC 9) is the
+  founder's laptop step: not run here (no Claude key in the build).
+- Interfaces that moved: `meta.rows_of`; the notes about new/stopped; `new`/`stopped` absent (not empty) with no
+  window before; `first_watched` absent on a base other than opened; fields of one name merged; `find` and `learned`
+  refuse more; a part of a period is a tool error; a compare after the export is a tool error; verify's new reasons
+  (`wrong_group`, `first_last`, `private_total`, `language`); `Verdict.private_line` true for any number of a result
+  with hidden items; the planted case expectation `private_line`.
+- Tools the plans showed missing: an offset on `breakdown` (D05: "more" repeats the top); a channel dropped long ago
+  (B05: no call finds it without a year in their message); a timeline over all history cut to 24 months while
+  `complete` stays true (F11); an unlocked sensitive topic as a scope (I02); a reader for part of a period (G04).
+- Spec points that proved wrong or need the founder: step 13 ("rank words" only) under-says the private line; the
+  window match tolerance (0.85) let a month stand for 4 weeks; `eras[].share` as a mean of yearly shares reads as a
+  pooled share; `meta.hidden.friends` is the library's count, not the window's (left as is: the line it drives says
+  friends' posts are never counted).
+<!-- end section 21 -->
