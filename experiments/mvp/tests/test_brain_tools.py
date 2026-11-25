@@ -319,7 +319,8 @@ def test_ambiguous_and_no_match_return_options_and_never_numbers(brain):
     # toolfix 6 (scratchpad mvp22): a no-match carries one count, of the items holding the words searched (none
     # here), so "nothing about chess" has a cell; still no number from a closest match
     assert r2["error"] == "no_match" and r2["searched"] == "chess" and r2["items_with_words"] == 0
-    assert "items" not in json.dumps({k: v for k, v in r2.items() if k != "items_with_words"})
+    assert "items" not in json.dumps({k: v for k, v in r2.items() if k not in ("items_with_words", "meta")})
+    assert r2["meta"]["hidden"]["sensitive"] == 1   # a constant: the private topics are left out, never how many
     r3, _t = call(brain, "find", {"names": ["gaming"], "kinds": ["theme"]})
     row = r3["sheet"]["names"][0]
     assert row["status"] == "ambiguous" and not row["matches"]

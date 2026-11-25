@@ -219,12 +219,27 @@ def _unresolved(turn, tool, r):
     out = {"rid": rid, "tool": tool, "error": r["status"], "name": r["name"], "options": r["options"],
            "meta": {"complete": False, "notes": ["No numbers for a name that did not resolve: ask them which one, "
                                                  "or use one of the options."]}}
-    out.update(_no_match_cell(turn, r))
+    cell = _no_match_cell(turn, r)
+    if cell:
+        out.update(cell)
+        out["meta"]["hidden"] = _words_hidden(turn)
+        out["meta"]["notes"].append(NO_MATCH_NOTE)
     return out
 
 
 NO_MATCH_NOTE = ("A name with no match carries `searched` (the words looked for) and `items_with_words`: how many of "
                  "their items (opened, liked or saved, ever) hold those words in their own text.")
+
+
+PRIVATE_WORDS_NOTE = "A count of the items holding some words leaves out the topics they keep private; how many is not said."
+
+
+def _words_hidden(turn):
+    """The private items a words count leaves out: never their number (it would say, word by word, whether a private
+    title holds the words); a constant asks for the private line whenever the library keeps anything private."""
+    if bool(turn.lib.hidden.any()):
+        return {"sensitive": 1, "friends": 0, "rank_hidden_above": True}
+    return {"sensitive": 0, "friends": 0, "rank_hidden_above": False}
 
 
 def _no_match_cell(turn, r):
@@ -407,6 +422,9 @@ def run_find(turn, a: FindArgs):
                                         "no numbers."]}
     if any("items_with_words" in r for r in rows):
         meta["notes"].append(NO_MATCH_NOTE)
+        meta["hidden"] = _words_hidden(turn)
+        if meta["hidden"]["sensitive"]:
+            meta["notes"].append(PRIVATE_WORDS_NOTE)
     return _finish(turn, "find", rid, None, sheet, meta, t0, keep="names")
 
 

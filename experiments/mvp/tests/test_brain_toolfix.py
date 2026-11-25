@@ -202,6 +202,18 @@ def test_a_name_with_no_match_carries_how_many_items_hold_its_words(brain):
     soup = ever_touched(lambda r: "soup" in r["caption"].lower())
     assert s["searched"] == "soup" and s["items_with_words"] == len(soup) == 1                   # recount
     assert k["row"] == "r1.names[0]"
+    # the count leaves the private topics out, and never says how many (a constant asks for the private line)
+    assert env_["meta"]["hidden"] == {"sensitive": 1, "friends": 0, "rank_hidden_above": True}
+
+
+def test_a_words_count_never_says_whether_a_private_title_holds_the_words(brain):
+    # "Heart Notes" is a private channel on a locked turn: its count is of what they may see (0), with the same
+    # constant as any other words count, so a name cannot be probed for private items by the cell or by the meta
+    hid, _t = call(brain, "find", {"names": ["Heart Notes"]}, PLAIN_2024)
+    open_, _t = call(brain, "find", {"names": ["knitting"]}, PLAIN_2024)
+    h, o = hid["sheet"]["names"][0], open_["sheet"]["names"][0]
+    assert h["status"] == o["status"] == "no_match" and h["items_with_words"] == o["items_with_words"] == 0
+    assert hid["meta"]["hidden"] == open_["meta"]["hidden"] and not h["options"]
 
 
 def test_a_counting_tool_given_no_match_carries_the_same_cell(brain):

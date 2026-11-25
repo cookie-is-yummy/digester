@@ -12,6 +12,12 @@ The resolve order, first match wins, each match saying how it was read:
 8. none: up to 3 options by spelling and by meaning.
 Ambiguous and no match carry options and never a number: a closest match is an option, never a count. Sensitive
 themes, channels and items are never a match, nor an option, unless the turn's unlock is their topic.
+
+After the thin live slice (scratchpad mvp22, toolfix 2, 6, 7): a name in the topic the turn's own message unlocked is
+that topic (`topic:<topic>`, "private topic"; its theme has no name in the build), checked before step 2 unless it is a
+channel's own name; a no-match's tool row carries how many of their items hold its words (words_count: the one number
+of a no-match, of the items they may see, never for a locked sensitive name); an Instagram account is also found by
+its display name (facts.displays).
 """
 import difflib
 import re
