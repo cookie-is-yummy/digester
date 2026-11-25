@@ -206,6 +206,8 @@ def _label(lib, ref):
         return displays(lib).get(c, c)
     if form == "collection":
         return next((c for c in _collections(lib).values() if F.slug(c) == val), val)
+    if form == "topic":
+        return F.UNLOCKED_NAME   # the rows of the unlocked topic carry this name (facts._unlocked_rows)
     return val
 
 

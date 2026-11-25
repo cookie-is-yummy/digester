@@ -487,6 +487,9 @@ def channel_names(view, idx, out):
 
 
 UNLOCKED_THEME_ID = 10 ** 6   # the unlocked topic's theme row: an id no build gives a theme
+# the unlocked topic's rows are named by this label (the topic word is the row's `topic`): a sentence that names a
+# sensitive word through a row is refused by insight's own check, which does not know the turn's unlock (mvp22)
+UNLOCKED_NAME = "the topic you asked about"
 
 
 def _unlocked_rows(out, sc, prev, view, idx, facts, th, unlock, q):
@@ -494,8 +497,8 @@ def _unlocked_rows(out, sc, prev, view, idx, facts, th, unlock, q):
     theme was Home cooking with 8"): a sensitive theme keeps no name nor category in its build, so the items of a
     topic their message unlocked were in the totals and the channel rows but in no theme row and no area row. Here
     they are: one theme row (the topic's items no named theme row holds) and one area row (the topic's items no area
-    holds), both named by code's own topic word, built by the same row builders, ranked where their counts put them,
-    and marked `private: true`. A turn with no unlock never comes here."""
+    holds), both named UNLOCKED_NAME with code's own topic word as `topic`, built by the same row builders, ranked
+    where their counts put them, and marked `private: true`. A turn with no unlock never comes here."""
     import numpy as np
     if th is None or not len(sc.items):
         return
@@ -506,19 +509,20 @@ def _unlocked_rows(out, sc, prev, view, idx, facts, th, unlock, q):
         pid = UNLOCKED_THEME_ID
         theme = np.where(of & (facts.theme < 0), pid, -1).astype(np.int32)
         th_ = _Over(th, themes={pid: {"field": None, "mixed": False}}, fields={},
-                    shown=lambda t: unlock if t == pid else th.shown(t), field_name=lambda f: None)
+                    shown=lambda t: UNLOCKED_NAME if t == pid else th.shown(t), field_name=lambda f: None)
         rows_, _n = _theme_rows(view, sc, prev, _Over(facts, theme=theme), th_, q=q)
         if rows_:
-            row = dict(rows_[0], area=unlock, private=True, theme_id=None)
+            row = dict(rows_[0], area=UNLOCKED_NAME, topic=unlock, private=True, theme_id=None)
             out["themes"] = _insert_ranked(out.get("themes") or [], row, q, n_cap or THEMES_MAX)
             out["unthemed"] = int(out.get("unthemed", 0)) - int(row["items"])
             if "ranked" in out:
                 out["ranked"]["themes"] += 1
     if (of & (facts.area < 0))[sc.items].any():
         area = np.where(of & (facts.area < 0), 0, -1).astype(np.int32)
-        rows_ = _area_rows(sc, prev, _Over(facts, area=area, area_names=[unlock]), out.get("themes") or [], q=q)
+        rows_ = _area_rows(sc, prev, _Over(facts, area=area, area_names=[UNLOCKED_NAME]), out.get("themes") or [],
+                           q=q)
         if rows_:
-            row = dict(rows_[0], private=True)
+            row = dict(rows_[0], topic=unlock, private=True)
             out["areas"] = _insert_ranked(out.get("areas") or [], row, q, n_cap or AREAS_MAX)
             if "ranked" in out:
                 out["ranked"]["areas"] += 1

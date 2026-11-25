@@ -73,6 +73,7 @@ AREA_SAID = {"film and tv": "film and TV", "diy and making": "DIY and making"}
 # the brain's audit (SPEC 4.8): what each `how` of a tool's scope counts (SPEC 2.2's table), and my own words for the
 # sensitive topic a message unlocks (an item of a sensitive theme is counted when its own text is about it)
 HOW_EVENTS = {"opened": OPEN, "liked": ("like",), "saved": SAVED, "any": OPEN + ("like",) + SAVED}
+UNLOCKED_NAME = "the topic you asked about"   # the brain's toolfix 1: the name of the unlocked topic's own rows
 UNLOCK_WORDS = {"relationships": ("dating", "date", "relationship", "relationships", "partner", "breakup"),
                 "money": ("money", "stock", "stocks", "invest", "investing", "budget", "debt"),
                 "health": ("health", "diagnosis", "therapy", "symptom", "symptoms", "medication"),
@@ -489,7 +490,8 @@ class Library:
     def member(self, i, ent):
         """Whether item i belongs to an entity: (kind, name)."""
         k, n = ent
-        if k in ("theme", "area") and n == getattr(self, "unlock", None) and i in getattr(self, "unlocked_items", ()):
+        if k in ("theme", "area") and n == UNLOCKED_NAME and getattr(self, "unlock", None) and \
+                i in getattr(self, "unlocked_items", ()):
             # the brain's toolfix 1: the unlocked topic's own theme and area rows hold its items no named theme (or
             # area) of mine holds
             return (self.theme_of if k == "theme" else self.area_of).get(i) is None
@@ -874,7 +876,7 @@ def _rank(lib, ids, kind):
         else:
             k = lib.items[i]["c"]
         if not k and kind in ("theme", "area") and i in getattr(lib, "unlocked_items", ()):
-            k = lib.unlock   # the brain's toolfix 1: the unlocked topic's own row (see Library.member)
+            k = UNLOCKED_NAME   # the brain's toolfix 1: the unlocked topic's own row (see Library.member)
         if k:
             c[k] += 1
     return c

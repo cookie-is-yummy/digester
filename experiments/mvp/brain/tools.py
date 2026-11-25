@@ -539,17 +539,17 @@ def run_compare(turn, a: CompareArgs):
     sheet = R.present(raw, rid)
     meta = _meta(turn, raw, a.scope, resolved, by=None if a.by == "none" else a.by,
                  extra_notes=["Both windows are in this one result: `totals` is the first, `previous` the second."])
-    _compare_days(turn, raw, wb, a.scope, meta)
+    _compare_days(turn, raw, wb, q, meta)
     return _finish(turn, "compare", rid, raw, sheet, meta, t0, wa, keep=LIST_OF.get(a.by), how=a.scope.how)
 
 
-def _compare_days(turn, raw, wb, scope, meta):
+def _compare_days(turn, raw, wb, q, meta):
     """Toolfix 5 (this autumn, cut where the export ends on 30 October, was set against the whole of last autumn with
     no word): both windows as counted, with their days (`meta.windows`, `meta.same_days`), and a note when the days
     differ. The second window is cut where the export ends, as facts counts it."""
     from datetime import date
     rec = turn.lib.rec
-    plats = sorted(set(scope.platforms)) or sorted(rec.ends)
+    plats = Hm._scope_platforms(q, turn.lib.view, rec)   # the platforms facts counted (a base, a platform asked)
     win = raw.get("window") or {}
     if not win.get("start") or not win.get("end"):
         return
@@ -559,7 +559,7 @@ def _compare_days(turn, raw, wb, scope, meta):
     if b1 is not None and ends:
         b1 = min(b1, max(ends))
     if b0 is None:   # a window with no start ("all") starts where the record does
-        b0 = Hm._record_start(rec, plats, Hm.HistoryQuery(kind="count", how=HOW[scope.how]))
+        b0 = Hm._record_start(rec, plats, q)
     if b0 is None or b1 is None:
         return
     da, db = (a1 - a0).days + 1, (b1 - b0).days + 1

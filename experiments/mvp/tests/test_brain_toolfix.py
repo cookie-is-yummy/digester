@@ -20,6 +20,7 @@ ROWS = {r["id"]: r for r in B.rows()}
 I02 = "my partner thinks i watched a lot of dating advice in 2024, did i?"   # held-out I02.0: unlocks relationships
 PLAIN_2024 = "what did i watch in 2024"
 Y2024 = (date(2024, 1, 1), date(2024, 12, 31))
+TOPIC = "the topic you asked about"   # the unlocked topic's rows (facts.UNLOCKED_NAME); the topic word is `topic`
 
 
 def W(words):
@@ -42,19 +43,20 @@ def test_an_unlocked_topic_has_its_own_theme_and_area_rows(brain, by):
     assert s["totals"]["items"] == len(total) == 58                                            # recount
     th = {r["name"]: r for r in s["themes"]}
     ar = {r["name"]: r for r in s["areas"]}
-    assert th["relationships"]["items"] == len(da) == 50 and ar["relationships"]["items"] == 50
-    assert th["relationships"]["share"] == round(50 / 58, 4) and ar["relationships"]["share"] == round(50 / 58, 4)
+    assert th[TOPIC]["items"] == len(da) == 50 and ar[TOPIC]["items"] == 50
+    assert th[TOPIC]["share"] == round(50 / 58, 4) and ar[TOPIC]["share"] == round(50 / 58, 4)
+    assert th[TOPIC]["topic"] == ar[TOPIC]["topic"] == "relationships" and th[TOPIC]["private"] is True
     # ranked where its count puts it: 50 leads Home cooking's 8 (held-out I02.0 said Home cooking was the top theme)
-    assert s["themes"][0]["name"] == "relationships" and s["areas"][0]["name"] == "relationships"
+    assert s["themes"][0]["name"] == TOPIC and s["areas"][0]["name"] == TOPIC
     assert sum(r["items"] for r in s["themes"]) == s["totals"]["items"]
-    assert th["relationships"]["area"] == "relationships"
+    assert th[TOPIC]["area"] == TOPIC
     assert env_["meta"]["rows_of"]["themes"] == len(s["themes"]) and env_["meta"]["rows_of"]["areas"] == len(s["areas"])
     assert env_["meta"]["hidden"]["sensitive"] == 0
 
 
 def test_an_unlocked_topic_row_carries_the_window_before(brain):
     env_, _t = call(brain, "breakdown", {"by": "theme", "window": W("2024")}, I02)
-    row = next(r for r in env_["sheet"]["themes"] if r["name"] == "relationships")
+    row = next(r for r in env_["sheet"]["themes"] if r["name"] == TOPIC)
     before = opened(date(2023, 1, 1), date(2023, 12, 31), keys={"da"}, unlock_sensitive=True)
     assert row["previous_items"] == len(before)
     assert row["change_vs_previous"] == round((row["share"] - row["previous_share"]) * 100, 1)
@@ -66,7 +68,8 @@ def test_a_locked_turn_has_no_row_of_the_topic_and_is_as_before(brain):
     s = env_["sheet"]
     assert [(r["name"], r["items"]) for r in s["themes"]] == [("Home cooking", 8)]
     assert [(r["name"], r["items"]) for r in s["areas"]] == [("food and cooking", 8)]
-    assert "relationships" not in json.dumps(env_) and "Heart Notes" not in json.dumps(env_)
+    assert "relationships" not in json.dumps(env_) and TOPIC not in json.dumps(env_)
+    assert "Heart Notes" not in json.dumps(env_)
     assert env_["meta"]["hidden"]["sensitive"] == 50 and env_["meta"]["hidden"]["rank_hidden_above"] is True
 
 
@@ -77,7 +80,7 @@ def test_find_resolves_the_unlocked_topic_and_its_three_counts_agree(brain):
     rows = env_["sheet"]["names"]
     assert [r["status"] for r in rows] == ["ok", "ok"]
     m = rows[0]["matches"][0]
-    assert m["ref"] == "topic:relationships" and m["label"] == "relationships" and m["how"] == "private topic"
+    assert m["ref"] == "topic:relationships" and m["label"] == TOPIC and m["how"] == "private topic"
     da_ever = ever_touched(lambda r: r["theme"] == "da")
     assert m["items_all_time"] == len(da_ever) == 50                                            # recount
     assert rows[1]["matches"][0]["ref"] == "topic:relationships"   # the topic wins over the 33 titles with "dating"
@@ -85,7 +88,7 @@ def test_find_resolves_the_unlocked_topic_and_its_three_counts_agree(brain):
     all_, _t = call(brain, "breakdown", {"by": "theme", "window": {"preset": "all"},
                                          "scope": {"only": ["dating advice"], "how": "any"}}, I02)
     assert all_["sheet"]["totals"]["items"] == 50
-    assert all_["sheet"]["themes"][0]["items"] == 50 and all_["sheet"]["themes"][0]["name"] == "relationships"
+    assert all_["sheet"]["themes"][0]["items"] == 50 and all_["sheet"]["themes"][0]["name"] == TOPIC
     y, _t = call(brain, "breakdown", {"by": "none", "window": W("2024"), "scope": {"only": ["dating advice"]}}, I02)
     assert not y.get("error") and y["sheet"]["totals"]["items"] == 50
     # the typed ref the find gave is accepted by the other tools
@@ -184,6 +187,20 @@ def test_a_compare_cut_at_the_export_end_says_both_windows_days(brain):
     rev, _t = call(brain, "compare", {"a": W("last autumn"), "b": W("this autumn")}, "last autumn against this autumn")
     assert rev["meta"]["windows"]["a"]["days"] == 91 and rev["meta"]["windows"]["b"]["days"] == 60
     assert rev["meta"]["same_days"] is False
+
+
+def test_a_compare_cut_on_b_where_its_platform_ends(brain):
+    # Instagram only: its export ends on 15 October 2026 (the library's own last Instagram event), so this autumn is
+    # 1 September to 15 October there
+    ig_end = max(local(at) for r in B.rows() if r["platform"] == "instagram" and not r.get("friend")
+                 for _k, at in r["events"])
+    assert ig_end == date(2026, 10, 15)
+    env_, _t = call(brain, "compare", {"a": W("last autumn"), "b": W("this autumn"),
+                                       "scope": {"platforms": ["instagram"], "how": "any"}},
+                    "instagram this autumn against last autumn")
+    m = env_["meta"]
+    assert m["windows"]["b"] == {"start": "2026-09-01", "end": ig_end.isoformat(), "days": 45}
+    assert m["windows"]["a"]["days"] == 91 and m["same_days"] is False
 
 
 def test_a_compare_of_equal_windows_has_no_days_note(brain):

@@ -233,14 +233,14 @@ def test_a_rank_of_rows_that_leave_most_of_the_total_out_is_not_proved(brain):
                 search=FakeEngine())
     env_ = TL.call(t, "breakdown", {"by": "none", "window": {"words": "2024"}})
     # toolfix 1 (scratchpad mvp22): today's tool gives the unlocked topic its own theme row, so the gap is gone ...
-    assert env_["sheet"]["themes"][0]["name"] == "relationships" and env_["sheet"]["themes"][0]["items"] == 50
+    assert env_["sheet"]["themes"][0]["private"] is True and env_["sheet"]["themes"][0]["items"] == 50
     assert env_["sheet"]["totals"]["items"] == sum(r["items"] for r in env_["sheet"]["themes"]) == 58
     # ... and the verifier's rule is held on the result as the slice's tools gave it (the topic in no theme row)
     import copy
     env_ = copy.deepcopy(env_)
     for k in ("themes", "areas"):
         env_["sheet"][k] = [dict(r, ref=f"r1.{k}[{n}]") for n, r in
-                            enumerate(x for x in env_["sheet"][k] if x["name"] != "relationships")]
+                            enumerate(x for x in env_["sheet"][k] if not x.get("private"))]
         env_["meta"]["rows_of"][k] = len(env_["sheet"][k])
     t.results["r1"] = env_
     sh = env_["sheet"]
