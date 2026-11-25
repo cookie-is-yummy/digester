@@ -3680,9 +3680,10 @@ def p6_subject(s, sheet):
                 int(mm.group(1).replace(",", "")) == int(prev["items"]) and prev["items"] != tot["items"]:
             f = sheet.get("filters") or {}
             noun = (bases(sheet) or {}).get("videos") or (f"{f['topic']} videos" if f.get("topic") else "videos")
-            up = tot["items"] > prev["items"]
-            return (f"Your {noun} went {'up' if up else 'down'} to {_fmt(tot['items'], 'en')}, from "
-                    f"{_fmt(prev['items'], 'en')}{mm.group('rest')}"), None
+            rest_ = mm.group("rest").strip()
+            mw = re.match(r"^in (.+?)[.!]?$", rest_)
+            if mw:   # "That is up from 808 in <the span before>." is the count then, with its subject and span
+                return f"In {mw.group(1)} you opened {_fmt(prev['items'], 'en')} {noun}.", None
     return None, "no_subject"
 
 
@@ -3704,6 +3705,17 @@ def p6_values(s, sheet):
 
 
 def gate_sentence(s, sheet, names, state):
+    """`_gate_sentence`, then one base after a number, never two (round 12, pass 6, second round; the hand check, b7:
+    "70% of your YouTube videos of your watching in 2026 was Shorts")."""
+    out, why = _gate_sentence(s, sheet, names, state)
+    if isinstance(out, str):
+        out = re.sub(r"\b(of your (?:long )?(?:[\w ]+ )?videos(?: on YouTube)?) of (?:your watching|your viewing|what you "
+                     r"(?:opened|watched)|everything(?: you (?:opened|watched))?|all (?:that )?you (?:opened|watched))\b",
+                     r"\1", out)
+    return out, why
+
+
+def _gate_sentence(s, sheet, names, state):
     """(the sentence with every percent based, None) or (None, why). `state["opened_said"]`: the answer said "of what
     you opened" already (an unfiltered record share needs it only once)."""
     if (sheet.get("lang") or "en") == "en":
@@ -3829,6 +3841,14 @@ def gate_sentence(s, sheet, names, state):
             based_kinds.add(subj)
             continue
         words = base_phrase(sheet, subj)
+        if subj == "shorts" and sheet.get("kind") == "compare_topics":
+            # round 12, pass 6, second round (the hand check, b5: "<art> was mostly Shorts at 83% of your YouTube
+            # videos": 83% was of the art videos on YouTube): a side's own Shorts share says its side
+            v_ = first.group(0).replace(" ", "")
+            tops_ = [t for t in (shown(sheet).get("topics") or []) if isinstance(t, dict) and t.get("name") and
+                     _num(t.get("shorts_share")) and _pc(t["shorts_share"]) == v_]
+            if len(tops_) == 1 and _pc(((shown(sheet).get("totals") or {}).get("shorts_share")) or -1) != v_:
+                words = f"of your {tops_[0]['name']} videos on YouTube"
         later = next((r2 for r2 in runs[runs.index(run) + 1:] if _gate_subject(s, cues, r2[0], s[r2[-1].end():]) == subj
                       and _G_BASE.match(s[r2[-1].end():])), None)
         if later is not None:
@@ -4700,10 +4720,9 @@ def code_form(sheet):
             # round 12, pass 6, second round (the hand check, b3: "That is up from 808 in the same part of 2025" right
             # after "<theme> led with 373 videos": 808 was the topic's count, the theme had 113): the subject and both
             # values worded by code, never left to "That"
-            up = tot["items"] > prev["items"]
+            # (the lead says the count now; this says the count then, with its own subject and span)
             noun = (bases(s) or {}).get("videos") or f"{topic} videos"
-            o(f"Your {noun} went {'up' if up else 'down'} to {f(tot['items'], lang)}, from {f(prev['items'], lang)} "
-              f"in {pw}.", "totals", "previous")
+            o(f"In {pw} you opened {f(prev['items'], lang)} {noun}.", "totals", "previous")
         if len(themes) >= 2 and not es:
             o(f"The biggest parts: {themes[0]['name']} ({_pc(themes[0]['share'])}) and {themes[1]['name']} "
               f"({_pc(themes[1]['share'])}).", "themes")

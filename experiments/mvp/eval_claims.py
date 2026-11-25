@@ -482,6 +482,12 @@ def resolve(spec, lib, today):
         a, b = sa.toordinal(), min(sb.toordinal(), newest)
         pm, py = (sa.month - 3, sa.year) if sa.month > 3 else (sa.month + 9, sa.year - 1)
         prev = (date(py, pm, 1).toordinal(), sa.toordinal() - 1)
+        if a > newest:
+            # pass 6, second round (X11, DESIGN 19.P6): a season after the record is answered over the latest
+            # stretch of its length the record holds
+            n = sb.toordinal() - sa.toordinal() + 1
+            a, b = newest - n + 1, newest
+            prev = (a - n, a - 1)
     elif k == "since":
         a, b = date(int(spec["year"]), 1, 1).toordinal(), newest
     elif k == "years":
@@ -1380,7 +1386,12 @@ class TextAudit:
                 e = ents[-1][2]
             # "from X% (in Y1) to Y% (in Y2)": X before, Y now (or the two years of a change)
             scope = "cur"
-            per = re.match(r"^\s*(?:in|en) (20\d\d)\b", after)
+            per = re.match(r"^\s*(?:of [^,.;%]*?\s)?(?:in|en) (20\d\d)\b(?! to\b)", after)
+            # pass 6, second round (the hand check's false flags, b7: "2020 was led by gaming, then comedy, with 4%
+            # Shorts" and "70% of your YouTube videos in 2026 was Shorts" in a "since 2020" answer): a year that leads
+            # the sentence, or follows the number's base, is the number's own span
+            if not per:
+                per = re.match(r"^\s*(20\d\d)\s+(?:was|saw|had|is)\b", s)
             frm = re.search(r"\b(?:from|de)\s*$", before[-6:].lower())
             to = re.search(r"\b(?:to|a)\s*$", before[-4:].lower()) and \
                 re.search(r"(?:from|de) \d+(?:[.,]\d+)?%[^%]*$", before.lower())
@@ -1388,6 +1399,9 @@ class TextAudit:
             wr = re.match(r"^\s*(?:of [^,.;%]*?\s)?(?:were|was|are|is)\s+(?:all\s+)?(Shorts|long)\b", after)
             if wr:
                 e = ("shorts", "Shorts") if wr.group(1) == "Shorts" else ("long", "long videos")
+            elif re.match(r"^\s*Shorts\b", after) and not any(sp[2][0] == "channel" for sp in spans
+                                                               if sp[1] <= m.start()):
+                e = ("shorts", "Shorts")   # pass 6, second round (b7): "with 4% Shorts": a Shorts share
             # "from 64% in 2023 to 33%": the value after "to" is the same record's, in the same clause
             if out and to and not wr:
                 gap = s[out[-1]["m"].end():m.start()]
@@ -1730,15 +1744,17 @@ class TextAudit:
             rest = " ".join(w for w in words if w not in ("total", "different", "other", "youtube"))
             what = m.group(3).lower()
             ent = None
-            if rest.startswith("long") or what == "ones" and "long" in low[max(0, m.start() - 30):m.start()]:
+            if rest.startswith("long") or what == "ones" and "long" in low[max(0, m.start() - 30):m.start()] or \
+                    re.match(r"^\s+largos\b", s[m.end():]):   # pass 6, second round (n07): "3.570 videos largos"
                 ent, kind = ("long", ""), "count of long videos"
-                rest = rest[4:].strip()
+                rest = rest[4:].strip() if rest.startswith("long") else rest
             elif what == "shorts":
                 ent, kind = ("shorts", ""), "count of Shorts"
             else:
                 kind = "count of videos"
             bound = None
-            if not rest and re.search(r",\s*$", s[:m.start()]) and spans and spans[0][0] == 0 and \
+            if not rest and (re.search(r",\s*$", s[:m.start()]) or re.search(r"\bis new at the top:\s*$", s[:m.start()])) \
+                    and spans and spans[0][0] == 0 and \
                     spans[0][2][0] in ("channel", "theme", "area"):
                 # "<channel> is new: first opened in this span, 12 videos.": the sentence's own subject
                 bound = spans[0][2]
@@ -1749,6 +1765,7 @@ class TextAudit:
                 near = [sp for sp in spans if cl <= sp[0] and sp[1] <= m.start() and
                         sp[2][0] in ("channel", "theme", "area", "topic")]
                 if near and re.fullmatch(r"\s*(?:had|has|have|adds?|added|supplied|gave|brought|contributed|"
+                                         r"fue el tema l[ií]der con|con|tuvo|"
                                          r"accounts? for|accounted for|made up|with|was behind|is behind)"
                                          r"(?:\s+(?:another|more|just|only|about|over|some|nearly|almost))*\s*",
                                          s[near[-1][1]:m.start()]):
@@ -2229,6 +2246,9 @@ def audit_first_last(ctx, F, text):
     if lost:
         F.add("word", "first or last with no object", False, lost.group(0), "watched what?", severity=1.0)
     after_date = first[m.end():] if m else first
+    # pass 6, second round (the hand check's false flag, n05a: "... from <channel>. Most of it has been <theme> (N of
+    # M)." read as the first video's theme): the first or last is the sentence that says it, not the one after it
+    after_date = re.split(r"(?<=[.!?])\s+(?=[A-Z])", after_date, maxsplit=1)[0]
     fm = re.search(r"\bfrom ([^,.;]+?)\s*(?:[,.;]|$)", after_date)
     if fm and it["c"]:
         said_c = fm.group(1).strip()

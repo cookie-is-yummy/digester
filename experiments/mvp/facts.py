@@ -1013,7 +1013,10 @@ def _so_what_candidates(out, kind, q):
     stopped = {x.get("name") if isinstance(x, dict) else x for x in (out.get("stopped") or {}).get("themes") or []}
     for x in (out.get("library") or {}).get("saved_not_opened") or []:
         t = themes.get(x.get("theme"))
-        if (x.get("n") or 0) < SAVED_MIN:
+        # round 12, pass 6, second round: the count said is of every platform, but a saved so-what is proposed only
+        # where YouTube videos were saved and never opened (as before; the founder's four judged answers keep their
+        # shape)
+        if (x.get("youtube", x.get("n")) or 0) < SAVED_MIN:
             continue
         if _clip_theme(x.get("theme"), t):
             continue   # round 12, pass 2 fix (judges: "you saved 4 <comedy theme>, open them?" is not worth saying)

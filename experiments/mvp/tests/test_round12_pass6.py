@@ -490,7 +490,7 @@ def test_r2_a_change_of_the_count_names_its_subject_and_both_values():
     lines = [o["text"] for o in I.code_form(_count_sheet())["observations"]]
     assert not any(re.match(r"^(?:That|This|It)\b", t) for t in lines), lines
     one = [t for t in lines if "808" in t]
-    assert one and "kites videos" in one[0].lower() and "1,094" in one[0], one
+    assert one and one[0] == "In the same part of 2025 (1 January to 30 October 2025) you opened 808 kites videos.", one
     raw = {"answer": "x", "observations": [
         {"text": "{themes[1].name} led with {themes[1].items} videos.", "uses": []},
         {"text": "That is up from {previous.items} in {previous.words}.", "uses": []}]}
@@ -501,7 +501,7 @@ def test_r2_a_change_of_the_count_names_its_subject_and_both_values():
 def test_r2_a_pronoun_led_change_is_reworded_or_goes():
     s = _count_sheet()
     out, _ = gate("That is up from 808 in the same part of 2025.", s, said=True)
-    assert out is None or (not out.startswith("That") and "1,094" in out and "kites videos" in out), out
+    assert out == "In the same part of 2025 you opened 808 kites videos.", out
     out, _ = gate("It fell from 9% to 5% against the 4 weeks before.", top(), said=True)
     assert out is None, out
 
