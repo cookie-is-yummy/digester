@@ -27,9 +27,10 @@ the auditor reads from the message set against the window code resolved (`unders
 (facts.sheet) byte for byte, how many with the same numbers, how many the library cannot answer, and which no one
 call maps.
 
-Offline: no model call, no network. The library is built in a temporary folder (MVP_HOME, MVP_LEDGER_HOME,
-MVP_INBOX and MVP_DERIVED_HOME point inside it before any of the bot's modules is imported); nothing is read from or
-written to data/.
+`planted`, `plans`, `insight`, `audit` and the tests are offline: no model call, no network. The library is built in a
+temporary folder (MVP_HOME, MVP_LEDGER_HOME, MVP_INBOX and MVP_DERIVED_HOME point inside it before any of the bot's
+modules is imported); nothing is read from or written to data/. `run` (live) keeps the caller's MVP_LEDGER_HOME: its
+only write under data/ is the ledger, through ai.log_batch.
 """
 import argparse
 import json
@@ -583,7 +584,14 @@ def call_key(tool, args, env):
     prev = sheet.get("previous") or {}
     window = [w.get("start"), w.get("end")] if isinstance(w, dict) else [None, None]
     if tool == "compare":
-        window = window + [prev.get("start"), prev.get("end")]
+        # the second window: its days when the sheet has them, else read from its words (verify's own reader), else
+        # the words themselves (a compare's `previous` carries words, not dates)
+        from mvp.brain import verify as V
+        pw = V.Result(env).prev_window() if env else None
+        if pw:
+            window = window + [pw[0].isoformat(), pw[1].isoformat()]
+        else:
+            window = window + [prev.get("start") or prev.get("words"), prev.get("end")]
     return {"tool": tool, "what": what, "window": window, "base": meta.get("base"), "scope": _scope_said(env),
             "order": order}
 
@@ -681,13 +689,33 @@ def audit_sent(h, results, unlock, rec, question):
     return bad, len(rows)
 
 
+def _g2_again(h, rec, chains):
+    """G2 of a saved record, its hand plan replayed on its own hand chain (conversation records in message order)."""
+    plans_by = chains.setdefault("_plans", {p["id"]: p for p in load_jsonl(PLANS)})
+    p = plans_by[rec["id"]]
+    st = chains.get(rec["id"])
+    if st is None:
+        st = {"screen": "", "last": None}
+        if p.get("before"):
+            b = run_message(h, {"n": -1, "text": p["before"]["message"], "rounds": p["before"]["rounds"]}, audit=False)
+            st = {"screen": b["lead"] or "", "last": b["_window"]}
+        chains[rec["id"]] = st
+    m = next(x for x in p["messages"] if x["n"] == rec["n"])
+    hand = run_message(h, m, st["screen"], st["last"], audit=False)
+    st["screen"], st["last"] = hand["lead"] or st["screen"], hand["_window"] or st["last"]
+    return compare_plans(hand_keys(hand), model_keys(rec))
+
+
 def reaudit(a):
     """Offline: the auditor again over a saved run folder (the envelopes are in each record), and summary.json
     rewritten; the first summary is kept as summary.first.json. No model call."""
     import glob
     h = Harness.scratch()
     recs = []
-    for f in sorted(glob.glob(os.path.join(a.run, "*.json"))):
+    chains = {}
+    files = [f for f in glob.glob(os.path.join(a.run, "*.json")) if not os.path.basename(f).startswith("summary")]
+    files.sort(key=lambda f: (os.path.basename(f).split(".")[0], int(os.path.basename(f).split(".")[1])))
+    for f in files:
         if os.path.basename(f).startswith("summary"):
             continue
         with open(f, encoding="utf-8") as fh:
@@ -695,6 +723,7 @@ def reaudit(a):
         results = {c["rid"]: c["result"] for c in rec["calls"] if c.get("rid")}
         bad, checked = audit_sent(h, results, h.turn(rec["message"]).unlock, rec, rec["message"])
         rec["audit"] = {"checked": checked, "findings": bad}
+        rec["g2"] = _g2_again(h, rec, chains)
         with open(f, "w", encoding="utf-8") as fh:
             json.dump(rec, fh, indent=1, default=str, ensure_ascii=False)
         recs.append(rec)
@@ -830,6 +859,7 @@ def summarize(recs, settings=None):
                      "cache_read_input_tokens": sum(q["usage"]["cache_read_input_tokens"] for q in req),
                      "cache_creation_input_tokens": sum(q["usage"]["cache_creation_input_tokens"] for q in req)},
         "repairs": sum(1 for r in done if r.get("repair_message")),
+        "decomposition": _decomposition(done),
         "events": _counts(e for r in done for e in r.get("events") or []),
         "dropped": {r["key"]: r["dropped"] for r in done if r["dropped"]},
         "dropped_reasons": _counts(x for r in done for d in r["dropped"] for x in d["reasons"]),
@@ -837,7 +867,10 @@ def summarize(recs, settings=None):
             "G2": "per plan message: every hand-plan counting call (evalset/brain_plans.jsonl, run on its own hand "
                   "chain) has a model call with the same tool, what it ranks by, window days, base, scope "
                   "(meta.filters_said) and order; 'other_plan' = same window, base, scope and order but another tool "
-                  "or ranking (for a human to judge, not counted); share = understood / messages with a hand plan",
+                  "or ranking (for a human to judge, not counted); share = understood / messages with a hand plan. "
+                  "A compare's window is both windows (the second read from previous.words). Any matching model "
+                  "call earns the credit, even when the answer cites another call; extra calls do not count against "
+                  "it",
             "G3": "answers whose lead is the model's own (lead_source model or model_after_repair) / every plan "
                   "message attempted (API failures and turns with no form count as not own)",
             "G4": "micro-averaged: written = sentences of the model's FIRST form (lead sentences + points); "
@@ -847,6 +880,24 @@ def summarize(recs, settings=None):
             "G5": "wall seconds of the turn (all requests, tool runs, verification, repair, back-off), at the run's "
                   "parallelism", "G6": "ledger cost of every request of the message, mean in cents"}}
     return s
+
+
+def _decomposition(done):
+    """What the measured G3 and G4 mix: repairs spent on a form that did not validate (an invented key), and the first
+    pass read on the first form that DID validate (a decomposition, not a gate figure)."""
+    def sents(v):
+        return [o for o in (v or {}).get("outcomes", []) if o["where"] in ("lead", "point")]
+    key_repairs = [r["key"] for r in done if r.get("verdicts") and r["verdicts"][0].get("form_error")]
+    w = k = 0
+    for r in done:
+        v = next((v for v in r.get("verdicts") or [] if not v.get("form_error")), None)
+        w += len(sents(v))
+        k += sum(1 for o in sents(v) if o["kept"])
+    not_own = [r["key"] for r in done if r["lead_source"] not in ("model", "model_after_repair")]
+    return {"repairs_on_a_form_error": len(key_repairs), "repairs_on_a_form_error_list": key_repairs,
+            "not_own_whose_repair_went_on_a_form_error": sorted(set(key_repairs) & set(not_own)),
+            "first_valid_form_written": w, "first_valid_form_kept": k,
+            "first_valid_form_missing": round(1 - k / w, 4) if w else None}
 
 
 def _counts(it):

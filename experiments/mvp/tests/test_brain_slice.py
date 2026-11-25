@@ -395,6 +395,31 @@ def test_g2_compares_window_base_scope_and_order_and_keeps_other_plans_apart():
     assert E.compare_plans([], [k])["verdict"] == "no_hand_plan"
 
 
+def test_g2_reads_both_windows_of_a_compare(harness):
+    from mvp import eval_brain as E
+    from mvp.brain import tools as TL
+    msg = "compare this autumn with last autumn, and with 2024"
+    t = harness.turn(msg)
+    right = {"a": {"words": "this autumn"}, "b": {"words": "last autumn"}, "by": "area"}
+    wrong = {"a": {"words": "this autumn"}, "b": {"words": "2024"}, "by": "area"}
+    r1, r2 = TL.call(t, "compare", right), TL.call(t, "compare", wrong)
+    k1, k2 = E.call_key("compare", right, r1), E.call_key("compare", wrong, r2)
+    assert k1["window"][:2] == k2["window"][:2] and k1["window"][2:] != k2["window"][2:]
+    assert k1["window"][2] == "2025-09-01" and None not in k1["window"]
+    assert E.compare_plans([k1], [k2])["verdict"] == "differs"
+    assert E.compare_plans([k1], [k2, dict(k1)])["verdict"] == "understood"
+
+
+def test_the_decomposition_reads_the_first_form_that_validated():
+    from mvp import eval_brain as E
+    out = {"outcomes": [{"where": "lead", "kept": True}, {"where": "point", "kept": False}]}
+    r = _rec("A.0", "code", 2, 0, 0, 1.0, 0.0)
+    r["verdicts"] = [{"form_error": "extra_forbidden", "outcomes": []}, dict(out, form_error=None)]
+    d = E.summarize([r])["decomposition"]
+    assert d["repairs_on_a_form_error"] == 1 and d["not_own_whose_repair_went_on_a_form_error"] == ["A.0"]
+    assert d["first_valid_form_written"] == 2 and d["first_valid_form_kept"] == 1 and d["first_valid_form_missing"] == 0.5
+
+
 def test_run_refuses_without_a_key(monkeypatch, capsys):
     from mvp import eval_brain as E
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
