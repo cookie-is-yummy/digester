@@ -8939,6 +8939,23 @@
    ]
   },
   {
+   "id": "f_least_other_list",
+   "source": "new",
+   "class": "3.12 'least' on a list the result did not rank",
+   "ledger": "least",
+   "form": {
+    "lead": "In October 2026, here is what stood out.",
+    "points": [
+     "Gaming clips[r1.themes[0]] was the theme you opened least, with 61[r1.themes[0].items] videos."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "least"
+   ]
+  },
+  {
    "id": "f_most_on_least",
    "source": "new",
    "class": "3.12 'most' on a result ordered by least",

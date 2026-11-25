@@ -678,6 +678,8 @@ def check_value(mk):
         return "bad_ref", f"{mk.path} is not a value"
     if meas == "name":
         if not mk.said or _low(mk.said) != _low(v):
+            if _segs(mk.rest)[-1][0] in ("title", "text", "why_matched", "caption"):
+                return "wrong_name", f"the words before {mk.path} are not that cell's text"
             return "wrong_name", f"{mk.path} = '{_clip(v)}'"
         return None
     if meas == "date":
@@ -1153,7 +1155,11 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         elif mk.kind == "row":
             if not mk.said:
                 nm = _row_names(mk.value, mk.rest)
-                add("wrong_name", f"{mk.path} is '{_clip(nm[0]) if nm else '?'}'")
+                if isinstance(mk.value, dict) and mk.value.get("title"):
+                    # an item's title is third-party text: never put back into a message to the model
+                    add("wrong_name", f"the words before {mk.path} are not that item's title")
+                else:
+                    add("wrong_name", f"{mk.path} is '{_clip(nm[0]) if nm else '?'}'")
         elif mk.kind == "calc":
             if len({mk.a.split('.', 1)[0], mk.b.split('.', 1)[0]}) > 1:
                 add("two_results", f"{mk.a} and {mk.b}")
@@ -1279,6 +1285,10 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
             if not (order == "least" and (res.meta or {}).get("complete") is True and rows0):
                 add("least", f"{res.rid} is ordered by {order}" + ("" if (res.meta or {}).get("complete") else
                                                                     ", not over every entity"))
+            elif not any(_smallest(res, mk.owner) for mk in rows0):
+                # the result is ordered by least, but the list cited is not the one it ranked (a sheet's other lists
+                # keep their "most" order): its first row must be the smallest of its list, by code's own reading
+                add("least", f"{res.rid}'s list cited is not ranked from the least")
         if order == "least" and _RANK.search(re.sub(r"\bthe least\b|\bleast\b", " ", low)):
             add("rank", f"{res.rid} is ordered by least: its first row is the smallest")
         r_ = _close_check(low, markers, res)
@@ -1319,7 +1329,7 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     structural = {"bad_ref", "bad_marker", "two_results", "wrong_name", "too_long"}
     if ires is not None and ires.is_sheet and (not fail or probe or not (set(fail) & structural)):
         try:
-            why = insight_check(raw, markers, plain_names, cited_names, ires, where)
+            why = insight_check(raw, markers, plain_names, cited_names, ires, where, turn.unlock)
         except Exception as e:   # noqa: BLE001  (a sentence insight cannot read is dropped, never sent)
             why = ("insight_error", type(e).__name__)
         out.insight = why[0] if why else None
@@ -1355,6 +1365,21 @@ def _tie(res, owner):
                 return f"{res.rid}.{lp}[0] and [1] are tied at {a}"
             return None
     return None
+
+
+def _smallest(res, owner):
+    """The first row of its list holds the smallest value of the list (items, else share); a tie counts as not."""
+    try:
+        lst = _resolve(res.sheet, re.sub(r"\[0\]$", "", owner))
+    except KeyError:
+        return False
+    if not isinstance(lst, list) or not lst or not all(isinstance(x, dict) for x in lst):
+        return False
+    for k in ("items", "share", "n"):
+        vals = [x.get(k) for x in lst]
+        if all(isinstance(v, (int, float)) for v in vals):
+            return all(vals[0] < v for v in vals[1:])
+    return False
 
 
 def _filter_dropped(raw, markers, res):
@@ -1528,11 +1553,24 @@ def _rewrite_reason(ins, only):
     return "insight_rewrite"
 
 
-def insight_check(raw, markers, plain_names, cited_names, res, where):
+def _mask_unlocked(text, unlock):
+    """The words of the turn's unlocked sensitive topic (SPEC 8.4) taken out of what insight's sensitive rule reads;
+    any other sensitive word stays and still fails."""
+    if not unlock:
+        return text
+    from .. import outside as O
+
+    def sub(m):
+        return "topic" if O.sensitive_topic([m.group(0)]) == unlock else m.group(0)
+    return re.sub(r"[A-Za-z][A-Za-z'’-]*", sub, text)
+
+
+def insight_check(raw, markers, plain_names, cited_names, res, where, unlock=None):
     """None or (reason, detail): the sentence through insight's own checks against the cited result's sheet."""
     s = slotted(raw, markers, plain_names, cited_names, res)
     if s is None:
         return "bad_ref", "a cited row with no name"
+    s = _mask_unlocked(s, unlock)
     sheet, facts = res.sheet_k, res.facts
     lang = sheet.get("lang") or "en"
     text, why = I.render(s, sheet, facts, strict=True)
