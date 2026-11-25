@@ -144,7 +144,8 @@ def key(bot, person):
     except Exception:  # noqa: BLE001
         prof = None
     parts = [stamp(os.path.join(lib, "corpus", "interactions.jsonl")),
-             stamp(os.path.join(T.folder(lib), "build.json")), L.VERSION, prof, CONTEXT_VERSION]
+             stamp(os.path.join(T.folder(lib), "build.json")), L.VERSION,
+             stamp(os.path.join(L.folder(), "lengths.jsonl")), prof, CONTEXT_VERSION]
     return hashlib.sha256(json.dumps(parts, default=str).encode()).hexdigest()
 
 

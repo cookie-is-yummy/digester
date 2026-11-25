@@ -363,15 +363,20 @@ def run_timeline(turn, a: TimelineArgs):
     if bad:
         return _unresolved(turn, "timeline", bad)
     raw = _sheet(turn, q)
+    for p in raw.get("periods") or []:   # a period too thin to say what was watched in it (facts.SPARSE_MIN)
+        if isinstance(p, dict) and isinstance(p.get("items"), int):
+            p["sparse"] = p["items"] < F.SPARSE_MIN
     rid = turn.next_rid()
     sheet = R.present(raw, rid)
-    extra = ["A period with fewer than 50 items is marked sparse."]
+    extra = [f"A period with fewer than {F.SPARSE_MIN} items is marked sparse."]
     return _finish(turn, "timeline", rid, raw, sheet, _meta(turn, raw, a.scope, resolved, extra_notes=extra), t0, w,
                    keep="periods")
 
 
-def _year_back(w):
-    """The same window a year earlier (29 February becomes the 28th)."""
+def _year_back(turn, w):
+    """The same days a year earlier, of the window as the record holds it: a window that runs past where the export
+    ends is cut there first ("this year" up to 30 October is set against 1 January to 30 October of last year, never
+    the whole of last year); a range, so its words say its dates. 29 February becomes the 28th."""
     def back(d):
         try:
             return d.replace(year=d.year - 1)
@@ -379,7 +384,13 @@ def _year_back(w):
             return d.replace(year=d.year - 1, day=28)
     if not w.start or not w.end:
         raise ToolError("same_last_year needs a window with dates: lately and all have no year before")
-    return Hm.Window(kind="range" if w.kind not in ("year", "month") else w.kind, start=back(w.start), end=back(w.end))
+    newest = max(turn.lib.rec.ends.values()) if turn.lib.rec.ends else None
+    end = min(w.end, newest) if newest else w.end
+    if end < w.start:
+        raise ToolError("that window is after where the export ends: there is nothing to set against last year")
+    if end == w.end and w.kind in ("year", "month"):
+        return Hm.Window(kind=w.kind, start=back(w.start), end=back(w.end))
+    return Hm.Window(kind="range", start=back(w.start), end=back(end))
 
 
 def run_changes(turn, a: ChangesArgs):
@@ -395,7 +406,7 @@ def run_changes(turn, a: ChangesArgs):
     if a.against == "same_last_year":
         if w.kind == "lately":
             raise ToolError("same_last_year needs a window with dates: use words like 'this year' or 'in October'")
-        q, bad = _query(turn, a.scope, "compare", w, resolved, window2=_year_back(w))
+        q, bad = _query(turn, a.scope, "compare", w, resolved, window2=_year_back(turn, w))
     elif a.level == "channel":
         q, bad = _query(turn, a.scope, "top_channels", w, resolved)
     else:
@@ -672,6 +683,8 @@ def call(turn, name, args):
         return t.run(turn, a)
     except ToolError as e:
         return R.error(str(e), tool=name)
+    except Exception as e:  # noqa: BLE001 - a backend or a sheet that fails is an error result, never a crash
+        return R.error(f"the tool failed ({type(e).__name__}); try another way or say what is missing", tool=name)
 
 
 def _short(e):

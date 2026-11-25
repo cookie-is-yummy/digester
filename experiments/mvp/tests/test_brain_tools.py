@@ -215,6 +215,8 @@ def test_timeline_per_year_recounts(brain):
     for y in range(2021, 2027):
         assert got[str(y)] == len(opened(date(y, 1, 1), date(y, 12, 31)))                       # recount 9
     assert got["2024"] == 8     # the 50 videos of the sensitive theme are not counted
+    assert all(p["sparse"] == (p["items"] < 50) for p in r["sheet"]["periods"])
+    assert any(p["sparse"] for p in r["sheet"]["periods"]) and not all(p["sparse"] for p in r["sheet"]["periods"])
 
 
 def test_compare_two_years_in_one_result(brain):
@@ -240,7 +242,12 @@ def test_changes_channels_lately_and_areas_against_last_year(brain):
     l2, _t = call(brain, "changes", {"level": "channel", "window": {"preset": "lately"}})
     assert l2["sheet"]["new"]["channels"] == []     # both were first opened on 1 October, before the 4 weeks
     r2, _t = call(brain, "changes", {"level": "area", "window": {"preset": "this_year"}, "against": "same_last_year"})
-    assert r2["sheet"]["kind"] == "compare_windows" and r2["sheet"]["previous"]["words"] == "2025"
+    s2 = r2["sheet"]
+    # this year runs to where the export ends (30 October): last year's side is the same days, said with its dates
+    assert s2["kind"] == "compare_windows" and "30 October 2025" in s2["previous"]["words"]
+    assert s2["totals"]["items"] == len(opened(date(2026, 1, 1), date(2026, 10, 30)))           # recount 17
+    assert s2["previous"]["items"] == len(opened(date(2025, 1, 1), date(2025, 10, 30)))        # recount 18
+    assert len(opened(date(2025, 1, 1), date(2025, 10, 30))) < len(opened(date(2025, 1, 1), date(2025, 12, 31)))
     r3, _t = call(brain, "changes", {"level": "theme", "window": {"words": "since 2020"}}, "changed since 2020")
     assert r3["sheet"]["kind"] == "changed" and r3["sheet"]["periods"]
 
@@ -621,6 +628,12 @@ def test_search_keeps_only_what_they_may_see_of_the_kind_asked_with_a_why_line_f
     # with no backend injected, nothing runs and nothing is spent
     n, _t = call(brain, "search", {"query": "pasta", "how": "saved"})
     assert n["is_error"] and "not available" in n["error"]
+
+    # a backend that fails is an error result, never a crash
+    def broken(*_a):
+        raise RuntimeError("the engine is down")
+    b, _t = call(brain, "search", {"query": "pasta", "how": "saved"}, search=broken)
+    assert b["is_error"] and "RuntimeError" in b["error"] and "engine" not in b["error"]
 
 
 def test_learned_keeps_points_with_a_source_they_may_see_once_a_turn(brain):
