@@ -39,7 +39,9 @@ def one(text, name="lately", where="point", turn=None):
 # ================================================================ the planted set (SPEC 4.8)
 def test_every_planted_false_sentence_is_dropped_with_its_reason_and_the_true_ones_are_kept():
     s = P.score(PLANTED)
-    bad = [r for r in s["rows"] if (r["expect"] == "dropped" and (r["kept"] or r.get("reason_ok") is False))]
+    # (the verifier attack's cases, source "attack", are scored apart: tests/test_brain_fix.py)
+    bad = [r for r in s["rows"] if r.get("source") != "attack" and
+           (r["expect"] == "dropped" and (r["kept"] or r.get("reason_ok") is False))]
     assert not bad, bad
     new = s["by_source"]["new"]
     assert new["false"] >= 60 and new["true"] >= 40, new

@@ -362,6 +362,34 @@ for cid, led, where, truth, cls, text, fam in AUD.CASES:
                 "target": "lead" if where == "L" else "point:0", "expect": expect, "reasons": [],
                 "turn": audit_turns[led]})
 
+# mvp20 fix: the verifier attack's sentences on real tool results (eval/brain_attack_cases.py), with the ledgers that
+# tests/test_brain_fix.py froze here (MVP_FREEZE_ATTACK=1 rewrites them from today's tools). False ones are source
+# "attack" (expected dropped), true ones "attack_true" (scored apart, like the audit's). A point is tried under each
+# of its true carrier leads (case "forms"): kept when any carrier keeps it.
+_kspec = importlib.util.spec_from_file_location("brain_attack_cases", os.path.join(HERE, "brain_attack_cases.py"))
+ATK = importlib.util.module_from_spec(_kspec)
+_kspec.loader.exec_module(ATK)
+attack_turns = _old_all.get("attack_turns") or {}
+for name in ATK.LEDGERS:
+    if "attack_" + name in _old:
+        ledgers["attack_" + name] = _old["attack_" + name]
+for cid, led, where, truth, cls, text, why, carriers in ATK.CASES:
+    if "attack_" + led not in ledgers:
+        continue   # (not frozen yet: run tests/test_brain_fix.py with MVP_FREEZE_ATTACK=1 first)
+    for w in (["L", "P"] if where == "B" else [where]):
+        base = {"source": "attack" if truth == "F" else "attack_true", "class": f"{cls}: {why}",
+                "ledger": "attack_" + led, "reasons": [],
+                "expect": ("private_line" if cid in getattr(ATK, "PRIVATE_LINE", ()) else "dropped") if truth == "F"
+                else "kept",
+                "turn": attack_turns[led]}
+        if w == "L":
+            out.append(dict(base, id=f"attack_{cid}" + ("_L" if where == "B" else ""),
+                            form={"lead": text, "points": []}, target="lead"))
+        else:
+            out.append(dict(base, id=f"attack_{cid}" + ("_P" if where == "B" else ""),
+                            form={"lead": carriers[0], "points": [text]},
+                            forms=[{"lead": c, "points": [text]} for c in carriers], target="point:0"))
+
 # the insight_v5 sentences (SPEC 4.8 source 1)
 d, cases, extra = CONV.load()
 rows = CONV.rows()
@@ -394,7 +422,7 @@ data = {"about": "SPEC 4.8: the verifier's planted set. Every result here is mad
                  "eval/insight_cases.json. 'new' cases are one class each (the 4.3 steps and the sixth pass's hand-check "
                  "classes); 'insight_v5' cases are the writer's eval sentences in marker form (eval/convert_insight_cases.py): "
                  "a sentence true only after today's code rewrote it is expected dropped.",
-        "ledgers": ledgers, "audit_turns": audit_turns, "cases": out}
+        "ledgers": ledgers, "audit_turns": audit_turns, "attack_turns": attack_turns, "cases": out}
 with open(PATH, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=1, ensure_ascii=False)
 print(len(out), sum(1 for c in out if c["expect"] == "dropped"), sum(1 for c in out if c["expect"] == "kept"))
