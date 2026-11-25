@@ -246,7 +246,7 @@ def run_message(h, m, screen="", last_window=None, audit=True):
             rec["numbers"] = rec.get("numbers", 0) + n_all
             rec["recounted"] = rec.get("recounted", 0) + n_rec
             rec.setdefault("not_recounted", []).extend(
-                f"{r['tool']}/{(r.get('sheet') or {}).get('kind')}:{re.sub(r'[[]\d+[]]', '[]', p)}" for p in miss)
+                f"{r['tool']}/{(r.get('sheet') or {}).get('kind')}:{re.sub(r'\[\d+\]', '[]', p)}" for p in miss)
             rec["checked"] += sum(1 for x in rows if x["kind"] != "understood_window")
             rec["findings"] += [x for x in rows if not x["ok"] and x["kind"] != "understood_window"]
             rec["understood_window"] += [x for x in rows if not x["ok"] and x["kind"] == "understood_window"]
@@ -278,6 +278,261 @@ def run_conversation(h, p, audit=True):
         r = run_message(h, m, screen, last, audit=audit)
         r["tier"] = "plan"
         r["step2"] = m.get("step2") or []
+        r["plan_finding"] = m.get("finding")
         screen, last = r["lead"] or screen, r["_window"] or last
         out["messages"].append(r)
     return out
+
+
+# a finding's class: a number (a value, a rank, a date, a word of a sent lead) is what "recounts true" is about; a
+# shape (a sheet row whose label says less than the name) and a window reading are listed apart, each with its why
+SHAPE_KINDS = {"one name, two fields"}
+
+
+def finding_class(row):
+    if row.get("audit") == "window":
+        return "window"
+    if row.get("kind") in SHAPE_KINDS:
+        return "shape"
+    return "number"
+
+
+def _brief(row):
+    return {k: row.get(k) for k in ("audit", "kind", "where", "said", "recount", "note")}
+
+
+def plans(h, only=None):
+    """Run every plan -> (summary, per-conversation records without the results)."""
+    core = {r["id"]: r for r in load_jsonl(CORE)}
+    out, convs = [], load_jsonl(PLANS)
+    for p in convs:
+        if only and p["id"] not in only:
+            continue
+        if p["status"] in ("step2", "step3"):
+            out.append({"id": p["id"], "status": p["status"],
+                        "messages": [{"n": m["n"], "tier": m["tier"], "why": m.get("why")} for m in p["messages"]]})
+            continue
+        out.append(run_conversation(h, p))
+    s = {"conversations": len(out), "messages": sum(len(c["messages"]) for c in out),
+         "by_status": {}, "messages_by_tier": {}, "planned_messages": 0, "calls": 0, "tool_errors": [],
+         "expect_failed": [], "window_failed": [], "lead_how": {}, "lead_not_ok": [], "numbers_in_results": 0,
+         "numbers_recounted": 0, "not_recounted": {}, "checked": 0, "findings": {"number": [], "shape": [],
+                                                                                 "window": []},
+         "understood_window": [], "recount_true": 0, "recount_not_true": [], "plan_findings": [],
+         "step2_parts": 0}
+    for c in out:
+        s["by_status"][c["status"]] = s["by_status"].get(c["status"], 0) + 1
+        bad = []
+        for m in c["messages"]:
+            s["messages_by_tier"][m["tier"]] = s["messages_by_tier"].get(m["tier"], 0) + 1
+            if m["tier"] != "plan":
+                continue
+            where = f"{c['id']}.{m['n']}"
+            s["planned_messages"] += 1
+            s["calls"] += len(m["calls"])
+            s["step2_parts"] += len(m.get("step2") or [])
+            s["tool_errors"] += [f"{where}: {e}" for e in m["errors"]]
+            s["expect_failed"] += [f"{where}: {e}" for e in m["expect_failed"]]
+            s["window_failed"] += [f"{where}: {e}" for e in m["window_failed"]]
+            s["lead_how"][m["lead_how"]] = s["lead_how"].get(m["lead_how"], 0) + 1
+            if not m["lead_ok"]:
+                s["lead_not_ok"].append(where)
+            s["numbers_in_results"] += m.get("numbers", 0)
+            s["numbers_recounted"] += m.get("recounted", 0)
+            for p in m.get("not_recounted", []):
+                s["not_recounted"][p] = s["not_recounted"].get(p, 0) + 1
+            s["checked"] += m["checked"]
+            for f in m["findings"]:
+                cls = finding_class(f)
+                s["findings"][cls].append(dict(_brief(f), at=where))
+                if cls == "number":
+                    bad.append(f)
+            s["understood_window"] += [dict(_brief(f), at=where, message=core[c["id"]]["messages"][m["n"]])
+                                       for f in m["understood_window"]]
+            if m.get("plan_finding"):
+                s["plan_findings"].append(f"{where}: {m['plan_finding']}")
+        if c["status"] in ("plan", "partial"):
+            if bad:
+                s["recount_not_true"].append({"id": c["id"], "why": [dict(_brief(f)) for f in bad]})
+            else:
+                s["recount_true"] += 1
+    s["with_a_plan"] = s["by_status"].get("plan", 0) + s["by_status"].get("partial", 0)
+    s["waiting"] = {"step2": s["by_status"].get("step2", 0), "step3": s["by_status"].get("step3", 0)}
+    return s, out
+
+
+# ================================================================ planted
+def planted():
+    """eval/brain_planted.json through the verifier (brain/planted.py's scorer), by class."""
+    from mvp.brain import planted as BP
+    sc = BP.score()
+    by = {}
+    for r in sc["rows"]:
+        b = by.setdefault(r.get("class") or "?", {"false": 0, "dropped": 0, "dropped_expected": 0, "true": 0,
+                                                    "kept": 0})
+        if r["expect"] == "dropped":
+            b["false"] += 1
+            b["dropped"] += not r["kept"]
+            b["dropped_expected"] += bool(not r["kept"] and r.get("reason_ok"))
+        else:
+            b["true"] += 1
+            b["kept"] += r["kept"]
+    s = {k: v for k, v in sc.items() if k != "rows"}
+    s["true_kept_share"] = round(sc["true_kept"] / sc["true"], 4) if sc["true"] else None
+    s["bar"] = {"false_all_dropped": sc["false_dropped"] == sc["false"],
+                "true_kept_97": bool(sc["true"]) and sc["true_kept"] / sc["true"] >= 0.97}
+    s["by_class"] = by
+    s["kept_false"] = [r["id"] for r in sc["rows"] if r["expect"] == "dropped" and r["kept"]]
+    s["dropped_true"] = [r["id"] for r in sc["rows"] if r["expect"] == "kept" and not r["kept"]]
+    s["wrong_reason"] = [r["id"] for r in sc["rows"] if r["expect"] == "dropped" and not r["kept"]
+                         and r.get("reason_ok") is False]
+    return s
+
+
+# ================================================================ the 20 insight cases
+# each question of eval/insight_cases.json as the one tool call a good model would make (tests/test_brain_tools.py
+# holds the same mapping for its own checks): SAME = the whole sheet the model reads is today's facts.sheet of the
+# question; NUMBERS = a topic read by today's code as words is a resolved ref here (the numbers agree, not the shape);
+# NO_MATCH = nothing of the topic in this library (today's sheet counts 0, the tool gives no number); NOT_MAPPED =
+# history.read reads nothing of the question on this clock, or no one call is the question
+INSIGHT_SAME = {
+    "top_lately": ("breakdown", {"by": "area", "window": {"words": "lately"}}),
+    "top_summer": ("breakdown", {"by": "area", "window": {"words": "the summer of 2023"}}),
+    "channels_2025": ("breakdown", {"by": "channel", "window": {"words": "in 2025"}}),
+    "channels_october": ("breakdown", {"by": "channel", "window": {"words": "in october"}}),
+    "day_oct30": ("items", {"window": {"words": "on october 30"}, "limit": 10}),
+    "day_sep12": ("items", {"window": {"words": "on 12 september"}, "limit": 10}),
+    "changed_since_2020": ("changes", {"level": "area", "window": {"words": "since 2020"}}),
+    "cmp_years": ("compare", {"a": {"words": "2024"}, "b": {"words": "2025"}}),
+    "es_top": ("breakdown", {"by": "area", "window": {"preset": "lately"}}),
+}
+INSIGHT_NUMBERS = {
+    "count_minecraft": ("breakdown", {"by": "none", "window": {"words": "this year"}, "scope": {"only": ["minecraft"]}}),
+    "last_cooking": ("first_last", {"subject": "cooking", "which": "last"}),
+}
+INSIGHT_NO_MATCH = {
+    "count_blender_all": ("breakdown", {"by": "none", "window": {"preset": "all"}, "scope": {"only": ["blender"]}}),
+    "first_blender": ("first_last", {"subject": "blender", "which": "first"}),
+    "first_chess": ("first_last", {"subject": "chess", "which": "first"}),
+    "last_guitar": ("first_last", {"subject": "guitar", "which": "last"}),
+}
+INSIGHT_NOT_MAPPED = {
+    "changed_this_year": "history.read returns None on this clock (no sheet to agree with)",
+    "cmp_months": "history.read returns None on this clock",
+    "cmp_cooking_guitar": "history.read returns None on this clock",
+    "es_cmp": "history.read returns None on this clock",
+    "cmp_gaming_art": "two topics in one window (compare_topics): no tool takes two topics; two breakdowns with "
+                      "scope.only give the same numbers",
+}
+
+
+def insight(h):
+    """How many of the 20 questions a tool call answers with today's fact sheet, identically."""
+    from mvp import facts as F, history as Hm
+    from mvp.brain import results as R, tools as TL
+    with open(INSIGHT, encoding="utf-8") as f:
+        cases = {c["id"]: c["sheet"]["question"] for c in json.load(f)["cases"]}
+    rows = []
+
+    def today_sheet(q):
+        hq = Hm.read(q, TODAY)
+        return None if hq is None else F.build(h.bot, h.person, hq, h.now, text=q, hide_sensitive=True)
+    for cid in sorted(cases):
+        q = cases[cid]
+        if cid in INSIGHT_SAME:
+            tool, args = INSIGHT_SAME[cid]
+            t = h.turn(q)
+            r = TL.call(t, tool, args)
+            raw = today_sheet(q)
+            lst = {"area": "areas", "channel": "channels", "theme": "themes"}.get(args.get("by"))
+            want = R.present(raw, "r1", limits={lst: args.get("top", 8)} if lst else None)
+            got = dict(r.get("sheet") or {})
+            same_items = True
+            if tool == "items":
+                same_items = [i["item_id"] for i in got.pop("items", [])] == [i["id"] for i in raw.get("items")
+                                                                             or []][:10]
+                want["items"] = []
+            R.cut_to_size(want, keep=lst or {"items": "items", "changes": "periods"}.get(tool))
+            if tool == "items":
+                want.pop("items", None)
+            rows.append({"id": cid, "how": "identical" if (got == want and same_items) else "differs",
+                         "truncated": bool((r.get("meta") or {}).get("truncated"))})
+        elif cid in INSIGHT_NUMBERS:
+            tool, args = INSIGHT_NUMBERS[cid]
+            r = TL.call(h.turn(q), tool, args)
+            raw = today_sheet(q)
+            ok = (r.get("sheet") or {}).get("totals", {}).get("items") == (raw.get("totals") or {}).get("items")
+            rows.append({"id": cid, "how": "same numbers" if ok else "numbers differ"})
+        elif cid in INSIGHT_NO_MATCH:
+            tool, args = INSIGHT_NO_MATCH[cid]
+            r = TL.call(h.turn(q), tool, args)
+            raw = today_sheet(q)
+            ok = r.get("error") == "no_match" and (raw.get("totals") or {}).get("items") == 0
+            rows.append({"id": cid, "how": "no match (0 today)" if ok else "differs"})
+        else:
+            rows.append({"id": cid, "how": "not mapped", "why": INSIGHT_NOT_MAPPED.get(cid, "?")})
+    s = {"cases": len(rows), "by": {}}
+    for r in rows:
+        s["by"][r["how"]] = s["by"].get(r["how"], 0) + 1
+    s["identical"] = s["by"].get("identical", 0)
+    s["truncated_identical"] = sum(1 for r in rows if r["how"] == "identical" and r.get("truncated"))
+    s["rows"] = rows
+    return s
+
+
+# ================================================================ the command line
+RUN_REFUSED = ("eval_brain run is step 2: it calls a real model through the brain loop, and step 1 has no loop, no "
+               "provider and no model call. Use `planted`, `plans` or `insight` (offline).")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="python3 -m mvp.eval_brain")
+    sub = ap.add_subparsers(dest="mode", required=True)
+    p1 = sub.add_parser("planted")
+    p1.add_argument("--show", default="", choices=("", "dropped_true", "kept_false", "wrong_reason"))
+    p2 = sub.add_parser("plans")
+    p2.add_argument("--json", default=None, help="write the full report here (keep it outside git)")
+    p2.add_argument("--only", default="", help="conversation ids, comma separated")
+    sub.add_parser("insight")
+    p4 = sub.add_parser("run")
+    p4.add_argument("rest", nargs=argparse.REMAINDER)
+    a = ap.parse_args(argv)
+    if a.mode == "run":
+        print(RUN_REFUSED, file=sys.stderr)
+        return 2
+    if a.mode == "planted":
+        s = planted()
+        by = s.pop("by_class")
+        print(json.dumps(s, indent=1))
+        print("class: false dropped (with an expected reason) / true kept")
+        for cls in sorted(by):
+            b = by[cls]
+            print(f"  {cls}: {b['dropped']}/{b['false']} ({b['dropped_expected']}) / {b['kept']}/{b['true']}")
+        return 0 if all(s["bar"].values()) else 1
+    h = Harness.scratch()
+    if a.mode == "insight":
+        s = insight(h)
+        print(json.dumps(s, indent=1))
+        return 0
+    s, out = plans(h, set(x for x in a.only.split(",") if x) or None)
+    if a.json:
+        def strip(o):
+            if isinstance(o, dict):
+                return {k: strip(v) for k, v in o.items() if not k.startswith("_")}
+            if isinstance(o, list):
+                return [strip(v) for v in o]
+            return o
+        with open(a.json, "w", encoding="utf-8") as f:
+            json.dump({"summary": s, "conversations": strip(out)}, f, indent=1, default=str)
+    short = {k: v for k, v in s.items() if k not in ("not_recounted", "findings")}
+    short["not_recounted"] = sorted(s["not_recounted"].items(), key=lambda x: -x[1])[:12]
+    short["findings"] = {"number": s["findings"]["number"], "window": s["findings"]["window"],
+                         "shape": {"count": len(s["findings"]["shape"]),
+                                   "kinds": sorted({f["kind"] for f in s["findings"]["shape"]}),
+                                   "results": sorted({f["at"] for f in s["findings"]["shape"]})}}
+    print(json.dumps(short, indent=1, default=str))
+    return 0 if not s["recount_not_true"] and not s["expect_failed"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
