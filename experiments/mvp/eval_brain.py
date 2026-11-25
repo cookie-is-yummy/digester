@@ -410,7 +410,10 @@ def planted():
                 "true_kept_97": bool(sc["true"]) and sc["true_kept"] / sc["true"] >= 0.97}
     s["by_class"] = by
     s["kept_false"] = [r["id"] for r in sc["rows"] if r["expect"] == "dropped" and r["kept"]]
-    s["dropped_true"] = [r["id"] for r in sc["rows"] if r["expect"] == "kept" and not r["kept"]]
+    s["dropped_true"] = [r["id"] for r in sc["rows"] if r["expect"] == "kept" and not r["kept"]
+                         and r.get("source") != "audit_true"]
+    # the step 1 audit's own true sentences, scored apart from the bar (brain/planted.py)
+    s["audit_true_dropped"] = [r["id"] for r in sc["rows"] if r.get("source") == "audit_true" and not r["kept"]]
     s["wrong_reason"] = [r["id"] for r in sc["rows"] if r["expect"] == "dropped" and not r["kept"]
                          and r.get("reason_ok") is False]
     return s

@@ -4,6 +4,7 @@ one of tests/brain_library.py (fixtures of test_brain_tools); every title, chann
 
 Each verifier class has the auditor's sentence, a variant of the same class, and a true twin that is kept. The counts
 behind each truth are from the made-up rows (test_brain_tools' recount helpers, which share nothing with facts.py)."""
+import json
 import os
 import sys
 from datetime import date
@@ -398,6 +399,64 @@ def test_a_close_fit_is_never_exactly_what_was_asked(brain):
     k = next((i for i, r in enumerate(rows) if r["fit"] != "clear"), None)
     assert k is not None
     dropped(brain, "search", f"{rows[k]['title']}[r1.items[{k}]] is exactly what you asked for.", ["weak_fit"])
+
+
+# ================================================================ the audit's sentences in the planted set
+MVP = os.path.dirname(HERE)
+PLANTED = os.path.join(MVP, "eval", "brain_planted.json")
+
+
+def _audit():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("brain_audit_cases", os.path.join(MVP, "eval", "brain_audit_cases.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def _audit_ledgers(e):
+    """{name: (envelopes, turn dict)} of the audit's ledgers from today's tools (took_ms zeroed: a timing)."""
+    from mvp.brain import tools as TL, verify as V
+    from mvp.tests.fakes.fake_brain import FakeEngine
+    A = _audit()
+    out = {}
+    for name, (msg, calls) in A.LEDGERS.items():
+        t = TL.Turn(e["bot"], person(e), NOW, message=msg, search=FakeEngine())
+        envs = [TL.call(t, tool, args) for tool, args in calls]
+        for env_ in envs:
+            env_["took_ms"] = 0
+        if name in A.PATCH:   # SYNTHETIC
+            lst, i, k, v = A.PATCH[name]
+            envs[0]["sheet"][lst][i][k] = v
+        vt = V.Turn.of(t)
+        out[name] = (json.loads(json.dumps(envs, default=str)),
+                     {"message": msg, "unlock": vt.unlock, "today": vt.today.isoformat(), "names": vt.names,
+                      "sensitive_names": vt.sensitive_names})
+    return out
+
+
+def test_the_audit_ledgers_frozen_in_the_planted_set_are_todays_tools(brain):
+    got = _audit_ledgers(brain)
+    with open(PLANTED, encoding="utf-8") as f:
+        data = json.load(f)
+    if os.environ.get("MVP_FREEZE_AUDIT") == "1":   # rewrite them (then run eval/build_brain_planted.py)
+        for name, (envs, t) in got.items():
+            data["ledgers"]["audit_" + name] = envs
+            data.setdefault("audit_turns", {})[name] = t
+        with open(PLANTED, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=1, ensure_ascii=False)
+    for name, (envs, t) in got.items():
+        assert data["ledgers"]["audit_" + name] == envs, name
+        assert data["audit_turns"][name] == t, name
+
+
+def test_every_false_sentence_of_the_audit_is_dropped_and_its_true_ones_counted():
+    from mvp.brain import planted as P
+    s = P.score()
+    a, t = s["by_source"]["audit"], s["by_source"]["audit_true"]
+    assert a["false"] == 137 and a["false_dropped"] == 137          # 133 false + 4 synthetic re-opens, all handled
+    assert t["true"] == 61 and t["true_kept"] >= 42                  # the audit's true sentences: 42 of 61 kept
+    assert s["false_dropped"] == s["false"] and s["true_kept"] / s["true"] >= 0.97
 
 
 # ================================================================ the code lead (the verifier audit's code leads)

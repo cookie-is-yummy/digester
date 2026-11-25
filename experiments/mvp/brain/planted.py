@@ -4,8 +4,10 @@ one of its expected reasons, and at least 97% of the true ones kept. No model ca
     python3 -m mvp.brain.planted [--show dropped_true|kept_false|all]    (from experiments/)
 
 A case: {"id", "source" ("new" | "insight_v5"), "class", "ledger" (a key of "ledgers"), "form" (a give_answer form),
-"target" ("lead", "lead:N", "point:N", "outside:N", "item:N"), "expect" ("kept" | "dropped"), "reasons" (any one of
-them is the expected reason; empty: any reason), "turn" (optional: message, unlock)}.
+"target" ("lead", "lead:N", "point:N", "outside:N", "item:N"), "expect" ("kept" | "dropped" | "private_line": dropped,
+or kept with code's private line), "reasons" (any one of them is the expected reason; empty: any reason), "turn"
+(optional: message, unlock, today, names, sensitive_names)}. Source "audit_true" (the step 1 audit's true sentences) is
+reported in by_source only, never in the bar's "true" counts.
 """
 import argparse
 import json
@@ -28,7 +30,8 @@ def outcome(case, ledgers):
     led = V.Ledger(ledgers[case["ledger"]])
     t = case.get("turn") or {}
     today = date.fromisoformat(t["today"]) if t.get("today") else None
-    turn = V.Turn(message=t.get("message", ""), unlock=t.get("unlock"), today=today)
+    turn = V.Turn(message=t.get("message", ""), unlock=t.get("unlock"), today=today, names=list(t.get("names") or []),
+                  sensitive_names=list(t.get("sensitive_names") or []))
     v = V.check_answer(case["form"], led, turn)
     tgt = case.get("target") or "point:0"
     kind, _, n = tgt.partition(":")
@@ -59,11 +62,22 @@ def score(data=None):
     for c in data["cases"]:
         kept, reasons, _v = outcome(c, led)
         want = c["expect"]
+        if want == "private_line":
+            # false said bare, true with code's line "Leaving out topics you keep private.": handled when dropped, or
+            # when kept with the line asked for (the audit's F46, F46b; SPEC 4.3 step 13 as widened at step 1's close)
+            kept = kept and not _v.private_line
+            want = "dropped"
         exp = c.get("reasons") or []
         row = {"id": c["id"], "source": c.get("source"), "class": c.get("class"), "expect": want,
                "kept": kept, "reasons": reasons}
         src = out["by_source"].setdefault(c.get("source") or "new", {"false": 0, "false_dropped": 0, "true": 0,
                                                                      "true_kept": 0})
+        if c.get("source") == "audit_true":
+            # the audit's own true sentences: scored apart (the 97% bar is the planted set's true twins)
+            src["true"] += 1
+            src["true_kept"] += kept
+            out["rows"].append(row)
+            continue
         if want == "dropped":
             out["false"] += 1
             src["false"] += 1

@@ -33,7 +33,8 @@ R12 = {"lately": "what have i been watching the most lately",
        "first_wc": "when did i first watch watercolor",
        "oct_count": "how many videos did i watch in october"}
 with open(PATH, encoding="utf-8") as _f:
-    _old = json.load(_f)["ledgers"]
+    _old_all = json.load(_f)
+_old = _old_all["ledgers"]
 S = {q: copy.deepcopy(_old[k][0]["sheet"]) for k, q in R12.items()}
 
 
@@ -344,6 +345,23 @@ for cid, led, form, target, expect, reasons in OUTSIDE:
     out.append({"id": cid, "source": "new", "class": "4.3 steps 2, 5, 6, 14", "ledger": led, "form": form,
                 "target": target, "expect": expect, "reasons": reasons})
 
+# the step 1 verifier audit's sentences on real tool results (eval/brain_audit_cases.py), with the ledgers that
+# tests/test_brain_step1_fix.py froze here (MVP_FREEZE_AUDIT=1 rewrites them from today's tools)
+_aspec = importlib.util.spec_from_file_location("brain_audit_cases", os.path.join(HERE, "brain_audit_cases.py"))
+AUD = importlib.util.module_from_spec(_aspec)
+_aspec.loader.exec_module(AUD)
+audit_turns = _old_all.get("audit_turns") or {}
+for name in AUD.LEDGERS:
+    ledgers["audit_" + name] = _old["audit_" + name]
+for cid, led, where, truth, cls, text, fam in AUD.CASES:
+    expect = "kept" if truth == "T" else ("private_line" if cid in AUD.PRIVATE_LINE else "dropped")
+    out.append({"id": "audit_" + cid, "source": "audit_true" if truth == "T" else "audit",
+                "class": f"{cls} (the audit expected: {fam or 'kept'})" + (" SYNTHETIC" if truth == "FS" else ""),
+                "ledger": "audit_" + led,
+                "form": {"lead": text, "points": []} if where == "L" else {"lead": "", "points": [text]},
+                "target": "lead" if where == "L" else "point:0", "expect": expect, "reasons": [],
+                "turn": audit_turns[led]})
+
 # the insight_v5 sentences (SPEC 4.8 source 1)
 d, cases, extra = CONV.load()
 rows = CONV.rows()
@@ -376,7 +394,7 @@ data = {"about": "SPEC 4.8: the verifier's planted set. Every result here is mad
                  "eval/insight_cases.json. 'new' cases are one class each (the 4.3 steps and the sixth pass's hand-check "
                  "classes); 'insight_v5' cases are the writer's eval sentences in marker form (eval/convert_insight_cases.py): "
                  "a sentence true only after today's code rewrote it is expected dropped.",
-        "ledgers": ledgers, "cases": out}
+        "ledgers": ledgers, "audit_turns": audit_turns, "cases": out}
 with open(PATH, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=1, ensure_ascii=False)
 print(len(out), sum(1 for c in out if c["expect"] == "dropped"), sum(1 for c in out if c["expect"] == "kept"))
