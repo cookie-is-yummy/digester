@@ -143,6 +143,52 @@ def _collections(lib):
     return out
 
 
+def displays(lib):
+    """{creator: display name} of the Instagram accounts whose export gives a name of their own (toolfix 7: a row
+    named only by its handle, which an answer never prints). A display name that is another creator's name, or
+    another account's display name too, is not used: the handle stays the row's name."""
+    if "displays" in lib._memo:
+        return lib._memo["displays"]
+    seen = {}
+    for it in lib.view.items.values():
+        d = getattr(it, "display", None)
+        if d and it.creator and it.creator.startswith("@"):
+            seen.setdefault(it.creator, d)
+    taken = {Hm._squash(c) for c in lib.idx.creators}
+    counts = {}
+    for d in seen.values():
+        counts[Hm._squash(d)] = counts.get(Hm._squash(d), 0) + 1
+    out = {c: d for c, d in seen.items() if Hm._squash(d) not in taken and counts[Hm._squash(d)] == 1}
+    lib._memo["displays"] = out
+    return out
+
+
+def topic_ref(lib):
+    """The ref of the topic the turn's own message unlocked (toolfix 2), else None."""
+    return f"topic:{lib.unlock}" if lib.unlock else None
+
+
+def words_count(lib, name):
+    """Toolfix 6 (a no-match had no cell, so "nothing called X in your history" could not be checked): (the words
+    searched, how many of their items, opened, liked or saved, ever, hold them in their own text), or None for a name
+    of a sensitive topic their message did not unlock (never a count of private titles) and for a typed ref."""
+    import numpy as np
+    raw = " ".join(str(name or "").split())
+    if not raw or len(raw) > 80 or re.match(r"^(?:area|theme|channel|collection|words|topic):", raw):
+        return None
+    from .. import outside as O
+    topic = O.sensitive_topic([raw])
+    if topic and topic != lib.unlock:
+        return None
+    t = fold(raw)
+    words = " ".join(_content_words(t)) or t
+    have = np.zeros(len(lib.idx.ids), bool)
+    have[np.unique(lib.idx.it)] = True
+    n = sum(1 for k, i in enumerate(lib.idx.ids) if have[k] and not lib.hidden[k]
+            and Hm.holds(lib.view.items[i].caption or "", words))
+    return words, int(n)
+
+
 def area_ref(shown):
     return "area:" + F.slug(shown)
 
@@ -163,7 +209,8 @@ def _label(lib, ref):
     if form == "theme":
         return next((nm for t, nm, _w in _themes(lib) if str(t) == val), val)
     if form == "channel":
-        return next((c for c in lib.idx.creators if F.channel_key(c) == val), val)
+        c = next((c for c in lib.idx.creators if F.channel_key(c) == val), val)
+        return displays(lib).get(c, c)
     if form == "collection":
         return next((c for c in _collections(lib).values() if F.slug(c) == val), val)
     return val
@@ -211,6 +258,8 @@ def valid_ref(lib, ref):
         return ref if any(F.slug(c) == val for c in _collections(lib).values()) else None
     if form == "words":
         return ref if 2 <= len(val.strip()) <= 60 else None
+    if form == "topic":
+        return ref if ref == topic_ref(lib) else None
     return None
 
 
@@ -279,14 +328,23 @@ def resolve_one(lib, name, kinds=()):
         # resolves only when their own message unlocked that topic; no options, no count
         return out
     # a typed ref ("area:gaming", "theme:3") is checked, never trusted
-    if re.match(r"^(?:area|theme|channel|collection|words):", raw):
+    if re.match(r"^(?:area|theme|channel|collection|words|topic):", raw):
         ref = valid_ref(lib, raw)
-        if ref and ref.split(":", 1)[0] in kinds:
+        form = (ref or "").split(":", 1)[0]
+        if ref and (form in kinds or (form == "topic" and kinds & {"area", "theme"})):
             out.update(status="ok", matches=[_match(lib, ref, "ref")])
-        else:
+        elif not raw.startswith("topic:"):
             out["options"] = _options(lib, raw.split(":", 1)[1])
         return out
     t = fold(raw)
+    if topic and topic == lib.unlock and kinds & {"area", "theme"}:
+        # toolfix 2 (held-out I02.0: "dating advice" was no_match on a turn that unlocked it, so the model said there
+        # was no such theme while 50 of 58 videos were of it): a name in the topic their message unlocked is that
+        # topic (its theme has no name in the build), unless it is a channel's own name
+        ch = Hm.channel_of(lib.view, raw)
+        if not (ch and "channel" in kinds and not _channels(lib).get(ch, True)):
+            out.update(status="ok", matches=[_match(lib, topic_ref(lib), "private topic")])
+            return out
     # 1. their own words: a vocabulary of step 3 and later (empty in the first version)
     # 2. an area word
     areas = _area_words(lib)
@@ -308,6 +366,8 @@ def resolve_one(lib, name, kinds=()):
     # 4. a channel's name
     if "channel" in kinds:
         ch = Hm.channel_of(lib.view, raw)
+        if not ch:   # toolfix 7: an Instagram account by its display name
+            ch = next((c for c, d in displays(lib).items() if Hm._squash(d) == Hm._squash(raw)), None)
         if ch and not _channels(lib).get(ch, True):
             out.update(status="ok", matches=[_match(lib, "channel:" + F.channel_key(ch), "channel name")])
             return out

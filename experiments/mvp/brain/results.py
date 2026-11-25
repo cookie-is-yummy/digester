@@ -127,10 +127,12 @@ def size(o):
     return len(json.dumps(o, ensure_ascii=False, default=str))
 
 
-def cut_to_size(sheet, chars=RESULT_CHARS, keep=None):
+def cut_to_size(sheet, chars=RESULT_CHARS, keep=None, newest=False):
     """Cut until the sheet is about 1,500 tokens: first the lists inside rows (a theme's channels, an area's themes),
     then the other rankings (longest first), the ranking asked for (`keep`) last. True when anything was cut. Rows
-    are cut from the end, so what is left is the top of each list, its refs unchanged."""
+    are cut from the end, so what is left is the top of each list, its refs unchanged. `newest` (toolfix 9: a month
+    timeline of all history kept January 2021 to December 2022 and lost October 2026): the list asked for is in time
+    order, so it is cut from its start, and its rows' refs are made again (a ref is the row's own path)."""
     cut = False
     for inner_max in (2, 1, 0):
         if size(sheet) <= chars:
@@ -150,15 +152,21 @@ def cut_to_size(sheet, chars=RESULT_CHARS, keep=None):
         if not lists:
             break
         _n, k = max(lists)
-        sheet[k] = sheet[k][:-1]
+        if newest and k == keep:
+            sheet[k] = sheet[k][1:]
+            head = str((sheet[k][0] or {}).get("ref", "")).split(".", 1)[0] if sheet[k] else ""
+            if head:
+                _refs({k: sheet[k]}, head)
+        else:
+            sheet[k] = sheet[k][:-1]
         cut = True
     return cut
 
 
-def envelope(rid, tool, meta, sheet, cost_usd=0.0, took_ms=0, keep=None):
+def envelope(rid, tool, meta, sheet, cost_usd=0.0, took_ms=0, keep=None, newest=False):
     meta = dict(meta)
     if sheet is not None:
-        meta["truncated"] = bool(meta.get("truncated")) or cut_to_size(sheet, keep=keep)
+        meta["truncated"] = bool(meta.get("truncated")) or cut_to_size(sheet, keep=keep, newest=newest)
         meta["third_party_text"] = holds_third_party(sheet)
     return {"rid": rid, "tool": tool, "meta": meta, "sheet": sheet, "cost_usd": round(float(cost_usd or 0.0), 6),
             "took_ms": int(took_ms)}

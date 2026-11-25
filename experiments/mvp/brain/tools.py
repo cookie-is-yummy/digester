@@ -216,9 +216,26 @@ def _query(turn, scope, kind, window, resolved, subject_ref=None, **extra):
 def _unresolved(turn, tool, r):
     """A counting tool given a name that is ambiguous or matches nothing: no rows, only the options."""
     rid = turn.next_rid()
-    return {"rid": rid, "tool": tool, "error": r["status"], "name": r["name"], "options": r["options"],
-            "meta": {"complete": False, "notes": ["No numbers for a name that did not resolve: ask them which one, "
-                                                  "or use one of the options."]}}
+    out = {"rid": rid, "tool": tool, "error": r["status"], "name": r["name"], "options": r["options"],
+           "meta": {"complete": False, "notes": ["No numbers for a name that did not resolve: ask them which one, "
+                                                 "or use one of the options."]}}
+    out.update(_no_match_cell(turn, r))
+    return out
+
+
+NO_MATCH_NOTE = ("A name with no match carries `searched` (the words looked for) and `items_with_words`: how many of "
+                 "their items (opened, liked or saved, ever) hold those words in their own text.")
+
+
+def _no_match_cell(turn, r):
+    """Toolfix 6 (a no-match had no cell, so "nothing called knitting in your history" could not be checked): the
+    words searched and how many of their items hold them (names.words_count); nothing for a private name."""
+    if r.get("status") != "no_match":
+        return {}
+    got = N.words_count(turn.lib, r.get("name"))
+    if got is None:
+        return {}
+    return {"searched": R.neutral(got[0]), "items_with_words": got[1]}
 
 
 def _filters_said(turn, scope, resolved):
@@ -323,6 +340,58 @@ def _no_previous(sheet):
     return sheet
 
 
+REELS_NOTE = ("`shorts` counts YouTube Shorts; `reels` counts Instagram reels and videos. The length filter 'short' "
+              "takes both.")
+
+
+def _reels_cells(raw, sheet, meta):
+    """Toolfix 4 (totals.shorts left out Instagram reels while the length filter counted them as short): facts'
+    count of the reels beside the Shorts, in `totals` and `previous`."""
+    for k in ("totals", "previous"):
+        if isinstance(sheet.get(k), dict) and isinstance((raw.get(k) or {}).get("reels"), int):
+            sheet[k]["reels"] = raw[k]["reels"]
+    if any(isinstance(sheet.get(k), dict) and sheet[k].get("reels") for k in ("totals", "previous")):
+        meta.setdefault("notes", []).append(REELS_NOTE)
+
+
+def _channel_names(turn, sheet):
+    """Toolfix 7 (an Instagram channel was named only by its handle, which an answer never prints): every channel row
+    keeps the handle as its own field (`handle`) and is named by the account's display name when the export has one
+    (names.displays); a top-level channel row says its platform. Item rows likewise (`channel`, `handle`)."""
+    lib = turn.lib
+    disp = N.displays(lib)
+    plat = {}
+    for it in lib.view.items.values():
+        if it.creator:
+            plat.setdefault(it.creator, it.platform)
+
+    def fix(row, name_key):
+        nm = row.get(name_key)
+        if not isinstance(nm, str) or plat.get(nm) is None:
+            return
+        if nm.startswith("@") and plat[nm] == "instagram":
+            row["handle"] = nm[1:]
+            if disp.get(nm):
+                row[name_key] = R.neutral(disp[nm], R.NAME_MAX)
+
+    def walk(o, key=None, depth=0):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                walk(v, k, depth + 1)
+        elif isinstance(o, list):
+            for row in o:
+                if isinstance(row, dict):
+                    if key == "channels":
+                        nm = row.get("name")
+                        if depth == 1 and isinstance(nm, str) and plat.get(nm):
+                            row["platform"] = plat[nm]
+                        fix(row, "name")
+                    elif key == "items" and "item_id" in row:
+                        fix(row, "channel")
+                walk(row, None, depth + 1)
+    walk(sheet)
+
+
 def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=None, how="opened"):
     if window is not None:
         turn.windows[rid] = window
@@ -330,7 +399,21 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
         for n in R.honest(sheet, how):
             if n not in meta.setdefault("notes", []):
                 meta["notes"].append(n)
-    env = R.envelope(rid, tool, meta, sheet, cost, (time.monotonic() - t0) * 1000, keep=keep)
+        _reels_cells(raw, sheet, meta)
+    if isinstance(sheet, dict):
+        _channel_names(turn, sheet)
+    whole = (meta.get("rows_of") or {}).get(keep) if keep else None
+    env = R.envelope(rid, tool, meta, sheet, cost, (time.monotonic() - t0) * 1000, keep=keep,
+                     newest=keep == "periods")
+    shown_n = len((sheet or {}).get(keep) or []) if keep else 0
+    if keep == "periods" and isinstance(whole, int) and shown_n < whole:
+        # toolfix 9 (a month timeline of all history was cut to its first 24 months while complete said true): the
+        # list asked for lost rows (its oldest ones), so the result is not complete, and a note says what it holds
+        env["meta"]["complete"] = False
+        ps = sheet[keep]
+        env["meta"]["notes"].append(f"Only the latest {shown_n} of {whole} periods fit in this result "
+                                    f"({ps[0].get('label')} to {ps[-1].get('label')}); ask for a shorter window "
+                                    "for the earlier ones.")
     turn.results[rid] = env
     return env
 
@@ -341,13 +424,15 @@ def run_find(turn, a: FindArgs):
     rows = []
     for nm in a.names:
         r = N.resolve_one(turn.lib, nm, a.kinds)
-        rows.append({"name": R.neutral(r["name"]), "status": r["status"], "matches": R.clean(r["matches"]),
-                     "options": R.clean(r["options"]), "also": R.clean(r["also"])})
+        rows.append(dict({"name": R.neutral(r["name"]), "status": r["status"], "matches": R.clean(r["matches"]),
+                          "options": R.clean(r["options"]), "also": R.clean(r["also"])}, **_no_match_cell(turn, r)))
     rid = turn.next_rid()
     # each name's row gets its path; a match's or an option's `ref` is the library ref to pass to the other tools
     sheet = {"names": [dict(row, row=f"{rid}.names[{n}]") for n, row in enumerate(rows)]}
     meta = {"complete": True, "notes": ["items_all_time counts what you opened, liked or saved, ever; options carry "
                                         "no numbers."]}
+    if any("items_with_words" in r for r in rows):
+        meta["notes"].append(NO_MATCH_NOTE)
     return _finish(turn, "find", rid, None, sheet, meta, t0, keep="names")
 
 
@@ -385,10 +470,13 @@ def run_timeline(turn, a: TimelineArgs):
         if isinstance(p, dict) and isinstance(p.get("items"), int):
             p["sparse"] = p["items"] < F.SPARSE_MIN
     rid = turn.next_rid()
-    sheet = R.present(raw, rid)
+    # toolfix 9: every period (insight.shown keeps its first 24); `rows_of.periods` says how many there are
+    n_periods = len(raw.get("periods") or [])
+    sheet = R.present(raw, rid, limits={"periods": n_periods} if n_periods else None)
     extra = [f"A period with fewer than {F.SPARSE_MIN} items is marked sparse."]
-    return _finish(turn, "timeline", rid, raw, sheet, _meta(turn, raw, a.scope, resolved, extra_notes=extra), t0, w,
-                   keep="periods", how=a.scope.how)
+    meta = _meta(turn, raw, a.scope, resolved, extra_notes=extra)
+    meta["rows_of"]["periods"] = n_periods
+    return _finish(turn, "timeline", rid, raw, sheet, meta, t0, w, keep="periods", how=a.scope.how)
 
 
 def _year_back(turn, w):
@@ -434,11 +522,13 @@ def run_changes(turn, a: ChangesArgs):
         return _unresolved(turn, "changes", bad)
     raw = _sheet(turn, q)
     rid = turn.next_rid()
-    sheet = R.present(raw, rid)
     keep = "periods" if raw.get("kind") == "changed" else LIST_OF[a.level]
-    return _finish(turn, "changes", rid, raw, sheet,
-                   _meta(turn, raw, a.scope, resolved, by=a.level, extra_notes=notes), t0, w, keep=keep,
-                   how=a.scope.how)
+    n_periods = len(raw.get("periods") or []) if keep == "periods" else 0
+    sheet = R.present(raw, rid, limits={"periods": n_periods} if n_periods else None)   # toolfix 9, as timeline
+    meta = _meta(turn, raw, a.scope, resolved, by=a.level, extra_notes=notes)
+    if keep == "periods":
+        meta["rows_of"]["periods"] = n_periods
+    return _finish(turn, "changes", rid, raw, sheet, meta, t0, w, keep=keep, how=a.scope.how)
 
 
 def run_compare(turn, a: CompareArgs):
@@ -455,10 +545,40 @@ def run_compare(turn, a: CompareArgs):
     raw = _sheet(turn, q)
     rid = turn.next_rid()
     sheet = R.present(raw, rid)
-    return _finish(turn, "compare", rid, raw, sheet,
-                   _meta(turn, raw, a.scope, resolved, by=None if a.by == "none" else a.by,
-                         extra_notes=["Both windows are in this one result: `totals` is the first, `previous` the "
-                                      "second."]), t0, wa, keep=LIST_OF.get(a.by), how=a.scope.how)
+    meta = _meta(turn, raw, a.scope, resolved, by=None if a.by == "none" else a.by,
+                 extra_notes=["Both windows are in this one result: `totals` is the first, `previous` the second."])
+    _compare_days(turn, raw, wb, a.scope, meta)
+    return _finish(turn, "compare", rid, raw, sheet, meta, t0, wa, keep=LIST_OF.get(a.by), how=a.scope.how)
+
+
+def _compare_days(turn, raw, wb, scope, meta):
+    """Toolfix 5 (this autumn, cut where the export ends on 30 October, was set against the whole of last autumn with
+    no word): both windows as counted, with their days (`meta.windows`, `meta.same_days`), and a note when the days
+    differ. The second window is cut where the export ends, as facts counts it."""
+    from datetime import date
+    rec = turn.lib.rec
+    plats = sorted(set(scope.platforms)) or sorted(rec.ends)
+    win = raw.get("window") or {}
+    if not win.get("start") or not win.get("end"):
+        return
+    a0, a1 = date.fromisoformat(win["start"]), date.fromisoformat(win["end"])
+    b0, b1 = Hm.resolve(wb, rec, plats, turn.today)
+    ends = [rec.ends[p] for p in plats if p in rec.ends]
+    if b1 is not None and ends:
+        b1 = min(b1, max(ends))
+    if b0 is None:   # a window with no start ("all") starts where the record does
+        b0 = Hm._record_start(rec, plats, Hm.HistoryQuery(kind="count", how=HOW[scope.how]))
+    if b0 is None or b1 is None:
+        return
+    da, db = (a1 - a0).days + 1, (b1 - b0).days + 1
+    meta["windows"] = {"a": {"start": a0.isoformat(), "end": a1.isoformat(), "days": da},
+                       "b": {"start": b0.isoformat(), "end": b1.isoformat(), "days": db}}
+    meta["same_days"] = da == db
+    if da != db:
+        meta["notes"].append(f"The two windows are not the same length: the first has {da} days "
+                             f"({Hm.day_words(a0)} to {Hm.day_words(a1)}), the second {db} days "
+                             f"({Hm.day_words(b0)} to {Hm.day_words(b1)}). Say so beside any count set against the "
+                             "other, or compare the same days.")
 
 
 def run_first_last(turn, a: FirstLastArgs):
@@ -533,7 +653,9 @@ def run_items(turn, a: ItemsArgs):
     rows = raw.get("items") or []
     if day:
         sheet = R.present(raw, rid)
-        rows = rows[a.offset:a.offset + a.limit]
+        # toolfix 3 (a day said order "newest" and listed its items oldest first): the day's items in the order asked,
+        # then the page
+        rows = _day_order(turn, raw, rows, a.order)[a.offset:a.offset + a.limit]
     else:
         if kind == "first":
             rows = rows[a.offset:a.offset + a.limit]
@@ -543,6 +665,24 @@ def run_items(turn, a: ItemsArgs):
     meta = _meta(turn, raw, a.scope, resolved)
     meta["order"] = a.order
     return _finish(turn, "items", rid, raw, sheet, meta, t0, w, keep="items", how=a.scope.how)
+
+
+def _day_order(turn, raw, rows, order):
+    """A day's item rows (facts gives them in time order, oldest first) in the order asked: newest first, oldest
+    first, or the most opened that day first (a tie keeps time order)."""
+    rows = list(rows)
+    if order == "newest":
+        return rows[::-1]
+    if order == "most_opened":
+        from datetime import date
+        d = (raw.get("window") or {}).get("start")
+        day = date.fromisoformat(d) if d else None
+
+        def n(r):
+            evs = turn.lib.rec.events.get(r.get("id"), [])
+            return sum(1 for e, k in evs if k in ("watch", "view") and (day is None or e == day))
+        return sorted(rows, key=lambda r: -n(r))
+    return rows
 
 
 def _fit(score):
@@ -604,10 +744,15 @@ def run_search(turn, a: SearchArgs):
     sheet = {"kind": "search", "query": R.neutral(a.query), "how": a.how, "items": rows}
     meta = {"window_said": None if w is None else _window_said(turn, w), "base": BASE[a.how], "filters_said": None,
             "resolved": {}, "order": "fit", "complete": False,
-            "hidden": {"sensitive": 0, "friends": int(getattr(turn.lib.view, "friends", 0) or 0),
-                       "rank_hidden_above": False},
+            "hidden": {"sensitive": 0, "friends": _friends(turn, a.how, start, end), "rank_hidden_above": False},
             "notes": ["Ranked by meaning; `fit` says how close each one is. Not a count of everything on the topic."]}
     return _finish(turn, "search", rid, None, sheet, meta, t0, w, got.get("cost_usd", 0.0), keep="items")
+
+
+def _friends(turn, how, start, end, q=None):
+    """Toolfix 8: the friends' posts left out of this result's window and base (facts.friends_in)."""
+    return F.friends_in(turn.lib.view, turn.tz, Hm.HOW_KINDS[HOW[how]], sorted(turn.lib.rec.ends) or
+                        ["youtube", "instagram"], start and start.toordinal(), end and end.toordinal(), q)
 
 
 def _not_after_end(turn, w, why):
@@ -662,7 +807,7 @@ def run_learned(turn, a: LearnedArgs):
     sheet = {"kind": "learned", "topic": R.neutral(a.topic), "points": points}
     meta = {"window_said": None, "base": BASE[a.scope.how], "filters_said": _filters_said(turn, a.scope, resolved),
             "resolved": resolved, "order": None, "complete": False,
-            "hidden": {"sensitive": 0, "friends": int(getattr(turn.lib.view, "friends", 0) or 0),
+            "hidden": {"sensitive": 0, "friends": _friends(turn, a.scope.how, None, None, q),
                        "rank_hidden_above": False},
             "notes": ["Each point was checked against the text of its sources."]}
     return _finish(turn, "learned", rid, None, sheet, meta, t0, None, got.get("cost_usd", 0.0), keep="points")

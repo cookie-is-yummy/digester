@@ -292,6 +292,11 @@ def ref_mask(view, idx, facts, ref):
         return np.array([any(slug(c) == val for c in (view.items[i].collections or [])) for i in idx.ids], dtype=bool)
     if form == "words":
         return np.array([bool(val) and Hm.holds(view.items[i].caption or "", val) for i in idx.ids], dtype=bool)
+    if form == "topic":
+        # the brain's tools (toolfix 2: find gave no match for a topic the turn had unlocked): the items of one
+        # sensitive topic (sensitive_items' topic of each item); the tools accept this form only for the turn's unlock
+        topics = sensitive_items(view, idx, facts, None)[1]
+        return np.array([bool(val) and t == val for t in topics], dtype=bool)
     return np.zeros(n, bool)
 
 
@@ -356,6 +361,118 @@ def sensitive_items(view, idx, facts, unlock=None):
     if unlock:
         hid = hid & np.array([t != unlock for t in topics], dtype=bool)
     return hid, topics
+
+
+# ---------- the brain's read tools, after the thin live slice (toolfix 1, 4, 8): used only when sheet() is called with
+# hide_sensitive (the brain's tools); today's sheets are unchanged
+def _reel_mask(view, idx, facts):
+    """Per item: an Instagram reel or video post (scope_mask's own test for `length == "short"`), memoised."""
+    import numpy as np
+    memo = facts.__dict__.setdefault("_reel", {})
+    if "all" not in memo:
+        memo["all"] = np.array([idx.platform[k] == 1 and view.items[i].media in ("reel", "video")
+                                for k, i in enumerate(idx.ids)], dtype=bool)
+    return memo["all"]
+
+
+def _reels(view, idx, facts, items):
+    """How many of `items` are Instagram reels or videos: `totals.shorts` counts YouTube Shorts only, while the
+    length filter "short" takes both (the attack's area_oct_nogaming: shorts 0 with 4 reels in it)."""
+    return int(_reel_mask(view, idx, facts)[items].sum()) if len(items) else 0
+
+
+def friends_in(view, tz, kinds, plats, so, eo, q=None):
+    """How many friends' posts (left out of every count, rule 5) the result's window, base, platforms and filters would
+    have held: an event of the base's kinds on a day of the window (the person's time zone), on that weekday when one is
+    asked, a reel or video when only the short ones are asked, none when only the long ones are (a friend's post is
+    Instagram's). A friend's post is never placed in a theme, an area, a channel or a collection, so under an `only`
+    scope none is counted; an `exclude` leaves them in. Reads view.friend_events (libview); 0 when it has none."""
+    evs = getattr(view, "friend_events", None) or []
+    if not evs or (q is not None and (getattr(q, "only_refs", None) or getattr(q, "length", "any") == "long")):
+        return 0
+    zone = ZoneInfo(tz)
+    short = q is not None and getattr(q, "length", "any") == "short"
+    wd = getattr(q, "weekday", None) if q is not None else None
+    hit = set()
+    for fid, kind, at, platform, media in evs:
+        if kind not in kinds or platform not in plats or (short and media not in ("reel", "video")):
+            continue
+        try:
+            d = datetime.fromisoformat(at)
+        except (TypeError, ValueError):
+            continue
+        d = d.astimezone(zone) if d.tzinfo else d.replace(tzinfo=zone)
+        o = d.toordinal()
+        if (so is not None and o < so) or (eo is not None and o > eo) or (wd is not None and d.weekday() != wd):
+            continue
+        hit.add(fid)
+    return len(hit)
+
+
+class _Over:
+    """A stand-in over an object with some attributes replaced (the unlocked topic's rows are built by the same row
+    builders as every other row, over arrays that hold only the topic)."""
+
+    def __init__(self, base, **over):
+        self.__dict__.update(over)
+        self.__dict__["_base"] = base
+
+    def __getattr__(self, k):
+        return getattr(self.__dict__["_base"], k)
+
+
+def _insert_ranked(rows, row, q, cap):
+    """`rows` with `row` put where its count ranks it (after the rows it ties with), cut to `cap` rows when the list
+    is a capped ranking; the list is new (the caller's stays as it was)."""
+    least = getattr(q, "order", "most") == "least" if q is not None else False
+    out = list(rows)
+    at = len(out)
+    for k, r in enumerate(out):
+        if (row["items"] < r["items"]) if least else (row["items"] > r["items"]):
+            at = k
+            break
+    out.insert(at, row)
+    if len(out) > cap:
+        out = out[:cap]
+    return out
+
+
+UNLOCKED_THEME_ID = 10 ** 6   # the unlocked topic's theme row: an id no build gives a theme
+
+
+def _unlocked_rows(out, sc, prev, view, idx, facts, th, unlock, q):
+    """Toolfix 1 (held-out I02.0: 2024 with dating unlocked counted 58 videos, Heart Notes 50 of them, and "the top
+    theme was Home cooking with 8"): a sensitive theme keeps no name nor category in its build, so the items of a
+    topic their message unlocked were in the totals and the channel rows but in no theme row and no area row. Here
+    they are: one theme row (the topic's items no named theme row holds) and one area row (the topic's items no area
+    holds), both named by code's own topic word, built by the same row builders, ranked where their counts put them,
+    and marked `private: true`. A turn with no unlock never comes here."""
+    import numpy as np
+    if th is None or not len(sc.items):
+        return
+    topics = sensitive_items(view, idx, facts, None)[1]
+    of = np.array([t == unlock for t in topics], dtype=bool)
+    n_cap = getattr(q, "top", None)
+    if (of & (facts.theme < 0))[sc.items].any():
+        pid = UNLOCKED_THEME_ID
+        theme = np.where(of & (facts.theme < 0), pid, -1).astype(np.int32)
+        th_ = _Over(th, themes={pid: {"field": None, "mixed": False}}, fields={},
+                    shown=lambda t: unlock if t == pid else th.shown(t), field_name=lambda f: None)
+        rows_, _n = _theme_rows(view, sc, prev, _Over(facts, theme=theme), th_, q=q)
+        if rows_:
+            row = dict(rows_[0], area=unlock, private=True, theme_id=None)
+            out["themes"] = _insert_ranked(out.get("themes") or [], row, q, n_cap or THEMES_MAX)
+            out["unthemed"] = int(out.get("unthemed", 0)) - int(row["items"])
+            if "ranked" in out:
+                out["ranked"]["themes"] += 1
+    if (of & (facts.area < 0))[sc.items].any():
+        area = np.where(of & (facts.area < 0), 0, -1).astype(np.int32)
+        rows_ = _area_rows(sc, prev, _Over(facts, area=area, area_names=[unlock]), out.get("themes") or [], q=q)
+        if rows_:
+            row = dict(rows_[0], private=True)
+            out["areas"] = _insert_ranked(out.get("areas") or [], row, q, n_cap or AREAS_MAX)
+            if "ranked" in out:
+                out["ranked"]["areas"] += 1
 
 
 def _hidden_counts(idx, facts, hev, so, eo, rows, q):
@@ -942,6 +1059,10 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
     out["totals"] = sc.totals()
     if prev is not None:
         out["previous"] = dict(prev.totals(), words=prev_words, clipped=prev_clipped)
+    if hide_sensitive:   # the brain's tools (toolfix 4): the Instagram reels and videos, the length filter's other half
+        out["totals"]["reels"] = _reels(view, idx, facts, sc.items)
+        if prev is not None:
+            out["previous"]["reels"] = _reels(view, idx, facts, prev.items)
     rows, unthemed = _theme_rows(view, sc, prev, facts, th, q=q)
     out["themes"] = rows
     out["unthemed"] = int(unthemed)
@@ -955,12 +1076,15 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
         out["ranked"] = {"themes": int(len(np.unique(facts.theme[sc.items][facts.theme[sc.items] >= 0]))),
                          "channels": int(len(np.unique(idx.creator[sc.items][idx.creator[sc.items] >= 0]))),
                          "areas": int(len(np.unique(facts.area[sc.items][facts.area[sc.items] >= 0])))}
+    if hide_sensitive and unlock:
+        _unlocked_rows(out, sc, prev, view, idx, facts, th, unlock, q)
     if hidm is not None:
         hev = base_all & hidm
         for f_ in ev_filters:
             hev = hev & f_
         out["hidden"] = _hidden_counts(idx, facts, hev, so, eo, out, q)
-        out["hidden"]["friends"] = int(getattr(view, "friends", 0) or 0)
+        # toolfix 8 (the count was of the whole library): the friends' posts left out of this window, base and scope
+        out["hidden"]["friends"] = friends_in(view, tz, kinds, plats, so, eo, q)
     if kind == "channels":   # round 12, pass 2 (T11): what the ranking says: the area most of the top 5 are
         top5 = [c for c in out["channels"][:5] if c.get("area")]
         if top5:

@@ -21,7 +21,9 @@ class Item:
     __slots__ = ("id", "platform", "url", "caption", "first_line", "creator", "media", "kinds", "dates", "collections",
                  "watch_count", "video_id", "duration_s", "raw_caption",
                  # ---------- round 10, slice S: the derived caption mark (captionmark.py; None until its file exists)
-                 "caption_mark", "caption_reasons", "caption_fp")
+                 "caption_mark", "caption_reasons", "caption_fp",
+                 # the brain's read tools (toolfix 7): an Instagram account's display name, beside its handle
+                 "display")
 
     def __init__(self, raw):
         pd = raw.get("platform_data") or {}
@@ -33,6 +35,9 @@ class Item:
         handle = (pd.get("owner_handle") or "").strip().lstrip("@")
         name = (pd.get("owner_name") or "").strip()
         self.creator = ("@" + handle if handle and self.platform == "instagram" else (name or handle)) or None
+        # toolfix 7: an Instagram row is named by its handle (`creator`, its key everywhere); the account's own name,
+        # when the export has one, is kept beside it for the brain's channel rows
+        self.display = name if self.platform == "instagram" and handle and name else None
         self.media = pd.get("media_kind")
         self.kinds = set(raw.get("interaction_kinds") or [])
         self.dates = {}  # kind -> latest ISO date of that kind
@@ -67,11 +72,16 @@ class LibraryView:
                                "posts cannot be left out (rule 5); redo the Instagram export with them")
         self.items = {}
         self.friends = 0
+        # toolfix 8: a friend's post is never in the view (rule 5); only its id, platform and media kind are kept, and
+        # its interactions' kinds and times below, so a result can say how many it left out in its own window
+        friend = {}
+        self.friend_events = []   # (friend post id, kind, ISO time, platform, media kind)
         with open(LIB.p(self.lib, "corpus", "items.jsonl"), encoding="utf-8") as f:
             for line in f:
                 raw = json.loads(line)
                 if LIB.is_friend(raw):
                     self.friends += 1
+                    friend[raw.get("id")] = (raw.get("platform"), (raw.get("platform_data") or {}).get("media_kind"))
                     continue
                 self.items[raw["id"]] = Item(raw)
         path = LIB.p(self.lib, "corpus", "interactions.jsonl")
@@ -80,6 +90,10 @@ class LibraryView:
                 for line in f:
                     r = json.loads(line)
                     it = self.items.get(r.get("item_id"))
+                    if it is None and r.get("item_id") in friend and r.get("at"):
+                        pf = friend[r["item_id"]]
+                        self.friend_events.append((r["item_id"], r.get("kind"), r["at"], pf[0], pf[1]))
+                        continue
                     if it is None or not r.get("at"):
                         continue
                     k = r.get("kind")
