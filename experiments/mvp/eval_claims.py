@@ -252,7 +252,8 @@ class Library:
             self.short[i] = short_rule(ln, it["cap"], pub)
         # ---- themes (the derived rows) and areas
         self.theme_of, self.area_of, self.theme_names = {}, {}, {}
-        self.theme_by_id, self.sensitive_items, self.hidden_items = {}, set(), set()
+        self.theme_by_id, self.sensitive_items, self.hidden_items, self.field_of = {}, set(), set(), {}
+        self.field_id_of, self.field_ids = {}, {}
         tdir = themes_dir or self._themes_dir(derived)
         if tdir:
             b = json.load(open(os.path.join(tdir, "build.json"), encoding="utf-8"))
@@ -284,6 +285,13 @@ class Library:
                         self.sensitive_items.add(r["item_id"])
                     if r.get("item_id") in self.items and t in canon_name:
                         nm = canon_name[t]
+                        fid = themes[t].get("field")
+                        fname = (fields.get(fid) or {}).get("name")
+                        if fname:
+                            self.field_of[r["item_id"]] = fname
+                            self.field_id_of[r["item_id"]] = fid
+                            if fid not in self.field_ids.setdefault(fname, []):
+                                self.field_ids[fname].append(fid)
                         self.theme_of[r["item_id"]] = nm.lower()
                         self.theme_names[nm.lower()] = canon_name[first[nm.lower()]]
                         if area.get(t):
@@ -316,7 +324,8 @@ class Library:
             if it is None or (words and any(holds(it["cap"], w) for w in words)):
                 continue
             self.hidden_items.add(i)
-            for d in (self.items, self.opens, self.open_at, self.open_days, self.acts, self.theme_of, self.area_of):
+            for d in (self.items, self.opens, self.open_at, self.open_days, self.acts, self.theme_of, self.area_of,
+                      self.field_of, self.field_id_of):
                 d.pop(i, None)
             self.saved.discard(i)
 
@@ -471,6 +480,14 @@ class Library:
 
     def first_watch(self, creator):
         ds = [self.open_days[i][0] for i in self.open_days if self.items[i]["c"] == creator]
+        return min(ds) if ds else None
+
+    def first_of(self, creator, how=None):
+        """A creator's first event of a kind (`how` of the brain's scope; opened when None)."""
+        if how in (None, "opened", "watched"):
+            return self.first_watch(creator)
+        _ev, days = self.how_events(how)
+        ds = [days[i][0] for i in days if self.items[i]["c"] == creator]
         return min(ds) if ds else None
 
 
@@ -908,8 +925,13 @@ def audit_sheet(ctx, F):
                 if "previous_items" in r:
                     chk(base + ".previous_items", r["previous_items"], pc, "count")
                 if isinstance(r.get("change_vs_previous"), (int, float)):
-                    chk(base + ".change_vs_previous", r["change_vs_previous"],
-                        round((round(c / n, 3) if n else 0) - ps, 3), "change", 0.0025)
+                    rec = round((round(c / n, 3) if n else 0) - ps, 3)
+                    if key == "themes" and getattr(ctx, "theme_change_pts", False):
+                        # the brain's results (SPEC 2.3): a theme's change is in percentage points
+                        chk(base + ".change_vs_previous", r["change_vs_previous"], round(100 * rec, 1), "change",
+                            0.25)
+                    else:
+                        chk(base + ".change_vs_previous", r["change_vs_previous"], rec, "change", 0.0025)
             for j, ch in enumerate(r.get("channels") or []):
                 if isinstance(ch, dict) and ch.get("name") and "items" in ch:
                     chk(f"{base}.channels[{j}].items", ch["items"],
@@ -924,8 +946,8 @@ def audit_sheet(ctx, F):
             if isinstance(a_, dict) and isinstance(b_, dict) and a_.get("name") and b_.get("name"):
                 na = a_["name"].lower() if kind == "theme" else a_["name"]
                 nb = b_["name"].lower() if kind == "theme" else b_["name"]
-                F.add("sheet", "rank", rk.get(na, 0) >= rk.get(nb, 0), rk.get(na, 0), rk.get(nb, 0),
-                      where=f"{key}[{k}]>={key}[{k + 1}]", severity=1.0)
+                F.add("sheet", "rank", _in_order(ctx, rk.get(na, 0), rk.get(nb, 0)), rk.get(na, 0), rk.get(nb, 0),
+                      where=f"{key}[{k}]{_ord_sign(ctx)}{key}[{k + 1}]", severity=1.0)
     # channels
     crk = _rank(lib, ids, "channel")
     for k, r in enumerate(sh.get("channels") or []):
@@ -950,13 +972,13 @@ def audit_sheet(ctx, F):
             chk(base + ".previous_items", r["previous_items"], sum(1 for i in pids if lib.items[i]["c"] == r["name"]),
                 "count")
         if r.get("first_watched"):
-            fw = lib.first_watch(r["name"])
+            fw = lib.first_of(r["name"], (getattr(ctx, "f", None) or {}).get("how"))
             chk(base + ".first_watched", date.fromisoformat(r["first_watched"]).toordinal(), fw, "date")
     chs = [r for r in sh.get("channels") or [] if isinstance(r, dict) and r.get("name")]
     for k in range(len(chs) - 1):
-        F.add("sheet", "rank", crk.get(chs[k]["name"], 0) >= crk.get(chs[k + 1]["name"], 0),
-              crk.get(chs[k]["name"], 0), crk.get(chs[k + 1]["name"], 0), where=f"channels[{k}]>=channels[{k + 1}]",
-              severity=1.0)
+        F.add("sheet", "rank", _in_order(ctx, crk.get(chs[k]["name"], 0), crk.get(chs[k + 1]["name"], 0)),
+              crk.get(chs[k]["name"], 0), crk.get(chs[k + 1]["name"], 0),
+              where=f"channels[{k}]{_ord_sign(ctx)}channels[{k + 1}]", severity=1.0)
     # when
     wh = sh.get("when") or {}
     evs = [e for ev in S.values() for e in ev]
@@ -1020,6 +1042,15 @@ def audit_sheet(ctx, F):
             # and never opened on both platforms): saved and never opened is counted on every platform
             nn = sum(1 for i in lib.saved if i not in lib.opens and lib.theme_of.get(i) == r["theme"].lower())
             chk(f"library.saved_not_opened[{k}].n", r["n"], nn, "count")
+
+
+def _in_order(ctx, a, b):
+    """A list's order: most first (as before), or least first for a brain result ordered by "least"."""
+    return a <= b if getattr(ctx, "order", "most") == "least" else a >= b
+
+
+def _ord_sign(ctx):
+    return "<=" if getattr(ctx, "order", "most") == "least" else ">="
 
 
 def rk_t(lib, ids, name):
@@ -2662,6 +2693,696 @@ def audit_folder(folder, library=None, derived=None, tz=None, today=None, json_o
             print(w["q"], "|", w["shape"], "|", w["audit"], w["kind"], "| said", w["said"], "| recount",
                   w["recount"], "|", w["where"], w["note"])
     return summ, rows
+
+
+# ============================================================================ the brain's results (SPEC 4.8)
+# audit_results: every number of one tool result (the envelope of design/brain_v1/SPEC.md 2.3) recounted from the raw
+# rows, in the window the result states, under the scope its call and its meta state, with my own reading of each ref;
+# the window my own reading of the call's words gives set against the stated one ("call window"), and the window my
+# reading of their message gives ("understood_window", reported apart: a question may name no window). audit_ledger:
+# every cell an answer cites, its value, its result's base total and its row's rank, recounted. Nothing here imports
+# the bot: the envelope and the call are plain dicts.
+PRESET_SPEC = {"lately": {"kind": "lately"}, "all": {"kind": "all"}, "this_year": {"kind": "this_year"}}
+_SEASONS = "spring|summer|fall|autumn|winter"
+_MONTHS_RX = "|".join(MONTHS)
+_LATELY_MORE = re.compile(r"\b(?:ultimamente|últimamente|nowadays|at the moment)\b")
+
+
+def _season_spec(name, year):
+    return {"kind": "season", "season": name, "year": year}
+
+
+def read_call_window(words, lib, today, preset=None):
+    """My reading of a tool call's window: its preset, or its words (read_window, plus the forms a call writes that a
+    question rarely does: "this autumn", "last autumn", a bare month, "on 30 october", "yesterday", "last week")."""
+    if preset:
+        if preset in PRESET_SPEC:
+            return dict(PRESET_SPEC[preset])
+        if preset == "last_year":
+            return {"kind": "year", "year": today.year - 1}
+        if preset in ("this_month", "last_month"):
+            y, m = today.year, today.month
+            if preset == "last_month":
+                y, m = (y, m - 1) if m > 1 else (y - 1, 12)
+            return {"kind": "month", "month": m, "year": y}
+        if preset in ("this_week", "last_week"):
+            a = today - timedelta(days=today.weekday())
+            if preset == "last_week":
+                a -= timedelta(days=7)
+            b = min(a + timedelta(days=6), today)
+            return {"kind": "range", "start": a.isoformat(), "end": b.isoformat()}
+        return None
+    t = " " + " ".join((words or "").lower().replace("’", "'").split()) + " "
+    if _LATELY_MORE.search(t):
+        return {"kind": "lately"}
+    m = re.search(r"\b(this|last) (" + _SEASONS + r")\b", t)
+    if m:
+        y = today.year if season_bounds(m.group(2), today.year)[0] <= today else today.year - 1
+        return _season_spec(m.group(2), y - (1 if m.group(1) == "last" else 0))
+    if re.search(r"\byesterday\b", t):
+        d = today - timedelta(days=1)
+        return {"kind": "range", "start": d.isoformat(), "end": d.isoformat()}
+    if re.search(r"\btoday\b", t):
+        return {"kind": "range", "start": today.isoformat(), "end": today.isoformat()}
+    m = re.search(r"\bon (\d{1,2}) (" + _MONTHS_RX + r")\b", t)
+    if m:
+        return {"kind": "day", "month": MON3[m.group(2)], "day": int(m.group(1))}
+    m = re.search(r"\b(early|mid|late) (" + _MONTHS_RX + r")\b", t)
+    if m:   # my reading: early = days 1 to 10, mid = 11 to 20, late = 21 to the month's end
+        mo = MON3[m.group(2)]
+        y = today.year if mo <= today.month else today.year - 1
+        d0, d1 = {"early": (1, 10), "mid": (11, 20), "late": (21, _month_end(y, mo).day)}[m.group(1)]
+        return {"kind": "range", "start": date(y, mo, d0).isoformat(), "end": date(y, mo, d1).isoformat()}
+    m = re.fullmatch(r" (?:in )?(" + _MONTHS_RX + r") ", t)
+    if m:
+        mo = MON3[m.group(1)]
+        return {"kind": "month", "month": mo, "year": today.year if mo <= today.month else today.year - 1}
+    if re.search(r"\b(?:this|last) week\b", t):
+        return read_call_window(None, lib, today, preset="this_week" if "this week" in t else "last_week")
+    if re.search(r"\blast year\b", t):
+        return {"kind": "year", "year": today.year - 1}
+    return read_window(t, lib, today)
+
+
+def _after_record(a, b, lib):
+    """A window wholly after the record is read over the latest stretch of its length the record holds (DESIGN
+    19.P6, X11, as `resolve` does for a season)."""
+    if a is not None and lib.newest is not None and a > lib.newest:
+        n = b - a + 1
+        return lib.newest - n + 1, lib.newest
+    return a, b
+
+
+def spec_window(spec, lib, today):
+    """(a, b, prev) ordinals of a spec, with a window after the record moved as `_after_record` says; a day after the
+    record is the record's last day."""
+    if spec is None:
+        return None
+    if spec.get("kind") == "day":
+        y = date.fromordinal(lib.newest).year if lib.newest else today.year
+        d = date(y, spec["month"], spec["day"])
+        if d.toordinal() > (lib.newest or d.toordinal()):
+            d = date(y - 1, spec["month"], spec["day"])
+        a = d.toordinal()
+        return a, a, (a - 1, a - 1)
+    if spec.get("kind") == "range":
+        a0, b0 = date.fromisoformat(spec["start"]).toordinal(), date.fromisoformat(spec["end"]).toordinal()
+        a, b = _after_record(a0, b0, lib)
+        if (a, b) != (a0, b0):
+            n = b - a + 1
+            return a, b, (a - n, a - 1)
+    a, b, prev = resolve(spec, lib, today)
+    return a, b, prev
+
+
+def stated_window(sheet):
+    w = (sheet or {}).get("window") or {}
+    try:
+        return date.fromisoformat(w["start"]).toordinal(), date.fromisoformat(w["end"]).toordinal()
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _spec_of_span(a, b, lib, today):
+    """A spec whose `resolve` gives this span, so its span before is my rule's: a year (or its part up to the record's
+    end), a calendar month (cut at the record's end), a season, else a range (the same number of days before)."""
+    da, db = date.fromordinal(a), date.fromordinal(b)
+    newest = lib.newest
+    if da.month == 1 and da.day == 1 and db.year == da.year and (db == date(da.year, 12, 31) or b == newest):
+        return {"kind": "year", "year": da.year}
+    if da.day == 1 and (db.year, db.month) == (da.year, da.month) and (db == _month_end(da.year, da.month)
+                                                                         or b == newest):
+        return {"kind": "month", "month": da.month, "year": da.year}
+    for s, m0 in SEASON_START.items():
+        if da.day == 1 and da.month == m0:
+            sa, sb = season_bounds(s, da.year)
+            if a == sa.toordinal() and (b == sb.toordinal() or b == newest):
+                return _season_spec(s, da.year)
+    return {"kind": "range", "start": da.isoformat(), "end": db.isoformat()}
+
+
+def _year_back(a, b):
+    def back(o):
+        d = date.fromordinal(o)
+        try:
+            return d.replace(year=d.year - 1).toordinal()
+        except ValueError:
+            return d.replace(year=d.year - 1, day=28).toordinal()
+    return back(a), back(b)
+
+
+def _refs_of(names, resolved):
+    out = []
+    for nm in names or []:
+        line = (resolved or {}).get(nm) or ""
+        ref = line.split(" (", 1)[0].strip()
+        out.append(ref or "?:" + nm)
+    return out
+
+
+def brain_filters(call, env):
+    """The filters of a tool call's scope, as my scope() reads them, from the call's arguments and the refs code
+    resolved (meta.resolved): the ref of each name is taken as given (the plan checks the reading of a name); what
+    the ref holds is my own reading."""
+    args = (call or {}).get("args") or {}
+    sc = args.get("scope") or {}
+    meta = (env or {}).get("meta") or {}
+    res = meta.get("resolved") or {}
+    f = {}
+    only = _refs_of(sc.get("only"), res)
+    if (call or {}).get("tool") == "first_last" and args.get("subject"):
+        only = _refs_of([args["subject"]], res)
+    if only:
+        f["only_refs"] = only
+    excl = _refs_of(sc.get("exclude"), res)
+    if excl:
+        f["exclude_refs"] = excl
+    if sc.get("length") == "long":
+        f["without_shorts"] = True
+    elif sc.get("length") == "short":
+        f["short"] = True
+    plats = sorted(set(sc.get("platforms") or []))
+    if len(plats) == 1:
+        f["platform"] = plats[0]
+    if sc.get("weekday") is not None:
+        f["weekday"] = int(sc["weekday"])
+    how = sc.get("how") or (args.get("how") if (call or {}).get("tool") == "search" else None)
+    if how and how != "opened":
+        f["how"] = how
+    return f
+
+
+def _clean(o):
+    """The sheet without the tools' own keys (ref, change_pts) and with every list row a plain dict."""
+    if isinstance(o, dict):
+        return {k: _clean(v) for k, v in o.items() if k not in ("ref", "change_pts", "third_party_text")}
+    if isinstance(o, list):
+        return [_clean(v) for v in o]
+    return o
+
+
+def brain_ctx(lib, env, call, question, today, earlier=None, last_window=None):
+    """(Ctx over the result's stated window and its call's scope, the window rows) for one tool result."""
+    sheet = _clean((env or {}).get("sheet") or {})
+    args = (call or {}).get("args") or {}
+    tool = (call or {}).get("tool") or env.get("tool")
+    rows = []
+    st = stated_window(sheet)
+    win = args.get("a") if tool == "compare" else args.get("window")
+    spec = None
+    if isinstance(win, dict) and not win.get("same_as"):
+        spec = read_call_window(win.get("words"), lib, today, preset=win.get("preset"))
+    mine = spec_window(spec, lib, today) if spec else None
+    if mine and st:
+        a0 = mine[0] if mine[0] is not None else lib.oldest
+        ok = (a0, mine[1]) == st
+        rows.append(("call window", ok, f"{_d(st[0])}..{_d(st[1])}", f"{_d(a0)}..{_d(mine[1])}",
+                     (win.get("words") or win.get("preset") or "")))
+    ans = {"id": env.get("rid") or "r", "text": question or "", "sheet": sheet,
+           "window": _spec_of_span(*st, lib, today) if st else {"kind": "all"}}
+    ctx = Ctx(lib, ans, today)
+    ctx.theme_change_pts = True
+    ctx.order = "least" if ((env or {}).get("meta") or {}).get("order") == "least" else "most"
+    if st:
+        ctx.a, ctx.b = st
+        if mine and (mine[0] if mine[0] is not None else lib.oldest, mine[1]) == st and spec.get("kind") != "all":
+            ctx.prev = mine[2]
+        else:   # my rule's span before the stated window (a year, a month, a season, or as many days before)
+            ctx.prev = resolve(ans["window"], lib, today)[2]
+    f = brain_filters(call, env)
+    ctx.f = f
+    if hasattr(ctx, "prev_f"):
+        del ctx.prev_f
+    if tool == "compare" and isinstance(args.get("b"), dict):
+        bw = args["b"]
+        sb = read_call_window(bw.get("words"), lib, today, preset=bw.get("preset")) if not bw.get("same_as") else None
+        mb = spec_window(sb, lib, today) if sb else None
+        ctx.prev = (mb[0] if mb[0] is not None else lib.oldest, mb[1]) if mb else None
+    elif tool == "changes" and args.get("against") == "same_last_year" and st:
+        ctx.prev = _year_back(*st)
+    if f.get("weekday") is not None and st:
+        ctx.prev = st
+        ctx.prev_f = {k: x for k, x in f.items() if k != "weekday"} | {"weekday_not": f["weekday"]}
+    if ctx.prev and lib.oldest is not None and ctx.prev[1] < lib.oldest:
+        ctx.prev = None
+    ctx._sc = {}
+    return ctx, rows
+
+
+def _item_rows_audit(ctx, F, rows, order=None, which=None):
+    """Item rows (items, a day, first_last): each one theirs to see, in the scope and window; its times opened in the
+    window, channel, platform and length word; the list's order; a first or a last the scope's first or last."""
+    lib = ctx.lib
+    S = ctx.sc("filt")
+    prev = None
+    for k, r in enumerate(rows or []):
+        if not isinstance(r, dict):
+            continue
+        i = r.get("item_id")
+        base = f"items[{k}]"
+        if i not in lib.items:
+            F.add("results", "item theirs to see", False, i, "hidden or unknown", where=base, severity=2.0)
+            continue
+        F.add("results", "item in scope", i in S, i, "in scope" if i in S else "out of scope", where=base,
+              severity=0 if i in S else 2.0)
+        n = sum(1 for o in lib.open_days.get(i, []) if (ctx.a is None or o >= ctx.a) and o <= ctx.b)
+        if "times_opened" in r:
+            F.add("results", "count", r["times_opened"] == n, r["times_opened"], n, where=base + ".times_opened")
+        if "channel" in r:
+            F.add("results", "channel", r["channel"] == lib.items[i]["c"], r["channel"], lib.items[i]["c"],
+                  where=base + ".channel", severity=1.0)
+        if "platform" in r:
+            F.add("results", "platform", r["platform"] == lib.items[i]["p"], r["platform"], lib.items[i]["p"],
+                  where=base + ".platform", severity=1.0)
+        if "length" in r:
+            p, s = lib.items[i]["p"], lib.short.get(i)
+            want = "short" if p == "instagram" or s is True else "long" if s is False else "unknown"
+            F.add("results", "length word", r["length"] == want, r["length"], want, where=base + ".length",
+                  severity=1.0)
+        if r.get("when"):
+            d = date.fromisoformat(str(r["when"])[:10]).toordinal()
+            days = [e[0] for e in S.get(i, [])]
+            F.add("results", "date", d in days, _d(d).isoformat(), ",".join(_d(x).isoformat() for x in days[:3]),
+                  where=base + ".when", severity=1.0)
+        key = r.get("times_opened") if order == "most_opened" else (str(r.get("when") or "") if order in (
+            "newest", "oldest") else None)
+        if prev is not None and key is not None:
+            ok = prev >= key if order in ("most_opened", "newest") else prev <= key
+            F.add("results", "rank", ok, prev, key, where=f"items[{k - 1}]..items[{k}] by {order}", severity=1.0)
+        prev = key if key is not None else prev
+    if which in ("first", "last") and rows and isinstance(rows[0], dict) and rows[0].get("item_id") in lib.items:
+        inst = [(t, i) for i in S for t in lib.open_at.get(i, [])
+                if ctx.a is None or datetime.fromtimestamp(t, lib.zone).date().toordinal() >= ctx.a]
+        if inst:
+            want = min(inst) if which == "first" else max(inst)
+            F.add("results", which, rows[0]["item_id"] == want[1], rows[0]["item_id"], want[1], where="items[0]",
+                  severity=2.0)
+
+
+def _search_audit(lib, F, env, f, a, b):
+    sh = env.get("sheet") or {}
+    kinds = HOW_EVENTS.get(f.get("how") or "opened", OPEN) if sh.get("how") != "saved" else SAVED
+    if sh.get("how") == "any":
+        kinds = HOW_EVENTS["any"]
+    for k, r in enumerate(sh.get("items") or []):
+        i = r.get("item_id")
+        base = f"items[{k}]"
+        if i not in lib.items:
+            F.add("results", "item theirs to see", False, i, "hidden or unknown", where=base, severity=2.0)
+            continue
+        evs = [o for o, _h, _w, kd in lib.acts.get(i, []) if kd in kinds and (a is None or o >= a) and
+               (b is None or o <= b)]
+        F.add("results", "item of the kind searched", bool(evs), i, sh.get("how"), where=base, severity=2.0)
+        if r.get("when") and evs:
+            F.add("results", "date", date.fromisoformat(r["when"][:10]).toordinal() == max(evs), r["when"],
+                  _d(max(evs)).isoformat(), where=base + ".when", severity=1.0)
+        if r.get("channel") is not None:
+            F.add("results", "channel", r["channel"] == lib.items[i]["c"], r["channel"], lib.items[i]["c"],
+                  where=base + ".channel", severity=1.0)
+        if r.get("why_matched"):
+            w = _neutral_cmp(r["why_matched"])
+            F.add("results", "line of its own text", w in _neutral_cmp(lib.items[i]["cap"]), r["why_matched"][:40],
+                  "in the item's text", where=base + ".why_matched", severity=2.0)
+
+
+def _neutral_cmp(s):
+    s = re.sub(r"[\[\]{}()<>‹›]", " ", s or "")
+    return " ".join(s.lower().rstrip("…").split())
+
+
+def _find_audit(lib, F, env):
+    for k, row in enumerate((env.get("sheet") or {}).get("names") or []):
+        for j, m in enumerate(row.get("matches") or []):
+            if "items_all_time" not in m:
+                continue
+            n = sum(1 for i in lib.items if lib.acts.get(i) and lib.in_ref(i, m.get("ref")))
+            F.add("results", "count", m["items_all_time"] == n, m["items_all_time"], n,
+                  where=f"names[{k}].matches[{j}].items_all_time")
+        for j, o in enumerate(row.get("options") or []):
+            F.add("results", "no number on an option", not any(x in o for x in ("items", "items_all_time")),
+                  "", "", where=f"names[{k}].options[{j}]", severity=2.0)
+
+
+def _learned_audit(lib, F, env):
+    for k, p in enumerate((env.get("sheet") or {}).get("points") or []):
+        srcs = [s.get("item_id") for s in p.get("sources") or []]
+        ok = bool(srcs) and all(i in lib.items and i in lib.saved for i in srcs)
+        F.add("results", "point from their own saves", ok, ",".join(map(str, srcs)), "saved and theirs",
+              where=f"points[{k}].sources", severity=2.0)
+        txt = _neutral_cmp(p.get("text"))
+        F.add("results", "point in its source's text", any(txt in _neutral_cmp(lib.items[i]["cap"])
+                                                           for i in srcs if i in lib.items),
+              (p.get("text") or "")[:40], "in a source's text", where=f"points[{k}].text", severity=2.0)
+
+
+def _numbers_of(o, path=""):
+    """Every number leaf of a sheet: [(path, value)] (bools, the window and refs left out)."""
+    out = []
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k in ("ref", "window", "change_pts") or isinstance(v, bool):
+                continue
+            out += _numbers_of(v, f"{path}.{k}" if path else k)
+    elif isinstance(o, list):
+        for n, v in enumerate(o):
+            out += _numbers_of(v, f"{path}[{n}]")
+    elif isinstance(o, (int, float)):
+        out.append((path, o))
+    return out
+
+
+def audit_results(lib, env, call=None, question="", today=None, earlier=None, last_window=None, F=None):
+    """Recount one tool result -> Findings rows (audit "results" for the tools' own fields, "sheet" for the fact
+    sheet's, "window" for the readings of the window). A row of kind "understood_window" sets my reading of their
+    message against the stated window: reported apart, never a number finding."""
+    today = today or date.today()
+    F = F or Findings(env.get("rid") or "r", env.get("tool") or "?")
+    tool = (call or {}).get("tool") or env.get("tool")
+    if env.get("is_error"):
+        return F.rows
+    if "sheet" not in env:   # an unresolved name: options only, never a number
+        F.add("results", "no number for an unresolved name", not _numbers_of(env.get("options") or []), "", "",
+              where="options", severity=2.0)
+        return F.rows
+    sh = env.get("sheet") or {}
+    f = brain_filters(call, env)
+    if tool == "find":
+        _find_audit(lib, F, env)
+        return F.rows
+    if tool == "learned":
+        _learned_audit(lib, F, env)
+        return F.rows
+    if tool == "search":
+        args = (call or {}).get("args") or {}
+        win = args.get("window")
+        mine = None
+        if isinstance(win, dict) and not win.get("same_as"):
+            sp = read_call_window(win.get("words"), lib, today, preset=win.get("preset"))
+            mine = spec_window(sp, lib, today) if sp else None
+        _search_audit(lib, F, env, f, *(mine[:2] if mine else (None, None)))
+        return F.rows
+    ctx, wrows = brain_ctx(lib, env, call, question, today, earlier, last_window)
+    for kind, ok, said, rec, words in wrows:
+        F.add("window", kind, ok, said, rec, where="window", note=words, severity=2.0)
+    if question:
+        q = read_call_window(question, lib, today)
+        st = stated_window(sh)
+        if q and q.get("kind") != "all" and st:
+            mq = spec_window(q, lib, today)
+            a0 = mq[0] if mq[0] is not None else lib.oldest
+            F.add("window", "understood_window", (a0, mq[1]) == st, f"{_d(st[0])}..{_d(st[1])}",
+                  f"{_d(a0)}..{_d(mq[1])}", where="window", note="their message", severity=0)
+    if sh.get("kind") in ("first", "last", "day", "items"):
+        items = sh.get("items")
+        tmp = dict(ctx.sheet)
+        tmp.pop("items", None)
+        ctx.sheet = tmp
+        audit_sheet(ctx, F)
+        _brain_extra(ctx, F, _clean(sh))
+        args = (call or {}).get("args") or {}
+        order = args.get("order") if tool == "items" and sh.get("kind") == "items" else None
+        _item_rows_audit(ctx, F, items, order=order, which=sh.get("kind") if tool == "first_last" else None)
+    else:
+        audit_sheet(ctx, F)
+        _brain_extra(ctx, F, _clean(sh))
+        # the tools' own field: an area's change in points is its change as a fraction, times 100
+        for k, r in enumerate(sh.get("areas") or []):
+            if isinstance(r, dict) and isinstance(r.get("change_pts"), (int, float)) and \
+                    isinstance(r.get("change_vs_previous"), (int, float)):
+                F.add("results", "change in points", abs(r["change_pts"] - 100 * r["change_vs_previous"]) <= 0.051,
+                      r["change_pts"], round(100 * r["change_vs_previous"], 1), where=f"areas[{k}].change_pts")
+    for p in sh.get("periods") or []:
+        pass
+    return F.rows
+
+
+def _brain_extra(ctx, F, sh):
+    """The fields of a brain result's sheet the round-12 sheet audit does not read: the theme fields, the busiest
+    hours' order, the weekend and usual-week shares, the counts of the new and stopped themes and channels, saved and
+    never opened on YouTube, the top channels' area, what a without-Shorts filter left out."""
+    lib = ctx.lib
+    S = ctx.sc("filt")
+    ids = list(S)
+    n = len(ids)
+
+    def chk(path, said, rec, kind, tol=0):
+        if said is None or rec is None or isinstance(said, bool):
+            return
+        F.add("sheet", kind, abs(float(said) - float(rec)) <= tol + 1e-9, said, rec, where=path)
+
+    # a field row is one field of the build (two fields of one shown name are NOT merged, as two themes of one name
+    # are): the row's count must be one of its name's fields' counts; a name that two fields with items in the scope
+    # share is a finding of its own (the row's "<name>" is not all of that name: a sentence citing it says less)
+    fc = Counter(lib.field_id_of[i] for i in ids if i in lib.field_id_of)
+    for k, r in enumerate(sh.get("fields") or []):
+        if not (isinstance(r, dict) and r.get("name")):
+            continue
+        cands = [fc.get(fid, 0) for fid in lib.field_ids.get(r["name"], [])]
+        ok = r.get("items") in cands
+        F.add("sheet", "count", ok, r.get("items"), r.get("items") if ok else cands, where=f"fields[{k}].items")
+        if "share" in r and n and ok:
+            chk(f"fields[{k}].share", r["share"], round(r["items"] / n, 3), "share", 0.0015)
+        if sum(1 for c in cands if c) > 1:
+            F.add("sheet", "one name, two fields", False, r.get("items"), sum(cands), where=f"fields[{k}].name",
+                  note=f"{sum(1 for c in cands if c)} fields named so have items here", severity=1.0)
+    wh = sh.get("when") or {}
+    evs = [e for ev in S.values() for e in ev]
+    if evs:
+        hc = Counter(e[1] for e in evs)
+        ranked = sorted(hc.values(), reverse=True)
+        for k, h in enumerate(wh.get("busiest_hours") or []):
+            if isinstance(h, dict) and "hour" in h and k < len(ranked):
+                chk(f"when.busiest_hours[{k}].hour", hc.get(h["hour"], 0), ranked[k], "rank")
+        if "weekend_share" in wh:
+            chk("when.weekend_share", wh["weekend_share"], round(sum(1 for e in evs if e[2] >= 5) / len(evs), 3),
+                "share", 0.0015)
+        if "usual_weekday_share" in wh:
+            # their own usual week: every event of the kind counted (what they opened, saved ...), over the whole
+            # record (my reading of 19.P2, T7)
+            how = ctx.f.get("how")
+            allv = [e for ev in lib.scope(None, lib.newest, {"how": how} if how else {}).values() for e in ev]
+            if allv:
+                chk("when.usual_weekday_share", wh["usual_weekday_share"],
+                    round(sum(1 for e in allv if e[2] < 5) / len(allv), 3), "share", 0.0015)
+    P = ctx.sc("prev") if ctx.prev else {}
+    tnow, tprev = Counter(lib.theme_of[i] for i in ids if i in lib.theme_of), \
+        Counter(lib.theme_of[i] for i in P if i in lib.theme_of)
+    cnow, cprev = Counter(lib.items[i]["c"] for i in ids), Counter(lib.items[i]["c"] for i in P)
+    for side in ("new", "stopped"):
+        part = sh.get(side) or {}
+        for k, r in enumerate(part.get("themes") or []):
+            if isinstance(r, dict) and r.get("name"):
+                chk(f"{side}.themes[{k}].items", r.get("items"), tnow.get(r["name"].lower(), 0), "count")
+                chk(f"{side}.themes[{k}].previous_items", r.get("previous_items"), tprev.get(r["name"].lower(), 0),
+                    "count")
+        for k, r in enumerate(part.get("channels") or []):
+            if isinstance(r, dict) and r.get("name"):
+                chk(f"{side}.channels[{k}].items", r.get("items"), cnow.get(r["name"], 0), "count")
+                chk(f"{side}.channels[{k}].previous_items", r.get("previous_items"), cprev.get(r["name"], 0),
+                    "count")
+    for k, r in enumerate((sh.get("library") or {}).get("saved_not_opened") or []):
+        if isinstance(r, dict) and r.get("theme") and "youtube" in r:
+            yt = sum(1 for i in lib.saved if i not in lib.opens and lib.theme_of.get(i) == r["theme"].lower()
+                     and lib.items[i]["p"] == "youtube")
+            chk(f"library.saved_not_opened[{k}].youtube", r["youtube"], yt, "count")
+    ta = sh.get("top_areas")
+    if isinstance(ta, dict) and ta.get("area"):
+        # the area most of the top 5 channels are in: my own top 5 (a `top` under 5 shows fewer rows than it counts)
+        cc = Counter(lib.items[i]["c"] for i in ids if lib.items[i]["c"])
+        sign = 1 if getattr(ctx, "order", "most") == "least" else -1
+        top = [c for c, _n in sorted(cc.items(), key=lambda x: (sign * x[1], x[0]))[:5]]
+
+        def area_of_channel(c):
+            ac = Counter(lib.area_of[i] for i in ids if lib.items[i]["c"] == c and i in lib.area_of)
+            return ac.most_common(1)[0][0] if ac else None
+        chk("top_areas.n", ta.get("n"), sum(1 for c in top if area_of_channel(c) == ta["area"]), "count")
+        chk("top_areas.of", ta.get("of"), len(top), "count")
+    # how the window changed (a changes result): each theme's or area's share in the first and the last period, its
+    # move in points, its peak; an era's area share over its periods; the Shorts share at both ends
+    def span_ids(a_label, b_label=None):
+        bd, bd2 = ctx.period(a_label), ctx.period(b_label or a_label)
+        if not bd or not bd2:
+            return None
+        a_ = max(bd[0], ctx.a) if ctx.a is not None else bd[0]
+        return list(ctx.sc(f"period:{a_}:{min(bd2[1], ctx.b)}"))
+
+    def share_of(pids, ent):
+        return round(sum(1 for i in pids if lib.member(i, ent)) / len(pids), 3) if pids else 0.0
+    for key, ek in (("change", "theme"), ("areas_change", "area")):
+        ch = sh.get(key)
+        if not isinstance(ch, dict):
+            continue
+        f_ids, t_ids = span_ids(ch.get("from")), span_ids(ch.get("to"))
+        if f_ids is None or t_ids is None:
+            continue
+        for side in ("rising", "fading", "left", "arrived"):
+            for k, r in enumerate(ch.get(side) or []):
+                if not (isinstance(r, dict) and r.get("name")):
+                    continue
+                ent = (ek, r["name"])
+                fs, ts = share_of(f_ids, ent), share_of(t_ids, ent)
+                chk(f"{key}.{side}[{k}].from_share", r.get("from_share"), fs, "share", 0.0015)
+                chk(f"{key}.{side}[{k}].to_share", r.get("to_share"), ts, "share", 0.0015)
+                chk(f"{key}.{side}[{k}].change", r.get("change"), round(100 * (ts - fs), 1), "change", 0.25)
+                if r.get("peak_period"):
+                    p_ids = span_ids(r["peak_period"])
+                    chk(f"{key}.{side}[{k}].peak_share", r.get("peak_share"), share_of(p_ids or [], ent), "share",
+                        0.0015)
+        sh_ = ch.get("shorts")
+        if isinstance(sh_, dict):
+            for end, ids_ in (("from", span_ids(sh_.get("from"))), ("to", span_ids(sh_.get("to")))):
+                s, lo_ = lib.shorts_long(ids_ or [])
+                chk(f"{key}.shorts.{end}_share", sh_.get(f"{end}_share"), round(s / (s + lo_), 3) if s + lo_ else 0,
+                    "share", 0.0015)
+    us = sh.get("usual")
+    if isinstance(us, dict) and ctx.a is not None and ctx.a == ctx.b:
+        # their usual day: the 90 days before the day, days with anything opened (my reading of 19.P2, T10)
+        day = ctx.a
+        base = lib.scope(day - 90, day - 1, {k: x for k, x in ctx.f.items() if k != "weekday"})
+        per_day = defaultdict(set)
+        hours = Counter()
+        for i, ev in base.items():
+            for o, hr, _wd in ev:
+                per_day[o].add(i)
+                hours[hr] += 1
+        if len(per_day) >= 5:
+            chk("usual.days", us.get("days"), len(per_day), "count")
+            chk("usual.median_items", us.get("median_items"), int(statistics.median(len(v) for v in per_day.values())),
+                "count")
+            sh_days = []
+            for o, its in per_day.items():
+                kn = [i for i in its if lib.items[i]["p"] == "youtube" and lib.short.get(i) is not None]
+                if kn:
+                    sh_days.append(sum(1 for i in kn if lib.short.get(i)) / len(kn))
+            if sh_days and us.get("shorts_share") is not None:
+                chk("usual.shorts_share", us["shorts_share"], round(statistics.median(sh_days), 3), "share", 0.0015)
+            if hours:
+                top = max(hours.values())
+                chk("usual.busiest_hour", hours.get(us.get("busiest_hour"), 0), top, "rank")
+        if "day_shorts_share" in us:
+            kn = [i for i in ids if lib.items[i]["p"] == "youtube" and lib.short.get(i) is not None]
+            if kn:
+                chk("usual.day_shorts_share", us["day_shorts_share"],
+                    round(sum(1 for i in kn if lib.short.get(i)) / len(kn), 3), "share", 0.0015)
+    nt = sh.get("new_today")
+    if isinstance(nt, dict) and ctx.a is not None:
+        fresh = {lib.items[i]["c"] for i in ids if lib.items[i]["c"] and lib.first_watch(lib.items[i]["c"]) == ctx.a}
+        chk("new_today.channels", nt.get("channels"), len(fresh), "count")
+    for k, e in enumerate(sh.get("eras") or []):
+        if isinstance(e, dict) and e.get("area"):
+            e_ids = span_ids(e.get("from"), e.get("to"))
+            if e_ids is not None:
+                chk(f"eras[{k}].share", e.get("share"), share_of(e_ids, ("area", e["area"])), "share", 0.0015)
+    for key, kind in (("channels", "channel"), ("themes", "theme")):
+        for k, r in enumerate(sh.get(key) or []):
+            if isinstance(r, dict) and r.get("name") and "shorts_share" in r:
+                mem = [i for i in ids if (lib.items[i]["c"] == r["name"] if kind == "channel" else
+                                          lib.theme_of.get(i) == r["name"].lower())]
+                s, lo_ = lib.shorts_long(mem)
+                if not s + lo_:   # no video of a known length: the share is 0 (the sheet audit reads the others)
+                    chk(f"{key}[{k}].shorts_share", r["shorts_share"], 0, "share")
+    lo = (sh.get("filters") or {}).get("left_out")
+    if isinstance(lo, dict) and ctx.a is not None:
+        base = lib.scope(ctx.a, ctx.b, {k: x for k, x in ctx.f.items() if k != "without_shorts"})
+        chk("filters.left_out.shorts", lo.get("shorts"),
+            sum(1 for i in base if lib.items[i]["p"] == "youtube" and lib.short.get(i) is True), "count")
+        chk("filters.left_out.reels", lo.get("reels"), sum(1 for i in base if lib.items[i]["p"] == "instagram"),
+            "count")
+        chk("filters.left_out.unknown_length", lo.get("unknown_length"),
+            sum(1 for i in base if lib.items[i]["p"] == "youtube" and lib.short.get(i) is None), "count")
+
+
+def coverage(env, rows):
+    """(numbers in the result's sheet, of them recounted, the paths not recounted)."""
+    nums = [p for p, _v in _numbers_of((env or {}).get("sheet") or {})]
+    seen = {r["where"].split(" ")[0] for r in rows}
+    miss = [p for p in nums if p not in seen]
+    return len(nums), len(nums) - len(miss), miss
+
+
+# ---------------------------------------------------------------- the cells an answer cites
+_MARK = re.compile(r"(?P<said>[^\[\]]{1,40}?)\[(?P<path>(?:r\d+|ctx[12])(?:\.[A-Za-z_]+(?:\[\d+\])?)+)\]")
+_NUM = re.compile(r"(\d+(?:[.,]\d+)?)\s*(%)?")
+
+
+def cited_cells(marked):
+    """[{path, said}] of a marker-form text: each value marker with the number (or date) typed before it."""
+    out = []
+    for m in _MARK.finditer(marked or ""):
+        path = m.group("path")
+        last = path.rsplit(".", 1)[-1]
+        if re.fullmatch(r"[A-Za-z_]+\[\d+\]", last) or last == "count":
+            continue   # a row marker or a count marker: no cell value
+        out.append({"path": path, "said": m.group("said").strip()})
+    return out
+
+
+def audit_ledger(lib, cited, results, calls=None, question="", today=None, F=None):
+    """Every cited cell recounted: its value, its result's base total (totals.items) and, for a row's cell, the
+    row's rank in its list. `results`: {rid: envelope}; `calls`: {rid: the call that made it}. -> Findings rows."""
+    F = F or Findings("ledger", "brain")
+    recs = {}
+    for c in cited or []:
+        rid, _, rest = c["path"].partition(".")
+        env = (results or {}).get(rid)
+        if env is None:
+            F.add("ledger", "cited result", False, c["path"], "no such result", where=c["path"], severity=2.0)
+            continue
+        if rid not in recs:
+            recs[rid] = {r["where"]: r for r in audit_results(lib, env, (calls or {}).get(rid), question, today)}
+        rows = recs[rid]
+        said = c["said"]
+        if rest.endswith(".when") or rest.endswith(".date"):
+            r = rows.get(rest)
+            ok = r is not None and r["ok"]
+            F.add("ledger", "date", ok, said, r["recount"] if r else "not recounted", where=c["path"], severity=2.0)
+            continue
+        m = None
+        for m in _NUM.finditer(said):
+            pass
+        r = rows.get(rest)
+        if r is None:
+            F.add("ledger", "not recounted", False, said, None, where=c["path"], severity=1.0)
+            continue
+        if m is None:
+            F.add("ledger", "no number before the marker", False, said, r["recount"], where=c["path"], severity=1.0)
+            continue
+        v = float(m.group(1).replace(",", "."))
+        rec = r["recount"]
+        if m.group(2) or rest.endswith("share"):
+            ok = rec is not None and close_share(v, float(rec), tol=0.51)
+        elif rest.endswith("change_vs_previous") or rest.endswith("change_pts"):
+            ok = rec is not None and abs(abs(v) - abs(100 * float(rec) if abs(float(rec)) <= 1 and
+                                                     rest.endswith("change_vs_previous") else float(rec))) <= 0.5
+        else:
+            ok = rec is not None and float(rec) == v
+        F.add("ledger", "value", ok and r["ok"], said, rec, where=c["path"])
+        base = rows.get("totals.items")
+        if base is not None:
+            F.add("ledger", "base total", base["ok"], base["said"], base["recount"], where=f"{rid}.totals.items")
+        rm = re.match(r"((?:[a-z_]+\.)*[a-z_]+)\[(\d+)\]", rest)
+        if rm:
+            lst, k = rm.group(1), int(rm.group(2))
+            for key in (f"{lst}[{k - 1}]>={lst}[{k}]", f"{lst}[{k}]>={lst}[{k + 1}]",
+                        f"{lst}[{k - 1}]<={lst}[{k}]", f"{lst}[{k}]<={lst}[{k + 1}]"):
+                rr = rows.get(key)
+                if rr is not None:
+                    F.add("ledger", "rank", rr["ok"], rr["said"], rr["recount"], where=f"{rid}.{key}")
+    return F.rows
+
+
+def audit_lead(lib, env, lead, marked=None, call=None, question="", today=None):
+    """A code lead recounted: with its marker form (a template), every cited cell through audit_ledger; without one
+    (insight's code_form), the text through TextAudit over the result's sheet, as an insight answer is."""
+    F = Findings("lead", (env or {}).get("tool") or "?")
+    if marked:
+        return audit_ledger(lib, cited_cells(marked), {env["rid"]: env}, {env["rid"]: call}, question, today, F=F)
+    if not env or "sheet" not in env:
+        return F.rows
+    ctx, _w = brain_ctx(lib, env, call, question, today)
+    ans_text = lead or ""
+    TextAudit(ctx, F).run(ans_text)
+    return [dict(r, audit="lead:" + r["audit"]) for r in F.rows]
 
 
 # ============================================================================ capture (the bot, only to send)

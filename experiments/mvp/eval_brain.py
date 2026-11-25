@@ -242,13 +242,20 @@ def run_message(h, m, screen="", last_window=None, audit=True):
             lib = h.audit_lib_for(t.unlock)
             rows = EC.audit_results(lib, r, c, question=m["text"], today=TODAY, earlier=t.windows,
                                     last_window=last_window)
+            n_all, n_rec, miss = EC.coverage(r, rows)
+            rec["numbers"] = rec.get("numbers", 0) + n_all
+            rec["recounted"] = rec.get("recounted", 0) + n_rec
+            rec.setdefault("not_recounted", []).extend(
+                f"{r['tool']}/{(r.get('sheet') or {}).get('kind')}:{re.sub(r'[[]\d+[]]', '[]', p)}" for p in miss)
             rec["checked"] += sum(1 for x in rows if x["kind"] != "understood_window")
             rec["findings"] += [x for x in rows if not x["ok"] and x["kind"] != "understood_window"]
             rec["understood_window"] += [x for x in rows if not x["ok"] and x["kind"] == "understood_window"]
         if cl["rid"] and cl["how"] != "plain":
             lib = h.audit_lib_for(t.unlock)
+            call_of = {r["rid"]: c for _k, c, r in calls if r.get("rid")}
             rows = EC.audit_lead(lib, by_rid.get(cl["rid"]) or t.results.get(cl["rid"]),
-                                 cl["lead"], marker_form, question=m["text"], today=TODAY)
+                                 cl["lead"], marker_form, call=call_of.get(cl["rid"]), question=m["text"],
+                                 today=TODAY)
             rec["checked"] += len(rows)
             rec["findings"] += [x for x in rows if not x["ok"]]
     rec["_window"] = t.windows.get("r1")
