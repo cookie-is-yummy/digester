@@ -108,6 +108,14 @@ def present(raw, rid, limits=None, drop=()):
     """The sheet as a tool returns it: shown, without code's so-whats and offers (and the keys in `drop`), each row
     with its ref, area rows with change_pts, every string neutralised."""
     s = shown(raw or {}, limits)
+    # step 1 fix (the tools audit, B24, P02, F04, B30: new.channels [] where facts found new channels): insight.shown
+    # empties some lists for its writer's style (new channels of a year or more are filler there); to the brain an
+    # empty list says "none", so a list shown empty that facts filled is taken out (absent: not shown)
+    for k in ("new", "stopped"):
+        if isinstance(s.get(k), dict) and isinstance((raw or {}).get(k), dict):
+            for kk, v in list(s[k].items()):
+                if isinstance(v, list) and not v and (raw[k].get(kk) or []):
+                    s[k].pop(kk)
     for k in tuple(DROPPED) + tuple(drop):
         s.pop(k, None)
     s = clean(s)

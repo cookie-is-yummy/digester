@@ -3360,6 +3360,12 @@ def _meta_audit(ctx, F, env, call):
             return bool(ev)
         n = sum(1 for it, acts in lib.hidden_acts.values() if in_scope(it, acts)) \
             if not (f.get("without_shorts") or f.get("short")) else None
+        if any(str(r).startswith("words:") for r in list(f.get("only_refs") or []) + list(f.get("exclude_refs") or [])):
+            # (the brain's tools, step 1 fix: under a title-word scope the count of private items left out is not
+            # said, a constant 1 with the rank flag set stands for it, so it cannot be probed word by word)
+            F.add("results", "count", hid["sensitive"] == 1 and bool(hid.get("rank_hidden_above")), hid["sensitive"],
+                  1, where="meta.hidden.sensitive", note="title-word scope: a constant")
+            n = None
         if n is not None:
             F.add("results", "count", hid["sensitive"] == n, hid["sensitive"], n, where="meta.hidden.sensitive")
     by = ((call or {}).get("args") or {}).get("by") or ((call or {}).get("args") or {}).get("level")

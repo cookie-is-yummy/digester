@@ -281,6 +281,14 @@ def _meta(turn, raw, scope, resolved, order="most", by=None, extra_notes=()):
     # the one asked for (a compare by none still holds themes and channels): the flag is said when a hidden entity
     # would rank above the first row of ANY list shown, never under-said
     above = hidden.get("above") or {}
+    sens, rank_above = int(hidden.get("sensitive", 0)), any(bool(v) for v in above.values())
+    notes_extra = []
+    if any(str(resolved.get(n, "")).startswith("words:") for n in list(scope.only) + list(scope.exclude)):
+        # step 1 fix (the tools audit, L14: under only "words:texting" the private items left out were 17, under
+        # "words:zzqx" 0, so private titles could be probed word by word): under a title-word scope the count of
+        # private items left out is not said; a constant stands for it, so every number asks for the private line
+        sens, rank_above = 1, True
+        notes_extra.append("Under a title-word scope, how many private items were left out is not said.")
     return {"window_said": ((raw or {}).get("window") or {}).get("words"),
             "base": BASE[scope.how],
             "filters_said": _filters_said(turn, scope, resolved),
@@ -289,9 +297,8 @@ def _meta(turn, raw, scope, resolved, order="most", by=None, extra_notes=()):
             # step 1 fix (the verifier audit, F67: "videos from 7[r1.channels.count] channels" of a list cut to 8 of
             # 9): how many rows each ranking holds, shown or not, so a count marker of a cut list can be refused
             "rows_of": {k: int(v) for k, v in sorted(ranked.items()) if isinstance(v, int)},
-            "hidden": {"sensitive": int(hidden.get("sensitive", 0)), "friends": int(hidden.get("friends", 0)),
-                       "rank_hidden_above": any(bool(v) for v in above.values())},
-            "notes": _notes(turn, raw) + list(extra_notes)}
+            "hidden": {"sensitive": sens, "friends": int(hidden.get("friends", 0)), "rank_hidden_above": rank_above},
+            "notes": _notes(turn, raw) + list(extra_notes) + notes_extra}
 
 
 def _sheet(turn, q):

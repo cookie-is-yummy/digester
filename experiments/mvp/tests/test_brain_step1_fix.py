@@ -121,6 +121,26 @@ def test_an_instagram_photo_post_has_no_length_word(brain):
     assert any(ROWS[x["item_id"]].get("media") == "post" for x in env_["sheet"]["items"])
 
 
+def test_a_new_list_facts_filled_is_never_shown_empty(brain):
+    # the tools audit's B24: 2025's new channel (Wet Paper, first opened 10 January 2025) was shown as no new channel
+    first_wp = min(local(at) for r in visible_rows() if r.get("channel") == "Wet Paper" and r["platform"] == "youtube"
+                   for k, at in r["events"] if k == "watch")
+    assert first_wp.year == 2025
+    env_, _t = call(brain, "breakdown", {"by": "channel", "window": W("in 2025"), "top": 1}, "the top channel in 2025")
+    new = env_["sheet"].get("new") or {}
+    assert new.get("channels") != [] and ("channels" not in new or any(c["name"] == "Wet Paper"
+                                                                        for c in new["channels"]))
+
+
+@pytest.mark.parametrize("word", ["texting", "zzqx"])
+def test_a_title_word_scope_never_says_how_many_private_items_it_left_out(brain, word):
+    # the tools audit's L14: 17 private items under "texting", 0 under "zzqx": private titles probed word by word
+    env_, _t = call(brain, "breakdown", {"by": "none", "window": {"preset": "all"},
+                                         "scope": {"only": [f"words:{word}"]}}, "how about these words")
+    h = env_["meta"]["hidden"]
+    assert (h["sensitive"], h["rank_hidden_above"]) == (1, True)
+
+
 def test_rows_of_every_ranking_are_in_meta(brain):
     env_, _t = call(brain, "breakdown", {"by": "area", "window": {"preset": "lately"}}, "lately")
     ro = env_["meta"]["rows_of"]

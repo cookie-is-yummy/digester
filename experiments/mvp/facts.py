@@ -735,7 +735,7 @@ DAY_ITEMS_MAX = 60   # round 12, pass 6 (X16): a day's items on the sheet (the c
 DAY_ALL = 10         # a day of this many items or fewer is shown whole (insight.SHOW["items"])
 
 
-def _by_instant(items, idx, ev, eo, kind, sort=True):
+def _by_instant(items, idx, ev, eo, kind, sort=True, so=None):
     """Round 12, pass 6 (X1, the hand check: "the last minecraft video" named the one opened at 00:04, not the one at
     09:12 the same day): a first's or a last's items in the order of the instant of their first (or last) open, the
     newest first for a last and a day; each item's local time of that open as "at_time" ("9:12 am"). The sentence,
@@ -747,6 +747,8 @@ def _by_instant(items, idx, ev, eo, kind, sort=True):
     m = ev & np.isin(idx.it, [p for p in pos if p is not None])
     if eo is not None:
         m &= idx.day <= eo
+    if so is not None:   # the brain's tools (step 1 fix): a scoped first of a window, from the window's start
+        m &= idx.day >= so
     first_t, last_t = {}, {}
     for p, t in zip(idx.it[m].tolist(), idx.sec[m].tolist()):
         if p not in first_t or t < first_t[p]:
@@ -1044,13 +1046,17 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
             have = set(ids)
             ids = list(ids) + [idx.ids[p_] for p_, _t in sorted(last_t.items(), key=lambda x: -x[1])
                                if idx.ids[p_] not in have][:DAY_ITEMS_MAX]
-        out["items"] = _item_rows(view, idx, facts, th, ids, rec, kinds, eff_start if kind == "day" else None,
+        # (the brain's tools, step 1 fix: a scoped first of a window says each item's first open in the window, not
+        # its first open ever; today's reads are unchanged)
+        win_first = scoped and kind == "first"
+        out["items"] = _item_rows(view, idx, facts, th, ids, rec, kinds,
+                                  eff_start if (kind == "day" or win_first) else None,
                                   eff_end if kind == "day" else None, first=(kind == "first"))
         if kind in ("first", "last", "day"):
             # a day of more items than the cards show keeps the code reply's order (its "more" pages on from it); a
             # day the cards show whole is in the order it was opened
             _by_instant(out["items"], idx, ev, eo, kind,
-                        sort=(kind != "day" or len(out["items"]) <= DAY_ALL))
+                        sort=(kind != "day" or len(out["items"]) <= DAY_ALL), so=so if win_first else None)
         if kind in ("first", "last") and q.topic:
             out["periods"], out["periods_unit"] = _periods(idx, facts, th, ev, None, eo, by="year")
     # things saved on the window's themes and never opened
