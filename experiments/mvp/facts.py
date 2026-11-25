@@ -344,7 +344,9 @@ def sensitive_items(view, idx, facts, unlock=None):
                     if cat in T.SENSITIVE_CATEGORIES:
                         topic = cat
                     elif meta.get("sensitive"):
-                        topic = cat or "sensitive"
+                        # a sensitive theme keeps no name nor category in its build: the item's own words say its
+                        # topic, else it is of no topic a message can unlock
+                        topic = O.sensitive_topic([view.items[i].caption or ""]) or "sensitive"
             cap = view.items[i].caption or ""
             if topic is None and P.sensitive(cap):
                 topic = O.sensitive_topic([cap]) or "sensitive"
