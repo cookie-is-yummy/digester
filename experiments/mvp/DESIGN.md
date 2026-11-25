@@ -5875,6 +5875,26 @@ fixer, the improved auditor also found "225 videos on 27 different days" under "
 videos"), a side clause with no number (X5), a so-what that repeated a bullet's move (X9, 4 answers) and "12 videos now"
 under "without Shorts" (X4). This pass's 8 live answers, replayed on the final build: 0 and 0.
 
+**The auditor, merged.** The improved auditor (A1 to A5) is now in this tree: `eval_claims.py`, its tests, and
+`eval/claims_planted.json`. It still imports none of facts, insight, history or themes. What it now catches: a first or
+last checked against the open with the earliest or latest instant (its channel, its theme, the first card, the order of
+the cards, each card's date, a date with no object); a share inside a record with no base; a count whose words drop a
+filter in force; a change with one value, no value, or a share set against a count; a move under 3 points; "of your
+long videos" as the videos known to be long; a usual day on the day's own base; "saved" against all saved and "never
+opened" against the never-opened; one fact said twice; charts with a 90% first row, a 0% row or a bar rounded twice;
+limits said as a sentence of their own; a topic's themes that do not say its word. It reads a calendar month and the
+month before it, a follow-up's window through its chain, a topic row cut at 4, and "new" and a count in their own
+clause. The planted set: 20 of 20 defects caught, 17 of 17 clean cases kept (the old auditor caught 0 and flagged 1).
+What it cannot do: it takes theme membership, the mapping of a topic word and the lengths as given; it does not check
+the window words of a count, grammar, the so-what's fit, phone height or non-English text. Run as merged over the final
+answers, it gives 816, 237, 98 and 0 flags (the 194 answers, the 41 replayed live forms, the hand check's 18, this pass's
+8). All but 3 of them are on "without Shorts" answers. They come from one line: the auditor's scope for "without Shorts"
+still drops only the known Shorts, while the sheet now counts the videos known to be long (X6). With that one line read
+as X6, the counts are 3, 1, 0 and 0, as above. A hand count on the raw files finds no product defect among the 4: the
+two firsts say the first video's date, time and channel right and "Most of it" is the whole topic's split; the channel
+had 12 known-long videos in the 4 weeks and 0 before; the season not begun is answered over the latest stretch with one
+clause on where the record ends (X11). The auditor's scope line still has to be made X6's.
+
 **Live, read as the founder would.** The 8 questions once on the real library (a scratch home, the live writer,
 port 8795), then the same forms replayed on the final build (no model call). Rows 1, 3 and 5 read as before. Row 7 said
 the fall of one area twice, as a bullet and as the so-what; fixed (X9 at any depth) and it now says it once. Row 2 leads
