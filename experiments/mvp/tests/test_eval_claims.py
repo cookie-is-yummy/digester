@@ -2,6 +2,7 @@
 invented. Each planted false claim must be reported with both values; each true one must pass."""
 import json
 import os
+import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 
@@ -221,7 +222,8 @@ def test_counts_with_their_base(tmp_path):
     rows_, _ = audit(lib, der, "what did i watch in june without shorts", sheet, spec,
                      "You opened 30 long videos and only 31 total videos.")
     got = {(r["kind"], r["said"], r["recount"]) for r in bad(rows_, "base")}
-    assert ("count of videos", 31, 30) in got
+    # pass 6 (X4): "31 total videos" does not say "long" or "without Shorts", so it is recounted as all 100 opened
+    assert ("count (its words drop a filter: without Shorts)", 31, 100) in got
     rows_, _ = audit(lib, der, "what did i watch in june without shorts", sheet, spec,
                      "You opened 30 long videos. Pixel Forge is behind 10 of the 30 videos.")
     assert not bad(rows_, "base")
@@ -347,6 +349,122 @@ def test_summary_prints_codes_only(tmp_path, capsys):
     for name in ("Pixel Forge", "Orbit Kitchen", "Block building", "gaming"):
         assert name not in printed and name not in json.dumps(summ)
     assert E.paths_of({"answer": "{themes[0].name} at {themes[0].share}"}) == {"themes[0].name", "themes[0].share"}
+
+
+# ---------------------------------------------------------------------------------------------- 6. pass 6
+def test_the_auditor_imports_none_of_the_answer_s_code():
+    src = open(E.__file__, encoding="utf-8").read()
+    for mod in ("facts", "insight", "history", "themes"):
+        assert not re.search(r"^\s*(?:from \S*\b" + mod + r"\b|import \S*\b" + mod + r"\b|from \. import .*\b" + mod
+                             + r"\b)", src, re.M), mod
+
+
+PLANTED_RESULTS = {}
+
+
+def _planted():
+    if not PLANTED_RESULTS:
+        for c, b in E.run_planted():
+            PLANTED_RESULTS[c["id"]] = (c, b)
+    return PLANTED_RESULTS
+
+
+@pytest.mark.parametrize("cid", [c["id"] for c in json.load(open(E.PLANTED, encoding="utf-8"))["cases"]])
+def test_the_planted_set(cid):
+    """A5: every defect of the hand check, planted in a made-up answer, is flagged with its kind; its clean twin is
+    flagged with nothing at all."""
+    c, b = _planted()[cid]
+    if c["defect"]:
+        assert any(c["expect"] in r["kind"] for r in b), (cid, [r["kind"] for r in b])
+    else:
+        assert not b, (cid, [(r["kind"], r["said"], r["recount"]) for r in b])
+
+
+def test_planted_values():
+    """The flags carry both values, as a hand count of the made-up record gives them."""
+    P = _planted()
+    got = lambda cid, kind: [(r["said"], r["recount"]) for r in P[cid][1] if kind in r["kind"]]   # noqa: E731
+    assert got("x2_defect", "inside a record") == [(21.0, 62.5)]            # 25 of the 40 gaming videos
+    assert got("x4_defect", "drop a filter") == [(20, 64)]                   # every long video of June
+    assert got("x6_defect", "share") == [(19.0, 15.6)]                       # 10 of the 64 known to be long
+    assert got("x7_defect", "usual day") == [(67.0, 50.0)]                   # 2 of 4 YouTube videos a usual day
+    assert got("x8_defect", "saved") == [(4, 6)]                             # 6 saved, 4 of them never opened
+    assert got("x1_defect", "cards in order") == [("1/2", "2/1")]
+    assert got("x13_defect", "chart share") == [(19.0, 18.3)]               # 22 of 120, rounded once
+    assert ("2 points", ">= 3 points") in got("x14_defect", "under 3 points")
+    rep = E.planted_report([P[k] for k in P])
+    assert rep["missed"] == [] and rep["false_flags"] == [] and rep["caught"] == rep["defects"] >= 12
+
+
+def test_a_calendar_month_and_its_month_before():
+    class R:
+        newest = date(2026, 10, 30).toordinal()
+        oldest = date(2019, 1, 1).toordinal()
+    sp = E.read_window("what was i into in march 2024", R, TODAY)
+    assert sp == {"kind": "month", "month": 3, "year": 2024}
+    a, b, prev = E.resolve(sp, R, TODAY)
+    assert (date.fromordinal(a), date.fromordinal(b)) == (date(2024, 3, 1), date(2024, 3, 31))
+    assert (date.fromordinal(prev[0]), date.fromordinal(prev[1])) == (date(2024, 2, 1), date(2024, 2, 29))
+    a, b, prev = E.resolve({"kind": "range", "start": "2024-03-01", "end": "2024-03-31"}, R, TODAY)
+    assert date.fromordinal(prev[0]) == date(2024, 2, 1)
+    assert E.read_window("what did i watch in october", R, TODAY) == {"kind": "month", "month": 10, "year": 2026}
+    assert E.read_window("what did i watch on october 30", R, TODAY)["kind"] == "day"
+
+
+def test_a_follow_up_keeps_the_window_of_its_chain():
+    ans = [{"id": "q.0", "text": "what did i watch the most in 2024", "follow": False},
+           {"id": "q.1", "text": "without shorts", "follow": True, "parent_text": "what did i watch the most in 2024"},
+           {"id": "q.2", "text": "only music", "follow": True, "parent_text": "what did i watch the most in 2024"}]
+    E.link_follow_ups(ans)
+    assert ans[2]["chain"] == ["what did i watch the most in 2024", "without shorts"]
+
+    class R:
+        newest = date(2026, 10, 30).toordinal()
+        oldest = date(2019, 1, 1).toordinal()
+        said_themes = {}
+    ctx = E.Ctx(R, dict(ans[2], sheet={}), TODAY)
+    assert ctx.spec == {"kind": "year", "year": 2024}
+
+
+def test_a_topic_row_cut_at_four_reads_its_top_themes():
+    row = {"name": "blocks", "themes": ["A", "B", "C", "D"], "matched_by": "themes and words",
+           "top_themes": [{"name": "E", "items": 9}, {"name": "A", "items": 5}]}
+    assert E.row_themes(row) == ["A", "B", "C", "D", "E"]
+    words = {"name": "folds", "themes": [], "matched_by": "words", "top_themes": [{"name": "Z", "items": 9}]}
+    assert E.row_themes(words) == []   # a row found by its words has no themes: its top themes are not its own
+
+
+def test_new_and_a_count_bind_to_their_own_clause(tmp_path):
+    rows = rows_months({6: [("Pixel Forge", 1, 900, 30), ("Orbit Kitchen", 0, 900, 50)],
+                        5: [("Pixel Forge", 1, 900, 20), ("Orbit Kitchen", 0, 900, 20)]})
+    rows += [{"ch": "Clip Barn", "theme": 3, "len": 20, "pub": "2025-01-01", "at": [day(2025, 6, 9)]},
+             {"ch": "Dot Lane", "theme": 3, "len": 20, "pub": "2025-01-01", "at": [day(2025, 6, 9)]}]
+    lib, der = make_lib(tmp_path, rows)
+    spec = dict(kind="range", start="2025-06-01", end="2025-06-30")
+    sheet = {"kind": "top", "filters": {}, "window": dict(start="2025-06-01", end="2025-06-30"),
+             "channels": [{"name": n} for n in ("Orbit Kitchen", "Pixel Forge", "Clip Barn", "Dot Lane")]}
+    rows_, _ = audit(lib, der, "what did i watch in june", sheet, spec,
+                     "Orbit Kitchen and Pixel Forge each supplied many, while 2 channels were new.")
+    assert not bad(rows_), bad(rows_)
+    assert [r for r in rows_ if r["kind"] == "new channels (count)" and r["ok"]]
+    rows_, _ = audit(lib, der, "what did i watch in june", sheet, spec, "Pixel Forge had 30 videos.")
+    assert [r for r in rows_ if r["kind"] == "count of a record's videos" and r["ok"]]
+    rows_, _ = audit(lib, der, "what did i watch in june", sheet, spec, "Pixel Forge had 82 videos.")
+    assert bad(rows_, "base", "count of a record")
+
+
+def test_allowed_cases_are_marked_not_dropped():
+    allow = E.load_allow()
+    assert allow, "eval_claims_allow.json is read"
+    F = E.Findings("x", "top")
+    for s in ("Grid Works was mostly Block building, with 76% of its videos in that theme.", "Mostly Block building."):
+        F.sentence = s
+        F.add("word", "mostly (half)", False, ">=50%", 2.0, severity=1.0)
+    rows = F.rows
+    E.mark_allowed(rows, allow)
+    assert rows[0].get("allowed") == 0 and rows[1].get("allowed") is None
+    summ = E.summarise(rows, [{}])
+    assert summ["mismatches"] == 1 and summ["allowed"] == 1
 
 
 # ---------------------------------------------------------------------------------------------- 5. against the product
