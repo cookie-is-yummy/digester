@@ -3171,11 +3171,12 @@ def _brain_extra(ctx, F, sh):
         if not (isinstance(r, dict) and r.get("name")):
             continue
         cands = [fc.get(fid, 0) for fid in lib.field_ids.get(r["name"], [])]
-        ok = r.get("items") in cands
+        # (the brain's tools merge the fields of one shown name into one row, step 1 fix: its count is their sum)
+        ok = r.get("items") in cands or r.get("items") == sum(cands)
         F.add("sheet", "count", ok, r.get("items"), r.get("items") if ok else cands, where=f"fields[{k}].items")
         if "share" in r and n and ok:
             chk(f"fields[{k}].share", r["share"], round(r["items"] / n, 3), "share", 0.0015)
-        if sum(1 for c in cands if c) > 1:
+        if sum(1 for c in cands if c) > 1 and r.get("items") != sum(cands):
             F.add("sheet", "one name, two fields", False, r.get("items"), sum(cands), where=f"fields[{k}].name",
                   note=f"{sum(1 for c in cands if c)} fields named so have items here", severity=1.0)
     wh = sh.get("when") or {}

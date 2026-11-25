@@ -479,6 +479,9 @@ def insight(h):
                 same_items = [i["item_id"] for i in got.pop("items", [])] == [i["id"] for i in raw.get("items")
                                                                              or []][:10]
                 want["items"] = []
+            # the tools' own presentation steps (results.honest, step 1 fix): no empty new/stopped without a window
+            # before, one row per field name, no first save said as a first watch; every count is facts.sheet's
+            R.honest(want, (args.get("scope") or {}).get("how", "opened"))
             R.cut_to_size(want, keep=lst or {"items": "items", "changes": "periods"}.get(tool))
             if tool == "items":
                 want.pop("items", None)

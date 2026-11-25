@@ -1020,11 +1020,17 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
             d_, i_, t_ = idx.day[ev], idx.it[ev], idx.sec[ev]
             if eo is not None:
                 d_, i_, t_ = d_[d_ <= eo], i_[d_ <= eo], t_[d_ <= eo]
+            if scoped and so is not None:
+                # the brain's tools, step 1 fix (the tools audit: the items tool's "oldest" of October listed the
+                # oldest of all history): a scoped first reads from the window's start too
+                d_, i_, t_ = d_[d_ >= so], i_[d_ >= so], t_[d_ >= so]
             seen_ = {}
+            # the brain's tools page past the first 10 (offset + n); today's reads keep 10
+            cap_ = max(10, int(getattr(q, "offset", 0) or 0) + int(q.n)) if scoped else 10
             # round 12, pass 6 (X1: items of one day were in the order of their ids): by the instant of the open
             for t1, i1 in sorted(zip(t_.tolist(), i_.tolist()), reverse=(kind == "last")):
                 seen_.setdefault(i1, t1)
-                if len(seen_) >= 10:
+                if len(seen_) >= cap_:
                     break
             ids = [idx.ids[i1] for i1 in seen_]
         if kind == "day":

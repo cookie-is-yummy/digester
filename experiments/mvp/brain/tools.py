@@ -286,6 +286,9 @@ def _meta(turn, raw, scope, resolved, order="most", by=None, extra_notes=()):
             "filters_said": _filters_said(turn, scope, resolved),
             "resolved": dict(resolved), "order": order, "complete": True,
             "rows_total": ranked.get(lst) if lst else None,
+            # step 1 fix (the verifier audit, F67: "videos from 7[r1.channels.count] channels" of a list cut to 8 of
+            # 9): how many rows each ranking holds, shown or not, so a count marker of a cut list can be refused
+            "rows_of": {k: int(v) for k, v in sorted(ranked.items()) if isinstance(v, int)},
             "hidden": {"sensitive": int(hidden.get("sensitive", 0)), "friends": int(hidden.get("friends", 0)),
                        "rank_hidden_above": any(bool(v) for v in above.values())},
             "notes": _notes(turn, raw) + list(extra_notes)}
@@ -313,9 +316,13 @@ def _no_previous(sheet):
     return sheet
 
 
-def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=None):
+def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=None, how="opened"):
     if window is not None:
         turn.windows[rid] = window
+    if raw is not None and isinstance(sheet, dict) and sheet.get("kind"):
+        for n in R.honest(sheet, how):
+            if n not in meta.setdefault("notes", []):
+                meta["notes"].append(n)
     env = R.envelope(rid, tool, meta, sheet, cost, (time.monotonic() - t0) * 1000, keep=keep)
     turn.results[rid] = env
     return env
@@ -356,7 +363,7 @@ def run_breakdown(turn, a: BreakdownArgs):
     if a.compare == "none":
         _no_previous(sheet)
     meta = _meta(turn, raw, a.scope, resolved, a.order, a.by)
-    return _finish(turn, "breakdown", rid, raw, sheet, meta, t0, w, keep=lst)
+    return _finish(turn, "breakdown", rid, raw, sheet, meta, t0, w, keep=lst, how=a.scope.how)
 
 
 def run_timeline(turn, a: TimelineArgs):
@@ -374,7 +381,7 @@ def run_timeline(turn, a: TimelineArgs):
     sheet = R.present(raw, rid)
     extra = [f"A period with fewer than {F.SPARSE_MIN} items is marked sparse."]
     return _finish(turn, "timeline", rid, raw, sheet, _meta(turn, raw, a.scope, resolved, extra_notes=extra), t0, w,
-                   keep="periods")
+                   keep="periods", how=a.scope.how)
 
 
 def _year_back(turn, w):
@@ -423,12 +430,17 @@ def run_changes(turn, a: ChangesArgs):
     sheet = R.present(raw, rid)
     keep = "periods" if raw.get("kind") == "changed" else LIST_OF[a.level]
     return _finish(turn, "changes", rid, raw, sheet,
-                   _meta(turn, raw, a.scope, resolved, by=a.level, extra_notes=notes), t0, w, keep=keep)
+                   _meta(turn, raw, a.scope, resolved, by=a.level, extra_notes=notes), t0, w, keep=keep,
+                   how=a.scope.how)
 
 
 def run_compare(turn, a: CompareArgs):
     t0 = time.monotonic()
     wa, wb = _window(turn, a.a), _window(turn, a.b)
+    for w_ in (wa, wb):
+        # step 1 fix (the tools audit, P03 and P06: November against October gave October against October, and
+        # October against November a 0 for November): a window wholly after where the export ends has no count
+        _not_after_end(turn, w_, "there is nothing to compare it with")
     resolved = {}
     q, bad = _query(turn, a.scope, "compare", wa, resolved, window2=wb)
     if bad:
@@ -439,7 +451,7 @@ def run_compare(turn, a: CompareArgs):
     return _finish(turn, "compare", rid, raw, sheet,
                    _meta(turn, raw, a.scope, resolved, by=None if a.by == "none" else a.by,
                          extra_notes=["Both windows are in this one result: `totals` is the first, `previous` the "
-                                      "second."]), t0, wa, keep=LIST_OF.get(a.by))
+                                      "second."]), t0, wa, keep=LIST_OF.get(a.by), how=a.scope.how)
 
 
 def run_first_last(turn, a: FirstLastArgs):
@@ -463,12 +475,17 @@ def run_first_last(turn, a: FirstLastArgs):
     # so a filter applied to the query is never left unsaid
     meta["filters_said"] = "; ".join(x for x in (f"{a.subject}: {_label_of(turn, resolved[a.subject])}",
                                                  _filters_said(turn, a.scope, resolved)) if x)
-    return _finish(turn, "first_last", rid, raw, sheet, meta, t0, keep="items")
+    return _finish(turn, "first_last", rid, raw, sheet, meta, t0, keep="items", how=a.scope.how)
 
 
-def _length_word(row):
+def _length_word(row, media=None):
+    """short (a known Short, or an Instagram reel or video), long (known long), else unknown. Step 1 fix (the tools
+    audit: Instagram photo posts were said "short"): only a reel or a video post is short; a photo post has no
+    length."""
     s = row.get("is_short")
-    return "short" if s is True or (row.get("platform") == "instagram") else "long" if s is False else "unknown"
+    if row.get("platform") == "instagram":
+        return "short" if (media or "reel") in ("reel", "video") else "unknown"
+    return "short" if s is True else "long" if s is False else "unknown"
 
 
 def _item_rows(turn, raw, rows, q, rid, offset=0):
@@ -489,7 +506,8 @@ def _item_rows(turn, raw, rows, q, rid, offset=0):
             when = f"{when} {r['at_time']}"
         out.append({"ref": f"{rid}.items[{len(out)}]", "item_id": iid, "title": R.neutral(r.get("title"), R.TITLE_MAX),
                     "channel": R.neutral(r.get("channel"), R.NAME_MAX), "platform": r.get("platform"),
-                    "when": when, "times_opened": opened, "length": _length_word(r)})
+                    "when": when, "times_opened": opened,
+                    "length": _length_word(r, getattr(turn.lib.view.items.get(iid), "media", None))})
     return out
 
 
@@ -517,7 +535,7 @@ def run_items(turn, a: ItemsArgs):
     sheet["items"] = _item_rows(turn, raw, rows, q, rid)
     meta = _meta(turn, raw, a.scope, resolved)
     meta["order"] = a.order
-    return _finish(turn, "items", rid, raw, sheet, meta, t0, w, keep="items")
+    return _finish(turn, "items", rid, raw, sheet, meta, t0, w, keep="items", how=a.scope.how)
 
 
 def _fit(score):
@@ -585,6 +603,18 @@ def run_search(turn, a: SearchArgs):
     return _finish(turn, "search", rid, None, sheet, meta, t0, w, got.get("cost_usd", 0.0), keep="items")
 
 
+def _not_after_end(turn, w, why):
+    rec = turn.lib.rec
+    plats = sorted(rec.ends)
+    if not plats:
+        return
+    s, _e = Hm.resolve(w, rec, plats, turn.today)
+    newest = max(rec.ends.values())
+    if s is not None and s > newest:
+        raise ToolError(f"that window starts after where the export ends ({Hm.day_words(newest)}): {why}; say what "
+                        "the export holds, or ask for a new export")
+
+
 def _window_said(turn, w):
     rec = turn.lib.rec
     plats = sorted(rec.ends)
@@ -612,8 +642,11 @@ def run_learned(turn, a: LearnedArgs):
     for p in got.get("points") or []:
         if not isinstance(p, dict) or not isinstance(p.get("text"), str):
             continue
-        src = [i for i in p.get("item_ids") or [] if turn.lib.is_visible(i)]
-        if not src:
+        ids_ = [i for i in p.get("item_ids") or [] if isinstance(i, str)]
+        src = [i for i in ids_ if turn.lib.is_visible(i)]
+        if not src or len(src) != len(ids_):
+            # step 1 fix (the tools audit): a point that rests on a source they may not see (a friend's post, a
+            # sensitive item) may say what that source says, so the point goes, not only the source
             continue
         n = len(points)
         points.append({"ref": f"{rid}.points[{n}]", "text": R.neutral(p["text"], R.TEXT_MAX),

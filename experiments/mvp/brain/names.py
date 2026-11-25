@@ -271,6 +271,13 @@ def resolve_one(lib, name, kinds=()):
     raw = " ".join(str(name or "").split())
     if not raw or len(raw) > 80:
         return out
+    from .. import outside as O
+    topic = O.sensitive_topic([raw])
+    if topic and topic != lib.unlock:
+        # step 1 fix (the tools audit: find("dating") gave words:dating with 33 items while no message had unlocked
+        # the topic, so the counts of a private topic could be read through title words): a name in a sensitive topic
+        # resolves only when their own message unlocked that topic; no options, no count
+        return out
     # a typed ref ("area:gaming", "theme:3") is checked, never trusted
     if re.match(r"^(?:area|theme|channel|collection|words):", raw):
         ref = valid_ref(lib, raw)

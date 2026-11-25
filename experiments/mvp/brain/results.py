@@ -168,3 +168,58 @@ def error(message, tool=None, **extra):
 def has_url(o):
     """True when any string in `o` holds a link (a test's and a check's question)."""
     return bool(URL.search(json.dumps(o, ensure_ascii=False, default=str)))
+
+
+# ================================================================ step 1 fixes of the tools audit
+from .. import facts as _F  # noqa: E402
+
+NO_BEFORE_NOTE = "No window before this one: new and stopped are not computed here."
+NEW_NOTE = (f"New: at least {_F.NEW_MIN_ITEMS} items and {int(_F.NEW_MIN_SHARE * 100)}% of the window, with at most "
+            f"{_F.NEW_PREV_MAX} before; a channel new in the window: first opened in it, {_F.NEW_CHANNEL_MIN} items or "
+            f"more on {_F.NEW_CHANNEL_DAYS} days or more; stopped: the reverse.")
+
+
+def honest(sheet, how="opened"):
+    """Step 1 fixes of the tools audit, on every sheet result (the tools' presentation only; facts.sheet is
+    unchanged): `new` and `stopped` of a sheet with no window before are not computed, so they are taken out rather
+    than shown as empty lists ("nothing is new"); a channel's `first_watched` on a base of saves or likes is the first
+    save (or like), so it is taken out there; and the floors that make a row "new" are said."""
+    notes = []
+    if not isinstance(sheet, dict) or not sheet.get("kind"):
+        return notes
+    if "new" in sheet or "stopped" in sheet:
+        if not sheet.get("previous") and sheet.get("kind") not in ("compare_windows",):
+            sheet.pop("new", None)
+            sheet.pop("stopped", None)
+            notes.append(NO_BEFORE_NOTE)
+        else:
+            notes.append(NEW_NOTE)
+    fl = sheet.get("fields")
+    if isinstance(fl, list) and len({(r or {}).get("name") for r in fl if isinstance(r, dict)}) < len(fl):
+        # step 1 fix (the tools audit: two rows named "Gaming", 66 and 6): fields of one shown name are one row here
+        # (a sentence citing "Gaming" means all of it); counts and shares of one base add up
+        merged = {}
+        for r in fl:
+            if not isinstance(r, dict):
+                continue
+            m = merged.setdefault(r.get("name"), {k: v for k, v in r.items() if k != "ref"})
+            if m is not r and m.get("_seen"):
+                m["items"] = int(m.get("items", 0)) + int(r.get("items", 0))
+                if isinstance(m.get("share"), (int, float)) and isinstance(r.get("share"), (int, float)):
+                    m["share"] = round(m["share"] + r["share"], 4)
+            m["_seen"] = True
+        rows = sorted(merged.values(), key=lambda x: -int(x.get("items", 0)))
+        rid = str((fl[0] or {}).get("ref", "r?.")).split(".", 1)[0]
+        sheet["fields"] = [dict({k: v for k, v in r.items() if k != "_seen"}, ref=f"{rid}.fields[{k}]")
+                           for k, r in enumerate(rows)]
+    if how != "opened":
+        def walk(o):
+            if isinstance(o, dict):
+                o.pop("first_watched", None)
+                for v in o.values():
+                    walk(v)
+            elif isinstance(o, list):
+                for v in o:
+                    walk(v)
+        walk(sheet)
+    return notes

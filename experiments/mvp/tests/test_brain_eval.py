@@ -26,8 +26,8 @@ PLANS = os.path.join(MVP, "evalset", "brain_plans.jsonl")
 DRAFT = os.path.join(MVP, "design", "brain_v1", "eval_messages.draft.jsonl")
 # the plans whose results hold a number the auditor does not recount true today (each a finding of the report):
 # B05 and C13 eras[].share is the mean of the yearly shares, not the era's share; G06 code_form's "mostly <area>
-# (44%) and <area> (26%)"; I05 an Instagram photo post's length word "short"
-KNOWN_NOT_TRUE = {"B05", "C13", "G06", "I05"}
+# (44%) and <area> (26%)". (I05, an Instagram photo post's length word "short", recounts true since step 1's close.)
+KNOWN_NOT_TRUE = {"B05", "C13", "G06"}
 # the code leads that fail the eval's reading (fallback findings): B10 the plain line with two checked points in hand
 # (learned's template fails its own verifier); C06 and K03 code_form leads that start in lower case and name only
 # the window before; C08 and F04 a last with no day (the template fails insight's date check)
@@ -120,8 +120,9 @@ def test_the_plans_run_recount_and_say_their_findings(harness):
                for p in s["not_recounted"]), s["not_recounted"]
     assert {x["id"] for x in s["recount_not_true"]} == KNOWN_NOT_TRUE
     assert s["recount_true"] == s["with_a_plan"] - len(KNOWN_NOT_TRUE)
-    assert [f["at"] for f in s["findings"]["window"]] == ["G04.0"]          # "late october" read as October
-    assert {f["kind"] for f in s["findings"]["shape"]} == {"one name, two fields", "list cut"}
+    # step 1's close: "late october" is refused (G04 asks for October), and the fields of one name are one row
+    assert [f["at"] for f in s["findings"]["window"]] == []
+    assert {f["kind"] for f in s["findings"]["shape"]} == {"list cut"}
     assert any(f["at"] == "F11.0" and f["kind"] == "list cut" for f in s["findings"]["shape"])
     assert len(s["plan_findings"]) == 5
     # the fake brain stood for one request per round and one for the answer

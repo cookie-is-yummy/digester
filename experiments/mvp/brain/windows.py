@@ -20,6 +20,11 @@ NOT_UNDERSTOOD = ("window words not understood: '{w}'. Use words like: lately, i
                   "months, 2024, since March.")
 TWO_WINDOWS = "two windows in '{w}': use compare, or one window per call."
 NOT_THEIRS = "use their own words for the window"
+# a part of a month, a season or a year ("early October", "the end of 2024", "the first week of March"): no reader
+PART_OF = re.compile(r"\b(?:early|late|mid|middle of|beginning of|start of|end of|first half of|second half of|"
+                     r"(?:first|second|third|fourth|last) (?:week|weekend|days?|fortnight) of)\b")
+PART_NOT_READ = ("'{w}' names part of a period, which code cannot read yet: use the whole period ('in October'), or "
+                 "ask them for the days.")
 
 
 class WindowArg(BaseModel):
@@ -56,6 +61,11 @@ def read_words(words, today, message="", screen="", scheduled=False):
         raise WindowError(NOT_THEIRS)
     t = Hm.normal(words or "")
     t = " ".join(LATELY.sub("lately", t).split())
+    if PART_OF.search(t):
+        # step 1 fix (the tools audit: "early october", "late october", "the first week of october" were read as all
+        # of October and said "October 2026"): history.py has no reader for a part of a period, so code refuses
+        # rather than count a window the words did not name
+        raise WindowError(PART_NOT_READ.format(w=words))
     if t.strip(" .!?") in ALL_WORDS:
         return Hm.Window()
     found = [w for w, _span in Hm.find_windows(t, today) if isinstance(w, Hm.Window)]

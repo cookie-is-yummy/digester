@@ -437,6 +437,7 @@ def test_a_tool_call_gives_todays_sheet_of_the_same_question(brain, cid):
         w = R.present(raw, "r1", limits={lst: args.get("top", 8)} if lst else None)
         if tool == "items":
             w["items"] = []
+        R.honest(w, (args.get("scope") or {}).get("how", "opened"))   # the tools' own presentation (step 1 fix)
         R.cut_to_size(w, keep=keep)
         w.pop("items", None) if tool == "items" else None
         return w
