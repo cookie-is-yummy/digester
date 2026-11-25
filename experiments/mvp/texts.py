@@ -3181,6 +3181,12 @@ YT_NO_YT_PICKS = ("None of these are YouTube videos, so I can't put them in a Yo
 YT_PLAYLIST_NAME_ASK = "What should the playlist be called? Say, for example, \"put these in a playlist called dinners\"."
 YT_HISTORY = ("No app can change your YouTube history. Open it here to clear or pause it: "
               "https://www.youtube.com/feed/history")
+YT_TAKEOUT = ("I can't reach into your Google account to pull a Takeout myself \u2014 there's no automatic "
+              "hand-off for it, so you download it and add it, like the Instagram export.\n"
+              "\u2022 Likes, playlists and subscriptions: quicker \u2014 say \"connect youtube\" and tap Allow "
+              "on Google, no file.\n"
+              "\u2022 Watch history: at takeout.google.com export \"YouTube history\" as JSON, then add the zip "
+              "the same way as an Instagram export.")
 YT_NOT_A_VIDEO = "That one isn't a YouTube video, so it can't go in Watch Later."
 IG_ALL_DONE = "That's all of them."
 IG_WHO = "Which account? Say, for example, \"unfollow @name\"."

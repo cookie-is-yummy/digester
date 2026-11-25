@@ -788,3 +788,22 @@ def test_m7_topic_phrasings_name_no_playlist_place(text):
 def test_m7_the_word_playlist_names_the_place(text):
     from mvp import places
     assert places.named(text).key == "youtube_playlist"
+
+
+@pytest.mark.parametrize("text", ["Can you access my google takeout",
+                                  "can you get my google takeout",
+                                  "pull my youtube watch history",
+                                  "can you download my watch history",
+                                  "access my youtube history"])
+def test_a_google_takeout_or_watch_history_ask_is_answered_not_the_instagram_steps(yt, text):
+    r = tell(yt, text)
+    assert r.startswith("I can't reach into your Google account to pull a Takeout myself"), text
+    assert "takeout.google.com" in r and "connect youtube" in r
+    assert "Instagram, every" not in r and "accountscenter.instagram.com" not in r
+    assert yt["g"].calls == []   # nothing asked of Google, nothing changed
+
+
+def test_getting_new_saves_in_still_reaches_the_library_not_the_takeout_line(yt):
+    # the import phrasing must stay with the library status, not be caught by the takeout handler
+    from mvp import ytreads
+    assert ytreads.TAKEOUT.search("get my watch history in up to date") is None

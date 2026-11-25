@@ -107,6 +107,13 @@ WATCH_LATER = re.compile(r"^" + _PLEASE + r"(?:add|put|save)\s+" + _WHAT + r"\s+
                          r"(?:youtube\s+|yt\s+)?watch[\s-]?later(?:\s+on\s+" + _YT + r")?" + _TAILS + r"$")
 HISTORY = re.compile(r"^" + _PLEASE + r"(?:clear|delete|erase|pause|turn\s+off|wipe|stop)\s+(?:my\s+)?" + _YT +
                      r"\s+(?:watch\s+)?history" + _TAILS + r"$")
+# "can you access my google takeout", "pull my youtube watch history": there is no automatic hand-off; said plainly
+TAKEOUT = re.compile(r"\btakeout\b"                       # one word only: "take out" (two words) means remove, not Takeout
+                     r"|\bgoogle\s+take\s?out\b"
+                     r"|\bgoogle\s+(?:data|archive|dump)\b"
+                     r"|^" + _PLEASE + r"(?:access|get|grab|pull|fetch|download|read|see|export)\s+(?:my\s+|the\s+)?"
+                     r"(?:watch\s+history|youtube\s+(?:watch\s+)?history|google\s+history)\b"
+                     r"(?!\s+(?:in|into|up\b|to\s+date))", re.I)
 IG_EXPORT = re.compile(r"^(?:(?:how\s+(?:do|can|could)\s+i|can\s+you|could\s+you|help\s+me|is\s+there\s+a\s+way\s+to|"
                        r"can\s+i|i\s+want\s+to)\s+)?(?:make|set\s+up|get|have|schedule)\s+(?:my\s+)?(?:instagram|insta|ig)\s+"
                        r"(?:export|exports|data\s+export|download)s?\b.*\b(?:repeat|regular(?:ly)?|every\s+week|weekly|"
@@ -398,7 +405,7 @@ def is_ask(text):
         return False
     return any(rx.match(t) for rx in (CONNECT, DISCONNECT, UNSUB_THAT, UNSUB_NAME, IDLE, CLEAN_UP, PLAYLIST_BARE,
                                       GET_RID, PLAYLIST, PLAYLIST_MY, PLAYLIST_MAKE, WATCH_LATER, REMOVE_SUB,
-                                      UNFOLLOW))
+                                      UNFOLLOW, TAKEOUT))
 
 
 def youtube_reads(bot, person, text, now):
@@ -425,6 +432,9 @@ def youtube_reads(bot, person, text, now):
         if rx.match(t):
             bot.note(intent="youtube")
             return fn(bot, person, now)
+    if TAKEOUT.search(t):
+        bot.note(intent="youtube")
+        return bot.send(h, T.YT_TAKEOUT)
     if IG_EXPORT.match(t):
         bot.note(intent="youtube")
         return bot.send(h, T.ig_schedule())

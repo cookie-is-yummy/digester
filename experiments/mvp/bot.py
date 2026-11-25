@@ -65,7 +65,9 @@ def main():
     def _load():  # read each library and start its search engine now, so the first reply is not a minute late
         for lib in libs:
             try:
-                bot.view(lib)
+                if not bot.view(lib).items:
+                    continue  # a new sign-up's empty library: no engine to build; the person is answered "nothing
+                    # saved yet" (retrieve.py, "an empty library: nothing to rank") without a search engine
                 bot.pool.get(lib)
             except Exception as e:  # noqa: BLE001
                 report(e)
