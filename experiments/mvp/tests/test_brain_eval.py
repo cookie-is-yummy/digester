@@ -160,10 +160,12 @@ def test_insight_mode_counts_the_twenty_cases(harness):
     assert s["truncated_identical"] == 4
 
 
-def test_run_mode_refuses_in_step_1(capsys):
+def test_run_mode_is_live_and_refuses_without_a_key(capsys, monkeypatch):
+    # step 2's slice made `run` real (tests/test_brain_slice.py); with no Claude key it sends nothing
     from mvp import eval_brain as E
-    assert E.main(["run", "--set", "x", "--provider", "anthropic"]) == 2
-    assert "step 2" in capsys.readouterr().err
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert E.main(["run", "--half", "tune", "--out", "/nonexistent"]) == 2
+    assert "nothing was sent" in capsys.readouterr().err
 
 
 # ================================================================ the fake brain and the fake backends

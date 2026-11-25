@@ -3,7 +3,14 @@
     python3 -m mvp.eval_brain planted [--show dropped_true|kept_false|wrong_reason]   (from experiments/)
     python3 -m mvp.eval_brain plans [--json OUT] [--only A01,B07]
     python3 -m mvp.eval_brain insight
-    python3 -m mvp.eval_brain run ...        step 2: refuses here (no model call in step 1)
+    python3 -m mvp.eval_brain run --half tune --out DIR [--limit N] [--ids A02,B04] [--parallel N] [--max-usd 1.5]
+    python3 -m mvp.eval_brain count [--out DIR]
+
+`run` (step 2's thin live slice, LIVE: claude-haiku-5-5, paid, needs the Claude key and MVP_LEDGER_HOME): every "plan"
+message of the half (the split: half_of) through brain/loop.run_turn on the same made-up library, the screen carried
+from message to message; per message one JSON (calls with results, forms, verdicts, the repair, the answer sent,
+lead_source, sentence counts, seconds, tokens, cost, G2 against the hand plan, the auditor's findings on what was
+sent) and summary.json (G1 to G6). `count`: count_tokens (free) on the prefix and a typical turn.
 
 `planted`: eval/brain_planted.json through the verifier (brain/planted.py's scorer): every false sentence dropped (and
 with which reason), every true one kept, by class.
@@ -45,10 +52,14 @@ TIERS = ("plan", "t0", "step2", "step3")
 
 
 # ================================================================ the made-up library and a bot to read it
-def scratch_env(base):
-    """Point every home of the bot inside `base` (call before importing any of the bot's modules)."""
+def scratch_env(base, keep_ledger=False):
+    """Point every home of the bot inside `base` (call before importing any of the bot's modules). keep_ledger (the
+    live `run` mode): MVP_LEDGER_HOME stays the caller's, so every paid request lands in the shared ledger and the
+    Claude cap counts it."""
     for k, sub in (("MVP_HOME", "home"), ("MVP_LEDGER_HOME", "ledger"), ("MVP_INBOX", "inbox"),
                    ("MVP_DERIVED_HOME", "derived")):
+        if keep_ledger and k == "MVP_LEDGER_HOME":
+            continue
         os.environ[k] = os.path.join(base, sub)
     os.environ.pop("YOUTUBE_API_KEY", None)
 
@@ -90,10 +101,10 @@ class Harness:
         self._audit_lib = None
 
     @classmethod
-    def scratch(cls, base=None):
+    def scratch(cls, base=None, keep_ledger=False):
         """A harness on a library built in a temporary folder (the command line's)."""
         base = base or tempfile.mkdtemp(prefix="eval_brain_")
-        scratch_env(base)
+        scratch_env(base, keep_ledger=keep_ledger)
         lib = build_library(base)
         bot = LiteBot(os.environ["MVP_HOME"])
         bot.store.upsert_person(HANDLE, "Test", lib, TZ)
@@ -513,9 +524,390 @@ def insight(h):
     return s
 
 
+# ================================================================ run: the model on the tools, live (step 2's slice)
+# The split (the brief of mvp20, fixed before any run): a conversation with a plan is in the TUNE half when
+# int(sha1(id), 16) % 2 == 0, else in the HELD-OUT half. Only the tune half may be read while the prompt or the
+# verifier changes.
+NOW_WORDS = "Sun 22 Nov 2026 12:00, America/New_York"
+PLAN_STATUSES = ("plan", "partial")
+COUNTING = ("breakdown", "timeline", "changes", "compare", "first_last", "items", "search", "learned")
+
+
+def half_of(cid):
+    import hashlib
+    return "tune" if int(hashlib.sha1(cid.encode()).hexdigest(), 16) % 2 == 0 else "heldout"
+
+
+def run_set(half, ids=None, limit=None):
+    """[(plan conversation, core conversation)] of the half ("tune", "heldout", "all"), in file order; `ids` keeps
+    those conversations only; `limit` stops once that many plan messages are taken (whole conversations)."""
+    core = {r["id"]: r for r in load_jsonl(CORE)}
+    out, n = [], 0
+    for p in load_jsonl(PLANS):
+        if p["status"] not in PLAN_STATUSES:
+            continue
+        if half != "all" and half_of(p["id"]) != half:
+            continue
+        if ids and p["id"] not in ids:
+            continue
+        k = sum(1 for m in p["messages"] if m["tier"] == "plan")
+        if limit is not None and n >= limit:
+            break
+        out.append((p, core[p["id"]]))
+        n += k
+    return out
+
+
+def _scope_said(env):
+    meta = (env or {}).get("meta") or {}
+    parts = sorted(x.strip() for x in str(meta.get("filters_said") or "").split("; ") if x.strip())
+    if ((env or {}).get("sheet") or {}).get("filters", {}).get("without_shorts") and \
+            "only videos known to be long" not in parts:
+        parts.append("only videos known to be long")
+    return parts
+
+
+def call_key(tool, args, env):
+    """What one counting call counts, as code resolved it: the tool and what it ranks by, the window as days (and the
+    second window of a compare), the base, the scope (meta.filters_said, code's fixed words) and the order."""
+    args = args or {}
+    sheet = (env or {}).get("sheet") or {}
+    meta = (env or {}).get("meta") or {}
+    what = {"breakdown": args.get("by", None), "changes": args.get("level"), "timeline": args.get("unit"),
+            "compare": args.get("by", "none"), "first_last": args.get("which"), "items": None,
+            "search": None, "learned": None}.get(tool)
+    order = meta.get("order") or "most"
+    if tool == "items":
+        order = args.get("order") or "most_opened"
+    w = sheet.get("window") or {}
+    prev = sheet.get("previous") or {}
+    window = [w.get("start"), w.get("end")] if isinstance(w, dict) else [None, None]
+    if tool == "compare":
+        window = window + [prev.get("start"), prev.get("end")]
+    return {"tool": tool, "what": what, "window": window, "base": meta.get("base"), "scope": _scope_said(env),
+            "order": order}
+
+
+CORE_DIMS = ("window", "base", "scope", "order")
+
+
+def compare_plans(hand, model):
+    """G2 for one message: `hand`, `model` lists of call_key. -> {"verdict": "understood" | "other_plan" | "differs" |
+    "no_hand_plan", "diffs": [...]}. Understood: every hand call has a model call equal on every dimension; other plan
+    (for a human to judge, never counted as understood): every hand call has a model call with the same window, base,
+    scope and order, but the tool or what it ranks by differs; differs: some hand call has no such model call (the
+    nearest model call's differing dimensions are listed). Extra model calls do not count against it."""
+    if not hand:
+        return {"verdict": "no_hand_plan", "diffs": []}
+    verdicts, diffs = [], []
+    for hk in hand:
+        if any(all(hk[d] == mk[d] for d in hk) for mk in model):
+            verdicts.append("understood")
+            continue
+        if any(all(hk[d] == mk[d] for d in CORE_DIMS) for mk in model):
+            near = next(mk for mk in model if all(hk[d] == mk[d] for d in CORE_DIMS))
+            verdicts.append("other_plan")
+            diffs.append({"hand": hk, "model": near, "differs": [d for d in hk if hk[d] != near[d]]})
+            continue
+        verdicts.append("differs")
+        near = max(model, key=lambda mk: sum(hk[d] == mk[d] for d in hk)) if model else None
+        diffs.append({"hand": hk, "model": near, "differs": [d for d in hk if near is None or hk[d] != near[d]]})
+    v = "differs" if "differs" in verdicts else "other_plan" if "other_plan" in verdicts else "understood"
+    return {"verdict": v, "diffs": diffs}
+
+
+def hand_keys(hand_rec):
+    out = []
+    for c in hand_rec["calls"]:
+        if c.get("error") or c["tool"] not in COUNTING or not c.get("rid"):
+            continue
+        env = hand_rec["_results"].get(c["rid"])
+        if env is None or "sheet" not in env:
+            continue
+        out.append(call_key(c["tool"], c.get("args"), env))
+    return out
+
+
+def model_keys(rec):
+    out = []
+    for c in rec["calls"]:
+        env = c.get("result") or {}
+        if c["name"] not in COUNTING or env.get("is_error") or "sheet" not in env:
+            continue
+        out.append(call_key(c["name"], c.get("args"), env))
+    return out
+
+
+def audit_sent(h, t, rec, question):
+    """The auditor on what was SENT: every value marker of the sent model sentences recounted (eval_claims.audit_ledger
+    on the marker form), and the final text read by TextAudit over its cited result (a code lead: audit_lead).
+    -> [finding rows that are not ok], rows checked."""
+    from mvp import eval_claims as EC
+    lib = h.audit_lib_for(t.unlock)
+    calls = {c["rid"]: {"tool": c["name"], "args": c["args"]} for c in rec["calls"] if c.get("rid")}
+    rows = []
+    src = rec["lead_source"]
+    if src in ("model", "model_after_repair"):
+        k = len(rec["verdicts"]) - 1 if src == "model_after_repair" else 0
+        sent = [o for o in rec["verdicts"][k]["outcomes"] if o["kept"] and o["where"] in ("lead", "point")]
+        marked = " ".join(o["text"] for o in sent)
+        rows += EC.audit_ledger(lib, EC.cited_cells(marked), t.results, calls, question, TODAY)
+        rid = rec["answer"].get("rid")
+        env = t.results.get(rid) if rid else None
+        if env is not None and "sheet" in env and env.get("tool") not in ("find", "search", "learned"):
+            ctx, _w = EC.brain_ctx(lib, env, calls.get(rid), question, TODAY)
+            F = EC.Findings("text", env.get("tool"))
+            text = " ".join([rec["answer"]["lead"]] + list(rec["answer"]["points"]))
+            EC.TextAudit(ctx, F).run(text)
+            rows += [dict(r, audit="text:" + r["audit"]) for r in F.rows]
+    elif src == "code" and rec.get("code_lead") and rec["code_lead"].get("rid"):
+        cl = rec["code_lead"]
+        env = t.results.get(cl["rid"])
+        marked = None
+        if cl["how"] == "template":
+            from mvp.brain import fallback as FB, verify as V
+            forms = [x for x in FB.templates(V.Ledger(t.results).get(cl["rid"])) if V.strip_markers(x) == cl["lead"]]
+            marked = forms[0] if forms else None
+        rows += EC.audit_lead(lib, env, cl["lead"], marked, call=calls.get(cl["rid"]), question=question, today=TODAY)
+    bad = [{k: r.get(k) for k in ("audit", "kind", "where", "said", "recount", "note", "sentence")}
+           for r in rows if not r["ok"]]
+    return bad, len(rows)
+
+
+def dropped_of(rec):
+    """Every sentence the model wrote that did not go out: where, the text (markers in), reasons, the true values."""
+    out = []
+    for k, v in enumerate(rec["verdicts"]):
+        for o in v["outcomes"]:
+            if not o["kept"]:
+                out.append({"form": k + 1, "where": o["where"], "index": o["index"], "text": o["text"],
+                            "reasons": o["reasons"], "details": o["details"], "cells": o["cells"]})
+    return out
+
+
+def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log=print):
+    """Every plan message of one conversation through the live brain, in order: the screen and the last window come
+    from the brain's own last answer; the hand plan runs beside it on its own chain (G2 compares the two)."""
+    from mvp.brain import loop as BL
+    from mvp.tests.fakes.fake_brain import FakeEngine, fake_learned
+    screen = {"now": NOW_WORDS}
+    last = None
+    hscreen, hlast = "", None
+    if p.get("before"):
+        b = run_message(h, {"n": -1, "text": p["before"]["message"], "rounds": p["before"]["rounds"]}, audit=False)
+        hscreen, hlast = b["lead"] or "", b["_window"]
+        last = b["_window"]
+        plan = [{"rid": c["rid"], "tool": c["tool"], "args": c["args"],
+                 "window_said": ((b["_results"].get(c["rid"]) or {}).get("meta") or {}).get("window_said"),
+                 "filters_said": ((b["_results"].get(c["rid"]) or {}).get("meta") or {}).get("filters_said")}
+                for c in b["calls"] if c.get("rid")]
+        screen = {"now": NOW_WORDS, "last_answer": {"minutes_ago": 1, "plan": plan, "scope_line": None}}
+    outs = []
+    for m in p["messages"]:
+        if m["tier"] != "plan":
+            continue
+        if max_usd is not None and provider.spent >= max_usd:
+            outs.append({"id": p["id"], "n": m["n"], "skipped": "budget"})
+            continue
+        hand = run_message(h, m, hscreen, hlast, audit=False)
+        hscreen, hlast = hand["lead"] or hscreen, hand["_window"] or hlast
+        t = h.turn(m["text"], screen="", last_window=last, search=FakeEngine(), learned=fake_learned)
+        rec = BL.run_turn(provider, t, m["text"], screen)
+        g2 = compare_plans(hand_keys(hand), model_keys(rec))
+        bad, checked = audit_sent(h, t, rec, m["text"])
+        rec.update(id=p["id"], n=m["n"], key=f"{p['id']}.{m['n']}", half=half_of(p["id"]), g2=g2,
+                   hand_plan=[{"tool": c["tool"], "args": c["args"]} for c in hand["calls"]],
+                   audit={"checked": checked, "findings": bad}, dropped=dropped_of(rec))
+        screen = BL.screen_after(rec, NOW_WORDS)
+        last = BL.last_window(t, rec) or last
+        if out_dir:
+            with open(os.path.join(out_dir, f"{p['id']}.{m['n']}.json"), "w", encoding="utf-8") as f:
+                json.dump(rec, f, indent=1, default=str, ensure_ascii=False)
+        log(f"{rec['key']}: {rec['lead_source']} g2={g2['verdict']} {rec['seconds']}s ${rec['cost_usd']:.4f} "
+            f"sent {rec['sentences']['kept_sent']}/{rec['sentences']['written']} findings {len(bad)}")
+        outs.append(rec)
+    return outs
+
+
+def _pct(xs, q):
+    xs = sorted(xs)
+    if not xs:
+        return None
+    k = (len(xs) - 1) * q
+    lo, hi = int(k), min(int(k) + 1, len(xs) - 1)
+    return round(xs[lo] + (xs[hi] - xs[lo]) * (k - lo), 2)
+
+
+def summarize(recs, settings=None):
+    """summary.json of a run: the gate figures G2 to G6 (G1: the auditor's findings on what was sent; no hand
+    recount), every dropped sentence, lead_source counts. Definitions are written into the summary itself."""
+    done = [r for r in recs if not r.get("skipped")]
+    n = len(done)
+    src = {}
+    for r in done:
+        src[r["lead_source"]] = src.get(r["lead_source"], 0) + 1
+    g2 = {}
+    for r in done:
+        g2[r["g2"]["verdict"]] = g2.get(r["g2"]["verdict"], 0) + 1
+    planned = sum(v for k, v in g2.items() if k != "no_hand_plan")
+    written = sum(r["sentences"]["written"] for r in done)
+    first = sum(r["sentences"]["kept_first_pass"] for r in done)
+    sent = sum(r["sentences"]["kept_sent"] for r in done)
+    secs = [r["seconds"] for r in done]
+    costs = [r["cost_usd"] for r in done]
+    own = src.get("model", 0) + src.get("model_after_repair", 0)
+    findings = {r["key"]: r["audit"]["findings"] for r in done if r["audit"]["findings"]}
+    req = [q for r in done for q in r["requests"]]
+    s = {
+        "messages": n, "skipped": [f"{r['id']}.{r['n']}" for r in recs if r.get("skipped")],
+        "settings": settings or {},
+        "lead_source": src,
+        "G2_understood": {"understood": g2.get("understood", 0), "other_plan": g2.get("other_plan", 0),
+                          "differs": g2.get("differs", 0), "no_hand_plan": g2.get("no_hand_plan", 0),
+                          "share": round(g2.get("understood", 0) / planned, 4) if planned else None, "bar": 0.90,
+                          "other_plan_list": [r["key"] for r in done if r["g2"]["verdict"] == "other_plan"],
+                          "differs_list": {r["key"]: r["g2"]["diffs"] for r in done
+                                           if r["g2"]["verdict"] == "differs"}},
+        "G3_own_lead": {"own": own, "of": n, "share": round(own / n, 4) if n else None, "bar": 0.85,
+                        "not_own": {r["key"]: {"lead_source": r["lead_source"], "error": r.get("error"),
+                                               "events": r.get("events")} for r in done
+                                    if r["lead_source"] not in ("model", "model_after_repair")}},
+        "G4_sentences": {"written": written, "kept_first_pass": first, "kept_sent": sent,
+                         "missing_first_pass": round(1 - first / written, 4) if written else None,
+                         "missing_after_repair": round(1 - sent / written, 4) if written else None, "bar": 0.15},
+        "G5_seconds": {"median": _pct(secs, 0.5), "p90": _pct(secs, 0.9), "max": max(secs) if secs else None,
+                       "bar_median": 6.0, "bar_p90": 10.0,
+                       "retries": sum(q.get("retries", 0) for q in req)},
+        "G6_cost": {"mean_cents": round(100 * sum(costs) / n, 4) if n else None, "total_usd": round(sum(costs), 6),
+                    "bar_mean_cents": 0.5},
+        "G1_auditor": {"messages_with_findings": len(findings), "findings": sum(len(v) for v in findings.values()),
+                       "by_message": findings, "note": "the auditor (eval_claims) only; no hand recount in this run"},
+        "requests": {"count": len(req), "per_message_mean": round(len(req) / n, 3) if n else None,
+                     "stop_reasons": _counts(q["stop_reason"] for q in req),
+                     "input_tokens": sum(q["usage"]["input_tokens"] for q in req),
+                     "output_tokens": sum(q["usage"]["output_tokens"] for q in req),
+                     "cache_read_input_tokens": sum(q["usage"]["cache_read_input_tokens"] for q in req),
+                     "cache_creation_input_tokens": sum(q["usage"]["cache_creation_input_tokens"] for q in req)},
+        "repairs": sum(1 for r in done if r.get("repair_message")),
+        "events": _counts(e for r in done for e in r.get("events") or []),
+        "dropped": {r["key"]: r["dropped"] for r in done if r["dropped"]},
+        "dropped_reasons": _counts(x for r in done for d in r["dropped"] for x in d["reasons"]),
+        "definitions": {
+            "G2": "per plan message: every hand-plan counting call (evalset/brain_plans.jsonl, run on its own hand "
+                  "chain) has a model call with the same tool, what it ranks by, window days, base, scope "
+                  "(meta.filters_said) and order; 'other_plan' = same window, base, scope and order but another tool "
+                  "or ranking (for a human to judge, not counted); share = understood / messages with a hand plan",
+            "G3": "answers whose lead is the model's own (lead_source model or model_after_repair) / every plan "
+                  "message attempted (API failures and turns with no form count as not own)",
+            "G4": "micro-averaged: written = sentences of the model's FIRST form (lead sentences + points); "
+                  "kept_first_pass = of those, kept by the first verdict; kept_sent = the model's sentences in the "
+                  "answer that went out (the repaired form's kept sentences, or the passed points under a code lead), "
+                  "capped at written",
+            "G5": "wall seconds of the turn (all requests, tool runs, verification, repair, back-off), at the run's "
+                  "parallelism", "G6": "ledger cost of every request of the message, mean in cents"}}
+    return s
+
+
+def _counts(it):
+    out = {}
+    for x in it:
+        out[x] = out.get(x, 0) + 1
+    return out
+
+
+RUN_NO_KEY = ("eval_brain run calls claude-haiku-5-5 live: set DIGESTER_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) and "
+              "MVP_LEDGER_HOME first; nothing was sent.")
+
+
+def run_live(a):
+    """The `run` mode: the made-up library as the plans mode builds it, every plan message of the half live."""
+    if not (os.environ.get("DIGESTER_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")) or \
+            not os.environ.get("MVP_LEDGER_HOME"):
+        print(RUN_NO_KEY, file=sys.stderr)
+        return 2
+    ledger_home = os.path.abspath(os.environ["MVP_LEDGER_HOME"])
+    base = tempfile.mkdtemp(prefix="eval_brain_run_")
+    h = Harness.scratch(base, keep_ledger=True)
+    from mvp import llm
+    from mvp.brain import loop as BL, provider as P
+    if os.path.abspath(llm.ai.LEDGER).startswith(os.path.abspath(base)) or \
+            os.path.dirname(os.path.abspath(llm.ai.LEDGER)) != ledger_home:
+        print(f"the ledger is not MVP_LEDGER_HOME's: {llm.ai.LEDGER}", file=sys.stderr)
+        return 2
+    os.makedirs(a.out, exist_ok=True)
+    rows_before = _ledger_rows(llm.ai.LEDGER)
+    prov = P.AnthropicProvider(prompt_version=BL.PROMPT_VERSION, loose=tuple(x for x in a.loose.split(",") if x))
+    sets = run_set(a.half, set(x for x in a.ids.split(",") if x) or None, a.limit)
+    h.audit_lib_for(None)
+    recs = []
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max(1, min(4, a.parallel))) as ex:
+        futs = [ex.submit(live_conversation, h, prov, p, c, a.out, a.max_usd) for p, c in sets]
+        for f in futs:
+            recs += f.result()
+    settings = dict(prov.settings(), prompt_version=BL.PROMPT_VERSION, rounds=BL.ROUNDS, soft_s=BL.SOFT_S,
+                    deep_s=BL.DEEP_S, hard_s=BL.HARD_S, parallel=a.parallel, half=a.half,
+                    tool_result_shape="rid, tool, meta and the sheet's keys at the top (loop.present)",
+                    max_usd=a.max_usd, spent_usd=round(prov.spent, 6), requests=prov.requests)
+    s = summarize(recs, settings)
+    rows_after = _ledger_rows(llm.ai.LEDGER)
+    new = [r for r in rows_after[len(rows_before):] if r.get("purpose") == P.PURPOSE]
+    s["ledger"] = {"rows_added": len(rows_after) - len(rows_before), "brain_eval_rows": len(new),
+                   "brain_eval_usd": round(sum(r.get("cost_usd") or 0 for r in new), 6),
+                   "matches_requests": len(new) == prov.requests}
+    with open(os.path.join(a.out, "summary.json"), "w", encoding="utf-8") as f:
+        json.dump(s, f, indent=1, default=str, ensure_ascii=False)
+    short = {k: s[k] for k in ("messages", "lead_source", "repairs", "events", "dropped_reasons", "ledger")}
+    for k in ("G2_understood", "G3_own_lead", "G4_sentences", "G5_seconds", "G6_cost"):
+        short[k] = {x: y for x, y in s[k].items() if not isinstance(y, (dict, list))}
+    short["G1_auditor"] = {k: s["G1_auditor"][k] for k in ("messages_with_findings", "findings")}
+    print(json.dumps(short, indent=1, default=str))
+    return 0
+
+
+def _ledger_rows(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(x) for x in f if x.strip()]
+
+
+def count_prefix(a):
+    """count_tokens (free) on the real prefix (system text + tool schemas) and on a typical turn."""
+    if not (os.environ.get("DIGESTER_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")):
+        print(RUN_NO_KEY, file=sys.stderr)
+        return 2
+    h = Harness.scratch(keep_ledger=True)
+    from mvp.brain import loop as BL, provider as P, tools as TL
+    prov = P.AnthropicProvider(prompt_version=BL.PROMPT_VERSION, loose=tuple(x for x in a.loose.split(",") if x))
+    system, tools = BL.system_text(), BL.tool_list()
+    out = {}
+    one = [{"role": "user", "content": "x"}]
+    out["prefix_plus_one_token_message"] = prov.count_tokens(system, tools, one)
+    out["tools_only"] = prov.count_tokens("x", tools, one)
+    out["system_only"] = prov.count_tokens(system, [], one)
+    msg = "which channels did I watch the most in October?"
+    t = h.turn(msg)
+    env = TL.call(t, "breakdown", {"by": "channel", "window": {"words": "in October"}})
+    u = {"type": "tool_use", "id": "toolu_count01", "name": "breakdown",
+         "input": {"by": "channel", "window": {"words": "in October", "preset": None, "same_as": None}}}
+    turn_msgs = [{"role": "user", "content": BL.user_text(msg, {"now": NOW_WORDS})},
+                 {"role": "assistant", "content": [u]},
+                 {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_count01",
+                                               "content": BL.present(env)}]}]
+    out["typical_round2_request"] = prov.count_tokens(system, tools, turn_msgs)
+    out["user_turn_only"] = prov.count_tokens(system, tools, turn_msgs[:1]) - out["prefix_plus_one_token_message"]
+    out["one_result"] = out["typical_round2_request"] - out["prefix_plus_one_token_message"] - out["user_turn_only"]
+    out["result_chars"] = len(BL.present(env))
+    print(json.dumps(out, indent=1))
+    if a.out:
+        os.makedirs(a.out, exist_ok=True)
+        with open(os.path.join(a.out, "count_tokens.json"), "w") as f:
+            json.dump(out, f, indent=1)
+    return 0
+
+
 # ================================================================ the command line
-RUN_REFUSED = ("eval_brain run is step 2: it calls a real model through the brain loop, and step 1 has no loop, no "
-               "provider and no model call. Use `planted`, `plans` or `insight` (offline).")
 
 
 def main(argv=None):
@@ -527,13 +919,22 @@ def main(argv=None):
     p2.add_argument("--json", default=None, help="write the full report here (keep it outside git)")
     p2.add_argument("--only", default="", help="conversation ids, comma separated")
     sub.add_parser("insight")
-    sub.add_parser("run")    # SPEC 12.4's --set, --provider, --model, --out, --library: step 2
-    a, extra = ap.parse_known_args(argv)
-    if extra and a.mode != "run":
-        ap.error("unrecognized arguments: " + " ".join(extra))
+    p4 = sub.add_parser("run", help="live: claude-haiku-5-5 through the brain loop on the plan messages of a half")
+    p4.add_argument("--half", choices=("tune", "heldout", "all"), required=True)
+    p4.add_argument("--limit", type=int, default=None, help="stop once this many plan messages are taken")
+    p4.add_argument("--ids", default="", help="conversation ids, comma separated")
+    p4.add_argument("--out", required=True, help="a folder outside git: one JSON per message and summary.json")
+    p4.add_argument("--parallel", type=int, default=2, help="conversations at once (at most 4)")
+    p4.add_argument("--max-usd", type=float, default=1.50, help="no new message once the run spent this much")
+    p4.add_argument("--loose", default="give_answer", help="tools sent without strict (comma separated)")
+    p5 = sub.add_parser("count", help="count_tokens (free) on the real prefix and a typical turn")
+    p5.add_argument("--out", default=None)
+    p5.add_argument("--loose", default="give_answer")
+    a = ap.parse_args(argv)
     if a.mode == "run":
-        print(RUN_REFUSED, file=sys.stderr)
-        return 2
+        return run_live(a)
+    if a.mode == "count":
+        return count_prefix(a)
     if a.mode == "planted":
         s = planted()
         by = s.pop("by_class")
