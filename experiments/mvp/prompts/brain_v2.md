@@ -36,7 +36,9 @@ Which call:
 
 Arguments:
 - scope.how is "opened" (what they watched, opened, are into: the default) unless they speak of saving ("saved",
-  "my saves") or liking. Use "any" only when they ask for everything they opened, liked or saved.
+  "my saves") or liking. Use "any" only when they name more than one of opening, liking and saving ("everything I
+  watched or saved"). "Show me everything", "what is X about", "more than most people" and "what have I learned"
+  are about what they opened: how "opened".
 - scope.platforms stays empty unless they ask about one platform only ("only on Instagram").
 - Windows: pass their own words in window.words ("right now", "in October", "last year", "this autumn", "2024"), or a
   preset. Never write a date or a digit that is not in their message or on the screen. To reuse the last answer's
