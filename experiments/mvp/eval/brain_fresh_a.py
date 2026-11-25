@@ -6,8 +6,31 @@ build_brain_fresh.Recount, never copied from a tool), the good line and the call
 The messages were written and committed before any reading was run (commit 64527c0). Half B lives in brain_fresh_b.py
 and is locked (see evalset/README_brain_fresh.md).
 """
-from mvp.eval.brain_fresh_dsl import (ALL, BEFORE_LATELY, LAST, LAST7, LATELY, OCT, SEP, SUMMER23, SUMMER25,
-                                      SUMMER26, Y21, Y22, Y23, Y24, Y25, Y26, C, F, M, R, X, preset, words)
+from mvp.eval.brain_fresh_dsl import (
+                                      ALL,
+                                      BEFORE_LATELY,
+                                      LAST,
+                                      LAST7,
+                                      LATELY,
+                                      OCT,
+                                      SEP,
+                                      SUMMER23,
+                                      SUMMER25,
+                                      SUMMER26,
+                                      Y21,
+                                      Y22,
+                                      Y23,
+                                      Y24,
+                                      Y25,
+                                      Y26,
+                                      C,
+                                      F,
+                                      M,
+                                      R,
+                                      X,
+                                      preset,
+                                      words,
+)
 
 PRIVATE_LINE = "Leaving out topics you keep private."
 GAMING, ART, MATH, COOK = "gaming", "art and design", "math", "food and cooking"
@@ -168,9 +191,10 @@ CONVS = [
                 "there in September.",
           offer="Show October without the clips?")]},
     {"id": "N010", "msgs": [
-        M("this summer vs last summer", "compare",
+        M("this summer vs last summer", "compare tool_gap",
           readings=[R(C("compare", a=words("this summer"), b=words("last summer"), by="area"), win=SUMMER26,
-                      note="this summer (2026) against the one before (2025)")],
+                      note="this summer (2026) against the one before (2025); today code reads both as the summer "
+                           "of 2026, so the facts for 2025 are not in the result (a tool gap, or a reading question)")],
           facts=[F("summer 2026 items", lambda r: r.n(SUMMER26), "opened rows, 1 Jun to 31 Aug 2026",
                    "r1.totals.items"),
                  F("summer 2025 items", lambda r: r.n(SUMMER25), "opened rows, 1 Jun to 31 Aug 2025",
@@ -181,9 +205,9 @@ CONVS = [
                  F("top area, summer 2025", lambda r: r.top("area", SUMMER25), "rows by area")],
           means="Both summers were art summers; this one adds digital drawing to the watercolor of last year.",
           offer="Just the art side, theme by theme?"),
-        M("just the art side", "follow_up scoped",
+        M("just the art side", "follow_up scoped tool_gap",
           readings=[R(C("compare", a=LAST, b=words("last summer"), by="theme", scope={"only": ["art"]}),
-                      win=SUMMER26, note="the same two summers, only art")],
+                      win=SUMMER26, note="the same two summers, only art (the same tool gap as the message before)")],
           facts=[F("art, summer 2026", lambda r: r.n(SUMMER26, area=ART), "art rows, summer 2026", "r1.totals.items"),
                  F("art, summer 2025", lambda r: r.n(SUMMER25, area=ART), "art rows, summer 2025",
                    "r1.previous.items"),
@@ -379,7 +403,7 @@ CONVS = [
                    "r1.when.busiest_hours[0].hour"),
                  F("afternoon, 12 to 16", lambda r: r.n(None, hours=range(12, 17)), "rows by local hour"),
                  F("evening, 17 to 21", lambda r: r.n(None, hours=range(17, 22)), "rows by local hour"),
-                 F("night, 22 to 4", lambda r: r.n(None, hours=list(range(22, 24)) + list(range(0, 5))),
+                 F("night, 22 to 4", lambda r: r.n(None, hours=list(range(22, 24)) + list(range(5))),
                    "rows by local hour"),
                  F("morning, 5 to 11", lambda r: r.n(None, hours=range(5, 12)), "rows by local hour")],
           means="Almost all of it is late afternoon and early evening, New York time; nights are rare.",

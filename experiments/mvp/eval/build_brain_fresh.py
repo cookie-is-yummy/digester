@@ -40,7 +40,7 @@ MIN_CONVS, MIN_PLAN, MIN_FOLLOW = 70, 100, 30
 TAGS = {"follow_up", "correction", "scoped", "private", "locked", "unlocked", "friends", "saved", "liked", "instagram",
         "shorts", "compare", "first_last", "timeline", "items", "wide", "no_answer_in_data", "part_of_period",
         "sloppy", "lately", "changes", "channels", "themes", "time_of_day", "weekday", "search", "after_end",
-        "planted", "exact"}
+        "planted", "exact", "tool_gap"}
 
 
 def half_of(cid):
@@ -156,7 +156,7 @@ class Recount:
 
     def least(self, key, win=None, **f):
         rows = self.by(key, win, **f)
-        return sorted(rows, key=lambda kv: (kv[1], str(kv[0])))[0][0] if rows else None
+        return min(rows, key=lambda kv: (kv[1], str(kv[0])))[0] if rows else None
 
     def edge(self, which, win=None, **f):
         """The first or last event of the scope: {day, time, title, channel}."""
@@ -256,12 +256,19 @@ def get_path(results, path):
     return cur
 
 
+def yes_no(v):
+    """A fact's value is a number or a string: a yes/no question is said "yes" or "no"."""
+    return ("yes" if v else "no") if isinstance(v, bool) else v
+
+
 def same(a, b):
     if isinstance(a, float) or isinstance(b, float):
         try:
             return abs(float(a) - float(b)) < 0.0015
         except (TypeError, ValueError):
             return False
+    if isinstance(a, str) and isinstance(b, str) and re.fullmatch(r"\d{4}-\d\d-\d\d", a) and b.startswith(a + " "):
+        return True     # a day against a "when" that also gives the time of day
     return a == b or (isinstance(a, str) and isinstance(b, str) and a.lower() == b.lower())
 
 
@@ -331,7 +338,8 @@ def valid_args(c):
 
 # ================================================================ build
 def load_specs():
-    from mvp.eval import brain_fresh_a as A, brain_fresh_b as B
+    from mvp.eval import brain_fresh_a as A
+    from mvp.eval import brain_fresh_b as B
     return [(c, "A") for c in A.CONVS] + [(c, "B") for c in B.CONVS]
 
 
@@ -360,7 +368,8 @@ def build(h=None, log=print):
         cid = spec["id"]
         if half_of(cid) != half:
             problems.append(f"{cid}: in the half-{half} file but its sha1 puts it in half {half_of(cid)}")
-        label = lambda n, s="": f"{cid}.{n}" + (f" {s}" if half == "A" and s else "")   # noqa: E731
+        def label(n, s="", cid=cid, half=half):
+            return f"{cid}.{n}" + (f" {s}" if half == "A" and s else "")
         msgs, screen, last = [], "", None
         for n, m in enumerate(spec["msgs"]):
             bad_tags = set(m["tags"]) - TAGS
@@ -398,7 +407,7 @@ def build(h=None, log=print):
             facts = []
             pref_win = sheet_window((pref[1] if pref else {}).get("r1"), pref[0] if pref else None)
             for fct in m["facts"]:
-                v = fct["fn"](rec)
+                v = yes_no(fct["fn"](rec))
                 facts.append({"say": fct["say"], "value": v, "how": fct["how"]})
                 if not (fct["tool"] and pref):
                     continue
@@ -407,7 +416,7 @@ def build(h=None, log=print):
                 checks = [(0, pref[1])] + [(k, res) for k, res, w in others if w == pref_win
                                            and get_path(res, fct["tool"]) != "(missing)"]
                 for k, res in checks:
-                    tv = get_path(res, fct["tool"])
+                    tv = yes_no(get_path(res, fct["tool"]))
                     if not same(v, tv):
                         kind = "count"
                         if isinstance(v, str) and isinstance(tv, str) and re.sub(r"\s*#\d+$", "", v) == tv:
@@ -417,7 +426,7 @@ def build(h=None, log=print):
                                          "call": res.get(fct["tool"].split(".")[0], {}).get("tool")})
             refuses = []
             for x in m["refuses"]:
-                t2, res2, err2 = run_reading(h, m["text"], [[x]], screen, last)
+                _t2, _res2, err2 = run_reading(h, m["text"], [[x]], screen, last)
                 if not err2:
                     problems.append(f"{cid}.{n}: a call that must be refused was not: {x['tool']}")
                 refuses.append({"tool": x["tool"], "args": x["args"], "error": err2[0] if err2 else None})
@@ -499,9 +508,43 @@ def half_b_sha(text_lines):
     return hashlib.sha256("".join(ln + "\n" for ln in hb).encode("utf-8")).hexdigest()
 
 
+def stored_lines():
+    """{id: line} of the written file, or {} when there is none."""
+    if not os.path.exists(OUT):
+        return {}
+    with open(OUT, encoding="utf-8") as f:
+        return {json.loads(x)["id"]: x.rstrip("\n") for x in f if x.strip()}
+
+
+def keep_half_b(ls, stored):
+    """Half B is locked: once the file exists its half B lines are kept byte for byte, whatever the tools now give.
+    -> (the lines to write, the ids of half B whose rebuilt line differs from the stored one)."""
+    out, differ = [], []
+    for ln in ls:
+        cid = json.loads(ln)["id"]
+        if half_of(cid) == "B" and cid in stored:
+            if stored[cid] != ln:
+                differ.append(cid)
+            out.append(stored[cid])
+        else:
+            out.append(ln)
+    missing = sorted({i for i in stored if half_of(i) == "B"} - {json.loads(x)["id"] for x in ls})
+    return out, differ + [f"{i} (gone from the source)" for i in missing]
+
+
+def redact(row):
+    """A finding of half B as the report keeps it: id, kind, reading, call and path only (half B is locked)."""
+    cid = row["where"].split(".")[0]
+    if half_of(cid) == "A":
+        return row
+    return {k: row.get(k) for k in ("kind", "where", "reading", "call", "path") if k in row}
+
+
 def main(argv=None):
     p = argparse.ArgumentParser()
-    p.add_argument("--write", action="store_true", help="write evalset/brain_fresh.jsonl")
+    p.add_argument("--write", action="store_true", help="write evalset/brain_fresh.jsonl (half B kept as stored)")
+    p.add_argument("--rewrite-half-b", action="store_true",
+                   help="rebuild half B too: only for the first write of a new set, never after the lock")
     p.add_argument("--report", help="write the report (counts, findings, problems, nearest pairs) as JSON here")
     a = p.parse_args(argv)
     convs, problems, findings = build()
@@ -509,8 +552,12 @@ def main(argv=None):
     problems += p2
     by_tag, by_half = counts(convs)
     ls = lines(convs)
-    hide = lambda x: x if x[3] == "A" else (x[0], x[1], x[2], "B", "(half B)", x[5])   # noqa: E731
+    stored = {} if a.rewrite_half_b else stored_lines()
+    ls, b_differs = keep_half_b(ls, stored)
+    findings = [redact(x) for x in findings]
+    hide = lambda x: x if x[3] == "A" else (x[0], x[1], x[2], "B", "(half B)", x[5])
     rep = {"problems": problems, "findings": findings, "by_tag": by_tag, "by_half": by_half,
+           "half_b_rebuilt_differs": b_differs,
            "nearest": [hide(x) for x in near[:10]], "half_b_sha256": half_b_sha(ls),
            "conversations": len(convs),
            "plan_messages": sum(1 for c in convs for m in c["messages"] if m["tier"] == "plan")}
@@ -522,6 +569,8 @@ def main(argv=None):
     for x in findings:
         print("  ", json.dumps(x, default=str)[:400])
     print("nearest:", json.dumps(rep["nearest"][:3]))
+    if b_differs:
+        print(f"half B kept as stored; rebuilt differs for: {', '.join(b_differs)}")
     if a.report:
         with open(a.report, "w", encoding="utf-8") as f:
             json.dump(rep, f, indent=1, default=str)

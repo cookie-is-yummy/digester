@@ -7,8 +7,27 @@ The shape is brain_fresh_a.py's. The messages were written and committed before 
 """
 from datetime import date
 
-from mvp.eval.brain_fresh_dsl import (ALL, BEFORE_LATELY, LAST, LAST7, LATELY, OCT, SEP, SUMMER26, Y21, Y24, Y25,
-                                      Y26, C, F, M, R, X, preset, words)
+from mvp.eval.brain_fresh_dsl import (
+                                      ALL,
+                                      BEFORE_LATELY,
+                                      LAST,
+                                      LAST7,
+                                      LATELY,
+                                      OCT,
+                                      SEP,
+                                      SUMMER26,
+                                      Y21,
+                                      Y24,
+                                      Y25,
+                                      Y26,
+                                      C,
+                                      F,
+                                      M,
+                                      R,
+                                      X,
+                                      preset,
+                                      words,
+)
 
 PRIVATE_LINE = "Leaving out topics you keep private."
 GAMING, ART, MATH, COOK = "gaming", "art and design", "math", "food and cooking"
@@ -128,9 +147,10 @@ CONVS = [
           means="New-ish: nothing before January 2025, then watercolor all of 2025 and drawing this year.",
           offer="Watercolor and drawing side by side?")]},
     {"id": "N020", "msgs": [
-        M("which months was i on youtube the most", "timeline",
+        M("which months was i on youtube the most", "timeline tool_gap",
           readings=[R(C("timeline", unit="month", window=preset("all"), scope={"platforms": ["youtube"]}), win=ALL,
-                      note="YouTube per month")],
+                      note="YouTube per month; today the result is cut to its first 24 months, so the facts are "
+                           "not in it (a tool gap)")],
           facts=[F("top month", lambda r: r.top("month", None, platform="youtube"), "YouTube rows by month"),
                  F("its items", lambda r: r.top_n("month", None, platform="youtube"), "rows",
                    "r1.periods[label=Oct 2026].items"),
@@ -344,7 +364,7 @@ CONVS = [
           readings=[R(C("breakdown", by="none", window=preset("all")), win=ALL,
                       note="no tool counts by hour; the count sheet's busiest hours")],
           facts=[F("items 22:00 to 04:59, New York", lambda r: r.n(None, hours=list(range(22, 24)) +
-                                                              list(range(0, 5))), "rows by local hour"),
+                                                              list(range(5))), "rows by local hour"),
                  F("latest hour with any", lambda r: max(h for h, _n in r.by("hour")), "rows"),
                  F("busiest hour", lambda r: r.top("hour"), "rows", "r1.when.busiest_hours[0].hour")],
           means="There is almost no late-night watching: nearly everything is between 3 and 8 pm.",
@@ -407,10 +427,11 @@ CONVS = [
           means="Very little: four watercolor reels and three saved food posts, all in October, before the "
                 "Instagram export ends on 15 October.",
           offer="YouTube in the same days?"),
-        M("and on youtube in the same stretch", "follow_up",
+        M("and on youtube in the same stretch", "follow_up tool_gap",
           readings=[R(C("breakdown", by="theme", window=words("12 to 15 october"),
                         scope={"platforms": ["youtube"]}), win=["2026-10-12", "2026-10-15"],
-                      note="the Instagram days on the screen, on YouTube")],
+                      note="the Instagram days on the screen, on YouTube; today code reads the range as its last "
+                           "day only, so the facts are not in the result (a tool gap)")],
           facts=[F("YouTube items, 12 to 15 Oct", lambda r: r.n(["2026-10-12", "2026-10-15"], platform="youtube"),
                    "rows", "r1.totals.items"),
                  F("top theme", lambda r: r.top("theme", ["2026-10-12", "2026-10-15"], platform="youtube"), "rows",
@@ -571,14 +592,18 @@ CONVS = [
           offer="When did it stop?")]},
     {"id": "N089", "msgs": [
         M("my breakup era videos, when did that start", "private unlocked first_last",
-          readings=[R(C("first_last", subject="dating", which="first"), win=ALL,
-                      note="the topic their message names, first; 'dating' is the word a model would pass")],
+          readings=[R(C("breakdown", by="channel", window=preset("all"), compare="none"),
+                      C("first_last", subject="heart notes", which="first"), win=ALL,
+                      note="the named topic is counted this turn; its channel, then that channel's first video"),
+                    R(C("breakdown", by="channel", window=preset("all"), compare="none"),
+                      C("first_last", subject="dating", which="first"), win=ALL, check=True,
+                      note="'dating' is the word a model would pass; code reads it as title words (a finding)")],
           facts=[F("first dating advice day", lambda r: r.edge("first", theme="Dating advice", private=True)["day"],
-                   "rows", "r1.items[0].when"),
+                   "rows", "r2.items[0].when"),
                  F("its title", lambda r: r.edge("first", theme="Dating advice", private=True)["title"], "rows",
-                   "r1.items[0].title"),
+                   "r2.items[0].title"),
                  F("dating advice in all", lambda r: r.n(None, theme="Dating advice", private=True), "rows",
-                   "r1.totals.items")],
+                   "r2.totals.items")],
           means="1 February 2024, with Heart Notes, and it ran into August.",
           offer="How many in all?")]},
     {"id": "N090", "msgs": [

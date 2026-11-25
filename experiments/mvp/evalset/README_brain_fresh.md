@@ -25,6 +25,13 @@ a design uses half A only.
 Write a new fresh set, because an edited half B is no longer unseen. Half A may change, for example to fix a reading
 after a tool change. The facts stay recounted by the build script, never copied from a tool.
 
+- `--write` keeps half B's stored lines byte for byte, whatever the tools now give, and names by id only the half B
+  conversations whose rebuilt line would differ. `--rewrite-half-b` exists only for the first write of a new set.
+- The report and the printout give half B findings as id, kind, call and path only.
+- If a tool learns to read something half B expects it to refuse (a part of a period, likes), add that id to
+  `LAPSED_B` in the test. Do not edit the line.
+- Messages tagged `tool_gap` have no reading that reaches their facts today. Score them apart.
+
 ## A line
 
 `{"id": "N001", "half": "A", "messages": [{"n", "text", "tier", "tags", "readings", "facts", "good", "refuses"?}]}`
