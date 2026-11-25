@@ -106,6 +106,11 @@ body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
 .prog i { width: 22px; height: 4px; border-radius: 4px; background: var(--edge); }
 .prog i.on { background: var(--accent); }
 .prog span { margin-left: 6px; }
+.sheet button.backarrow { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin: -8px 10px -8px -8px; padding: 0;
+  border-radius: 50%; border: 1px solid var(--edge); background: transparent; background-image: none; color: var(--head); text-decoration: none; transition: background-color .15s; }
+.sheet button.backarrow::after { content: none; }
+.sheet button.backarrow:hover { background: var(--field); }
+.sheet button.backarrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sheet h2 { font: 650 27px/1.18 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; letter-spacing: -.02em;
   color: var(--head); margin: 0 0 12px; }
 .sheet .sub { margin: 0 0 28px; color: var(--grey); }
@@ -150,6 +155,12 @@ body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
 .sheet .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--field)); }
 .sheet .bar { max-width: none; height: 4px; border-radius: 4px; overflow: hidden; }
 .sheet .bar i { background: var(--accent); box-shadow: none; }
+.sheet h3.ch { font: 600 17px/1.3 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif;
+  letter-spacing: -.01em; color: var(--head); margin: 30px 0 4px; }
+.sheet .cnote { margin: 0 0 14px; font-size: 16px; color: var(--grey); max-width: none; }
+.sheet .connect { padding-bottom: 22px; border-bottom: 1px solid var(--edge); }
+.sheet .connect h3.ch { margin-top: 4px; }
+#ytcode { margin-top: 16px; }
 </style>
 </head>
 <body>
@@ -183,7 +194,7 @@ body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
   </section>
 
   <section id="s1" class="sheet" hidden>
-    <div class="prog"><i class="on"></i><i></i><i></i><span>Step 1 of 3</span></div>
+    <div class="prog"><button class="backarrow" id="back1" type="button" aria-label="Back to the first page"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 4.5L6 10l5.500 5.500M6.500 10H15"/></svg></button><i class="on"></i><i></i><i></i><span>Step 1 of 3</span></div>
     <h2>Sign up for digestr</h2>
     <p class="sub">Your number is your account. There's no password.</p>
     <form id="f1" novalidate>
@@ -210,7 +221,7 @@ body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
   </section>
 
   <section id="s2" class="sheet" hidden>
-    <div class="prog"><i class="on"></i><i class="on"></i><i></i><span>Step 2 of 3</span></div>
+    <div class="prog"><button class="backarrow" id="back2" type="button" aria-label="Back to change your number"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 4.5L6 10l5.500 5.500M6.500 10H15"/></svg></button><i class="on"></i><i class="on"></i><i></i><span>Step 2 of 3</span></div>
     <h2>Send one text so we know it's you</h2>
     <p class="sub">Tap the button and press send. The code is already typed.</p>
     <div class="box code" id="code" aria-label="Your code"></div>
@@ -225,14 +236,43 @@ body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
   <section id="s3" class="sheet" hidden>
     <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><span>Step 3 of 3</span></div>
     <h2>You're in</h2>
-    <p class="sub">The bot has replied in your thread, so keep texting that number. To let it answer from your own saves, add your Instagram export, now or later.</p>
-    <ol class="how">
-      <li>Open <a id="ig" href="https://accountscenter.instagram.com/info_and_permissions/dyi/" target="_blank" rel="noopener noreferrer">Instagram's export page</a> and choose <b>Download or transfer information</b>.</li>
-      <li>Pick <b>Some of your information</b>: Saved, Likes, and Followers and following. Leave Messages unticked.</li>
-      <li>Choose <b>Download to device</b>, format <b>JSON</b>, date range <b>All time</b>.</li>
-      <li>When Instagram emails you the file, come back to this link and add it below.</li>
-    </ol>
-    <label class="box drop" id="drop" tabindex="0" for="file"><b>Choose your export</b><span>or drop the .zip here (up to __MAX_MB__ MB)</span></label>
+    <p class="sub">The bot has replied in your thread — keep texting that number. Add more below so it can answer from what you watch and save. Now, or any time later.</p>
+
+    <div class="connect">
+      <h3 class="ch">YouTube</h3>
+      <p class="cnote">Your likes, playlists and the channels you follow. A quick Google sign-in — no file, no password.</p>
+      <button class="primary" id="ytgo" type="button">Connect YouTube</button>
+      <div id="ytcode" hidden>
+        <p class="cnote">Open Google on any device, enter this code, and tap Allow. This page updates on its own.</p>
+        <div class="box code" id="ytuser" aria-label="Your sign-in code"></div>
+        <a class="btn primary" id="ytopen" href="https://www.google.com/device" target="_blank" rel="noopener noreferrer">Open Google &amp; enter it</a>
+        <div class="wait" id="ytwait"><span class="spin" aria-hidden="true"></span><span>Waiting for you to approve…</span></div>
+      </div>
+      <div class="ok" id="ytok" role="status">✓ YouTube connected — your likes, playlists and subscriptions are in.</div>
+      <div class="err" id="yte" role="alert"></div>
+    </div>
+
+    <h3 class="ch">Saves and watch history</h3>
+    <p class="cnote">Add a file to bring in your Instagram saves or your YouTube watch history. Add whichever you have — one now, another later.</p>
+    <details class="fine"><summary>Instagram saves — how to export</summary>
+      <ol class="how">
+        <li>Open <a id="ig" href="https://accountscenter.instagram.com/info_and_permissions/dyi/" target="_blank" rel="noopener noreferrer">Instagram's export page</a> and choose <b>Download or transfer information</b>.</li>
+        <li>Pick <b>Some of your information</b>: Saved, Likes, and Followers and following. Leave Messages unticked.</li>
+        <li>Choose <b>Download to device</b>, format <b>JSON</b>, date range <b>All time</b>.</li>
+        <li>When Instagram emails you the file, come back here and add the .zip below.</li>
+      </ol>
+    </details>
+    <details class="fine"><summary>YouTube watch history — how to export</summary>
+      <ol class="how">
+        <li>Open <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout</a> and <b>Deselect all</b>.</li>
+        <li>Tick only <b>YouTube and YouTube Music</b> → <b>All YouTube data included</b> → deselect all → tick only <b>history</b>.</li>
+        <li>Set <b>Multiple formats</b> → History to <b>JSON</b>. Then <b>Create export</b>.</li>
+        <li>When Google emails you the file, come back here and add the .zip below.</li>
+      </ol>
+      <p class="cnote">Watch history can only come from this file — Google gives it to no app automatically.</p>
+    </details>
+    <p class="cnote" id="phonehint" hidden>On a phone? The watch-history file is easier to add on a computer. <button class="quiet" id="copylink" type="button">Copy this link</button></p>
+    <label class="box drop" id="drop" tabindex="0" for="file"><b>Choose a file</b><span>Instagram or Takeout .zip — or drop it here</span></label>
     <input class="sr" id="file" type="file" accept=".zip,application/zip">
     <div class="bar" id="bar"><i id="fill"></i></div>
     <div class="ok" id="ok" role="status"></div>
@@ -256,9 +296,14 @@ body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
     try_later: "Something went wrong on our side. Please try again in a minute.",
     claim: "That took a while, so the code expired. Please start again.",
     ticket: "Please verify your number again to add a file.",
-    too_big: "That file is over " + MAX_MB + " MB. In Instagram, pick only Saved, Likes, and Followers and following, in JSON.",
+    too_big: "That file is too large. In Instagram, pick only Saved, Likes, and Followers and following, in JSON — that keeps it small.",
     html: "That export is in HTML format. Request it again and choose JSON.",
-    not_export: "That isn't an Instagram export. Choose the .zip Instagram emailed you.",
+    not_export: "That isn't an Instagram or Takeout export. Choose the .zip Instagram or Google emailed you.",
+    yt_off: "YouTube sign-in isn't switched on for this test yet.",
+    yt_failed: "Couldn't reach Google. Tap Connect YouTube to try again.",
+    yt_denied: "That sign-in was turned down. Tap Connect YouTube to try again.",
+    yt_expired: "The code ran out. Tap Connect YouTube for a new one.",
+    yt_scope: "Google gave the wrong permission, so nothing was kept. Tap Connect YouTube to try again.",
     cut_off: "The upload was interrupted. Please try again.",
     length: "The upload was interrupted. Please try again.",
     body: "Something went wrong. Please try again.",
@@ -340,43 +385,75 @@ body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
     $("b1").disabled = false; $("b1").textContent = "Continue";
   });
 
-  $("back").addEventListener("click", () => { clearTimeout(timer); forget(); show("s1"); });
-  $("go").addEventListener("click", () => show("s1"));
+  const renumber = () => { clearTimeout(timer); forget(); show("s1"); };
+  $("back").addEventListener("click", renumber);
+  $("back2").addEventListener("click", renumber);
+  $("back1").addEventListener("click", () => { clear($("e1")); show("s0"); $("go").focus({ preventScroll: true }); });
+  $("go").addEventListener("click", () => { show("s1"); try { history.pushState({ step: 1 }, ""); } catch (e) { /* no history */ } });
+  window.addEventListener("popstate", () => { if (!$("s1").hidden) show("s0"); });   // the browser's own back button, from the number step
   $("copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(state.botNumber); $("copy").textContent = "Copied"; }
     catch (e) { $("copy").textContent = "Press and hold the number"; }
     setTimeout(() => { $("copy").textContent = "Copy number"; }, 2500);
   });
 
+  const CHUNK = 8 * 1048576, PER_REQUEST = 90 * 1048576;   // one request stays well under the tunnel's 100 MB limit
+  function uploadResult(status, data) {
+    $("bar").classList.remove("show");
+    if (status === 200 && data && data.ok) {
+      $("ok").textContent = "Got it. The bot will text you when it has been added, usually within a few minutes.";
+      $("ok").classList.add("show"); say($("ok").textContent);
+    } else {
+      if (data && data.error === "ticket") forget();
+      fail($("e3"), (data && data.error) || (status === 413 ? "too_big" : "try_later"));
+    }
+  }
   function upload(file) {
     clear($("e3")); $("ok").classList.remove("show");
     if (!file) return;
     if (!/\.zip$/i.test(file.name)) return fail($("e3"), "not_export");
-    if (file.size > MAX_MB * 1048576) return fail($("e3"), "too_big");
+    const name = file.name.replace(/[^\w.\- ]+/g, "_").slice(0, 120);
+    $("bar").classList.add("show"); $("fill").style.width = "0";
+    if (file.size <= PER_REQUEST) return singleUpload(file, name);
+    return chunkUpload(file, name);
+  }
+  function singleUpload(file, name) {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/upload");
     xhr.setRequestHeader("X-Invite", invite);
     xhr.setRequestHeader("X-Ticket", state.ticket);
-    xhr.setRequestHeader("X-Filename", file.name.replace(/[^\w.\- ]+/g, "_").slice(0, 120));
+    xhr.setRequestHeader("X-Filename", name);
     xhr.setRequestHeader("Content-Type", "application/zip");
-    $("bar").classList.add("show"); $("fill").style.width = "0";
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) $("fill").style.width = Math.round(100 * e.loaded / e.total) + "%"; };
     xhr.onerror = () => { $("bar").classList.remove("show"); fail($("e3"), "offline"); };
-    xhr.onload = () => {
-      $("bar").classList.remove("show");
-      let data = {};
-      try { data = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ }
-      if (xhr.status === 200 && data.ok) {
-        $("ok").textContent = "Got it. The bot will text you when it has been added, usually within a few minutes.";
-        $("ok").classList.add("show"); say($("ok").textContent);
-      } else {
-        if (data.error === "ticket") { forget(); }
-        fail($("e3"), data.error || (xhr.status === 413 ? "too_big" : "try_later"));
-      }
-    };
+    xhr.onload = () => { let d = {}; try { d = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ } uploadResult(xhr.status, d); };
     xhr.send(file);
   }
+  async function chunkUpload(file, name) {
+    const id = (self.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random())
+      .replace(/[^\w-]/g, "").slice(0, 60);
+    const total = file.size;
+    for (let off = 0; off < total; off += CHUNK) {
+      const final = off + CHUNK >= total;
+      let res;
+      try {
+        res = await fetch("/api/upload", { method: "POST", cache: "no-store", body: file.slice(off, off + CHUNK),
+          headers: { "X-Invite": invite, "X-Ticket": state.ticket, "X-Filename": name, "X-Upload-Id": id,
+                     "X-Total-Size": String(total), "X-Chunk-Final": final ? "1" : "0", "Content-Type": "application/zip" } });
+      } catch (e) { return uploadResult(0, { error: "offline" }); }
+      let data = {}; try { data = await res.json(); } catch (e) { /* not JSON */ }
+      if (!res.ok) return uploadResult(res.status, data);
+      $("fill").style.width = Math.round(100 * Math.min(off + CHUNK, total) / total) + "%";
+      if (final) return uploadResult(res.status, data);
+    }
+  }
   $("file").addEventListener("change", () => { upload($("file").files[0]); $("file").value = ""; });
+  if (navigator.maxTouchPoints > 0 || (window.matchMedia && matchMedia("(pointer: coarse)").matches)) $("phonehint").hidden = false;
+  $("copylink").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(location.href); $("copylink").textContent = "Copied"; }
+    catch (e) { $("copylink").textContent = "Copy didn't work — long-press the address bar."; }
+    setTimeout(() => { $("copylink").textContent = "Copy this link"; }, 2800);
+  });
   const drop = $("drop");
   drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
   for (const t of ["dragenter", "dragover"]) drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); });
@@ -384,6 +461,41 @@ body.steps main { max-width: 520px; margin: 0 auto; padding: 9vh 16px 48px; }
   drop.addEventListener("drop", (e) => upload(e.dataTransfer.files[0]));
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => e.preventDefault());
+  // ---------- step 3: connect YouTube by a code, confirmed on this page ----------
+  let ytTimer = null;
+  function ytConnected() {
+    clearTimeout(ytTimer);
+    $("ytcode").hidden = true;
+    $("ytgo").hidden = true;
+    $("ytok").classList.add("show");
+    say($("ytok").textContent);
+  }
+  function ytPoll() {
+    clearTimeout(ytTimer);
+    if (!state || !state.ticket) return;
+    ytTimer = setTimeout(async () => {
+      try {
+        const r = await post("/api/youtube/status", { ticket: state.ticket });
+        if (r.connected) return ytConnected();
+        if (r.error) { $("ytcode").hidden = true; $("ytgo").hidden = false; $("ytgo").disabled = false; return fail($("yte"), "yt_" + r.error); }
+      } catch (e) { /* keep waiting through a blip */ }
+      ytPoll();
+    }, 3000);
+  }
+  $("ytgo").addEventListener("click", async () => {
+    clear($("yte")); $("ytgo").disabled = true;
+    try {
+      const r = await post("/api/youtube/start", { ticket: state.ticket });
+      if (r.connected) return ytConnected();
+      $("ytuser").textContent = (r.code || "").replace(/(.{4})(?=.)/g, "$1 ").trim();
+      $("ytcode").hidden = false;
+      ytPoll();
+    } catch (e) {
+      $("ytgo").disabled = false;
+      fail($("yte"), e && e.message ? e.message : "yt_failed");
+    }
+  });
+
   document.addEventListener("visibilitychange", () => { if (!document.hidden && state && !state.ticket) poll(); });
 
   if (invite.length < 16) return show("s-closed");

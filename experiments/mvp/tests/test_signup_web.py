@@ -379,7 +379,9 @@ def test_the_page_is_served_locked_down(web):
 def test_the_page_asks_nothing_of_other_sites(web):
     html = call(web, "/")[2].decode()
     links = set(re.findall(r'(?:src|href|action)="(https?://[^"]+)"', html))
-    assert links == {"https://accountscenter.instagram.com/info_and_permissions/dyi/"}
+    assert links == {"https://accountscenter.instagram.com/info_and_permissions/dyi/",
+                     "https://takeout.google.com/",            # YouTube watch-history export
+                     "https://www.google.com/device"}          # where the person enters the YouTube sign-in code
     assert not re.search(r"<(script|link|img|iframe)[^>]+(src|href)=", html)   # no outside script, style, image or frame
     assert "location.hash" in html and "location.search" not in html  # the invite stays in the fragment
     assert 'on' + 'click="' not in html and "eval(" not in html and "innerHTML" not in html
@@ -445,3 +447,140 @@ def test_an_upload_over_the_limit_is_refused_by_its_size(web):
     status, _, body = call(web, "/api/upload", raw=data, headers={"X-Invite": INVITE, "X-Ticket": ticket})
     assert status == 413 and json.loads(body) == {"error": "too_big"}
     assert inbox_files(web, "+15550001234") == []
+
+
+# ---------- YouTube connect by a device code, confirmed on the page ----------
+class FakeYt:
+    """Stands in for yt_auth: no Google, no network. Scripts what each poll returns."""
+    def __init__(self, has_client=True):
+        self.has_client = has_client
+        self.codes = {}       # handle -> user_code while a code is open
+        self.plan = {}        # handle -> [states poll() returns, in order]
+        self.done = set()     # connected handles
+    def client(self):
+        return ("id", "secret") if self.has_client else None
+    def connected(self, store, handle, *a, **k):
+        return handle in self.done
+    def waiting(self, store, handle, now=None):
+        return {"user_code": self.codes[handle]} if handle in self.codes else None
+    def start(self, store, handle, now=None):
+        self.codes[handle] = "WXYZ-5678"
+        return {"user_code": "WXYZ-5678", "minutes": 30}
+    def poll(self, store, handle, now=None):
+        seq = self.plan.get(handle) or []
+        st = seq.pop(0) if seq else "pending"
+        if st == "connected":
+            self.done.add(handle); self.codes.pop(handle, None)
+        elif st in ("denied", "expired", "scope", "failed"):
+            self.codes.pop(handle, None)
+        return st
+
+
+def test_youtube_connect_gives_a_code_then_confirms_once_approved(env):
+    app = env["app"]; app.yt = FakeYt()
+    t = verified(env)
+    out = app.youtube_start(INVITE, t)
+    assert out["code"] == "WXYZ-5678" and out["url"] == "https://www.google.com/device"
+    assert app.youtube_status(INVITE, t) == {"connected": False, "waiting": True}   # not approved yet
+    app.yt.plan[ANA] = ["connected"]
+    assert app.youtube_status(INVITE, t) == {"connected": True}                     # approved
+    assert app.youtube_status(INVITE, t) == {"connected": True}                     # still yes
+
+
+def test_youtube_start_when_already_connected_says_so(env):
+    app = env["app"]; app.yt = FakeYt()
+    t = verified(env); app.yt.done.add(ANA)
+    assert app.youtube_start(INVITE, t) == {"connected": True}
+
+
+def test_youtube_is_off_with_no_google_client(env):
+    app = env["app"]; app.yt = FakeYt(has_client=False)
+    assert refused(app.youtube_start, INVITE, verified(env)) == (503, "yt_off")
+
+
+def test_youtube_needs_a_real_ticket(env):
+    app = env["app"]; app.yt = FakeYt()
+    for bad in ["", None, "abc.def", env["S"].make_ticket(b"x" * 32, ANA)]:
+        assert refused(app.youtube_start, INVITE, bad) == (403, "ticket")
+        assert refused(app.youtube_status, INVITE, bad) == (403, "ticket")
+
+
+def test_youtube_status_reports_a_turned_down_code(env):
+    app = env["app"]; app.yt = FakeYt()
+    t = verified(env); app.youtube_start(INVITE, t)
+    app.yt.plan[ANA] = ["denied"]
+    assert app.youtube_status(INVITE, t) == {"connected": False, "waiting": False, "error": "denied"}
+
+
+def test_a_google_takeout_zip_is_accepted_like_an_instagram_export(env):
+    t = verified(env)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("Takeout/YouTube and YouTube Music/history/watch-history.json", json.dumps([]))
+    data = buf.getvalue()
+    assert env["app"].upload(INVITE, t, "takeout.zip", io.BytesIO(data), len(data), 99 * 2 ** 20) == \
+        {"ok": True, "kind": "takeout"}
+
+
+def test_the_page_offers_youtube_connect_and_the_takeout_route(env):
+    html = open(os.path.join(os.path.dirname(env["S"].__file__), "signup_page.html"), encoding="utf-8").read()
+    for must in ["Connect YouTube", "takeout.google.com", "watch history", "/api/youtube/start", "/api/youtube/status"]:
+        assert must in html, must
+
+
+# ---------- big files: chunked upload (so size isn't capped by the tunnel's per-request limit) ----------
+def takeout_zip():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("Takeout/YouTube and YouTube Music/history/watch-history.json", json.dumps([{"title": "a"}]))
+    return buf.getvalue()
+
+
+def _send_chunks(app, ticket, data, uid, chunk, total=None, max_bytes=99 * 2 ** 20, filename="takeout.zip"):
+    total = len(data) if total is None else total
+    out = None
+    for off in range(0, len(data), chunk):
+        piece = data[off:off + chunk]
+        final = off + chunk >= len(data)
+        out = app.upload(INVITE, ticket, filename, io.BytesIO(piece), len(piece), max_bytes,
+                         upload_id=uid, total=total, final=final)
+    return out
+
+
+def test_a_big_file_uploads_in_small_chunks_and_imports(env):
+    data = takeout_zip()
+    assert _send_chunks(env["app"], verified(env), data, "sess-aaaaaaaa", chunk=7) == {"ok": True, "kind": "takeout"}
+    assert inbox_files(env) and inbox_files(env)[0].endswith(".zip")   # the whole file landed in the inbox
+
+
+def test_what_the_tunnel_would_refuse_whole_still_gets_through_in_chunks(env):
+    data, t = takeout_zip(), verified(env)
+    # one request bigger than the per-request limit is refused...
+    assert refused(env["app"].upload, INVITE, t, "x.zip", io.BytesIO(data), len(data), 8) == (413, "too_big")
+    # ...but the same bytes in 8-byte pieces go through
+    assert _send_chunks(env["app"], t, data, "sess-bbbbbbbb", chunk=8, max_bytes=8) == {"ok": True, "kind": "takeout"}
+
+
+def test_a_partial_upload_is_held_and_imported_only_on_the_last_chunk(env):
+    data, t, uid = takeout_zip(), verified(env), "sess-partial01"
+    half = len(data) // 2
+    r1 = env["app"].upload(INVITE, t, "x.zip", io.BytesIO(data[:half]), half, 99 * 2 ** 20,
+                           upload_id=uid, total=len(data), final=False)
+    assert r1["ok"] and "kind" not in r1 and inbox_files(env) == []    # nothing imported yet
+    r2 = env["app"].upload(INVITE, t, "x.zip", io.BytesIO(data[half:]), len(data) - half, 99 * 2 ** 20,
+                           upload_id=uid, total=len(data), final=True)
+    assert r2 == {"ok": True, "kind": "takeout"}
+
+
+def test_chunks_cannot_exceed_the_declared_total_or_the_cap(env):
+    app = env["app"]; app.total_cap = 50; t = verified(env)
+    assert refused(app.upload, INVITE, t, "x.zip", io.BytesIO(b"xxxx"), 4, 99 * 2 ** 20,
+                   upload_id="sess-cccccccc", total=999) == (413, "too_big")          # total over the cap
+    assert refused(app.upload, INVITE, t, "x.zip", io.BytesIO(b"xxxxxxxx"), 8, 99 * 2 ** 20,
+                   upload_id="sess-dddddddd", total=4) == (413, "too_big")            # a chunk past the declared total
+
+
+def test_a_bad_upload_id_is_refused(env):
+    t = verified(env)
+    assert refused(env["app"].upload, INVITE, t, "x.zip", io.BytesIO(b"xx"), 2, 99 * 2 ** 20,
+                   upload_id="bad id!", total=2) == (400, "body")

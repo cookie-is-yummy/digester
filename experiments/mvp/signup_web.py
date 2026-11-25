@@ -22,7 +22,7 @@ How it is kept safe (each line has a test in tests/test_signup_web.py):
 - The server listens on 127.0.0.1 only: the tunnel is the one way in.
 
 Settings (environment only): MVP_SIGNUP_INVITE, PHOTON_API_KEY and PHOTON_PROJECT_ID (photon_assign.py). Optional:
-MVP_SIGNUP_MAX_PEOPLE, MVP_SIGNUP_UPLOAD_MB (default 95; a quick Cloudflare tunnel refuses bodies over 100 MB),
+MVP_SIGNUP_MAX_PEOPLE, MVP_SIGNUP_UPLOAD_MB (default 99; a quick Cloudflare tunnel refuses bodies over 100 MB, so a real host is needed to go higher),
 MVP_SIGNUP_LIBRARY (the empty library a new person starts on; default data/libraries/empty).
 """
 import argparse
@@ -141,7 +141,7 @@ class Signup:
     """The sign-up's own logic, apart from HTTP, so tests call it directly."""
 
     def __init__(self, store, invite, assign, key, people_path=None, library=None, max_people=3, classify=None,
-                 save_upload=None, nudge=None):
+                 save_upload=None, nudge=None, yt=None):
         if not invite or len(invite) < 16:
             raise RuntimeError("MVP_SIGNUP_INVITE is not set, or shorter than 16 characters")
         self.store, self.invite, self.assign, self.key = store, invite, assign, key
@@ -149,6 +149,7 @@ class Signup:
         self.library = os.path.abspath(library or os.path.join(config.REPO, "data", "libraries", "empty"))
         self.max_people = max_people
         self.classify, self.save_upload, self.nudge = classify, save_upload, nudge
+        self.yt = yt   # yt_auth; None when YouTube is off on this bot
         self.claims = {}                 # claim id -> {secret, handle, code, at, since, bot}
         self.lock = threading.Lock()
         self.file_lock = threading.Lock()
@@ -156,6 +157,9 @@ class Signup:
         self.everyone = Limiter(40, 3600)
         self.checks = Limiter(1200, 3600)     # one page asks every 2 seconds for up to 30 minutes
         self.uploads = Limiter(8, 3600)      # a few wrong files (HTML, the wrong zip) must not lock a person out
+        self.chunks = Limiter(6000, 3600)    # pieces of a big file: many requests for one upload, so counted apart
+        self.total_cap = int(os.environ.get("MVP_SIGNUP_UPLOAD_MAX_MB", "2048")) * 2 ** 20   # whole-file cap when chunked
+        self.parts_dir = os.path.join(config.INBOX, ".uploads")
         ensure_empty_library(self.library)
 
     # ---------- the invite ----------
@@ -260,21 +264,8 @@ class Signup:
         return {"verified": True, "ticket": make_ticket(self.key, c["handle"], now)}
 
     # ---------- step 3: an export ----------
-    def upload(self, invite, ticket, filename, stream, length, max_bytes, ip="?", now=None):
-        self.check_invite(invite)
-        handle = read_ticket(self.key, ticket, now)
-        if handle is None or self.store.person(handle) is None:
-            raise Refused(403, "ticket")
-        if not isinstance(length, int) or length <= 0:
-            raise Refused(411, "length")
-        if length > max_bytes:
-            raise Refused(413, "too_big")
-        if not self.uploads.allow(handle, now) or not self.per_ip.allow("up:" + ip, now):
-            raise Refused(429, "slow_down")
-        try:
-            path = self.save_upload(handle, filename, stream, length)
-        except ValueError:
-            raise Refused(400, "cut_off") from None
+    def _finish_saved(self, path):
+        """A file is in the inbox: keep it if it is an export, delete it otherwise. Shared by both upload paths."""
         kind = None
         try:
             if zipfile.is_zipfile(path):
@@ -293,6 +284,145 @@ class Signup:
             self.nudge(path)
         return {"ok": True, "kind": kind}
 
+    def _sweep_parts(self):
+        """Drop half-finished uploads nobody came back to finish (older than 2 hours)."""
+        cutoff = time.time() - 2 * 3600
+        try:
+            for n in os.listdir(self.parts_dir):
+                f = os.path.join(self.parts_dir, n)
+                try:
+                    if os.path.getmtime(f) < cutoff:
+                        os.remove(f)
+                except OSError:
+                    pass
+        except OSError:
+            pass
+
+    def upload(self, invite, ticket, filename, stream, length, max_bytes, ip="?", now=None,
+               upload_id=None, total=None, final=True):
+        """One request is at most `max_bytes` (the tunnel's limit). A file larger than that arrives as many requests
+        sharing one `upload_id`, appended into one file (bounded only by self.total_cap), then imported on the last."""
+        self.check_invite(invite)
+        handle = read_ticket(self.key, ticket, now)
+        if handle is None or self.store.person(handle) is None:
+            raise Refused(403, "ticket")
+        if not isinstance(length, int) or length <= 0:
+            raise Refused(411, "length")
+        if length > max_bytes:
+            raise Refused(413, "too_big")
+        if upload_id is None:                                        # a small file: one request, as before
+            if not self.uploads.allow(handle, now) or not self.per_ip.allow("up:" + ip, now):
+                raise Refused(429, "slow_down")
+            try:
+                path = self.save_upload(handle, filename, stream, length)
+            except ValueError:
+                raise Refused(400, "cut_off") from None
+            return self._finish_saved(path)
+        # a big file, in pieces
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", upload_id or ""):
+            raise Refused(400, "body")
+        if not isinstance(total, int) or total <= 0 or total > self.total_cap:
+            raise Refused(413, "too_big")
+        os.makedirs(self.parts_dir, exist_ok=True)
+        part = os.path.join(self.parts_dir, hashlib.sha256(f"{handle}|{upload_id}".encode()).hexdigest()[:24] + ".part")
+        with self.file_lock:
+            first = not os.path.exists(part)
+            if first:
+                self._sweep_parts()
+                if not self.uploads.allow(handle, now) or not self.per_ip.allow("up:" + ip, now):
+                    raise Refused(429, "slow_down")
+            elif not self.chunks.allow("ch:" + ip, now):
+                raise Refused(429, "slow_down")
+            have = 0 if first else os.path.getsize(part)
+            if have + length > total or have + length > self.total_cap:
+                try:
+                    os.remove(part)
+                except OSError:
+                    pass
+                raise Refused(413, "too_big")
+            left = length
+            with open(part, "ab") as f:
+                while left > 0:
+                    buf = stream.read(min(1 << 20, left))
+                    if not buf:
+                        break
+                    f.write(buf)
+                    left -= len(buf)
+            if left:
+                try:
+                    os.remove(part)
+                except OSError:
+                    pass
+                raise Refused(400, "cut_off")
+            if not final:
+                return {"ok": True, "received": os.path.getsize(part)}
+            size = os.path.getsize(part)
+        if size != total:
+            try:
+                os.remove(part)
+            except OSError:
+                pass
+            raise Refused(400, "cut_off")
+        try:
+            with open(part, "rb") as f:
+                path = self.save_upload(handle, filename, f, size)
+        finally:
+            try:
+                os.remove(part)
+            except OSError:
+                pass
+        return self._finish_saved(path)
+
+
+    # ---------- step 3 (optional): connect YouTube by Google's device code, confirmed on this page ----------
+    def _ticket_handle(self, ticket, now):
+        handle = read_ticket(self.key, ticket, now)
+        if handle is None or self.store.person(handle) is None:
+            raise Refused(403, "ticket")
+        return handle
+
+    def youtube_start(self, invite, ticket, ip="?", now=None):
+        """Ask Google for a sign-in code for this (already phone-verified) person. {"code","url","minutes"} or
+        {"connected": True}. yt_off when this bot has no Google client."""
+        self.check_invite(invite)
+        handle = self._ticket_handle(ticket, now)
+        if not self.per_ip.allow("yts:" + ip, now):
+            raise Refused(429, "slow_down")
+        if self.yt is None or self.yt.client() is None:
+            raise Refused(503, "yt_off")
+        if self.yt.connected(self.store, handle):
+            return {"connected": True}
+        st = self.yt.waiting(self.store, handle, now)
+        if st:
+            return {"code": st["user_code"], "url": "https://www.google.com/device"}
+        from .actions.youtube import YtError
+        try:
+            got = self.yt.start(self.store, handle, now)
+        except YtError as e:
+            raise Refused(503, "yt_off" if e.code in ("not_set_up", "no_key") else "yt_failed") from None
+        return {"code": got["user_code"], "url": "https://www.google.com/device", "minutes": got["minutes"]}
+
+    def youtube_status(self, invite, ticket, ip="?", now=None):
+        """Has the person approved the code yet? Polls Google no faster than its interval. {"connected": bool,
+        "waiting": bool, "error"?}."""
+        self.check_invite(invite)
+        handle = self._ticket_handle(ticket, now)
+        if not self.checks.allow("ytp:" + ip, now):
+            raise Refused(429, "slow_down")
+        if self.yt is None:
+            raise Refused(503, "yt_off")
+        if self.yt.connected(self.store, handle):
+            return {"connected": True}
+        got = self.yt.poll(self.store, handle, now)   # force=False: at most one Google call per device interval
+        if got == "connected" or self.yt.connected(self.store, handle):
+            return {"connected": True}
+        if got == "pending" or (got is None and self.yt.waiting(self.store, handle, now)):
+            return {"connected": False, "waiting": True}
+        if got in ("denied", "expired", "scope", "failed"):
+            return {"connected": False, "waiting": False, "error": got}
+        return {"connected": False, "waiting": False}   # no code open: the page offers to start again
+
+
 
 def ensure_empty_library(lib):
     """The library a new person starts on: nothing in it, so every answer says so until their export is added."""
@@ -307,7 +437,7 @@ def ensure_empty_library(lib):
                    "counts": {"items": 0, "instagram": 0, "youtube": 0, "interactions": 0}, "warnings": []}, f)
 
 
-def make_server(app, port=8790, max_upload=95 * 2 ** 20, page_path=PAGE):
+def make_server(app, port=8790, max_upload=99 * 2 ** 20, page_path=PAGE):
     with open(page_path, encoding="utf-8") as f:
         page = f.read()
 
@@ -361,14 +491,23 @@ def make_server(app, port=8790, max_upload=95 * 2 ** 20, page_path=PAGE):
                 elif path == "/api/status":
                     d = self._body()
                     out = app.status(d.get("invite"), d.get("claim"), d.get("secret"), self._ip())
+                elif path == "/api/youtube/start":
+                    d = self._body()
+                    out = app.youtube_start(d.get("invite"), d.get("ticket"), self._ip())
+                elif path == "/api/youtube/status":
+                    d = self._body()
+                    out = app.youtube_status(d.get("invite"), d.get("ticket"), self._ip())
                 elif path == "/api/upload":
                     try:
                         length = int(self.headers.get("Content-Length") or 0)
                     except ValueError:
                         length = 0
+                    tot = self.headers.get("X-Total-Size")
                     out = app.upload(self.headers.get("X-Invite"), self.headers.get("X-Ticket"),
                                      self.headers.get("X-Filename") or "export.zip", self.rfile, length, max_upload,
-                                     self._ip())
+                                     self._ip(), upload_id=self.headers.get("X-Upload-Id"),
+                                     total=int(tot) if tot and tot.isdigit() else None,
+                                     final=(self.headers.get("X-Chunk-Final") != "0"))
                 else:
                     return self._send(404)
             except Refused as e:
@@ -387,14 +526,14 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="The invited testers' sign-up page (Photon channel).")
     ap.add_argument("--port", type=int, default=8790)
     a = ap.parse_args(argv)
-    from . import photon_assign, refresh
+    from . import photon_assign, refresh, yt_auth
     from .store import Store
     store = Store(config.DB)
     app = Signup(store, os.environ.get("MVP_SIGNUP_INVITE", ""), photon_assign.assign, load_key(),
                  library=os.environ.get("MVP_SIGNUP_LIBRARY"),
                  max_people=int(os.environ.get("MVP_SIGNUP_MAX_PEOPLE", "3")),
-                 classify=refresh.classify, save_upload=refresh.save_upload)
-    server = make_server(app, a.port, int(os.environ.get("MVP_SIGNUP_UPLOAD_MB", "95")) * 2 ** 20)
+                 classify=refresh.classify, save_upload=refresh.save_upload, yt=yt_auth)
+    server = make_server(app, a.port, int(os.environ.get("MVP_SIGNUP_UPLOAD_MB", "99")) * 2 ** 20)
     print(f"Sign-up page on 127.0.0.1:{a.port}, at most {app.max_people} people, store {store.path}", file=sys.stderr)
     server.serve_forever()
 
