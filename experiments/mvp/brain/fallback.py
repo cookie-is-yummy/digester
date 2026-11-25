@@ -7,6 +7,13 @@ smallest row "led"), the answer of `insight.code_form(sheet)`, run through today
 base words of `scoped`, the gate) and given its window's words (`insight.window_lead`). Otherwise one template per
 tool, written with markers and passed through `verify.check_answer` before it is used, then sent with its markers
 taken out. When nothing passes: the plain line of SPEC 3.10.
+
+Merge seam (the tools' real results): code_form is not used on a result the tools scoped (meta.filters_said: only,
+without, a subject, a weekday, a platform) nor on a length-filtered sheet, because its words would leave the scope
+out ("Clip Factory led" of only gaming); the templates say the scope, the base's verb ("you saved"), both windows of
+a compare, and a first or a last by the item's day. On the brain library code_form gives no answer for a plain count,
+a timeline, a compare or a tool-made first_last sheet (its first/last branch reads facts' own item rows and a topic):
+those get a template.
 """
 import re
 
@@ -40,9 +47,11 @@ def _from_code_form(res):
     sheet = res.sheet_k
     if sheet.get("kind") not in CODE_FORM_KINDS or (res.meta or {}).get("order") == "least":
         return None
-    if V.scope_parts(res):
+    f = sheet.get("filters") or {}
+    if V.scope_parts(res) or f.get("without_shorts") or f.get("length") in ("long", "short"):
         # merge seam: a result the tools scoped by a name, a weekday or a platform keeps its scope in meta, not in
-        # the sheet's filters, so code_form's words would leave it out ("Clip Factory led" of only gaming)
+        # the sheet's filters, so code_form's words would leave it out ("Clip Factory led" of only gaming); and its
+        # lead of a length-filtered sheet ranks without saying "long" ("Pan Theory led" of the long videos only)
         return None
     try:
         form = I.code_form(sheet)

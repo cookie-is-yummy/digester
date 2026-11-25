@@ -981,10 +981,10 @@ def _name_spans(text, names_idx, extra=()):
     return sorted(found)
 
 
-def _window_phrases(res):
+def _window_phrases(res, prev=True):
     out = []
     for x in ((res.meta or {}).get("window_said"), (res.sheet.get("window") or {}).get("words"),
-              (res.sheet.get("previous") or {}).get("words")):
+              (res.sheet.get("previous") or {}).get("words") if prev else None):
         if isinstance(x, str) and x.strip():
             out.append(x.strip())
             out.append(re.split(r"[(,]", x)[0].strip())
@@ -1177,7 +1177,10 @@ def _window_check(text, res, cites_prev, turn, period_cells=False):
         return None
     said = (res.meta or {}).get("window_said") or (res.sheet.get("window") or {}).get("words") or ""
     det = f"{res.rid}'s window is '{_clip(said, 90)}'"
-    t = _remove_phrases(text, _window_phrases(res))
+    # the window before's own words are left out of the check only when they are the sentence's (a previous or
+    # change cell, a compare): "In September 2026, Clip Factory made 61" of an October cell is the wrong window (merge
+    # seam: every breakdown the tools return carries the window before)
+    t = _remove_phrases(text, _window_phrases(res, prev=len(wins) > 1))
     for m in _DATE_IN.finditer(t):
         g = m.groups()
         d_, mon, y = (g[0], g[1], g[2]) if g[0] else (g[4], g[3], g[5])
@@ -1215,6 +1218,7 @@ def _end_in_base(sentence, markers, res, turn=None):
     prevw = (res.sheet.get("previous") or {}).get("words")
     w, pw = res.window(), res.prev_window()
     clipped = bool((res.sheet.get("window") or {}).get("clipped"))
+    first_value = next((mk for mk in markers if mk.kind == "value" and isinstance(mk.value, (int, float))), None)
     for mk in markers:
         if mk.kind != "value" or not isinstance(mk.value, (int, float)):
             continue
@@ -1226,6 +1230,11 @@ def _end_in_base(sentence, markers, res, turn=None):
             continue   # a change is of both periods
         prev_cell = _is_before(mk.rest)
         m = re.match(r"^\s*(?:,\s*)?(?:[a-z]+\s+){0,2}?(?:in|during|over|across)\s+(.{3,80})", after, re.I)
+        if not m and mk is first_value:
+            # merge seam (a compare result holds both windows, so step 15 lets either year stand anywhere; a
+            # previous cell lets the window before stand): the time that opens the sentence is its first value's
+            # ("In 2025, you opened 8[r1.totals.items]" says a count of 2024 under 2025's name)
+            m = re.match(r"^\s*(?:in|during|over|across)\s+(.{3,80})", sentence[:mk.start], re.I)
         if not m:
             continue
         ph = m.group(1).lower()
@@ -1581,6 +1590,11 @@ def _filter_dropped(raw, markers, res):
     if not length:
         return None
     word = "long" if length == "long" else r"(?:short|shorts|reels?)"
+    if (_RANK.search(raw) or _LEAST.search(raw)) and any(mk.kind in ("row", "value") and mk.rid == res.rid and
+                                                        mk.owner for mk in markers) and \
+            not re.search(r"\b" + word + r"\b|without shorts|no shorts", raw, re.I):
+        # merge seam: a rank among the long videos only ("Pan Theory led") is not the rank of what they opened
+        return "filter_dropped", f"{res.rid} ranked only {length} videos ({_clip(said, 60)})"
     for mk in markers:
         if mk.kind != "value" or _family(mk.rest) != "count":
             continue
