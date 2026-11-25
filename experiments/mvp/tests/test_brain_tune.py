@@ -41,6 +41,10 @@ CALLS = {
     "lately": ("breakdown", {"by": "area", "window": win(preset="lately"), "scope": scope()}),
     "saved_oct": ("breakdown", {"by": "area", "window": win(words="in October"), "scope": scope(how="saved")}),
     "y2023": ("compare", {"a": win(words="2023"), "b": win(words="2022"), "by": "none", "scope": scope()}),
+    "changes": ("changes", {"against": "previous", "level": "area", "window": win(words="since 2021"),
+                            "scope": scope()}),
+    "cf_all": ("breakdown", {"by": "none", "window": win(preset="all"), "scope": scope(only=["Clip Factory"])}),
+    "year": ("breakdown", {"by": "channel", "window": win(preset="this_year"), "scope": scope()}),
 }
 
 
@@ -298,6 +302,58 @@ def test_the_prompt_is_v2_and_its_new_examples_pass_or_fail_as_it_says(harness):
         assert o.kept, (s, o.reasons, o.details)
     for s in ("Moss Garden[r1.channels[0]] made up three of your top five channels.",
               "You opened 142[r1.totals.items] videos, mostly from gardening.",
-              "Your export ends on 30 October 2026, so I can't see last week."):
+              "Your export ends on 30 October 2026, so I can't see last week.",
+              "You saved three lessons from Kettle Craft."):
         assert s in text, s
         assert not V.check_sentence(s, V.Ledger(ledgers[0]), vt, "point").kept, s
+
+
+# ================================================================ batch 2 (after live run2)
+def test_a_changes_share_is_said_with_its_own_period_never_as_the_windows(harness):
+    # run2's C13 sent "Since 1 January 2021 up to 30 October 2026, art and design came in at 52% of what you opened":
+    # 52% is art and design's share IN 2026 (133 of 254); since 2021 it is 26% (187 of 723). A FALSE sentence that went
+    # out: now dropped, and the same cell with its period kept
+    led, vt, _t = ledger(harness, "changes")
+    from mvp.brain import verify as V
+    ac = led.get("r1").sheet["areas_change"]
+    assert ac["to"] == "2026" and ac["from"] == "2021"
+    k = next(i for i, r in enumerate(ac["arrived"]) if r["name"] == "art and design")
+    g = next(i for i, r in enumerate(ac["left"]) if r["name"] == "gaming")
+    lead = "Since 1 January 2021 up to 30 October 2026, art and design[r1.areas_change.arrived[{k}]] {v} of what you opened{t}."
+    bad = lead.format(k=k, v=f"came in at 52%[r1.areas_change.arrived[{k}].to_share]", t="")
+    good = lead.format(k=k, v=f"grew to 52%[r1.areas_change.arrived[{k}].to_share]", t=" in 2026")
+    assert "wrong_window" in V.check_sentence(bad, led, vt, "lead").reasons
+    o = V.check_sentence(good, led, vt, "lead")
+    assert o.kept, (o.reasons, o.details)
+    both = (f"Gaming[r1.areas_change.left[{g}]] fell from 94%[r1.areas_change.left[{g}].from_share] in 2021 to "
+            f"31%[r1.areas_change.left[{g}].to_share] of what you opened in 2026.")
+    o = V.check_sentence(both, led, vt, "point")
+    assert o.kept, (o.reasons, o.details)
+    swapped = both.replace("in 2021 to", "in X to").replace("opened in 2026", "opened in 2021").replace("in X to",
+                                                                                                         "in 2026 to")
+    assert not V.check_sentence(swapped, led, vt, "point").kept
+
+
+def test_the_scope_said_again_in_words_is_the_scope_said(harness):
+    # only Clip Factory, all history: 61 videos (recount). The row's own marked name is not the scope; the scope said
+    # again in words is
+    kept(harness, "cf_all", "In all your history, Clip Factory[r1.channels[0]] sits in Gaming clips[r1.themes[0]], with "
+                            "61[r1.channels[0].items] videos you opened, counting only Clip Factory.", "lead")
+    dropped(harness, "cf_all", "In all your history, Clip Factory[r1.channels[0]] made 61[r1.channels[0].items] of the "
+                               "videos you opened.", "lead", reason="filter_dropped")
+
+
+def test_the_lead_may_name_the_window_by_its_words_before_the_exports_end(harness):
+    # this year (up to 30 October 2026): Pixel Pencil 92 of 254
+    kept(harness, "year", "This year, Pixel Pencil[r1.channels[0]] is your top channel, with 92[r1.channels[0].items] "
+                          "of the 254[r1.totals.items] videos you opened.", "lead")
+    dropped(harness, "year", "This month, Pixel Pencil[r1.channels[0]] is your top channel, with "
+                             "92[r1.channels[0].items] of the 254[r1.totals.items] videos you opened.", "lead")
+
+
+def test_on_youtube_with_its_own_by_platform_cell(harness):
+    # lately: 126 of 130 were YouTube (4 Instagram reels)
+    kept(harness, "lately", "In the 4 weeks up to 30 October 2026, 126[r1.totals.by_platform.youtube] of your "
+                            "130[r1.totals.items] videos were on YouTube.", "lead")
+    dropped(harness, "lately", "In the 4 weeks up to 30 October 2026, 130[r1.totals.items] of your videos were on "
+                               "YouTube.", "lead")

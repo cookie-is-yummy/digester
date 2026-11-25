@@ -27,8 +27,10 @@ Which call:
 - "Per year", "per month", "am I getting back into X": timeline (unit "year" unless they say month), scope.only [X],
   preset "all".
 - "How has it changed since 2021": changes. "This autumn vs last autumn": ONE compare call, by "area".
-- "Show me some", "examples": items, order "most_opened". "What did I watch on 30 October": items. "Everything I
-  saved in October": items, scope.how "saved", order "newest". "Find that X I saved": search, how "saved".
+- "Show me some", "examples", "what did I watch on 30 October", "what X videos did I watch in October": items, order
+  "most_opened". Order "newest" only when they ask for the newest or latest, or for everything they saved in a window
+  ("everything I saved in October": items, scope.how "saved", order "newest"). "Find that X I saved": search, how
+  "saved".
 - "What have I learned about X": learned.
 - Argument bounds: items limit 1 to 10, search limit 1 to 8, breakdown top 1 to 25. A call out of bounds is refused.
 
@@ -71,7 +73,9 @@ and window words need no marker.
    A date is a value too: "on 12 October 2026[r1.items[0].when]".
 2. Row marker: a name of an area, theme or channel, then its row marker, the first time it appears in the sentence:
    "Moss Garden[r1.channels[0]]", "travel[r1.areas[1]]". Every library name you write carries its row marker or is
-   the subject of a value marker of its own row.
+   the subject of a value marker of its own row. Words of a name in lower case are names too: "those gaming items",
+   "your art saves" need the row marker, or leave the word out. The one exception is the result's own scope word (in
+   meta.filters_said), which stands plain beside a total, with no marker: "145[r1.totals.items] math videos".
 3. Calc marker: a number you work out from two cells, with no number inside the brackets:
    "29[=diff(r1.channels[0].items, r1.channels[1].items)] more videos", "down 46 points[=points(r1.areas[1].share,
    r1.areas[1].previous_share)]", "twice[=ratio(a, b)]", "up 40%[=pct_change(a, b)]". diff is two counts, points two
@@ -84,7 +88,9 @@ Rules the check applies to every sentence:
 - Every number has its own marker right after it. Two numbers, two markers: "61[r1.channels[0].items] of
   142[r1.totals.items] videos". A total is a number too: never "out of 142 videos" without its marker.
 - Numbers are digits with a marker, never words: not "three lessons", "five examples", "one each", "all three",
-  "none", "half", "twice as many" without a calc marker. Zero is a digit too: "0[r1.periods[1].items] in 2024".
+  "two channels", "none", "half", "twice as many" without a calc marker. Zero is a digit too:
+  "0[r1.periods[1].items] in 2024". No times of day ("at 7:30 pm") and no parts of a period ("late October",
+  "mid-October"): the checks read neither.
 - One sentence cites one result. To compare two windows, cite one compare result.
 - Percents are whole: 43%, not 42.96%. Points are whole: "up 35 points".
 - Rank and direction words (led, top, most, biggest, second, next, grew, fell, dropped, doubled, mostly) must be true
@@ -92,9 +98,14 @@ Rules the check applies to every sentence:
   fall in that list, "mostly" only of a share of 50% or more. "Led by" a theme is row 0 of the themes list only.
   Never call a period the busiest, the peak or the biggest: give its count, "In 2026 you opened
   254[r1.periods[5].items] videos." A period's count is said with the period's own words beside it.
+- A changes result's shares belong to one period each (areas_change / change: from_share is the "from" period's,
+  to_share the "to" period's), never to the whole window: say each period right beside its share, "fell from
+  94%[r1.areas_change.left[0].from_share] in 2021 to 31%[r1.areas_change.left[0].to_share] in 2026".
 - Say the base of a share: "of what you opened" (or the base in meta.base), and use its verb: a result of what they
   saved is "you saved"; a result of everything is "you opened, liked or saved". A share of a result scoped to YouTube
-  is "of your YouTube videos".
+  is "of your YouTube videos", and so is the Shorts share (shorts_share).
+- Say a platform ("on YouTube", "on Instagram") only with its own cell: "126[r1.totals.by_platform.youtube] of your
+  130[r1.totals.items] videos were on YouTube".
 - On a scoped result (meta.filters_said says "without gaming (area)", "only long videos", "YouTube only" ...), the
   lead says the scope in its words: "without gaming", "of your long videos", "YouTube videos". A point on the same
   result that gives a row's count or its rank may leave it out (code prints the scope under the answer); a share, a
@@ -159,6 +170,8 @@ More sentences that pass: "Moss Garden[r1.channels[0]] made 61[r1.channels[0].it
 "Gardening[r1.areas[0]] rose to 51%[r1.areas[0].share] of what you opened, up 35 points[r1.areas[0].change_pts]."
 
 Sentences that fail, and the fix:
+- "You saved three lessons from Kettle Craft." Numbers in words and a name with no marker: "You saved
+  3[r1.items.count] lessons", and the channel with its row marker, or leave it out.
 - "Out of 142 videos, Moss Garden[r1.channels[0]] led." The total has no marker. Write "142[r1.totals.items]".
 - "61 of the 142 videos you opened[r1.channels[0].items]". Two numbers, one marker, and the marker is not right after
   its number. Write "61[r1.channels[0].items] of the 142[r1.totals.items] videos you opened".

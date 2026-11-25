@@ -1512,6 +1512,11 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
                                                       r"series|youtuber|artist|brand|studio)\b", blank2[b:], re.I):
             add("outside_in_history")
     wl = _remove_phrases(low, [p.lower() for p in _window_phrases(wres)] if wres else [])
+    for p_ in ("youtube", "instagram"):
+        if any(mk.kind == "value" and mk.path.endswith(".by_platform." + p_) for mk in markers):
+            # (mvp20 tune, the audit's T56, run2's C10: "126[r1.totals.by_platform.youtube] ... on YouTube" says where
+            # their own count was, a cell of their history, not a claim about the world)
+            wl = re.sub(r"\bon " + p_ + r"\b", " ", wl)
     if res is not None and any(p["kind"] == "platform" and p["words"] == ["youtube"] for p in scope_parts(res)):
         # merge seam: a result the tools scoped to YouTube only says its scope as "on YouTube" (not a world claim)
         wl = re.sub(r"\bon youtube\b", " ", wl)
@@ -1639,6 +1644,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         if r:
             add(*r)
         r = _platform_said(raw, markers, res)
+        if r:
+            add(*r)
+        r = _change_period_said(raw, markers, res)
         if r:
             add(*r)
     # 3.8 insight's checks, one sentence (sheets only), or the rules of a result that is not a sheet (step 4)
@@ -1977,9 +1985,19 @@ def _scope_dropped(raw, markers, res, low):
                 row = _resolve(res.sheet, own)
             except KeyError:
                 row = None
+            # mvp20 tune (run2's K02 "... Clip Factory[r1.channels[0]] ... 61[...] videos you opened, counting only
+            # Clip Factory", C03, D06.1): the row's OWN name is blanked where it names the row (its marker's span,
+            # done above, or the last time it is typed before its value marker), not every time it is written, so a
+            # scope said again in words ("counting only Clip Factory", "of your art videos") is the scope said
+            if mk.kind != "value":
+                continue
+            best = None
             for n in (_row_names(row, own) if isinstance(row, dict) else []):
-                blanked = re.sub(r"(?<!\w)" + re.escape(n) + r"(?!\w)", lambda m: " " * len(m.group(0)), blanked,
-                                 flags=re.I)
+                for m_ in re.finditer(r"(?<!\w)" + re.escape(n) + r"(?!\w)", blanked[:mk.start], flags=re.I):
+                    if best is None or m_.start() > best[0]:
+                        best = (m_.start(), m_.end())
+            if best:
+                blanked = blanked[:best[0]] + " " * (best[1] - best[0]) + blanked[best[1]:]
     text = strip_markers(blanked).lower()
     for p in parts:
         hit = any(re.search(r"\b" + re.escape(w) + r"(?:s|es)?\b", text) for w in p["words"])
@@ -2018,6 +2036,54 @@ def _verb_dropped(raw, markers, res, low):
     if said and (said - own or (len(own) > 1 and said != own)):
         words = "opened, liked or saved" if len(own) > 1 else next(iter(own))
         return "base", f"{res.rid} counts what you {words}: say '{words}'"
+    return None
+
+
+def _change_period_said(raw, markers, res):
+    """mvp20 tune (the live run2's C13: "Since 1 January 2021 up to 30 October 2026, art and design came in at
+    52%[r1.areas_change.arrived[0].to_share] of what you opened" went out; 52% is its share IN 2026, and since 2021 it
+    is 26%): a share of a changes result's periods (areas_change / change rows: from_share, to_share, peak_share; the
+    Shorts block) belongs to ONE period ("2021", "2026", the row's peak_period), not to the result's window; the
+    sentence says that period's label beside it, or it is wrongly based. (The window's own words are left out first:
+    the "2026" of "up to 30 October 2026" names no period.)"""
+    # the period labels typed in the sentence (outside every marker and the window's own words), with their places
+    blank = list(raw)
+    for mk in markers:
+        for i in range(mk.mstart, mk.end):
+            blank[i] = " "
+    blank = "".join(blank)
+    for ph in sorted(_window_phrases(res), key=len, reverse=True):
+        for m in re.finditer(re.escape(ph), blank, re.I):
+            blank = blank[:m.start()] + " " * (m.end() - m.start()) + blank[m.end():]
+    for m in re.finditer(r"\b\d{1,2} " + _MON_RX + r"\w* (?:19|20)\d\d\b", blank, re.I):
+        blank = blank[:m.start()] + " " * (m.end() - m.start()) + blank[m.end():]
+    labs_at = [(m.start(), m.group(0)) for m in
+               re.finditer(r"\b(?:" + _MON_RX + r"\w* )?(?:19|20)\d\d\b", blank, re.I)]
+    for mk in markers:
+        if mk.kind != "value" or mk.rid != res.rid:
+            continue
+        m = re.match(r"^(areas_change|change)\.(?:(\w+)\[\d+\]\.|(shorts)\.)(from_share|to_share|peak_share)$",
+                     mk.rest)
+        if not m:
+            continue
+        blk = res.sheet.get(m.group(1)) or {}
+        if m.group(4) == "peak_share":
+            try:
+                lab = (_resolve(res.sheet, mk.owner) or {}).get("peak_period")
+            except (KeyError, AttributeError):
+                lab = None
+        else:
+            src = blk.get("shorts") if m.group(3) else blk
+            lab = (src or {}).get("from" if m.group(4) == "from_share" else "to")
+        lab = str(lab or "").strip()
+        # its period is said in its own stretch of the sentence, between the value markers before and after it
+        # ("from 94%[a] in 2021 to 31%[b] in 2026"; the years swapped fail on the first cell)
+        vals = sorted(x.start for x in markers if x.kind == "value")
+        lo = max([x_.end for x_ in markers if x_.kind == "value" and x_.end <= mk.start] or [0])
+        hi = min([x_ for x_ in vals if x_ > mk.start] or [len(raw)])
+        mine = [t for t in labs_at if lo <= t[0] < hi]
+        if not lab or not any(_low(t[1]) == _low(lab) for t in mine):
+            return "wrong_window", f"{mk.path} is the share in {lab or 'one period'}: say 'in {lab}' right beside it"
     return None
 
 
@@ -2512,6 +2578,25 @@ def _lead_names_window(lead_text, ledger, rid):
     said = (r.meta or {}).get("window_said") or ""
     if said and _low(re.split(r"[(,]", said)[0]) in _low(plain):
         return True
+    core = re.split(r"[(,]", said)[0]
+    if " up to " in core and re.search(r"(?<!\w)" + re.escape(_low(core.split(" up to ")[0])) + r"(?!\w)",
+                                       _low(plain)):
+        # mvp20 tune (run2's E05: "This year, Pixel Pencil ... is your top channel" of "this year up to 30 October 2026,
+        # where your export ends"): the window's own words before the clip ("this year", "October 2026") name it; the
+        # clip is the export's end
+        return True
+    pmk = [mk for mk in parse(" ".join(lead_text.split()), ledger)[0] if mk.kind == "value"]
+    if pmk and all(mk.rid == r.rid and mk.owner and re.fullmatch(r"periods\[\d+\]", mk.owner) for mk in pmk):
+        labs = []
+        for mk in pmk:
+            try:
+                labs.append(str((_resolve(r.sheet, mk.owner) or {}).get("label") or ""))
+            except (KeyError, AttributeError):
+                labs.append("")
+        if all(lab and re.search(r"(?<![\w-])" + re.escape(lab) + r"(?![\w-])", plain, re.I) for lab in labs):
+            # (run2's F07: "you opened 10[r1.periods[3].items] math videos in 2026, after 0[...] in 2024 ...": a lead
+            # of period cells names each cell's own period, which is the time it claims)
+            return True
     if r.sheet.get("kind") in ("first", "last") and _low(said).startswith("all your history") and re.search(
             r"\[" + re.escape(r.rid) + r"\.items\[\d+\]\.(?:when|at|date)\]", lead_text):
         # merge seam (first_last over all of their history): the item's own day, checked against its cell, is the
