@@ -1556,6 +1556,11 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
                     _remove_phrases(low, [p.lower() for p in _window_phrases(wres)] if wres else []))
     if LIMITS.search(no_win):
         add("limits")
+    elif _SELF_TALK.search(plain):
+        # mvp20 fix, after the final live runs (the held-out second look's I02.0: "I found no dating advice theme or
+        # channel in your history, so that label doesn't match anything I can count", on a turn that unlocked the
+        # topic and counted 50 of its videos): what the assistant found or can count is a limits line code writes
+        add("limits", "say what the results hold; what was or was not found is code's line")
     if WATCH_TIME.search(low):
         add("watch_time")
     # 3.11 sensitive
@@ -2157,6 +2162,11 @@ def _least_of_whole_list(markers, res):
             if all(vals[i] < v for j, v in enumerate(vals) if j != i):
                 return True
     return False
+
+
+_SELF_TALK = re.compile(r"\bI (?:found no|find no|couldn'?t find|could not find|did not find|didn'?t find|see no|"
+                        r"have no)\b|\banything I can (?:count|see|find)\b|\bgave no checked\b|\bchecked points?\b",
+                        re.I)
 
 
 def _blank_marked(raw, markers):

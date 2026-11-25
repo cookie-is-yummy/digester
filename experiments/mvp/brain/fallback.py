@@ -297,6 +297,13 @@ def _preferred_list(verdict, rid):
     return None
 
 
+# a point that points back at what the model's own lead said ("That is 8 fewer videos", "its theme", "the other 651",
+# "also opened"): under a code lead it points at a sentence that is not sent
+_BACK_REF = re.compile(r"^\s*(?:that|this|it|its|they|their|these|those|he|she)\b|\b(?:its|their)\s+(?:own\s+)?"
+                       r"(?:theme|area|channel|share|count|videos?)\b|\bthe other\b|\bthe rest\b|\balso\b|"
+                       r"\bas well\b|\btoo\b|\binstead\b", re.I)
+
+
 def _points_under(ledger, verdict, lead, turn):
     """mvp20 fix (the recount's C04.0 and I02.0: points kept under the model's failed lead went out under a code lead
     they did not fit: "art and design came next" after a THEME, the code lead said again as a point): the model's
@@ -305,6 +312,10 @@ def _points_under(ledger, verdict, lead, turn):
     rides on a code lead. A code_form lead has no markers: a point that places itself after the lead's row ('came
     next') is not sent under it."""
     kept = [o for o in verdict.outcomes if o.where == "point" and o.kept and "scope_waived" not in (o.notes or {})]
+    # mvp20 fix, after the final live runs (the held-out second look's E04.0: "That is 8 fewer videos, and its theme
+    # Watercolor painting fell ..." went out under a code lead about another channel): a point that refers back to the
+    # model's own lead is not sent under a code lead
+    kept = [o for o in kept if not _BACK_REF.search(V.strip_markers(o.text))]
     if not kept:
         return []
     texts = [o.text for o in kept]

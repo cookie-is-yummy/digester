@@ -317,3 +317,30 @@ def test_the_scope_line_closes_its_bracket_and_says_a_part_once():
     res = next(iter(led.by_rid.values()))
     line = A.scope_line(res)
     assert line.lower().count("saturdays") == 1, line
+
+
+# ================================================================ after the final live runs (offline)
+def test_a_point_that_refers_back_to_the_models_lead_is_not_sent_under_a_code_lead():
+    # the held-out second look's E04.0: "That is 8 fewer videos, and its theme Watercolor painting fell ..." went out
+    # under a code lead about another channel; the same point with its own subject is sent
+    from mvp.brain import fallback as FB
+    led, turn = _ledger("ch_oct")
+    v = _failed_lead_verdict("ch_oct", "In October 2026, gaming[r1.areas[0]] led what you opened because you were "
+                                       "bored.",
+                             ["That is 61[r1.channels[0].items] videos from Clip Factory[r1.channels[0]].",
+                              "Pan Theory[r1.channels[1]] made 32[r1.channels[1].items] of them."])
+    a = FB.answer(led, v, turn)
+    assert a["how"] in ("code_form", "template") and a["points"] == ["Pan Theory made 32 of them."], a
+
+
+@pytest.mark.parametrize("s", [
+    "In October 2026, I found no dating advice theme or channel in your history.",
+    "In October 2026, that label doesn't match anything I can count.",
+    "Your opened items on calculus gave no checked points.",
+])
+def test_what_the_assistant_found_or_can_count_is_a_limits_line(s):
+    # the held-out second look's I02.0 lead (on a turn that unlocked the topic and counted 50 of its videos) and K04.0
+    v = _check("ch_oct", s)
+    assert not v.lead_ok and "limits" in v.lead[0].reasons
+    v = _check("ch_oct", "Here is what I found in October 2026.")   # a plain opening stays
+    assert v.lead_ok, [o.reasons for o in v.lead]
