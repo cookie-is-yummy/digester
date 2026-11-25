@@ -4001,6 +4001,16 @@ def bases(sheet):
     filtered: {"opened": of what (a share of everything the sheet counts), "yt": of what (its YouTube videos, the base
     of a Shorts share), "videos": what one of its videos is called ("math videos"), "day_yt": a day's YouTube videos}.
     A topic (an area or a theme too: "only gaming"), a channel, "without Shorts" and one platform each give their own."""
+    b = _bases(sheet)
+    wd = ((sheet or {}).get("filters") or {}).get("weekday")
+    if wd and (sheet or {}).get("kind") != "compare_topics":
+        # round 12, pass 6, second round: a weekday's sheet is of what was opened on that weekday
+        b = dict(b or {"opened": "what you opened", "yt": "your YouTube videos", "videos": "videos", "day_yt": None})
+        b = {k: (f"{v} on {wd}" if isinstance(v, str) and k != "day_yt" else v) for k, v in b.items()}
+    return b
+
+
+def _bases(sheet):
     f = (sheet or {}).get("filters") or {}
     if (sheet or {}).get("kind") == "compare_topics":
         return None   # each side is said by its own name
@@ -4056,6 +4066,7 @@ def based_chart(ch, sheet):
         if head.startswith(old) and (b.get("yt") or "{yt}" not in new):
             v = b["videos"]
             head = new.format(opened=b["opened"], yt=b["yt"], Videos=v[:1].upper() + v[1:]) + head[len(old):]
+            head = re.sub(r"^(.*?videos)( on [A-Z][a-z]+days) opened\b", r"\1 opened\2", head)   # "Videos opened on Sundays"
             break
     return head + ("\n" + rest if rest else "")
 

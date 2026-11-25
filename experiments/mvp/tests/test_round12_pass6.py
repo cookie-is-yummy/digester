@@ -636,7 +636,10 @@ def test_r2_what_do_i_usually_watch_on_a_weekday_is_read_as_history(r12):
     assert "other days" in (s.get("previous") or {}).get("words", ""), s.get("previous")
     I = ins()
     assert I.bases(s)["opened"] == "what you opened on Sundays", I.bases(s)
-    text = I.layout(I.code_form(s), s)[0]["text"]
+    cf = I.code_form(s)
+    form = {"answer": cf["answer"], "observations": [o["text"] for o in cf["observations"]], "offers": [],
+            "so_what": None, "dropped": []}
+    text = I.layout(form, s)[0]["text"]
     assert "Sundays" in text.split("\n")[0], text
 
 

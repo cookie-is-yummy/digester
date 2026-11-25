@@ -703,6 +703,16 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         ev &= ~sh[idx.it]
     so = eff_start.toordinal() if eff_start else None
     eo = eff_end.toordinal() if eff_end else None
+    ev_other = None
+    if getattr(q, "weekday", None) is not None:
+        # round 12, pass 6, second round (the hand check, n02: "what do i usually watch on sundays"): that weekday over
+        # the window, set against the other days of the week in the same window
+        day_ = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"][q.weekday]
+        out["filters"]["weekday"] = day_
+        wdm = idx.wd == q.weekday
+        ev_other = ev & ~wdm
+        ev = ev & wdm
+        out["window"]["words"] = f"on {day_}, over {out['window']['words']}"
     if getattr(q, "without_shorts", False):
         cut_w = cut & ((idx.day >= so) if so is not None else True) & ((idx.day <= eo) if eo is not None else True)
         left_out = {"shorts": int(len(np.unique(idx.it[cut_w & (idx.platform[idx.it] == 0) &
@@ -720,7 +730,10 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     # the equal window just before (or the other window of a comparison)
     prev, prev_words, prev_clipped = None, None, False
     pbounds = None
-    if q.kind == "compare" and q.window2:
+    if ev_other is not None and kind != "changed":
+        prev = Scope(idx, facts, ev_other & topic_mask[idx.it] if topic_mask is not None else ev_other, so, eo)
+        prev_words = "on the other days of the week"
+    elif q.kind == "compare" and q.window2:
         s2, e2 = Hm.resolve(q.window2, rec, plats, today)
         e2c = min(e2, newest) if (e2 and newest) else e2
         prev = Scope(idx, facts, ev, s2 and s2.toordinal(), e2c and e2c.toordinal())

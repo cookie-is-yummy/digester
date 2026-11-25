@@ -76,6 +76,7 @@ class HistoryQuery(BaseModel):
     by: Optional[Literal["month", "year"]] = None   # timeline: "by year", "per month"
     less: bool = False                  # round 11 fix, A (R5): compare asked "less / fewer", so its answer leads so
     without_shorts: bool = False        # round 12, D: "without shorts", "only long videos": Shorts and reels left out
+    weekday: Optional[int] = Field(default=None, ge=0, le=6)   # round 12, pass 6, second round: "on sundays" (0 Monday)
 
 
 # ====================================== reading the message ======================================================
@@ -474,6 +475,22 @@ def find_windows(t, today):
         # the round 11 check (DESIGN 18.X): "halloween 2025" is that year's, never this year's with 2025 dropped
         d = date(int(m.group(1)), *md) if m.group(1) else _past_day(*md, today)
         add(m, _win("day", d, d))
+    # round 12, pass 6, second round (the hand check, n01: "what did i watch the week of march 9 2025" was not read as
+    # history): "the week of <a date>" is the seven days from that date (the answer's window words say them)
+    for m in rx(r"\b(?:(?:in|during|over|for)\s+)?the\s+week\s+of\s+(?:(" + _MONTH_RE +
+                r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?|(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + _MONTH_RE +
+                r"))\b(?:,?\s+(\d{4}))?"):
+        g = m.groups()
+        name, dd = (g[0], g[1]) if g[0] else (g[3], g[2])
+        mo = MON_ABBR.get(name[:4] if name.startswith("sept") else name[:3])
+        if not mo or not 1 <= int(dd) <= 31:
+            continue
+        try:
+            d = _past_day(mo, int(dd), today, int(g[4]) if g[4] else None)
+        except ValueError:
+            d = None
+        if d:
+            add(m, _win("range", d, d + timedelta(days=6)))
     for m in rx(r"\b(?:on\s+)?(" + _MONTH_RE + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?|"
                 r"\b(?:on\s+)?(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + _MONTH_RE + r")\b(?:,?\s+(\d{4}))?|"
                 r"\b(?:el\s+)?(\d{1,2})\s+de\s+(" + "|".join(MONTH_ES) + r")\b(?:\s+de\s+(\d{4}))?"):
@@ -609,9 +626,39 @@ def _topic_and_platform(t, spans):
     return [" ".join(r) for r in runs if r], platform, how
 
 
+_WEEKDAY_ASK = re.compile(
+    r"\b(?:on\s+)?(?:(?P<pl>mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays)|a\s+(?P<a>monday|tuesday|"
+    r"wednesday|thursday|friday|saturday|sunday)|(?P<one>monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b")
+_USUAL_WORD = re.compile(r"\b(?:usually|normally|typically|tend to|generally)\b")
+
+
 def read(text, today, loose=False):
     """A HistoryQuery for a history question, else None. `loose`: the interpreter already called it a question about
-    the library (library_stats), so the history markers are not needed."""
+    the library (library_stats), so the history markers are not needed.
+
+    Round 12, pass 6, second round (the hand check, n02: "what do i usually watch on sundays" was not read, and the
+    bot said nothing matched): a weekday asked as a habit ("on sundays", "on a sunday", "usually ... on sunday") is the
+    question over that weekday of the whole record (or of the window it names), set against the other days."""
+    raw = " ".join((text or "").split())
+    t0 = normal(raw)
+    m = _WEEKDAY_ASK.search(t0)
+    if m and m.group("one") and not (_USUAL_WORD.search(t0) and re.match(r"on\s", m.group(0))):
+        m = None   # "on sunday" is a day ("what did i watch on sunday"), unless asked as a habit
+    if m and not REMIND.search(t0) and not EVERY_TIMED.search(t0) and not re.search(r"\bevery\b", t0):
+        word = next(g for g in (m.group("pl"), m.group("a"), m.group("one")) if g)
+        wd = next(i for i, d in enumerate(DAYS) if word.startswith(d))
+        rest = " ".join((t0[:m.start()] + " " + t0[m.end():]).split())
+        rest = " ".join(_USUAL_WORD.sub(" ", rest).split())
+        q = _read(rest, today, loose)
+        if q is None or q.kind in ("first", "last", "on_day", "compare", "compare_topics", "timeline"):
+            return q if q is None or q.kind != "on_day" else None
+        w = q.window if q.window.kind not in ("lately", "all") else Window(kind="all")
+        return q.model_copy(update={"weekday": wd, "window": w,
+                                    "kind": "top" if q.kind in ("list", "top_items", "top_topics") else q.kind})
+    return _read(text, today, loose)
+
+
+def _read(text, today, loose=False):
     raw = " ".join((text or "").split())
     if not raw or len(raw) > 200:
         return None
