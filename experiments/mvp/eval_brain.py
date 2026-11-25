@@ -494,9 +494,10 @@ def main(argv=None):
     p2.add_argument("--json", default=None, help="write the full report here (keep it outside git)")
     p2.add_argument("--only", default="", help="conversation ids, comma separated")
     sub.add_parser("insight")
-    p4 = sub.add_parser("run")
-    p4.add_argument("rest", nargs=argparse.REMAINDER)
-    a = ap.parse_args(argv)
+    sub.add_parser("run")    # SPEC 12.4's --set, --provider, --model, --out, --library: step 2
+    a, extra = ap.parse_known_args(argv)
+    if extra and a.mode != "run":
+        ap.error("unrecognized arguments: " + " ".join(extra))
     if a.mode == "run":
         print(RUN_REFUSED, file=sys.stderr)
         return 2

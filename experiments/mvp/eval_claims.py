@@ -346,6 +346,12 @@ class Library:
             memo[how] = (ev, {i: [x[0] for x in e] for i, e in ev.items()})
         return memo[how]
 
+    def first_day(self, how=None, platform=None):
+        """The record's first day for a kind of event (and a platform): where "all your history" starts."""
+        _ev, days = self.how_events(how)
+        ds = [d[0] for i, d in days.items() if d and (not platform or self.items[i]["p"] == platform)]
+        return min(ds) if ds else self.oldest
+
     def in_ref(self, i, ref):
         """Whether item i is in a ref of the brain's tools, by my own reading of each form: area:<slug> (my areas),
         theme:<id> (the build's id, its shown name), channel:<key> (c + sha1 of the name squashed), collection:<slug>,
@@ -2773,11 +2779,18 @@ def _after_record(a, b, lib):
     return a, b
 
 
-def spec_window(spec, lib, today):
+def spec_window(spec, lib, today, platform=None):
     """(a, b, prev) ordinals of a spec, with a window after the record moved as `_after_record` says; a day after the
-    record is the record's last day."""
+    record is the record's last day. With a `platform`, the record is that platform's (its own end)."""
     if spec is None:
         return None
+    if platform and lib.ends.get(platform) is not None and lib.ends[platform] != lib.newest:
+        keep = lib.newest
+        lib.newest = lib.ends[platform]
+        try:
+            return spec_window(spec, lib, today)
+        finally:
+            lib.newest = keep
     if spec.get("kind") == "day":
         y = date.fromordinal(lib.newest).year if lib.newest else today.year
         d = date(y, spec["month"], spec["day"])
@@ -2892,9 +2905,11 @@ def brain_ctx(lib, env, call, question, today, earlier=None, last_window=None):
     spec = None
     if isinstance(win, dict) and not win.get("same_as"):
         spec = read_call_window(win.get("words"), lib, today, preset=win.get("preset"))
-    mine = spec_window(spec, lib, today) if spec else None
+    plat = brain_filters(call, env).get("platform")
+    first = lib.first_day(brain_filters(call, env).get("how"), plat)   # "all your history" of what is counted
+    mine = spec_window(spec, lib, today, plat) if spec else None
     if mine and st:
-        a0 = mine[0] if mine[0] is not None else lib.oldest
+        a0 = mine[0] if mine[0] is not None else first
         ok = (a0, mine[1]) == st
         rows.append(("call window", ok, f"{_d(st[0])}..{_d(st[1])}", f"{_d(a0)}..{_d(mine[1])}",
                      (win.get("words") or win.get("preset") or "")))
@@ -2905,7 +2920,7 @@ def brain_ctx(lib, env, call, question, today, earlier=None, last_window=None):
     ctx.order = "least" if ((env or {}).get("meta") or {}).get("order") == "least" else "most"
     if st:
         ctx.a, ctx.b = st
-        if mine and (mine[0] if mine[0] is not None else lib.oldest, mine[1]) == st and spec.get("kind") != "all":
+        if mine and (mine[0] if mine[0] is not None else first, mine[1]) == st and spec.get("kind") != "all":
             ctx.prev = mine[2]
         else:   # my rule's span before the stated window (a year, a month, a season, or as many days before)
             ctx.prev = resolve(ans["window"], lib, today)[2]
@@ -2916,8 +2931,8 @@ def brain_ctx(lib, env, call, question, today, earlier=None, last_window=None):
     if tool == "compare" and isinstance(args.get("b"), dict):
         bw = args["b"]
         sb = read_call_window(bw.get("words"), lib, today, preset=bw.get("preset")) if not bw.get("same_as") else None
-        mb = spec_window(sb, lib, today) if sb else None
-        ctx.prev = (mb[0] if mb[0] is not None else lib.oldest, mb[1]) if mb else None
+        mb = spec_window(sb, lib, today, plat) if sb else None
+        ctx.prev = (mb[0] if mb[0] is not None else first, mb[1]) if mb else None
     elif tool == "changes" and args.get("against") == "same_last_year" and st:
         ctx.prev = _year_back(*st)
     if f.get("weekday") is not None and st:
@@ -3090,8 +3105,8 @@ def audit_results(lib, env, call=None, question="", today=None, earlier=None, la
         q = read_call_window(question, lib, today)
         st = stated_window(sh)
         if q and q.get("kind") != "all" and st:
-            mq = spec_window(q, lib, today)
-            a0 = mq[0] if mq[0] is not None else lib.oldest
+            mq = spec_window(q, lib, today, f.get("platform"))
+            a0 = mq[0] if mq[0] is not None else lib.first_day(f.get("how"), f.get("platform"))
             F.add("window", "understood_window", (a0, mq[1]) == st, f"{_d(st[0])}..{_d(st[1])}",
                   f"{_d(a0)}..{_d(mq[1])}", where="window", note="their message", severity=0)
     if sh.get("kind") in ("first", "last", "day", "items"):
@@ -3172,8 +3187,8 @@ def _brain_extra(ctx, F, sh):
         if "usual_weekday_share" in wh:
             # their own usual week: every event of the kind counted (what they opened, saved ...), over the whole
             # record (my reading of 19.P2, T7)
-            how = ctx.f.get("how")
-            allv = [e for ev in lib.scope(None, lib.newest, {"how": how} if how else {}).values() for e in ev]
+            base_f = {k: ctx.f[k] for k in ("how", "platform") if ctx.f.get(k)}
+            allv = [e for ev in lib.scope(None, lib.newest, base_f).values() for e in ev]
             if allv:
                 chk("when.usual_weekday_share", wh["usual_weekday_share"],
                     round(sum(1 for e in allv if e[2] < 5) / len(allv), 3), "share", 0.0015)
