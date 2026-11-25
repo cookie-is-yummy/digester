@@ -663,3 +663,53 @@ def test_r2_a_ranked_list_with_a_gap_says_among():
     texts = [o["text"] for o in I.code_form(s)["observations"]]
     one = [t for t in texts if "Kite Lab (97)" in t]
     assert one and "by videos opened" not in one[0] and one[0].startswith("Among the channels new that summer"), one
+
+
+# ---- R2-S2, S5: a change with one value gets the other; the end value is never put in the base period (c05.1, c08)
+def test_r2_a_change_to_one_value_says_where_it_came_from():
+    """c05.1: "Film and TV rose to 8% of your long videos and science to 6%, both above 2023" (no 2023 values)."""
+    s = top()
+    kept, why = obs("{areas[0].name} rose to {areas[0].share} and {areas[2].name} to {areas[2].share}.", s)
+    assert kept is None, kept   # internet culture moved under 3 points (or the other way): not said as a rise
+    kept, why = obs("{areas[0].name} rose to {areas[0].share}.", s)
+    assert kept and "from 12%" in kept, (kept, why)
+    kept, why = obs("{areas[0].name} rose to {areas[0].share} and {areas[1].name} to {areas[1].share}.", s)
+    assert kept is None and why == ["direction"], (kept, why)   # comedy fell
+
+
+def test_r2_the_end_value_goes_after_the_base_period():
+    """c08: "Gaming slipped from 50% to 47% in the summer before": 47% was the fall's own share."""
+    s = top()
+    s["previous"] = dict(s["previous"], words="the summer before (1 June to 31 August 2021)")
+    kept, why = obs("{areas[3].name} slipped from {areas[3].previous_share} in {previous.words}.", s)
+    assert kept == "Sports slipped from 16% in the summer before (1 June to 31 August 2021) to 9%.", (kept, why)
+
+
+# ---- R2-S6: a move under 3 points is not said in Spanish either (n07)
+def test_r2_a_small_move_in_points_goes_in_spanish_too():
+    s = top(lang="es")
+    s["areas"][0] = dict(s["areas"][0], change_vs_previous=1.68)
+    kept, why = obs("{areas[0].name} aportó {areas[0].share}, subió {areas[0].change_vs_previous} puntos frente a "
+                    "{previous.words}.", s)
+    assert kept is None and why == ["small_move"], (kept, why)
+
+
+# ---- R2-S3: one fact once (n06.1, n07)
+def test_r2_one_records_channels_and_a_leads_share_said_once():
+    I = ins()
+    f = {"answer": "En 2022, lo que más viste fue gaming con 48% de todo.", "dropped": [],
+         "observations": ["Gaming aportó 48%.", "Behind Speed runs (5% of your long videos): Pixel Forge, with Doggo "
+                          "Plays following.", "Behind Speed runs: Pixel Forge (14 long videos) and Doggo Plays (9).",
+                          "Gaming grew from 12% to 48%."], "so_what": None}
+    out = I.p6_once(f, top())["observations"]
+    assert out == ["Behind Speed runs: Pixel Forge (14 long videos) and Doggo Plays (9).",
+                   "Gaming grew from 12% to 48%."], out
+
+
+# ---- R2-S8: a first's arc is said after another first's (n05a)
+def test_r2_a_firsts_arc_key_names_its_topic():
+    from mvp import facts as F
+    out = {"kind": "first", "filters": {"topic": "kites"}, "themes": [],
+           "periods": [{"label": "2023", "items": 131}, {"label": "2026", "items": 12}]}
+    c = [x for x in F._so_what_candidates(out, "first", None) if x["kind"] == "path"]
+    assert c and c[0]["key"] == "path:faded:kites", c

@@ -2526,18 +2526,38 @@ def _p6_twin(sl, sheet):
     return tw if _num(v) and not isinstance(v, bool) else None
 
 
+def _p6_back(sl, sheet):
+    """The path of a "now" slot's "before" value of the same measure, or None (round 12, pass 6, second round)."""
+    k = sl.key or ""
+    back = {v: k_ for k_, v in _P6_NOW.items()}
+    if sl.path.startswith("totals.") and k in ("shorts_share", "shorts_yt_share"):
+        tw = "previous." + k
+    elif k in back and "." in sl.path and not sl.path.startswith(("totals.", "previous.")):
+        tw = sl.path.rsplit(".", 1)[0] + "." + back[k]
+    else:
+        return None
+    try:
+        v = _resolve(sheet, _path_segs(tw))
+    except KeyError:
+        return None
+    return tw if _num(v) and not isinstance(v, bool) else None
+
+
 def p6_change(text, sheet, sl):
     """(the template with every change said by two values of one measure, None) or (None, why). A "before" value
     whose "now" value of the same measure is not in the sentence gets it ("faded from {x.previous_items}" is "faded
     from {x.previous_share} to {x.share}"); a share against a count of one record ("climbed to {x.share} from
     {x.previous_items} videos before") is said in shares; a move under 3 points is dropped."""
-    if not isinstance(sl, list) or not sl or not _P6_VERB.search(SLOT.sub(" ", text)):
+    if not isinstance(sl, list) or not sl:
         return text, None
     for x in sl:
+        # a move said in points (any language: the hand check, n07, "subió 2 puntos" of a 1.68-point move)
         if x.key == "change_vs_previous" and _num(x.value):
             v = abs(float(x.value))
             if (v if v <= 1 else v / 100) < SMALL_MOVE - 1e-9:
                 return None, "small_move"
+    if not _P6_VERB.search(SLOT.sub(" ", text)):
+        return text, None
     paths = {x.path for x in sl}
     edits = []   # (start, end, new text)
     for x in sl:
@@ -2586,10 +2606,42 @@ def p6_change(text, sheet, sl):
                 continue
         tw = _p6_twin(x, sheet)
         if tw and tw not in paths and re.search(r"\bfrom\s*$", text[max(0, x.start - 8):x.start]):
-            # one value: "faded from {x.previous_share}" says where it went, "to {x.share}"
-            edits.append((x.end, x.end, " to {" + tw + "}"))
+            # one value: "faded from {x.previous_share}" says where it went, "to {x.share}"; round 12, pass 6, second
+            # round (the hand check, c08: "slipped from 50% to 47% in the summer before": 47% was the fall's): the end
+            # value goes after the base period said with the first one
+            sp_ = re.match(r"\s+(?:in|during|over)\s+(?:\{previous\.words\}|the [a-z ]{2,30}? before(?: \([^)]*\))?|"
+                           r"(?:19|20)\d\d)", text[x.end:])
+            at_ = x.end + (sp_.end() if sp_ else 0)
+            edits.append((at_, at_, " to {" + tw + "}"))
             paths.add(tw)
-    for a, b, t in sorted(edits, key=lambda e: e[0], reverse=True):
+    for x in sl:
+        # round 12, pass 6, second round (the hand check, c05.1: "Film and TV rose to 8% and science to 6%, both above
+        # 2023": no 2023 values): a change to one value says the value it came from
+        if x.role != _ROLE_NUM or (x.key or "") not in ("share", "shorts_share", "shorts_yt_share"):
+            continue
+        tw = _p6_back(x, sheet)
+        verbs = list(_P6_CHANGE_VERB.finditer(SLOT.sub(lambda m: " " * len(m.group(0)), text[:x.start])))
+        if tw and re.search(r"\bto\s*$", text[max(0, x.start - 6):x.start]) and verbs:
+            try:
+                now_, then_ = float(x.value), float(_resolve(sheet, _path_segs(tw)))
+            except (KeyError, TypeError, ValueError):
+                continue
+            up_ = not re.match(r"(?:fell|fallen|dropped|slipped|faded|declined|shrank|shrunk|halved|went down|cooled)",
+                               verbs[-1].group(0).lower())
+            if (up_ and now_ < then_) or (not up_ and now_ > then_):
+                return None, "direction"   # "A rose to 22% and B to 11%" where B fell
+            if (x.key or "") == "share" and abs(round(now_ * 100) - round(then_ * 100)) < SMALL_MOVE * 100:
+                # a move under 3 points (X14): its side clause goes ("..., while B rose to 6%"), else the sentence
+                side = [m for m in _P6_SIDE.finditer(text[:x.start])]
+                if side:
+                    end_ = re.search(r"[.;!?]", text[x.end:])
+                    edits.append((side[-1].start(), x.end + (end_.start() if end_ else len(text) - x.end), ""))
+                    continue
+                return None, "small_move"
+            if tw not in paths:
+                edits.append((x.end, x.end, " from {" + tw + "}"))
+                paths.add(tw)
+    for a, b, t in sorted(edits, key=lambda e: (e[0], e[1]), reverse=True):
         text = text[:a] + t + text[b:]
     # a move under 3 points: both values of one record present
     sl2 = slots_of(text, sheet, (sheet or {}).get("lang") or "en") if edits else sl
@@ -3524,6 +3576,10 @@ def p6_words(s, sheet, names):
         s = _P6_OPENED.sub("of what you opened", s)
     s = _P6_YT.sub("of your YouTube videos", s)
     s = re.sub(r"\bof your YouTube videos videos\b", "of your YouTube videos", s)
+    # round 12, pass 6, second round (the hand check, b7: "70% of your YouTube videos of your watching in 2026 was
+    # Shorts"): one base after a number, never two
+    s = re.sub(r"\b(of your YouTube videos) of (?:your watching|your viewing|what you (?:opened|watched)|everything(?: you "
+               r"(?:opened|watched))?|all (?:that )?you (?:opened|watched))\b", r"\1", s)
     counts = _p6_counts(sheet)
     if counts:
         out, last = [], 0
@@ -3993,7 +4049,52 @@ def p6_once(form, sheet):
             if cut and not (_p6_moved(cut, names) & sw_mv):
                 keep.append(cut)
         out = keep
-    return dict(form, observations=out, dropped=dropped)
+    # round 12, pass 6, second round (the hand check, n06.1: "Behind <theme> (4% ...): <ch>, with <ch2> and <ch3>
+    # following" and then "Behind <theme>: <ch> (14 videos) and <ch2> (9)"): one record's channels said once, the
+    # saying with more numbers kept
+    seen_b = {}
+    for i, o in enumerate(list(out)):
+        m = re.match(r"^Behind ([^:(]+?)\s*(?:\(|:)", o)
+        if not m:
+            continue
+        key = " ".join(_words(m.group(1)))
+        if key in seen_b:
+            j = seen_b[key]
+            nums = lambda t: len(re.findall(r"\d", t))   # noqa: E731
+            lose = j if nums(out[i]) > nums(out[j]) else i
+            dropped.append(("observation", "repeat_behind", out[lose]))
+            out[lose] = None
+            seen_b[key] = i if lose == j else j
+        else:
+            seen_b[key] = i
+    out = [o for o in out if o is not None]
+    # (n07, in Spanish: "48% de todo" in the lead and "Gaming aportó 48%" as a bullet): a bullet whose only numbers are
+    # shares the lead already gave the same records goes, in any language
+    pairs_ans = {(n.lower(), v) for n, v in _p6_name_pcts(ans, names)}
+    keep = []
+    for o in out:
+        pr = _p6_name_pcts(o, names)
+        all_nums = re.findall(r"\d+(?:[.,]\d+)?", o)
+        if pr and len(pr) == len(all_nums) and all((n.lower(), v) in pairs_ans for n, v in pr):
+            dropped.append(("observation", "repeat_lead", o))
+            continue
+        keep.append(o)
+    return dict(form, observations=keep, dropped=dropped)
+
+
+def _p6_name_pcts(text, names):
+    """[(record name, "N%")]: each percent with the record name said nearest before it (within 40 characters)."""
+    out = []
+    for m in _G_PCT.finditer(text or ""):
+        pre = text[max(0, m.start() - 40):m.start()]
+        best = None
+        for n in names:
+            for mm in re.finditer(r"(?<![\w])" + re.escape(n) + r"(?![\w])", pre, re.I):
+                if best is None or mm.start() > best[1]:
+                    best = (n, mm.start())
+        if best:
+            out.append((best[0], m.group(0).replace(" ", "")))
+    return out
 
 
 def bases(sheet):

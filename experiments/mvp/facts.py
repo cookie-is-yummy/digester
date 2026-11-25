@@ -1103,7 +1103,11 @@ def _so_what_candidates(out, kind, q):
         if len(ps) >= 2:
             last, peak = ps[-1], max(ps, key=lambda p: p["items"])
             how = "deeper" if peak is last else ("still" if last["items"] >= 0.5 * peak["items"] else "faded")
-            c.insert(0, {"key": "path:" + how, "kind": "path", "how": how, "last_label": last["label"],
+            # round 12, pass 6, second round (the hand check, n05a: a first's arc not said after another first's):
+            # the key names its topic, so "never the same so-what twice in a row" is of the same topic only
+            tp_ = str((out.get("filters") or {}).get("topic") or "")
+            c.insert(0, {"key": "path:" + how + (":" + tp_ if tp_ else ""), "kind": "path", "how": how,
+                         "last_label": last["label"],
                          "last_items": last["items"], "peak_label": peak["label"], "peak_items": peak["items"]})
     order = {"path": 0, "moving": 1, "lapsed_saves": 1, "learning_faded": 2, "then_not_since": 2, "channel_rise": 3,
              "seasonal": 4, "shorts_shift": 5, "saved": 6}
