@@ -263,6 +263,7 @@ class Marker:
     hedge: str = ""
     num: Optional[float] = None
     unit: str = ""
+    sign: str = ""            # a sign typed before the number ("+16 points")
 
 
 @dataclass
@@ -619,6 +620,7 @@ def parse(sentence, ledger):
                 mk.start, mk.said = prev_end + t.start(), t.group(0).strip()
                 mk.num, mk.unit = _num_of(t.group("num")), (t.group("unit") or "").strip().lower()
                 mk.hedge = (t.group("hedge") or "").lower()
+                mk.sign = t.group("sign") or ""
         out.append(mk)
         prev_end = m.end()
     return out, bad
@@ -636,8 +638,12 @@ def _row_names(row, rest):
 
 
 def _area_aliases(name):
+    """The words an area may be called by beside its own name: a whole word of the name ("cooking" for "food and
+    cooking", "art" for "art and design"). themes.CATEGORY_WORDS is wider ("painting", "drawing" for art and design,
+    which are themes' names too); the code-owned alias table of SPEC 2.2 (names.py) replaces this when it exists."""
     from .. import themes as T
-    return list((T.CATEGORY_WORDS or {}).get(_low(name), ()))
+    own = set(_low(name).split()) - {"and", "the", "of", "&"}
+    return [w for w in (T.CATEGORY_WORDS or {}).get(_low(name), ()) if w in own]
 
 
 def strip_markers(sentence, markers=None):
@@ -973,29 +979,164 @@ def _months_in(a, b):
     return out
 
 
-def _window_check(text, res, cites_prev, turn):
-    """None or (reason, detail): dates, months, years, seasons and window words against the cited result's window
-    (and its compare window when a previous cell is cited or the result is a compare)."""
-    if res is None:
+_PHRASE = re.compile(
+    r"\b(?P<since>since\s+|after\s+)?(?:"
+    r"(?:the\s+)?(?P<season>spring|summer|autumn|winter)(?:\s+of)?(?:\s+(?P<sy>(?:19|20)\d\d))?"
+    r"|(?P<mon>january|february|march|april|may|june|july|august|september|october|november|december|"
+    r"jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\.?(?:\s+(?P<my>(?:19|20)\d\d))?"
+    r"|(?P<year>(?:19|20)\d\d)"
+    r"|(?P<rel>today|yesterday|(?:this|last|past) (?:week|month|year))"
+    r")\b", re.I)
+_SEASON_M = {"spring": (3, 5), "summer": (6, 8), "autumn": (9, 11), "winter": (12, 2)}
+FAR = date(2999, 12, 31)
+WINDOW_MATCH = 0.85   # a time said of a count covers its window, and the window covers it, to this share of days
+
+
+def _month_range(y, m):
+    nxt = date(y + (m == 12), m % 12 + 1, 1)
+    return date(y, m, 1), date.fromordinal(nxt.toordinal() - 1)
+
+
+def _season(y, s0, s1):
+    if s0 > s1:   # winter: December to February
+        return date(y, 12, 1), _month_range(y + 1, 2)[1]
+    return date(y, s0, 1), _month_range(y, s1)[1]
+
+
+def _overlap(p, w):
+    a, b = max(p[0], w[0]), min(p[1], w[1])
+    return max(0, b.toordinal() - a.toordinal() + 1)
+
+
+def _phrase_range(m, wins, turn):
+    """(start, end) of a time phrase, or None when it cannot be placed (a relative word with no today)."""
+    g = m.groupdict()
+    end_year = max((b.year for _a, b in wins), default=None)
+    if g.get("rel"):
+        today = turn.today if turn and turn.today else None
+        if today is None:
+            return None
+        r = g["rel"].lower()
+        if r == "today":
+            a = b = today
+        elif r == "yesterday":
+            a = b = date.fromordinal(today.toordinal() - 1)
+        elif r.endswith("week"):
+            mon = date.fromordinal(today.toordinal() - today.weekday())
+            if r.startswith("last"):
+                mon = date.fromordinal(mon.toordinal() - 7)
+            a, b = (date.fromordinal(today.toordinal() - 7), today) if r.startswith("past") else \
+                (mon, date.fromordinal(mon.toordinal() + 6))
+        elif r.endswith("month"):
+            y, mo = today.year, today.month
+            if r.startswith("last"):
+                y, mo = (y - (mo == 1), 12 if mo == 1 else mo - 1)
+            a, b = _month_range(y, mo)
+        else:
+            y = today.year - r.startswith("last")
+            a, b = date(y, 1, 1), date(y, 12, 31)
+    elif g.get("season"):
+        s0, s1 = _SEASON_M[g["season"].lower()]
+        if g.get("sy"):
+            y = int(g["sy"])
+        else:   # the instance that overlaps the windows most
+            cands = sorted({a.year for a, _b in wins} | {b.year for _a, b in wins} | {(end_year or 2000) - 1})
+            y = max(cands, key=lambda yy: (sum(_overlap(_season(yy, s0, s1), w) for w in wins), yy))
+        a, b = _season(y, s0, s1)
+    elif g.get("mon"):
+        mi = next(i for i, x in enumerate(_MONTHS) if x.startswith(g["mon"].lower()[:3])) + 1
+        if g.get("my"):
+            a, b = _month_range(int(g["my"]), mi)
+        else:
+            cands = sorted({y for w in wins for y in range(w[0].year, w[1].year + 1)} or {end_year or 2000})
+            y = max(cands, key=lambda yy: (sum(_overlap(_month_range(yy, mi), w) for w in wins), yy))
+            a, b = _month_range(y, mi)
+    else:
+        y = int(g["year"])
+        a, b = date(y, 1, 1), date(y, 12, 31)
+    if g.get("since"):
+        b = FAR
+    return a, b
+
+
+def _matches(p, w, clipped):
+    """The phrase's range and the window are the same stretch of time (each covers the other to WINDOW_MATCH); a
+    window cut at the export's end, or an open "since", is read up to the window's end."""
+    a, b = p
+    if b == FAR or (clipped and b > w[1]):
+        b = w[1]
+    if b < a:
+        return False
+    ov = _overlap((a, b), w)
+    lw = w[1].toordinal() - w[0].toordinal() + 1
+    lp = b.toordinal() - a.toordinal() + 1
+    return ov >= WINDOW_MATCH * lw and ov >= WINDOW_MATCH * lp
+
+
+def _labels(sheet):
+    """The periods a sheet names itself ("2021", "Oct 2026": periods, eras, the change's ends)."""
+    out = set()
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in ("label", "from", "to", "peak_period", "peak_label", "last_label") and isinstance(v, str):
+                    out.add(_low(v))
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    walk({k: v for k, v in sheet.items() if k in ("periods", "eras", "change", "areas_change", "seasonal")})
+    return out
+
+
+def _label_range(label):
+    m = _PHRASE.fullmatch(label.strip())
+    if not m or m.group("rel") or m.group("since") or not (m.group("year") or m.group("my") or m.group("sy")):
         return None
-    ranges = []
+    return _phrase_range(m, [], None)
+
+
+def _phrase_ok(m, rng, res, wins, period_cells=False):
+    """The phrase is the window (or the compare window); or, when the sentence cites a period's own cells (periods,
+    eras, a change's two ends), one of the periods the sheet names."""
+    if rng is None:
+        return False
+    clipped = bool((res.sheet.get("window") or {}).get("clipped"))
+    if any(_matches(rng, w, clipped) for w in wins):
+        return True
+    if not period_cells:
+        return False
+    lab = _labels(res.sheet)
+    return _low(m.group(0)) in lab or any(rng == _label_range(x) for x in lab)
+
+
+def _windows_of(res, cites_prev):
+    out = []
     w = res.window()
     if w[0] and w[1]:
-        ranges.append(w)
-    pw = res.prev_window() if (cites_prev or res.tool == "compare" or res.sheet.get("kind") in ("compare",
-                                                                                                  "compare_windows"))\
-        else None
-    if pw:
-        ranges.append(pw)
-    if not ranges:
+        out.append(w)
+    if cites_prev or res.tool == "compare" or res.sheet.get("kind") in ("compare", "compare_windows"):
+        pw = res.prev_window()
+        if pw:
+            out.append(pw)
+    return out
+
+
+def _window_check(text, res, cites_prev, turn, period_cells=False):
+    """None or (reason, detail): every time said in the sentence against the cited result's window (and its compare
+    window when a previous or change cell is cited, or the result is a compare). A day must lie inside one; a month,
+    a year, a season or a relative word ("this year", "last week") must be that window, not a stretch around or
+    inside it (a count of 4 weeks said "in 2026" is the right number with a wrong window), unless the sheet names
+    that period itself (its periods, eras, a change's ends)."""
+    if res is None:
+        return None
+    wins = _windows_of(res, cites_prev)
+    if not wins:
         return None
     said = (res.meta or {}).get("window_said") or (res.sheet.get("window") or {}).get("words") or ""
-    t = _remove_phrases(text, _window_phrases(res))
     det = f"{res.rid}'s window is '{_clip(said, 90)}'"
-    yms = set()
-    for a, b in ranges:
-        yms |= _months_in(a, b)
-    years = {y for y, _m in yms}
+    t = _remove_phrases(text, _window_phrases(res))
     for m in _DATE_IN.finditer(t):
         g = m.groups()
         d_, mon, y = (g[0], g[1], g[2]) if g[0] else (g[4], g[3], g[5])
@@ -1003,83 +1144,64 @@ def _window_check(text, res, cites_prev, turn):
         if mi is None:
             continue
         ok = False
-        for a, b in ranges:
+        for a, b in wins:
             for yy in ([int(y)] if y else range(a.year, b.year + 1)):
                 try:
                     dd = date(yy, mi + 1, int(d_))
                 except ValueError:
                     continue
-                if a <= dd <= b:
-                    ok = True
+                ok = ok or a <= dd <= b
         if not ok:
             return "wrong_window", det
-    t2 = _DATE_IN.sub(" ", t)
-    for m in re.finditer(r"\b(" + _MON_RX + r")\w*\.?(?:\s+((?:19|20)\d\d))?\b", t2, re.I):
-        word = m.group(0).lower()
-        if word.startswith("may") and not m.group(2):
-            continue
-        if re.match(r"^(?:mar|sept?|oct|nov|dec|jan|feb|apr|jun|jul|aug)$", m.group(1).lower()) and \
-                not re.match(r"^\w+\.?(?:\s+\d{4})?$", word):
-            continue
-        mi = next((i for i, x in enumerate(_MONTHS) if x.startswith(m.group(1).lower()[:3])), None)
-        if mi is None:
-            continue
-        if m.group(2):
-            if (int(m.group(2)), mi + 1) not in yms:
-                return "wrong_window", det
-        elif not any(mm == mi + 1 for _y, mm in yms):
+    t2 = _DATE_IN.sub(lambda m: " " * len(m.group(0)), t)
+    for m in _PHRASE.finditer(t2):
+        if m.group("mon") and m.group("mon").lower() in ("may", "mar") and not m.group("my"):
+            continue   # "may" and "mar" are words as often as months
+        if not _phrase_ok(m, _phrase_range(m, wins, turn), res, wins, period_cells):
             return "wrong_window", det
-    t3 = re.sub(r"\b" + _MON_RX + r"\w*\.?\s+(?:19|20)\d\d\b", " ", t2, flags=re.I)
-    for y in _YEAR.findall(t3):
-        if int(y) not in years:
-            return "wrong_window", det
-    for m in _SEASON.finditer(t3):
-        months = {"spring": (3, 4, 5), "summer": (6, 7, 8), "autumn": (9, 10, 11), "fall": (9, 10, 11),
-                  "winter": (12, 1, 2)}[m.group(1).lower()]
-        if m.group(1).lower() == "fall" and not re.search(r"\b(?:the|this|last|in) fall\b", t3, re.I):
-            continue
-        if not any(mm in months for _y, mm in yms):
-            return "wrong_window", det
-    if _LATELY.search(t3):
+    if _LATELY.search(t2):
         lately = re.search(r"\b(?:4|four) weeks\b", said, re.I) or _LATELY.search(said)
         if not lately:
             return "wrong_window", det
-    for m in _REL_YEAR.finditer(t3):
-        today = turn.today if turn and turn.today else None
-        end = w[1]
-        ref = today or end
-        if ref is None:
-            continue
-        which, unit = m.group(1).lower(), m.group(2).lower()
-        if unit == "year":
-            want = ref.year - (which == "last")
-            if want not in years:
-                return "wrong_window", det
     return None
 
 
-def _end_in_base(sentence, markers, res):
-    """The end value of a change said inside the base period's words ("from 12% to 9% in the 4 weeks before"), or
-    a base value inside the window's words."""
-    prevw = (res.sheet.get("previous") or {}).get("words") if res else None
+def _end_in_base(sentence, markers, res, turn=None):
+    """A value said with the other period's words: the end value of a change inside the base period ("from 12% to
+    9% in the 4 weeks before"), or a value of the period before inside the window's words or dates."""
+    if res is None:
+        return None
+    prevw = (res.sheet.get("previous") or {}).get("words")
+    w, pw = res.window(), res.prev_window()
+    clipped = bool((res.sheet.get("window") or {}).get("clipped"))
     for mk in markers:
         if mk.kind != "value" or not isinstance(mk.value, (int, float)):
             continue
         after = sentence[mk.end:mk.end + 120]
-        stop = re.search(r"[;]|,\s*(?:while|and|but)\b|\b(?:while|whereas|but)\b", after)
+        stop = re.search(r"[;]|,\s*(?:while|and|but)\b|\b(?:while|whereas|but)\b|"
+                         r"\b(?:to|from)\s+[+\-−]?\d[\d.,]*\s*(?:%|\[|points?\b)", after)
         after = after[:stop.start()] if stop else after
-        prev_cell = mk.rest.startswith("previous.") or (mk.key or "").startswith("previous_") or \
-            mk.key in ("faded_from", "grew_from", "from_share")
+        if (mk.key or "") in ("change_vs_previous", "change_pts", "change"):
+            continue   # a change is of both periods
+        prev_cell = _is_before(mk.rest)
         m = re.match(r"^\s*(?:,\s*)?(?:[a-z]+\s+){0,2}?(?:in|during|over|across)\s+(.{3,80})", after, re.I)
         if not m:
             continue
         ph = m.group(1).lower()
         says_prev = bool(re.search(r"\bbefore\b|\bprevious\b|\bearlier\b|\bprior\b", ph)) or \
             bool(prevw and _low(prevw)[:20] in _low(ph))
-        if says_prev and not prev_cell:
-            return "wrong_window", f"{mk.path} is of {res.rid}'s window, not the period before"
         nw = [x for x in ((res.meta or {}).get("window_said"), (res.sheet.get("window") or {}).get("words")) if x]
         says_now = not says_prev and any(_low(re.split(r"[(,]", x)[0])[:24] in _low(ph) for x in nw)
+        if not (says_prev or says_now):
+            pm = _PHRASE.match(m.group(1))
+            wins = [x for x in (w, pw) if x and x[0]]
+            rng = _phrase_range(pm, wins, turn) if pm else None
+            if rng and w[0]:
+                in_now = _matches(rng, w, clipped)
+                in_prev = bool(pw) and _matches(rng, pw, False)
+                says_prev, says_now = in_prev and not in_now, in_now and not in_prev
+        if says_prev and not prev_cell:
+            return "wrong_window", f"{mk.path} is of {res.rid}'s window, not the period before"
         if says_now and prev_cell:
             return "wrong_window", f"{mk.path} is of the period before, not {res.rid}'s window"
     return None
@@ -1152,6 +1274,14 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
             r = check_value(mk)
             if r:
                 add(*r)
+            elif mk.kind == "value" and _measure(mk.rest, mk.value)[1] == "points":
+                # a move in points: its typed sign and the direction words of its clause against the cell's sign
+                pts = _points_of(mk.rest, mk.value)
+                clause = _clause_around(raw, mk.start, mk.mstart).lower()
+                up, down = bool(_UPW.search(clause)), bool(_DOWNW.search(clause))
+                if (mk.sign == "+" and pts < 0) or (mk.sign in ("-", "−") and pts > 0) or \
+                        (up and not down and pts < 0) or (down and not up and pts > 0):
+                    add("direction", f"{mk.path} = {round(pts, 1)} points")
         elif mk.kind == "row":
             if not mk.said:
                 nm = _row_names(mk.value, mk.rest)
@@ -1305,14 +1435,23 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         if hid.get("rank_hidden_above") and _RANK.search(low):
             out.hidden_rank = True
     # 3.15 window words; the end value of a change inside the base period's words
-    cites_prev = any((mk.rest.startswith("previous.") or (mk.key or "").startswith("previous_")) for mk in markers
+    cites_prev = any((mk.rest.startswith("previous.") or (mk.key or "").startswith("previous_") or
+                      mk.key in ("change_vs_previous", "change_pts", "change")) for mk in markers
                      if mk.kind == "value") or any(
         ".previous" in p or p.split(".", 1)[1].startswith("previous.") for mk in markers if mk.kind == "calc"
         for p in (mk.a, mk.b))
-    r = _window_check(plain, wres, cites_prev, turn)
+    period_cells = any(re.match(r"^(?:periods|eras|change|areas_change|seasonal)\b", p.split(".", 1)[1])
+                       for mk in markers for p in ([mk.path] if mk.kind != "calc" else [mk.a, mk.b]) if "." in p)
+    # (a date said by a date marker is checked against its own cell: its words are left out here)
+    wtext = list(raw)
+    for mk in markers:
+        dated = mk.kind == "value" and isinstance(mk.value, str) and _measure(mk.rest, mk.value)[1] == "date"
+        for i in range(mk.start if dated else mk.mstart, mk.end):
+            wtext[i] = " "
+    r = _window_check("".join(wtext), wres, cites_prev, turn, period_cells)
     if r:
         add(*r)
-    r = _end_in_base(raw, markers, res)
+    r = _end_in_base(raw, markers, res, turn)
     if r:
         add(*r)
     # a count of a result filtered to long (or short) videos said without that word
@@ -1404,15 +1543,12 @@ def _filter_dropped(raw, markers, res):
 
 def _sensitive(text, turn):
     from .. import profile as P
-    from .. import outside as O
     if any(n and _low(n) in _low(text) for n in turn.sensitive_names):
         if not (turn.unlock and any(_low(turn.unlock) in _low(n) for n in turn.sensitive_names if _low(n) in
                                     _low(text))):
             return True
-    if P.sensitive(text):
-        topic = O.sensitive_topic([text])
-        return not (turn.unlock and topic and topic == turn.unlock)
-    return False
+    # the unlock is per topic (SPEC 8.4): its own words are taken out, any other sensitive word still fails
+    return bool(P.sensitive(_mask_unlocked(text, turn.unlock)))
 
 
 # ------------------------------------------------------------------ step 3.8: insight's checks, one sentence
@@ -1420,9 +1556,12 @@ _NEUTRAL = "changed"
 
 
 def slotted(raw, markers, plain_names, cited_names, res):
-    """The sentence in insight's slotted form: value markers -> `{path}` (the hedge kept), row markers and cited plain
-    names -> the row's name slot, calc spans -> a neutral word (number spans dropped, their direction words kept),
-    count spans -> the number in words. None when a cited name has no name slot."""
+    """The sentence in insight's slotted form: value markers -> `{path}` (the hedge kept; a date stays as typed), row
+    markers and cited plain names -> the row's name slot; a calc of a row's share against its share before -> that
+    row's `{change_vs_previous}` slot; any other calc -> a neutral word for ratio words ("doubled" -> "changed") or
+    nothing for a typed number (the direction words of its clause stay); count spans -> nothing (their words stay);
+    the model's own "the 4 weeks" loses its digit unless it is the sheet's exact window phrase. None when a cited row
+    has no name slot."""
     edits = []   # (start, end, new)
     for mk in markers:
         if mk.kind == "value":
@@ -1434,8 +1573,9 @@ def slotted(raw, markers, plain_names, cited_names, res):
                 edits.append((mk.start, mk.end, "{" + rest + "}"))
                 continue
             h = NUM_TAIL.search(raw[:mk.mstart])
-            st = mk.start + (h.start("sign") if h and h.group("sign") else (h.start("num") - h.start() if h else 0))
-            edits.append((st, mk.end, "{" + rest + "}"))
+            # the number (and its sign) becomes the slot; a hedge before it stays as typed
+            st = (h.start("sign") if h.group("sign") else h.start("num")) if h else mk.start
+            edits.append((max(st, mk.start), mk.end, "{" + rest + "}"))
         elif mk.kind == "row":
             nk = I._record_name_key(mk.value) if isinstance(mk.value, dict) else None
             if nk is None:

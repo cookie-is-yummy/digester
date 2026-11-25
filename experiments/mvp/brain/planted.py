@@ -10,6 +10,7 @@ them is the expected reason; empty: any reason), "turn" (optional: message, unlo
 import argparse
 import json
 import os
+from datetime import date
 
 from . import verify as V
 
@@ -26,7 +27,8 @@ def outcome(case, ledgers):
     """(kept: bool, reasons: [str], verdict)"""
     led = V.Ledger(ledgers[case["ledger"]])
     t = case.get("turn") or {}
-    turn = V.Turn(message=t.get("message", ""), unlock=t.get("unlock"))
+    today = date.fromisoformat(t["today"]) if t.get("today") else None
+    turn = V.Turn(message=t.get("message", ""), unlock=t.get("unlock"), today=today)
     v = V.check_answer(case["form"], led, turn)
     tgt = case.get("target") or "point:0"
     kind, _, n = tgt.partition(":")

@@ -8025,8 +8025,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "bad_ref",
-    "uncited_number"
+    "bad_ref"
    ]
   },
   {
@@ -8043,8 +8042,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "uncited_number",
-    "bad_ref"
+    "uncited_number"
    ]
   },
   {
@@ -8299,8 +8297,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "watch_time",
-    "uncited_number"
+    "watch_time"
    ]
   },
   {
@@ -8385,8 +8382,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "calc",
-    "direction"
+    "calc"
    ]
   },
   {
@@ -8522,10 +8518,9 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "bound",
-    "bound_to_other",
     "unnamed_owner",
-    "wrong_value"
+    "bound_to_other",
+    "bound"
    ]
   },
   {
@@ -8542,9 +8537,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "channel_not_in_theme",
-    "bound",
-    "bound_to_other"
+    "channel_not_in_theme"
    ]
   },
   {
@@ -8612,9 +8605,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "rank",
-    "not_top",
-    "order"
+    "rank"
    ]
   },
   {
@@ -8631,10 +8622,6 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "close",
-    "gap",
-    "rank",
-    "order",
     "not_close"
    ]
   },
@@ -8652,10 +8639,8 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "base",
-    "base_missing",
-    "insight_rewrite",
-    "share_of_topic"
+    "share_of_topic",
+    "base"
    ]
   },
   {
@@ -8672,9 +8657,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "base",
-    "base_missing",
-    "insight_rewrite"
+    "base"
    ]
   },
   {
@@ -8691,8 +8674,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "one_value",
-    "insight_rewrite"
+    "one_value"
    ]
   },
   {
@@ -8709,8 +8691,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "wrong_window",
-    "insight_rewrite"
+    "wrong_window"
    ]
   },
   {
@@ -8738,15 +8719,14 @@
    "form": {
     "lead": "In the 4 weeks up to 30 October 2026, here is what stood out.",
     "points": [
-     "Digital drawing[r1.themes[2]] faded while Gaming clips[r1.themes[0]] took off."
+     "Digital drawing[r1.themes[2]] faded while Gaming clips[r1.themes[0]] grew."
     ]
    },
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
     "vague",
-    "direction_unbound",
-    "not_new"
+    "direction_unbound"
    ]
   },
   {
@@ -8763,8 +8743,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "not_stopped",
-    "status"
+    "not_stopped"
    ]
   },
   {
@@ -8894,14 +8873,13 @@
    "form": {
     "lead": "In the 4 weeks up to 30 October 2026, here is what stood out.",
     "points": [
-     "Dating advice made up 12%[r1.themes[1].share] of what you opened."
+     "Dating advice made up 23%[r1.themes[1].share] of what you opened."
     ]
    },
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "sensitive",
-    "wrong_value"
+    "sensitive"
    ]
   },
   {
@@ -9088,10 +9066,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "wrong_window",
-    "bound",
-    "insight_rewrite",
-    "previous"
+    "wrong_window"
    ]
   },
   {
@@ -9125,8 +9100,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "weak_fit",
-    "wrong_name"
+    "weak_fit"
    ]
   },
   {
@@ -9143,8 +9117,7 @@
    "target": "point:0",
    "expect": "dropped",
    "reasons": [
-    "wrong_name",
-    "weak_fit"
+    "wrong_name"
    ]
   },
   {
@@ -9810,6 +9783,320 @@
    "target": "point:0",
    "expect": "kept",
    "reasons": []
+  },
+  {
+   "id": "f_month_end_in_base",
+   "source": "new",
+   "class": "hand check: an end value in the base period (said by its month)",
+   "ledger": "oct_channels",
+   "form": {
+    "lead": "In October 2026, here is what stood out.",
+    "points": [
+     "Digital drawing[r1.themes[2]] fell from 70%[r1.themes[2].previous_share] to 22%[r1.themes[2].share] in September."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "wrong_window"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_months_swapped",
+   "source": "new",
+   "class": "3.15 the two periods' months swapped",
+   "ledger": "oct_channels",
+   "form": {
+    "lead": "In October 2026, here is what stood out.",
+    "points": [
+     "Digital drawing[r1.themes[2]] fell from 70%[r1.themes[2].previous_share] in October to 22%[r1.themes[2].share] in September."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "wrong_window"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_this_week",
+   "source": "new",
+   "class": "3.15 'this week' on a month's result",
+   "ledger": "oct_channels",
+   "form": {
+    "lead": "In October 2026, here is what stood out.",
+    "points": [
+     "This week Clip Factory[r1.channels[0]] made 61[r1.channels[0].items] videos."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "wrong_window"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_this_month",
+   "source": "new",
+   "class": "3.15 'this month' on last month's result",
+   "ledger": "oct_channels",
+   "form": {
+    "lead": "In October 2026, here is what stood out.",
+    "points": [
+     "This month Clip Factory[r1.channels[0]] made 61[r1.channels[0].items] videos."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "wrong_window"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_today",
+   "source": "new",
+   "class": "3.15 'today' on a month's result",
+   "ledger": "oct_channels",
+   "form": {
+    "lead": "In October 2026, here is what stood out.",
+    "points": [
+     "Today Clip Factory[r1.channels[0]] has 61[r1.channels[0].items] videos."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "wrong_window"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_year_on_weeks",
+   "source": "new",
+   "class": "hand check: a right number with a wrong window (a year around 4 weeks)",
+   "ledger": "lately",
+   "form": {
+    "lead": "In the 4 weeks up to 30 October 2026, here is what stood out.",
+    "points": [
+     "In 2026 Clip Factory[r1.channels[0]] made 56[r1.channels[0].items] videos."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "wrong_window"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_label_not_period",
+   "source": "new",
+   "class": "3.15 a period label on a count of all the history",
+   "ledger": "years",
+   "form": {
+    "lead": "Across all your history, here is what stood out.",
+    "points": [
+     "In 2021 Minecraft builds[r1.themes[0]] made 162[r1.themes[0].items] videos."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "wrong_window"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_alias_theme_word",
+   "source": "new",
+   "class": "3.6 an area under a word that is a theme's",
+   "ledger": "lately",
+   "form": {
+    "lead": "In the 4 weeks up to 30 October 2026, here is what stood out.",
+    "points": [
+     "Painting[r1.areas[1]] was 25%[r1.areas[1].share] of what you opened."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "wrong_name"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_sign",
+   "source": "new",
+   "class": "3.4 a typed sign against the cell's",
+   "ledger": "w47",
+   "form": {
+    "lead": "Right now (the 4 weeks to 30 Oct, where your YouTube export ends), here is what stood out.",
+    "points": [
+     "Art and design[r1.areas[1]] moved +4 points[r1.areas[1].change_pts] against the 4 weeks before."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "direction"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_up_on_fall",
+   "source": "new",
+   "class": "3.4 'up' on a fall in points",
+   "ledger": "w47",
+   "form": {
+    "lead": "Right now (the 4 weeks to 30 Oct, where your YouTube export ends), here is what stood out.",
+    "points": [
+     "Art and design[r1.areas[1]] went up 4 points[r1.areas[1].change_pts] against the 4 weeks before."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "direction"
+   ],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "f_second_topic",
+   "source": "new",
+   "class": "3.11 a second sensitive topic beside the unlocked one",
+   "ledger": "search",
+   "form": {
+    "lead": "Here's what I found in your saves.",
+    "points": [
+     "Here is what I found about dating and your debt."
+    ]
+   },
+   "target": "point:0",
+   "expect": "dropped",
+   "reasons": [
+    "sensitive"
+   ],
+   "turn": {
+    "today": "2026-11-22",
+    "message": "what about dating",
+    "unlock": "relationships"
+   }
+  },
+  {
+   "id": "t_last_month",
+   "source": "new",
+   "class": "3.15 'last month' on last month's result",
+   "ledger": "oct_channels",
+   "form": {
+    "lead": "In October 2026, here is what stood out.",
+    "points": [
+     "Last month Clip Factory[r1.channels[0]] made 61[r1.channels[0].items] videos."
+    ]
+   },
+   "target": "point:0",
+   "expect": "kept",
+   "reasons": [],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "t_months",
+   "source": "new",
+   "class": "3.15 each value with its own month",
+   "ledger": "oct_channels",
+   "form": {
+    "lead": "In October 2026, here is what stood out.",
+    "points": [
+     "Digital drawing[r1.themes[2]] fell from 70%[r1.themes[2].previous_share] in September to 22%[r1.themes[2].share] in October."
+    ]
+   },
+   "target": "point:0",
+   "expect": "kept",
+   "reasons": [],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "t_sign",
+   "source": "new",
+   "class": "3.4 a typed sign that is the cell's",
+   "ledger": "w47",
+   "form": {
+    "lead": "Right now (the 4 weeks to 30 Oct, where your YouTube export ends), here is what stood out.",
+    "points": [
+     "Gaming[r1.areas[0]] rose +16 points[r1.areas[0].change_pts] against the 4 weeks before."
+    ]
+   },
+   "target": "point:0",
+   "expect": "kept",
+   "reasons": [],
+   "turn": {
+    "today": "2026-11-22"
+   }
+  },
+  {
+   "id": "t_unlocked",
+   "source": "new",
+   "class": "3.11 the unlocked topic's own words",
+   "ledger": "search",
+   "form": {
+    "lead": "Here's what I found in your saves.",
+    "points": [
+     "Here is what I found about dating."
+    ]
+   },
+   "target": "point:0",
+   "expect": "kept",
+   "reasons": [],
+   "turn": {
+    "today": "2026-11-22",
+    "message": "what about dating",
+    "unlock": "relationships"
+   }
+  },
+  {
+   "id": "t_label_period",
+   "source": "new",
+   "class": "3.15 a period label on that period's cell",
+   "ledger": "years",
+   "form": {
+    "lead": "Across all your history, here is what stood out.",
+    "points": [
+     "In 2021, Minecraft builds[r1.periods[0].themes[0]] took 68%[r1.periods[0].themes[0].share] of what you opened."
+    ]
+   },
+   "target": "point:0",
+   "expect": "kept",
+   "reasons": [],
+   "turn": {
+    "today": "2026-11-22"
+   }
   },
   {
    "id": "o_ok",
