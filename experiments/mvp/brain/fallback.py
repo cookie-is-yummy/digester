@@ -53,6 +53,12 @@ def _from_code_form(res):
         # the sheet's filters, so code_form's words would leave it out ("Clip Factory led" of only gaming); and its
         # lead of a length-filtered sheet ranks without saying "long" ("Pan Theory led" of the long videos only)
         return None
+    if sheet.get("kind") == "changed" and not all(re.fullmatch(r"(?:19|20)\d\d", str((p or {}).get("label") or ""))
+                                                  for p in sheet.get("periods") or [{}]):
+        # step 1 fix (the verifier audit's code leads chg and chgy: "gaming has led every year since Oct 2026, at about
+        # 51%" of this year by month, where art and design led): code_form's changed answer reads its periods as years;
+        # the tools' changes over months get a template
+        return None
     try:
         form = I.code_form(sheet)
     except Exception:   # noqa: BLE001  (a sheet code_form cannot read gets a template)
@@ -221,8 +227,11 @@ def code_lead(ledger, verdict=None, turn=None, cited=None):
     if res.is_sheet:
         a = _from_code_form(res)
         if a:
+            # (step 1's close: as the verifier, any number of a result that left private items out asks for the line)
+            hidden_n = int((((res.meta or {}).get("hidden") or {}).get("sensitive")) or 0)
             return {"lead": a, "how": "code_form", "rid": res.rid, "items": items,
-                    "private_line": hidden_above and bool(V._RANK.search(a) or V._LEAST.search(a))}
+                    "private_line": (hidden_above and bool(V._RANK.search(a) or V._LEAST.search(a))) or
+                    (hidden_n > 0 and bool(re.search(r"\d|\b(?:led|most|top|biggest)\b", a)))}
     for t in templates(res):
         v = V.check_answer({"lead": t, "points": []}, ledger, turn or V.Turn())
         if v.lead_ok:

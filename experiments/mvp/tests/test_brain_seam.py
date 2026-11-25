@@ -248,7 +248,9 @@ def test_a_compare_says_each_count_with_its_own_year_and_a_private_topic_above_i
     assert r["meta"]["hidden"]["rank_hidden_above"] is True and r["meta"]["hidden"]["sensitive"] > 0
     v = kept(t, vt, lead24)
     assert v.private_line
-    assert not kept(t, vt, f"In 2024, you opened {len(y24)}[r1.totals.items] videos.").private_line
+    # step 1's close: any number of a result that left private items out asks for the private line (SPEC 4.3 step 13
+    # widened from rank words, the verifier audit's F46)
+    assert kept(t, vt, f"In 2024, you opened {len(y24)}[r1.totals.items] videos.").private_line
     lead = code_lead(t, vt, "template", [len(y24), len(y25)])
     assert lead == f"In 2024, you opened {len(y24)} videos, and {len(y25)} in 2025."
 
@@ -332,7 +334,11 @@ def test_find_counts_and_no_rank(brain):
     r, t, vt = ask(brain, "find", {"names": ["Gaming Daily"]}, "gaming daily")
     n = sum(1 for x in visible_rows() if x.get("channel") == "Gaming Daily")
     assert n == 5
-    kept(t, vt, f"You opened {n}[r1.names[0].matches[0].items_all_time] videos from "
+    # items_all_time counts what they opened, liked or saved: said with one verb it is the wrong base (step 1's close,
+    # the verifier audit's F69b); said with all three, or with none, it stands
+    dropped(t, vt, f"You opened {n}[r1.names[0].matches[0].items_all_time] videos from "
+                   f"Gaming Daily[r1.names[0].matches[0]].", "base")
+    kept(t, vt, f"You opened, liked or saved {n}[r1.names[0].matches[0].items_all_time] videos from "
                 f"Gaming Daily[r1.names[0].matches[0]].")
     dropped(t, vt, f"Gaming Daily[r1.names[0].matches[0]] is your top channel, with "
                    f"{n}[r1.names[0].matches[0].items_all_time] videos.", "rank")
@@ -347,9 +353,10 @@ def test_search_rows_take_the_kind_searched_from_the_sheet(brain):
     assert rows and all("how" not in x for x in rows) and r["sheet"]["how"] == "opened"
     # "the one you saved" of a row that was only opened
     k = next(i for i, x in enumerate(rows) if x["item_id"] == "rx_love")
-    o = dropped(t, vt, f"You saved {rows[k]['title']}[r1.items[{k}]].", "wrong_name", where="point",
+    # (step 1's close: the verb rule of every result says it first, as the base)
+    o = dropped(t, vt, f"You saved {rows[k]['title']}[r1.items[{k}]].", "base", where="point",
                 lead="Here's what I found.")
-    assert o.notes["wrong_name"] == f"r1.items[{k}] was not saved (opened)"
+    assert o.notes["base"] == "r1 counts what you opened: say 'opened'"
     kept(t, vt, "Here's what I found.", [f"You opened {rows[k]['title']}[r1.items[{k}]]."])
     r2, t2, vt2 = ask(brain, "search", {"query": "sourdough starter", "how": "saved"}, "find my sourdough saves",
                       search=fake_search())

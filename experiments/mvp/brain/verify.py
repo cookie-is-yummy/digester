@@ -94,9 +94,14 @@ WORLD_CLAIMS = re.compile(r"\b(?:most popular|best[- ]known|well[- ]known|famous
                           r"videos|history))|in the world|everyone|everybody|subscribers?|views\b|viewers|followers|"
                           r"trending|viral|award[- ]winning|critically)\b", re.I)
 _APPOSITIVE = re.compile(r"^\s*,\s*(?:a|an|the|which|who|whose|known for|famous for|run by|made by|hosted by)\b", re.I)
+# step 1 fix (the verifier audit's F42, "the channel you have followed longest"): following and subscribing are not
+# in the record
+_UNRECORDED = re.compile(r"\byou(?:'ve| have|'d| had)?\s+(?:\w+\s+)?(?:followed|subscribed|been following|been "
+                         r"subscribed)\b|\bsubscri(?:bed|ption)\b", re.I)
 _KNOWN_FOR = re.compile(r"^\s*(?:,\s*)?(?:known for|famous for|run by|hosted by)\b", re.I)
 # step 3.9: claims with no marker
-_CONSUME = re.compile(r"\byou(?:'ve| have|'d| had)?\s+(?:been\s+)?(?:watch\w*|open\w*|sav\w*|lik\w*|view\w*|"
+_CONSUME = re.compile(r"\byou(?:'ve| have|'d| had)?\s+(?:(?:first|last|also|just|recently|mostly|mainly|often|"
+                      r"usually|still|only|ever|then|later)\s+)?(?:been\s+)?(?:watch\w*|open\w*|sav\w*|lik\w*|view\w*|"
                       r"into|drop\w*|stopp\w*|start\w*|switch\w*|binge\w*|spent|spend\w*|follow\w*|keep|kept|"
                       r"mostly|mainly|often|usually|always|never|rarely)\b", re.I)
 _COMPARATIVE = re.compile(r"\b(?:more|less|fewer)\b|\b\w+er than\b", re.I)
@@ -128,6 +133,37 @@ _OF_BASE = re.compile(r"^\s*(?:of\s+(?:what|everything|all|your|the|those|these|
 COUNT_KEYS = set(I.COUNT_KEYS) | {"times_opened", "items_all_time", "rows_total"}
 DATE_KEYS = set(I.DATE_KEYS) | {"date", "when", "first", "last", "saved_at", "opened_at"}
 OPEN_KEYS = {"times_opened", "events", "opens"}   # counts of openings, never of distinct videos
+DAY_KEYS = {"days", "days_active"}                  # counts of days, never of videos
+ITEM_KEYS = {"items", "previous_items", "items_all_time", "shorts", "long", "since_items", "since_new"}
+# step 1 fix (the verifier audit, F05b, FS35d): the noun said after a count is its measure's ("30[days] videos" is a
+# count of days said as videos; "3[times_opened] of the clips" openings said as distinct items)
+_VIDEO_NOUN = re.compile(r"^\s*(?:[\w'’-]+\s+){0,3}?(?:videos?|items?|clips?|posts?|reels?|shorts|things|ones)\b", re.I)
+_DAY_NOUN = re.compile(r"^\s*(?:[\w'’-]+\s+){0,1}?days?\b", re.I)
+_AVERAGE = re.compile(r"\b(?:average|averaged|on average|mean)\b", re.I)
+_CLAUSE_BREAKS = re.compile(r"[,;:—–]|\b(?:while|whereas|but)\b", re.I)   # clause ends for _bare_clause
+# ordinals: a rank said by place (step 1 fix, F17, F21: "came fourth" of a row tied with the next)
+_ORDINAL = {"second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9,
+            "tenth": 10, "runner-up": 2, "runner up": 2}
+_ORD_RX = re.compile(r"\b(?:" + "|".join(sorted(_ORDINAL, key=len, reverse=True)) + r")\b", re.I)
+# a clause with no marker that still claims something about their history (step 1 fix, F39 "its busiest month", F37b
+# "as it did the month before"): rank, peak, direction, "before" words, or a consumption verb
+_CLAUSE_CLAIM = re.compile(r"\b(?:led|leads|leading|top|most|biggest|largest|busiest|peak\w*|highest|record|main|"
+                           r"favou?rite|first place|number one|rose|grew|fell|dropped|up(?! to)|down|more than doubled|"
+                           r"doubled|halved|best|worst|lowest|before|previous|earlier|prior|again|as it did|as before|like last|"
+                           r"same as|still|also did|every (?:year|month|week))\b", re.I)
+# an entity described in the present tense after its row marker, with no cell (step 1 fix, F40 "posts a new Short
+# every day", F86c "is a huge channel"): what a channel is or does is outside knowledge, not their history
+_ENTITY_PRESENT = re.compile(r"^\s*(?:posts|uploads|publishes|makes|creates|streams|covers|focuses|runs|releases|"
+                             r"puts out|produces|specializes|specialises|is (?:a|an|one of|known|famous|popular|huge|"
+                             r"big|small|massive|tiny)|has (?:a|an|over|more|millions|thousands|hundreds))\b", re.I)
+# Spanish function words: the checks read English only (step 1 fix, F59, F64b, F64c); a sentence in another language
+# is refused until a reader exists for it (step 2 must give the brain the turn's language)
+_ES_WORDS = re.compile(r"\b(?:de|los|las|que|lo|con|del|una|el|y|más|casi|tantos|como|hizo|abriste|viste|guardaste|"
+                       r"mayoría|octubre|septiembre|videos? de|en el|en la|por|para|fue|fueron|tus|tu)\b", re.I)
+_EN_WORDS = re.compile(r"\b(?:the|of|you|your|and|with|was|were|what|made|opened|watched|in|on|from|than)\b", re.I)
+# a search row said as the exact thing asked for: only a clear fit (step 1 fix, F94)
+_EXACT = re.compile(r"\b(?:exactly|precisely|just what you|what you asked for|that's the one|is the one|found it|"
+                    r"the very)\b", re.I)
 SHARE_EXTRA = {"faded_from", "faded_to", "grew_from", "grew_to"}
 ADDED_KEYS = ("ref", "change_pts", "third_party_text")   # keys results.present() adds; insight never sees them
 NON_SHEET_TOOLS = ("find", "search", "learned")
@@ -168,6 +204,10 @@ REASON_TEXT = {
     "not_item": "an item ref that is not an item row of this turn's results",
     "weak_fit": "a weak match presented as the thing asked for",
     "point_text": "a learned point is only its marker",
+    "wrong_group": "a row placed in a group its own row does not name",
+    "language": "the checks read English only: write the sentence in English",
+    "first_last": "a first or a last is said by the date of the result's first item",
+    "private_total": "an 'all' claim on a result that left private topics out",
 }
 
 
@@ -1101,17 +1141,16 @@ def _phrase_range(m, wins, turn):
 
 
 def _matches(p, w, clipped):
-    """The phrase's range and the window are the same stretch of time (each covers the other to WINDOW_MATCH); a
-    window cut at the export's end, or an open "since", is read up to the window's end."""
+    """The phrase's range is the window: the same first day, and the same last day (a window cut at the export's
+    end, or an open "since", is read up to the window's end). Step 1 fix (the verifier audit, F15, F15b: "In
+    October" of the 4 weeks from 3 October passed at WINDOW_MATCH's tolerance, a count about 8% off): a calendar
+    period said of a count is that period, never a stretch most of it."""
     a, b = p
     if b == FAR or (clipped and b > w[1]):
         b = w[1]
     if b < a:
         return False
-    ov = _overlap((a, b), w)
-    lw = w[1].toordinal() - w[0].toordinal() + 1
-    lp = b.toordinal() - a.toordinal() + 1
-    return ov >= WINDOW_MATCH * lw and ov >= WINDOW_MATCH * lp
+    return a == w[0] and b == w[1]
 
 
 def _labels(sheet):
@@ -1140,11 +1179,16 @@ def _label_range(label):
 
 def _phrase_ok(m, rng, res, wins, period_cells=False):
     """The phrase is the window (or the compare window); or, when the sentence cites a period's own cells (periods,
-    eras, a change's two ends), one of the periods the sheet names."""
+    eras, a change's two ends), one of the periods the sheet names. A window of all their history starts where the
+    record starts: a phrase may start earlier in that year ("since 2021" of a history from 5 January 2021)."""
     if rng is None:
         return False
     clipped = bool((res.sheet.get("window") or {}).get("clipped"))
     if any(_matches(rng, w, clipped) for w in wins):
+        return True
+    said = _low((res.meta or {}).get("window_said") or (res.sheet.get("window") or {}).get("words") or "")
+    if said.startswith("all your history") and wins and rng[0] <= wins[0][0] and rng[0].year == wins[0][0].year \
+            and _matches((wins[0][0], rng[1]), wins[0], clipped):
         return True
     if not period_cells:
         return False
@@ -1350,10 +1394,20 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
             r = check_calc(mk, ledger, _clause_around(raw, mk.start, mk.mstart).lower())
             if r:
                 add(*r)
-    # value markers of a count of opens said as "videos" (re-opens are not videos)
+    # value markers of a count of opens said as "videos" (re-opens are not videos); a count of days said as videos,
+    # a count of videos said as days; a median said as an average (step 1 fix: one table of key to noun)
     for mk in markers:
-        if mk.kind == "value" and mk.key in OPEN_KEYS and re.match(r"^\s*(?:\w+\s+){0,2}videos?\b", raw[mk.end:]):
+        if mk.kind != "value":
+            continue
+        after = raw[mk.end:mk.end + 60]
+        if mk.key in OPEN_KEYS and _VIDEO_NOUN.match(after):
             add("wrong_measure", f"{mk.path} counts openings, not videos")
+        elif mk.key in DAY_KEYS and _VIDEO_NOUN.match(after):
+            add("wrong_measure", f"{mk.path} counts days ({mk.value}), not videos")
+        elif mk.key in ITEM_KEYS and _DAY_NOUN.match(after):
+            add("wrong_measure", f"{mk.path} counts videos ({mk.value}), not days")
+        if "median" in (mk.key or "") and _AVERAGE.search(low):
+            add("wrong_measure", f"{mk.path} is a median, not an average")
         if mk.kind == "calc" and any(_family(p.split(".", 1)[1]) == "opens" for p in (mk.a, mk.b)) and \
                 re.search(r"\bvideos?\b", raw[mk.end:mk.end + 30]):
             add("wrong_measure", "a count of openings is not a count of videos")
@@ -1437,6 +1491,11 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     for mk in markers:
         if mk.kind == "row" and (_APPOSITIVE.match(raw[mk.end:]) or _KNOWN_FOR.match(raw[mk.end:])):
             add("outside_in_history")
+        elif mk.kind == "row" and not re.match(r"^items\[", mk.rest) and _ENTITY_PRESENT.match(raw[mk.end:]):
+            cl_end = _BREAKS.search(raw, mk.end)
+            cl = raw[mk.end:cl_end.start() if cl_end else len(raw)]
+            if not _BRACKET.search(cl):
+                add("outside_in_history", "what a channel is or does is outside knowledge: put it in outside")
     for a, b, _n in plain_names:
         if _APPOSITIVE.match(blank2[b:]) and re.match(r"^\s*,\s*(?:a|an|the)\s+\w+\s+(?:channel|creator|show|"
                                                       r"series|youtuber|artist|brand|studio)\b", blank2[b:], re.I):
@@ -1447,9 +1506,19 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         wl = re.sub(r"\bon youtube\b", " ", wl)
     if WORLD_CLAIMS.search(wl):
         add("outside_in_history", "claims about the world go in outside")
-    # 3.9 claims with no marker
-    if not markers and (_CONSUME.search(low) or _COMPARATIVE.search(low) or _RANK.search(low)):
+    if _UNRECORDED.search(wl):
+        add("outside_in_history", "the export records what they opened, liked or saved, not whom they follow")
+    # 3.9 claims with no marker (step 1 fix, F32d: a first or a last said by a date with no marker is a claim too)
+    if not markers and (_CONSUME.search(low) or _COMPARATIVE.search(low) or _RANK.search(low) or (
+            re.search(r"\b(?:first|last|latest|earliest|newest|oldest|most recent)\b", low) and _DATE_IN.search(low))):
         add("uncited_claim", "a claim about their history needs its marker")
+    elif markers and res is not None and res.is_sheet:
+        r_ = _bare_clause(raw, markers, wres)
+        if r_:
+            add(*r_)
+    if _not_english(plain) and ((wres.sheet.get("lang") if wres is not None else None) or "en") == "en":
+        # the checks read the result's own language (insight's Spanish rules run on a Spanish sheet)
+        add("language", "the checks read English only")
     # 3.10 psych, outcome, limits; watch time
     if PSYCH.search(low):
         add("psych")
@@ -1481,9 +1550,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         r_ = _close_check(low, markers, res)
         if r_:
             add(*r_)
-        if (_RANK.search(low) or _LEAST.search(low)) and rows0:
+        if (_RANK.search(low) or _LEAST.search(low) or re.search(r"\bmost[- ]\w+", low)) and rows0:
             for mk in rows0:
-                tie = _tie(res, mk.owner)
+                tie = _tie(res, mk.owner, opens=((res.meta or {}).get("order") == "most_opened"))
                 if tie:
                     add("tie", tie)
                     break
@@ -1491,6 +1560,38 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         hid = (res.meta or {}).get("hidden") or {}
         if hid.get("rank_hidden_above") and _RANK.search(low):
             out.hidden_rank = True
+        # step 1 fix (the verifier audit, F45, F45b, F46, F46b: "In 2024 you opened 8 videos" of 58 with the private
+        # topic; "100% of what you opened", "everything you opened"): any number of a result that left private items
+        # out is a number of what is shown, so the scope line says the private topics were left out (SPEC 4.3 step 13
+        # widened from rank words to every count, share, calc and "all" word)
+        if int(hid.get("sensitive") or 0) > 0 and (any(mk.kind in ("value", "count", "calc") and
+                                                        (mk.rid == res.rid or mk.a.startswith(res.rid + "."))
+                                                        for mk in markers) or _RANK.search(low) or
+                                                    re.search(r"\b(?:everything|all of|every|only|nothing but)\b",
+                                                              low)):
+            out.hidden_rank = True
+            # a claim of everything ("everything you opened came from", "100% of what you opened") cannot be true of a
+            # result that left private items out: no line under it makes it true, so it is dropped
+            if re.search(r"\b(?:everything|all of (?:what|it|them)|every (?:video|item|one)|nothing but|100 ?%|"
+                         r"all you)\b", low) or any(mk.kind == "value" and _measure(mk.rest, mk.value)[1] == "share"
+                                                   and float(mk.value) >= 0.995 for mk in markers):
+                add("private_total", f"{res.rid} left {int(hid.get('sensitive'))} private items out: 'all' is not "
+                                     "all of what they opened")
+        r_ = _ordinal_check(low, markers, res)
+        if r_:
+            add(*r_)
+        r_ = _group_check(markers, res, ledger)
+        if r_:
+            add(*r_)
+        r_ = _calc_owners(raw, markers, res)
+        if r_:
+            add(*r_)
+        r_ = _cut_count(raw, markers, res)
+        if r_:
+            add(*r_)
+        r_ = _first_last(low, markers, res)
+        if r_:
+            add(*r_)
     # 3.15 window words; the end value of a change inside the base period's words
     cites_prev = any((mk.rest.startswith("previous.") or (mk.key or "").startswith("previous_") or
                       mk.key in ("change_vs_previous", "change_pts", "change")) for mk in markers
@@ -1553,8 +1654,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     return out
 
 
-def _tie(res, owner):
-    """A rank word on the first row of a list whose second row has the same value."""
+def _tie(res, owner, opens=False):
+    """A rank word on the first row of a list whose second row has the same value (`opens`: an item list ranked by
+    times opened, step 1 fix F22: "your most-watched video" when every row was opened once)."""
     try:
         lp = re.sub(r"\[0\]$", "", owner)
         lst = _resolve(res.sheet, lp)
@@ -1562,13 +1664,184 @@ def _tie(res, owner):
         return None
     if not isinstance(lst, list) or len(lst) < 2 or not all(isinstance(x, dict) for x in lst[:2]):
         return None
-    for k in ("items", "share", "n"):
+    for k in ("items", "share", "n") + (("times_opened",) if opens else ()):
         a, b = lst[0].get(k), lst[1].get(k)
         if isinstance(a, (int, float)) and isinstance(b, (int, float)):
             if a == b:
                 return f"{res.rid}.{lp}[0] and [1] are tied at {a}"
             return None
     return None
+
+
+def _list_and_index(owner):
+    m = re.match(r"^(?P<lst>.*)\[(?P<i>\d+)\]$", owner or "")
+    return (m.group("lst"), int(m.group("i"))) if m else (None, None)
+
+
+def _row_value(res, lst, i, key=None):
+    try:
+        row = _resolve(res.sheet, f"{lst}[{i}]")
+    except KeyError:
+        return None, None
+    if not isinstance(row, dict):
+        return None, None
+    for k in ([key] if key else []) + ["items", "share", "n", "times_opened"]:
+        if isinstance(row.get(k), (int, float)) and not isinstance(row.get(k), bool):
+            return k, row[k]
+    return None, None
+
+
+def _ordinal_check(low, markers, res):
+    """A place said by an ordinal ("came second", "fourth") must be the cited row's place in its list, and the row
+    may not tie the rows beside it (step 1 fix, F17, F21)."""
+    m = _ORD_RX.search(low)
+    if not m:
+        return None
+    rows = [mk for mk in markers if mk.kind in ("row", "value") and mk.owner and mk.rid == res.rid]
+    if not rows:
+        return None
+    lst, i = _list_and_index(rows[0].owner)
+    if lst is None:
+        return None
+    want = _ORDINAL[m.group(0).lower()]
+    if i + 1 != want:
+        return "rank", f"{res.rid}.{lst}[{i}] is number {i + 1} of its list, not {m.group(0).lower()}"
+    k, v = _row_value(res, lst, i)
+    for j in (i - 1, i + 1):
+        if j < 0 or k is None:
+            continue
+        _k2, v2 = _row_value(res, lst, j, k)
+        if v2 is not None and v2 == v:
+            return "tie", f"{res.rid}.{lst}[{i}] and [{j}] are tied at {v}"
+    return None
+
+
+_GROUP_FIELD = {"themes": "theme", "areas": "area"}
+
+
+def _group_check(markers, res, ledger):
+    """A row placed in a group by markers (a channel "(Gaming clips[r1.themes[0]])", "part of", "inside" a theme;
+    a channel or a theme in an area) when the group row has no number of its own in the sentence: the child row's
+    own theme or area must be that group (step 1 fix, F28b, F29b, F30c, F30d, F30f). A sentence that sets a number
+    of the group row beside the child's compares them instead, which other steps check."""
+    groups, kids = [], []
+    for mk in markers:
+        if mk.kind != "row" or mk.rid != res.rid:
+            continue
+        lst, _i = _list_and_index(mk.rest)
+        top = (lst or "").split(".")[-1].split("[")[0]
+        if top in _GROUP_FIELD and "." not in (lst or ""):
+            groups.append(mk)
+        if top in ("channels", "themes") or (lst and "." in lst):
+            kids.append(mk)
+    if not groups:
+        return None
+    valued = {mk.owner for mk in markers if mk.kind == "value" and mk.owner} | {
+        _owner(p.split(".", 1)[1]) for mk in markers if mk.kind == "calc" for p in (mk.a, mk.b)}
+    by_list = {}
+    for g in groups:
+        if g.rest in valued:
+            continue
+        glist = _list_and_index(g.rest)[0]
+        by_list.setdefault(glist, []).append(g)
+    for glist, gs in by_list.items():
+        gnames = {_low((g.value or {}).get(I._record_name_key(g.value) or "name")) for g in gs}
+        field_ = _GROUP_FIELD[glist]
+        for k in kids:
+            if k in gs or any(k.rest.startswith(g.rest + ".") for g in gs):
+                continue   # a nested row sits inside its own group
+            if _list_and_index(k.rest)[0] == glist:
+                continue   # two rows of one list: a comparison, not a placement
+            have = (k.value or {}).get(field_) if isinstance(k.value, dict) else None
+            if not isinstance(have, str):
+                return "wrong_group", f"{k.path} carries no {field_} to place it in {gs[0].path}"
+            if _low(have) not in gnames:
+                return "wrong_group", f"{k.path}'s {field_} is '{_clip(have, 40)}', not " + \
+                    " or ".join(g.path for g in gs)
+    return None
+
+
+def _calc_owners(raw, markers, res):
+    """A calc of two rows' cells is said of those two rows: no other row of the same list is named in the sentence,
+    and both rows are named (step 1 fix, F52: "Clip Factory made 32 more than Pan Theory" where the 32 was against
+    Pixel Pencil)."""
+    low = _low(strip_markers(raw))
+    for mk in markers:
+        if mk.kind != "calc":
+            continue
+        oa, ob = _owner(mk.a.split(".", 1)[1]), _owner(mk.b.split(".", 1)[1])
+        if not oa or not ob or oa == ob:
+            continue
+        la, lb = _list_and_index(oa)[0], _list_and_index(ob)[0]
+        for r in markers:
+            if r.kind == "row" and r.rid == res.rid and _list_and_index(r.rest)[0] in (la, lb) and \
+                    r.rest not in (oa, ob):
+                return "calc", f"{mk.op}({mk.a}, {mk.b}) is of {oa} and {ob}, not {r.rest}"
+        for own in (oa, ob):
+            try:
+                row = _resolve(res.sheet, own)
+            except KeyError:
+                continue
+            names = _row_names(row, own) if isinstance(row, dict) else []
+            if names and not any(re.search(r"(?<!\w)" + re.escape(_low(n)) + r"(?!\w)", low) for n in names):
+                return "calc", f"{mk.op}({mk.a}, {mk.b}): name {own} ('{_clip(names[0], 40)}') in the sentence"
+    return None
+
+
+def _cut_count(raw, markers, res):
+    """A count marker of a ranked list that the tools cut is the length of what is shown, not of everything: it
+    passes only as "the top N" (step 1 fix, F67: "videos from 7[r1.channels.count] channels" of 8)."""
+    ro = (res.meta or {}).get("rows_of") or {}
+    for mk in markers:
+        if mk.kind != "count" or mk.rid != res.rid:
+            continue
+        lp = mk.rest[:-len(".count")] if mk.rest.endswith(".count") else ""
+        total = ro.get(lp) if lp in ro else None
+        cut = (total is not None and total > mk.value) or (total is None and "." in lp and
+                                                           (res.meta or {}).get("truncated"))
+        if cut and not re.search(r"\b(?:top|first|leading|biggest)\s+(?:\w+\s+)?$", raw[:mk.start].lower()):
+            return "wrong_value", (f"{mk.path} is the {mk.value} rows shown of {total}: say 'the top {mk.value}'"
+                                   if total is not None else f"{mk.path} is a list cut to fit: say 'the top'")
+    return None
+
+
+def _first_last(low, markers, res):
+    """On a first or a last result, a 'first' or a 'last' said with a date is the date of the result's first item
+    (step 1 fix, F31c: a channel's first_watched said as the subject's first)."""
+    if res.sheet.get("kind") not in ("first", "last") or not re.search(
+            r"\b(?:first|last|latest|most recent|earliest|newest|oldest)\b", low):
+        return None
+    dated = [mk for mk in markers if mk.kind == "value" and isinstance(mk.value, str) and
+             _measure(mk.rest, mk.value)[1] == "date" and mk.rid == res.rid]
+    for mk in dated:
+        if not re.fullmatch(r"items\[0\]\.(?:when|at|date)", mk.rest):
+            return "first_last", f"the {res.sheet.get('kind')} is {res.rid}.items[0].when, not {mk.path}"
+    return None
+
+
+def _bare_clause(raw, markers, res):
+    """A clause of a marked sentence that holds no marker and still claims something about their history (a rank, a
+    peak, a direction, a 'before'): the claim is of no cell (step 1 fix, F39, F37b)."""
+    spans = [(mk.start, mk.end) for mk in markers]
+    win = [p.lower() for p in _window_phrases(res)] if res else []
+    cuts = [0] + [m.end() for m in _CLAUSE_BREAKS.finditer(raw)] + [len(raw) + 1]
+    for a, b in zip(cuts, cuts[1:]):
+        cl = raw[a:b - 1] if b <= len(raw) else raw[a:]
+        if not cl.strip() or any(x < b and a < y for x, y in spans):
+            continue
+        t = _remove_phrases(cl.lower(), win)
+        t = re.sub(r"\b(?:in|during|over)\s+the\s+(?:\d+|four)\s+weeks\s+before\b", " ", t)
+        # a base phrase ("of the art videos you opened lately") is a relative clause, not a claim
+        t = re.sub(r"\b(?:videos?|items?|what|everything|things|clips?|posts?|ones|those|that)\s+(?:that\s+|which\s+)?"
+                   r"you\b.*$", " ", t)
+        if _CLAUSE_CLAIM.search(t) or _CONSUME.search(t):
+            return "uncited_claim", f"'{_clip(cl.strip(), 50)}' claims something with no marker"
+    return None
+
+
+def _not_english(text):
+    es, en = len(_ES_WORDS.findall(text)), len(_EN_WORDS.findall(text))
+    return es >= 2 and es > en
 
 
 def _smallest(res, owner):
@@ -1667,7 +1940,25 @@ def _scope_dropped(raw, markers, res, low):
     claims = any(mk.kind != "row" for mk in mine) or (bool(mine) and bool(_RANK.search(low) or _LEAST.search(low)))
     if not claims:
         return None
-    text = strip_markers(raw).lower()
+    # step 1 fix (the verifier audit, F96 to F99: "Speedruns[r1.themes[0]] led" of a result scoped to the subject
+    # Speedruns, "art and design[r1.areas[0]] led" of only art and design): a cited row's own name is not the scope
+    # said, so the names of the cited rows are blanked before the scope's words are looked for
+    t_ = list(raw)
+    for mk in markers:
+        for i in range(mk.start if mk.kind == "row" else mk.mstart, mk.end):
+            t_[i] = " "
+    blanked = "".join(t_)
+    for mk in markers:
+        own = mk.owner if mk.kind in ("row", "value") else None
+        if own and mk.rid == res.rid:
+            try:
+                row = _resolve(res.sheet, own)
+            except KeyError:
+                row = None
+            for n in (_row_names(row, own) if isinstance(row, dict) else []):
+                blanked = re.sub(r"(?<!\w)" + re.escape(n) + r"(?!\w)", lambda m: " " * len(m.group(0)), blanked,
+                                 flags=re.I)
+    text = strip_markers(blanked).lower()
     for p in parts:
         hit = any(re.search(r"\b" + re.escape(w) + r"(?:s|es)?\b", text) for w in p["words"])
         if p["kind"] == "without" and not _EXCLUDE_WORDS.search(text):
@@ -1684,17 +1975,27 @@ _VERBS = {"opened": re.compile(r"\b(?:opened|watched|viewed)\b", re.I), "saved":
 
 def _verb_dropped(raw, markers, res, low):
     """A count of a result the tools counted by saves (or likes) said as what they opened, or the reverse (merge seam:
-    the tools' meta.base is "of what you saved" for a saved breakdown, and insight's checks read no verb)."""
+    the tools' meta.base is "of what you saved" for a saved breakdown, and insight's checks read no verb). Step 1 fix
+    (the verifier audit, F69b, F85b, F93): a base of everything opened, liked or saved said with one verb ("you've
+    watched 98", "of what you opened on Instagram"), and a search of saves said as watched, on every kind of result:
+    every verb said must be one of the base's, and a base of three verbs is said with all three or none."""
     base = _low((res.meta or {}).get("base") or "")
+    if res.tool == "find":
+        base = "of everything you opened, liked or saved"   # items_all_time (the find tool's own note)
     m = re.fullmatch(r"of what you (opened|saved|liked)", base)
-    if not m or not res.is_sheet:
+    own = {m.group(1)} if m else ({"opened", "liked", "saved"} if base == "of everything you opened, liked or saved"
+                                  else None)
+    if not own:
         return None
-    if not any(mk.kind != "row" and mk.rid == res.rid for mk in markers):
+    if not any((mk.rid == res.rid and not mk.rest.startswith("library.")) or
+               (mk.kind == "calc" and mk.a.startswith(res.rid + ".")) for mk in markers):
+        return None   # (the cells of `library`, things saved and never opened, are of the saves)
+    if not res.is_sheet and res.tool not in ("find", "search"):
         return None
-    own = m.group(1)
     said = {v for v, rx in _VERBS.items() if rx.search(low)}
-    if said and own not in said:
-        return "base", f"{res.rid} counts what you {own}: say '{own}'"
+    if said and (said - own or (len(own) > 1 and said != own)):
+        words = "opened, liked or saved" if len(own) > 1 else next(iter(own))
+        return "base", f"{res.rid} counts what you {words}: say '{words}'"
     return None
 
 
@@ -1727,7 +2028,11 @@ def slotted(raw, markers, plain_names, cited_names, res):
         if mk.kind == "value":
             rest = re.sub(r"\.change_pts$", ".change_vs_previous", mk.rest)
             if isinstance(mk.value, str) and _measure(mk.rest, mk.value)[1] == "date":
-                edits.append((mk.mstart, mk.end, ""))     # a date stays as typed (insight checks dates itself)
+                # a date code verified against its own cell (step 3.4) is not read again by insight: the tools' item
+                # rows carry it as `when`, which insight's dates do not hold (step 1 fix, the auditor's T31, T61: a
+                # last's true "on 20 October 2026[r1.items[0].when]" failed insight's date rule)
+                edits.append((mk.start if mk.key in ("when",) else mk.mstart, mk.end,
+                              "that day" if mk.key in ("when",) else ""))
                 continue
             if isinstance(mk.value, str):
                 edits.append((mk.start, mk.end, "{" + rest + "}"))
@@ -1788,6 +2093,23 @@ def slotted(raw, markers, plain_names, cited_names, res):
             edits.append((a, b, "{" + rest + "}"))
         elif nk:
             edits.append((a, b, "{" + rest + "." + nk + "}"))
+    # step 1 fix (the verifier audit's true T04, T16, T42, T46, T53: "down from 31[previous_items] in September" failed
+    # insight's no_base): a time phrase that step 15 read as the window before, beside a cell of the window before, is
+    # insight's own base slot `{previous.words}`
+    pw = res.prev_window()
+    if pw and (res.sheet.get("previous") or {}).get("words") and any(
+            mk.kind == "value" and _is_before(mk.rest) for mk in markers):
+        for m in _PHRASE.finditer(raw):
+            if any(x < m.end() and m.start() < y for x, y in spans) or any(a < m.end() and m.start() < b for a, b, _t
+                                                                            in edits):
+                continue
+            if m.group("since") or m.group("rel"):
+                continue
+            rng = _phrase_range(m, [pw], None)
+            if rng and _matches(rng, pw, False):
+                st = m.start()
+                pre = re.search(r"\b(?:in|during|over)\s+$", raw[:st], re.I)
+                edits.append((pre.start() if pre else st, m.end(), "in {previous.words}"))
     # the window said in the model's own words ("the 4 weeks to 30 Oct"), checked by step 15: its count of weeks is
     # no number of the sheet's, so it is taken out ("the weeks to 30 Oct") rather than read as a free number
     words = " ".join(_window_phrases(res)).lower()
@@ -1960,6 +2282,8 @@ def _non_sheet(raw, markers, res, low):
         fit = mk.value.get("fit") if isinstance(mk.value, dict) else None
         if fit == "weak" and re.search(r"\b(?:here is|here's|this is|found it|that's the one|is the one)\b", low):
             return "weak_fit", f"{mk.path} is a weak match"
+        if fit != "clear" and _EXACT.search(low):
+            return "weak_fit", f"{mk.path} is a {fit or 'weak'} match, not exactly what was asked"
         # a search row carries no `how` of its own: the result's sheet says which kind it searched (merge seam)
         how = str((mk.value.get("how") if isinstance(mk.value, dict) else None) or res.sheet.get("how") or "")
         if re.search(r"\bsaved\b", low) and how and not re.search(r"save|collection|playlist", how):

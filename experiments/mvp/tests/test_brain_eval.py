@@ -31,7 +31,7 @@ KNOWN_NOT_TRUE = {"B05", "C13", "G06"}
 # the code leads that fail the eval's reading (fallback findings): B10 the plain line with two checked points in hand
 # (learned's template fails its own verifier); C06 and K03 code_form leads that start in lower case and name only
 # the window before; C08 and F04 a last with no day (the template fails insight's date check)
-KNOWN_LEAD_NOT_OK = {"B10.0", "C06.0", "K03.0", "C08.0", "F04.0"}
+KNOWN_LEAD_NOT_OK = {"B10.0", "C06.0", "K03.0"}   # (C08 and F04 say their day since step 1's close)
 
 
 def rows(path):

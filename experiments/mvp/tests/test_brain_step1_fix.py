@@ -124,3 +124,309 @@ def test_rows_of_every_ranking_are_in_meta(brain):
     env_, _t = call(brain, "breakdown", {"by": "area", "window": {"preset": "lately"}}, "lately")
     ro = env_["meta"]["rows_of"]
     assert ro["channels"] == len(by_channel(opened(*LATELY))) and ro["channels"] > len(env_["sheet"]["channels"])
+
+
+# ================================================================ the verifier (the verifier audit)
+# the audit's ledgers: one turn each, real tool calls on the made-up library (the audit's ledgers.py)
+LEDGERS = {
+    "ch": ("which channels did i watch most in october",
+           [("breakdown", {"by": "channel", "window": W("in october")})]),
+    "area": ("what am i most into lately", [("breakdown", {"by": "area", "window": {"preset": "lately"}})]),
+    "fwc": ("when did i first watch watercolor", [("first_last", {"subject": "watercolor", "which": "first"})]),
+    "lmc": ("when did i last watch minecraft", [("first_last", {"subject": "minecraft", "which": "last"})]),
+    "items": ("what did i watch most in october", [("items", {"window": W("in october")})]),
+    "find": ("watercolor and gaming and pan theory", [("find", {"names": ["watercolor", "gaming", "Pan Theory"]})]),
+    "art": ("only art lately by theme",
+            [("breakdown", {"by": "theme", "window": {"preset": "lately"}, "scope": {"only": ["art"]}})]),
+    "y2024": ("channels in 2024", [("breakdown", {"by": "channel", "window": W("in 2024")})]),
+    "tly": ("how has my watching changed over the years", [("timeline", {"unit": "year", "window": {"preset": "all"}})]),
+    "fri": ("channels on fridays in october",
+            [("breakdown", {"by": "channel", "window": W("in october"), "scope": {"weekday": 4}})]),
+    "insta": ("instagram in october", [("breakdown", {"by": "channel", "window": W("in october"),
+                                                      "scope": {"platforms": ["instagram"], "how": "any"}})]),
+    "search": ("find my sourdough saves", [("search", {"query": "sourdough starter", "how": "saved"})]),
+    "lsr": ("when did i last watch speedrun videos", [("first_last", {"subject": "speedrun", "which": "last"})]),
+    "lnp": ("when did i last watch number puzzles", [("first_last", {"subject": "number puzzles", "which": "last"})]),
+    "two2": ("channels in october, and how has it changed over the years",
+             [("breakdown", {"by": "channel", "window": W("in october")}),
+              ("timeline", {"unit": "year", "window": {"preset": "all"}})]),
+    "reopen": ("what did i watch most in october", [("items", {"window": W("in october")})]),
+}
+
+
+def ledger(e, name):
+    from mvp.brain import tools as TL, verify as V
+    from mvp.tests.fakes.fake_brain import FakeEngine
+    msg, calls = LEDGERS[name]
+    t = TL.Turn(e["bot"], person(e), NOW, message=msg, search=FakeEngine())
+    envs = [TL.call(t, tool, args) for tool, args in calls]
+    if name == "reopen":   # SYNTHETIC: the library has no re-opens, so the first row is patched to 3 openings
+        envs[0]["sheet"]["items"][0]["times_opened"] = 3
+    return envs, V.Turn.of(t)
+
+
+def verdict(e, name, sentence, where="point"):
+    from mvp.brain import verify as V
+    envs, vt = ledger(e, name)
+    form = {"lead": sentence} if where == "lead" else {"lead": "", "points": [sentence]}
+    v = V.check_answer(form, envs, vt)
+    o = [x for x in v.outcomes if x.where == where]
+    return bool(o) and all(x.kept for x in o), sorted({r for x in o for r in x.reasons}), v
+
+
+def dropped(e, name, sentence, reasons=None, where="point"):
+    k, why, _v = verdict(e, name, sentence, where)
+    assert not k, sentence
+    if reasons:
+        assert set(why) & set(reasons), (sentence, why)
+
+
+def kept(e, name, sentence, where="point", private=None):
+    k, why, v = verdict(e, name, sentence, where)
+    assert k, (sentence, why, [o.details for o in v.outcomes])
+    if private is not None:
+        assert v.private_line is private, sentence
+
+
+# ---------------------------------------------------------------- 1. a scope satisfied by the scoped row's own name
+def test_the_scoped_rows_own_name_is_not_the_scope_said(brain):
+    # all visible history by theme: Minecraft builds 163, Watercolor 95, Digital drawing 92, Speedruns 90 (4th)
+    dropped(brain, "lsr", "In all your history, Speedruns[r1.themes[0]] led, with 90[r1.themes[0].items] videos.",
+            ["filter_dropped"])
+    dropped(brain, "lnp", "Number puzzles[r1.themes[0]] was your top theme, with 60[r1.themes[0].items] videos.",
+            ["filter_dropped"])
+    lately = opened(*LATELY)
+    art = {i for i in lately if ROWS[i]["theme"] in ("wc", "dd")}
+    assert (len(art), len(lately)) == (32, 130)   # art and design lately is 25% of what they opened, not 100%
+    dropped(brain, "art", "Lately, art and design[r1.areas[0]] led what you opened, with 32[r1.areas[0].items] videos.",
+            ["filter_dropped"])
+    dropped(brain, "art", "Art and design[r1.areas[0]] was 100%[r1.areas[0].share] of what you opened lately.",
+            ["filter_dropped"])
+    dropped(brain, "lsr", "Speedruns[r1.themes[0]] was your biggest theme, with 90[r1.themes[0].items] videos.",
+            ["filter_dropped"])   # a variant of our own
+    dd = {i for i in art if ROWS[i]["theme"] == "dd"}
+    kept(brain, "art", f"Of the art and design videos you opened lately, Digital drawing[r1.themes[0]] made "
+                       f"{len(dd)}[r1.themes[0].items].")
+    kept(brain, "lsr", "In all your history, the last speedrun video you opened was on 1 May 2023[r1.items[0].when].",
+         where="lead")
+
+
+# ---------------------------------------------------------------- 2. numbers of a result that left private items out
+def test_a_result_with_private_items_left_out_asks_for_the_private_line(brain):
+    y24 = opened(date(2024, 1, 1), date(2024, 12, 31))
+    assert len(y24) == 8 and len(opened(date(2024, 1, 1), date(2024, 12, 31), unlock_sensitive=True)) == 58
+    dropped(brain, "y2024", "In 2024, 100%[r1.channels[0].share] of what you opened was Pan Theory[r1.channels[0]].",
+            ["private_total"])
+    dropped(brain, "y2024", "In 2024, everything you opened came from Pan Theory[r1.channels[0]], "
+                            "8[r1.channels[0].items] videos.", ["private_total"])
+    kept(brain, "y2024", "In 2024 you opened 8[r1.totals.items] videos.", where="lead", private=True)
+    assert len(opened(None, None)) == 723 and len(opened(None, None, unlock_sensitive=True)) == 773
+    kept(brain, "tly", "In all your history you opened 723[r1.totals.items] videos.", where="lead", private=True)
+    kept(brain, "ch", f"In October 2026, you opened {len(opened(*OCTOBER))}[r1.totals.items] videos.", where="lead",
+         private=False)   # nothing private in October: no line
+
+
+# ---------------------------------------------------------------- 3. a row placed in the wrong group
+@pytest.mark.parametrize("s", [
+    "Gaming Daily[r1.channels[4]], part of Minecraft builds[r1.themes[3]], made 5[r1.channels[4].items] videos.",
+    "Brick Realm[r1.channels[3]] (Gaming clips[r1.themes[0]]) made 6[r1.channels[3].items] videos.",
+    "Inside Digital drawing[r1.themes[2]], Wet Paper[r1.channels[7]] made 1[r1.channels[7].items] video.",
+    "Pixel Pencil[r1.channels[2]] (food and cooking[r1.areas[2]]) made 29[r1.channels[2].items] videos.",
+    "Limit Lane[r1.channels[5]] (gaming[r1.areas[0]]) made 4[r1.channels[5].items] videos.",
+    "Clip Factory[r1.channels[0]] (Home cooking[r1.themes[1]]) made 61[r1.channels[0].items] videos.",   # variant
+])
+def test_a_row_in_a_group_its_own_row_does_not_name_is_dropped(brain, s):
+    dropped(brain, "ch", s, ["wrong_group"])
+
+
+def test_a_row_in_its_own_group_is_kept(brain):
+    envs, _vt = ledger(brain, "ch")
+    sh = envs[0]["sheet"]
+    assert sh["channels"][0]["theme"] == sh["themes"][0]["name"] == "Gaming clips"
+    kept(brain, "ch", "Clip Factory[r1.channels[0]] (Gaming clips[r1.themes[0]]) made 61[r1.channels[0].items] videos.")
+
+
+# ---------------------------------------------------------------- 4. ordinals and ties
+def test_an_ordinal_is_the_rows_place_and_no_tie(brain):
+    dropped(brain, "area", "Watercolor painting[r1.themes[3]] came fourth lately, with 5[r1.themes[3].items] videos.",
+            ["tie"])
+    fri = {i for i in opened(*OCTOBER) if any(k == "watch" and local(at).weekday() == 4 for k, at in ROWS[i]["events"])}
+    bc = by_channel(fri)
+    assert bc["Pan Theory"] == bc["Pixel Pencil"] == 6
+    dropped(brain, "fri", "On Fridays, Pan Theory[r1.channels[1]] came second, with 6[r1.channels[1].items] videos.",
+            ["tie"])
+    dropped(brain, "ch", "Pixel Pencil[r1.channels[2]] came second in October, with 29[r1.channels[2].items] videos.",
+            ["rank"])   # variant: it is third
+    kept(brain, "ch", "Pan Theory[r1.channels[1]] came second in October, with 32[r1.channels[1].items] videos.")
+
+
+def test_most_watched_on_an_item_list_where_every_row_was_opened_once_is_a_tie(brain):
+    dropped(brain, "items", "Your most-watched video in October was Cooking soup on the 30th[r1.items[0]].", ["tie"])
+    dropped(brain, "items", "The video you opened most was Cooking soup on the 30th[r1.items[0]], "
+                            "1[r1.items[0].times_opened] time.", ["tie"])
+
+
+# ---------------------------------------------------------------- 5. a calc said of another row
+def test_a_calc_is_said_of_its_own_two_rows(brain):
+    dropped(brain, "ch", "Clip Factory[r1.channels[0]] made 32 more[=diff(r1.channels[0].items, "
+                         "r1.channels[2].items)] videos than Pan Theory[r1.channels[1]].", ["calc"])
+    dropped(brain, "ch", "Clip Factory[r1.channels[0]] made 32 more[=diff(r1.channels[0].items, "
+                         "r1.channels[2].items)] videos than the next channel.", ["calc"])   # variant: unnamed
+    kept(brain, "ch", "Clip Factory[r1.channels[0]] made 29 more[=diff(r1.channels[0].items, r1.channels[1].items)] "
+                      "videos than Pan Theory[r1.channels[1]].")
+
+
+# ---------------------------------------------------------------- 6. a month said of a 4-week result
+def test_a_month_said_of_four_weeks_is_the_wrong_window(brain):
+    assert len(opened(*LATELY)) == 130 and len(opened(*OCTOBER)) == 142
+    dropped(brain, "area", "In October, gaming[r1.areas[0]] was 49%[r1.areas[0].share] of what you opened.",
+            ["wrong_window"])
+    dropped(brain, "area", "In October, Clip Factory[r1.channels[0]] made 56[r1.channels[0].items] videos.",
+            ["wrong_window"])
+    dropped(brain, "area", "Since October, Clip Factory[r1.channels[0]] made 56[r1.channels[0].items] videos.",
+            ["wrong_window"])   # variant
+    kept(brain, "area", "Lately, Clip Factory[r1.channels[0]] made 56[r1.channels[0].items] videos.")
+    kept(brain, "ch", "In October, Clip Factory[r1.channels[0]] made 61[r1.channels[0].items] videos.")
+
+
+# ---------------------------------------------------------------- 7. a claim in a clause with no marker
+def test_a_clause_with_no_marker_claims_nothing(brain):
+    dropped(brain, "two2", "Pixel Pencil[r1.channels[2]] made 29[r1.channels[2].items] videos in October 2026, its "
+                           "busiest month.", ["uncited_claim"])
+    dropped(brain, "ch", "Clip Factory[r1.channels[0]] led October with 61[r1.channels[0].items] videos, as it did "
+                         "the month before.", ["uncited_claim"])
+    dropped(brain, "ch", "Pan Theory[r1.channels[1]] made 32[r1.channels[1].items] videos, its best month yet.",
+            ["uncited_claim"])   # variant
+    kept(brain, "ch", "Pixel Pencil[r1.channels[2]] made 29[r1.channels[2].items] videos in October 2026, and Pan "
+                      "Theory[r1.channels[1]] made 32[r1.channels[1].items].")
+
+
+# ---------------------------------------------------------------- 8. outside knowledge with no comma
+@pytest.mark.parametrize("s", [
+    "Clip Factory[r1.channels[0]] posts a new Short every day, and you opened 61[r1.channels[0].items] of them.",
+    "Clip Factory[r1.channels[0]] is a huge channel, and you opened 61[r1.channels[0].items] of its videos.",
+    "Brick Realm[r1.channels[3]] is the channel you have followed longest, with 6[r1.channels[3].items] videos in "
+    "October.",
+    "Pixel Pencil[r1.channels[2]] uploads drawing lessons every week, and you opened 29[r1.channels[2].items] of "
+    "them.",   # variant
+])
+def test_what_a_channel_is_or_does_is_outside_knowledge(brain, s):
+    dropped(brain, "ch", s, ["outside_in_history"])
+
+
+def test_a_channel_said_by_what_they_opened_is_kept(brain):
+    kept(brain, "ch", "Clip Factory[r1.channels[0]] led October, with 61[r1.channels[0].items] videos.")
+
+
+# ---------------------------------------------------------------- 9. first and last
+def test_a_first_or_a_last_is_the_date_of_the_results_first_item(brain):
+    dropped(brain, "fwc", "You first watched a watercolor video on 12 October 2026[r1.channels[1].first_watched].",
+            ["first_last"])
+    dropped(brain, "lmc", "You last watched a minecraft video on 30 October 2026.", ["uncited_claim"])
+    dropped(brain, "lmc", "Your last minecraft video was on 17 October 2026.", ["uncited_claim"])   # variant
+    first_wc = min(local(at) for r in visible_rows() if r["theme"] == "wc" for k, at in r["events"] if k == "watch")
+    assert first_wc == date(2025, 1, 10)
+    kept(brain, "fwc", "In all your history, you first opened a watercolor video on 10 January 2025[r1.items[0].when].",
+         where="lead")
+    last_mc = max(local(at) for r in visible_rows() if r["theme"] == "mc" for k, at in r["events"] if k == "watch")
+    assert last_mc == date(2026, 10, 20)
+    kept(brain, "lmc", "The last Minecraft video you watched was on 20 October 2026[r1.items[0].when].", where="lead")
+
+
+# ---------------------------------------------------------------- 10. the base said with the wrong verb
+def test_the_verbs_said_are_the_bases(brain):
+    assert len(opened(None, None, keys={"wc"})) == 95
+    dropped(brain, "find", "You've watched 98[r1.names[0].matches[0].items_all_time] videos of Watercolor "
+                           "painting[r1.names[0].matches[0]].", ["base"])
+    dropped(brain, "insta", "Watercolor painting[r1.themes[0]] made 57%[r1.themes[0].share] of what you opened on "
+                            "Instagram.", ["base"])
+    dropped(brain, "find", "You saved 98[r1.names[0].matches[0].items_all_time] watercolor things.", ["base"])  # variant
+    kept(brain, "find", "You opened, liked or saved 98[r1.names[0].matches[0].items_all_time] videos of Watercolor "
+                        "painting[r1.names[0].matches[0]].")
+
+
+def test_a_saved_row_of_a_search_is_never_said_watched(brain):
+    envs, _vt = ledger(brain, "search")
+    row = envs[0]["sheet"]["items"][0]
+    day = date.fromisoformat(row["when"][:10])
+    when = f"{day.day} {day.strftime('%B')} {day.year}"
+    dropped(brain, "search", f"You watched {row['title']}[r1.items[0]] on {when}[r1.items[0].when].", ["base"])
+    kept(brain, "search", f"You saved {row['title']}[r1.items[0]] on {when}[r1.items[0].when].")
+
+
+# ---------------------------------------------------------------- 11. a cell said under another measure
+def test_a_cell_is_said_under_its_own_measure(brain):
+    dropped(brain, "ch", "Clip Factory[r1.channels[0]] made 30[r1.channels[0].days] videos.", ["wrong_measure"])
+    dropped(brain, "ch", "Pan Theory[r1.channels[1]] made 26[r1.channels[1].days] clips.", ["wrong_measure"])  # variant
+    o = sorted(ROWS[i]["length"] for i in opened(*OCTOBER) if known_long(ROWS[i]))
+    assert (o[len(o) // 2 - 1] + o[len(o) // 2]) / 2 / 60 == 10.0 and round(sum(o) / len(o) / 60, 1) == 16.0
+    dropped(brain, "ch", "Your long videos ran 10 minutes[r1.totals.long_median_min] on average.", ["wrong_measure"])
+    kept(brain, "ch", "Clip Factory[r1.channels[0]] made 61[r1.channels[0].items] videos on 30[r1.channels[0].days] "
+                      "days.")
+
+
+def test_reopenings_are_not_distinct_items_synthetic(brain):
+    # SYNTHETIC: the library has no re-opens; items[0].times_opened is patched to 3
+    dropped(brain, "reopen", "Cooking soup on the 30th[r1.items[0]] was 3[r1.items[0].times_opened] of the clips you "
+                             "opened that day.", ["wrong_measure"])
+    dropped(brain, "reopen", "You opened 3[r1.items[0].times_opened] different cooking clips on 30 October 2026.",
+            ["wrong_measure"])
+
+
+# ---------------------------------------------------------------- 12. a count of a list the tools cut
+def test_a_count_of_a_cut_list_is_the_top_n_only(brain):
+    assert len(by_channel(opened(*LATELY))) == 8
+    dropped(brain, "area", "Lately you opened videos from 7[r1.channels.count] channels.", ["wrong_value"])
+    dropped(brain, "area", "You opened 7[r1.channels.count] different channels lately.", ["wrong_value"])  # variant
+    kept(brain, "area", "Lately, your top 7[r1.channels.count] channels were led by Clip Factory[r1.channels[0]].")
+
+
+# ---------------------------------------------------------------- 13. a sentence the checks cannot read
+@pytest.mark.parametrize("s", [
+    "Clip Factory[r1.channels[0]] hizo 61[r1.channels[0].items] de los videos que abriste en septiembre.",
+    "Clip Factory[r1.channels[0]] hizo 61[r1.channels[0].items] videos, la mayoría de lo que abriste.",
+    "Pan Theory[r1.channels[1]] hizo 32[r1.channels[1].items] videos, casi tantos como Clip Factory[r1.channels[0]].",
+])
+def test_a_sentence_not_in_the_results_language_is_refused(brain, s):
+    dropped(brain, "ch", s, ["language"])
+
+
+# ---------------------------------------------------------------- 14. a close fit said as exactly what was asked
+def test_a_close_fit_is_never_exactly_what_was_asked(brain):
+    envs, _vt = ledger(brain, "search")
+    rows = envs[0]["sheet"]["items"]
+    k = next((i for i, r in enumerate(rows) if r["fit"] != "clear"), None)
+    assert k is not None
+    dropped(brain, "search", f"{rows[k]['title']}[r1.items[{k}]] is exactly what you asked for.", ["weak_fit"])
+
+
+# ================================================================ the code lead (the verifier audit's code leads)
+def code_lead(e, name=None, msg=None, calls=None):
+    from mvp.brain import fallback as FB, tools as TL, verify as V
+    if calls is None:
+        envs, vt = ledger(e, name)
+    else:
+        t = TL.Turn(e["bot"], person(e), NOW, message=msg)
+        envs, vt = [TL.call(t, tool, args) for tool, args in calls], V.Turn.of(t)
+    return FB.code_lead(envs, None, vt)
+
+
+def test_the_code_lead_of_a_last_says_its_day_never_a_rank(brain):
+    for name, day in (("lsr", "1 May 2023"), ("lnp", "22 August 2023"), ("lmc", "20 October 2026")):
+        lead = code_lead(brain, name)
+        assert lead["how"] == "template" and day in lead["lead"] and " led" not in lead["lead"], lead
+
+
+def test_the_code_lead_of_a_changes_result_by_month_is_no_every_year_line(brain):
+    this_year = opened(date(2026, 1, 1), date(2026, 10, 30))
+    art = sum(1 for i in this_year if ROWS[i]["theme"] in ("wc", "dd"))
+    gaming = sum(1 for i in this_year if ROWS[i]["theme"] in ("mc", "sr", "cl"))
+    assert art > gaming   # art and design led this year, not gaming
+    lead = code_lead(brain, msg="what changed this year",
+                     calls=[("changes", {"level": "area", "window": {"preset": "this_year"}})])
+    assert "every year" not in lead["lead"] and lead["how"] == "template"
+
+
+def test_the_code_lead_of_all_history_asks_for_the_private_line(brain):
+    lead = code_lead(brain, "tly")
+    assert "723" in lead["lead"] and lead["private_line"] is True
