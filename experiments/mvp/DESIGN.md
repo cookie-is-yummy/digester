@@ -5779,6 +5779,122 @@ $25.567 after): 41 live writer calls of the auditor's live questions ($0.216) an
 `eval_claims_allow.json` (the one case is listed by hand). Spanish answers keep their words (the gate is English only).
 <!-- end round 12, pass 5 -->
 
+### 19.P6 The sixth pass: what a hand check found, fixed by construction (round 12, pass 6; `insight.py`, `facts.py`, `history.py`, `themes.py`, `channels/web.py`, `channels/web_page.html`, `eval/insight_cases.json`, `eval_insight.py`, `tests/test_round12_pass6.py`)
+
+**Why.** Pass 5 made the recount automatic, and its audit came back clean. A checker then recounted about 288 claims by
+hand on 18 live answers. The founder's 8 questions held no false number. On 10 other questions it found 5 must-fix
+sentences, 7 should-fix and 2 nits, and the automatic audit had missed 4 of the 5. The improved auditor (A1 to A5, its
+own branch) then found 2 more true defects (X19, X20) and more cases of X2, X4 to X9, X11 and X13. The product's claim
+is that nothing in an answer is made up. So each fix here is by construction: code words the part of a sentence that
+can be false, whoever wrote the sentence (the writer's paths, code's templates, the so-what). No fix is one more pattern
+for one more sentence.
+
+**What changed, item by item.**
+- X1, X20 (first and last). Every open keeps its instant. A first or a last is the open with the earliest or latest
+  instant, and items of one day are in the order they were opened. A first's or last's answer is always code's: the
+  day, the time and the channel of that item. The cards and the sheet agree with it.
+- X2 (an "Inside <area>" share). A sentence that sets a theme inside an area says its base in that sentence ("5% of
+  what you opened"), even when the answer said the base before.
+- X3 (Shorts). "shorts" as the format is written "Shorts", and a Shorts share always says "of your YouTube videos".
+- X4 (a count under filters). Code knows the counts of the whole scope (totals, the span before) and the noun for each
+  under the filters in force. A count of the scope gets that noun: "431 long music videos", "225 long videos on 27
+  different days". A channel's rise says "12 long videos" under "without Shorts". A record's own count, said with its
+  name, keeps its words.
+- X5 (a change). A change is two values of one measure, or it is not said. A share against a count is said in shares;
+  a lone value gets its other value from the sheet. A side clause that says a change with no number ("while comedy and
+  music grew") goes. "from 11% to 8% in 2021" in an answer about 2022 becomes "from 11% in 2021 to 8%".
+- X6 (without Shorts). We picked one meaning: the videos KNOWN to be long. That is the set "of your long videos"
+  names. A video of no known length may be a Short, so it is left out and counted apart. Lead, bullets and chart use
+  the same set.
+- X7 (a usual day). The sheet has the usual day's Shorts share on the day's own base (of all its YouTube videos). Code
+  says only that pair.
+- X8 (saved). A count of saved videos never opened is said "you saved and never opened N".
+- X9 (one fact once). A move said as points and the same move said as two values are one fact; the richer sentence
+  stays. A count of new channels and a named new channel are one fact. A move the so-what says is not also a bullet.
+  The check knows every record the sheet names, at any depth (live, row 7 said an area's fall twice: the area was named
+  only in the sheet's periods).
+- X10 (charts). A row that rounds to 0% is left out. A chart whose first row is 90% or more is not drawn; under a topic
+  the topic's themes or its months are tried instead.
+- X11 (a window after the export). It is answered like any other window, over the latest stretch of that length the
+  record holds. The window words say in one clause where the record ends. The hint is said once, as one line. A season
+  not begun is the same.
+- X12 (a rare topic word). A theme is adopted for a word only when a measured share of the theme's own titles says the
+  word (20%; pass 2's T8 rule, now for rare words too). A topic that is a handful of videos by its words alone gets
+  code's count with its items, and no writer call.
+- X13. Shares are stored to four places, so a chart row rounds once, from its count. A balance is said by its ratio in
+  words ("about 9 times as many, down from 14 times"), never "the gap".
+- X14 (row 2). A move under 3 points is not said. The so-what is the saved-and-never-opened line.
+- X15 (row 4). A first's so-what is its arc, worded by code from the sheet: when it peaked and what it is now ("Your
+  blender watching peaked at 131 in 2023; in 2026 up to 30 October it was 12."), then what he saved on it and never
+  opened, as the step to take.
+- X16 (row 6). A list of more than 3 items is drawn as compact rows on the test page: a small picture, the title, one
+  caption line with the time, the taps beside the row (about 70 px a row at 430 px). Text channels show numbered lines.
+  A day of up to 10 items is shown whole; a longer day shows its first page and then a card for every channel the
+  overview names. How the day differs from his usual day comes first. Picks and recall cards are unchanged.
+- X17 (row 8). A past season is set against the year around it ("What set the summer apart from the rest of 2023"),
+  says which channels were new then and how much of them he has opened since, and keeps the move to Shorts as its own
+  bullet with its own base. The so-what is a channel he followed then and not since, with a step code can take.
+- X18 (bases). One phrase for the answer's own base ("of what you opened"), one for Shorts ("of your YouTube videos").
+- X19 (new channels of a day). Counted over every channel opened that day, not only the sheet's top list.
+
+**The writer's prompt is unchanged** (insight_v5). No new prompt version, no live eval run for it.
+
+**Tests** (`tests/test_round12_pass6.py`, 34, made-up data; each fails on c073c24). Test lines changed on purpose, each
+with its item: `test_round12_claims.py` (X18: "of what you opened" in place of "of everything you opened", twice; X13:
+a Shorts share to four places; X14: the made-up moves are their own shares' moves); `test_round12_d.py` (X6: without
+Shorts leaves out the videos of no known length and counts them apart); `test_round12_fix.py` and
+`test_round12_merge.py` (X1: a first's answer names the item's time and channel; X15: the arc, then "you saved and never
+opened"); `test_round12_pass2_fix.py` (X5: "Gaming grew from 12% to 89%", both values; X15; X13: the ratio then and
+now in place of "the gap has narrowed"; X18; X1); `test_round12_pass3.py` (X16: a day's row says its time, and items in
+the order opened); `test_round12_pass3_fix.py` and `test_round12_pass4.py` (X17: nothing hangs off the move to Shorts,
+what fell is a bullet, and what set the season apart from its year is said; X15: the arc's words); the self-test's c61
+(X12: a topic of 2 videos by its words is code's count, no writer call) and c62 (X1: the time and the channel).
+
+**Evals.** The writer's eval rescored from the saved insight_v5 forms (no model call), c073c24 against this build:
+answers 19 and 19, writer used 20 and 20, bullets kept 52 and 52, dropped 31 and 31, so-what 5 and 5, violations 0 and
+0. The planted-falsehood eval: 89 of 89 typed planted caught and 43 of 43 true kept, as before. The v5 set read through
+the gate grew by the pass 6 classes (an inside share with no base, a lower-case Shorts share, a share against a count,
+a lone value, a move under 3 points, a saved count, "the gap", a count whose noun drops a filter, a change with no
+value): 83 of 83 caught and 39 of 39 kept (c073c24 cannot read these cases; on its own set it is 72 of 72 and 32 of 32).
+The topic mapping eval (23 topic words on the real library, counts only), before the change and on this build: 5 rare
+words (under 30 matching titles) were mapped to 1 or 2 themes of 2,490 to 7,611 items whose titles say the word at most
+0.3% of the time; they now map to none. The other 18 words map as before.
+
+**The auditor.** Run as it is in this tree and, read-only, the improved one from its own branch (both with one scratch
+line: "without Shorts" as the videos known to be long, X6's choice). Over the pass 5 question list through code and the
+made-up writer (194 answers), the 41 replayed live forms and the hand check's 18 replayed answers.
+Pass 5's result was 0 and the 1 allow-listed case. This tree's auditor on the final build: the 194 answers 1 (a
+season not begun, answered over the latest stretch on purpose: X11), the 41 replayed live forms 2 (the allow-listed case,
+and a channel's "12 long videos now, against 0", 12 and 0 by a hand count on the raw files: it reads the count as the
+whole), the hand check's 18 replayed answers 15 (all of its own known misreadings, A3: a month's window, a follow-up's
+window, a topic row cut at 4, a count after "had" or "adds another"). The improved auditor on the same final answers: 3,
+1 and 0. The 3 are the season not begun and two firsts whose answer says "Most of it has been <theme> (N of M)" after
+the first video: it binds the first video's theme to that second sentence (by hand, 1,433 of 2,667 is right and the
+sentence says nothing of the first video's theme). The 1 is the "12 long videos" case. Before the fixes of this
+fixer, the improved auditor also found "225 videos on 27 different days" under "without Shorts" (X4: now "225 long
+videos"), a side clause with no number (X5), a so-what that repeated a bullet's move (X9, 4 answers) and "12 videos now"
+under "without Shorts" (X4). This pass's 8 live answers, replayed on the final build: 0 and 0.
+
+**Live, read as the founder would.** The 8 questions once on the real library (a scratch home, the live writer,
+port 8795), then the same forms replayed on the final build (no model call). Rows 1, 3 and 5 read as before. Row 7 said
+the fall of one area twice, as a bullet and as the so-what; fixed (X9 at any depth) and it now says it once. Row 2 leads
+with the top channel, then the year's biggest area and its themes, what each top channel is, which ones he grazed and
+which he kept coming back to, the chart, and the saved-and-never-opened step; no move under 3 points. Row 4 is code's
+answer with the time and the channel, two bullets, 10 compact rows in the order opened, then the arc and the saved
+videos as the step. Row 6 leads with how the day differs from his usual day on the same base, then 10 compact rows with
+their times; nothing it names is hidden. Row 8 sets the summer against the rest of its year, says which channels were
+new then and how much of them since, and keeps the move to Shorts as its own bullet; its step was reworded ("to see all
+the <theme> you opened then"). At 430 px: row 6 was 2,991 px at the hand check, 1,643 px with the first compact rows
+(each 118 px, the time and taps on a line of their own) and is 1,262 px now (about 70 px a row, the taps beside it);
+row 4 1,663 then 1,251; rows 2 and 8 850 and 808. Spend $0.053 by the ledger ($25.750 before, $25.802 after): the
+set-up and the 8 questions; the replays cost nothing.
+
+**Not done.** The auditor here still reads "without Shorts" as every video not known to be a Short (it needs X6's
+meaning). Spanish answers keep their words (the gate is English only). The compact rows are on the test page only;
+iMessage gets numbered lines. Row 2 is still a list of channels at heart: the founder's "what would I do with that" is
+met only by the themes line, the grazed-or-followed line and the saved-videos step.
+<!-- end round 12, pass 6 -->
+
 ## 20. Claude as the text model (24 Nov 2026; amendment A-020, Proposed)
 
 The founder has $100 of Claude API credits and said: "feel free to use claude api tokens instead of openai or gemini".
