@@ -343,7 +343,7 @@ def test_x17_what_he_did_then_and_not_since_is_a_so_what_with_a_step():
     assert c and c[0]["channel"] == "Kite Lab" and c[0]["since"] == 2, c
     t = ins().so_what_text(c[0], {})
     assert t == ("Kite Lab was a thing of that time: you opened 40 of their videos then and 2 since. Say \"only Speed "
-                 "runs\" to see the rest of Speed runs you opened then."), t
+                 "runs\" to see all the Speed runs you opened then."), t
 
 
 # ================================ X18: two base phrases at most, one for the answer's own base =====================
@@ -442,3 +442,23 @@ def test_x4_a_count_said_with_its_days_names_every_filter_in_force():
     assert out == "You opened 225 long videos on 27 different days.", out
     out2, _ = gate("You opened 225 videos on YouTube.", s)
     assert out2.startswith("You opened 225 long videos"), out2
+
+
+# ================================ X9 (the live run of pass 6, row 7): a record named only deep in the sheet ==========
+def test_x9_a_move_of_an_area_named_only_in_the_periods_is_said_once():
+    """Live, row 7: "Woodwork fell from 11% in 2020 to 2% in 2026." as a bullet, then the so-what "The learning side
+    gave way: woodwork fell from 11% in 2020 to 2% in 2026." The area was named only in the sheet's periods, so the
+    repeat check did not know it."""
+    I = ins()
+    s = {"kind": "changed", "lang": "en", "filters": {"topic": None, "without_shorts": False},
+         "themes": [{"name": "Kite repairs", "area": "crafts", "share": 0.06}],
+         "periods": [{"label": "2020", "areas": [{"name": "woodwork", "share": 0.11}]},
+                     {"label": "2026", "areas": [{"name": "woodwork", "share": 0.02}]}],
+         "areas_change": {"left": [{"name": "woodwork", "from": 0.11, "to": 0.02}]}}
+    f = {"answer": "Since 2020, crafts took more of it.", "dropped": [],
+         "observations": ["Kite repairs rose from 0.1% in 2020 to 6% in 2026.",
+                          "Woodwork fell from 11% in 2020 to 2% in 2026."],
+         "so_what": "The learning side gave way: woodwork fell from 11% in 2020 to 2% in 2026. Say \"only woodwork\" "
+                    "to see what you still open of it."}
+    out = I.p6_once(f, s)["observations"]
+    assert out == ["Kite repairs rose from 0.1% in 2020 to 6% in 2026."], out

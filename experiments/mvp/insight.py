@@ -3796,13 +3796,36 @@ def _p6_drop(text, at):
     return _drop_clause(text, at)
 
 
+def _p6_names(sheet):
+    """Every record the sheet names, at any depth (its themes, areas, channels, a period's areas, the areas that came
+    and went): the subjects a move can be said of. Round 12, pass 6 (X9, live: "Science fell from 11% in 2020 to 2%"
+    as a bullet and again as the so-what; the area was named only in the sheet's periods)."""
+    out = set(_gate_names(shown(sheet)))
+
+    def walk(o, depth=0):
+        if depth > 6:
+            return
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in ("name", "area", "theme", "channel") and isinstance(v, str) and len(v.strip()) >= 2 \
+                        and "@" not in v:
+                    out.add(v.strip())
+                elif isinstance(v, (dict, list)) and k not in ("items", "library", "window", "filters"):
+                    walk(v, depth + 1)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v, depth + 1)
+    walk(sheet or {})
+    return sorted(out, key=len, reverse=True)
+
+
 def p6_once(form, sheet):
     """Round 12, pass 6 (X9, the hand check: "<theme> rose by 16 points" then "<theme> grew to 54%, from 38%"; "2
     channels were new that day" then "<channel> was new that day, one of 2 channels you opened for the first time"):
     one fact once in an answer, in whatever words. A move of one record said twice (as points, or as its two values)
     is one fact: the later or poorer saying goes (its clause, or its sentence). A count of new channels and a named
     new channel are one fact: the sentence that names the channel stays."""
-    names = _gate_names(shown(sheet))
+    names = _p6_names(sheet)
     obs = list(form.get("observations") or [])
     dropped = list(form.get("dropped") or [])
     ans = form.get("answer") or ""
@@ -4931,7 +4954,7 @@ def so_what_text(c, s, topic=None, lang=None):
         # round 12, pass 6 (X17): what he did then and has not since, with the step code takes
         since = "none since" if not c.get("since") else f"{_fmt(c['since'], 'en')} since"
         return (f"{c['channel']} was a thing of that time: you opened {_fmt(c['items'], 'en')} of their videos then "
-                f"and {since}. Say \"only {c['theme']}\" to see the rest of {c['theme']} you opened then.")
+                f"and {since}. Say \"only {c['theme']}\" to see all the {c['theme']} you opened then.")
     if k == "seasonal":
         return (f"{c['theme']} comes back at this time of year: in {_fmt(c['years'], 'en')} of {_fmt(c['of_years'], 'en')} "
                 f"years it ran well above its share of the year.")
