@@ -5913,6 +5913,76 @@ set-up and the 8 questions; the replays cost nothing.
 meaning). Spanish answers keep their words (the gate is English only). The compact rows are on the test page only;
 iMessage gets numbered lines. Row 2 is still a list of channels at heart: the founder's "what would I do with that" is
 met only by the themes line, the grazed-or-followed line and the saved-videos step.
+
+**The second round of the pass.** An independent hand check of the merged build (ed32261) read 30 live answers: the
+founder's 8 questions and 22 others. It found 8 must-fix sentences, 10 should-fix and 4 nits, and the merged auditor
+had missed most of them. Each fix below is by construction: code words the part that can be false. Each has a test on
+made-up data in `tests/test_round12_pass6.py` (18 tests, all fail on ed32261). No real names are written here.
+- A change's subject (b3, n06.3: "That is up from 808 in the same part of 2025", after a theme's 373; 808 was the
+  topic's count). Code's line now says the count then with its own subject and span: "In the same part of 2025 you
+  opened 808 minecraft videos." A sentence that leaves a change to "That", "This" or "It" is reworded the same way
+  when its number is the scope's count before, else it is not sent.
+- Saved and never opened (b2, b4: "6" was the YouTube ones; by hand 371 on both platforms). The count is now of every
+  platform, and the row says what it counts ("videos", "posts", or "posts and videos"). Code words every saved
+  sentence, and the writer's saved count gets the row's noun. A saved so-what is still proposed only where YouTube
+  videos were saved and never opened, so rows 1, 3, 5 and 7 keep their shape. The "yes" list shows both platforms.
+- A channel behind a theme (c06: two channels said behind two themes; both were 95% a third theme). A topic's channel
+  rows now carry their main theme. A channel set behind, leading or driving a theme must be that theme's own row or
+  have it as its main theme, else the sentence goes.
+- A record's own Shorts share (n05b: "0% of your science videos shows <channel> was almost all long videos"; 0% was
+  the channel's Shorts share). A channel's or theme's Shorts share is sent only when its own clause says Shorts. Under
+  a filter the gate then takes the number out (pass 5).
+- A tie (n03: "<A> led, ahead of <B>" on 11 and 11). Code's channel lead says "A and B tied for the most". A writer's
+  "ahead of" between two equal counts goes.
+- "N more" since a season (b8: 12 counted 9 videos opened again). The sheet keeps the videos opened since and the new
+  ones apart; "more" is the new ones. A ranked list with a gap (a channel left out as sensitive) says "Among the
+  channels new that summer", not "by videos opened".
+- Without Shorts (c03, n03, n06.1, n06.3: "130 videos", "(14 videos)"). Every video the sheet counts under this filter
+  is known to be long, so every count of videos says "long", a record's own count too.
+- A weekday (n02: "what do i usually watch on sundays" was not read). A weekday asked as a habit ("on sundays", "on
+  a sunday", "usually ... on sunday") is that weekday over the window (the whole record by default), set against the
+  other days of the week. Its base is "of what you opened on Sundays". "What did i watch on sunday" stays one day.
+- "The week of <a date>" (n01) is the seven days from that date; the window words say them.
+- Changes (c05.1, c08): a change to one value says where it came from ("rose to 8% from 6%"), and a rise said of two
+  records must hold for both; the end value goes after the span before ("from 50% in the summer before to 47%");
+  two periods' values each say their period.
+- Moves under 3 points are not said in any language (n07, Spanish "subió 2 puntos").
+- One fact once: one record's channels said twice ("Behind <theme>") keep the richer saying; a bullet whose only
+  numbers are shares the lead gave goes (n07).
+- A first's arc after another first (n05a): the arc's key now names its topic, so "never the same so-what twice in a
+  row" no longer drops it.
+- Nits: a share said before its name moves after it ("<theme> (50% of ...)"); one base after a number, never two
+  (b7); a compared side's Shorts share says its side (b5: "of your art videos on YouTube").
+
+Test lines changed on purpose: `test_round12_fix.py` and `test_round12_pass3_fix.py` (a saved so-what now reads "You
+saved and never opened N <theme> videos.", one wording for all); `test_round12_pass2_fix.py` (a made-up bullet says
+"Shorts" after a channel's own share, as the new rule needs).
+
+**The auditor, second round** (`eval_claims.py`, `tests/test_eval_claims.py`, `eval/claims_planted.json`). It now reads
+"without Shorts" as the videos known to be long (X6), saved and never opened on every platform, a weekday and its other
+days, a season after the record as its latest stretch, a move's base said with its first value, a record's own long
+count, two channels' counts inside a named theme, the sentence that says a first, a year that leads a sentence, Shorts
+after a number, two Spanish counts and a channel's rise. New classes: a change with no subject, a channel behind a
+theme it is not in (or not one of its biggest), a move under 3 points in Spanish. Planted set: 23 of 23 caught, 19 of
+19 kept. It still does not catch: videos opened again counted as "more", a gap in a ranked list, a lone value in an
+elliptical change, an end value put in the base period, or a lead's share said again.
+
+**Evals and audits.** The writer's eval rescored from the saved insight_v5 forms (no model call), ed32261 against this
+build: answers 19 and 19, used 20 and 20, kept 52 and 52, dropped 31 and 31, so-what 5 and 5, violations 0 and 0. The
+v5 planted set read through the gate: 89 of 89 caught, 43 of 43 kept (6 plants and 4 true sentences added for this
+round); the typed set 89 of 89 and 43 of 43. No prompt change (still insight_v5) and no topic mapping change. The
+auditor over the pass 5 question list through code and the made-up writer: 0 of 194 answers; the 41 replayed live
+forms: 0; the hand check's 30 answers replayed on this build: 0.
+
+**Live.** None. The ledger stood at $26.226 when this round began, above the pass's $26.20, so no model was called.
+The 8 questions were replayed on the test page with the hand check's recorded forms (every other model call refused)
+and looked at in 430 px pictures: row 2 is 850 px, row 4 1,335 px, row 6 1,136 px, row 8 892 px. Rows 1, 5 and 7
+read as before, apart from the base fixes above; row 3 now says the theme's own rise in place of "That is up from".
+
+**Not done.** A theme whose own name holds the topic word is still left out of the topic (it changes row 3's count and
+needs the mapping eval). The weekday answer was seen only through the made-up writer. A theme's share said in the lead
+and again with its rise (n06.2) is still said twice. "<area> was the whole month-by-month picture" under its own filter
+and "split across" two channels that hold a third are still possible. Spanish answers are gated only for small moves.
 <!-- end round 12, pass 6 -->
 
 ## 20. Claude as the text model (24 Nov 2026; amendment A-020, Proposed)
