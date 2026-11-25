@@ -286,7 +286,7 @@ def run_conversation(h, p, audit=True):
 
 # a finding's class: a number (a value, a rank, a date, a word of a sent lead) is what "recounts true" is about; a
 # shape (a sheet row whose label says less than the name) and a window reading are listed apart, each with its why
-SHAPE_KINDS = {"one name, two fields"}
+SHAPE_KINDS = {"one name, two fields", "list cut"}
 
 
 def finding_class(row):

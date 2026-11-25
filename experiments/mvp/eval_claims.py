@@ -2955,8 +2955,10 @@ def _item_rows_audit(ctx, F, rows, order=None, which=None):
             F.add("results", "platform", r["platform"] == lib.items[i]["p"], r["platform"], lib.items[i]["p"],
                   where=base + ".platform", severity=1.0)
         if "length" in r:
+            # SPEC 2.2: short = a known Short or a reel; an Instagram photo post is neither (unknown)
             p, s = lib.items[i]["p"], lib.short.get(i)
-            want = "short" if p == "instagram" or s is True else "long" if s is False else "unknown"
+            want = ("short" if (p == "instagram" and lib.items[i].get("media") in ("reel", "video")) or s is True
+                    else "long" if s is False else "unknown")
             F.add("results", "length word", r["length"] == want, r["length"], want, where=base + ".length",
                   severity=1.0)
         if r.get("when"):
@@ -3105,6 +3107,17 @@ def audit_results(lib, env, call=None, question="", today=None, earlier=None, la
     else:
         audit_sheet(ctx, F)
         _brain_extra(ctx, F, _clean(sh))
+        st = stated_window(sh)
+        if tool == "timeline" and st and isinstance(sh.get("periods"), list):
+            # a timeline cut by the size cap keeps its first periods: a rank over it ("my biggest month") is only true
+            # of what is shown, so the result may not say it is complete
+            unit = ((call or {}).get("args") or {}).get("unit")
+            want = len(periods_of(st[0], st[1], lib, unit)[0])
+            shown = len(sh["periods"])
+            if shown < want and (env.get("meta") or {}).get("truncated"):
+                F.add("results", "list cut", not (env.get("meta") or {}).get("complete"), shown, want,
+                      where="periods", note="meta.complete is true while periods are cut" if (env.get("meta") or {})
+                      .get("complete") else "", severity=1.0)
         # the tools' own field: an area's change in points is its change as a fraction, times 100
         for k, r in enumerate(sh.get("areas") or []):
             if isinstance(r, dict) and isinstance(r.get("change_pts"), (int, float)) and \
