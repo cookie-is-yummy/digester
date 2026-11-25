@@ -462,3 +462,186 @@ def test_x9_a_move_of_an_area_named_only_in_the_periods_is_said_once():
                     "to see what you still open of it."}
     out = I.p6_once(f, s)["observations"]
     assert out == ["Kite repairs rose from 0.1% in 2020 to 6% in 2026."], out
+
+
+# =====================================================================================================================
+# The second round of the pass: what an independent hand check of the merged build found (30 live answers, made-up
+# here). Each test fails on ed32261 (the build the check read) and on c073c24.
+# =====================================================================================================================
+def _run(raw, s):
+    I = ins()
+    f = I.fill(I.check(raw, s, strict=True), raw, s)
+    return I.layout(f, s)[0]["text"]
+
+
+def _count_sheet(**kw):
+    s = top(kind="count", filters={"topic": "kites", "without_shorts": False}, **kw)
+    s["totals"] = dict(s["totals"], items=1094)
+    s["previous"] = dict(s["previous"], items=808, words="the same part of 2025 (1 January to 30 October 2025)")
+    s["topics"] = [{"name": "kites", "items": 1094, "days": 200, "matched_by": "themes and words"}]
+    return s
+
+
+# ---- R2-1: a change's subject is worded by code, never left to "That" (b3, n06.3)
+def test_r2_a_change_of_the_count_names_its_subject_and_both_values():
+    """b3: after "<theme> led with 373 videos", "That is up from 808 in the same part of 2025": 808 was the topic's
+    count (1,094 now); read in place, "That" is the theme's 373."""
+    I = ins()
+    lines = [o["text"] for o in I.code_form(_count_sheet())["observations"]]
+    assert not any(re.match(r"^(?:That|This|It)\b", t) for t in lines), lines
+    one = [t for t in lines if "808" in t]
+    assert one and "kites videos" in one[0].lower() and "1,094" in one[0], one
+    raw = {"answer": "x", "observations": [
+        {"text": "{themes[1].name} led with {themes[1].items} videos.", "uses": []},
+        {"text": "That is up from {previous.items} in {previous.words}.", "uses": []}]}
+    text = _run(raw, _count_sheet())
+    assert "That is" not in text and "That's" not in text, text
+
+
+def test_r2_a_pronoun_led_change_is_reworded_or_goes():
+    s = _count_sheet()
+    out, _ = gate("That is up from 808 in the same part of 2025.", s, said=True)
+    assert out is None or (not out.startswith("That") and "1,094" in out and "kites videos" in out), out
+    out, _ = gate("It fell from 9% to 5% against the 4 weeks before.", top(), said=True)
+    assert out is None, out
+
+
+# ---- R2-2: saved and never opened counts every platform, and says what it counts (b2, b4)
+def test_r2_saved_and_never_opened_counts_instagram_saves_too():
+    """b4: "You saved and never opened 6 <theme>": 6 was the YouTube ones; by hand 371 (290 reels, 75 posts, 6
+    YouTube videos)."""
+    from mvp import facts as F
+    ids = ["y1", "y2", "r1", "r2", "p1", "w1"]
+    plat = np.array([0, 0, 1, 1, 1, 0], dtype=np.int8)
+    kinds = ["playlist", "save", "watch"]
+    #          y1 saved   y2 saved+watched   r1 saved   r2 saved   p1 saved   w1 watched
+    it = np.array([0, 1, 1, 2, 3, 4, 5])
+    kind = np.array([0, 0, 2, 1, 1, 1, 2])
+    idx = SimpleNamespace(ids=ids, it=it, day=np.arange(7), platform=plat, kinds=kinds,
+                          kind_mask=lambda ks: np.isin(kind, [n for n, k in enumerate(kinds) if k in ks]))
+    facts = SimpleNamespace(theme=np.array([7, 7, 7, 7, 7, 7]))
+    th = SimpleNamespace(shown=lambda t: "Kite repairs")
+    media = {"y1": "video", "y2": "video", "r1": "reel", "r2": "reel", "p1": "post", "w1": "video"}
+    view = SimpleNamespace(items={i: SimpleNamespace(media=m, platform="youtube" if i[0] in "yw" else "instagram")
+                                  for i, m in media.items()})
+    rows = F._saved_not_opened(view, idx, facts, th, [7])
+    assert rows and rows[0]["n"] == 4 and rows[0]["youtube"] == 1 and rows[0]["noun"] == "posts and videos", rows
+    I = ins()
+    t = I.so_what_text({"kind": "saved", "theme": "Kite repairs", "n": 4, "noun": "posts and videos"}, top())
+    assert t.startswith("You saved and never opened 4 Kite repairs posts and videos"), t
+
+
+def test_r2_a_saved_count_in_the_writers_words_gets_the_rows_noun():
+    s = top()
+    s["library"] = {"saved_not_opened": [{"theme": "Speed runs", "n": 26, "noun": "posts and videos"}]}
+    out, _ = gate("You saved 26 Speed runs videos; want to open them next?", s, said=True)
+    assert out and "never opened 26 Speed runs posts and videos" in out, out
+
+
+# ---- R2-3: channels set behind themes they are not in (c06)
+def test_r2_channels_said_behind_themes_they_are_not_in_are_dropped():
+    """c06: "<A> and <B> were the biggest themes, with <ch1> and <ch2> behind them" (topics[0].top_themes with
+    topics[0].channels): both channels were 95% a third theme."""
+    kept, why = obs("{themes[0].name} and {themes[1].name} were the biggest themes, with {channels[0].name} and "
+                    "{channels[1].name} behind them.")
+    assert kept is None and why, (kept, why)   # Doggo Plays is Block battles
+    kept, why = obs("{themes[1].name} and {themes[2].name} were there too, with {channels[0].name} and "
+                    "{channels[1].name} behind them.")
+    assert kept, why   # each channel is its theme's
+
+
+def test_r2_a_topics_channels_carry_their_theme(r12):
+    s = sheet_of(r12, "how many minecraft videos did i watch in 2021")
+    ch = [c for t in s.get("topics") or [] for c in t.get("channels") or []]
+    assert ch and all(c.get("theme") for c in ch), ch
+
+
+# ---- R2-4: a record's own Shorts share is never said of the scope (n05b)
+def test_r2_a_channels_own_shorts_share_never_gets_the_scopes_base():
+    """n05b: "... and 0% of your science videos shows <ch> was almost all long videos" (0% was the channel's Shorts
+    share; the channel is 3.6% of the science videos)."""
+    for f_ in ({"topic": "gaming", "without_shorts": False}, {"topic": None, "without_shorts": False}):
+        s = top(kind="last", filters=f_)
+        s["channels"][1]["shorts_share"] = 0.0
+        s["items"] = [{"id": "v1", "title": "A made-up run", "channel": "Pixel Forge", "at": "2026-10-30",
+                       "theme": "Speed runs"}]
+        s["topics"] = [{"name": f_["topic"] or "gaming", "items": 300}]
+        raw = {"answer": "x", "observations": [{"text": "{channels[0].name} and {channels[1].name} were the biggest "
+                                                        "channels, and {channels[1].shorts_share} shows "
+                                                        "{channels[1].name} was almost all long videos.", "uses": []}]}
+        text = _run(raw, s)
+        assert not re.search(r"\b0% (?:of|shows)\b", text), text
+
+
+# ---- R2-5: no rank word on a tie (n03)
+def test_r2_a_tie_is_never_said_as_a_lead():
+    """n03: "In 2025, for music, <ch1> led, ahead of <ch2>": both had 11 long music videos."""
+    I = ins()
+    t = top(kind="channels")
+    t["channels"][1]["items"] = 30
+    t["channels"].append({"name": "Laugh Lab", "items": 12, "days": 5, "area": "comedy", "theme": "Sketch edits",
+                          "shorts_share": 0.97})
+    ans = I.code_form(t)["answer"]
+    assert "Pixel Forge led" not in ans and "tied" in ans, ans
+    kept, why = obs("{channels[0].name} led, ahead of {channels[1].name}.", t)
+    assert kept is None, (kept, why)
+
+
+# ---- R2-6: "N more" counts new videos, not videos opened again (b8)
+def test_r2_since_a_season_counts_new_videos_apart_from_reopened_ones():
+    """b8: "since then you opened ... 12 more of the second": 9 of the 12 were opened in the summer too (3 new)."""
+    from mvp import facts as F
+    # channel 0: in the season (days 1..3) videos 0,1,2; after it (day 10..12) videos 1, 2 (again) and 3 (new)
+    idx = SimpleNamespace(it=np.array([0, 1, 2, 1, 2, 3]), day=np.array([1, 2, 3, 10, 11, 12]),
+                          creator=np.array([0, 0, 0, 0]))
+    ev = np.ones(6, bool)
+    opened, new = F._since_counts(idx, ev, 3, 0)
+    assert (opened, new) == (3, 1), (opened, new)
+    I = ins()
+    from mvp.tests.test_round12_pass4 import into_summer
+    s = into_summer()
+    s["new"] = {"themes": [], "channels": [{"name": "Kite Lab", "items": 40, "theme": "Speed runs", "since_items": 12,
+                                            "since_new": 3},
+                                           {"name": "Moss Den", "items": 30, "theme": "Meme drops",
+                                            "since_items": 9, "since_new": 9}]}
+    texts = [o["text"] for o in I.code_form(s)["observations"]]
+    one = [t for t in texts if "Kite Lab (40)" in t]
+    assert one and "3 more of the first" in one[0] and "12 more" not in one[0], one
+
+
+# ---- R2-7: under "without Shorts" every count of videos is of long videos (c03, n03, n06.1, n06.3)
+def test_r2_without_shorts_every_count_of_videos_says_long():
+    w = top(filters={"topic": None, "without_shorts": True})
+    cases = {"Pixel Forge and Doggo Plays came next, with 15 and 9 videos.": "with 15 and 9 long videos",
+             "Speed runs led with 130 videos, ahead of Block battles.": "130 long videos",
+             "Behind Speed runs: Pixel Forge (14 videos) and Doggo Plays (9).": "(14 long videos)"}
+    for text, want in cases.items():
+        out, _ = gate(text, w, said=True)
+        assert out and want in out, out
+    out, _ = gate("Speed runs led with 130 videos, ahead of Block battles.", top(), said=True)
+    assert "130 videos" in out, out   # with Shorts: as it was
+
+
+# ---- R2-8: a weekday question is a history question (n02)
+def test_r2_what_do_i_usually_watch_on_a_weekday_is_read_as_history(r12):
+    """n02: "what do i usually watch on sundays": history.read returned None and the bot said nothing matched."""
+    from mvp import history as H
+    for t, wd in (("what do i usually watch on sundays", 6), ("what do i watch on fridays", 4),
+                  ("what do i usually watch on a saturday", 5)):
+        q = H.read(t, TODAY)
+        assert q is not None and q.weekday == wd and q.window.kind == "all", (t, q)
+    assert H.read("remind me on sundays to watch a cooking video", TODAY) is None
+    s = sheet_of(r12, "what do i usually watch on sundays")
+    assert s["filters"]["weekday"] == "Sundays" and s["totals"]["items"] > 0, s["filters"]
+    assert "other days" in (s.get("previous") or {}).get("words", ""), s.get("previous")
+    I = ins()
+    assert I.bases(s)["opened"] == "what you opened on Sundays", I.bases(s)
+    text = I.layout(I.code_form(s), s)[0]["text"]
+    assert "Sundays" in text.split("\n")[0], text
+
+
+# ---- R2-9: "the week of <date>" is a history window (n01)
+def test_r2_the_week_of_a_date_is_a_window():
+    from mvp import history as H
+    q = H.read("what did i watch the week of march 9 2025", TODAY)
+    assert q is not None and str(q.window.start) == "2025-03-09" and str(q.window.end) == "2025-03-15", q
