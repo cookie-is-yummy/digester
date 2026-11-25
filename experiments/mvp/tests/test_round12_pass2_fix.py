@@ -753,7 +753,7 @@ def test_a_bullet_another_bullet_says_in_full_goes():
            "observations": [{"text": "{channels[0].name} was the top channel, at {channels[0].shorts_share} Shorts.",
                              "uses": []},
                             {"text": "{channels[0].name} is {channels[0].shorts_share} Shorts and {channels[1].name} "
-                                     "{channels[1].shorts_share}.", "uses": []}]}
+                                     "{channels[1].shorts_share} Shorts.", "uses": []}]}
     f = I.fill(I.check(raw, s, strict=True), raw, s)
     assert not [o for o in f["observations"] if o.startswith("Pixel Forge was the top channel")]
 

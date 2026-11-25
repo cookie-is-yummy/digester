@@ -1755,6 +1755,16 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
         lst = a.list_path.split(".")[-1]
         if lst in RANKED and b.index != a.index + 1 and b.index != a.index:
             return "order"
+        if lst in RANKED and m.group(0) in ("ahead of", "followed by") and b.index != a.index:
+            # round 12, pass 6, second round (the hand check, n03: "<ch1> led, ahead of <ch2>" on 11 and 11): no rank
+            # word between two records the counts tie
+            try:
+                rows = _resolve(sheet, _path_segs(a.list_path))
+                ka = "items" if _num(rows[a.index].get("items")) else "share"
+                if _num(rows[a.index].get(ka)) and rows[a.index].get(ka) == rows[b.index].get(ka):
+                    return "tie"
+            except (KeyError, TypeError, IndexError):
+                pass
         if lst == "periods" and b.index < a.index:
             return "order"   # periods are in time order: "then" goes forward
         if lst == "topics":
@@ -1910,6 +1920,11 @@ def _subjects(sheet, owners, pl, slots, names):
     return out
 
 
+_BEHIND = re.compile(r"\b(?:behind|led by|driven by|drove|drive|driving|powered by|carried by|came from|its (?:biggest|"
+                     r"main|top) channels?|their (?:biggest|main|top) channels?|channels? (?:of|in|for|behind) it|"
+                     r"detr[aá]s|impulsad[oa]s? por)\b")
+
+
 def _bind_more(text, pl, sheet, slots, names):
     """Round 12, pass 2 fix: what the judges found bound to the wrong thing after the first pass (None, or why)."""
     low = _norm(text)
@@ -1925,6 +1940,23 @@ def _bind_more(text, pl, sheet, slots, names):
             between = _gap(text, a, b)
             if not _CONTRAST.search(_norm(between)):
                 return "wrong_area"
+    # (a2) round 12, pass 6, second round (the hand check, c06: "<A> and <B> were the biggest themes, with <ch1> and
+    # <ch2> behind them": both channels were 95% a third theme): a channel set behind, leading or driving a theme is
+    # that theme's own (a channel of its row) or has it as its own main theme; else the sentence is not sent
+    if _BEHIND.search(low):
+        ths = [n for n in names if (n.list_path or "").split(".")[-1] in ("themes", "top_themes")
+               and n.key in (None, "name")]
+        chs = [n for n in names if (n.list_path or "").split(".")[-1] == "channels" and n.key in (None, "name")]
+        if ths and chs:
+            towners = [_name_owner(t) or "" for t in ths]
+            tnames = {_norm((_rec(sheet, o) or {}).get("name") or "") for o in towners}
+            for c in chs:
+                o = _name_owner(c) or ""
+                if any(t_ and o.startswith(t_ + ".") for t_ in towners):
+                    continue   # "{themes[0].channels[0].name}": the theme's own channel
+                r = _rec(sheet, o) or {}
+                if not (isinstance(r.get("theme"), str) and _norm(r["theme"]) in tnames):
+                    return "channel_not_in_theme"
     # (b) the window's median long video said next to one record (judge A: art's side "typically about 20 minutes",
     # 20 being the whole year's); a topic's own sheet is its window
     if any(x.key == "long_median_min" and x.owner is None for x in slots):
@@ -2014,6 +2046,20 @@ def _bind_more(text, pl, sheet, slots, names):
         want = (before[-1].index + 1) if before else 1
         if n.index != want:
             return "rank"
+    # (h) round 12, pass 6, second round (the hand check, n05b: "... and 0% of your science videos shows <ch> was almost
+    # all long videos": 0% was the channel's own Shorts share): a record's own Shorts share is said as "N% Shorts" (or
+    # right after "Shorts"), and never under a topic or a channel (the gate would give it the scope's base)
+    for x in slots:
+        if x.role != _ROLE_NUM or x.key != "shorts_share":
+            continue
+        if (x.owner or "").rsplit("[", 1)[0].split(".")[-1] not in ("channels", "themes", "top_themes"):
+            continue
+        fl = sheet.get("filters") or {}
+        after = _norm(text[x.end:x.end + 60])
+        before_ = _norm(text[max(0, x.start - 30):x.start])
+        if fl.get("topic") or fl.get("channel") or not (re.match(r"^\s*(?:%\s*)?shorts?\b", after) or
+                                                         re.search(r"\bshorts?\s*(?:\(|,|at|with)?\s*$", before_)):
+            return "own_shorts_share"
     return None
 
 
@@ -3500,6 +3546,15 @@ def p6_words(s, sheet, names):
                 last = m.end() + nm.end()
         out.append(s[last:])
         s = "".join(out)
+    fl_ = sheet.get("filters") or {}
+    if fl_.get("without_shorts"):
+        # round 12, pass 6, second round (the hand check, c03, n03, n06.1, n06.3: "<theme> led with 130 videos" and
+        # "<ch> (14 videos)" under "without Shorts", 515 and 15 with them): under this filter every video the sheet
+        # counts is known to be long (X6), so every count of videos says so, a record's own count too
+        tp_ = (fl_.get("topic") or "").lower()
+        s = re.sub(r"(?<![\w.,%$])(\d{1,3}(?:,\d{3})+|\d+)(?!\s?%)(\s+(?:of (?:their|its|his|her|these|those) )?)"
+                   r"(?!long\b)((?:" + (re.escape(tp_) + r"\s+" if tp_ else "") + r")?videos?)\b",
+                   lambda m: f"{m.group(1)}{m.group(2)}long {m.group(3)}", s)
     sv = {int(x.get("n")) for x in ((sheet.get("library") or {}).get("saved_not_opened") or [])
           if isinstance(x, dict) and _num(x.get("n"))}
     for c in sheet.get("so_what_candidates") or []:
@@ -3510,6 +3565,16 @@ def p6_words(s, sheet, names):
             r"\b(?:never|not yet|have not|haven't|did not|didn't)\b", m.group("t") + s[m.end():m.end() + 30]):
         y = "You" if m.group("y") == "You" else "you"
         s = s[:m.start()] + f"{y} saved and never opened {m.group('n')} {m.group('t')}" + s[m.end():]
+    # round 12, pass 6, second round (the hand check, b2: "5 <theme> videos" saved and never opened, where by hand
+    # 26 were, posts among them): a saved count is the row's own, of every platform, said with what it counts
+    rows_ = {int(x["n"]): x for x in ((sheet.get("library") or {}).get("saved_not_opened") or [])
+             if isinstance(x, dict) and _num(x.get("n")) and x.get("theme")}
+    m = re.search(r"\bsaved and never opened (?P<n>\d[\d,]*) (?P<t>[^;,.?!:()]+?)(?=\s*(?:[;,.?!:]|\s(?:and|but|want|"
+                  r"from|in|on|that|which)\b|$))", s)
+    if m and int(m.group("n").replace(",", "")) in rows_:
+        x = rows_[int(m.group("n").replace(",", ""))]
+        if " ".join(_words(x["theme"])) in " ".join(_words(m.group("t"))) and (x.get("noun") or "videos") != "videos":
+            s = s[:m.start("t")] + _saved_what(x) + s[m.end("t"):]
     return s
 
 
@@ -3517,6 +3582,35 @@ _P6_CHANGE_VERB = re.compile(r"\b(?:grew|grown|rose|risen|climbed|jumped|doubled
                              r"faded|declined|shrank|shrunk|halved|went (?:up|down)|picked up|cooled)\b"
                              r"(?! on\b| into\b| in love\b)", re.I)
 _P6_SIDE = re.compile(r"(?:,\s*|\s+)(?:while|whereas|but)\s+|;\s+")
+
+
+_P6_PRONOUN = re.compile(r"^(?:That|This|It|These|Those)(?:'s|\s+(?:is|was|were|are|has|have|had))?\s+"
+                         r"(?:(?:been|gone|went|now)\s+)?(?:(?P<dir>up|down)\s+from|(?P<v>grew|grown|rose|risen|climbed|"
+                         r"jumped|doubled|gained|fell|fallen|dropped|slipped|faded|declined|shrank|shrunk|halved|"
+                         r"cooled|picked up)\b)")
+
+
+def p6_subject(s, sheet):
+    """Round 12, pass 6, second round (the hand check, b3 and n06.3: "That is up from 808 in the same part of 2025"
+    after "<theme> led with 373 videos": 808 was the topic's count): the subject of a change is worded, never left to
+    "That" or "It". A change of the scope's count gets code's subject and both values; any other goes. (sentence, None)
+    or (None, why)."""
+    if not isinstance(s, str):
+        return s, None
+    m = _P6_PRONOUN.match(s.strip())
+    if not m:
+        return s, None
+    if m.group("dir"):
+        mm = re.match(r"^\s*(\d{1,3}(?:,\d{3})+|\d+)\b(?P<rest>.*)$", s.strip()[m.end():])
+        prev, tot = sheet.get("previous") or {}, sheet.get("totals") or {}
+        if mm and _num(prev.get("items")) and _num(tot.get("items")) and \
+                int(mm.group(1).replace(",", "")) == int(prev["items"]) and prev["items"] != tot["items"]:
+            f = sheet.get("filters") or {}
+            noun = (bases(sheet) or {}).get("videos") or (f"{f['topic']} videos" if f.get("topic") else "videos")
+            up = tot["items"] > prev["items"]
+            return (f"Your {noun} went {'up' if up else 'down'} to {_fmt(tot['items'], 'en')}, from "
+                    f"{_fmt(prev['items'], 'en')}{mm.group('rest')}"), None
+    return None, "no_subject"
 
 
 def p6_values(s, sheet):
@@ -3540,6 +3634,9 @@ def gate_sentence(s, sheet, names, state):
     """(the sentence with every percent based, None) or (None, why). `state["opened_said"]`: the answer said "of what
     you opened" already (an unfiltered record share needs it only once)."""
     if (sheet.get("lang") or "en") == "en":
+        s, why = p6_subject(s, sheet)
+        if s is None:
+            return None, why
         s = p6_values(s, sheet)
         s = p6_words(s, sheet, names)
         if _P6_GAP.search(s):
@@ -4324,14 +4421,26 @@ def code_form(sheet):
         if sea and nw and not es and moving_said == "into":
             # round 12, pass 6 (X17): what was new then, and how much of it he has opened since
             def since_(x):
-                return "none" if x["since_items"] == 0 else f"{f(x['since_items'], lang)} more"
+                # round 12, pass 6, second round (b8): "more" is the videos new since, never the ones opened again
+                n_ = x["since_new"] if isinstance(x.get("since_new"), int) else x["since_items"]
+                if n_ == 0:
+                    return "none" if x["since_items"] == 0 else "no new ones"
+                return f"{f(n_, lang)} more"
             if len(nw) == 2:
                 tail_ = (f"; since then you opened {since_(nw[0])} of the first and {since_(nw[1])} of the second"
                          .replace("none of the first", "none from the first").replace("none of the second",
                                                                                       "none from the second"))
             else:
                 tail_ = f"; since then you opened {since_(nw[0])}" + (" from it" if nw[0]["since_items"] == 0 else "")
-            o(f"New that {sea.group(1).lower()}, by videos opened: " + " and ".join(
+            # round 12, pass 6, second round (the hand check, b8: "New that summer, by videos opened: <A> (97) and <B>
+            # (60)" skipped a 68 left out as sensitive): a ranking word only for the top of the list; a list with a
+            # gap says "among"
+            ranked = [x for x in _rows_named((s.get("new") or {}).get("channels"), ("name", "items"))
+                      if x["items"] >= 20 and not any(c.get("kind") == "then_not_since" and c.get("channel") == x["name"]
+                                                      for c in s.get("so_what_candidates") or [] if isinstance(c, dict))]
+            top_ = [x["name"] for x in ranked[:len(nw)]] == [x["name"] for x in nw]
+            o((f"New that {sea.group(1).lower()}, by videos opened: " if top_ else
+               f"Among the channels new that {sea.group(1).lower()}: ") + " and ".join(
                 f"{x['name']} ({f(x['items'], lang)})" for x in nw) + tail_ + ".", "new", must=True)
         if season_into:
             if by_area:
@@ -4354,7 +4463,13 @@ def code_form(sheet):
             # round 12, pass 3 fix (judge A, row 2: "the lead's three numbers are printed again as the chart's top
             # three bars"): the lead in words, the chart carries the counts
             c2 = chans[2]
-            ans = f"{head}{c0['name']} led, ahead of {c1['name']} and {c2['name']}."
+            # round 12, pass 6, second round (the hand check, n03: "<ch1> led, ahead of <ch2>" where both had 11): a
+            # rank word only where the counts say it; a tie is said as one
+            if c0.get("items") == c1.get("items"):
+                ans = (f"{head}{c0['name']} and {c1['name']} tied for the most" +
+                       (f", ahead of {c2['name']}." if (c2.get("items") or 0) < (c1.get("items") or 0) else "."))
+            else:
+                ans = f"{head}{c0['name']} led, ahead of {c1['name']} and {c2['name']}."
             moving_said = "words"
         elif len(chans) >= 3:
             c2 = chans[2]
@@ -4367,6 +4482,9 @@ def code_form(sheet):
                    f"({f(c1['items'], lang)})." if es else
                    f"{head}{c0['name']} led with {f(c0['items'], lang)} videos{tail0}, ahead of {c1['name']} "
                    f"({f(c1['items'], lang)}).")
+        if not es and len(chans) >= 2 and c0.get("items") == c1.get("items") and " ahead of " in ans and \
+                "tied" not in ans:
+            ans = f"{head}{c0['name']} and {c1['name']} tied with {f(c0['items'], lang)} videos each."
         ta = s.get("top_areas") or {}
         if not es and not topic and ta.get("area") and _num(ta.get("n")) and _num(ta.get("of")) and ta["n"] >= 2:
             # round 12, pass 2 fix (judge A, row 2: "say what each top channel is and what most of the top 5 are"):
@@ -4449,9 +4567,14 @@ def code_form(sheet):
         else:
             ans = ("About " if about else "") + f"{f(tot['items'], lang)} {topic} videos on {f(d, lang)} days" + (
                 f", out of {f(wt, lang)} you opened in all." if _num(wt) else ".")
-        if _num(prev.get("items")) and pw and prev["items"] != tot["items"]:
+        if _num(prev.get("items")) and pw and prev["items"] != tot["items"] and not es:
+            # round 12, pass 6, second round (the hand check, b3: "That is up from 808 in the same part of 2025" right
+            # after "<theme> led with 373 videos": 808 was the topic's count, the theme had 113): the subject and both
+            # values worded by code, never left to "That"
             up = tot["items"] > prev["items"]
-            o(f"That is {'up' if up else 'down'} from {f(prev['items'], lang)} in {pw}.", "totals", "previous")
+            noun = (bases(s) or {}).get("videos") or f"{topic} videos"
+            o(f"Your {noun} went {'up' if up else 'down'} to {f(tot['items'], lang)}, from {f(prev['items'], lang)} "
+              f"in {pw}.", "totals", "previous")
         if len(themes) >= 2 and not es:
             o(f"The biggest parts: {themes[0]['name']} ({_pc(themes[0]['share'])}) and {themes[1]['name']} "
               f"({_pc(themes[1]['share'])}).", "themes")
@@ -4879,10 +5002,23 @@ def _path_line(s, topic, path_only=False):
         how = (c or {}).get("how")
         step = {"faded": "to pick it up again", "still": "to go on from there",
                 "deeper": "to go further"}.get(how, "as a next step")
-        saved = (f"You saved and never opened {_fmt(sv['n'], 'en')} {_videos_of(sv['theme'])}: want them as a list, "
+        saved = (f"You saved and never opened {_fmt(sv['n'], 'en')} {_saved_what(sv)}: want them as a list, "
                  f"{step}?")
         return (path + " " + saved) if path else saved
     return path
+
+
+def _saved_what(x, lang="en"):
+    """Round 12, pass 6, second round: what a saved-and-never-opened count counts, from its row ("noun": videos, posts,
+    or posts and videos, on every platform): "Watercolor painting videos", "Watercolor painting posts and videos"."""
+    noun = (x or {}).get("noun") or "videos"
+    theme = (x or {}).get("theme") or ""
+    if lang == "es":
+        return {"videos": "videos", "posts": "publicaciones",
+                "posts and videos": "publicaciones y videos"}.get(noun, "videos") + f" de {theme}"
+    if noun == "videos":
+        return _videos_of(theme)
+    return f"{theme} ({noun})" if _videos_of(theme) == theme else f"{theme} {noun}"
 
 
 def _videos_of(theme):
@@ -4900,7 +5036,7 @@ def so_what_text(c, s, topic=None, lang=None):
     lang = lang or s.get("lang") or "en"
     if lang == "es":
         if c.get("kind") in ("saved", "lapsed_saves"):
-            return f"Guardaste {_fmt(c['n'], lang)} videos de {c['theme']} que nunca abriste. ¿Te los muestro en una " \
+            return f"Guardaste {_fmt(c['n'], lang)} {_saved_what(c, 'es')} que nunca abriste. ¿Te los muestro en una " \
                    f"lista?"
         return None
     k = c.get("kind")
@@ -4917,11 +5053,15 @@ def so_what_text(c, s, topic=None, lang=None):
         return {"deeper": f"You are deeper into {topic} than ever: {li} {part}, your busiest year for it.",
                 "still": f"You are still at it: {li} {part}, against {pi} in {pl}, your busiest year.",
                 "faded": f"Your {topic} watching peaked at {pi} in {pl}; {part} it was {li}."}.get(c.get("how"))
-    if k == "lapsed_saves":
-        return (f"{c['theme']} has faded, and you still have {_fmt(c['n'], 'en')} saved {c['theme']} videos you never "
-                f"opened. Want them as a list?")
-    if k == "saved":
-        return f"You saved {_fmt(c['n'], 'en')} {c['theme']} videos you never opened. Want them as a list?"
+    if k == "lapsed_saves" and _num(c.get("previous_share")) and _num(c.get("share")) and \
+            round(c["previous_share"] * 100) - round(c["share"] * 100) >= 3:
+        # round 12, pass 6, second round (the hand check, c05.2: "<theme> has faded" with no values): the fall with
+        # both its values, then the count of every platform with what it counts
+        return (f"{c['theme']} fell to {_pc(c['share'])}, from {_pc(c['previous_share'])}" +
+                (f" in {pw}" if pw else "") + f"; you saved and never opened {_fmt(c['n'], 'en')} {_saved_what(c)}. "
+                f"Want them as a list?")
+    if k in ("saved", "lapsed_saves"):
+        return f"You saved and never opened {_fmt(c['n'], 'en')} {_saved_what(c)}. Want them as a list?"
     if k == "learning_faded" and _num(c.get("faded_from")) and _num(c.get("grew_from")):
         if c.get("from") and c.get("to"):   # round 12, pass 2 fix: a change's own years
             return (f"The learning side gave way: {c['faded']} fell from {_pc(c['faded_from'])} in {c['from']} to "
@@ -4990,11 +5130,12 @@ def _saved_line(sheet, said_names, facts):
         if sheet.get("kind") in ("first", "last") or key in said_names or key in facts.topic_keys or any(key in facts.parents.get(n, ()) or
                                                                key == _theme_of(facts, n) for n in said_names):
             if lang == "es":
-                return f"Guardaste {_fmt(x['n'], lang)} videos de {x['theme']} que nunca abriste. ¿Te los muestro en " \
+                return f"Guardaste {_fmt(x['n'], lang)} {_saved_what(x, 'es')} que nunca abriste. ¿Te los muestro en " \
                        f"una lista?"
             one = x["n"] == 1
-            return (f"You saved 1 {x['theme']} video you never opened. Want to see it?" if one else
-                    f"You saved {_fmt(x['n'], lang)} {x['theme']} videos you never opened. Want them as a list?")
+            what1 = {"posts": "post", "posts and videos": "post"}.get(x.get("noun") or "videos", "video")
+            return (f"You saved and never opened 1 {x['theme']} {what1}. Want to see it?" if one else
+                    f"You saved and never opened {_fmt(x['n'], lang)} {_saved_what(x)}. Want them as a list?")
     return None
 
 
@@ -5344,7 +5485,7 @@ def fill(form, raw, sheet, chart_vals=None):
             chosen = sv0
         if not sw:
             sv = next((c for c in cands if c.get("kind") in ("saved", "lapsed_saves")), None)
-            sw = (f"You saved {_fmt(sv['n'], 'en')} {sv['theme']} videos you never opened, a next step. Want them "
+            sw = (f"You saved and never opened {_fmt(sv['n'], 'en')} {_saved_what(sv)}, a next step. Want them "
                   f"as a list?") if sv else None
             sw = sw if sw and check_sentence(sw, facts) is None else None
         also = chosen["key"] if (sw and chosen is not None) else None

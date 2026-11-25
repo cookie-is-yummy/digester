@@ -357,7 +357,7 @@ def test_a_saved_so_what_with_no_offer_gets_codes_words():
            "so_what": {"pick": "saved:Space talks", "text": "You saved {so_what_candidates[0].n} "
                                                              "{so_what_candidates[0].theme}."}}
     f = written(s, raw)
-    assert f["so_what"] == "You saved 11 Space talks videos you never opened. Want them as a list?", f
+    assert f["so_what"] == "You saved and never opened 11 Space talks videos. Want them as a list?", f
 
 
 # ================================ row 7: a 3% top theme is filler ==============================================

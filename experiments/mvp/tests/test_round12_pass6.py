@@ -645,3 +645,18 @@ def test_r2_the_week_of_a_date_is_a_window():
     from mvp import history as H
     q = H.read("what did i watch the week of march 9 2025", TODAY)
     assert q is not None and str(q.window.start) == "2025-03-09" and str(q.window.end) == "2025-03-15", q
+
+
+# ---- R2-S4: a list said "by videos opened" is the top of its ranking, else "among" (b8)
+def test_r2_a_ranked_list_with_a_gap_says_among():
+    """b8: "New that summer, by videos opened: <A> (97) and <B> (60)" where a 68 was left out (sensitive)."""
+    from mvp.tests.test_round12_pass4 import into_summer
+    I = ins()
+    s = into_summer()
+    s["new"] = {"themes": [], "channels": [
+        {"name": "Kite Lab", "items": 97, "theme": "Speed runs", "since_items": 20, "since_new": 20},
+        {"name": "Dating Tips Daily", "items": 68, "theme": "Meme drops", "since_items": 34, "since_new": 30},
+        {"name": "Moss Den", "items": 60, "theme": "Meme drops", "since_items": 12, "since_new": 3}]}
+    texts = [o["text"] for o in I.code_form(s)["observations"]]
+    one = [t for t in texts if "Kite Lab (97)" in t]
+    assert one and "by videos opened" not in one[0] and one[0].startswith("Among the channels new that summer"), one

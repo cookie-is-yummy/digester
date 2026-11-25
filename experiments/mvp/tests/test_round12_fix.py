@@ -411,4 +411,4 @@ def test_a_so_what_that_adds_a_theme_the_answer_never_named_is_the_codes_on_the_
     raw = dict(c["fake"], so_what="You saved 7 Blender 3D videos and 4 guitar practice videos you never opened; want "
                                   "them as a list?")
     f = checked(raw, c["sheet"])
-    assert f["so_what"] == "You saved 7 Blender 3D videos you never opened. Want them as a list?"
+    assert f["so_what"] == "You saved and never opened 7 Blender 3D videos. Want them as a list?"

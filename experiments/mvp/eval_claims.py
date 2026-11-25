@@ -886,8 +886,9 @@ def audit_sheet(ctx, F):
     # saved and never opened
     for k, r in enumerate((sh.get("library") or {}).get("saved_not_opened") or []):
         if isinstance(r, dict) and r.get("theme") and "n" in r:
-            nn = sum(1 for i in lib.saved if i not in lib.opens and lib.items[i]["p"] == "youtube" and
-                     lib.theme_of.get(i) == r["theme"].lower())
+            # pass 6, second round (the hand check, b4: a saved count of the YouTube ones only, where 371 were saved
+            # and never opened on both platforms): saved and never opened is counted on every platform
+            nn = sum(1 for i in lib.saved if i not in lib.opens and lib.theme_of.get(i) == r["theme"].lower())
             chk(f"library.saved_not_opened[{k}].n", r["n"], nn, "count")
 
 
@@ -1745,8 +1746,7 @@ class TextAudit:
                 e = self.names.found.get(rest) if rest else None
                 never = bool(re.search(r"\b(?:never|not yet|not|haven't|have not|didn't|did not) (?:opened|watched|"
                                        r"open|watch)\b|\bunopened\b|\bstill unopened\b", low))
-                ids = [i for i in lib.saved if lib.items[i]["p"] == "youtube" and (e is None or lib.member(i, e))
-                       and (i not in lib.opens or not never)]
+                ids = [i for i in lib.saved if (e is None or lib.member(i, e)) and (i not in lib.opens or not never)]
                 kind = "count of saved, never opened" if never else "count of saved (all of them)"
             got = len(ids)
             self.F.add("base", kind, close_count(n, got, about), n, got, where=ent_code(ent) if ent else "window")
@@ -1758,8 +1758,7 @@ class TextAudit:
             n = int(m.group(1).replace(",", ""))
             never = bool(re.search(r"\b(?:never|not yet|not|haven't|have not|didn't|did not) (?:opened|watched|"
                                    r"open|watch)\b|\bunopened\b", low))
-            ids = [i for i in lib.saved if lib.items[i]["p"] == "youtube" and lib.member(i, sp[2]) and
-                   (i not in lib.opens or not never)]
+            ids = [i for i in lib.saved if lib.member(i, sp[2]) and (i not in lib.opens or not never)]
             self.F.add("base", "count of saved, never opened" if never else "count of saved (all of them)",
                        n == len(ids), n, len(ids), where=ent_code(sp[2]))
         # "N against M" (a comparison's two sides, now or in the span before)

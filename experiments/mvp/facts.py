@@ -508,14 +508,17 @@ def _periods(idx, facts, th, ev_mask, start_o, end_o, by=None):
 
 
 def _saved_not_opened(view, idx, facts, th, tids, limit=10):   # round 12, merge: up to 10 ids, the list "yes" shows
-    """YouTube videos the person saved (a playlist, a save) and never watched, on each of the themes `tids`."""
+    """What the person saved (a playlist, a save, a collection) and never opened, on each of the themes `tids`, on
+    every platform. Round 12, pass 6, second round (the hand check, b4: "You saved and never opened 6 <theme>": 6 was
+    the YouTube ones; by hand 371, 290 of them reels and 75 posts on Instagram): the count is of every platform, and
+    the row says what it counts ("noun": "videos", "posts" or "posts and videos"; "youtube": the YouTube ones)."""
     import numpy as np
     if th is None or not tids:
         return []
     sm = idx.kind_mask(SAVED_KINDS)
     saved = np.unique(idx.it[sm])
     watched = np.unique(idx.it[idx.kind_mask(("watch", "view"))])
-    cand = saved[~np.isin(saved, watched) & (idx.platform[saved] == 0)]
+    cand = saved[~np.isin(saved, watched)]
     last = np.full(len(idx.ids), -1, dtype=np.int64)
     np.maximum.at(last, idx.it[sm], idx.day[sm])
     out = []
@@ -524,7 +527,11 @@ def _saved_not_opened(view, idx, facts, th, tids, limit=10):   # round 12, merge
         if not len(mem):
             continue
         mem = mem[np.argsort(-last[mem], kind="stable")]
-        out.append({"theme": th.shown(tid), "n": int(len(mem)), "examples": [idx.ids[int(k)] for k in mem[:limit]]})
+        posts = sum(1 for k in mem if idx.platform[int(k)] != 0 and
+                    getattr(view.items.get(idx.ids[int(k)]), "media", None) not in ("reel", "video"))
+        noun = "videos" if not posts else "posts" if posts == len(mem) else "posts and videos"
+        out.append({"theme": th.shown(tid), "n": int(len(mem)), "youtube": int((idx.platform[mem] == 0).sum()),
+                    "noun": noun, "examples": [idx.ids[int(k)] for k in mem[:limit]]})
     return out
 
 
@@ -749,11 +756,12 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     if season_ and eo is not None and kind == "top":
         # round 12, pass 6 (X17, row 8: "what he did then and has not since"): each channel new then, with the videos
         # of it opened after the season, up to where the record ends
-        after = base_ev & (idx.day > eo)
         for c in (out["new"] or {}).get("channels") or []:
             if isinstance(c, dict) and c.get("name") in idx.creators:
                 cid = idx.creators.index(c["name"])
-                c["since_items"] = int(len(np.unique(idx.it[after & (idx.creator[idx.it] == cid)])))
+                # round 12, pass 6, second round (the hand check, b8: "12 more of the second": 9 of the 12 had been
+                # opened in the summer too): the videos opened since, and of them the ones new since
+                c["since_items"], c["since_new"] = _since_counts(idx, base_ev, eo, cid)
     # ---- by kind
     if kind == "changed" or q.kind == "timeline" or q.by or (kind == "count" and so is not None and eo is not None
                                                              and eo - so >= 45):
@@ -1000,6 +1008,7 @@ def _so_what_candidates(out, kind, q):
                                               and t["change_vs_previous"] <= -1.0)
         c.append({"key": ("lapsed_saves:" if faded else "saved:") + str(x["theme"]),
                   "kind": "lapsed_saves" if faded else "saved", "theme": x["theme"], "n": int(x["n"]),
+                  "noun": x.get("noun") or "videos",
                   **({"share": t["share"], "previous_share": t.get("previous_share")} if t is not None else {})})
     ts = [t for t in out.get("themes") or [] if isinstance(t.get("change_vs_previous"), (int, float))]
     learn = sorted((t for t in ts if t.get("area") in LEARNING and t["change_vs_previous"] <= -1.5),
@@ -1313,6 +1322,24 @@ def _compare(topics, prev_topics, lang="en"):
     return out
 
 
+def _since_counts(idx, ev, eo, cid):
+    """(videos of channel `cid` opened after day `eo`, those of them never opened up to `eo`), over the events `ev`."""
+    import numpy as np
+    mine = ev & (idx.creator[idx.it] == cid)
+    after = np.unique(idx.it[mine & (idx.day > eo)])
+    before = np.unique(idx.it[mine & (idx.day <= eo)])
+    return int(len(after)), int((~np.isin(after, before)).sum())
+
+
+def _main_theme(idx, facts, th, items, cid):
+    """The theme most of a channel's `items` are on, or None."""
+    if th is None:
+        return None
+    mem = items[idx.creator[items] == cid]
+    tc = Counter(int(x) for x in facts.theme[mem] if x >= 0)
+    return th.shown(tc.most_common(1)[0][0]) if tc else None
+
+
 def _topic_row(view, rec, idx, facts, th, phrase, ev, so, eo):
     import numpy as np
     m, tids, n_theme, n_words = topic_items(view, rec, idx, facts, phrase)
@@ -1330,8 +1357,11 @@ def _topic_row(view, rec, idx, facts, th, phrase, ev, so, eo):
                           Counter(int(x) for x in facts.theme[sc.items] if x >= 0).most_common(2)
                           # round 12, pass 2 fix (judge A: a 2-video theme "inside cooking"): 5% of the side or more
                           if th.shown(t) and n >= max(3, 0.05 * t_items)] if th is not None else [],
-           "channels": [{"name": idx.creators[c], "items": int(n)} for c, n in
-                        Counter(int(x) for x in idx.creator[sc.items] if x >= 0).most_common(3)]}
+           # round 12, pass 6, second round (the hand check, c06: "<A> and <B> were the biggest themes, with <ch1> and
+           # <ch2> behind them": both channels were 95% a third theme): each channel with its own main theme in the
+           # topic, so a sentence that sets it behind a theme can be checked
+           "channels": [{"name": idx.creators[c], "items": int(n), "theme": _main_theme(idx, facts, th, sc.items, c)}
+                        for c, n in Counter(int(x) for x in idx.creator[sc.items] if x >= 0).most_common(3)]}
     allm = ev & m[idx.it]
     if allm.any():
         row["first_watched"] = _iso(int(idx.day[allm].min()))
