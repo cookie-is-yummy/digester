@@ -6355,7 +6355,8 @@ not years. The private line is asked for any number of a result with hidden item
 A thin live slice of step 2: the real model (`claude-haiku-5-5`, through `lib/ai.py`'s Anthropic client) on the read
 tools of section 21, the verifier in between, and code's answer. It was built, tuned on half of the eval set, checked by
 two independent checkers, and closed. **Nothing in the message path changed**: no handler hook, no switch the bot
-reads. With nothing switched on, today's bot behaves as before (the dry self-test passes 164 of 164 steps at $0; the
+reads. With nothing switched on, today's bot behaves as before (the whole suite passes, 5928 with 2 skipped, in 4 shards on
+25a50b1; the dry self-test passes 164 of 164 steps at $0; the
 demo passes 10 of 10). Every live call used the made-up library of `tests/brain_library.py` and the made-up messages of
 `evalset/brain_core.jsonl`.
 
@@ -6396,7 +6397,7 @@ tune-half figures are inflated in the same way: the prompt was written while rea
 
 | Line | Bar | Tune, tuner's last run (run5) | Tune, final run | Held-out, first look | Held-out, second look |
 |---|---|---|---|---|---|
-| G1 false sent | 0 | 0 (tuner's recount) | 0 (my recount; 1 borderline) | **5** (independent recount) | **2** (my recount) |
+| G1 false sent | 0 | 0 (tuner's recount) | 0 (my reading; 1 borderline) | **5** (independent recount) | **3** (my reading, a lower bound) |
 | G2 understood (strict / gate fields) | 90% | 94.6% / 97.3% | 94.6% / 97.3% | 78.8% / 86.5% | **73.1% / 84.6%** |
 | G3 own lead | 85% | 92.1% | 92.1% (35/38) | 67.9% (36/53) | **79.2%** (42/53) |
 | G4 missing, first pass / after repair | 15% after | 31.0% / 15.9% | 23.4% / 13.5% | 44.5% / 32.1% | **36.7% / 28.1%** |
@@ -6417,23 +6418,29 @@ Notes on the figures:
 - **G1, first look.** An independent agent recounted all 110 sent sentences from the rows and found 5 false or wrongly
   based: B03.0, C04.0, F05.0, F11.0 and I02.0. All five were in code-lead answers. The eval's auditor caught 1 of them,
   and 21 of its 24 findings were its own misreadings.
-- **G1, second look.** This is my recount, not an independent one. I read every sent answer and recounted the doubtful
-  sentences from the rows. Two sentences were false:
+- **G1, second look.** This is my own reading, not an independent recount, so the figure is a lower bound. I read
+  every sent answer, and recounted from the rows (`fix/myrecount.py`, the recount's row reader) every composition
+  claim the cells cannot prove on their own: "both from", "all in", "from <channel>", "each opened once", the saves.
+  All held but one. Three sentences were false or wrongly based:
   - E04.0, a point sent under a code lead about Pixel Pencil: "That is 8 fewer videos, and its theme Watercolor
     painting fell from 87% of what you opened to 16%". It was written about Wet Paper.
   - I02.0, the model's own lead: "I found no dating advice theme or channel in your history". The turn unlocked the
     topic, and its channel had 50 of the 58 videos. The cause is in the tools: `find` gave no match for the unlocked
     topic.
+  - I01.0, a point: "3 saved Home cooking posts were not opened in 2024". The library block counts every save of
+    their history, and the 3 saves were made in 2026.
 
-  Both classes are closed after the runs, offline (22.5). The auditor made 24 findings and none was a true finding:
+  All three are closed after the runs, offline, with the limits that 22.5 gives. The auditor made 24 findings and none
+  was a true finding:
   - 19 read "came next with N" as the window's total;
   - 3 checked a filtered share on the unfiltered base;
   - 2 are style (lower-case "shorts").
-- **G1, tune final.** I read all 38 answers and found no false sentence. One is borderline: C13.0 says "while art and
+- **G1, tune final.** I read all 38 answers and recounted their composition claims; I found no false sentence. One is borderline: C13.0 says "while art and
   design rose to 52%", and its period, 2026, is only in the parallel clause before it.
-- **The offline replay of the second look's saved forms**, on the final tree (bb7a825): 86 of 139 sentences kept first,
-  95 sent, so 31.7% missing. Leads: model 32, after repair 8, code 12, plain 1 (40 of 53, 75.5% own). This is lower than
-  live because I02.0's false lead is now dropped. The model's answers to the repair messages are the saved ones.
+- **The offline replay of the second look's saved forms**, on the final tree (25a50b1): 85 of 139 sentences kept first,
+  94 sent, so 32.4% missing. Leads: model 32, after repair 8, code 12, plain 1 (40 of 53, 75.5% own). This is lower than
+  live because the three false sentences are now dropped. The model's answers to the repair messages are the saved
+  ones.
 - **Spend.** Tune $0.0571 (91 requests), held-out $0.0796 (133 requests), $0.137 in all of the $2 budget. The ledger
   rows matched the requests on both runs.
 
@@ -6450,7 +6457,7 @@ With brain_v3, most answers carry an offer; the code lead now keeps the model's 
 
 ### 22.5 What got out that was false, and how each class was closed
 Each class has a rule, not a sentence. Each has a test in `tests/test_brain_fix.py` with its false sentences dropped
-and a true twin kept. 30 of its 31 tests fail on the tuned tree da5530e; the one that passes freezes the ledgers.
+and a true twin kept. 31 of its 32 tests fail on the tuned tree da5530e; the one that passes freezes the ledgers.
 
 The recount's five (first look):
 - **B03.0** "Home cooking led what you opened, with 30 long videos", of the long videos only. A base said in words
@@ -6493,11 +6500,15 @@ The code lead also changed:
 - A bare "here is what I counted" with no point becomes the plain line.
 - The scope line closes its bracket and says each part once; no scope line goes under the plain line.
 
-After the final runs, offline (bb7a825), the two classes of the second look were closed:
+After the final runs, offline (bb7a825 and 25a50b1), the three classes of the second look were closed, each with a
+limit:
 - A point that refers back to the model's own lead ("That is", "its theme", "the other", "also") is not sent under a
-  code lead.
+  code lead. This rule is a list of words. Re-checking the points under the code lead did not catch E04.0, so the
+  model's points under a code lead stay an open risk.
 - What the assistant "found" or "can count" ("I found no ...", "anything I can count", "no checked points") is a
-  limits line, which code writes.
+  limits line, which code writes. This closes that wording only. "No dating advice theme is in your history", with no
+  "I", still passes, and the cause, `find` on an unlocked topic, is open.
+- The library block (saved and never opened, every save of their history) is said with no time of the window.
 
 ### 22.6 What the checker still drops that is true
 In the second look, 71 unique sentences were dropped. I read 18 of them, every fourth in the run's order:
@@ -6549,8 +6560,11 @@ The brain_v1 prefix was 10,122. The prompt grew by 2,900 tokens over the tune an
 SPEC 9's assumption. On Haiku it still costs a fraction of a cent.
 
 ### 22.8 What step 2 must know
-- The gate is not met. On the held-out second look G2, G3, G4 and G5 are missed. G1 is missed with 2 false sentences;
-  both classes are closed offline, but no fresh held-out set measures that.
+- The gate is not met. On the held-out second look G2, G3, G4 and G5 are missed. G1 is missed with at least 3 false
+  sentences. Their classes are closed offline, each within the limits of 22.5, but no fresh held-out set measures
+  that.
+- The model's points under a code lead are still a risk: they were written for the model's own lead, and a word list
+  is what keeps them from pointing at a sentence that is not sent.
 - The approach decides more than the prompt does. A verifier that reads free English with rules drops too much that is
   true: 13 of 18 sampled drops in the second look were true, the attack's true set is kept at 68%, and the audit's at
   80%. Each loosening has to be paid for with an attack. The live answers still found two false classes nobody had
@@ -6558,9 +6572,13 @@ SPEC 9's assumption. On Haiku it still costs a fraction of a cent.
   move, each with its base and window as fields) would let code check a claim instead of parsing English.
 - The code lead is now safer, but it is still the poor answer: the founder read 0 of the 17 first-look code-lead
   answers as good. Fewer code leads comes from fewer wrongful drops, not from better templates.
-- G2 fell from 78.8% to 73.1% between the looks (one run each, prompt v2 to v3). The misses are wide or odd questions
-  and follow-ups ("the second one", a channel read as an area, "drop" read over 4 weeks); that is the tools and the
-  prompt, not the verifier.
+- G2 fell from 78.8% to 73.1% between the looks (one run each, prompt v2 to v3). Three messages moved:
+  - C06.0 newly differs on scope: the model scoped to gaming and art, the hand plan did not;
+  - F06.0 newly differs on what and scope;
+  - K03.0 moved to another plan.
+
+  The misses that stayed are wide or odd questions and follow-ups: "the second one", a channel read as an area, "drop"
+  read over 4 weeks. That is the tools and the prompt, not the verifier.
 - Speed: two to three Haiku requests with adaptive thinking do not fit a 6 s median. A repair round is the slowest path.
 - The tools have known faults:
   - `find` gives no match for an unlocked sensitive topic (the cause of I02.0's lead).
@@ -6569,5 +6587,12 @@ SPEC 9's assumption. On Haiku it still costs a fraction of a cent.
   - The unlocked topic is counted in the totals but in no theme or area row.
 - The eval's auditor is not a valid G1 recount: it reads "came next with N" as the window's total and filtered shares
   on the unfiltered base. A G1 figure needs a hand recount.
-- Still open from the recount: Instagram handles as names, the plain line's "in time" wording (pinned by SPEC 3.10),
-  and repeated facts across the lead and the points.
+- Still open:
+  - from the recount: Instagram handles as names, the plain line's "in time" wording (pinned by SPEC 3.10), repeated
+    facts across the lead and the points;
+  - bare-total code leads that do not answer (F11.0, B05.0, F04.0);
+  - thin answers to wide questions (K03.0);
+  - the auditor's misreadings;
+  - C13.0's period said only in the neighbouring clause;
+  - the attack's assembly case P5: a filtered result's point under an unfiltered lead prints no scope line, though the
+    point says its scope.
