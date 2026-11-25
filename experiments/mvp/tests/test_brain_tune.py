@@ -357,3 +357,27 @@ def test_on_youtube_with_its_own_by_platform_cell(harness):
                             "130[r1.totals.items] videos were on YouTube.", "lead")
     dropped(harness, "lately", "In the 4 weeks up to 30 October 2026, 130[r1.totals.items] of your videos were on "
                                "YouTube.", "lead")
+
+
+def test_a_lead_of_period_cells_names_its_window_by_the_periods(harness):
+    # since 2021 by year: 254 in 2026 (dating hidden). The lead's window check takes each period cell's own label as
+    # the time it claims (run2's F07 shape); a wrong label or none is still dropped. (Added after the held-out run:
+    # a test only, no code change.)
+    from mvp.brain import verify as V
+    led, vt, _t = ledger(harness, "years")
+    ok = V.check_answer({"lead": "You opened 254[r1.periods[5].items] videos in 2026.", "points": []}, led, vt)
+    assert ok.lead_ok, [(o.reasons, o.details) for o in ok.lead]
+    for bad in ("You opened 254[r1.periods[5].items] videos in 2025.", "You opened 254[r1.periods[5].items] videos."):
+        v = V.check_answer({"lead": bad, "points": []}, led, vt)
+        assert not v.lead_ok, bad
+
+
+def test_known_hole_after_tune_outside_claims_on_an_area_row_are_kept(harness):
+    # FOUND after the held-out run (not fixed: the verifier is frozen after it). The theme/area exemption of
+    # _ENTITY_PRESENT (made for "Home cooking[...] posts" as a noun) also lets "is huge", "has millions" through on an
+    # area or a theme row; before tune they were outside_in_history. This test pins today's behaviour so the next
+    # change flips it on purpose: narrow the exemption to the noun "posts".
+    o = check(harness, "lately", "Gaming[r1.areas[0]] is huge right now.")
+    assert o.kept
+    o = check(harness, "lately", "Clip Factory[r1.channels[0]] is huge right now.")
+    assert not o.kept
