@@ -70,6 +70,28 @@ SAVED = ("save", "collection", "share_self", "playlist")
 FRIENDS = {"friend", "mutual"}
 SENSITIVE = {"money", "health", "relationships", "politics", "religion"}
 AREA_SAID = {"film and tv": "film and TV", "diy and making": "DIY and making"}
+# the brain's audit (SPEC 4.8): what each `how` of a tool's scope counts (SPEC 2.2's table), and my own words for the
+# sensitive topic a message unlocks (an item of a sensitive theme is counted when its own text is about it)
+HOW_EVENTS = {"opened": OPEN, "liked": ("like",), "saved": SAVED, "any": OPEN + ("like",) + SAVED}
+UNLOCK_WORDS = {"relationships": ("dating", "date", "relationship", "relationships", "partner", "breakup"),
+                "money": ("money", "stock", "stocks", "invest", "investing", "budget", "debt"),
+                "health": ("health", "diagnosis", "therapy", "symptom", "symptoms", "medication"),
+                "politics": ("politics", "election", "vote", "political"),
+                "religion": ("religion", "faith", "church", "prayer", "bible", "god")}
+
+
+def _plain(s):
+    return "".join(c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c))
+
+
+def slug(name):
+    """A ref's slug ("art and design" -> "art-and-design"), my own spelling of SPEC 2.2."""
+    return re.sub(r"[^a-z0-9]+", "-", _plain(name).lower()).strip("-")
+
+
+def channel_key(name):
+    """SPEC 2.2: "c" + the first 8 hex of sha1 of the channel's name, lower-cased with every non-word character out."""
+    return "c" + hashlib.sha1(re.sub(r"[\W_]+", "", _plain(name).lower()).encode("utf-8")).hexdigest()[:8]
 LONG_SHORTS_FROM = "2024-10-15"
 CAP_S = 3 * 3600
 # DESIGN 19.D: "the title's own mark (#shorts and its spellings)"; my own pattern of those spellings
@@ -149,7 +171,10 @@ def code_of(kind, name):
 class Library:
     """The raw records of one library, read with my own reading of DESIGN 19 (never through the bot's modules)."""
 
-    def __init__(self, lib, derived=None, tz="UTC", now=None, themes_dir=None):
+    def __init__(self, lib, derived=None, tz="UTC", now=None, themes_dir=None, hide_sensitive=False, unlock=None):
+        """`hide_sensitive` (the brain's audit, SPEC 4.8; off as before): the items of a sensitive theme (its build's
+        own flag, or a sensitive category) are left out of everything, as the brain's tools leave them out, except
+        those whose own text is about `unlock` (my own word list, UNLOCK_WORDS)."""
         self.lib = os.path.abspath(lib)
         self.zone = ZoneInfo(tz)
         derived = derived or os.environ.get("MVP_DERIVED_HOME") or os.path.join(REPO, "data", "mvp", "derived")
@@ -168,12 +193,15 @@ class Library:
                 dur = pd.get("duration_s")
                 self.items[r["id"]] = {"p": p, "cap": " ".join((r.get("caption") or "").split()), "c": creator,
                                        "vid": pd.get("video_id") if p == "youtube" else None,
-                                       "dur": dur if isinstance(dur, (int, float)) else None}
+                                       "dur": dur if isinstance(dur, (int, float)) else None,
+                                       "coll": [c for c in pd.get("collections") or [] if isinstance(c, str)],
+                                       "media": pd.get("media_kind")}
         self.opens = defaultdict(list)      # item -> sorted [(ordinal, hour, weekday)] of watch / view events
         self.open_at = defaultdict(list)    # item -> sorted instants (UTC seconds) of the same events (pass 6, A1)
         self.saved = set()
         self.ends = {}
         self.first_open = {}
+        self.acts = defaultdict(list)       # item -> sorted [(ordinal, hour, weekday, kind)] of every dated event
         with open(os.path.join(self.lib, "corpus", "interactions.jsonl"), encoding="utf-8") as f:
             for line in f:
                 r = json.loads(line)
@@ -188,6 +216,7 @@ class Library:
                 o = d.date().toordinal()
                 p = it["p"]
                 self.ends[p] = max(self.ends.get(p, o), o)
+                self.acts[r["item_id"]].append((o, d.hour, d.weekday(), r["kind"]))
                 if r["kind"] in OPEN:
                     self.opens[r["item_id"]].append((o, d.hour, d.weekday()))
                     self.open_at[r["item_id"]].append((d if d.tzinfo else d.replace(tzinfo=self.zone)).timestamp())
@@ -196,6 +225,8 @@ class Library:
         for i in self.opens:
             self.opens[i].sort()
             self.open_at[i].sort()
+        for i in self.acts:
+            self.acts[i].sort()
         self.open_days = {i: [e[0] for e in ev] for i, ev in self.opens.items()}
         # ---- lengths (the derived rows still inside their 30 days; the corpus's own duration when no row)
         rows = {}
@@ -221,6 +252,7 @@ class Library:
             self.short[i] = short_rule(ln, it["cap"], pub)
         # ---- themes (the derived rows) and areas
         self.theme_of, self.area_of, self.theme_names = {}, {}, {}
+        self.theme_by_id, self.sensitive_items, self.hidden_items = {}, set(), set()
         tdir = themes_dir or self._themes_dir(derived)
         if tdir:
             b = json.load(open(os.path.join(tdir, "build.json"), encoding="utf-8"))
@@ -240,16 +272,24 @@ class Library:
                 c = first[nm.lower()]
                 cat = themes[c].get("category") or (fields.get(themes[c].get("field")) or {}).get("category")
                 area[tid] = None if (not cat or cat == "other" or cat in SENSITIVE) else AREA_SAID.get(cat, cat)
+            # the brain's refs: theme:<id> names the theme of that id (two themes of one shown name are one)
+            self.theme_by_id = {tid: nm.lower() for tid, nm in canon_name.items()}
+            sens_themes = {tid for tid, t in themes.items() if t.get("sensitive") or (
+                (t.get("category") or (fields.get(t.get("field")) or {}).get("category")) in SENSITIVE)}
             with open(os.path.join(tdir, "themes.jsonl"), encoding="utf-8") as f:
                 for line in f:
                     r = json.loads(line)
                     t = r.get("theme")
+                    if r.get("item_id") in self.items and t in sens_themes:
+                        self.sensitive_items.add(r["item_id"])
                     if r.get("item_id") in self.items and t in canon_name:
                         nm = canon_name[t]
                         self.theme_of[r["item_id"]] = nm.lower()
                         self.theme_names[nm.lower()] = canon_name[first[nm.lower()]]
                         if area.get(t):
                             self.area_of[r["item_id"]] = area[t]
+        if hide_sensitive:
+            self._hide(unlock)
         self.said_themes = {}   # a topic's themes as the answer's sheet lists them (set per answer by Ctx)
         self.month_items = defaultdict(set)   # (year, month) -> items opened then (the sliding spans of "peaked")
         for i, ds in self.open_days.items():
@@ -268,20 +308,77 @@ class Library:
                 if os.path.exists(os.path.join(root, d, "build.json"))]
         return os.path.join(root, subs[0]) if len(subs) == 1 else None
 
+    def _hide(self, unlock):
+        """Leave the items of a sensitive theme out of everything (the brain's audit), but those about `unlock`."""
+        words = UNLOCK_WORDS.get(unlock or "", ())
+        for i in sorted(self.sensitive_items):
+            it = self.items.get(i)
+            if it is None or (words and any(holds(it["cap"], w) for w in words)):
+                continue
+            self.hidden_items.add(i)
+            for d in (self.items, self.opens, self.open_at, self.open_days, self.acts, self.theme_of, self.area_of):
+                d.pop(i, None)
+            self.saved.discard(i)
+
+    # ---------------------------------------------------------------- the brain's scopes (SPEC 2.2, 4.8)
+    def how_events(self, how):
+        """({item: [(ordinal, hour, weekday)]}, {item: [ordinals]}) of the events a kind of `how` counts: opened (a
+        watch or a view), liked, saved (a save, a collection, a self share, a playlist) or any of them."""
+        if how in (None, "opened", "watched"):
+            return self.opens, self.open_days
+        memo = self.__dict__.setdefault("_how", {})
+        if how not in memo:
+            kinds = HOW_EVENTS[how]
+            ev = {}
+            for i, acts in self.acts.items():
+                e = [(o, h, wd) for o, h, wd, k in acts if k in kinds]
+                if e:
+                    ev[i] = e
+            memo[how] = (ev, {i: [x[0] for x in e] for i, e in ev.items()})
+        return memo[how]
+
+    def in_ref(self, i, ref):
+        """Whether item i is in a ref of the brain's tools, by my own reading of each form: area:<slug> (my areas),
+        theme:<id> (the build's id, its shown name), channel:<key> (c + sha1 of the name squashed), collection:<slug>,
+        words:<text> (my own `holds` over the item's text)."""
+        form, _, val = (ref or "").partition(":")
+        it = self.items[i]
+        if form == "area":
+            return slug(self.area_of.get(i) or "") == val and bool(val)
+        if form == "theme":
+            try:
+                nm = self.theme_by_id.get(int(val))
+            except ValueError:
+                return False
+            return nm is not None and self.theme_of.get(i) == nm
+        if form == "channel":
+            return bool(it["c"]) and channel_key(it["c"]) == val
+        if form == "collection":
+            return any(slug(c) == val for c in it.get("coll") or [])
+        if form == "words":
+            return bool(val) and holds(it["cap"], val)
+        return False
+
+    def is_short_or_reel(self, i):
+        it = self.items[i]
+        return (it["p"] == "youtube" and self.short.get(i) is True) or (
+            it["p"] == "instagram" and it.get("media") in ("reel", "video"))
+
     # ---------------------------------------------------------------- scopes
     def scope(self, a, b, f=None):
         """{item: [(ordinal, hour, weekday)] of opens in [a, b]} under the filters f (topic, channel, without
-        Shorts, platform)."""
+        Shorts, platform; for the brain's audit also only_refs, exclude_refs, short and how)."""
         f = f or {}
         out = {}
-        for i, ds in self.open_days.items():
+        evs, days = self.how_events(f.get("how"))
+        for i, ds in days.items():
             lo = bisect.bisect_left(ds, a) if a is not None else 0
             hi = bisect.bisect_right(ds, b) if b is not None else len(ds)
             if lo >= hi:
                 continue
             if f and not self.passes(i, f):
                 continue
-            ev = self.opens[i][lo:hi]
+            ev = evs[i][lo:hi]
             if f.get("weekday") is not None:   # pass 6, second round: "on sundays" (0 Monday); "weekday_not": the rest
                 ev = [e for e in ev if e[2] == f["weekday"]]
             elif f.get("weekday_not") is not None:
@@ -300,6 +397,12 @@ class Library:
         if f.get("without_shorts") and (it["p"] != "youtube" or self.short.get(i) is not False):
             return False
         if f.get("channel") and it["c"] != f["channel"]:
+            return False
+        if f.get("only_refs") and not any(self.in_ref(i, r) for r in f["only_refs"]):
+            return False
+        if f.get("exclude_refs") and any(self.in_ref(i, r) for r in f["exclude_refs"]):
+            return False
+        if f.get("short") and not self.is_short_or_reel(i):
             return False
         if f.get("topic"):
             if not self.on_topic(i, f["topic"], f.get("topic_themes") or ()) and \
