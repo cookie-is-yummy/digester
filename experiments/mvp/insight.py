@@ -2054,11 +2054,13 @@ def _bind_more(text, pl, sheet, slots, names):
             continue
         if (x.owner or "").rsplit("[", 1)[0].split(".")[-1] not in ("channels", "themes", "top_themes"):
             continue
-        fl = sheet.get("filters") or {}
-        after = _norm(text[x.end:x.end + 60])
-        before_ = _norm(text[max(0, x.start - 30):x.start])
-        if fl.get("topic") or fl.get("channel") or not (re.match(r"^\s*(?:%\s*)?shorts?\b", after) or
-                                                         re.search(r"\bshorts?\s*(?:\(|,|at|with)?\s*$", before_)):
+        # its own clause says Shorts ("(95% Shorts)", "Shorts were only 4% of its videos", "with 8% and 9% Shorts
+        # shares"); under a filter the gate then takes its number out (pass 5)
+        t2 = SLOT.sub(lambda m_: " " * len(m_.group(0)), text)   # the slots' own dots are no stop
+        a0 = max(t2.rfind(c, 0, x.start) for c in ",;.:") + 1
+        ends = [i for i in (t2.find(c, x.end) for c in ",;.") if i >= 0]
+        clause = _norm(t2[a0:x.start] + " " + t2[x.end:min(ends) if ends else len(t2)])
+        if not re.search(r"\bshorts?\b", clause):
             return "own_shorts_share"
     return None
 
