@@ -6349,3 +6349,225 @@ not years. The private line is asked for any number of a result with hidden item
   pooled share; `meta.hidden.friends` is the library's count, not the window's (left as is: the line it drives says
   friends' posts are never counted).
 <!-- end section 21 -->
+
+## 22. The brain, a thin live slice on Haiku (26 Nov 2026; design/brain_v1/SPEC.md and DECISIONS.md, A-021)
+
+A thin live slice of step 2: the real model (`claude-haiku-5-5`, through `lib/ai.py`'s Anthropic client) on the read
+tools of section 21, the verifier in between, and code's answer. It was built, tuned on half of the eval set, checked by
+two independent checkers, and closed. **Nothing in the message path changed**: no handler hook, no switch the bot
+reads. With nothing switched on, today's bot behaves as before (the dry self-test passes 164 of 164 steps at $0; the
+demo passes 10 of 10). Every live call used the made-up library of `tests/brain_library.py` and the made-up messages of
+`evalset/brain_core.jsonl`.
+
+### 22.1 What exists
+- `brain/provider.py`: one request to the model (`AnthropicProvider`, adaptive thinking, effort `low`, strict tools on
+  the nine read tools, `give_answer` sent loose because all ten strict is "the compiled grammar is too large"), every
+  request logged with `ai.log_batch` (purpose `brain_eval`). `FakeProvider` replays scripted turns for the tests.
+- `brain/loop.py`: one turn. Round 1 asks for tool calls, the results go back as `loop.present` text (rid, tool, meta
+  and the sheet's keys at the top), the model writes `give_answer`, the verifier checks it, and one repair round is
+  allowed. Then `_finish` chooses what goes out: the model's lead, the model's lead after the repair, the code lead, or
+  the plain line. Unknown top-level keys of a form are dropped before the check.
+- `brain/answer.py`: the answer that goes out: the lead, the points, code's scope line when the cited result was
+  filtered, code's private line, and the offers with labels code writes.
+- `prompts/brain_v3.md` (v1 and v2 kept; `loop.PROMPT_VERSION` is `brain_v3`).
+- `eval_brain.py run --half tune|heldout`: the live run. Its summary holds the gate lines.
+  `eval_brain.py count`: `count_tokens`, which is free.
+- The verifier attack's sentences are in the planted set (`eval/brain_attack_cases.py`, ledgers frozen by
+  `tests/test_brain_fix.py`), scored apart from the builder's own cases as sources `attack` and `attack_true`.
+
+### 22.2 The gate, fixed before any run
+Each line is measured on the held-out half, per plain history message (the "plan" tier), 53 messages:
+- G1: 0 sentences sent that a recount finds false or wrongly based.
+- G2: at least 90% understood.
+- G3: at least 85% of answers go out with the model's own lead.
+- G4: at most 15% of the sentences written are missing after the repair.
+- G5: median at most 6 s and p90 at most 10 s.
+- G6: mean at most 0.5 cents.
+
+On every tree, the planted set must keep all of its false sentences handled and 78 of 78 of its true ones.
+
+The split is fixed by `sha1(id) % 2`. The tune half has 38 messages and the held-out half 53.
+
+### 22.3 Every figure, with its half and its look
+The held-out half was run once by the tuner (the first look, tree 4ce8a5a). Two checkers then read those answers. It was
+run once more on the closed tree (bee4b4e). That second run is a **second look**: the held-out messages and their
+first-look answers had been read by both checkers and by this fix before it, so it is not a fresh held-out figure. The
+tune-half figures are inflated in the same way: the prompt was written while reading tune-half messages.
+
+| Line | Bar | Tune, tuner's last run (run5) | Tune, final run | Held-out, first look | Held-out, second look |
+|---|---|---|---|---|---|
+| G1 false sent | 0 | 0 (tuner's recount) | 0 (my recount; 1 borderline) | **5** (independent recount) | **2** (my recount) |
+| G2 understood (strict / gate fields) | 90% | 94.6% / 97.3% | 94.6% / 97.3% | 78.8% / 86.5% | **73.1% / 84.6%** |
+| G3 own lead | 85% | 92.1% | 92.1% (35/38) | 67.9% (36/53) | **79.2%** (42/53) |
+| G4 missing, first pass / after repair | 15% after | 31.0% / 15.9% | 23.4% / 13.5% | 44.5% / 32.1% | **36.7% / 28.1%** |
+| G5 median / p90 | 6 s / 10 s | 6.89 / 9.33 s | **6.40 / 10.06 s** | 7.64 / 10.96 s | **7.40 / 10.68 s** |
+| G6 mean | 0.5 c | 0.143 c | 0.150 c | 0.156 c | 0.150 c |
+| Planted false handled / true kept | all / 78 | 332 / 78 | 332 / 78 | 332 / 78 | 332 / 78 |
+
+On the held-out second look, every line except G6 is missed. On the tune half, G1 to G4 and G6 are met and G5 is
+missed by 0.4 s at the median and 0.06 s at p90.
+
+Notes on the figures:
+- **The planted line** holds on every tree: 332 of 332 false sentences handled and 78 of 78 true kept. The attack's
+  set is scored apart from it:
+  - 165 of 166 false sentences dropped. R03 is kept with the private line, as the founder's answer 4 allows.
+  - 41 of its 60 true sentences kept. The tuned verifier kept 42; t19 ("doubled its share from 2021 to 2026") is
+    dropped again.
+  - The step 1 audit's true set stays at 49 of 61.
+- **G1, first look.** An independent agent recounted all 110 sent sentences from the rows and found 5 false or wrongly
+  based: B03.0, C04.0, F05.0, F11.0 and I02.0. All five were in code-lead answers. The eval's auditor caught 1 of them,
+  and 21 of its 24 findings were its own misreadings.
+- **G1, second look.** This is my recount, not an independent one. I read every sent answer and recounted the doubtful
+  sentences from the rows. Two sentences were false:
+  - E04.0, a point sent under a code lead about Pixel Pencil: "That is 8 fewer videos, and its theme Watercolor
+    painting fell from 87% of what you opened to 16%". It was written about Wet Paper.
+  - I02.0, the model's own lead: "I found no dating advice theme or channel in your history". The turn unlocked the
+    topic, and its channel had 50 of the 58 videos. The cause is in the tools: `find` gave no match for the unlocked
+    topic.
+
+  Both classes are closed after the runs, offline (22.5). The auditor made 24 findings and none was a true finding:
+  - 19 read "came next with N" as the window's total;
+  - 3 checked a filtered share on the unfiltered base;
+  - 2 are style (lower-case "shorts").
+- **G1, tune final.** I read all 38 answers and found no false sentence. One is borderline: C13.0 says "while art and
+  design rose to 52%", and its period, 2026, is only in the parallel clause before it.
+- **The offline replay of the second look's saved forms**, on the final tree (bb7a825): 86 of 139 sentences kept first,
+  95 sent, so 31.7% missing. Leads: model 32, after repair 8, code 12, plain 1 (40 of 53, 75.5% own). This is lower than
+  live because I02.0's false lead is now dropped. The model's answers to the repair messages are the saved ones.
+- **Spend.** Tune $0.0571 (91 requests), held-out $0.0796 (133 requests), $0.137 in all of the $2 budget. The ledger
+  rows matched the requests on both runs.
+
+### 22.4 What the model writes
+Short, listy, correct leads, often a rank with its count and total: "In October 2026, Clip Factory led what you
+opened, with 61 of 142 videos." The points are the next rows ("Pan Theory came next with 32 videos.") or a theme with
+its channel ("Gaming clips made up 59 of those, 56 from Clip Factory."). Few say what the numbers mean. Wide or odd
+questions get thin answers:
+- K03.0 (the full picture of the year) has two sentences and no new or stopped part;
+- D07.1 reads "the second one" by time;
+- F14.0 answers about the gaming area, not the channel it was asked about.
+
+With brain_v3, most answers carry an offer; the code lead now keeps the model's offers too.
+
+### 22.5 What got out that was false, and how each class was closed
+Each class has a rule, not a sentence. Each has a test in `tests/test_brain_fix.py` with its false sentences dropped
+and a true twin kept. 30 of its 31 tests fail on the tuned tree da5530e; the one that passes freezes the ledgers.
+
+The recount's five (first look):
+- **B03.0** "Home cooking led what you opened, with 30 long videos", of the long videos only. A base said in words
+  ("of what you opened", "led what you opened") on a filtered result must carry the scope in its own clause, or in the
+  sentence's opening words. The template now says "food and cooking led the long videos you opened, with 30".
+- **C04.0** "art and design came next", kept under a code lead that named a theme first:
+  - The model's points are checked again under the code lead's template in marker form.
+  - "Came next" passes only after the row it follows, in the same list.
+  - The template prefers the list the model's own lead cited.
+- **F05.0** "Minecraft builds is still the largest gaming theme, at 51% of what you opened": the base rule above, and
+  "still" needs the window before.
+- **F11.0** "Your full years before 2026 were ...": a time said with a range word is that stretch.
+- **I02.0** "the top theme was Home cooking with 8" of 58: a rank or an "only" of a complete list whose rows leave out
+  more of the total than its first row holds cannot be proved.
+
+The attack's 66 must-fix sentences, by class:
+- A time with since, by, until, up to, before, after or between, "on" a day of a longer window, or two times joined
+  ("in 2025 and 2026"), is a stretch, and passes only where it is exactly the window. A period's cell says its own
+  period. "Ever" needs all their history.
+- Platform, length and day words on a count ("of your long videos", "61 Instagram reels", "From YouTube alone", "all
+  of them Shorts", "weekend") are bound by the scope, by a cell, or by every cited row being of that kind.
+- A comparison cites the value it compares with, in the order said; a sum ("together") is never a cell. A calc's
+  "than <time>" names its second window, a calc of the totals is not said of a row, and "% fewer" follows the sign.
+- "From A to B" puts the earlier value first.
+- "Only", "all", "nothing else", "on its own" and "just N areas" are not said of a result that left the private topic
+  out.
+- "All from" a channel needs the row's own list to hold only it, or the channel's own theme and count.
+- "Usually" at an hour needs more than half of the items there.
+- The first or the last item is the earliest or the latest shown, by its own time.
+- The count of a first-time list is the rows shown.
+- Motives ("because you were bored") and what a video "told" or "taught" them are not in the export.
+- A filtered result's numbers are never widened ("overall", "of all your channels", "with or without").
+- An ordinal of a least-ordered result says "least".
+- A point on another window says its window. A filtered list's count never leans on the lead's scope.
+- The tuner's pinned hole ("Gaming is huge right now" on an area row) is flipped on purpose: the theme and area
+  exemption now covers only the noun "posts".
+
+The code lead also changed:
+- It says the scope as opening words, not a bracketed tag, and the window's core words ("In all your history").
+- A bare "here is what I counted" with no point becomes the plain line.
+- The scope line closes its bracket and says each part once; no scope line goes under the plain line.
+
+After the final runs, offline (bb7a825), the two classes of the second look were closed:
+- A point that refers back to the model's own lead ("That is", "its theme", "the other", "also") is not sent under a
+  code lead.
+- What the assistant "found" or "can count" ("I found no ...", "anything I can count", "no checked points") is a
+  limits line, which code writes.
+
+### 22.6 What the checker still drops that is true
+In the second look, 71 unique sentences were dropped. I read 18 of them, every fourth in the run's order:
+- 13 were true;
+- 3 were right drops: a filtered share with no scope, a limits line that was also false, and "100% of what you opened"
+  with the private topic left out;
+- 2 could not be decided.
+
+The true ones fall in these classes:
+- a move against the window before with no direction word the checks read ("up from 2 in the 4 weeks before");
+- a channel's share of a theme said with "which holds";
+- a title with its channel named plainly;
+- "all on YouTube" marked on the word;
+- "a share of 100%" of Shorts;
+- "in the same period last year" of a compare;
+- "the only Minecraft channel ... from 5 January 2021 to 30 October 2026" as the lead's window;
+- "your biggest month of 2026".
+
+The attack's 19 true sentences still dropped:
+- t56: "138 videos on YouTube and 4 on Instagram";
+- t57, t58: "counting only long videos, you opened 72 videos" (the noun without "long");
+- t25, t26: "about half", "a quarter";
+- t24: "just behind";
+- t52: "Since 2021 you opened 723" as a lead;
+- t59: a two-period lead;
+- t20: a percent change written as previous against now;
+- t35, t36, t51: moves read with no direction;
+- t02, t10, t21, t23, t30, t32;
+- t19.
+
+The tightened rules cost one of the tuner's true classes: F09.0's "has 1[channels.count] channel" under its scoped
+lead is no longer waived, because a filtered list's count is scope-bound.
+
+### 22.7 Cost and speed, measured
+- Cost: 0.150 cents a message on both halves, about a third of the bar.
+- Speed: a message takes two or three requests (calls, answer, and a repair in about a fifth of them). On the held-out
+  half: median 7.40 s, p90 10.68 s, max 14.45 s, no retries.
+- `count_tokens` (free, v3) against SPEC 9:
+
+| Measure | Measured | SPEC 9 |
+|---|---|---|
+| Prefix (tools + system, one-token message) | 13,045 | 8,300 |
+| of which tools | 6,592 | 4,500 |
+| of which system (brain_v3 and its fixed context) | 6,464 | 3,800 (prompt 1,800, context 2,000) |
+| A typical round-2 request | 16,395 | |
+| One result | 3,291 | 1,800 for two trimmed sheets |
+
+The brain_v1 prefix was 10,122. The prompt grew by 2,900 tokens over the tune and this fix, and the prefix is 57% over
+SPEC 9's assumption. On Haiku it still costs a fraction of a cent.
+
+### 22.8 What step 2 must know
+- The gate is not met. On the held-out second look G2, G3, G4 and G5 are missed. G1 is missed with 2 false sentences;
+  both classes are closed offline, but no fresh held-out set measures that.
+- The approach decides more than the prompt does. A verifier that reads free English with rules drops too much that is
+  true: 13 of 18 sampled drops in the second look were true, the attack's true set is kept at 68%, and the audit's at
+  80%. Each loosening has to be paid for with an attack. The live answers still found two false classes nobody had
+  listed. The free-text-with-markers grammar is the weak point; a form with typed slots per claim (rank, share, count,
+  move, each with its base and window as fields) would let code check a claim instead of parsing English.
+- The code lead is now safer, but it is still the poor answer: the founder read 0 of the 17 first-look code-lead
+  answers as good. Fewer code leads comes from fewer wrongful drops, not from better templates.
+- G2 fell from 78.8% to 73.1% between the looks (one run each, prompt v2 to v3). The misses are wide or odd questions
+  and follow-ups ("the second one", a channel read as an area, "drop" read over 4 weeks); that is the tools and the
+  prompt, not the verifier.
+- Speed: two to three Haiku requests with adaptive thinking do not fit a 6 s median. A repair round is the slowest path.
+- The tools have known faults:
+  - `find` gives no match for an unlocked sensitive topic (the cause of I02.0's lead).
+  - On a one-day window, `items` reports meta.order "newest" while its rows are in time order (`tools.run_items`). The
+    verifier now reads the items' own times.
+  - The unlocked topic is counted in the totals but in no theme or area row.
+- The eval's auditor is not a valid G1 recount: it reads "came next with N" as the window's total and filtered shares
+  on the unfiltered base. A G1 figure needs a hand recount.
+- Still open from the recount: Instagram handles as names, the plain line's "in time" wording (pinned by SPEC 3.10),
+  and repeated facts across the lead and the points.
