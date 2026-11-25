@@ -4037,6 +4037,57 @@
       "why": "count_subject"
      }
     ]
+   },
+   {
+    "case": "p6_top",
+    "as": "gated",
+    "about": "round 12, pass 6, second round: the hand check's classes of the merged build, each worded by code",
+    "true": [
+     {
+      "text": "{themes[1].name} and {themes[2].name} were there too, with {channels[0].name} and {channels[1].name} behind them.",
+      "good": "behind them"
+     },
+     {
+      "text": "{areas[0].name} rose to {areas[0].share}.",
+      "good": "from 12%"
+     },
+     {
+      "text": "{areas[3].name} slipped from {areas[3].previous_share} in {previous.words}.",
+      "good": "(5 September to 2 October 2026) to 9%"
+     },
+     {
+      "text": "{themes[3].name} fell to {themes[3].share}.",
+      "good": "from 7%"
+     }
+    ],
+    "plants": [
+     {
+      "text": "{themes[0].name} and {themes[1].name} were there too, with {channels[0].name} and {channels[1].name} behind them.",
+      "why": "channel_not_in_theme"
+     },
+     {
+      "text": "That is up from {previous.items} in {previous.words}.",
+      "bad": "^That",
+      "why": "no_subject"
+     },
+     {
+      "text": "{areas[0].name} rose to {areas[0].share} and {areas[1].name} to {areas[1].share}.",
+      "why": "direction"
+     },
+     {
+      "text": "{areas[0].name} rose to {areas[0].share} and {areas[3].name} to {areas[3].share}, both above {previous.words}.",
+      "why": "direction"
+     },
+     {
+      "text": "{areas[3].name} slipped from {areas[3].previous_share} to {areas[3].share} in {previous.words}.",
+      "bad": "to 9% in the 4 weeks before",
+      "why": "end_in_base"
+     },
+     {
+      "text": "{channels[1].name} was mostly long: {channels[1].shorts_share} shows it.",
+      "why": "own_shorts_share"
+     }
+    ]
    }
   ],
   "sheets": {

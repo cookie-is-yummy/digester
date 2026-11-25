@@ -3698,9 +3698,11 @@ def p6_values(s, sheet):
         if _P6_CHANGE_VERB.search(seg) and not re.search(r"\d", seg):
             s = s[:m.start()] + s[m.start() + len(seg):]
     base = _base_of(sheet)
-    if base and re.fullmatch(r"(?:19|20)\d\d", base):
+    if base:
+        # round 12, pass 6, second round (the hand check, c08: "slipped from 50% to 47% in the summer before": 47%
+        # was the fall's own): any span before, not only a year
         s = re.sub(r"\bfrom (\d+(?:\.\d+)?%) to (\d+(?:\.\d+)?%)((?: of [^,.;()]*?)?) in " + re.escape(base) +
-                   r"\b(?! (?:to|and)\b)", lambda m: f"from {m.group(1)} in {base} to {m.group(2)}{m.group(3)}", s)
+                   r"(?![\w(])(?! (?:to|and)\b)", lambda m: f"from {m.group(1)} in {base} to {m.group(2)}{m.group(3)}", s)
     return s
 
 

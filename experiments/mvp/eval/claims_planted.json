@@ -212,6 +212,27 @@
   {"id": "x18_clean", "item": "X18", "defect": false,
    "text": "what did i watch in june 2025", "window": {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"},
    "sheet": {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"}},
-   "sent": "Gaming made up 33% of what you opened, and Space facts 11%.\n• Shorts were 37% of your YouTube videos."}
+   "sent": "Gaming made up 33% of what you opened, and Space facts 11%.\n• Shorts were 37% of your YouTube videos."},
+
+  {"id": "r2_subject_defect", "item": "R2-1", "defect": true, "expect": "a change with no subject",
+   "text": "what did i watch in june 2025", "window": {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"},
+   "sheet": {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"}},
+   "sent": "Inside gaming, Speed runs led with 21% of everything you opened.\n\n• That is up from 9% in May 2025."},
+  {"id": "r2_subject_clean", "item": "R2-1", "defect": false,
+   "text": "what did i watch in june 2025", "window": {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"},
+   "sheet": {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"}},
+   "sent": "Inside gaming, Speed runs led with 21% of everything you opened."},
+  {"id": "r2_behind_defect", "item": "R2-3", "defect": true, "expect": "a channel behind a theme it is not in",
+   "text": "what did i watch in june 2025", "window": {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"},
+   "sheet": {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"}, "channels": [{"name": "Run Lab"}, {"name": "Orbit Kitchen"}, {"name": "Clip Barn"}, {"name": "Star Desk"}]},
+   "sent": "Speed runs and Pan recipes were there too, with Clip Barn and Star Desk behind them."},
+  {"id": "r2_behind_clean", "item": "R2-3", "defect": false,
+   "text": "what did i watch in june 2025", "window": {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"},
+   "sheet": {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"}, "channels": [{"name": "Run Lab"}, {"name": "Orbit Kitchen"}, {"name": "Clip Barn"}, {"name": "Star Desk"}]},
+   "sent": "Speed runs and Pan recipes were there too, with Run Lab and Orbit Kitchen behind them."},
+  {"id": "r2_puntos_defect", "item": "R2-S6", "defect": true, "expect": "move under 3 points",
+   "text": "what did i watch in june 2025", "window": {"kind": "range", "start": "2025-06-01", "end": "2025-06-30"},
+   "sheet": {"kind": "top", "filters": {}, "window": {"start": "2025-06-01", "end": "2025-06-30"}, "lang": "es"},
+   "sent": "Gaming subió 2 puntos frente a mayo de 2025."}
  ]
 }

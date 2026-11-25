@@ -1880,6 +1880,31 @@ class TextAudit:
                     share = sum(1 for i in ids if any(lib.member(i, e) for e in ents)) / len(ids)
                     self.F.add("word", "mostly (half)", share >= 0.5, ">=50%", round(share * 100, 1),
                                where="+".join(ent_code(e) for e in ents), note="base " + b_, severity=1.0)
+        # pass 6, second round (the hand check, b3 and n06.3: "That is up from 808 in the same part of 2025" after
+        # "<theme> led with 373 videos": 808 was the topic's count): a change whose subject is only "That" or "It"
+        if re.match(r"^\s*(?:that|this|it|these|those)(?:'s|\s+(?:is|was|were|are|has|had))?\s+(?:(?:been|gone|went|now)"
+                    r"\s+)?(?:(?:up|down)\s+from|grew|rose|fell|dropped|climbed|slipped|faded|jumped|doubled|halved)\b", low):
+            self.F.add("word", "a change with no subject", False, s.strip()[:40], "a named subject", severity=1.0)
+        # pass 6, second round (the hand check, c06: "<A> and <B> were the biggest themes, with <ch1> and <ch2> behind
+        # them": both channels were 95% a third theme): a channel set behind a theme has it as its own main theme
+        if re.search(r"\bbehind (?:it|them)\b|\bdriven by\b|\bled by\b|\bits (?:biggest|main|top) channels?\b", low):
+            ths = [sp[2] for sp in spans if sp[2][0] == "theme"]
+            chs = [sp[2] for sp in spans if sp[2][0] == "channel"]
+            if ths and chs:
+                pool = self.base_ids("filt")
+                for ch in chs:
+                    c = Counter(lib.theme_of.get(i) for i in pool if lib.member(i, ch) and lib.theme_of.get(i))
+                    if not c:
+                        continue
+                    main = c.most_common(1)[0][0]
+                    ok = any(main == t[1].lower() for t in ths)
+                    self.F.add("word", "a channel behind a theme it is not in", ok, ent_code(ch),
+                               code_of("theme", main), severity=1.0)
+        # pass 6, second round (the hand check, n07: "subió 2 puntos frente a 2021", a 1.68-point move): X14 in Spanish
+        for m in re.finditer(r"\b(?:subi[oó]|baj[oó]|cay[oó]|creci[oó]|aument[oó]|perdi[oó]|gan[oó])\s+(\d+(?:[.,]\d+)?)"
+                             r"\s+puntos?\b", low):
+            x = float(m.group(1).replace(",", "."))
+            self.F.add("word", "move under 3 points said", x >= 3, f"{x:g} puntos", ">= 3 points", severity=0.5)
         # led / top / came first / ahead of / followed by / came next / close behind
         if re.search(r"\b(?:led|leads|top|topped|came first|ahead of|followed by|came next|close behind|then)\b", low):
             self.order(s, spans)
