@@ -3417,7 +3417,8 @@ _P6_GAP = re.compile(r"\bthe (?:gap|difference|lead)\b[^.;]{0,60}?\b(?:widen\w*|
 _P6_INSIDE = re.compile(r"\b(?:inside|within)\b", re.I)
 _P6_NOUN = re.compile(r"^(?P<sp>\s+)(?P<n>(?:(?:long|long-form|short|youtube|YouTube)\s+)?"
                       r"(?:(?!(?:were|was|are|is|of|the|your|them|those|these|and|or|in|on|at|as|than|then|all)\b)"
-                      r"[a-z][a-z&'-]*\s+){0,2}?(?:videos?|Shorts|ones|clips|posts))\b(?! (?:from|on|of)\b)")
+                      r"[a-z][a-z&'-]*\s+){0,2}?(?:videos?|Shorts|ones|clips|posts))\b"
+                      r"(?! (?:from|of)\b| on (?!\d|YouTube\b|Instagram\b))")   # "on 27 days" is still the count's
 _P6_SAVED = re.compile(r"\b(?P<y>[Yy]ou) saved (?P<n>\d[\d,]*) (?P<t>[^;,.?!:]+?)"
                        r"(?=\s*(?:[;,.?!:]|\s(?:and|but|want|from|in|on|that|which)\b|$))")
 

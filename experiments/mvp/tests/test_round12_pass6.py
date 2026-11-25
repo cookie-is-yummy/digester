@@ -431,3 +431,14 @@ def test_x4_a_channels_rise_under_without_shorts_counts_long_videos():
     t = I.so_what_text(c, s)
     assert t.startswith("Kite Lab is new at the top: 12 long videos now, against 0"), t
     assert I.so_what_text(c, top()).startswith("Kite Lab is new at the top: 12 videos now"), t
+
+
+def test_x4_a_count_said_with_its_days_names_every_filter_in_force():
+    """The auditor, on the made-up writer's follow-ups: after "without shorts": "You opened 225 videos on 27 different
+    days." (225 long videos). A noun followed by "on <a number>" is still the count's subject."""
+    s = top(filters={"topic": None, "without_shorts": True})
+    s["totals"] = dict(s["totals"], items=225, long=225, shorts=0, days_active=27)
+    out, _ = gate("You opened 225 videos on 27 different days.", s)
+    assert out == "You opened 225 long videos on 27 different days.", out
+    out2, _ = gate("You opened 225 videos on YouTube.", s)
+    assert out2.startswith("You opened 225 long videos"), out2

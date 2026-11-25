@@ -3957,6 +3957,10 @@
      {
       "text": "You saved and never opened {library.saved_not_opened[0].n} {library.saved_not_opened[0].theme} videos.",
       "good": "You saved and never opened 5"
+     },
+     {
+      "text": "{themes[1].name} climbed to {themes[1].share} from {themes[1].previous_share} against {previous.words}, while {themes[3].name} fell to {themes[3].share}.",
+      "good": "while Sketch edits fell to 2%"
      }
     ],
     "plants": [
@@ -3994,6 +3998,11 @@
       "text": "The gap between {areas[0].name} and {areas[1].name} has narrowed.",
       "bad": "gap",
       "why": "gap_words"
+     },
+     {
+      "text": "{themes[1].name} climbed to {themes[1].share} from {themes[1].previous_share} against {previous.words}, while {themes[3].name} and {areas[3].name} fell.",
+      "bad": "fell\\.$",
+      "why": "change_no_value"
      }
     ]
    },
@@ -4005,6 +4014,10 @@
      {
       "text": "You opened {totals.long} long music videos.",
       "good": "431 long music videos"
+     },
+     {
+      "text": "You opened {totals.long} long music videos on {totals.days_active} different days.",
+      "good": "431 long music videos on 28"
      }
     ],
     "plants": [
@@ -4016,6 +4029,11 @@
      {
       "text": "You opened {totals.items} videos.",
       "bad": "431 videos\\b",
+      "why": "count_subject"
+     },
+     {
+      "text": "You opened {totals.long} videos on {totals.days_active} different days.",
+      "bad": "431 videos on",
       "why": "count_subject"
      }
     ]
