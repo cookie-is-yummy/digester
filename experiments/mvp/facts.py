@@ -243,6 +243,179 @@ def topic_items(view, rec, idx, facts, phrase):
     return out
 
 
+# ---------- the brain's tools, step 1 (design/brain_v1/SPEC.md 2.2, 8.4, 11.3): the scope of a tool call. Every
+# function here is used only when a query sets the new HistoryQuery fields or a caller asks for the sensitive topics
+# to be left out; with neither, sheet() runs exactly as before.
+def _ranked(counter, q, default_n):
+    """The rows of a ranking: the `default_n` largest (Counter.most_common, as before) unless the query asks for
+    another number (`q.top`) or for the smallest first (`q.order == "least"`: fewest first, ties by key)."""
+    n = default_n if q is None or getattr(q, "top", None) is None else q.top
+    if q is None or getattr(q, "order", "most") != "least":
+        return counter.most_common(n)
+    return sorted(counter.items(), key=lambda kv: (kv[1], kv[0]))[:n]
+
+
+def _no_shorts(q):
+    """Without Shorts: today's "without shorts", or a tool's `length: long` (videos KNOWN to be long, X6)."""
+    return bool(getattr(q, "without_shorts", False) or getattr(q, "length", "any") == "long")
+
+
+def slug(name):
+    """An area's or a collection's slug in a ref: "art and design" -> "art-and-design"."""
+    return re.sub(r"[^a-z0-9]+", "-", Hm.strip_accents((name or "").lower())).strip("-")
+
+
+def channel_key(name):
+    """A channel's key in a ref: "c" + the first 8 hex of sha1 of its normalised name (history._squash)."""
+    import hashlib
+    return "c" + hashlib.sha1(Hm._squash(name).encode("utf-8")).hexdigest()[:8]
+
+
+def ref_mask(view, idx, facts, ref):
+    """Per item (the index's order): the items a typed ref names. A ref of an unknown form names nothing."""
+    import numpy as np
+    n = len(idx.ids)
+    form, _, val = (ref or "").partition(":")
+    if form == "area":
+        hit = [k for k, a in enumerate(facts.area_names) if slug(a) == val]
+        return np.isin(facts.area, hit) if hit else np.zeros(n, bool)
+    if form == "theme":
+        try:
+            tid = int(val)
+        except ValueError:
+            return np.zeros(n, bool)
+        return facts.theme == int(facts.canon.get(tid, tid))
+    if form == "channel":
+        cids = [k for k, c in enumerate(idx.creators) if channel_key(c) == val]
+        return np.isin(idx.creator, cids) if cids else np.zeros(n, bool)
+    if form == "collection":
+        return np.array([any(slug(c) == val for c in (view.items[i].collections or [])) for i in idx.ids], dtype=bool)
+    if form == "words":
+        return np.array([bool(val) and Hm.holds(view.items[i].caption or "", val) for i in idx.ids], dtype=bool)
+    return np.zeros(n, bool)
+
+
+def scope_mask(view, idx, facts, q):
+    """Per item: the items a query's scope keeps: any of `only_refs` (an OR), none of `exclude_refs` (a NOT), and for
+    `length == "short"` the known Shorts and the Instagram reels. (`length == "long"` is the without-Shorts filter.)"""
+    import numpy as np
+    n = len(idx.ids)
+    keep = np.ones(n, bool)
+    only = list(getattr(q, "only_refs", None) or [])
+    if only:
+        anym = np.zeros(n, bool)
+        for r in only:
+            anym |= ref_mask(view, idx, facts, r)
+        keep &= anym
+    for r in getattr(q, "exclude_refs", None) or []:
+        keep &= ~ref_mask(view, idx, facts, r)
+    if getattr(q, "length", "any") == "short":
+        reel = np.array([idx.platform[k] == 1 and view.items[i].media in ("reel", "video")
+                         for k, i in enumerate(idx.ids)], dtype=bool)
+        keep &= (facts.short == 1) | reel
+    return keep
+
+
+def _scoped(q):
+    return bool(getattr(q, "only_refs", None) or getattr(q, "exclude_refs", None)
+                or getattr(q, "length", "any") == "short")
+
+
+def sensitive_items(view, idx, facts, unlock=None):
+    """Per item: (hidden, topic) arrays. Hidden: an item of a theme in a sensitive category (or a theme marked
+    sensitive) or one whose own text profile.sensitive flags; `topic`: the sensitive topic it is about (the theme's
+    category, else outside.sensitive_topic of its text). An item of the `unlock` topic is not hidden (8.4: the unlock is
+    per topic, set by code from their message)."""
+    import numpy as np
+    from . import outside as O
+    from . import profile as P
+    from . import themes as T
+    memo = facts.__dict__.setdefault("_sensitive", {})
+    if "all" not in memo:
+        th = facts.th
+        topics = []
+        for i in idx.ids:
+            topic = None
+            if th is not None:
+                t = th.theme_id(i)
+                meta = th.themes.get(t) if t is not None else None
+                if meta:
+                    cat = meta.get("category") or (th.fields.get(meta.get("field")) or {}).get("category")
+                    if cat in T.SENSITIVE_CATEGORIES:
+                        topic = cat
+                    elif meta.get("sensitive"):
+                        topic = cat or "sensitive"
+            cap = view.items[i].caption or ""
+            if topic is None and P.sensitive(cap):
+                topic = O.sensitive_topic([cap]) or "sensitive"
+            topics.append(topic)
+        memo["all"] = (np.array([t is not None for t in topics], dtype=bool), topics)
+    hid, topics = memo["all"]
+    if unlock:
+        hid = hid & np.array([t != unlock for t in topics], dtype=bool)
+    return hid, topics
+
+
+def _hidden_counts(idx, facts, hev, so, eo, rows, q):
+    """What the hidden events of a scope hold: how many items, and whether a hidden entity would have ranked above the
+    first row shown of each list (channels, themes, areas)."""
+    import numpy as np
+    m = hev.copy()
+    if so is not None:
+        m &= idx.day >= so
+    if eo is not None:
+        m &= idx.day <= eo
+    items = np.unique(idx.it[m])
+    out = {"sensitive": int(len(items)), "above": {}}
+    least = getattr(q, "order", "most") == "least"
+    th = facts.th
+    groups = {"channels": Counter(int(c) for c in idx.creator[items] if c >= 0)}
+    if th is not None:
+        raw = Counter()
+        for k in items.tolist():
+            t = th.theme_id(idx.ids[k])
+            if t is not None:
+                raw[t] += 1
+        groups["themes"] = raw
+        topics = facts.__dict__.get("_sensitive", {}).get("all", (None, []))[1]
+        groups["areas"] = Counter(topics[k] for k in items.tolist() if topics and topics[k])
+    for name, cnt in groups.items():
+        shown_rows = [r for r in rows.get(name) or [] if isinstance(r, dict) and isinstance(r.get("items"), int)]
+        if not cnt:
+            out["above"][name] = False
+        elif not shown_rows:
+            out["above"][name] = True
+        elif least:
+            out["above"][name] = min(cnt.values()) < shown_rows[0]["items"]
+        else:
+            out["above"][name] = max(cnt.values()) > shown_rows[0]["items"]
+    return out
+
+
+def _ids_from_events(idx, ev, so, eo, kind, n=10):
+    """The items of the scope's events in the order a first, a last, a list or a top-items row reads them."""
+    import numpy as np
+    m = ev.copy()
+    if so is not None:
+        m &= idx.day >= so
+    if eo is not None:
+        m &= idx.day <= eo
+    its, secs = idx.it[m].tolist(), idx.sec[m].tolist()
+    if kind == "top_items":
+        cnt = Counter(its)
+        last = {}
+        for p, t in zip(its, secs):
+            last[p] = max(t, last.get(p, t))
+        order = sorted(cnt, key=lambda p: (-cnt[p], -last[p], p))
+        return [idx.ids[p] for p in order[:n]]
+    seen = {}
+    for t, p in sorted(zip(secs, its), reverse=(kind != "first")):
+        seen.setdefault(p, t)
+        if len(seen) >= n:
+            break
+    return [idx.ids[p] for p in seen]
+
+
 class Scope:
     """The events in a window, after the question's filters, and their distinct items, with per-item counts."""
 
@@ -320,7 +493,7 @@ def _length_by(it, key, facts, idx):
     return {j: (float(secs[j]), int(n[j]), int(sh[j])) for j in np.nonzero(n)[0].tolist()}
 
 
-def _theme_rows(view, sc, prev, facts, th):
+def _theme_rows(view, sc, prev, facts, th, q=None):
     """The themes of a scope, largest first, with their share against `prev` (a Scope or None)."""
     import numpy as np
     idx = sc.idx
@@ -337,7 +510,7 @@ def _theme_rows(view, sc, prev, facts, th):
     yt = it[(idx.platform[it] == 0) & (facts.length[it] > 0)]
     total_secs = float(facts.length[yt].sum()) if len(yt) else 0.0
     cnt, last = sc.per_item()
-    for tid, c in tcount.most_common(THEMES_MAX):
+    for tid, c in _ranked(tcount, q, THEMES_MAX):
         mem = it[facts.theme[it] == tid]
         chans = Counter(idx.creator[mem][idx.creator[mem] >= 0].tolist()).most_common(3)
         order = np.lexsort((-last[mem], -cnt[mem]))[:EXAMPLES]
@@ -370,7 +543,7 @@ def _first_by_creator(idx, all_ev):
     return first, big
 
 
-def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, first=None, prev=None):
+def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, first=None, prev=None, q=None):
     import numpy as np
     it = sc.items
     pc = Counter(idx.creator[prev.items][idx.creator[prev.items] >= 0].tolist()) if prev is not None else None
@@ -381,7 +554,7 @@ def _channel_rows(view, sc, idx, facts, th, all_ev, start_o, top=CHANNELS_MAX, f
     days = sc.days_by(idx.creator)
     lens = _length_by(it, idx.creator, facts, idx)
     out = []
-    for cid, n in c.most_common(top):
+    for cid, n in _ranked(c, q, top):
         mem = it[idx.creator[it] == cid]
         tc = Counter(facts.theme[mem][facts.theme[mem] >= 0].tolist())
         secs, known, shorts = lens.get(cid, (0.0, 0, 0))
@@ -625,8 +798,13 @@ def window_words(q, w, start, end, rec, plats, lang="en"):
 
 
 # ================================================================ the sheet
-def sheet(view, rec, q, today, tz, prof=None, text=None):
-    """The fact sheet of `q` (a history.HistoryQuery), or None when the record has nothing in scope."""
+def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, unlock=None):
+    """The fact sheet of `q` (a history.HistoryQuery), or None when the record has nothing in scope.
+
+    The brain's tools (design/brain_v1/SPEC.md 8.4): `hide_sensitive` leaves out every item of a sensitive topic (a
+    theme of a sensitive category, or an item whose own text profile.sensitive flags) except those of `unlock` (one
+    topic, set by code from their message), and adds `hidden` (how many were left out, and whether one would have
+    ranked above the first row shown) and `ranked` (how many rows each ranking had). Off, the sheet is as before."""
     import numpy as np
     t0 = time.monotonic()
     idx, facts = index(view, tz)
@@ -642,10 +820,15 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     kinds = Hm.HOW_KINDS[q.how]
     pcodes = [0 if p == "youtube" else 1 for p in plats]
     base_ev = idx.kind_mask(kinds) & np.isin(idx.platform[idx.it], pcodes)
+    base_all, hidm = base_ev, None
+    if hide_sensitive:   # the brain's tools (8.4): the sensitive topics' events are not in scope, nor in its base
+        hidm = sensitive_items(view, idx, facts, unlock)[0][idx.it]
+        base_ev = base_ev & ~hidm
+    scoped = bool(hide_sensitive or _scoped(q))
+    ev_filters = []      # the event filters of the scope, kept to count the hidden events under the same filters
     kind = sheet_kind(q)
     out = {"question": text, "kind": kind, "filters": {"topic": q.topic[0] if q.topic and kind != "compare_topics"
-                                                       else None, "without_shorts": bool(getattr(q, "without_shorts",
-                                                                                                 False)),
+                                                       else None, "without_shorts": _no_shorts(q),
                                                        "platform": q.platform, "channel": q.channel, "how": q.how}}
     start, end = Hm.resolve(q.window, rec, plats, today)
     newest = max((rec.ends[p] for p in plats if p in rec.ends), default=None)
@@ -685,6 +868,7 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     if q.channel:
         cid = idx.creators.index(q.channel) if q.channel in idx.creators else -2
         ev &= idx.creator[idx.it] == cid
+        ev_filters.append(idx.creator[idx.it] == cid)
     topic_tids = []
     topic_mask = None
     if q.topic and kind != "compare_topics":
@@ -694,13 +878,18 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
             topic_mask |= m
             topic_tids += [t for t in tids if t not in topic_tids]
         out["filters"]["topic_themes"] = [th.shown(t) for t in topic_tids] if th is not None else []
-    if getattr(q, "without_shorts", False):
+    if _scoped(q):   # the brain's tools (11.3): only, exclude, short
+        sm = scope_mask(view, idx, facts, q)[idx.it]
+        ev &= sm
+        ev_filters.append(sm)
+    if _no_shorts(q):
         # round 12, pass 6 (X6, the hand check: "22% of your long videos" was of every YouTube video not known to be a
         # Short, 8% of them of no known length: 24% of the long ones): without Shorts is the videos KNOWN to be long,
         # the set its words name ("of your long videos"); a video of no known length may be a Short and is left out
         sh = facts.short != 0
         cut = ev & sh[idx.it]
         ev &= ~sh[idx.it]
+        ev_filters.append(~sh[idx.it])
     so = eff_start.toordinal() if eff_start else None
     eo = eff_end.toordinal() if eff_end else None
     ev_other = None
@@ -712,8 +901,9 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
         wdm = idx.wd == q.weekday
         ev_other = ev & ~wdm
         ev = ev & wdm
+        ev_filters.append(wdm)
         out["window"]["words"] = f"on {day_}, over {out['window']['words']}"
-    if getattr(q, "without_shorts", False):
+    if _no_shorts(q):
         cut_w = cut & ((idx.day >= so) if so is not None else True) & ((idx.day <= eo) if eo is not None else True)
         left_out = {"shorts": int(len(np.unique(idx.it[cut_w & (idx.platform[idx.it] == 0) &
                                                         (facts.short[idx.it] == 1)]))),
@@ -726,6 +916,7 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     ev_pre = ev.copy()   # round 12, pass 5: the other filters (without Shorts, a channel), the topic not yet applied
     if topic_mask is not None:
         ev = ev & topic_mask[idx.it]
+        ev_filters.append(topic_mask[idx.it])
     sc = Scope(idx, facts, ev, so, eo)
     # the equal window just before (or the other window of a comparison)
     prev, prev_words, prev_clipped = None, None, False
@@ -747,15 +938,25 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
     out["totals"] = sc.totals()
     if prev is not None:
         out["previous"] = dict(prev.totals(), words=prev_words, clipped=prev_clipped)
-    rows, unthemed = _theme_rows(view, sc, prev, facts, th)
+    rows, unthemed = _theme_rows(view, sc, prev, facts, th, q=q)
     out["themes"] = rows
     out["unthemed"] = int(unthemed)
     if th is not None and len(sc.items):
         fc = Counter(int(f) for f in facts.field[sc.items] if f >= 0)
         out["fields"] = [{"name": th.field_name(f), "items": int(c), "share": _share(c, len(sc.items))}
                          for f, c in fc.most_common(6) if th.field_name(f)]
-    out["channels"] = _channel_rows(view, sc, idx, facts, th, base_ev, so, prev=prev)
-    out["areas"] = _area_rows(sc, prev, facts, out["themes"])
+    out["channels"] = _channel_rows(view, sc, idx, facts, th, base_ev, so, prev=prev, q=q)
+    out["areas"] = _area_rows(sc, prev, facts, out["themes"], q=q)
+    if scoped:   # the brain's tools: how many rows each ranking had (its `rows_total`), and what was left out
+        out["ranked"] = {"themes": int(len(np.unique(facts.theme[sc.items][facts.theme[sc.items] >= 0]))),
+                         "channels": int(len(np.unique(idx.creator[sc.items][idx.creator[sc.items] >= 0]))),
+                         "areas": int(len(np.unique(facts.area[sc.items][facts.area[sc.items] >= 0])))}
+    if hidm is not None:
+        hev = base_all & hidm
+        for f_ in ev_filters:
+            hev = hev & f_
+        out["hidden"] = _hidden_counts(idx, facts, hev, so, eo, out, q)
+        out["hidden"]["friends"] = int(getattr(view, "friends", 0) or 0)
     if kind == "channels":   # round 12, pass 2 (T11): what the ranking says: the area most of the top 5 are
         top5 = [c for c in out["channels"][:5] if c.get("area")]
         if top5:
@@ -805,7 +1006,12 @@ def sheet(view, rec, q, today, tz, prof=None, text=None):
                                                                                             "refresh"))
         except Exception:  # noqa: BLE001 - the list is extra; the sheet stands without it
             ids = []
-        if kind in ("first", "last") and topic_mask is not None:
+        if scoped and kind == "day":   # the brain's tools: the code reply's list knows nothing of the scope
+            in_scope = set(sc.items.tolist())
+            ids = [i for i in ids if idx.pos.get(i) in in_scope]
+        elif scoped and q.kind in ("list", "top_items"):
+            ids = _ids_from_events(idx, ev, so, eo, q.kind, n=q.offset + q.n)[q.offset:]
+        if kind in ("first", "last") and (topic_mask is not None or scoped):
             # round 12, pass 5 (the audit: "You first opened a gaming video on 5 April 2020" where the sheet's own
             # topic, its themes and its words, holds one from 21 August 2019): a first or a last is of the sheet's
             # own scope, its items in the order of their first (or last) open
@@ -914,7 +1120,7 @@ SHIFT_POINTS = 0.10    # T5: Shorts' share moved by at least 10 points against t
 MOVE_MIN = 0.03        # U5: an area's share moved by at least 3 points against the weeks before
 
 
-def _area_rows(sc, prev, facts, theme_rows):
+def _area_rows(sc, prev, facts, theme_rows, q=None):
     """T3: the areas of a scope, largest first: items, share of everything opened, the share before and its change
     (a FRACTION, as the writer reads it), and the themes inside each (from the scope's theme rows)."""
     it = sc.items
@@ -925,7 +1131,7 @@ def _area_rows(sc, prev, facts, theme_rows):
     pn = len(prev.items) if prev is not None else 0
     pcnt = Counter(facts.area[prev.items][facts.area[prev.items] >= 0].tolist()) if pn else Counter()
     out = []
-    for a, c in ac.most_common(AREAS_MAX):
+    for a, c in _ranked(ac, q, AREAS_MAX):
         name = facts.area_names[a]
         row = {"name": name, "items": int(c), "share": _share(c, n),
                "themes": [{"name": t["name"], "share": t["share"]} for t in theme_rows
@@ -1485,7 +1691,7 @@ def before_window(w, a, b):
 def _offers(q, kind, out):
     offers = []
     t = out.get("totals") or {}
-    if not getattr(q, "without_shorts", False) and (t.get("shorts") or 0) > 0 and kind not in ("first", "last"):
+    if not _no_shorts(q) and (t.get("shorts") or 0) > 0 and kind not in ("first", "last"):
         offers.append("without_shorts")
     # round 12, pass 2 (T11): a ranking of channels is narrowed by its broad areas ("only gaming"), not by a theme
     # round 12, pass 3 (U6): a top answer (or a change) leads with its areas: those are offered first, then its
@@ -1510,8 +1716,9 @@ def _offers(q, kind, out):
     return offers
 
 
-def build(bot, person, q, now, text=None):
-    """The fact sheet of the history question `q` for `person`, or None. Code only: no model, no network."""
+def build(bot, person, q, now, text=None, hide_sensitive=False, unlock=None):
+    """The fact sheet of the history question `q` for `person`, or None. Code only: no model, no network.
+    `hide_sensitive`, `unlock`: see sheet() (the brain's tools; off as before)."""
     try:
         h = person["handle"]
         tz = person.get("timezone") or "UTC"
@@ -1522,5 +1729,7 @@ def build(bot, person, q, now, text=None):
         prof = P.get(bot.store, h)
     except Exception:  # noqa: BLE001 - no sheet: the writer is not called and today's answer stands
         return None
+    if hide_sensitive:
+        return sheet(view, rec, q, today, tz, prof, text=text, hide_sensitive=True, unlock=unlock)
     return sheet(view, rec, q, today, tz, prof, text=text)
 
