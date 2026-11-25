@@ -638,40 +638,81 @@ def model_keys(rec):
     return out
 
 
-def audit_sent(h, t, rec, question):
-    """The auditor on what was SENT: every value marker of the sent model sentences recounted (eval_claims.audit_ledger
-    on the marker form), and the final text read by TextAudit over its cited result (a code lead: audit_lead).
-    -> [finding rows that are not ok], rows checked."""
+def audit_sent(h, results, unlock, rec, question):
+    """The auditor on what was SENT: every value marker of the model's sentences that went out recounted
+    (eval_claims.audit_ledger on their marker form), each such sentence read by TextAudit over the result it cites, and
+    a code lead through audit_lead. `results`: {rid: envelope} of the turn. -> [finding rows not ok], rows checked."""
     from mvp import eval_claims as EC
-    lib = h.audit_lib_for(t.unlock)
+    lib = h.audit_lib_for(unlock)
     calls = {c["rid"]: {"tool": c["name"], "args": c["args"]} for c in rec["calls"] if c.get("rid")}
     rows = []
     src = rec["lead_source"]
+    sent = []
     if src in ("model", "model_after_repair"):
         k = len(rec["verdicts"]) - 1 if src == "model_after_repair" else 0
         sent = [o for o in rec["verdicts"][k]["outcomes"] if o["kept"] and o["where"] in ("lead", "point")]
+    elif rec["verdicts"]:
+        sent = [o for o in rec["verdicts"][-1]["outcomes"] if o["kept"] and o["where"] == "point"]
+    if sent:
         marked = " ".join(o["text"] for o in sent)
-        rows += EC.audit_ledger(lib, EC.cited_cells(marked), t.results, calls, question, TODAY)
-        rid = rec["answer"].get("rid")
-        env = t.results.get(rid) if rid else None
-        if env is not None and "sheet" in env and env.get("tool") not in ("find", "search", "learned"):
+        rows += EC.audit_ledger(lib, EC.cited_cells(marked), results, calls, question, TODAY)
+        by_rid = {}
+        for o in sent:
+            by_rid.setdefault(o.get("rid") or rec["answer"].get("rid"), []).append(o["sent"] or "")
+        for rid, texts in by_rid.items():
+            env = results.get(rid) if rid else None
+            if env is None or "sheet" not in env or env.get("tool") in ("find", "search", "learned"):
+                continue
             ctx, _w = EC.brain_ctx(lib, env, calls.get(rid), question, TODAY)
             F = EC.Findings("text", env.get("tool"))
-            text = " ".join([rec["answer"]["lead"]] + list(rec["answer"]["points"]))
-            EC.TextAudit(ctx, F).run(text)
+            EC.TextAudit(ctx, F).run(" ".join(texts))
             rows += [dict(r, audit="text:" + r["audit"]) for r in F.rows]
-    elif src == "code" and rec.get("code_lead") and rec["code_lead"].get("rid"):
+    if src == "code" and rec.get("code_lead") and rec["code_lead"].get("rid"):
         cl = rec["code_lead"]
-        env = t.results.get(cl["rid"])
+        env = results.get(cl["rid"])
         marked = None
         if cl["how"] == "template":
             from mvp.brain import fallback as FB, verify as V
-            forms = [x for x in FB.templates(V.Ledger(t.results).get(cl["rid"])) if V.strip_markers(x) == cl["lead"]]
+            forms = [x for x in FB.templates(V.Ledger(results).get(cl["rid"])) if V.strip_markers(x) == cl["lead"]]
             marked = forms[0] if forms else None
         rows += EC.audit_lead(lib, env, cl["lead"], marked, call=calls.get(cl["rid"]), question=question, today=TODAY)
     bad = [{k: r.get(k) for k in ("audit", "kind", "where", "said", "recount", "note", "sentence")}
            for r in rows if not r["ok"]]
     return bad, len(rows)
+
+
+def reaudit(a):
+    """Offline: the auditor again over a saved run folder (the envelopes are in each record), and summary.json
+    rewritten; the first summary is kept as summary.first.json. No model call."""
+    import glob
+    h = Harness.scratch()
+    recs = []
+    for f in sorted(glob.glob(os.path.join(a.run, "*.json"))):
+        if os.path.basename(f).startswith("summary"):
+            continue
+        with open(f, encoding="utf-8") as fh:
+            rec = json.load(fh)
+        results = {c["rid"]: c["result"] for c in rec["calls"] if c.get("rid")}
+        bad, checked = audit_sent(h, results, h.turn(rec["message"]).unlock, rec, rec["message"])
+        rec["audit"] = {"checked": checked, "findings": bad}
+        with open(f, "w", encoding="utf-8") as fh:
+            json.dump(rec, fh, indent=1, default=str, ensure_ascii=False)
+        recs.append(rec)
+    sp = os.path.join(a.run, "summary.json")
+    old = {}
+    if os.path.exists(sp):
+        with open(sp, encoding="utf-8") as fh:
+            old = json.load(fh)
+        if not os.path.exists(os.path.join(a.run, "summary.first.json")):
+            with open(os.path.join(a.run, "summary.first.json"), "w", encoding="utf-8") as fh:
+                json.dump(old, fh, indent=1, default=str, ensure_ascii=False)
+    s = summarize(recs, old.get("settings"))
+    if "ledger" in old:
+        s["ledger"] = old["ledger"]
+    with open(sp, "w", encoding="utf-8") as fh:
+        json.dump(s, fh, indent=1, default=str, ensure_ascii=False)
+    print(json.dumps(s["G1_auditor"], indent=1, default=str))
+    return 0
 
 
 def dropped_of(rec):
@@ -714,7 +755,7 @@ def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log
         t = h.turn(m["text"], screen="", last_window=last, search=FakeEngine(), learned=fake_learned)
         rec = BL.run_turn(provider, t, m["text"], screen)
         g2 = compare_plans(hand_keys(hand), model_keys(rec))
-        bad, checked = audit_sent(h, t, rec, m["text"])
+        bad, checked = audit_sent(h, t.results, t.unlock, rec, m["text"])
         rec.update(id=p["id"], n=m["n"], key=f"{p['id']}.{m['n']}", half=half_of(p["id"]), g2=g2,
                    hand_plan=[{"tool": c["tool"], "args": c["args"]} for c in hand["calls"]],
                    audit={"checked": checked, "findings": bad}, dropped=dropped_of(rec))
@@ -927,6 +968,8 @@ def main(argv=None):
     p4.add_argument("--parallel", type=int, default=2, help="conversations at once (at most 4)")
     p4.add_argument("--max-usd", type=float, default=1.50, help="no new message once the run spent this much")
     p4.add_argument("--loose", default="give_answer", help="tools sent without strict (comma separated)")
+    p6 = sub.add_parser("audit", help="offline: the auditor again over a saved run folder, summary.json rewritten")
+    p6.add_argument("--run", required=True)
     p5 = sub.add_parser("count", help="count_tokens (free) on the real prefix and a typical turn")
     p5.add_argument("--out", default=None)
     p5.add_argument("--loose", default="give_answer")
@@ -935,6 +978,8 @@ def main(argv=None):
         return run_live(a)
     if a.mode == "count":
         return count_prefix(a)
+    if a.mode == "audit":
+        return reaudit(a)
     if a.mode == "planted":
         s = planted()
         by = s.pop("by_class")

@@ -410,3 +410,17 @@ def test_present_lifts_the_sheet_and_keeps_it_nested_on_a_clash():
     env["sheet"]["meta"] = {"x": 1}
     assert "sheet" in json.loads(BL.present(env))
     assert json.loads(BL.present({"is_error": True, "error": "no"})) == {"error": "no", "is_error": True}
+
+
+def test_the_auditor_reads_each_sent_sentence_against_the_result_it_cites(harness):
+    from mvp import eval_brain as E
+    point = "In 2024, you opened 8[r2.totals.items] videos."
+    rec, _p, t = run(harness, [[bd(), bd(Y2024)], [ga(TRUE_LEAD, [point])]],
+                     message="which channels did I watch most in October, and how many videos in 2024?")
+    assert rec["lead_source"] == "model" and rec["sentences"]["kept_sent"] == 2, rec["verdicts"]
+    bad, checked = E.audit_sent(harness, t.results, t.unlock, rec, rec["message"])
+    assert checked > 0 and bad == []
+    # a false cell is found (the auditor's own recount, not the verifier's)
+    rec["verdicts"][0]["outcomes"][1]["text"] = "In 2024, you opened 9[r2.totals.items] videos."
+    bad, _n = E.audit_sent(harness, t.results, t.unlock, rec, rec["message"])
+    assert any(b["kind"] == "value" and str(b["said"]).endswith("9") for b in bad)

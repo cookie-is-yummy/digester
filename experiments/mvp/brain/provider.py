@@ -158,6 +158,14 @@ class AnthropicProvider:
                         continue
                     kind = (f"http {mine.status} {mine.kind}" if isinstance(mine, ai.ClaudeHTTPError)
                             else type(mine).__name__)
+                    if self.log and (isinstance(mine, ai.ClaudeTimeout) or getattr(mine, "maybe_sent", False)):
+                        # sent and maybe billed with no usage back: an over-estimate goes to the ledger (the whole
+                        # prompt at the uncached price and 1,000 output tokens), so the cap still counts it
+                        est = est_in / 1e6 * p["input_per_m"] + 1000 / 1e6 * p.get("output_per_m", 0)
+                        ai.log_batch("anthropic", self.model, self.purpose, 1, int(est_in), 1000, est,
+                                     round(time.time() - t0, 2), prompt_version=self.prompt_version + "+estimate")
+                        with self._lock:
+                            self.spent += est
                     raise ProviderError(kind, retries, round(time.time() - t0, 2)) from None
         finally:
             with ai._pending_lock:
