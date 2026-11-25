@@ -66,3 +66,20 @@ calendar, places on a map, to-dos, inspiration from their own history, suggestio
 proactive when the person is not; linking Instagram and Google during setup so exports arrive without manual
 steps; and a model cheaper than Haiku for trivial reads. Much of the doing side exists already under
 `actions/` behind today's bot. None of it is built in steps 1 and 2.
+
+## After step 1 (26 Nov 2026)
+
+Step 1 (tools and verifier, offline) is merged. It missed its own bar on one line that matters: an independent
+auditor's true sentences were kept 42 of 61 (bar 97%), and the fixed verifier has not been attacked again. So the
+full step 2 waits for a thin live slice on Haiku (the loop, the prompt, the verifier with one repair) with a gate
+fixed before the run: nothing false sent, 90% understood, 85% of answers led by the model's own sentence, at most
+15% of its sentences dropped, median 6 s, 0.5 cents a message; tuned on half the eval set and judged on the other
+half by a hand recount and a fresh attack. Only the made-up test library is sent to the model.
+
+The founder's answers to step 1's questions:
+- A count from a result that leaves out private topics is sent with the line "Leaving out topics you keep
+  private." Accepted.
+- A part of a period ("late October") is refused for now; the bot asks for the days. A reader may come later.
+- Scheduled Takeout is accepted as a route for recurring exports. If a more frequent official route exists for
+  Instagram, the same is wanted for YouTube and Google. Being researched against official sources; the result goes
+  to A-022 (part 5), which stays Proposed.
