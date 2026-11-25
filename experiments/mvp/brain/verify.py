@@ -2752,8 +2752,24 @@ _TAUGHT = re.compile(r"\b(?:taught|teaches|told|tells|showed|shows|helped|helps|
                      r"loves|knows)\b", re.I)
 
 
+def _library_window(raw, markers, res, turn):
+    """mvp20 fix, after the final live runs (the held-out second look's I01.0: "3[r1.library.saved_not_opened[0].n]
+    saved Home cooking posts were not opened in 2024" of saves made in 2026): the library block (saved and never
+    opened) counts every save of their history, whatever the window, so it is said with no time of the window's."""
+    if not any(mk.rid == res.rid and mk.rest.startswith("library.") for mk in markers):
+        return None
+    wins = _windows_of(res, True)
+    text = re.sub(r"where your (?:youtube |instagram )?export ends", " ", _blank_marked(raw, markers), flags=re.I)
+    if _time_spans(text, wins, turn) or _LATELY.search(text):
+        return "wrong_window", f"{res.rid}.library counts every save of their history, not the window's"
+    return None
+
+
 def _fix_rules(raw, markers, res, ledger, turn, low, period_cells, cites_prev):
     """The mvp20 fix rules of one sentence (None or (reason, detail))."""
+    r = _library_window(raw, markers, res, turn)
+    if r:
+        return r
     if _MOTIVE.search(low):
         return "psych", "why they opened something is not in the export"
     if _TAUGHT.search(low):

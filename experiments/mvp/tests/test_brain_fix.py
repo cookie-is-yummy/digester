@@ -344,3 +344,20 @@ def test_what_the_assistant_found_or_can_count_is_a_limits_line(s):
     assert not v.lead_ok and "limits" in v.lead[0].reasons
     v = _check("ch_oct", "Here is what I found in October 2026.")   # a plain opening stays
     assert v.lead_ok, [o.reasons for o in v.lead]
+
+
+def test_the_library_block_is_said_with_no_time_of_the_window():
+    # the held-out second look's I01.0: "3 saved Home cooking posts were not opened in 2024" of saves made in 2026
+    led, _turn = _ledger("area_saved_lately")
+    res = next(iter(led.by_rid.values()))
+    lib = (res.sheet.get("library") or {}).get("saved_not_opened") or []
+    if not lib:
+        pytest.skip("no library row on this ledger")
+    n, theme = lib[0]["n"], lib[0]["theme"]
+    lead = "In the 4 weeks up to 30 October 2026, you saved 6[r1.totals.items] items."
+    v = _check("area_saved_lately", lead, [f"{n}[r1.library.saved_not_opened[0].n] saved {theme} posts were not "
+                                           f"opened in the 4 weeks up to 30 October 2026."])
+    assert "wrong_window" in v.outcomes[1].reasons, v.outcomes[1].reasons
+    v = _check("area_saved_lately", lead, [f"You saved {n}[r1.library.saved_not_opened[0].n] {theme} posts that you "
+                                           f"never opened."])
+    assert "wrong_window" not in v.outcomes[1].reasons, v.outcomes[1].reasons
