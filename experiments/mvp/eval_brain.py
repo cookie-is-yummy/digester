@@ -406,7 +406,10 @@ def planted():
     from mvp.brain import planted as BP
     sc = BP.score()
     by = {}
+    apart = ("audit_true", "attack", "attack_true")
     for r in sc["rows"]:
+        if r.get("source") in ("attack", "attack_true"):
+            continue   # mvp20 fix: the verifier attack's cases are scored apart (attack_kept_false, by_source)
         b = by.setdefault(r.get("class") or "?", {"false": 0, "dropped": 0, "dropped_expected": 0, "true": 0,
                                                     "kept": 0})
         if r["expect"] == "dropped":
@@ -421,11 +424,15 @@ def planted():
     s["bar"] = {"false_all_dropped": sc["false_dropped"] == sc["false"],
                 "true_kept_97": bool(sc["true"]) and sc["true_kept"] / sc["true"] >= 0.97}
     s["by_class"] = by
-    s["kept_false"] = [r["id"] for r in sc["rows"] if r["expect"] == "dropped" and r["kept"]]
+    s["kept_false"] = [r["id"] for r in sc["rows"] if r["expect"] == "dropped" and r["kept"]
+                       and r.get("source") not in apart]
     s["dropped_true"] = [r["id"] for r in sc["rows"] if r["expect"] == "kept" and not r["kept"]
-                         and r.get("source") != "audit_true"]
+                         and r.get("source") not in apart]
     # the step 1 audit's own true sentences, scored apart from the bar (brain/planted.py)
     s["audit_true_dropped"] = [r["id"] for r in sc["rows"] if r.get("source") == "audit_true" and not r["kept"]]
+    # mvp20 fix: the verifier attack's sentences, scored apart (false ones kept, true ones dropped)
+    s["attack_kept_false"] = [r["id"] for r in sc["rows"] if r.get("source") == "attack" and r["kept"]]
+    s["attack_true_dropped"] = [r["id"] for r in sc["rows"] if r.get("source") == "attack_true" and not r["kept"]]
     s["wrong_reason"] = [r["id"] for r in sc["rows"] if r["expect"] == "dropped" and not r["kept"]
                          and r.get("reason_ok") is False]
     return s

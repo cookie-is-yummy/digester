@@ -7,7 +7,8 @@ A case: {"id", "source" ("new" | "insight_v5"), "class", "ledger" (a key of "led
 "target" ("lead", "lead:N", "point:N", "outside:N", "item:N"), "expect" ("kept" | "dropped" | "private_line": dropped,
 or kept with code's private line), "reasons" (any one of them is the expected reason; empty: any reason), "turn"
 (optional: message, unlock, today, names, sensitive_names)}. Source "audit_true" (the step 1 audit's true sentences) is
-reported in by_source only, never in the bar's "true" counts.
+reported in by_source only, never in the bar's "true" counts. mvp20 fix: the verifier attack's cases (sources "attack"
+and "attack_true") are reported in by_source only too; an attack point case carries "forms" (one per carrier lead).
 """
 import argparse
 import json
@@ -26,7 +27,15 @@ def load(path=PATH):
 
 
 def outcome(case, ledgers):
-    """(kept: bool, reasons: [str], verdict)"""
+    """(kept: bool, reasons: [str], verdict). A case with "forms" (the attack's point cases: one form per true carrier
+    lead) counts as kept when ANY of its forms keeps the target, so a false point must be dropped under every carrier."""
+    if case.get("forms"):
+        best = None
+        for f in case["forms"]:
+            r = outcome(dict(case, form=f, forms=None), ledgers)
+            if best is None or (r[0] and not best[0]):
+                best = r
+        return best
     led = V.Ledger(ledgers[case["ledger"]])
     t = case.get("turn") or {}
     today = date.fromisoformat(t["today"]) if t.get("today") else None
@@ -72,10 +81,18 @@ def score(data=None):
                "kept": kept, "reasons": reasons}
         src = out["by_source"].setdefault(c.get("source") or "new", {"false": 0, "false_dropped": 0, "true": 0,
                                                                      "true_kept": 0})
-        if c.get("source") == "audit_true":
-            # the audit's own true sentences: scored apart (the 97% bar is the planted set's true twins)
+        if c.get("source") in ("audit_true", "attack_true"):
+            # the audits' own true sentences: scored apart (the 97% bar is the planted set's true twins)
             src["true"] += 1
             src["true_kept"] += kept
+            out["rows"].append(row)
+            continue
+        if c.get("source") == "attack":
+            # mvp20 fix: the verifier attack's false sentences, scored apart from the builder's own cases (the bar's
+            # "false" line stays the builder's and the step 1 audit's)
+            src["false"] += 1
+            src["false_dropped"] += not kept
+            row["expect"] = "dropped"
             out["rows"].append(row)
             continue
         if want == "dropped":
