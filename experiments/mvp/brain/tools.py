@@ -344,52 +344,24 @@ REELS_NOTE = ("`shorts` counts YouTube Shorts; `reels` counts Instagram reels an
               "takes both.")
 
 
-def _reels_cells(raw, sheet, meta):
-    """Toolfix 4 (totals.shorts left out Instagram reels while the length filter counted them as short): facts'
-    count of the reels beside the Shorts, in `totals` and `previous`."""
-    for k in ("totals", "previous"):
-        if isinstance(sheet.get(k), dict) and isinstance((raw.get(k) or {}).get("reels"), int):
-            sheet[k]["reels"] = raw[k]["reels"]
+def _reels_note(sheet, meta):
+    """Toolfix 4 (totals.shorts left out Instagram reels while the length filter counted them as short): facts counts
+    the reels beside the Shorts (`totals.reels`, `previous.reels`); the note says which is which."""
     if any(isinstance(sheet.get(k), dict) and sheet[k].get("reels") for k in ("totals", "previous")):
         meta.setdefault("notes", []).append(REELS_NOTE)
 
 
-def _channel_names(turn, sheet):
-    """Toolfix 7 (an Instagram channel was named only by its handle, which an answer never prints): every channel row
-    keeps the handle as its own field (`handle`) and is named by the account's display name when the export has one
-    (names.displays); a top-level channel row says its platform. Item rows likewise (`channel`, `handle`)."""
-    lib = turn.lib
-    disp = N.displays(lib)
-    plat = {}
-    for it in lib.view.items.values():
-        if it.creator:
-            plat.setdefault(it.creator, it.platform)
-
-    def fix(row, name_key):
-        nm = row.get(name_key)
-        if not isinstance(nm, str) or plat.get(nm) is None:
-            return
-        if nm.startswith("@") and plat[nm] == "instagram":
+def _item_channels(turn, sheet):
+    """Toolfix 7, on the tools' own item rows: an Instagram item's `channel` is its account's display name when it has
+    one (facts.displays), and its handle is its own field (`handle`). facts names the channel rows itself."""
+    ig = {c for c in turn.lib.idx.creators if c.startswith("@")}
+    disp = N.displays(turn.lib)
+    for row in (sheet or {}).get("items") or []:
+        nm = row.get("channel") if isinstance(row, dict) else None
+        if isinstance(nm, str) and nm in ig:
             row["handle"] = nm[1:]
             if disp.get(nm):
-                row[name_key] = R.neutral(disp[nm], R.NAME_MAX)
-
-    def walk(o, key=None, depth=0):
-        if isinstance(o, dict):
-            for k, v in o.items():
-                walk(v, k, depth + 1)
-        elif isinstance(o, list):
-            for row in o:
-                if isinstance(row, dict):
-                    if key == "channels":
-                        nm = row.get("name")
-                        if depth == 1 and isinstance(nm, str) and plat.get(nm):
-                            row["platform"] = plat[nm]
-                        fix(row, "name")
-                    elif key == "items" and "item_id" in row:
-                        fix(row, "channel")
-                walk(row, None, depth + 1)
-    walk(sheet)
+                row["channel"] = R.neutral(disp[nm], R.NAME_MAX)
 
 
 def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=None, how="opened"):
@@ -399,21 +371,23 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
         for n in R.honest(sheet, how):
             if n not in meta.setdefault("notes", []):
                 meta["notes"].append(n)
-        _reels_cells(raw, sheet, meta)
+        _reels_note(sheet, meta)
     if isinstance(sheet, dict):
-        _channel_names(turn, sheet)
+        _item_channels(turn, sheet)
     whole = (meta.get("rows_of") or {}).get(keep) if keep else None
-    env = R.envelope(rid, tool, meta, sheet, cost, (time.monotonic() - t0) * 1000, keep=keep,
-                     newest=keep == "periods")
+    # toolfix 9: a timeline is cut from its oldest periods (a change keeps its first period: it is the base)
+    newest = tool == "timeline"
+    env = R.envelope(rid, tool, meta, sheet, cost, (time.monotonic() - t0) * 1000, keep=keep, newest=newest)
     shown_n = len((sheet or {}).get(keep) or []) if keep else 0
     if keep == "periods" and isinstance(whole, int) and shown_n < whole:
         # toolfix 9 (a month timeline of all history was cut to its first 24 months while complete said true): the
-        # list asked for lost rows (its oldest ones), so the result is not complete, and a note says what it holds
+        # list asked for lost rows, so the result is not complete, and a note says what it holds
         env["meta"]["complete"] = False
         ps = sheet[keep]
-        env["meta"]["notes"].append(f"Only the latest {shown_n} of {whole} periods fit in this result "
+        which = "latest" if newest else "first"
+        env["meta"]["notes"].append(f"Only the {which} {shown_n} of {whole} periods fit in this result "
                                     f"({ps[0].get('label')} to {ps[-1].get('label')}); ask for a shorter window "
-                                    "for the earlier ones.")
+                                    "for the others.")
     turn.results[rid] = env
     return env
 

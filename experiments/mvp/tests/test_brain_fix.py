@@ -59,9 +59,10 @@ def test_the_attack_ledgers_frozen_in_the_planted_set_are_todays_tools(brain):
             data.setdefault("attack_turns", {})[name] = t
         with open(PLANTED, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=1, ensure_ascii=False)
-    for name, (envs, t) in got.items():
-        assert data["ledgers"]["attack_" + name] == envs, name
-        assert data["attack_turns"][name] == t, name
+    # scratchpad mvp22 (the read tools' fixes): the frozen ledgers are one tools version behind; today's tools
+    # differ from them exactly as eval/brain_toolfix_ledger_diff.json pins (tests/brain_ledger_diff.py)
+    from mvp.tests import brain_ledger_diff as LD
+    LD.check("attack_", got, data)
 
 
 def test_every_false_sentence_of_the_attack_is_dropped_and_its_true_ones_counted():
@@ -231,6 +232,17 @@ def test_a_rank_of_rows_that_leave_most_of_the_total_out_is_not_proved(brain):
     t = TL.Turn(brain["bot"], person(brain), NOW, message="did i watch a lot of dating advice in 2024",
                 search=FakeEngine())
     env_ = TL.call(t, "breakdown", {"by": "none", "window": {"words": "2024"}})
+    # toolfix 1 (scratchpad mvp22): today's tool gives the unlocked topic its own theme row, so the gap is gone ...
+    assert env_["sheet"]["themes"][0]["name"] == "relationships" and env_["sheet"]["themes"][0]["items"] == 50
+    assert env_["sheet"]["totals"]["items"] == sum(r["items"] for r in env_["sheet"]["themes"]) == 58
+    # ... and the verifier's rule is held on the result as the slice's tools gave it (the topic in no theme row)
+    import copy
+    env_ = copy.deepcopy(env_)
+    for k in ("themes", "areas"):
+        env_["sheet"][k] = [dict(r, ref=f"r1.{k}[{n}]") for n, r in
+                            enumerate(x for x in env_["sheet"][k] if x["name"] != "relationships")]
+        env_["meta"]["rows_of"][k] = len(env_["sheet"][k])
+    t.results["r1"] = env_
     sh = env_["sheet"]
     th = sh["themes"][0]
     assert sh["totals"]["items"] - sum(r["items"] for r in sh["themes"]) >= th["items"]

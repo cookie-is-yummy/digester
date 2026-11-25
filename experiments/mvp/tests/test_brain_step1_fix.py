@@ -465,9 +465,10 @@ def test_the_audit_ledgers_frozen_in_the_planted_set_are_todays_tools(brain):
             data.setdefault("audit_turns", {})[name] = t
         with open(PLANTED, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=1, ensure_ascii=False)
-    for name, (envs, t) in got.items():
-        assert data["ledgers"]["audit_" + name] == envs, name
-        assert data["audit_turns"][name] == t, name
+    # scratchpad mvp22 (the read tools' fixes): the frozen ledgers are one tools version behind; today's tools
+    # differ from them exactly as eval/brain_toolfix_ledger_diff.json pins (tests/brain_ledger_diff.py)
+    from mvp.tests import brain_ledger_diff as LD
+    LD.check("audit_", got, data)
 
 
 def test_every_false_sentence_of_the_audit_is_dropped_and_its_true_ones_counted():

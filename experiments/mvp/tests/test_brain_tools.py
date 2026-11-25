@@ -316,7 +316,10 @@ def test_ambiguous_and_no_match_return_options_and_never_numbers(brain):
     assert r["error"] == "no_match" and "sheet" not in r
     assert all(set(o) == {"ref", "label", "how"} for o in r["options"])
     r2, _t = call(brain, "first_last", {"subject": "chess", "which": "first"}, "my first chess video")
-    assert r2["error"] == "no_match" and "items" not in json.dumps(r2)
+    # toolfix 6 (scratchpad mvp22): a no-match carries one count, of the items holding the words searched (none
+    # here), so "nothing about chess" has a cell; still no number from a closest match
+    assert r2["error"] == "no_match" and r2["searched"] == "chess" and r2["items_with_words"] == 0
+    assert "items" not in json.dumps({k: v for k, v in r2.items() if k != "items_with_words"})
     r3, _t = call(brain, "find", {"names": ["gaming"], "kinds": ["theme"]})
     row = r3["sheet"]["names"][0]
     assert row["status"] == "ambiguous" and not row["matches"]
@@ -450,8 +453,18 @@ def test_a_tool_call_gives_todays_sheet_of_the_same_question(brain, cid):
     if cid in SENSITIVE_IN_SCOPE:   # 2024 is in the window or the window before: today's plain sheet holds the
         assert "Heart Notes" in json.dumps(plain)   # sensitive channel; the tool never does
         assert "Heart Notes" not in json.dumps(r) and got != want_of(plain)
-    else:                           # where nothing sensitive is in scope, today's plain sheet agrees too
-        assert got == want_of(plain), cid
+    else:                           # where nothing sensitive is in scope, today's plain sheet agrees too, but for
+        assert _no_toolfix_cells(got) == want_of(plain), cid   # the cells the brain's sheets add (toolfix, mvp22)
+
+
+def _no_toolfix_cells(o):
+    """A tool's sheet without the cells only the brain's sheets have (scratchpad mvp22's toolfix): `reels` beside
+    `shorts` in totals and previous, and an Instagram channel row's own `handle`."""
+    if isinstance(o, dict):
+        return {k: _no_toolfix_cells(v) for k, v in o.items() if k not in ("reels", "handle")}
+    if isinstance(o, list):
+        return [_no_toolfix_cells(v) for v in o]
+    return o
 
 
 @pytest.mark.parametrize("cid", sorted(NUMBERS))

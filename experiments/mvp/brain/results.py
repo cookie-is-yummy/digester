@@ -142,7 +142,12 @@ def cut_to_size(sheet, chars=RESULT_CHARS, keep=None, newest=False):
                 if isinstance(row, dict):
                     for kk, v in list(row.items()):
                         if isinstance(v, list) and len(v) > inner_max:
-                            row[kk] = v[:inner_max]
+                            if newest and not inner_max:
+                                # toolfix 9: a period's list cut to nothing is taken out (absent: not shown; an
+                                # empty list would say "none"), so more periods fit
+                                row.pop(kk)
+                            else:
+                                row[kk] = v[:inner_max]
                             cut = True
     while size(sheet) > chars:
         lists = [(len(sheet[k]), k) for k in CUT_ORDER if k != keep and isinstance(sheet.get(k), list)

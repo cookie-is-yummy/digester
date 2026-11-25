@@ -223,8 +223,8 @@ def test_an_instagram_channel_row_keeps_its_handle_as_its_own_field(brain):
     env_, _t = call(brain, "breakdown", {"by": "channel", "window": W("in October")}, "which channels in October")
     rows = {r["name"]: r for r in env_["sheet"]["channels"]}
     ig = rows["@wetpaper.ig"]   # the made-up library has no display name for it: the handle stays its name
-    assert ig["handle"] == "wetpaper.ig" and ig["platform"] == "instagram"
-    assert rows["Clip Factory"].get("handle") is None and rows["Clip Factory"]["platform"] == "youtube"
+    assert ig["handle"] == "wetpaper.ig" and ig["items"] == 4
+    assert "handle" not in rows["Clip Factory"]   # a YouTube channel has no handle of its own here
 
 
 def _with_display(brain, monkeypatch, name):

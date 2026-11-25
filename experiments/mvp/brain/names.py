@@ -144,23 +144,10 @@ def _collections(lib):
 
 
 def displays(lib):
-    """{creator: display name} of the Instagram accounts whose export gives a name of their own (toolfix 7: a row
-    named only by its handle, which an answer never prints). A display name that is another creator's name, or
-    another account's display name too, is not used: the handle stays the row's name."""
-    if "displays" in lib._memo:
-        return lib._memo["displays"]
-    seen = {}
-    for it in lib.view.items.values():
-        d = getattr(it, "display", None)
-        if d and it.creator and it.creator.startswith("@"):
-            seen.setdefault(it.creator, d)
-    taken = {Hm._squash(c) for c in lib.idx.creators}
-    counts = {}
-    for d in seen.values():
-        counts[Hm._squash(d)] = counts.get(Hm._squash(d), 0) + 1
-    out = {c: d for c, d in seen.items() if Hm._squash(d) not in taken and counts[Hm._squash(d)] == 1}
-    lib._memo["displays"] = out
-    return out
+    """{creator: display name} of the Instagram accounts with a name of their own (facts.displays), memoised."""
+    if "displays" not in lib._memo:
+        lib._memo["displays"] = F.displays(lib.view, lib.idx)
+    return lib._memo["displays"]
 
 
 def topic_ref(lib):

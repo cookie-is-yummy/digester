@@ -437,6 +437,55 @@ def _insert_ranked(rows, row, q, cap):
     return out
 
 
+def displays(view, idx):
+    """{creator: display name} of the Instagram accounts whose export gives a name of their own (toolfix 7: a row
+    named only by its handle, which an answer never prints; libview keeps the name as Item.display). A display name
+    that is another creator's name, or a second account's display name too, is not used: the handle stays."""
+    seen = {}
+    for it in view.items.values():
+        d = getattr(it, "display", None)
+        if d and it.creator and it.creator.startswith("@"):
+            seen.setdefault(it.creator, d)
+    taken = {Hm._squash(c) for c in idx.creators}
+    counts = Counter(Hm._squash(d) for d in seen.values())
+    return {c: d for c, d in seen.items() if Hm._squash(d) not in taken and counts[Hm._squash(d)] == 1}
+
+
+def channel_names(view, idx, out):
+    """Toolfix 7: every channel row of the sheet (a ranking, a theme's or an area's channels, new and stopped ones)
+    that is an Instagram account keeps its handle as `handle` and is named by its display name when it has one."""
+    ig = {c for c in idx.creators if c.startswith("@")}
+    if not ig:
+        return
+    disp = displays(view, idx)
+
+    def walk(o, key=None, top=False):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                walk(v, k, top)
+        elif isinstance(o, list):
+            for row in o:
+                if isinstance(row, dict):
+                    nm = row.get("name")
+                    if key == "channels" and isinstance(nm, str) and nm in ig and (top or disp.get(nm)):
+                        # a ranking's own rows always (the name may be the handle itself); a row inside another
+                        # row only when its name changed, so the results do not grow for nothing
+                        row["handle"] = nm[1:]
+                        if disp.get(nm):
+                            row["name"] = disp[nm]
+                    walk(row, None, False)
+
+    def walk_top(o):
+        for k, v in o.items():
+            if k == "channels" and isinstance(v, list):
+                walk(v, "channels", True)
+            elif isinstance(v, dict) and k in ("new", "stopped"):
+                walk(v, None, True)
+            else:
+                walk(v, k, False)
+    walk_top(out)
+
+
 UNLOCKED_THEME_ID = 10 ** 6   # the unlocked topic's theme row: an id no build gives a theme
 
 
@@ -1059,7 +1108,8 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
     out["totals"] = sc.totals()
     if prev is not None:
         out["previous"] = dict(prev.totals(), words=prev_words, clipped=prev_clipped)
-    if hide_sensitive:   # the brain's tools (toolfix 4): the Instagram reels and videos, the length filter's other half
+    if hide_sensitive and "instagram" in plats:
+        # the brain's tools (toolfix 4): the Instagram reels and videos, the length filter's other half
         out["totals"]["reels"] = _reels(view, idx, facts, sc.items)
         if prev is not None:
             out["previous"]["reels"] = _reels(view, idx, facts, prev.items)
@@ -1245,6 +1295,8 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
     out["versions"] = {"themes": (th.meta.get("version") if th is not None else None),
                        "themes_embedding": (th.meta.get("embedding_model") if th is not None else None),
                        "lengths": __import__("mvp.lengths", fromlist=["x"]).VERSION}
+    if hide_sensitive:   # the brain's tools (toolfix 7): an Instagram row's handle apart, its display name shown
+        channel_names(view, idx, out)
     return out
 
 
