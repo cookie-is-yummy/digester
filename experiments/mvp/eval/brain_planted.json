@@ -43728,8 +43728,8 @@
    "source": "attack",
    "class": "of_videos_frame: all 61 Clip Factory videos are 40 s Shorts; it made 0 long videos",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -43787,8 +43787,8 @@
    "source": "attack",
    "class": "of_videos_frame: Pixel Pencil is a YouTube channel: 0 of the 4 Instagram reels",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -43852,8 +43852,8 @@
    "source": "attack",
    "class": "of_videos_frame: Pan Theory: 0 saved; the 32 were opened",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -43917,8 +43917,8 @@
    "source": "attack",
    "class": "of_videos_frame: Clip Factory was first opened 1 Oct 2026: 0 in 2025",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -43976,8 +43976,8 @@
    "source": "attack",
    "class": "of_videos_frame: Wet Paper is art and design: 0 gaming videos",
    "ledger": "attack_ch_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels this year",
     "unlock": null,
@@ -44041,8 +44041,8 @@
    "source": "attack",
    "class": "of_videos_frame: Brick Realm videos are 600 s: 0 Shorts",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44106,8 +44106,8 @@
    "source": "attack",
    "class": "of_videos_frame: last month (October) Clip Factory made 61, not 56 (56 is 3 to 30 Oct)",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -44171,8 +44171,8 @@
    "source": "attack",
    "class": "of_videos_frame: Clip Factory on Sat/Sun in October: 16 (26% of 61), not 61",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44230,8 +44230,8 @@
    "source": "attack",
    "class": "of_videos_frame: Pan Theory is food and cooking: 0 of the 34 art videos",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44295,8 +44295,8 @@
    "source": "attack",
    "class": "of_videos_frame: the 3 Wet Paper lessons were saved and never opened",
    "ledger": "attack_area_saved_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what i saved lately",
     "unlock": null,
@@ -44354,8 +44354,8 @@
    "source": "attack",
    "class": "platform: on YouTube: 138; 4 of the 142 are Instagram reels",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44403,8 +44403,8 @@
    "source": "attack",
    "class": "platform: Clip Factory is YouTube: 0 reels",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44462,8 +44462,8 @@
    "source": "attack",
    "class": "platform: art in October: 30 YouTube + 4 Instagram reels",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44527,8 +44527,8 @@
    "source": "attack",
    "class": "platform: 4 of 142 were Instagram",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44576,8 +44576,8 @@
    "source": "attack",
    "class": "platform: 4 of the 32 are @wetpaper.ig reels (12 to 15 Oct)",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -44641,8 +44641,8 @@
    "source": "attack",
    "class": "platform: 66 of the 138 were Shorts",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44690,8 +44690,8 @@
    "source": "attack",
    "class": "platform: 4 is Instagram's count; YouTube's is 138",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44739,8 +44739,8 @@
    "source": "attack",
    "class": "platform: gaming 64 of 126 YouTube = 51%; 49% is of all 130",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -44798,8 +44798,8 @@
    "source": "attack",
    "class": "platform: art from YouTube alone: 30 (4 are Instagram)",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -44863,8 +44863,8 @@
    "source": "attack",
    "class": "change_period: since 2021 gaming is 319 of 723 = 44%; 94% is 2021 alone",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -44928,8 +44928,8 @@
    "source": "attack",
    "class": "change_period: 2021 to 2026 art is 187 of 723 = 26%; 52% is 2026 alone",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -44993,8 +44993,8 @@
    "source": "attack",
    "class": "change_period: 87% is 2025 alone; 2025+2026 watercolor: 95 of 316 = 30%",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -45058,8 +45058,8 @@
    "source": "attack",
    "class": "change_period: Shorts over the window: 66 of 723 = 9%; 26% is 2026",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -45123,8 +45123,8 @@
    "source": "attack",
    "class": "change_period: 2021: 0 digital drawing",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -45188,8 +45188,8 @@
    "source": "attack",
    "class": "change_period: the peak is 2025; 2026 is 16%",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -45253,8 +45253,8 @@
    "source": "attack",
    "class": "change_period: swapped: 94% in 2021, 31% in 2026, a fall",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -45318,8 +45318,8 @@
    "source": "attack",
    "class": "change_period: 12.6 / 6.0 = 2.1: doubled, not tripled",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -45383,8 +45383,8 @@
    "source": "attack",
    "class": "change_period: gaming in 2025 was 0 of 62; 2026 is not its lowest",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -45432,8 +45432,8 @@
    "source": "attack",
    "class": "change_period: 13 Minecraft videos in 2026 (Sep-Oct)",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -45497,8 +45497,8 @@
    "source": "attack",
    "class": "period_label: 134 is 2021; 2022 had 108",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -45562,8 +45562,8 @@
    "source": "attack",
    "class": "period_label: since 2021: 723; 134 is 2021 alone",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -45611,8 +45611,8 @@
    "source": "attack",
    "class": "period_label: since 2021: 723; 134 is 2021 alone",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -45676,8 +45676,8 @@
    "source": "attack",
    "class": "period_label: cumulative: 469 by the end of 2025, 723 by 30 Oct 2026; 254 is 2026 alone",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -45741,8 +45741,8 @@
    "source": "attack",
    "class": "period_label: 135 math videos in 2023",
    "ledger": "attack_tl_month_math",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "math by month this year",
     "unlock": null,
@@ -45800,8 +45800,8 @@
    "source": "attack",
    "class": "period_label: 2023: 157; 254/157 = 1.6",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -45859,8 +45859,8 @@
    "source": "attack",
    "class": "period_label: 2021: 134; 2022 was down",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -45924,8 +45924,8 @@
    "source": "attack",
    "class": "period_label: 2021+2022 = 242",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -45973,8 +45973,8 @@
    "source": "attack",
    "class": "period_label: 2021-2023: 399; 157 is 2023",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -46038,8 +46038,8 @@
    "source": "attack",
    "class": "lead_window: on 30 Oct: Clip Factory 1, Pixel Pencil 2 led; 61 is the month",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -46087,8 +46087,8 @@
    "source": "attack",
    "class": "lead_window: the 4 weeks before (5 Sep - 2 Oct): gaming 14 of 51 = 27%",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -46136,8 +46136,8 @@
    "source": "attack",
    "class": "lead_window: 1 Jan-30 Sep: Pixel Pencil 63, not 92",
    "ledger": "attack_ch_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels this year",
     "unlock": null,
@@ -46185,8 +46185,8 @@
    "source": "attack",
    "class": "lead_window: by autumn 2026 (cumulative): 723 at the end; 186 is Sep-Oct 2026",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -46234,8 +46234,8 @@
    "source": "attack",
    "class": "lead_window: all history: Brick Realm 163 leads",
    "ledger": "attack_ch_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels this year",
     "unlock": null,
@@ -46283,8 +46283,8 @@
    "source": "attack",
    "class": "lead_window: since 30 Oct: 1 Clip Factory video",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -46332,8 +46332,8 @@
    "source": "attack",
    "class": "lead_window: after 30 Oct: no YouTube data; 13 is 24-30 Oct",
    "ledger": "attack_ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -46381,8 +46381,8 @@
    "source": "attack",
    "class": "move_frame: the move is against autumn 2025; against September 2026 cooking rose more (Sep: 0 of ~44)",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -46446,8 +46446,8 @@
    "source": "attack",
    "class": "move_frame: the move is against the 4 weeks before; a year before (Oct 2025) gaming was 0",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -46505,8 +46505,8 @@
    "source": "attack",
    "class": "move_frame: math gained 5.4 points, more than cooking's 3.9",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -46570,8 +46570,8 @@
    "source": "attack",
    "class": "move_frame: the move is against 17-23 Oct, not the month before",
    "ledger": "attack_ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -46635,8 +46635,8 @@
    "source": "attack",
    "class": "pct: 2022 had 108, 2023 157: 2022 was fewer",
    "ledger": "attack_cmp_2023",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -46700,8 +46700,8 @@
    "source": "attack",
    "class": "pct: 2023 had 45% more",
    "ledger": "attack_cmp_2023",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -46765,8 +46765,8 @@
    "source": "attack",
    "class": "pct: the base is the week before (33), not a month",
    "ledger": "attack_ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -46830,8 +46830,8 @@
    "source": "attack",
    "class": "pct: Limit Lane: 75 in 2023, 0 in 2022; 45% is all videos",
    "ledger": "attack_cmp_2023",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -46889,8 +46889,8 @@
    "source": "attack",
    "class": "pct: Pan Theory fell from 9 to 5",
    "ledger": "attack_ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -46954,8 +46954,8 @@
    "source": "attack",
    "class": "hour: 7 pm: 33 of 142 = 23%, not most",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -47019,8 +47019,8 @@
    "source": "attack",
    "class": "hour: 77% of October's videos were opened at other hours",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -47084,8 +47084,8 @@
    "source": "attack",
    "class": "hour: on 30 Oct: 10 am, 12 pm, 7:30 pm, 9 pm; none at 4 pm",
    "ledger": "attack_items_30oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch on 30 October",
     "unlock": null,
@@ -47143,8 +47143,8 @@
    "source": "attack",
    "class": "hour: 7 pm 33, 4 pm 32",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -47208,8 +47208,8 @@
    "source": "attack",
    "class": "hour: 5 pm and 7 pm tie at 30 each",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -47273,8 +47273,8 @@
    "source": "attack",
    "class": "fell_into: art is second (65), behind gaming (79)",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -47338,8 +47338,8 @@
    "source": "attack",
    "class": "fell_into: gaming leads at 54%",
    "ledger": "attack_ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -47403,8 +47403,8 @@
    "source": "attack",
    "class": "outside_theme: outside knowledge (known hole, pinned)",
    "ledger": "attack_area_saved_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what i saved lately",
     "unlock": null,
@@ -47462,8 +47462,8 @@
    "source": "attack",
    "class": "outside_theme: a world claim",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -47527,8 +47527,8 @@
    "source": "attack",
    "class": "base_verbs: opened, liked or saved in the window: 136 (130 opened + 6 saved); 6 is saves",
    "ledger": "attack_area_saved_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what i saved lately",
     "unlock": null,
@@ -47576,8 +47576,8 @@
    "source": "attack",
    "class": "base_verbs: the 4 art items are reels opened; 0 art saves on Instagram",
    "ledger": "attack_area_lately_ig",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "instagram lately",
     "unlock": null,
@@ -47641,8 +47641,8 @@
    "source": "attack",
    "class": "waiver: overall in October Clip Factory led with 61",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -47706,8 +47706,8 @@
    "source": "attack",
    "class": "waiver: Clip Factory had 61",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -47771,8 +47771,8 @@
    "source": "attack",
    "class": "waiver: in total Pixel Pencil was third (61, 32, 29)",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -47836,8 +47836,8 @@
    "source": "attack",
    "class": "waiver: with Shorts Clip Factory leads with 61",
    "ledger": "attack_area_oct_long",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October only long videos",
     "unlock": null,
@@ -47901,8 +47901,8 @@
    "source": "attack",
    "class": "waiver: any length: Brick Realm is fourth",
    "ledger": "attack_area_oct_long",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October only long videos",
     "unlock": null,
@@ -47966,8 +47966,8 @@
    "source": "attack",
    "class": "waiver: 8 is Saturdays; all days 61",
    "ledger": "attack_ch_oct_sat",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "saturdays in October",
     "unlock": null,
@@ -48025,8 +48025,8 @@
    "source": "attack",
    "class": "waiver: the whole month: 29",
    "ledger": "attack_ch_oct_sat",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "saturdays in October",
     "unlock": null,
@@ -48090,8 +48090,8 @@
    "source": "attack",
    "class": "waiver: both platforms: second is Pan Theory (30) etc.",
    "ledger": "attack_area_lately_ig",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "instagram lately",
     "unlock": null,
@@ -48155,8 +48155,8 @@
    "source": "attack",
    "class": "waiver: all channels this year: Clip Factory 61 is second, Wet Paper third",
    "ledger": "attack_ch_year_art",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "only art this year",
     "unlock": null,
@@ -48220,8 +48220,8 @@
    "source": "attack",
    "class": "waiver: 8 channels in October",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -48285,8 +48285,8 @@
    "source": "attack",
    "class": "waiver: gaming 72 is the biggest of all",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -48344,8 +48344,8 @@
    "source": "attack",
    "class": "waiver: altogether Pixel Pencil is third",
    "ledger": "attack_area_oct_long",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October only long videos",
     "unlock": null,
@@ -48409,8 +48409,8 @@
    "source": "attack",
    "class": "waiver: Clip Factory 61",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -48474,8 +48474,8 @@
    "source": "attack",
    "class": "scope_words: long and short: 142",
    "ledger": "attack_area_oct_long",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October only long videos",
     "unlock": null,
@@ -48523,8 +48523,8 @@
    "source": "attack",
    "class": "scope_words: with or without gaming: 142",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -48572,8 +48572,8 @@
    "source": "attack",
    "class": "scope_words: every day: 142",
    "ledger": "attack_ch_oct_sat",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "saturdays in October",
     "unlock": null,
@@ -48621,8 +48621,8 @@
    "source": "attack",
    "class": "scope_words: everything: 254",
    "ledger": "attack_ch_year_art",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "only art this year",
     "unlock": null,
@@ -48670,8 +48670,8 @@
    "source": "attack",
    "class": "scope_words: both platforms 18 Sep - 15 Oct: far more (YouTube opens)",
    "ledger": "attack_area_lately_ig",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "instagram lately",
     "unlock": null,
@@ -48719,8 +48719,8 @@
    "source": "attack",
    "class": "scope_words: without Shorts and reels: 72",
    "ledger": "attack_area_oct_short",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October only shorts",
     "unlock": null,
@@ -48768,8 +48768,8 @@
    "source": "attack",
    "class": "scope_words: long and Shorts: 142",
    "ledger": "attack_area_oct_long",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October only long videos",
     "unlock": null,
@@ -48817,8 +48817,8 @@
    "source": "attack",
    "class": "scope_words: gaming included: 142",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -48866,8 +48866,8 @@
    "source": "attack",
    "class": "cut_count: 6 themes in the window",
    "ledger": "attack_theme_90",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "themes in the last 90 days",
     "unlock": null,
@@ -48915,8 +48915,8 @@
    "source": "attack",
    "class": "cut_count: 6 themes in the window",
    "ledger": "attack_theme_90",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "themes in the last 90 days",
     "unlock": null,
@@ -48980,8 +48980,8 @@
    "source": "attack",
    "class": "cut_count: 8 channels",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -49045,8 +49045,8 @@
    "source": "attack",
    "class": "cut_count: 3 were YouTube playlist saves",
    "ledger": "attack_items_oct_saved",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i save in October",
     "unlock": null,
@@ -49104,8 +49104,8 @@
    "source": "attack",
    "class": "cut_count: 61",
    "ledger": "attack_first_cf",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my first clip factory video",
     "unlock": null,
@@ -49163,8 +49163,8 @@
    "source": "attack",
    "class": "cut_count: Wet Paper and @wetpaper.ig are art, Limit Lane math",
    "ledger": "attack_ch_least_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channel i watched least in October",
     "unlock": null,
@@ -49222,8 +49222,8 @@
    "source": "attack",
    "class": "number_word: 43%",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -49281,8 +49281,8 @@
    "source": "attack",
    "class": "number_word: 23%",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -49346,8 +49346,8 @@
    "source": "attack",
    "class": "number_word: 6",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -49411,8 +49411,8 @@
    "source": "attack",
    "class": "number_word: 23%",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -49476,8 +49476,8 @@
    "source": "attack",
    "class": "number_word: 54%",
    "ledger": "attack_ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -49541,8 +49541,8 @@
    "source": "attack",
    "class": "number_word: last autumn 13 of 15 = 87%, not all",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -49606,8 +49606,8 @@
    "source": "attack",
    "class": "number_word: together 65%",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -49665,8 +49665,8 @@
    "source": "attack",
    "class": "share_sum: together 48%",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -49730,8 +49730,8 @@
    "source": "attack",
    "class": "share_sum: 32 + 29 = 61: equal, not more",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -49789,8 +49789,8 @@
    "source": "attack",
    "class": "share_sum: wrongly based: the cell is Clip Factory's share (61/142); Pan Theory + Pixel Pencil is also 61/142 by coincidence",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -49854,8 +49854,8 @@
    "source": "attack",
    "class": "dates: 1 October 2026 was a Thursday",
    "ledger": "attack_first_cf",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my first clip factory video",
     "unlock": null,
@@ -49913,8 +49913,8 @@
    "source": "attack",
    "class": "dates: the reel before: 15 Oct, 6 days earlier",
    "ledger": "attack_last_wc",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my last watercolor video",
     "unlock": null,
@@ -49972,8 +49972,8 @@
    "source": "attack",
    "class": "dates: it was the first (10 am); the last was Cooking soup on the 30th (9 pm)",
    "ledger": "attack_items_30oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch on 30 October",
     "unlock": null,
@@ -50031,8 +50031,8 @@
    "source": "attack",
    "class": "dates: third (7:30 pm)",
    "ledger": "attack_items_30oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch on 30 October",
     "unlock": null,
@@ -50090,8 +50090,8 @@
    "source": "attack",
    "class": "dates: the first was Cooking tofu three ways at 4 pm",
    "ledger": "attack_items_pt_oldest",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "pan theory in October, oldest first",
     "unlock": null,
@@ -50149,8 +50149,8 @@
    "source": "attack",
    "class": "dates: it was the last; the first was lesson 1 on 3 Oct",
    "ledger": "attack_items_oct_saved",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i save in October",
     "unlock": null,
@@ -50208,8 +50208,8 @@
    "source": "attack",
    "class": "dates: never opened",
    "ledger": "attack_items_oct_saved",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i save in October",
     "unlock": null,
@@ -50267,8 +50267,8 @@
    "source": "attack",
    "class": "dates: Gaming Daily first opened 1 Oct too",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -50326,8 +50326,8 @@
    "source": "attack",
    "class": "dates: 13 Brick Realm videos in 2026",
    "ledger": "attack_cmp_2023",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -50391,8 +50391,8 @@
    "source": "attack",
    "class": "dates: 10 am was the oldest of the day",
    "ledger": "attack_items_30oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch on 30 October",
     "unlock": null,
@@ -50450,8 +50450,8 @@
    "source": "attack",
    "class": "dates: the first save was lesson 1 on 3 October; lesson 3 was the fourth",
    "ledger": "attack_items_oct_saved",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i save in October",
     "unlock": null,
@@ -50509,8 +50509,8 @@
    "source": "attack",
    "class": "dates: 4 pm, not night",
    "ledger": "attack_first_cf",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my first clip factory video",
     "unlock": null,
@@ -50568,8 +50568,8 @@
    "source": "attack",
    "class": "private: Heart Notes: 50 more videos (private)",
    "ledger": "attack_area_2024",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch in 2024",
     "unlock": null,
@@ -50627,8 +50627,8 @@
    "source": "attack",
    "class": "private: Heart Notes too",
    "ledger": "attack_area_2024",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch in 2024",
     "unlock": null,
@@ -50686,8 +50686,8 @@
    "source": "attack",
    "class": "private: dating 50 > cooking 8 (private line case)",
    "ledger": "attack_area_2024",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "private_line",
    "turn": {
     "message": "what did i watch in 2024",
     "unlock": null,
@@ -50745,8 +50745,8 @@
    "source": "attack",
    "class": "private: 58 with the private topic",
    "ledger": "attack_tl_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -50810,8 +50810,8 @@
    "source": "attack",
    "class": "private: 5 with the private topic",
    "ledger": "attack_changes_area",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -50875,8 +50875,8 @@
    "source": "attack",
    "class": "private: Heart Notes' theme too",
    "ledger": "attack_area_2024",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch in 2024",
     "unlock": null,
@@ -50934,8 +50934,8 @@
    "source": "attack",
    "class": "private: dating, 50, is smaller (private)",
    "ledger": "attack_area_all",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "all my history",
     "unlock": null,
@@ -50999,8 +50999,8 @@
    "source": "attack",
    "class": "private: Heart Notes led with 50",
    "ledger": "attack_ch_2024",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels in 2024",
     "unlock": null,
@@ -51058,8 +51058,8 @@
    "source": "attack",
    "class": "private: Heart Notes too; under a clean lead no private line is printed",
    "ledger": "attack_ch_oct+area_2024",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October and what did i watch in 2024",
     "unlock": null,
@@ -51123,8 +51123,8 @@
    "source": "attack",
    "class": "private: Heart Notes: 50 of the 58; no private line printed",
    "ledger": "attack_first_cf+area_2024",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my first clip factory video and what did i watch in 2024",
     "unlock": null,
@@ -51182,8 +51182,8 @@
    "source": "attack",
    "class": "private: Heart Notes: 50 of the 58",
    "ledger": "attack_area_2024",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch in 2024",
     "unlock": null,
@@ -51241,8 +51241,8 @@
    "source": "attack",
    "class": "two_results: under an October lead: Wet Paper made 1 video in October; 37 is this year",
    "ledger": "attack_ch_oct+ch_year_art",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October and only art this year",
     "unlock": null,
@@ -51306,8 +51306,8 @@
    "source": "attack",
    "class": "bare_clause: Pixel Pencil on 28 days; 30 days active",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -51371,8 +51371,8 @@
    "source": "attack",
    "class": "bare_clause: Pan Theory Sat/Sun in October: 10 of 32",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -51436,8 +51436,8 @@
    "source": "attack",
    "class": "bare_clause: gaming opened 4 pm to 7 pm",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -51495,8 +51495,8 @@
    "source": "attack",
    "class": "bare_clause: first opened 1 October",
    "ledger": "attack_ch_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels this year",
     "unlock": null,
@@ -51560,8 +51560,8 @@
    "source": "attack",
    "class": "bare_clause: 5 from Gaming Daily",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -51625,8 +51625,8 @@
    "source": "attack",
    "class": "bare_clause: the 5 before were on 1 and 2 October: 0 in September",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -51690,8 +51690,8 @@
    "source": "attack",
    "class": "bare_clause: 29 < 32: behind",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -51755,8 +51755,8 @@
    "source": "attack",
    "class": "bare_clause: 60 vs 32: far behind",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -51820,8 +51820,8 @@
    "source": "attack",
    "class": "bare_clause: until 2023: 76 (14 is 2023 alone)",
    "ledger": "attack_cmp_2023",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -51885,8 +51885,8 @@
    "source": "attack",
    "class": "motive: a motive",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -51944,8 +51944,8 @@
    "source": "attack",
    "class": "motive: a motive",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -52003,8 +52003,8 @@
    "source": "attack",
    "class": "title: the title's instruction obeyed",
    "ledger": "attack_last_wc",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my last watercolor video",
     "unlock": null,
@@ -52062,8 +52062,8 @@
    "source": "attack",
    "class": "title: a title's text as a fact",
    "ledger": "attack_first_cf",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my first clip factory video",
     "unlock": null,
@@ -52121,8 +52121,8 @@
    "source": "attack",
    "class": "title: outside / title as fact",
    "ledger": "attack_items_30oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what did i watch on 30 October",
     "unlock": null,
@@ -52180,8 +52180,8 @@
    "source": "attack",
    "class": "outside: outside knowledge",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -52245,8 +52245,8 @@
    "source": "attack",
    "class": "outside: outside knowledge",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -52310,8 +52310,8 @@
    "source": "attack",
    "class": "title: a title quoted as an instruction",
    "ledger": "attack_last_wc",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my last watercolor video",
     "unlock": null,
@@ -52369,8 +52369,8 @@
    "source": "attack",
    "class": "title: a title's text said as what the channel told them (third-party text as content)",
    "ledger": "attack_last_wc",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "my last watercolor video",
     "unlock": null,
@@ -52428,8 +52428,8 @@
    "source": "attack",
    "class": "two_results: under an October lead: Clip Factory made 61 in October; 13 is 24-30 Oct, the point names no window",
    "ledger": "attack_ch_oct+ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October and channels last week",
     "unlock": null,
@@ -52493,8 +52493,8 @@
    "source": "attack",
    "class": "two_results: under an October lead: in October Clip Factory led; 92 is this year",
    "ledger": "attack_ch_oct+ch_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October and channels this year",
     "unlock": null,
@@ -52558,8 +52558,8 @@
    "source": "attack",
    "class": "two_results: under an unfiltered October lead: gaming led with 72",
    "ledger": "attack_ch_oct+area_oct_nogaming",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October and October without gaming",
     "unlock": null,
@@ -52623,8 +52623,8 @@
    "source": "attack",
    "class": "two_results: two results",
    "ledger": "attack_ch_oct+ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October and channels last week",
     "unlock": null,
@@ -52682,8 +52682,8 @@
    "source": "attack",
    "class": "calc_rows: 61 - 32 = 29 more than Pan Theory (32 is against Digital drawing)",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -52741,8 +52741,8 @@
    "source": "attack",
    "class": "calc_rows: 61/5 = 12 times Gaming Daily (10 is against Minecraft builds)",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -52800,8 +52800,8 @@
    "source": "attack",
    "class": "calc_rows: art fell 52 points",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -52865,8 +52865,8 @@
    "source": "attack",
    "class": "calc_rows: 66 - 29 = 37 more than Digital drawing; 34 is against Pan Theory",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -52930,8 +52930,8 @@
    "source": "attack",
    "class": "calc_rows: gaming rose 42.5 points (0% to 42%); 29 is against cooking's share before",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -52989,8 +52989,8 @@
    "source": "attack",
    "class": "least: second least (tied with Limit Lane)",
    "ledger": "attack_ch_least_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channel i watched least in October",
     "unlock": null,
@@ -53048,8 +53048,8 @@
    "source": "attack",
    "class": "least: third (art 133, gaming 79, cooking 32)",
    "ledger": "attack_area_least_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "least this year",
     "unlock": null,
@@ -53107,8 +53107,8 @@
    "source": "attack",
    "class": "least: art led; math is least",
    "ledger": "attack_area_least_year",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "least this year",
     "unlock": null,
@@ -53156,8 +53156,8 @@
    "source": "attack",
    "class": "least: tied with @wetpaper.ig at 4",
    "ledger": "attack_ch_least_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channel i watched least in October",
     "unlock": null,
@@ -53215,8 +53215,8 @@
    "source": "attack",
    "class": "least: fourth most (61, 32, 29, 6); fifth least",
    "ledger": "attack_ch_least_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channel i watched least in October",
     "unlock": null,
@@ -53274,8 +53274,8 @@
    "source": "attack",
    "class": "from_to: swapped",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -53323,8 +53323,8 @@
    "source": "attack",
    "class": "from_to: swapped",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -53388,8 +53388,8 @@
    "source": "attack",
    "class": "from_to: swapped",
    "ledger": "attack_ch_week",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -53447,8 +53447,8 @@
    "source": "attack",
    "class": "from_to: it fell from 57% to 21%",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -53512,8 +53512,8 @@
    "source": "attack",
    "class": "compare_frame: fewer",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -53571,8 +53571,8 @@
    "source": "attack",
    "class": "compare_frame: 15 is Sep-Nov 2025 (3 months); Sep-Oct 2025: 10",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -53620,8 +53620,8 @@
    "source": "attack",
    "class": "compare_frame: 87% is Sep-Nov 2025; September 2025 alone: 4 of 4 = 100%",
    "ledger": "attack_cmp_autumn",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -53685,8 +53685,8 @@
    "source": "attack",
    "class": "find: 3 saved",
    "ledger": "attack_find_cf",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "clip factory and watercolor",
     "unlock": null,
@@ -53744,8 +53744,8 @@
    "source": "attack",
    "class": "find: watercolor has 98",
    "ledger": "attack_find_cf",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "clip factory and watercolor",
     "unlock": null,
@@ -53803,8 +53803,8 @@
    "source": "attack",
    "class": "owner: uncited name and number",
    "ledger": "attack_area_lately",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -53862,8 +53862,8 @@
    "source": "attack",
    "class": "measure: 30 is days; 61 videos",
    "ledger": "attack_ch_oct",
-   "expect": "dropped",
    "reasons": [],
+   "expect": "dropped",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -53921,8 +53921,8 @@
    "source": "attack_true",
    "class": "of_videos: 29",
    "ledger": "attack_ch_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -53986,8 +53986,8 @@
    "source": "attack_true",
    "class": "of_videos: 29 of 34 art",
    "ledger": "attack_ch_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -54051,8 +54051,8 @@
    "source": "attack_true",
    "class": "platform: 32",
    "ledger": "attack_ch_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -54116,8 +54116,8 @@
    "source": "attack_true",
    "class": "platform: 24",
    "ledger": "attack_none_week_yt",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "youtube last week",
     "unlock": null,
@@ -54165,8 +54165,8 @@
    "source": "attack_true",
    "class": "period_label: 157",
    "ledger": "attack_tl_year",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -54230,8 +54230,8 @@
    "source": "attack_true",
    "class": "period_label: 4",
    "ledger": "attack_tl_month_math",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "math by month this year",
     "unlock": null,
@@ -54289,8 +54289,8 @@
    "source": "attack_true",
    "class": "move_value: 64/130 = 49.2%, before 14/51 = 27.5%",
    "ledger": "attack_area_lately",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -54348,8 +54348,8 @@
    "source": "attack_true",
    "class": "verb_list: 7",
    "ledger": "attack_area_lately_ig",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "instagram lately",
     "unlock": null,
@@ -54397,8 +54397,8 @@
    "source": "attack_true",
    "class": "fell_into: 4",
    "ledger": "attack_area_lately",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -54446,8 +54446,8 @@
    "source": "attack_true",
    "class": "theme_posts: 3 and 3",
    "ledger": "attack_area_saved_lately",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what i saved lately",
     "unlock": null,
@@ -54495,8 +54495,8 @@
    "source": "attack_true",
    "class": "pct: 157 vs 108: +45.4%",
    "ledger": "attack_cmp_2023",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -54560,8 +54560,8 @@
    "source": "attack_true",
    "class": "hour: 19:00 33, next 32",
    "ledger": "attack_ch_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -54625,8 +54625,8 @@
    "source": "attack_true",
    "class": "period_lead: 62 and 8 (private line)",
    "ledger": "attack_tl_year",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -54674,8 +54674,8 @@
    "source": "attack_true",
    "class": "by_platform: 126 of 130",
    "ledger": "attack_area_lately",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -54723,8 +54723,8 @@
    "source": "attack_true",
    "class": "scope_again: 37 of 133",
    "ledger": "attack_ch_year_art",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "only art this year",
     "unlock": null,
@@ -54782,8 +54782,8 @@
    "source": "attack_true",
    "class": "lead_window: 92",
    "ledger": "attack_ch_year",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "channels this year",
     "unlock": null,
@@ -54831,8 +54831,8 @@
    "source": "attack_true",
    "class": "change_period: 126/134; 79/254",
    "ledger": "attack_changes_area",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -54896,8 +54896,8 @@
    "source": "attack_true",
    "class": "change_period: 133/254",
    "ledger": "attack_changes_area",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -54961,8 +54961,8 @@
    "source": "attack_true",
    "class": "change_period: 8/134 = 6.0% to 32/254 = 12.6%",
    "ledger": "attack_changes_area",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -55026,8 +55026,8 @@
    "source": "attack_true",
    "class": "pct: (108-157)/157 = -31%",
    "ledger": "attack_cmp_2023",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -55091,8 +55091,8 @@
    "source": "attack_true",
    "class": "least: art 133, gaming 79",
    "ledger": "attack_area_least_year",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "least this year",
     "unlock": null,
@@ -55150,8 +55150,8 @@
    "source": "attack_true",
    "class": "least: 1",
    "ledger": "attack_ch_least_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "channel i watched least in October",
     "unlock": null,
@@ -55209,8 +55209,8 @@
    "source": "attack_true",
    "class": "least: 1,4,4,5,6",
    "ledger": "attack_ch_least_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "channel i watched least in October",
     "unlock": null,
@@ -55268,8 +55268,8 @@
    "source": "attack_true",
    "class": "close: 61 vs 60",
    "ledger": "attack_cmp_autumn",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -55333,8 +55333,8 @@
    "source": "attack_true",
    "class": "number_word: 49%",
    "ledger": "attack_area_lately",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -55392,8 +55392,8 @@
    "source": "attack_true",
    "class": "number_word: 6/24",
    "ledger": "attack_ch_week",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -55457,8 +55457,8 @@
    "source": "attack_true",
    "class": "share_sum: 74%",
    "ledger": "attack_area_lately",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -55516,8 +55516,8 @@
    "source": "attack_true",
    "class": "first: 1 Oct 4 pm",
    "ledger": "attack_first_cf",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "my first clip factory video",
     "unlock": null,
@@ -55575,8 +55575,8 @@
    "source": "attack_true",
    "class": "last: 21 Oct",
    "ledger": "attack_last_wc",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "my last watercolor video",
     "unlock": null,
@@ -55624,8 +55624,8 @@
    "source": "attack_true",
    "class": "day: 10 am",
    "ledger": "attack_items_30oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what did i watch on 30 October",
     "unlock": null,
@@ -55683,8 +55683,8 @@
    "source": "attack_true",
    "class": "day: 4, 1 Short",
    "ledger": "attack_items_30oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what did i watch on 30 October",
     "unlock": null,
@@ -55732,8 +55732,8 @@
    "source": "attack_true",
    "class": "items: 10 Oct",
    "ledger": "attack_items_oct_saved",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what did i save in October",
     "unlock": null,
@@ -55791,8 +55791,8 @@
    "source": "attack_true",
    "class": "items: 2 Oct 4 pm",
    "ledger": "attack_items_pt_oldest",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "pan theory in October, oldest first",
     "unlock": null,
@@ -55850,8 +55850,8 @@
    "source": "attack_true",
    "class": "find: 95 opened + 3 saved",
    "ledger": "attack_find_cf",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "clip factory and watercolor",
     "unlock": null,
@@ -55909,8 +55909,8 @@
    "source": "attack_true",
    "class": "previous: 13; 14",
    "ledger": "attack_ch_week",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -55968,8 +55968,8 @@
    "source": "attack_true",
    "class": "from_to: 9 to 5",
    "ledger": "attack_ch_week",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "channels last week",
     "unlock": null,
@@ -56033,8 +56033,8 @@
    "source": "attack_true",
    "class": "lead: 90 of 220",
    "ledger": "attack_theme_90",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "themes in the last 90 days",
     "unlock": null,
@@ -56082,8 +56082,8 @@
    "source": "attack_true",
    "class": "count_top: 90, 66, 32",
    "ledger": "attack_theme_90",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "themes in the last 90 days",
     "unlock": null,
@@ -56141,8 +56141,8 @@
    "source": "attack_true",
    "class": "scope_lead: 34",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -56190,8 +56190,8 @@
    "source": "attack_true",
    "class": "waiver: 32",
    "ledger": "attack_area_oct_nogaming",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "October without gaming",
     "unlock": null,
@@ -56249,8 +56249,8 @@
    "source": "attack_true",
    "class": "scope_lead: 32 of 72",
    "ledger": "attack_area_oct_long",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "October only long videos",
     "unlock": null,
@@ -56298,8 +56298,8 @@
    "source": "attack_true",
    "class": "scope_lead: 70; 61",
    "ledger": "attack_area_oct_short",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "October only shorts",
     "unlock": null,
@@ -56347,8 +56347,8 @@
    "source": "attack_true",
    "class": "scope_lead: 8 of 19",
    "ledger": "attack_ch_oct_sat",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "saturdays in October",
     "unlock": null,
@@ -56396,8 +56396,8 @@
    "source": "attack_true",
    "class": "stopped: 59; 0",
    "ledger": "attack_cmp_2023",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -56461,8 +56461,8 @@
    "source": "attack_true",
    "class": "move_value: 135/157",
    "ledger": "attack_cmp_2023",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "2023 against 2022",
     "unlock": null,
@@ -56526,8 +56526,8 @@
    "source": "attack_true",
    "class": "move_value: 32/186 vs 2/15",
    "ledger": "attack_cmp_autumn",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "this autumn against last autumn",
     "unlock": null,
@@ -56591,8 +56591,8 @@
    "source": "attack_true",
    "class": "calc: 61/32 = 1.9",
    "ledger": "attack_ch_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -56650,8 +56650,8 @@
    "source": "attack_true",
    "class": "calc: 61-32",
    "ledger": "attack_ch_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -56709,8 +56709,8 @@
    "source": "attack_true",
    "class": "move_value: 30/130 vs 2/51",
    "ledger": "attack_area_lately",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -56774,8 +56774,8 @@
    "source": "attack_true",
    "class": "from_to: 29/51 to 27/130",
    "ledger": "attack_area_lately",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what am i into lately",
     "unlock": null,
@@ -56839,8 +56839,8 @@
    "source": "attack_true",
    "class": "period_label: 108; 134",
    "ledger": "attack_tl_year",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "by year",
     "unlock": null,
@@ -56904,8 +56904,8 @@
    "source": "attack_true",
    "class": "lead: 723",
    "ledger": "attack_changes_area",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "what changed since 2021",
     "unlock": null,
@@ -56953,8 +56953,8 @@
    "source": "attack_true",
    "class": "of_videos: 37 of 254",
    "ledger": "attack_ch_year",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "channels this year",
     "unlock": null,
@@ -57012,8 +57012,8 @@
    "source": "attack_true",
    "class": "lead: 319 of 723",
    "ledger": "attack_area_all",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "all my history",
     "unlock": null,
@@ -57061,8 +57061,8 @@
    "source": "attack_true",
    "class": "platform: 13 of 24",
    "ledger": "attack_none_week_yt",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "youtube last week",
     "unlock": null,
@@ -57120,8 +57120,8 @@
    "source": "attack_true",
    "class": "by_platform: 138; 4",
    "ledger": "attack_ch_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "which channels in October",
     "unlock": null,
@@ -57169,8 +57169,8 @@
    "source": "attack_true",
    "class": "scope_lead: 72",
    "ledger": "attack_area_oct_long",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "October only long videos",
     "unlock": null,
@@ -57218,8 +57218,8 @@
    "source": "attack_true",
    "class": "scope_lead: 70",
    "ledger": "attack_area_oct_short",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "October only shorts",
     "unlock": null,
@@ -57267,8 +57267,8 @@
    "source": "attack_true",
    "class": "period_lead: 6; 4",
    "ledger": "attack_tl_month_math",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "math by month this year",
     "unlock": null,
@@ -57316,8 +57316,8 @@
    "source": "attack_true",
    "class": "share: 61/142",
    "ledger": "attack_ch_oct",
-   "expect": "kept",
    "reasons": [],
+   "expect": "kept",
    "turn": {
     "message": "which channels in October",
     "unlock": null,

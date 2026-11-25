@@ -685,3 +685,7 @@ CASES = [
     ('t59', 'tl_month_math', 'L', 'T', 'period_lead', 'In September 2026 you opened 6[r1.periods[0].items] math videos, and 4[r1.periods[1].items] in October 2026.', '6; 4', []),
     ('t60', 'ch_oct', 'P', 'T', 'share', 'Clip Factory[r1.channels[0]] made 43%[r1.channels[0].share] of what you opened.', '61/142', ['In October 2026, you opened 142[r1.totals.items] videos.']),
 ]
+
+# false as bare sentences, true with the private line ("Leaving out topics you keep private."): a rank of a result
+# whose hidden private topic would rank above it (the founder's answer 4); handled when dropped or kept with the line
+PRIVATE_LINE = {"R03"}

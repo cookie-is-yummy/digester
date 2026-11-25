@@ -372,12 +372,11 @@ def test_a_lead_of_period_cells_names_its_window_by_the_periods(harness):
         assert not v.lead_ok, bad
 
 
-def test_known_hole_after_tune_outside_claims_on_an_area_row_are_kept(harness):
-    # FOUND after the held-out run (not fixed: the verifier is frozen after it). The theme/area exemption of
-    # _ENTITY_PRESENT (made for "Home cooking[...] posts" as a noun) also lets "is huge", "has millions" through on an
-    # area or a theme row; before tune they were outside_in_history. This test pins today's behaviour so the next
-    # change flips it on purpose: narrow the exemption to the noun "posts".
+def test_outside_claims_on_an_area_row_are_dropped_again(harness):
+    # FOUND after the held-out run and pinned as kept; mvp20 fix flips it on purpose: the theme/area exemption of
+    # _ENTITY_PRESENT is narrowed to the noun ("3 Home cooking[...] posts."), so "is huge", "has millions" on an area
+    # or a theme row are outside claims again, as on a channel row
     o = check(harness, "lately", "Gaming[r1.areas[0]] is huge right now.")
-    assert o.kept
+    assert not o.kept and "outside_in_history" in o.reasons
     o = check(harness, "lately", "Clip Factory[r1.channels[0]] is huge right now.")
     assert not o.kept

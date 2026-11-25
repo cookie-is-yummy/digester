@@ -378,7 +378,9 @@ for cid, led, where, truth, cls, text, why, carriers in ATK.CASES:
         continue   # (not frozen yet: run tests/test_brain_fix.py with MVP_FREEZE_ATTACK=1 first)
     for w in (["L", "P"] if where == "B" else [where]):
         base = {"source": "attack" if truth == "F" else "attack_true", "class": f"{cls}: {why}",
-                "ledger": "attack_" + led, "expect": "dropped" if truth == "F" else "kept", "reasons": [],
+                "ledger": "attack_" + led, "reasons": [],
+                "expect": ("private_line" if cid in getattr(ATK, "PRIVATE_LINE", ()) else "dropped") if truth == "F"
+                else "kept",
                 "turn": attack_turns[led]}
         if w == "L":
             out.append(dict(base, id=f"attack_{cid}" + ("_L" if where == "B" else ""),

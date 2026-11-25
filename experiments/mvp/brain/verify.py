@@ -991,6 +991,10 @@ def check_calc(mk, ledger, clause):
         return "direction", f"{op}({mk.a}, {mk.b}) = {round(val, 1)}"
     if down and (val >= 0 or (op == "points" and -val < MOVE_MIN_POINTS)):
         return "direction", f"{op}({mk.a}, {mk.b}) = {round(val, 1)}"
+    if op == "pct_change" and ((re.search(r"\bmore\b", said) and val < 0) or
+                               (re.search(r"\b(?:fewer|less)\b", said) and val > 0)):
+        # mvp20 fix (the attack's G02: "45% fewer[=pct_change(2023, 2022)]" of +45%): the word typed with the number
+        return "direction", f"pct_change = {round(val)}%"
     if re.search(r"\bmore\b", said + " " + clause) and val < 0 and op == "diff":
         return "direction", f"diff = {round(val)}"
     if re.search(r"\b(?:fewer|less)\b", said + " " + clause) and val > 0 and op == "diff":
@@ -1498,8 +1502,10 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     for mk in markers:
         if mk.kind == "row" and (_APPOSITIVE.match(raw[mk.end:]) or _KNOWN_FOR.match(raw[mk.end:])):
             add("outside_in_history")
-        elif mk.kind == "row" and not re.match(r"^items\[", mk.rest) and not re.match(r"^(?:themes|areas|fields)\[",
-                                                                                     mk.rest) and \
+        elif mk.kind == "row" and not re.match(r"^items\[", mk.rest) and not (
+                re.match(r"^(?:themes|areas|fields)\[", mk.rest) and
+                re.match(r"^\s*(?:posts|videos|clips|reels|shorts|items)\b\s*(?:[,.;:]|$|and\b|from\b|in\b|on\b)",
+                         raw[mk.end:], re.I)) and \
                 _ENTITY_PRESENT.match(raw[mk.end:]):
             # (mvp20 tune, the live run's I05: "3 Home cooking[r1.themes[1]] posts." read "posts" as a verb: an area
             # or a theme posts, makes or is nothing in the world; what a CHANNEL is or does stays outside knowledge)
@@ -1647,6 +1653,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         if r:
             add(*r)
         r = _change_period_said(raw, markers, res)
+        if r:
+            add(*r)
+        r = _fix_rules(raw, markers, res, ledger, turn, low, period_cells, cites_prev)
         if r:
             add(*r)
     # 3.8 insight's checks, one sentence (sheets only), or the rules of a result that is not a sheet (step 4)
@@ -2114,6 +2123,709 @@ def _platform_said(raw, markers, res):
         if isinstance(byp, dict) and mk.rest.endswith(".items") and byp.get(p) == mk.value:
             continue
         return "platform_word", f"{mk.path} counts every platform, not only {p.capitalize()}"
+    return None
+
+
+# ------------------------------------------------------------------ mvp20 fix: the two checkers' classes, by rule
+# (the hand recount of the held-out answers that went out, and the verifier attack; eval/brain_attack_cases.py). Each
+# rule reads what a sentence CLAIMS (a time said with a range word, a qualifier on a count, a comparison, a base, an
+# exclusive word) against what its cells can prove, and drops what they cannot; the attack's true sentences and the
+# planted set's true twins are the keep figures it is measured on.
+def _blank_marked(raw, markers):
+    """raw with every marker's brackets blanked, and a row marker's or a dated value's said words too (a cited row's own
+    name, an item's title, a cell's own date are not words of the sentence)."""
+    t = list(raw)
+    for mk in markers:
+        dated = mk.kind == "value" and isinstance(mk.value, str) and _measure(mk.rest, mk.value)[1] == "date"
+        for i in range(mk.start if (mk.kind == "row" or dated) else mk.mstart, mk.end):
+            t[i] = " "
+    return "".join(t)
+
+
+_TIME_PH = re.compile(r"\b(?:(?:the\s+)?(?:spring|summer|autumn|winter)(?:\s+of)?(?:\s+(?:19|20)\d\d)?|" + _MON_RX +
+                      r"\.?\s+(?:19|20)\d\d|(?:19|20)\d\d|(?:this|last|past|next) (?:week|month|year|spring|summer|"
+                      r"autumn|winter)|today|yesterday)\b", re.I)
+# the words right before a time that make it a stretch other than the time itself ("since 2021", "by 2026", "up to
+# this year", "between 2021 and 2023", "after 30 October", "by the end of 2021")
+_PRE_TIME = re.compile(r"\b(?P<w>since|after|before|by|until|till|through|thru|between|from|prior to|following|as of|"
+                       r"up to|up until|to|ahead of|pre|post|start of|beginning of|end of|on)\s+(?:the\s+(?:end|start|"
+                       r"beginning|middle|close)\s+of\s+)?(?:the\s+)?$", re.I)
+_TIME_GAP = re.compile(r"^\s*(?:,|and|or|to|through|thru|-|–|&|and in|or in)\s*$", re.I)
+_EVER = re.compile(r"\b(?:ever|all[- ]time|of all time|never before)\b", re.I)
+_PERSIST = re.compile(r"\b(?:still|no longer|any ?more|remains?|remained|stayed|stays|as before)\b", re.I)
+_BEFORE_PH = re.compile(r"\b(?:the\s+)?(?:(?P<n>\d{1,2}|two|three|four|five|six)\s+)?(?P<u>day|week|month|year|"
+                        r"fortnight)s?\s+before\b|\bthe previous (?P<u2>day|week|month|year)\b", re.I)
+_UNIT_DAYS = {"day": (1, 1), "week": (7, 7), "fortnight": (14, 14), "month": (28, 31), "year": (365, 366)}
+
+
+def _time_spans(text, wins, turn):
+    """[(start, end, 'day' | 'period', (first, last) or None)] of the times said in text (a day date, a month or a
+    year, a season, a relative word)."""
+    out = []
+    for m in _DATE_IN.finditer(text):
+        g = m.groups()
+        d_, mon, y = (g[0], g[1], g[2]) if g[0] else (g[4], g[3], g[5])
+        mi = next((i for i, x in enumerate(_MONTHS) if x.startswith(mon.lower()[:3])), None)
+        rng = None
+        if mi is not None:
+            yy = int(y) if y else max((b.year for _a, b in wins), default=None)
+            try:
+                rng = (date(yy, mi + 1, int(d_)),) * 2 if yy else None
+            except ValueError:
+                rng = None
+        out.append((m.start(), m.end(), "day", rng))
+    t2 = _DATE_IN.sub(lambda m: " " * len(m.group(0)), text)
+    for m in _TIME_PH.finditer(t2):
+        pm = _PHRASE.fullmatch(m.group(0))
+        rng = _phrase_range(pm, wins, turn) if pm else None
+        out.append((m.start(), m.end(), "period", rng))
+    return sorted(out)
+
+
+def _range_said(raw, markers, res, turn, period_cells, cites_prev):
+    """mvp20 fix (the attack's E, D, C, S09 and the recount's F11.0: "Since 2021 you opened 134[periods[0]]", "by 2026
+    254[...]", "Between 2021 and 2023", "In 2025 and 2026, ... 87%[peak_share]", "On 30 October 2026, Clip Factory led
+    ... 61[...]" of October, "Up to this year", "Your full years before 2026 were ..."): a time said with a word that
+    makes it another stretch (since, by, until, up to, before, after, between, from ... to, two times joined by 'and')
+    claims that stretch. It passes only where it IS the cited window: 'since' or 'from' its first day (or the first
+    year of a history that starts in it, and no period's cell cited), 'up to' / 'to' / 'until' its last day, 'on' a
+    one-day window. A time said 'ever' needs a window of all their history."""
+    wins = _windows_of(res, True)
+    if not wins:
+        return None
+    said = (res.meta or {}).get("window_said") or (res.sheet.get("window") or {}).get("words") or ""
+    det = f"{res.rid}'s window is '{_clip(said, 90)}'"
+    # (the window's own words are read too, not taken out: "2023" of a window of 2023 said "Until 2023" is another
+    # stretch; the window's words pass by these same rules, "up to" its last day)
+    text = _blank_marked(raw, markers)
+    text = re.sub(r"where your (?:youtube |instagram )?export ends", lambda m: " " * len(m.group(0)), text, flags=re.I)
+    all_hist = _low(said).startswith("all your history")
+    spans = _time_spans(text, wins, turn)
+    prev_end, prev_rng = None, None
+    for a, b, kind, rng in spans:
+        pre = text[max(0, a - 40):a]
+        if prev_end is not None and _TIME_GAP.match(text[prev_end:a]) and not (
+                prev_rng and rng and any(prev_rng[0] == x[0] and rng[1] == x[1] for x in wins)):
+            return "wrong_window", det + f": '{_clip(text[a - 20 if a > 20 else 0:b].strip(), 40)}' joins two times"
+        prev_end, prev_rng = b, rng
+        m = _PRE_TIME.search(pre)
+        if not m:
+            continue
+        w = " ".join(m.group("w").lower().split())
+        if w in ("since", "from", "start of", "beginning of"):
+            ok = rng is not None and (kind == "day" or not period_cells) and any(
+                rng[0] == x[0] or (all_hist and kind == "period" and rng[0].year == x[0].year and rng[0] <= x[0])
+                for x in wins)
+        elif w in ("to", "up to", "up until", "until", "till", "through", "thru"):
+            ok = kind == "day" and rng is not None and any(rng[0] == x[1] for x in wins)
+        elif w == "on":
+            ok = kind != "day" or (rng is not None and any(x[0] == x[1] == rng[0] for x in wins))
+            if kind != "day":
+                continue
+        else:
+            ok = False
+        if not ok:
+            return "wrong_window", det + f": '{_clip((m.group(0) + text[a:b]).strip(), 40)}' is another stretch"
+    # a period's own cell (a timeline's periods[i]) says its own period as a time of its own ("134[periods[0].items]
+    # in 2021"), not only the window's words around it ("Since 5 January 2021 you opened 134[periods[0].items]")
+    pspans = [rng for _a, _b, kind, rng in spans if kind == "period" and rng]
+    for mk in markers:
+        if mk.kind != "value" or mk.rid != res.rid or not re.match(r"^periods\[\d+\]\.", mk.rest):
+            continue
+        try:
+            lab = str((_resolve(res.sheet, mk.owner) or {}).get("label") or "")
+        except (KeyError, AttributeError):
+            lab = ""
+        lr = _label_range(lab) if lab else None
+        if any(x.kind == "row" and x.rid == mk.rid and x.rest == mk.owner for x in markers):
+            continue   # the period named by its own row marker ("In 2021[r1.periods[0]], ...")
+        if lr is not None and lr not in pspans:
+            return "wrong_window", f"{mk.path} is the count of {lab}: say '{lab}' beside it"
+    if _EVER.search(_low(strip_markers(raw))) and not all_hist:
+        return "wrong_window", det + ": 'ever' needs all their history"
+    for m in _BEFORE_PH.finditer(text):
+        u = (m.group("u") or m.group("u2") or "").lower()
+        n = _num_of(m.group("n")) if m.group("n") else 1
+        pw = res.prev_window() if hasattr(res, "prev_window") else None
+        lo, hi = _UNIT_DAYS.get(u, (0, 0))
+        days = (pw[1].toordinal() - pw[0].toordinal() + 1) if pw and pw[0] and pw[1] else None
+        if days is None or not (lo * (n or 1) <= days <= hi * (n or 1)):
+            return "wrong_window", det + f": '{_clip(m.group(0), 30)}' is not the window before" + (
+                f" ({days} days)" if days else "")
+    if _PERSIST.search(_low(strip_markers(raw))) and not cites_prev:
+        return "wrong_window", "'still' (or 'no longer', 'again') claims another time: cite the window before"
+    return None
+
+
+_PLAT_WORD = re.compile(r"\b(?P<p>youtube|instagram|reels?|ig)\b", re.I)
+_LEN_WORD = re.compile(r"\b(?P<s>shorts|short videos?|short ones|reels?)\b|\b(?P<l>long)\b(?!\s+(?:time|ago|while|run))",
+                       re.I)
+_DAY_WORD = re.compile(r"\b(?P<d>weekends?|weekdays?|mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|"
+                       r"sundays?|mornings?|evenings?|nights?|afternoons?)\b", re.I)
+
+
+def _items_of(res):
+    return [x for x in (res.sheet.get("items") or []) if isinstance(x, dict)]
+
+
+def _cited_rows(markers, res):
+    out = []
+    for mk in markers:
+        if mk.rid != res.rid or mk.kind not in ("row", "value") or not mk.owner:
+            continue
+        try:
+            row = _resolve(res.sheet, mk.owner)
+        except (KeyError, AttributeError):
+            continue
+        if isinstance(row, dict):
+            out.append((mk.owner, row))
+    return out
+
+
+def _qualifier_unbound(raw, markers, res):
+    """mvp20 fix (the attack's A, B, N03, M05: "61[channels[0].items] of your long videos" of a channel of Shorts,
+    "29 of your Instagram videos" of a YouTube channel, "of the Shorts you opened" of a channel of long videos, "of your
+    weekend videos", "61 Instagram reels", "34[fields[1].items] YouTube videos" of 30 and 4 reels, "138 videos on
+    YouTube, all of them Shorts", "From YouTube alone, ...", "all of them from Instagram", "on Instagram and YouTube" of
+    Instagram only): a platform, a length or a day word in a sentence narrows its counts; it is true only when the
+    result is scoped to it, a cited cell is that platform's or that length's, or every cited row (or the whole result)
+    is of it."""
+    marked = [mk for mk in markers if mk.rid == res.rid and mk.kind in ("value", "count", "row", "calc")]
+    if not marked:
+        return None
+    text = _remove_phrases(_blank_marked(raw, markers), _window_phrases(res))
+    text = re.sub(r"where your (?:youtube |instagram )?export ends|your (?:youtube|instagram) export|\b(?:mon|tues|"
+                  r"wednes|thurs|fri|satur|sun)day,?\s+(?=\d{1,2}\b)|\bshorts (?:and|or) reels\b",
+                  lambda m: " " * len(m.group(0)) if not m.group(0).lower().startswith("shorts") else
+                  "shorts" + " " * (len(m.group(0)) - 6), text, flags=re.I)
+    low = text.lower()
+    parts = scope_parts(res)
+    plats = {w for p in parts if p["kind"] == "platform" for w in p["words"]}
+    days = {w for p in parts if p["kind"] == "weekday" for w in p["words"]}
+    f = res.sheet.get("filters") or {}
+    fsaid = _low(" ".join(str(x) for x in ((res.meta or {}).get("filters_said"), (res.meta or {}).get("base")) if x))
+    length = f.get("length") or ("long" if f.get("without_shorts") or re.search(r"\blong\b|without shorts", fsaid)
+                                 else ("short" if re.search(r"\bonly shorts\b|\bshorts only\b", fsaid) else None))
+    rests = [mk.rest for mk in markers if mk.kind in ("value", "count") and mk.rid == res.rid] + [
+        p.split(".", 1)[1] for mk in markers if mk.kind == "calc" for p in (mk.a, mk.b)]
+    rows = _cited_rows(markers, res)
+    items = _items_of(res)
+    byp = (res.sheet.get("totals") or {}).get("by_platform") or {}
+    for m in _PLAT_WORD.finditer(low):
+        p = m.group("p").lower()
+        if p.startswith("reel") and length == "short":
+            continue   # "reels" of a result of Shorts and reels is its length word
+        p = "instagram" if p in ("reel", "reels", "ig") else p
+        if p in plats or any(r.endswith("by_platform." + p) for r in rests):
+            continue
+        if p == "youtube" and any(r.endswith("shorts_share") for r in rests):
+            continue   # a share of Shorts is of the YouTube videos (Shorts are YouTube's)
+        if isinstance(byp, dict) and byp and all((v or 0) == 0 for k, v in byp.items() if k != p) and byp.get(p):
+            continue   # every item of the result is that platform's
+        if not byp and not items:
+            continue   # a sheet that says no platform (a hand-made or round 12 sheet) is not read here
+        if rows and all(_row_platform(row, own) == p for own, row in rows):
+            continue
+        if not rows and items and all(_low(it.get("platform") or "") == p for it in items) and \
+                not (res.meta or {}).get("truncated"):
+            continue
+        return "platform_word", f"{res.rid} is not only {p.capitalize()}'s: cite its by_platform cell or say no platform"
+    for m in _LEN_WORD.finditer(low):
+        want = "short" if m.group("s") else "long"
+        if length == want or (want == "short" and length == "long" and re.search(
+                r"\b(?:without|no|not|excluding|leaving out|left out)\s+(?:the\s+)?$", low[:m.start()])):
+            continue
+        if any(re.search(r"(?:^|\.)(?:shorts|shorts_share|long|long_median_min)$", r) for r in rests):
+            continue
+        if rows and all(_row_length(row) == want for _own, row in rows):
+            continue
+        return "length_word", f"{res.rid} counts videos of any length: cite a Shorts cell or say no length"
+    for m in _DAY_WORD.finditer(low):
+        d = m.group("d").lower().rstrip("s")
+        if d in {x.rstrip("s") for x in days}:
+            continue
+        if d in ("weekend", "weekday") and any(r.endswith(d + "_share") for r in rests):
+            continue
+        if any(r.endswith("busiest_weekday") for r in rests) and d in I.WEEKDAYS:
+            continue
+        if d in ("morning", "evening", "night", "afternoon") and any("busiest_hours" in r for r in rests):
+            continue
+        return "wrong_window", f"{res.rid} counts every day, not only {m.group('d')}"
+    return None
+
+
+def _row_platform(row, own):
+    if isinstance(row.get("platform"), str):
+        return _low(row["platform"])
+    if re.match(r"^channels\[\d+\]$|\.channels\[\d+\]$", own or "") and isinstance(row.get("name"), str):
+        return "instagram" if row["name"].startswith("@") else "youtube"
+    return None
+
+
+def _row_length(row):
+    s = row.get("shorts_share")
+    if isinstance(s, (int, float)) and not isinstance(s, bool):
+        return "short" if s >= 0.999 else ("long" if s <= 0.001 else None)
+    if isinstance(row.get("length"), str):
+        return {"long": "long", "short": "short"}.get(_low(row["length"]))
+    return None
+
+
+_CMP_KEY = re.compile(r"\b(?:than|as (?:many|much|often) as|ahead of|beat|beats|beating|outnumber\w*|outpac\w*|"
+                      r"overtook|overtaking|surpass\w*)\b", re.I)
+_SUM_KEY = re.compile(r"\b(?:together|combined|put together|between them)\b", re.I)
+_MORE_W = re.compile(r"\b(?:more|bigger|larger|higher|greater|busier|ahead|beat|beats|outnumber\w*|outpac\w*|"
+                     r"overtook|surpass\w*)\b", re.I)
+_LESS_W = re.compile(r"\b(?:less|fewer|smaller|lower|quieter)\b", re.I)
+
+
+def _compare_unbound(raw, markers, res, ledger, turn):
+    """mvp20 fix (the attack's F03, P02, D07, X08, G01, G04: "..., more than math[areas[3]] gained", "more than Pan
+    Theory and Pixel Pencil together", "as many as in 2021 and 2022 together", "more than Watercolor painting[...]",
+    "45% more[calc] videos in 2022 than in 2023" of 2023 against 2022, "Limit Lane made 45% more[calc of the totals]"):
+    a comparison claims the value of what it is compared with. The thing after 'than' needs its own value marker (or a
+    calc said before it in the clause), the two values must stand in the order the words say, a sum ('together') is
+    never a cell, a calc's 'than <time>' names the calc's second window, and a calc of the result's totals is said of
+    the result, not of a row."""
+    plain_low = _low(strip_markers(raw))
+    if _SUM_KEY.search(plain_low):
+        return "uncited_claim", "a sum of rows ('together') is not a cell of the results"
+    vals = [mk for mk in markers if mk.kind in ("value", "count") and isinstance(mk.value, (int, float)) and
+            not isinstance(mk.value, bool)]
+    calcs = [mk for mk in markers if mk.kind == "calc"]
+    for mk in calcs:
+        ops = [p.split(".", 1)[1] for p in (mk.a, mk.b)]
+        if all(re.match(r"^(?:totals|previous)\.", o) for o in ops) and any(
+                x.kind == "row" or (x.kind == "value" and x.owner) for x in markers if x.rid == mk.a.split(".")[0]):
+            return "calc", f"{mk.op}({mk.a}, {mk.b}) is of every item of the window, not of a row"
+    braw = _blank_marked(raw, markers)
+    for m in _CMP_KEY.finditer(raw):
+        if re.search(r"\b(?:other|rather|no more|no less|nothing more)\s+$", raw[max(0, m.start() - 14):m.start()],
+                     re.I):
+            continue
+        cl_end = re.search(r"[,;.]|\band\b(?!\s+(?:the\s+)?\d)", braw[m.end():])
+        after_end = m.end() + (cl_end.start() if cl_end else len(raw) - m.end())
+        after = [x for x in markers if m.end() <= x.start < after_end or (m.end() <= x.mstart < after_end)]
+        before_calc = [c for c in calcs if c.end <= m.start() and not re.search(r"[;.]", raw[c.end:m.start()])]
+        if before_calc:
+            c = before_calc[-1]
+            r = _calc_than_window(braw[m.end():after_end], braw[:m.start()], c, ledger, turn)
+            if r:
+                return r
+            continue
+        av = [x for x in after if x.kind in ("value", "count", "calc")]
+        if not av:
+            r = _rows_compared(raw, markers, m, after, res)
+            if r is None:
+                continue
+            if r:
+                return r
+            return "uncited_claim", f"'{_clip(strip_markers(raw[m.start():after_end]), 40)}' compares with a value " \
+                                    "it does not cite"
+        bv = [x for x in vals if x.end <= m.start()]
+        a2 = [x for x in av if x in vals]
+        if bv and a2 and _family(bv[-1].rest) == _family(a2[0].rest):
+            v1, v2 = float(bv[-1].value), float(a2[0].value)
+            head = raw[max(0, m.start() - 40):m.start()]
+            word = m.group(0).lower()
+            if (word == "than" and _MORE_W.search(head) and not v1 > v2) or \
+                    (word == "than" and _LESS_W.search(head) and not v1 < v2) or \
+                    (word.startswith("as ") and abs(v1 - v2) > 0.005 * max(abs(v1), abs(v2), 1)) or \
+                    (word in ("ahead of", "beat", "beats", "beating") and not v1 > v2):
+                return "direction", f"{bv[-1].path} = {bv[-1].value}, {a2[0].path} = {a2[0].value}"
+    return None
+
+
+def _rows_compared(raw, markers, m, after, res):
+    """A comparison of two rows of one list with no value after 'than' ("more gaming than comedy", "more than math
+    gained"): None when the rows' own cells prove it (the key of the value cited before, else the list's count), a
+    reason when they disprove it, False when it cannot be read."""
+    rows_after = [x for x in after if x.kind == "row" and x.rid == res.rid]
+    before = [x for x in markers if x.end <= m.start() and x.rid == res.rid and x.kind in ("row", "value") and x.owner]
+    if not rows_after or not before:
+        return False
+    a_own, b_own = before[-1].owner, rows_after[0].rest
+    la, ia = _list_and_index(a_own)
+    lb, ib = _list_and_index(b_own)
+    if la is None or la != lb:
+        return False
+    key = before[-1].key if before[-1].kind == "value" and isinstance(before[-1].value, (int, float)) else None
+    _k, va = _row_value(res, la, ia, key)
+    _k2, vb = _row_value(res, lb, ib, key or _k)
+    if not isinstance(va, (int, float)) or not isinstance(vb, (int, float)):
+        return False
+    head = raw[max(0, m.start() - 60):m.start()]
+    if _MORE_W.search(head) and not va > vb:
+        return "direction", f"{res.rid}.{a_own} = {va}, {res.rid}.{b_own} = {vb}"
+    if _LESS_W.search(head) and not va < vb:
+        return "direction", f"{res.rid}.{a_own} = {va}, {res.rid}.{b_own} = {vb}"
+    if not (_MORE_W.search(head) or _LESS_W.search(head)):
+        return False
+    return None
+
+
+def _calc_than_window(after, before, c, ledger, turn):
+    """A calc of a window against the one before, said 'in A than in B': B is the calc's second window, A its first."""
+    try:
+        res = ledger.get(c.a.split(".", 1)[0])
+    except Exception:   # noqa: BLE001
+        return None
+    if res is None:
+        return None
+    cur, prev = res.window(), res.prev_window()
+    if not (cur and cur[0] and prev and prev[0]):
+        return None
+    wins = [cur, prev]
+    first_is_now = not _is_before(c.a.split(".", 1)[1])
+    now_w, then_w = (cur, prev) if first_is_now else (prev, cur)
+    clipped = bool((res.sheet.get("window") or {}).get("clipped"))
+    for part, bad in ((after, now_w), (before[-80:], then_w)):
+        for _a, _b, kind, rng in _time_spans(_remove_phrases(part, []), wins, turn):
+            if rng is not None and kind == "period" and _matches(rng, bad, clipped) and not _matches(
+                    rng, then_w if bad is now_w else now_w, clipped):
+                return "calc", f"{c.op}({c.a}, {c.b}) is the first window against the second, not the other way"
+    return None
+
+
+_FROM_TO = re.compile(r"\bfrom\b(?P<x>[^.;]{0,80}?)\bto\b", re.I)
+
+
+def _from_to_swapped(raw, markers):
+    """mvp20 fix (the attack's X01 to X03: "went from 13[items] the week before to 14[previous_items]"): 'from A to B'
+    says A is the earlier value; a value of the window before after 'to' with one of the window after 'from' is the
+    move said backwards."""
+    vals = [mk for mk in markers if mk.kind == "value"]
+    for m in _FROM_TO.finditer(_blank_marked(raw, markers)):
+        a = [x for x in vals if m.start() <= x.start and x.end <= m.end()]
+        b = [x for x in vals if x.start >= m.end()]
+        if not a or not b:
+            continue
+        x, y = a[0], b[0]
+        if re.search(r"[,;]", raw[m.end():y.start]) and not re.match(r"^\s*(?:the\s+)?$", raw[m.end():y.start]):
+            continue
+        if _is_before(y.rest) and not _is_before(x.rest):
+            return "direction", f"{x.path} is now and {y.path} is before: 'from' the earlier 'to' the later"
+        if x.key == "to_share" and y.key == "from_share":
+            return "direction", f"{x.path} is the later end of the change"
+    return None
+
+
+_EXCL = re.compile(r"\b(?:only|nothing else|nothing but|on (?:its|their) own|alone|sole(?:ly)?|exclusively|"
+                   r"(?:only|just) \d+ (?:areas|themes|channels|topics|kinds|types)|the one (?:theme|channel|area)|"
+                   r"your one|one (?:theme|channel|area)\b|was all|were all|"
+                   r"all (?:you|of (?:what|it|them|your))|every (?:video|item|one))\b", re.I)
+# ("all from <row>" is a row's make-up, not 'nothing else': _all_from reads it)
+
+
+def _exclusive_words(low, res):
+    """The 'only' words of a sentence that claim nothing else was there ("Pan Theory was the only channel", "and nothing
+    else", "on its own", "just 4 areas"), not a scope ("counting only long videos", "only gaming") nor 'only once'."""
+    scope_w = {w for p in scope_parts(res) for w in p["words"]} | {"long", "shorts", "short", "reels", "youtube",
+                                                                     "instagram", "once", "twice", "counting"}
+    for m in _EXCL.finditer(low):
+        if m.group(0).lower() == "only":
+            if re.match(r"\s+(?:about\s+|around\s+)?\d", low[m.end():]):
+                continue   # "only 1 video": a small count, not 'nothing else'
+            nxt = low[m.end():m.end() + 30].split()
+            prv = low[max(0, m.start() - 12):m.start()].split()
+            if (nxt and nxt[0].strip(",.") in scope_w) or (len(nxt) > 1 and nxt[1].strip(",.") in scope_w) or \
+                    (prv and prv[-1] in ("counting", "with", "showing", "keeping")):
+                continue
+        return m.group(0)
+    return None
+
+
+def _uncovered(res, lst):
+    """How many of the result's items fall in no row of a complete list (rows that do not add up to the total: an
+    unlocked topic counted in the total but in no theme row, the private topic, items with no theme), or None."""
+    rows = res.sheet.get(lst)
+    tot = (res.sheet.get("totals") or {}).get("items")
+    ro = ((res.meta or {}).get("rows_of") or {}).get(lst)
+    if not isinstance(rows, list) or not rows or not isinstance(tot, (int, float)) or ro != len(rows):
+        return None
+    vals = [r.get("items") for r in rows if isinstance(r, dict)]
+    if not all(isinstance(v, (int, float)) for v in vals):
+        return None
+    return tot - sum(vals)
+
+
+def _hidden_claims(low, markers, res, turn):
+    """mvp20 fix (the attack's R01, R02, R06, R08 to R11, R05 and the recount's I02.0): an 'only', 'all', 'nothing
+    else', 'on its own' or 'just N' of a result that left the private topic out is not true of what they opened; a rank
+    or an 'only' of a complete list whose rows leave more items out than its first row holds (I02.0: "the top theme was
+    Home cooking with 8" of 58, 50 of them an unlocked topic in no theme row) cannot be proved."""
+    hid = (res.meta or {}).get("hidden") or {}
+    excl = _exclusive_words(low, res)
+    if excl and int(hid.get("sensitive") or 0) > 0:
+        return "private_total", f"{res.rid} left {int(hid.get('sensitive'))} private items out: '{excl}' is not " \
+                                "all of what they opened"
+    rank = _RANK.search(low) or _ORD_RX.search(low) or excl
+    if not rank:
+        return None
+    for own, row in _cited_rows(markers, res):
+        lst, i = _list_and_index(own)
+        if lst is None or "." in lst:
+            continue
+        rem = _uncovered(res, lst)
+        if rem is not None and rem > 0 and rem >= (row.get("items") or 0):
+            return "rank", f"{res.rid}.{lst} leaves {rem} of {(res.sheet.get('totals') or {}).get('items')} items " \
+                           "in no row: its first row is not proved the top"
+    return None
+
+
+_ALL_FROM = re.compile(r"\b(?:all|each|every one|entirely|solely|exclusively|only)\s+(?:of\s+(?:them|it|these|those)\s+)?"
+                       r"(?:from|by|made by|on)\s+$", re.I)
+
+
+def _all_from(raw, markers, res):
+    """mvp20 fix (the attack's S05: "Gaming clips came to 66 videos, all from Clip Factory[themes[0].channels[0]]" of
+    61 and 5): 'all from' a row is true only of a row's own single channel (its channels list has one row, or that
+    row's count is the whole row's)."""
+    for mk in markers:
+        if mk.kind != "row" or mk.rid != res.rid or not _ALL_FROM.search(raw[max(0, mk.start - 40):mk.start]):
+            continue
+        m = re.match(r"^(?P<own>.+)\.channels\[(?P<k>\d+)\]$", mk.rest)
+        ok = False
+        if m:
+            try:
+                parent = _resolve(res.sheet, m.group("own"))
+            except (KeyError, AttributeError):
+                parent = None
+            chs = (parent or {}).get("channels") if isinstance(parent, dict) else None
+            if isinstance(chs, list) and chs:
+                ch = chs[int(m.group("k"))] if int(m.group("k")) < len(chs) else {}
+                ok = len(chs) == 1 or (isinstance(ch, dict) and ch.get("items") == parent.get("items"))
+        elif re.fullmatch(r"channels\[\d+\]", mk.rest) and isinstance(mk.value, dict):
+            # a channel of the result said to make ALL of a theme's (or an area's) videos: its own theme is that
+            # theme, every one of its videos is of it (theme_share 1), and it holds as many as the row cited before
+            ch = mk.value
+            for x in markers:
+                if x.kind == "value" and x.rid == res.rid and x.rest == "totals.items" and x.end <= mk.start:
+                    ok = ch.get("items") == x.value   # one channel holds every item of the result
+                    continue
+                if x.kind not in ("row", "value") or x.rid != res.rid or not x.owner or x.owner == mk.rest or \
+                        x.end > mk.start:
+                    continue
+                try:
+                    parent = _resolve(res.sheet, x.owner)
+                except (KeyError, AttributeError):
+                    continue
+                if not isinstance(parent, dict) or not re.fullmatch(r"(?:themes|areas)\[\d+\]", x.owner):
+                    continue
+                fld = "theme" if x.owner.startswith("themes") else "area"
+                same = _low(ch.get(fld) or "") == _low(parent.get("name") or "")
+                full = fld == "area" or (ch.get("theme_share") or 0) >= 0.999
+                ok = same and full and ch.get("items") == parent.get("items")
+        if not ok:
+            return "uncited_claim", f"'all from {mk.said}' needs the row's own channel list to have only it"
+    return None
+
+
+_USUALLY = re.compile(r"\b(?:usually|typically|normally|mostly|generally|tend to|tends to|most often|most of the time|"
+                      r"always)\b", re.I)
+
+
+def _usually_hour(low, markers, res):
+    """mvp20 fix (the attack's H02: "You usually opened videos at 7 pm[busiest_hours[0].hour]" when 23% were then):
+    'usually' of a busiest hour or day needs more than half of the items there."""
+    if not _USUALLY.search(low):
+        return None
+    for mk in markers:
+        if mk.rid != res.rid or "busiest_hours[" not in mk.rest:
+            continue
+        own = re.sub(r"\.hour$", "", mk.rest)
+        try:
+            share = (_resolve(res.sheet, own) or {}).get("share")
+        except (KeyError, AttributeError):
+            share = None
+        if not isinstance(share, (int, float)) or share <= 0.5:
+            return "rank", f"{mk.path}'s hour holds {share if share is not None else '?'} of the items: not 'usually'"
+    return None
+
+
+_WHEN_RX = re.compile(r"^(\d{4}-\d\d-\d\d)(?:[ T](\d{1,2}):(\d\d)\s*([ap]m)?)?", re.I)
+
+
+def _when_key(w):
+    m = _WHEN_RX.match(str(w or ""))
+    if not m:
+        return None
+    h = int(m.group(2)) if m.group(2) else None
+    if h is not None and m.group(4):
+        h = h % 12 + (12 if m.group(4).lower() == "pm" else 0)
+    return (m.group(1), h, int(m.group(3)) if m.group(3) else None)
+
+
+def _item_order(low, markers, res):
+    """mvp20 fix (the attack's Q03, Q05, Q12: "The last video you opened on 30 October was X[items[0]]" of a list
+    whose first row is that day's first, "Your first Pan Theory video in October was X[items[1]]", "The first thing you
+    saved in October was X[items[3]]"): an item said to be the first or the last (earliest, newest, most recent) is the
+    earliest or the latest of the rows shown, by their own times, with no other row at the same time; a list cut to fit
+    proves only the end its order starts from."""
+    if res.sheet.get("kind") in ("first", "last"):
+        return None
+    low2 = re.sub(r"\blast (?:week|month|year|spring|summer|autumn|winter|\d+ \w+|day of)\b", " ",
+                  _remove_phrases(low, [p.lower() for p in _window_phrases(res)]))
+    m = re.search(r"\b(?:(?P<f>first|earliest|oldest)|(?P<l>last|latest|newest|most recent|final))\b", low2)
+    if not m:
+        return None
+    items = _items_of(res)
+    cited = [mk for mk in markers if mk.kind == "row" and mk.rid == res.rid and re.fullmatch(r"items\[\d+\]", mk.rest)]
+    if not cited or not items:
+        return None
+    keys = [_when_key(it.get("when")) for it in items]
+    if any(k is None for k in keys):
+        return None
+    order = (res.meta or {}).get("order") or ""
+    cut = bool((res.meta or {}).get("truncated")) or (isinstance((res.meta or {}).get("rows_total"), int) and
+                                                       (res.meta or {}).get("rows_total") > len(items))
+    want_first = bool(m.group("f"))
+    if cut and order != ("oldest" if want_first else "newest"):
+        return "first_last", f"{res.rid}.items is cut to fit and ordered {order or 'by opens'}: its " \
+                             f"{'first' if want_first else 'last'} is not shown"
+    i = int(re.search(r"\d+", cited[0].rest).group(0))
+    if all(k[1] is None for k in keys):
+        # days only (a list over more than a day): the tools order by the full time, so the row the order starts
+        # from is the first (oldest) or the last (newest); any other row must be the only one of its day at that end
+        if i == 0 and order == ("oldest" if want_first else "newest"):
+            return None
+        days_ = [k[0] for k in keys]
+        end = min(days_) if want_first else max(days_)
+        if days_[i] == end and days_.count(end) == 1:
+            return None
+        return "first_last", f"{cited[0].path} is not the {'first' if want_first else 'last'} of the rows shown"
+
+    def full(k):
+        return (k[0], k[1] if k[1] is not None else -1, k[2] if k[2] is not None else -1)
+    ks = [full(k) for k in keys]
+    target = min(ks) if want_first else max(ks)
+    if ks[i] != target or ks.count(target) > 1 or (keys[i][1] is None and sum(k[0] == keys[i][0] for k in keys) > 1):
+        return "first_last", f"{cited[0].path} is not the {'first' if want_first else 'last'} of the rows shown " \
+                             f"(by their times)"
+    return None
+
+
+_MOTIVE = re.compile(r"\bbecause\b|\bto (?:unwind|relax|chill|escape|de-?stress|switch off|wind down|kill time|pass "
+                     r"the time|feel better|learn)\b|\bafter (?:a long day|work|school)\b|\bwhen you (?:were|felt|are) "
+                     r"(?:bored|tired|sad|stressed|lonely|anxious)\b|\bout of (?:boredom|habit)\b|\bfor fun\b", re.I)
+_TAUGHT = re.compile(r"\b(?:taught|teaches|told|tells|showed|shows|helped|helps|inspired|inspires|convinced|"
+                     r"encouraged|encourages|reminded|reminds|wanted|wants|asked)\s+(?:you|them)\b|\b(?:a|an|the)\s+"
+                     r"[a-z]+\s+who\b|,?\s+who\s+(?:cooks|makes|draws|paints|plays|lives|is|was|teaches|streams|posts|"
+                     r"loves|knows)\b", re.I)
+
+
+def _fix_rules(raw, markers, res, ledger, turn, low, period_cells, cites_prev):
+    """The mvp20 fix rules of one sentence (None or (reason, detail))."""
+    if _MOTIVE.search(low):
+        return "psych", "why they opened something is not in the export"
+    if _TAUGHT.search(low):
+        return "outside_in_history", "what a video or a channel told them, or who makes it, is not in the export"
+    for fn in (lambda: _range_said(raw, markers, res, turn, period_cells, cites_prev),
+               lambda: _qualifier_unbound(raw, markers, res),
+               lambda: _compare_unbound(raw, markers, res, ledger, turn),
+               lambda: _from_to_swapped(raw, markers),
+               lambda: _hidden_claims(low, markers, res, turn),
+               lambda: _all_from(raw, markers, res),
+               lambda: _usually_hour(low, markers, res),
+               lambda: _item_order(low, markers, res),
+               lambda: _items_count(raw, markers, res),
+               lambda: _base_unscoped(raw, markers, res),
+               lambda: _broadened(low, res)):
+        r = fn()
+        if r:
+            return r
+    order = (res.meta or {}).get("order") or "most"
+    if order == "least" and _ORD_RX.search(low) and not _LEAST.search(low):
+        return "rank", f"{res.rid} is ordered by least: an ordinal says its place from the least"
+    return None
+
+
+def _items_count(raw, markers, res):
+    """mvp20 fix (the attack's N04: "You have opened 3[r1.items.count] Clip Factory videos" of a first-time result's
+    three rows): the count of an item list that shows a first, a last or a page is the rows shown, not all of them."""
+    kind = res.sheet.get("kind")
+    meta = res.meta or {}
+    cut = kind in ("first", "last") or bool(meta.get("truncated")) or (
+        isinstance(meta.get("rows_total"), int) and meta.get("rows_total") > len(_items_of(res)))
+    if not cut:
+        return None
+    for mk in markers:
+        if mk.kind == "count" and mk.rid == res.rid and mk.rest == "items.count":
+            pre = raw[max(0, mk.start - 30):mk.start].lower()
+            post = raw[mk.end:mk.end + 30].lower()
+            if not re.search(r"\b(?:the|these|those)?\s*(?:first|last|latest|newest|oldest|top)\s*$|here are\s*$", pre) \
+                    and not re.search(r"\b(?:shown|listed|here)\b", post):
+                return "wrong_value", f"{mk.path} is the {mk.value} rows shown, not every one"
+    return None
+
+
+_BASE_PH = re.compile(r"\b(?:of\s+)?(?:what|everything|all(?: of)? what)\s+you(?:'ve| have)?\s+(?:opened|watched|saved|"
+                      r"liked)(?:,?\s*liked\s+or\s+saved)?\b", re.I)
+
+
+def _scope_words_of(res):
+    """(words that say the result's scope, its 'without' parts, its length) for a filtered result, or None."""
+    parts = scope_parts(res)
+    f = res.sheet.get("filters") or {}
+    fsaid = _low(" ".join(str(x) for x in ((res.meta or {}).get("filters_said"), (res.meta or {}).get("base")) if x))
+    length = f.get("length") or ("long" if f.get("without_shorts") or re.search(r"\blong\b|without shorts", fsaid)
+                                 else ("short" if re.search(r"\bonly shorts\b|\bshorts only\b", fsaid) else None))
+    if not parts and length not in ("long", "short"):
+        return None
+    words = {w for p in parts for w in p["words"]}
+    if length == "long":
+        words |= {"long"}
+    elif length == "short":
+        words |= {"short", "shorts", "reels", "reel"}
+    return words, any(p["kind"] == "without" for p in parts)
+
+
+def _base_unscoped(raw, markers, res):
+    """mvp20 fix (the recount's B03.0 and F05.0: "Home cooking led what you opened, with 30 long videos" of the long
+    videos only, "Minecraft builds is still the largest gaming theme, at 51% of what you opened" of only gaming: 51% is
+    of the gaming videos, 23% of what they opened): on a filtered result, a base said in words ("of what you opened",
+    "led what you opened") is the base the rank or the share is of; it must carry the scope in its own clause ("of what
+    you opened on Sundays", "of the long videos you opened"), not elsewhere in the sentence."""
+    sw = _scope_words_of(res)
+    if not sw:
+        return None
+    words, without = sw
+    if not any(mk.rid == res.rid for mk in markers):
+        return None
+    text = _blank_marked(raw, markers)
+    for m in _BASE_PH.finditer(text):
+        pre = [x.end() for x in re.finditer(r"[,;:—–()]", text[:m.start()])]
+        post = re.search(r"[,;:—–()]", text[m.end():])
+        cl = text[(pre[-1] if pre else 0):m.end() + (post.start() if post else len(text) - m.end())].lower()
+        first = min((mk.start for mk in markers), default=len(text))
+        local = cl + " " + (text[:first].lower() if first <= m.start() else "")
+        hit = any(re.search(r"\b" + re.escape(w) + r"(?:s|es)?\b", local) for w in words)
+        if without and not _EXCLUDE_WORDS.search(local) and not re.search(r"\bthe rest\b", local):
+            hit = False
+        if not hit and not re.search(r"\b(?:of the rest|of those|of them|of these)\b", cl):
+            return "base", f"{res.rid} is filtered: say the scope with '{_clip(m.group(0), 30)}' " \
+                                     "('of the long videos you opened', 'of what you opened on Sundays')"
+    return None
+
+
+_BROADEN = re.compile(r"\b(?:overall|in total|altogether|all told|in general|across the board|with or without|"
+                      r"every other|everything else|every day of the week|the whole (?:month|year|week|window|history)|"
+                      r"whole month|of any length|any length|all lengths|all (?:of )?your (?:channels|areas|themes)|"
+                      r"all channels|all the channels|of all (?:your |the )?(?:channels|areas|themes)|every channel|"
+                      r"everything you opened|of all\b(?=\s*(?:[,.;]|with\b|$)))\b", re.I)
+
+
+def _broadened(low, res):
+    """mvp20 fix (the attack's L and M rows: "top channel overall", "In total, ... came second", "on every day of the
+    week", "across the whole month", "of all your channels", "your biggest area of all", "beat every other channel",
+    "with or without gaming", "on Saturdays and every other day", "and everything else"): a filtered result's numbers
+    said of more than its scope."""
+    if not _scope_words_of(res):
+        return None
+    m = _BROADEN.search(low)
+    if m:
+        return "scope_broadened", f"{res.rid} counts {_clip((res.meta or {}).get('filters_said') or 'a filtered scope', 60)}" \
+                                 f", not '{m.group(0)}'"
     return None
 
 
@@ -2669,7 +3381,7 @@ def _waive_scope_repeats(v, ledger, lead_text):
         if str(o.notes.get("filter_dropped") or "").startswith("code would have to add"):
             continue   # insight's own rewrite (a clause it would add), not the scope said again
         mks, _b = parse(" ".join(o.text.split()), ledger)
-        if any(mk.kind == "calc" or (mk.kind == "value" and (_family(mk.rest) in ("share", "points") or
+        if any(mk.kind in ("calc", "count") or (mk.kind == "value" and (_family(mk.rest) in ("share", "points") or
                                                             re.match(r"^(?:totals|previous)\.", mk.rest)))
                for mk in mks) or _UNSCOPED_BASE.search(strip_markers(o.text)):
             # a share, a move, a total of the window, or a base said in words ("of what you opened", "the 107 items
@@ -2681,6 +3393,57 @@ def _waive_scope_repeats(v, ledger, lead_text):
         o.details = []
         o.notes = {"scope_waived": f"the lead says {res.rid}'s scope"}
         o.sent = " ".join(strip_markers(" ".join(o.text.split())).split())
+
+
+_NEXT = re.compile(r"\b(?:came next|comes next|next came|was next|is next|next,|then came|followed by|followed|"
+                   r"behind (?:it|them|that|this)|after (?:it|that|them)|runner-up)\b|^\s*next\b", re.I)
+
+
+def _bind_points_to_lead(v, ledger):
+    """mvp20 fix. (a) The recount's C04.0 ("art and design came next at 25%" kept under a lead that named a THEME
+    first): a point that places its row relative to the one before ('came next', 'followed', 'behind it') is true only
+    under a kept lead that cites the row just before it in the same list. (b) The attack's U01, U02, U05 ("Clip
+    Factory[r2.channels[0]] led with 13" of the last 7 days under a lead of October): a point on another result, whose
+    window is not the lead's, says its own window."""
+    lead_os = [o for o in v.outcomes if o.where == "lead"]
+    lead_ok = bool(lead_os) and all(o.kept for o in lead_os)
+    lead_rows = set()
+    for o in (lead_os if lead_ok else []):   # (a failed lead is not sent: the code lead's own check decides)
+        for mk in parse(" ".join(o.text.split()), ledger)[0]:
+            if mk.kind in ("row", "value") and mk.owner:
+                lead_rows.add((mk.rid, mk.owner))
+    lrid = next((o.rid for o in lead_os if o.rid), None)
+    lres = ledger.get(lrid) if lrid else None
+    for o in v.outcomes:
+        if o.where != "point" or not o.kept:
+            continue
+        mks, _b = parse(" ".join(o.text.split()), ledger)
+        plain = strip_markers(o.text)
+        mine = {(mk.rid, mk.owner) for mk in mks if mk.kind in ("row", "value") and mk.owner}
+        if _NEXT.search(plain):
+            own = next((mk for mk in mks if mk.kind in ("row", "value") and mk.owner), None)
+            lst, i = _list_and_index(own.owner) if own else (None, None)
+            # the lead names the first row of ANOTHER list (or result), and not the row just before this one: 'came
+            # next' then reads as after the lead's row, which it is not
+            other_first = any(rid_ == (own.rid if own else None) and re.fullmatch(r"\w+\[0\]", ow) and
+                              _list_and_index(ow)[0] != lst for rid_, ow in lead_rows) or \
+                any(rid_ != (own.rid if own else None) and re.search(r"\[0\]$", ow) for rid_, ow in lead_rows)
+            ok = lst is not None and bool(i) and (not other_first or (own.rid, f"{lst}[{i - 1}]") in lead_rows)
+            if not ok:
+                o.reasons.append("rank")
+                o.details.append("'came next' places a row after the one the lead names first: cite that row in the "
+                                 "lead, or say its place")
+                o.sent = None
+                continue
+        lead_rows |= mine   # what comes after may follow this point's rows ("came next" after a theme it named)
+        if lres is not None and o.rid and o.rid != lrid:
+            pres = ledger.get(o.rid)
+            if pres is not None and pres.window() != lres.window() and \
+                    not _lead_names_window(o.text, ledger, o.rid):
+                o.reasons.append("window_missing")
+                o.details.append(f"{o.rid} is another window than the lead's: say "
+                                 f"'{_clip((pres.meta or {}).get('window_said') or '', 80)}'")
+                o.sent = None
 
 
 def check_answer(form, ledger, turn=None):
@@ -2725,6 +3488,7 @@ def check_answer(form, ledger, turn=None):
             lead_os[0].details.append(f"say the window: '{_clip((r.meta or {}).get('window_said') if r else '', 90)}'")
             lead_os[0].sent = None
     _waive_scope_repeats(v, ledger, f.lead)
+    _bind_points_to_lead(v, ledger)
     # 3.14 once: the same cells said again (the later sentence goes)
     for o in v.outcomes:
         if not o.kept:

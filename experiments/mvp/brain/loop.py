@@ -312,6 +312,10 @@ def _finish(rec, turn, vturn, verdicts):
     form = None
     if sent_v is not None:
         form = rec["forms"][verdicts.index(sent_v)]
+    elif code is not None and code.get("how") != "plain" and base_v is not None and base_v in verdicts and \
+            verdicts.index(base_v) < len(rec["forms"]):
+        # mvp20 fix: the offers the model picked go out under a code lead too (their labels are code's)
+        form = rec["forms"][verdicts.index(base_v)]
     out = A.build(ledger, verdict=sent_v, code=code, form=form, also=[v for v in verdicts if v is not None])
     rec["answer"] = out
     rec["lead_source"] = source

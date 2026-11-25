@@ -177,9 +177,10 @@ def test_only_an_area_must_be_said(brain):
     assert "only gaming" in o.notes["filter_dropped"]
     dropped(t, vt, f"In October 2026, Clip Factory[r1.channels[0]] led, with {cf}[r1.channels[0].items] videos.",
             "filter_dropped")
-    # code_form is not used on a scoped result; the template says the scope
+    # code_form is not used on a scoped result; the template says the scope (mvp20 fix: as the words that open the
+    # sentence, so the rank after them is of the scope, not as a tag after the count)
     lead = code_lead(t, vt, "template", [cf, len(g)])
-    assert "(only gaming)" in lead
+    assert lead.startswith("In October 2026, counting only gaming, ") and "(" not in lead
 
 
 # ================================================================ 5. without an area
@@ -192,7 +193,7 @@ def test_without_an_area_needs_the_exclusion_said(brain):
     dropped(t, vt, f"In October 2026, you opened {len(rest)}[r1.totals.items] gaming videos.", "filter_dropped")
     top = sorted(by_channel(rest).items(), key=lambda x: -x[1])[0]
     lead = code_lead(t, vt, "template", [top[1], len(rest)])
-    assert "(without gaming)" in lead and top[0] in lead
+    assert lead.startswith("In October 2026, without gaming, ") and top[0] in lead
 
 
 # ================================================================ 6. only the long videos
@@ -210,7 +211,11 @@ def test_only_long_videos(brain):
     kept(t, vt, f"In October 2026, {top[0][0]}[r1.channels[0]] led the long videos you opened, with "
                 f"{top[0][1]}[r1.channels[0].items].")
     lead = code_lead(t, vt, "template", [top[0][1], len(lo)])
-    assert f"{top[0][0]} led what you opened, with {top[0][1]} long videos." in lead   # (mvp20: the base's verb)
+    # (mvp20 fix, the recount's B03.0: "X led what you opened, with N long videos" ranked on everything they opened;
+    # the rank's base now says the length itself)
+    assert f"{top[0][0]} led the long videos you opened, with {top[0][1]}." in lead
+    dropped(t, vt, f"In October 2026, {top[0][0]}[r1.channels[0]] led what you opened, with "
+                   f"{top[0][1]}[r1.channels[0].items] long videos.", "base")
 
 
 # ================================================================ 7. least

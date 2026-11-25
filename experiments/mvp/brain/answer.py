@@ -49,10 +49,18 @@ def scope_line(res):
     lst = LIST_WORD.get(kind or res.tool or "", res.tool or "results")
     base = (meta.get("base") or "of what you opened")
     base = base[3:] if base.startswith("of ") else base
-    window = (meta.get("window_said") or "").split(",")[0].strip()
+    # (mvp20 fix: the recount found "all your history (5 January 2021 to 30 October 2026 · only gaming" with its
+    # bracket left open, and "on Sundays · on Sundays": the export's end is cut out whole and a part is said once)
+    import re
+    window = re.sub(r",?\s*where your (?:youtube |instagram )?export ends", "", meta.get("window_said") or "").strip()
+    window = window.split(", ")[0].strip() if "(" not in window else window
+    if window.count("(") > window.count(")"):
+        window += ")"
     parts = [lst, base] + ([window] if window else [])
     if meta.get("filters_said"):
-        parts.append(str(meta["filters_said"]))
+        for p in str(meta["filters_said"]).split("; "):
+            if p.strip() and p.strip().lower() not in window.lower():
+                parts.append(p.strip())
     elif (res.sheet.get("filters") or {}).get("without_shorts"):
         parts.append("only videos known to be long")
     return "Counted: " + " · ".join(parts)
@@ -144,8 +152,11 @@ def build(ledger, verdict=None, code=None, form=None, also=()):
     rid = _cited_rid(verdict, code, ledger)
     res = ledger.get(rid) if rid else None
     filt = filtered(res)
-    sline = scope_line(res) if filt else None
-    offers = offers_of(form, ledger) if verdict is not None else []
+    # (mvp20 fix: the plain line counted nothing, so no scope line goes under it)
+    plain = verdict is None and bool(code) and code.get("how") == "plain"
+    sline = scope_line(res) if filt and not plain else None
+    # (mvp20 fix: a code lead keeps the offers the model picked; code writes every label)
+    offers = offers_of(form, ledger) if (verdict is not None or code) else []
     lines = [lead] if lead else []
     lines += ["- " + p for p in points]
     tail = [x for x in (sline, PRIVATE_LINE if private else None) if x]
