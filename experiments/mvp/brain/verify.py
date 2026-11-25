@@ -1441,7 +1441,11 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         if _APPOSITIVE.match(blank2[b:]) and re.match(r"^\s*,\s*(?:a|an|the)\s+\w+\s+(?:channel|creator|show|"
                                                       r"series|youtuber|artist|brand|studio)\b", blank2[b:], re.I):
             add("outside_in_history")
-    if WORLD_CLAIMS.search(_remove_phrases(low, [p.lower() for p in _window_phrases(wres)] if wres else [])):
+    wl = _remove_phrases(low, [p.lower() for p in _window_phrases(wres)] if wres else [])
+    if res is not None and any(p["kind"] == "platform" and p["words"] == ["youtube"] for p in scope_parts(res)):
+        # merge seam: a result the tools scoped to YouTube only says its scope as "on YouTube" (not a world claim)
+        wl = re.sub(r"\bon youtube\b", " ", wl)
+    if WORLD_CLAIMS.search(wl):
         add("outside_in_history", "claims about the world go in outside")
     # 3.9 claims with no marker
     if not markers and (_CONSUME.search(low) or _COMPARATIVE.search(low) or _RANK.search(low)):
@@ -1696,9 +1700,12 @@ def _verb_dropped(raw, markers, res, low):
 
 def _sensitive(text, turn):
     from .. import profile as P
-    if any(n and _low(n) in _low(text) for n in turn.sensitive_names):
-        if not (turn.unlock and any(_low(turn.unlock) in _low(n) for n in turn.sensitive_names if _low(n) in
-                                    _low(text))):
+    # a sensitive name as whole words (merge seam: Turn.of fills sensitive_names from a real library, where a short
+    # hidden channel name inside another word must not drop the sentence)
+    named = [n for n in turn.sensitive_names if n and re.search(r"(?<![\w@])" + re.escape(_low(n)) + r"(?!\w)",
+                                                                _low(text))]
+    if named:
+        if not (turn.unlock and any(_low(turn.unlock) in _low(n) for n in named)):
             return True
     # the unlock is per topic (SPEC 8.4): its own words are taken out, any other sensitive word still fails
     return bool(P.sensitive(_mask_unlocked(text, turn.unlock)))

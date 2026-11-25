@@ -246,7 +246,7 @@ def test_the_code_lead_templates_pass_the_verifier_and_the_plain_line_ends_the_l
         a = F.code_lead(LEDGERS[name])
         assert a["how"] in ("code_form", "template") and a["lead"], name
     assert F.code_lead(LEDGERS["search"])["items"] == ["r1.items[0]", "r1.items[1]"]
-    assert F.code_lead([]) == {"lead": F.PLAIN, "how": "plain", "rid": None, "items": []}
+    assert F.code_lead([]) == {"lead": F.PLAIN, "how": "plain", "rid": None, "items": [], "private_line": False}
 
 
 def test_the_code_lead_keeps_the_points_that_passed():

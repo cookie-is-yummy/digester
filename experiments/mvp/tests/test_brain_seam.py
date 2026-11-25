@@ -369,6 +369,59 @@ def test_the_verifiers_turn_carries_the_name_index_and_the_unlock(brain):
     # a library name the results do not hold, named in a history sentence, needs a marker (SPEC 4.3 step 6)
     dropped(t, vt, "In 2024, you opened videos from Gaming Daily.", "uncited_name")
     assert V.Turn().names == []
+    # a hidden channel's name as part of another word is not the name
+    vt.sensitive_names = ["Pan"]
+    assert not V._sensitive("In 2024 you opened Panorama videos.", vt) and V._sensitive("In 2024 Pan led.", vt)
+
+
+def test_the_code_lead_carries_the_private_line_when_a_hidden_topic_would_lead(brain):
+    """2024 holds the made-up sensitive theme (50 items, more than any channel shown): a lead that ranks must bring
+    code's private line (SPEC 4.3 step 13), whichever way the code lead was made."""
+    from mvp.brain import fallback as FB
+    r, t, vt = ask(brain, "breakdown", {"by": "channel", "window": {"words": "in 2024"}}, "channels in 2024")
+    assert r["meta"]["hidden"]["rank_hidden_above"] is True
+    cl = FB.code_lead(t.results, turn=vt)
+    assert re.search(r"\bled\b", cl["lead"]) and cl["private_line"] is True, cl
+    assert FB.answer(t.results, None, vt)["private_line"] is True
+    r2, t2, vt2 = ask(brain, "breakdown", {"by": "none", "window": {"words": "in October"}}, "how much in october")
+    cl2 = FB.code_lead(t2.results, turn=vt2)
+    assert cl2["private_line"] is False and not re.search(r"\bled\b", cl2["lead"])
+
+
+SCOPES = {   # every form of the tools' filters_said, through real calls: (tool, args, message, scope parts)
+    "weekday": ("breakdown", {"by": "none", "window": {"words": "in October"}, "scope": {"weekday": 0}},
+                "mondays in october", 1),
+    "platform": ("breakdown", {"by": "none", "window": {"words": "in October"}, "scope": {"platforms": ["youtube"]}},
+                 "youtube in october", 1),
+    "title_words": ("breakdown", {"by": "none", "window": {"words": "in October"}, "scope": {"exclude": ["tofu"]}},
+                    "october without tofu", 1),
+    "two_filters": ("breakdown", {"by": "channel", "window": {"words": "in October"},
+                                  "scope": {"only": ["gaming"], "exclude": ["Gaming Daily"], "length": "long"}},
+                    "gaming without gaming daily, long only, in october", 2),
+    "first_with_platform": ("first_last", {"subject": "watercolor", "which": "first",
+                                           "scope": {"platforms": ["instagram"]}},
+                            "my first watercolor on instagram", 2),
+}
+
+
+@pytest.mark.parametrize("name", sorted(SCOPES))
+def test_every_scope_the_tools_write_is_read_and_must_be_said(brain, name):
+    from mvp.brain import verify as V
+    tool, args, msg, n_parts = SCOPES[name]
+    r, t, vt = ask(brain, tool, args, msg)
+    said = r["meta"]["filters_said"]
+    pieces = [p for p in said.split("; ") if p not in ("only videos known to be long", "only Shorts and reels")]
+    parts = V.scope_parts(V.Ledger(t.results).get("r1"))
+    assert len(parts) == len(pieces) == n_parts, (said, parts)
+    n = r["sheet"]["totals"]["items"]
+    window = "In all your history" if tool == "first_last" else "In October 2026"
+    o = dropped(t, vt, f"{window}, you opened {n}[r1.totals.items] videos.", "filter_dropped")
+    assert any(said[:30] in d for d in o.details), o.details
+    # said with the scope's words, the same count is kept
+    words = {"weekday": "on Mondays, ", "platform": "on YouTube, ", "title_words": "without tofu videos, ",
+             "two_filters": "of gaming without Gaming Daily, ", "first_with_platform": "of watercolor on Instagram, "}
+    noun = "long videos" if name == "two_filters" else "videos"
+    kept(t, vt, f"{window}, {words[name]}you opened {n}[r1.totals.items] {noun}.")
 
 
 # ================================================================ the test helper's envelope is results.present
@@ -380,6 +433,7 @@ def test_the_verifiers_test_envelope_is_the_tools_sheet(brain):
     from mvp.brain import results as R
     from mvp.tests import brain_envelope as BE
     from mvp.tests.test_brain_tools import NOW, TODAY, person
+    compared = []
     for q in ("what am i into lately", "which channels did i watch most in october", "what did i watch on 30 october",
               "how did my watching change since 2020", "did i watch more in 2024 or 2025"):
         hq = Hm.read(q, TODAY)
@@ -390,3 +444,5 @@ def test_the_verifiers_test_envelope_is_the_tools_sheet(brain):
         for k in R.DROPPED:
             mine.pop(k, None)
         assert mine == R.present(raw, "r1"), q
+        compared.append((q, raw.get("kind")))
+    assert len(compared) >= 4, compared

@@ -206,28 +206,36 @@ def templates(res):
 
 def code_lead(ledger, verdict=None, turn=None, cited=None):
     """{"lead": text with no marker, "how": "code_form" | "template" | "plain", "rid": rid or None,
-    "items": [item refs for cards]}."""
+    "items": [item refs for cards], "private_line": bool}. `private_line` (SPEC 4.3 step 13, as Verdict.private_line):
+    the lead ranks while a topic they keep private would have ranked above it, so code's scope line must add
+    "Leaving out topics you keep private."."""
     if not isinstance(ledger, V.Ledger):
         ledger = V.Ledger(ledger)
     res = _first_result(ledger, cited or _cited_rid(verdict))
     if res is None:
-        return {"lead": PLAIN, "how": "plain", "rid": None, "items": []}
+        return {"lead": PLAIN, "how": "plain", "rid": None, "items": [], "private_line": False}
     items = [f"{res.rid}.items[{i}]" for i, it in enumerate(res.sheet.get("items") or [])
              if isinstance(it, dict)][:V.ITEMS_MAX] if not res.is_sheet or res.sheet.get("kind") in I.ITEM_KINDS \
         else []
+    hidden_above = bool(((res.meta or {}).get("hidden") or {}).get("rank_hidden_above"))
     if res.is_sheet:
         a = _from_code_form(res)
         if a:
-            return {"lead": a, "how": "code_form", "rid": res.rid, "items": items}
+            return {"lead": a, "how": "code_form", "rid": res.rid, "items": items,
+                    "private_line": hidden_above and bool(V._RANK.search(a) or V._LEAST.search(a))}
     for t in templates(res):
         v = V.check_answer({"lead": t, "points": []}, ledger, turn or V.Turn())
         if v.lead_ok:
-            return {"lead": " ".join(o.sent for o in v.lead), "how": "template", "rid": res.rid, "items": items}
-    return {"lead": PLAIN, "how": "plain", "rid": res.rid, "items": []}
+            return {"lead": " ".join(o.sent for o in v.lead), "how": "template", "rid": res.rid, "items": items,
+                    "private_line": v.private_line}
+    return {"lead": PLAIN, "how": "plain", "rid": res.rid, "items": [], "private_line": False}
 
 
 def answer(ledger, verdict, turn=None):
     """SPEC 4.5, row 3: the code lead with the points of the model's answer that passed."""
     lead = code_lead(ledger, verdict, turn)
     pts = verdict.kept_text("point") if verdict is not None and lead["how"] != "plain" else []
-    return dict(lead, points=pts)
+    # a kept point that ranks under a hidden topic needs the private line too
+    private = lead["private_line"] or bool(verdict is not None and lead["how"] != "plain" and any(
+        o.kept and o.hidden_rank for o in verdict.outcomes if o.where == "point"))
+    return dict(lead, points=pts, private_line=private)

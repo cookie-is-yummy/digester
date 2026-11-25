@@ -459,7 +459,10 @@ def run_first_last(turn, a: FirstLastArgs):
     sheet = R.present(raw, rid)
     sheet["items"] = _item_rows(turn, raw, (raw.get("items") or [])[:3], q, rid)
     meta = _meta(turn, raw, a.scope, resolved)
-    meta["filters_said"] = f"{a.subject}: {_label_of(turn, resolved[a.subject])}"
+    # merge seam: the subject line first, then the scope's own lines (an exclude, a length, a weekday, a platform),
+    # so a filter applied to the query is never left unsaid
+    meta["filters_said"] = "; ".join(x for x in (f"{a.subject}: {_label_of(turn, resolved[a.subject])}",
+                                                 _filters_said(turn, a.scope, resolved)) if x)
     return _finish(turn, "first_last", rid, raw, sheet, meta, t0, keep="items")
 
 
