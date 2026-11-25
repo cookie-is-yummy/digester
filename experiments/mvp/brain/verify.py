@@ -1518,7 +1518,13 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
                                                       r"series|youtuber|artist|brand|studio)\b", blank2[b:], re.I):
             add("outside_in_history")
     wl = _remove_phrases(low, [p.lower() for p in _window_phrases(wres)] if wres else [])
+    byp_ = ((res.sheet.get("totals") or {}).get("by_platform") or {}) if res is not None and res.is_sheet else {}
     for p_ in ("youtube", "instagram"):
+        if isinstance(byp_, dict) and byp_.get(p_) and all(not v for k, v in byp_.items() if k != p_) and \
+                any(mk.rid == res.rid for mk in markers):
+            # mvp20 fix (the recount's F02.0, D07.0: "4 videos, all of them on YouTube" when all 4 were): every item
+            # of the cited result is that platform's, so "on YouTube" says where their own items were
+            wl = re.sub(r"\bon " + p_ + r"\b", " ", wl)
         if any(mk.kind == "value" and mk.path.endswith(".by_platform." + p_) for mk in markers):
             # (mvp20 tune, the audit's T56, run2's C10: "126[r1.totals.by_platform.youtube] ... on YouTube" says where
             # their own count was, a cell of their history, not a claim about the world)
@@ -1559,7 +1565,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     if res is not None:
         order = (res.meta or {}).get("order") or "most"
         rows0 = [mk for mk in markers if mk.kind in ("row", "value") and mk.owner and re.search(r"\[0\]$", mk.owner)]
-        if _LEAST.search(low):
+        if _LEAST.search(low) and _least_of_whole_list(markers, res):
+            pass   # mvp20 fix (the recount's A06.0): the last row of a complete list, strictly its smallest
+        elif _LEAST.search(low):
             if not (order == "least" and (res.meta or {}).get("complete") is True and rows0):
                 add("least", f"{res.rid} is ordered by {order}" + ("" if (res.meta or {}).get("complete") else
                                                                     ", not over every entity"))
@@ -2131,6 +2139,26 @@ def _platform_said(raw, markers, res):
 # rule reads what a sentence CLAIMS (a time said with a range word, a qualifier on a count, a comparison, a base, an
 # exclusive word) against what its cells can prove, and drops what they cannot; the attack's true sentences and the
 # planted set's true twins are the keep figures it is measured on.
+def _least_of_whole_list(markers, res):
+    """A cited row that is the strictly smallest of a complete list (every row of it shown, not cut), whatever the
+    list's order: 'the fewest' of it is proved by the rows themselves."""
+    ro = (res.meta or {}).get("rows_of") or {}
+    for mk in markers:
+        if mk.rid != res.rid or mk.kind not in ("row", "value") or not mk.owner:
+            continue
+        lst, i = _list_and_index(mk.owner)
+        if lst is None or "." in lst:
+            continue
+        rows = res.sheet.get(lst)
+        if not isinstance(rows, list) or ro.get(lst) != len(rows) or (res.meta or {}).get("truncated"):
+            continue
+        vals = [r.get("items") for r in rows if isinstance(r, dict)]
+        if len(vals) == len(rows) and all(isinstance(v, (int, float)) for v in vals) and len(vals) > 1:
+            if all(vals[i] < v for j, v in enumerate(vals) if j != i):
+                return True
+    return False
+
+
 def _blank_marked(raw, markers):
     """raw with every marker's brackets blanked, and a row marker's or a dated value's said words too (a cited row's own
     name, an item's title, a cell's own date are not words of the sentence)."""

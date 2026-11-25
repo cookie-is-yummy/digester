@@ -29,7 +29,7 @@ from . import tools as TL
 from . import verify as V
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROMPT_VERSION = os.environ.get("MVP_BRAIN_PROMPT", "brain_v2")   # mvp20 tune: v2 (v1 kept for reference)
+PROMPT_VERSION = os.environ.get("MVP_BRAIN_PROMPT", "brain_v3")   # mvp20 fix: v3 (v1, v2 kept for reference)
 PROMPT_PATH = os.path.join(os.path.dirname(HERE), "prompts", f"{PROMPT_VERSION}.md")
 GIVE_ANSWER = "give_answer"
 ROUNDS = int(os.environ.get("MVP_BRAIN_ROUNDS", "3"))

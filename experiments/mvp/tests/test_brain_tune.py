@@ -290,7 +290,8 @@ def test_a_kept_learned_point_marker_goes_out_as_the_points_text(harness):
 def test_the_prompt_is_v2_and_its_new_examples_pass_or_fail_as_it_says(harness):
     from mvp.brain import loop as BL, verify as V
     from mvp.tests import brain_prompt_fixture as PF
-    assert BL.PROMPT_VERSION == "brain_v2" and BL.PROMPT_PATH.endswith("brain_v2.md")
+    # (mvp20 fix: the default is brain_v3, which keeps every v2 example verbatim)
+    assert BL.PROMPT_VERSION == "brain_v3" and BL.PROMPT_PATH.endswith("brain_v3.md")
     text = " ".join(BL.system_text().split())
     ledgers = PF.ledgers(harness)
     vt = V.Turn(message="x", today=TODAY)
