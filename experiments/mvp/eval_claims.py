@@ -1898,6 +1898,12 @@ class TextAudit:
                         continue
                     main = c.most_common(1)[0][0]
                     ok = any(main == t[1].lower() for t in ths)
+                    for t in ths if not ok else ():
+                        # or one of that theme's own biggest channels ("<theme>, driven by A, B and C")
+                        tc = Counter(lib.items[i]["c"] for i in pool if lib.theme_of.get(i) == t[1].lower() and
+                                     lib.items[i]["c"])
+                        if ch[1] in [k for k, _ in tc.most_common(5)]:
+                            ok = True
                     self.F.add("word", "a channel behind a theme it is not in", ok, ent_code(ch),
                                code_of("theme", main), severity=1.0)
         # pass 6, second round (the hand check, n07: "subió 2 puntos frente a 2021", a 1.68-point move): X14 in Spanish
