@@ -8,6 +8,8 @@ base words of `scoped`, the gate) and given its window's words (`insight.window_
 tool, written with markers and passed through `verify.check_answer` before it is used, then sent with its markers
 taken out. When nothing passes: the plain line of SPEC 3.10.
 """
+import re
+
 from .. import insight as I
 from . import verify as V
 
@@ -38,6 +40,10 @@ def _from_code_form(res):
     sheet = res.sheet_k
     if sheet.get("kind") not in CODE_FORM_KINDS or (res.meta or {}).get("order") == "least":
         return None
+    if V.scope_parts(res):
+        # merge seam: a result the tools scoped by a name, a weekday or a platform keeps its scope in meta, not in
+        # the sheet's filters, so code_form's words would leave it out ("Clip Factory led" of only gaming)
+        return None
     try:
         form = I.code_form(sheet)
     except Exception:   # noqa: BLE001  (a sheet code_form cannot read gets a template)
@@ -57,6 +63,12 @@ def _from_code_form(res):
             return None
         out.append(g)
     ans = I.window_lead(" ".join(out), sheet)
+    # window_lead opens with the window's bare words ("October 2026 up to 30 October 2026, ..., Clip Factory led"):
+    # the fallback says them as a lead does ("In October 2026 up to ...")
+    w = ((sheet.get("window") or {}).get("words") or "").strip().rstrip(",")
+    cap = w[:1].upper() + w[1:]
+    if cap and ans.startswith(cap + ", ") and lead_in(w) != cap + ", ":
+        ans = lead_in(w) + ans[len(cap) + 2:]
     return ans if len(ans) <= I.ANSWER_MAX + 120 else None
 
 
@@ -65,22 +77,91 @@ def _window_words(res):
     return w.rstrip(",")
 
 
+_OWN_PREP = re.compile(r"^(?:in|on|since|from|between|this|last|during|over|across|up to)\b", re.I)
+_WEEKDAY = re.compile(r"^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", re.I)
+VERB = {"of what you opened": ("opened", "videos", "video"), "of what you liked": ("liked", "items", "item"),
+        "of what you saved": ("saved", "items", "item"),
+        "of everything you opened, liked or saved": ("opened, liked or saved", "items", "item")}
+_FORM = re.compile(r" \((?:area|theme|channel|collection)\)$")
+_LENGTH_PARTS = ("only videos known to be long", "only Shorts and reels")
+
+
+def lead_in(w):
+    """The window's words as the opening of a lead (merge seam: the tools' window words start with "since", "this
+    year", a weekday or "the 4 weeks", not only a month): "In October 2026, ", "Since 1 January 2020 ...", "On Friday
+    30 October 2026, ...", "In the 4 weeks up to ..."."""
+    if not w:
+        return ""
+    if _WEEKDAY.match(w):
+        return "On " + w + ", "
+    if _OWN_PREP.match(w):
+        return w[:1].upper() + w[1:] + ", "
+    return "In " + w + ", "
+
+
+def _scope_clause(res):
+    """The tools' scope said in the sentence (" (only gaming)", " (without Minecraft builds, on Mondays)"): the length
+    lines are said by the noun ("long videos"), first_last's subject by its own template."""
+    said = (res.meta or {}).get("filters_said")
+    if not isinstance(said, str) or not V.scope_parts(res):
+        return ""
+    parts = [_FORM.sub("", p.strip()) for p in said.split("; ") if p.strip() and p.strip() not in _LENGTH_PARTS
+             and ":" not in p]
+    return " (" + ", ".join(parts) + ")" if parts else ""
+
+
+def _n(n, one, many):
+    return one if n == 1 else many
+
+
+def _day_words(when):
+    d = V._as_d(str(when or "")[:10])
+    return f"{d.day} {I.MONTHS[d.month - 1].capitalize()} {d.year}" if d else None
+
+
 def templates(res):
     """Marker-form leads for a result, most specific first (each is verified before use)."""
     rid, sheet, tool = res.rid, res.sheet, res.tool
     w = _window_words(res)
-    lead_in = (f"In {w}, " if w and not w.lower().startswith(("in ", "across ", "all ")) else
-               (w[:1].upper() + w[1:] + ", " if w else ""))
+    lead = lead_in(w)
     out = []
     order = (res.meta or {}).get("order") or "most"
     kind = sheet.get("kind")
+    verb, noun, noun1 = VERB.get((res.meta or {}).get("base") or "", VERB["of what you opened"])
+    scope = _scope_clause(res)
+    if res.is_sheet and kind in ("first", "last"):
+        # first_last: the item's day (code_form needs facts' own item rows and a topic, which the tool's resolved
+        # subject replaces); the window's core words ("In all your history") and the subject in their own words
+        said = (res.meta or {}).get("filters_said") or ""
+        subj = said.split(":", 1)[0].strip() if ":" in said else ""
+        it0 = (sheet.get("items") or [None])[0]
+        day = _day_words(it0.get("when")) if isinstance(it0, dict) else None
+        core = re.split(r"[(,]", w)[0].strip()
+        if subj and day:
+            an = "an" if subj[:1].lower() in "aeiou" else "a"
+            head = lead_in(core)
+            if kind == "first":
+                out.append(f"{head}you first {verb} {an} {subj} {noun1} on {day}[{rid}.items[0].when].")
+            else:
+                out.append(f"{head}the last {subj} {noun1} you {verb} was on {day}[{rid}.items[0].when].")
     if res.is_sheet:
         f = sheet.get("filters") or {}
-        noun = "long videos" if (f.get("without_shorts") or f.get("length") == "long") else (
-            f"{f['topic']} videos" if isinstance(f.get("topic"), str) and f.get("topic") else "videos")
+        long_ = bool(f.get("without_shorts") or f.get("length") == "long")
+        noun_ = (f"long {noun}" if long_ else
+                 f"{f['topic']} {noun}" if isinstance(f.get("topic"), str) and f.get("topic") else noun)
+        noun1_ = (f"long {noun1}" if long_ else
+                  f"{f['topic']} {noun1}" if isinstance(f.get("topic"), str) and f.get("topic") else noun1)
         tot = (sheet.get("totals") or {}).get("items")
-        total_line = f"{lead_in}you opened {tot}[{rid}.totals.items] {noun}." if isinstance(tot, (int, float)) \
-            else None
+        total_line = (f"{lead}you {verb} {tot}[{rid}.totals.items] {_n(tot, noun1_, noun_)}{scope}."
+                      if isinstance(tot, (int, float)) else None)
+        prev = sheet.get("previous") or {}
+        ptot, pw = prev.get("items"), (prev.get("words") or "").strip()
+        if kind in ("compare_windows", "compare") and isinstance(tot, (int, float)) and \
+                isinstance(ptot, (int, float)) and pw:
+            # both windows of a compare result in one sentence (each count beside its own window's words)
+            pin = pw if _OWN_PREP.match(pw) else "in " + pw
+            out.append(f"{lead}you {verb} {tot}[{rid}.totals.items] {_n(tot, noun1_, noun_)}{scope}, and "
+                       f"{ptot}[{rid}.previous.items] {pin}.")
         if kind == "count" and total_line:
             out.append(total_line)
         lst = LIST_OF.get(kind, "themes")
@@ -93,22 +174,24 @@ def templates(res):
                 continue
             name, n = rows[0][nk], rows[0]["items"]
             if order == "least":
-                out.append(f"{lead_in}{name}[{rid}.{key}[0]] was the one you opened least, with "
-                           f"{n}[{rid}.{key}[0].items] {noun}.")
+                out.append(f"{lead}{name}[{rid}.{key}[0]] was the one you {verb} least, with "
+                           f"{n}[{rid}.{key}[0].items] {_n(n, noun1_, noun_)}{scope}.")
             else:
-                out.append(f"{lead_in}{name}[{rid}.{key}[0]] led, with {n}[{rid}.{key}[0].items] {noun}.")
+                out.append(f"{lead}{name}[{rid}.{key}[0]] led, with {n}[{rid}.{key}[0].items] "
+                           f"{_n(n, noun1_, noun_)}{scope}.")
         if total_line and kind != "count":
             out.append(total_line)
         if w:
-            out.append(f"{lead_in}here is what I counted.")
+            out.append(f"{lead}here is what I counted{scope}.")
     elif tool == "search":
-        out.append("Here's what I found in your saves.")
+        out.append("Here's what I found in your saves." if (sheet.get("how") or "saved") == "saved" else
+                   "Here's what I found.")
     elif tool == "learned":
         out.append("Here is what I found in what you saved.")
     elif tool == "find":
         out.append("Here is what I found in your library.")
     else:
-        out.append((lead_in or "") + "here are the videos." if lead_in else "Here are the videos.")
+        out.append(lead + "here are the videos." if lead else "Here are the videos.")
     return out
 
 

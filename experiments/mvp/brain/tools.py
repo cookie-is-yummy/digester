@@ -277,13 +277,17 @@ def _meta(turn, raw, scope, resolved, order="most", by=None, extra_notes=()):
     hidden = (raw or {}).get("hidden") or {}
     ranked = (raw or {}).get("ranked") or {}
     lst = LIST_OF.get(by)
+    # merge seam: the verifier reads one flag for every list of the sheet, and a sentence may rank a list that is not
+    # the one asked for (a compare by none still holds themes and channels): the flag is said when a hidden entity
+    # would rank above the first row of ANY list shown, never under-said
+    above = hidden.get("above") or {}
     return {"window_said": ((raw or {}).get("window") or {}).get("words"),
             "base": BASE[scope.how],
             "filters_said": _filters_said(turn, scope, resolved),
             "resolved": dict(resolved), "order": order, "complete": True,
             "rows_total": ranked.get(lst) if lst else None,
             "hidden": {"sensitive": int(hidden.get("sensitive", 0)), "friends": int(hidden.get("friends", 0)),
-                       "rank_hidden_above": bool((hidden.get("above") or {}).get(lst, False)) if lst else False},
+                       "rank_hidden_above": any(bool(v) for v in above.values())},
             "notes": _notes(turn, raw) + list(extra_notes)}
 
 

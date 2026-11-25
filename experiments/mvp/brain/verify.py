@@ -243,6 +243,27 @@ class Turn:
     names: list[str] = field(default_factory=list)
     sensitive_names: list[str] = field(default_factory=list)
 
+    @classmethod
+    def of(cls, tturn):
+        """The verifier's turn from the tools' turn (brain/tools.Turn): the same message, screen, today and unlock
+        (code's, from their message), and the person's name index from the library the tools read: the areas,
+        themes, channels and collections they may see as `names`, the channels hidden as sensitive as
+        `sensitive_names` (a hidden channel is never offered; naming it fails step 3.11 unless its topic is the
+        turn's unlock). Duck-typed: verify does not import the tools."""
+        names, sens = [], []
+        lib = getattr(tturn, "lib", None) if getattr(tturn, "bot", None) is not None else None
+        if lib is not None:
+            from . import names as N
+            names += sorted(set(N._area_words(lib).values()))
+            names += [nm for _t, nm, _w in N._themes(lib)]
+            for nm, hidden in sorted(N._channels(lib).items()):
+                (sens if hidden else names).append(nm)
+            names += sorted(N._collections(lib).values())
+        return cls(message=getattr(tturn, "message", "") or "", unlock=getattr(tturn, "unlock", None),
+                   screen=getattr(tturn, "screen", "") or "", today=getattr(tturn, "today", None),
+                   names=[n for n in names if isinstance(n, str) and len(n) >= 2],
+                   sensitive_names=[n for n in sens if isinstance(n, str) and len(n) >= 2])
+
 
 @dataclass
 class Marker:
@@ -624,6 +645,26 @@ def parse(sentence, ledger):
         out.append(mk)
         prev_end = m.end()
     return out, bad
+
+
+def _bad_detail(sentence, ledger):
+    """The repair text for a bracket that is no marker, as exact as code can make it (the live probe's shapes:
+    `[r1.sheet.totals.items]`, `[r1.meta.window_said]`, a rid with no result)."""
+    if re.search(r"[{}]", sentence):
+        return "braces are not markers: type the number, then [r1.path]"
+    for m in _BRACKET.finditer(sentence):
+        body = m.group(0)[1:-1].strip()
+        if body.startswith("="):
+            continue
+        rid = body.split(".", 1)[0]
+        if re.fullmatch(r"r\d+|ctx[12]", rid) and ledger.get(rid) is None:
+            return f"{rid} is not a result with numbers in this turn"
+        if re.match(r"^(?:r\d+|ctx[12])\.(?:sheet|meta)\.", body):
+            fixed = re.sub(r"^((?:r\d+|ctx[12]))\.sheet\.", r"\1.", body)
+            if ".meta." in body:
+                return f"'{_clip(body, 40)}': meta is not cited; window words need no marker"
+            return f"'{_clip(body, 40)}': a path starts after the result id, without 'sheet.' ({_clip(fixed, 40)})"
+    return "a bracket that is not a marker of this turn's results"
 
 
 def _row_names(row, rest):
@@ -1230,7 +1271,7 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
             out.details.append(d)
             out.notes.setdefault(r, d)
     for b in bad:
-        add(b, "a bracket that is not a marker of this turn's results")
+        add(b, _bad_detail(raw, ledger))
     for mk in markers:
         if mk.kind == "calc":
             for p in (mk.a, mk.b):
@@ -1327,6 +1368,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
                 allowed_scope.add(_low(v))
         for k, v in ((res.meta or {}).get("resolved") or {}).items():
             allowed_scope.add(_low(k))
+        for p in scope_parts(res):   # the labels of the tools' scope ("only gaming (area)": "gaming")
+            if p.get("label"):
+                allowed_scope.add(_low(p["label"]))
     cited_names = {}
     for rest_, rid_ in cited_rows.items():
         r_ = ledger.get(rid_)
@@ -1459,6 +1503,14 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         r = _filter_dropped(raw, markers, res)
         if r:
             add(*r)
+        # a number, a date or a rank of a result the tools scoped by a name, a weekday or a platform, said without
+        # the scope's words (merge seam: the scope lives in meta.filters_said, not in the sheet's filters)
+        r = _scope_dropped(raw, markers, res, low)
+        if r:
+            add(*r)
+        r = _verb_dropped(raw, markers, res, low)
+        if r:
+            add(*r)
     # 3.8 insight's checks, one sentence (sheets only), or the rules of a result that is not a sheet (step 4)
     # (a sentence with no marker is read by insight against the turn's first result: insight's strict render drops a
     # direction or a number with no path, "the mix narrowed")
@@ -1541,6 +1593,93 @@ def _filter_dropped(raw, markers, res):
     return None
 
 
+# the scope lines brain/tools.py writes in meta.filters_said, joined by "; " (tools._filters_said, tools._label_of):
+# "only gaming (area)", "without Minecraft builds (theme)", "only videos with 'speedrun' in the title", "on Mondays",
+# "YouTube only", and first_last's "watercolor: Watercolor painting (theme)". The length lines ("only videos known to
+# be long", "only Shorts and reels") are _filter_dropped's.
+_SCOPE_REF = re.compile(r"^(?:(?P<op>only|without)|(?P<subj>[^:]{1,80}):) (?:(?P<label>.+) \((?:area|theme|channel|"
+                        r"collection)\)|videos with '(?P<words>.+)' in the title)$")
+_SCOPE_DAY = re.compile(r"^on (?P<day>" + "|".join(d.capitalize() for d in
+                                                   ("monday", "tuesday", "wednesday", "thursday", "friday",
+                                                    "saturday", "sunday")) + r")s$")
+_SCOPE_PLATFORM = re.compile(r"^(?P<p>YouTube|Instagram) only$")
+_EXCLUDE_WORDS = re.compile(r"\b(?:without|except|excluding|leaving out|left out|other than|not counting|apart from|"
+                            r"besides|outside of|minus|setting aside|no)\b", re.I)
+_SCOPE_STOP = {"and", "the", "of", "for", "with", "videos", "video", "title", "your", "my"}
+
+
+def scope_parts(res):
+    """[{kind: only|without|subject|weekday|platform, label, words}] of a result the tools scoped (from
+    meta.filters_said in the tools' own fixed forms; any other line, the helper's "only <topic>" included, is not a
+    scope part here: insight's topic rules read the sheet's filters.topic)."""
+    said = (res.meta or {}).get("filters_said") if res is not None else None
+    if not isinstance(said, str) or not said.strip():
+        return []
+    theirs = [k for k in ((res.meta or {}).get("resolved") or {})]
+    out = []
+    for part in [p.strip() for p in said.split("; ") if p.strip()]:
+        m = _SCOPE_REF.match(part)
+        if m:
+            label = m.group("label") or m.group("words") or ""
+            kind = m.group("op") or "subject"
+            extra = [m.group("subj")] if m.group("subj") else []
+            words = {w for x in [label] + extra + theirs for w in re.findall(r"[a-z0-9]+", _low(x))
+                     if len(w) >= 3 and w not in _SCOPE_STOP}
+            out.append({"kind": kind, "label": label, "words": sorted(words)})
+            continue
+        m = _SCOPE_DAY.match(part)
+        if m:
+            out.append({"kind": "weekday", "label": "", "words": [m.group("day").lower()]})
+            continue
+        m = _SCOPE_PLATFORM.match(part)
+        if m:
+            out.append({"kind": "platform", "label": "", "words": [m.group("p").lower()]})
+    return out
+
+
+def _scope_dropped(raw, markers, res, low):
+    """A number, a date, a count or a rank word of a scoped result needs the scope's words in the same sentence (a
+    channel's count inside "only Minecraft builds" is its Minecraft videos only; a share is of the scoped items): the
+    label or their own word for it, and for a "without" an exclusion word too. A sentence that only names a row
+    claims nothing the scope changes."""
+    parts = scope_parts(res)
+    if not parts:
+        return None
+    mine = [mk for mk in markers if mk.rid == res.rid or (mk.kind == "calc" and mk.a.startswith(res.rid + "."))]
+    claims = any(mk.kind != "row" for mk in mine) or (bool(mine) and bool(_RANK.search(low) or _LEAST.search(low)))
+    if not claims:
+        return None
+    text = strip_markers(raw).lower()
+    for p in parts:
+        hit = any(re.search(r"\b" + re.escape(w) + r"(?:s|es)?\b", text) for w in p["words"])
+        if p["kind"] == "without" and not _EXCLUDE_WORDS.search(text):
+            hit = False
+        if not hit:
+            said = (res.meta or {}).get("filters_said") or ""
+            return "filter_dropped", f"{res.rid} counts {_clip(said, 80)}: say it in the sentence"
+    return None
+
+
+_VERBS = {"opened": re.compile(r"\b(?:opened|watched|viewed)\b", re.I), "saved": re.compile(r"\bsaved\b", re.I),
+          "liked": re.compile(r"\bliked\b", re.I)}
+
+
+def _verb_dropped(raw, markers, res, low):
+    """A count of a result the tools counted by saves (or likes) said as what they opened, or the reverse (merge seam:
+    the tools' meta.base is "of what you saved" for a saved breakdown, and insight's checks read no verb)."""
+    base = _low((res.meta or {}).get("base") or "")
+    m = re.fullmatch(r"of what you (opened|saved|liked)", base)
+    if not m or not res.is_sheet:
+        return None
+    if not any(mk.kind != "row" and mk.rid == res.rid for mk in markers):
+        return None
+    own = m.group(1)
+    said = {v for v, rx in _VERBS.items() if rx.search(low)}
+    if said and own not in said:
+        return "base", f"{res.rid} counts what you {own}: say '{own}'"
+    return None
+
+
 def _sensitive(text, turn):
     from .. import profile as P
     if any(n and _low(n) in _low(text) for n in turn.sensitive_names):
@@ -1611,7 +1750,14 @@ def slotted(raw, markers, plain_names, cited_names, res):
             continue
         rest = cited_names.get(n)
         if rest is None:
-            continue   # a scope word (the filter's topic): insight allows it typed
+            f_ = res.sheet.get("filters") or {}
+            if n in {_low(v) for v in (f_.get("topic"), f_.get("channel")) if isinstance(v, str)}:
+                continue   # the filter's topic: insight allows it typed
+            # a scope word of the tools (meta.resolved, meta.filters_said: "gaming" of "only gaming (area)"): insight
+            # does not know the tools' scope and would read it as a name typed beside a number (typed_name); the
+            # scope rule (_scope_dropped) has checked it, so insight reads the sentence without it
+            edits.append((a, b, ""))
+            continue
         try:
             row = _resolve(res.sheet, rest)
         except KeyError:
@@ -1793,7 +1939,8 @@ def _non_sheet(raw, markers, res, low):
         fit = mk.value.get("fit") if isinstance(mk.value, dict) else None
         if fit == "weak" and re.search(r"\b(?:here is|here's|this is|found it|that's the one|is the one)\b", low):
             return "weak_fit", f"{mk.path} is a weak match"
-        how = str(mk.value.get("how") or "") if isinstance(mk.value, dict) else ""
+        # a search row carries no `how` of its own: the result's sheet says which kind it searched (merge seam)
+        how = str((mk.value.get("how") if isinstance(mk.value, dict) else None) or res.sheet.get("how") or "")
         if re.search(r"\bsaved\b", low) and how and not re.search(r"save|collection|playlist", how):
             return "wrong_name", f"{mk.path} was not saved ({how})"
     for m in re.finditer(r"[\"“]([^\"”]{2,120})[\"”]", raw):
@@ -1874,6 +2021,11 @@ def _lead_names_window(lead_text, ledger, rid):
     plain = strip_markers(lead_text)
     said = (r.meta or {}).get("window_said") or ""
     if said and _low(re.split(r"[(,]", said)[0]) in _low(plain):
+        return True
+    if r.sheet.get("kind") in ("first", "last") and _low(said).startswith("all your history") and re.search(
+            r"\[" + re.escape(r.rid) + r"\.items\[\d+\]\.(?:when|at|date)\]", lead_text):
+        # merge seam (first_last over all of their history): the item's own day, checked against its cell, is the
+        # time the lead claims; "in all your history" adds nothing to "you first opened ... on 10 January 2025"
         return True
     sheet = r.sheet_k
     wl = I.window_lead(plain, sheet)
