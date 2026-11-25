@@ -59,7 +59,7 @@ _NUM_RX = r"(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
 # a number typed right before a value or count marker, with its unit
 NUM_TAIL = re.compile(r"(?:(?P<hedge>\b" + _HEDGE_RX + r")\s+)?(?P<sign>[+\-−])?(?P<num>" + _NUM_RX + r"|\b" +
                       _NUM_WORD_RX + r")(?P<unit>\s?%|\s?percent|\s?per cent|\s+percentage points?|\s+points?|"
-                      r"\s+pts|\s+minutes?)?\s*$", re.I)
+                      r"\s+pts|\s+minutes?|\s+times)?\s*$", re.I)
 DATE_TAIL = re.compile(r"(?P<date>\b\d{1,2}(?:st|nd|rd|th)? " + _MON_RX + r"\w*\.?(?:,? \d{4})?|\b" + _MON_RX +
                        r"\w*\.? \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?|\b" + _MON_RX + r"\w*\.?(?: \d{4})?|"
                        r"\b(?:19|20)\d\d)\s*$", re.I)
@@ -348,7 +348,7 @@ class Result:
     def sheet_k(self):
         """The sheet as insight reads it: without the keys the tools add."""
         if self._k is None:
-            self._k = _strip_added(self.sheet)
+            self._k = {k: v for k, v in _strip_added(self.sheet).items() if k not in ("hidden", "ranked")}
         return self._k
 
     @property
@@ -366,6 +366,14 @@ class Result:
         a, b = _as_d(p.get("start")), _as_d(p.get("end"))
         if a and b:
             return a, b
+        w = str(p.get("words") or "").strip()
+        my = re.fullmatch(r"(?:in\s+)?([A-Za-z]+)\s+((?:19|20)\d\d)", w)
+        if my and my.group(1).lower() in _MONTHS:   # "September 2026": the whole month
+            mi, y = _MONTHS.index(my.group(1).lower()) + 1, int(my.group(2))
+            nxt = date(y + (mi == 12), mi % 12 + 1, 1)
+            return date(y, mi, 1), date.fromordinal(nxt.toordinal() - 1)
+        if re.fullmatch(r"(?:19|20)\d\d", w):
+            return date(int(w), 1, 1), date(int(w), 12, 31)
         m = re.search(r"\((\d{1,2}) (\w+)(?: (\d{4}))? to (\d{1,2}) (\w+) (\d{4})\)", str(p.get("words") or ""))
         if m:
             try:
@@ -703,7 +711,7 @@ def check_value(mk):
         return None if abs(mk.num - float(v)) <= max(0.1 * float(v), 0.05) else \
             ("wrong_value", f"{mk.path} = {round(float(v), 2)}")
     # counts
-    if unit.startswith("minute") and key == "long_median_min":
+    if (unit.startswith("minute") and key == "long_median_min") or (unit == "times" and key in OPEN_KEYS):
         unit = ""
     if unit:
         return "wrong_measure", f"{mk.path} is a count ({_fmt(mk.rest, v)})"
@@ -780,6 +788,46 @@ def _family(rest):
     return "count"
 
 
+def _is_before(rest):
+    key = _segs(rest)[-1][0]
+    return rest.startswith("previous.") or key.startswith("previous_") or key in ("faded_from", "grew_from",
+                                                                                   "from_share")
+
+
+_CLOSE = re.compile(r"\b(?:close behind|right behind|just behind|not far behind|a close second|close second|"
+                    r"neck and neck|nearly level|almost level|almost as (?:many|much)|nearly as (?:many|much)|"
+                    r"close to|hot on)\b", re.I)
+CLOSE_RATIO = 0.8   # "close behind": the second value at least four fifths of the first
+
+
+def _close_check(low, markers, res):
+    """'close behind' and its kin: the two values said (or the row and the row above it) within a fifth."""
+    if not _CLOSE.search(low) or res is None:
+        return None
+    vals = [(mk.owner, mk.key, float(mk.value)) for mk in markers if mk.kind == "value" and mk.owner and
+            isinstance(mk.value, (int, float)) and _family(mk.rest) in ("count", "share")]
+    pairs = []
+    for i, a in enumerate(vals):
+        for b in vals[i + 1:]:
+            if a[1] == b[1] and a[0] != b[0]:
+                pairs.append((a[2], b[2]))
+    if not pairs:
+        for ow, key, v in vals:
+            m = re.match(r"^(.*)\[(\d+)\]$", ow)
+            if m and int(m.group(2)) > 0:
+                try:
+                    above = _resolve(res.sheet, f"{m.group(1)}[{int(m.group(2)) - 1}].{key}")
+                except KeyError:
+                    continue
+                if isinstance(above, (int, float)):
+                    pairs.append((float(above), v))
+    for a, b in pairs:
+        hi, lo = max(a, b), min(a, b)
+        if hi and lo / hi < CLOSE_RATIO:
+            return "not_close", f"'close' needs the two within a fifth: {round(lo, 4)} against {round(hi, 4)}"
+    return None
+
+
 def check_calc(mk, ledger, clause):
     """None, or (reason, detail): the op computed from the two cells, the typed number or words against it, and the
     direction words of its clause against its sign."""
@@ -796,6 +844,9 @@ def check_calc(mk, ledger, clause):
         return "wrong_measure", f"points needs two shares; {det}"
     if op == "ratio" and (fa != fb or fa not in ("count", "share")):
         return "wrong_measure", f"ratio needs two counts or two shares; {det}"
+    if _is_before(ra) and not _is_before(rb):
+        # the value of the period before goes second: "up" is now against before, never the other way round
+        return "calc", f"{op}(now, before): {mk.b} is now, {mk.a} is the period before; {det}"
     if op == "diff":
         val = va - vb
     elif op == "points":
@@ -1017,7 +1068,7 @@ def _end_in_base(sentence, markers, res):
         after = after[:stop.start()] if stop else after
         prev_cell = mk.rest.startswith("previous.") or (mk.key or "").startswith("previous_") or \
             mk.key in ("faded_from", "grew_from", "from_share")
-        m = re.match(r"^\s*(?:,\s*)?(?:in|during|over|across)\s+(.{3,80})", after, re.I)
+        m = re.match(r"^\s*(?:,\s*)?(?:[a-z]+\s+){0,2}?(?:in|during|over|across)\s+(.{3,80})", after, re.I)
         if not m:
             continue
         ph = m.group(1).lower()
@@ -1025,6 +1076,10 @@ def _end_in_base(sentence, markers, res):
             bool(prevw and _low(prevw)[:20] in _low(ph))
         if says_prev and not prev_cell:
             return "wrong_window", f"{mk.path} is of {res.rid}'s window, not the period before"
+        nw = [x for x in ((res.meta or {}).get("window_said"), (res.sheet.get("window") or {}).get("words")) if x]
+        says_now = not says_prev and any(_low(re.split(r"[(,]", x)[0])[:24] in _low(ph) for x in nw)
+        if says_now and prev_cell:
+            return "wrong_window", f"{mk.path} is of the period before, not {res.rid}'s window"
     return None
 
 
@@ -1172,6 +1227,8 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     for mk in markers:
         if mk.kind == "row" and isinstance(mk.value, dict) and isinstance(mk.value.get("title"), str):
             titles.append(mk.value["title"])
+            if isinstance(mk.value.get("channel"), str):
+                titles.append(mk.value["channel"])   # a cited item's own channel may be named (step 4)
     caps_text = _remove_phrases(caps_text, titles)
     caps_text = re.sub(r"\"[^\"]{1,90}\"|“[^”]{1,90}”", lambda m: " " * len(m.group(0)), caps_text) if titles else \
         caps_text
@@ -1224,7 +1281,10 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
                                                                     ", not over every entity"))
         if order == "least" and _RANK.search(re.sub(r"\bthe least\b|\bleast\b", " ", low)):
             add("rank", f"{res.rid} is ordered by least: its first row is the smallest")
-        if _RANK.search(low) and rows0:
+        r_ = _close_check(low, markers, res)
+        if r_:
+            add(*r_)
+        if (_RANK.search(low) or _LEAST.search(low)) and rows0:
             for mk in rows0:
                 tie = _tie(res, mk.owner)
                 if tie:
@@ -1358,14 +1418,27 @@ def slotted(raw, markers, plain_names, cited_names, res):
             edits.append((mk.start, mk.end, "{" + mk.rest + "." + nk + "}"))
         elif mk.kind == "calc":
             words = CALC_TAIL.search(raw[:mk.mstart])
+            ra, rb = mk.a.split(".", 1)[1], mk.b.split(".", 1)[1]
+            own = _owner(ra)
+            if mk.op == "points" and own and own == _owner(rb) and {_segs(ra)[-1][0], _segs(rb)[-1][0]} == \
+                    {"share", "previous_share"}:
+                # a row's move in points, its share now against before: insight's own change cell says it, so
+                # insight still reads a number beside the direction word (code verified the typed one)
+                try:
+                    has = isinstance(_resolve(res.sheet, own + ".change_vs_previous"), (int, float))
+                except KeyError:
+                    has = False
+                if has:
+                    edits.append((mk.start, mk.end, "{" + own + ".change_vs_previous}"))
+                    continue
             if words and words.group("words"):
                 edits.append((mk.start, mk.end, _NEUTRAL))
             else:
                 edits.append((mk.start, mk.end, ""))
         elif mk.kind == "count":
-            n = int(mk.value)
-            word = {v: k for k, v in _NUM_WORDS.items() if " " not in k}.get(n, str(n))
-            edits.append((mk.start, mk.end, word))
+            # the length of a list ("the top 3"): verified by code; insight's strict reading takes any number word
+            # for a free number ("with four areas rising"), so the count goes and its words stay ("the top")
+            edits.append((mk.start, mk.end, ""))
     # plain cited names (not inside a marker's span)
     spans = [(mk.start, mk.end) for mk in markers]
     for a, b, n in plain_names:
@@ -1386,7 +1459,9 @@ def slotted(raw, markers, plain_names, cited_names, res):
     # the window said in the model's own words ("the 4 weeks to 30 Oct"), checked by step 15: its count of weeks is
     # no number of the sheet's, so it is taken out ("the weeks to 30 Oct") rather than read as a free number
     words = " ".join(_window_phrases(res)).lower()
-    exact = [(m.start(), m.end()) for ph in _window_phrases(res) for m in re.finditer(re.escape(ph), raw, re.I)]
+    full = [x for x in ((res.meta or {}).get("window_said"), (res.sheet.get("window") or {}).get("words"),
+                        (res.sheet.get("previous") or {}).get("words")) if isinstance(x, str) and x.strip()]
+    exact = [(m.start(), m.end()) for ph in full for m in re.finditer(re.escape(ph.strip()), raw, re.I)]
     for m in _SPAN_N.finditer(raw):
         if any(x < m.end() and m.start() < y for x, y in spans) or any(a < m.end() and m.start() < b for a, b, _t in
                                                                         edits):
