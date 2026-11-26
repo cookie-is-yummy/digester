@@ -830,15 +830,23 @@ def _diff_ok(n, counts):
     return any(abs(a - b) == n for i, a in enumerate(cs) for b in cs[i + 1:])
 
 
-def check_sentence(text, facts, uses=None, chart_vals=None, need_fact=True):
-    """None when the sentence holds only what the sheet holds; else why it is dropped (a short code word)."""
-    why, n = _check(text, facts, uses, chart_vals)
+def _go(why, skip):
+    """mvp25 (the brain checker's cells mode, DESIGN 24.4): True when the reason `why` stops a check. A reason in
+    `skip` is walked past, so the checks after it are still looked at. With `skip` empty (every caller but the cells
+    mode) every reason stops, as before."""
+    return not skip or str(why).split(":")[0] not in skip
+
+
+def check_sentence(text, facts, uses=None, chart_vals=None, need_fact=True, skip=frozenset()):
+    """None when the sentence holds only what the sheet holds; else why it is dropped (a short code word). `skip`
+    (mvp25, the brain checker's cells mode only): reasons walked past, so a later reason is still looked at."""
+    why, n = _check(text, facts, uses, chart_vals, skip=skip)
     if why is None and need_fact and n == 0:
         return "generic"
     return why
 
 
-def _check(text, facts, uses=None, chart_vals=None, maxlen=SENT_MAX):
+def _check(text, facts, uses=None, chart_vals=None, maxlen=SENT_MAX, skip=frozenset()):
     """(why it is dropped or None, how many of the sheet's facts it names)."""
     from . import profile as P
     raw = " ".join(str(text or "").split())
@@ -846,11 +854,11 @@ def _check(text, facts, uses=None, chart_vals=None, maxlen=SENT_MAX):
         return "empty", 0
     if len(raw) > maxlen:
         return "too_long", 0
-    if _LINK.search(raw):
+    if _LINK.search(raw) and _go("link", skip):
         return "link", 0
     if P.sensitive(raw):
         return "sensitive", 0
-    r = _check_body(raw, facts, uses, chart_vals)
+    r = _check_body(raw, facts, uses, chart_vals, skip=skip)
     return (r, 0) if isinstance(r, str) else (None, r)
 
 
@@ -869,23 +877,27 @@ def _own_base(raw, sheet):
     return bool(said) and all(x in own for x in said)
 
 
-def _check_body(raw, facts, uses, chart_vals):
+def _check_body(raw, facts, uses, chart_vals, skip=frozenset()):
     t = _norm(raw)
     for ph in facts.allowed_phrases:   # the window's own words (they carry where the record ends) are always fine
         t = t.replace(_norm(ph).rstrip(", "), " ")
     t = re.sub(r"where your (?:youtube |instagram )?export ends|donde termina tu exportacion(?: de \w+)?", " ", t)
     if _WATCH_TIME.search(t):
-        return "watch_time"
+        if _go("watch_time", skip):
+            return "watch_time"
     if _LIMITS.search(t):
-        return "limits"
+        if _go("limits", skip):
+            return "limits"
     if _ONE_DAY.search(t):   # round 12, merge: "on 1 different days" is never said (house style)
-        return "one_day"
+        if _go("one_day", skip):
+            return "one_day"
     keys = None
     if uses is not None:
         keys = [str(k).split(".")[0].split("[")[0] for k in (uses if isinstance(uses, list) else [uses])]
         keys = [k for k in keys if k in facts.sheet]
         if not keys:
-            return "no_keys"
+            if _go("no_keys", skip):
+                return "no_keys"
     # ---- dates first (a day before a month is never a count), then the sheet's names ----
     n_facts = 0
     for m in re.finditer(_DATE_RX, t):
@@ -894,7 +906,8 @@ def _check_body(raw, facts, uses, chart_vals):
         ok = (any(x.month == mo and x.day == int(d) and x.year == int(y) for x in facts.dates) or
               ((mo, int(d)) in facts.md and int(y) in facts.years)) if y else (mo, int(d)) in facts.md
         if not ok:
-            return "date"
+            if _go("date", skip):
+                return "date"
         n_facts += 1
     t2 = re.sub(_DATE_RX, " ", t)
     names, rest = facts.names_in(t2)
@@ -904,7 +917,8 @@ def _check_body(raw, facts, uses, chart_vals):
         # round 12, pass 3 fix: a follow-up's own words in quotes ("only gaming") name what they filter by
         qn = re.sub(r"^only\s+", "", qn) if re.match(r"^only\s+\S", qn) else qn
         if qn and not any(qn in e for e in facts.entities):
-            return "quote"
+            if _go("quote", skip):
+                return "quote"
     pool = facts.pool_for(keys, names)
     n_facts += len(names)
     # ---- months, years, hours of the day (taken out of the text once read) ----
@@ -915,9 +929,11 @@ def _check_body(raw, facts, uses, chart_vals):
             continue   # "may" is a word as often as a month
         if m.group(2):
             if (int(m.group(2)), mo) not in facts.ym:
-                return "month"
+                if _go("month", skip):
+                    return "month"
         elif mo not in facts.months:
-            return "month"
+            if _go("month", skip):
+                return "month"
         n_facts += 1
     rest_n = re.sub(r"\b(" + _MON_RE + r")\b(?:\s+(?:de\s+)?(\d{4}))?", " ", rest_n)
     for m in re.finditer(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)|\b(\d{1,2}):(\d{2})\b", rest_n):
@@ -928,22 +944,26 @@ def _check_body(raw, facts, uses, chart_vals):
         if ap == "am" and h == 12:
             h = 0
         if not any(abs(h - x) <= 1 or abs(h - x) == 23 for x in facts.hours_of_day):
-            return "hour"
+            if _go("hour", skip):
+                return "hour"
         n_facts += 1
     rest_n = re.sub(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)|\b(\d{1,2}):(\d{2})\b", " ", rest_n)
     for w in re.findall(r"[a-z]+", rest_n):
         if w in _TIME_WORD:
             if not any(h in _TIME_WORD[w] for h in facts.hours_of_day):
-                return "time_of_day"
+                if _go("time_of_day", skip):
+                    return "time_of_day"
             n_facts += 1
     for w, months in SEASONS.items():
         if re.search(r"\b" + w + r"\b", rest_n):
             if not any(m in facts.months for m in months):
-                return "season"
+                if _go("season", skip):
+                    return "season"
             n_facts += 1
     if _WEEKPART.search(rest_n):
         if not facts.has_weekpart:
-            return "weekpart"
+            if _go("weekpart", skip):
+                return "weekpart"
         n_facts += 1
     for i, wd in enumerate(WEEKDAYS + WEEKDAYS_ES):
         if re.search(r"\b" + wd + r"s?\b", rest_n):
@@ -951,25 +971,29 @@ def _check_body(raw, facts, uses, chart_vals):
             # week's split is not everyone's (any date of the sheet used to do: a channel first watched on a Saturday)
             day_of_item = facts.sheet.get("kind") in ITEM_KINDS and any(d.weekday() == i % 7 for d in facts.dates)
             if not (day_of_item or facts.busiest_weekday == WEEKDAYS[i % 7]):
-                return "weekday"
+                if _go("weekday", skip):
+                    return "weekday"
             n_facts += 1
     for y in re.findall(r"\b(19[89]\d|20\d\d)\b(?!\s*%)", rest_n):
         if int(y) not in facts.years:
-            return "year"
+            if _go("year", skip):
+                return "year"
         n_facts += 1
     rest_n = re.sub(r"\b(19[89]\d|20\d\d)\b(?!\s*%)", " ", rest_n)
     # ---- ratio and fraction words ----
     for rx, r in _RATIO:
         if rx.search(rest_n):
             if not _ratio_bound(r, facts, names, rest_n, pool):
-                return "ratio"
+                if _go("ratio", skip):
+                    return "ratio"
             n_facts += 1
             rest_n = rx.sub(" ", rest_n)
     rest_n = re.sub(r"\b(\w+) times\b", lambda m: " " if m.group(1) in _NUMWORD else m.group(0), rest_n)
     for rx, f in _FRAC:
         if rx.search(rest_n):
             if not (any(abs(x - f) <= 0.07 for x in pool.fracs) or _ratio_ok(1 / f, pool)):
-                return "fraction"
+                if _go("fraction", skip):
+                    return "fraction"
             n_facts += 1
     rest_n = re.sub(r"\b(?:twice|double[sd]?|doubling|half|halved|a third|a quarter)\b", " ", rest_n)
     # ---- numbers ----
@@ -998,7 +1022,8 @@ def _check_body(raw, facts, uses, chart_vals):
             abs(v - h) <= max(0.6, h * (0.15 if hedged else 0.06)) for h in own.hours)
         if own.counts and not _near_count(v, own.counts, hedged) and not _diff_ok(int(v), own.counts) \
                 and not hours_ok:
-            return "number_of_name"
+            if _go("number_of_name", skip):
+                return "number_of_name"
     for m in re.finditer(num_re + r"(\s*%|\s*percent|\s*per cent|\s*por ciento|\s*points?|\s*puntos?)?"
                          r"(\s*(?:hours?|hrs?|h\b|horas?))?(\s*(?:minutes?|mins?|minutos?))?(\s*(?:times|x\b|veces))?",
                          rest_n):
@@ -1012,20 +1037,25 @@ def _check_body(raw, facts, uses, chart_vals):
         if m.group(2):
             if "point" in m.group(2) or "punto" in m.group(2):
                 if not any(abs(v - p) <= (3 if hedged else 1) for p in pool.points):
-                    return "points"
+                    if _go("points", skip):
+                        return "points"
             elif not (_near_frac(v, pool.fracs, hedged) or any(abs(v - p) <= (3 if hedged else 1) for p in pool.points)
                       or _share_of_total(v, facts, names, hedged)):
-                return "percent"
+                if _go("percent", skip):
+                    return "percent"
         elif m.group(3):
             # round 12, pass 2 (T2): no total of video length, in any words ("about 3,356 hours of video on 359
             # days" read as 9 hours a day); an item's own length is said in minutes by the item lines
-            return "hours"
+            if _go("hours", skip):
+                return "hours"
         elif m.group(4):
             if not any(abs(v - x) <= (2 if hedged else 0) for x in pool.minutes):
-                return "minutes"
+                if _go("minutes", skip):
+                    return "minutes"
         elif m.group(5):
             if not _ratio_ok(v, pool):
-                return "ratio"
+                if _go("ratio", skip):
+                    return "ratio"
         else:
             topn = re.search(r"\b(?:top|first|primer\w*|los)\s*$", before)
             if _COUNTED.match(rest_n[m.end():]):
@@ -1033,7 +1063,8 @@ def _check_body(raw, facts, uses, chart_vals):
                 # a count, never an hours figure that happens to sit in the same sentence
                 if v != int(v) or not (_near_count(v, pool.counts, hedged) or topn or
                                        (_diff_ok(int(v), pool.counts) and _RELATION.search(t))):
-                    return "count_of_videos"
+                    if _go("count_of_videos", skip):
+                        return "count_of_videos"
                 continue
             ok = (_near_count(v, pool.counts, hedged) or (v == int(v) and _diff_ok(int(v), pool.counts)
                                                           and _RELATION.search(t))
@@ -1043,27 +1074,33 @@ def _check_body(raw, facts, uses, chart_vals):
                       and re.search(r"\bbusiest\b|\bhours?\b|\bhoras?\b", t))
                   or (topn and v <= 10 and any(L >= v for L in facts.lengths)))
             if not ok:
-                return "number"
+                if _go("number", skip):
+                    return "number"
     for w, n in _NUMWORD.items():
         if re.search(r"\b" + w + r"\b", rest_n) and not (w == "once" and facts.lang == "en"):
             if n not in pool.counts and n not in facts.lengths and not _diff_ok(n, pool.counts):
-                return "number_word"
+                if _go("number_word", skip):
+                    return "number_word"
             n_facts += 1
     # ---- words: a subject the sheet does not name is a made-up fact; a claim true for anyone is worthless ----
     if GENERIC_CLAIM.search(rest_n):
-        return "generic_claim"
+        if _go("generic_claim", skip):
+            return "generic_claim"
     if _FILLER.search(rest_n):
-        return "filler"
+        if _go("filler", skip):
+            return "filler"
     if _UNSUPPORTED.search(rest_n) and not re.search(r"\b\d[\d,.]*\s+(?:different\s+)?(?:days|dias)\b", t):
         # (a steadiness the days say, "steadier: 190 days against 120", stands)
-        return "unsupported"   # round 12, pass 2 fix (judge A: "art was smaller but steadier": no number says so)
+        if _go("unsupported", skip):
+            return "unsupported"   # round 12, pass 2 fix (judge A: "art was smaller but steadier": no number says so)
     for tok in re.findall(r"[a-z]+(?:'[a-z]+)?", rest_n):
         w = tok.split("'")[0]
         if w not in TOPICAL and _stem(w) not in TOPICAL:
             continue
         if w in facts.vocab or _stem(w) in facts.vocab:
             continue
-        return "word:" + w
+        if _go("word", skip):
+            return "word:" + w
     # a capitalised word inside a sentence that is no word of the sheet's names (a made-up channel of plain words)
     for m in re.finditer(r"\b([A-ZÁÉÍÓÚÑ][\w&-]+)", raw):
         pre = raw[:m.start()].rstrip(" \"“(¿¡")
@@ -1080,36 +1117,44 @@ def _check_body(raw, facts, uses, chart_vals):
             continue
         if len(parts) == 2 and parts[0] in ALLOWED_CAPS and parts[1] in ("heavy", "only", "free", "like", "style"):
             continue   # round 12, pass 2: "Shorts-heavy"
-        return "name:" + w
+        if _go("name", skip):
+            return "name:" + w
     # ---- what the words claim must agree with the sheet ----
     one = [n for n in names if n in facts.change]
     if len(one) == 1:
         ch = facts.change[one[0]]
         if _UP.search(rest_n) and not _DOWN.search(rest_n) and ch <= 0:
-            return "direction"
+            if _go("direction", skip):
+                return "direction"
         if _DOWN.search(rest_n) and not _UP.search(rest_n) and ch >= 0:
-            return "direction"
+            if _go("direction", skip):
+                return "direction"
     if names and _NEW.search(rest_n) and not any(n in facts.new for n in names):
-        return "not_new"
+        if _go("not_new", skip):
+            return "not_new"
     if names and _STOPPED.search(rest_n) and not any(n in facts.stopped for n in names):
-        return "not_stopped"
+        if _go("not_stopped", skip):
+            return "not_stopped"
     topn = re.search(r"\btop (\d{1,2}|three|five|ten)\b", rest_n)
     if topn:
         k = int(topn.group(1)) if topn.group(1).isdigit() else _NUMWORD[topn.group(1)]
         if names and not any(facts.rank.get(n, 99) < k for n in names):
-            return "not_top"
+            if _go("not_top", skip):
+                return "not_top"
         rest_n = rest_n[:topn.start()] + " " + rest_n[topn.end():]
     periods = [n for n in names if n in facts.period_top or n in facts.period_area]
     if periods and _SUPER.search(rest_n):
         if not any((facts.period_top.get(p) in names and facts.period_top.get(p) != p) or
                    facts.period_area.get(p) in names
                    for p in periods):
-            return "not_top"
+            if _go("not_top", skip):
+                return "not_top"
     elif names and (_SUPER.search(rest_n) or re.search(r"\bmost of\b|\bla mayoria\b", rest_n)) and \
             not _leads_ok(facts, names):
-        return "not_top"
-    why = (None if facts.slotted else _order_claim(facts, names, rest_n)) or _spread_claim(facts, names, rest_n) \
-        or _mix_claim(facts, rest_n)
+        if _go("not_top", skip):
+            return "not_top"
+    why = (None if facts.slotted else _order_claim(facts, names, rest_n, skip=skip)) or \
+        _spread_claim(facts, names, rest_n, skip=skip) or _mix_claim(facts, rest_n, skip=skip)
     if why:
         return why
     if re.search(r"\b(?:saved|guardaste|guardado|guardados)\b", t) and re.search(
@@ -1118,9 +1163,10 @@ def _check_body(raw, facts, uses, chart_vals):
         ns = {int(x["n"]) for x in lib if isinstance(x, dict) and _num(x.get("n"))}
         said = {int(v) for v in nums if v == int(v)}
         if not ns or (said and not said & ns) or not said:
-            return "library"
+            if _go("library", skip):
+                return "library"
     if not names:
-        why = _field_claim(facts, rest_n)
+        why = _field_claim(facts, rest_n, skip=skip)
         if why:
             return why
     flat = " ".join(_words(raw))
@@ -1134,11 +1180,13 @@ def _check_body(raw, facts, uses, chart_vals):
             more = facts.items_of[a] > facts.items_of[b]
             want_more = g.get("w") in ("more", "mas", "bigger", "busier") if order else True
             if want_more != more:
-                return "comparison"
+                if _go("comparison", skip):
+                    return "comparison"
     if chart_vals and nums:
         tot = {float(v) for v in ((facts.sheet.get("totals") or {}).get("items"),) if _num(v)}
         if all(v in chart_vals or v in tot for v in nums) and not _INSIGHT.search(rest_n.replace("|", " ")):
-            return "restates_chart"
+            if _go("restates_chart", skip):
+                return "restates_chart"
     # "up from 19 before" when 19 is a count of days: a number said of the span before is the span before's
     for m in re.finditer(r"\b(?:up|down|rising|falling|grew|fell|rose|climbed|dropped) from (?:about )?(\d[\d,.]*\d|\d)"
                          r"(?![\d,.]*\s*(?:%|percent|points?))|\b(?:against|versus|compared with) (\d[\d,.]*) (?:in )?"
@@ -1150,19 +1198,22 @@ def _check_body(raw, facts, uses, chart_vals):
             prev.add(facts.entities.get(per) or Pool())
         if v is not None and not (_near_count(v, prev.counts, bool(re.search(r"about", m.group(0))))
                                   or any(abs(v - h) <= max(0.6, h * 0.15) for h in prev.hours)):
-            return "previous"
+            if _go("previous", skip):
+                return "previous"
     # "22% of your cooking videos" when 22% is a share of everything opened
     for m in re.finditer(r"(\d[\d.,]*)\s*%\s+of\s+(?:your|the|all)\s+(?:\|[A-Z]\||(?!what\b)[a-z]+(?: [a-z]+)?)\s+"
                          r"(?:videos|posts|items)", rest_n):
         if not re.search(r"\bshorts?\b|\blong\b|\bcortos?\b|\blargos?\b", rest_n) and \
                 not _own_base(raw, facts.sheet):
-            return "share_of_topic"
+            if _go("share_of_topic", skip):
+                return "share_of_topic"
     # "led by 640" when it led by 428: a lead is a difference of two counts (or points)
     for m in re.finditer(r"\b(?:led|leads|ahead|more|fewer|up|down|grew|fell)\s+(?:\w+\s+)?by\s+(?:about\s+)?"
                          r"(\d[\d,.]*)(?![\d,.])(?!\s*(?:%|percent|points?))", rest_n):
         v = _parse_num(m.group(1), facts.lang)
         if v is not None and not _diff_ok(int(v), pool.counts | facts.glob.counts):
-            return "lead"
+            if _go("lead", skip):
+                return "lead"
     return n_facts
 
 
@@ -1212,7 +1263,7 @@ def _leads_ok(facts, names):
     return False
 
 
-def _order_claim(facts, names, text):
+def _order_claim(facts, names, text, skip=frozenset()):
     """'X led with 107, followed by Y with 96': names said in a ranking order must be in that order in their list."""
     if not _ORDER.search(text):
         return None
@@ -1224,36 +1275,40 @@ def _order_claim(facts, names, text):
     seq = [facts.order[n] for n in said if n in facts.order]
     for (k1, i1), (k2, i2) in zip(seq, seq[1:]):
         if k1 == k2 and i2 < i1:
-            return "order"
+            if _go("order", skip):
+                return "order"
     return None
 
 
-def _spread_claim(facts, names, text):
+def _spread_claim(facts, names, text, skip=frozenset()):
     """'mostly X' / 'centered on X' when X is 6% of it is false framing (a spread); 'mostly long videos' for 431
     against 404 too."""
     if not _SPREAD.search(text):
         return None
     shares = [facts.fields[n]["share"] for n in names if "share" in facts.fields.get(n, {})]
     if shares and sum(shares) < SPREAD_SHARE:   # round 12, pass 2 (T1): "mostly X and Y" needs half together
-        return "spread"
+        if _go("spread", skip):
+            return "spread"
     tot = facts.sheet.get("totals") or {}
     sh, lo = tot.get("shorts"), tot.get("long")
     if _num(sh) and _num(lo) and sh + lo > 0:
         if re.search(r"\b(?:mostly|mainly|largely)\s+(?:long|longer)\b", text) and lo / (sh + lo) < LONG_SHARE:
-            return "spread"
+            if _go("spread", skip):
+                return "spread"
         if re.search(r"\b(?:mostly|mainly|largely)\s+shorts\b", text) and sh / (sh + lo) < LONG_SHARE:
-            return "spread"
+            if _go("spread", skip):
+                return "spread"
     return None
 
 
-def _mix_claim(facts, text):
+def _mix_claim(facts, text, skip=frozenset()):
     """Round 12, pass 2 (T1): "a wide mix" only when the leader of the list it speaks of is under a fifth."""
     if not _MIX.search(text):
         return None
     for key in ("areas", "themes"):
         xs = [x for x in facts.sheet.get(key) or [] if isinstance(x, dict) and _num(x.get("share"))]
         if xs:
-            return "mix" if xs[0]["share"] >= WIDE_MIX else None
+            return "mix" if xs[0]["share"] >= WIDE_MIX and _go("mix", skip) else None
     return None
 
 
@@ -1304,7 +1359,7 @@ def _share_of_total(p, facts, names, hedged):
     return any(abs(100 * facts.items_of[n] / tot - p) <= tol for n in names if n in facts.items_of)
 
 
-def _field_claim(facts, text):
+def _field_claim(facts, text, skip=frozenset()):
     """'Shorts grew', 'long videos fell': the totals against the span before must agree."""
     for f, rx in FIELDS.items():
         if rx.search(text):
@@ -1312,9 +1367,11 @@ def _field_claim(facts, text):
             if not (_num(now) and _num(before)):
                 continue
             if _UP.search(text) and not _DOWN.search(text) and now <= before:
-                return "direction"
+                if _go("direction", skip):
+                    return "direction"
             if _DOWN.search(text) and not _UP.search(text) and now >= before:
-                return "direction"
+                if _go("direction", skip):
+                    return "direction"
     return None
 
 
@@ -1645,7 +1702,7 @@ def _gap(text, a, b):
 _BREAK = re.compile(r"[,;:()—–]|\b(?:than|against|versus|vs|compared|while|whereas|and|but|y|frente|que)\b")
 
 
-def bind_check(text, sheet, slots, facts, unit_slots=None):
+def bind_check(text, sheet, slots, facts, unit_slots=None, skip=frozenset()):
     """None, or why the template's words or numbers are not bound to their own things (see above)."""
     names = [x for x in slots if x.role == _ROLE_NAME]
     unit_names = [x for x in (unit_slots or slots) if x.role == _ROLE_NAME]
@@ -1657,7 +1714,8 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
         # R1: a number of a named record stands only where that record is named
         if x.owner is not None and not any(_name_owner(n) == x.owner for n in unit_names) and \
                 not _is_question_topic(sheet, x.owner) and not _named_as(sheet, x.owner, unit_names):
-            return "unnamed_owner"
+            if _go("unnamed_owner", skip):
+                return "unnamed_owner"
         # R2: the name next to it is its own (or the record above or below it)
         near = []
         for j in (k - 1, k + 1):
@@ -1668,9 +1726,11 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
             # "N of your X videos": the N is a part of X, whatever stands before it
             no = _name_owner(seq[k + 1])
             if x.owner is None:
-                return "bound_global"
+                if _go("bound_global", skip):
+                    return "bound_global"
             if not (no == x.owner or (no and x.owner.startswith(no + "."))):
-                return "bound_to_other"
+                if _go("bound_to_other", skip):
+                    return "bound_to_other"
             near = []
         if near and x.owner is not None and any(_name_owner(t[2]) == x.owner or _named_as(sheet, x.owner, [t[2]])
                                                 for t in near):
@@ -1687,27 +1747,33 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                             re.match(r"^\s*(?:of|out of|de)\s+(?:the|your|all|all your|its|tus|los|las|sus)?\s*$",
                                      g))
                     if not part and not (_BREAK.search(g) or gap_len > 40):
-                        return "bound_to_other"
+                        if _go("bound_to_other", skip):
+                            return "bound_to_other"
             elif not _BREAK.search(g) and gap_len <= 24 and not (n.owner is None and n.index is None):
-                return "bound_global"
+                if _go("bound_global", skip):
+                    return "bound_global"
         # R3: a share of the window is never a share "of your <name>"
         if x.key in ("share", "previous_share", "from_share", "to_share", "peak_share") and k + 1 < len(seq) and \
                 seq[k + 1].role == _ROLE_NAME and re.match(r"^\s*(?:of|de)\s+(?:your|the|all|all your|tus|los|las)?"
                                                            r"\s*$", _norm(_gap(text, x, seq[k + 1]))):
-            return "share_of_name"
+            if _go("share_of_name", skip):
+                return "share_of_name"
         if x.key == "shorts_share" and k + 1 < len(seq) and seq[k + 1].role == _ROLE_NAME and \
                 re.match(r"^\s*(?:of|de)\b", _norm(_gap(text, x, seq[k + 1]))) and \
                 not _lineage(_name_owner(seq[k + 1]), x.owner or "~"):
-            return "share_of_name"
+            if _go("share_of_name", skip):
+                return "share_of_name"
         # a count said as a share ("your Shorts share jumped from 3,716 to 12,080")
         if not (x.key or "").endswith("share") and x.key not in ("change_vs_previous", "change") and \
                 re.search(r"\b(?:share|percent|proportion|parte|porcentaje)\b[^{}]{0,30}$", _norm(text[:x.start])) and \
                 not re.search(r"[.;]", text[max(0, x.start - 30):x.start]):
-            return "count_as_share"
+            if _go("count_as_share", skip):
+                return "count_as_share"
         # R9: "N more" is the sheet's own difference, never a count typed before "more"
         nxt = text[x.end:x.end + 12]
         if _DIFF_V5.match(_norm(nxt)) and x.key != "difference":
-            return "made_up_difference"
+            if _go("made_up_difference", skip):
+                return "made_up_difference"
     plain = SLOT.sub(lambda m: " §" + str([sl.start for sl in slots].index(m.start())) + "§ ", text)
     pl = _norm(plain)
     # R4: words of rank need the first of a ranked list (or the topic with the most, for topics)
@@ -1716,7 +1782,8 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
         near_ = sorted(((abs(pl.find("§" + str(slots.index(n)) + "§") - m.start()), n) for n in names),
                        key=lambda t: t[0])
         if near_ and near_[0][1].index is not None and near_[0][1].index >= k_:
-            return "rank"
+            if _go("rank", skip):
+                return "rank"
     pl = re.sub(r"\btop (?:\d+|two|three|four|five|six|seven|eight|nine|ten)\b", " ", pl)
     for m in _SUPER_V5.finditer(pl):
         cand = []
@@ -1731,15 +1798,18 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
         if lst in RANKED:
             # the closest name is the first of its list, or the first of that list is said with it ("X and Y led")
             if n.index != 0 and not any(x.list_path == n.list_path and x.index == 0 for x in names):
-                return "rank"
+                if _go("rank", skip):
+                    return "rank"
         elif lst in ("topics", "periods", "items"):
             try:
                 rows = _resolve(sheet, _path_segs(n.list_path))
                 top = max(rows, key=lambda r: r.get("items") or 0) if rows else None
                 if top is not rows[n.index]:
-                    return "rank"
+                    if _go("rank", skip):
+                        return "rank"
             except (KeyError, ValueError, TypeError):
-                return "rank"
+                if _go("rank", skip):
+                    return "rank"
     # R5: "followed by", "then", "ahead of": the names of one list in their own order, the next after the last
     marks = {slots.index(n): n for n in names}
     for m in _ORDER.finditer(pl):
@@ -1754,7 +1824,8 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
             continue
         lst = a.list_path.split(".")[-1]
         if lst in RANKED and b.index != a.index + 1 and b.index != a.index:
-            return "order"
+            if _go("order", skip):
+                return "order"
         if lst in RANKED and m.group(0) in ("ahead of", "followed by") and b.index != a.index:
             # round 12, pass 6, second round (the hand check, n03: "<ch1> led, ahead of <ch2>" on 11 and 11): no rank
             # word between two records the counts tie
@@ -1762,18 +1833,22 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                 rows = _resolve(sheet, _path_segs(a.list_path))
                 ka = "items" if _num(rows[a.index].get("items")) else "share"
                 if _num(rows[a.index].get(ka)) and rows[a.index].get(ka) == rows[b.index].get(ka):
-                    return "tie"
+                    if _go("tie", skip):
+                        return "tie"
             except (KeyError, TypeError, IndexError):
                 pass
         if lst == "periods" and b.index < a.index:
-            return "order"   # periods are in time order: "then" goes forward
+            if _go("order", skip):
+                return "order"   # periods are in time order: "then" goes forward
         if lst == "topics":
             try:
                 rows = _resolve(sheet, _path_segs(a.list_path))
                 if (rows[b.index].get("items") or 0) > (rows[a.index].get("items") or 0):
-                    return "order"
+                    if _go("order", skip):
+                        return "order"
             except (KeyError, TypeError, IndexError):
-                return "order"
+                if _go("order", skip):
+                    return "order"
     # R6: "mostly" / "most of" / "centred on": half or more, by the named records' own shares (or Shorts')
     if _SPREAD_V5.search(pl):
         sms = list(re.finditer(r"\b(mostly|mainly|largely|most of (?:it|them|what)\w*|almost entirely|almost all|"
@@ -1796,7 +1871,8 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                     frac = t["shorts"] / (t["shorts"] + t["long"])
             need_ = 0.9 if _OVERWHELM.search(sm.group(1)) or sm.group(1) == "almost entirely" else LONG_SHARE
             if frac is None or (frac if sm.group(2).startswith("short") else 1 - frac) < need_:
-                return "spread"
+                if _go("spread", skip):
+                    return "spread"
         if not sms:
             tot = 0.0
             seen = set()
@@ -1834,22 +1910,25 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                            and (x.owner is None or x.owner in owners or not names)]
             need = OVERWHELM_SHARE if _OVERWHELM.search(pl) else SPREAD_SHARE
             if tot < need and not any(v >= need for v in share_slots):
-                return "spread"
+                if _go("spread", skip):
+                    return "spread"
     # R7: "a wide mix": the leader of the list it names (areas, else themes) under a fifth
     if _MIX.search(pl):
         lists = [n.list_path.split(".")[-1] for n in names if n.list_path]
         key = "areas" if "areas" in lists or not lists and sheet.get("areas") else "themes"
         xs = [x for x in sheet.get(key) or [] if isinstance(x, dict) and _num(x.get("share"))]
         if not xs or xs[0]["share"] >= WIDE_MIX:
-            return "mix"
-    why = _bind_more(text, pl, sheet, slots, names)
+            if _go("mix", skip):
+                return "mix"
+    why = _bind_more(text, pl, sheet, slots, names, skip=skip)
     if why:
         return why
-    why = _direction_check(text, pl, sheet, slots, names)   # round 12, pass 3 (U1)
+    why = _direction_check(text, pl, sheet, slots, names, skip=skip)   # round 12, pass 3 (U1)
     if why:
         return why
     if _change_words(pl, slots) == "no_direction":   # round 12, pass 3 (U7); a missing base is added by render
-        return "no_direction"
+        if _go("no_direction", skip):
+            return "no_direction"
     # R8: "twice", "N times", "half": two numbers of the sentence of one kind in that ratio, or the sheet's own
     rm = _RATIO_V5.search(pl)
     if rm and not any(x.key in ("ratio_words", "times") for x in slots):
@@ -1868,7 +1947,8 @@ def bind_check(text, sheet, slots, facts, unit_slots=None):
                         if abs(q_ - r) <= 0.15 * r or abs(1 / q_ - r) <= 0.15 * r:
                             ok = True
         if not ok:
-            return "ratio"
+            if _go("ratio", skip):
+                return "ratio"
     return None
 
 
@@ -1925,7 +2005,7 @@ _BEHIND = re.compile(r"\b(?:behind|led by|driven by|drove|drive|driving|powered 
                      r"detr[aá]s|impulsad[oa]s? por)\b")
 
 
-def _bind_more(text, pl, sheet, slots, names):
+def _bind_more(text, pl, sheet, slots, names, skip=frozenset()):
     """Round 12, pass 2 fix: what the judges found bound to the wrong thing after the first pass (None, or why)."""
     low = _norm(text)
     # (a) a theme said inside, or leading, an area it does not belong to ("gaming, led by <a memes theme>")
@@ -1939,7 +2019,8 @@ def _bind_more(text, pl, sheet, slots, names):
                 continue
             between = _gap(text, a, b)
             if not _CONTRAST.search(_norm(between)):
-                return "wrong_area"
+                if _go("wrong_area", skip):
+                    return "wrong_area"
     # (a2) round 12, pass 6, second round (the hand check, c06: "<A> and <B> were the biggest themes, with <ch1> and
     # <ch2> behind them": both channels were 95% a third theme): a channel set behind, leading or driving a theme is
     # that theme's own (a channel of its row) or has it as its own main theme; else the sentence is not sent
@@ -1956,14 +2037,16 @@ def _bind_more(text, pl, sheet, slots, names):
                     continue   # "{themes[0].channels[0].name}": the theme's own channel
                 r = _rec(sheet, o) or {}
                 if not (isinstance(r.get("theme"), str) and _norm(r["theme"]) in tnames):
-                    return "channel_not_in_theme"
+                    if _go("channel_not_in_theme", skip):
+                        return "channel_not_in_theme"
     # (b) the window's median long video said next to one record (judge A: art's side "typically about 20 minutes",
     # 20 being the whole year's); a topic's own sheet is its window
     if any(x.key == "long_median_min" and x.owner is None for x in slots):
         for n in names:
             o = _name_owner(n)
             if o and not _is_question_topic(sheet, o):
-                return "median_of_window"
+                if _go("median_of_window", skip):
+                    return "median_of_window"
     for k, x in enumerate(slots):
         if x.role != _ROLE_NUM:
             continue
@@ -1971,19 +2054,23 @@ def _bind_more(text, pl, sheet, slots, names):
         # (c) a count said where its share belongs ("Shorts made up 12,080 of your window")
         if x.key in COUNT_KEYS and re.match(r"^\s*of\s+(?:your|the|all|all your|everything)?\s*(?:window|span|what you "
                                             r"opened|everything|viewing|history|videos)\b", after):
-            return "count_as_share"
+            if _go("count_as_share", skip):
+                return "count_as_share"
         # (d) a Shorts share said as long-form ("leaned long-form at 69%" where 69% is its Shorts share)
         if x.key == "shorts_share":
             clause = re.split(r"[,;:.]", _norm(text[:x.start]))[-1]
             if not re.match(r"^\s*(?:shorts?|cortos?)\b", after) and re.search(r"\blong", clause) and \
                     not re.search(r"\bshorts?\b", clause.split("long")[-1]):
-                return "shorts_as_long"
+                if _go("shorts_as_long", skip):
+                    return "shorts_as_long"
             v = float(x.value)
             pre = _norm(text[:x.start]) + " " + after[:20]
             if re.search(r"\b(?:almost|nearly|virtually)? ?all\s+(?:long|longer)\b", pre) and v > 0.1:
-                return "spread"
+                if _go("spread", skip):
+                    return "spread"
             if re.search(r"\b(?:almost|nearly|virtually) all\s+shorts\b", pre) and v < 0.9:
-                return "spread"
+                if _go("spread", skip):
+                    return "spread"
     # (e) "arrived" of a thing that was there before (live: "gaming arrived" of the area that led January)
     if _ARRIVED.search(pl):
         for n in names:
@@ -1992,10 +2079,12 @@ def _bind_more(text, pl, sheet, slots, names):
                 continue
             a, b = r.get("from_share", r.get("previous_share")), r.get("to_share", r.get("share"))
             if _num(a) and _num(b) and b > 0 and a >= 0.5 * b:
-                return "not_new"
+                if _go("not_new", skip):
+                    return "not_new"
             if any(_norm(e.get("area") or "") == _norm(r.get("name") or "~") for e in (sheet.get("eras") or [])[:1]
                    if isinstance(e, dict)):
-                return "not_new"
+                if _go("not_new", skip):
+                    return "not_new"
     # (f) a direction word said of a record that moved the other way (judge B: "<area> tripled to 9%" of an area
     # that fell from 16%): the record named nearest the word
     for m in list(_UP.finditer(pl)) + list(_DOWN.finditer(pl)):
@@ -2014,12 +2103,14 @@ def _bind_more(text, pl, sheet, slots, names):
         if not _num(ch) and _num(r.get("from_share")) and _num(r.get("to_share")):
             ch = r["to_share"] - r["from_share"]
         if _num(ch) and ((up and ch < 0) or (not up and ch > 0)):
-            return "direction"
+            if _go("direction", skip):
+                return "direction"
     # (g) "opened X most", an ordinal ("came second", "your second area"): the place in its list
     for m in re.finditer(r"\b(?:opened|watched|saw|viewed)\s+§(\d+)§\s+(?:the\s+)?most\b", pl):
         n = slots[int(m.group(1))]
         if n.role == _ROLE_NAME and n.index not in (None, 0) and (n.list_path or "").split(".")[-1] in RANKED:
-            return "rank"
+            if _go("rank", skip):
+                return "rank"
     for m in _ORDINAL.finditer(pl):
         want = _ORD_N.get(m.group(1))
         cand = []
@@ -2030,7 +2121,8 @@ def _bind_more(text, pl, sheet, slots, names):
         if cand and want is not None:
             n = min(cand, key=lambda t: t[0])[1]
             if n.index != want:
-                return "rank"
+                if _go("rank", skip):
+                    return "rank"
     # round 12, pass 4 (V6, live: "<first channel> came on N days and M videos, while <third channel> was close
     # behind at K", the third channel): a word of the next place ("close behind", "came next", "runner-up") is said of
     # the record right after the one before it in the same list (the first one said, else the leader)
@@ -2045,7 +2137,8 @@ def _bind_more(text, pl, sheet, slots, names):
         before = [x for x in ranked if x is not n and x.list_path == n.list_path and 0 <= at[id(x)] < at[id(n)]]
         want = (before[-1].index + 1) if before else 1
         if n.index != want:
-            return "rank"
+            if _go("rank", skip):
+                return "rank"
     # (h) round 12, pass 6, second round (the hand check, n05b: "... and 0% of your science videos shows <ch> was almost
     # all long videos": 0% was the channel's own Shorts share): a record's own Shorts share is said as "N% Shorts" (or
     # right after "Shorts"), and never under a topic or a channel (the gate would give it the scope's base)
@@ -2061,7 +2154,8 @@ def _bind_more(text, pl, sheet, slots, names):
         ends = [i for i in (t2.find(c, x.end) for c in ",;.") if i >= 0]
         clause = _norm(t2[a0:x.start] + " " + t2[x.end:min(ends) if ends else len(t2)])
         if not re.search(r"\bshorts?\b", clause):
-            return "own_shorts_share"
+            if _go("own_shorts_share", skip):
+                return "own_shorts_share"
     return None
 
 
@@ -2195,7 +2289,7 @@ def _same_list_pair(owners, at):
     return [a, b] if lst(a) == lst(b) and a != b else None
 
 
-def _direction_check(text, pl, sheet, slots, names):
+def _direction_check(text, pl, sheet, slots, names, skip=frozenset()):
     """None, or why a word of direction or comparison is not supported by a path of the sentence (U1)."""
     if not _D_ANY.search(pl):
         return None
@@ -2240,31 +2334,37 @@ def _direction_check(text, pl, sheet, slots, names):
             if len(sides) < 2:
                 # "more of it", "Shorts became more of what you opened": a direction against the span before
                 if not supported(m.start(), 1 if m.group(0) in ("more", "mas") else -1):
-                    return "direction_unbound"
+                    if _go("direction_unbound", skip):
+                        return "direction_unbound"
                 continue
         elif _same_list_pair(owners, m.start()):
             # "Aug 2026 led, then Sep 2026, with far fewer in Jul 2026": the first one after against the one before
             sides = _same_list_pair(owners, m.start())
         else:
             if not supported(m.start(), 1 if m.group(0) in ("more", "mas") else -1):
-                return "direction_unbound"
+                if _go("direction_unbound", skip):
+                    return "direction_unbound"
             continue
         ra, rb = _rec(sheet, sides[0]), _rec(sheet, sides[1])
         va = next((ra[k] for k in ("items", "share") if ra and _num(ra.get(k))), None)
         vb = next((rb[k] for k in ("items", "share") if rb and _num(rb.get(k))), None)
         if va is None or vb is None:
-            return "direction_unbound"
+            if _go("direction_unbound", skip):
+                return "direction_unbound"
         if (m.group(0) in ("more", "mas")) != (va > vb):
-            return "direction"
+            if _go("direction", skip):
+                return "direction"
     for m in _D_UP.finditer(pl):
         if m.group(0) in ("became", "become", "becoming") and not re.match(r"\s+(?:more|bigger|larger|the|your|a)\b",
                                                                           pl[m.end():]):
             continue
         if not supported(m.start(), 1):
-            return "direction_unbound"
+            if _go("direction_unbound", skip):
+                return "direction_unbound"
     for m in _D_DOWN.finditer(pl):
         if not supported(m.start(), -1):
-            return "direction_unbound"
+            if _go("direction_unbound", skip):
+                return "direction_unbound"
     for m in _D_SHIFT.finditer(pl):
         # a shift from A to B: A fell and B rose (or the eras' own order)
         win = sorted({(p, o) for p, o, _n in owners if -60 <= p - m.start() <= 80})
@@ -2285,17 +2385,20 @@ def _direction_check(text, pl, sheet, slots, names):
         else:
             ok_ = False
         if not ok_:
-            return "direction_unbound"
+            if _go("direction_unbound", skip):
+                return "direction_unbound"
     for m in _D_SPREAD.finditer(pl):
         # broader / narrower: the leader of its list lost / gained share against the span before
         lead_ = [o for o in near(m.start(), before=80, after=80) if re.match(r"^(?:areas|themes)\[0\]$", o)]
         d = _rec_direction(sheet, lead_[0]) if lead_ else None
         broad = bool(re.match(r"broader|wider|more varied|more spread|spread out", m.group(0)))
         if d is None or d == 0 or (d == -1) != broad:
-            return "direction_unbound"
+            if _go("direction_unbound", skip):
+                return "direction_unbound"
     for m in _D_PEAK.finditer(pl):
         if not any(x.key in ("peak_period", "peak_share", "peak_label", "peak_items") for x in slots):
-            return "direction_unbound"
+            if _go("direction_unbound", skip):
+                return "direction_unbound"
     return None
 
 
@@ -2343,7 +2446,7 @@ def _pct_vals(text, facts=None):
 _UNITS = {"videos", "video", "days", "day", "shorts", "short", "long", "minutes", "channels", "items", "hours"}
 
 
-def _obs_more(text, answer, sheet, raw, facts):
+def _obs_more(text, answer, sheet, raw, facts, skip=frozenset()):
     """Round 12, pass 2 fix: an observation that says nothing new or nothing at all (None, or why)."""
     low = _norm(text)
     # every number of it was said by the answer, a point either way (judge A, row 4: "89%" right after "88%")
@@ -2356,10 +2459,12 @@ def _obs_more(text, answer, sheet, raw, facts):
     # (10%)"): a move the answer does not say is new, whatever its two numbers
     moved = bool(re.search(r"\bfrom \S*\d", low)) and not re.search(r"\bfrom \S*\d", _norm(answer))
     if vals and avals and not moved and all(any(same(v, p, w, q) for w, q in avals) for v, p in vals):
-        return "repeat"
+        if _go("repeat", skip):
+            return "repeat"
     pv = [v for v, p in vals if p is True]
     if len(pv) >= 2 and not moved and all(any(q is True and abs(v - w) <= 1.0 for w, q in avals) for v in pv):
-        return "repeat"   # live, row 7: "Shorts grew from 4% in 2020 to 81% in 2026" right after the answer said it
+        if _go("repeat", skip):
+            return "repeat"   # live, row 7: "Shorts grew from 4% in 2020 to 81% in 2026" right after the answer said it
     # a direction with no number (judge A, row 7: "rose most", "fell from the early years")
     bare = low
     for ph in facts.allowed_phrases:
@@ -2368,29 +2473,35 @@ def _obs_more(text, answer, sheet, raw, facts):
     bare = re.sub(r"\|[A-Z]\|", " ", facts.names_in(bare)[1])
     if (_UP.search(low) or _DOWN.search(low) or re.search(r"\bshift\w*|\btowards?\b", low)) \
             and not re.search(r"\d", bare):
-        return "vague"   # (live: "gaming gained share while comedy and sports lost ground" against "the 4 weeks before")
+        if _go("vague", skip):
+            return "vague"   # (live: "gaming gained share while comedy and sports lost ground" against "the 4 weeks before")
     # the answer's own date said again, with nothing else (live: "<its date> is the first <its date> in ...")
     ds, ads = re.findall(_DATE_RX, low), re.findall(_DATE_RX, _norm(answer))
     if ds and (len(ds) != len(set(ds)) or (set(ds) <= set(ads) and not vals) or
                (sheet.get("kind") in ("first", "last") and set(ds) & set(ads))):
-        return "repeat"   # (live, row 4, twice: "<its date> is the first <topic> watch date, ...")
+        if _go("repeat", skip):
+            return "repeat"   # (live, row 4, twice: "<its date> is the first <topic> watch date, ...")
     cnts = [v for v, p in _pct_vals(re.sub(r"\b(\d[\d,]*) of (?:the |your |all |all your )?\1\b", " ", low), facts)
             if p is not True and v >= 10]   # ("behind 56 of the 56 X videos" is a whole, said right)
     if len(cnts) != len(set(cnts)):
-        return "garbled"   # live, row 4: "90 Shorts made up 90 of 300 videos"
+        if _go("garbled", skip):
+            return "garbled"   # live, row 4: "90 Shorts made up 90 of 300 videos"
     kind = sheet.get("kind")
     if kind == "day" and re.search(r"\b(?:the )?day before\b|\bel dia anterior\b", low):
-        return "filler"   # judge A, row 6: areas that "grew" against the day before, on a 10-video day
+        if _go("filler", skip):
+            return "filler"   # judge A, row 6: areas that "grew" against the day before, on a 10-video day
     sl = slots_of(raw, shown(sheet), sheet.get("lang") or "en") if isinstance(raw, str) and SLOT.search(raw) else []
     nums = [x for x in sl if isinstance(sl, list) and x.role == _ROLE_NUM] if isinstance(sl, list) else []
     if kind in ("top", "changed", "compare_windows") and nums and \
             all(x.key == "shorts_share" and (x.owner or "").startswith("channels[") for x in nums):
-        return "filler"   # judges, rows 1 and 8: one channel's Shorts share says nothing about what he watched
+        if _go("filler", skip):
+            return "filler"   # judges, rows 1 and 8: one channel's Shorts share says nothing about what he watched
     if kind in ("top", "changed", "compare_windows") and re.search(r"\bshorts?\b", low):
         chs = {" ".join(_words(c.get("name") or "")) for c in sheet.get("channels") or [] if isinstance(c, dict)}
         nm = facts.names_in(low)[0]
         if nm and all(n in chs for n in nm):
-            return "filler"   # live, row 1: "X was your top channel and almost all Shorts, while Y leaned less on ..."
+            if _go("filler", skip):
+                return "filler"   # live, row 1: "X was your top channel and almost all Shorts, while Y leaned less on ..."
     return None
 
 
@@ -2408,30 +2519,37 @@ def free_numbers(text, facts):
     return bool(re.search(r"\d", t))
 
 
-def render(text, sheet, facts, strict=False, unit=None):
+def render(text, sheet, facts, strict=False, unit=None, skip=frozenset()):
     """(the sentence with its paths filled, None) or (None, why). Plain text with no path passes as it is unless
     strict and it types a number."""
     if not isinstance(text, str):
-        return None, "empty"
+        if _go("empty", skip):
+            return None, "empty"
     lang = sheet.get("lang") or "en"
     sl = slots_of(text, sheet, lang)
     if isinstance(sl, str):
         return None, sl
     if strict and free_numbers(text, facts):
-        return None, "free_number"
+        if _go("free_number", skip):
+            return None, "free_number"
     if strict and _COUNT_WORDS.search(_norm(SLOT.sub(" ", text))):
-        return None, "free_number"   # round 12, pass 3 (U1, live: "with four areas rising"): a count typed in words
+        if _go("free_number", skip):
+            return None, "free_number"   # round 12, pass 3 (U1, live: "with four areas rising"): a count typed in words
     if not sl:
         if strict and _D_ANY.search(_D_AMOUNT.sub(" ", _norm(text))):
-            return None, "direction_unbound"   # round 12, pass 3 (U1): a direction with no path to support it
+            if _go("direction_unbound", skip):
+                return None, "direction_unbound"   # round 12, pass 3 (U1): a direction with no path to support it
         return text, None
     if strict and any(x.role == _ROLE_NUM for x in sl) and typed_names(text, sheet, facts):
-        return None, "typed_name"
+        if _go("typed_name", skip):
+            return None, "typed_name"
     # round 12, pass 6 (X5, X14): a change is two values of one measure, or it is not said; a move under 3 points is
     # not said (filler)
     text2, why = p6_change(text, sheet, sl)
-    if why:
+    if why and _go(why, skip):
         return None, why
+    if why:
+        text2 = text   # (mvp25: a reason walked past leaves the sentence as it was)
     if text2 != text:
         text = text2
         sl = slots_of(text, sheet, lang)
@@ -2451,7 +2569,7 @@ def render(text, sheet, facts, strict=False, unit=None):
     if unit and unit is not text:
         us = slots_of(unit, sheet, lang)
         us = us if isinstance(us, list) else None
-    why = bind_check(text, sheet, sl, facts, unit_slots=us)
+    why = bind_check(text, sheet, sl, facts, unit_slots=us, skip=skip)
     if why:
         return None, why
     plain_ = _norm(SLOT.sub(lambda m: " §" + str([x.start for x in sl].index(m.start())) + "§ ", text))
@@ -2465,7 +2583,8 @@ def render(text, sheet, facts, strict=False, unit=None):
         froms = [next((x for x in sl if x.start == m.start(1)), None) for m in re.finditer(r"\bfrom\s+(\{[^}]+\})", text)]
         if base and any(x is not None and x.role == _ROLE_NUM and not (x.key or "").endswith("share") and
                         x.key not in ("faded_from", "grew_from") for x in froms):
-            return None, "no_base"   # a change "from" a count ("down 3 points from 980")
+            if _go("no_base", skip):
+                return None, "no_base"   # a change "from" a count ("down 3 points from 980")
         last_v = list(re.finditer(r"\b(?:from|to)\s+\{[^}]+\}", tail_))
         if base and last_v and not m_end and tail_[last_v[-1].end():].strip(" .!"):
             # round 12, pass 3 fix (judge A, "the last 3 months": "...; what would you like to lean into next? against

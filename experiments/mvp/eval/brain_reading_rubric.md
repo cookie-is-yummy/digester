@@ -110,6 +110,25 @@ number, name or date is wrong, or when its framing is wrong. The framing faults 
 - a rank over a tie;
 - a false absence: "no such theme" while a private theme holds it.
 
+### Private rows: the convention (DECISIONS.md, 26 Nov 2026; DESIGN 24.5)
+
+When the answer carries the private line ("Leaving out topics you keep private."), "all", "only" and a rank over the
+rows shown are NOT counted false because of the hidden private rows. The line says those rows were left out, and the
+founder's answer "say it was kept private" covers it.
+
+- With the line shown: "Pan Theory was all you opened in 2024" (8 videos shown; 50 more of a private topic) is not
+  counted false. Neither is "Home cooking was your top theme of 2024, with 8 videos".
+- Without the line: the same sentence is false. This happens when the line is not printed, for example a point on a
+  result with private rows under a lead on a result without them.
+- The convention covers "all", "only", "nothing else", "on its own", "just N areas", "the one theme" and a rank or
+  a "least" over the rows shown. It does not cover a sentence that reads past the line ("you barely watched
+  anything", "the year you nearly stopped") or a number that is wrong without the private rows. Those are judged
+  as any other sentence.
+- A false absence ("no dating advice theme in your history") is never covered: the line says topics were left out,
+  not that they are absent.
+
+Mark `false=` with this convention. Say in the note when a sentence counts as true only because of it.
+
 The eval's auditor (`auditor_hints` in summary.json) can show where to look first. It is not a recount. On the
 held-out half it was measured on, it flagged 1 of the 5 false sentences sent, and 3 of the 23 false sentences the
 model wrote in all, so most false sentences carry no hint.

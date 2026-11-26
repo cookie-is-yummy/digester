@@ -26,7 +26,7 @@ FRESH = os.path.join(os.path.dirname(HERE), "evalset", "brain_fresh.jsonl")
 HALF_B_SHA256 = "3a121423684a58498d375df70685e09a59d31f33a305d48a4d1986f7bb79ec38"
 # half B ids whose refused call is no longer refused (a tool learned to read it, e.g. a part of a period). Half B
 # cannot be edited, so a lapse is listed here by id; half A's refusals are kept true by editing half A.
-LAPSED_B = set()
+LAPSED_B = {"N096"}   # mvp25 toolgaps 1: a part of a period is read now (DESIGN 25.1); listed by id, never opened
 TAGS_NEEDED = {"follow_up", "correction", "scoped", "private", "locked", "unlocked", "friends", "saved", "liked",
                "instagram", "shorts", "compare", "first_last", "timeline", "items", "wide", "no_answer_in_data",
                "part_of_period", "sloppy", "lately", "changes", "channels", "themes", "time_of_day", "weekday",

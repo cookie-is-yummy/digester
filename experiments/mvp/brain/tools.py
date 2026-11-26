@@ -142,15 +142,44 @@ class Turn:
     search: Optional[Callable] = None     # (turn, query, how, start, end, limit) -> {"items": [...], "cost_usd"}
     learned: Optional[Callable] = None    # (turn, topic, query) -> {"points": [...], "cost_usd"}
     last_window: Any = None
+    carried_unlock: Optional[str] = None  # mvp25 toolgaps 5: the topic the last answer resolved a name to (code's)
     results: dict = field(default_factory=dict)
     windows: dict = field(default_factory=dict)
     counts: dict = field(default_factory=dict)
+    limits: list = field(default_factory=list)   # mvp25 toolgaps 2: what the export does not hold, for code's line
     unlock: Optional[str] = field(default=None, init=False)
+    said_unlock: Optional[str] = field(default=None, init=False)   # the topic this message itself names
     _lib: Any = field(default=None, init=False, repr=False)
+    _carried_mask: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         from .. import outside as O
         self.unlock = O.sensitive_topic([self.message]) if self.message else None
+        self.said_unlock = self.unlock
+        if self.unlock is None and self.carried_unlock:
+            # mvp25 toolgaps 5 (N053.1: "and how did that year compare to 2023" right after "was i really watching
+            # dating videos every week in 2024": compare and find gave no_match for "dating", and the answer said the
+            # history had no match): a follow-up keeps the topic the last answer resolved a name to, as code carried
+            # it (never from the screen the model reads, never from a model's argument); a message that names another
+            # sensitive topic unlocks that one instead, and one that names none of it stays as carried. A carried topic
+            # makes its NAME resolve (in every tool, as the turn before); it stays out of every count that is not
+            # scoped to it (the privacy rule: hidden from totals unless the message names it; `carried_hidden`)
+            self.unlock = self.carried_unlock
+
+    @property
+    def carried_only(self):
+        """The topic is carried from the answer before and this message does not name it."""
+        return bool(self.unlock and self.unlock != self.said_unlock)
+
+    def carried_hidden(self, iid):
+        """An item of the carried topic, which a result not scoped to the topic leaves out."""
+        if not self.carried_only:
+            return False
+        if self._carried_mask is None:
+            lib = self.lib
+            self._carried_mask = F.ref_mask(lib.view, lib.idx, lib.facts, f"topic:{self.unlock}")
+        k = self.lib.idx.pos.get(iid)
+        return k is not None and bool(self._carried_mask[k])
 
     @property
     def tz(self):
@@ -172,7 +201,11 @@ class Turn:
 
 
 class ToolError(ValueError):
-    pass
+    """A refused call; `extra` (mvp25 toolgaps 2) goes into the error result beside code's reason."""
+
+    def __init__(self, msg, **extra):
+        super().__init__(msg)
+        self.extra = extra
 
 
 # ================================================================ shared steps
@@ -336,10 +369,59 @@ def _meta(turn, raw, scope, resolved, order="most", by=None, extra_notes=()):
 def _sheet(turn, q):
     """facts.build with the sensitive topics left out (unlocked per topic by their message only)."""
     raw = F.build(turn.bot, turn.person, q, turn.now, text=turn.message or None, hide_sensitive=True,
-                  unlock=turn.unlock)
+                  unlock=turn.unlock if _counts_topic(turn, q) else turn.said_unlock)
     if raw is None:
-        raise ToolError("nothing in their record for this: no platform holds that kind of event")
+        # mvp25 toolgaps 2 (N038.0, N042.0, N113.0: "what have i liked" came back as a bare error, and the model spent
+        # a second call finding out what the export holds): what it does hold, and the call that would answer
+        ex = export_info(turn)
+        want = {"watched": "opened"}.get(q.how, q.how)
+        near = {"liked": ("saved", "opened"), "saved": ("opened",), "opened": ("saved",)}.get(want, ("opened", "saved"))
+        held = [h for h in near if h in ex["holds"]]
+        raise ToolError(f"Their export holds no {NOT_HELD_WORD.get(want, want)}: no platform has that kind of event. "
+                        f"It holds what they {' and what they '.join(held) or 'opened'}, up to "
+                        f"{ex['ends_said']}. Answer with what it holds: the same call with scope.how "
+                        f"{' or '.join(repr(h) for h in held) or repr('opened')}.",
+                        export=ex, nearest={"scope.how": held[0] if held else "opened"},
+                        limit=f"Your export holds no {NOT_HELD_WORD.get(want, want)}.")
     return raw
+
+
+def _counts_topic(turn, q):
+    """mvp25 toolgaps 5: a turn counts its unlocked topic when the message names it, or, when it is carried from the
+    answer before, only in a result scoped wholly within it (scope.only of the topic, or of names all of whose items
+    are of it): the follow-up's totals keep it out, as the set's N053.1 reads the privacy rule."""
+    if not turn.carried_only:
+        return True
+    if not q.only_refs:
+        return False
+    lib = turn.lib
+    topic = F.ref_mask(lib.view, lib.idx, lib.facts, f"topic:{turn.unlock}")
+    m = None
+    for r in q.only_refs:
+        x = F.ref_mask(lib.view, lib.idx, lib.facts, r)
+        m = x if m is None else (m | x)
+    return bool((m & topic).any()) and not bool((m & ~topic).any())
+
+
+NOT_HELD_WORD = {"liked": "likes", "saved": "saves", "opened": "opens"}
+EXPORT_HOW = (("opened", "watched"), ("liked", "liked"), ("saved", "saved"))
+
+
+def export_info(turn):
+    """mvp25 toolgaps 2: what their export holds, as code reads it from the record: where each platform's history
+    starts and ends, which kinds of event it holds (opened, liked, saved) and which it does not."""
+    rec = turn.lib.rec
+    plats = {}
+    for (p, _k), d in rec.starts.items():
+        if p in rec.ends:
+            a = plats.setdefault(p, {"from": d, "to": rec.ends[p]})
+            a["from"] = min(a["from"], d)
+    holds = [word for word, how in EXPORT_HOW if any(k in Hm.HOW_KINDS[how] for (_p, k) in rec.starts)]
+    newest = max(rec.ends.values()) if rec.ends else None
+    return {"ends": newest and newest.isoformat(), "ends_said": newest and Hm.day_words(newest),
+            "platforms": {p: {"from": v["from"].isoformat(), "to": v["to"].isoformat(),
+                              "said": Hm.span_words(v["from"], v["to"])} for p, v in sorted(plats.items())},
+            "holds": holds, "holds_not": [w for w, _h in EXPORT_HOW if w not in holds]}
 
 
 PREVIOUS_KEYS = ("previous_share", "previous_items", "change_vs_previous", "change_pts")
@@ -366,6 +448,13 @@ def _reels_note(sheet, meta):
         meta.setdefault("notes", []).append(REELS_NOTE)
 
 
+PARTS_NOTE = ("when.parts_of_day: the opens of each part of the day, in their own time: morning 5am to noon, "
+              "afternoon noon to 5pm, evening 5pm to 9pm, night 9pm to 5am. A busiest hour is said as a clock time "
+              "(hour 16 is 4pm to 5pm).")
+FIRST_NOTE = ("A row's `first_watched` is the first day they ever opened it. A row of `new` may have begun before "
+              "this window: when you say when it started, say its own first day.")
+
+
 def _item_channels(turn, sheet):
     """Toolfix 7, on the tools' own item rows: an Instagram item's `channel` is its account's display name when it has
     one (facts.displays), and its handle is its own field (`handle`). facts names the channel rows itself."""
@@ -379,20 +468,52 @@ def _item_channels(turn, sheet):
                 row["channel"] = R.neutral(disp[nm], R.NAME_MAX)
 
 
-def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=None, how="opened"):
+def window_dates(start, end):
+    """mvp25 toolgaps 1: a counted window's exact days, as code says them ("21 to 30 October 2026")."""
+    from datetime import date
+    try:
+        a, b = date.fromisoformat(str(start)[:10]), date.fromisoformat(str(end)[:10])
+    except (TypeError, ValueError):
+        return None
+    return {"start": a.isoformat(), "end": b.isoformat(), "days": (b - a).days + 1, "said": Hm.span_words(a, b)}
+
+
+DATES_NOTE = "meta.window_dates gives the exact days counted; say them when the window's words are not a whole period."
+
+
+def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=None, how="opened", dates=None):
     if window is not None:
         turn.windows[rid] = window
+    if window is not None or tool == "first_last":
+        # mvp25 toolgaps 1 (N010.0's "last summer" was counted as the summer of 2026 and nothing showed it): every
+        # result with a window says the days it counted, cut where the export ends
+        win = (sheet or {}).get("window") if isinstance(sheet, dict) else None
+        d = window_dates(*(dates or ((win or {}).get("start"), (win or {}).get("end"))))
+        if d:
+            meta["window_dates"] = d
+            wb = (meta.get("windows") or {}).get("b")
+            if isinstance(wb, dict):
+                meta["window_dates_b"] = window_dates(wb["start"], wb["end"])
     if raw is not None and isinstance(sheet, dict) and sheet.get("kind"):
         for n in R.honest(sheet, how):
             if n not in meta.setdefault("notes", []):
                 meta["notes"].append(n)
         _reels_note(sheet, meta)
+
     if isinstance(sheet, dict):
         _item_channels(turn, sheet)
     whole = (meta.get("rows_of") or {}).get(keep) if keep else None
     # toolfix 9: a timeline is cut from its oldest periods (a change keeps its first period: it is the base)
     newest = tool == "timeline"
     env = R.envelope(rid, tool, meta, sheet, cost, (time.monotonic() - t0) * 1000, keep=keep, newest=newest)
+    sh = env.get("sheet")
+    if isinstance(sh, dict) and sh.get("kind"):
+        # mvp25 toolgaps 6: the notes of the added cells, when the size cut kept them (results.drop_extras)
+        if isinstance(sh.get("when"), dict) and sh["when"].get("parts_of_day"):
+            env["meta"]["notes"].append(PARTS_NOTE)
+        if any(isinstance(r, dict) and r.get("first_watched") for k in ("themes", "channels")
+               for r in ((sh.get("new") or {}).get(k) or [])):
+            env["meta"]["notes"].append(FIRST_NOTE)
     shown_n = len((sheet or {}).get(keep) or []) if keep else 0
     if keep == "periods" and isinstance(whole, int) and shown_n < whole:
         # toolfix 9 (a month timeline of all history was cut to its first 24 months while complete said true): the
@@ -447,7 +568,12 @@ def run_breakdown(turn, a: BreakdownArgs):
     if a.compare == "none":
         _no_previous(sheet)
     meta = _meta(turn, raw, a.scope, resolved, a.order, a.by)
+    meta["notes"].append(LEVELS_NOTE)
     return _finish(turn, "breakdown", rid, raw, sheet, meta, t0, w, keep=lst, how=a.scope.how)
+
+
+LEVELS_NOTE = ("areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one "
+               "list only.")
 
 
 def run_timeline(turn, a: TimelineArgs):
@@ -526,10 +652,11 @@ def run_changes(turn, a: ChangesArgs):
 def run_compare(turn, a: CompareArgs):
     t0 = time.monotonic()
     wa, wb = _window(turn, a.a), _window(turn, a.b)
-    for w_ in (wa, wb):
+    for which, w_, other in (("a", wa, wb), ("b", wb, wa)):
         # step 1 fix (the tools audit, P03 and P06: November against October gave October against October, and
         # October against November a 0 for November): a window wholly after where the export ends has no count
-        _not_after_end(turn, w_, "there is nothing to compare it with")
+        o = None if _after_end(turn, other) else _window_said(turn, other)
+        _not_after_end(turn, w_, "there is nothing to compare it with", which=which, other=o)
     resolved = {}
     q, bad = _query(turn, a.scope, "compare", wa, resolved, window2=wb)
     if bad:
@@ -576,7 +703,15 @@ def _compare_days(turn, raw, wb, q, meta):
 def run_first_last(turn, a: FirstLastArgs):
     t0 = time.monotonic()
     if a.scope.only:
-        raise ToolError("put what it is about in `subject`, not in scope.only")
+        # mvp25 toolgaps 3 (N013.0, N013.1: the subject was also put in scope.only, the call was refused and a second
+        # call was spent): the subject said again in scope.only is the same scope, so it is taken out; another name
+        # there cannot be counted with the subject (scope.only counts items of ANY of its names), so it is refused
+        # with the call that would work
+        rest = [x for x in a.scope.only if N.fold(x) != N.fold(a.subject)]
+        if rest:
+            raise ToolError(f"first_last counts one subject: put one name in `subject` ({a.subject!r} or "
+                            f"{rest[0]!r}) and leave scope.only empty")
+        a = a.model_copy(update={"scope": a.scope.model_copy(update={"only": []})})
     r = N.resolve_one(turn.lib, a.subject)
     if r["status"] != "ok":
         return _unresolved(turn, "first_last", r)
@@ -590,6 +725,7 @@ def run_first_last(turn, a: FirstLastArgs):
     sheet = R.present(raw, rid)
     sheet["items"] = _item_rows(turn, raw, (raw.get("items") or [])[:3], q, rid)
     meta = _meta(turn, raw, a.scope, resolved)
+    meta["notes"].append(EVENT_NOTE)
     # merge seam: the subject line first, then the scope's own lines (an exclude, a length, a weekday, a platform),
     # so a filter applied to the query is never left unsaid
     meta["filters_said"] = "; ".join(x for x in (f"{a.subject}: {_label_of(turn, resolved[a.subject])}",
@@ -607,6 +743,26 @@ def _length_word(row, media=None):
     return "short" if s is True else "long" if s is False else "unknown"
 
 
+EVENT_WORD = {"watch": "opened", "view": "opened", "like": "liked", "save": "saved", "collection": "saved",
+              "share_self": "saved", "playlist": "saved"}
+EVENT_ORDER = ("opened", "liked", "saved")
+EVENT_NOTE = ("Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with "
+              "the date: a saved item was not opened that day.")
+
+
+def event_of(evs, day, kinds):
+    """mvp25 toolgaps 4 (N048.0, N048.1: a saved post went out as "opened on 5 October 2026"): what they did with an
+    item on `day`, of the kinds counted ("saved", "opened and saved")."""
+    from datetime import date
+    if isinstance(day, str):
+        try:
+            day = date.fromisoformat(day[:10])
+        except ValueError:
+            return None
+    words = {EVENT_WORD[k] for d, k in evs if k in kinds and k in EVENT_WORD and d == day}
+    return " and ".join(w for w in EVENT_ORDER if w in words) or None
+
+
 def _item_rows(turn, raw, rows, q, rid, offset=0):
     """Item rows as the tools return them: never a link, the title neutralised and clipped."""
     from datetime import date
@@ -621,11 +777,12 @@ def _item_rows(turn, raw, rows, q, rid, offset=0):
         evs = turn.lib.rec.events.get(iid, [])
         opened = sum(1 for d, k in evs if k in ("watch", "view") and (a is None or d >= a) and (b is None or d <= b))
         when = r.get("at")
+        event = event_of(evs, when, set(Hm.HOW_KINDS[q.how])) if when else None
         if r.get("at_time") and when:
             when = f"{when} {r['at_time']}"
         out.append({"ref": f"{rid}.items[{len(out)}]", "item_id": iid, "title": R.neutral(r.get("title"), R.TITLE_MAX),
                     "channel": R.neutral(r.get("channel"), R.NAME_MAX), "platform": r.get("platform"),
-                    "when": when, "times_opened": opened,
+                    "when": when, "how": event, "times_opened": opened,
                     "length": _length_word(r, getattr(turn.lib.view.items.get(iid), "media", None))})
     return out
 
@@ -656,7 +813,52 @@ def run_items(turn, a: ItemsArgs):
     sheet["items"] = _item_rows(turn, raw, rows, q, rid)
     meta = _meta(turn, raw, a.scope, resolved)
     meta["order"] = a.order
+    meta["notes"].append(EVENT_NOTE)
+    if a.order == "most_opened" and not day:
+        _ties(turn, a, q, sheet, meta)
     return _finish(turn, "items", rid, raw, sheet, meta, t0, w, keep="items", how=a.scope.how)
+
+
+TIE_NOTE = ("Every item of this window and scope was opened once: there is no ranking by times opened, and no item is "
+            "the most opened. The list runs newest first.")
+TIE_SHOWN_NOTE = "The items shown are tied: each was opened {n} times. None of them ranks above the others."
+
+
+def _ties(turn, a, q, sheet, meta):
+    """mvp25 toolgaps 6 (N044.0, N056.0: "the most-opened long videos are led by ..." where every video was opened
+    once): an order by times opened over a tie says so. `meta.tie` is "all" when no item of the window and scope was
+    opened more than once, "shown" when the rows shown are tied among themselves."""
+    rows = sheet.get("items") or []
+    if not rows:
+        return
+    top = rows[0].get("times_opened")
+    if a.offset:
+        try:
+            raw0 = _sheet(turn, q.model_copy(update={"n": 1, "offset": 0}))
+            first = _ids_from(raw0)
+            top = sum(1 for d, k in turn.lib.rec.events.get(first, []) if k in ("watch", "view")
+                      and _in_window(raw0, d)) if first else top
+        except ToolError:
+            pass
+    if isinstance(top, int) and top <= 1 and all(r.get("times_opened") == top for r in rows):
+        meta["tie"] = "all"
+        meta["notes"].append(TIE_NOTE)
+    elif len(rows) > 1 and len({r.get("times_opened") for r in rows}) == 1:
+        meta["tie"] = "shown"
+        meta["notes"].append(TIE_SHOWN_NOTE.format(n=rows[0].get("times_opened")))
+
+
+def _ids_from(raw):
+    rows = raw.get("items") or []
+    return rows[0].get("id") if rows and isinstance(rows[0], dict) else None
+
+
+def _in_window(raw, d):
+    from datetime import date
+    win = raw.get("window") or {}
+    a = date.fromisoformat(win["start"]) if win.get("start") else None
+    b = date.fromisoformat(win["end"]) if win.get("end") else None
+    return (a is None or d >= a) and (b is None or d <= b)
 
 
 def _day_order(turn, raw, rows, order):
@@ -717,7 +919,7 @@ def run_search(turn, a: SearchArgs):
     rows, seen = [], set()
     for x in got.get("items") or []:
         iid = x.get("item_id") if isinstance(x, dict) else None
-        if not iid or iid in seen or not turn.lib.is_visible(iid):
+        if not iid or iid in seen or not turn.lib.is_visible(iid) or turn.carried_hidden(iid):
             continue
         evs = [(d, k) for d, k in turn.lib.rec.events.get(iid, []) if k in kinds
                and (start is None or d >= start) and (end is None or d <= end)]
@@ -727,9 +929,10 @@ def run_search(turn, a: SearchArgs):
         it = turn.lib.view.items[iid]
         why = _why(it.caption or "", x.get("why"), a.query)
         fit = x.get("fit") if x.get("fit") in ("clear", "close", "weak") else _fit(x.get("score"))
+        last = max(d for d, _k in evs)
         rows.append({"ref": f"{rid}.items[{len(rows)}]", "item_id": iid, "title": R.neutral(Hm._title(it), R.TITLE_MAX),
                      "channel": R.neutral(it.creator, R.NAME_MAX), "platform": it.platform,
-                     "when": max(d for d, _k in evs).isoformat(),
+                     "when": last.isoformat(), "how": event_of(evs, last, kinds),
                      "why_matched": R.neutral(why, R.TEXT_MAX) if why else None, "fit": fit})
         if len(rows) >= a.limit:
             break
@@ -737,8 +940,21 @@ def run_search(turn, a: SearchArgs):
     meta = {"window_said": None if w is None else _window_said(turn, w), "base": BASE[a.how], "filters_said": None,
             "resolved": {}, "order": "fit", "complete": False,
             "hidden": {"sensitive": 0, "friends": _friends(turn, a.how, start, end), "rank_hidden_above": False},
-            "notes": ["Ranked by meaning; `fit` says how close each one is. Not a count of everything on the topic."]}
-    return _finish(turn, "search", rid, None, sheet, meta, t0, w, got.get("cost_usd", 0.0), keep="items")
+            "notes": ["Ranked by meaning; `fit` says how close each one is. Not a count of everything on the topic.",
+                      EVENT_NOTE]}
+    return _finish(turn, "search", rid, None, sheet, meta, t0, w, got.get("cost_usd", 0.0), keep="items",
+                   dates=_search_dates(turn, start, end))
+
+
+def _search_dates(turn, start, end):
+    """The days a search's window covers, cut to the record (a window with no start starts where it does)."""
+    rec = turn.lib.rec
+    if not rec.ends:
+        return None
+    newest = max(rec.ends.values())
+    a = start or min(rec.starts.values())
+    b = min(end, newest) if end else newest
+    return (a.isoformat(), b.isoformat())
 
 
 def _friends(turn, how, start, end, q=None):
@@ -747,16 +963,43 @@ def _friends(turn, how, start, end, q=None):
                         ["youtube", "instagram"], start and start.toordinal(), end and end.toordinal(), q)
 
 
-def _not_after_end(turn, w, why):
+def _after_end(turn, w):
+    """(start, end) of a window that starts after where the export ends, else None."""
     rec = turn.lib.rec
     plats = sorted(rec.ends)
     if not plats:
-        return
-    s, _e = Hm.resolve(w, rec, plats, turn.today)
+        return None
+    s, e = Hm.resolve(w, rec, plats, turn.today)
     newest = max(rec.ends.values())
-    if s is not None and s > newest:
-        raise ToolError(f"that window starts after where the export ends ({Hm.day_words(newest)}): {why}; say what "
-                        "the export holds, or ask for a new export")
+    return (s, e) if s is not None and s > newest else None
+
+
+LATELY_ARG = {"preset": "lately"}
+
+
+def _not_after_end(turn, w, why, which=None, other=None):
+    """mvp25 toolgaps 2 (N004.0 "my last few weeks compared to the summer", N067.0 "november vs october so far": the
+    error said only that the window starts after the export ends, and the model answered nothing): the refusal says
+    where the export ends, what it holds, the window asked with its dates, and a window ready to pass that it does
+    hold (the 4 weeks up to its end), or the other window of a compare alone."""
+    got = _after_end(turn, w)
+    if not got:
+        return
+    s, e = got
+    ex = export_info(turn)
+    asked = {"start": s.isoformat(), "end": (e or s).isoformat(), "said": Hm.span_words(s, e or s)}
+    lately = Hm.resolve(Hm.Window(kind="lately"), turn.lib.rec, sorted(turn.lib.rec.ends), turn.today)
+    nearest = {"window": LATELY_ARG, "said": f"the 4 weeks up to {ex['ends_said']}",
+               "start": lately[0].isoformat(), "end": lately[1].isoformat()}
+    tail = ""
+    if other is not None:
+        nearest["or"] = "breakdown with the other window alone"
+        tail = f" Or answer with the other window ({other}) alone: a breakdown of it."
+    raise ToolError(f"{'Window ' + which + ' (' if which else 'That window ('}{asked['said']}) starts after where "
+                    f"the export ends ({ex['ends_said']}): {why}. The export has nothing after {ex['ends_said']}. "
+                    f"The nearest window it holds: window {json.dumps(LATELY_ARG)} ({nearest['said']}).{tail}",
+                    export=ex, asked=asked, nearest=nearest,
+                    limit=f"Your export ends on {ex['ends_said']}, so {asked['said']} is not in it.")
 
 
 def _window_said(turn, w):
@@ -787,7 +1030,7 @@ def run_learned(turn, a: LearnedArgs):
         if not isinstance(p, dict) or not isinstance(p.get("text"), str):
             continue
         ids_ = [i for i in p.get("item_ids") or [] if isinstance(i, str)]
-        src = [i for i in ids_ if turn.lib.is_visible(i)]
+        src = [i for i in ids_ if turn.lib.is_visible(i) and not turn.carried_hidden(i)]
         if not src or len(src) != len(ids_):
             # step 1 fix (the tools audit): a point that rests on a source they may not see (a friend's post, a
             # sensitive item) may say what that source says, so the point goes, not only the source
@@ -866,7 +1109,9 @@ def call(turn, name, args):
     try:
         return t.run(turn, a)
     except ToolError as e:
-        return R.error(str(e), tool=name)
+        if e.extra.get("limit") and e.extra["limit"] not in turn.limits:
+            turn.limits.append(e.extra["limit"])
+        return R.error(str(e), tool=name, **{k: v for k, v in e.extra.items() if k != "limit"})
     except Exception as e:  # noqa: BLE001 - a backend or a sheet that fails is an error result, never a crash
         return R.error(f"the tool failed ({type(e).__name__}); try another way or say what is missing", tool=name)
 

@@ -266,3 +266,55 @@ Open, parked:
 - One reader marked the answers. There was no second hand.
 
 The evidence of this round is in `eval/runs/brain_cells_run_a_2026-11-26.tgz` (made-up library only).
+
+## The second live run: the leak fixes did not hold and cost good sentences (26 Nov 2026)
+
+The same 65 messages (half A), prompt v3, after this round's changes: nine new checker rules against the leaks, six
+loosenings for true sentences, the tool gaps fixed, item cards and ask-backs shown, code leads that follow the tool.
+Again every sentence was recounted by hand from the library rows. Claude spend for the round: $0.11.
+Everything here is in sample: the fixes were made on these messages. Each round is one run.
+
+| What | Run 1 | Run 2 |
+|---|---|---|
+| Wrong number, name, date or calculation written | 0 of 170 | 0 of 170 |
+| Sent with a wrong number as shown | 0 | 1, if "Here are 5" over 4 cards counts (see below) |
+| Wrongly based sentences sent | 13 of 150 (6 firm) | 5 of 149 (1 firm) |
+| Answers with at least one | 10 of 65 | 5 of 65 |
+| True first-form sentences the check refused | 27 of 155 | 40 of 165 |
+| The model's own lead kept | 61 of 65 | 56 of 65 |
+| Rewords asked for | 14 | 22 |
+| Seconds, median and slow end | 7.97 and 10.56 | 8.14 and 13.27 (both bars missed) |
+| Read calls that returned an error | 11 of 95 | 6 of 88 |
+| Answers good / acceptable / poor | 9 / 31 / 25 | 9 / 37 / 19 |
+| Answers the question asked | 43 | 50 |
+| Says what the numbers mean | 16 | 12 |
+| Worthwhile offer | 39 | 44 |
+
+What happened:
+- The tool fixes worked. All 13 of run 1's wrongly based sentences are gone from what was sent, and 12 of its 25
+  poor answers are now acceptable or good. 23 item cards went out, none wrong.
+- The leak fixes did not hold. They closed 24 of 24 of the first attacker's leaks. A second attacker then got 47
+  of 113 new false sentences out, 31 of them a wrong number, date or measure by the repo's own rule.
+- The checker is now the largest cause of poor answers: 9 of the 19 are a refused true sentence or the bare code
+  lead that replaces one. Six answers got worse, all for that reason or for a new wording fault.
+- Examples of true sentences refused: "Pan Theory is the one that shows up in every year of your history, from 8
+  videos in 2021 to 32 in 2026." "Across all your history, the evening, 5pm to 9pm, is when you opened the most."
+- "Here are 5 of the 72 food and cooking items you opened" went out over 4 cards. The model left out an item whose
+  title was written as an attack on the bot. The five rows are real. It is filed as wrongly based, and reported
+  here plainly as the nearest thing to a wrong number sent in either run.
+- The model has written no wrong number, name, date or calculation in about 610 sentences over four live runs.
+  With none seen in 610, the true rate is very likely under 1 in 200 (the 95% bound is 0.5%).
+- "Good" has not moved from 9 in two rounds of checker and tool work, and "says what it means" fell. The prompt
+  has not been touched yet.
+
+What changes:
+- Stop closing leak families rule by rule. It does not converge, and a replay on saved sentences cannot show what
+  a rule costs on sentences the model has not written yet.
+- A check keeps the power to refuse a sentence only when it fails on values, with no reading of words: a marker
+  whose cell does not hold the written value, a path that does not exist, a number or name found nowhere in the
+  turn's results. Everything else becomes a logged flag for testing, and refuses nothing.
+- That is measured first on the 610 hand-judged sentences, then confirmed with live runs that change the checker
+  only, run twice to learn how much one run differs from the next.
+- After that the next change is the first prompt change.
+
+Still open from this round: the tool defects in DESIGN 25.15; `percent` unclassed; the season rule's thin evidence.

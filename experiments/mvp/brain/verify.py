@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import copy
 import difflib
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -35,6 +36,187 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .. import insight as I
 
 VERIFY_VERSION = "brain_verify_v1"
+
+# ------------------------------------------------------------------ the checker's mode (mvp24, DESIGN 24)
+# "full": every rule (today's checker, unchanged). "cells": code checks the cells only (numbers, names, dates,
+# calculations and what each number is bound to), the policy lines (outside knowledge, feelings, outcomes, watch time,
+# sensitive topics) and the marker grammar; every framing rule (window, base, scope, rank, tie, list, only/all,
+# direction words) is off at the source: its code is never added, and a rule chain that stops at its first hit walks
+# past a rule that is off. Chosen by the `mode` argument, else by the environment variable MVP_BRAIN_CHECK.
+CHECK_ENV = "MVP_BRAIN_CHECK"
+CHECK_MODES = ("full", "cells")
+
+# every reason code the checker or insight's checks can give, by what it checks (pinned by tests/test_brain_cells.py:
+# a code seen on any set that is in none of these fails the test)
+CELL_CODES = frozenset({
+    "bad_marker", "bad_ref", "two_results", "uncited_number", "free_number", "number", "wrong_value", "date",
+    "wrong_measure", "count_as_share", "count_of_videos", "wrong_name", "typed_name", "bound_to_other", "calc", "ratio",
+    "made_up_difference", "unknown_name", "uncited_name", "other_name", "wrong_group", "wrong_area",
+    "channel_not_in_theme", "not_item", "link", "about_not_cited", "source", "marker", "garbled", "too_long",
+    "language", "point_text", "insight_error", "bound", "fraction", "month", "quote", "number_word", "empty",
+    "bad_path", "bad_value",
+    "name", "word",   # insight's "name:<w>" (a capitalised word no name of the sheet holds), "word:<w>" (a topic word
+                      # the sheet's vocabulary does not hold): a made-up name
+    # mvp24: two of insight's binding rules the paper's taxonomy had filed among framing; each reads which row or which
+    # measure a cell is of (insight.py, beside channel_not_in_theme and count_as_share), and each is the only check of
+    # a planted cell-class case (v5_054, v5_056)
+    "median_of_window", "shorts_as_long",
+    # mvp25: the cells-only rules' codes (DESIGN 24.4)
+    "other_period", "item_field", "length_cell",
+    "share_of_name"})   # insight's R3 (a share said "of your <name>"): a binding reason insight_walk counts
+POLICY_CODES = frozenset({"outside_in_history", "psych", "outcome", "sensitive", "watch_time", "filler",
+                          "second_person", "generic_claim", "weak_fit", "too_many"})
+FRAMING_CODES = frozenset({
+    "wrong_window", "window_missing", "filter_dropped", "scope_broadened", "base", "base_missing", "no_base",
+    "insight_rewrite", "rank", "not_top", "tie", "least", "spread", "mostly", "mix", "previous",
+    "direction_unbound", "no_direction", "small_move", "vague", "one_value", "first_last", "private_total",
+    "platform_word", "length_word", "shorts_left_out", "own_shorts_share", "share_of_topic",
+    "weekpart", "weekday", "year", "hour", "time_of_day", "not_close", "not_new", "not_stopped", "order",
+    "gap_words", "number_run", "season",
+    "unsupported"})   # insight's "steadier", "consistent" with no number: a direction word
+# a framing-listed rule that stays on in cells mode, and why (DESIGN 24.2)
+FRAMING_KEPT = {"weekday": "insight's weekday rule also checks the weekday of an item's own date; it is the only check "
+                           "of the attack's Q01 ('on 1 October 2026, a Sunday'), and it cost no true sentence on any set"}
+# the codes whose place can be argued; each was decided by the evidence of DESIGN 24.2 (on = kept in cells mode)
+DOUBT_CODES = {
+    # "code@emitter": one rule of a code several rules give. A doubtful code (or emitter) stays on only when switching
+    # it off alone lets a cell-class false case out (pin/loo.py over the planted, attack, skeptic and record sets).
+    "direction@sign": "on",       # a typed sign or 'up' / 'down' on a points cell: f_sign, f_up_on_fall get out
+    "direction@calc": "on",       # check_calc's sign: the attack's G02 ('45% fewer' of +45%) gets out
+    "direction@from_to": "on",    # 'from' the now cell: the attack's X01 to X03 and the record set's N25 get out
+    "direction@compare": "off",   # _compare_unbound's direction words: no cell-class case gets out
+    "direction@insight": "on",    # insight's direction rule: alone, nothing gets out and no true sentence comes back;
+                                  # off with uncited_claim@compare off, the attack's D01 gets out (insight stops at its
+                                  # first reason, so a direction reason off hides its unnamed_owner reason)
+    "uncited_claim@nomarker": "on",   # a claim with no marker: the audit's F32d (a last date with no marker) gets out
+    "uncited_claim@bare": "off",      # _bare_clause: 7 true sentences back, no cell-class case out
+    "uncited_claim@compare": "off",
+    "uncited_claim@all_from": "off",
+    # mvp25 (DESIGN 24.4): limits and repeat enforce the founder's own rules (never keep saying what the bot cannot
+    # do; be brief), so each emitter was judged by what it would drop on run1 and the two looks, sentence by sentence
+    # (step4.txt): on only when at most a quarter of its drops, and at most 3 per 65 answers, are useful true sentences
+    "limits@words": "off",    # LIMITS words: 5 drops, all leads, 4 of them useful true sentences ("export ends", "I
+                              # can't predict next week, but ... gaming was 49%")
+    "limits@self": "off",     # what the assistant found or could not find: 6 drops, all leads. 2 wanted (look2's
+                              # I02.0 false absence, twice); 4 are the one honest line of an answer whose code lead
+                              # would be bare ("I couldn't check an answer to that in time.", "Here's what I found in
+                              # your saves."): run1's N004.0 and N109.0, the looks' K04.0. 4 of 6 unwanted
+    "limits@insight": "off",  # insight's own limits words: 8 drops, 5 of them useful true sentences
+    "unnamed_owner": "on",    # 16 cell-class cases get out (a number beside another row's name)
+    "bound_global": "off",    # no cell-class case out; 3 true sentences back
+    "repeat": "off",          # no cell-class case out; a POLICY case (r_repeat, a fact said twice) gets out. mvp25:
+                              # "repeat@once" would drop 2 points of run1 and the looks, 1 of them a useful true one
+                              # (look1 D08.0: "All 32 were long videos, in the Home cooking theme"); insight's repeat
+                              # drops none: both stay off
+}
+# marker-bookkeeping loosenings of cells mode (mvp23 record/d1b.txt; IN SAMPLE): a title in quotes, an item's own
+# channel. mvp25: "short_word" ("a short" / "a long video" before an item's marker) is out: it let a short go out under
+# another channel's name (the second attack's e12, l07); "platform_all" ("on YouTube[...by_platform.youtube]" when
+# every item is) is out as asked; it had kept 2 true sentences of the held-out looks (DESIGN 24.4)
+CELLS_LOOSE = frozenset({"title_quote", "item_channel", "own_fields", "hour_word", "handle", "month_alone",
+                         "label_in_date", "quoted_title"})
+# mvp25: the cells-only rules, each switchable (a CheckMode's `rules`), each kept only on a measured catch and a
+# measured true-sentence cost (DESIGN 24.4; every figure IN SAMPLE). Full mode runs none of them.
+CELLS_RULES = frozenset({"period_bind", "period_named", "free_date", "weekday_typed", "insight_walk",
+                         "item_fields", "length_cell", "pairs_crossed", "date_owner"})
+# the later reasons insight_walk counts (DESIGN 24.4, IN SAMPLE): the binding reasons (a number or a name beside
+# another row, another area, another theme, another measure) and a name, word, title or link the sheet does not hold.
+# Walked to on the true sentences of every set, "date", "percent" (twice), "number", "count_as_share", "filler" and
+# "weekday" fell on true sentences (insight's text rules misread a window's end date, a weekday share, "163 of the
+# videos"): not counted
+WALK_ACCEPT = frozenset({"unnamed_owner", "bound_to_other", "bound", "wrong_area", "channel_not_in_theme",
+                         "shorts_as_long", "median_of_window", "share_of_name", "wrong_group", "word", "name", "link",
+                         "quote"})
+
+
+@dataclass(frozen=True)
+class CheckMode:
+    """What the checker runs. `off`: reason codes never added (a code, or "code@emitter" for one emitter of a code
+    several rules give); `loose`: the marker loosenings; `insight`: "on" (insight's checks run; a first reason that is
+    off counts as none) or "off"; `rules` (mvp25): the cells-only rules of CELLS_RULES that run."""
+    name: str
+    off: frozenset = frozenset()
+    loose: frozenset = frozenset()
+    insight: str = "on"
+    cells: bool = False
+    rules: frozenset = frozenset()   # mvp25: the cells-only rules that run (CELLS_RULES)
+
+    def rule(self, name):
+        return name in self.rules
+
+    def is_off(self, code, src=None):
+        if not self.off:
+            return False
+        c = str(code).split(":")[0]
+        return code in self.off or c in self.off or (src is not None and f"{c}@{src}" in self.off)
+
+
+def _insight_skip(cm):
+    """The reasons insight walks past in a mode (its codes that are off, alone or as "code@insight")."""
+    return frozenset({x for x in cm.off if "@" not in x} | {x.split("@")[0] for x in cm.off if x.endswith("@insight")})
+
+
+# the loosenings insight's reading takes (verify.insight_check, slotted)
+_INSIGHT_LOOSE = frozenset({"handle", "month_alone", "label_in_date"})
+
+
+def _cited_handles(markers, res):
+    """The '@handles' the rows the sentence cites hold in their own fields (name, title, channel, handle), lower
+    case."""
+    out = set()
+    for mk in markers:
+        if mk.kind not in ("row", "value") or not mk.owner or mk.rid != res.rid:
+            continue
+        try:
+            row = _resolve(res.sheet, mk.owner)
+        except KeyError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        for k in ("name", "title", "channel"):
+            for h in re.findall(r"@[\w][\w.]*\w", str(row.get(k) or "")):
+                out.add(h.lower())
+        if isinstance(row.get("handle"), str) and row["handle"].strip():
+            out.add("@" + row["handle"].strip().lstrip("@").lower())
+    return out
+
+
+def _hour_cell_after(raw, pos, markers):
+    """'Hour' right before a marker of an hour cell ("Hour 18[r1.when.busiest_hours[1].hour]")."""
+    return any(mk.kind == "value" and mk.key == "hour" and not raw[pos:mk.start].strip() for mk in markers)
+
+
+def _hour_cells_out(raw, markers):
+    """The sentence's plain lower text with every "hour N[...hour]" span taken out (an hour of the day, never watch
+    time)."""
+    t = list(raw)
+    for mk in markers:
+        if mk.kind == "value" and mk.key == "hour":
+            pre = re.search(r"\bhours?\s*$", raw[:mk.start], re.I)
+            for i in range(pre.start() if pre else mk.start, mk.end):
+                t[i] = " "
+    return strip_markers("".join(t)).lower()
+
+
+def _cells_off():
+    return frozenset((FRAMING_CODES - set(FRAMING_KEPT)) | {c for c, v in DOUBT_CODES.items() if v == "off"})
+
+
+FULL = CheckMode("full")
+CELLS = CheckMode("cells", off=_cells_off(), loose=CELLS_LOOSE, cells=True, rules=CELLS_RULES)
+
+
+def check_mode(mode=None):
+    """The CheckMode of `mode` ("full", "cells", a CheckMode), else of MVP_BRAIN_CHECK, else "full"."""
+    if isinstance(mode, CheckMode):
+        return mode
+    name = mode if mode is not None else (os.environ.get(CHECK_ENV) or "full")
+    name = str(name).strip().lower()
+    if name == "full":
+        return FULL
+    if name == "cells":
+        return CELLS
+    raise ValueError(f"{CHECK_ENV} / check mode must be one of {CHECK_MODES}, not {name!r}")
 
 # ------------------------------------------------------------------ the marker grammar (SPEC 4.2)
 PATH = r"(?:r\d+|ctx[12])(?:\.[A-Za-z_]+(?:\[\d+\])?)+"
@@ -358,6 +540,7 @@ class Verdict:
     private_line: bool = False   # SPEC 4.3 step 13: code's scope line adds "Leaving out topics you keep private."
     repair: bool = False
     version: str = VERIFY_VERSION
+    check: str = "full"          # the checker's mode (mvp24): "full" or "cells"
 
     @property
     def lead(self):
@@ -565,10 +748,11 @@ def _num_of(tok):
         return None
 
 
-def parse(sentence, ledger):
+def parse(sentence, ledger, loose=frozenset()):
     """([Marker], [reason]) of one sentence. A bracket that is not a path, a calc of two paths or a count fails
     `bad_ref` (a calc with a literal number inside does not parse); a path that does not resolve in the ledger fails
-    `bad_ref`; braces (insight's slots) are not part of this grammar and fail `bad_ref`."""
+    `bad_ref`; braces (insight's slots) are not part of this grammar and fail `bad_ref`. `loose` (cells mode only):
+    the row-name loosenings of CELLS_LOOSE."""
     out, bad = [], []
     if re.search(r"[{}]", sentence):
         bad.append("bad_ref")
@@ -647,11 +831,14 @@ def parse(sentence, ledger):
         if isinstance(v, dict) and segs and segs[-1][1] is not None:
             mk = Marker("row", m.start(), m.end(), m.start(), path=body, rid=rid, rest=rest, value=v, owner=rest)
             names = _row_names(v, rest)
-            low = _low(prefix)
+            pfx = prefix
+            if loose:
+                names, pfx = _loose_names(names, v, rest, prefix, loose)
+            low = _low(pfx)
             hit = next((n for n in sorted(names, key=len, reverse=True) if low.endswith(_low(n))), None)
             if hit is not None:
                 # the said name's start in the original prefix (case and spacing as typed)
-                mt = re.search(r"\s+".join(re.escape(w) for w in hit.split()) + r"\s*$", prefix, re.I)
+                mt = re.search(r"\s+".join(re.escape(w) for w in hit.split()) + r"\s*$", pfx, re.I)
                 if mt:
                     mk.start, mk.said = prev_end + mt.start(), prefix[mt.start():].strip()
             out.append(mk)
@@ -686,6 +873,23 @@ def parse(sentence, ledger):
         out.append(mk)
         prev_end = m.end()
     return out, bad
+
+
+def _loose_names(names, v, rest, prefix, loose):
+    """cells mode (mvp23 record/d1b.txt, in sample): the names that may stand before a row marker, and the prefix read.
+    title_quote: a title in quotes, or the title without its trailing '#n'; item_channel: an item's own channel;
+    short_word: 'a short' / 'a long video' for an item of that length."""
+    names = list(names)
+    pfx = prefix
+    if "title_quote" in loose:
+        pfx = re.sub(r"[\"“”]\s*$", "", prefix)
+        names += [re.sub(r"\s*#\s*\d+\s*$", "", n) for n in names if re.search(r"#\s*\d+\s*$", n)]
+    item = bool(re.match(r"^items\[\d+\]$", rest))
+    if "item_channel" in loose and item and isinstance(v.get("channel"), str):
+        names.append(v["channel"])
+    if "short_word" in loose and item and v.get("length") in ("short", "long"):
+        names += ["a short", "a Short"] if v["length"] == "short" else ["a long video", "a long one"]
+    return names, pfx
 
 
 def _bad_detail(sentence, ledger):
@@ -1002,6 +1206,71 @@ def check_calc(mk, ledger, clause):
     return None
 
 
+def _cross_row_move(mk):
+    """cells mode (mvp24, the attack's V05: "Gaming rose 29 points[=points(r1.areas[0].share,
+    r1.areas[2].previous_share)]"): a change that sets one row's value now against ANOTHER row's value before is bound
+    to no row's move. Read from the two paths only."""
+    if mk.op not in ("diff", "points", "pct_change"):
+        return None
+    ra, rb = mk.a.split(".", 1)[1], mk.b.split(".", 1)[1]
+    oa, ob = _owner(ra), _owner(rb)
+    if oa and ob and oa != ob and _is_before(ra) != _is_before(rb):
+        return "calc", f"{mk.op}({mk.a}, {mk.b}) sets {oa} now against {ob} before: a change is of one row"
+    return None
+
+
+def _mixed_move(markers):
+    """cells mode (mvp24, the planted v5_112: "Speed runs[r1.themes[1]] climbed to 9%[r1.themes[1].share] from
+    27[r1.themes[1].previous_items] videos before"): a row said with a value now and a value before says them in one
+    measure; a before value with no now value of its own measure (a count against a share) is bound to the wrong
+    measure. Read from the paths only."""
+    groups = {}
+    for mk in markers:
+        if mk.kind != "value" or isinstance(mk.value, (str, bool)) or not isinstance(mk.value, (int, float)):
+            continue
+        fam = _family(mk.rest)
+        if fam not in ("count", "share"):
+            continue
+        own = mk.owner   # a row's own cells only (the window's totals and previous may be said apart)
+        if own is None:
+            continue
+        g = groups.setdefault((mk.rid, own), (set(), set()))
+        g[1 if _is_before(mk.rest) else 0].add(fam)
+    for (rid, own), (now, before) in groups.items():
+        if now and before and not (now & before):
+            return "wrong_measure", f"{rid}.{own}: a value before in {'/'.join(sorted(before))} against a value " \
+                                    f"now in {'/'.join(sorted(now))}: say both in one measure"
+    return None
+
+
+def _window_median_of_row(markers, res):
+    """cells mode (mvp24): insight's own binding rule (b), "the window's median long video said next to one record",
+    read from the paths, so that no framing reason insight gives first can hide it (the compound probe p17: "Speed
+    runs[r1.themes[1]] led on 18 days, and its long videos ran about 23[r1.totals.long_median_min] minutes")."""
+    if res is None or not res.is_sheet or not any(mk.kind == "value" and mk.rest == "totals.long_median_min"
+                                                   for mk in markers):
+        return None
+    for mk in markers:
+        if mk.kind in ("row", "value") and mk.owner and mk.rid == res.rid and \
+                not I._is_question_topic(res.sheet_k, mk.owner):
+            return "median_of_window", f"{res.rid}.totals.long_median_min is the window's median, not {mk.owner}'s"
+    return None
+
+
+def _platform_all(raw, mk, ledger):
+    """cells mode (mvp23 D1b, in sample): 'on YouTube[r1.totals.by_platform.youtube]', a marker after a word with no
+    number, when that cell equals the result's totals.items (every item is on that platform)."""
+    if not re.search(r"(?:^|\.)by_platform\.(youtube|instagram)$", mk.rest or ""):
+        return False
+    if not re.search(r"\bon (?:youtube|instagram)\s*$", raw[:mk.start], re.I):
+        return False
+    if not re.search(mk.rest.rsplit(".", 1)[1], raw[max(0, mk.start - 12):mk.start], re.I):
+        return False
+    r = ledger.get(mk.rid)
+    tot = ((r.sheet or {}).get("totals") or {}).get("items") if r is not None else None
+    return isinstance(tot, (int, float)) and not isinstance(tot, bool) and mk.value == tot
+
+
 # ------------------------------------------------------------------ one sentence (step 3)
 def _clause_around(s, a, b):
     """The clause of s that holds [a, b): from the last break before a to the next break after b."""
@@ -1306,9 +1575,563 @@ def _end_in_base(sentence, markers, res, turn=None):
     return None
 
 
-def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=None, probe=False):
+# ------------------------------------------------------------------ mvp25: cells-only rules (DESIGN 24.4, IN SAMPLE)
+_SAME_PART = re.compile(r"\b(?:the\s+)?same\s+(?:part|stretch|weeks|period|time)\s+of\s+(?P<y>(?:19|20)\d\d)\b", re.I)
+_RANGE_WORDS = re.compile(r"(\d{1,2}) ([A-Za-z]+)(?: (\d{4}))? to (\d{1,2}) ([A-Za-z]+) (\d{4})")
+
+
+def _prev_range(res):
+    """The window before of a result: prev_window(), else the dates in its previous words ("from 1 January to 30
+    October 2025", the changes tool's words, with no brackets)."""
+    pw = res.prev_window()
+    if pw:
+        return pw
+    m = _RANGE_WORDS.search(str((res.sheet.get("previous") or {}).get("words") or ""))
+    if not m:
+        return None
+    try:
+        y2 = int(m.group(6))
+        b = date(y2, _MONTHS.index(m.group(5).lower()) + 1, int(m.group(4)))
+        a = date(int(m.group(3)) if m.group(3) else y2, _MONTHS.index(m.group(2).lower()) + 1, int(m.group(1)))
+    except ValueError:
+        return None
+    return a, b
+
+
+def _row_period(res, rest):
+    """The period a period row's cell is of (periods[i], eras[i]: the row's own label), else None."""
+    m = re.match(r"^((?:periods|eras)\[\d+\])", rest)
+    if not m:
+        return None
+    try:
+        row = _resolve(res.sheet, m.group(1))
+    except KeyError:
+        return None
+    lab = row.get("label") if isinstance(row, dict) else None
+    return _label_range(_low(lab)) if isinstance(lab, str) else None
+
+
+def _cell_anchors(markers, res):
+    """[(start, end, path, (start, end) or "both")] of every numeric cell of `res` the sentence cites, in order (a
+    change, or a calc of a change, is of both periods); None when a cell has no period code can place."""
+    out = []
+    for mk in markers:
+        if mk.kind == "value" and isinstance(mk.value, (int, float)) and not isinstance(mk.value, bool) and \
+                mk.rid == res.rid:
+            rests = [mk.rest]
+        elif mk.kind == "calc":
+            rests = [x.split(".", 1)[1] for x in (mk.a, mk.b) if x.split(".", 1)[0] == res.rid]
+        else:
+            continue
+        ws = []
+        for rest in rests:
+            if _segs(rest)[-1][0] in ("change_vs_previous", "change_pts", "change"):
+                ws.append("both")
+                continue
+            if re.match(r"^(?:periods|eras)\[", rest):
+                w = _row_period(res, rest)
+            elif re.match(r"^(?:change|areas_change|seasonal)\b", rest):
+                return None
+            elif _is_before(rest):
+                w = _prev_range(res)
+            else:
+                w = res.window()
+                w = w if w[0] and w[1] else None
+            if w is None:
+                return None
+            ws.append(w)
+        if mk.kind == "calc" and len(set(map(str, ws))) > 1:
+            ws = ["both"]
+        out.append((mk.start, mk.end, mk.path, ws[0] if ws else "both"))
+    return out
+
+
+def _known_periods(ledger):
+    """[(range, name, clipped)] of every period the turn's results name: each result's window and window before, and
+    the periods its sheet names itself (periods, eras, a change's ends)."""
+    out = []
+    for r in ledger.by_rid.values():
+        w = r.window()
+        if w[0] and w[1]:
+            out.append((w, f"{r.rid}'s window", bool((r.sheet.get("window") or {}).get("clipped"))))
+        pw = _prev_range(r)
+        if pw:
+            out.append((pw, f"{r.rid}'s window before", False))
+        for lab in sorted(_labels(r.sheet)):
+            rng = _label_range(lab)
+            if rng:
+                out.append((rng, f"'{lab}'", False))
+    return out
+
+
+_LAST_BEFORE = re.compile(r"\b(?:last|past|previous)\s+$", re.I)
+
+
+def _last_season(name, turn):
+    """mvp25 merge (the tools' convention of DESIGN 25.1, brain/windows.py): "last <season>" is the one a year before the
+    latest one that has begun on the turn's day. None (left alone) when the turn has no day. Before this, "last summer"
+    took the instance the cited windows overlap most, which in a this-summer-against-last-summer compare is a tie and
+    went to this summer."""
+    today = turn.today if turn and turn.today else None
+    if today is None:
+        return None
+    s0, s1 = _SEASON_M[name.lower()]
+    y = today.year if today.month >= s0 else today.year - 1
+    return _season(y - 1, s0, s1)
+
+
+_CLAUSE_BREAK = re.compile(r"[;:]|,\s*(?:and|but|while|whereas|against|with|so|though)\b|\b(?:while|whereas|but)\b",
+                           re.I)
+
+
+def _period_named(raw, markers, res, ledger, turn):
+    """mvp25 cells rule "period_named" (the second attack's f16, f21, f22, p04, p05, p07): a period the sentence names
+    (a year, a month, a season, 'this year', 'the same part of 2025') bound to a numeric cell, when the cell has no day
+    in it, or when it is another period one of the turn's results holds (a window, a window before, a period row),
+    names the cell under another period's name. A phrase binds to the cell right before it in the same clause (one
+    phrase per cell), or, before the first cell, the phrase nearest it binds that cell. Read from the cells' paths and
+    the results' window fields; a phrase that holds the cell's period (the frame: 'this year' of an October row), one
+    after 'before', 'after', 'since', 'until' or 'up to', or one bound to no cell, is left alone (framing)."""
+    if res is None or not res.is_sheet:
+        return None
+    cells = _cell_anchors(markers, res)
+    if not cells:
+        return None
+    w = res.window()
+    if w[0] and w[1] and _prev_range(res) == w:
+        return None   # a window compared with itself: which period a cell is of cannot be read
+    clipped_now = bool((res.sheet.get("window") or {}).get("clipped"))
+    known = _known_periods(ledger)
+    t = list(raw)
+    for mk in markers:
+        for i in range(mk.start if mk.kind == "row" else mk.mstart, mk.end):
+            t[i] = " "
+    t = "".join(t)
+    t = _DATE_IN.sub(lambda m: " " * len(m.group(0)), t)
+    said = []
+    for m in _SAME_PART.finditer(t):
+        if w[0] and w[1]:
+            y = int(m.group("y"))
+            try:
+                said.append((m.start(), m.end(), m.group(0), (w[0].replace(year=y), w[1].replace(year=y))))
+            except ValueError:
+                pass
+    t = _SAME_PART.sub(lambda m: " " * len(m.group(0)), t)
+    wins = [x for *_r, x in cells if x != "both"] or [w]
+    for m in _PHRASE.finditer(t):
+        if m.group("since"):
+            continue
+        if m.group("mon") and m.group("mon").lower() in ("may", "mar") and not m.group("my"):
+            continue
+        if re.search(r"\b(?:before|after|since|until|till|up to|through|by|from)\s*$", t[:m.start()], re.I):
+            continue
+        rng = _phrase_range(m, wins, turn)
+        if m.group("season") and not m.group("sy") and _LAST_BEFORE.search(t[:m.start()]):
+            rng = _last_season(m.group("season"), turn)
+        if rng is not None:
+            said.append((m.start(), m.end(), m.group(0), rng))
+    said.sort()
+    bound = {}
+    for k, (a, b, text, rng) in enumerate(said):
+        before = [c for c in cells if c[1] <= a]
+        if before:
+            c = before[-1]
+            gap = raw[c[1]:a]
+            if c[2] in bound or _CLAUSE_BREAK.search(gap) or any(c[1] <= x[0] < a for x in said[:k]):
+                continue
+        else:
+            c = cells[0]
+            if any(b <= x[0] < c[0] for x in said[k + 1:]):
+                continue   # a nearer phrase binds the first cell
+        bound[c[2]] = (text, rng)
+        cw = c[3]
+        if cw == "both":
+            continue
+        if _matches(rng, cw, clipped_now and cw == w) or (rng[0] <= cw[0] and cw[1] <= rng[1]):
+            continue   # the cell's own period, or a period that holds it (the frame)
+        disjoint = rng[1] < cw[0] or cw[1] < rng[0]
+        other = next((nm for kr, nm, kc in known if _matches(rng, kr, kc)), None)
+        if disjoint or other:
+            return "other_period", (f"{c[2]} is of {cw[0].isoformat()} to {cw[1].isoformat()}, not '{_clip(text, 30)}'"
+                                    + (f" ({other})" if other else ""))
+    return None
+
+
+_ISO_DAY = re.compile(r"^((?:19|20)\d\d)-(\d\d)-(\d\d)")
+_MON_YEAR = re.compile(r"\b(" + _MON_RX + r")\.?\s+((?:19|20)\d\d)\b", re.I)
+_BOUND_WORDS = re.compile(r"\b(?:to|up to|until|till|through|ends?|ending|ended|from|since|between|and|before|after)"
+                          r"(?:\s+on)?\s*$", re.I)
+
+
+def _row_days(res, markers):
+    """The dates (date) in the rows the sentence cites of `res` (an item's 'when', a channel's 'first_watched', ...)."""
+    out = set()
+    for mk in markers:
+        if mk.kind not in ("row", "value") or not mk.owner or mk.rid != res.rid:
+            continue
+        try:
+            row = _resolve(res.sheet, mk.owner)
+        except KeyError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        for v in row.values():
+            m = _ISO_DAY.match(v) if isinstance(v, str) else None
+            if m:
+                try:
+                    out.add(date(int(m.group(1)), int(m.group(2)), int(m.group(3))))
+                except ValueError:
+                    pass
+    return out
+
+
+def _typed_dates(raw, markers, res):
+    """[(start, text, (first day, last day), day: bool)] of the dates typed with no marker: a full date, a month and a
+    year, a year after 'in' or 'starting'; the window's own words and every marker's said text left out."""
+    t = list(raw)
+    for mk in markers:
+        for i in range(mk.start, mk.end):
+            t[i] = " "
+    t = _remove_phrases("".join(t), _window_phrases(res))
+    out = []
+    for m in _DATE_IN.finditer(t):
+        g = m.groups()
+        d_, mon, y = (g[0], g[1], g[2]) if g[0] else (g[4], g[3], g[5])
+        mi = next((i for i, x in enumerate(_MONTHS) if x.startswith(mon.lower()[:3])), None)
+        if mi is None:
+            continue
+        if not y:
+            # a day with no year ("on 30 October"): held when a row's date is that day of any year
+            out.append((m.start(), m.group(0), ("md", mi + 1, int(d_)), True))
+            continue
+        try:
+            dd = date(int(y), mi + 1, int(d_))
+        except ValueError:
+            continue
+        out.append((m.start(), m.group(0), (dd, dd), True))
+    t = _DATE_IN.sub(lambda m: " " * len(m.group(0)), t)
+    for m in _MON_YEAR.finditer(t):
+        mi = next((i for i, x in enumerate(_MONTHS) if x.startswith(m.group(1).lower()[:3])), None)
+        if mi is not None:
+            out.append((m.start(), m.group(0), _month_range(int(m.group(2)), mi + 1), False))
+    t = _MON_YEAR.sub(lambda m: " " * len(m.group(0)), t)
+    for m in re.finditer(r"\b(?:in|starting in|started in|starting|beginning in|back in)\s+((?:19|20)\d\d)\b", t, re.I):
+        y = int(m.group(1))
+        out.append((m.start(1), m.group(1), (date(y, 1, 1), date(y, 12, 31)), False))
+    for m in re.finditer(r"\b(?:starting|started|start|beginning|began|begun|since|first\s+\w+)\s+"
+                         r"(?:in\s+|on\s+|from\s+)?(" + _MON_RX + r")\b(?!\.?\s+(?:19|20)\d\d)", t, re.I):
+        # a month with no year said as where a row starts ("starting in April"): held when a row's date is in it
+        mi = next((i for i, x in enumerate(_MONTHS) if x.startswith(m.group(1).lower()[:3])), None)
+        if mi is not None and not (m.group(1).lower() in ("may", "mar") and not m.group(1)[0].isupper()):
+            out.append((m.start(1), m.group(1), ("m", mi + 1), False))
+    return sorted(out, key=lambda x: x[0])
+
+
+def _free_date(raw, markers, res, ledger):
+    """mvp25 cells rule "free_date" (the second attack's c09, c10, g05): a date typed with no marker in a sentence that
+    cites a row holding dates must be that row's: it holds one of the cited rows' dates (an item's day, a channel's
+    first day), or it is a period one of the turn's results holds (a window, a window before, a period row), or a
+    window's first or last day said as an end ('up to', 'from', 'since'), or the window itself when the window is one
+    day. Else no cell holds it. Read from the rows' date fields and the results' window fields only."""
+    if res is None or not res.is_sheet:
+        return None
+    days = _row_days(res, markers)
+    if not days:
+        return None
+    known = _known_periods(ledger)
+    bounds = {d for kr, _nm, _c in known for d in kr}
+    w = res.window()
+    for a, text, rng, is_day in _typed_dates(raw, markers, res):
+        if rng[0] == "md":
+            edge = _BOUND_WORDS.search(raw[:a]) and any((b_.month, b_.day) == rng[1:] for b_ in bounds)
+            if not edge and not any((d.month, d.day) == rng[1:] for d in days) and \
+                    not any(kr[0] == kr[1] and (kr[0].month, kr[0].day) == rng[1:] for kr, _nm, _c in known):
+                return "date", f"'{_clip(text, 30)}' is no date of the rows cited"
+            continue
+        if rng[0] == "m":
+            if not any(d.month == rng[1] for d in days):
+                return "date", f"'{_clip(text, 30)}' is no month of the rows cited"
+            continue
+        d0, d1 = rng
+        if any(d0 <= d <= d1 for d in days):
+            continue
+        if any(kr == (d0, d1) or (c and kr[0] == d0 and d1 >= kr[1]) for kr, _nm, c in known):
+            continue
+        if _BOUND_WORDS.search(raw[:a]) and (d0 in bounds or d1 in bounds):
+            continue
+        if is_day and w[0] and w[0] == w[1] == d0:
+            continue
+        said = ", ".join(sorted(d.isoformat() for d in days))[:80]
+        return "date", f"'{_clip(text, 30)}' is no date of the rows cited ({said})"
+    return None
+
+
+_WD_DATE = re.compile(r"\b(" + "|".join(I.WEEKDAYS) + r"),?\s+(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" +
+                      _MON_RX + r")\.?,?\s+((?:19|20)\d\d)\b", re.I)
+
+
+def _typed_weekday(raw):
+    """mvp25 cells rule "weekday_typed" (the second attack's w01): 'Thursday 30 October 2026' typed with a weekday that
+    is not that date's (calendar arithmetic on the words only)."""
+    for m in _WD_DATE.finditer(strip_markers(raw)):
+        mi = next((i for i, x in enumerate(_MONTHS) if x.startswith(m.group(3).lower()[:3])), None)
+        try:
+            dd = date(int(m.group(4)), mi + 1, int(m.group(2)))
+        except (TypeError, ValueError):
+            continue
+        if I.WEEKDAYS[dd.weekday()] != m.group(1).lower():
+            return "weekday", f"{dd.isoformat()} is a {I.WEEKDAYS[dd.weekday()].title()}, not a {m.group(1).title()}"
+    return None
+
+
+_HOUR_OF = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", re.I)
+_LENGTH_SAID = re.compile(r"\b(?:(?P<short>shorts?)|(?P<long>long(?:-form)?(?:\s+(?:videos?|ones?))?|longer))\b", re.I)
+_ITEM_CLAUSE_STOP = re.compile(r"[,;:]|\b(?:and|but|while|whereas|then|after|before)\b", re.I)
+
+
+def _cited_items(markers, res):
+    """[(marker, row)] of the items the sentence cites (a row marker or a cell of items[i])."""
+    out = []
+    for mk in markers:
+        if mk.kind not in ("row", "value") or mk.rid != res.rid or not mk.owner or \
+                not re.fullmatch(r"items\[\d+\]", mk.owner):
+            continue
+        try:
+            row = _resolve(res.sheet, mk.owner)
+        except KeyError:
+            continue
+        if isinstance(row, dict):
+            out.append((mk, row))
+    return out
+
+
+def _item_hour(row):
+    m = _HOUR_OF.search(str(row.get("when") or ""))
+    if not m:
+        return None
+    h = int(m.group(1)) % 12 + (12 if m.group(3).lower() == "pm" else 0)
+    return h
+
+
+def _item_fields(raw, markers, res):
+    """mvp25 cells rule "item_fields" (the second attack's h01 to h03, e09, e13): what a sentence says of a cited item
+    in words must be that item's own field. A time of day ('in the morning', 'late at night') said after an item is its
+    hour's; 'a Short' / 'a long video' said of an item in the same clause is its length; a channel cited with 'from' or
+    'by' right after an item is the item's own channel. Read from the item row's fields (when, length, channel)."""
+    if res is None or not res.is_sheet:
+        return None
+    items = _cited_items(markers, res)
+    if not items:
+        return None
+    t = list(raw)
+    for mk in markers:
+        for i in range(mk.start if mk.kind == "row" else mk.mstart, mk.end):
+            t[i] = " "
+    t = "".join(t)
+    t = re.sub(r"@[\w.]+|\"[^\"]{1,120}\"|“[^”]{1,120}”", lambda m: " " * len(m.group(0)), t)   # names and titles
+    # a title in quotes beside a cited item is that item's own, not another item's of the result
+    own_titles = {_low(row.get("title")) for _mk, row in items if isinstance(row.get("title"), str)}
+    all_titles = {_low(x.get("title")) for x in (res.sheet.get("items") or []) if isinstance(x, dict) and
+                  isinstance(x.get("title"), str)}
+    for q in re.findall(r"[\"“]([^\"”]{2,120})[\"”]", raw):
+        if _low(q) in all_titles and _low(q) not in own_titles:
+            return "item_field", f"'{_clip(q, 40)}' is the title of another item of {res.rid}"
+
+    def owner_before(pos, clause=False):
+        best = None
+        for mk, row in items:
+            if mk.end <= pos and (best is None or mk.end > best[0].end):
+                best = (mk, row)
+        if best is None:
+            return None
+        if clause and _ITEM_CLAUSE_STOP.search(t[best[0].end:pos]):
+            return None
+        return best
+    # a time of day
+    for m in re.finditer(r"[a-z]+", t.lower()):
+        hours = I._TIME_WORD.get(m.group(0))
+        if hours is None or m.group(0) in ("manana", "mananas", "tarde", "tardes", "noche", "noches"):
+            continue
+        if m.group(0) == "late" and not re.match(r"^[\s-]*(?:at\s+night|night|in\s+the\s+evening|evening)",
+                                                 t.lower()[m.end():]):
+            continue   # "late January", "late in the year": no hour
+        it = owner_before(m.start()) or (items[0] if len(items) == 1 else None)
+        if it is None:
+            continue
+        h = _item_hour(it[1])
+        if h is not None and h not in hours:
+            return "item_field", f"{res.rid}.{it[0].owner} was opened at {h}:00, not in the {m.group(0)}"
+    # its length
+    for m in _LENGTH_SAID.finditer(t):
+        it = owner_before(m.start(), clause=True)
+        if it is None or it[1].get("length") not in ("short", "long"):
+            continue
+        said = "short" if m.group("short") else "long"
+        if said != it[1]["length"]:
+            return "item_field", f"{res.rid}.{it[0].owner} is a {it[1]['length']} video, not a {said} one"
+    # its channel
+    for mk in markers:
+        if mk.kind != "row" or mk.rid != res.rid or not re.fullmatch(r"channels\[\d+\]", mk.owner or ""):
+            continue
+        if not re.search(r"\b(?:from|by)\s*$", raw[:mk.start]):
+            continue
+        it = owner_before(mk.start, clause=True)
+        ch = it[1].get("channel") if it else None
+        name = (mk.value or {}).get("name") if isinstance(mk.value, dict) else None
+        if isinstance(ch, str) and isinstance(name, str) and _low(ch) != _low(name):
+            return "item_field", f"{res.rid}.{it[0].owner} is from {ch}, not {name}"
+    return None
+
+
+_ALL_LEN = re.compile(r"\b(?:all|every one|each|each one)\s+(?:of\s+(?:them|those|these|it)\s+)?(?:were\s+|was\s+)?"
+                      r"(?:an?\s+)?(?P<w>shorts?|long(?:-form)?(?: videos?| ones?)?)\b|"
+                      r"\bonly\s+(?P<w2>shorts|long videos)\b", re.I)
+_SHORTS_KEYS = ("shorts", "shorts_share", "previous_shorts", "previous_shorts_share")
+_LONG_KEYS = ("long", "long_share", "previous_long", "previous_long_share")
+
+
+def _length_cell(raw, markers, res):
+    """mvp25 cells rule "length_cell" (the second attack's a19, n09, p06): a length cell said under the other length's
+    word ("72[...totals.long] of them Shorts"; "long videos, at 47%[...shorts_share]"), and "all of them Shorts" of a
+    row whose Shorts share says otherwise. The word read is the length word right after the cell (up to four words),
+    else the nearest one before it with no other number between. Read from the cells' keys and the row's
+    shorts_share."""
+    if res is None or not res.is_sheet:
+        return None
+    nums = [mk for mk in markers if mk.kind == "value" and isinstance(mk.value, (int, float))
+            and not isinstance(mk.value, bool)]
+    t = list(raw)
+    for mk in markers:
+        for i in range(mk.start if mk.kind == "row" else mk.mstart, mk.end):
+            t[i] = " "
+    t = "".join(t)
+    for mk in nums:
+        key = _segs(mk.rest)[-1][0]
+        kind = "short" if key in _SHORTS_KEYS else "long" if key in _LONG_KEYS else None
+        if kind is None:
+            continue
+        after = re.match(r"^(?:\s*[^\s,;:.]+){1,4}", t[mk.end:mk.end + 80])
+        aw = _LENGTH_SAID.search(after.group(0)) if after else None
+        if aw:
+            said = "short" if aw.group("short") else "long"
+        else:
+            prev_num = max((x.end for x in nums if x.end <= mk.start), default=0)
+            bw = list(_LENGTH_SAID.finditer(t[prev_num:mk.start]))
+            if not bw:
+                continue
+            said = "short" if bw[-1].group("short") else "long"
+        if said != kind:
+            return "length_cell", f"{mk.path} is a {'Shorts' if kind == 'short' else 'long-video'} cell, said as " \
+                                  f"{'Shorts' if said == 'short' else 'long videos'}"
+    for mk in nums:
+        # a row's count of videos said as Shorts or as long videos ("32[r1.channels[1].items] Shorts"): all of the
+        # row's videos are of that length
+        if _segs(mk.rest)[-1][0] != "items":
+            continue
+        nx = re.match(r"^\s*(?P<w>shorts?|long(?:-form)?\s+(?:videos?|ones?))\b", t[mk.end:mk.end + 30], re.I)
+        if not nx:
+            continue
+        try:
+            row = _resolve(res.sheet, mk.owner) if mk.owner else (res.sheet.get("totals") or {})
+        except KeyError:
+            continue
+        sh = row.get("shorts_share") if isinstance(row, dict) else None
+        if isinstance(sh, (int, float)) and not isinstance(sh, bool):
+            w = nx.group("w").lower()
+            if (w.startswith("short") and sh < 0.995) or (w.startswith("long") and sh > 0.005):
+                return "length_cell", f"{mk.path}: {round(100 * sh)}% of them are Shorts, not all " + \
+                                      ("Shorts" if w.startswith("short") else "long videos")
+    m = _ALL_LEN.search(t)
+    if m:
+        w = (m.group("w") or m.group("w2")).lower()
+        own = next((mk.owner for mk in markers if mk.kind in ("row", "value") and mk.owner and mk.rid == res.rid), None)
+        try:
+            row = _resolve(res.sheet, own) if own else (res.sheet.get("totals") or {})
+        except KeyError:
+            row = None
+        sh = row.get("shorts_share") if isinstance(row, dict) else None
+        if isinstance(sh, (int, float)) and not isinstance(sh, bool):
+            if (w.startswith("short") and sh < 0.995) or (w.startswith("long") and sh > 0.005):
+                return "length_cell", f"{res.rid}.{own or 'totals'}.shorts_share = {round(100 * sh)}%: not all " + \
+                                      ("Shorts" if w.startswith("short") else "long videos")
+    return None
+
+
+def _own_field_of(name, at, markers, ledger):
+    """mvp25 cells loosening "own_fields": the path of the field ("items[3].channel", "channels[1].theme") that holds
+    `name` in the row cited right before position `at` (a row marker, or the row of a cell; the first row cited after
+    it when none comes before), else None."""
+    rows = []
+    for mk in markers:
+        if mk.kind == "row" and mk.owner:
+            rows.append((mk.start, mk.rid, mk.owner))
+        elif mk.kind == "value" and mk.owner:
+            rows.append((mk.start, mk.rid, mk.owner))
+    if not rows:
+        return None
+    before = [r for r in rows if r[0] < at]
+    pos, rid, own = max(before) if before else min(rows)
+    res = ledger.get(rid)
+    try:
+        row = _resolve(res.sheet, own) if res is not None else None
+    except KeyError:
+        return None
+    if not isinstance(row, dict):
+        return None
+    f_ = res.sheet.get("filters") or {}
+    scope = {_low(v) for v in (f_.get("topic"), f_.get("channel")) if isinstance(v, str)}
+    for k_ in ("channel", "theme", "area"):
+        v = row.get(k_)
+        if not isinstance(v, str) or not v.strip() or _low(v) in scope:
+            continue
+        if _low(v) == name or (k_ == "area" and name in {_low(x) for x in _area_aliases(v)}):
+            return f"{own}.{k_}"
+    return None
+
+
+def _date_owner(markers, plain_rows):
+    """mvp25 cells rule "date_owner" (the second attack's b09: "You started on @wetpaper.ig[r1.channels[1]] on 10
+    January 2025[r1.channels[0].first_watched]"): a date cell of a row (a channel's first day, an item's day) said
+    where another row of the same list is named and its own row is not. Insight never reads a date cell's row (its
+    slot is taken out), so this binding is read here, from the paths only. `plain_rows`: the rows named in plain
+    words."""
+    named = {(mk.rid, mk.owner) for mk in markers if mk.kind == "row" and mk.owner} | set(plain_rows)
+    for mk in markers:
+        if mk.kind != "value" or not isinstance(mk.value, str) or not mk.owner or \
+                _measure(mk.rest, mk.value)[1] != "date":
+            continue
+        lst, _i = _list_and_index(mk.owner)
+        if lst is None or (mk.rid, mk.owner) in named:
+            continue
+        others = [o for r_, o in named if r_ == mk.rid and _list_and_index(o)[0] == lst and o != mk.owner]
+        if others:
+            return "bound_to_other", f"{mk.path} is {mk.owner}'s date, said beside {others[0]}"
+    return None
+
+
+def _pairs_crossed(raw, markers):
+    """mvp25 cells rule "pairs_crossed" (the second attack's p02): "A[...] and B[...] had X[B's cell] and Y[A's cell]":
+    two rows said in one order and their two cells in the crossed order. Read from the paths only."""
+    rows = [mk for mk in markers if mk.kind == "row" and mk.owner]
+    vals = [mk for mk in markers if mk.kind == "value" and mk.owner and isinstance(mk.value, (int, float))]
+    if len(rows) != 2 or len(vals) != 2 or not (rows[1].end <= vals[0].start):
+        return None
+    if not re.search(r"^\s*and\s*$", raw[rows[0].end:rows[1].start]) or \
+            not re.search(r"^\s*and\s*$", raw[vals[0].end:vals[1].start]):
+        return None
+    a, b = (rows[0].rid, rows[0].owner), (rows[1].rid, rows[1].owner)
+    x, y = (vals[0].rid, vals[0].owner), (vals[1].rid, vals[1].owner)
+    if x == b and y == a and a != b:
+        return "bound_to_other", f"{vals[0].path} is {rows[1].owner}'s and {vals[1].path} is {rows[0].owner}'s: " \
+                                 "said in the crossed order"
+    return None
+
+
+def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=None, probe=False, mode=None):
     """One sentence -> Outcome (kept, or dropped with reason codes and the true values of its cells). `probe` (the
-    proof and the tests only): insight's step runs even when an earlier step failed, its verdict in `insight`."""
+    proof and the tests only): insight's step runs even when an earlier step failed, its verdict in `insight`. `mode`:
+    a CheckMode or its name ("full" when None; check_answer reads MVP_BRAIN_CHECK)."""
+    cm = check_mode(mode) if mode is not None else FULL
     turn = turn or Turn()
     state = state if state is not None else {}
     out = Outcome(where, index, sentence)
@@ -1319,10 +2142,12 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     if len(strip_markers(raw)) > SENT_MAX:
         out.reasons.append("too_long")
         return out
-    markers, bad = parse(raw, ledger)
+    markers, bad = parse(raw, ledger, cm.loose)
     fail = out.reasons
 
-    def add(r, d=None):
+    def add(r, d=None, src=None):
+        if cm.off and cm.is_off(r, src):
+            return   # cells mode: a framing rule is off at the source
         if r not in fail:
             fail.append(r)
         if d:
@@ -1367,6 +2192,8 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     # 3.4 value, 3.5 calc
     for mk in markers:
         if mk.kind in ("value", "count"):
+            if mk.kind == "value" and not mk.said and "platform_all" in cm.loose and _platform_all(raw, mk, ledger):
+                continue   # cells mode (mvp23 D1b, in sample): 'all on YouTube[cell]', the cell being every item
             if mk.kind == "value" and not mk.said and _measure(mk.rest, mk.value)[1] not in ("name",):
                 add("bad_marker", f"{mk.path} = {_fmt(mk.rest, mk.value) if not isinstance(mk.value, str) else mk.value}")
                 continue
@@ -1380,7 +2207,7 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
                 up, down = bool(_UPW.search(clause)), bool(_DOWNW.search(clause))
                 if (mk.sign == "+" and pts < 0) or (mk.sign in ("-", "−") and pts > 0) or \
                         (up and not down and pts < 0) or (down and not up and pts > 0):
-                    add("direction", f"{mk.path} = {round(pts, 1)} points")
+                    add("direction", f"{mk.path} = {round(pts, 1)} points", src="sign")
         elif mk.kind == "row":
             if not mk.said and re.fullmatch(r"points\[\d+\]", mk.rest) and getattr(ledger.get(mk.rid), "tool", None) \
                     == "learned" and re.fullmatch(r"\s*\[" + re.escape(mk.path) + r"\]\s*\.?\s*", raw):
@@ -1404,7 +2231,15 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
                 continue
             r = check_calc(mk, ledger, _clause_around(raw, mk.start, mk.mstart).lower())
             if r:
-                add(*r)
+                add(*r, src="calc")
+            elif cm.cells:
+                r = _cross_row_move(mk)
+                if r:
+                    add(*r)
+    if cm.cells:
+        r = _mixed_move(markers) or _window_median_of_row(markers, res)
+        if r:
+            add(*r)
     # value markers of a count of opens said as "videos" (re-opens are not videos); a count of days said as videos,
     # a count of videos said as days; a median said as an average (step 1 fix: one table of key to noun)
     for mk in markers:
@@ -1472,7 +2307,22 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         if base_n in cited_names or base_n in allowed_scope:
             plain_names.append((a, b, base_n))
             continue
+        if "own_fields" in cm.loose:
+            fld = _own_field_of(base_n, a, markers, ledger)
+            if fld:
+                # mvp25 cells loosening (run1's N014, N063; the looks' D03.1, D04.0, F06.0, F10.0, F15.0): a name the
+                # row cited right before it holds in its own field (an item's channel, a channel's or a theme's
+                # area or theme) is cited by that row, and read as that field's slot
+                cited_names.setdefault(base_n, fld)
+                plain_names.append((a, b, base_n))
+                continue
         add("uncited_name", f"'{_clip(blank2[a:b])}' is named with no marker")
+    if cm.rule("date_owner"):
+        r = _date_owner(markers, {(cited_rows.get(cited_names[n_].split(".")[0]) or rid,
+                                   re.sub(r"\.(?:channel|theme|area)$", "", cited_names[n_]))
+                                  for _a, _b, n_ in plain_names if n_ in cited_names})
+        if r:
+            add(*r)
     # capitalised words that are no name (the first word too)
     caps_text = blank2
     for a, b, _n in _name_spans(caps_text, names_idx, list(turn.names) + list(allowed_scope)):
@@ -1483,6 +2333,17 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
             titles.append(mk.value["title"])
             if isinstance(mk.value.get("channel"), str):
                 titles.append(mk.value["channel"])   # a cited item's own channel may be named (step 4)
+        elif "quoted_title" in cm.loose and mk.kind == "value" and mk.owner and \
+                re.fullmatch(r"items\[\d+\]", mk.owner) and res is not None and mk.rid == res.rid:
+            # mvp25 cells loosening (run1's N049.0): the title of an item one of whose cells is cited, said in quotes
+            try:
+                it_ = _resolve(res.sheet, mk.owner)
+            except KeyError:
+                it_ = None
+            if isinstance(it_, dict) and isinstance(it_.get("title"), str):
+                qt = it_["title"].strip()
+                if re.search(r"[\"“]" + re.escape(qt) + r"[\"”]", raw, re.I):
+                    titles.append(qt)
     caps_text = _remove_phrases(caps_text, titles)
     caps_text = re.sub(r"\"[^\"]{1,90}\"|“[^”]{1,90}”", lambda m: " " * len(m.group(0)), caps_text) if titles else \
         caps_text
@@ -1497,6 +2358,8 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
             continue   # an adverb opening the sentence ("Mostly", "Overwhelmingly"): a word, not a name
         if not caps_text[:m.start()].strip() and w0 in ("is", "was", "were", "are", "had", "has", "did"):
             continue
+        if "hour_word" in cm.loose and w0 == "hour" and _hour_cell_after(raw, m.end(), markers):
+            continue   # mvp25 cells loosening (run1's N027.0): "Hour 18[...hour]" names an hour cell
         add("unknown_name", f"'{_clip(m.group(1), 30)}' is not a name of the results")
     # 3.7 outside text in a history sentence
     for mk in markers:
@@ -1539,11 +2402,11 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     # 3.9 claims with no marker (step 1 fix, F32d: a first or a last said by a date with no marker is a claim too)
     if not markers and (_CONSUME.search(low) or _COMPARATIVE.search(low) or _RANK.search(low) or (
             re.search(r"\b(?:first|last|latest|earliest|newest|oldest|most recent)\b", low) and _DATE_IN.search(low))):
-        add("uncited_claim", "a claim about their history needs its marker")
+        add("uncited_claim", "a claim about their history needs its marker", src="nomarker")
     elif markers and res is not None and res.is_sheet:
         r_ = _bare_clause(raw, markers, wres)
         if r_:
-            add(*r_)
+            add(*r_, src="bare")
     if _not_english(plain) and ((wres.sheet.get("lang") if wres is not None else None) or "en") == "en":
         # the checks read the result's own language (insight's Spanish rules run on a Spanish sheet)
         add("language", "the checks read English only")
@@ -1554,14 +2417,14 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         add("outcome")
     no_win = re.sub(r"where your (?:youtube |instagram )?export ends", " ",
                     _remove_phrases(low, [p.lower() for p in _window_phrases(wres)] if wres else []))
-    if LIMITS.search(no_win):
+    if LIMITS.search(no_win) and not cm.is_off("limits", "words"):
         add("limits")
     elif _SELF_TALK.search(plain):
         # mvp20 fix, after the final live runs (the held-out second look's I02.0: "I found no dating advice theme or
         # channel in your history, so that label doesn't match anything I can count", on a turn that unlocked the
         # topic and counted 50 of its videos): what the assistant found or can count is a limits line code writes
-        add("limits", "say what the results hold; what was or was not found is code's line")
-    if WATCH_TIME.search(low):
+        add("limits", "say what the results hold; what was or was not found is code's line", src="self")
+    if WATCH_TIME.search(_hour_cells_out(raw, markers) if "hour_word" in cm.loose else low):
         add("watch_time")
     # 3.11 sensitive
     if _sensitive(plain, turn):
@@ -1649,6 +2512,35 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     r = _end_in_base(raw, markers, res, turn)
     if r:
         add(*r)
+        if cm.rule("period_bind") and not (res is not None and res.window()[0] and _prev_range(res) == res.window()):
+            # mvp25 cells rule (the second attack's f08; the planted f_prev_in_now, f_months_swapped, audit_F72,
+            # audit_F82, attack_E02): the period-binding part of wrong_window, read from each cell's path (now or
+            # before) and the window words said right after it, kept under a cell code
+            add("other_period", r[1])
+    if cm.rule("period_named"):
+        r = _period_named(raw, markers, res, ledger, turn)
+        if r:
+            add(*r)
+    if cm.rule("free_date"):
+        r = _free_date(raw, markers, res, ledger)
+        if r:
+            add(*r)
+    if cm.rule("weekday_typed"):
+        r = _typed_weekday(raw)
+        if r:
+            add(*r)
+    if cm.rule("item_fields"):
+        r = _item_fields(raw, markers, res)
+        if r:
+            add(*r)
+    if cm.rule("length_cell"):
+        r = _length_cell(raw, markers, res)
+        if r:
+            add(*r)
+    if cm.rule("pairs_crossed"):
+        r = _pairs_crossed(raw, markers)
+        if r:
+            add(*r)
     # a count of a result filtered to long (or short) videos said without that word
     if res is not None:
         r = _filter_dropped(raw, markers, res)
@@ -1668,9 +2560,9 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
         r = _change_period_said(raw, markers, res)
         if r:
             add(*r)
-        r = _fix_rules(raw, markers, res, ledger, turn, low, period_cells, cites_prev)
+        r = _fix_rules(raw, markers, res, ledger, turn, low, period_cells, cites_prev, cm)
         if r:
-            add(*r)
+            add(r[0], r[1], src=r[2])
     # 3.8 insight's checks, one sentence (sheets only), or the rules of a result that is not a sheet (step 4)
     # (a sentence with no marker is read by insight against the turn's first result: insight's strict render drops a
     # direction or a number with no path, "the mix narrowed")
@@ -1678,18 +2570,36 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     # insight also runs after a failed value or name check, so the repair names every fault at once (its slots hold
     # the cells' true values); not after a marker that does not parse or resolve
     structural = {"bad_ref", "bad_marker", "two_results", "wrong_name", "too_long"}
-    if ires is not None and ires.is_sheet and (not fail or probe or not (set(fail) & structural)):
+    if ires is not None and ires.is_sheet and cm.insight != "off" and \
+            (not fail or probe or not (set(fail) & structural)):
         try:
-            why = insight_check(raw, markers, plain_names, cited_names, ires, where, turn.unlock)
+            why = insight_check(raw, markers, plain_names, cited_names, ires, where, turn.unlock,
+                                loose=cm.loose & _INSIGHT_LOOSE) if cm.loose & _INSIGHT_LOOSE else \
+                insight_check(raw, markers, plain_names, cited_names, ires, where, turn.unlock)
+            if why and cm.rule("insight_walk") and cm.is_off(why[0], "insight"):
+                # mvp25 cells rule (the compound probes p16, p19): when insight's first reason is off, its checks
+                # run again walking past every reason that is off, and a later reason counts when it is one of
+                # WALK_ACCEPT (a number bound to another row, a name or word the sheet does not hold)
+                w2 = insight_check(raw, markers, plain_names, cited_names, ires, where, turn.unlock,
+                                   skip=_insight_skip(cm), loose=cm.loose & _INSIGHT_LOOSE)
+                if w2 and str(w2[0]).split(":")[0] in WALK_ACCEPT:
+                    out.notes["insight_walk"] = f"{why[0]} -> {w2[0]}"
+                    why = w2
         except Exception as e:   # noqa: BLE001  (a sentence insight cannot read is dropped, never sent)
             why = ("insight_error", type(e).__name__)
+        if why and cm.is_off(why[0], "insight"):
+            # cells mode: insight's checks stop at their first reason; a first reason that is off counts as none
+            # (a later reason of insight's own is reached only by the rule insight_walk, DESIGN 24.8)
+            out.notes["insight_off"] = str(why[0])
+            why = None
         out.insight = why[0] if why else None
         if why and (not fail or not (set(fail) & structural)):
             if not fail:
                 out.layer = "insight"
             add(*why)
     elif not fail and res is not None and not res.is_sheet:
-        why = _non_sheet(raw, markers, res, low)
+        why = _non_sheet(raw, markers, res, low, cm.loose) if "quoted_title" in cm.loose else \
+            _non_sheet(raw, markers, res, low)
         if why:
             add(*why)
     # (a sentence with no marker holds plain words only: no number, name or claim passed the steps above)
@@ -2765,32 +3675,32 @@ def _library_window(raw, markers, res, turn):
     return None
 
 
-def _fix_rules(raw, markers, res, ledger, turn, low, period_cells, cites_prev):
-    """The mvp20 fix rules of one sentence (None or (reason, detail))."""
-    r = _library_window(raw, markers, res, turn)
-    if r:
-        return r
-    if _MOTIVE.search(low):
-        return "psych", "why they opened something is not in the export"
-    if _TAUGHT.search(low):
-        return "outside_in_history", "what a video or a channel told them, or who makes it, is not in the export"
-    for fn in (lambda: _range_said(raw, markers, res, turn, period_cells, cites_prev),
-               lambda: _qualifier_unbound(raw, markers, res),
-               lambda: _compare_unbound(raw, markers, res, ledger, turn),
-               lambda: _from_to_swapped(raw, markers),
-               lambda: _hidden_claims(low, markers, res, turn),
-               lambda: _all_from(raw, markers, res),
-               lambda: _usually_hour(low, markers, res),
-               lambda: _item_order(low, markers, res),
-               lambda: _items_count(raw, markers, res),
-               lambda: _base_unscoped(raw, markers, res),
-               lambda: _broadened(low, res)):
+def _fix_rules(raw, markers, res, ledger, turn, low, period_cells, cites_prev, cm=None):
+    """The mvp20 fix rules of one sentence (None or (reason, detail, emitter)). The rules stop at the first hit; in
+    cells mode (`cm`) a rule whose code is off is walked past, so it hides no later rule."""
+    cm = cm or FULL
+    for src, fn in (("library", lambda: _library_window(raw, markers, res, turn)),
+                    ("motive", lambda: ("psych", "why they opened something is not in the export")
+                     if _MOTIVE.search(low) else None),
+                    ("taught", lambda: ("outside_in_history", "what a video or a channel told them, or who makes it, "
+                                        "is not in the export") if _TAUGHT.search(low) else None),
+                    ("range", lambda: _range_said(raw, markers, res, turn, period_cells, cites_prev)),
+                    ("qualifier", lambda: _qualifier_unbound(raw, markers, res)),
+                    ("compare", lambda: _compare_unbound(raw, markers, res, ledger, turn)),
+                    ("from_to", lambda: _from_to_swapped(raw, markers)),
+                    ("hidden", lambda: _hidden_claims(low, markers, res, turn)),
+                    ("all_from", lambda: _all_from(raw, markers, res)),
+                    ("usually", lambda: _usually_hour(low, markers, res)),
+                    ("item_order", lambda: _item_order(low, markers, res)),
+                    ("items_count", lambda: _items_count(raw, markers, res)),
+                    ("base_unscoped", lambda: _base_unscoped(raw, markers, res)),
+                    ("broadened", lambda: _broadened(low, res))):
         r = fn()
-        if r:
-            return r
+        if r and not cm.is_off(r[0], src):
+            return r[0], r[1], src
     order = (res.meta or {}).get("order") or "most"
-    if order == "least" and _ORD_RX.search(low) and not _LEAST.search(low):
-        return "rank", f"{res.rid} is ordered by least: an ordinal says its place from the least"
+    if order == "least" and _ORD_RX.search(low) and not _LEAST.search(low) and not cm.is_off("rank", "least_ordinal"):
+        return "rank", f"{res.rid} is ordered by least: an ordinal says its place from the least", "least_ordinal"
     return None
 
 
@@ -2906,7 +3816,7 @@ _OF_VIDEOS = re.compile(r"\s+of\s+(?:(?:the|your|all(?: the)?|all your)\s+)?(?:[
                         r"(?:opened|watched|saved|liked)(?:,\s*liked\s+or\s+saved)?(?![\w\[])", re.I)
 
 
-def slotted(raw, markers, plain_names, cited_names, res):
+def slotted(raw, markers, plain_names, cited_names, res, loose=frozenset()):
     """The sentence in insight's slotted form: value markers -> `{path}` (the hedge kept; a date stays as typed), row
     markers and cited plain names -> the row's name slot; a calc of a row's share against its share before -> that
     row's `{change_vs_previous}` slot; any other calc -> a neutral word for ratio words ("doubled" -> "changed") or
@@ -3055,12 +3965,20 @@ def slotted(raw, markers, plain_names, cited_names, res):
             full = next((x for x in _MONTHS if x[:3] == mm.group(1).lower()), None)
             if full:
                 alts |= {f"{full} {mm.group(2)}", f"{mm.group(1)} {mm.group(2)}"}
+                if "month_alone" in loose and sum(
+                        1 for x in (res.sheet.get("periods") or []) if isinstance(x, dict) and
+                        str(x.get("label") or "")[:3].lower() == mm.group(1).lower()) == 1:
+                    # mvp25 cells loosening (run1's N008.0: "August had 36[r1.periods[7].items]"): the month alone
+                    # names the period row when no other row of the sheet is that month
+                    alts |= {full, mm.group(1)}
         for alt in sorted(alts, key=len, reverse=True):
             hit = None
             for m in re.finditer(r"(?<![\w-])" + re.escape(alt) + r"(?![\w-])", raw, re.I):
                 if any(x < m.end() and m.start() < y for x, y in spans) or any(
                         a < m.end() and m.start() < b for a, b, _t in edits):
                     continue
+                if "label_in_date" in loose and re.search(r"\b\d{1,2}(?:st|nd|rd|th)?\s+$", raw[:m.start()]):
+                    continue   # mvp25 cells loosening (run1's N008.0): a month inside a full date is no period's name
                 hit = m
                 break
             if hit:
@@ -3163,17 +4081,25 @@ def _change_and_value(markers):
     return bool(moves & nows)
 
 
-def insight_check(raw, markers, plain_names, cited_names, res, where, unlock=None):
-    """None or (reason, detail): the sentence through insight's own checks against the cited result's sheet."""
-    s = slotted(raw, markers, plain_names, cited_names, res)
+def insight_check(raw, markers, plain_names, cited_names, res, where, unlock=None, skip=frozenset(),
+                  loose=frozenset()):
+    """None or (reason, detail): the sentence through insight's own checks against the cited result's sheet. `skip`
+    (mvp25, cells mode's rule "insight_walk"): reasons walked past, here and inside insight, so a later reason is still
+    looked at (empty: every reason stops, as before)."""
+    def go(w):
+        return not skip or str(w).split(":")[0] not in skip
+    s = slotted(raw, markers, plain_names, cited_names, res, loose) if loose else \
+        slotted(raw, markers, plain_names, cited_names, res)
     if s is None:
         return "bad_ref", "a cited row with no name"
     s = _mask_unlocked(s, unlock)
     sheet, facts = res.sheet_k, res.facts
     lang = sheet.get("lang") or "en"
-    text, why = I.render(s, sheet, facts, strict=True)
-    if why:
+    text, why = I.render(s, sheet, facts, strict=True, skip=skip) if skip else I.render(s, sheet, facts, strict=True)
+    if why and go(why):
         return why, _insight_detail(why)
+    if why:
+        return None   # (a structural reason walked past: insight has no text to read further)
     fill = _plain_fill(s, sheet, lang)
     if fill is not None and _norm_cmp(text) != _norm_cmp(fill):
         ins, only = _inserted(_norm_cmp(fill), _norm_cmp(text))
@@ -3188,17 +4114,30 @@ def insight_check(raw, markers, plain_names, cited_names, res, where, unlock=Non
             # row checked by code (the move's sign against the direction words), says the value before as well
             # (30 - 17): insight's "from 13%" adds nothing the sentence does not already claim
             benign = True
-        if not benign:
+        if not benign and go(_rewrite_reason(ins, only)):
             return _rewrite_reason(ins, only), "code would have to add: " + _clip(" / ".join(ins), 80)
-        text = fill
+        if benign:
+            text = fill
     facts.slotted = bool(I.SLOT.search(s))
+    skip_c = skip
+    if "handle" in loose:
+        # mvp25 cells loosening (run1's N036, N038): an '@handle' that is a cited row's own name, filled in by insight,
+        # is that name, not a link
+        hs = sorted(_cited_handles(markers, res) | {h for h in cited_names if h.startswith("@")}, key=len,
+                    reverse=True)
+        lk = list(I._LINK.finditer(text))
+        if hs and lk and all(any(text.lower().find(h, max(0, m.start() - 60)) != -1 and
+                                 any(a <= m.start() < a + len(h) for a in [i_.start() for i_ in
+                                     re.finditer(re.escape(h), text.lower())]) for h in hs) for m in lk):
+            skip_c = frozenset(skip) | {"link"}
     try:
-        why = I.check_sentence(text, facts, need_fact=False)
+        why = I.check_sentence(text, facts, need_fact=False, skip=skip_c) if skip_c else \
+            I.check_sentence(text, facts, need_fact=False)
         if not why and where != "lead":
-            why = I._obs_more(text, "", sheet, s, facts)
-        if not why and I.n_numbers(text, facts) > I.NUMBERS_MAX:
+            why = I._obs_more(text, "", sheet, s, facts, skip=skip) if skip else I._obs_more(text, "", sheet, s, facts)
+        if not why and I.n_numbers(text, facts) > I.NUMBERS_MAX and go("number_run"):
             why = "number_run"
-        if not why and I.shorts_left_out(text, sheet):
+        if not why and I.shorts_left_out(text, sheet) and go("shorts_left_out"):
             why = "shorts_left_out"
     finally:
         facts.slotted = False
@@ -3208,15 +4147,17 @@ def insight_check(raw, markers, plain_names, cited_names, res, where, unlock=Non
     if _norm_cmp(sc) != _norm_cmp(text):
         ins, only = _inserted(_norm_cmp(text), _norm_cmp(sc))
         r = "base" if not only else _rewrite_reason(ins, only)
-        return r, "the base is " + _clip(" / ".join(ins) or (I.bases(sheet) or {}).get("opened") or "", 80)
+        if go(r):
+            return r, "the base is " + _clip(" / ".join(ins) or (I.bases(sheet) or {}).get("opened") or "", 80)
     g, gwhy = I.gate_sentence(text, sheet, I._gate_names(sheet), {"opened_said": True})
-    if gwhy:
+    if gwhy and go(gwhy):
         return gwhy, _insight_detail(gwhy)
     if _norm_cmp(g) != _norm_cmp(text):
         ins, only = _inserted(_norm_cmp(text), _norm_cmp(g))
         # the gate takes out a second "of what you opened" (the answer's base, said once): words it removes that are
         # the result's own base change nothing the sentence claims
-        if not all(re.fullmatch(r"-of (?:what|everything|all) you (?:opened|watched)", x) for x in ins):
+        if not all(re.fullmatch(r"-of (?:what|everything|all) you (?:opened|watched)", x) for x in ins) and \
+                go(_rewrite_reason(ins, only)):
             return _rewrite_reason(ins, only), "code would have to add: " + _clip(" / ".join(ins), 80)
     return None
 
@@ -3233,7 +4174,7 @@ def _insight_detail(why):
     return _INSIGHT_TEXT.get(str(why).split(":")[0], f"insight: {why}")
 
 
-def _non_sheet(raw, markers, res, low):
+def _non_sheet(raw, markers, res, low, loose=frozenset()):
     """Step 4 of 4.3: the rules of `search`, `learned` and `find` results (and item lists)."""
     tool = res.tool
     if tool == "find":
@@ -3265,8 +4206,19 @@ def _non_sheet(raw, markers, res, low):
         how = str((mk.value.get("how") if isinstance(mk.value, dict) else None) or res.sheet.get("how") or "")
         if re.search(r"\bsaved\b", low) and how and not re.search(r"save|collection|playlist", how):
             return "wrong_name", f"{mk.path} was not saved ({how})"
+    own_titles = [mk.value.get("title") for mk in rows if isinstance(mk.value, dict)]
+    if "quoted_title" in loose:
+        # mvp25 cells loosening (run1's N049.0): the title of an item one of whose cells is cited
+        for mk in markers:
+            if mk.kind == "value" and mk.owner and re.fullmatch(r"items\[\d+\]", mk.owner) and mk.rid == res.rid:
+                try:
+                    it_ = _resolve(res.sheet, mk.owner)
+                except KeyError:
+                    continue
+                if isinstance(it_, dict):
+                    own_titles.append(it_.get("title"))
     for m in re.finditer(r"[\"“]([^\"”]{2,120})[\"”]", raw):
-        if not any(isinstance(mk.value, dict) and _low(mk.value.get("title")) == _low(m.group(1)) for mk in rows):
+        if not any(_low(t_) == _low(m.group(1)) for t_ in own_titles if isinstance(t_, str)):
             return "wrong_name", "a quoted title must be the row's own title"
     return None
 
@@ -3453,12 +4405,15 @@ _NEXT = re.compile(r"\b(?:came next|comes next|next came|was next|is next|next,|
                    r"behind (?:it|them|that|this)|after (?:it|that|them)|runner-up)\b|^\s*next\b", re.I)
 
 
-def _bind_points_to_lead(v, ledger):
+def _bind_points_to_lead(v, ledger, cm=None):
     """mvp20 fix. (a) The recount's C04.0 ("art and design came next at 25%" kept under a lead that named a THEME
     first): a point that places its row relative to the one before ('came next', 'followed', 'behind it') is true only
     under a kept lead that cites the row just before it in the same list. (b) The attack's U01, U02, U05 ("Clip
     Factory[r2.channels[0]] led with 13" of the last 7 days under a lead of October): a point on another result, whose
     window is not the lead's, says its own window."""
+    cm = cm or FULL
+    if cm.is_off("rank", "next") and cm.is_off("window_missing", "point"):
+        return   # cells mode: both rules are framing rules
     lead_os = [o for o in v.outcomes if o.where == "lead"]
     lead_ok = bool(lead_os) and all(o.kept for o in lead_os)
     lead_rows = set()
@@ -3474,7 +4429,7 @@ def _bind_points_to_lead(v, ledger):
         mks, _b = parse(" ".join(o.text.split()), ledger)
         plain = strip_markers(o.text)
         mine = {(mk.rid, mk.owner) for mk in mks if mk.kind in ("row", "value") and mk.owner}
-        if _NEXT.search(plain):
+        if _NEXT.search(plain) and not cm.is_off("rank", "next"):
             own = next((mk for mk in mks if mk.kind in ("row", "value") and mk.owner), None)
             lst, i = _list_and_index(own.owner) if own else (None, None)
             # the lead names the first row of ANOTHER list (or result), and not the row just before this one: 'came
@@ -3490,7 +4445,7 @@ def _bind_points_to_lead(v, ledger):
                 o.sent = None
                 continue
         lead_rows |= mine   # what comes after may follow this point's rows ("came next" after a theme it named)
-        if lres is not None and o.rid and o.rid != lrid:
+        if lres is not None and o.rid and o.rid != lrid and not cm.is_off("window_missing", "point"):
             pres = ledger.get(o.rid)
             if pres is not None and pres.window() != lres.window() and \
                     not _lead_names_window(o.text, ledger, o.rid):
@@ -3500,29 +4455,33 @@ def _bind_points_to_lead(v, ledger):
                 o.sent = None
 
 
-def check_answer(form, ledger, turn=None):
+def check_answer(form, ledger, turn=None, mode=None):
     """The form against the ledger -> Verdict (SPEC 4.3). `form`: an AnswerForm or its dict; `ledger`: a Ledger, or
-    the turn's result envelopes (a list, or a dict by rid)."""
+    the turn's result envelopes (a list, or a dict by rid); `mode`: "full", "cells" or a CheckMode (None: the
+    environment's MVP_BRAIN_CHECK, else "full")."""
+    cm = check_mode(mode)
     turn = turn or Turn()
     if not isinstance(ledger, Ledger):
         ledger = Ledger(ledger)
     try:
         f = form if isinstance(form, AnswerForm) else AnswerForm.model_validate(form)
     except ValidationError as e:
-        return Verdict(outcomes=[], form_error=str(e.errors()[0].get("type")), repair=True)
-    v = Verdict(outcomes=[])
+        return Verdict(outcomes=[], form_error=str(e.errors()[0].get("type")), repair=True, check=cm.name)
+    v = Verdict(outcomes=[], check=cm.name)
     state = {}
     claimed = []
     # the lead (1 to 2 sentences, <= ANSWER_MAX) and the points (0 to 3, each <= SENT_MAX)
     lead_s = _split(f.lead)
     if not lead_s:
-        v.outcomes.append(Outcome("lead", 0, f.lead or "", reasons=["window_missing" if f.lead else "too_long"]))
+        # (a lead with text but no sentence; cells mode names it without the framing code)
+        v.outcomes.append(Outcome("lead", 0, f.lead or "", reasons=[
+            ("garbled" if cm.cells else "window_missing") if f.lead else "too_long"]))
     elif len(strip_markers(f.lead)) > LEAD_MAX or len(lead_s) > 2:
         for k, s in enumerate(lead_s):
             v.outcomes.append(Outcome("lead", k, s, reasons=["too_long"]))
     else:
         for k, s in enumerate(lead_s):
-            v.outcomes.append(check_sentence(s, ledger, turn, "lead", k, state))
+            v.outcomes.append(check_sentence(s, ledger, turn, "lead", k, state, mode=cm))
     for k, p in enumerate(f.points):
         sents = _split(p)
         if k >= POINTS_MAX:
@@ -3531,10 +4490,10 @@ def check_answer(form, ledger, turn=None):
         if len(sents) != 1:
             v.outcomes.append(Outcome("point", k, p, reasons=["too_long"]))
             continue
-        v.outcomes.append(check_sentence(sents[0], ledger, turn, "point", k, state))
+        v.outcomes.append(check_sentence(sents[0], ledger, turn, "point", k, state, mode=cm))
     # the lead names its window (step 2), when the lead holds no failure of its own
     lead_os = [o for o in v.outcomes if o.where == "lead"]
-    if lead_os and all(o.kept for o in lead_os):
+    if lead_os and all(o.kept for o in lead_os) and not cm.is_off("window_missing", "lead"):
         rid = next((o.rid for o in lead_os if o.rid), None)
         if not _lead_names_window(f.lead, ledger, rid):
             lead_os[0].reasons.append("window_missing")
@@ -3542,10 +4501,10 @@ def check_answer(form, ledger, turn=None):
             lead_os[0].details.append(f"say the window: '{_clip((r.meta or {}).get('window_said') if r else '', 90)}'")
             lead_os[0].sent = None
     _waive_scope_repeats(v, ledger, f.lead)
-    _bind_points_to_lead(v, ledger)
+    _bind_points_to_lead(v, ledger, cm)
     # 3.14 once: the same cells said again (the later sentence goes)
     for o in v.outcomes:
-        if not o.kept:
+        if not o.kept or cm.is_off("repeat", "once"):
             continue
         mks, _b = parse(" ".join(o.text.split()), ledger)
         key = _claim_key(o, mks)
@@ -3567,7 +4526,7 @@ def check_answer(form, ledger, turn=None):
             if len(it.note) > NOTE_MAX:
                 reasons.append("too_long")
             else:
-                note_o = check_sentence(it.note, ledger, turn, "note", k, state)
+                note_o = check_sentence(it.note, ledger, turn, "note", k, state, mode=cm)
                 reasons += note_o.reasons
         v.items.append({"ref": it.ref, "note": note_o.sent if note_o and note_o.kept else None,
                         "kept": "not_item" not in reasons, "reasons": reasons})

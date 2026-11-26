@@ -763,6 +763,53 @@ def _when(idx, sc, base_ev=None):
             "busiest_weekday": days[int(np.argmax(wd))], "events": n, **usual}
 
 
+# the brain's tools (mvp25 toolgaps 6): the parts of the day, by the hour of the open in their own time zone
+PARTS_OF_DAY = (("morning", 5, 12, "5am to noon"), ("afternoon", 12, 17, "noon to 5pm"),
+                ("evening", 17, 21, "5pm to 9pm"), ("night", 21, 29, "9pm to 5am"))
+
+
+def _parts_of_day(idx, sc, when):
+    import numpy as np
+    n = int(sc.ev.sum())
+    if not n:
+        return
+    h = np.bincount(idx.hour[sc.ev].astype(np.int64), minlength=24)
+    parts = []
+    for name, a, b, said in PARTS_OF_DAY:
+        k = int(sum(h[x % 24] for x in range(a, b)))
+        parts.append({"part": name, "events": k, "share": _share(k, n)})
+    when["parts_of_day"] = parts
+
+
+def _new_first_days(new, idx, facts, th, base_ev):
+    """Each row of `new` with `first_watched`: the first day of the base's events of that theme or channel (the
+    events in scope of the base, the private topics left out as the brain's sheets leave them out)."""
+    if not isinstance(new, dict) or th is None or base_ev is None or not base_ev.any():
+        return
+    ev_theme = facts.theme[idx.it]
+    ev_creator = idx.creator[idx.it]
+    shown = {}
+    for tid in set(int(t) for t in facts.theme.tolist() if t >= 0):
+        shown.setdefault(th.shown(tid), []).append(tid)
+    for row in new.get("themes") or []:
+        tids = shown.get(row.get("name")) if isinstance(row, dict) else None
+        if tids:
+            m = base_ev & np_isin(ev_theme, tids)
+            if m.any():
+                row["first_watched"] = _iso(int(idx.day[m].min()))
+    for row in new.get("channels") or []:
+        nm = row.get("name") if isinstance(row, dict) else None
+        if nm in idx.creators:
+            m = base_ev & (ev_creator == idx.creators.index(nm))
+            if m.any():
+                row["first_watched"] = _iso(int(idx.day[m].min()))
+
+
+def np_isin(a, b):
+    import numpy as np
+    return np.isin(a, b)
+
+
 def _new_stopped(sc, prev, idx, facts, th, all_ev, start_o):
     """Themes present in the window and absent in the equal window before (and the reverse), with a floor; channels
     first watched in the window, and channels of the window before not watched in it."""
@@ -1145,10 +1192,19 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
             a, k = Counter(c["area"] for c in top5).most_common(1)[0]
             out["top_areas"] = {"area": a, "n": int(k), "of": len(out["channels"][:5])}
     out["when"] = _when(idx, sc, base_ev)
+    if hide_sensitive and out["when"] and kind == "count":
+        # the brain's tools (mvp25 toolgaps 6, N027.0 "do i watch more at night or during the day": the sheet held only
+        # the 3 busiest hours as bare numbers): the parts of the day, on the totals' sheet only (a ranked sheet is
+        # near its size cap, and a row more there would cut a ranking's rows)
+        _parts_of_day(idx, sc, out["when"])
     season_ = bool(getattr(q, "season", None) or getattr(q.window, "label", None))
     short_window = so is not None and eo is not None and eo - so + 1 < 7
     out["new"], out["stopped"] = ({"themes": [], "channels": []}, {"themes": [], "channels": []}) if short_window \
         else _new_stopped(sc, prev, idx, facts, th, base_ev, so)
+    if hide_sensitive:
+        # the brain's tools (mvp25 toolgaps 6, N008.1: "Pixel Pencil and Clip Factory were the channels that started in
+        # it [October]"; Pixel Pencil's first day is 1 August 2026): a new theme or channel says its own first day
+        _new_first_days(out.get("new"), idx, facts, th, base_ev)
     if season_ and eo is not None and kind == "top":
         # round 12, pass 6 (X17, row 8: "what he did then and has not since"): each channel new then, with the videos
         # of it opened after the season, up to where the record ends

@@ -689,3 +689,13 @@ CASES = [
 # false as bare sentences, true with the private line ("Leaving out topics you keep private."): a rank of a result
 # whose hidden private topic would rank above it (the founder's answer 4); handled when dropped or kept with the line
 PRIVATE_LINE = {"R03"}
+
+# mvp24, the private-row convention (eval/brain_reading_rubric.md "Private rows"; DECISIONS.md, 26 Nov 2026): when the
+# private line is shown, "all", "only" and a rank over the rows shown are NOT counted false because of hidden private
+# rows. It reclassifies these cases (every one of them false only because of the hidden private topic): each stays
+# false said bare and is NOT counted false when kept under the private line. R09 and R10 print no private line (their
+# point is on a result with private rows under a lead on one without), so they stay false as sent. No case is deleted,
+# and the full checker's line is unchanged (it drops every one); `python3 -m mvp.brain.planted --check cells` scores
+# them by this set. Outside this file the same convention covers the audit's F45, F45b, F46 and F46b (already scored
+# with the line) and, in the scratch sets of mvp22 / mvp23, the skeptic's K23 and K24 and the record checker's N03.
+PRIVATE_ROW_CONVENTION = {"R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11"}

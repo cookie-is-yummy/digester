@@ -270,7 +270,8 @@ def test_items_of_a_day_and_of_a_month(brain):
     assert r["sheet"]["kind"] == "day" and "usual" in r["sheet"]
     assert {i["item_id"] for i in r["sheet"]["items"]} == opened(date(2026, 10, 30), date(2026, 10, 30))  # recount 12
     row = r["sheet"]["items"][0]
-    assert set(row) == {"ref", "item_id", "title", "channel", "platform", "when", "times_opened", "length"}
+    assert set(row) == {"ref", "item_id", "title", "channel", "platform", "when", "times_opened", "length",
+                        "how"}   # mvp25 toolgaps 4: what they did on `when`
     m, _t = call(brain, "items", {"window": {"words": "in october"}, "order": "newest", "limit": 3})
     assert [i["when"][:10] for i in m["sheet"]["items"]] == ["2026-10-30"] * 3
     assert m["sheet"]["totals"]["items"] == len(opened(*OCTOBER))
@@ -458,13 +459,19 @@ def test_a_tool_call_gives_todays_sheet_of_the_same_question(brain, cid):
         assert _no_toolfix_cells(got) == want_of(plain), cid   # the cells the brain's sheets add (toolfix, mvp22)
 
 
-def _no_toolfix_cells(o):
+def _no_toolfix_cells(o, path=""):
     """A tool's sheet without the cells only the brain's sheets have (scratchpad mvp22's toolfix): `reels` beside
-    `shorts` in totals and previous, and an Instagram channel row's own `handle`."""
+    `shorts` in totals and previous, and an Instagram channel row's own `handle`; and mvp25's toolgaps: the parts of
+    the day and a busiest hour's `label` in `when`, a new row's `first_watched`."""
     if isinstance(o, dict):
-        return {k: _no_toolfix_cells(v) for k, v in o.items() if k not in ("reels", "handle")}
+        drop = {"reels", "handle"}
+        if path == "when":
+            drop |= {"parts_of_day"}
+        if path in ("when.busiest_hours", "new.themes", "new.channels"):
+            drop |= {"label", "first_watched"}
+        return {k: _no_toolfix_cells(v, f"{path}.{k}" if path else k) for k, v in o.items() if k not in drop}
     if isinstance(o, list):
-        return [_no_toolfix_cells(v) for v in o]
+        return [_no_toolfix_cells(v, path) for v in o]
     return o
 
 

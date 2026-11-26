@@ -123,6 +123,24 @@ def present(raw, rid, limits=None, drop=()):
     return _refs(s, rid)
 
 
+LEVEL_OF = {"areas": "area", "themes": "theme", "channels": "channel"}
+
+
+def levels(sheet):
+    """mvp25 toolgaps 6 (N067.0: "Clip Factory led with 61" then "Digital drawing came next at 29", a channel's rank
+    and a theme's set side by side): each row of a ranked list says its level (area, theme, channel), at the top of
+    the sheet and in its new and stopped lists; a rank is within one level."""
+    if not isinstance(sheet, dict):
+        return sheet
+    lists = [sheet] + [sheet[k] for k in ("new", "stopped") if isinstance(sheet.get(k), dict)]
+    for holder in lists:
+        for k, lv in LEVEL_OF.items():
+            for row in holder.get(k) or []:
+                if isinstance(row, dict):
+                    row.setdefault("level", lv)
+    return sheet
+
+
 def size(o):
     return len(json.dumps(o, ensure_ascii=False, default=str))
 
@@ -133,7 +151,7 @@ def cut_to_size(sheet, chars=RESULT_CHARS, keep=None, newest=False):
     are cut from the end, so what is left is the top of each list, its refs unchanged. `newest` (toolfix 9: a month
     timeline of all history kept January 2021 to December 2022 and lost October 2026): the list asked for is in time
     order, so it is cut from its start, and its rows' refs are made again (a ref is the row's own path)."""
-    cut = False
+    cut = drop_extras(sheet, chars)
     for inner_max in (2, 1, 0):
         if size(sheet) <= chars:
             return cut
@@ -166,6 +184,24 @@ def cut_to_size(sheet, chars=RESULT_CHARS, keep=None, newest=False):
             sheet[k] = sheet[k][:-1]
         cut = True
     return cut
+
+
+def drop_extras(sheet, chars=RESULT_CHARS):
+    """mvp25 toolgaps 6: the cells this round added for insight (a new row's first day, the parts of the day) never cost
+    a row: on a sheet over its size they go first, so its rows are cut exactly as before; but a totals' sheet ("count")
+    keeps its parts of the day, which cost its ranked lists a row or two. True when any went."""
+    if size(sheet) <= chars:
+        return False
+    went = False
+    for k in ("themes", "channels"):
+        for row in ((sheet.get("new") or {}).get(k) or []) if isinstance(sheet.get("new"), dict) else []:
+            if isinstance(row, dict) and row.pop("first_watched", None) is not None:
+                went = True
+    if size(sheet) > chars and sheet.get("kind") != "count" and isinstance(sheet.get("when"), dict) and \
+            sheet["when"].pop("parts_of_day", None) is not None:
+        # (a totals' sheet keeps them: there the parts of the day are the answer and its ranked lists are extra)
+        went = True
+    return went
 
 
 def envelope(rid, tool, meta, sheet, cost_usd=0.0, took_ms=0, keep=None, newest=False):

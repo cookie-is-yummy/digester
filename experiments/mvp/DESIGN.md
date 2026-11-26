@@ -6695,3 +6695,615 @@ figure from "5 of 110 sent" (section 22): that one is after the verifier and the
   same path.
 - The plans mode still exits 1 (B05, C13, G06), as before this round.
 - The auditor misses 4 of 5 false sentences; it gives hints only.
+
+## 24. A pinned cells-only checker (26 Nov 2026; DECISIONS.md "Two model-worded checks, measured")
+
+**Correction (mvp25, 24.8).** This section's claim that the pinned cells mode handled every cell-class case fell. An
+independent attacker wrote 131 new false sentences on saved results: 24 got out in cells mode, 19 of them only in
+cells mode. 24.8 says what each family was, what closes it now, and what it costs. 24.1 to 24.7 describe the mode as
+it was pinned at 4064f3e.
+
+"Cells only" was a copy of the checker with switches in the scratchpad. It is now one mode of `brain/verify.py`,
+pinned by a hash and tested. **No model was called** ($0). Nothing in the message path changed; "full" is the
+default and is today's checker. Every figure is on the made-up library and the saved held-out records. Evidence:
+the scratchpad's `mvp24/pin/`.
+
+### 24.1 What exists
+- `verify.check_mode(mode)`: "full" or "cells", from the argument, else `MVP_BRAIN_CHECK`, else "full". A bad value
+  raises. `check_answer(..., mode=)` and `check_sentence(..., mode=)` take it.
+- In "cells" a framing rule is off at the source:
+  - its code is never added;
+  - a rule chain that stops at its first hit (`_fix_rules`) walks past a rule that is off;
+  - the lead's window rule and the points' binding to the lead are not run.
+- Insight's checks stop at their first reason. When that reason is off, it counts as none, and a later reason of
+  insight's own is not reached (24.3).
+- `brain/loop.run_turn(..., check=)` resolves the mode once per turn and writes it into the record (`check`).
+  `brain/fallback.answer` and `brain/answer.build` take it.
+- In "cells" a code lead never carries the model's points. No model point is read again under a lead it was not
+  written for.
+- Code's own template lead is always checked in "full", because code words it (B03.0 was a false code lead).
+- `eval_brain.py run --check cells|full` writes the mode into every record and into the summary (`check`).
+- `python3 -m mvp.brain.planted --check cells` gives the cells line:
+  - every false case by class (cell, framing, policy) and by kind;
+  - the true ones kept;
+  - exit code 1 when a cell-class case goes out or a true one is lost.
+  `--check full` (the default) prints today's line, unchanged.
+- `tests/test_brain_cells.py` (31 tests) holds:
+  - the hashes of the codes on and off, the loosenings, the kept framing rule, the doubtful decisions and the class
+    file;
+  - every behaviour below, with a true twin for each new rule;
+  - the compound probes, the extra cases, and the loop, answer and eval threading.
+
+### 24.2 Which doubtful codes stay on: by evidence
+The rule: a doubtful code (or one emitter of a code several rules give) stays on only if switching it off lets a
+cell-class false case out. Each was first switched off alone from "every doubtful code on" (`mvp24/pin/loo.py`). The pinned set was then
+checked against its one-change neighbours on the tip (`mvp24/pin/loo_final.txt`); the table gives those figures.
+
+| Code (emitter) | In cells | Cell-class cases out when off | True sentences back when off |
+|---|---|---|---|
+| direction (a typed sign or up/down on a points cell) | on | f_sign, f_up_on_fall | 0 |
+| direction (check_calc's sign) | on | the attack's G02 ("45% fewer" of +45%) | 0 |
+| direction ('from' the now cell) | on | the attack's X01, X02, X03; the record set's N25 | 0 |
+| direction (_compare_unbound) | off | none | 0 |
+| direction (insight) | on | alone none; with `uncited_claim`'s `_compare_unbound` emitter off (as pinned), the attack's D01 | 0 |
+| uncited_claim (no marker at all) | on | the audit's F32d (a last date with no marker) | 3 |
+| uncited_claim (_bare_clause, _compare_unbound, _all_from) | off | none | 8 |
+| limits | off | none (a policy case, f_limits, goes out) | 4 |
+| unnamed_owner | on | 18 (a number beside another row's name or label) | 8 |
+| bound_global | off | none | 3 |
+| repeat | off | none (a policy case, r_repeat, goes out) | 8 |
+
+What else the evidence changed:
+- **D01 and insight's order.** Insight stops at its first reason. With insight's direction reason off, its
+  `unnamed_owner` reason was never reached for D01 ("134[2021's row] videos in 2022, more than in 2021"). So
+  insight's direction emitter stays on. It gives back no true sentence when off.
+- **Two codes moved from framing to cell.** The paper's taxonomy had filed `median_of_window` and `shorts_as_long`
+  as framing. Both are insight's binding rules: they read which row and which measure a cell is of, beside
+  `channel_not_in_theme` and `count_as_share`. Each is the only check of a planted cell-class case (v5_054,
+  v5_056). They cost no true sentence.
+- **One framing-listed rule stays on, so "every framing rule off" is not literally true.** Insight's `weekday` rule
+  also checks the weekday of an item's own date. It is the only check of the attack's Q01 ("on 1 October 2026, a
+  Sunday": a Thursday). It cost no true sentence on any set (`verify.FRAMING_KEPT`).
+- **Three cells-only cell rules, read from the paths alone.** Each was written from the one case it closes, so each
+  is in sample. Each has a true twin in the tests and costs no true sentence on any set:
+  - `_cross_row_move`: a change that sets one row now against another row before. This closes **C1**, the attack's
+    V05 ("Gaming rose 29 points[=points(areas[0].share, areas[2].previous_share)]"). That is a cell fault: the 29
+    is gaming's share against cooking's share before.
+  - `_mixed_move`: a row said now in one measure and before in another (v5_112: "climbed to 9% from 27 videos").
+  - `_window_median_of_row`: insight's own median rule, read from the paths, so that no framing reason insight
+    gives first can hide it (compound probe p17).
+- **Not taken:**
+  - `insight_rewrite` would also close v5_112, but it costs 10 true sentences.
+  - The four switches of the d1b test that the brief named (title_quote, item_channel, short_word, platform_all)
+    are in. With them off, the cell-class cases out are the same and 5 true sentences are lost. They were chosen
+    by reading lost true sentences of the looks, so they are in sample.
+- **The rule's cost.** Switching `uncited_claim`'s `_compare_unbound` and `_all_from` emitters back on would catch
+  12 framing cases more at no true cost in sample. The rule says off, so they are off.
+
+The pinned off set: every framing code but `weekday`, plus these:
+- `direction@compare`;
+- `uncited_claim@bare`, `@compare` and `@all_from`;
+- `limits`, `bound_global`, `repeat`;
+- `insight_rewrite`, `season`, `unsupported`.
+
+### 24.3 Cell class and framing class
+The labels were frozen by hash before the leave-one-out (`mvp24/pin/labels.sha256`;
+`eval/brain_cells_classes.json` for the planted part). They were written after the record round's out-flags had been
+seen, so they are not blind.
+
+The rule:
+- **Cell:** the fault shows in a value the sentence says, against the cell or row its marker cites, or in
+  arithmetic between cited cells:
+  - a number, number word, name, date or time;
+  - a calculation;
+  - the marker grammar;
+  - a value bound to the wrong row (another row's cell, a period row under another label) or the wrong measure
+    (days as videos, the Shorts share as the long share, now in the 'from' slot);
+  - a direction word on a marked change value, which gives that value's sign.
+- **Framing:** you need something beyond the cited cells to see it. This covers the window, base, scope, rank, tie,
+  order, list, only/all, most, hidden rows, and a direction or comparison word with no marked change value.
+- **Policy:** outside knowledge, feelings, outcomes, watch time, sensitive topics, limits talk, a fact said twice.
+
+| Set | False | Cell: handled / all | Framing: out | Policy: out |
+|---|---|---|---|---|
+| Builder's planted (new, audit, insight_v5) | 332 | **115 / 115** | 149 of 188 | 3 of 29 (f_limits, r_repeat, audit F49) |
+| Attack, by case | 166 | **30 / 30** | 96 of 125 (8 more kept under the private line) | 0 of 11 |
+| Skeptic's set (mvp22) | 48 | **5 / 6** (K37 out) | 34 of 42 | none |
+| Record checker's set (cases_v2, 7 near-copies left out) | 47 | **3 / 3** | 42 of 44 | none |
+| Held-out first forms (both looks) | 17 | none is cell-class | 10 of 17 | none |
+
+On this table the rule calls K37 cell-class, and K37 is the one cell-class case not handled: "Your Shorts ran
+10[r1.totals.long_median_min] minutes at the median". The full checker lets it out too. It is arguable: the fault is
+a length scope (long against Shorts). The arguable cases, both ways:
+- audit F31c, attack Q07 and skeptic K26 are framing on this table and go out. Read as cell, they would be 3 more
+  cell-class cases out.
+- Q01, Q11, v5_004, v5_013, v5_017, v5_025, v5_055 and K27 are handled either way.
+
+The framing cases out include 8 that are false by arithmetic on two cited cells under a direction or comparison word.
+A reader may call these wrong calculations:
+- attack P02, X04 and the planted f_close_behind;
+- skeptic K29 and K32;
+- the record set's N27, N30 and N31.
+N30 is an example: "slowed in October 2026, to 142 from 44".
+
+**Insight's order is a limit.**
+- On the sets, 157 false cases had an insight first reason that is off. 11 of them are cell-class, and every one of
+  those is handled by another check.
+- 22 compound probes add a framing word to a binding fault (`mvp24/pin/probes.py`; pinned in the tests). 20 are
+  handled. Two go out, because insight's framing reason comes first and hides its binding reason:
+  - p16, "gaming[...] led at 22%, mostly Meme drops[a theme of another area]";
+  - p19, "Meme drops[...] was mostly long-form at 69%[its Shorts share]".
+  Full mode drops both.
+
+### 24.4 The saved held-out records, replayed
+These are first forms only, with `mvp22/raw/sentences.json` as the truth (`mvp24/pin/replay.py`). The repair forms
+answer full-mode repair messages, so what a cells-mode repair gives is not measured.
+
+| Mode | Look | False out | True lost | Model lead kept, first pass | Repairs due |
+|---|---|---|---|---|---|
+| full | 1 | 1 of 8 | 56 of 126 (44%) | 30 of 53 | 29 |
+| full | 2 | 1 of 9 | 44 of 128 (34%) | 34 of 53 | 21 |
+| **cells** | 1 | 5 of 8 | 18 of 126 (14%) | **44 of 53** | 11 |
+| **cells** | 2 | 5 of 9 | 14 of 128 (11%) | **49 of 53** | 5 |
+| D1b/d (mvp23) | 1 | 5 of 8 | 13 of 126 (10%) | 48 of 53 | 6 |
+| D1b/d (mvp23) | 2 | 5 of 9 | 10 of 128 (8%) | 50 of 53 | 4 |
+
+- Every false sentence out is framing:
+  - look 1: A06.0, B05.0, F05.0, F11.0 and I02.0 p0;
+  - look 2: B05.0, B14.0, F15.0, I01.0 and I02.0's lead.
+- I02.0's lead is the false absence that was sent ("I found no dating advice theme"). `limits` off lets it out. Its
+  cause, `find` on an unlocked topic, was fixed in the tools (section 23).
+- Cells mode loses 4 to 5 more true sentences than D1b/d. D1b/d had insight's checks off altogether and every
+  doubtful code off. The evidence keeps insight on (its `typed_name` accounts for 3 and 2 of the losses), and it
+  keeps `unnamed_owner` and claims with no marker on.
+
+### 24.5 The private-row convention
+Written into `eval/brain_reading_rubric.md`. When the private line is shown, "all", "only" and a rank over the rows
+shown are not counted false because of hidden private rows.
+
+`eval/brain_attack_cases.PRIVATE_ROW_CONVENTION` names the cases it reclassifies, R01 to R11. None is deleted, and
+the full line is unchanged. R09 and R10 print no private line, so they stay false as sent. The same convention covers
+the audit's F45 to F46b, which are already scored with the line.
+
+### 24.6 Checks
+- Full mode is byte for byte today's checker. The base checker of f22d04f and this one were compared field by field
+  on 1173 forms of every set, three ways (argument, environment unset, environment "full"): 0 differ. The code lead
+  and both answer builds were compared on 152 forms: 0 differ.
+- Planted line, full: 332 of 332 false handled, 78 of 78 true kept. The attack: 169 of 169 rows; its true set 41 of
+  60. The audit's true set: 49 of 61.
+- Planted line, cells: every cell-class case handled, 78 of 78 true kept. The attack's true set: 52 of 60. The
+  audit's true set: 56 of 61.
+- The whole suite in 4 shards on 2464c0d: 6030 passed and 2 skipped, 0 failed (1352, 1319, 1506 with the 2 skips,
+  1853). The 13 brain test files together: 345 passed. `demo/test_demo.py`: 10 passed. The dry self-test: 67
+  conversations, 164 of 164 steps, $0.
+
+### 24.7 What this does not show
+- No live run used cells mode. The model's answers under a cells-mode repair are unmeasured.
+- Everything here is in sample:
+  - the loosenings;
+  - the three new rules;
+  - the codes moved to cell;
+  - the kept `weekday` rule;
+  - the class labels, which were written after the record round's out-flags had been seen.
+- Two compound shapes get out (24.3), and so does K37.
+- For the founder:
+  - `limits` off lets the model's own limits talk out, against the rule "never keep saying what the bot cannot
+    do";
+  - `repeat` off lets a fact be said twice, against "be brief".
+
+### 24.8 The claim fell: the second attack, and what closes it (mvp25, 26 Nov 2026)
+No model was called ($0). Evidence: the scratchpad's `mvp25/cellsfix/` (`m.py` measures every set, `diff25.py` is the
+full-mode differential, `step4.txt` the limits and repeat lists, `exposure.txt` what each rule saw).
+
+**What fell.** At 4064f3e an independent attacker (mvp24 pincheck) wrote 131 false and 46 true sentences on 8 saved
+held-out results. 24 false ones got out in cells mode; 5 of those get out in full mode too. The set is now frozen in
+the repo as `eval/brain_cells_attack2.json` (made-up library only), with its forms and ledgers. Each sentence runs as
+a point under its record's true carrier lead and alone as a lead. `tests/test_brain_cells.py` pins every case, in both
+modes. The planted cells line now prints the second attack and its count of known leaks, and says it is in sample
+(`python3 -m mvp.brain.planted --check cells`, key `summary`).
+
+**The families, and what closes each.** Every new rule is cells-only, reads paths and window or row fields (no
+free-English reading of the whole sentence), is one switch of `verify.CELLS_RULES`, and is pinned by a test that
+shows its case gets out with that switch off.
+
+| Family (attack2 ids) | What it was | Closed by |
+|---|---|---|
+| A year or period name on another window's cell (f08 f16 f21 f22 p04 p05 p07; planted f_prev_in_now, f_months_swapped, audit F72, F82, attack E02) | "In 2025, you opened 254[this year's total]" | `period_bind`: the period-binding part of wrong_window (`_end_in_base`: the window words right after a cell, against the cell's path, now or before), under the cell code `other_period`. `period_named`: a period phrase bound to the cell before it (or, before the first cell, the one nearest it) that the cell has no day in, or that is another period a result of the turn holds |
+| A date or year typed with no marker (c09 c10 g05) | "starting in March 2022" of a channel first watched in March 2021 | `free_date`: a typed date beside a row that holds dates must be one of that row's dates, a period a result holds, or a window's end said as an end |
+| Insight's first-reason masking (m02 n05 n09; probes p16 p19) | "mostly" stopped insight before its binding rule | `insight_walk`: when insight's first reason is off, its checks run again walking past every reason that is off (`insight.py`'s new `skip` parameter; empty by default, so every other caller is unchanged), and a later reason counts when it is a binding or name reason (`verify.WALK_ACCEPT`). m02 and n05 fall to `period_named` first, n09 to `length_cell` |
+| The short_word loosening (e12 l07) | a short said under another channel's name | `short_word` taken out |
+| Time-of-day words (h01 h02 h03) | "late at night" of a 3 pm item | `item_fields`: a time of day said after an item is its hour's; "a Short" said of an item is its length; "from <channel>" after an item is its channel; a quoted title beside an item is that item's own |
+| The five that get out in full mode too (a19 e09 e13 w01 p02) and p06 | "72[the long count] of them Shorts"; "on Thursday 30 October 2026" (a Friday); two rows and their two counts in crossed order | `length_cell`, `item_fields`, `weekday_typed` (calendar arithmetic), `pairs_crossed` |
+
+A rule found while closing these: `date_owner`. Insight never reads which row a date cell is of (its slot is taken
+out), so b09 ("You started on @wetpaper.ig[channels[1]] on 10 January 2025[channels[0].first_watched]") was held only
+because '@' read as a link. With the handle loosening below it would have got out; `date_owner` holds it.
+
+**Known leaks now.** In cells mode: none of the 131. In full mode: a19, e09, e13, w01, p02, as before (full mode is
+unchanged). This is **in sample**: the rules were written from these very cases. Sibling sentences written after the
+first fixes (another shape of each family) found 5 more holes at once (a day with no year, "starting in April", "every
+one a Short", "32[...] Shorts", another item's quoted title); they were closed and are pinned as false twins, with 14
+true twins. That 5 of 15 siblings got out at first is the honest measure: the next attacker will find more.
+
+**True sentences lost to cell codes (step 5).** Each run1 loss was traced to its cause. Fixed in the checker, as cells
+loosenings, only where no planted cell-class case and no handled attack2 case gets out:
+- `own_fields`: a name the row cited right before it holds in its own field (an item's channel, a channel's or a
+  theme's area or theme) is cited by that row (run1 N014, N063, N029; looks D03.1, D04.0, F06.0, F10.0, F15.0).
+- `hour_word`: "Hour 18[...hour]" names an hour cell, and is no watch time (N027).
+- `handle`: an '@handle' a cited row holds is that name, not a link (N036, N038, N042.1, attack2 b08, t03).
+- `month_alone`, `label_in_date`: "August had 36[the Aug 2026 row]" names the row when no other row is that month;
+  a month inside a full date ("up to 30 October 2026") is no period's name (N008.0, its lead and both points).
+- `quoted_title`: a cited item's title in quotes (N049.0's repair lead).
+
+Two of these let a false case out that something else had held by accident, and the founder should know:
+- `handle`: three planted framing-class cases (attack L08, Q06; audit F85) had been dropped only because '@' read as
+  a link. They are framing, so the cells line stays clean, but they now go out.
+- `own_fields`: run1's N056.0 point 1 ("Next is Digital art colour on the 30th from Pixel Pencil", a rank over a tie)
+  had been dropped only because the item's own channel had no marker. It is wrongly based (framing) and now goes out.
+
+**What stays lost, and why** (the cause is not the checker, so the check was not loosened; written down for the
+agents who own it):
+- The search tool's `why_matched` says "Integrals by parts #2" while the title is "Integrals by parts": the model
+  writes the '#2' and fails the title (N049.0's points). Tools.
+- "all on YouTube[r1.totals.by_platform.youtube]": a value marker after a word, not a number (N052.0, N054.0; looks
+  F02.0, D08.0, I02.0). `platform_all` was taken out as asked, although it had kept 2 true look sentences, one a
+  lead. Marker grammar and prompt: a form for "all N on YouTube".
+- "each held 3[one row's cell]" of two rows (N041.1, N042.0): the marker grammar has no form for one value of two rows.
+- A sentence-opening word the opener list lacks ("Several", N049.0's first lead).
+- `outside_in_history` and `watch_time` (policy, not cell) drop 4 and 1 true run1 sentences; not touched here.
+- Insight's own text rules misread, once each, when the walk reached them: a window's end date, a weekday share,
+  "163 of the videos" read as a share, a day with no year ("29 October" of an item dropped, "30 October" passed).
+  That is why `insight_walk` counts only binding and name reasons. Insight.
+
+**Before and after, cells mode** (true sentences lost; run1 truth `mvp24/recounta/sentences.json`, looks truth
+`mvp22/raw/sentences.json`; first forms, then all forms):
+
+| Set | Before (4064f3e) | After |
+|---|---|---|
+| run1, first forms | 27 of 155 | 18 of 155 |
+| run1, all forms | 38 of 180 | 21 of 180 |
+| look 1, first / all | 18 of 126 / 23 of 185 | 17 of 126 / 22 of 185 |
+| look 2, first / all | 14 of 128 / 17 of 171 | 13 of 128 / 15 of 171 |
+| attack2 true | 8 of 46 | 7 of 46 |
+| planted builder / attack true / audit true | 0 of 78 / 8 of 60 / 5 of 61 | 0 of 78 / 6 of 60 / 3 of 61 |
+| skeptic true / record set true | 6 of 20 / 2 of 25 | 5 of 20 / 2 of 25 |
+| model lead kept, first pass: run1 / look 1 / look 2 | 54 / 44 / 49 | 57 / 44 / 49 |
+| attack2 false out | 24 of 131 | 0 of 131 |
+| planted framing-class out: new / audit / insight_v5 / attack | 30 / 55 / 64 / 96 | 20 / 50 / 60 / 92 |
+
+Taking out `short_word` and `platform_all` cost 4 true sentences (attack2 q08; look 1 D07.0 point 1 and F02.0's lead;
+look 2 D08.0 point 0); they are inside the "after" column. Every cells rule alone lost 0 true sentences on every set
+above, against a bar of 1. What each rule saw of true sentences, and passed (`exposure.txt`): `period_named` 236,
+`pairs_crossed` 31, `item_fields` 26, `length_cell` 25, `free_date` 19 (none of run1), `weekday_typed` 10. So "0 lost"
+means little for `free_date` and `weekday_typed`.
+
+**limits and repeat (step 4).** They enforce the founder's own rules, so each emitter was judged by what it would drop
+on run1 and the two looks, sentence by sentence (`step4.txt`). The bar: unwanted drops (a useful true sentence) at most
+a quarter of its drops and at most 3 per 65 answers. Every limits drop is a lead, and in cells mode a lead that does
+not pass leaves a code lead.
+- `limits@words` (the LIMITS words): 5 drops; 1 wanted (N052.1, a wrongly based "I can't tell why"), 4 unwanted
+  (N066.1 "Your YouTube export ends on 30 October 2026", the answer asked for; both looks' F10.0 "I can't predict
+  next week, but ... gaming was 49%"; look 2's F15.0 repair, which says the history has no durations). **Off.**
+- `limits@self` (what the assistant found or could not find): 6 drops. 2 wanted (look 2's I02.0 false absence,
+  twice). 4 are the one honest line of an answer whose code lead would be bare ("I couldn't check an answer to that
+  in time", "Here's what I found in your saves"): N004.0, N109.0, the looks' K04.0. **Off.**
+- `limits@insight`: 8 drops, 5 unwanted (N055.0, N066.1, look 1 D10.1, both F10.0, F15.0's repair). **Off.**
+- `repeat@once`: 2 drops; 1 wanted (N035.0, the 7 Instagram items said again), 1 unwanted (look 1 D08.0 "All 32 were
+  long videos, in the Home cooking theme", new facts beside a repeated count). **Off.**
+- `repeat@insight`: no drop on these sets. **Off** (nothing measured to earn it).
+So the founder's rules "never keep saying what the bot cannot do" and "be brief" are still not enforced by code in
+cells mode. The judgment of wanted and unwanted is by hand, and the criteria were written before the lists were read.
+
+**Checks.** Full mode is byte for byte f22d04f's checker: its verify.py and its insight.py against this tree's, field
+by field, on 1606 forms of every set (planted, looks, skeptic, record set, attack2 as point and as lead, run1 first
+and repair forms), three ways: 0 differ. The code lead and both answer builds on 231 look and run1 forms: 0 differ.
+`insight.py` with the `skip` parameter and its guards stripped is identical to f22d04f's. The whole suite in 4 shards: 6083 passed and 2 skipped, 0 failed (1375, 1344, 1535 with the 2 skips, 1829). It ran
+on this tree before four line-length edits to comments and strings; the brain tests (398 passed), the 16 other test
+files that import insight (941 passed, 2 skipped), the differential and both planted lines were re-run after them. Planted line, full: 332 of
+332, 78 of 78. Cells line: no cell-class case out, 78 of 78 true kept, the second attack 131 of 131 handled, 0 known
+leaks (in sample). `tests/test_brain_cells.py`: 84 passed, with `MVP_BRAIN_CHECK` unset and set to "cells".
+
+**What is in sample.** Everything above: every rule, every loosening, the walk's accept list, the limits and repeat
+decisions, the class labels. The rules were built on the second attack and tuned against the same true sets that
+judge their cost. No live run used cells mode; what the model writes after a cells-mode repair is still unmeasured.
+
+## 25. The tool gaps of the live run on fresh half A (26 Nov 2026; scratchpad mvp25, key toolgaps)
+
+The live run of section 24's cells mode on fresh half A (scratchpad `mvp24/runa/run1`, read by hand in
+`mvp24/recounta`) showed that most poor answers came from the tools and the code lead, not from the model's sentences.
+This round fixes those gaps in the processor. **No model was called** ($0), **no prompt changed** and `brain/verify.py`
+is untouched: the full-mode checker is byte for byte section 24's. Today's bot (the brain off) is unchanged. Every
+figure is on the made-up library of `tests/brain_library.py`. Evidence: the scratchpad's `mvp25/toolgaps/`.
+
+Each gap was reproduced first from the saved record: `toolgaps/replay.py` runs the calls the model made in run1 (their
+arguments as recorded) through the tools; on 4064f3e it gives every saved result exactly (26 messages, 40 calls,
+`before_replay.txt`). `tests/test_brain_toolgaps.py` (30 tests) holds the fixes: on 4064f3e 27 fail and 3 pass (the 3
+are guards: "this winter" and "last autumn" already read as the convention says, and a part the convention does not
+name is still refused). Every count below was recounted from the library's rows (`toolgaps/recount.py`, which shares no
+code with facts.py or history.py).
+
+### 25.1 Windows, and the conventions
+Before: "the summer" was not read (N004.0); "last summer", beside "this summer", was the summer of 2026 (N010.0,
+N010.1); "late October" and "mid 2023" were refused as a part of a period (N063.0, N064.0).
+
+The conventions (`brain/windows.py`; history.py, which today's bot reads, is unchanged):
+- A season said alone ("the summer", "over the summer") is "this <season>".
+- "This <season>" is the latest one that has begun (history's own rule): in November 2026, the summer of 2026; the
+  winter of 2025 to 2026.
+- "Last <season>" is always the one a year before "this <season>", as "last year" is the year before this one. In
+  November 2026 that is the summer of 2025. Said alone in November, "last summer" is also read as 2025; a person may
+  have meant the summer just gone. The result's dates say which was counted (below).
+- Early, mid and late of a month: days 1 to 10, 11 to 20, 21 to its end. Of a year: January to April, May to August,
+  September to December. Of a season: its first, middle and last month. "The start of" and "the beginning of" are
+  early; "the end of" is late. "The first half" and "the second half" of a month: days 1 to 15 and 16 to its end; of a
+  year: January to June and July to December. Any other part ("the first week of March") is still refused.
+- A part said back: "late October 2026", "mid 2023", "the first half of 2024"; cut where the export ends as any window.
+
+Every result with a window now says its exact days: `meta.window_dates` {start, end, days, said}, cut where the export
+ends; a compare also has `meta.window_dates_b`. first_last says the days of all history.
+
+After, recounted: this summer 45 against last summer 16 (N010.0); art only, 45 against 14 (N010.1); late October,
+21 to 30 October, 38 videos on 10 days (N063.0); mid 2023, May to August, 138 (N064.0).
+
+The checker on the new windows: "In late October 2026, you opened 38[...] videos." is kept in cells and dropped in
+full (`time_of_day`); "In mid 2023, ..." is kept in both. The exact dates beside a count ("From 21 to 30 October 2026,
+you opened 38") are dropped in both modes (`free_number`): the model should say the window's words, not
+window_dates' dates, beside a number.
+
+### 25.2 After the export, and what it does not hold
+Before: "that window starts after where the export ends (30 October 2026): there is nothing to compare it with"
+(N004.0's "last few weeks", N067.0's "november vs october so far"), and "nothing in their record for this: no
+platform holds that kind of event" (N038.0, N042.0, N113.0 on likes). The model then spent a call finding out.
+
+After, both are still refused (a window with no rows has no count), but the refusal carries:
+- `export`: where each platform's history starts and ends, the kinds it holds (`holds`: opened, saved) and does not
+  (`holds_not`: liked);
+- `asked`: the window asked, with its dates ("1 to 22 November 2026");
+- `nearest`: a window ready to pass that the export holds ({"preset": "lately"}, the 4 weeks up to 30 October 2026),
+  or, for a compare, the other window alone; for a kind it does not hold, the nearest kind ({"scope.how": "saved"}).
+Passed as given, the nearest window is not refused.
+
+Watch time (N057.0) already had its note; the model did not say it, because the prompt leaves that line to code and
+`answer.py` printed none. Code's limit line is now printed by `answer.py`:
+- the watch-time line, when a cited result carries it (the prompt tells the model not to say it, and the checker's
+  policy rule drops it, so it is never said twice);
+- under a code lead only, what the turn's refused calls found (`tools.Turn.limits`): "Your export holds no likes.",
+  "Your export ends on 30 October 2026, so 1 to 22 November 2026 is not in it.". Under the model's own lead it is not
+  printed: N042.0 and N113.0 said it themselves.
+
+### 25.3 first_last with its subject in scope.only
+Before: refused ("put what it is about in `subject`"), and a second call (N013.0, N013.1). After: the subject said
+again in scope.only is the same scope and is taken out; the result is the one without it. Another name there is
+refused with the call that would work (scope.only counts items of any of its names, so it cannot narrow a subject).
+
+### 25.4 What happened and when, on every item row
+Before: an item row had `when` and no kind of event, so a saved post went out as "opened on 5 October 2026" (N048.0,
+N048.1). After: every item row of items, first_last and search carries `how` ("opened", "saved", "liked", or "opened
+and saved"): what they did on its `when` day, of the kinds counted. The field is named `how` because the checker already
+reads a row's `how` for "saved": "saved on 5 October 2026[r1.items[0].when]" is now kept in cells (before:
+`wrong_name`, "not saved (any)"). The checker does not refuse "opened on" of a saved item; that stays the model's word.
+Recounted: rx_sour1's only event is a save on 5 October 2026.
+
+### 25.5 The private topic on a follow-up
+Before: N053.1 ("and how did that year compare to 2023", right after the dating question) gave no_match for "dating"
+in compare and find, and the answer said the history had no match. The unlock was read from the message alone.
+
+After: `loop.unlock_after(turn, rec)` gives the topic the turn unlocked, only when one of its results resolved a name to
+it; the next `tools.Turn` takes it as `carried_unlock`. It never goes on the screen (the model reads the screen), never
+comes from a model's argument, and a message that names another sensitive topic unlocks that one. The eval passes it
+along the model's chain and writes `unlock` into each record.
+
+What a carried topic opens, within the privacy rule (hidden from totals unless the user names it):
+- its name resolves the same way in every tool (find, compare, breakdown, first_last), as on the turn before;
+- a result scoped wholly within it counts it (scope.only of the topic, or of names whose items are all of it);
+- every other result leaves it out as before: the follow-up's unscoped totals, its searches and its learned points.
+  This is the set's own reading of N053.1 ("this message names no private topic, so it stays out": 8 shown, 50 left
+  out), so the hand chain and the build need no carry.
+- the checker's turn reads the carried topic, so a sentence on the topic's own result is kept.
+After, recounted: the topic in 2024, 50, against 0 in 2023; the unscoped compare, 8 against 157, with 50 left out and
+the private line.
+
+### 25.6 Rollups
+- **Parts of the day** (N027.0 "never says day or night"; N112.0 "never says 8 am"): a totals sheet (breakdown by
+  none) has `when.parts_of_day`, the opens of morning (5am to noon), afternoon (noon to 5pm), evening (5pm to 9pm)
+  and night (9pm to 5am), in their own time, with a note. Recounted over all history: 5, 219, 498 and 1 of 723; on
+  Instagram all 4 opens at 8am, morning. The checker keeps "The afternoon held 219[...] and the night just 1[...]" in
+  cells and drops it in full (`time_of_day`). The cells count opens: "498 of 723 videos" is dropped
+  (`count_of_videos`). Only on totals sheets: a ranked sheet is near its size cap.
+- **Ties** (N044.0, N044.1, N056.0): an items list ordered by times opened says `meta.tie` "all" when no item of the
+  window and scope was opened more than once, with a note that there is no ranking by times opened and the list is
+  newest first; "shown" when the rows shown tie among themselves. Recounted: no item was opened twice.
+- **First days** (N008.1, "the channels that started in [October]"; Pixel Pencil began on 1 August 2026): a row of
+  `new` carries `first_watched`, its first day. A channel row already had it; a new theme row has it now (Digital
+  drawing, 1 August 2026, recounted).
+- **Levels** (N067.0, a channel's rank and a theme's set side by side): a breakdown's notes say that areas, themes
+  and channels are three levels and a rank word compares rows of one list.
+- **The size cap.** The added cells never cost a ranked sheet a row: on a sheet over its size, `first_watched` of new
+  rows and the parts of the day go first (`results.drop_extras`), so the rows are cut exactly as before. A totals sheet
+  keeps its parts of the day; that cost one ledger (audit_count) a theme row, 6 to 5. So on N008.1's year timeline the
+  new themes' first days do not fit; its channel rows still say theirs.
+
+Tried and not kept: a `level` field on every row (it cost ranked lists rows: a "7 channels" count marker failed on a
+list cut to 6); the weeks of a window and the weeks with an open (N053.0 "every week?": the topic fell in 29 of 2024's
+53 weeks, recounted), because the checker drops both cells (`number`); hour labels on the busiest hours (the checker
+read the row as named, `unnamed_owner`).
+
+### 25.7 Cards and ask-backs
+Before: item cards and ask-backs were not rendered (N041.1, N044.1 and N049.0 named nothing). After, `answer.build`
+renders them as the channel shows them, built by code from the cited rows, never a model sentence:
+`• Title · [Channel](link) · saved on 5 October 2026`. "Channel as a link" is read literally: the channel's name links
+to the item's own `source_url`, the one link the record holds. The model's picks (`items`, kept by the checker) go
+out under the model's lead; the code lead's items under a code lead. A model note never goes out. An ask-back goes out
+as code's "Which one do you mean?" over the cards of the result it is about; the model's ask-back words never do. The
+build returns `cards`, `ask` and `limits` beside the text.
+
+### 25.8 The code lead follows the tool
+Before: all 4 code leads of run1 read poor (N014.0 a total for "last cooking video"; N049.0 "Here's what I found."
+with 5 items; N008.0 one total for "month by month"; N038.0 a save count with nothing about likes). After, each new
+template is checked in full before use, as before:
+- first_last, and items ordered newest or oldest: the item by its title and its day ("In all your history, counting
+  only food and cooking, the newest video you opened was Cooking soup on the 30th, on 30 October 2026.");
+- timeline: the total, the period with the most and the one with the fewest ("This year, you opened 254 videos: 142
+  in Oct 2026 and 4 in Feb 2026."), recounted;
+- items and search: the cards under the lead (N049.0: "Here's what I found.", "Which one do you mean?", 5 cards).
+N038.0's item lead ("the newest item you saved was A post from @noodle.nights") is refused (`link`), so it goes out as
+its save count, code's line "Your export holds no likes." and its 5 cards. A code lead still never carries a model
+point in cells mode.
+
+### 25.9 Time
+The loop's deadlines were set for the old bars (soft 6 s, the old median bar; deep 12 s; hard 15 s). The bars are now
+8 s at the median and 11 s at the slow end. A read round that starts at the soft deadline still needs the answer request
+after it, 4.2 s at the median in run1, so the soft deadline is 11 - 4.2, about **7 s** (run1's 3 refused turns were at
+6.2 to 6.7 s). A deep round is refused past the slow-end bar itself, **11 s**. The hard stop stays at 15 s. The eval
+summary's bars are now 8 and 11. No live run measured the effect.
+
+### 25.10 The saved ledgers and the planted lines
+As in section 23, the frozen planted ledgers are left as they are and `eval/brain_toolfix_ledger_diff.json` pins how
+today's tools differ from them: still 62 ledgers, 598 entries (365 before). The new entries are meta.window_dates (69),
+item rows' `how` (61), notes moved or added, new themes' first_watched (10), parts of the day (7), window_dates_b (3),
+meta.tie (2), and one row cut (audit_count, themes 6 to 5). No other list changed length. The planted lines, full and
+cells, print byte for byte what they printed on 4064f3e; planted.py is not edited.
+
+### 25.11 Checks
+- The full-mode differential of section 24 (`toolgaps/diff/`, the mvp24 harness on this tree): 3519 verdicts of 1173
+  forms, 0 differ. The code lead and both answer builds on 152 forms differ only as intended: 35 code builds and 11
+  model builds gain cards, 11 code leads are the new first_last and timeline templates, 17 code leads list an items
+  result's cards (`toolgaps/diff/answers2.txt`).
+- The plans mode: 9006 numbers in results, 8983 recounted (the 23 left are the kinds it left before); the parts of the
+  day are recounted from the auditor's own scope (`eval_brain.parts_recount`); the same 3 number findings (B05, C13, G06).
+- The fresh set: half A's N063.0 and N064.0 read their part of a period now, so their refusals became a second
+  accepted reading (the whole period stays reading 0, which the facts and the follow-up N063.1 are written for);
+  N038, N042, N067 and N113 keep their refusals with the new error text. The builder refuses to write while any
+  refusal of the set lapses, so the file was written by a scratch script (`toolgaps/write_fresh.py`) that runs the
+  builder's own steps and writes only when the one problem left is a half B lapse listed in `LAPSED_B`. Half B is as
+  stored (its sha256 unchanged). Its rebuilt lines differ from the stored ones only in refusal error texts (N096, N105,
+  N108, compared by path, values not read); N096's refusal lapsed and is listed by id in `LAPSED_B`, not opened. The
+  build's findings: 22, all among section 23's 24 (none new); the two gone are N010.0 and N010.1's last summer.
+- The dry self-test: 67 conversations, 164 of 164 steps, $0; its transcript is section 24's but the build id and the
+  fake sign-in port. `demo/test_demo.py`: 10 passed.
+- The whole suite in 4 shards on the final tree: 6061 passed and 2 skipped, 0 failed (1446, 1342, 1543 with the 2
+  skips, 1730). An earlier run had 1 failure, `test_brain_seam`'s pin that a search row has no `how`; that pin now
+  reads the row's own event (25.4). The 14 brain test files together: 376 passed.
+
+### 25.12 What is not fixed
+- The checker refuses or drops several of the new cells' plausible sentences: parts of the day and part-of-period
+  leads in full mode (`time_of_day`), a window's exact dates beside a count (`free_number`), the weeks cells
+  (`number`). Opening them is a `verify.py` change, which this round did not own.
+- The prompt (unchanged) says "No times of day" and "no parts of a period ('late October')", and "never say what the
+  data lacks". The model will not use `parts_of_day`, the part windows or `export`/`nearest` the way the tools now
+  allow until the prompt says so (25.13).
+- N005.0, N008.1 and N053.0 were planning: no per-year channel count, no October breakdown, no yes or no. N052.1,
+  N055.0, N057.0, N067.0's cut point and N109.0 are wording. N048.1 and N056.0 are checker drops.
+- "Opened on" said of a saved item still passes the checker.
+- The first days of new themes do not fit a sheet over its size cap (N008.1's own result).
+- Files outside this round's list were touched, each because the change needed it: `brain/windows.py` (the window
+  reader), `eval/brain_fresh_a.py` and `evalset/brain_fresh.jsonl` (half A's two refusals), `tests/test_brain_fresh.py`
+  (LAPSED_B), and three tests that pinned the old behaviour: `test_brain_tools.py` (the brain-only cells and an item
+  row's keys), `test_brain_step1_fix.py` (part-of-period refusals) and `test_brain_seam.py` (the first_last lead, and
+  a search row with no `how`).
+
+### 25.13 What the prompt would need
+Not changed here; each is a line the model would need to use what the tools now give:
+- the item row's `how`: say "saved on" or "opened on" by it;
+- `meta.tie`: do not rank by times opened, say each was opened once;
+- `when.parts_of_day`: the parts of the day by name, counted as opens, not videos; and lifting "no times of day";
+- `first_watched` on new rows: say a row's own first day when saying it started;
+- part-of-period windows: pass "late October" as their words (today the prompt says to ask for the whole period);
+- an error's `nearest` and `export`: answer with the nearest window in the same turn, and say in one sentence what the
+  export holds;
+- `items`: pick the items to show; code renders them, so a point need not repeat a title.
+
+### 25.14 The merge of sections 24.8 and 25 (mvp25, key merge)
+No model was called ($0). Branch `brain-r25-local`: `brain-cells-local` (24.8) with `brain-toolgaps-local` (25) merged
+in. Evidence: the scratchpad's `mvp25/merge/`. The figures in 24.8 (6083 passed) and 25.11 (6061 passed, 376 brain
+tests, 3519 verdicts, planted lines as on 4064f3e) are each branch's own; the merged figures are here.
+
+**The merge.** The two branches touched different files but this one. `DESIGN.md` was the one conflict: both appended
+after 24.7, and 24.8 now comes before 25. No test was dropped and none was re-pinned.
+
+**The checker's fixtures and the new tools.** `eval/brain_planted.json` and `eval/brain_cells_attack2.json` freeze
+their tool results, and neither `planted.py` nor `tests/test_brain_cells.py` calls a tool, so the tool changes move
+none of them. Planted full and `--check cells` print byte for byte what they print on `brain-cells-local` (332 of 332,
+78 of 78; second attack 131 of 131 false handled, 0 known leaks, in sample). Every set of the cellsfix measure gives
+the same verdict, sentence by sentence, as on `brain-cells-local` (1619 sentences). The skeptic set's scenarios are
+rebuilt with today's tools, and they give the same too. The second attack was also run on its 8 ledgers rebuilt
+from their saved calls with the merged tools (keyed by saved rid): all 177 cases end as on the frozen ledgers, in
+both modes (cells: 131 of 131 false handled, 39 of 46 true kept; full: the same 5 known leaks). The same rebuild on
+4064f3e also changes no case. The rebuilt ledgers are not byte for byte the frozen ones on either tree, so the
+frozen file stays as it is.
+
+**A seam, fixed in part.** `period_named` (cells only) placed a season with no year at the instance the cited windows overlap
+most. The tools now give "last summer" as the summer of 2025 (25.1). In a this-summer-against-last-summer compare the
+overlap is a tie, which went to 2026. So the true "This summer you opened 45, up from 16 last summer" was dropped as
+`other_period`, and the false "Last summer you opened 45" (this summer's count) got out. Now "last", "past" or
+"previous" before a season with no year reads the tools' convention: the one a year before the latest one that has
+begun on the turn's day. With no day on the turn the phrase is read as before. `tests/test_brain_r25_merge.py` has 7
+tests: 4 fail without the change (2 true dropped, 2 false out) and 3 are guards. The change moved no verdict on any
+saved set, so its cost and catch are measured only on these twins, which were written here. Still open: "this
+<season>" is still placed by overlap, so on the same compare the false "This summer you opened 16[r1.previous.items]
+videos" (last summer's count) gets out, before and after this change. Reading "this <season>" by the convention
+too would touch the 23 "this autumn" sentences of the planted set and needs its own measure.
+
+**Full mode.** The differential of 24.8 against f22d04f (its `verify.py` and its `insight.py`): 1606 forms of every
+set, three ways, 4818 verdicts, 0 differ, before and after the seam fix. The code lead and both answer builds on 231
+forms (both looks and run1) differ as section 25 intends. 165 forms differ only by the new keys of `answer.build`
+(`cards`, `ask`, `limits`, empty). The others: 21 code leads have new text (the first_last, timeline and items
+templates); 26 more code leads only carry their items; 59 code builds and 26 model builds gain cards; 2 each gain the
+ask-back; 1 each gains a limits line. Every changed text is explained by one of these. Today's bot is not touched:
+`history.py` and `handler.py` are as on 4064f3e, the added parts of `facts.py` run only for the brain's sheets
+(`hide_sensitive`), and no module outside `brain/` imports `brain/`. The dry self-test's transcript is the same as on
+both branches but for the build id and the fake sign-in's port.
+
+**run1, replayed offline in cells mode.** The saved first forms of the live run (65 records, 171 sentences; truth from
+the hand recount). The forms were written against the old tool results.
+
+| checker, results | true kept | false kept | model lead kept on the first pass |
+| --- | --- | --- | --- |
+| 4064f3e, as saved | 128 of 155 | 8 of 13 | 54 of 65 |
+| merged, as saved | 137 of 155 | 9 of 13 | 57 of 65 |
+| merged, replayed through the merged tools | 136 of 155 | 9 of 13 | 57 of 65 |
+
+The replay keys each result by its saved rid. Four calls that were refused now succeed (N013.0, N013.1, N063.0,
+N064.0), and they would shift the later rids by one, so the forms' markers keep pointing at the results they cited.
+On 4064f3e the replay gives back every saved result. The one sentence the replay loses is N001.1's
+`r2.periods[50]`: the timeline sheet now holds the latest 47 periods, not 52, because the added cells
+(`when.parts_of_day`, `meta.window_dates`) take room under its size cap. That loss is on `brain-toolgaps-local` too. It sits
+badly with 25.10's "no other list changed length", which was measured on the frozen planted ledgers.
+Nothing here measures what the model would write on the new results.
+
+**Still open.** "Opened on" said of a saved item still passes in both modes (25.12). The checker's handling of the
+other new cells is as 25.12 says. On the merged checker, the sentences of 25.12 give the same verdicts as on 4064f3e,
+but for the seam above.
+
+**Checks on the merged tree.** The whole suite in 4 shards: 6121 passed and 2 skipped, 0 failed (6083 + 6061 - 6030
+from the two branches, and the 7 seam tests). The brain test files (`tests/test_brain*.py`): 436 passed.
+`tests/test_brain_cells.py` with `MVP_BRAIN_CHECK=cells`: 84 passed. `demo/test_demo.py`: 10 passed. The dry
+self-test: 67 conversations, 164 of 164 steps, $0.
+
+### 25.15 After the merge: the claim of 24.8 fell again, and the rules cost true sentences live (mvp25, keys check, runa2, recount2)
+
+Read this before trusting 24.8's "0 known leaks".
+
+- A second independent attacker wrote 113 new false and 69 new true sentences on the merged tip. In cells mode
+  47 false sentences get out; 43 are not in the repo's list. 31 are cell class by 24.3's rule: a part of a period
+  on another window's cell, a period that overlaps the cell but is not its window, parts of the day crossed, an
+  unmarked date in a year some result holds, saved said as opened, likes the export does not hold. Full mode lets
+  8 out and refuses 43 of the 69 true sentences; cells mode refuses 10.
+- The rules of 24.8 lost 0 true sentences on every replay set. In the live run that followed (fresh half A, the
+  same 65 messages, prompt v3) the checker refused 40 of 165 true first-form sentences, against 27 of 155 before.
+  `two_results` went from 1 drop to 8, `uncited_number` from 4 to 13, `outside_in_history` from 4 to 8, the new
+  `other_period` from 0 to 4, and insight's `number`, `percent` and `wrong_measure` dropped 7. The model's own
+  lead fell from 61 to 56 of 65, repairs rose from 14 to 22, and the slow end went from 10.6 s to 13.3 s.
+- So closing leak families rule by rule does not converge, in the same way the framing rules did not. A replay on
+  saved forms can rule a checker out; it cannot show what a rule costs on sentences the model has not written yet.
+- `percent` is in none of verify.py's pinned classes. The merge's season rule ("last / past / previous <season>")
+  rests on 6 hand-written twin sentences.
+- Tool defects the attacker found, not fixed here: the label of the window before is wrong on part-of-period
+  windows (7 results); ask-backs and the scope line fall back to another result's cards (6 of 8 ask-back builds);
+  `first_last` can return a no-match with no option and no pointer to search; code leads embed item titles
+  unquoted; the timeline holds 47 of 69 periods where it held 52; `busiest_weekday` names one day over a tie.
+- 7281 of 7811 values in 79 tool results were recounted from the library rows with 0 differences.
+- Half B of the fresh set: one id's stored plan lapsed when parts of a period became readable. It is listed by id
+  in `tests/test_brain_fresh.py` and was not opened.
+
+What follows from this is in DECISIONS.md, "The second live run".

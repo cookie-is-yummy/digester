@@ -119,10 +119,10 @@ class Harness:
         bot.store.upsert_person(HANDLE, "Test", lib, TZ)
         return cls(bot, lib, os.environ["MVP_DERIVED_HOME"])
 
-    def turn(self, message="", screen="", last_window=None, search=None, learned=None):
+    def turn(self, message="", screen="", last_window=None, search=None, learned=None, carried_unlock=None):
         from mvp.brain import tools as TL
         return TL.Turn(self.bot, self.person, self.now, message=message, screen=screen, last_window=last_window,
-                       search=search, learned=learned)
+                       search=search, learned=learned, carried_unlock=carried_unlock)
 
     def audit_lib_for(self, unlock=None):
         """The auditor's own reading of the same raw rows (eval_claims.Library), the sensitive themes left out as the
@@ -265,7 +265,8 @@ def run_message(h, m, screen="", last_window=None, audit=True):
         res = ledger.get(cl["rid"])
         forms = [x for x in FB.templates(res) if V.strip_markers(x) == cl["lead"]]
         marker_form = forms[0] if forms else None
-        if not (marker_form and V.check_answer({"lead": marker_form, "points": []}, t.results, vt).lead_ok):
+        if not (marker_form and V.check_answer({"lead": marker_form, "points": []}, t.results, vt,
+                                               mode="full").lead_ok):
             issues.append("the template does not pass the verifier")
     elif cl["how"] == "code_form":
         # code_form's answer passed today's checks inside fallback (insight._check, the gate); the verifier's own
@@ -301,6 +302,7 @@ def run_message(h, m, screen="", last_window=None, audit=True):
             lib = h.audit_lib_for(t.unlock)
             rows = EC.audit_results(lib, r, c, question=m["text"], today=TODAY, earlier=t.windows,
                                     last_window=last_window)
+            rows += parts_recount(lib, r, c, m["text"], t.windows, last_window)
             n_all, n_rec, miss = EC.coverage(r, rows)
             rec["numbers"] = rec.get("numbers", 0) + n_all
             rec["recounted"] = rec.get("recounted", 0) + n_rec
@@ -320,6 +322,29 @@ def run_message(h, m, screen="", last_window=None, audit=True):
     rec["_window"] = t.windows.get("r1")
     rec["_results"] = by_rid
     return rec
+
+
+PARTS_HOURS = {"morning": range(5, 12), "afternoon": range(12, 17), "evening": range(17, 21),
+               "night": [*range(21, 24), *range(0, 5)]}
+
+
+def parts_recount(lib, env, call, question, earlier=None, last_window=None):
+    """mvp25 toolgaps 6: the parts of the day of a totals' sheet, recounted from the auditor's own scope of the result
+    (eval_claims.brain_ctx: its window, its filters, the raw rows), by the hour of each open in their time zone."""
+    from mvp import eval_claims as EC
+    parts = ((env.get("sheet") or {}).get("when") or {}).get("parts_of_day") if not env.get("is_error") else None
+    if not parts:
+        return []
+    ctx, _w = EC.brain_ctx(lib, env, call, question, TODAY, earlier, last_window)
+    evs = [e for ev in ctx.sc("filt").values() for e in ev]
+    F = EC.Findings(env.get("rid") or "r", env.get("tool") or "?")
+    for k, row in enumerate(parts):
+        n = sum(1 for e in evs if e[1] in PARTS_HOURS.get(row.get("part"), ()))
+        F.add("sheet", "count", row.get("events") == n, row.get("events"), n, where=f"when.parts_of_day[{k}].events")
+        sh = round(n / len(evs), 3) if evs else 0.0
+        F.add("sheet", "share", abs(float(row.get("share") or 0) - sh) <= 0.0015, row.get("share"), sh,
+              where=f"when.parts_of_day[{k}].share")
+    return F.rows
 
 
 def run_conversation(h, p, audit=True):
@@ -963,7 +988,9 @@ def reaudit(a, h=None):
     set_file = set_file_of(a.run, getattr(a, "set_file", None))
     for f, rec in run_records(a.run):
         results = {c["rid"]: c["result"] for c in rec["calls"] if c.get("rid")}
-        bad, checked = audit_sent(h, results, h.turn(rec["message"]).unlock, rec, rec["message"])
+        # mvp25 toolgaps 5: the turn's own unlock as the record has it (a carried one too); older records: the message's
+        unlock = rec["unlock"] if "unlock" in rec else h.turn(rec["message"]).unlock
+        bad, checked = audit_sent(h, results, unlock, rec, rec["message"])
         rec["audit"] = {"checked": checked, "findings": bad}
         rec["g2"] = _g2_again(h, rec, chains, path=set_file)
         with open(f, "w", encoding="utf-8") as fh:
@@ -1002,14 +1029,14 @@ def dropped_of(rec):
     return out
 
 
-def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log=print, set_name="plans"):
+def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log=print, set_name="plans", check=None):
     """Every plan message of one conversation through the live brain, in order: the screen and the last window come
     from the brain's own last answer; every acceptable reading (the hand plan of brain_plans.jsonl, or the fresh set's
     readings) runs beside it on its own hand chain, which goes on from the preferred reading (G2 compares them)."""
     from mvp.brain import loop as BL
     from mvp.tests.fakes.fake_brain import FakeEngine, fake_learned
     screen = {"now": NOW_WORDS}
-    last = None
+    last, carry = None, None
     hscreen, hlast = "", None
     if p.get("before"):
         b = run_message(h, {"n": -1, "text": p["before"]["message"], "rounds": p["before"]["rounds"]}, audit=False)
@@ -1030,8 +1057,9 @@ def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log
             continue
         hand, readings, rwindows, rerrors = hand_readings(h, m, hscreen, hlast)
         hscreen, hlast = hand_chain_next(hand, set_name, hscreen, hlast)
-        t = h.turn(m["text"], screen="", last_window=last, search=FakeEngine(), learned=fake_learned)
-        rec = BL.run_turn(provider, t, m["text"], screen)
+        t = h.turn(m["text"], screen="", last_window=last, search=FakeEngine(), learned=fake_learned,
+                   carried_unlock=carry)
+        rec = BL.run_turn(provider, t, m["text"], screen, check=check)
         g2 = g2_of(readings, model_keys(rec))
         bad, checked = audit_sent(h, t.results, t.unlock, rec, m["text"])
         rec.update(id=p["id"], n=m["n"], key=f"{p['id']}.{m['n']}", set=set_name, half=half_of(p["id"], set_name),
@@ -1040,6 +1068,7 @@ def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log
                    audit={"checked": checked, "findings": bad}, dropped=dropped_of(rec))
         screen = BL.screen_after(rec, NOW_WORDS)
         last = BL.last_window(t, rec) or last
+        carry = BL.unlock_after(t, rec)
         if out_dir:
             with open(os.path.join(out_dir, f"{p['id']}.{m['n']}.json"), "w", encoding="utf-8") as f:
                 json.dump(rec, f, indent=1, default=str, ensure_ascii=False)
@@ -1065,6 +1094,7 @@ def summarize(recs, settings=None):
     start empty. Definitions are written into the summary itself."""
     done = [r for r in recs if not r.get("skipped")]
     n = len(done)
+    checks = sorted({r.get("check") or "full" for r in done})
     src = {}
     for r in done:
         src[r["lead_source"]] = src.get(r["lead_source"], 0) + 1
@@ -1088,6 +1118,8 @@ def summarize(recs, settings=None):
     s = {
         "messages": n, "skipped": [f"{r['id']}.{r['n']}" for r in recs if r.get("skipped")],
         "settings": settings or {},
+        # mvp24: the checker's mode of every record ("full" for a record written before the mode existed)
+        "check": (settings or {}).get("check") or (checks[0] if len(checks) == 1 else checks),
         "lead_source": src,
         "G2_understood": {"understood": g2.get("understood", 0), "other_plan": g2.get("other_plan", 0),
                           "differs": g2.get("differs", 0), "no_hand_plan": g2.get("no_hand_plan", 0),
@@ -1120,7 +1152,8 @@ def summarize(recs, settings=None):
                          "missing_first_pass": round(1 - first / written, 4) if written else None,
                          "missing_after_repair": round(1 - sent / written, 4) if written else None, "bar": 0.15},
         "G5_seconds": {"median": _pct(secs, 0.5), "p90": _pct(secs, 0.9), "max": max(secs) if secs else None,
-                       "bar_median": 6.0, "bar_p90": 10.0,
+                       # mvp25 toolgaps 9: the founder's bars, 8 s and 11 s (they were 6 and 10)
+                       "bar_median": 8.0, "bar_p90": 11.0,
                        "retries": sum(q.get("retries", 0) for q in req)},
         "G6_cost": {"mean_cents": round(100 * sum(costs) / n, 4) if n else None, "total_usd": round(sum(costs), 6),
                     "bar_mean_cents": 0.5},
@@ -1251,7 +1284,7 @@ def run_live(a):
     base = tempfile.mkdtemp(prefix="eval_brain_run_")
     h = Harness.scratch(base, keep_ledger=True)
     from mvp import llm
-    from mvp.brain import loop as BL, provider as P
+    from mvp.brain import loop as BL, provider as P, verify as V
     if os.path.abspath(llm.ai.LEDGER).startswith(os.path.abspath(base)) or \
             os.path.dirname(os.path.abspath(llm.ai.LEDGER)) != ledger_home:
         print(f"the ledger is not MVP_LEDGER_HOME's: {llm.ai.LEDGER}", file=sys.stderr)
@@ -1259,19 +1292,21 @@ def run_live(a):
     os.makedirs(a.out, exist_ok=True)
     rows_before = _ledger_rows(llm.ai.LEDGER)
     prov = P.AnthropicProvider(prompt_version=BL.PROMPT_VERSION, loose=tuple(x for x in a.loose.split(",") if x))
+    check = V.check_mode(getattr(a, "check", None)).name
     sets = run_set(a.half, set(x for x in a.ids.split(",") if x) or None, a.limit, set_name=a.set, path=set_path)
     h.audit_lib_for(None)
     recs = []
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=max(1, min(4, a.parallel))) as ex:
-        futs = [ex.submit(live_conversation, h, prov, p, c, a.out, a.max_usd, set_name=a.set) for p, c in sets]
+        futs = [ex.submit(live_conversation, h, prov, p, c, a.out, a.max_usd, set_name=a.set, check=check)
+                for p, c in sets]
         for f in futs:
             recs += f.result()
     settings = dict(prov.settings(), prompt_version=BL.PROMPT_VERSION, rounds=BL.ROUNDS, soft_s=BL.SOFT_S,
                     deep_s=BL.DEEP_S, hard_s=BL.HARD_S, parallel=a.parallel, half=a.half, set=a.set,
                     set_file=os.path.relpath(set_path, HERE),
                     tool_result_shape="rid, tool, meta and the sheet's keys at the top (loop.present)",
-                    max_usd=a.max_usd, spent_usd=round(prov.spent, 6), requests=prov.requests)
+                    max_usd=a.max_usd, spent_usd=round(prov.spent, 6), requests=prov.requests, check=check)
     s = summarize(recs, settings)
     rows_after = _ledger_rows(llm.ai.LEDGER)
     new = [r for r in rows_after[len(rows_before):] if r.get("purpose") == P.PURPOSE]
@@ -1280,7 +1315,7 @@ def run_live(a):
                    "matches_requests": len(new) == prov.requests}
     with open(os.path.join(a.out, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(s, f, indent=1, default=str, ensure_ascii=False)
-    short = {k: s[k] for k in ("messages", "lead_source", "repairs", "events", "dropped_reasons", "ledger")}
+    short = {k: s[k] for k in ("messages", "check", "lead_source", "repairs", "events", "dropped_reasons", "ledger")}
     for k in ("G2_understood", "G3_own_lead", "G4_sentences", "G5_seconds", "G6_cost"):
         short[k] = {x: y for x, y in s[k].items() if not isinstance(y, (dict, list))}
     short["auditor_hints"] = {k: s["auditor_hints"][k] for k in ("messages_with_hints", "hints")}
@@ -1511,6 +1546,7 @@ def fill_marks(run_dir, marks_path):
 
 
 def main(argv=None):
+    from mvp.brain import verify as V
     ap = argparse.ArgumentParser(prog="python3 -m mvp.eval_brain")
     sub = ap.add_subparsers(dest="mode", required=True)
     p1 = sub.add_parser("planted")
@@ -1531,6 +1567,9 @@ def main(argv=None):
     p4.add_argument("--parallel", type=int, default=2, help="conversations at once (at most 4)")
     p4.add_argument("--max-usd", type=float, default=1.50, help="no new message once the run spent this much")
     p4.add_argument("--loose", default="give_answer", help="tools sent without strict (comma separated)")
+    p4.add_argument("--check", default=None, choices=V.CHECK_MODES,
+                    help="the checker's mode (default: MVP_BRAIN_CHECK, else full); written into every record and the "
+                         "summary")
     p6 = sub.add_parser("audit", help="offline: the auditor's hints and G2 again over a saved run folder, "
                                       "summary.json rewritten")
     p6.add_argument("--run", required=True)

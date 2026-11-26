@@ -163,6 +163,58 @@ def _day_words(when):
     return f"{d.day} {I.MONTHS[d.month - 1].capitalize()} {d.year}" if d else None
 
 
+def _title(it):
+    t = (it or {}).get("title") if isinstance(it, dict) else None
+    return t.strip() if isinstance(t, str) and t.strip() else None
+
+
+def _tool_leads(res, lead, verb, noun, noun1, noun1_scoped):
+    """mvp25 toolgaps 8 (the 4 code leads of run1 read poor: N014.0 asked for the last cooking video and got the
+    all-time total, N008.0 asked month by month and got one total): a lead that follows the tool the model called.
+    first_last and items ordered newest or oldest: the item, by its title and day; timeline: the month (or year)
+    with the most and the one with the fewest; items or search: a plain lead, the cards go under it."""
+    rid, sheet, tool = res.rid, res.sheet, res.tool
+    out = []
+    items = [x for x in (sheet.get("items") or []) if isinstance(x, dict)]
+    order = (res.meta or {}).get("order")
+    it0 = items[0] if items else None
+    day = _day_words(it0.get("when")) if it0 else None
+    title = _title(it0)
+    if tool == "items" and title and day and order in ("newest", "oldest"):
+        which = "newest" if order == "newest" else "first"
+        out.append(f"{lead}the {which} {noun1_scoped} you {verb} was {title}[{rid}.items[0]], on "
+                   f"{day}[{rid}.items[0].when].")
+    f = sheet.get("filters") or {}
+    scoped = bool(_scope_clause(res) or f.get("without_shorts") or f.get("length") in ("long", "short")
+                  or f.get("topic"))
+    if tool == "timeline" and not scoped:   # a scoped timeline keeps the counts' templates, which say the scope
+        ps = [(k, p) for k, p in enumerate(sheet.get("periods") or []) if isinstance(p, dict)
+              and isinstance(p.get("items"), int) and p.get("label")]
+        if len(ps) >= 2:
+            hi = max(ps, key=lambda x: (x[1]["items"], -x[0]))
+            lo = min(ps, key=lambda x: (x[1]["items"], x[0]))
+            if hi[1]["items"] > lo[1]["items"]:
+                # the period with the most and the one with the fewest, each count beside its own period's words (the
+                # checker reads a window's dates beside a period's count as a number with no marker, so the window
+                # is said by its head words only: "This year", not "This year up to 30 October 2026")
+                w = _window_words(res)
+                head = w.split(" up to ")[0].strip() if " up to " in w else w
+                h = lead_in(head) if head else "In all, "
+                tot = (sheet.get("totals") or {}).get("items")
+                if isinstance(tot, int):
+                    out.append(f"{h}you {verb} {tot}[{rid}.totals.items] {_n(tot, noun1, noun)}: "
+                               f"{hi[1]['items']}[{rid}.periods[{hi[0]}].items] in {hi[1]['label']} and "
+                               f"{lo[1]['items']}[{rid}.periods[{lo[0]}].items] in {lo[1]['label']}.")
+                out.append(f"{h}you {verb} {hi[1]['items']}[{rid}.periods[{hi[0]}].items] "
+                           f"{_n(hi[1]['items'], noun1, noun)} in {hi[1]['label']} and "
+                           f"{lo[1]['items']}[{rid}.periods[{lo[0]}].items] in {lo[1]['label']}.")
+    if tool == "items" and items:
+        # the cards go under it (answer.build renders them from the rows)
+        out.append(f"{lead}here are some of the {noun} you {verb}." if lead else f"Here are some of the {noun} you "
+                   f"{verb}.")
+    return out
+
+
 def templates(res, prefer=None):
     """Marker-form leads for a result, most specific first (each is verified before use). `prefer`: the list the
     model's own lead cited (areas, themes, channels), tried first."""
@@ -184,6 +236,13 @@ def templates(res, prefer=None):
         it0 = (sheet.get("items") or [None])[0]
         day = _day_words(it0.get("when")) if isinstance(it0, dict) else None
         core = re.split(r"[(,]", w)[0].strip()
+        title = _title(it0)
+        if subj and day and title:
+            # mvp25 toolgaps 8: the item itself, by its title, beside its day
+            head = lead_in(core)
+            which = "first" if kind == "first" else "last"
+            out.append(f"{head}the {which} {subj} {noun1} you {verb} was {title}[{rid}.items[0]], on "
+                       f"{day}[{rid}.items[0].when].")
         if subj and day:
             an = "an" if subj[:1].lower() in "aeiou" else "a"
             head = lead_in(core)
@@ -198,6 +257,8 @@ def templates(res, prefer=None):
                  f"{f['topic']} {noun}" if isinstance(f.get("topic"), str) and f.get("topic") else noun)
         noun1_ = (f"long {noun1}" if long_ else
                   f"{f['topic']} {noun1}" if isinstance(f.get("topic"), str) and f.get("topic") else noun1)
+        # mvp25 toolgaps 8: the tool's own lead first (an item, a month), then the counts
+        out += _tool_leads(res, lead, verb, noun_, noun1_, noun1_)
         tot = (sheet.get("totals") or {}).get("items")
         total_line = (f"{lead}you {verb} {tot}[{rid}.totals.items] {_n(tot, noun1_, noun_)}."
                       if isinstance(tot, (int, float)) else None)
@@ -265,7 +326,7 @@ def code_lead(ledger, verdict=None, turn=None, cited=None):
         return {"lead": PLAIN, "how": "plain", "rid": None, "items": [], "private_line": False}
     items = [f"{res.rid}.items[{i}]" for i, it in enumerate(res.sheet.get("items") or [])
              if isinstance(it, dict)][:V.ITEMS_MAX] if not res.is_sheet or res.sheet.get("kind") in I.ITEM_KINDS \
-        else []
+        or res.tool == "items" else []   # mvp25 toolgaps 8: an items result's cards go under the code lead too
     hidden_above = bool(((res.meta or {}).get("hidden") or {}).get("rank_hidden_above"))
     if res.is_sheet:
         a = _from_code_form(res)
@@ -277,7 +338,9 @@ def code_lead(ledger, verdict=None, turn=None, cited=None):
                     "private_line": (hidden_above and bool(V._RANK.search(a) or V._LEAST.search(a))) or
                     (hidden_n > 0 and bool(re.search(r"\d|\b(?:led|most|top|biggest)\b", a)))}
     for t in templates(res, _preferred_list(verdict, res.rid)):
-        v = V.check_answer({"lead": t, "points": []}, ledger, turn or V.Turn())
+        # (mvp24: code's own template is checked with every rule, "full", whatever mode the model's answer was checked
+        # in: code words it, and B03.0 was a false code lead)
+        v = V.check_answer({"lead": t, "points": []}, ledger, turn or V.Turn(), mode="full")
         if v.lead_ok:
             return {"lead": " ".join(o.sent for o in v.lead), "how": "template", "rid": res.rid, "items": items,
                     "private_line": v.private_line, "marked": t}
@@ -304,7 +367,7 @@ _BACK_REF = re.compile(r"^\s*(?:that|this|it|its|they|their|these|those|he|she)\
                        r"\bas well\b|\btoo\b|\binstead\b", re.I)
 
 
-def _points_under(ledger, verdict, lead, turn):
+def _points_under(ledger, verdict, lead, turn, mode=None):
     """mvp20 fix (the recount's C04.0 and I02.0: points kept under the model's failed lead went out under a code lead
     they did not fit: "art and design came next" after a THEME, the code lead said again as a point): the model's
     kept points are checked again with the code lead in their lead's place (the template in marker form), and only
@@ -320,7 +383,7 @@ def _points_under(ledger, verdict, lead, turn):
         return []
     texts = [o.text for o in kept]
     if lead.get("marked"):
-        v = V.check_answer({"lead": lead["marked"], "points": texts}, ledger, turn or V.Turn())
+        v = V.check_answer({"lead": lead["marked"], "points": texts}, ledger, turn or V.Turn(), mode=mode)
         return [o.sent for o in v.outcomes if o.where == "point" and o.kept and o.sent and
                 "scope_waived" not in (o.notes or {})]
     out = []
@@ -336,17 +399,22 @@ def _points_under(ledger, verdict, lead, turn):
     return out
 
 
-def answer(ledger, verdict, turn=None):
-    """SPEC 4.5, row 3: the code lead with the points of the model's answer that passed (checked again under it)."""
+def answer(ledger, verdict, turn=None, mode=None):
+    """SPEC 4.5, row 3: the code lead with the points of the model's answer that passed (checked again under it).
+    mvp24, cells mode: a code lead never carries a model's points, and no model point is read again under a lead it
+    was not written for (the points are not re-checked under the code lead: there are none)."""
     if not isinstance(ledger, V.Ledger):
         ledger = V.Ledger(ledger)
+    cm = V.check_mode(mode)
     lead = code_lead(ledger, verdict, turn)
-    pts = _points_under(ledger, verdict, lead, turn) if verdict is not None and lead["how"] != "plain" else []
+    pts = _points_under(ledger, verdict, lead, turn, cm) if verdict is not None and lead["how"] != "plain" and \
+        not cm.cells else []
     if lead["how"] == "template" and not pts and lead.get("marked", "").endswith("here is what I counted."):
         # mvp20 fix (the recount's D04.1: "here is what I counted (Instagram only)." with nothing after it): a lead
         # that only says a count was made, with no point under it, says nothing: the plain line instead
         return {"lead": PLAIN, "how": "plain", "rid": lead["rid"], "items": [], "private_line": False, "points": []}
     # a kept point that ranks under a hidden topic needs the private line too
-    private = lead["private_line"] or bool(verdict is not None and lead["how"] != "plain" and any(
+    # (cells mode: no model point goes out under the code lead, so none asks for the line here)
+    private = lead["private_line"] or bool(not cm.cells and verdict is not None and lead["how"] != "plain" and any(
         o.kept and o.hidden_rank for o in verdict.outcomes if o.where == "point"))
     return dict(lead, points=pts, private_line=private)

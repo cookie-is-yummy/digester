@@ -9,7 +9,13 @@ lead (brain/fallback.answer): the lead, the points, then code's own lines:
 - the private line "Leaving out topics you keep private." whenever any verdict of the turn or the code lead asks for it
   (Verdict.private_line: any kept number of a result that left private items out; decision 4);
 - the offers, each label from a fixed template (code writes them; the model only picks the kind and a ref).
-No model text reaches them but the verified sentences. Chart, items and outside lines are not rendered in this slice.
+No model text reaches them but the verified sentences. Chart and outside lines are not rendered in this slice.
+
+mvp25 toolgaps 7 (N041.1, N044.1 and N049.0 named nothing: the item cards the model chose were not rendered): the
+cards go out as the channel shows them, a short list of item lines built by code from the cited rows (title, channel
+as a link to the item, the event and its day), never a model sentence; an ask-back goes out as code's question over
+the cards of the result it is about. Code's limit line (mvp25 toolgaps 2): the export's watch-time line when a cited
+result carries it, and, under a code lead only, what a refused call found the export does not hold.
 """
 from . import verify as V
 
@@ -21,6 +27,8 @@ OFFER_TEMPLATES = {"exclude": "Without {label}?", "only": "Only {label}?", "leng
                    "length_any": "Any length?", "window": "And {window}?", "by_month": "By month?",
                    "examples": "Show some examples?"}
 OFFERS_MAX = 2
+CARDS_MAX = 5
+ASK_LINE = "Which one do you mean?"
 
 
 def _cited_rid(verdict, code, ledger):
@@ -134,19 +142,90 @@ def _learned_point(ledger, text):
     return t or None
 
 
-def build(ledger, verdict=None, code=None, form=None, also=()):
+def _row(ledger, ref):
+    if not ref or "." not in ref:
+        return None
+    rid, rest = ref.split(".", 1)
+    r = ledger.get(rid)
+    if r is None:
+        return None
+    try:
+        row = V._resolve(r.sheet, rest)
+    except (KeyError, AttributeError, IndexError, TypeError):
+        return None
+    return row if isinstance(row, dict) else None
+
+
+def card(ledger, ref, links=None):
+    """One item line, built by code from the row a ref names: "Title · [Channel](link) · saved on 5 October 2026"."""
+    from datetime import date
+    from .. import history as Hm
+    row = _row(ledger, ref)
+    title = (row or {}).get("title")
+    if not isinstance(title, str) or not title.strip() or not str(ref).split(".", 1)[1].startswith("items["):
+        return None
+    day = None
+    try:
+        day = Hm.day_words(date.fromisoformat(str(row.get("when") or "")[:10]))
+    except ValueError:
+        pass
+    ev = row.get("how") if isinstance(row.get("how"), str) else None
+    when = f"{ev} on {day}" if ev and day else f"on {day}" if day else ""
+    ch = row.get("channel") if isinstance(row.get("channel"), str) else None
+    url = links(row.get("item_id")) if (links and row.get("item_id")) else None
+    chs = f"[{ch}]({url})" if ch and url else (ch or "")
+    line = " · ".join(x for x in (title.strip(), chs, when) if x)
+    return {"ref": ref, "title": title.strip(), "channel": ch, "url": url, "event": ev, "when": row.get("when"),
+            "line": line}
+
+
+def _cards(ledger, refs, links=None):
+    out = []
+    for ref in refs:
+        c = card(ledger, ref, links)
+        if c and all(x["ref"] != c["ref"] for x in out):
+            out.append(c)
+        if len(out) >= CARDS_MAX:
+            break
+    return out
+
+
+def _result_items(ledger, rid):
+    r = ledger.get(rid) if rid else None
+    rows = (r.sheet.get("items") or []) if r is not None and isinstance(r.sheet, dict) else []
+    return [f"{rid}.items[{k}]" for k, x in enumerate(rows) if isinstance(x, dict)]
+
+
+def limit_lines(ledger, rid, code=None, limits=()):
+    """Code's own limit lines: the watch-time line of a cited result (the prompt leaves it to code), and under a code
+    lead what the turn's refused calls found the export does not hold (`limits`, tools.Turn.limits)."""
+    from . import tools as TL
+    out = []
+    res = ledger.get(rid) if rid else None
+    if res is not None and TL.WATCH_TIME_LINE in ((res.meta or {}).get("notes") or []):
+        out.append(TL.WATCH_TIME_LINE)
+    if code is not None and code.get("how") != "plain":
+        out += [x for x in limits if isinstance(x, str) and x not in out]
+    return out
+
+
+def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=None, limits=()):
     """The answer that goes out. `verdict`: the verdict whose sentences are sent (the model's), or None when `code`
-    (fallback.answer's dict) is sent; `also`: every verdict of the turn (the private line is OR'd over them all).
-    -> {lead, points, scope_line, private_line, offers, text, rid, filtered}."""
+    (fallback.answer's dict) is sent; `also`: every verdict of the turn (the private line is OR'd over them all);
+    `mode`: the checker's mode (mvp24: in "cells" a code lead goes out with no point of the model's).
+    `links`: item id -> its link (the cards' channel link); `limits`: the turn's limit lines (tools.Turn.limits).
+    -> {lead, points, scope_line, private_line, offers, text, rid, filtered, cards, ask, limits}."""
     if not isinstance(ledger, V.Ledger):
         ledger = V.Ledger(ledger)
+    cells = V.check_mode(mode).cells
     if verdict is not None:
         lead = " ".join(o.sent for o in verdict.lead if o.kept and o.sent)
         points = [s for s in (o.sent or _learned_point(ledger, o.text) for o in verdict.outcomes
                               if o.where == "point" and o.kept) if s]
     else:
         lead = (code or {}).get("lead") or ""
-        points = list((code or {}).get("points") or [])
+        # (mvp24, cells mode: the model's points were written for its own lead; under code's lead none goes out)
+        points = [] if cells else list((code or {}).get("points") or [])
     private = bool(verdict is not None and verdict.private_line) or bool((code or {}).get("private_line")) or any(
         v.private_line for v in also if v is not None)
     rid = _cited_rid(verdict, code, ledger)
@@ -157,8 +236,21 @@ def build(ledger, verdict=None, code=None, form=None, also=()):
     sline = scope_line(res) if filt and not plain else None
     # (mvp20 fix: a code lead keeps the offers the model picked; code writes every label)
     offers = offers_of(form, ledger) if (verdict is not None or code) else []
+    # mvp25 toolgaps 7: the item cards (the model's picks, or the code lead's items) and an ask-back over them
+    if verdict is not None:
+        refs = [it.get("ref") for it in (verdict.items or []) if isinstance(it, dict) and it.get("kept")]
+    else:
+        refs = list((code or {}).get("items") or []) if not plain else []
+    ask = bool((form or {}).get("ask_back")) and (verdict is not None or not plain)
+    if ask and not refs:
+        refs = _result_items(ledger, rid)
+    cards = _cards(ledger, refs, links)
+    lim = limit_lines(ledger, rid, code if verdict is None else None, limits) if not plain else []
     lines = [lead] if lead else []
     lines += ["- " + p for p in points]
+    lines += lim
+    if cards:
+        lines += ([ASK_LINE] if ask else []) + ["• " + c["line"] for c in cards]
     tail = [x for x in (sline, PRIVATE_LINE if private else None) if x]
     text = "\n".join(lines)
     if tail:
@@ -166,4 +258,4 @@ def build(ledger, verdict=None, code=None, form=None, also=()):
     if offers:
         text += "\n\n" + " · ".join(o["label"] for o in offers)
     return {"lead": lead, "points": points, "scope_line": sline, "private_line": private, "offers": offers,
-            "text": text, "rid": rid, "filtered": filt}
+            "text": text, "rid": rid, "filtered": filt, "cards": cards, "ask": bool(ask and cards), "limits": lim}

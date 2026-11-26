@@ -33,8 +33,13 @@ PROMPT_VERSION = os.environ.get("MVP_BRAIN_PROMPT", "brain_v3")   # mvp20 fix: v
 PROMPT_PATH = os.path.join(os.path.dirname(HERE), "prompts", f"{PROMPT_VERSION}.md")
 GIVE_ANSWER = "give_answer"
 ROUNDS = int(os.environ.get("MVP_BRAIN_ROUNDS", "3"))
-SOFT_S = float(os.environ.get("MVP_BRAIN_SOFT_S", "6"))
-DEEP_S = float(os.environ.get("MVP_BRAIN_DEEP_S", "12"))
+# mvp25 toolgaps 9: the speed bars are now 8 s at the median and 11 s at the slow end (they were 6 and 10). A read round
+# that starts at the soft deadline still needs the answer request after it (4.2 s at the median in mvp24's run1), so
+# the soft deadline is the slow-end bar less that: 11 - 4.2, about 7 (it was 6, the old median bar; 3 turns of run1
+# were refused at 6.2 to 6.7 s). A deep round (a third round, or after `learned`) is refused past the slow-end bar
+# itself, 11 (it was 12). The hard stop stays at 15: it is a stop, not a bar.
+SOFT_S = float(os.environ.get("MVP_BRAIN_SOFT_S", "7"))
+DEEP_S = float(os.environ.get("MVP_BRAIN_DEEP_S", "11"))
 HARD_S = float(os.environ.get("MVP_BRAIN_HARD_S", "15"))
 CALLS_MAX = 12
 TIME_UP = "Time is up for this question. Call give_answer now with the results you already have."
@@ -104,9 +109,11 @@ def verdict_json(v):
 
 
 def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, rounds=ROUNDS, soft_s=SOFT_S,
-             deep_s=DEEP_S, hard_s=HARD_S, system=None, tools=None):
+             deep_s=DEEP_S, hard_s=HARD_S, system=None, tools=None, check=None):
     """One message through the brain. `turn`: a tools.Turn for this message (its search / learned backends set);
-    `screen`: the code-written screen (a dict). -> the turn record (see the module docstring and eval_brain run)."""
+    `screen`: the code-written screen (a dict); `check`: the checker's mode ("full", "cells"; None: MVP_BRAIN_CHECK,
+    else "full"), resolved once for the whole turn. -> the turn record (see the module docstring and eval_brain run)."""
+    cm = V.check_mode(check)
     message = turn.message if message is None else message
     screen = screen or {}
     if not turn.screen:
@@ -115,7 +122,10 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
     tools = tools if tools is not None else tool_list()
     t0 = now()
     rec = {"message": message, "screen": screen, "calls": [], "forms": [], "verdicts": [], "repair_message": None,
-           "requests": [], "events": [], "lead_source": None, "error": None, "answer": None}
+           "requests": [], "events": [], "lead_source": None, "error": None, "answer": None, "check": cm.name,
+           # mvp25 toolgaps 5: the topic this turn unlocked (code's, from their message or carried from the answer
+           # before), so an offline re-read of the record reads the same rows
+           "unlock": turn.unlock, "unlock_carried": bool(turn.carried_unlock and turn.unlock == turn.carried_unlock)}
     messages = [{"role": "user", "content": user_text(message, screen)}]
     vturn = V.Turn.of(turn)
     tool_rounds, calls_made, deep = 0, 0, False
@@ -168,7 +178,7 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
             if ga:
                 form = _take_form(ga[0], rec)
                 forms.append(form)
-                v = V.check_answer(form, turn.results, vturn)
+                v = V.check_answer(form, turn.results, vturn, mode=cm)
                 verdicts.append(v)
             else:
                 rec["events"].append("repair_without_answer")
@@ -176,7 +186,7 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
         if ga and not reads:
             form = _take_form(ga[0], rec)
             forms.append(form)
-            v = V.check_answer(form, turn.results, vturn)
+            v = V.check_answer(form, turn.results, vturn, mode=cm)
             verdicts.append(v)
             if not v.repair:
                 break
@@ -225,7 +235,7 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
     rec["forms"] = forms
     rec["verdicts"] = [verdict_json(v) for v in verdicts]
     rec["rounds"] = tool_rounds
-    _finish(rec, turn, vturn, verdicts)
+    _finish(rec, turn, vturn, verdicts, cm)
     rec["seconds"] = round(elapsed(), 2)
     rec["tokens"] = {k: sum(q["usage"].get(k, 0) for q in rec["requests"])
                      for k in ("input_tokens", "output_tokens", "cache_read_input_tokens",
@@ -293,8 +303,9 @@ def _ordered(uses, results):
     return [by[u["id"]] for u in uses if u["id"] in by]
 
 
-def _finish(rec, turn, vturn, verdicts):
+def _finish(rec, turn, vturn, verdicts, cm=None):
     """Which answer goes out, and its sentence counts."""
+    cm = cm or V.FULL
     ledger = V.Ledger(turn.results)
     v1 = verdicts[0] if verdicts else None
     v2 = verdicts[1] if len(verdicts) > 1 else None
@@ -307,7 +318,7 @@ def _finish(rec, turn, vturn, verdicts):
         sent_v, source = v1, "model"          # the repair (for the points) failed; the first lead stands
     if sent_v is None:
         base_v = v2 or v1
-        code = FB.answer(ledger, base_v, vturn)
+        code = FB.answer(ledger, base_v, vturn, mode=cm)
         source = "plain" if code["how"] == "plain" else "code"
     form = None
     if sent_v is not None:
@@ -316,7 +327,8 @@ def _finish(rec, turn, vturn, verdicts):
             verdicts.index(base_v) < len(rec["forms"]):
         # mvp20 fix: the offers the model picked go out under a code lead too (their labels are code's)
         form = rec["forms"][verdicts.index(base_v)]
-    out = A.build(ledger, verdict=sent_v, code=code, form=form, also=[v for v in verdicts if v is not None])
+    out = A.build(ledger, verdict=sent_v, code=code, form=form, also=[v for v in verdicts if v is not None], mode=cm,
+                  links=_links(turn), limits=list(getattr(turn, "limits", None) or []))
     rec["answer"] = out
     rec["lead_source"] = source
     rec["code_lead"] = code
@@ -328,6 +340,15 @@ def _finish(rec, turn, vturn, verdicts):
     else:
         final = len(code["points"]) if code else 0
     rec["sentences"] = {"written": written, "kept_first_pass": first_kept, "kept_sent": min(final, written)}
+
+
+def _links(turn):
+    """item id -> its link, from the library the tools read (the cards' channel link; mvp25 toolgaps 7)."""
+    lib = getattr(turn, "_lib", None)
+    view = getattr(lib, "view", None)
+    if view is None:
+        return None
+    return lambda iid: getattr(view.items.get(iid), "url", None)
 
 
 def screen_after(rec, now_words=None):
@@ -346,6 +367,24 @@ def screen_after(rec, now_words=None):
     if now_words:
         out["now"] = now_words
     return out
+
+
+def unlock_after(turn, rec):
+    """mvp25 toolgaps 5: the topic to carry into the next message: the one this turn unlocked, when one of its results
+    resolved a name to it (meta.resolved, or a find row's match); else None. Code's, never the model's: the next Turn
+    takes it as `carried_unlock`, and it never goes on the screen the model reads."""
+    if not turn.unlock:
+        return None
+    for c in rec.get("calls") or []:
+        env = c.get("result") or {}
+        if env.get("is_error"):
+            continue
+        if any(str(v).startswith("topic:") for v in ((env.get("meta") or {}).get("resolved") or {}).values()):
+            return turn.unlock
+        for row in (env.get("sheet") or {}).get("names") or []:
+            if any(str((m or {}).get("ref", "")).startswith("topic:") for m in row.get("matches") or []):
+                return turn.unlock
+    return None
 
 
 def last_window(turn, rec):

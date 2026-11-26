@@ -272,7 +272,9 @@ def test_a_first_names_the_items_day_and_its_subject(brain):
     dropped(t, vt, f"In all your history, you opened {len(all_wc)}[r1.totals.items] videos.", "filter_dropped")
     kept(t, vt, f"In all your history, you opened {len(all_wc)}[r1.totals.items] watercolor videos.")
     lead = code_lead(t, vt, "template", [])
-    assert lead == f"In all your history, you first opened a watercolor video on {day_words(d)}."
+    # mvp25 toolgaps 8: the code lead of a first_last names the item itself, by its title, beside its day
+    title = r["sheet"]["items"][0]["title"]
+    assert lead == f"In all your history, the first watercolor video you opened was {title}, on {day_words(d)}."
 
 
 # ================================================================ 10. a day, its items
@@ -355,7 +357,8 @@ def test_search_rows_take_the_kind_searched_from_the_sheet(brain):
     r, t, vt = ask(brain, "search", {"query": "cooking hack", "how": "opened"}, "cooking hack videos i watched",
                    search=fake_search())
     rows = r["sheet"]["items"]
-    assert rows and all("how" not in x for x in rows) and r["sheet"]["how"] == "opened"
+    # mvp25 toolgaps 4: a search row says its own event now (`how`, of the kinds searched); the sheet keeps its own
+    assert rows and all(x["how"] == "opened" for x in rows) and r["sheet"]["how"] == "opened"
     # "the one you saved" of a row that was only opened
     k = next(i for i, x in enumerate(rows) if x["item_id"] == "rx_love")
     # (step 1's close: the verb rule of every result says it first, as the base)

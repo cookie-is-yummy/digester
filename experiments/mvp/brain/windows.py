@@ -61,13 +61,21 @@ def read_words(words, today, message="", screen="", scheduled=False):
         raise WindowError(NOT_THEIRS)
     t = Hm.normal(words or "")
     t = " ".join(LATELY.sub("lately", t).split())
+    part = PART_SAID.match(t.strip(" .!?"))
+    if part:
+        # mvp25 toolgaps 1 (N063.0 "late October", N064.0 "mid 2023" were refused): early, mid and late of a month, a
+        # year or a season, read by the convention of DESIGN 25 (part_of)
+        return part_of(part.group(1), part.group(2), words, today)
     if PART_OF.search(t):
         # step 1 fix (the tools audit: "early october", "late october", "the first week of october" were read as all
         # of October and said "October 2026"): history.py has no reader for a part of a period, so code refuses
-        # rather than count a window the words did not name
+        # rather than count a window the words did not name (mvp25: only what part_of cannot read is left here)
         raise WindowError(PART_NOT_READ.format(w=words))
     if t.strip(" .!?") in ALL_WORDS:
         return Hm.Window()
+    s = season(t.strip(" .!?"), today)
+    if s is not None:
+        return s
     found = [w for w, _span in Hm.find_windows(t, today) if isinstance(w, Hm.Window)]
     if not found:
         found = [w for w, _span in Hm.season_windows(t, today)]
@@ -76,6 +84,89 @@ def read_words(words, today, message="", screen="", scheduled=False):
     if len(found) > 1:
         raise WindowError(TWO_WINDOWS.format(w=words))
     return found[0]
+
+
+# ================================================================ mvp25 toolgaps 1: seasons and parts of a period
+# The convention (DESIGN 25.1), one rule each, the same in every message:
+# - a season said alone ("the summer", "over the summer") is "this <season>";
+# - "this <season>" is the latest one that has begun (history.season_windows: in November 2026, the summer of 2026);
+# - "last <season>" is always the one a year before "this <season>" (in November 2026, the summer of 2025), as "last
+#   year" is the year before this one. Said alone in November it reads as 2025: the result's dates say which.
+# - early / mid / late of a month: days 1 to 10, 11 to 20, 21 to its end; of a year: January to April, May to August,
+#   September to December; of a season: its first, middle and last month. "The start of" / "the beginning of" are
+#   early, "the end of" is late; "the first half of" / "the second half of" a month are days 1 to 15 and 16 to its end,
+#   of a year January to June and July to December. Anything else ("the first week of March") is still refused.
+_SEASON_RX = r"(spring|summer|fall|autumn|winter)"
+_BARE_SEASON = re.compile(r"^(?:(?:in|during|over|for|of|across)\s+)?(?:the\s+)?(?:(this|last|past|previous)\s+)?"
+                          + _SEASON_RX + r"$")
+PART_SAID = re.compile(r"^(?:(?:in|during|over|for|at|around|from)\s+)?(?:the\s+)?(early|mid|middle\s+of|late|"
+                       r"start\s+of|beginning\s+of|end\s+of|first\s+half\s+of|second\s+half\s+of)(?:\s+|-)"
+                       r"(?:the\s+)?(?!week|weekend|days?|fortnight|month|year)(.+)$")
+PART_WORD = {"early": "early", "start of": "early", "beginning of": "early", "mid": "mid", "middle of": "mid",
+             "late": "late", "end of": "late", "first half of": "first half", "second half of": "second half"}
+
+
+def _this_season(name, today):
+    got = [w for w, _s in Hm.season_windows(f"this {name}", today)]
+    return got[0] if got else None
+
+
+def season(t, today):
+    """A season said alone, "this", "last" (or "past", "previous") season, by the convention above; None for other
+    words (a season with its year, "the summer of 2023", is history's own reader)."""
+    m = _BARE_SEASON.match(t)
+    if not m:
+        return None
+    rel, name = m.group(1), m.group(2)
+    this = _this_season(name, today)
+    if this is None:
+        return None
+    if rel in (None, "this"):
+        return this
+    y = this.start.year - 1
+    got = [w for w, _s in Hm.season_windows(f"the {name} of {y}", today)]
+    return got[0] if got else None
+
+
+def _month_end(y, m):
+    from datetime import date, timedelta
+    return date(y + (m == 12), m % 12 + 1, 1) - timedelta(days=1)
+
+
+def part_of(part, rest, words, today):
+    """The part of the period `rest` names (a month, a year or a season), as a range said with its own label."""
+    from datetime import date
+    part = PART_WORD[" ".join(part.split())]
+    try:
+        w = read_words(rest, today, scheduled=True)
+    except WindowError:
+        raise WindowError(PART_NOT_READ.format(w=words)) from None
+    s = w.start
+    if s is None:
+        raise WindowError(PART_NOT_READ.format(w=words))
+    if w.kind == "month":
+        end = _month_end(s.year, s.month)
+        mon = Hm.MONTH_EN[s.month - 1]
+        cuts = {"early": (1, 10), "mid": (11, 20), "late": (21, end.day), "first half": (1, 15),
+                "second half": (16, end.day)}
+        a, b = cuts[part]
+        start, stop = date(s.year, s.month, a), date(s.year, s.month, b)
+        label = f"the {part} of {mon} {s.year}" if "half" in part else f"{part} {mon} {s.year}"
+    elif w.kind == "year":
+        cuts = {"early": (1, 4), "mid": (5, 8), "late": (9, 12), "first half": (1, 6), "second half": (7, 12)}
+        a, b = cuts[part]
+        start, stop = date(s.year, a, 1), _month_end(s.year, b)
+        label = f"the {part} of {s.year}" if "half" in part else f"{part} {s.year}"
+    elif w.kind == "range" and (w.label or "").startswith("the ") and part in ("early", "mid", "late"):
+        k = {"early": 0, "mid": 1, "late": 2}[part]
+        y, mo = s.year + (s.month + k - 1) // 12, (s.month + k - 1) % 12 + 1
+        start, stop = date(y, mo, 1), _month_end(y, mo)
+        label = f"{part} {w.label[4:]}"   # "late summer of 2026", "early winter of 2025 to 2026"
+    else:
+        raise WindowError(PART_NOT_READ.format(w=words))
+    if start > today:
+        raise WindowError(f"'{words}' has not begun yet: use a period that has.")
+    return Hm.Window(kind="range", start=start, end=min(stop, today), label=label)
 
 
 def resolve(arg, today, message="", screen="", scheduled=False, earlier=None, last=None):

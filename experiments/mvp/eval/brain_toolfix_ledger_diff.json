@@ -7,6 +7,29 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2024-01-01",
+    "end": "2024-12-31",
+    "days": 366,
+    "said": "1 January to 31 December 2024"
+   }
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -24,7 +47,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -44,7 +84,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-03",
+    "end": "2026-10-30",
+    "days": 28,
+    "said": "3 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -70,7 +127,24 @@
    "list_len",
    "[0].meta.notes",
    2,
-   3
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[1]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-09-18",
+    "end": "2026-10-15",
+    "days": 28,
+    "said": "18 September to 15 October 2026"
+   }
   ],
   [
    "added",
@@ -108,7 +182,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-01-01",
+    "end": "2026-10-30",
+    "days": 303,
+    "said": "1 January to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -131,6 +222,29 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -148,7 +262,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -174,7 +305,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -190,6 +338,29 @@
   ]
  ],
  "attack_area_saved_lately": [
+  [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-03",
+    "end": "2026-10-30",
+    "days": 28,
+    "said": "3 to 30 October 2026"
+   }
+  ],
   [
    "added",
    "[0].sheet.channels[1].handle",
@@ -217,6 +388,29 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2024-01-01",
+    "end": "2024-12-31",
+    "days": 366,
+    "said": "1 January to 31 December 2024"
+   }
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -234,7 +428,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -260,7 +471,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -280,7 +508,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -293,6 +538,29 @@
    "[1].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[1].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[1].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[1].meta.window_dates",
+   null,
+   {
+    "start": "2024-01-01",
+    "end": "2024-12-31",
+    "days": 366,
+    "said": "1 January to 31 December 2024"
+   }
   ],
   [
    "added",
@@ -312,7 +580,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -330,7 +615,24 @@
    "list_len",
    "[1].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[1].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[1].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -356,7 +658,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -369,6 +688,29 @@
    "[1].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[1].meta.notes",
+   4,
+   5
+  ],
+  [
+   "changed",
+   "[1].meta.notes[3]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[1].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-24",
+    "end": "2026-10-30",
+    "days": 7,
+    "said": "24 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -394,7 +736,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -412,13 +771,30 @@
    "list_len",
    "[1].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[1].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
   ],
   [
    "changed",
    "[1].meta.truncated",
    false,
    true
+  ],
+  [
+   "added",
+   "[1].meta.window_dates",
+   null,
+   {
+    "start": "2026-01-01",
+    "end": "2026-10-30",
+    "days": 303,
+    "said": "1 January to 30 October 2026"
+   }
   ],
   [
    "list_len",
@@ -468,7 +844,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -486,7 +879,24 @@
    "list_len",
    "[1].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[1].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[1].meta.window_dates",
+   null,
+   {
+    "start": "2026-01-01",
+    "end": "2026-10-30",
+    "days": 303,
+    "said": "1 January to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -509,6 +919,29 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -521,6 +954,29 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   4,
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[3]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-24",
+    "end": "2026-10-30",
+    "days": 7,
+    "said": "24 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -546,7 +1002,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-01-01",
+    "end": "2026-10-30",
+    "days": 303,
+    "said": "1 January to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -572,7 +1045,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-01-01",
+    "end": "2026-10-30",
+    "days": 303,
+    "said": "1 January to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -608,6 +1098,17 @@
   ],
   [
    "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-01",
+    "end": "2026-10-30",
+    "days": 2129,
+    "said": "1 January 2021 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
@@ -621,10 +1122,38 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   4,
+   5
+  ],
+  [
    "added",
    "[0].meta.same_days",
    null,
    true
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2023-01-01",
+    "end": "2023-12-31",
+    "days": 365,
+    "said": "1 January to 31 December 2023"
+   }
+  ],
+  [
+   "added",
+   "[0].meta.window_dates_b",
+   null,
+   {
+    "start": "2022-01-01",
+    "end": "2022-12-31",
+    "days": 365,
+    "said": "1 January to 31 December 2022"
+   }
   ],
   [
    "added",
@@ -642,6 +1171,18 @@
      "days": 365
     }
    }
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[0].first_watched",
+   null,
+   "2023-06-03"
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[1].first_watched",
+   null,
+   "2023-06-05"
   ],
   [
    "added",
@@ -683,6 +1224,28 @@
   ],
   [
    "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-09-01",
+    "end": "2026-10-30",
+    "days": 60,
+    "said": "1 September to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].meta.window_dates_b",
+   null,
+   {
+    "start": "2025-09-01",
+    "end": "2025-11-30",
+    "days": 91,
+    "said": "1 September to 30 November 2025"
+   }
+  ],
+  [
+   "added",
    "[0].meta.windows",
    null,
    {
@@ -719,6 +1282,47 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with the date: a saved item was not opened that day."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -733,6 +1337,47 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with the date: a saved item was not opened that day."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -743,6 +1388,29 @@
    "[1].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[1].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[1].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[1].meta.window_dates",
+   null,
+   {
+    "start": "2024-01-01",
+    "end": "2024-12-31",
+    "days": 366,
+    "said": "1 January to 31 December 2024"
+   }
   ],
   [
    "added",
@@ -759,10 +1427,39 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with the date: a saved item was not opened that day."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-30",
+    "end": "2026-10-30",
+    "days": 1,
+    "said": "30 October 2026"
+   }
+  ],
+  [
    "changed",
    "[0].sheet.items[0].channel",
    "Pixel Pencil",
    "Pan Theory"
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
   ],
   [
    "changed",
@@ -787,6 +1484,12 @@
    "[0].sheet.items[1].channel",
    "Clip Factory",
    "Pixel Pencil"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
   ],
   [
    "changed",
@@ -819,6 +1522,12 @@
    "Clip Factory"
   ],
   [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
    "changed",
    "[0].sheet.items[2].item_id",
    "rday2",
@@ -849,6 +1558,12 @@
    "Pixel Pencil"
   ],
   [
+   "added",
+   "[0].sheet.items[3].how",
+   null,
+   "opened"
+  ],
+  [
    "changed",
    "[0].sheet.items[3].item_id",
    "rday4",
@@ -875,10 +1590,33 @@
  ],
  "attack_items_oct_saved": [
   [
+   "list_len",
+   "[0].meta.notes",
+   2,
+   3
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
    "added",
    "[0].sheet.items[0].handle",
    null,
    "noodle.nights"
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "saved"
   ],
   [
    "added",
@@ -888,9 +1626,39 @@
   ],
   [
    "added",
+   "[0].sheet.items[1].how",
+   null,
+   "saved"
+  ],
+  [
+   "added",
    "[0].sheet.items[2].handle",
    null,
    "crumb.lab"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "saved"
+  ],
+  [
+   "added",
+   "[0].sheet.items[3].how",
+   null,
+   "saved"
+  ],
+  [
+   "added",
+   "[0].sheet.items[4].how",
+   null,
+   "saved"
+  ],
+  [
+   "added",
+   "[0].sheet.items[5].how",
+   null,
+   "saved"
   ]
  ],
  "attack_items_pt_oldest": [
@@ -899,6 +1667,41 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   2,
+   3
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
   ]
  ],
  "attack_last_wc": [
@@ -912,7 +1715,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with the date: a saved item was not opened that day."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -922,15 +1742,33 @@
   ],
   [
    "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
    "[0].sheet.items[1].handle",
    null,
    "wetpaper.ig"
   ],
   [
    "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
    "[0].sheet.items[2].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
   ],
   [
    "added",
@@ -945,6 +1783,60 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-24",
+    "end": "2026-10-30",
+    "days": 7,
+    "said": "24 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.when.parts_of_day",
+   null,
+   [
+    {
+     "part": "morning",
+     "events": 1,
+     "share": 0.0417,
+     "ref": "r1.when.parts_of_day[0]"
+    },
+    {
+     "part": "afternoon",
+     "events": 7,
+     "share": 0.2917,
+     "ref": "r1.when.parts_of_day[1]"
+    },
+    {
+     "part": "evening",
+     "events": 15,
+     "share": 0.625,
+     "ref": "r1.when.parts_of_day[2]"
+    },
+    {
+     "part": "night",
+     "events": 1,
+     "share": 0.0417,
+     "ref": "r1.when.parts_of_day[3]"
+    }
+   ]
   ]
  ],
  "attack_theme_90": [
@@ -958,7 +1850,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-08-02",
+    "end": "2026-10-30",
+    "days": 90,
+    "said": "2 August to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -981,10 +1890,27 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   4,
+   5
+  ],
+  [
    "added",
    "[0].meta.rows_of.periods",
    null,
    2
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-01-01",
+    "end": "2026-10-30",
+    "days": 303,
+    "said": "1 January to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -997,6 +1923,37 @@
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.parts_of_day",
+   null,
+   [
+    {
+     "part": "morning",
+     "events": 0,
+     "share": 0.0,
+     "ref": "r1.when.parts_of_day[0]"
+    },
+    {
+     "part": "afternoon",
+     "events": 3,
+     "share": 0.3,
+     "ref": "r1.when.parts_of_day[1]"
+    },
+    {
+     "part": "evening",
+     "events": 7,
+     "share": 0.7,
+     "ref": "r1.when.parts_of_day[2]"
+    },
+    {
+     "part": "night",
+     "events": 0,
+     "share": 0.0,
+     "ref": "r1.when.parts_of_day[3]"
+    }
+   ]
   ]
  ],
  "attack_tl_year": [
@@ -1010,13 +1967,24 @@
    "list_len",
    "[0].meta.notes",
    4,
-   5
+   6
   ],
   [
    "added",
    "[0].meta.rows_of.periods",
    null,
    6
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
   ],
   [
    "removed",
@@ -1041,12 +2009,6 @@
    "[0].sheet.areas[3].themes",
    [],
    null
-  ],
-  [
-   "list_len",
-   "[0].sheet.channels",
-   9,
-   10
   ],
   [
    "removed",
@@ -1173,6 +2135,37 @@
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.parts_of_day",
+   null,
+   [
+    {
+     "part": "morning",
+     "events": 5,
+     "share": 0.0069,
+     "ref": "r1.when.parts_of_day[0]"
+    },
+    {
+     "part": "afternoon",
+     "events": 219,
+     "share": 0.3029,
+     "ref": "r1.when.parts_of_day[1]"
+    },
+    {
+     "part": "evening",
+     "events": 498,
+     "share": 0.6888,
+     "ref": "r1.when.parts_of_day[2]"
+    },
+    {
+     "part": "night",
+     "events": 1,
+     "share": 0.0014,
+     "ref": "r1.when.parts_of_day[3]"
+    }
+   ]
   ]
  ],
  "audit_area": [
@@ -1186,7 +2179,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-03",
+    "end": "2026-10-30",
+    "days": 28,
+    "said": "3 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -1218,13 +2228,36 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   6
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-03",
+    "end": "2026-10-30",
+    "days": 28,
+    "said": "3 to 30 October 2026"
+   }
   ],
   [
    "added",
    "[0].sheet.channels[1].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[0].first_watched",
+   null,
+   "2025-01-10"
   ],
   [
    "added",
@@ -1250,7 +2283,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -1292,6 +2342,17 @@
   ],
   [
    "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-03",
+    "end": "2026-10-30",
+    "days": 28,
+    "said": "3 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
@@ -1315,6 +2376,28 @@
    "[0].meta.same_days",
    null,
    true
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].meta.window_dates_b",
+   null,
+   {
+    "start": "2026-09-01",
+    "end": "2026-09-30",
+    "days": 30,
+    "said": "1 to 30 September 2026"
+   }
   ],
   [
    "added",
@@ -1357,7 +2440,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   6
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -1366,10 +2466,47 @@
    0
   ],
   [
+   "list_len",
+   "[0].sheet.themes",
+   6,
+   5
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.parts_of_day",
+   null,
+   [
+    {
+     "part": "morning",
+     "events": 5,
+     "share": 0.0352,
+     "ref": "r1.when.parts_of_day[0]"
+    },
+    {
+     "part": "afternoon",
+     "events": 41,
+     "share": 0.2887,
+     "ref": "r1.when.parts_of_day[1]"
+    },
+    {
+     "part": "evening",
+     "events": 95,
+     "share": 0.669,
+     "ref": "r1.when.parts_of_day[2]"
+    },
+    {
+     "part": "night",
+     "events": 1,
+     "share": 0.007,
+     "ref": "r1.when.parts_of_day[3]"
+    }
+   ]
   ]
  ],
  "audit_fri": [
@@ -1383,7 +2520,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -1409,13 +2563,48 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with the date: a saved item was not opened that day."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
   ],
   [
    "added",
    "[0].sheet.channels[1].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
   ],
   [
    "added",
@@ -1429,7 +2618,24 @@
    "list_len",
    "[0].meta.notes",
    2,
-   3
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[1]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-15",
+    "days": 15,
+    "said": "1 to 15 October 2026"
+   }
   ],
   [
    "added",
@@ -1462,6 +2668,59 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   2,
+   4
+  ],
+  [
+   "added",
+   "[0].meta.tie",
+   null,
+   "all"
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[3].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[4].how",
+   null,
+   "opened"
   ]
  ],
  "audit_least": [
@@ -1475,7 +2734,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -1510,6 +2786,47 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with the date: a saved item was not opened that day."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -1524,6 +2841,47 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with the date: a saved item was not opened that day."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -1536,6 +2894,35 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[0].first_watched",
+   null,
+   "2021-02-01"
   ],
   [
    "added",
@@ -1558,6 +2945,47 @@
    0
   ],
   [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "Each item's `how` says what they did on its `when` day (opened, saved or liked); say that verb with the date: a saved item was not opened that day."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
    "added",
    "[0].sheet.totals.reels",
    null,
@@ -1570,6 +2998,53 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   2,
+   3
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[3].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[4].how",
+   null,
+   "opened"
   ]
  ],
  "audit_nog": [
@@ -1583,13 +3058,42 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   6
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
    "[0].sheet.channels[3].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[0].first_watched",
+   null,
+   "2021-02-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[1].first_watched",
+   null,
+   "2025-01-10"
   ],
   [
    "added",
@@ -1610,6 +3114,83 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   2,
+   3
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[3].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[4].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[5].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[6].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[7].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[8].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[9].how",
+   null,
+   "opened"
   ]
  ],
  "audit_reopen": [
@@ -1618,9 +3199,85 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   2,
+   4
+  ],
+  [
+   "added",
+   "[0].meta.tie",
+   null,
+   "all"
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[2].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[3].how",
+   null,
+   "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[4].how",
+   null,
+   "opened"
   ]
  ],
  "audit_saved": [
+  [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
+  ],
   [
    "added",
    "[0].sheet.channels[1].handle",
@@ -1642,6 +3299,12 @@
  ],
  "audit_search": [
   [
+   "list_len",
+   "[0].meta.notes",
+   1,
+   2
+  ],
+  [
    "added",
    "[0].sheet.items[0].handle",
    null,
@@ -1649,9 +3312,21 @@
   ],
   [
    "added",
+   "[0].sheet.items[0].how",
+   null,
+   "saved"
+  ],
+  [
+   "added",
    "[0].sheet.items[1].handle",
    null,
    "crumb.lab"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].how",
+   null,
+   "saved"
   ]
  ],
  "audit_tlm": [
@@ -1665,13 +3340,24 @@
    "list_len",
    "[0].meta.notes",
    4,
-   5
+   6
   ],
   [
    "added",
    "[0].meta.rows_of.periods",
    null,
    10
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-01-01",
+    "end": "2026-10-30",
+    "days": 303,
+    "said": "1 January to 30 October 2026"
+   }
   ],
   [
    "removed",
@@ -1824,12 +3510,6 @@
    0
   ],
   [
-   "list_len",
-   "[0].sheet.themes",
-   3,
-   4
-  ],
-  [
    "removed",
    "[0].sheet.themes[0].channels",
    [],
@@ -1852,6 +3532,37 @@
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.parts_of_day",
+   null,
+   [
+    {
+     "part": "morning",
+     "events": 5,
+     "share": 0.0197,
+     "ref": "r1.when.parts_of_day[0]"
+    },
+    {
+     "part": "afternoon",
+     "events": 72,
+     "share": 0.2835,
+     "ref": "r1.when.parts_of_day[1]"
+    },
+    {
+     "part": "evening",
+     "events": 176,
+     "share": 0.6929,
+     "ref": "r1.when.parts_of_day[2]"
+    },
+    {
+     "part": "night",
+     "events": 1,
+     "share": 0.0039,
+     "ref": "r1.when.parts_of_day[3]"
+    }
+   ]
   ]
  ],
  "audit_tly": [
@@ -1865,13 +3576,24 @@
    "list_len",
    "[0].meta.notes",
    4,
-   5
+   6
   ],
   [
    "added",
    "[0].meta.rows_of.periods",
    null,
    6
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
   ],
   [
    "removed",
@@ -1896,12 +3618,6 @@
    "[0].sheet.areas[3].themes",
    [],
    null
-  ],
-  [
-   "list_len",
-   "[0].sheet.channels",
-   9,
-   10
   ],
   [
    "removed",
@@ -2028,6 +3744,37 @@
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.parts_of_day",
+   null,
+   [
+    {
+     "part": "morning",
+     "events": 5,
+     "share": 0.0069,
+     "ref": "r1.when.parts_of_day[0]"
+    },
+    {
+     "part": "afternoon",
+     "events": 219,
+     "share": 0.3029,
+     "ref": "r1.when.parts_of_day[1]"
+    },
+    {
+     "part": "evening",
+     "events": 498,
+     "share": 0.6888,
+     "ref": "r1.when.parts_of_day[2]"
+    },
+    {
+     "part": "night",
+     "events": 1,
+     "share": 0.0014,
+     "ref": "r1.when.parts_of_day[3]"
+    }
+   ]
   ]
  ],
  "audit_two": [
@@ -2041,7 +3788,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -2068,6 +3832,41 @@
    0
   ],
   [
+   "list_len",
+   "[1].meta.notes",
+   3,
+   5
+  ],
+  [
+   "changed",
+   "[1].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[1].meta.window_dates",
+   null,
+   {
+    "start": "2023-01-01",
+    "end": "2023-12-31",
+    "days": 365,
+    "said": "1 January to 31 December 2023"
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.new.themes[0].first_watched",
+   null,
+   "2023-06-03"
+  ],
+  [
+   "added",
+   "[1].sheet.new.themes[1].first_watched",
+   null,
+   "2023-06-05"
+  ],
+  [
    "added",
    "[1].sheet.previous.reels",
    null,
@@ -2091,7 +3890,24 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2026-10-01",
+    "end": "2026-10-30",
+    "days": 30,
+    "said": "1 to 30 October 2026"
+   }
   ],
   [
    "added",
@@ -2127,13 +3943,24 @@
    "list_len",
    "[1].meta.notes",
    4,
-   5
+   6
   ],
   [
    "added",
    "[1].meta.rows_of.periods",
    null,
    6
+  ],
+  [
+   "added",
+   "[1].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-05",
+    "end": "2026-10-30",
+    "days": 2125,
+    "said": "5 January 2021 to 30 October 2026"
+   }
   ],
   [
    "removed",
@@ -2158,12 +3985,6 @@
    "[1].sheet.areas[3].themes",
    [],
    null
-  ],
-  [
-   "list_len",
-   "[1].sheet.channels",
-   9,
-   10
   ],
   [
    "removed",
@@ -2290,6 +4111,37 @@
    "[1].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[1].sheet.when.parts_of_day",
+   null,
+   [
+    {
+     "part": "morning",
+     "events": 5,
+     "share": 0.0069,
+     "ref": "r2.when.parts_of_day[0]"
+    },
+    {
+     "part": "afternoon",
+     "events": 219,
+     "share": 0.3029,
+     "ref": "r2.when.parts_of_day[1]"
+    },
+    {
+     "part": "evening",
+     "events": 498,
+     "share": 0.6888,
+     "ref": "r2.when.parts_of_day[2]"
+    },
+    {
+     "part": "night",
+     "events": 1,
+     "share": 0.0014,
+     "ref": "r2.when.parts_of_day[3]"
+    }
+   ]
   ]
  ],
  "audit_y2021": [
@@ -2298,6 +4150,29 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "No window before this one: new and stopped are not computed here.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2021-01-01",
+    "end": "2021-12-31",
+    "days": 365,
+    "said": "1 January to 31 December 2021"
+   }
   ],
   [
    "added",
@@ -2312,6 +4187,41 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   5
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2023-01-01",
+    "end": "2023-12-31",
+    "days": 365,
+    "said": "1 January to 31 December 2023"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[0].first_watched",
+   null,
+   "2023-06-03"
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[1].first_watched",
+   null,
+   "2023-06-05"
   ],
   [
    "added",
@@ -2332,6 +4242,29 @@
    "[0].meta.hidden.friends",
    1,
    0
+  ],
+  [
+   "list_len",
+   "[0].meta.notes",
+   3,
+   4
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+  ],
+  [
+   "added",
+   "[0].meta.window_dates",
+   null,
+   {
+    "start": "2024-01-01",
+    "end": "2024-12-31",
+    "days": 366,
+    "said": "1 January to 31 December 2024"
+   }
   ],
   [
    "added",

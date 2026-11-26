@@ -89,11 +89,22 @@ def test_a_learned_point_with_a_source_they_may_not_see_is_dropped(brain):
     assert [p["text"] for p in env_["sheet"]["points"]] == ["A point from their own post."]
 
 
-@pytest.mark.parametrize("words", ["early october", "late october", "the first week of october", "mid october",
-                                   "the end of 2024"])
+@pytest.mark.parametrize("words", ["the first week of october", "the last days of october"])
 def test_part_of_a_period_is_refused_not_read_as_the_whole(brain, words):
+    # mvp25 toolgaps 1: early, mid and late of a month, a year or a season are read now (DESIGN 25.1,
+    # tests/test_brain_toolgaps.py); a part the convention does not name is still refused, never read as the whole
     env_, _t = call(brain, "breakdown", {"by": "channel", "window": W(words)}, words)
     assert env_.get("is_error") and "part of a period" in env_["error"]
+
+
+@pytest.mark.parametrize("words,days", [("early october", ("2026-10-01", "2026-10-10")),
+                                        ("late october", ("2026-10-21", "2026-10-30")),
+                                        ("mid october", ("2026-10-11", "2026-10-20")),
+                                        ("the end of 2024", ("2024-09-01", "2024-12-31"))])
+def test_part_of_a_period_is_read_as_its_own_days_not_the_whole(brain, words, days):
+    env_, _t = call(brain, "breakdown", {"by": "channel", "window": W(words)}, words)
+    d = env_["meta"]["window_dates"]
+    assert (d["start"], d["end"]) == days
 
 
 def test_lately_is_still_read(brain):
