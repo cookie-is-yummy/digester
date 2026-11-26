@@ -165,11 +165,12 @@ an independent checker. Only the made-up library was used. Claude spend for this
 | | Cells only | Cells plus a typed record | Cells plus a second-model reader |
 |---|---|---|---|
 | What checks the framing | Nothing | A closed list of 98 words needs a record, checked against rows | A second Haiku request reads the answer against the tool results |
-| The model's own 17 faults caught | 7 (by cell and name checks) | 5 more by the record | 5 of the 8 that pass cells |
-| New false sentences written to break it | 37 of 37 out | 35 of 37 out | 2 of 29 out, then 0 of 29 on a second run |
-| True sentences lost | about 10% | 10 to 17% | about 10% more are flagged (3 of 19 new; 7 to 10 of 107 on look 2) |
+| The model's own 17 faults | 7 to 9 caught by cell and name checks | 4 more caught by the record | of the 8 that pass cells, 5 flagged; 3 of those 5 on the set its prompt was written on |
+| The same 48 new false sentences (the skeptic's set) | about 40 out | 27 to 30 out | 3 to 5 out |
+| False sentences aimed at that check itself | not run | 35 of 37 out | 0 to 2 of 29 out |
+| True sentences refused or flagged | 10 to 21%, by which doubtful checks stay on | 10 to 17% with the doubtful checks off | beyond cells: 7 to 10 of 107, 4 to 5 of 28, 3 of 19, and 5 to 6 of 13 on the hardest set |
 | Reasons given for a flag | none | a code name | right in 29 of 30 read by hand |
-| Typical answer time | about 7 s | about 7 to 7.5 s if the model fills the record; 8.7 s if it does not | 11 to 12.5 s (the reader takes about 4 s) |
+| Typical answer time | about 7 s | 7 to 7.5 s if the model fills the record; 8.7 s if it does not | 11 to 12.5 s (the reader takes about 4 s) |
 | Cost per answer | 0.16 cents | about the same | 0.25 cents |
 | Obeys an instruction hidden in a title | not applicable | not applicable | 0 of 34 tries |
 
@@ -177,13 +178,21 @@ What the figures say:
 - The typed record repeats the old problem one level down. It catches a fault only when the sentence uses a
   listed word. A small rewording gets out: 6 of 6 of its own catches, reworded, passed. It is not built.
 - The reader does catch framing faults it has never seen, in every class, with usable reasons. Its weak spots
-  are base and scope, and "all" and "only" when something is hidden. It is far over the 8 second bar.
+  are base and scope, and "all" and "only" when something is hidden. It is far over the 8 second bar as measured.
+  Its flags on true sentences are unsteady from run to run.
 - Neither was tested on fresh answers from the model. The model's own real faults are few (17), so no rate can
-  be given for them. The reword step after a flag was not run.
-- With cells only, the model's own lead is kept in 48 to 50 of 53 answers on first pass, against 31 today.
+  be given for them. The reword step after a flag was not run, so "out" for the reader is a best case.
+- "Cells only" is not yet one pinned checker. With every doubtful check on, the model's lead is kept in 38 to 44
+  of 53 answers; with them off, in 44 to 50. Which checks stay is pinned and hashed before any live run.
+
+Convention taken as the default: when the private line is shown, "all", "only" and a rank over the rows shown
+are not counted false because of the hidden private rows. The founder's answer "say it was kept private" covers it.
+
+Next, whichever way the founder decides: one live run on half A of the fresh set, with the present prompt, the
+pinned cells-only checker and the fixed tools, and a hand recount of what was sent. Half B stays locked.
 
 Still the founder's to decide: whether an answer may go out with a sentence whose framing is unchecked (about 1
-sentence in 17 was wrongly based, never a wrong number), or pay about 4 more seconds for the reader, or use the
-reader only after sending or only in testing.
+sentence in 17 was wrongly based, never a wrong number), or pay more seconds for the reader, or use the reader
+only after sending or only in testing.
 
 The evidence of both rounds is in `eval/runs/brain_after_slice_2026-11-26.tgz` (made-up library only).
