@@ -214,8 +214,20 @@ def _has_content(env):
     return bool(s.get("points") or s.get("items") or s.get("names") or (s.get("totals") or {}).get("items"))
 
 
-def _window_of(env):
+def _window_of(env, turn=None):
+    """A result's window: its sheet's [start, end]. A search result has no sheet window: its window is the one the
+    tools resolved for it (history.resolve over the record's ends, as run_search does; the fresh set states it so,
+    eval/build_brain_fresh.sheet_window). mvp22 merge: without this a search reading of the fresh set (N069.0) failed
+    its window as [None, None]."""
     w = ((env or {}).get("sheet") or {}).get("window") or {}
+    if isinstance(w, dict) and w.get("start"):
+        return [w.get("start"), w.get("end")]
+    if turn is not None and env and env.get("tool") == "search" and env.get("rid") in turn.windows:
+        from mvp import history as Hm
+        rec = turn.lib.rec
+        s, e = Hm.resolve(turn.windows[env["rid"]], rec, sorted(rec.ends), turn.today)
+        if s is not None:
+            return [s.isoformat(), e.isoformat()]
     return [w.get("start"), w.get("end")] if isinstance(w, dict) else [None, None]
 
 
@@ -241,7 +253,7 @@ def run_message(h, m, screen="", last_window=None, audit=True):
                              "error": r.get("error")})
     rec["expect_failed"] = check_expect(by_rid, m.get("expect"))
     for rid, want in (m.get("window") or {}).items():
-        got = _window_of(by_rid.get(rid))
+        got = _window_of(by_rid.get(rid), t)
         if got != want:
             rec["window_failed"].append(f"{rid}: got {got}, want {want}")
     vt = V.Turn.of(t)
@@ -806,6 +818,20 @@ def hand_readings(h, m, screen="", last=None):
     return (recs[0] if recs else None), [hand_keys(x) for x in recs], windows, errors
 
 
+def hand_chain_next(hand, set_name, screen, last):
+    """The hand chain after a message's preferred reading -> (screen, last window) for the next message. The plans set
+    goes on from the reading's code lead; the fresh set from its first result's window words, as its build chained
+    its readings (evalset/README_brain_fresh.md: "with that reading's window words as the screen"). mvp22 merge: with
+    the lead as the screen, a follow-up of the fresh set (N058.1, half B) failed its tool call and had nothing to
+    score, while the set's own replay held."""
+    if hand is None:
+        return screen, last
+    if set_name == "fresh":
+        said = (((hand.get("_results") or {}).get("r1") or {}).get("meta") or {}).get("window_said")
+        return said or screen, hand["_window"] or last
+    return hand["lead"] or screen, hand["_window"] or last
+
+
 def hand_keys(hand_rec):
     out = []
     for c in hand_rec["calls"]:
@@ -911,8 +937,7 @@ def _g2_again(h, rec, chains, path=None):
         chains[rec["id"]] = st
     m = next(x for x in p["messages"] if x["n"] == rec["n"])
     hand, readings, _windows, _errors = hand_readings(h, m, st["screen"], st["last"])
-    if hand is not None:
-        st["screen"], st["last"] = hand["lead"] or st["screen"], hand["_window"] or st["last"]
+    st["screen"], st["last"] = hand_chain_next(hand, set_name, st["screen"], st["last"])
     return g2_of(readings, model_keys(rec))
 
 
@@ -1004,8 +1029,7 @@ def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log
                          "message": m["text"], "skipped": "budget"})
             continue
         hand, readings, rwindows, rerrors = hand_readings(h, m, hscreen, hlast)
-        if hand is not None:
-            hscreen, hlast = hand["lead"] or hscreen, hand["_window"] or hlast
+        hscreen, hlast = hand_chain_next(hand, set_name, hscreen, hlast)
         t = h.turn(m["text"], screen="", last_window=last, search=FakeEngine(), learned=fake_learned)
         rec = BL.run_turn(provider, t, m["text"], screen)
         g2 = g2_of(readings, model_keys(rec))
