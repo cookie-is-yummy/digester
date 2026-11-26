@@ -14,9 +14,14 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from mvp.tests.test_mvp import env  # noqa: E402,F401  (env is a fixture)
-from mvp.tests.test_brain_tools import (  # noqa: E402,F401  (fixtures: the made-up library)
-    NOW, brain, built, no_real_keys, person)
+from mvp.tests.test_brain_tools import (  # noqa: F401  (fixtures: the made-up library)
+    NOW,
+    brain,
+    built,
+    no_real_keys,
+    person,
+)
+from mvp.tests.test_mvp import env  # noqa: F401  (env is a fixture)
 
 FRESH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "evalset", "brain_fresh.jsonl")
 

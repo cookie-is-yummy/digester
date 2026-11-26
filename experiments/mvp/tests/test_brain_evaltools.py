@@ -152,6 +152,12 @@ def test_the_held_out_cases_on_the_made_up_library(harness):
     assert verdicts(m, [("breakdown", {"by": "none", "window": {"words": "2024"}})]) == ("differs", "differs")
     assert verdicts(m, [("breakdown", {"by": "none", "window": {"words": "2024"},
                                        "scope": {"only": ["dating advice"]}})])[0] == "understood"
+    # the rule I02.0 tested before the merge, on a name no tool resolves: a first round with no result to compare
+    # leaves the next round required (the call by none is then another plan than the round by channel)
+    m = plan_msg("how much knitting did i watch in 2024",
+                 [bd(by="none", window={"words": "in 2024"}, scope={"only": ["knitting"]})],
+                 [bd(by="channel", window={"words": "in 2024"})])
+    assert verdicts(m, [("breakdown", {"by": "none", "window": {"words": "2024"}})]) == ("other_plan", "other_plan")
 
 
 # ================================================================ 2. the auditor, on sentences a hand recount labelled
@@ -198,8 +204,11 @@ AUDIT_CASES = [
     ("I02.0", "false", "my partner thinks i watched a lot of dating advice in 2024, did i?",
      [("breakdown", {"by": "none", "window": {"words": "2024"}, "scope": {"only": ["dating advice"]}}),
       ("breakdown", {"by": "none", "window": {"words": "2024"}})], "r2",
-     ("In 2024 you opened 58[r2.totals.items] videos, and the top theme was Home cooking[r2.themes[0]] with "
-      "8[r2.themes[0].items]."), True),   # flagged since the merge of the read tools' fix 1 (see the test below)
+     # mvp22 merge: the calls are replayed on today's tools, where the unlocked topic has its own theme row first (50
+     # of 2024, the read tools' fix 1), so Home cooking is themes[1]; the run's marker said themes[0], which now
+     # cites the topic's row (a stale marker would be flagged as 8 against 50, for the wrong reason)
+     ("In 2024 you opened 58[r2.totals.items] videos, and the top theme was Home cooking[r2.themes[1]] with "
+      "8[r2.themes[1].items]."), False),
     ("F11.0", "false", "was october my biggest month ever",
      [("timeline", {"unit": "month", "window": ALL}), ("timeline", {"unit": "month", "window": {"preset": "this_year"}}),
       ("timeline", {"unit": "year", "window": ALL})], "r3",
@@ -234,14 +243,12 @@ def test_the_auditor_on_a_labelled_sentence(harness, case):
 
 
 def test_the_auditor_still_misses_most_false_sentences_so_it_gives_hints_only():
-    """The case table measured: of the labelled false sentences, the auditor flags two: F05.0 (by reading the share as
-    gaming's, not Minecraft builds') and, since the merge of the read tools' fix 1, I02.0 (the calls replayed on
-    today's tools give the unlocked topic its own theme row, 50 of 2024, so "the top theme ... with 8" is recounted
-    as 50). On the run's stored results I02.0 is still not flagged (mvp22 merge: the auditor's figures on the stored
-    records are unchanged, 1 of 5 false of the 110 sent). Of the true ones, none since the two fixes."""
+    """The case table measured: of the labelled false sentences, the auditor flags one (F05.0, and by reading the
+    share as gaming's, not Minecraft builds'); of the true ones, none since the two fixes. (mvp22 merge: I02.0, its
+    markers pointed at Home cooking's row on today's tools, is still missed.)"""
     false = [c for c in AUDIT_CASES if c[1] == "false"]
     true = [c for c in AUDIT_CASES if c[1] == "true"]
-    assert sum(c[6] for c in false) == 2 and len(false) == 5
+    assert sum(c[6] for c in false) == 1 and len(false) == 5
     assert sum(c[6] for c in true) == 0
 
 
