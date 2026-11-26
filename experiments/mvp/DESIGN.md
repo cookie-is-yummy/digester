@@ -6622,8 +6622,10 @@ the scratchpad's `mvp22/` folder.
   reproduced first. `tests/test_brain_toolfix.py` has 31 tests: on the base 1163b7b, 22 fail and 9 pass (the 9 are
   guards: a locked turn, orders that already held, friends figures that were already right). The unlocked topic's rows
   are named "the topic you asked about", with the topic word in a `topic` field and `private: true`, because insight's
-  sensitive check does not know the turn's unlock. The new cells and rows are built only with `hide_sensitive`, which
-  only the brain and the eval pass; today's sheets are as before. The frozen planted ledgers differ from today's tools
+  sensitive check does not know the turn's unlock. In `facts.py` every new cell and row (the unlocked rows, reels,
+  friends in the window, display names) is built only with `hide_sensitive`, which only the brain and the eval pass;
+  the timeline's cut is in `brain/results.py`; `libview.py` gains two attributes nothing else reads. Today's bot: the
+  suite passes and the dry self-test's transcript matches the base's (23.4). The frozen planted ledgers differ from today's tools
   exactly as `eval/brain_toolfix_ledger_diff.json` pins (62 ledgers). The plans mode: plan findings 5 to 4, numbers in
   results 8721 to 8905, recounted 8698 to 8882 (`plans_before.json`, `plans_final.json`).
 - **Eval tools** (`brain-evaltools-local`, tip f534fb9; evidence `mvp22/evaltools/`). A message can have several
@@ -6661,8 +6663,9 @@ without a conflict (the two changes do not touch). Three seams were found and fi
   live loop with a fake provider that calls its preferred reading.
 
 The fresh set rebuilt on the merged tools without writing (`mvp22/merge/fresh_seam_*.json`): 0 problems, no stored line
-would change, and the build's differences between a tool's cell and the recount fall from 28 to 24 (gone: N012.0's
-friends, N020.0's October bar, three first_last cells of N089.0). The facts were counted from rows and stand.
+would change, and the build's differences between a tool's cell and the recount fall from 28 to 24: five are gone
+(N012.0 in half A; N020.0 and three of N089.0 in half B, by id) and one is new, N089.0's title now differing only by a
+trailing number the tool's title cleaning drops. The facts were counted from rows and stand.
 
 ### 23.4 Checks (merge, on the merged tree)
 - Planted line: 332 of 332 false handled, 78 of 78 true kept; the attack's set 165 of 166 false dropped (R03 kept with
@@ -6687,7 +6690,8 @@ figure from "5 of 110 sent" (section 22): that one is after the verifier and the
 - Framing is where the false sentences are; the verifier's rules on free English are not the way to close it (DECISIONS).
 - Tool faults the fresh set records: N010's "last summer" resolves to the summer of 2026; 4 messages are tagged
   `tool_gap` (2 per half) and are scored apart.
-- The set's own check path for the dating count names "Dating advice" (N053.0, and N083.0 in half B by id), while the
-  row is now named "the topic you asked about"; the tools give the right 50, the check does not find it.
+- The set's own check path for N053.0's dating count names "Dating advice", while the row is now named "the topic you
+  asked about": the tools give the right 50, the check does not find it. One finding of half B (N083.0, by id) is on the
+  same path.
 - The plans mode still exits 1 (B05, C13, G06), as before this round.
 - The auditor misses 4 of 5 false sentences; it gives hints only.
