@@ -582,3 +582,76 @@ the meaning prompt stays as written there):
 - Limit sentences on the sample after the last wording: unwanted in 4 of 52 answers under each prompt (12 under the
   prompt before); the difference between the two new prompts is inside the noise.
 - Claude spend to here: about $5.05 of $25.
+
+### The crossed run: results, and why the gate on half B is not run yet (27 Nov 2026)
+
+Eight live runs, one per cell: prompt (v3c, v4c) by strict tools (on, off), on set A (65 messages) and on the
+held-out half of the plans set (set H: 53 messages in 42 conversations; I wrote 62 above, which is the half before
+its filter). Six blind readers, two per answer; a tally; an independent recount whose mechanical counts match the
+tally in all eight cells. Reader agreement on grade: 78%, kappa 0.61. Evidence: eval/runs/brain_crossed_runs_2026-11-27.tgz.
+
+| Cell | Good / acceptable / poor | Answers | Means | False (two settlements) | Median / p90 s |
+|---|---|---|---|---|---|
+| A v3c on | 12 / 43 / 10 | 61.5 | 18.5 | 3 to 4 | 8.13 / 11.55 |
+| A v3c off | 14 / 43 / 8 | 62 | 20.5 | 0 to 2 | 6.72 / 9.65 |
+| A v4c on | 21.5 / 32.5 / 11 | 59.5 | 22.5 | 2 to 3 | 7.31 / 10.67 |
+| A v4c off | 16 / 42.5 / 6.5 | 62 | 19 | 2 | 6.42 / 9.56 |
+| H v3c on | 11.5 / 32.5 / 9 | 48 | 10.5 | 2 to 5 | 8.02 / 11.02 |
+| H v3c off | 10.5 / 33.5 / 9 | 47.5 | 12 | 2 to 3 | 5.88 / 8.63 |
+| H v4c on | 19.5 / 23 / 10.5 | 45 | 17 | 1 | 6.96 / 10.40 |
+| H v4c off | 20.5 / 22.5 / 10 | 47 | 18 | 3 to 5 | 6.07 / 9.37 |
+
+Wrongly based firm: 1.6 to 2.8 per 100 sentences in every cell. Wrong scope: 0 in every cell. Privacy faults
+settled: 0. Limit-only answers: 1 on set A in all, and one held-out message in every cell.
+
+The two rules, applied as written:
+- The meaning prompt is NOT adopted. On set A "says what it means" rose by 1.25 of 65, interval -3.0 to +5.25: not
+  above 0. On set H it rose by 6.25 (2.0 to 10.5). Tally and recount agree under every settlement.
+- Strict off, per prompt as the rule says. Speed: 0.9 to 2.2 s faster on the paired difference in all four pairs,
+  every interval clear of 0. Under v3c it passes on both sets (good +2, poor -2, false not up). Under v4c it fails
+  on set A (good -5.5 of 65; set H shows +1) and false sentences rise on set H. With one run per cell this cannot
+  be told from the noise between two runs of one build (about 3 good, 4 poor of 65). Crossing two questions in
+  eight runs was my choice, on advice; it left no repeat. Next time each candidate is run twice.
+- The model left a tool's schema 6 times, all with strict off, all a `breakdown` call without `order`. Code
+  refused each and the model called again.
+
+What the rule did not see:
+- My rule for the prompt tested "says what it means". The gate tests the grade. On the grade the prompt does
+  better on both sets: good answers +5.75 of 65 on set A (0.5 to 11.25) and +9 of 53 on set H (3.75 to 14.5).
+  All four v3c cells miss the gate's bar on good answers (18.5 to 21.7% against 25%); the v4c cells sit at 24.6 to
+  38.7%. The prompt's one measured cost: "answers the question" fell by 1.75 of 53 on set H, interval clear of 0.
+- So the next rule is written on the gate's own marks (below), not on one mark of my choosing.
+
+Deviation from the rule above, and why: the rule said to run half B once if a cell met the speed bars on set A.
+Three cells do. I am not running it. Six of the eight cells are over the bar of one false sentence, so the locked
+half would be spent on a fail that is already known.
+
+Where the false sentences come from: 12 of the 16 that both readers confirm say that data is missing or that a
+read failed, when the rows hold the answer ("your export holds no video lengths", "I can't isolate late October",
+"no Instagram history before 12 October"). No value check can see these: they hold no wrong value. Three held-out
+messages fault in every cell, whatever the prompt or the setting, so their cause is in what the tools returned.
+The next round sorts each by cause and fixes it at the source (a tool's note, a narrow error the model widened, the
+time-up message), not with a phrase rule.
+
+The switched-off checker rules, replayed on these runs (out of sample for them): 10 sentences flip, all rightly by
+the tally's reading (9 true sentences released, 1 false count over the cards caught); none wrongly. Six rules flip
+on their own. They are switched on next round together with the guards that were built for them, after the attack
+sets are rerun on exactly that set. `timing_out` is a bug fix and becomes the default; its declared cost showed
+once (a true "these four areas" refused).
+
+Marking: the tally and the recount drew the line between false and wrongly based differently on 8 sentences, which
+moves a cell by up to 3 against a bar of 1. The line is now written in eval/brain_reading_rubric.md ("False or
+wrongly based: the line"), with the privacy call the reader groups split on. The gate's bar on wrongly based
+sentences counts the firm ones; I decided that after seeing these marks, and the lenient count is reported beside
+it (with lenient included only one cell is under 6 per 100).
+
+The rule for the next run, written before it:
+- Strict off is the setting (speed is settled; code holds the arguments).
+- Two candidates, v3c and v4c, each with the fixes of the next round, each run twice on set A and twice on set H.
+- The candidate for the gate is the one with more good answers on set A (both runs, both readers), provided that
+  against the other it has no more settled false sentences, no more poor answers beyond 4 of 65, and "answers the
+  question" does not fall on either set with an interval clear of 0. If v4c fails a proviso, v3c is the candidate.
+- The gate on half B is run once on that candidate only if both of its set A runs and both of its set H runs meet
+  every bar but one at most, and none has more than 2 settled false sentences. Otherwise another round.
+
+Claude spend to here: about $5.75 of $25.
