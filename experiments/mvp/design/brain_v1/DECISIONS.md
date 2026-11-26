@@ -126,3 +126,33 @@ Questions for the founder:
   writing the rest? This sits beside the earlier answer "small model words it".
 
 The run records and the recount are in `eval/runs/brain_slice_2026-11-25.tgz` (made-up library and messages only).
+
+## The founder's answers after the slice (26 Nov 2026)
+
+| Question | Answer | What it changes |
+|---|---|---|
+| Is a median of 7 to 8 seconds acceptable? | Yes. | The speed bar becomes 8 s median and 11 s at the slow end. |
+| May code word the framing of a sentence? | No: "not a good choice". | The model words every sentence in full. "Small model words it" stands. |
+
+What the second answer removes:
+- Code writing the period, the base or the filter inside the model's sentence.
+- Code rendering the claims with the model adding only the meaning.
+- A frame line printed by code under every answer. The scope line when a filter is on stays, as decided earlier.
+
+What it leaves open, and what is tested next on paper at no model cost:
+- Cells only: code checks numbers, names, dates and calculations, and nothing else.
+- Cells plus a small typed record for rank, list and change, which code checks against the rows. Code refuses a
+  word the record cannot back and the model rewords it.
+- A second small-model reader. It adds about 1.6 seconds and is above the new speed bar.
+
+The raw recount of the model's own sentences on the held-out half (both looks, 272 sentences with a claim):
+
+| Kind | Count |
+|---|---|
+| A wrong number, name, date or calculation | 0 |
+| Wrongly based, catchable by a record checked against the rows (rank, tie, list, "new", "the other") | 9 |
+| Wrongly based on period, base or scope words | 5 |
+| Wrongly based because a tool gave a wrong picture | 3 |
+
+Whatever design is chosen keeps three changes: a code lead never carries a model's points, the model's lead is
+kept more often, and the marker bookkeeping stops dropping true sentences.
