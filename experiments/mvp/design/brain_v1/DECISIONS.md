@@ -513,3 +513,45 @@ false sentences); let a figure in the cited row's own text count as found; check
 cells-only "found" rule against their live refusals (the safety code `outcome` refused the plain true sentence
 "You saved it on 5 October 2026"; "found only in cells" refused 2 to 3 sentences a run and caught no live fault);
 find why the same messages time out.
+
+### The build round before the retest, and the rule for the crossed run (26 Nov 2026)
+
+What the build round gave (branch brain-r28-local, DESIGN section 30 when merged):
+- Two prompt files, brain_v3c (limits talk cut back, the form's items field explained) and brain_v4c (v3c plus the
+  same meaning hunks). On a fixed 52-message sample of half A, unwanted limit sentences fell from 12 to 1 under v3c
+  and to 5 under v4c, and a stated count above the cards shown from 1 to 0. v3c was revised once on that sample, so
+  these figures are in sample.
+- The eval's auditor no longer crashes on a date cell.
+- Speed. The loss against the earlier runs is mostly the session, not the prompt: the old prompt was as slow that
+  day. The 15 s timeouts are long thinking on the request that fills the form, not stalls. One setting moves the
+  bars: the strict tool grammar on the nine read tools costs about 1 s before the first token of most requests.
+  With it off, one run of half A gave a median of 6.46 s and a slow end of 9.46 s. Requests are now streamed with an
+  exact wall clock; that alone moves nothing.
+- New values rules for a stated item count against the cards, a figure quoted from the cited row's own text, and
+  narrowings of two older codes.
+
+What was decided after it:
+- The new values rules do not go into the run switched on. On the v3c and v4c sample runs they changed no verdict:
+  the prompt fixed those cases. An independent attack showed false sentences getting out more often with them
+  (2 to 15 of 42 on one set, 4 to 8 of 39 on another) and 11 of 12 honest counts refused. A repair written against
+  the attacker's own sets is in sample. This is the pattern of the cells mode again. The rules stay in the code
+  behind a switch, off by default. After the run each is replayed alone on the saved forms and kept only if it
+  flips a sentence the readers settled as true or false. My advice to build these two rules was wrong for the
+  prompts going forward.
+- A new fault blocks the run until fixed: three sample turns answered with a limit alone after a tool error and
+  the 7 s soft deadline, and one of them said a read had failed when no read was tried.
+- Strict off is safe only if code refuses a tool argument outside the schema, so that is built first.
+
+The crossed run, rule written before the runs (it replaces the run plan of the section above; the adoption rule for
+the meaning prompt stays as written there):
+- Four runs on half A, one per cell: v3c or v4c, strict on or off. The same four on the held-out half of the plans
+  set (62 conversations by the eval's loader; I wrote "53 messages" above from memory). That half is out of sample
+  for the prompt only: it was run live in an earlier round and builders have seen those runs.
+- The prompt is compared within each strict setting (two pairs on half A), strict within each prompt (two pairs).
+- Strict off is adopted if all of these hold on half A, with the held-out half not contradicting them. Median
+  seconds fall by at least 0.5 on the paired difference with a 95% interval above 0. Good answers do not fall and
+  poor answers do not rise beyond the noise between same-arm runs seen so far (about 4 of 65). Settled false
+  sentences do not rise. Answers given from a wrong scope (a window, a platform or a topic the message did not
+  ask for) do not rise: the readers mark this, and every tool call whose arguments code refused is counted.
+- The gate on half B is then run once on the chosen cell. If no cell meets the speed bars on half A, the gate is
+  not run and the founder is asked whether the bars or the build should move.
