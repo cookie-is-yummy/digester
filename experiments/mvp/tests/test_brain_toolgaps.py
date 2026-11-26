@@ -320,8 +320,8 @@ def test_the_code_lead_of_an_items_call_names_the_item(brain):
     newest = max(opens_at(lambda r: r["theme"] == "co"), key=lambda x: x[1])[0]
     assert newest["caption"] == "Cooking soup on the 30th"                                                    # recount
     assert code["how"] == "template" and out["lead"] == ("In all your history, counting only food and cooking, the "
-                                                          "newest video you opened was Cooking soup on the 30th, on "
-                                                          "30 October 2026.")
+                                                          'newest video you opened was "Cooking soup on the 30th", on '
+                                                          "30 October 2026.")   # (mvp26 toolfix2 4: quoted)
     assert out["cards"][0]["line"].startswith("Cooking soup on the 30th · [Pan Theory](https://")
     assert out["cards"][0]["line"].endswith(" · opened on 30 October 2026")
 

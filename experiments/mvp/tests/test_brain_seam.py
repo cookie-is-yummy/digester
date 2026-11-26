@@ -274,7 +274,8 @@ def test_a_first_names_the_items_day_and_its_subject(brain):
     lead = code_lead(t, vt, "template", [])
     # mvp25 toolgaps 8: the code lead of a first_last names the item itself, by its title, beside its day
     title = r["sheet"]["items"][0]["title"]
-    assert lead == f"In all your history, the first watercolor video you opened was {title}, on {day_words(d)}."
+    # (mvp26 toolfix2 4: the title in double quotes, cut as its card)
+    assert lead == f'In all your history, the first watercolor video you opened was "{title}", on {day_words(d)}.'
 
 
 # ================================================================ 10. a day, its items

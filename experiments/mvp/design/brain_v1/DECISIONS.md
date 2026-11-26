@@ -318,3 +318,82 @@ What changes:
 - After that the next change is the first prompt change.
 
 Still open from this round: the tool defects in DESIGN 25.15; `percent` unclassed; the season rule's thin evidence.
+
+## A check that refuses on values only: measured, and run live twice (26 Nov 2026)
+
+The decision of the last section was built as a third checker mode ("values") and measured. The same 65 messages
+(half A) were then run live twice with it, changing the checker only against run 2: the same tools, the same
+prompt v3. Each run was recounted by hand by a reader who did not see the other. Claude spend: $0.19.
+All of it is in sample. Marks are one reader's per run.
+
+What the mode refuses: a marker whose cell does not hold the written value; a marker with no such cell; a
+calculation that does not give the written value; a number, date, time or name found nowhere in the turn's tool
+results or the user's message; and the privacy and safety codes (a sensitive topic named, motive guessing, an
+outcome promised, another language, a made-up link, watch time on a length cell). Every other code still runs
+and is logged as a flag. A flag refuses nothing and asks for no reword.
+
+On the 574 hand-judged first-form sentences of the four earlier live runs:
+
+| Checker | True sentences refused | Model's lead kept first pass | Rewords asked |
+|---|---|---|---|
+| Full (today's default) | 279 of 574 | 107 of 236 | 144 |
+| Numbers and names, as first pinned | 99 | 189 | 52 |
+| Numbers and names, with the leak rules | 88 | 192 | 47 |
+| Values only | 4 | 231 | 4 |
+
+The rise in refused true sentences in run 2 came from old rules meeting new sentence shapes (43 of 48), not from
+the new leak rules (5 of 48).
+
+Live, the same 65 messages:
+
+| What | Run 2 (numbers and names) | Run A (values) | Run B (values) |
+|---|---|---|---|
+| Wrong number, name, date or calculation sent | 0 | 0 | 1 |
+| Wrongly based sentences sent | 5 of 149 | 6 of 181 | 4 of 171 |
+| True sentences refused | 48 | 4 | 3 |
+| Faulty sentences refused | 9 | 0 | 0 |
+| Rewords asked | 22 | 3 | 1 |
+| The model's own lead sent | 56 of 65 | 65 | 63 (2 provider timeouts) |
+| Seconds, median and slow end | 8.14 and 13.27 | 6.9 and 10.92 | 7.08 and 10.08 |
+| Answers good / acceptable / poor | 9 / 37 / 19 | 17 / 36 / 12 | 20 / 33 / 12 |
+| Answers the question asked | 50 | 57 | 54 |
+| Says what the numbers mean | 12 | 20 | 17 |
+| Cost per answer, cents | 0.157 | 0.143 | 0.127 |
+
+What the figures say:
+- Good answers about doubled and both speed bars are met again. Of run 2's 9 answers made poor by the checker, 7
+  (run A) and 6 (run B) are now acceptable or good.
+- The check now catches almost nothing the model actually writes: 0 faulty sentences refused in either run. What
+  it holds is the made-up value. On the attack sets it stops 147 of 157 made-up values, and lets out 626 of 643
+  real values said of the wrong period, row, measure or event. That second figure is the price, stated plainly.
+- The first false sentence sent in any run: "Your newest save is Watercolor portrait lesson 3" (run B). The newest
+  save is another post. The title was written without quotes beside another row's marker, and the mode counted
+  it as found because some result of the turn holds it. This is a hole in a values rule, and it is being closed:
+  a name beside a row marker must be that row's name.
+- No flag earns its power back. Sentences with a flag from the old rules were true 33 to 40 times in 41 to 44.
+  Sentences with no flag held no primary fault in run B and one in run A.
+- Noise between two runs of the same build: the lead source differs on 4 of 65 messages, the tools called on 11,
+  and 53 of 65 answers differ in substance somewhere. Grades moved by 3 good between A and B with nothing
+  changed. A change must beat that to count.
+- What is poor now (12 of 65 in each run): the model does not say a limit the tool already told it (no likes, no
+  rows after the export's end, a friend's save shown only as a count) in 4 to 5 answers; its own framing in 3 to
+  5; a provider timeout in 2 (run B); a quoted post's own numbers refused in 1.
+
+Decisions taken, open to the founder's objection:
+- Values mode is the working checker for the chat core. Full and numbers-and-names modes stay in the code, pinned
+  and unchanged, and their codes run as flags for testing.
+- "Be brief" (a fourth point, a two-sentence point), watch time said in words, outside knowledge and limits talk
+  are no longer refused by code. They are flags. The prompt has to carry them.
+
+The tool defects of DESIGN 25.15 are fixed (DESIGN 27): the window before a part of a period, cards and scope
+lines only from what the answer cites, a next step on every refusal, titles quoted in code leads, the timeline's
+52 periods back, weekday ties, a count of rows sharing one title. Sent answers do not re-enter the model's
+context; the plan line and scope line do, and their library names are now neutralised.
+
+The first prompt change is drafted, not run: each point says what its number means (what it is made of, how it
+stands against the whole, or how it moved) instead of "X came next with N videos". "No meaning" is the cause in
+68 of the 76 answers that the prompt could have made better.
+
+Open: `meta.hidden` counts (a friend's save, private rows) cannot be cited, so two kinds of answer cannot be
+given in a checked sentence; the model's own tool arguments re-enter the next turn unmarked; `new.channels`
+still holds 5 at most (shared with today's bot; now noted in the result); the half B gate has not been run.

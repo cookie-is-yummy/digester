@@ -44,7 +44,7 @@ VERIFY_VERSION = "brain_verify_v1"
 # direction words) is off at the source: its code is never added, and a rule chain that stops at its first hit walks
 # past a rule that is off. Chosen by the `mode` argument, else by the environment variable MVP_BRAIN_CHECK.
 CHECK_ENV = "MVP_BRAIN_CHECK"
-CHECK_MODES = ("full", "cells")
+CHECK_MODES = ("full", "cells", "values")
 
 # every reason code the checker or insight's checks can give, by what it checks (pinned by tests/test_brain_cells.py:
 # a code seen on any set that is in none of these fails the test)
@@ -63,7 +63,10 @@ CELL_CODES = frozenset({
     "median_of_window", "shorts_as_long",
     # mvp25: the cells-only rules' codes (DESIGN 24.4)
     "other_period", "item_field", "length_cell",
-    "share_of_name"})   # insight's R3 (a share said "of your <name>"): a binding reason insight_walk counts
+    "share_of_name",   # insight's R3 (a share said "of your <name>"): a binding reason insight_walk counts
+    # mvp26 (DESIGN 26): insight's "percent" (a percent no share of the sheet gives), seen live in run 2 and in no
+    # pinned set before; a value check, so a cell code. Classing it changes nothing in cells mode (it was never off)
+    "percent"})
 POLICY_CODES = frozenset({"outside_in_history", "psych", "outcome", "sensitive", "watch_time", "filler",
                           "second_person", "generic_claim", "weak_fit", "too_many"})
 FRAMING_CODES = frozenset({
@@ -216,6 +219,8 @@ def check_mode(mode=None):
         return FULL
     if name == "cells":
         return CELLS
+    if name == "values":
+        return VALUES
     raise ValueError(f"{CHECK_ENV} / check mode must be one of {CHECK_MODES}, not {name!r}")
 
 # ------------------------------------------------------------------ the marker grammar (SPEC 4.2)
@@ -366,7 +371,7 @@ REASON_TEXT = {
     "uncited_name": "a name of the library with no marker in the sentence",
     "outside_in_history": "outside knowledge inside a history sentence (put it in outside)",
     "uncited_claim": "a claim about what they watched with no marker",
-    "psych": "a claim about their feelings or who they are",
+    "psych": "a claim about their feelings or who they are, or a guess at why they opened something",
     "outcome": "a claim that something was done",
     "limits": "talk of limits (code writes those lines)",
     "sensitive": "a sensitive topic",
@@ -524,6 +529,7 @@ class Outcome:
     layer: Optional[str] = None   # where it failed: "marker" (verify's own steps) or "insight" (step 3.8)
     insight: Optional[str] = None  # insight's own verdict on the sentence (step 3.8), when it ran
     notes: dict = field(default_factory=dict)   # reason -> its first detail (the repair text's words)
+    flags: list = field(default_factory=list)   # mvp26, values mode only: [{"code", "mode"}] that refuse nothing
 
     @property
     def kept(self):
@@ -2132,6 +2138,8 @@ def check_sentence(sentence, ledger, turn=None, where="point", index=0, state=No
     proof and the tests only): insight's step runs even when an earlier step failed, its verdict in `insight`. `mode`:
     a CheckMode or its name ("full" when None; check_answer reads MVP_BRAIN_CHECK)."""
     cm = check_mode(mode) if mode is not None else FULL
+    if cm.rule("values"):
+        return check_sentence_values(sentence, ledger, turn, where, index, mode=cm, with_flags=True)
     turn = turn or Turn()
     state = state if state is not None else {}
     out = Outcome(where, index, sentence)
@@ -4460,6 +4468,8 @@ def check_answer(form, ledger, turn=None, mode=None):
     the turn's result envelopes (a list, or a dict by rid); `mode`: "full", "cells" or a CheckMode (None: the
     environment's MVP_BRAIN_CHECK, else "full")."""
     cm = check_mode(mode)
+    if cm.rule("values"):
+        return check_answer_values(form, ledger, turn, mode=cm)
     turn = turn or Turn()
     if not isinstance(ledger, Ledger):
         ledger = Ledger(ledger)
@@ -4554,6 +4564,648 @@ def check_answer(form, ledger, turn=None, mode=None):
     failed = [o for o in sents if not o.kept]
     v.repair = (not v.lead_ok) or (len(sents) > 0 and len(failed) * 2 > len(sents))
     return v
+
+
+# ------------------------------------------------------------------ the values mode (mvp26, DESIGN 26)
+# A check refuses a sentence only on values, with no reading of words: (a) a marker whose cell does not hold the value
+# written beside it; (b) a marker whose path or result does not exist; (c) a calc marker whose arithmetic does not give
+# the written value; (d) a number, date, clock time or name written with no marker that no result of this turn holds
+# (nor the user's message). Privacy and safety refusals keep their power (VALUES_SAFETY). Every code today's full and
+# cells checks give is computed as today and written as a FLAG ({"code", "mode"}) that refuses nothing and asks for no
+# reword. Code words no part of a sentence.
+VALUES_CODES = frozenset({"wrong_value", "wrong_name", "wrong_measure", "bad_ref", "calc", "empty", "garbled",
+                          "unfound_number", "unfound_date", "unfound_time", "unfound_name"})
+# the refuse list: code -> why it refuses (pinned and hashed by tests/test_brain_values.py)
+VALUES_REFUSE = {
+    "wrong_value": "(a) a marked number, share, hour or date the cell does not hold, within the grammar's rounding; "
+                   "a typed sign against a points cell",
+    "wrong_name": "(a) a marked name the cell does not hold; a row marker after another row's name or after a "
+                  "quoted title that is not the row's",
+    "wrong_measure": "(a) a typed unit against the cell's kind: a count typed as a share or in points, a share typed "
+                     "with no %, points typed as %",
+    "bad_ref": "(b) a bracket that names no cell of this turn's results (or braces)",
+    "calc": "(c) a calc marker whose arithmetic from the two cells does not give the written value",
+    "unfound_number": "(d) a figure with no marker that no result of this turn holds, nor the message",
+    "unfound_date": "(d) a date, month or year with no marker that no result of this turn holds, nor the message",
+    "unfound_time": "(d) a clock time with no marker that no result of this turn holds, nor the message",
+    "unfound_name": "(d) a name with no marker that no result of this turn holds, nor the message",
+    "empty": "nothing to send (an empty sentence)",
+    "garbled": "a lead with text and no sentence in it (nothing to send)",
+    # privacy and safety (VALUES_SAFETY)
+    "sensitive": "a private or sensitive topic named when the turn did not unlock it",
+    "psych": "a claim about their feelings or who they are, or a guess at why they opened something",
+    "outcome": "a claim that something was done (an instruction obeyed)",
+    "language": "the checks read English only",
+    "link": "a link or web address (an instruction's payload)",
+    "watch_time": "a marker citing a length total (watch time is never said); no word is read",
+    "not_item": "an item card whose ref is no item row of this turn's results",
+}
+VALUES_SAFETY = ("sensitive", "psych", "outcome", "language", "link", "watch_time")
+# the number-word variant: "refuse" (a small number word or a fraction word is a value: refused when no result holds
+# it) or "flag" (never refused). Chosen by DESIGN 26's measure
+VALUES_NUMBER_WORDS = "refuse"
+_V_NUM_WORDS = {**_NUM_WORDS, "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20}
+_V_FRACTIONS = {"half": 50.0, "a third": 100 / 3, "a quarter": 25.0, "two thirds": 200 / 3, "three quarters": 75.0}
+_V_FRACTION_RX = re.compile(r"(?:(?P<h>" + _HEDGE_RX + r")\s+)?\b(?P<w>half|a third|a quarter|two thirds|three "
+                            r"quarters)(?:\s+of)?\s*$", re.I)
+_V_NUMWORD_RX = re.compile(r"\b(?P<w>" + "|".join(sorted(set(_V_NUM_WORDS) | set(_V_FRACTIONS), key=len,
+                                                          reverse=True)) + r")\b", re.I)
+_V_RATIO_BEFORE = re.compile(r"(?P<w>(?:(?:nearly|almost|about|roughly|more than|over|just over|just under)\s+)?"
+                             r"(?:twice|doubled|double|tripled|triple|thrice|halved|half|a third|a quarter|"
+                             r"\d+(?:\.\d+)?\s+times|(?:two|three|four|five|six|seven|eight|nine|ten) times))"
+                             r"(?:\s+(?:as|the))?(?:\s+"
+                             r"(?:many|much|busy|big|large|long|often|high))?(?:\s+[a-z]+){0,2}\s*$", re.I)
+_V_RATIO_FREE = re.compile(r"\b(?:(?:more than|over|nearly|almost|about|roughly)\s+)?(?:twice|doubled|tripled|halved|"
+                           r"quadrupled|(?:two|three|four|five|six|seven|eight|nine|ten|\d+(?:\.\d+)?) times)\b", re.I)
+_V_COUNT_TWICE = re.compile(r"\b(?:opened|watched|saved|liked|played|viewed|seen)(?:\s+\w+)?\s*$", re.I)
+_V_ISO = re.compile(r"^((?:19|20)\d\d)-(\d\d)-(\d\d)(?:[ T](\d{1,2}):(\d\d)\s*([ap]\.?m\.?)?)?", re.I)
+_V_CLOCK = re.compile(r"\b(\d{1,2})(?::(\d\d))?\s*(am|pm|a\.m\.|p\.m\.)(?![\w])", re.I)
+_V_MONTH = r"(?:" + "|".join(_MONTHS) + r"|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)"
+_V_RANGE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:to|and|-|–|until|through|till)\s*(\d{1,2})(?:st|nd|rd|th)?"
+                      r"\s+(?:of\s+)?(" + _V_MONTH + r")\w*\.?(?:,?\s+((?:19|20)\d\d))?\b", re.I)
+_V_DAYMON = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + _V_MONTH + r")\w*\.?(?:,?\s+((?:19|20)\d\d))?\b",
+                       re.I)
+_V_MONDAY = re.compile(r"\b(" + _V_MONTH + r")\w*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+((?:19|20)\d\d))?\b", re.I)
+_V_RANGE_END = re.compile(r"\s*(?:to|and|-|–|until|through|till)\s+(?:\d{1,2}(?:st|nd|rd|th)?\s+)?(?:of\s+)?" +
+                          _V_MONTH + r"\w*\.?(?:\s+\d{1,2}(?:st|nd|rd|th)?)?,?\s+((?:19|20)\d\d)\b", re.I)
+_V_MONYEAR = re.compile(r"\b(" + _V_MONTH + r")\w*\.?,?\s+((?:19|20)\d\d)\b", re.I)
+_V_MONALONE = re.compile(r"\b(" + "|".join(m for m in _MONTHS if m != "may") + r"|May)\b", re.I)
+_V_YEAR = re.compile(r"(?<![\w.,])((?:19|20)\d\d)(?![\w.,]\d)")
+_V_FIG = re.compile(r"(?<![\w.,@#-])(?P<sign>[+\-−])?(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+                    r"(?P<ord>st|nd|rd|th)?(?P<pct>\s?%|\s?percent|\s?per cent)?")
+_V_QUOTE = re.compile(r"[\"“]([^\"”]{2,160})[\"”]")
+_V_HANDLE = re.compile(r"@[\w][\w.]*\w")
+# third-party text: never a holder of a figure, a date or a time (a name is matched against it)
+_V_THIRD_PARTY = frozenset({"title", "text", "why_matched", "caption", "snippet", "description", "name", "channel",
+                            "handle"})
+_V_CAPS = re.compile(r"(?<![\w'’@&.-])[A-Z][\w'’&-]*(?:\s+[A-Z][\w'’&-]*)*")
+
+
+def _mon_i(tok):
+    t = tok.lower()[:3]
+    return next((i + 1 for i, m in enumerate(_MONTHS) if m[:3] == t), None)
+
+
+class _Pool:
+    """What this turn's results hold, read once per ledger: every numeric value and list length, every date and
+    date-time, every hour, and every string (lower case), from every result's envelope (sheet and meta, notes
+    included), and the user's message. Figures, dates and times are read from code's own strings only (window words,
+    labels, notes), never from third-party text (a title, a post's text, a name): a number inside a title is no count
+    of their history (the planted f_forged_title2, audit F50b, F50c)."""
+
+    def __init__(self, ledger, message=""):
+        self.nums, self.fracs, self.dates, self.hours, self.times = set(), [], set(), set(), set()
+        self.months, self.years = set(), set()   # (year, month) and years a date part of the results holds
+        self.pcts, self.labels = [], set()   # percent-keyed values; the rows' own labels and parts ("2021", "evening")
+        strs, code = [], []
+
+        def walk(o, key=None):
+            if isinstance(o, bool) or o is None:
+                return
+            if isinstance(o, (int, float)):
+                v = float(o)
+                self.nums.add(round(v, 6))
+                if 0 <= v <= 1 and isinstance(o, float):
+                    self.fracs.append(v * 100)
+                if key and re.search(r"pct|percent|change", str(key)):
+                    self.pcts.append(v)
+                if key == "hour" and v == int(v):
+                    self.hours.add(int(v) % 24)
+            elif isinstance(o, str):
+                strs.append(o)
+                if key in ("part", "label") and o.strip():
+                    self.labels.add(_low(o))
+                if key in _V_THIRD_PARTY:
+                    return
+                code.append(o)
+                m = _V_ISO.match(o.strip())
+                if m:
+                    y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                    self.dates.add((y, mo, d))
+                    self.years.add(y)
+                    if m.group(4):
+                        h = int(m.group(4)) % 12 + (12 if (m.group(6) or "").lower().startswith("p") else 0) \
+                            if m.group(6) else int(m.group(4))
+                        self.hours.add(h)
+                        self.times.add((h, int(m.group(5))))
+            elif isinstance(o, dict):
+                for k, v in o.items():
+                    walk(v, k)
+            elif isinstance(o, (list, tuple)):
+                self.nums.add(float(len(o)))
+                for v in o:
+                    walk(v, key)
+        for r in ledger.by_rid.values():
+            walk(r.env)
+        self.text = "\n".join(strs).lower()
+        self.message = " ".join(str(message or "").split()).lower()
+        both = "\n".join(code).lower() + "\n" + self.message
+        for m in re.finditer(r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)", both):
+            self.nums.add(round(float(m.group(1).replace(",", "")), 6))
+        for m in _V_CLOCK.finditer(both):
+            h = int(m.group(1)) % 12 + (12 if m.group(3).lower().startswith("p") else 0)
+            self.hours.add(h)
+            self.times.add((h, int(m.group(2) or 0)))
+        for m in re.finditer(r"\b(?:19|20)\d\d\b", both):
+            self.nums.add(float(m.group(0)))
+            self.years.add(int(m.group(0)))
+        # dates written in code's own strings: a period's label ("Jul 2026"), a window's words ("5 January 2021 to 30
+        # October 2026"), a month with its year ("2026-09")
+        for m in re.finditer(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(" + _V_MONTH + r")\w*\.?(?:,?\s+((?:19|20)\d\d))?\b",
+                             both):
+            mo = _mon_i(m.group(2))
+            if mo and 1 <= int(m.group(1)) <= 31:
+                self.dates.add((int(m.group(3)) if m.group(3) else None, mo, int(m.group(1))))
+        for m in re.finditer(r"\b(" + _V_MONTH + r")\w*\.?,?\s+((?:19|20)\d\d)\b|\b((?:19|20)\d\d)-(\d\d)\b(?!-)",
+                             both):
+            if m.group(1):
+                self.months.add((int(m.group(2)), _mon_i(m.group(1))))
+            elif 1 <= int(m.group(4)) <= 12:
+                self.months.add((int(m.group(3)), int(m.group(4))))
+        self.code_text = both
+
+    def has_text(self, s):
+        s = " ".join(str(s).lower().split())
+        if not s:
+            return True
+        rx = re.compile(r"(?<![\w@])" + re.escape(s) + r"(?![\w])")
+        return bool(rx.search(self.text) or rx.search(self.message))
+
+    def has_num(self, n, pct=False, hedged=False, decimals=0):
+        tol = 1.5 if hedged else 0.5
+        if pct:   # "114%": a share of the results (x100), a percent-keyed value, or "114%" in code's own text
+            return any(abs(f - n) <= tol for f in self.fracs) or any(abs(p_ - n) <= tol for p_ in self.pcts) or \
+                bool(re.search(r"(?<![\d.])" + re.escape(f"{n:g}") + r"\s?%", self.code_text))
+        if round(n, 6) in self.nums:
+            return True
+        if decimals and any(round(v, decimals) == round(n, decimals) for v in self.nums):
+            return True
+        tol = 1.5 if hedged else 0.5
+        return any(abs(f - n) <= tol for f in self.fracs) if (pct or n <= 100) else False
+
+    def has_date(self, y=None, mo=None, d=None):
+        """A date part some date of the results holds (a day; a month: also a period's label; a year: also any
+        year written in the results)."""
+        if any((y is None or a is None or a == y) and (mo is None or b == mo) and (d is None or c == d)
+               for a, b, c in self.dates):
+            return True
+        if d is None and mo is not None and any((y is None or a == y) and b == mo for a, b in self.months):
+            return True
+        return d is None and mo is None and y is not None and y in self.years
+
+
+def _v_code_has(pool, s):
+    """The same date words inside code's own strings (window words, labels, notes) or the message."""
+    s = " ".join(str(s).lower().split())
+    return bool(re.search(r"(?<![\w@])" + re.escape(s) + r"(?![\w])", pool.code_text))
+
+
+def _values_pool(ledger, turn, cache):
+    key = id(ledger)
+    if key not in cache:
+        cache[key] = _Pool(ledger, (turn.message if turn else "") or "")
+    return cache[key]
+
+
+def _blank(t, a, b):
+    return t[:a] + " " * (b - a) + t[b:]
+
+
+def _row_own_names(row, rest):
+    own = {_low(n) for n in _row_names(row, rest)}
+    if isinstance(row, dict):
+        for k in ("name", "title", "label", "theme", "channel", "area", "handle"):
+            v = row.get(k)
+            if isinstance(v, str) and v.strip():
+                own.add(_low(v))
+                own.add(_low(v.lstrip("@")))
+    return own
+
+
+def _title_said_ok(quoted, row):
+    """A quoted title before a row marker against the row's own title (the title_quote loosening: a trailing '#n',
+    a trailing '...' of a cut title)."""
+    t = _low(row.get("title") or "") if isinstance(row, dict) else ""
+    q = _low(re.sub(r"(?:\.\.\.|…)\s*$", "", quoted))
+    if not t:
+        return False
+    if q == t or re.sub(r"\s*#\s*\d+\s*$", "", q) == re.sub(r"\s*#\s*\d+\s*$", "", t):
+        return True
+    return len(q) >= 8 and (t.startswith(q) or q.startswith(t))
+
+
+def _v_name_claim(pre):
+    """The name a row marker is written after when it is not the row's own: from the last capitalised word of the
+    clause right before the marker to the marker ("watched Any% speedrun guide[...]": "Any% speedrun guide"). None
+    when that clause holds no capitalised word but the plain ones (an opener, YouTube, a month)."""
+    tail = re.split(r"[,;:()\[\]]", pre)[-1]
+    starts = [m.start() for m in re.finditer(r"(?<![\w'’@-])[A-Z@][\w'’%&.-]*", tail)]
+    for a in reversed(starts):
+        words = tail[a:].split()
+        while words and _v_plain_cap(words[0]):
+            words = words[1:]
+        if words and len(words) <= 8 and re.match(r"[A-Z@]", words[0]):
+            return " ".join(words).rstrip(".…")
+    return None
+
+
+def _values_marked(raw, markers, ledger, turn, nw_refuse, pool=None):
+    """Rules (a) and (c), and watch_time on a length cell: [(code, detail)] from the markers alone."""
+    out = []
+    r = _typed_weekday(raw)
+    if r:   # a weekday written beside a date that is another day of the week (calendar arithmetic)
+        out.append(("wrong_value", r[1]))
+    names_idx = ledger.all_names()
+    prev_end = 0
+    for mk in sorted(markers, key=lambda m: m.mstart):
+        pre = raw[prev_end:mk.mstart if mk.kind != "calc" else mk.start]
+        if mk.kind in ("value", "count"):
+            if not mk.said:
+                fm = _V_FRACTION_RX.search(raw[prev_end:mk.mstart])
+                if fm and mk.kind == "value" and _measure(mk.rest, mk.value)[1] == "share":
+                    want = _V_FRACTIONS[fm.group("w").lower()]
+                    if nw_refuse and abs(float(mk.value) * 100 - want) > 5.0:
+                        out.append(("wrong_value", f"'{fm.group('w')}' is {mk.path} = {_fmt(mk.rest, mk.value)}"))
+                elif mk.kind == "value" and _measure(mk.rest, mk.value)[1] == "watch_time":
+                    out.append(("watch_time", f"{mk.path} is a length total, never said"))
+                prev_end = mk.end
+                continue
+            r = check_value(mk)
+            if r and r[0] in ("wrong_value", "wrong_name", "wrong_measure", "watch_time", "bad_ref"):
+                out.append(r)
+            elif not r and mk.kind == "value" and _measure(mk.rest, mk.value)[1] == "points":
+                pts = _points_of(mk.rest, mk.value)
+                if (mk.sign == "+" and pts < 0) or (mk.sign in ("-", "−") and pts > 0):
+                    out.append(("wrong_value", f"{mk.path} = {round(pts, 1)} points"))
+        elif mk.kind == "row" and not mk.said:
+            row = mk.value
+            q = re.search(r"[\"“]([^\"”]{2,160})[\"”]\s*$", pre)
+            if q and isinstance(row, dict) and row.get("title") is not None:
+                if not _title_said_ok(q.group(1), row):
+                    out.append(("wrong_name", f"the quoted title before {mk.path} is not that item's title"))
+            else:
+                own = _row_own_names(row, mk.rest)
+                lowp = _low(pre)
+                other = next((n for n in sorted(set(names_idx) | {_low(x) for x in turn.names if x} |
+                                                (pool.labels if pool is not None else set()), key=len, reverse=True)
+                              if len(n) >= 2 and re.search(r"(?<![\w@])" + re.escape(n) + r"\s*$", lowp)), None)
+                if other and other not in own and other.lstrip("@") not in own:
+                    out.append(("wrong_name", f"the name before {mk.path} is another row's"))
+                elif pool is not None and not other:
+                    claim = _v_name_claim(pre)
+                    if claim and not (pool.has_text(claim) or pool.has_text(re.sub(r"\s*#\s*\d+\s*$", "", claim))):
+                        out.append(("unfound_name", f"the name before {mk.path} is no name of this turn's results"))
+        elif mk.kind == "calc":
+            words = None
+            if mk.op == "ratio" and not mk.said:
+                wm = _V_RATIO_BEFORE.search(raw[prev_end:mk.mstart])
+                words = " ".join(wm.group("w").lower().split()) if wm else None
+            r = _values_calc(mk, ledger, words)
+            if r:
+                out.append(r)
+        prev_end = mk.end
+    return out
+
+
+def _values_calc(mk, ledger, words=None):
+    """Rule (c): the op computed from the two cells (of any results), the typed number or ratio words against it.
+    `words`: a ratio's words written a little before its marker ("twice as many[=ratio(...)]")."""
+    (va, ra), (vb, rb) = _cell(ledger, mk.a), _cell(ledger, mk.b)
+    if "length" in (_family(ra), _family(rb)):
+        return "watch_time", "a length total is never said"
+    va, vb = float(va), float(vb)
+    op = mk.op
+    det = f"{mk.a} = {round(va, 4)}, {mk.b} = {round(vb, 4)}"
+    if op == "diff":
+        val = va - vb
+    elif op == "points":
+        val = (va - vb) * 100
+    elif vb == 0:
+        return "calc", f"{op} over 0; {det}"
+    elif op == "pct_change":
+        val = (va - vb) / vb * 100
+    else:
+        val = va / vb
+    said = " ".join((mk.said or words or "").lower().split())
+    if op == "ratio":
+        if mk.num is not None and (mk.unit or "").strip() == "times":
+            return None if abs(mk.num - val) <= 0.1 * val else ("calc", f"{mk.a} / {mk.b} = {round(val, 2)}")
+        nt = re.match(r"^(?:(?:nearly|almost|about|roughly) )?(\S+) times$", said)
+        if nt:
+            n = _num_of(nt.group(1))
+            return None if n is not None and abs(n - val) <= 0.1 * n else ("calc", f"{mk.a} / {mk.b} = "
+                                                                                   f"{round(val, 2)}")
+        band = next(((lo, hi) for rx, lo, hi in _RATIO_BANDS if rx.match(said)), None)
+        if band is not None and not (band[0] <= val <= band[1]):
+            return "calc", f"'{said}' needs {band[0]} to {band[1]}; {mk.a} / {mk.b} = {round(val, 2)}"
+        return None
+    if mk.num is None:
+        return None   # no number written: nothing to compare (a flag)
+    tol = 0.0 if op == "diff" else (0.5 if op == "points" else 1.0)
+    if mk.hedge:
+        tol = max(tol, 1.5 if op == "points" else abs(val) * 0.1)
+    if abs(abs(mk.num) - abs(val)) > tol + 1e-9:
+        return "calc", f"{op}({mk.a}, {mk.b}) = {round(val, 1)}"
+    sign = re.search(r"(?:^|\s)([+\-−])\s*\d", " " + (mk.said or ""))
+    if sign and ((sign.group(1) == "+" and val < 0) or (sign.group(1) in ("-", "−") and val > 0)):
+        return "calc", f"{op}({mk.a}, {mk.b}) = {round(val, 1)}"
+    return None
+
+
+def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse):
+    """Rule (d): what is written with no marker, against what this turn's results hold. -> [(code, detail)]."""
+    out = []
+    t = raw
+    for mk in markers:
+        t = _blank(t, mk.start, mk.end)
+    t = re.sub(r"\[[^\]]*\]", lambda m: " " * len(m.group(0)), t)   # a bracket that did not parse (bad_ref)
+    # quoted strings (titles, lines of a post): found inside a string of the results
+    for m in list(_V_QUOTE.finditer(t)):
+        q = re.sub(r"(?:\.\.\.|…)\s*$", "", m.group(1)).strip()
+        q2 = re.sub(r"\s*#\s*\d+\s*$", "", q)
+        if not (pool.has_text(q) or pool.has_text(q2) or _low(q2) in pool.text):
+            out.append(("unfound_name", "a quoted title that no result of this turn holds"))
+        t = _blank(t, m.start(), m.end())
+    # links are the safety check's; handles are names
+    t = re.sub(r"https?://\S+|www\.\S+", lambda m: " " * len(m.group(0)), t)
+    for m in list(_V_HANDLE.finditer(t)):
+        if not pool.has_text(m.group(0)):
+            out.append(("unfound_name", f"'{_clip(m.group(0), 40)}' is named with no marker and no result of this "
+                                        "turn holds it"))
+        t = _blank(t, m.start(), m.end())
+    # dates: ranges of days, day and month, month and day, month and year, a month alone, a year
+    for m in list(_V_RANGE.finditer(t)):
+        mo, y = _mon_i(m.group(3)), (int(m.group(4)) if m.group(4) else None)
+        for d in (int(m.group(1)), int(m.group(2))):
+            if not pool.has_date(y, mo, d):
+                out.append(("unfound_date", f"'{_clip(m.group(0), 40)}': no result of this turn holds that day"))
+                break
+        t = _blank(t, m.start(), m.end())
+    for rx, order in ((_V_DAYMON, "dmy"), (_V_MONDAY, "mdy")):
+        for m in list(rx.finditer(t)):
+            if order == "dmy":
+                d, mo, y = int(m.group(1)), _mon_i(m.group(2)), (int(m.group(3)) if m.group(3) else None)
+            else:
+                mo, d, y = _mon_i(m.group(1)), int(m.group(2)), (int(m.group(3)) if m.group(3) else None)
+            if not (1 <= d <= 31):
+                continue
+            if y is None:   # "5 September to 2 October 2026": the year of the day that closes the range
+                ny = _V_RANGE_END.match(raw[m.end():m.end() + 40])
+                y = int(ny.group(1)) if ny else None
+            if not (pool.has_date(y, mo, d) or _v_code_has(pool, m.group(0))):
+                out.append(("unfound_date", f"'{_clip(m.group(0), 40)}': no result of this turn holds that day"))
+            t = _blank(t, m.start(), m.end())
+    for m in list(_V_MONYEAR.finditer(t)):
+        mo, y = _mon_i(m.group(1)), int(m.group(2))
+        if not (pool.has_date(y, mo) or _v_code_has(pool, m.group(0))):
+            out.append(("unfound_date", f"'{_clip(m.group(0), 40)}': no result of this turn holds that month"))
+        t = _blank(t, m.start(), m.end())
+    for m in list(_V_YEAR.finditer(t)):
+        y = int(m.group(1))
+        if not (pool.has_date(y) or _v_code_has(pool, m.group(1))):
+            out.append(("unfound_date", f"'{y}': no result of this turn holds that year"))
+        t = _blank(t, m.start(), m.end())
+    for m in list(_V_MONALONE.finditer(t)):
+        if m.group(1) in ("may", "march"):
+            continue   # the verb, not the month
+        mo = _mon_i(m.group(1))
+        if not (pool.has_date(None, mo) or _v_code_has(pool, m.group(1))):
+            out.append(("unfound_date", f"'{m.group(1)}': no result of this turn holds that month"))
+        t = _blank(t, m.start(), m.end())
+    # clock times
+    for m in list(_V_CLOCK.finditer(t)):
+        h = int(m.group(1)) % 12 + (12 if m.group(3).lower().startswith("p") else 0)
+        ok = (h, int(m.group(2))) in pool.times if m.group(2) and m.group(2) != "00" else (h in pool.hours)
+        if not ok:
+            out.append(("unfound_time", f"'{_clip(m.group(0), 20)}': no result of this turn holds that hour"))
+        t = _blank(t, m.start(), m.end())
+    # figures
+    for m in list(_V_FIG.finditer(t)):
+        num = m.group("num")
+        n = float(num.replace(",", ""))
+        dec = len(num.split(".")[1]) if "." in num else 0
+        hedged = bool(re.search(r"\b" + _HEDGE_RX + r"\s*$", t[:m.start()], re.I))
+        if m.group("ord") and pool.has_date(None, None, int(n)):
+            t = _blank(t, m.start(), m.end())
+            continue   # "the 30th": a day a date of the results holds
+        if not pool.has_num(n, pct=bool(m.group("pct")), hedged=hedged, decimals=dec):
+            out.append(("unfound_number", f"'{_clip(m.group(0).strip(), 20)}' has no marker and no result of this "
+                                          "turn holds it: cite its cell"))
+        t = _blank(t, m.start(), m.end())
+    # number words (the variant): a ratio word with no ratio marker is a computed value no cell holds; a small count;
+    # a fraction as a share
+    if nw_refuse:
+        for m in list(_V_RATIO_FREE.finditer(t)):
+            if _V_COUNT_TWICE.search(t[max(0, m.start() - 25):m.start()]) and m.group(0).lower() == "twice":
+                continue   # "opened twice": a count of two, read below as a number word
+            out.append(("unfound_number", f"'{m.group(0)}' has no ratio marker: no result of this turn holds a "
+                                          "ratio"))
+            t = _blank(t, m.start(), m.end())
+        t = re.sub(r"\b(?:the\s+)?(?:first|second|other)\s+half\b", lambda m: " " * len(m.group(0)), t, flags=re.I)
+        for m in list(_V_NUMWORD_RX.finditer(t)):
+            w = m.group("w").lower()
+            ok = pool.has_num(float(_V_NUM_WORDS[w])) if w in _V_NUM_WORDS else \
+                any(abs(f - _V_FRACTIONS[w]) <= 5.0 for f in pool.fracs)
+            if not ok:
+                out.append(("unfound_number", f"'{w}' has no marker and no result of this turn holds it"))
+            t = _blank(t, m.start(), m.end())
+    # names: the library's names (lower case too), then capitalised words
+    for a, b, n in _name_spans(t, ledger.all_names(), turn.names):
+        if not pool.has_text(n) and not pool.has_text(re.sub(r"(?:es|s)$", "", n)):
+            out.append(("unfound_name", f"'{_clip(t[a:b], 40)}' is named with no marker and no result of this turn "
+                                        "holds it"))
+        t = _blank(t, a, b)
+    lead_at = len(t) - len(t.lstrip(" \"“'(‘"))
+    for m in _V_CAPS.finditer(t):
+        words = m.group(0).split()
+        while words and _v_plain_cap(words[0]):
+            words = words[1:]
+        while words and _v_plain_cap(words[-1]):
+            words = words[:-1]
+        if not words:
+            continue
+        run = " ".join(words)
+        if m.start() == lead_at and len(m.group(0).split()) == 1 and not re.match(r"\s*[A-Z\"“@]", raw[m.end():]):
+            continue   # the sentence's first word, not before another capital: an English capital, not a name
+        if not pool.has_text(run):
+            out.append(("unfound_name", f"'{_clip(run, 40)}' is named with no marker and no result of this turn "
+                                        "holds it"))
+    return out
+
+
+def _v_plain_cap(w):
+    w0 = re.split(r"['’]", w.lower())[0].strip("'’")
+    return (w0 in OPENERS or w0 in I.ALLOWED_CAPS or w0 in ("of", "and", "the", "de", "&", "a", "an", "shorts", "reels",
+                                                            "reel", "youtube's") or w0 in I.WEEKDAYS or
+            w0.rstrip("s") in I.WEEKDAYS or any(w0[:3] == x[:3] for x in _MONTHS if len(w0) >= 3) or
+            w0 in ("is", "was", "were", "are", "had", "has", "did"))
+
+
+def _values_hidden_rank(low, markers, res):
+    """Step 3.13 as today (the private line under a number of a result that left private items out, or a rank word
+    over hidden rows), read for the values mode's own outcome."""
+    if res is None:
+        return False
+    hid = (res.meta or {}).get("hidden") or {}
+    if hid.get("rank_hidden_above") and _RANK.search(low):
+        return True
+    return int(hid.get("sensitive") or 0) > 0 and (
+        any(mk.kind in ("value", "count", "calc") and (mk.rid == res.rid or mk.a.startswith(res.rid + "."))
+            for mk in markers) or bool(_RANK.search(low)) or
+        bool(re.search(r"\b(?:everything|all of|every|only|nothing but)\b", low)))
+
+
+def _values_safety(raw, plain, low, markers, ledger, res, turn, pool):
+    """The privacy and safety refusals kept (VALUES_SAFETY), each called directly on the sentence."""
+    out = []
+    if _sensitive(plain, turn):
+        out.append(("sensitive", None))
+    if PSYCH.search(low):
+        out.append(("psych", None))
+    elif _MOTIVE.search(low):   # why they opened something (DESIGN 26: no true sentence of any set holds it)
+        out.append(("psych", "why they opened something is not in the export"))
+    if OUTCOME.search(low):
+        out.append(("outcome", None))
+    wres = res or next(iter(ledger.by_rid.values()), None)
+    if _not_english(plain) and ((wres.sheet.get("lang") if wres is not None else None) or "en") == "en":
+        out.append(("language", "the checks read English only"))
+    lt = _V_HANDLE.sub(lambda m: " " if pool.has_text(m.group(0)) else m.group(0), plain)
+    if I._LINK.search(lt):
+        out.append(("link", "no link or web address in a sentence"))
+    return out
+
+
+def check_sentence_values(sentence, ledger, turn=None, where="point", index=0, mode=None, pool_cache=None,
+                          too_long=False, with_flags=False):
+    """One sentence in values mode -> Outcome: refused only by VALUES_REFUSE. `with_flags` (a sentence checked
+    alone): every code of today's full and cells checks of the same sentence goes into `flags` (check_answer_values
+    takes them from the whole answer's checks instead)."""
+    cm = check_mode(mode) if mode is not None else VALUES
+    turn = turn or Turn()
+    if not isinstance(ledger, Ledger):
+        ledger = Ledger(ledger)
+    pool = _values_pool(ledger, turn, pool_cache if pool_cache is not None else {})
+    nw = cm.rule("nw_refuse")
+    out = Outcome(where, index, sentence)
+    raw = " ".join(str(sentence or "").split())
+    if not raw:
+        out.reasons.append("empty")
+        return out
+    markers, bad = parse(raw, ledger, CELLS_LOOSE)
+    for mk in markers:
+        if mk.kind == "calc":
+            for p in (mk.a, mk.b):
+                try:
+                    out.cells[p] = _cell(ledger, p)[0]
+                except (KeyError, AttributeError):
+                    pass
+        elif mk.kind in ("value", "count"):
+            out.cells[mk.path] = mk.value
+    rids = sorted({mk.rid for mk in markers if mk.rid} | {p.split(".", 1)[0] for mk in markers if mk.kind == "calc"
+                                                          for p in (mk.a, mk.b)})
+    out.rid = rids[0] if rids else None
+    res = ledger.get(out.rid) if out.rid else None
+    plain = strip_markers(raw)
+    low = plain.lower()
+    found = [(b, _bad_detail(raw, ledger)) for b in bad]
+    found += _values_marked(raw, markers, ledger, turn, nw, pool)
+    found += _values_unmarked(raw, markers, ledger, turn, pool, nw)
+    found += _values_safety(raw, plain, low, markers, ledger, res, turn, pool)
+    for r, d in found:
+        if r not in out.reasons:
+            out.reasons.append(r)
+        if d and d not in out.details:
+            out.details.append(d)
+            out.notes.setdefault(r, d)
+    out.hidden_rank = _values_hidden_rank(low, markers, res)
+    out.layer = "values" if out.reasons else None
+    if too_long:
+        out.flags.append({"code": "too_long", "mode": "values"})
+    if with_flags:
+        for name, m_ in (("cells", CELLS), ("full", FULL)):
+            for c in check_sentence(sentence, ledger, turn, where, index, mode=m_).reasons:
+                out.flags.append({"code": c, "mode": name})
+    if not out.reasons:
+        out.sent = plain
+    return out
+
+
+def _values_flags(o, others):
+    """The codes today's checks give the same sentence (by place), as flags: cells first, then full."""
+    seen, fl = set(), list(o.flags)
+    for name, v in others:
+        x = next((x for x in v.outcomes if (x.where, x.index) == (o.where, o.index)), None)
+        for c in (x.reasons if x is not None else []):
+            if (c, name) not in seen:
+                seen.add((c, name))
+                fl.append({"code": c, "mode": name})
+    return fl
+
+
+def check_answer_values(form, ledger, turn=None, mode=None):
+    """The form in values mode -> Verdict: today's full and cells verdicts are computed for the flags; a sentence is
+    refused only by the values rules and the safety list. The repair (4.5) is due when the lead is refused or more
+    than half of the sentences are."""
+    cm = check_mode(mode) if mode is not None else VALUES
+    turn = turn or Turn()
+    if not isinstance(ledger, Ledger):
+        ledger = Ledger(ledger)
+    try:
+        f = form if isinstance(form, AnswerForm) else AnswerForm.model_validate(form)
+    except ValidationError as e:
+        return Verdict(outcomes=[], form_error=str(e.errors()[0].get("type")), repair=True, check=cm.name)
+    vc = check_answer(f, ledger, turn, mode=CELLS)
+    vf = check_answer(f, ledger, turn, mode=FULL)
+    others = (("cells", vc), ("full", vf))
+    cache = {}
+    v = Verdict(outcomes=[], check=cm.name)
+    lead_s = _split(f.lead)
+    if not lead_s:
+        v.outcomes.append(Outcome("lead", 0, f.lead or "", reasons=["garbled" if (f.lead or "").strip() else "empty"]))
+    else:
+        long_lead = len(strip_markers(f.lead)) > LEAD_MAX or len(lead_s) > 2
+        for k, s in enumerate(lead_s):
+            v.outcomes.append(check_sentence_values(s, ledger, turn, "lead", k, cm, cache,
+                                                    too_long=long_lead or len(strip_markers(s)) > SENT_MAX))
+    for k, p in enumerate(f.points):
+        sents = _split(p)
+        text = sents[0] if len(sents) == 1 else " ".join(str(p).split())
+        v.outcomes.append(check_sentence_values(text, ledger, turn, "point", k, cm, cache,
+                                                too_long=k >= POINTS_MAX or len(sents) != 1 or
+                                                len(strip_markers(text)) > SENT_MAX))
+    for o in v.outcomes:
+        o.flags = _values_flags(o, others)
+    v.private_line = any(o.kept and o.hidden_rank for o in v.outcomes)
+    rows = _item_rows(ledger)
+    for k, it in enumerate(f.items):
+        if k >= ITEMS_MAX:   # the cards' cap, as today (not a sentence)
+            v.items.append({"ref": it.ref, "note": None, "kept": False, "reasons": ["too_long"], "flags": []})
+            continue
+        reasons = [] if it.ref in rows else ["not_item"]
+        note_o = check_sentence_values(it.note, ledger, turn, "note", k, cm, cache,
+                                       too_long=len(it.note) > NOTE_MAX) if it.note else None
+        if note_o is not None:
+            reasons += note_o.reasons
+        fl = [{"code": c, "mode": nm} for nm, vv in others for c in
+              ((vv.items[k]["reasons"] if k < len(vv.items) else []) or []) if c not in reasons]
+        v.items.append({"ref": it.ref, "note": note_o.sent if note_o and note_o.kept else None,
+                        "kept": "not_item" not in reasons, "reasons": reasons, "flags": fl})
+    v.outside = vc.outside
+    v.chart = vc.chart
+    sents = [o for o in v.outcomes if o.where in ("lead", "point")]
+    failed = [o for o in sents if not o.kept]
+    v.repair = (not v.lead_ok) or (len(sents) > 0 and len(failed) * 2 > len(sents))
+    return v
+
+
+def values_mode(number_words=None):
+    """The values CheckMode, with the number-word variant ("refuse" or "flag"; None: VALUES_NUMBER_WORDS)."""
+    nw = (number_words or VALUES_NUMBER_WORDS) == "refuse"
+    return CheckMode("values", off=CELLS.off, loose=CELLS_LOOSE, cells=True,
+                     rules=frozenset({"values"} | ({"nw_refuse"} if nw else set())))
+
+
+VALUES = values_mode()
 
 
 # ------------------------------------------------------------------ the repair text (4.5)

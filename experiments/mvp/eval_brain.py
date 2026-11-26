@@ -1213,6 +1213,9 @@ def summarize(recs, settings=None):
                   "capped at written",
             "G5": "wall seconds of the turn (all requests, tool runs, verification, repair, back-off), at the run's "
                   "parallelism", "G6": "ledger cost of every request of the message, mean in cents"}}
+    if any(r.get("flags") for r in done):
+        # mvp26 (DESIGN 26), values mode only: today's codes as flags (they refuse nothing), by code and mode
+        s["flag_codes"] = _counts(f"{f['code']}@{f['mode']}" for r in done for f in r.get("flags") or [])
     return s
 
 

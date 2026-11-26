@@ -17,6 +17,9 @@ as a link to the item, the event and its day), never a model sentence; an ask-ba
 the cards of the result it is about. Code's limit line (mvp25 toolgaps 2): the export's watch-time line when a cited
 result carries it, and, under a code lead only, what a refused call found the export does not hold.
 """
+import re
+
+from . import results as R
 from . import verify as V
 
 PRIVATE_LINE = "Leaving out topics you keep private."
@@ -31,14 +34,52 @@ CARDS_MAX = 5
 ASK_LINE = "Which one do you mean?"
 
 
-def _cited_rid(verdict, code, ledger):
+def _cited_rid(verdict, code, ledger, cards=()):
+    """The result the answer cites: a kept sentence's, else the code lead's, else the one result all the cards are of;
+    else none (mvp26 toolfix2 2: the scope line fell back to the turn's first result, and Wet Paper cards went out
+    under "Counted: ... Brick Realm: Brick Realm (channel)")."""
     if verdict is not None:
         for o in verdict.outcomes:
             if o.kept and o.rid:
                 return o.rid
     if code and code.get("rid"):
         return code["rid"]
-    return next(iter(ledger.by_rid), None)
+    rids = {str(c["ref"]).split(".", 1)[0] for c in cards}
+    if len(rids) == 1:
+        return rids.pop()
+    if not cards and len(ledger.by_rid) == 1:
+        # a turn with one result: the answer can be about no other (look2 D04.1, "Your Instagram areas for 2022 have
+        # no rows to show.", keeps "Counted: ... 2022 · Instagram only")
+        return next(iter(ledger.by_rid))
+    return None
+
+
+_ITEM_REF = re.compile(r"^(r\d+\.items\[\d+\])(?:\.\w+)?$")
+
+
+def _cited_items(verdict):
+    """The item rows the kept sentences cite ("r1.items[0]" of "r1.items[0].when"), in order."""
+    out = []
+    for o in (verdict.outcomes if verdict is not None else []):
+        if not o.kept:
+            continue
+        for path in o.cells or {}:
+            m = _ITEM_REF.match(str(path))
+            if m and m.group(1) not in out:
+                out.append(m.group(1))
+    return out
+
+
+def _between(form, ledger):
+    """The item refs an ask-back is between (`ask_back.between`), those that name an item row of this turn; a question
+    or a name written there is not a ref and gives no card."""
+    ab = (form or {}).get("ask_back") if isinstance(form, dict) else None
+    out = []
+    for x in ((ab or {}).get("between") or []) if isinstance(ab, dict) else []:
+        x = str(x).strip()
+        if _ITEM_REF.match(x) and card(ledger, x) is not None and x not in out:
+            out.append(x)
+    return out
 
 
 def filtered(res):
@@ -161,8 +202,9 @@ def card(ledger, ref, links=None):
     from datetime import date
     from .. import history as Hm
     row = _row(ledger, ref)
-    title = (row or {}).get("title")
-    if not isinstance(title, str) or not title.strip() or not str(ref).split(".", 1)[1].startswith("items["):
+    title = R.title_shown((row or {}).get("title"))
+    if not isinstance(title, str) or not title.strip() or "." not in str(ref) or \
+            not str(ref).split(".", 1)[1].startswith("items["):
         return None
     day = None
     try:
@@ -188,12 +230,6 @@ def _cards(ledger, refs, links=None):
         if len(out) >= CARDS_MAX:
             break
     return out
-
-
-def _result_items(ledger, rid):
-    r = ledger.get(rid) if rid else None
-    rows = (r.sheet.get("items") or []) if r is not None and isinstance(r.sheet, dict) else []
-    return [f"{rid}.items[{k}]" for k, x in enumerate(rows) if isinstance(x, dict)]
 
 
 def limit_lines(ledger, rid, code=None, limits=()):
@@ -228,12 +264,8 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
         points = [] if cells else list((code or {}).get("points") or [])
     private = bool(verdict is not None and verdict.private_line) or bool((code or {}).get("private_line")) or any(
         v.private_line for v in also if v is not None)
-    rid = _cited_rid(verdict, code, ledger)
-    res = ledger.get(rid) if rid else None
-    filt = filtered(res)
     # (mvp20 fix: the plain line counted nothing, so no scope line goes under it)
     plain = verdict is None and bool(code) and code.get("how") == "plain"
-    sline = scope_line(res) if filt and not plain else None
     # (mvp20 fix: a code lead keeps the offers the model picked; code writes every label)
     offers = offers_of(form, ledger) if (verdict is not None or code) else []
     # mvp25 toolgaps 7: the item cards (the model's picks, or the code lead's items) and an ask-back over them
@@ -242,9 +274,19 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
     else:
         refs = list((code or {}).get("items") or []) if not plain else []
     ask = bool((form or {}).get("ask_back")) and (verdict is not None or not plain)
-    if ask and not refs:
-        refs = _result_items(ledger, rid)
+    if ask:
+        # mvp26 toolfix2 2 (the attack: an ask-back rendered every item of the cited result, or of the turn's first
+        # result when the lead cited nothing, and never read `between`: 6 of 8 builds showed another result's cards):
+        # the items it is between, else the answer's picks, else the items its kept sentences cite; else none
+        refs = _between(form, ledger) or refs or (_cited_items(verdict) if verdict is not None else [])
     cards = _cards(ledger, refs, links)
+    rid = _cited_rid(verdict, code, ledger, cards)
+    res = ledger.get(rid) if rid else None
+    filt = filtered(res)
+    # (mvp26 toolfix2 2: the scope line says what the cited result counted; over cards of another result it would
+    # read as theirs, so it goes out only when every card is of that result)
+    own = all(str(c["ref"]).split(".", 1)[0] == rid for c in cards)
+    sline = scope_line(res) if filt and not plain and own else None
     lim = limit_lines(ledger, rid, code if verdict is None else None, limits) if not plain else []
     lines = [lead] if lead else []
     lines += ["- " + p for p in points]

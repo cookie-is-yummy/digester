@@ -467,7 +467,8 @@ def channel_names(view, idx, out):
             for row in o:
                 if isinstance(row, dict):
                     nm = row.get("name")
-                    if key == "channels" and isinstance(nm, str) and nm in ig and (top or disp.get(nm)):
+                    if key in ("channels", "small_channels") and isinstance(nm, str) and nm in ig and \
+                            (top or disp.get(nm)):
                         # a ranking's own rows always (the name may be the handle itself); a row inside another
                         # row only when its name changed, so the results do not grow for nothing
                         row["handle"] = nm[1:]
@@ -763,6 +764,24 @@ def _when(idx, sc, base_ev=None):
             "busiest_weekday": days[int(np.argmax(wd))], "events": n, **usual}
 
 
+WEEKDAYS_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def _weekday_tie(idx, sc, when):
+    """The brain's tools: when two or more weekdays have the most opens, `busiest_weekday` (one day) goes, and
+    `busiest_weekdays` (every day of the tie, Monday first) and `busiest_weekday_opens` (their count) say it."""
+    import numpy as np
+    if not sc.ev.any():
+        return
+    wd = np.bincount(idx.wd[sc.ev].astype(np.int64), minlength=7)
+    top = int(wd.max())
+    days = [WEEKDAYS_EN[k] for k in range(7) if int(wd[k]) == top]
+    if len(days) > 1:
+        when.pop("busiest_weekday", None)
+        when["busiest_weekdays"] = days
+        when["busiest_weekday_opens"] = top
+
+
 # the brain's tools (mvp25 toolgaps 6): the parts of the day, by the hour of the open in their own time zone
 PARTS_OF_DAY = (("morning", 5, 12, "5am to noon"), ("afternoon", 12, 17, "noon to 5pm"),
                 ("evening", 17, 21, "5pm to 9pm"), ("night", 21, 29, "9pm to 5am"))
@@ -803,6 +822,26 @@ def _new_first_days(new, idx, facts, th, base_ev):
             m = base_ev & (ev_creator == idx.creators.index(nm))
             if m.any():
                 row["first_watched"] = _iso(int(idx.day[m].min()))
+
+
+def _small_new_channels(new, sc, idx, all_ev, start_o):
+    if not isinstance(new, dict) or start_o is None or not len(sc.items):
+        return
+    first, big = _first_by_creator(idx, all_ev)
+    days = sc.days_by(idx.creator)
+    named = {r.get("name") for r in new.get("channels") or [] if isinstance(r, dict)}
+    rows = []
+    now_c = Counter(idx.creator[sc.items][idx.creator[sc.items] >= 0].tolist())
+    for cid, c in sorted(now_c.items(), key=lambda kv: (-kv[1], idx.creators[kv[0]])):
+        if first[cid] == big or first[cid] < start_o or idx.creators[cid] in named:
+            continue
+        if c < NEW_CHANNEL_MIN or days.get(cid, 0) < NEW_CHANNEL_DAYS:
+            rows.append({"name": idx.creators[cid], "items": int(c), "days": int(days.get(cid, 0)),
+                         "first_watched": _iso(int(first[cid]))})
+    if rows:
+        new["small_channels"] = rows[:5]
+        if len(rows) > 5:   # (brain/results.honest takes it out and says it in a note: no row is left out unsaid)
+            new["small_channels_left_out"] = len(rows) - 5
 
 
 def np_isin(a, b):
@@ -1192,6 +1231,10 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
             a, k = Counter(c["area"] for c in top5).most_common(1)[0]
             out["top_areas"] = {"area": a, "n": int(k), "of": len(out["channels"][:5])}
     out["when"] = _when(idx, sc, base_ev)
+    if hide_sensitive and out["when"]:
+        # the brain's tools (mvp26 toolfix2 6, the attack: 26 results named one busiest weekday over a tie, October
+        # 2026's Thursday and Friday with 24 opens each): over a tie every day of it, and no single day
+        _weekday_tie(idx, sc, out["when"])
     if hide_sensitive and out["when"] and kind == "count":
         # the brain's tools (mvp25 toolgaps 6, N027.0 "do i watch more at night or during the day": the sheet held only
         # the 3 busiest hours as bare numbers): the parts of the day, on the totals' sheet only (a ranked sheet is
@@ -1205,6 +1248,10 @@ def sheet(view, rec, q, today, tz, prof=None, text=None, hide_sensitive=False, u
         # the brain's tools (mvp25 toolgaps 6, N008.1: "Pixel Pencil and Clip Factory were the channels that started in
         # it [October]"; Pixel Pencil's first day is 1 August 2026): a new theme or channel says its own first day
         _new_first_days(out.get("new"), idx, facts, th, base_ev)
+        # (mvp26 toolfix2 6, run2 N019.0: "the new channels were Clip Factory and Gaming Daily"; @wetpaper.ig was
+        # first opened in the fall too, with 4 items, under the floor of a new channel): the channels first opened in
+        # the window that the floor leaves out of new.channels, each with its items and first day
+        _small_new_channels(out.get("new"), sc, idx, base_ev, so)
     if season_ and eo is not None and kind == "top":
         # round 12, pass 6 (X17, row 8: "what he did then and has not since"): each channel new then, with the videos
         # of it opened after the season, up to where the record ends
@@ -1918,6 +1965,9 @@ def before_window(w, a, b):
         pb = last if b == Hm._month_end(a.year, a.month) else min(last, date(y, m, b.day))
         words = Hm.month_words(pa) if pb == last else f"the same days of {Hm.month_words(pa)} ({Hm.span_words(pa, pb)})"
         return pa.toordinal(), pb.toordinal(), words
+    part = part_before(w, a, b)
+    if part is not None:
+        return part
     if w.label and w.kind == "range":
         name = w.label.split()[1] if len(w.label.split()) > 1 else ""
         pb = a - timedelta(days=1)
@@ -1936,6 +1986,83 @@ def before_window(w, a, b):
     else:
         words = f"the {n} days before ({Hm.span_words(pa, pb)})"
     return pa.toordinal(), pb.toordinal(), words
+
+
+# mvp26 toolfix2 1 (the second attack: "late summer of 2023" had "the spring before (1 May to 31 July 2023)", "late
+# October" "the 3 months before (1 July to 20 October 2026)", 112 days against 10, with no note): a part of a period
+# (brain/windows.part_of's labels; history.py writes none of these, so today's sheets are unchanged) is set against
+# the part before it, named by its own words and its own dates, as a person would say it: early, mid and late of a
+# month each take the one before (early takes late of the month before), the halves likewise, the parts of a year
+# likewise (early takes late of the year before), and a season's month takes the month before. A part cut where the
+# export ends takes the same number of days of the part before.
+_PART_MONTH = re.compile(r"^(early|mid|late) ([A-Z][a-z]+) ((?:19|20)\d\d)$")
+_PART_MONTH_HALF = re.compile(r"^the (first|second) half of ([A-Z][a-z]+) ((?:19|20)\d\d)$")
+_PART_YEAR = re.compile(r"^(early|mid|late) ((?:19|20)\d\d)$")
+_PART_YEAR_HALF = re.compile(r"^the (first|second) half of ((?:19|20)\d\d)$")
+_PART_SEASON = re.compile(r"^(early|mid|late) (?:spring|summer|fall|autumn|winter) of ")
+
+
+def _dates_said(a, b):
+    """"11 October to 20 October 2026", "1 September to 31 December 2022", "1 December 2025 to 28 February 2026": both
+    days with their month, so brain/verify's reader of a window before (`(D Month [YYYY] to D Month YYYY)`) reads it."""
+    first = f"{a.day} {Hm.MONTH_EN[a.month - 1]}" + (f" {a.year}" if a.year != b.year else "")
+    return f"{first} to {b.day} {Hm.MONTH_EN[b.month - 1]} {b.year}"
+
+
+def part_before(w, a, b):
+    """(start ordinal, end ordinal, words) of the window before a part of a period, or None when `w` is not one."""
+    label = (w.label or "") if w.kind == "range" else ""
+    if not label or w.start is None:
+        return None
+    s = w.start
+    mon = Hm.MONTH_EN
+    m1, m2, y1, y2 = (_PART_MONTH.match(label), _PART_MONTH_HALF.match(label), _PART_YEAR.match(label),
+                      _PART_YEAR_HALF.match(label))
+    season = _PART_SEASON.match(label)
+    prev_month = (s.year, s.month - 1) if s.month > 1 else (s.year - 1, 12)
+    pm_end = Hm._month_end(*prev_month)
+    if m1:
+        part = m1.group(1)
+        own_end = {"early": date(s.year, s.month, 10), "mid": date(s.year, s.month, 20)}.get(
+            part, Hm._month_end(s.year, s.month))
+        if part == "early":
+            pa, pz, pl = date(*prev_month, 21), pm_end, f"late {mon[prev_month[1] - 1]} {prev_month[0]}"
+        elif part == "mid":
+            pa, pz, pl = date(s.year, s.month, 1), date(s.year, s.month, 10), f"early {mon[s.month - 1]} {s.year}"
+        else:
+            pa, pz, pl = date(s.year, s.month, 11), date(s.year, s.month, 20), f"mid {mon[s.month - 1]} {s.year}"
+    elif m2:
+        if m2.group(1) == "first":
+            own_end = date(s.year, s.month, 15)
+            pa, pz = date(*prev_month, 16), pm_end
+            pl = f"the second half of {mon[prev_month[1] - 1]} {prev_month[0]}"
+        else:
+            own_end = Hm._month_end(s.year, s.month)
+            pa, pz, pl = date(s.year, s.month, 1), date(s.year, s.month, 15), f"the first half of {mon[s.month - 1]} {s.year}"
+    elif y1:
+        part, y = y1.group(1), s.year
+        own_end = {"early": date(y, 4, 30), "mid": date(y, 8, 31)}.get(part, date(y, 12, 31))
+        pa, pz, pl = {"early": (date(y - 1, 9, 1), date(y - 1, 12, 31), f"late {y - 1}"),
+                      "mid": (date(y, 1, 1), date(y, 4, 30), f"early {y}"),
+                      "late": (date(y, 5, 1), date(y, 8, 31), f"mid {y}")}[part]
+    elif y2:
+        y = s.year
+        if y2.group(1) == "first":
+            own_end, pa, pz, pl = date(y, 6, 30), date(y - 1, 7, 1), date(y - 1, 12, 31), f"the second half of {y - 1}"
+        else:
+            own_end, pa, pz, pl = date(y, 12, 31), date(y, 1, 1), date(y, 6, 30), f"the first half of {y}"
+    elif season:
+        own_end = Hm._month_end(s.year, s.month)
+        pa, pz, pl = date(*prev_month, 1), pm_end, Hm.month_words(date(*prev_month, 1))
+    else:
+        return None
+    if b < own_end and pa + timedelta(days=(b - a).days) < pz:
+        # cut (where the export ends, or today) to fewer days than the part before: the same number of its days
+        pb = pa + timedelta(days=(b - a).days)
+        return pa.toordinal(), pb.toordinal(), f"the same days of {pl} ({_dates_said(pa, pb)})"
+    if season:
+        return pa.toordinal(), pz.toordinal(), pl
+    return pa.toordinal(), pz.toordinal(), f"{pl} ({_dates_said(pa, pz)})"
 
 
 def _offers(q, kind, out):

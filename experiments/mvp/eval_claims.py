@@ -3194,6 +3194,8 @@ def audit_results(lib, env, call=None, question="", today=None, earlier=None, la
             sp = read_call_window(win.get("words"), lib, today, preset=win.get("preset"))
             mine = spec_window(sp, lib, today) if sp else None
         _search_audit(lib, F, env, f, *(mine[:2] if mine else (None, None)))
+        kinds = HOW_EVENTS.get(sh.get("how") or "saved", SAVED)
+        _same_title_audit(lib, F, sh.get("items"), kinds, *(mine[:2] if mine else (None, None)))
         return F.rows
     ctx, wrows = brain_ctx(lib, env, call, question, today, earlier, last_window)
     for kind, ok, said, rec, words in wrows:
@@ -3217,6 +3219,7 @@ def audit_results(lib, env, call=None, question="", today=None, earlier=None, la
         args = (call or {}).get("args") or {}
         order = args.get("order") if tool == "items" and sh.get("kind") == "items" else None
         _item_rows_audit(ctx, F, items, order=order, which=sh.get("kind") if tool == "first_last" else None)
+        _same_title_audit(lib, F, items, HOW_EVENTS.get((ctx.f or {}).get("how") or "opened", OPEN), ctx.a, ctx.b)
     else:
         audit_sheet(ctx, F)
         _brain_extra(ctx, F, _clean(sh))
@@ -3242,10 +3245,69 @@ def audit_results(lib, env, call=None, question="", today=None, earlier=None, la
     return F.rows
 
 
+def _toolfix2_extra(ctx, F, sh):
+    """The cells the brain's tools added in mvp26 (toolfix2), recounted from the raw rows: the busiest weekdays over a
+    tie (every day of it and their count; one day only when there is no tie) and new.small_channels (the channels first
+    opened in the window under the floor of a new channel: their items, days and first day)."""
+    lib = ctx.lib
+    S = ctx.sc("filt")
+    w = sh.get("when") if isinstance(sh.get("when"), dict) else {}
+    if w.get("busiest_weekdays") or w.get("busiest_weekday"):
+        c = Counter(e[2] for ev in S.values() for e in ev)
+        top = max(c.values()) if c else 0
+        tied = [DAYS_EN[k].capitalize() for k in range(7) if c.get(k) == top]
+        if w.get("busiest_weekdays"):
+            F.add("sheet", "weekdays tied", w["busiest_weekdays"] == tied, ",".join(w["busiest_weekdays"]),
+                  ",".join(tied), where="when.busiest_weekdays", severity=1.0)
+            if "busiest_weekday_opens" in w:
+                F.add("sheet", "count", w["busiest_weekday_opens"] == top, w["busiest_weekday_opens"], top,
+                      where="when.busiest_weekday_opens")
+        else:
+            F.add("sheet", "busiest weekday (no tie)", tied == [w["busiest_weekday"]], w["busiest_weekday"],
+                  ",".join(tied), where="when.busiest_weekday", severity=1.0)
+    new = sh.get("new") if isinstance(sh.get("new"), dict) else {}
+    for k, r in enumerate(new.get("small_channels") or []):
+        if not isinstance(r, dict):
+            continue
+        name = "@" + r["handle"] if r.get("handle") else r.get("name")
+        mem = [i for i in S if lib.items[i]["c"] == name]
+        base = f"new.small_channels[{k}]"
+        F.add("sheet", "count", r.get("items") == len(mem), r.get("items"), len(mem), where=base + ".items")
+        if "days" in r:
+            d = lib.days({i: S[i] for i in mem})
+            F.add("sheet", "days", r["days"] == d, r["days"], d, where=base + ".days")
+        fw = lib.first_of(name, (getattr(ctx, "f", None) or {}).get("how"))
+        if r.get("first_watched"):
+            got = date.fromisoformat(r["first_watched"]).toordinal()
+            F.add("sheet", "date", got == fw and (ctx.a is None or fw >= ctx.a), r["first_watched"],
+                  _d(fw).isoformat() if fw else None, where=base + ".first_watched", severity=1.0)
+
+
+def _shown_title(cap):
+    """My own reading of a row's title for a same-title count: the caption's first line, its trailing number tag
+    ("#3") and hashtags out, compared as _neutral_cmp compares."""
+    line = (cap or "").split("\n")[0]
+    line = re.sub(r"\s*#\w+", "", line)
+    return _neutral_cmp(line)
+
+
+def _same_title_audit(lib, F, rows, kinds, a, b):
+    """mvp26 toolfix2: an item row's `same_title`, how many of their items with an event of the kinds counted in the
+    window have exactly its title."""
+    for k, r in enumerate(rows or []):
+        if not isinstance(r, dict) or "same_title" not in r:
+            continue
+        t = _neutral_cmp(r.get("title"))
+        n = sum(1 for i, it in lib.items.items() if _shown_title(it["cap"]) == t and any(
+            kd in kinds and (a is None or o >= a) and (b is None or o <= b) for o, _h, _w, kd in lib.acts.get(i, [])))
+        F.add("results", "count", r["same_title"] == n, r["same_title"], n, where=f"items[{k}].same_title")
+
+
 def _brain_extra(ctx, F, sh):
     """The fields of a brain result's sheet the round-12 sheet audit does not read: the theme fields, the busiest
     hours' order, the weekend and usual-week shares, the counts of the new and stopped themes and channels, saved and
     never opened on YouTube, the top channels' area, what a without-Shorts filter left out."""
+    _toolfix2_extra(ctx, F, sh)
     lib = ctx.lib
     S = ctx.sc("filt")
     ids = list(S)

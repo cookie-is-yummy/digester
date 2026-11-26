@@ -145,13 +145,72 @@ def size(o):
     return len(json.dumps(o, ensure_ascii=False, default=str))
 
 
+def title_shown(text, limit=TITLE_MAX):
+    """mvp26 toolfix2 4: a title as code puts it in its own lines (a card, a code lead): neutralised, its double quotes
+    made single (so a quoted title stays one quotation), clipped to 90 characters. The same cut for every line."""
+    if not isinstance(text, str):
+        return text
+    return neutral(" ".join(text.replace('"', "'").split()), limit)
+
+
+# mvp26 toolfix2 5 (the timeline of run1 N001.1 held the latest 47 of 69 periods where it held 52 before the cells of
+# mvp25 were added, and new themes on ranked sheets lost their first days): the cells added for insight are measured
+# outside the size cap, so every list is cut exactly as before they were added; they ride on top up to EXTRA_CHARS
+# (about 250 tokens), and only past that do they go (the parts of the day first, unless the sheet is a totals' sheet,
+# where they are the answer)
+EXTRA_CHARS = 1000
+
+
+def _hold_extras(sheet):
+    """Take the added cells out of the sheet: [(holder, key, value, kind)] to put back."""
+    held = []
+    new = sheet.get("new") if isinstance(sheet.get("new"), dict) else None
+    for k in ("themes", "channels"):
+        for row in (new or {}).get(k) or []:
+            if isinstance(row, dict) and "first_watched" in row:
+                held.append((row, "first_watched", row.pop("first_watched"), "first"))
+    if new is not None and "small_channels" in new:
+        held.append((new, "small_channels", new.pop("small_channels"), "small"))
+    when = sheet.get("when") if isinstance(sheet.get("when"), dict) else None
+    for k in ("parts_of_day", "busiest_weekdays", "busiest_weekday_opens"):
+        if when is not None and k in when:
+            held.append((when, k, when.pop(k), "parts" if k == "parts_of_day" else "weekday"))
+    return held
+
+
+def _put_back(sheet, held, chars):
+    """The added cells back, then out again in order while the sheet is over `chars`. True when any went."""
+    for holder, k, v, _kind in held:
+        holder[k] = v
+    if size(sheet) <= chars:
+        return False
+    order = ("parts", "first", "small", "weekday") if sheet.get("kind") != "count" else \
+        ("first", "small", "parts", "weekday")
+    went = False
+    for kind in order:
+        for holder, k, _v, kk in held:
+            if kk == kind and k in holder:
+                holder.pop(k)
+                went = True
+        if size(sheet) <= chars:
+            break
+    return went
+
+
 def cut_to_size(sheet, chars=RESULT_CHARS, keep=None, newest=False):
     """Cut until the sheet is about 1,500 tokens: first the lists inside rows (a theme's channels, an area's themes),
     then the other rankings (longest first), the ranking asked for (`keep`) last. True when anything was cut. Rows
     are cut from the end, so what is left is the top of each list, its refs unchanged. `newest` (toolfix 9: a month
     timeline of all history kept January 2021 to December 2022 and lost October 2026): the list asked for is in time
-    order, so it is cut from its start, and its rows' refs are made again (a ref is the row's own path)."""
-    cut = drop_extras(sheet, chars)
+    order, so it is cut from its start, and its rows' refs are made again (a ref is the row's own path). The cells
+    added for insight are measured apart (mvp26 toolfix2 5: `_hold_extras`), so they never cost a row."""
+    held = _hold_extras(sheet)
+    cut = _cut_rows(sheet, chars, keep, newest)
+    return _put_back(sheet, held, chars + EXTRA_CHARS) or cut
+
+
+def _cut_rows(sheet, chars, keep, newest):
+    cut = False
     for inner_max in (2, 1, 0):
         if size(sheet) <= chars:
             return cut
@@ -244,6 +303,14 @@ def honest(sheet, how="opened"):
     notes = []
     if not isinstance(sheet, dict) or not sheet.get("kind"):
         return notes
+    nw = sheet.get("new") if isinstance(sheet.get("new"), dict) else {}
+    left = nw.pop("small_channels_left_out", None)
+    if left:
+        # mvp26 toolfix2 6: the channels under the floor are listed up to 5; how many more there are is said
+        notes.append(f"new.small_channels lists 5 of them; {left} more channels were first opened in this window under "
+                     "the floor and are not listed.")
+    if isinstance(nw.get("channels"), list) and len(nw["channels"]) >= 5:
+        notes.append("new.channels lists at most 5 channels: there may be more.")
     if "new" in sheet or "stopped" in sheet:
         if not sheet.get("previous") and sheet.get("kind") not in ("compare_windows",):
             sheet.pop("new", None)

@@ -187,6 +187,10 @@ def resolve(arg, today, message="", screen="", scheduled=False, earlier=None, la
             return last
         w = (earlier or {}).get(arg.same_as)
         if w is None:
-            raise WindowError(f"no result {arg.same_as} with a window in this turn")
+            # mvp26 toolfix2 3: every refusal says a next step that exists
+            have = sorted(earlier or {}, key=lambda r: int(r[1:]) if r[1:].isdigit() else 0)
+            raise WindowError(f"no result {arg.same_as} with a window in this turn: "
+                              + (f"use same_as {' or '.join(repr(r) for r in have)}, or say the window"
+                                 if have else "say the window in their words, or use a preset"))
         return w
     return read_words(arg.words, today, message, screen, scheduled)

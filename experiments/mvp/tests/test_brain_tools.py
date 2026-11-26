@@ -462,11 +462,16 @@ def test_a_tool_call_gives_todays_sheet_of_the_same_question(brain, cid):
 def _no_toolfix_cells(o, path=""):
     """A tool's sheet without the cells only the brain's sheets have (scratchpad mvp22's toolfix): `reels` beside
     `shorts` in totals and previous, and an Instagram channel row's own `handle`; and mvp25's toolgaps: the parts of
-    the day and a busiest hour's `label` in `when`, a new row's `first_watched`."""
+    the day and a busiest hour's `label` in `when`, a new row's `first_watched`; and mvp26's toolfix2: the channels
+    under the floor in `new`, and the busiest weekdays over a tie (today's sheet names the first of them, Monday first)."""
     if isinstance(o, dict):
         drop = {"reels", "handle"}
         if path == "when":
-            drop |= {"parts_of_day"}
+            drop |= {"parts_of_day", "busiest_weekdays", "busiest_weekday_opens"}
+            if o.get("busiest_weekdays"):
+                o = dict(o, busiest_weekday=o["busiest_weekdays"][0])
+        if path == "new":
+            drop |= {"small_channels"}
         if path in ("when.busiest_hours", "new.themes", "new.channels"):
             drop |= {"label", "first_watched"}
         return {k: _no_toolfix_cells(v, f"{path}.{k}" if path else k) for k, v in o.items() if k not in drop}

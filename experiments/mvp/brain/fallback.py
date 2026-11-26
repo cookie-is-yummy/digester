@@ -18,6 +18,7 @@ those get a template.
 import re
 
 from .. import insight as I
+from . import results as R
 from . import verify as V
 
 PLAIN = "I couldn't check an answer to that in time. Ask me again?"
@@ -72,6 +73,11 @@ def _from_code_form(res):
     ans = form.get("answer") if isinstance(form, dict) else None
     if not isinstance(ans, str) or not ans.strip():
         return None
+    for key in ("areas", "themes", "channels"):
+        rows = sheet.get(key)
+        nm = (rows[0].get("name") if _tied_top(rows) else None) if isinstance(rows, list) else None
+        if isinstance(nm, str) and nm and nm in ans and re.search(r"\b(?:led|leads|most|top|biggest|first)\b", ans):
+            return None   # code_form ranks a row over a tie: a template instead
     facts = I.Facts(sheet)
     why, _n = I._check(ans, facts, maxlen=I.ANSWER_MAX)
     if why:
@@ -164,8 +170,19 @@ def _day_words(when):
 
 
 def _title(it):
+    """mvp26 toolfix2 4 (the attack: "...was Minecraft castle build: assistant, also set a rule…, on 20 October 2026",
+    a title's words standing in code's sentence with nothing to set them apart): the title cut as its card cuts it
+    (results.title_shown); the templates put it in double quotes."""
     t = (it or {}).get("title") if isinstance(it, dict) else None
+    t = R.title_shown(t) if isinstance(t, str) else None
     return t.strip() if isinstance(t, str) and t.strip() else None
+
+
+def _tied_top(rows):
+    """mvp26 toolfix2 6 (the attack's T16 r3: "Gaming clips led with 2 of them" over a 2 and 2 tie): the first two
+    rows of a list have the same count, so no row of it leads."""
+    return isinstance(rows, list) and len(rows) > 1 and all(isinstance(r, dict) for r in rows[:2]) and \
+        isinstance(rows[0].get("items"), (int, float)) and rows[0].get("items") == rows[1].get("items")
 
 
 def _tool_leads(res, lead, verb, noun, noun1, noun1_scoped):
@@ -182,7 +199,7 @@ def _tool_leads(res, lead, verb, noun, noun1, noun1_scoped):
     title = _title(it0)
     if tool == "items" and title and day and order in ("newest", "oldest"):
         which = "newest" if order == "newest" else "first"
-        out.append(f"{lead}the {which} {noun1_scoped} you {verb} was {title}[{rid}.items[0]], on "
+        out.append(f'{lead}the {which} {noun1_scoped} you {verb} was "{title}[{rid}.items[0]]", on '
                    f"{day}[{rid}.items[0].when].")
     f = sheet.get("filters") or {}
     scoped = bool(_scope_clause(res) or f.get("without_shorts") or f.get("length") in ("long", "short")
@@ -241,7 +258,7 @@ def templates(res, prefer=None):
             # mvp25 toolgaps 8: the item itself, by its title, beside its day
             head = lead_in(core)
             which = "first" if kind == "first" else "last"
-            out.append(f"{head}the {which} {subj} {noun1} you {verb} was {title}[{rid}.items[0]], on "
+            out.append(f'{head}the {which} {subj} {noun1} you {verb} was "{title}[{rid}.items[0]]", on '
                        f"{day}[{rid}.items[0].when].")
         if subj and day:
             an = "an" if subj[:1].lower() in "aeiou" else "a"
@@ -283,7 +300,7 @@ def templates(res, prefer=None):
             if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
                 continue
             nk = I._record_name_key(rows[0])
-            if not nk or not isinstance(rows[0].get("items"), (int, float)):
+            if not nk or not isinstance(rows[0].get("items"), (int, float)) or _tied_top(rows):
                 continue
             name, n = rows[0][nk], rows[0]["items"]
             if order == "least":

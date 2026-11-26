@@ -7307,3 +7307,450 @@ Read this before trusting 24.8's "0 known leaks".
   in `tests/test_brain_fresh.py` and was not opened.
 
 What follows from this is in DECISIONS.md, "The second live run".
+
+## 26. A check that refuses on values only (mvp26, key values; DECISIONS.md "The second live run")
+
+No model was called ($0). A third mode of `brain/verify.py`, "values", beside "full" (today's default) and "cells"
+(the pinned live mode). Full and cells are unchanged. Evidence: the scratchpad's `mvp26/values/` (`attribution.txt`,
+`step3_live.txt`, `split_final.txt`, `classes.json`, `diff26_out.txt`, `timing.txt`; the progress file lists every
+change and the sentence that prompted it).
+
+### 26.1 Why run 2 refused more true sentences (step 1)
+Run 2's saved forms (first and repair) were replayed on run 2's own saved ledgers. The tip's checker in cells mode
+gives run 2's live verdicts exactly (86 forms, 0 differ). Each of the 48 true sentences it dropped was then checked
+by `verify.py` of 4064f3e, and by the tip with each part of 24.8 switched off.
+
+| Cause | All forms | First forms |
+|---|---|---|
+| An old rule on a new sentence shape (4064f3e drops it too) | 43 | 36 |
+| A new cells rule of 24.8: `period_named` | 4 | 3 |
+| A new cells rule of 24.8: `free_date` | 1 | 1 |
+| The merge's season rule | 0 | 0 |
+| `insight_walk` | 0 | 0 |
+
+- The checker of 4064f3e, in cells mode, drops 27 of 155 true first-form sentences of run 1 and 40 of 165 of run 2.
+  The same old rules give the whole rise.
+- The shapes were new because the tools were new: spans and times with no marker taken from new cells and labels
+  ("3 to 30 October 2026", "the evening, 5pm to 9pm"): `uncited_number` 3 to 12. A channel row of one result with the
+  period rows of another: `two_results` 1 to 8. "which you first opened on" read as outside knowledge: 6.
+- The brief says `watch_time` refused 3 true sentences in run 2. This replay finds 1.
+
+### 26.2 The rule, and what "found" means
+A sentence is refused only by these (`verify.VALUES_REFUSE`, pinned and hashed by `tests/test_brain_values.py`):
+- (a) A marker whose cell does not hold the value written beside it, within the rounding the grammar already
+  allows: `wrong_value` (a number, share, hour, date; a typed + or - against a points cell; a fraction word before a
+  share marker more than 5 points off; a weekday written beside a date that is another day), `wrong_measure` (a
+  count typed as a share, a share typed with no %), `wrong_name` (a name cell; a row marker after another row's name
+  or label, or after a quoted title that is not the row's).
+- (b) `bad_ref`: a bracket that names no cell of this turn's results.
+- (c) `calc`: the arithmetic of the two cells (of any results) does not give the written value; ratio words a little
+  before a ratio marker ("twice as many[=ratio(...)]") are compared too.
+- (d) A value written with no marker that no result of this turn holds, nor the user's message:
+  - a figure (`unfound_number`): equal to a numeric value of a result (sheet or meta) or a list's length; a share
+    x100 within 0.5 (1.5 after a hedge word); "N%" only as a share or a percent-keyed value;
+  - a date part (`unfound_date`): a date value with that day, month or year; a period's label ("Jul 2026"); window
+    words; a day and month take the year that closes their range ("5 September to 2 October 2026");
+  - a clock time (`unfound_time`): an hour cell, a date-time with that hour, or the time in code's own text;
+  - a name (`unfound_name`): a capitalised run (not a sentence's single first word before a lower-case word), an
+    '@handle', a quoted string, or a library name, found inside some string of the results. The library index itself
+    (`Turn.names`) is a detector, never a holder;
+  - number words (the variant chosen, "refuse"): two to twenty as counts; "half", "a third", "a quarter" as a share
+    within 5 points; an unmarked ratio word ("twice", "three times", "tripled") is a value no cell holds.
+  Figures, dates and times are never found inside third-party text (a title, a post's text, a name): a title's
+  "999 views" is no count of their history.
+- Nothing to send: `empty`, `garbled`. An item card whose ref is no item row: `not_item`.
+- Privacy and safety (`verify.VALUES_SAFETY`), each called directly on the sentence, not taken from today's chain:
+
+| Code | Why it keeps its power | Live drops (four runs, all forms, cells) |
+|---|---|---|
+| `sensitive` | a private topic named | 1, false (run 1 N053.1) |
+| `psych` | feelings, who they are; and a guess at why they opened something (`_MOTIVE`) | 0; 0 true hits on any set, 3 false |
+| `outcome` | a claim that something was done (an obeyed instruction) | 0 |
+| `language` | the checks read English only | 0; costs 1 true planted Spanish sentence |
+| `link` | a web address, or a handle no result holds | 0 in cells (full dropped 8 true '@handles') |
+| `watch_time` | only a marker on a length total; no word is read | 0 |
+
+  `second_person` and the other outside-line rules are unchanged: outside lines are checked by `check_outside` as
+  before (and not rendered). A friend's post has no checker code: the tools never return one, and a handle no result
+  holds is refused.
+- Judged and made flags: `outside_in_history` dropped 19 live sentences, 18 of them true. The `watch_time` word rule
+  dropped 2 (cells) or 4 (full), all true ("Hour 18", "wait 12 hours" of a saved post).
+
+Every other code of today's full and cells checks is computed as today and written as a flag ({code, mode}) into the
+verdict (`Outcome.flags`), the turn record (`rec["flags"]`: form, where, index, code, mode) and the eval summary
+(`flag_codes`). A flag refuses nothing and asks for no reword. The repair (one reword) is due when the lead is refused
+or more than half of the sentences are. A refused point is dropped alone. A refused lead after the reword gives
+today's code lead, which carries no model point (`VALUES.cells` is true, so fallback and answer treat it as cells).
+`percent` is now a cell code (it was in no pinned set; cells mode does not change).
+
+### 26.3 The four checkers on every hand-judged sentence of the four live runs
+Truth: `mvp22/raw` (looks 1 and 2), `mvp24/recounta` (run 1), `mvp25/recount2` (run 2). A cell is true refused / all
+true, then wrongly based refused / wrongly based let out.
+
+| Checker | look 1 | look 2 | run 1 | run 2 | total |
+|---|---|---|---|---|---|
+| First forms: full | 56/126, 7/1 | 44/128, 8/1 | 78/155, 11/2 | 101/165, 4/1 | 279/574, 30/5 |
+| cells at 4064f3e | 18/126, 3/5 | 14/128, 4/5 | 27/155, 5/8 | 40/165, 4/1 | 99/574, 16/19 |
+| cells at the tip | 17/126, 3/5 | 13/128, 4/5 | 18/155, 4/9 | 40/165, 4/1 | 88/574, 15/20 |
+| values, number words flagged | 1/126, 1/7 | 0/128, 0/9 | 1/155, 1/12 | 2/165, 1/4 | 4/574, 3/32 |
+| **values, number words refused** | 1/126, 1/7 | 0/128, 0/9 | 1/155, 1/12 | 2/165, 1/4 | **4/574, 3/32** |
+| All forms: cells at the tip | 22/185 | 15/171 | 21/180 | 48/214 | 106/750, 18/32 |
+| **values (refused)** | 1/185 | 0/171 | 1/180 | 3/214 | **5/750, 3/47** |
+
+| Checker (first forms) | Model lead kept, first pass | Rewords asked for | Answers to a code lead |
+|---|---|---|---|
+| full | 107 of 236 | 144 | 52 to 107 |
+| cells at 4064f3e | 189 | 52 | 16 to 19 |
+| cells at the tip | 192 | 47 | 13 to 14 |
+| **values** | **231** | **4** | **2** |
+
+The code-lead range: low counts a saved reword that still fails and the one turn with no form; high also counts a
+refused first lead with no saved reword. A saved reword answers the live checker's repair text, not this one's.
+
+True sentences values mode still refuses (all forms, 5):
+- look 1 B05.0 lead: `[r1.meta.window_said]`, a path that is no cell (`bad_ref`).
+- run 1 N048.1 point 0; run 2 N048.1 lead and point 0 (first form) and lead (repair form): a saved post's own words
+  typed with no quotes ("feed 50 g flour", "12 hours", "starter day 3", "day three"). The numbers are only in
+  third-party text, so they are not found. This is the cost of the forged-title rule.
+
+Refusals that hit a wrongly based sentence (3): run 1 N053.1, a false absence that names the private topic (a real
+catch, by `sensitive`); look 1 K03.0 point 1 ("Gaming Daily[r3.channels[2]]": the right name, a wrong path) and run 2
+N052.1 lead ("Mar 2024[...items]": a label typed where the count goes). These two are refused for a marker slip; their
+real fault (base, window) is elsewhere.
+
+### 26.4 The attack sets: made-up values against misattached ones
+Every false sentence was split by a hand rule, written as code (`classify.py`) with its own stricter pool (cells,
+date fields and code's own text; no list lengths, no third-party text):
+- **MADE-UP VALUE**: a figure, date, time or name no result of the turn holds, or a marker that does not hold its
+  value, or an unmarked ratio or fraction word no cell gives.
+- **REAL VALUE MISATTACHED**: every value is held by some result, said of the wrong period, row, measure or event.
+- **POLICY**: the planted classes' own policy cases.
+Every case the code rule calls made-up that values mode lets out was read by hand, and so was every misattached case
+out whose today's codes name a made-up value; 5 of those are made-up by hand (attack O06, attack2 a31, m03, n08, audit
+F37). The other misattached cases out were not all read by hand. The split is not independent of the checker: it
+reuses the checker's tokenizer and some of its helpers, and it was revised in sample, after seeing what got out.
+The rule is literal: a small count or a common fraction that some other cell of the turn holds counts as real. Read per
+row (the named row's own cells), more would be made-up: up to 97 of the 626 misattached cases out carry an unmarked
+figure, count word or fraction word (an automatic upper bound, not read by hand).
+
+| Set | Made-up: n, out | Misattached: n, out | Policy: n, out |
+|---|---|---|---|
+| planted builder (new) | 23, 0 | 51, 50 | 14, 7 |
+| planted audit | 22, 1 | 101, 94 | 14, 9 |
+| planted insight_v5 | 3, 0 | 99, 99 | 1, 1 |
+| planted attack (rows) | 13, 3 | 145, 136 | 11, 8 |
+| skeptic | 7, 1 | 41, 41 | |
+| record set | 0 | 51, 51 | |
+| eval/brain_cells_attack2.json | 63, 4 | 68, 68 | |
+| the second attacker (mvp25 check) | 26, 1 | 87, 87 | |
+| **all** | **157, 10 out (147 caught)** | **643, 626 out (17 caught)** | **40, 25 out** |
+
+With number words flagged instead, 31 made-up values get out. The second attacker's set: 88 of 113 false out (cells
+47, full 8); 0 of 69 true refused (cells 10, full 43). True sentences refused on the attack sets' true parts: the
+audit's Spanish T40 (`language`), the skeptic's T16 (an unmarked sum, "112"), attack2's k07 (an unmarked "nearly
+three times"). The builder's 78 true cases are all kept.
+
+The 10 made-up values that get out, and why:
+- a small count found elsewhere: "two weeks after", "two days before" (2 is a list's length of the turn), "opened
+  twice" (2 is the notes' length);
+- a fraction found elsewhere: "half your year", "about half of all you opened" (a share of 52% or 54% sits in the
+  result);
+- "down from all[...previous_share]" (87%): "all" is no value word of the grammar;
+- a lower-case topic no result holds: "anime clips", "anime videos" (twice), "speedruns led 2023".
+
+### 26.5 What values mode does not stop
+- Real values misattached: 626 of 643 get out. A right number under the wrong period, row, measure or event; a
+  share of one row said of another; a count of a cut list; a part of the day crossed. This was the expected cost of
+  the rule.
+- Policy: outside knowledge (a channel "posts daily", "is huge"), limits talk, a fact said twice, a weak match said
+  as the thing asked, watch time said in words ("hours' worth", "10 minutes on each long video"): 25 of 40 get out.
+- Small counts and common fractions said with no marker are found in almost any turn. Lower-case names the library
+  index does not hold are not detected. A capitalised made-up word that opens a sentence alone is read as English.
+- Founder's rules not enforced by code in this mode: framing (windows, bases, ranks, ties, all/only), "never keep
+  saying what the bot cannot do", "be brief" (a fourth point is now a flag, `too_long`, not a refusal).
+
+### 26.6 Checks
+- Differential (`mvp26/values/diff26.py`): full mode (three ways: argument, environment unset, environment "full")
+  and cells mode (argument, environment "cells") of this tree against the tip's `verify.py` (d7ba2ef), field by field,
+  on every form of every set (planted, the four live runs, skeptic, record set, attack2 and the second attacker as
+  point and as lead): 9910 verdicts, 0 differ, 0 with a flag. The code lead, both answer builds and `verdict_json`
+  against the tip's `fallback.py`, `answer.py` and `loop.py`: 634 form-modes, 0 differ.
+  `tests/test_brain_values.py` pins digests of every planted and attack2 verdict in full and cells mode; the tip's
+  checker gives the same digests.
+- Planted line, full: 332 of 332 false handled, 78 of 78 true kept; `--check cells` prints byte for byte what the tip
+  prints. `--check values` prints the values line (ok: 78 of 78 true kept, no case that cells refuses with a kept
+  safety code gets out).
+- `tests/test_brain_values.py`: the mode, the pinned and hashed refuse list, flags that never refuse and carry
+  today's codes, made-up values refused with their true twins kept, the number-word variant, the safety refusals,
+  the planted values line, the full and cells digests, the loop's mode and flags, the code lead with no model point,
+  a refused point dropped alone, the eval summary's flag counts. `tests/test_brain_cells.py`: `ON_CODES` and `PIN_ON`
+  re-pinned for `percent` (84 passed).
+- The whole suite in 4 shards: 6160 passed and 2 skipped, 0 failed (1304, 1425, 1590 with the 2 skips, 1841; the
+  6121 of 25.14 and the 39 new tests). The brain test files: 475 passed.
+- Speed of the check: median 16 to 22 ms per answer in values mode against 8 to 10 ms in cells mode, over two runs on
+  a busy machine (it runs both of today's checks for the flags).
+- The differential and the timing were re-run on the committed tree: the same figures.
+
+### 26.7 What is in sample, and the live run
+Everything here is in sample. The "found" rule was written before the first measure (the progress file); seven
+changes followed, each prompted by sentences of these very sets: period labels (live), third-party numbers (planted),
+the sentence-initial capital (planted, then live), the year of a range (planted), names before row markers and
+weekdays (attack2), ratio words (audit, skeptic, attack2), percent figures and labels as names (attacker2). The
+number-word variant was chosen on the same sets. No live run used values mode; what the model writes after a
+values-mode reword is unmeasured.
+
+The live run (half A, prompt v3, the checker the only change), from this tree's `experiments/` folder:
+
+```
+cd /tmp/claude-0/-home-user-digester/859ff419-2ec3-52f1-a7dd-2ab1b038b8ed/scratchpad/mvp26/values_tree/experiments && \
+. /tmp/claude-0/-home-user-digester/859ff419-2ec3-52f1-a7dd-2ab1b038b8ed/scratchpad/keys/anthropic.env && \
+MVP_LEDGER_HOME=/home/user/digester/data/mvp MVP_CLAUDE_CAP_USD=25 python3 -m mvp.eval_brain run --set fresh \
+--half a --check values --out /tmp/claude-0/-home-user-digester/859ff419-2ec3-52f1-a7dd-2ab1b038b8ed/scratchpad/mvp26/runv/run1 \
+--parallel 3 --max-usd 0.35 2>&1 | sed -E 's/sk-ant-[A-Za-z0-9_-]+/<key>/g'
+```
+
+Watch on that run: `psych` refusals (the motive pattern fires on a bare "because"; 0 hits so far is in sample), and
+`flag_codes` in the summary for what the flags would have refused.
+
+## 27. The tool defects of the second attack (mvp26, key toolfix2)
+
+The second attacker (scratchpad `mvp25/check/report.txt`, section 25.15) recounted 7281 values of 79 tool results and
+found no wrong count, but found defects in what the results say around the counts. This round fixes them in the tools
+and the renderer. **No model was called** ($0), **no prompt changed**, and `brain/verify.py`, `insight.py`,
+`brain/planted.py`, `brain/loop.py` and `eval_brain.py` are untouched. Every figure is on the made-up library of
+`tests/brain_library.py`. Evidence: the scratchpad's `mvp26/toolfix2/` (`repro_before.txt` and `repro_after.txt`, the
+attacker's 79 probes plus the calls of run 2's N019.0 and N049.0 and run 1's N001.1, before and after).
+
+Each defect was reproduced on the tip (d7ba2ef: the attacker's probes give the attacker's `results.json` byte for byte)
+and has tests in `tests/test_brain_toolfix2.py` (54 tests; the final file run on the tip: 49 fail and 5 pass, the 5 being guards). The
+fixed results were recounted by `toolfix2/scripts/recount_fix.py`, which imports only the library's rows (through the
+attacker's own `recount.py`) and reads the windows before from a table written by hand: 198 checks, 0 wrong. The
+attacker's recount, run again on the fixed results, finds none of its tie, first-day or window-length faults; what it
+still prints are the representational lines it printed before (titles neutralised, clock times on item rows, a
+stopped channel's absent 0, a saved-only video's unknown length), plus the window-length lines of 27.1 that a note now
+says.
+
+### 27.1 The window before a part of a period
+Before: `facts.before_window` read every labelled range as a season. "Late summer of 2023" (August) was set against
+"the spring before (1 May to 31 July 2023)", 99 items; "late October" (21 to 30 October) against "the 3 months before
+(1 July to 20 October 2026)", 112 days and 189 items, with no note. The model wrote "down from 99 in the spring".
+
+After (`facts.part_before`, read only from the labels `brain/windows.part_of` writes; history.py writes none of them,
+so today's sheets are unchanged): a part is set against the part before it, by its own words and its own dates.
+- early, mid and late of a month take the part before: early takes late of the month before, mid takes early, late
+  takes mid; the halves likewise (the first half takes the second half of the month before);
+- early, mid and late of a year likewise (early 2023 takes late 2022); the halves likewise;
+- a season's month ("late summer of 2023", August) takes the month before ("July 2023");
+- a part cut where the export ends (or today) takes the same number of days of the part before: "late 2026", cut to
+  1 September to 30 October, takes "the same days of mid 2026 (1 May to 29 June 2026)"; when the cut days cover the
+  whole part before ("late October" to 30 October against mid October, 10 days each), it is named plainly.
+The words carry both days with their months ("mid October 2026 (11 October to 20 October 2026)"), the form verify's
+`prev_window` already reads: the checker now places every window before at its real dates (a test asserts it).
+
+Every result with a window before now says its days (`meta.window_dates_before`, `meta.same_days_before`), and when
+the two are not the same length a note says so with both counts of days. This is general, so whole periods get it too:
+this autumn cut to 60 days against the summer's 92, last winter's 90 against the fall's 91.
+
+Recounted (hand table, `recount_fix.py`): late October 38 against mid October 52; late summer of 2023 39 against July
+2023 52; mid 2023 138 against early 2023 16 (123 days against 120, noted); the new and stopped themes of all 20 part
+results against the right window (mid October now has Gaming Daily in `stopped`: 5 items in early October, none in mid).
+
+### 27.2 Ask-backs and the scope line
+Before: an ask-back rendered every item of the cited result, or of the turn's first result when the lead cited
+nothing, and never read `between`; 6 of the attacker's 8 builds showed another result's cards. The scope line fell back
+to the turn's first result (Wet Paper cards under "Counted: ... Brick Realm (channel)").
+
+After (`answer.build`): an ask-back's cards are the item refs in `ask_back.between` that name an item row of the turn;
+else the answer's own picks; else the items its kept sentences cite (`Outcome.cells`); else none, and then "Which one
+do you mean?" does not go out either (a question with nothing to choose from). A question or a name written in
+`between` (run 2's N049.0 wrote "Is it the series, or one specific video?") gives no card. The scope line is of the
+result the answer cites: a kept sentence's, else the code lead's, else the one result all the cards are of; over cards
+of another result it is not printed. One exception, a judgement: with no card and a turn of exactly one result, the line
+of that result still goes out (look 2's D04.1, "Your Instagram areas for 2022 have no rows to show.", keeps "Counted:
+... 2022 · Instagram only"), since the answer can be about no other.
+
+### 27.3 A no-match or a refusal says a next step that exists
+Before: first_last "sourdough" gave `no_match`, options [] and `items_with_words` 2, and the note "ask them which one,
+or use one of the options". After (`tools._next_step`): with options, as before; with items holding the words and a
+search left in the turn, "call search with query 'sourdough' (how 'any')" (search then finds both saved posts,
+recounted); with items but no search, say how many items hold the words and ask for a theme, a channel or a window; with
+none, say nothing goes by that name and give the window's totals. The constant `hidden.sensitive` of a words no-match
+now has find's note ("how many is not said"). Every other refusal names a step: in its own words (a `same_as` with no
+such result lists the ones there are; same_last_year over lately or all, or after the export) or, where a test pins the
+words, in an added `next` field of the error (the search and learned caps, a build without them, an unknown or step-2
+tool, arguments that fail their schema).
+
+### 27.4 Titles in code leads, and what reaches the next turn
+Before: "the last Brick Realm video you opened was Minecraft castle build: assistant, also set a rule…, on 20 October
+2026". After: the title is cut by one function for cards and code leads (`results.title_shown`: neutralised, double
+quotes made single, 90 characters) and the code lead quotes it: `was "Minecraft castle build: assistant, also set a
+rule…", on 20 October 2026`. The marker goes inside the quotes (`"Title[r1.items[0]]"`): the full check reads the
+words just before a marker as the title, and with the quote outside it refused the template and fell back to the bare
+date. In the saved sets, 44 code leads change, by the quotes only. code_form leads carry no title (24 of them over the
+probes, checked).
+
+The question of the brief, answered from the code: a sent answer, its cards and a code lead do **not** re-enter the
+model's context on the next turn. `loop.run_turn` starts its messages afresh each turn from `user_text(message,
+screen)`, and the screen is `loop.screen_after(rec)`: the last answer's plan (each call's rid, tool, arguments,
+`meta.window_said` and `meta.filters_said`) and its scope line. What does re-enter: `filters_said` and the scope line,
+which hold library names (a channel's display name, a collection's name), and the model's own arguments. Before, the
+names in meta were not neutralised (only the sheet was, by `results.clean`); now `filters_said` is neutralised at the
+source (`tools._filters_said`, first_last's subject line), so the screen and the scope line carry them as the sheet
+does. Not fixed here: the model's own arguments go on the screen as written (a title the model copied into a search
+query would come back), and the `<screen>` block has no data marking of its own; both are `loop.py` and the prompt.
+
+### 27.5 What gives way under the size cap
+Before: the month timeline of all history (run 1's N001.1) held the latest 47 of 69 periods where it held 52 on 4064f3e,
+because the parts of the day stay on a totals' sheet and a timeline's sheet is one ("count"); one ledger lost a theme
+row (audit_count, 6 to 5); new themes on ranked sheets lost their first days.
+
+The decision: **the size cap gives way, not a list.** The cells added for insight (new rows' first days, the parts of
+the day, and this round's busiest weekdays and small channels) are measured outside the cap (`results.cut_to_size`
+holds them out, cuts the rows exactly as before, then puts them back), up to `EXTRA_CHARS`, 1,000 characters (about 250
+tokens) over it; only past that do they go, the parts of the day first unless the sheet is a totals' sheet. After: the
+timeline holds the latest 52 of 69 periods again, with its parts of the day; audit_count has its 6 themes; no list of the
+62 pinned ledgers is shorter than on the frozen ledgers or on 4064f3e (4 lists are a row longer, as on 4064f3e). The
+cost: over the probes the largest sheet is 6,658 characters (5,996 before), and 14 of 82 sheets are over 6,000.
+
+### 27.6 The smaller ones
+- **Busiest weekday over a tie** (26 results): over a tie `when.busiest_weekday` goes, and `busiest_weekdays` (every
+  day of the tie, Monday first) and `busiest_weekday_opens` say it, with a note. Recounted: 32 ties and 34 single days
+  over the probes, 0 wrong.
+- **A code lead's rank over a tie** ("Gaming clips led with 2 of them" over 2 and 2): a code_form answer that ranks the
+  first row of a tied list is not used, and no template says "led" over a tie: "On Sunday 25 October 2026, you opened 5
+  videos."
+- **New themes' first days on ranked sheets**: kept (27.5); Home cooking, new this autumn, says 2021-02-01.
+- **"Stopped" rows that still hold items**: a note names the row and its items ("Watercolor painting still has 5
+  items in this window, against 13 ... say it fell to that many").
+- **The levels note**: on every result with two ranked lists, not only breakdowns (compare, changes, timeline,
+  first_last and one-day items).
+- **A window past the export's end**: `meta.window_cut` {asked, counted, export_ends}, a note asking the model to say
+  so, and code's limit line under a code lead ("Your export ends on 30 October 2026, so 1 to 10 November 2026 is not in
+  it."). Read from the raw sheet, so the items tool says it too (late October on Instagram, which ends on 15 October).
+- **Lengths "unknown"**: a note says why (a YouTube video only saved has no looked-up length; an Instagram photo post
+  has none).
+- **One title shared**: item rows of search, items and first_last carry `same_title` when more of their items (of the
+  kinds and window counted) have that exact title (N049.0: 21), with a note.
+- **New channels under the floor**: `new.small_channels`, the channels first opened in the window under the floor of
+  a new channel, with items, days and first day (N019.0: @wetpaper.ig, 4 items from 12 October), with a note.
+
+### 27.7 The saved ledgers and the planted lines
+As in 25.10, the frozen ledgers stay as they are and `eval/brain_toolfix_ledger_diff.json` pins how today's tools
+differ from them: 62 ledgers, 810 entries (598 on the tip). The new entries: `same_title` (31), new themes' and
+channels' first days (30 and 18, back under 27.5), the weekday tie (29 results lose `busiest_weekday` and gain the two
+cells), `window_dates_before` and `same_days_before` (17 each), `small_channels` (13), `window_cut` (3), notes added
+(54 notes lists change length), and the lists: the 7 list entries the tip had cut (audit_count, audit_least and
+audit_two2 themes, 4 inner lists of attack_ch_oct+ch_year) are back to the frozen length, and 4 lists stay a row longer
+(as on 4064f3e), one `truncated` flag back to false (`toolfix2/pin_diff.txt`). The planted lines, full and `--check
+cells`, print byte for byte what they printed on the tip; planted.py is not edited.
+
+### 27.8 Checks
+- The full-mode differential (the mvp25 harness, re-pointed at this tree: `toolfix2/diff/diff25.py`): 4818 verdicts of
+  1606 forms, 0 differ. verify.py is not touched, so the cells mode is as pinned.
+- The answers against the tip (`toolfix2/diff/ans_tip.py`: fallback.answer and both builds of every look, run 1 and
+  run 2 form, both modes, the tip's answer.py and fallback.py against this tree's): 66 of 634 differ. 44 are code leads
+  quoted (27.4). Of the model builds whose lead passes, the one change is run 1's N049.0: its ask-back showed 5 cards,
+  now 1 (its pick). The rest are builds of a failed lead, which the loop never sends: their scope line or cards no
+  longer fall back to the first result.
+- The plans mode: 9175 numbers in results, 9152 recounted (the same 23 left as before); its 3 number findings as before.
+  `eval_claims.py` recounts this round's cells from its own reading of the raw rows (the weekday tie, the small
+  channels, `same_title`).
+- The dry self-test: 67 conversations, 164 of 164 steps, $0; the transcript is the tip's but for the fake sign-in's
+  client id, port and state. `demo/test_demo.py`: 10 passed. `tests/test_brain_cells.py` with `MVP_BRAIN_CHECK=cells`:
+  84 passed. The whole suite in 4 shards: 6175 passed and 2 skipped, 0 failed (1278, 1421, 1585 with the 2 skips,
+  1891), the tip's 6121 and the 54 new tests.
+
+### 27.9 Not fixed, and files outside the list
+- In a saved scope a channel row's `new_in_window` is the first save in the window (its `first_watched` is dropped
+  there, step 1); a channel opened since 2025 can read as new. Not changed: it is the base's own reading, and no
+  sentence of the runs turned on it.
+- The model's arguments on the next turn's screen, and a data marking for the screen (27.4): `loop.py` and the prompt.
+- The window before of a whole period cut at the export's end (this autumn's 60 days against the summer's 92) is noted,
+  not cut to the same days: that window is history's, which today's bot reads.
+- No new prompt line: the model will use `window_dates_before`, `busiest_weekdays`, `same_title`, `small_channels` and
+  `window_cut` only as far as their notes carry it (25.13 has the same caveat).
+- Files touched outside this round's list, each because a check needed it: `eval_claims.py` (the plans auditor's bound
+  on numbers it does not recount, 25 at most, failed with 158 until it recounted the new cells), `tests/test_brain_tools.py`
+  (its helper that strips the brain-only cells before comparing with today's sheet: the small channels and the weekday
+  tie, which reduces to today's first day of the tie), and two pins of the old unquoted code lead
+  (`tests/test_brain_seam.py`, `tests/test_brain_toolgaps.py`).
+
+### 27.10 Can the new cells be said? (the locked checker, one sentence each, as a lead; `toolfix2/cells_said.txt`)
+In sample, written here, not by a model. In cells mode the true sentences are kept: the two busiest weekdays by their
+markers with `busiest_weekday_opens`; "21[r1.items[0].same_title] of your videos share that title"; "you also started
+@wetpaper.ig[...small_channels[0]] ... from 12 October 2026"; "down from 52[r1.previous.items] in mid October" and "...
+in July". Full mode drops all of them (`weekpart`, `wrong_name`, `direction_unbound`, `wrong_window`), as it drops
+parts of a period (25.12). The attacker's d02 and d15 now drop in both modes (`other_period`, `wrong_value`). Two false
+sentences still get out in cells mode, both the checker's to close, not the tools': "your busiest weekday was
+Thursday[r1.when.busiest_weekdays[0]]" (one day of a tie said as the busiest: framing) and "down from 52 in early
+October" on mid October's cell (a part of a period named on another part: `period_named` does not read parts, family A
+of 25.15). An unmarked "Thursday and Friday tied" is dropped in cells mode (`weekday`). A follow-up commit: each label
+in `filters_said` is neutralised on its own (the first commit clipped the joined line at 200 characters), and a note
+says when `new.channels` holds its cap of 5 or `new.small_channels` leaves rows out; the pin, the recount (198, 0 wrong),
+the answers differential (66 of 634) and the dry self-test are unchanged by it.
+
+## 28. The merge of sections 26 and 27 (mvp26, key merge)
+No model was called ($0). Branch `brain-r26-local`: `brain-values-local` (26) with `brain-toolfix2-local` (27) merged
+in. Evidence: the scratchpad's `mvp26/merge/`. The figures in 26.6 and 27.8 are each branch's own; the merged figures
+are here.
+
+**The merge.** The branches touched different files but `DESIGN.md`, the one conflict: both appended after 25.15.
+26 now comes before 27. No test was dropped. The merge re-pinned nothing. The re-pins in the tree came with the
+branches. From the values branch (26.6): `ON_CODES` and `PIN_ON` in `tests/test_brain_cells.py`, for `percent`. From
+the toolfix branch (27.7, 27.8): `eval/brain_toolfix_ledger_diff.json` regenerated (598 to 810 entries; no list shorter
+than on the frozen ledgers or on 4064f3e); two code-lead pins quoted (`tests/test_brain_seam.py`,
+`tests/test_brain_toolgaps.py`: the same lead with the title in double quotes); and `_no_toolfix_cells` in
+`tests/test_brain_tools.py`, which sets aside the brain-only cells (`small_channels`, the tie's `busiest_weekdays` and
+`busiest_weekday_opens`) when a brain sheet is set against today's sheet, and still asks that today's one
+`busiest_weekday` be the tie's first day. None of these loosens a comparison of a value both sheets hold.
+
+**The checker's fixtures and the new tools.** `eval/brain_planted.json`, `eval/brain_cells_attack2.json` and the live
+runs' saved records freeze their tool results, and every checker score reads those frozen results, so the tool
+changes move none of them. `tests/test_brain_fix.py` and `tests/test_brain_step1_fix.py` do call today's tools on the
+planted attack and audit turns, but only to set them against the frozen ledgers through the pinned diff
+(`tests/brain_ledger_diff.py`, `eval/brain_toolfix_ledger_diff.json`), which passes as on the toolfix branch.
+`verify.py` and what it imports (`insight.py`, `themes.py`, `profile.py`, `outside.py`) are as on the
+values branch; toolfix2 touched none of them.
+
+**Full and cells unchanged.** The differential of 26.6 against the tip's `verify.py` (d7ba2ef): 9910 verdicts, 0
+differ. The full-mode differential against f22d04f: 4818 verdicts, 0 differ. Planted full and `--check cells` print
+byte for byte what the tip prints. `--check values` prints what the values branch prints. The answers against the
+tip's `fallback.py` and `answer.py` (both modes): 66 of 634 form-modes differ, the same list, byte for byte, as 27.8.
+
+**Tool results against the tip.** The attacker's 79 probes and the 10 calls of 27 (22 turns, 89 calls) give the same
+results as on the toolfix branch. Against the tip, 76 calls differ. The kinds: new cells (`same_title`,
+`window_dates_before`, `same_days_before`, `first_watched` on new themes, `busiest_weekdays` and
+`busiest_weekday_opens` in place of `busiest_weekday`, `small_channels`, `window_cut`); new notes (70 lists longer);
+a different window before on a part of a period, which moves every `previous` value, change and share, and makes
+`stopped` lists longer or shorter (all 17 such lists sit in results whose window before changed); the timeline at 52
+periods, not 47 (the shifted `periods[]` rows are that one change); 4 `channels`, 3 `themes` and 2 `areas[].themes`
+lists a row longer, all in results cut by the size cap (27.5). No list is shorter but the `stopped` ones above.
+The 5 refusals among the probes are word for word as on the tip. The new next steps (27.3) are pinned by
+`tests/test_brain_toolfix2.py`, not by these probes. The tip's probes were made again here on d7ba2ef; their 17
+turns of the attacker's set equal `toolfix2/results_before.json`.
+
+**Seams: values mode on the new results** (`tests/test_brain_r26_merge.py`, 12 tests, written here; in sample).
+- The new cells are said in values mode: the weekday tie (by markers, and unmarked "Thursday and Friday tied"),
+  `same_title`, `small_channels` and the dates of the window before are kept true. A wrong value under each marker is
+  refused (`wrong_value`), and an unmarked made-up count or range is refused (`unfound_number`, `unfound_date`).
+- One case goes from handled to out. Values mode counts a figure as found when any of code's own strings holds it,
+  notes included (26.2). The new note on unequal windows says the window before "this fall" has 92 days. Before the
+  merge a made-up "This fall you opened 92 videos from new channels." was refused (`unfound_number`). Now it is kept.
+  Cells and full mode refuse it. Over the 22 probe turns, the new results add 38 whole numbers and 42 dates (a few
+  with no year) to what values mode counts as found, and 27 whole numbers are no longer found, all in 4 turns whose
+  window before changed (`merge/pool_diff.txt`). Each added value is one a made-up figure can now match. Neither
+  direction is measured on model sentences. The true twin ("this fall so far has 60 days, against 92 in the summer
+  before") is now kept.
+- "Your busiest weekday was Thursday[r1.when.busiest_weekdays[0]]" (one day of a tie said as the busiest) is kept in
+  values mode, as in cells mode (27.10). It is framing, which values mode does not refuse by design.
+- Code leads in values mode: over the four live runs' 317 saved forms, the values tree and the merge give the same
+  verdicts. 22 code leads differ, by the title's quotes only. Run 1's N049.0 model build shows 2 cards (first form)
+  and 1 card (repair form) where it showed 5. A refused lead gives way to a code lead that quotes its title, even one
+  worded like an instruction.
+
+**Checks on the merged tree.** The brain test files (`tests/test_brain*.py`): 541 passed. `tests/test_brain_cells.py`
+and `tests/test_brain_values.py`: 123 passed with `MVP_BRAIN_CHECK` unset, "cells" and "values". `demo/test_demo.py`:
+10 passed. The dry self-test: 67 conversations, 164 of 164 steps, $0. Its transcript is the toolfix branch's but for the
+build id and the fake sign-in's client id. The whole suite in 4 shards: 6226 passed and 2 skipped, 0 failed (1375,
+1306, 1647 with the 2 skips, 1898): the tip's 6121, the 39 tests of 26, the 54 of 27 and the 12 seam tests. Before
+the seam tests were added: 6214 passed.

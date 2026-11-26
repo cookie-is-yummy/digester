@@ -242,12 +242,58 @@ def score_attack2(mode=None, data=None):
     return out
 
 
+SAFETY_LINE = frozenset({"sensitive", "psych", "outcome", "language", "link", "second_person"})
+
+
+def score_values(data=None, mode="values"):
+    """mvp26 (DESIGN 26), the values-mode line: per source, the false cases out (kept and no private line where one is
+    due) by class, and the true ones kept. ok: every true case of the builder's set kept, and no false case that cells
+    mode refuses with a privacy or safety code values mode keeps (SAFETY_LINE) goes out. watch_time read from words is
+    a flag by decision (DESIGN 26.3), so it is not in the line. A description, not a gate on framing: in values mode
+    framing cases go out by design."""
+    from ..eval import brain_attack_cases as ATK
+    data = data or load()
+    cls = classes()
+    conv = {"attack_" + x for x in getattr(ATK, "PRIVATE_ROW_CONVENTION", ())}
+    out = {"check": V.check_mode(mode).name, "true": 0, "true_kept": 0, "true_lost": [], "safety_out": [],
+           "by_source": {}}
+    for c in data["cases"]:
+        kept, _reasons, v = outcome(c, data["ledgers"], mode)
+        src = c.get("source") or "new"
+        b = out["by_source"].setdefault(src, {"true": 0, "true_kept": 0, "false": 0, "out": 0, "out_by_class": {}})
+        if c["expect"] == "kept":
+            b["true"] += 1
+            b["true_kept"] += kept
+            if src not in ("audit_true", "attack_true"):
+                out["true"] += 1
+                out["true_kept"] += kept
+                if not kept:
+                    out["true_lost"].append(c["id"])
+            continue
+        base = re.sub(r"_[LP]$", "", c["id"]) if src == "attack" else c["id"]
+        line_ok = bool(v.private_line) and (c["expect"] == "private_line" or c["id"] in conv or base in conv)
+        b["false"] += 1
+        if kept and not line_ok:
+            b["out"] += 1
+            k = (cls.get(c["id"]) or {}).get("class") or "?"
+            b["out_by_class"][k] = b["out_by_class"].get(k, 0) + 1
+            _kc, reasons_cells, _vc = outcome(c, data["ledgers"], "cells")
+            if set(reasons_cells) & SAFETY_LINE:
+                out["safety_out"].append(c["id"])
+    out["ok"] = out["true_kept"] == out["true"] and not out["safety_out"]
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--show", default="", choices=("", "dropped_true", "kept_false", "wrong_reason", "all"))
     ap.add_argument("--check", default=None, choices=V.CHECK_MODES,
                     help="the checker's mode (default: MVP_BRAIN_CHECK, else full)")
     a = ap.parse_args(argv)
+    if V.check_mode(a.check).name == "values":
+        s = score_values()
+        print(json.dumps(s, indent=1))
+        return 0 if s["ok"] else 1
     if V.check_mode(a.check).name == "cells":
         s = score_cells(mode="cells")
         print(json.dumps(s, indent=1))

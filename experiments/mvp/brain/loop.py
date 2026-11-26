@@ -103,16 +103,28 @@ def outcome_json(o):
 def verdict_json(v):
     if v is None:
         return None
-    return {"outcomes": [outcome_json(o) for o in v.outcomes], "items": v.items, "outside": v.outside,
-            "chart": v.chart, "form_error": v.form_error, "private_line": v.private_line, "repair": v.repair,
-            "lead_ok": v.lead_ok, "version": v.version}
+    out = {"outcomes": [outcome_json(o) for o in v.outcomes], "items": v.items, "outside": v.outside,
+           "chart": v.chart, "form_error": v.form_error, "private_line": v.private_line, "repair": v.repair,
+           "lead_ok": v.lead_ok, "version": v.version}
+    if v.check == "values":
+        # mvp26 (DESIGN 26): the flags of the values mode (today's codes, refusing nothing), per sentence
+        for oj, o in zip(out["outcomes"], v.outcomes):
+            oj["flags"] = list(o.flags)
+    return out
+
+
+def flags_of(verdicts):
+    """mvp26, values mode: every flag of the turn's verdicts as {form, where, index, code, mode} (offline tests)."""
+    return [{"form": k, "where": o.where, "index": o.index, "code": f["code"], "mode": f["mode"]}
+            for k, v in enumerate(verdicts) if v is not None for o in v.outcomes for f in o.flags]
 
 
 def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, rounds=ROUNDS, soft_s=SOFT_S,
              deep_s=DEEP_S, hard_s=HARD_S, system=None, tools=None, check=None):
     """One message through the brain. `turn`: a tools.Turn for this message (its search / learned backends set);
-    `screen`: the code-written screen (a dict); `check`: the checker's mode ("full", "cells"; None: MVP_BRAIN_CHECK,
-    else "full"), resolved once for the whole turn. -> the turn record (see the module docstring and eval_brain run)."""
+    `screen`: the code-written screen (a dict); `check`: the checker's mode ("full", "cells", "values"; None:
+    MVP_BRAIN_CHECK, else "full"), resolved once for the whole turn. -> the turn record (see the module docstring and
+    eval_brain run)."""
     cm = V.check_mode(check)
     message = turn.message if message is None else message
     screen = screen or {}
@@ -234,6 +246,8 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
 
     rec["forms"] = forms
     rec["verdicts"] = [verdict_json(v) for v in verdicts]
+    if cm.rule("values"):
+        rec["flags"] = flags_of(verdicts)
     rec["rounds"] = tool_rounds
     _finish(rec, turn, vturn, verdicts, cm)
     rec["seconds"] = round(elapsed(), 2)

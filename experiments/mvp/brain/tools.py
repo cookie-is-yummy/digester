@@ -13,6 +13,7 @@ Nothing here is wired into the message path.
 import json
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Optional
 from zoneinfo import ZoneInfo
@@ -247,17 +248,44 @@ def _query(turn, scope, kind, window, resolved, subject_ref=None, **extra):
 
 
 def _unresolved(turn, tool, r):
-    """A counting tool given a name that is ambiguous or matches nothing: no rows, only the options."""
+    """A counting tool given a name that is ambiguous or matches nothing: no rows, only the options, and a next step
+    that exists (mvp26 toolfix2 3: first_last "sourdough" gave options [] and items_with_words 2, and told the model to
+    "use one of the options")."""
     rid = turn.next_rid()
     out = {"rid": rid, "tool": tool, "error": r["status"], "name": r["name"], "options": r["options"],
-           "meta": {"complete": False, "notes": ["No numbers for a name that did not resolve: ask them which one, "
-                                                 "or use one of the options."]}}
+           "meta": {"complete": False, "notes": []}}
     cell = _no_match_cell(turn, r)
     if cell:
         out.update(cell)
         out["meta"]["hidden"] = _words_hidden(turn)
+    out["meta"]["notes"].append(_next_step(turn, r, cell))
+    if cell:
         out["meta"]["notes"].append(NO_MATCH_NOTE)
+        if out["meta"]["hidden"]["sensitive"]:
+            # (the attack: a no-match's hidden.sensitive 1 is a constant, and nothing said so; find already says it)
+            out["meta"]["notes"].append(PRIVATE_WORDS_NOTE)
     return out
+
+
+def _search_left(turn):
+    return turn.search is not None and turn.counts.get("search", 0) < SEARCH_PER_TURN
+
+
+def _next_step(turn, r, cell):
+    """The step a name that did not resolve leaves: its options when it has some; else, when items hold its words, a
+    search for them (only when this turn can still search); else what to say."""
+    if r.get("options"):
+        return "No numbers for a name that did not resolve: ask them which one, or use one of the options."
+    n = (cell or {}).get("items_with_words")
+    words = (cell or {}).get("searched") or R.neutral(r.get("name"))
+    if isinstance(n, int) and n > 0 and _search_left(turn):
+        return (f"No name matched {words!r}, and it has no options, but {n} of their items hold those words in their "
+                f"own text: call search with query {words!r} (how 'any') to find them.")
+    if isinstance(n, int) and n > 0:
+        return (f"No name matched {words!r}, and it has no options; {n} of their items hold those words in their own "
+                "text (items_with_words): answer with that, and ask them for a theme, a channel or a window.")
+    return (f"No name matched {words!r}, and it has no options: say that nothing in their history goes by that name, "
+            "and answer with their totals for the window (a breakdown by 'none' and no scope).")
 
 
 NO_MATCH_NOTE = ("A name with no match carries `searched` (the words looked for) and `items_with_words`: how many of "
@@ -308,7 +336,9 @@ def _filters_said(turn, scope, resolved):
 def _label_of(turn, resolved_line):
     ref, _, how = resolved_line.partition(" (")
     form = ref.split(":", 1)[0]
-    label = N._label(turn.lib, ref) if ref else "?"
+    # mvp26 toolfix2 4: a name in meta is third-party text as it is in the sheet (meta reaches the next turn's screen
+    # and the scope line): each label neutralised the same way, never the joined line clipped
+    label = R.neutral(N._label(turn.lib, ref), R.NAME_MAX) if ref else "?"
     if form == "words":
         return f"videos with '{label}' in the title"
     return f"{label} ({form})"
@@ -455,6 +485,13 @@ FIRST_NOTE = ("A row's `first_watched` is the first day they ever opened it. A r
               "this window: when you say when it started, say its own first day.")
 
 
+SMALL_NOTE = (f"new.small_channels: channels first opened in this window that are under the floor of a new channel "
+              f"({F.NEW_CHANNEL_MIN} items on {F.NEW_CHANNEL_DAYS} days or more), with their items and first day. A list "
+              "of the channels they started in it names these too.")
+WEEKDAYS_NOTE = ("when.busiest_weekdays: these days tie for the most opens (busiest_weekday_opens each): name them all, "
+                 "never one of them as the busiest.")
+
+
 def _item_channels(turn, sheet):
     """Toolfix 7, on the tools' own item rows: an Instagram item's `channel` is its account's display name when it has
     one (facts.displays), and its handle is its own field (`handle`). facts names the channel rows itself."""
@@ -481,6 +518,113 @@ def window_dates(start, end):
 DATES_NOTE = "meta.window_dates gives the exact days counted; say them when the window's words are not a whole period."
 
 
+def _before_dates(window, sheet, meta, d):
+    """mvp26 toolfix2 1 (the attack: 14 part windows were set against about 3 months whatever their own length, with no
+    note): the days of the window before, as facts counted them (facts.before_window, the same call), and a note when
+    it is not the same length as the window."""
+    from datetime import date
+    prev = sheet.get("previous") if isinstance(sheet, dict) else None
+    if not isinstance(prev, dict) or sheet.get("kind") in ("compare_windows", "compare") or not prev.get("words"):
+        return
+    try:
+        ps, pe, words = F.before_window(window, date.fromisoformat(d["start"]), date.fromisoformat(d["end"]))
+    except (TypeError, ValueError, AttributeError):
+        return
+    if words != prev.get("words"):
+        return   # not the window facts set it against (the other days of the week): nothing is said of its days
+    db = window_dates(date.fromordinal(ps), date.fromordinal(pe))
+    meta["window_dates_before"] = db
+    meta["same_days_before"] = db["days"] == d["days"]
+    if db["days"] != d["days"]:
+        meta.setdefault("notes", []).append(
+            f"The window before is not the same length: this window has {d['days']} days ({d['said']}), the window "
+            f"before {db['days']} days ({db['said']}). Say so beside any count set against it.")
+
+
+def _window_cut(turn, window, raw, meta, d):
+    """mvp26 toolfix2 6 (the attack: "this month" gave October and "early November" 21 to 30 October, said only by
+    window_said; late October on Instagram, which ends on 15 October, said nothing): a window wholly after where the
+    export ends is counted as the nearest days it holds; meta says what was asked, what was counted and where the export
+    ends, a note asks the model to say so, and code's limit line says it under a code lead."""
+    cs = (raw or {}).get("cannot_see") or {}
+    if cs.get("reason") != "after" or not cs.get("export_ends"):
+        return
+    rec = turn.lib.rec
+    s, e = Hm.resolve(window, rec, sorted(rec.ends), turn.today)
+    if s is None or e is None:
+        return
+    asked = window_dates(s, e)
+    ends = _date(cs["export_ends"])
+    meta["window_cut"] = {"asked": asked, "counted": d, "export_ends": ends.isoformat()}
+    meta.setdefault("notes", []).append(
+        f"They asked for {asked['said']}, after where the export ends ({Hm.day_words(ends)}): this result counts "
+        f"{d['said']} instead, the nearest days it holds. Say so: these are not the days they asked for.")
+    line = f"Your export ends on {Hm.day_words(ends)}, so {asked['said']} is not in it."
+    if line not in turn.limits:
+        turn.limits.append(line)
+
+
+def _stopped_note(sheet, meta):
+    """mvp26 toolfix2 6 (the attack: Watercolor painting "stopped" this autumn with 5 items in it): a stopped row fell
+    to a handful; when it still has items in the window, the note says how many."""
+    st = sheet.get("stopped") if isinstance(sheet.get("stopped"), dict) else {}
+    for k in ("themes", "channels"):
+        for r in st.get(k) or []:
+            if isinstance(r, dict) and isinstance(r.get("items"), int) and r["items"] > 0:
+                meta.setdefault("notes", []).append(
+                    f"In `stopped`, {r.get('name')} still has {r['items']} items in this window, against "
+                    f"{r.get('previous_items')} in the window before: a stopped row fell to at most {F.NEW_PREV_MAX}. "
+                    "Say it fell to that many, not that it stopped.")
+
+
+LENGTH_WHY = {"youtube": "a YouTube video's length is known only when it was opened and looked up, so a video they "
+                         "only saved has none",
+              "instagram": "an Instagram photo post has no length"}
+
+
+def _length_note(sheet, meta):
+    """mvp26 toolfix2 6 (the attack: saved-only YouTube videos showed length "unknown" with no word why): why."""
+    plats = sorted({r.get("platform") for r in sheet.get("items") or [] if isinstance(r, dict)
+                    and r.get("length") == "unknown" and r.get("platform") in LENGTH_WHY})
+    if plats:
+        meta.setdefault("notes", []).append("An item's length 'unknown': " + "; ".join(LENGTH_WHY[p] for p in plats) +
+                                            ". Say nothing of its length.")
+
+
+SAME_TITLE_NOTE = ("`same_title` on an item row: how many of their items (of the kinds and the window counted) have "
+                   "exactly that title. The rows shown may be only some of them: say how many share it.")
+
+
+def _same_titles(turn, kinds, start=None, end=None):
+    """mvp26 toolfix2 6 (run2 N049.0: 5 of 21 rows titled "Integrals by parts", and the answer said "shows up again" as
+    if complete): {title: how many of their items, with an event of `kinds` in the window, have it}."""
+    out = Counter()
+    for iid, evs in turn.lib.rec.events.items():
+        if not turn.lib.is_visible(iid) or turn.carried_hidden(iid):
+            continue
+        if not any(k in kinds and (start is None or dd >= start) and (end is None or dd <= end) for dd, k in evs):
+            continue
+        it = turn.lib.view.items.get(iid)
+        if it is not None:
+            out[Hm._title(it)] += 1
+    return out
+
+
+def _mark_same_titles(turn, rows, kinds, start, end, meta):
+    if not rows:
+        return
+    got = _same_titles(turn, kinds, start, end)
+    marked = False
+    for r in rows:
+        it = turn.lib.view.items.get(r.get("item_id"))
+        n = got.get(Hm._title(it), 0) if it is not None else 0
+        if n > 1:
+            r["same_title"] = n
+            marked = True
+    if marked:
+        meta.setdefault("notes", []).append(SAME_TITLE_NOTE)
+
+
 def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=None, how="opened", dates=None):
     if window is not None:
         turn.windows[rid] = window
@@ -494,11 +638,22 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
             wb = (meta.get("windows") or {}).get("b")
             if isinstance(wb, dict):
                 meta["window_dates_b"] = window_dates(wb["start"], wb["end"])
+        if d and window is not None:
+            _before_dates(window, sheet, meta, d)
+            _window_cut(turn, window, raw, meta, d)
     if raw is not None and isinstance(sheet, dict) and sheet.get("kind"):
         for n in R.honest(sheet, how):
             if n not in meta.setdefault("notes", []):
                 meta["notes"].append(n)
         _reels_note(sheet, meta)
+        _stopped_note(sheet, meta)
+        if tool != "breakdown" and sum(1 for k in LIST_OF.values() if sheet.get(k)) >= 2 and \
+                LEVELS_NOTE not in meta["notes"]:
+            # mvp26 toolfix2 6 (the attack: the levels note was on every breakdown and on no compare, change,
+            # timeline or first_last, which rank rows just the same): on every result with two ranked lists
+            meta["notes"].append(LEVELS_NOTE)
+    if isinstance(sheet, dict):
+        _length_note(sheet, meta)
 
     if isinstance(sheet, dict):
         _item_channels(turn, sheet)
@@ -514,6 +669,10 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
         if any(isinstance(r, dict) and r.get("first_watched") for k in ("themes", "channels")
                for r in ((sh.get("new") or {}).get(k) or [])):
             env["meta"]["notes"].append(FIRST_NOTE)
+        if (sh.get("new") or {}).get("small_channels") if isinstance(sh.get("new"), dict) else False:
+            env["meta"]["notes"].append(SMALL_NOTE)
+        if isinstance(sh.get("when"), dict) and sh["when"].get("busiest_weekdays"):
+            env["meta"]["notes"].append(WEEKDAYS_NOTE)
     shown_n = len((sheet or {}).get(keep) or []) if keep else 0
     if keep == "periods" and isinstance(whole, int) and shown_n < whole:
         # toolfix 9 (a month timeline of all history was cut to its first 24 months while complete said true): the
@@ -607,11 +766,13 @@ def _year_back(turn, w):
         except ValueError:
             return d.replace(year=d.year - 1, day=28)
     if not w.start or not w.end:
-        raise ToolError("same_last_year needs a window with dates: lately and all have no year before")
+        raise ToolError("same_last_year needs a window with dates: lately and all have no year before. Use words like "
+                        "'this year' or 'in October', or against 'previous'")
     newest = max(turn.lib.rec.ends.values()) if turn.lib.rec.ends else None
     end = min(w.end, newest) if newest else w.end
     if end < w.start:
-        raise ToolError("that window is after where the export ends: there is nothing to set against last year")
+        raise ToolError("that window is after where the export ends: there is nothing to set against last year. Use "
+                        f"window {json.dumps(LATELY_ARG)} (the 4 weeks up to where it ends) instead")
     if end == w.end and w.kind in ("year", "month"):
         return Hm.Window(kind=w.kind, start=back(w.start), end=back(w.end))
     return Hm.Window(kind="range", start=back(w.start), end=back(end))
@@ -726,9 +887,11 @@ def run_first_last(turn, a: FirstLastArgs):
     sheet["items"] = _item_rows(turn, raw, (raw.get("items") or [])[:3], q, rid)
     meta = _meta(turn, raw, a.scope, resolved)
     meta["notes"].append(EVENT_NOTE)
+    _mark_same_titles(turn, sheet["items"], set(Hm.HOW_KINDS[q.how]), *_raw_days(raw), meta)
     # merge seam: the subject line first, then the scope's own lines (an exclude, a length, a weekday, a platform),
     # so a filter applied to the query is never left unsaid
-    meta["filters_said"] = "; ".join(x for x in (f"{a.subject}: {_label_of(turn, resolved[a.subject])}",
+    meta["filters_said"] = "; ".join(x for x in (f"{R.neutral(a.subject, R.NAME_MAX)}: "
+                                                 f"{_label_of(turn, resolved[a.subject])}",
                                                  _filters_said(turn, a.scope, resolved)) if x)
     return _finish(turn, "first_last", rid, raw, sheet, meta, t0, keep="items", how=a.scope.how)
 
@@ -761,6 +924,13 @@ def event_of(evs, day, kinds):
             return None
     words = {EVENT_WORD[k] for d, k in evs if k in kinds and k in EVENT_WORD and d == day}
     return " and ".join(w for w in EVENT_ORDER if w in words) or None
+
+
+def _raw_days(raw):
+    from datetime import date
+    win = (raw or {}).get("window") or {}
+    return (date.fromisoformat(win["start"]) if win.get("start") else None,
+            date.fromisoformat(win["end"]) if win.get("end") else None)
 
 
 def _item_rows(turn, raw, rows, q, rid, offset=0):
@@ -814,6 +984,7 @@ def run_items(turn, a: ItemsArgs):
     meta = _meta(turn, raw, a.scope, resolved)
     meta["order"] = a.order
     meta["notes"].append(EVENT_NOTE)
+    _mark_same_titles(turn, sheet["items"], set(Hm.HOW_KINDS[q.how]), *_raw_days(raw), meta)
     if a.order == "most_opened" and not day:
         _ties(turn, a, q, sheet, meta)
     return _finish(turn, "items", rid, raw, sheet, meta, t0, w, keep="items", how=a.scope.how)
@@ -903,9 +1074,10 @@ def run_search(turn, a: SearchArgs):
     with a why-line that is in the item's own text."""
     t0 = time.monotonic()
     if turn.counts.get("search", 0) >= SEARCH_PER_TURN:
-        raise ToolError(f"at most {SEARCH_PER_TURN} searches a turn")
+        raise ToolError(f"at most {SEARCH_PER_TURN} searches a turn", next="answer with the searches already made")
     if turn.search is None:
-        raise ToolError("search is not available in this build")
+        raise ToolError("search is not available in this build",
+                        next="answer with what the other tools found (items, first_last, breakdown)")
     w = _window(turn, a.window) if a.window is not None else None
     start = end = None
     if w is not None:
@@ -942,6 +1114,7 @@ def run_search(turn, a: SearchArgs):
             "hidden": {"sensitive": 0, "friends": _friends(turn, a.how, start, end), "rank_hidden_above": False},
             "notes": ["Ranked by meaning; `fit` says how close each one is. Not a count of everything on the topic.",
                       EVENT_NOTE]}
+    _mark_same_titles(turn, rows, kinds, start, end, meta)
     return _finish(turn, "search", rid, None, sheet, meta, t0, w, got.get("cost_usd", 0.0), keep="items",
                    dates=_search_dates(turn, start, end))
 
@@ -1015,9 +1188,11 @@ def run_learned(turn, a: LearnedArgs):
     keeps a point only with a source they may see, and neutralises its text."""
     t0 = time.monotonic()
     if turn.counts.get("learned", 0) >= LEARNED_PER_TURN:
-        raise ToolError(f"at most {LEARNED_PER_TURN} learned call a turn")
+        raise ToolError(f"at most {LEARNED_PER_TURN} learned call a turn", next="answer with the one already made")
     if turn.learned is None:
-        raise ToolError("learned is not available in this build")
+        raise ToolError("learned is not available in this build",
+                        next=("use search for their saved items on the topic" if _search_left(turn) else
+                              "answer with what the other tools found"))
     resolved = {}
     q, bad = _query(turn, a.scope, "count", Hm.Window(), resolved)
     if bad:
@@ -1097,15 +1272,18 @@ def call(turn, name, args):
     code's reason, never an exception."""
     t = REGISTRY.get(name)
     if t is None:
-        return R.error(f"no tool named {name!r}")
+        return R.error(f"no tool named {name!r}",
+                       next=f"use one of {', '.join(n for n in sorted(REGISTRY) if REGISTRY[n].run)}")
     if t.run is None:
-        return R.error(f"{name} is not available in this build", tool=name)
+        return R.error(f"{name} is not available in this build", tool=name,
+                       next="answer what they asked about their history with the read tools, and say nothing about "
+                            "the rest (code adds the line for it)")
     try:
         if isinstance(args, str):
             args = json.loads(args or "{}")
         a = t.params(**(args or {}))
     except (ValueError, TypeError, ValidationError) as e:
-        return R.error(_short(e), tool=name)
+        return R.error(_short(e), tool=name, next="call it again with the arguments fixed")
     try:
         return t.run(turn, a)
     except ToolError as e:

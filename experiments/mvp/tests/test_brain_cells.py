@@ -35,7 +35,7 @@ def _h(x):
 # mvp25 (DESIGN 24.4): re-hashed after short_word and platform_all went out, the cells rules (CELLS_RULES) and the
 # loosenings of the true sentences went in, limits was split by emitter, and three cell codes were added
 PIN_OFF = "f0f4c667b93d46d3f9c5b4e9ecbce76bce8ff27b8bbbfe92d44216be6a013247"
-PIN_ON = "17f5687a77abb695e5df2e2840bf9405894ef1e1c0e71b6d950cacbd6d59aabe"
+PIN_ON = "b2ad95ff2e68c5ee9b5338ce31d37233213d4456092f70d07be69c03a574dca4"   # mvp26: re-hashed when insight's "percent" was classed as a cell code (DESIGN 26)
 PIN_LOOSE = "392cd40c5853a13662fe4543b2763535f2f8f23002b299851158871ca43a95b3"
 PIN_KEPT = "22d78bacbfac1875b7de193d0ecf3a841a596fc0569e58bf01d1268aafc6d97b"
 PIN_DOUBT = "e54e1711163ba4ce40c59fb36d884885ff9bb127963f77bdcb16340f335b8c1f"
@@ -48,7 +48,7 @@ ON_CODES = [
     "direction@insight", "direction@sign", "empty", "filler", "fraction", "free_number", "garbled", "generic_claim",
     "insight_error", "item_field", "language", "length_cell", "link", "made_up_difference", "marker",
     "median_of_window", "month", "name", "not_item", "number", "number_word", "other_name", "other_period", "outcome",
-    "outside_in_history", "point_text", "psych", "quote", "ratio", "second_person", "sensitive", "share_of_name",
+    "outside_in_history", "percent", "point_text", "psych", "quote", "ratio", "second_person", "sensitive", "share_of_name",
     "shorts_as_long", "source", "too_long", "too_many", "two_results", "typed_name", "uncited_claim@nomarker",
     "uncited_name", "uncited_number", "unknown_name", "unnamed_owner", "watch_time", "weak_fit", "weekday", "word",
     "wrong_area", "wrong_group", "wrong_measure", "wrong_name", "wrong_value"]
