@@ -73,15 +73,16 @@ def test_the_window_before_of_a_part_gives_dates_values_mode_finds(brain):
 
 
 def test_a_new_note_widens_what_values_mode_counts_as_found(brain):
-    # A known leak of the merge, pinned so that a change shows. Values mode counts a figure as found when any of
-    # code's own strings holds it (DESIGN 26.2), notes included. toolfix2's note on unequal windows (27.1) says the
-    # window before has 92 days; before the merge 92 was found nowhere in this result and a made-up "92 videos" was
-    # refused (unfound_number). Now it gets out. Its true twin, the day counts said unmarked, is now kept.
+    # A known leak of the merge, pinned so that a change shows. Values mode counted a figure as found when any of
+    # code's own strings held it (DESIGN 26.2), notes included. toolfix2's note on unequal windows (27.1) says the
+    # window before has 92 days, and a made-up "92 videos" got out. mvp27 (DESIGN 29.2) closed it: a figure is found
+    # in a cell, never in a note, and a count of days (window_dates_before.days) only as days. Its true twin, the day
+    # counts said unmarked, is kept.
     env_, t = _call(brain, FALL)
     notes = " ".join(env_["meta"]["notes"])
     assert "92 days" in notes and env_["meta"]["window_dates_before"]["days"] == 92
     assert kept(t, "This fall so far has 60 days, against 92 in the summer before.", mode="values") is True
-    assert kept(t, "This fall you opened 92 videos from new channels.", mode="values") is True     # the leak
+    assert kept(t, "This fall you opened 92 videos from new channels.", mode="values") is False    # closed (mvp27)
     # the pinned modes refuse both (no marker)
     for mode in ("cells", "full"):
         assert kept(t, "This fall you opened 92 videos from new channels.", mode=mode) is False

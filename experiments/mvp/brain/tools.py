@@ -293,6 +293,24 @@ NO_MATCH_NOTE = ("A name with no match carries `searched` (the words looked for)
 
 
 PRIVATE_WORDS_NOTE = "A count of the items holding some words leaves out the topics they keep private; how many is not said."
+TITLE_WORDS_NOTE = "Under a title-word scope, how many private items were left out is not said."
+
+
+def _left_out(sheet, meta):
+    """mvp27 (DESIGN 29.4): what a counted result left out, as a cell the markers can cite (meta is never cited):
+    `left_out.private`, the items of the window and base in topics they keep private, and `left_out.friends`, the
+    friends' posts. Counts only: never a topic's name or a post. Only a count above 0, and never the constant that
+    stands for the count under a title-word scope or a words count (it is no count: _meta, _words_hidden)."""
+    if not isinstance(sheet, dict) or not isinstance(meta.get("hidden"), dict):
+        return
+    notes = meta.get("notes") or []
+    if PRIVATE_WORDS_NOTE in notes or TITLE_WORDS_NOTE in notes:
+        return
+    hid = meta["hidden"]
+    cell = {k: int(hid.get(src) or 0) for k, src in (("private", "sensitive"), ("friends", "friends"))
+            if int(hid.get(src) or 0) > 0}
+    if cell:
+        sheet["left_out"] = cell
 
 
 def _words_hidden(turn):
@@ -383,7 +401,7 @@ def _meta(turn, raw, scope, resolved, order="most", by=None, extra_notes=()):
         # "words:zzqx" 0, so private titles could be probed word by word): under a title-word scope the count of
         # private items left out is not said; a constant stands for it, so every number asks for the private line
         sens, rank_above = 1, True
-        notes_extra.append("Under a title-word scope, how many private items were left out is not said.")
+        notes_extra.append(TITLE_WORDS_NOTE)
     return {"window_said": ((raw or {}).get("window") or {}).get("words"),
             "base": BASE[scope.how],
             "filters_said": _filters_said(turn, scope, resolved),
@@ -662,6 +680,8 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
     newest = tool == "timeline"
     env = R.envelope(rid, tool, meta, sheet, cost, (time.monotonic() - t0) * 1000, keep=keep, newest=newest)
     sh = env.get("sheet")
+    # mvp27: after the size cut, so that no row gives way to it (a few characters, outside the cap as the extras are)
+    _left_out(sh, env["meta"])
     if isinstance(sh, dict) and sh.get("kind"):
         # mvp25 toolgaps 6: the notes of the added cells, when the size cut kept them (results.drop_extras)
         if isinstance(sh.get("when"), dict) and sh["when"].get("parts_of_day"):

@@ -448,6 +448,7 @@ def test_a_tool_call_gives_todays_sheet_of_the_same_question(brain, cid):
         return w
     raw = _today_sheet(brain, question)
     got = dict(r["sheet"])
+    got.pop("left_out", None)   # mvp27: the brain's citable twin of meta.hidden; today's sheet has none
     if tool == "items":   # the day's sheet; its item rows are the tool's own shape, of the same items
         assert [i["item_id"] for i in got.pop("items")] == [i["id"] for i in (raw.get("items") or [])][:10]
     assert got == want_of(raw), cid
@@ -463,9 +464,10 @@ def _no_toolfix_cells(o, path=""):
     """A tool's sheet without the cells only the brain's sheets have (scratchpad mvp22's toolfix): `reels` beside
     `shorts` in totals and previous, and an Instagram channel row's own `handle`; and mvp25's toolgaps: the parts of
     the day and a busiest hour's `label` in `when`, a new row's `first_watched`; and mvp26's toolfix2: the channels
-    under the floor in `new`, and the busiest weekdays over a tie (today's sheet names the first of them, Monday first)."""
+    under the floor in `new`, and the busiest weekdays over a tie (today's sheet names the first of them, Monday first);
+    and mvp27's `left_out`, the citable twin of meta.hidden."""
     if isinstance(o, dict):
-        drop = {"reels", "handle"}
+        drop = {"reels", "handle"} | ({"left_out"} if not path else set())
         if path == "when":
             drop |= {"parts_of_day", "busiest_weekdays", "busiest_weekday_opens"}
             if o.get("busiest_weekdays"):

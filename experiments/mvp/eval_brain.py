@@ -541,6 +541,7 @@ def insight(h):
             lst = {"area": "areas", "channel": "channels", "theme": "themes"}.get(args.get("by"))
             want = R.present(raw, "r1", limits={lst: args.get("top", 8)} if lst else None)
             got = dict(r.get("sheet") or {})
+            got.pop("left_out", None)   # mvp27: the brain's citable twin of meta.hidden; today's sheet has none
             same_items = True
             if tool == "items":
                 same_items = [i["item_id"] for i in got.pop("items", [])] == [i["id"] for i in raw.get("items")

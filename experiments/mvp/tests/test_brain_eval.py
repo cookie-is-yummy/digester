@@ -116,7 +116,10 @@ def test_the_plans_run_recount_and_say_their_findings(harness):
     # a few meta counts the auditor does not read (a length-filtered result's private count, a search's, a learned's,
     # friends on a result that saw nothing)
     assert s["numbers_in_results"] - s["numbers_recounted"] <= 25
-    assert all(p.endswith(("since_items", "since_new", "meta.hidden.sensitive", "meta.hidden.friends"))
+    # (mvp27: `left_out` is the citable twin of meta.hidden, and goes unrecounted exactly where meta.hidden does: on a
+    # search and on a result that saw nothing; the auditor recounts it wherever it recounts meta.hidden)
+    assert all(p.endswith(("since_items", "since_new", "meta.hidden.sensitive", "meta.hidden.friends",
+                           "left_out.private", "left_out.friends"))
                for p in s["not_recounted"]), s["not_recounted"]
     assert {x["id"] for x in s["recount_not_true"]} == KNOWN_NOT_TRUE
     assert s["recount_true"] == s["with_a_plan"] - len(KNOWN_NOT_TRUE)

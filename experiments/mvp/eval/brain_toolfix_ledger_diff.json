@@ -31,6 +31,14 @@
   ],
   [
    "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "private": 50
+   }
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
@@ -64,6 +72,14 @@
     "end": "2026-10-30",
     "days": 2125,
     "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "private": 50
    }
   ],
   [
@@ -207,6 +223,14 @@
    "[0].sheet.channels[2].handle",
    null,
    "noodle.nights"
+  ],
+  [
+   "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "friends": 1
+   }
   ],
   [
    "added",
@@ -461,6 +485,14 @@
   ],
   [
    "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "friends": 1
+   }
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
@@ -515,6 +547,14 @@
     "end": "2024-12-31",
     "days": 366,
     "said": "1 January to 31 December 2024"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "private": 50
    }
   ],
   [
@@ -730,6 +770,14 @@
     "end": "2024-12-31",
     "days": 366,
     "said": "1 January to 31 December 2024"
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.left_out",
+   null,
+   {
+    "private": 50
    }
   ],
   [
@@ -1491,6 +1539,14 @@
   ],
   [
    "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "private": 50
+   }
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
@@ -1904,6 +1960,14 @@
   ],
   [
    "added",
+   "[1].sheet.left_out",
+   null,
+   {
+    "private": 50
+   }
+  ],
+  [
+   "added",
    "[1].sheet.totals.reels",
    null,
    0
@@ -2149,6 +2213,14 @@
    "[0].sheet.items[5].how",
    null,
    "saved"
+  ],
+  [
+   "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "friends": 1
+   }
   ]
  ],
  "attack_items_pt_oldest": [
@@ -2603,6 +2675,14 @@
    "[0].sheet.channels",
    9,
    10
+  ],
+  [
+   "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "private": 50
+   }
   ],
   [
    "removed",
@@ -3635,6 +3715,14 @@
   ],
   [
    "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "friends": 1
+   }
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
@@ -4554,6 +4642,14 @@
   ],
   [
    "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "friends": 1
+   }
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
@@ -4610,6 +4706,14 @@
    "[0].sheet.items[1].how",
    null,
    "saved"
+  ],
+  [
+   "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "friends": 1
+   }
   ]
  ],
  "audit_tlm": [
@@ -5008,6 +5112,14 @@
    "[0].sheet.channels",
    9,
    10
+  ],
+  [
+   "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "private": 50
+   }
   ],
   [
    "removed",
@@ -5560,6 +5672,14 @@
    10
   ],
   [
+   "added",
+   "[1].sheet.left_out",
+   null,
+   {
+    "private": 50
+   }
+  ],
+  [
    "removed",
    "[1].sheet.periods[0].areas",
    [],
@@ -5871,6 +5991,14 @@
     "end": "2023-12-31",
     "days": 365,
     "said": "1 January to 31 December 2023"
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.left_out",
+   null,
+   {
+    "private": 50
    }
   ],
   [

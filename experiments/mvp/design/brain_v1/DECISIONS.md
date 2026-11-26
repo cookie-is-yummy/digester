@@ -431,3 +431,56 @@ One live run of half B with the final build, marked blind by two readers. It pas
 The eval's "understood" score is not part of the gate. It reads 38 to 45% where a hand reading finds 54 to 57 of 65
 answers on the question, so it measures agreement with one stored plan, not understanding.
 These bars are proposed by the builder and stand unless the founder changes them before the run.
+
+## Seven runs marked blind; the first prompt change (26 Nov 2026)
+
+The baseline was fixed first (DESIGN 29): a name beside a row marker must be that row's own; a figure counts as
+found only in a cell, not in a note code wrote; motive guessing no longer fires on a bare "because"; the prompt no
+longer says code adds the limits line, and tells the model to say once, in the lead, what the export does not
+hold (prompt `brain_v3b`); hidden counts (private rows, friends' posts) can be cited as a count; the screen that
+re-enters the next turn is marked as data. Then two prompts were run live twice each on half A: the baseline
+`brain_v3b`, and `brain_v4_meaning` (the baseline plus one change: each point says what its number means).
+`brain_v3` is still the default in the code. Claude spend: $0.42.
+
+Seven runs of the same 65 messages were then marked blind: the answers shuffled, the run hidden, three message
+groups, two readers per group who each built the facts from the library rows. Readers agree on the grade in 77%
+of answers (kappa 0.64). Figures are the average of the two readers.
+
+| Run | Good | Acceptable | Poor | Answers the question | Says what it means | False sentences (settled) |
+|---|---|---|---|---|---|---|
+| Run 2: numbers-and-names check | 11 | 30.5 | 23.5 | 49.5 | 18.5 | 2 |
+| Run A: values check | 17.5 | 34 | 13.5 | 56.5 | 28.5 | 1 |
+| Run B: values check | 13.5 | 35 | 16.5 | 52 | 24 | 1 |
+| Baseline fixed, run 1 | 23 | 29 | 13 | 59 | 31 | 2 |
+| Baseline fixed, run 2 | 18.5 | 33 | 12.5 | 57 | 26.5 | 3 |
+| Meaning prompt, run 1 | 28 | 24.5 | 11.5 | 58 | 34 | 1 |
+| Meaning prompt, run 2 | 23.5 | 32.5 | 8 | 60 | 40 | 0 |
+
+What the blind marks say:
+- Values check against the numbers-and-names check: poor answers fall by 8.5 of 65 (interval 2.5 to 14.75), and
+  "says what it means" rises by 7.75. The rise in good answers (+4.5) is inside the noise. One reader sees it and
+  one does not, so the earlier "9 to 17 or 20" is not confirmed as stated.
+- The baseline fixes did what they aimed at: on the 11 messages they targeted, poor falls from about 7 to 1 to 2.5.
+  Over all messages the change is inside the noise.
+- The meaning prompt: "says what it means" rises by 8.75 of 64 (interval 4.25 to 13.5; 26 answers up, 6 down).
+  All four run pairs are positive. Good +5 and poor -2.5 are inside the noise. No rise in false or wrongly based
+  sentences, in length or in seconds.
+- The rule written before the marks were read asked for a rise of 8 on both readers' marks. One reader set gives
+  10.5 and the other 7.0. By that rule the prompt is not adopted on this run alone. It goes forward as the arm of
+  the next round and is tested again.
+
+What went wrong or is still wrong:
+- Limits talk tripled: about 27 sentences per 65 answers against 7. The new limits text and the citable hidden
+  counts are used where nobody asked ("Your export ends on 30 October 2026, so ..." as an opener; "50 more videos
+  sit in topics you keep private" beside the private line code already prints). This breaks the rule "never keep
+  telling the user what the bot cannot do" and has to be cut back to the questions that are about the missing thing.
+- Speed: 3 of the 4 new runs miss a bar (median 7.6 to 8.8 s, slow end 10.9 to 12.2 s). The runs had up to 3
+  provider timeouts of 15 s each and wrote more output (about 700 tokens a request against 620). Not yet explained.
+- False sentences sent, 6 in 4 runs. Three are one message: "Here are 5 of the 72 ..." over 0, 3 or 4 cards. The
+  model leaves out an item whose title is written as an attack, and still cites the count 5. One "next 5" with no
+  cards. One "two of your saves mention flour" (one does). One first-open date of a channel said of a title.
+  The values check stops none of them.
+- A true sentence that quotes a saved post's own numbers ("50 g flour", "day 3") is refused in every run.
+- The eval's auditor crashes on one message (a date compared as a number), so three runs hold 64 of 65 messages.
+- Readers disagree widely on "wrongly based" (3 to 30 per reader group). Those counts are not settled between
+  readers and should be read as ranges.

@@ -3484,6 +3484,20 @@ def _brain_extra(ctx, F, sh):
 META_NUMBERS = ("hidden.sensitive", "hidden.friends", "rows_total")
 
 
+def _left_out_audit(F, env, key, n):
+    """mvp27 (DESIGN 29.4): the brain's citable `left_out` cell, recounted as its meta twin is: a count above 0 is
+    there with my own count, none is there at 0, and none ever stands for the constant of a title-word scope (n None)."""
+    lo = ((env or {}).get("sheet") or {}).get("left_out") or {}
+    notes = " ".join(((env or {}).get("meta") or {}).get("notes") or [])
+    if "how many private items were left out is not said" in notes or "how many is not said" in notes:
+        n = None   # (a title-word scope or a words count: the brain's tools give no left_out cell at all)
+    if n is None:
+        F.add("results", "count", key not in lo, lo.get(key), None, where=f"left_out.{key}",
+              note="no cell for a count that is not said")
+    elif n > 0 or key in lo:
+        F.add("results", "count", lo.get(key) == n, lo.get(key), n, where=f"left_out.{key}")
+
+
 def _meta_audit(ctx, F, env, call):
     """The numbers of a result's meta: friends' posts left out (the library's), the private items left out in the
     window (of the kind counted, on the platform asked), and how many entities the asked ranking ran over."""
@@ -3495,6 +3509,7 @@ def _meta_audit(ctx, F, env, call):
         # library's whole count)
         n = lib.friends_in(ctx.a, ctx.b, ctx.f)
         F.add("results", "count", hid["friends"] == n, hid["friends"], n, where="meta.hidden.friends")
+        _left_out_audit(F, env, "friends", n)
     if "sensitive" in hid and ctx.a is not None and getattr(lib, "hidden_acts", None) is not None:
         # the private items left out: those the scope would have counted (an item of a private theme has no area
         # nor theme of its own, so an area or a theme scope holds none of them)
@@ -3524,6 +3539,7 @@ def _meta_audit(ctx, F, env, call):
             n = None
         if n is not None:
             F.add("results", "count", hid["sensitive"] == n, hid["sensitive"], n, where="meta.hidden.sensitive")
+        _left_out_audit(F, env, "private", n)
     by = ((call or {}).get("args") or {}).get("by") or ((call or {}).get("args") or {}).get("level")
     if isinstance(meta.get("rows_total"), int) and by in ("area", "theme", "channel"):
         n = len(_rank(lib, list(ctx.sc("filt")), by))

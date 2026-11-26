@@ -39,3 +39,17 @@ def ledgers(h):
         assert r.get("rid") == rid, r
         out.append({rid: _rename(r)})
     return out
+
+
+# mvp27 (DESIGN 29.4): the call behind brain_v3b's left_out example, a result that left a friend's post out
+SAVED_CALL = ("r1", "what have I saved lately?", "breakdown",
+              {"by": "channel", "window": {"words": "lately"}, "scope": {"how": "saved"}})
+
+
+def saved_ledger(h):
+    """{rid: envelope} of SAVED_CALL, renamed (its left_out.friends is 1)."""
+    from mvp.brain import tools as TL
+    rid, msg, tool, args = SAVED_CALL
+    r = TL.call(h.turn(msg), tool, args)
+    assert r.get("rid") == rid and (r["sheet"].get("left_out") or {}).get("friends") == 1, r
+    return {rid: _rename(r)}

@@ -34,10 +34,11 @@ def _h(x):
 # ================================================================ the pin
 # Changing any of these is a decision (DESIGN 26.2): the refuse list, the safety codes kept, the number-word variant,
 # the keys whose strings never hold a figure, a date or a time.
-REFUSE = ["bad_ref", "calc", "empty", "garbled", "language", "link", "not_item", "outcome", "psych", "sensitive",
-          "unfound_date", "unfound_name", "unfound_number", "unfound_time", "watch_time", "wrong_measure",
+REFUSE = ["bad_ref", "calc", "empty", "garbled", "language", "link", "not_item", "outcome", "psych", "row_name",
+          "sensitive", "unfound_date", "unfound_name", "unfound_number", "unfound_time", "watch_time", "wrong_measure",
           "wrong_name", "wrong_value"]
-PIN_REFUSE = "f5ae15ad6d7e3bac2d843a661c0bd023937fe04512457c76e7590e0c700f06ed"
+# (mvp27, DESIGN 29.1: "row_name" added, a title or name before a row marker that the row does not hold)
+PIN_REFUSE = "6faec7f8052e3f86c27dd9321f823df1cacccb06a0dd75b1aeaf5962d5b9b7f4"
 SAFETY = ["sensitive", "psych", "outcome", "language", "link", "watch_time"]
 THIRD_PARTY = ["caption", "channel", "description", "handle", "name", "snippet", "text", "title", "why_matched"]
 
