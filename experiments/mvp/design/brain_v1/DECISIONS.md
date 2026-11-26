@@ -458,8 +458,8 @@ of answers (kappa 0.64). Figures are the average of the two readers.
 
 What the blind marks say:
 - Values check against the numbers-and-names check: poor answers fall by 8.5 of 65 (interval 2.5 to 14.75), and
-  "says what it means" rises by 7.75. The rise in good answers (+4.5) is inside the noise. One reader sees it and
-  one does not, so the earlier "9 to 17 or 20" is not confirmed as stated.
+  "says what it means" rises by 7.75. The rise in good answers (+4.5) is inside the noise. One set of three
+  readers sees it and the other set does not, so the earlier "9 to 17 or 20" is not confirmed as stated.
 - The baseline fixes did what they aimed at: on the 11 messages they targeted, poor falls from about 7 to 1 to 2.5.
   Over all messages the change is inside the noise.
 - The meaning prompt: "says what it means" rises by 8.75 of 64 (interval 4.25 to 13.5; 26 answers up, 6 down).
@@ -474,7 +474,8 @@ What went wrong or is still wrong:
   counts are used where nobody asked ("Your export ends on 30 October 2026, so ..." as an opener; "50 more videos
   sit in topics you keep private" beside the private line code already prints). This breaks the rule "never keep
   telling the user what the bot cannot do" and has to be cut back to the questions that are about the missing thing.
-- Speed: 3 of the 4 new runs miss a bar (median 7.6 to 8.8 s, slow end 10.9 to 12.2 s). The runs had up to 3
+- Speed: all 4 new runs miss a bar (median 7.6 to 8.8 s, slow end 10.9 to 12.2 s; the one run that meets the
+  slow end misses the median at 8.13 s). The runs had up to 3
   provider timeouts of 15 s each and wrote more output (about 700 tokens a request against 620). Not yet explained.
 - False sentences sent, 6 in 4 runs. Three are one message: "Here are 5 of the 72 ..." over 0, 3 or 4 cards. The
   model leaves out an item whose title is written as an attack, and still cites the count 5. One "next 5" with no
@@ -484,3 +485,31 @@ What went wrong or is still wrong:
 - The eval's auditor crashes on one message (a date compared as a number), so three runs hold 64 of 65 messages.
 - Readers disagree widely on "wrongly based" (3 to 30 per reader group). Those counts are not settled between
   readers and should be read as ranges.
+
+### Where the build stands against the half B gate, and the rule for the retest (26 Nov 2026)
+
+The build would fail its own gate today, so half B is not run yet:
+- False sentences: the bar is at most 1 per run. The four new runs gave 2, 3, 1 and 0.
+- Speed: all four new runs miss a bar. The timeouts recur on the same messages (N004.0 in three runs; N005.0,
+  N007.0 and N032.0 in two each), and output grew from about 620 to 700 tokens a request, which alone predicts
+  about 0.7 s. So it looks like the build, not the session.
+- Wrongly based: reader groups counted between 3 and 30, so the bar cannot be decided as written. The bar stays.
+  Before the gate run, disputed sentences are settled from the library rows, as false sentences already are, and
+  the readers get written conventions for the cases they split on.
+
+The retest of the meaning prompt, rule written before the runs:
+- Two runs of each prompt on half A, and one run of each on the 53 held-out messages of the earlier set (the
+  prompt was drafted from half A answers, so half A alone is in sample for it). Marked blind as before.
+- It is adopted if all of these hold. On half A, the paired per-message difference in "says what it means"
+  (both readers, both runs) has a 95% interval above 0. On the held-out messages the difference is above 0.
+  Good answers do not fall. Settled false sentences do not rise. Settled wrongly based sentences rise by no more
+  than 2 per 65 answers. Median seconds rise by no more than 0.5 on the paired difference.
+- This round's result is not pooled in. The first rule ("a rise of 8 on both readers") split six readers into
+  two sets arbitrarily; one of the four possible splits passes it.
+
+To do in the baseline before those runs: fix the auditor crash; cut limits talk back to the questions that are
+about the missing thing, and count it mechanically; check a cited item count against the cards sent (4 of the 6
+false sentences); let a figure in the cited row's own text count as found; check the kept safety codes and the
+cells-only "found" rule against their live refusals (the safety code `outcome` refused the plain true sentence
+"You saved it on 5 October 2026"; "found only in cells" refused 2 to 3 sentences a run and caught no live fault);
+find why the same messages time out.
