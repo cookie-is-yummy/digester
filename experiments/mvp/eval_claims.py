@@ -73,6 +73,7 @@ AREA_SAID = {"film and tv": "film and TV", "diy and making": "DIY and making"}
 # the brain's audit (SPEC 4.8): what each `how` of a tool's scope counts (SPEC 2.2's table), and my own words for the
 # sensitive topic a message unlocks (an item of a sensitive theme is counted when its own text is about it)
 HOW_EVENTS = {"opened": OPEN, "liked": ("like",), "saved": SAVED, "any": OPEN + ("like",) + SAVED}
+UNLOCKED_NAME = "the topic you asked about"   # the brain's toolfix 1: the name of the unlocked topic's own rows
 UNLOCK_WORDS = {"relationships": ("dating", "date", "relationship", "relationships", "partner", "breakup"),
                 "money": ("money", "stock", "stocks", "invest", "investing", "budget", "debt"),
                 "health": ("health", "diagnosis", "therapy", "symptom", "symptoms", "medication"),
@@ -181,12 +182,15 @@ class Library:
         now_s = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%S")
         self.items = {}
         self.friends = 0
+        friend = {}            # the brain's toolfix 8: a friend's post's platform and media kind (never its text)
+        self.friend_acts = []  # [(friend post id, ordinal, weekday, kind, platform, media)]
         with open(os.path.join(self.lib, "corpus", "items.jsonl"), encoding="utf-8") as f:
             for line in f:
                 r = json.loads(line)
                 pd = r.get("platform_data") or {}
                 if pd.get("owner_relation") in FRIENDS:
                     self.friends += 1
+                    friend[r["id"]] = (r.get("platform"), pd.get("media_kind"))
                     continue   # friends' posts are never counted
                 p = r.get("platform")
                 handle = (pd.get("owner_handle") or "").strip().lstrip("@")
@@ -208,7 +212,8 @@ class Library:
             for line in f:
                 r = json.loads(line)
                 it = self.items.get(r.get("item_id"))
-                if it is None or not r.get("at") or r.get("kind") == "share_friend":
+                fr = friend.get(r.get("item_id")) if it is None else None
+                if (it is None and fr is None) or not r.get("at") or r.get("kind") == "share_friend":
                     continue
                 try:
                     d = datetime.fromisoformat(r["at"])
@@ -216,6 +221,9 @@ class Library:
                     continue
                 d = d.astimezone(self.zone) if d.tzinfo else d
                 o = d.date().toordinal()
+                if fr is not None:
+                    self.friend_acts.append((r["item_id"], o, d.weekday(), r["kind"], fr[0], fr[1]))
+                    continue
                 p = it["p"]
                 self.ends[p] = max(self.ends.get(p, o), o)
                 self.acts[r["item_id"]].append((o, d.hour, d.weekday(), r["kind"]))
@@ -322,8 +330,12 @@ class Library:
         """Leave the items of a sensitive theme out of everything (the brain's audit), but those about `unlock`."""
         words = UNLOCK_WORDS.get(unlock or "", ())
         self.hidden_acts = {}
+        self.unlock = unlock
+        self.unlocked_items = set()   # the brain's toolfix 2: the sensitive items of the unlocked topic (a topic ref)
         for i in sorted(self.sensitive_items):
             it = self.items.get(i)
+            if it is not None and words and any(holds(it["cap"], w) for w in words):
+                self.unlocked_items.add(i)
             if it is None or (words and any(holds(it["cap"], w) for w in words)):
                 continue
             self.hidden_items.add(i)
@@ -376,7 +388,24 @@ class Library:
             return any(slug(c) == val for c in it.get("coll") or [])
         if form == "words":
             return bool(val) and holds(it["cap"], val)
+        if form == "topic":   # the brain's toolfix 2: the unlocked topic, by my own word list (UNLOCK_WORDS)
+            return bool(val) and val == getattr(self, "unlock", None) and i in getattr(self, "unlocked_items", ())
         return False
+
+    def friends_in(self, a, b, f):
+        """The brain's toolfix 8: friends' posts with an event of the base's kinds in [a, b] (None: open), under the
+        platform and weekday asked; none under an `only` scope (a friend's post has no theme nor channel of its own)
+        or the known-long filter (they are Instagram's); a reel or video under the short filter."""
+        f = f or {}
+        if f.get("only_refs") or f.get("without_shorts"):
+            return 0
+        kinds = HOW_EVENTS.get(f.get("how") or "opened", OPEN)
+        hit = {fid for fid, o, wd, k, p, media in self.friend_acts
+               if k in kinds and (a is None or o >= a) and (b is None or o <= b)
+               and (not f.get("platform") or p == f["platform"])
+               and (f.get("weekday") is None or wd == f["weekday"])
+               and (not f.get("short") or media in ("reel", "video"))}
+        return len(hit)
 
     def is_short_or_reel(self, i):
         it = self.items[i]
@@ -461,6 +490,11 @@ class Library:
     def member(self, i, ent):
         """Whether item i belongs to an entity: (kind, name)."""
         k, n = ent
+        if k in ("theme", "area") and n == UNLOCKED_NAME and getattr(self, "unlock", None) and \
+                i in getattr(self, "unlocked_items", ()):
+            # the brain's toolfix 1: the unlocked topic's own theme and area rows hold its items no named theme (or
+            # area) of mine holds
+            return (self.theme_of if k == "theme" else self.area_of).get(i) is None
         if k == "theme":
             return self.theme_of.get(i) == n.lower()
         if k == "area":
@@ -841,6 +875,8 @@ def _rank(lib, ids, kind):
             k = lib.area_of.get(i)
         else:
             k = lib.items[i]["c"]
+        if not k and kind in ("theme", "area") and i in getattr(lib, "unlocked_items", ()):
+            k = UNLOCKED_NAME   # the brain's toolfix 1: the unlocked topic's own row (see Library.member)
         if k:
             c[k] += 1
     return c
@@ -886,6 +922,9 @@ def audit_sheet(ctx, F):
         chk(f"{base}.days_active", t.get("days_active"), lib.days(sc), "days")
         chk(f"{base}.shorts", t.get("shorts"), s, "count")
         chk(f"{base}.long", t.get("long"), lo, "count")
+        if "reels" in t:   # the brain's toolfix 4: Instagram reels and videos, the other half of the short filter
+            chk(f"{base}.reels", t["reels"], sum(1 for i in idl if lib.items[i]["p"] == "instagram" and
+                                                 lib.items[i].get("media") in ("reel", "video")), "count")
         if "shorts_share" in t and s + lo:
             chk(f"{base}.shorts_share", t["shorts_share"], round(s / (s + lo), 3), "share", 0.0015)
         bp = t.get("by_platform") or {}
@@ -1065,7 +1104,7 @@ def _ord_sign(ctx):
 
 def rk_t(lib, ids, name):
     nm = name.lower()
-    return sum(1 for i in ids if lib.theme_of.get(i) == nm)
+    return sum(1 for i in ids if lib.member(i, ("theme", name)) or lib.theme_of.get(i) == nm)
 
 
 # ============================================================================ 2 and 3. the sent text
@@ -1177,6 +1216,13 @@ class Names:
         return out
 
 
+def _rank_count_gap(gap):
+    """mvp22: the words between a record and its count, when they rank it and end in "with" or "at" ("came next
+    with", "was third with", "was the top theme, with", "was the largest long theme at", "alone made"): no number, no
+    other clause, and no "videos" (in "<area> videos, with 5" the record is a word of another phrase)."""
+    return not re.search(r"\d|[;:]|\bvideos?\b", gap) and bool(re.search(r"\b(?:with|at|made)\s*$", gap))
+
+
 def ent_code(e):
     return {"shorts": "Shorts", "long": "Long", "all": "All"}.get(e[0]) or code_of(e[0], e[1])
 
@@ -1188,6 +1234,7 @@ class TextAudit:
         self.filtered = bool(ctx.f.get("topic") or ctx.f.get("channel") or ctx.f.get("without_shorts"))
         self.facts = []   # (kind, record, value, sentence index): one fact said in two sentences is a repeat (X9)
         self.si = 0
+        self.scoped = False   # mvp22: the sentence being read says the call's own filter (said_scope)
 
     # ---------------------------------------------------------------- bases
     def base_ids(self, key, ent=None, x=None, scope="cur"):
@@ -1612,6 +1659,7 @@ class TextAudit:
     def sentence(self, s, prev_base):
         lib, ctx = self.lib, self.ctx
         spans = self.names.spans(s)
+        self.scoped = self.said_scope(s, spans)
         low = s.lower()
         sentence_base = None
         base_kind = None
@@ -1675,6 +1723,11 @@ class TextAudit:
                 self.judge_share(said, base, cands, got, e, "share inside a record (no base said: of the record)",
                                  about)
                 continue
+            if base == "all" and self.scoped:
+                # mvp22 (the brain slice's held-out look, B02.0 and C02.0): "Without gaming, art and design led with
+                # 48% of what you opened": the sentence says the call's own filter as its scope, so "what you opened"
+                # is the filtered videos
+                base = "filt"
             if base is not None:
                 sentence_base, base_kind = base, e[0]
             cands = self.candidates(e, scope=scope)
@@ -1688,6 +1741,34 @@ class TextAudit:
         # ---------------- words
         self.words(s, spans, sentence_base)
         return sentence_base
+
+    def said_scope(self, s, spans):
+        """mvp22: the sentence says one of the call's own record filters as a scope phrase: "without <record>" for an
+        exclude ref of the brain's call, "only <record>" for an only ref. (A record named as a subject, "the largest
+        gaming theme", is not a scope phrase.)"""
+        f, low = self.ctx.f, s.lower()
+        for key, word in (("exclude_refs", "without"), ("only_refs", "only")):
+            refs = f.get(key) or []
+            for sp in spans:
+                if sp[2][0] in ("theme", "area", "channel") and re.search(r"\b" + word + r"\s+$", low[:sp[0]]) and \
+                        any(self._is_ref(sp[2], r) for r in refs):
+                    return True
+        return False
+
+    def _is_ref(self, e, ref):
+        form, _, val = (ref or "").partition(":")
+        if form != e[0]:
+            return False
+        if form == "area":
+            return slug(e[1]) == val
+        if form == "channel":
+            return channel_key(e[1]) == val
+        if form == "theme":
+            try:
+                return (self.lib.theme_by_id.get(int(val)) or "").lower() == e[1].lower()
+            except ValueError:
+                return False
+        return False
 
     def usual_medians(self):
         """A day's usual day (DESIGN 19.P2, T10, my reading): the 90 days before it with anything opened; on each, the
@@ -1913,6 +1994,13 @@ class TextAudit:
                                          r"accounts? for|accounted for|made up|with|was behind|is behind)"
                                          r"(?:\s+(?:another|more|just|only|about|over|some|nearly|almost))*\s*",
                                          s[near[-1][1]:m.start()]):
+                    bound = near[-1][2]
+                elif near and _rank_count_gap(s[near[-1][1]:m.start()]) and \
+                        not re.search(r"\b\d[\d,]* of\s*$", s[:m.start()]):
+                    # mvp22 (the brain slice's held-out look: 17 of its 24 findings): "<record> came next with 32
+                    # videos", "<record> was the top theme, with 23 videos", "<record> was the channel you opened
+                    # least, with 1 video": the count of the record named before it in the clause, never the window's
+                    # total ("59 of 130 videos" stays the whole: the number after "N of")
                     bound = near[-1][2]
             if bound is not None:
                 if not (bound[0] == "topic" and bound[1].lower() == (ctx.f.get("topic") or "").lower()):
@@ -2149,7 +2237,7 @@ class TextAudit:
                     self.facts.append(("move", rec, x, self.si))
                     if rec is not None and rec[0] in ("theme", "area", "topic", "channel") and self.ctx.prev:
                         # the move itself: the record's share now less its share in the span before, in points
-                        b_ = "filt" if self.filtered else "all"
+                        b_ = "filt" if (self.filtered or self.scoped) else "all"
                         now_ids, pre_ids = self.base_ids(b_), self.base_ids(b_, scope="prev")
                         if now_ids and pre_ids:
                             d = 100 * (sum(1 for i in now_ids if self.lib.member(i, rec)) / len(now_ids) -
@@ -3039,6 +3127,11 @@ def _find_audit(lib, F, env):
             n = sum(1 for i in lib.items if lib.acts.get(i) and lib.in_ref(i, m.get("ref")))
             F.add("results", "count", m["items_all_time"] == n, m["items_all_time"], n,
                   where=f"names[{k}].matches[{j}].items_all_time")
+        if isinstance(row.get("items_with_words"), int):   # the brain's toolfix 6: a no-match's own count
+            w = row.get("searched") or ""
+            n = sum(1 for i in lib.items if lib.acts.get(i) and bool(w) and holds(lib.items[i]["cap"], w))
+            F.add("results", "count", row["items_with_words"] == n, row["items_with_words"], n,
+                  where=f"names[{k}].items_with_words")
         for j, o in enumerate(row.get("options") or []):
             F.add("results", "no number on an option", not any(x in o for x in ("items", "items_all_time")),
                   "", "", where=f"names[{k}].options[{j}]", severity=2.0)
@@ -3336,9 +3429,10 @@ def _meta_audit(ctx, F, env, call):
     hid = meta.get("hidden") or {}
     saw_nothing = bool(((env or {}).get("sheet") or {}).get("cannot_see"))
     if "friends" in hid and not saw_nothing:
-        # the library's count of friends' posts left out (the tools' reading: not the window's)
-        F.add("results", "count", hid["friends"] == lib.friends, hid["friends"], lib.friends,
-              where="meta.hidden.friends")
+        # the friends' posts left out of the result's own window, base and scope (the brain's toolfix 8; it was the
+        # library's whole count)
+        n = lib.friends_in(ctx.a, ctx.b, ctx.f)
+        F.add("results", "count", hid["friends"] == n, hid["friends"], n, where="meta.hidden.friends")
     if "sensitive" in hid and ctx.a is not None and getattr(lib, "hidden_acts", None) is not None:
         # the private items left out: those the scope would have counted (an item of a private theme has no area
         # nor theme of its own, so an area or a theme scope holds none of them)

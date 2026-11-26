@@ -6596,3 +6596,102 @@ SPEC 9's assumption. On Haiku it still costs a fraction of a cent.
   - C13.0's period said only in the neighbouring clause;
   - the attack's assembly case P5: a filtered result's point under an unfiltered lead prints no scope line, though the
     point says its scope.
+
+## 23. After the slice: tools, eval and a fresh set (26 Nov 2026; DECISIONS.md "After the thin live slice")
+
+The slice of section 22 missed its gate, and its checkers found faults outside the verifier: in the read tools, in the
+eval that measured it, and in having no unseen messages left. This round fixed those three and merged them on
+`brain-after-slice-local`. **No rule was added to `brain/verify.py`, no prompt was written or changed, and no model was
+called** ($0). Today's bot is unchanged. Every figure below is on the made-up library of `tests/brain_library.py`.
+"Merge" marks a figure measured again on the merged tree; the others are carried from the branch's own evidence under
+the scratchpad's `mvp22/` folder.
+
+### 23.1 What was wrong
+- **The read tools** (section 22.8): an unlocked private topic was counted in the totals but in no theme or area row;
+  `find` gave no match for it, which caused I02.0's false absence; a day's items came in time order whatever the order
+  asked; Shorts and Instagram reels had no cell apart; a compare cut at the export end did not say its two windows had
+  unequal days; a no-match had no cell a sentence could cite; friends' posts left out were the library's whole count,
+  not the window's; an Instagram channel had no display name; a long month timeline was cut at 24 rows silently.
+- **The eval**: G2 compared the model's calls with one hand plan and required every round. The auditor read
+  "came next with N" as the window's total and shares said "without X" on the unfiltered base. Its findings stood in
+  for G1, though a hand recount found it caught 1 of the 5 false sentences sent.
+- **No fresh set.** Both held-out looks used the same messages, so nothing unseen could measure what was closed.
+
+### 23.2 What changed
+- **Read tools** (`brain-toolfix-local`, tip 76d83ba; evidence `mvp22/tools/`). The nine faults above are fixed, each
+  reproduced first. `tests/test_brain_toolfix.py` has 31 tests: on the base 1163b7b, 22 fail and 9 pass (the 9 are
+  guards: a locked turn, orders that already held, friends figures that were already right). The unlocked topic's rows
+  are named "the topic you asked about", with the topic word in a `topic` field and `private: true`, because insight's
+  sensitive check does not know the turn's unlock. In `facts.py` every new cell and row (the unlocked rows, reels,
+  friends in the window, display names) is built only with `hide_sensitive`, which only the brain and the eval pass;
+  the timeline's cut is in `brain/results.py`; `libview.py` gains two attributes nothing else reads. Today's bot: the
+  suite passes and the dry self-test's transcript matches the base's (23.4). The frozen planted ledgers differ from today's tools
+  exactly as `eval/brain_toolfix_ledger_diff.json` pins (62 ledgers). The plans mode: plan findings 5 to 4, numbers in
+  results 8721 to 8905, recounted 8698 to 8882 (`plans_before.json`, `plans_final.json`).
+- **Eval tools** (`brain-evaltools-local`, tip f534fb9; evidence `mvp22/evaltools/`). A message can have several
+  acceptable readings and the best one counts. Five named rules (`RULES`): only the first counting round is required,
+  first_last's scope words, a total inside any breakdown, a year timeline inside a month one, and extra filters that
+  change no count. The old strict verdict is kept beside it. On the first held-out look, understood rose from 41 to 44
+  of 52, and agreement with the independent reader from 44 to 47 of 52; on the second look, 38 to 42 of 52 (merge: the
+  same on the merged tools, `mvp22/merge/scorer_merged.txt`). The auditor's two fixes, on the 110 sent sentences of the
+  first look: false flagged 2 of 5 before, 1 of 5 after; true flagged 23 of 105 before, 2 of 105 after (merge: the
+  same, `mvp22/merge/auditor_merged.txt`). It still misses 4 of 5, so it is demoted: its output is `auditor_hints`, and
+  `G1_false_sent` stays empty until a hand recount fills it through `eval_brain marks`. New: `run --set fresh --half
+  a|b|all`, `read` (a reading sheet per run) and `marks`, and `eval/brain_reading_rubric.md` from the founder's rules.
+  `tests/test_brain_evaltools.py` has 26 tests.
+- **Fresh set** (`brain-fresh-local`, tip c4262cc; evidence `mvp22/fresh/`, `mvp22/freshcheck/`):
+  `evalset/brain_fresh.jsonl`, 95 conversations (A 46, B 49), 132 messages, 131 at the plan tier (A 65, B 66) and 1 at
+  step 2, 194 readings and 466 facts (merge: counted from the file). A second agent recounted every fact with its own
+  counter over the rows: 0 value differences. No message is at or above 0.80 of an old one (the nearest is 0.788).
+  Half B is locked and pinned by sha256 in `tests/test_brain_fresh.py`; this merge read it only through tests and by id.
+
+### 23.3 The merge and its seams
+Three merges with `--no-ff` (1a374c6, 4a2c926, 500f8df); `eval_claims.py` was changed on two branches and merged
+without a conflict (the two changes do not touch). Three seams were found and fixed in three commits after the merges
+(the last is 34a570f), with a test file for them:
+- I02.0 in `test_brain_evaltools.py`. With the tools' fix the unlocked topic resolves, so its first round now has a
+  result and is the required round: the run's call without the topic counts 58 against 50 and differs. The rule the case
+  tested (a first round with no result leaves the next round required) has a case of its own on a name no tool knows.
+  Its auditor case cites Home cooking's row, now `themes[1]`; it is still missed, and the tally stays 1 of 5.
+- `eval_brain` read a search result's window as none (N069.0): it is now the window the tools resolved, as the fresh
+  set's build reads it.
+- `eval_brain`'s hand chain went on from the code lead; the fresh set's readings go on from the window words of the
+  result before (`hand_chain_next`). With the lead, a follow-up of half B (N058.1) failed its call.
+- `tests/test_brain_after_slice.py` (5 tests): the run mode loads the real fresh file by half (65, 66 and 131 plan
+  messages) and stops at the missing key with nothing sent; every reading of both halves holds on today's tools along
+  the eval's own chain (no window fault, no tool error, something to score); a conversation of half A runs through the
+  live loop with a fake provider that calls its preferred reading.
+
+The fresh set rebuilt on the merged tools without writing (`mvp22/merge/fresh_seam_*.json`): 0 problems, no stored line
+would change, and the build's differences between a tool's cell and the recount fall from 28 to 24: five are gone
+(N012.0 in half A; N020.0 and three of N089.0 in half B, by id) and one is new, N089.0's title now differing only by a
+trailing number the tool's title cleaning drops. The facts were counted from rows and stand.
+
+### 23.4 Checks (merge, on the merged tree)
+- Planted line: 332 of 332 false handled, 78 of 78 true kept; the attack's set 165 of 166 false dropped (R03 kept with
+  the private line) and 41 of 60 true kept; the step 1 audit's true set 49 of 61. Identical to the base.
+- The plans mode: identical output to the tools branch's final run (it exits 1 as on the base: B05, C13 and G06 do not
+  recount true).
+- The whole suite: 5999 passed and 2 skipped, 0 failed, in 4 shards on 34a570f (1377, 1273, 1562 with the 2 skips,
+  1787). The 12 brain test files together: 314 passed. `demo/test_demo.py`: 10 passed.
+- The dry self-test with no key: 67 conversations, 164 of 164 steps, $0; its transcript is the base's line for line
+  but the fake sign-in links' random ids.
+
+### 23.5 The raw false rate
+The read-only recounter (`mvp22/raw/numbers.txt`) judged every sentence the model wrote in both held-out looks, before
+the verifier, from the rows. Of the first forms' sentences with a claim, **8 of 135 (5.9%) were false or wrongly based
+on the first look, and 9 of 139 (6.5%) on the second** (read leniently 4.4% and 4.3%, strictly 11.9% and 10.1%). None
+was a wrong number or calculation: every one was framing (window, base, scope, rank, completeness, a false absence).
+On the first look the verifier dropped 5 of the 8 and kept 3, and dropped 54 of the 126 true ones. This is a different
+figure from "5 of 110 sent" (section 22): that one is after the verifier and the code lead.
+
+### 23.6 Still open
+- No run has read the fresh set: half B is unseen and is the next gate's measure. G1 needs a hand recount.
+- Framing is where the false sentences are; the verifier's rules on free English are not the way to close it (DECISIONS).
+- Tool faults the fresh set records: N010's "last summer" resolves to the summer of 2026; 4 messages are tagged
+  `tool_gap` (2 per half) and are scored apart.
+- The set's own check path for N053.0's dating count names "Dating advice", while the row is now named "the topic you
+  asked about": the tools give the right 50, the check does not find it. One finding of half B (N083.0, by id) is on the
+  same path.
+- The plans mode still exits 1 (B05, C13, G06), as before this round.
+- The auditor misses 4 of 5 false sentences; it gives hints only.
