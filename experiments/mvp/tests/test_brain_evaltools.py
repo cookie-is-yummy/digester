@@ -142,11 +142,16 @@ def test_the_held_out_cases_on_the_made_up_library(harness):
     m = plan_msg("thats not right, i barely watch gaming", [bd(by="area", window={"preset": "lately"})],
                  [bd(by="area", window={"preset": "lately"}, scope={"length": "long"})])
     assert verdicts(m, [("breakdown", {"by": "area", "window": LATELY})]) == ("understood", "differs")
-    # I02.0: a first round with no result to compare (the private topic is no_match) leaves the next round required
+    # I02.0: before the read tools' fix (brain-toolfix-local, fix 2) the private topic was no_match even on the turn
+    # that unlocked it, so the first round had no result and the next round was required (the run's call was then
+    # other_plan). Since the merge the turn's unlocked topic resolves: the first round holds a count (50 of 2024), it
+    # is the required round, and the run's call without the topic counts 58, so it differs. The scoped call matches.
     m = plan_msg("my partner thinks i watched a lot of dating advice in 2024, did i?",
                  [bd(by="none", window={"words": "in 2024"}, scope={"only": ["dating advice"]})],
                  [bd(by="channel", window={"words": "in 2024"})])
-    assert verdicts(m, [("breakdown", {"by": "none", "window": {"words": "2024"}})]) == ("other_plan", "other_plan")
+    assert verdicts(m, [("breakdown", {"by": "none", "window": {"words": "2024"}})]) == ("differs", "differs")
+    assert verdicts(m, [("breakdown", {"by": "none", "window": {"words": "2024"},
+                                       "scope": {"only": ["dating advice"]}})])[0] == "understood"
 
 
 # ================================================================ 2. the auditor, on sentences a hand recount labelled
@@ -194,7 +199,7 @@ AUDIT_CASES = [
      [("breakdown", {"by": "none", "window": {"words": "2024"}, "scope": {"only": ["dating advice"]}}),
       ("breakdown", {"by": "none", "window": {"words": "2024"}})], "r2",
      ("In 2024 you opened 58[r2.totals.items] videos, and the top theme was Home cooking[r2.themes[0]] with "
-      "8[r2.themes[0].items]."), False),
+      "8[r2.themes[0].items]."), True),   # flagged since the merge of the read tools' fix 1 (see the test below)
     ("F11.0", "false", "was october my biggest month ever",
      [("timeline", {"unit": "month", "window": ALL}), ("timeline", {"unit": "month", "window": {"preset": "this_year"}}),
       ("timeline", {"unit": "year", "window": ALL})], "r3",
@@ -229,11 +234,14 @@ def test_the_auditor_on_a_labelled_sentence(harness, case):
 
 
 def test_the_auditor_still_misses_most_false_sentences_so_it_gives_hints_only():
-    """The case table measured: of the labelled false sentences, the auditor flags one (F05.0, and by reading the
-    share as gaming's, not Minecraft builds'); of the true ones, none since the two fixes."""
+    """The case table measured: of the labelled false sentences, the auditor flags two: F05.0 (by reading the share as
+    gaming's, not Minecraft builds') and, since the merge of the read tools' fix 1, I02.0 (the calls replayed on
+    today's tools give the unlocked topic its own theme row, 50 of 2024, so "the top theme ... with 8" is recounted
+    as 50). On the run's stored results I02.0 is still not flagged (mvp22 merge: the auditor's figures on the stored
+    records are unchanged, 1 of 5 false of the 110 sent). Of the true ones, none since the two fixes."""
     false = [c for c in AUDIT_CASES if c[1] == "false"]
     true = [c for c in AUDIT_CASES if c[1] == "true"]
-    assert sum(c[6] for c in false) == 1 and len(false) == 5
+    assert sum(c[6] for c in false) == 2 and len(false) == 5
     assert sum(c[6] for c in true) == 0
 
 
