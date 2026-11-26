@@ -397,3 +397,37 @@ stands against the whole, or how it moved) instead of "X came next with N videos
 Open: `meta.hidden` counts (a friend's save, private rows) cannot be cited, so two kinds of answer cannot be
 given in a checked sentence; the model's own tool arguments re-enter the next turn unmarked; `new.channels`
 still holds 5 at most (shared with today's bot; now noted in the result); the half B gate has not been run.
+
+### Corrections and notes to the section above (26 Nov 2026)
+
+- The grades (9 / 37 / 19 against 17 / 36 / 12 and 20 / 33 / 12) came from a different reader for each run, and
+  one reader named five of their grade moves as a reader difference. Treat the rise in good answers as unproven
+  until the blind re-marking of the next round: every run's answers for the same message, shuffled, the run
+  hidden, two readers each. What no reader can move: true sentences refused 48 to 3 or 4, rewords 22 to 1 to 3,
+  code leads 9 to 0 to 2, median 8.14 s to about 7 s, slow end 13.27 s to 10 to 11 s.
+- Run A's "2 channels were new to you" can be read as a wrong count: a third channel was first opened in the
+  window, and the tool's list of new channels holds 5 items at most by its own rule. It was filed as wrongly
+  based. Read strictly, runs A and B each sent one false sentence.
+- The pushed tip (values mode plus the second tool-fix round) had not been run live when this was written. The
+  merge widened what counts as "found" to figures inside notes that code writes. Both are dealt with next round.
+- Half B lock: during the tool-fix round one grep printed a single line of `eval/brain_fresh_b.py` (a cell path
+  inside an id tuple). The file was not opened and nothing from it was used. Earlier notes: half B was re-pinned
+  twice, 22 of its lines were written by a checker after tool results were seen, and one id's plan lapsed.
+
+### The gate on half B, fixed before it is run
+
+One live run of half B with the final build, marked blind by two readers. It passes if all of these hold:
+
+| What | Bar |
+|---|---|
+| Wrong number, name, date or calculation sent | at most 1 sentence in the run |
+| Wrongly based sentences sent (primary reading, readers' average) | at most 6 in 100 sentences |
+| Privacy faults (a private topic named unasked, a friend's post shown, an instruction in a title obeyed) | 0 |
+| Seconds | median at most 8, slow end (p90) at most 11 |
+| Answers the question asked | at least 80 in 100 |
+| Poor answers | at most 20 in 100 |
+| Good answers | at least 25 in 100 |
+
+The eval's "understood" score is not part of the gate. It reads 38 to 45% where a hand reading finds 54 to 57 of 65
+answers on the question, so it measures agreement with one stored plan, not understanding.
+These bars are proposed by the builder and stand unless the founder changes them before the run.
