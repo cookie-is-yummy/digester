@@ -107,28 +107,33 @@ CONVS = [
                 "picture is of someone who goes deep on one hobby at a time. " + PRIVATE_LINE,
           offer="Want it year by year, to see when each hobby took over?")]},
     {"id": "N004", "msgs": [
-        # freshcheck: rewritten after the results were seen (the same ask and window as "what am i into lately" of
-        # brain_plans.jsonl); the length slot is new
-        M("give me the gist of my last few weeks but only proper videos, not shorts", "lately shorts scoped",
-          readings=[R(C("breakdown", by="area", window=preset("lately"), scope={"length": "long"}, compare="previous"),
-                      win=LATELY, note="'last few weeks' is the 4 weeks up to where the export ends; only videos known "
-                                       "to be long"),
-                    R(C("breakdown", by="theme", window=preset("lately"), scope={"length": "long"},
-                        compare="previous"), win=LATELY, note="themes first is as good")],
-          facts=[F("long videos lately", lambda r: r.n(LATELY, length="long"), "YouTube rows over 60 s, 3 to 30 Oct",
-                   "r1.totals.items"),
-                 F("long videos in the 4 weeks before", lambda r: r.n(BEFORE_LATELY, length="long"),
-                   "YouTube rows over 60 s, 5 Sep to 2 Oct", "r1.previous.items"),
-                 F("food and cooking lately", lambda r: r.n(LATELY, length="long", area=COOK), "rows",
-                   "r1.areas[name=food and cooking].items"),
-                 F("art and design lately", lambda r: r.n(LATELY, length="long", area=ART), "rows",
-                   "r1.areas[name=art and design].items"),
-                 F("food and cooking in the 4 weeks before", lambda r: r.n(BEFORE_LATELY, length="long", area=COOK),
-                   "rows"),
-                 F("gaming lately, long only", lambda r: r.n(LATELY, length="long", area=GAMING), "Brick Realm rows",
-                   "r1.areas[name=gaming].items")],
-          means="Without the Shorts it is cooking and art about equally (30 and 28), then a few minecraft builds and "
-                "calculus lessons; the cooking is the new part, up from 2.",
+        # freshcheck: rewritten after the results were seen ("give me the gist of my last few weeks" was the same ask
+        # as "what am i into lately" of brain_plans.jsonl); the second window is new
+        M("give me the gist of my last few weeks compared to the summer", "lately compare",
+          readings=[R(C("compare", a=preset("lately"), b=words("this summer"), by="theme"), win=LATELY,
+                      note="the 4 weeks up to where the export ends against the summer just gone (June to August)"),
+                    R(C("compare", a=preset("lately"), b=words("this summer"), by="area"), win=LATELY,
+                      note="by area"),
+                    R([C("breakdown", by="theme", window=preset("lately"), compare="none"),
+                       C("breakdown", by="theme", window=words("this summer"), compare="none")], win=LATELY,
+                      note="the two windows as two results")],
+          facts=[F("items lately", lambda r: r.n(LATELY), "opened rows, 3 to 30 Oct", "r1.totals.items"),
+                 F("items in summer 2026", lambda r: r.n(SUMMER26), "opened rows, 1 Jun to 31 Aug 2026",
+                   "r1.previous.items"),
+                 F("Gaming clips lately", lambda r: r.n(LATELY, theme="Gaming clips"), "rows",
+                   "r1.themes[name=Gaming clips].items"),
+                 F("Gaming clips in the summer", lambda r: r.n(SUMMER26, theme="Gaming clips"), "rows",
+                   "r1.themes[name=Gaming clips].previous_items"),
+                 F("Home cooking lately", lambda r: r.n(LATELY, theme="Home cooking"), "rows",
+                   "r1.themes[name=Home cooking].items"),
+                 F("Digital drawing lately", lambda r: r.n(LATELY, theme="Digital drawing"), "rows",
+                   "r1.themes[name=Digital drawing].items"),
+                 F("Digital drawing in the summer", lambda r: r.n(SUMMER26, theme="Digital drawing"), "rows",
+                   "r1.themes[name=Digital drawing].previous_items"),
+                 F("Watercolor painting in the summer", lambda r: r.n(SUMMER26, theme="Watercolor painting"), "rows",
+                   "r1.themes[name=Watercolor painting].previous_items")],
+          means="Much busier than the summer (130 in four weeks against 45 in three months) and different: the "
+                "summer was all drawing and watercolor; now gaming clips and cooking lead, with drawing still there.",
           offer="Show the cooking videos?")]},
     {"id": "N005", "msgs": [
         # freshcheck: rewritten after the results were seen (the same ask as "how has what i watch changed since
@@ -883,7 +888,8 @@ CONVS = [
                  F("their hour, New York", lambda r: r.top("hour", None, platform="instagram"), "rows (all four)",
                    "r1.when.busiest_hours[0].hour"),
                  F("reels opened before noon", lambda r: r.n(None, platform="instagram", hours=range(5, 12)), "rows"),
-                 F("busiest YouTube hour, New York", lambda r: r.top("hour", None, platform="youtube"), "rows")],
+                 F("busiest YouTube hour, New York (16 has 179, one more than 18)",
+                   lambda r: r.top("hour", None, platform="youtube"), "rows")],
           means="Yes: all four reels they opened were around 8 in the morning, while YouTube is a late afternoon "
                 "thing; it is only four reels, 12 to 15 October.",
           offer="What the reels were?")]},

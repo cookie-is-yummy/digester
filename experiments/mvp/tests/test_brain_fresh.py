@@ -23,7 +23,7 @@ FRESH = os.path.join(os.path.dirname(HERE), "evalset", "brain_fresh.jsonl")
 # edited, which needs a new fresh set, not a new pin (evalset/README_brain_fresh.md). Pinned once more by the
 # independent check of the set (the writer's pin was 343275626e4f...; the check fixed facts, readings and wording and
 # added conversations before the lock took hold); no pin after this one.
-HALF_B_SHA256 = "023c3af0cd304e49509f06da36ac0b68260569de5038ca483bac2c4329f2063a"
+HALF_B_SHA256 = "3a121423684a58498d375df70685e09a59d31f33a305d48a4d1986f7bb79ec38"
 # half B ids whose refused call is no longer refused (a tool learned to read it, e.g. a part of a period). Half B
 # cannot be edited, so a lapse is listed here by id; half A's refusals are kept true by editing half A.
 LAPSED_B = set()

@@ -17,9 +17,13 @@ are follow-ups or corrections.
 Half A holds the ids where `int(sha1(id).hexdigest(), 16) % 2 == 0`. Half B holds the rest.
 
 **Half B is locked.** It was written once and checked once, by an independent checker (its own recount from
-`rows()`, its own reading of every message). The check rewrote 12 messages that repeated an ask of
-`brain_plans.jsonl` (same ask, same slots), fixed facts, readings or wording in 9 more, and added 8 conversations
-(9 messages). Those lines were written after tool results were seen; each is marked `freshcheck` in the half files.
+`rows()`, its own reading of every message). Lines the check changed, all written after tool results were seen:
+- message text rewritten (13): A N001.0, N004.0, N005.0, N007.0, N053.1, N068.0; B N030.1, N051.0, N061.0, N065.0,
+  N082.0, N086.0, N100.0 (12 repeated an ask of `brain_plans.jsonl` with the same slots; N065.0 used the tools' word);
+- facts, readings or `good` fixed in place (10): A N027.0, N034.0; B N006.0, N009.0, N030.0, N031.0, N043.0, N046.0,
+  N050.0, N086.1;
+- conversations added (8, 9 messages): A N109, N112, N113; B N106, N107, N108, N110, N116.
+
 The pin in the test is the checker's. After that, no builder, tuner or prompt writer reads half B.
 That means half B's lines of `brain_fresh.jsonl`, `eval/brain_fresh_b.py`, and any report or run output that quotes
 half B messages. Only a run and its independent readers (judges, recounts) may open it. Anyone who tunes a prompt or

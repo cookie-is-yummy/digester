@@ -296,8 +296,9 @@ CONVS = [
                    "r1.previous.items"),
                  F("last Brick Realm day", lambda r: r.edge("last", channel="Brick Realm")["day"], "rows"),
                  F("Brick Realm in 2021", lambda r: r.n(Y21, channel="Brick Realm"), "rows")],
-          means="A little: about one a week this autumn, far from the 2021 habit; the last one's title asks for a rule, "
-                "which is only a title.",
+          # freshcheck: means reworded to match its facts (5 and 7 per four weeks, not one a week)
+          means="A little: 5 in the last four weeks and 7 in the four before, far from the 91 of 2021; the last "
+                "one's title asks for a rule, which is only a title.",
           offer="Since when is it back?"),
         M("since when", "follow_up first_last",
           readings=[R(C("items", window=preset("this_year"), scope={"only": ["brick realm"]}, order="oldest",
@@ -512,7 +513,8 @@ CONVS = [
                 "save is a friend's post, counted only.",
           offer="Show both sets?")]},
     {"id": "N065", "msgs": [
-        M("opened vs saved in october", "saved compare",
+        # freshcheck: reworded ("opened" is the tools' word, not a person's)
+        M("watched vs saved in october", "saved compare",
           readings=[R([C("breakdown", by="none", window=words("in october")),
                        C("breakdown", by="none", window=words("in october"), scope={"how": "saved"})], win=OCT,
                       note="the same month on two bases")],
