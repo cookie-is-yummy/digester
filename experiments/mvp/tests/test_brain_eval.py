@@ -122,9 +122,10 @@ def test_the_plans_run_recount_and_say_their_findings(harness):
     assert s["recount_true"] == s["with_a_plan"] - len(KNOWN_NOT_TRUE)
     # step 1's close: "late october" is refused (G04 asks for October), and the fields of one name are one row
     assert [f["at"] for f in s["findings"]["window"]] == []
-    assert {f["kind"] for f in s["findings"]["shape"]} == {"list cut"}
-    assert any(f["at"] == "F11.0" and f["kind"] == "list cut" for f in s["findings"]["shape"])
-    assert len(s["plan_findings"]) == 5
+    # toolfix 9 (scratchpad mvp22): F11's month timeline of all history keeps its latest months and says complete
+    # false when cut, so the auditor's "list cut" finding is gone; toolfix 2 closed I02's plan finding (4 left)
+    assert s["findings"]["shape"] == []
+    assert len(s["plan_findings"]) == 4 and not any(x.startswith("I02.0") for x in s["plan_findings"])
     # the fake brain stood for one request per round and one for the answer
     a01 = next(c for c in out if c["id"] == "A01")
     assert [m.get("requests") for m in a01["messages"] if m["tier"] == "plan"] == [2, 2, 2, 2, 2]

@@ -12,6 +12,12 @@ The resolve order, first match wins, each match saying how it was read:
 8. none: up to 3 options by spelling and by meaning.
 Ambiguous and no match carry options and never a number: a closest match is an option, never a count. Sensitive
 themes, channels and items are never a match, nor an option, unless the turn's unlock is their topic.
+
+After the thin live slice (scratchpad mvp22, toolfix 2, 6, 7): a name in the topic the turn's own message unlocked is
+that topic (`topic:<topic>`, "private topic"; its theme has no name in the build), checked before step 2 unless it is a
+channel's own name; a no-match's tool row carries how many of their items hold its words (words_count: the one number
+of a no-match, of the items they may see, never for a locked sensitive name); an Instagram account is also found by
+its display name (facts.displays).
 """
 import difflib
 import re
@@ -143,6 +149,39 @@ def _collections(lib):
     return out
 
 
+def displays(lib):
+    """{creator: display name} of the Instagram accounts with a name of their own (facts.displays), memoised."""
+    if "displays" not in lib._memo:
+        lib._memo["displays"] = F.displays(lib.view, lib.idx)
+    return lib._memo["displays"]
+
+
+def topic_ref(lib):
+    """The ref of the topic the turn's own message unlocked (toolfix 2), else None."""
+    return f"topic:{lib.unlock}" if lib.unlock else None
+
+
+def words_count(lib, name):
+    """Toolfix 6 (a no-match had no cell, so "nothing called X in your history" could not be checked): (the words
+    searched, how many of their items, opened, liked or saved, ever, hold them in their own text), or None for a name
+    of a sensitive topic their message did not unlock (never a count of private titles) and for a typed ref."""
+    import numpy as np
+    raw = " ".join(str(name or "").split())
+    if not raw or len(raw) > 80 or re.match(r"^(?:area|theme|channel|collection|words|topic):", raw):
+        return None
+    from .. import outside as O
+    topic = O.sensitive_topic([raw])
+    if topic and topic != lib.unlock:
+        return None
+    t = fold(raw)
+    words = " ".join(_content_words(t)) or t
+    have = np.zeros(len(lib.idx.ids), bool)
+    have[np.unique(lib.idx.it)] = True
+    n = sum(1 for k, i in enumerate(lib.idx.ids) if have[k] and not lib.hidden[k]
+            and Hm.holds(lib.view.items[i].caption or "", words))
+    return words, int(n)
+
+
 def area_ref(shown):
     return "area:" + F.slug(shown)
 
@@ -163,9 +202,12 @@ def _label(lib, ref):
     if form == "theme":
         return next((nm for t, nm, _w in _themes(lib) if str(t) == val), val)
     if form == "channel":
-        return next((c for c in lib.idx.creators if F.channel_key(c) == val), val)
+        c = next((c for c in lib.idx.creators if F.channel_key(c) == val), val)
+        return displays(lib).get(c, c)
     if form == "collection":
         return next((c for c in _collections(lib).values() if F.slug(c) == val), val)
+    if form == "topic":
+        return F.UNLOCKED_NAME   # the rows of the unlocked topic carry this name (facts._unlocked_rows)
     return val
 
 
@@ -211,6 +253,8 @@ def valid_ref(lib, ref):
         return ref if any(F.slug(c) == val for c in _collections(lib).values()) else None
     if form == "words":
         return ref if 2 <= len(val.strip()) <= 60 else None
+    if form == "topic":
+        return ref if ref == topic_ref(lib) else None
     return None
 
 
@@ -279,14 +323,23 @@ def resolve_one(lib, name, kinds=()):
         # resolves only when their own message unlocked that topic; no options, no count
         return out
     # a typed ref ("area:gaming", "theme:3") is checked, never trusted
-    if re.match(r"^(?:area|theme|channel|collection|words):", raw):
+    if re.match(r"^(?:area|theme|channel|collection|words|topic):", raw):
         ref = valid_ref(lib, raw)
-        if ref and ref.split(":", 1)[0] in kinds:
+        form = (ref or "").split(":", 1)[0]
+        if ref and (form in kinds or (form == "topic" and kinds & {"area", "theme"})):
             out.update(status="ok", matches=[_match(lib, ref, "ref")])
-        else:
+        elif not raw.startswith("topic:"):
             out["options"] = _options(lib, raw.split(":", 1)[1])
         return out
     t = fold(raw)
+    if topic and topic == lib.unlock and kinds & {"area", "theme"}:
+        # toolfix 2 (held-out I02.0: "dating advice" was no_match on a turn that unlocked it, so the model said there
+        # was no such theme while 50 of 58 videos were of it): a name in the topic their message unlocked is that
+        # topic (its theme has no name in the build), unless it is a channel's own name
+        ch = Hm.channel_of(lib.view, raw)
+        if not (ch and "channel" in kinds and not _channels(lib).get(ch, True)):
+            out.update(status="ok", matches=[_match(lib, topic_ref(lib), "private topic")])
+            return out
     # 1. their own words: a vocabulary of step 3 and later (empty in the first version)
     # 2. an area word
     areas = _area_words(lib)
@@ -308,6 +361,8 @@ def resolve_one(lib, name, kinds=()):
     # 4. a channel's name
     if "channel" in kinds:
         ch = Hm.channel_of(lib.view, raw)
+        if not ch:   # toolfix 7: an Instagram account by its display name
+            ch = next((c for c, d in displays(lib).items() if Hm._squash(d) == Hm._squash(raw)), None)
         if ch and not _channels(lib).get(ch, True):
             out.update(status="ok", matches=[_match(lib, "channel:" + F.channel_key(ch), "channel name")])
             return out
