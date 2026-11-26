@@ -264,3 +264,5 @@ Open, parked:
   question. The scorer and the bar need another look before the final gate.
 - Scope lines and private lines are worded by code and are not in the sentence counts.
 - One reader marked the answers. There was no second hand.
+
+The evidence of this round is in `eval/runs/brain_cells_run_a_2026-11-26.tgz` (made-up library only).
