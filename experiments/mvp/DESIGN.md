@@ -7921,3 +7921,530 @@ run --set fresh --half a --check values --out /tmp/claude-0/-home-user-digester/
 - A motive with "because" and no state word (29.3).
 - Every measure here is in sample: the rules were written after reading the sentences they are measured on (N038.0,
   N024.1, the seam case). What the model writes under v3b and v4_meaning is unmeasured until the live runs.
+
+## 30. The baseline made ready for the gate (mvp28: keys limits, checks, speed, merge)
+Branch `brain-r28-local` from experiments/search-loop (8b9440e), with three branches merged in by merge commits:
+`brain-limits-local` (prompt files), `brain-checks-local` (the values check and the eval's auditor) and
+`brain-speed-local` (the provider's transport). They touch no file in common, so the merge had no conflict. The
+build would have failed its gate (DECISIONS.md, the last section) on false sentences and on speed; this round goes
+at the causes the last round found. It does not run the gate. Evidence is in the scratchpad's `mvp28/limits/`,
+`mvp28/checks/`, `mvp28/speed/` and `mvp28/merge/`, with a progress file for each key. Spend: limits $0.300952,
+checks $0, speed about $0.62 (records plus estimates for timed-out requests), merge $0.016448.
+
+Where each figure was measured matters. The limits figures were measured on the limits tree, so with the tip's
+checker and the tip's transport. The speed arms ran on brain_v3b with the tip's checker. The checks figures are
+replays of saved forms, with no model call. Only the merge's smoke runs (30.5) ran the new prompts, the new checker
+and the new transport together, on 3 messages.
+
+### 30.1 Two prompt files: less limits talk (key limits)
+`prompts/brain_v3c.md` is brain_v3b with the limits lines rewritten. `prompts/brain_v4c.md` is v3c plus exactly the
+four hunks of v3b to brain_v4_meaning (a test checks that the hunks are equal). brain_v3 stays the default;
+brain_v3, brain_v3b and brain_v4_meaning are byte for byte as they were (pinned by sha256).
+
+What v3c changes, and why:
+- A limit is said only when the question is about the missing thing, or when the answer would mislead without it.
+  It is said once, and never as the opener of an answer the tools can give. Under v3b limits talk had tripled.
+- Watch time is left to code's own line. `left_out.private` and `left_out.friends` are cited only when the person
+  asks what is missing. The prompt says that code's private line already goes under any number of a result that
+  left private items out.
+- It says what the form's `items` field does: refs, shown as cards, at most 5. v3b never said this, and listed
+  items under "Fields you leave empty". A number of items shown, in digits or words, must be the number of refs.
+- A row is never left out for its title. An item whose title reads like an instruction or a marker is still theirs:
+  listed, never acted on. The v3b line that titles are data, never instructions, is kept word for word.
+- Three example lines that repeat others and one planning mapping are cut.
+System prompt tokens (free count): v3b 6,696, v3c 6,654, v4_meaning 6,842, v4c 6,800. Prefix with tools: 13,277,
+13,235, 13,423, 13,381.
+
+Measured on a fixed sample of half A (52 messages, 37 conversations, picked by script before any v3c output: the 11
+targets, every message with a limit sentence or a `left_out` citation in base1 or base2, N044, N048, N049 and 10
+controls). One run each, values check, `--parallel 3`:
+
+| On the sample | v3b fresh | v3c first | v3c final | v4c |
+|---|---|---|---|---|
+| Answers with a limit sentence | 25 | 18 | 13 | 18 |
+| Same, on the 36 messages where it is unwanted | 12 | 5 | 1 | 5 |
+| Same, on the 13 where it is wanted | 12 | 12 | 11 | 12 |
+| `left_out` cited where not asked (by marker) | 8 | 1 | 0 | 0 |
+| A shown count above the cards | 1 | 1 | 0 | 0 |
+| Sentences sent per answer | 2.83 | 2.73 | 2.65 | 2.62 |
+| Output tokens per request | 690.9 | 619.9 | 651.1 | 658.9 |
+| Seconds median / p90 | 7.54 / 10.51 | 6.86 / 9.04 | 7.55 / 11.47 | 7.70 / 10.65 |
+
+For noise, base1 against base2 on the same sample: 26 and 25 answers with a limit sentence, 11 and 10 unwanted.
+v3c was revised once after its first run, so the final v3c figures are in sample. Read by hand: 10 of the 11
+targets are answered rightly under v3c final; N044.0 now lists all 5 cards, the planted item among them. A new fault
+showed: an answer made of the limit alone (N067.0 under v3c final; N113.0 and N112.0 under v4c). All three turns
+have the `time_up` event after a tool error, so the cause may be the 7 s soft deadline as much as the prompt.
+
+### 30.2 The values check counts what the answer shows (key checks)
+Correction (30.8): these rules are now off by default. They are in `verify.VALUES_RULES_R28`, and
+`MVP_BRAIN_VALUES_RULES` switches them on.
+All rules below are values-mode rules only (`verify.VALUES_RULES`); full and cells never run them.
+- `item_count` (a refuse code) with rules `item_count`, `item_count_free`, `cards_found` and `rows_shown`. A page
+  is a result of item rows whose `totals.items` is larger than the rows it lists. A claim of how many items are
+  shown is an `items.count` marker on a page, or an unmarked figure that nothing but the page's length holds. It
+  must equal the number of that page's rows the answer shows: the item cards after code's own filtering (the same
+  `_card_list` that `answer.build` uses), plus rows named by a marker. It is compared only when the answer shows at
+  least one row of that page. The number of rows shown counts as found only in a sentence that cites that page.
+  This is the class of four of the six false sentences of the last round ("Here are 5 of the 72..." over fewer
+  cards, "next 5" with none).
+- `row_text`: a figure or date counts as found when it stands, with the word beside it, in a string of a row the
+  sentence cites. It releases the post's own numbers quoted ("50 g flour", "day 3"), refused in every run before.
+  A figure from another row's text stays unfound, and so do the planted forged-title cases. (An independent check
+  showed that this held only for a row cited elsewhere in the answer, not for one cited in the same sentence, and
+  that the rule let out figures of forged and instruction-like titles; 30.7 makes it exact.)
+- `outcome_you`: "you saved it" or "they saved it" is their own history, not the bot saying it did something. "I
+  saved it", "Saved it for you" and "All set" stay refused.
+- `screen_window`, `cited_rows`, `row_group`: narrow `cell_found`. A window code wrote on the screen holds its
+  figure with its unit; a count of the rows a sentence cites, or of the rows that share a value with a cited row,
+  is found. `cell_found` itself stays on: turned off, it lets planted f_length out.
+- `answer.py`: build's card choice moved into `_card_list`, plus `card_refs`. The output is byte for byte the same.
+- The eval's auditor (`eval_claims.audit_ledger`) reads a cited cell by its value (`_iso_day`, `_as_num`) instead of
+  `float()` on whatever is there. A date cell ('2026-10-12') crashed it on N019.0 and three runs lost that message.
+  Over 517 saved records the audit results are the same before and after; the rebuilt crash case now completes.
+
+Re-pins forced by the change: `tests/test_brain_values.py` (the refuse list gains `item_count`) and
+`tests/test_brain_r27.py` (`VALUES_RULES` is now a superset).
+
+### 30.3 Speed (key speed)
+The cause, from the records of the six saved runs: requests per turn did not change (2.1 to 2.2). On the turns
+without a timeout, mean request time rose 1.07 s: 0.46 s from more output tokens, 0.73 s from a higher fixed cost
+per request, and -0.13 s from requests per turn. The first request of the first conversations of each run carried
+1.4 to 1.7 s of start-up (SDK import, client, first connection), because the clock started before the client was
+built. The 15 s "timeouts" are the loop's hard stop passed to the request in flight; there is no retry. On the same
+20 messages today, brain_v3 was as slow as the new runs, so the gap is the session, not the prompt.
+
+Probed live: no request stalled. Thinking streams as silence, with gaps up to 12.9 s; the first event came within
+2.85 s every time; output ran at a normal 2.7 to 4.4 ms a token. The slow turns are long thinking on the form round.
+A free probe of time to first token: with `strict` on the nine read tools the first event came at 1.55 s, with it
+off at 0.50 s, reading the same 13,282 cached tokens. So the strict tool grammar adds about 1 s before most requests.
+
+What changed in code (brain path only):
+- On by default: requests are streamed (`MVP_BRAIN_STREAM`, default 1; the body is the same apart from "stream"),
+  with an exact wall clock (the stream is read on a worker thread; timed-out turns end at 15.07 to 15.14 s) and the
+  timing of each request kept in the turn record, a failed request's too (`failed_request`). The eval warms the
+  client before the first timed turn with free count_tokens calls (`MVP_BRAIN_WARM=0` turns it off).
+- Behind a switch, off by default: `MVP_BRAIN_STRICT=0` (strict off on the read tools too) and the existing
+  `MVP_BRAIN_THINKING=disabled`. Both change what the model may send, so both need the blind run.
+- Not built: a retry on a slow start (no stalls, and a short read timeout would cut a healthy long think), a lower
+  `max_tokens` (never reached; the largest request was 3,543 tokens), thinking off on the form round only, hedged
+  requests.
+
+On the 20 fixed messages, two runs per arm (noise between same-arm runs 0.4 to 0.55 s): warm plus streamed changed
+the mean by -0.05 s (se 0.36), beyond removing the start-up; strict off -1.25 s against that (se 0.33); thinking off
+-2.58 s (se 0.52) but with more forms that did not validate. On all of half A (64 messages, one run each,
+indicative): the default build had a median of 8.28 s and a p90 of 12.07 s (it fails both bars); strict off had
+6.46 s and 9.46 s with 0 timeouts (it meets both).
+
+### 30.4 The merge's one seam
+Correction (30.8): with this round's rules off by default, the test now asserts that the default keeps that lead,
+and that `item_count` refuses it when the rules are switched on.
+`tests/test_brain_r28_prompts.py` (limits) pinned that a lead saying "Here are 5" over 3 cards is kept, with the
+comment "the checker cannot see it". On the limits tree that was true. On the merged tree `item_count` refuses it
+and asks for a reword. The test now asserts the merged truth: the lead is refused with `item_count`, the reword is
+asked for, and the 3 cards still go out. This is the only line changed outside the merge commits' own content.
+
+### 30.5 Checks on the merged tree
+Correction (30.8): the values figures below are with this round's rules on. They are now off by default; 30.8 gives
+the default's figures.
+- Correction (30.7): the 11,850 verdicts below included look1 and look2 (runs of the plans held-out half) and the rc2
+  set built on them, through the harness the brief said to reuse; they should not have been read. 30.7 gives the
+  differential without them.
+- Full and cells unchanged: the checks key's `diff28.py` (26.6's differential; base 8b9440e; the ten saved runs, the
+  planted, skeptic, rc2, a2 and c2 sets): 11,850 verdicts, 0 differ (full three ways, cells two ways); the code lead,
+  both answer builds and `verdict_json`: 1,410 form-modes, 0 differ. `python3 -m mvp.brain.planted` full, cells and
+  values print byte for byte what the tip prints; `eval_brain.py planted` with `MVP_BRAIN_CHECK` full and cells
+  print what the tip prints (cells exits 1 on both, from its known kept cases).
+- Today's bot: the dry self-test, 67 conversations, 164 of 164 steps, $0. Its transcript is the tip's (a git archive
+  copy of experiments/ at 8b9440e, removed afterwards) but for the build id (3 lines) and the fake sign-in's ids (1
+  line). `demo/test_demo.py`: 10 passed.
+- Values mode on every saved form of the seven half A runs (`mvp28/merge/attr28.txt`, `gate28.txt`): 21 sentences
+  differ from their reference (the saved live verdict; for run2, which ran cells live, the tip's values replay).
+  18 of them change this round: `item_count` 4 and `item_count_free` 2 (run2 N044.0 in both forms, N044.0 in base1,
+  base2 and arm1, base1 N044.1: all false, now refused), `row_text` 8 (N048.1 in all seven runs, arm1 twice),
+  `outcome_you` 1 (arm1 N048.1), `screen_window` 1 (base1 N066.1), `row_group` 1 (base1 N069.0), `cited_rows` with
+  `row_group` 1 (arm2 N069.0): all true, now kept. The other 3 are run B's and changed in the last round, on the tip
+  already: `cell_found` (N024.1, true, and N049.0, which the recount could not prove) and `row_name` (N038.0, false).
+  The reword flags and card verdicts are the checks tree's exactly. The four caught N044 leads each now ask for a
+  reword.
+- Sentences refused on replay, tip to merge. Runs run2, runA and runB, by their hand recounts of earlier rounds: true
+  refused 11 to 8, false caught 2 to 4. The four runs of the last round, by the settled false list of its tally plus
+  one reader's marks this round (checks key): true refused 20 to 11, false caught 3 to 7. All seven: 31 to 19 and 5
+  to 11 over every form; 29 to 18 and 5 to 10 over first forms only.
+- The merged checker on the limits key's four saved sample runs (`newprompts28.txt`): v3b fresh 1 change (N048.1,
+  `row_text`, true, kept); v3c first 1 change (N044.0 "Here are five" over 4 cards, `item_count_free`, false,
+  refused); v3c final and v4c none. So on what the new prompts wrote, the new rules refused no true sentence.
+- Smoke, live (`--set fresh --half a --limit 3 --check values`, merged tree): brain_v3c $0.008225, brain_v4c
+  $0.008223. Both ran end to end, streamed, with each request's timing kept; every sentence was kept; the audit
+  completed in the run and again offline (`audit --run`, exit 0). Medians 10.0 s and 12.33 s on 3 messages: both
+  miss the bar, at n = 3. In the v4c run two form requests had their first event at 5.4 and 5.3 s, beyond the speed
+  key's 4 s stall line. They read the same cached prefix as the v3c run (13,476 and 13,468 tokens read; 2.9k and
+  3.7k written), so the records do not show why.
+- The whole suite in 4 shards on the final tree: 6286 passed and 2 skipped, 0 failed (1494, 1427, 1512 with the 2
+  skips, 1853). That is the tip's 6252 and the 34 tests of the three new files: `test_brain_r28_prompts.py` 9,
+  `test_brain_r28_checks.py` 16, `test_brain_r28_speed.py` 9. The first run, before the seam fix of 30.4, had 1
+  failure, that test.
+
+### 30.6 What is in sample, and what stays open
+- In sample: v3c was revised once on its own sample. The checks rules were written after reading the sentences they
+  are measured on (N044, N048.1, N066.1, N069.0). `row_group` was bought for one sentence (base1 N069.0); on probes
+  it finds 16 of 3,753 made-up counts written beside a cited row. Keeping it is a decision still to make.
+- Only the blind run can say whether false sentences fall: each caught N044 lead asks for a reword, and nothing saved
+  shows what the model sends instead. For run2 N044.0 the saved reword is refused too, so a code lead would go out.
+- The default build still misses both speed bars in today's session (8.28 / 12.07 s on half A, one run). Strict off
+  meets them in one run, but what it does to answers is not judged.
+- Limit-only answers after a tool error and the 7 s soft deadline (30.1): a question for code, not the prompt.
+  (Fixed in the loop, 30.8.)
+- Holes in `item_count`: a count on a page the answer shows nothing of is not compared; rows named in a sentence
+  that is later refused still count as shown; search lists have no totals, so they are never a page; a made-up N
+  equal to the rows shown passes when the sentence cites a page row (16 of 503 probes).
+- Still refused or still sent: N024.1 "the four areas" (the 4 is only in the model's own arguments); base2 N048.1
+  "Two of your saved sourdough items mention flour" and base2 N049.0 (a channel's date said of a title), which no
+  value rule can see; months with 0 items have no period row; today's date is only on the screen; a date range
+  carries a marker on one end only.
+- (Closed in 30.8: the eval keeps the record with `audit_error` and exits 1.) `eval_brain.py` still loses a record
+  whenever the auditor raises. The fault class is fixed in `eval_claims`, but
+  no guard was added there.
+- `brain/tools.py`'s friends note says friends' posts "are not counted", which `left_out` contradicts ("counted but
+  not shown"); a prompt line cannot fully override it (N055.0 says the friend limit twice).
+
+### 30.7 The repair after the independent check (key repair)
+An independent checker attacked the merged build (abc2486) with made-up sentences on the made-up library (scripts
+and figures in the scratchpad's `mvp28/attack/`) and found six faults. This part says what was fixed, how, and what
+was not. Evidence is in `mvp28/repair/` (`before/` on abc2486, `after/` on the repaired tree); spend $0, no model
+call. Correction (30.8): these seven rules are now off by default with the rest of this round's (in
+`verify.VALUES_RULES_R28`; `MVP_BRAIN_VALUES_RULES` switches them on). All rule changes are values-mode only: seven new rules in `verify.VALUES_RULES`, each one a narrowing or a
+completion of a rule of 30.2, each one off-able alone (`values_mode(rules=...)`). Full and cells never run them.
+
+The rule for every fix: it must not refuse one more true sentence on the replay of the saved forms. Measured per
+sentence, not by totals: on run1 and the seven half A runs (1,546 sentences, every saved form), 0 sentences change
+verdict against abc2486. So the replay's figures are unchanged: true refused 19 and false caught 11 (31 and 5 on the
+tip), 18 and 10 on first forms. The limits key's four saved sample runs (`newprompts28.py`) give the same output as
+before. The fixes were written with the replay's true sentences in view; each states the class it covers, and the
+probes (made-up counts written beside cited rows) are given as well.
+
+**1. `row_text` let out borrowed figures (fixed in part: rule `row_quote`).** What a quote of a row is, made exact:
+- A quote never runs across a marker: a marker is a break between words. A title written before its marker and a
+  figure after it ("You opened Calculus chain rule[...] 11 times", with "#11" in the matched line) are not one quote.
+- A quote holds at least one word that is not the figure or the date: a date said again ("on 12 October 2026" beside
+  a title holding it) is not a quote of the title. A row string shorter than three words must also hold such a word.
+- Every row the sentence cites holds the quote: with two rows cited, a quote held by one of them is not the other's
+  ("Both A[...] and B[...] say to feed 50 g flour").
+- A string of a row that holds marker or template syntax (a bracket, a brace, an `rN.` path, or an indexed path in
+  the form code shows it, `channels(0).items`: code turns a caption's brackets into parentheses) is never quoted
+  from: the forged-title class.
+On the checker's 42 false sentences (attack2): out 30 before, 15 after (tip 2). Closed: another row in the same
+sentence 6 of 6, forged title 3 of 3, a title's number as a count 5 of 5, a title's date said again 1. Still out:
+instruction titles 6 of 6 and the row's words in another meaning 5 of 7 ("You fed your starter 50 g flour after
+saving ...", "Your bread uses ... 75% hydration, like ..."), and two made-up titles whose own words are the quote
+("You spent Pasta in 15 minutes[...] on it", "... for 3 people[...] for 3 people"). These are meaning: the quote is the
+row's own words, held by the one row the sentence cites, and only the claim around it is false. A values rule
+cannot tell "the post says wait 12 hours" from "you had to wait 12 hours"; the true quotes of the replay have the same
+shape (one row, a long verbatim span of the matched line). For instruction titles the gap is older than `row_text`:
+an echo with no figure is kept on the tip too (`echo_nofig.txt`). Not fixed now; it needs a meaning check or a
+safety rule on echoed instructions, which this round did not build.
+
+**2. The count-against-cards check missed false shapes (fixed in part: rules `page_cited`, `rows_kept`).**
+- `page_cited`: an unmarked figure equal to a page's length is bound to that page in a sentence that cites its
+  result, even when a cell of another result holds the same figure ("Here are 5 of the 72[r1...]" beside a breakdown
+  that holds a 5). The pool now counts each figure by the result that holds it (`_Pool.held_by`).
+- `rows_kept`: rows named only by refused sentences are not shown. Each sentence is checked again with the rows of
+  the other sentences refused on the last pass left out (its own rows always count, as it would be sent), until the
+  set of refused sentences stops changing. A test pins that the lead's verdict does not depend on how many points
+  come after it.
+On the checker's 48 false sentences (attack1, rerun on a fresh harness): out 25 before (the checker's file says 27:
+its saved5 turn held 5 twice, today's holds it once, so two of its cases are caught on abc2486 too), 22 after (tip
+46). Not fixed, with the reason:
+- A complete list (totals equal to its rows) and a search list (no totals): their length is also their total, and a
+  true sentence says the total over fewer cards ("Bread days holds 2 posts; here is the newest"). Which one "Here
+  are the 2" means is not a value (5 cases).
+- A total said as shown ("Your 6[r1.totals.items] saves are all below", 3 cases): the same cell is said truly beside
+  fewer cards ("You saved 6 things; here are the 2 sourdough posts"); the difference is words.
+- Both, a couple, a pair, a handful (4 cases): these are not the page's length, so the check never compares them; a
+  number shown that is neither the page's length nor the cards (F38, F39) is the same class.
+- No card and no row named (3 cases): comparing a page the answer shows nothing of refuses the true arm2 N063.1 ("the
+  list tool gives 10 at a time"), which the rule for fixes forbids.
+- A figure held by two cells with no marker in its sentence (F26, F27): which cell it is cannot be read.
+On the checker's pages measure (`pagerate.txt`), 38 of 93 pages are compared when unmarked; `page_cited` adds the
+sentences that cite the page's result.
+
+**3. `item_count` refused honest page counts (fixed in part: rule `shown_said`).** A sentence that states a page's
+length and also says how many of its rows it shows (a whole figure with no marker, in digits or number words, equal to
+the rows shown; a figure inside a cited title or a marked value does not count) says what it shows; the length beside it is the list's length ("The list gave 10[r1.items.count]; here are the
+first 5", "Your 5[...] newest saves include 2 watercolor lessons, shown below"). That is also what the rule's own
+reword asks for ("say how many are shown"). The boundary, by principle: a page's length said with no number shown
+is read as the number shown, because no value tells "Here are 5" from "The list gave 5". On attack1's 24 true
+sentences: kept 15 before, 21 after (tip 15); none newly refused. On the checker's 12 honest counts worded with no
+number shown (attack1b): kept 0 before, 1 after (tip 12). The other 11 are refused and asked for a reword. The cost
+falls on brain_v3 and brain_v3b (v3c and v4c tell the model to state the number of refs).
+
+**4. The narrowed outcome rule and the four widenings of "found only in cells" (fixed in part: rules
+`outcome_cited`, `screen_uncited`, `rows_before`).**
+- `outcome_cited`: "you saved it" is their history only in a sentence that cites a row they saved (a row, or a cell of
+  one, whose `how` is "saved"); with no such cell it is the bot telling them something was done ("You've saved it to
+  your reading list now").
+- `screen_uncited`: the window code wrote on the last answer's screen is found only in a sentence that cites no cell
+  of this turn: a sentence citing this turn's cells speaks of this turn's windows ("You opened 723[r1.totals.items]
+  videos in the last 7 days" over an all-history total).
+- `rows_before`: a count of rows (`cited_rows`, `row_group`, `cards_found`) is found only before the sentence's first
+  marker of a row it counts, where it introduces the rows; after a row's marker it says something of that row
+  ("X[...] 4 times", "@x[...] posts 4 reels a week", "Pan Theory[...] uploads 4 videos a week"). A group's count is
+  found only when the sentence names the group's value before that marker ("Four reels from @x ..."; not "4 friends
+  shared X[...]").
+On the checker's 39 false or unsafe sentences (attack3): out 22 before, 8 after (tip 4). Closed: outcome 5 of 5,
+screen window 2 of 2, cards_found 2 of 2, row_group 3 of 4, cited_rows 2 of 5. Still out beyond the tip: a correct
+count of the rows listed with wrong words around it ("You opened only 2 cooking videos all year: A and B", "3 friends
+sent you A, B and C", "You saved 3 reels: A, B and C", "You saved 4 reels from @x[...] this year"): meaning, as in 1.
+One of them gets past two rules: "You saved it, then had to wait 12 hours to open ...[r1.items[0]]" cites a row they
+saved (so `outcome_cited` lets "you saved it" stand) and quotes that row's "wait 12 hours" (so `row_quote` finds it).
+One attack3 run, the first after the code change, printed 6 out on the tip and 10 on the tree, both checkers keeping
+the two screen-window sentences; every later run, in the same harness, printed 4 and 8. The cause was not found. The
+privacy controls are unchanged (0 of 10 out beyond the tip's 1, the same friend sentence). On the probes: made-up
+counts beside a cited row found 16 of 9,162 before, 0 after (`probes28.py`); made-up "N of them" points citing a page
+row (`probes28b.py --cite`): 16 of 890 found, none of them by `cards_found` any more (on the checks tree 20, 4 by it).
+
+**5. The streamed transport and an error inside the stream (fixed).** An error the server sends after
+`message_start` comes with the stream's HTTP status 200, so the retry missed it. Now (streamed path only): an
+`overloaded_error`, `api_error` or `rate_limit_error` is retried by its type, as a 529 or a 500 is; a stream that failed
+after `message_start` gets an estimate row in the ledger (the over-estimate a timed-out request gets), retried or not;
+and no retry is sent when the turn has less than the back-off plus 3 s left (the speed probe's first event came within
+2.85 s every time), so a back-off no longer sends a request that is abandoned. On the checker's fake transport: the
+mid-stream overload is retried (2 requests, rows `+estimate` and the reply's); a 529 before the stream starts is
+retried with 1 row as before; the back-off case raises at once with 0 rows. Whether the server bills a stream that
+fails mid-way cannot be shown offline; the estimate row keeps the cap on the safe side. The created path is unchanged.
+
+**6. Process: the held-out half was read by the harness (fixed in the harness, reported).** `lib27.py` and its copy
+`lib28.py` list look1 and look2, runs of the plans held-out half (`E.half_of` puts all 42 ids of each in it), and the
+rc2 set loads them. The merger's 11,850-verdict differential included them, and one of the checker's runs loaded them
+in process; nothing of them was printed by either. The repair's harness (`mvp28/repair/a/h/lib28.py`) removes look1 and
+look2 from its runs and truths, and `run_rc` and `look_lookup` raise. The differential without them: 4,598 verdicts
+(full and cells; planted, the eight non-held-out runs, the skeptic, a2, c2 and the attack forms), 0 differ; answers
+2,130 form-modes, 0 differ. It still runs the a2 set (eval/brain_cells_attack2.json, which `planted.py` describes
+as an attacker's sentences on 8 saved held-out results): the repo ships it and the planted cells line needs it, so it
+was kept, but the differential is not free of held-out material. Three of the checker's recursive greps, and three of the repair's during orientation,
+searched the tree without excluding `eval/brain_fresh_b.py`; only matching lines could print, and none came from it.
+
+**Checks on the repaired tree.** `python3 -m mvp.brain.planted` full, cells and values, and `eval_brain planted` with
+`MVP_BRAIN_CHECK` full and cells, print byte for byte what the merge printed (= the tip; cells exits 1 as before). The
+dry self-test: 164 of 164 steps; its transcript is the merge's but for the build id (2 lines) and the fake sign-in
+link (1 line). The whole suite in 4 shards on the final tree: see the README count (6286 and the 16 tests of
+`test_brain_r28_repair.py`). Re-pin: `test_brain_r28_checks.py`'s rule set gains the seven rules.
+
+**Still open.** The meaning classes of 1 and 4 (a quote or a correct count with a false claim around it), echoed
+instructions with or without a figure, the item-count holes of 2, the honest counts of 3 worded with no number shown,
+and whether any of this lowers false sentences live: only the blind run can say. In sample: the seven runs' true
+sentences were read while the narrowings were written; the attack sets are the checker's and were read too.
+
+### 30.8 The prep round before the blind run (mvp28: keys rules, limitonly, args, merge2)
+Three branches from `brain-r28-local` (9ff2fba), merged in by merge commits: `brain-rules-local`,
+`brain-limitonly-local` and `brain-args-local`. Evidence is in the scratchpad's `mvp28/rules/`, `mvp28/limitonly/`,
+`mvp28/args/` and `mvp28/merge2/`, with a progress file for each key. Spend: rules $0, limitonly $0.302097, args
+$0.022279, merge2 $0.035637 (point 5). The rule for the next run (prompt crossed with strict) is in DECISIONS.md, the section
+of 26 Nov 2026 on experiments/search-loop. This part does not restate it.
+
+**1. This round's values rules are off by default (key rules).** `verify.VALUES_RULES` is last round's four rules
+again: `row_name`, `cell_found`, `day_typed`, `motive_you`. The 16 rules of 30.2 and 30.7 stay in the code as
+`VALUES_RULES_R28` (`VALUES_RULES_ALL` is the union). `MVP_BRAIN_VALUES_RULES` switches them on: a comma list of rule
+names, or `r28` for all. It is read once, at import; a name that is not a values rule raises. `item_count` is a refuse
+code only when its rules are on (`VALUES_REFUSE_R28`). A values run of the eval writes `values_rules` and
+`values_rules_r28` in its settings and on every record.
+Why: on the v3c and v4c sample runs the rules changed no verdict, and the independent attack showed more false
+sentences getting out with them and honest page counts refused (DECISIONS.md, 26 Nov). After the blind run each rule
+is replayed alone on the saved forms and kept only if it flips a sentence the readers settled.
+Measured, no model call: on every saved form of run1 and the seven half A runs (553 forms, 1,546 sentences) the
+default verdicts equal the tip's values mode in every field, 0 differ. With `r28` they equal the merged build's
+verdicts, 0 differ. Per rule on 11 runs, all r28 rules on flip 20 sentences: 13 refused become kept (12 marked true by
+hand), 7 kept become refused (6 marked false by hand). One flip goes against the truth (`item_count_free` alone
+refuses a true "next 5"). On v3c final and v4c no configuration flips anything. The truth marks of the limits runs are
+one reader's; the half A runs are in sample.
+
+**2. Limit-only answers: the cause was the loop (key limitonly).** In the records of ten runs (595 turns) the three
+limit-only turns were the only turns with no read result in hand. Each had one read come back as an error, or its
+first request alone ran to 7 s; code then refused the next read with "time is up, answer with the results you already
+have". There were none. In one turn the model then said it "couldn't pull" the history, when code had refused the
+read. The fix is in `brain/loop.py`, and one test decides it: is any call's result not an error.
+- No result in hand, past the soft or deep deadline, before the hard stop: the round runs (event `first_result_late`).
+- Out of rounds with no result in hand: the turn ends with code's lead, fallback's existing plain line (event
+  `no_result`). No new text was written.
+- With a result in hand nothing changed: the one time-up, the round limit, the call cap and the hard stop.
+Two prompt lines of v3c and v4c changed, no example: a limit is "never as the opener unless they ask about it", and a
+number of items shown is said "only when items holds every row ...; never over a longer list". The v3c to v4c diff is
+still the four meaning hunks. On the same 52 messages (one run per prompt, in sample): limit-only answers 1 and 2
+before, 0 and 0 after; unwanted limit answers 1 and 5 before, 4 and 4 after (noise: the same messages recur); medians
+7.46 s (v3c) and 7.34 s (v4c), p90 10.27 s and 9.19 s. The late round costs time: one message took 13.7 s (v3c, first wording) and 15.1 s (v4c).
+`no_result` fired 0 times in 208 live turns; only a fake-provider test covers it, and its plain line carries no limit
+line (`answer.build` drops code's limit lines under it). Both are fixed in 30.9, point 3.
+
+**3. The model's tool arguments are checked by code (key args).** With strict tool grammar off
+(`MVP_BRAIN_STRICT=0`), nothing held the model to the schema, and the argument models silently defaulted a missing
+key (39 of 358 bad cases) or coerced a value (33; `true` read as 1, so weekday `true` became Tuesday). A wrong scope
+from a defaulted argument is a wrong answer no value check can see. Now `tools.call(..., sent=True)`, which the loop
+uses for any provider that says its grammar (a `strict` attribute, on or off), checks the arguments against
+`schema(name)`, the schema sent to the model. An unknown or missing key, a wrong type, a value outside an enum or a
+string where a list is due is refused with one error that names every bad argument and what it allows
+(`outside_schema`). The model can call again. A call inside the schema runs as before: on 1,188 saved calls replayed
+in order, the only differences from the tip are 3 calls of the strict-off speed run, each a breakdown that left out
+`order`, now refused. The offline fake providers have no `strict` attribute and are not held. Not closed:
+`give_answer` (unknown keys dropped, fields defaulted), and integer bounds, which the sent schema does not carry (the
+argument models still refuse them). The eval now counts tool errors by kind per record and per run (`tool_args`),
+records `strict` for the read tools, and keeps a record with `audit_error` when the auditor raises (the run then exits
+1). Live check: 12 half A messages, strict off, brain_v3b, $0.0223: one refusal (the left-out `order` again), the next
+round sent it whole, about 1 s more on that turn.
+
+**4. The merge's seam.** A call refused outside the schema is an error, so a turn whose only call was refused has no
+result in hand. Past the soft deadline its next round now runs (`first_result_late`) instead of getting time-up. The
+args key's counter `arg_error_then_time_up` would miss that case, so `tool_args` also counts `first_result_late` and
+`no_result` per record and lists `arg_error_then_late` per run (an argument error with any of the three events). A
+test pins the path with a held fake provider and a fake clock (`test_brain_r28_limitonly.py`). Nothing else changed
+outside the three branches' own content but this section, the corrections in 30.2, 30.6 and 30.7, and the README.
+
+**5. Checks on the merged tree.** All on the final tree, against experiments/search-loop. Its tip (cd0f7ba) differs from
+8b9440e only in DECISIONS.md, so the tip copies of the code are the same files.
+- Full and cells: the repair's differential without the held-out runs (look1, look2 and rc2 left out): 4,598
+  verdicts, 0 differ; the code lead, both answer builds and `verdict_json`: 2,130 form-modes, 0 differ.
+- Values, by default: on every saved form of run1 and the seven half A runs (553 forms, 1,546 sentences), 0 differ
+  from the tip's values mode in any field. Against the saved live verdicts of the six runs that ran values live,
+  3 of 1,119 differ, all in run B; the tip gives the same three (last round's rules came after run B ran).
+- `python3 -m mvp.brain.planted` full, cells and values, and `eval_brain.py planted` with `MVP_BRAIN_CHECK` full,
+  cells and values: byte for byte what the tip prints (eval_brain planted exits 1 in cells and values on both).
+- Tool results: every saved call of the seven half A runs and the speed runs replayed in order through the model's
+  path (1,188 calls): the seven runs' 612 calls give byte-same results. The only differences are the 3 strict-off calls
+  of 3 above, now refused.
+- Today's bot: the dry self-test, 164 of 164 steps, $0. Its output is the tip's but for the build id (2 lines), the
+  fake sign-in's ids (2 lines) and the summary line. `demo/test_demo.py`: 10 passed.
+- Live smokes, `--set fresh --half a --limit 4 --check values`, one per cell, $0.035637 in all. Each ran end to end,
+  the audit completed with no `audit_error`, and the summary shows `strict` (true or false as set),
+  `values_rules` (last round's four), `values_rules_r28` (empty) and the new `tool_args` counters. Every lead was the
+  model's and every sentence was kept. Each run made 6 calls, with 1 tool error (a window after the export end) and
+  0 argument or form errors. Seconds, median and p90, on 4 messages:
+
+| | strict on | strict off |
+|---|---|---|
+| brain_v3c | 9.22 / 12.31 | 8.77 / 9.47 |
+| brain_v4c | 10.36 / 13.32 | 7.79 / 10.74 |
+
+  At n = 4 these say nothing about the bars.
+- The whole suite in 4 shards on the final tree: 6338 passed and 2 skipped, 0 failed (1450, 1484, 1486 with the 2
+  skips, 1918). That is the 6302 before this round, the three new files (`test_brain_r28_rules.py` 12,
+  `test_brain_r28_limitonly.py` 7, `test_brain_r28_args.py` 16) and the seam test. The first run, before the seam test, gave 6337 passed with no failure.
+
+**6. What the blind run will decide.**
+- Prompt (v3c or v4c) and strict (on or off), by the rule written in DECISIONS.md before the runs.
+- Whether false sentences fall with the rules off and the prompt's count line on. Nothing saved shows it.
+- Which of this round's values rules come back: each replayed alone on the run's saved forms, kept only if it flips a
+  sentence the readers settled as true or false.
+- Whether a refused argument near the soft deadline costs speed or answers: the run counts every refused call.
+- In sample: the limitonly figures (one run per prompt), the rules' truth marks, and the args table, built on the
+  made-up library. The older ablation scripts in the scratchpad compute `VALUES_RULES - {...}`; on this branch that is
+  the default set, so they would measure nothing. They need `VALUES_RULES_ALL`.
+
+### 30.9 The repair after the second independent check (mvp28, key repair2)
+An independent check of the prep round's tip (a36e24b) found five faults. Four are fixed by a general change; the
+first is fixed behind a switch, off by default, because the fix changes values verdicts against last round's and the
+founders decide before the run. Evidence is in the scratchpad's `mvp28/repair2/` (the checker's own scripts are in
+`mvp28/check2/`). Spend $0: no model call. New tests: `test_brain_r28_prep.py` (15).
+
+**1. The values check read the tool's clock as a value (rule `timing_out`, off by default).** Every result envelope
+carries `took_ms`, how many milliseconds the tool ran. The values check's pool of what the turn holds (`verify._Pool`)
+read every number of the envelope, so a free figure or number word that no cell holds was "found" when it happened to
+equal the tool's milliseconds. The verdict then hung on how fast the tool ran. This was there before this round.
+- Reproduced: on a saved form whose point says "the four areas" with no marker, the point is kept when `took_ms` is 4
+  and refused (`unfound_number`) at 3, 5, 8, 13 or 400, or with the field taken out. The checker's sweep: on the 985
+  saved forms of 20 half A runs, `took_ms` 2 to 12 flips 22 distinct sentences from refused to kept.
+- The fix: the values rule `timing_out` leaves `took_ms` out of the pool (the model still sees it; nothing the bot
+  sends changes). It is in `VALUES_RULES_PREP`, switched on only by name (`MVP_BRAIN_VALUES_RULES=timing_out`); `r28`
+  does not include it, so the figures of the r28 rules stay comparable (with `r28` set, the 1,786 values verdicts
+  equal the checker's `r28` run on a36e24b, 0 differ). A values run records it in
+  `values_rules_r28` when it is on.
+- Measured, no model call: with the switch unset, the values verdicts of the 985 saved forms and the 801 planted
+  forms equal the tip's in every field (1,786 form-modes, 0 differ). With `timing_out` on they equal the checker's
+  run with `took_ms` stripped (985, 0 differ), and they are the same whatever `took_ms` is set to (3, 4 and 7: 0
+  differ). Against the default, `timing_out` changes 2 of the 985 saved forms: one sentence goes from kept to refused
+  ("within those four areas" over a result that ran in 4 ms), and one refused sentence gets one more reason. No reader
+  marked the flipped sentence. It is of the class "the four areas", which the last round found true and refused by
+  `cell_found` (the build brief's point 4): with `timing_out` on, that class is refused whatever the clock. Taking `cost_usd` out as well changes nothing more (0 of 985).
+- A correction to 30.8, point 5. The checker read the run B difference on N024.1 there as this fault. It is not: that
+  point is kept under the rule set run B ran with, whatever `took_ms` is, and refused under `cell_found` with its
+  saved `took_ms` of 6. So "last round's rules came after run B ran" stands for that saved verdict (the other two run
+  B differences were not tested again here). What `took_ms`
+  does explain is the run-to-run flip of the same point when the calls are replayed (a new `took_ms` each time): the
+  checker's answers rebuild. The rebuild below sets `took_ms` back to the saved value, so it no longer varies.
+
+**2. A lookup that found nothing counted as a result in hand.** After 30.8's fix, "time is up, answer with the results
+you already have" was still sent when the only result was a `find` whose every name came back with no match. The
+model then had nothing to cite, and under full the code lead said "Here is what I found in your library." over
+nothing. The same holds for a counting tool given a scope name that matches nothing (`tools._unresolved`: no error,
+no rows, only the name's status). Fixed in three places, one test (`results.answers(env)`): any result but an error,
+and but a name that found nothing (a find whose every name is `no_match`, or an unresolved name, with no option and
+no item holding its words). An ambiguous name's options are an answer (they ask back), as is a
+count of zero of what was asked.
+- `loop.py`: past the soft or deep deadline, a turn with no such answer lets its next round run
+  (`first_result_late`), as with no result at all. Out of rounds the old test stays (any non-error result), so a
+  turn that only found no match still gets the one time-up, and the model may say it found no match.
+- `fallback.py`: the code lead never builds on a lookup that found nothing while a later result holds an answer, and
+  the find template ("Here is what I found in your library.") is never used over one; with nothing else, the plain
+  line.
+- The checker's scenario 6a (a find with no match, then a read past 7 s): the read now runs, and the code lead is the
+  read's ("In October 2026 ... Clip Factory led ..."), not "Here is what I found". A new scenario, a breakdown whose
+  scope name matched nothing and then a read past 7 s, got time-up before and now runs the read. Of the checker's 24
+  loop scenarios, only 4a, 4b, 4d (point 3) and 6a change from a36e24b.
+
+**3. Every call refused: a plain line that is true, with its limit lines.** A turn that ran out of rounds with every
+call refused (`no_result`) ended with fallback's plain line, "I couldn't check an answer to that in time. Ask me
+again?". Time was not the cause, and `answer.build` dropped the limit lines under any plain line. Now that one ending
+says `fallback.NO_RESULT`, "I couldn't get a result for that this time. Ask me again, maybe in other words?", written
+by code as a separate line, and the limits the refused calls found go with it. A new fake scenario (every call a
+window after the export's end): "I couldn't get a result for that this time. ..." then "Your export ends on 30
+October 2026, so 9 to 15 November 2026 is not in it." The other endings keep `PLAIN` (a hard stop, a provider error,
+no call after the nudge). Not changed: `PLAIN` also follows a turn that ended with no call after the nudge, where time
+was not the cause either (older than this round). `no_result` fired 0 times in 208 live turns, so the saved runs do
+not show it.
+
+**4. A schema refusal said back what the model wrote.** The refusal of 30.8 point 3 quoted unknown keys whole and
+values up to 40 characters, with markers, braces, tags and instruction text left in, and had no cap (an unknown key
+of 100,000 characters gave an error of 200,279). Now a refusal names only the schema's own paths and words: an
+unknown key is counted ("`scope` has a key that is not an argument (the keys of scope are ...)"; path `scope.*`), and a
+wrong value is said by its type and size ("got a string of 7 characters"; true, false, null and numbers as they are).
+At most `tools.PROBLEMS_MAX` (12) problems, and `outside_schema` lists at most 12 paths. The same class, older:
+the name of an unresolved scope (`_unresolved`) and the names in first_last's one-subject refusal are now neutralised
+as find's names are, the latter clipped to 90 characters.
+- The checker's `t3/args.py` (262 bad and 140 valid argument sets over the nine tools): echoes in an error text 18 ->
+  0, errors over 2,000 characters 1 -> 0; every set refused or passed at the same stage as before; 0 crashes.
+  `t3/echo2.py`: none of the 8 bad probes is echoed raw (before, 7 of 8 were). The 3 strict-off calls that left out `order` keep
+  their exact error text.
+- Still open, older and in valid calls: instruction text in a find name or a search query comes back inside the
+  result, neutralised (no bracket, brace, tag or link) but with its words, as titles do; a very long valid name comes
+  back long.
+
+**5. Eval message ids in code comments.** Three comments of the build round named eval messages
+(`brain/provider.py`, `eval_claims.py` twice). They now name the class of case.
+
+**6. Checks on the final tree** (no model call):
+Against experiments/search-loop (the tip) and the prep round's tip (a36e24b), with the checker's scripts.
+- Full and cells: every saved form of 44 runs, the planted set and the attack set (5,068 form-modes): 0 differ from
+  the tip. Against a36e24b, 1 differs (a cells note of one run B form that also varies when the tip is run twice).
+- Values, by default: 985 saved forms of 20 half A runs and 801 planted forms (1,786): 0 differ from the tip.
+- Planted: `python3 -m mvp.brain.planted` and `eval_brain.py planted`, each in full, cells and values: byte for byte
+  what the tip prints.
+- Tool results: 1,461 saved calls of 22 runs replayed in order through the model's path: the same as a36e24b in
+  every call, and as the tip but the 3 strict-off calls of 30.8 point 3. The neutralised names of point 4 change no
+  saved call.
+- What goes out, rebuilt from the saved forms on the replayed calls in full, cells and values (2,175 record-modes,
+  `took_ms` set back to the saved value): 0 differ from the tip and from a36e24b. No saved turn ended in `no_result`
+  or had a lookup that found nothing as its first result, so points 2 and 3 change no saved answer.
+- The checker's loop scenarios (24, plus 5 new): against a36e24b only 4a, 4b, 4d and 6a change, as said above.
+- With `PYTHONHASHSEED=0`, full, cells and values on the 985 saved forms (2,955): 1 differs from the tip's seeded
+  run, the same run B cells note as above.
+  The auditor guard: unchanged (the record is kept with `audit_error`, the run exits 1).
+- Today's bot: the dry self-test, 164 of 164 steps, $0. Its transcript is the last round's but for the build id
+  (3 lines) and the fake sign-in's ids (1 line).
+- The whole suite in 4 shards: 6353 passed and 2 skipped, 0 failed (1451, 1488, 1470 with the 2 skips, 1944): the
+  6338 before and the 15 tests of `test_brain_r28_prep.py`.
+
+**7. For the founders before the run.** `timing_out` is the only change here that would move a values verdict on the
+saved forms. Off, the blind run checks exactly as last round, and a sentence can pass by the tool's speed (on the
+saved forms, at their saved `took_ms`, one does: "within those four areas", kept only because the tool ran in 4 ms).
+On, no verdict depends on the clock, and that sentence is refused, as `cell_found` refuses its class ("the four
+areas") though such sentences were found true last round. So the switch trades a chance leak for a known refusal of
+a true class. Either way the setting is
+written in the run's settings and on every record.

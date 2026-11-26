@@ -252,7 +252,8 @@ def _unresolved(turn, tool, r):
     that exists (mvp26 toolfix2 3: first_last "sourdough" gave options [] and items_with_words 2, and told the model to
     "use one of the options")."""
     rid = turn.next_rid()
-    out = {"rid": rid, "tool": tool, "error": r["status"], "name": r["name"], "options": r["options"],
+    # (mvp28 prep repair: the name is the model's own argument, neutralised as find's rows are)
+    out = {"rid": rid, "tool": tool, "error": r["status"], "name": R.neutral(r["name"]), "options": r["options"],
            "meta": {"complete": False, "notes": []}}
     cell = _no_match_cell(turn, r)
     if cell:
@@ -890,8 +891,9 @@ def run_first_last(turn, a: FirstLastArgs):
         # with the call that would work
         rest = [x for x in a.scope.only if N.fold(x) != N.fold(a.subject)]
         if rest:
-            raise ToolError(f"first_last counts one subject: put one name in `subject` ({a.subject!r} or "
-                            f"{rest[0]!r}) and leave scope.only empty")
+            raise ToolError(f"first_last counts one subject: put one name in `subject` "
+                            f"({R.neutral(a.subject, R.NAME_MAX)!r} or {R.neutral(rest[0], R.NAME_MAX)!r}) and leave "
+                            "scope.only empty")
         a = a.model_copy(update={"scope": a.scope.model_copy(update={"only": []})})
     r = N.resolve_one(turn.lib, a.subject)
     if r["status"] != "ok":
@@ -1287,9 +1289,10 @@ REGISTRY = {t.name: t for t in (
 )}
 
 
-def call(turn, name, args):
+def call(turn, name, args, sent=False):
     """Run one tool call: `args` a dict or a JSON string. A bad call comes back as an error result (is_error) with
-    code's reason, never an exception."""
+    code's reason, never an exception. `sent` (the model's own calls, loop.run_turn): the arguments are first held to
+    the schema sent to the model (sent_problems); code's own calls (hand plans, tests) keep the models' defaults."""
     t = REGISTRY.get(name)
     if t is None:
         return R.error(f"no tool named {name!r}",
@@ -1301,6 +1304,12 @@ def call(turn, name, args):
     try:
         if isinstance(args, str):
             args = json.loads(args or "{}")
+        if sent:
+            bad = sent_problems(name, args)
+            if bad:
+                return R.error(f"Arguments outside the schema of {name}: " + "; ".join(p["said"] for p in bad[:6]) +
+                               ".", tool=name, outside_schema=[p["path"] for p in bad[:PROBLEMS_MAX]],
+                               next=f"call {name} again with every argument of its schema, each of its type")
         a = t.params(**(args or {}))
     except (ValueError, TypeError, ValidationError) as e:
         return R.error(_short(e), tool=name, next="call it again with the arguments fixed")
@@ -1312,6 +1321,111 @@ def call(turn, name, args):
         return R.error(str(e), tool=name, **{k: v for k, v in e.extra.items() if k != "limit"})
     except Exception as e:  # noqa: BLE001 - a backend or a sheet that fails is an error result, never a crash
         return R.error(f"the tool failed ({type(e).__name__}); try another way or say what is missing", tool=name)
+
+
+def sent_problems(name, args):
+    """mvp28: every way a model's arguments leave the schema sent to it (`schema(name)`: every key required, none
+    other allowed, enums and types as declared), as [{path, said}]: an unknown key, a missing key, a wrong type (a
+    bool is no integer, 3.0 is no integer), a value outside an enum. With strict tool grammar on, the server holds the
+    model to this schema; with it off (MVP_BRAIN_STRICT=0) code does, so nothing is defaulted, coerced or dropped
+    before a tool runs. Bounds and the one-of-three window rule stay with the argument models, as before.
+    mvp28 prep repair: a problem names only the schema's own paths and words, never a string the model wrote (an
+    unknown key is counted, a wrong value is said by its type and length): the model's arguments can carry a title's
+    text, a marker or an instruction, and an error is code's words. At most PROBLEMS_MAX problems."""
+    s = schema(name)
+    out = []
+    _walk(s, s, args, "", out)
+    return out
+
+
+def _deref(root, node):
+    while isinstance(node, dict) and "$ref" in node:
+        node = root["$defs"][node["$ref"].rsplit("/", 1)[-1]]
+    return node
+
+
+_TYPE_OK = {"string": lambda v: isinstance(v, str), "null": lambda v: v is None,
+            "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+            "array": lambda v: isinstance(v, list), "object": lambda v: isinstance(v, dict)}
+
+
+def _allowed(root, node):
+    """What a schema node allows, in a few words."""
+    node = _deref(root, node)
+    if "anyOf" in node:
+        return " or ".join(_allowed(root, x) for x in node["anyOf"])
+    if "enum" in node:
+        return "one of " + ", ".join(repr(x) for x in node["enum"])
+    t = node.get("type")
+    if t == "object":
+        return "an object with keys " + ", ".join(sorted(node.get("properties") or {}))
+    if t == "array":
+        inner = _allowed(root, node.get("items") or {})
+        return "a list of strings" if inner == "a string" else "a list of " + inner.replace("one of", "values of")
+    return {"string": "a string", "integer": "an integer", "null": "null"}.get(t, str(t))
+
+
+PROBLEMS_MAX = 12
+
+
+def _got(v):
+    """What a wrong value was, in code's words: true, false, null, a number, else its type and size (never its text)."""
+    if v is True or v is False or v is None:
+        return "true" if v is True else "false" if v is False else "null"
+    if isinstance(v, (int, float)) and abs(v) < 1e15:
+        return json.dumps(v)
+    if isinstance(v, str):
+        return f"a string of {len(v)} character{'' if len(v) == 1 else 's'}"
+    if isinstance(v, list):
+        return f"a list of {len(v)} value{'' if len(v) == 1 else 's'}"
+    if isinstance(v, dict):
+        return f"an object of {len(v)} key{'' if len(v) == 1 else 's'}"
+    return "a number" if isinstance(v, (int, float)) else type(v).__name__
+
+
+def _walk(root, node, v, path, out):
+    if len(out) >= PROBLEMS_MAX:
+        return
+    node = _deref(root, node)
+    if "anyOf" in node:
+        for alt in node["anyOf"]:
+            trial = []
+            _walk(root, alt, v, path, trial)
+            if not trial:
+                return
+        typed = [alt for alt in node["anyOf"] if _TYPE_OK.get(_deref(root, alt).get("type"), lambda _v: False)(v)]
+        if len(typed) == 1 and _deref(root, typed[0]).get("type") in ("object", "array"):
+            _walk(root, typed[0], v, path, out)   # an object of the right type: say which of its keys is wrong
+            return
+        out.append({"path": path or "arguments", "said": f"`{path or 'arguments'}` must be {_allowed(root, node)} "
+                                                         f"(got {_got(v)})"})
+        return
+    t = node.get("type")
+    if t and not _TYPE_OK.get(t, lambda _v: True)(v):
+        out.append({"path": path or "arguments", "said": f"`{path or 'arguments'}` must be {_allowed(root, node)} "
+                                                         f"(got {_got(v)})"})
+        return
+    if "enum" in node and v not in node["enum"]:
+        out.append({"path": path, "said": f"`{path}` must be {_allowed(root, node)} (got {_got(v)})"})
+        return
+    if t == "object":
+        props = node.get("properties") or {}
+        unknown = sum(1 for k in v if k not in props)
+        if unknown:
+            p = f"{path}.*" if path else "*"
+            what = "a key that is not an argument" if unknown == 1 else f"{unknown} keys that are not arguments"
+            out.append({"path": p, "said": (f"`{path}` has {what}" if path else what) +
+                        f" (the keys{' of ' + path if path else ''} are {', '.join(sorted(props))})"})
+        for k in node.get("required") or []:
+            if k not in v:
+                p = f"{path}.{k}" if path else k
+                out.append({"path": p, "said": f"`{p}` is missing: {_allowed(root, props[k])}"})
+        for k in sorted(props):
+            if k in v:
+                _walk(root, props[k], v[k], f"{path}.{k}" if path else k, out)
+    elif t == "array":
+        for n, x in enumerate(v):
+            _walk(root, node.get("items") or {}, x, f"{path}[{n}]", out)
 
 
 def _short(e):

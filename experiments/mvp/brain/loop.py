@@ -8,7 +8,9 @@ fails becomes the code lead (fallback.answer) with the points that passed. brain
 
 Rounds and deadlines (SPEC 3.4): at most ROUNDS tool rounds; past the soft deadline (SOFT_S; DEEP_S once `learned`
 was called or a third round started) or out of rounds, every read call gets one is_error "time is up" and the next
-response must be give_answer; a hard stop (HARD_S) ends the turn with the code lead. A response with only text gets one
+response must be give_answer; a hard stop (HARD_S) ends the turn with the code lead. With no read result in hand
+(mvp28), the soft and deep deadlines do not refuse the round (it runs up to the hard stop), and running out of rounds
+ends the turn with the code lead. A response with only text gets one
 nudge. give_answer beside read calls is refused (is_error) while the read calls run. Read calls run in call order
 (rids follow it).
 
@@ -149,6 +151,10 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
     messages = [{"role": "user", "content": user_text(message, screen)}]
     vturn = V.Turn.of(turn)
     tool_rounds, calls_made, deep = 0, 0, False
+    # mvp28: a provider that says which tool grammar it sent (AnthropicProvider, strict on or off) has the model's
+    # calls held to the schema sent (tools.sent_problems) before any tool runs; the offline fakes, whose scripts write
+    # calls in short form, keep the argument models' defaults
+    held = getattr(provider, "strict", None) is not None
     time_up_sent = nudged = repair_used = False
     verdicts, forms = [], []
 
@@ -158,8 +164,11 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
     def send(max_tokens=None):
         left = max(1.0, hard_s - elapsed())
         r = provider.send(system, tools, messages, max_tokens=max_tokens, timeout=left)
-        rec["requests"].append({"stop_reason": r.stop_reason, "usage": r.usage, "seconds": r.seconds,
-                                "cost_usd": r.cost_usd, "retries": r.retries, "blocks": r.blocks})
+        q = {"stop_reason": r.stop_reason, "usage": r.usage, "seconds": r.seconds,
+             "cost_usd": r.cost_usd, "retries": r.retries, "blocks": r.blocks}
+        if getattr(r, "timing", None):
+            q["timing"] = r.timing   # mvp28: streamed requests only (time to message_start, largest gap, blocks)
+        rec["requests"].append(q)
         return r
 
     while True:
@@ -174,6 +183,9 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
         except Exception as e:  # noqa: BLE001 - a provider failure ends the turn with what is in hand
             rec["error"] = getattr(e, "kind", None) or type(e).__name__
             rec["events"].append("provider_error")
+            if getattr(e, "timing", None):
+                # mvp28: a streamed request that failed keeps what it showed (message_start, events, blocks so far)
+                rec["failed_request"] = {"seconds": getattr(e, "seconds", None), "timing": e.timing}
             break
         if r.stop_reason in ("refusal", "max_tokens"):
             rec["events"].append(r.stop_reason)
@@ -224,7 +236,24 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
         for u in ga:
             results.append(_err(u["id"], ALONE))
         limit = deep_s if deep else soft_s
-        if tool_rounds >= rounds or elapsed() >= limit:
+        # mvp28 limitonly: "time is up, answer with the results you already have" is never sent with no result in
+        # hand (every call so far errored, or none ran): the model then answered with a limit alone, or said it
+        # could not read their history when code had refused the read. Past the soft (or deep) deadline, the round
+        # that would give the first result runs, up to the hard stop; out of rounds with nothing in hand, the turn
+        # ends with the code lead.
+        in_hand = any(not (c.get("result") or {}).get("is_error") for c in rec["calls"])
+        if not in_hand and tool_rounds >= rounds:
+            rec["events"].append("no_result")
+            break
+        late = elapsed() >= limit
+        # mvp28 prep repair: past the deadline a name lookup that found nothing (every name no match, no item holding
+        # its words) is no answer either, so the next round still runs; out of rounds it stays a result (the model
+        # may say it found no match)
+        if late and not any(R.answers(c.get("result")) for c in rec["calls"]) and elapsed() < hard_s:
+            if "first_result_late" not in rec["events"]:
+                rec["events"].append("first_result_late")
+            late = False
+        if tool_rounds >= rounds or late:
             if time_up_sent:
                 rec["events"].append("tools_after_time_up")
                 break
@@ -243,7 +272,7 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
                 env = {"is_error": True, "error": LIMIT, "tool": u.get("name")}
             else:
                 calls_made += 1
-                env = TL.call(turn, u.get("name"), args)
+                env = TL.call(turn, u.get("name"), args, sent=held)
             if u.get("name") == "learned":
                 deep = True
             rec["calls"].append({"round": tool_rounds, "id": u["id"], "name": u.get("name"), "args": args,
@@ -341,6 +370,10 @@ def _finish(rec, turn, vturn, verdicts, cm=None):
     if sent_v is None:
         base_v = v2 or v1
         code = FB.answer(ledger, base_v, vturn, mode=cm)
+        if "no_result" in (rec.get("events") or ()) and not verdicts:
+            # mvp28 prep repair: out of rounds with no result in hand, every call was refused; time was not the
+            # cause, so code's plain line says no result came back, and the limits the refused calls found go with it
+            code = FB.no_result(code)
         source = "plain" if code["how"] == "plain" else "code"
     form = None
     if sent_v is not None:

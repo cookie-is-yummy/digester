@@ -42,7 +42,8 @@ def _lead(t, sentence, mode="values"):
 # ================================================================ the pin
 def test_the_rules_are_pinned_and_on_by_default():
     from mvp.brain import answer as A, loop as BL, verify as V  # noqa: F401
-    assert V.VALUES_RULES == frozenset({"row_name", "cell_found", "day_typed", "motive_you"})
+    # (mvp28 added its own rules; tests/test_brain_r28_checks.py pins them)
+    assert V.VALUES_RULES >= frozenset({"row_name", "cell_found", "day_typed", "motive_you"})
     assert V.VALUES_RULES <= V.VALUES.rules and "row_name" in V.VALUES_REFUSE and "row_name" in V.VALUES_CODES
     assert not (V.VALUES_RULES & _no_rules().rules) and _no_rules().rule("values") and _no_rules().rule("nw_refuse")
     assert not (V.VALUES_RULES & (V.FULL.rules | V.CELLS.rules))   # full and cells never run them

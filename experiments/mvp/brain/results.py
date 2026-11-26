@@ -281,6 +281,25 @@ def error(message, tool=None, **extra):
     return out
 
 
+def answers(env):
+    """mvp28 prep repair: a result there is an answer in: any result but an error, and but a name that found nothing (a
+    find whose every name came back with no match, or a counting tool's result for a name of its scope that matched
+    nothing, tools._unresolved; either with no option and no item holding its words). An ambiguous name's options are
+    an answer (they ask back), as is a count of zero of what was asked."""
+    if not isinstance(env, dict) or env.get("is_error"):
+        return False
+
+    def found(r):
+        return not isinstance(r, dict) or r.get("status", r.get("error")) != "no_match" or bool(r.get("options")) or \
+            bool(r.get("items_with_words") or 0)
+    if "sheet" not in env and env.get("error") == "no_match":
+        return found(env)   # a counting tool's unresolved name: no rows, only what the name matched
+    if env.get("tool") != "find":
+        return True
+    rows = (env.get("sheet") or {}).get("names") or []
+    return not rows or any(found(r) for r in rows)
+
+
 def has_url(o):
     """True when any string in `o` holds a link (a test's and a check's question)."""
     return bool(URL.search(json.dumps(o, ensure_ascii=False, default=str)))

@@ -3600,6 +3600,36 @@ def _date_said_ok(typed, d):
     return (day is None or day == d.day) and (mon is None or mon == d.month) and (y is None or y == d.year)
 
 
+def _iso_day(x):
+    """mvp28: a recount's or a cell's date ('2026-10-12', '2026-10-12 14:00', a date), else None. A cited cell is read
+    by its value, never by its path's last word alone: `new.small_channels[0].first_watched` is a date too (the class
+    of case: a date cell under a path that does not end in `when` or `date`)."""
+    if isinstance(x, datetime):
+        return x.date()
+    if isinstance(x, date):
+        return x
+    if isinstance(x, str) and re.match(r"^\d{4}-\d\d-\d\d(?![\d])", x.strip()):
+        try:
+            return date.fromisoformat(x.strip()[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _as_num(x):
+    """mvp28: a recount's number, or None when the value is no number (a date, a weekday list, a name)."""
+    if isinstance(x, bool) or x is None:
+        return None
+    if isinstance(x, (int, float)):
+        return float(x)
+    if isinstance(x, str):
+        try:
+            return float(x.strip())
+        except ValueError:
+            return None
+    return None
+
+
 def audit_ledger(lib, cited, results, calls=None, question="", today=None, F=None):
     """Every cited cell recounted: its value, its result's base total (totals.items) and, for a row's cell, the
     row's rank in its list. `results`: {rid: envelope}; `calls`: {rid: the call that made it}. -> Findings rows."""
@@ -3615,19 +3645,20 @@ def audit_ledger(lib, cited, results, calls=None, question="", today=None, F=Non
             recs[rid] = {r["where"]: r for r in audit_results(lib, env, (calls or {}).get(rid), question, today)}
         rows = recs[rid]
         said = c["said"]
-        if rest.endswith(".when") or rest.endswith(".date"):
+        r = rows.get(rest)
+        # mvp28 (a date cell under another path's word crashed a run: `float('2026-10-12')` on a `first_watched`): a
+        # cell whose recount is a date is read as a date whatever its path ends with
+        if rest.endswith(".when") or rest.endswith(".date") or (r is not None and _iso_day(r["recount"]) is not None):
             # the row's date recounted, and the date typed before the marker is that date (at the precision said)
-            r = rows.get(rest)
             cell = r["said"] if r else None
             typed = _typed_date(said)
-            ok = r is not None and r["ok"] and typed is not None and cell is not None and \
-                _date_said_ok(typed, date.fromisoformat(str(cell)[:10]))
+            d = _iso_day(str(cell)) if cell is not None else None
+            ok = r is not None and r["ok"] and typed is not None and d is not None and _date_said_ok(typed, d)
             F.add("ledger", "date", ok, said, cell if r else "not recounted", where=c["path"], severity=2.0)
             continue
         m = None
         for m in _NUM.finditer(said):
             pass
-        r = rows.get(rest)
         if r is None:
             F.add("ledger", "not recounted", False, said, None, where=c["path"], severity=1.0)
             continue
@@ -3636,13 +3667,14 @@ def audit_ledger(lib, cited, results, calls=None, question="", today=None, F=Non
             continue
         v = float(m.group(1).replace(",", "."))
         rec = r["recount"]
+        x = _as_num(rec)   # mvp28: a recount that is no number (a weekday list, a name) is no match for a typed number
         if m.group(2) or rest.endswith("share"):
-            ok = rec is not None and close_share(v, float(rec), tol=0.51)
+            ok = x is not None and close_share(v, x, tol=0.51)
         elif rest.endswith("change_vs_previous") or rest.endswith("change_pts"):
-            ok = rec is not None and abs(abs(v) - abs(100 * float(rec) if abs(float(rec)) <= 1 and
-                                                     rest.endswith("change_vs_previous") else float(rec))) <= 0.5
+            ok = x is not None and abs(abs(v) - abs(100 * x if abs(x) <= 1 and
+                                                     rest.endswith("change_vs_previous") else x)) <= 0.5
         else:
-            ok = rec is not None and float(rec) == v
+            ok = x is not None and x == v
         F.add("ledger", "value", ok and r["ok"], said, rec, where=c["path"])
         base = rows.get("totals.items")
         if base is not None:

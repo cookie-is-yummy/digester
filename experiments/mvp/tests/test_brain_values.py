@@ -38,6 +38,8 @@ REFUSE = ["bad_ref", "calc", "empty", "garbled", "language", "link", "not_item",
           "sensitive", "unfound_date", "unfound_name", "unfound_number", "unfound_time", "watch_time", "wrong_measure",
           "wrong_name", "wrong_value"]
 # (mvp27, DESIGN 29.1: "row_name" added, a title or name before a row marker that the row does not hold)
+# (mvp28: the default is last round's; "item_count" is in verify.VALUES_REFUSE_R28, refused only when
+# MVP_BRAIN_VALUES_RULES switches its rule on; tests/test_brain_r28_rules.py pins it)
 PIN_REFUSE = "6faec7f8052e3f86c27dd9321f823df1cacccb06a0dd75b1aeaf5962d5b9b7f4"
 SAFETY = ["sensitive", "psych", "outcome", "language", "link", "watch_time"]
 THIRD_PARTY = ["caption", "channel", "description", "handle", "name", "snippet", "text", "title", "why_matched"]

@@ -15,7 +15,8 @@ the usage, the seconds, the cost). Two implementations:
   the 5-minute TTL only (lib/ai_prices.json holds the 5-minute write rate). Every request is checked against the
   Claude cap first (`ai._guard`, with this process's requests still waiting) and logged with `ai.log_batch`
   (provider "anthropic", purpose "brain_eval", the prompt version). A rate-limit or overloaded answer is retried
-  after a back-off (2 s, 5 s), then raised.
+  after a back-off (2 s, 5 s), then raised. mvp28: the request is streamed by default (the same body; see STREAM),
+  `warm()` opens the client's connections before anything is timed, and strict can be switched off (STRICT).
 - `FakeProvider`: replays scripted turns (each a list of content blocks as dicts, or a callable of the messages so
   far); no network, no money. Every test of the loop uses it.
 
@@ -35,9 +36,28 @@ EFFORT = os.environ.get("MVP_BRAIN_EFFORT", "low")
 THINKING = os.environ.get("MVP_BRAIN_THINKING", "adaptive")   # "adaptive" (the skill's advice) or "disabled" (Haiku
 #                                                               5.5 takes it at effort high or below): a tuner's knob
 MAX_TOKENS = int(os.environ.get("MVP_BRAIN_MAX_TOKENS", "4000"))
+# mvp28 speed: transport settings. None of them changes the request body (what the model reads or may write).
+# MVP_BRAIN_STREAM (default 1; 0 = the created request of mvp27): the same request streamed (client.beta.messages.stream
+#   + get_final_message); the turn's time limit is then held by the wall clock (a float timeout bounds only the gap
+#   between two bytes of a stream), and the reply carries `timing` (time to message_start, the largest gap between
+#   events, the seconds of each block). Measured on 20 half A messages x 2 runs: turn seconds -0.05 s against the
+#   created request (se 0.36), i.e. no change; it is on for the timing it records and the exact wall clock.
+#   No retry on a slow start: the probe (S/mvp28/speed/probe) showed thinking streams as silence (one gap of up to 13 s
+#   after message_start), so a read timeout short enough to catch a stall would also cut a healthy long think.
+STREAM = os.environ.get("MVP_BRAIN_STREAM", "1") == "1"
+# MVP_BRAIN_STRICT=0: `strict` off on the nine read tools too (needs the blind run: what the model reads is the same,
+#   the prompt cache reads the same tokens, but its tool arguments are no longer held to the schema by the API; the
+#   strict grammar costs about 1 s before the first token of most requests, mvp28 speed/ttft)
+STRICT = os.environ.get("MVP_BRAIN_STRICT", "1") != "0"
 PURPOSE = "brain_eval"
 RETRY_STATUS = (429, 500, 503, 529)
 BACKOFF_S = (2.0, 5.0)
+# mvp28 repair (streamed requests only): an error the server sends inside a stream comes with the stream's HTTP status
+# (200), so it is retried by its error type, as a 529 or a 500 is; and a retry is sent only when the turn has this long
+# left after the back-off (the speed key's probe: the first event came within 2.85 s every time; with less left, the
+# retry is sent and abandoned, and the turn still ends at its limit)
+RETRY_KINDS = ("overloaded_error", "api_error", "rate_limit_error")
+RETRY_MIN_LEFT_S = 3.0
 # strict on the nine read tools; give_answer is sent without it: with all ten strict the API answers 400 "The compiled
 # grammar is too large" (first live request, 26 Nov 2026). The loop validates the form with Pydantic anyway.
 LOOSE = ("give_answer",)
@@ -46,8 +66,8 @@ LOOSE = ("give_answer",)
 class ProviderError(RuntimeError):
     """No usable reply: `kind` is the reason in code's words (no request or reply text in it)."""
 
-    def __init__(self, kind, retries=0, seconds=0.0):
-        self.kind, self.retries, self.seconds = kind, retries, seconds
+    def __init__(self, kind, retries=0, seconds=0.0, timing=None):
+        self.kind, self.retries, self.seconds, self.timing = kind, retries, seconds, timing
         super().__init__(f"provider failed: {kind}")
 
 
@@ -61,6 +81,7 @@ class Reply:
     cost_usd: float = 0.0
     model: str = ""
     retries: int = 0
+    timing: Optional[dict] = None   # streamed requests only (mvp28): see AnthropicProvider._stream_once
 
     def tool_uses(self):
         return [b for b in self.blocks if b.get("type") == "tool_use"]
@@ -100,7 +121,7 @@ class AnthropicProvider:
 
     def __init__(self, model=MODEL, effort=EFFORT, max_tokens=MAX_TOKENS, prompt_version="", purpose=PURPOSE,
                  thinking=THINKING,
-                 strict=True, loose=LOOSE, cache=True, timeout=30.0, log=True):
+                 strict=None, loose=LOOSE, cache=True, timeout=30.0, log=True, stream=None):
         from .. import llm   # sets the ledger home (MVP_LEDGER_HOME) and the Claude cap before lib/ai.py is used
         self.ai = llm.ai
         self.model, self.effort, self.max_tokens = model, effort, max_tokens
@@ -108,7 +129,9 @@ class AnthropicProvider:
             raise ValueError(f"thinking is adaptive or disabled, not {thinking!r}")
         self.thinking = thinking
         self.prompt_version, self.purpose = prompt_version, purpose
+        strict = STRICT if strict is None else strict
         self.strict, self.loose, self.cache, self.timeout, self.log = strict, tuple(loose), cache, timeout, log
+        self.stream = STREAM if stream is None else bool(stream)
         self.spent = 0.0
         self.requests = 0
         self._lock = threading.Lock()
@@ -117,7 +140,7 @@ class AnthropicProvider:
         return {"model": self.model, "thinking": {"type": self.thinking}, "effort": self.effort,
                 "max_tokens": self.max_tokens, "tool_choice": "auto", "strict": self.strict,
                 "strict_off_for": list(self.loose), "cache": "5m on the system block + automatic tail" if self.cache
-                else "off", "fallbacks": None, "sampling": None}
+                else "off", "fallbacks": None, "sampling": None, "stream": self.stream}
 
     def body(self, system, tools, messages, max_tokens=None):
         sysb = {"type": "text", "text": system}
@@ -139,34 +162,51 @@ class AnthropicProvider:
             hold = est_in / 1e6 * p["input_per_m"] + body["max_tokens"] / 1e6 * p.get("output_per_m", 0)
             ai._pending["usd"] += hold
         t0 = time.time()
+        limit = timeout or self.timeout
+        deadline = time.monotonic() + limit
         retries = 0
+        timing = None
         try:
             client = ai.anthropic_client()
             while True:
                 try:
-                    r = client.beta.messages.create(**body, timeout=timeout or self.timeout)
+                    if self.stream:
+                        r, timing = self._stream_once(client, body, deadline)
+                    else:
+                        r = client.beta.messages.create(**body, timeout=limit)
                     break
                 except Exception as e:  # noqa: BLE001 - the SDK's errors become ours, without the request
                     mine = ai._sdk_error(e) if not isinstance(e, (ai.ClaudeHTTPError, ai.ClaudeTimeout,
                                                                   ai.ClaudeConnection)) else e
                     if mine is None:
                         raise
-                    if isinstance(mine, ai.ClaudeHTTPError) and mine.status in RETRY_STATUS and \
-                            retries < len(BACKOFF_S):
-                        time.sleep(BACKOFF_S[retries])
-                        retries += 1
-                        continue
-                    kind = (f"http {mine.status} {mine.kind}" if isinstance(mine, ai.ClaudeHTTPError)
-                            else type(mine).__name__)
-                    if self.log and (isinstance(mine, ai.ClaudeTimeout) or getattr(mine, "maybe_sent", False)):
-                        # sent and maybe billed with no usage back: an over-estimate goes to the ledger (the whole
-                        # prompt at the uncached price and 1,000 output tokens), so the cap still counts it
+                    # a streamed request that failed after message_start was read by the server and may be billed
+                    started = self.stream and (getattr(e, "timing", None) or {}).get("message_start") is not None
+                    http = isinstance(mine, ai.ClaudeHTTPError)
+                    again = http and (mine.status in RETRY_STATUS or (self.stream and mine.kind in RETRY_KINDS)) and \
+                        retries < len(BACKOFF_S)
+                    if again and self.stream and \
+                            deadline - time.monotonic() < BACKOFF_S[retries] + RETRY_MIN_LEFT_S:
+                        again = False
+                    if self.log and (started or isinstance(mine, ai.ClaudeTimeout) or
+                                     getattr(mine, "maybe_sent", False)):
+                        # sent and maybe billed with no usage back (a timeout, a request that may have been sent, a
+                        # stream that failed after message_start, retried or not): an over-estimate goes to the
+                        # ledger (the whole prompt at the uncached price and 1,000 output tokens), so the cap still
+                        # counts it. Whether the server bills a stream that fails mid-way is not known here.
                         est = est_in / 1e6 * p["input_per_m"] + 1000 / 1e6 * p.get("output_per_m", 0)
                         ai.log_batch("anthropic", self.model, self.purpose, 1, int(est_in), 1000, est,
                                      round(time.time() - t0, 2), prompt_version=self.prompt_version + "+estimate")
                         with self._lock:
                             self.spent += est
-                    raise ProviderError(kind, retries, round(time.time() - t0, 2)) from None
+                    if again:
+                        time.sleep(BACKOFF_S[retries])
+                        retries += 1
+                        continue
+                    kind = (f"http {mine.status} {mine.kind}" if isinstance(mine, ai.ClaudeHTTPError)
+                            else type(mine).__name__)
+                    raise ProviderError(kind, retries, round(time.time() - t0, 2),
+                                        timing=getattr(e, "timing", None)) from None
         finally:
             with ai._pending_lock:
                 ai._pending["usd"] = max(0.0, ai._pending["usd"] - hold)
@@ -181,9 +221,102 @@ class AnthropicProvider:
         with self._lock:
             self.spent += cost
             self.requests += 1
-        return Reply(blocks=[_block_json(b) for b in r.content], raw=list(r.content), stop_reason=r.stop_reason,
+        blocks = [_block_json(b) for b in r.content]
+        # a streamed message's blocks are the SDK's parsed kind (an extra parsed_output field on a text block): the
+        # conversation gets their plain JSON, the same bytes a created message's blocks are sent as
+        raw = list(r.content) if timing is None else [_plain(b) for b in blocks]
+        if timing is not None:
+            timing["retries"] = retries
+        return Reply(blocks=blocks, raw=raw, stop_reason=r.stop_reason,
                      usage=usage, seconds=secs, cost_usd=cost, model=getattr(r, "model", self.model),
-                     retries=retries)
+                     retries=retries, timing=timing)
+
+    def _stream_once(self, client, body, deadline):
+        """One streamed request -> (the final message, timing). The wall clock holds the turn's limit exactly: the
+        stream is read on a worker thread and this thread waits for it until `deadline`, then raises ai.ClaudeTimeout
+        (as a created request's timeout does) and leaves the worker to close the stream (closing it from here does not
+        interrupt a read that is waiting: a timer that tried overshot by 1.4 s live on a slow request, mvp28). The httpx
+        timeout, which for a stream bounds each wait for bytes and not the whole, is the time left. timing: seconds from
+        send to the first event and to message_start, the largest gap between two events, the event and delta counts,
+        and each content block's type, start, stop and deltas; an error carries the timing so far (`.timing`)."""
+        import anthropic
+        t0 = time.monotonic()
+        left = max(0.5, deadline - t0)
+        tm = {"first_event": None, "message_start": None, "max_gap": 0.0, "events": 0, "deltas": 0, "blocks": [],
+              "end": None}
+        lock, stop, box = threading.Lock(), threading.Event(), {}
+
+        def work():
+            try:
+                with client.beta.messages.stream(**body, timeout=anthropic.Timeout(left)) as st:
+                    box["stream"] = st
+                    for _ in self._events(st, t0, tm, lock, stop):
+                        pass
+                    if not stop.is_set():
+                        box["final"] = st.get_final_message()
+            except BaseException as e:  # noqa: BLE001 - handed to the waiting thread
+                box["error"] = e
+
+        th = threading.Thread(target=work, daemon=True, name="brain-stream")
+        th.start()
+        th.join(max(0.0, deadline - time.monotonic()))
+
+        def snap():
+            with lock:
+                out = json.loads(json.dumps(tm))
+            out["end"] = _r(time.monotonic() - t0)
+            return out
+        if th.is_alive():
+            stop.set()
+            e = self.ai.ClaudeTimeout("the turn's time is up (wall clock, streamed)")
+            e.timing = snap()
+            raise e
+        if "error" in box:
+            e = box["error"]
+            try:
+                e.timing = snap()
+            except Exception:  # noqa: BLE001
+                pass
+            raise e
+        return box["final"], snap()
+
+    @staticmethod
+    def _events(st, t0, tm, lock, stop):
+        last = t0
+        for ev in st:
+            if stop.is_set():
+                return
+            now = time.monotonic()
+            et = getattr(ev, "type", "")
+            with lock:
+                tm["events"] += 1
+                tm["max_gap"] = round(max(tm["max_gap"], now - last), 3)
+                if tm["first_event"] is None:
+                    tm["first_event"] = _r(now - t0)
+                if et == "message_start" and tm["message_start"] is None:
+                    tm["message_start"] = _r(now - t0)
+                elif et == "content_block_start":
+                    tm["blocks"].append({"type": getattr(ev.content_block, "type", "?"),
+                                         "start": _r(now - t0), "deltas": 0})
+                elif et == "content_block_delta":
+                    tm["deltas"] += 1
+                    if tm["blocks"]:
+                        tm["blocks"][-1]["deltas"] += 1
+                elif et == "content_block_stop" and tm["blocks"]:
+                    tm["blocks"][-1]["stop"] = _r(now - t0)
+            last = now
+            yield ev
+
+    def warm(self, system, tools, connections=1):
+        """mvp28: build the SDK client and open `connections` connections before anything is timed: free count_tokens
+        requests of the real prefix, run side by side (nothing billed, nothing logged, the prompt cache untouched).
+        A long-lived process pays this once; the eval used to pay it inside its first turns."""
+        from concurrent.futures import ThreadPoolExecutor
+        t0 = time.time()
+        msgs = [{"role": "user", "content": "warm"}]
+        with ThreadPoolExecutor(max_workers=max(1, connections)) as ex:
+            list(ex.map(lambda _i: self.count_tokens(system, tools, msgs), range(max(1, connections))))
+        return round(time.time() - t0, 2)
 
     def count_tokens(self, system, tools, messages):
         """Input tokens of a request (free; nothing is billed or logged)."""
@@ -192,6 +325,20 @@ class AnthropicProvider:
         b.pop("cache_control", None)
         r = self.ai.anthropic_client().beta.messages.count_tokens(**b)
         return r.input_tokens
+
+
+def _r(x):
+    return None if x is None else round(x, 3)
+
+
+# the fields of a block the Messages API takes back (a streamed text block also has the SDK's parsed_output)
+_PARAM_KEYS = {"text": ("type", "text", "citations"), "thinking": ("type", "thinking", "signature"),
+               "redacted_thinking": ("type", "data"), "tool_use": ("type", "id", "name", "input", "caller")}
+
+
+def _plain(d):
+    keep = _PARAM_KEYS.get(d.get("type"))
+    return dict(d) if keep is None else {k: d[k] for k in keep if k in d}
 
 
 @dataclass

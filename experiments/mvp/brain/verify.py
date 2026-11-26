@@ -4575,6 +4575,8 @@ def check_answer(form, ledger, turn=None, mode=None):
 # reword. Code words no part of a sentence.
 VALUES_CODES = frozenset({"wrong_value", "wrong_name", "wrong_measure", "bad_ref", "calc", "empty", "garbled",
                           "unfound_number", "unfound_date", "unfound_time", "unfound_name", "row_name"})
+# mvp28: the code the rules of VALUES_RULES_R28 add (refused only when MVP_BRAIN_VALUES_RULES switches them on)
+VALUES_CODES_R28 = frozenset({"item_count"})
 # the refuse list: code -> why it refuses (pinned and hashed by tests/test_brain_values.py)
 VALUES_REFUSE = {
     "wrong_value": "(a) a marked number, share, hour or date the cell does not hold, within the grammar's rounding; "
@@ -4600,6 +4602,11 @@ VALUES_REFUSE = {
     "link": "a link or web address (an instruction's payload)",
     "watch_time": "a marker citing a length total (watch time is never said); no word is read",
     "not_item": "an item card whose ref is no item row of this turn's results",
+}
+# mvp28: the refusals the rules of VALUES_RULES_R28 add, off by default (MVP_BRAIN_VALUES_RULES switches them on)
+VALUES_REFUSE_R28 = {
+    "item_count": "(a) a count of the rows a page of items shows (its items.count, or a figure only that length "
+                  "holds) that is not the number of its rows the answer shows (item cards and rows named)",
 }
 VALUES_SAFETY = ("sensitive", "psych", "outcome", "language", "link", "watch_time")
 # the number-word variant: "refuse" (a small number word or a fraction word is a value: refused when no result holds
@@ -4655,6 +4662,10 @@ def _mon_i(tok):
     return next((i + 1 for i, m in enumerate(_MONTHS) if m[:3] == t), None)
 
 
+def _fig(n):
+    return str(int(n)) if float(n) == int(n) else str(n)
+
+
 class _Pool:
     """What this turn's results hold, read once per ledger: every numeric value and list length, every date and
     date-time, every hour, and every string (lower case), from every result's envelope (sheet and meta, notes
@@ -4662,7 +4673,7 @@ class _Pool:
     labels, notes), never from third-party text (a title, a post's text, a name): a number inside a title is no count
     of their history (the planted f_forged_title2, audit F50b, F50c)."""
 
-    def __init__(self, ledger, message=""):
+    def __init__(self, ledger, message="", screen="", timing=True):
         self.nums, self.fracs, self.dates, self.hours, self.times = set(), [], set(), set(), set()
         self.months, self.years = set(), set()   # (year, month) and years a date part of the results holds
         self.pcts, self.labels = [], set()   # percent-keyed values; the rows' own labels and parts ("2021", "evening")
@@ -4672,12 +4683,25 @@ class _Pool:
         # a figure of code's window words only with its unit ("4 weeks"), never alone
         self.cell_nums, self.other_lens, self.win_units, self.day_nums = set(), set(), set(), set()
         vals, wins = [], []
+        # mvp28 (rules "item_count", "item_count_free", "cards_found"): how many cells hold each figure (the message
+        # apart), the item lists that are a page of a larger counted set ({rid: rows shown}), and the item cards the
+        # answer sends ({rid: cards}; None when the sentence is checked with no form, so nothing is compared)
+        self.held, self.pages, self.shown, self.touched = {}, {}, None, None
+        # mvp28 repair (rule "page_cited"): the same counts by the result that holds them ({figure: {rid: cells}})
+        self.held_by, cur, val_rids = {}, [None], []
+
+        def hold(v, rid=None):
+            self.held[round(v, 6)] = self.held.get(round(v, 6), 0) + 1
+            by = self.held_by.setdefault(round(v, 6), {})
+            rid = cur[0] if rid is None else rid
+            by[rid] = by.get(rid, 0) + 1
 
         def walk(o, key=None):
             if isinstance(o, bool) or o is None:
                 return
             if isinstance(o, (int, float)):
                 v = float(o)
+                hold(v)
                 self.nums.add(round(v, 6))
                 if key in _V_DAY_KEYS:
                     self.day_nums.add(round(v, 6))   # a count of days: found unless typed as a count of items
@@ -4698,6 +4722,7 @@ class _Pool:
                 code.append(o)
                 if key in _V_VALUE_KEYS:
                     vals.append(o)
+                    val_rids.append(cur[0])
                 elif key in _V_WINDOW_KEYS:
                     wins.append(o)
                 m = _V_ISO.match(o.strip())
@@ -4717,12 +4742,27 @@ class _Pool:
                 self.nums.add(float(len(o)))
                 if key not in _V_PROSE_KEYS and (not o or any(isinstance(v, dict) for v in o)):
                     self.cell_nums.add(float(len(o)))   # a list of rows (or an empty one): its length is a count
+                    hold(float(len(o)))
                 else:
                     self.other_lens.add(float(len(o)))   # notes, holds, the days of a tie: not counted as rows
                 for v in o:
                     walk(v, key)
         for r in ledger.by_rid.values():
-            walk(r.env)
+            cur[0] = r.rid
+            # mvp28 prep repair (rule "timing_out", off by default): the envelope's `took_ms` is code's clock, how long
+            # the tool ran, never a cell of their history; read as one, a figure no cell holds was found when it
+            # happened to equal the tool's milliseconds, so a verdict hung on how fast the tool ran
+            walk(r.env if timing or not isinstance(r.env, dict) else {k: v for k, v in r.env.items() if k != "took_ms"})
+            cur[0] = None
+            sh = r.sheet if isinstance(r.sheet, dict) else {}
+            its, tot = sh.get("items"), (sh.get("totals") or {}).get("items") if isinstance(sh.get("totals"), dict) \
+                else None
+            if isinstance(its, list) and its and all(isinstance(x, dict) for x in its) and \
+                    isinstance(tot, int) and not isinstance(tot, bool) and tot > len(its):
+                self.pages[r.rid] = len(its)   # a page: the rows shown are some of a set the result counts
+        for v, vr in zip(vals, val_rids):
+            for m in re.finditer(r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)", v.lower()):
+                hold(float(m.group(1).replace(",", "")), vr)
         self.text = "\n".join(strs).lower()
         self.message = " ".join(str(message or "").split()).lower()
         both = "\n".join(code).lower() + "\n" + self.message
@@ -4734,6 +4774,13 @@ class _Pool:
         for w in wins:
             for m in re.finditer(r"(?<![\w.])(\d+)\s+(day|week|month|year|hour|minute)s?\b", w.lower()):
                 self.win_units.add((float(m.group(1)), m.group(2)))
+        # mvp28 (rule "screen_window", a follow-up that repeats the window of the last answer's screen): the window
+        # words code wrote on the screen they see (the last answer's `window_said`), a figure with its unit; never the
+        # model's own arguments that the screen also carries
+        self.screen_units = set()
+        for w in _screen_window_words(screen):
+            for m in re.finditer(r"(?<![\w.])(\d+)\s+(day|week|month|year|hour|minute)s?\b", w.lower()):
+                self.screen_units.add((float(m.group(1)), m.group(2)))
         for m in _V_CLOCK.finditer(both):
             h = int(m.group(1)) % 12 + (12 if m.group(3).lower().startswith("p") else 0)
             self.hours.add(h)
@@ -4764,7 +4811,8 @@ class _Pool:
         rx = re.compile(r"(?<![\w@])" + re.escape(s) + r"(?![\w])")
         return bool(rx.search(self.text) or rx.search(self.message))
 
-    def has_num(self, n, pct=False, hedged=False, decimals=0, cells=False, unit=None, day_typed=False, noun=None):
+    def has_num(self, n, pct=False, hedged=False, decimals=0, cells=False, unit=None, day_typed=False, noun=None,
+                screen=False):
         """`cells` (rule "cell_found"): only what a cell holds; `unit`: the time word after the figure, which may match
         a figure of the window words with its unit ("4 weeks"); `noun`: the word after the figure: under `day_typed` a
         count of days (a window's or a row's `days`) is not found when the figure is typed as a count of items."""
@@ -4780,10 +4828,43 @@ class _Pool:
             return True
         if cells and unit and (float(n), unit) in self.win_units:
             return True
+        if cells and unit and screen and (float(n), unit) in self.screen_units:
+            return True
         if decimals and any(round(v, decimals) == round(n, decimals) for v in nums):
             return True
         tol = 1.5 if hedged else 0.5
         return any(abs(f - n) <= tol for f in self.fracs) if (pct or n <= 100) else False
+
+    def bound_pages(self, n):
+        """mvp28: the rids of the pages whose length is `n` when no other cell holds `n` (the figure is the number of
+        rows a page shows, and nothing else of the turn); else []."""
+        rids = [rid for rid, k in self.pages.items() if float(k) == float(n)]
+        return rids if rids and self.held.get(round(float(n), 6), 0) == len(rids) else []
+
+    def cited_pages(self, n, cited):
+        """mvp28 repair (rule "page_cited"): the pages of the results a sentence cites (`cited`) whose length is `n`,
+        when no other cell of those results holds `n`. A cell of a result the sentence does not cite may hold the same
+        figure: it is another result's figure, not what this sentence counts ("Here are 5 of the 72[r1...]" beside a
+        breakdown that holds a 5)."""
+        rids = [rid for rid, k in self.pages.items() if rid in cited and float(k) == float(n)]
+        by = self.held_by.get(round(float(n), 6), {})
+        return rids if rids and sum(c for rid, c in by.items() if rid in cited) == len(rids) else []
+
+    def item_count_wrong(self, rids, n, said=None):
+        """mvp28: a count of shown rows of these pages that the cards sent do not match -> the detail, else None. Only
+        a page the answer shows rows of (a card, or a sentence citing one of its rows) is compared: a page the answer
+        shows nothing of is not what it counts as shown (a sentence about how many rows the list tool gives a page).
+        mvp28 repair (rule "shown_said"): `said` is the set of whole figures the sentence writes. A sentence that also
+        writes how many of the page's rows it shows says what it shows; the page's length beside it is the list's
+        length ("The list gave 10; here are the first 5", "Your 5 newest saves include 2 lessons, below")."""
+        rids = [rid for rid in rids if rid in (self.touched or ())]
+        if self.shown is None or not rids or any(self.shown.get(rid, 0) == n for rid in rids):
+            return None
+        if said and any(self.shown.get(rid, 0) and float(self.shown.get(rid, 0)) in said for rid in rids):
+            return None
+        rid = rids[0]
+        return (f"{_fig(n)} rows of {rid}.items are counted as shown, and the answer shows {self.shown.get(rid, 0)} "
+                f"of them (item cards and rows named): send as many as the count, or say how many are shown")
 
     def has_date(self, y=None, mo=None, d=None):
         """A date part some date of the results holds (a day; a month: also a period's label; a year: also any
@@ -4796,16 +4877,40 @@ class _Pool:
         return d is None and mo is None and y is not None and y in self.years
 
 
+def _screen_window_words(screen):
+    """mvp28: every `window_said` string of the screen (code's words for the last answer's windows)."""
+    import json
+    try:
+        o = json.loads(screen) if isinstance(screen, str) and screen.strip() else (screen or {})
+    except ValueError:
+        return []
+    out = []
+
+    def walk(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k == "window_said" and isinstance(v, str):
+                    out.append(v)
+                else:
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    walk(o)
+    return out
+
+
 def _v_code_has(pool, s):
     """The same date words inside code's own strings (window words, labels, notes) or the message."""
     s = " ".join(str(s).lower().split())
     return bool(re.search(r"(?<![\w@])" + re.escape(s) + r"(?![\w])", pool.code_text))
 
 
-def _values_pool(ledger, turn, cache):
-    key = id(ledger)
+def _values_pool(ledger, turn, cache, timing=True):
+    key = id(ledger) if timing else (id(ledger), "timing_out")
     if key not in cache:
-        cache[key] = _Pool(ledger, (turn.message if turn else "") or "")
+        cache[key] = _Pool(ledger, (turn.message if turn else "") or "", (turn.screen if turn else "") or "",
+                           timing=timing)
     return cache[key]
 
 
@@ -4902,6 +5007,14 @@ def _values_marked(raw, markers, ledger, turn, nw_refuse, pool=None, cm_rules=No
             r = check_value(mk)
             if r and r[0] in ("wrong_value", "wrong_name", "wrong_measure", "watch_time", "bad_ref"):
                 out.append(r)
+            elif not r and mk.kind == "count" and mk.rest == "items.count" and pool is not None and \
+                    cm_rules is not None and "item_count" in cm_rules and mk.rid in pool.pages:
+                # mvp28 (a page's cited length said as the number shown, over fewer cards): the length of a page of
+                # item rows is how many it shows; the answer must send that many cards of it
+                d = pool.item_count_wrong([mk.rid], mk.value, _v_said_figs(raw, markers) if "shown_said" in cm_rules
+                                          else None)
+                if d:
+                    out.append(("item_count", d))
             elif not r and mk.kind == "value" and _measure(mk.rest, mk.value)[1] == "points":
                 pts = _points_of(mk.rest, mk.value)
                 if (mk.sign == "+" and pts < 0) or (mk.sign in ("-", "−") and pts > 0):
@@ -4985,12 +5098,174 @@ def _values_calc(mk, ledger, words=None):
     return None
 
 
+_V_TOK = re.compile(r"[a-z0-9]+")
+
+
+def _v_cited_rows(markers, ledger):
+    """mvp28: the rows the sentence cites (a row marker's row, a value marker's owner row), as dicts."""
+    out = []
+    for mk in markers:
+        row = None
+        if mk.kind == "row" and isinstance(mk.value, dict):
+            row = mk.value
+        elif mk.kind == "value" and mk.owner and mk.rid:
+            res = ledger.get(mk.rid)
+            try:
+                row = _resolve(res.sheet, mk.owner) if res is not None else None
+            except (KeyError, AttributeError, IndexError, TypeError):
+                row = None
+        if isinstance(row, dict) and all(row is not r for r in out):
+            out.append(row)
+    return out
+
+
+_V_GROUP_KEYS = ("channel", "handle", "platform", "how", "theme", "area", "length")
+
+
+def _v_row_counts(markers, ledger, cm_rules):
+    """mvp28: counts of rows a sentence can say with no cell holding them (rule "cited_rows": how many rows of one
+    list the sentence itself cites, two or more: "Two reels match: A[...] and B[...]"; rule "row_group": how many
+    rows of a cited row's own list share one of its values, its channel, platform, event, theme, area or length:
+    "Four reels from @x were opened", citing one of them). -> [(count, place, value)]: `place` is where the
+    sentence's first marker into that list starts, `value` the shared value (None for cited_rows).
+    mvp28 repair (rule "rows_before"): the caller finds such a count only before `place`, so that it introduces the
+    rows it counts; and for row_group only when the sentence's words before `place` name the shared value. A figure
+    after a row's marker says something of that row ("X[...] 4 times", "@x[...] posts 4 reels a week"), and a group
+    the sentence does not name is not what it counts ("4 friends shared X[...]")."""
+    rules = cm_rules or frozenset()
+    if not ({"cited_rows", "row_group"} & set(rules)):
+        return []
+    lists, first = {}, {}
+    for mk in markers:
+        path = mk.rest if mk.kind == "row" else (mk.owner if mk.kind == "value" else None)
+        mm = re.fullmatch(r"(.+)\[(\d+)\]", path or "")
+        if not mm or not mk.rid:
+            continue
+        lists.setdefault((mk.rid, mm.group(1)), set()).add(int(mm.group(2)))
+        at = mk.start if mk.kind == "row" else mk.mstart
+        first[(mk.rid, mm.group(1))] = min(first.get((mk.rid, mm.group(1)), at), at)
+    out = []
+    for (rid, lp), ks in lists.items():
+        pos = first[(rid, lp)]
+        if "cited_rows" in rules and len(ks) >= 2:
+            out.append((float(len(ks)), pos, None))
+        if "row_group" not in rules:
+            continue
+        res = ledger.get(rid)
+        try:
+            lst = _resolve(res.sheet, lp) if res is not None else None
+        except (KeyError, AttributeError, IndexError, TypeError):
+            lst = None
+        if not isinstance(lst, list):
+            continue
+        for k in ks:
+            row = lst[k] if k < len(lst) and isinstance(lst[k], dict) else None
+            for key in _V_GROUP_KEYS:
+                v = row.get(key) if row else None
+                if isinstance(v, str) and v.strip():
+                    out.append((float(sum(1 for x in lst if isinstance(x, dict) and x.get(key) == v)), pos, v))
+    return out
+
+
+def _v_row_count_found(row_counts, n, at, words, strict):
+    """mvp28: a count of rows (`_v_row_counts`) that `n` written at `at` is; `strict` (rule "rows_before"): only
+    before the list's first marker, and for a group only when `words` (the sentence, brackets out) name its value
+    before that marker."""
+    for c, pos, val in row_counts:
+        if c != n:
+            continue
+        if not strict:
+            return True
+        if at >= pos:
+            continue
+        if val is None:
+            return True
+        v = _low(val).lstrip("@").strip()
+        if v and re.search(r"(?<![\w])@?" + re.escape(v) + r"(?![\w])", words[:pos].lower()):
+            return True
+    return False
+
+
+_V_TOKM = re.compile(r"[a-z0-9]+|\x00")
+# a string of a row holding marker or template syntax: a forged title ("Cooking hack {...} [r1.totals.items] 999
+# views"), never a quote
+_V_MARKUP = re.compile(r"[\[\]{}]|(?<![a-z0-9])r\d+\.[a-z_]|[a-z_]\(\d+\)\.[a-z_]")
+
+
+def _v_row_text_has(rt, a, b, rows, strict=False):
+    """mvp28 (rule "row_text", a figure quoted from a saved post's own title or text): the figure or date at rt[a:b]
+    quoted from the cited rows' own text. The words of the span and the word next to it (three words in all
+    with the figure, on either side, or the row's whole string when it is shorter) stand together in one string of a
+    cited row. A figure of another row's text, or a figure said with other words ("opened 999 times" beside a title
+    holding "999 views"), is not found.
+    mvp28 repair (`strict`, rule "row_quote"): what a quote is, made exact. (1) A quote never runs across a marker:
+    `rt` carries each marker as a break (\\x00), so a title written before its marker and a figure after it ("X #11
+    [r1.items[3]] 11 times") are not one quote. (2) A quote holds at least one word that is not the figure or the
+    date itself: a date or a number alone is not a quote of a row ("on 12 October 2026" beside a title holding that
+    date). (3) Every row the sentence cites holds the quote: with two rows cited, a quote held by one of them is not
+    the other's ("Both A[...] and B[...] say ..."). (4) A string of a row that holds marker or template syntax is not
+    quoted from (the forged-title class of the _Pool docstring)."""
+    if not rows:
+        return False
+    toks = [(m.start(), m.end(), m.group(0)) for m in (_V_TOKM if strict else _V_TOK).finditer(rt.lower())]
+    idx = [k for k, (x, y, _w) in enumerate(toks) if x < b and y > a]
+    if not idx:
+        return False
+    i0, i1 = idx[0], idx[-1]
+    words = [w for _x, _y, w in toks]
+    n_fig = i1 - i0 + 1
+    span = max(3, n_fig + 1) if strict else max(3, n_fig)
+    wins = []
+    for start in range(i1 - span + 1, i0 + 1):
+        if start >= 0 and start + span <= len(words) and "\x00" not in words[start:start + span]:
+            wins.append(words[start:start + span])
+
+    def holds(row):
+        for s in _v_row_strings(row):
+            if strict and _V_MARKUP.search(s):
+                continue
+            st = _V_TOK.findall(s)
+            short = (n_fig < len(st) < 3) if strict else (len(st) < 3)
+            if short and st and any(words[k:k + len(st)] == st for k in range(max(0, i1 - len(st) + 1), i0 + 1)):
+                return True
+            for w in wins:
+                if any(st[k:k + len(w)] == w for k in range(len(st) - len(w) + 1)):
+                    return True
+        return False
+    return all(holds(r) for r in rows) if strict else any(holds(r) for r in rows)
+
+
 def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None):
     """Rule (d): what is written with no marker, against what this turn's results hold. -> [(code, detail)].
     `cm_rules`: the values mode's rules (mvp27: "cell_found", a figure is found in a cell, never in code's prose)."""
     out = []
     cells = cm_rules is not None and "cell_found" in cm_rules
     day_typed = cells and "day_typed" in cm_rules
+    own = _v_cited_rows(markers, ledger) if cm_rules is not None and "row_text" in cm_rules else []
+    rules = cm_rules or frozenset()
+    # mvp28 repair (rule "screen_uncited"): the screen's window is the last answer's; a sentence that cites a cell of
+    # this turn speaks of this turn's results and their windows, so the screen's window is not found there
+    screen = "screen_window" in rules and not (markers and "screen_uncited" in rules)
+    row_counts = _v_row_counts(markers, ledger, cm_rules)
+    before = "rows_before" in rules
+    rids = {mk.rid for mk in markers if mk.rid} | {p.split(".", 1)[0] for mk in markers if mk.kind == "calc"
+                                                   for p in (mk.a, mk.b)}
+    first_at = {}   # rule "rows_before": where the sentence first cites an item row of each result (a row or its cell)
+    for mk in markers:
+        path = mk.rest if mk.kind == "row" else (mk.owner if mk.kind == "value" else None)
+        if mk.rid and re.fullmatch(r"items\[\d+\]", path or ""):
+            at = mk.start if mk.kind == "row" else mk.mstart
+            first_at[mk.rid] = min(first_at.get(mk.rid, at), at)
+    rt = _BRACKET.sub(lambda m: " " * len(m.group(0)), raw)   # the words of the sentence, every bracket out
+    quote = "row_quote" in rules
+    if quote:   # rule "row_quote": a marker is a break between words, never a gap a quote runs across
+        rt_q = _BRACKET.sub(lambda m: " " + "\x00" * (len(m.group(0)) - 2) + " " if len(m.group(0)) >= 3
+                            else " " * len(m.group(0)), raw)
+    else:
+        rt_q = rt
+
+    def quoted(a, b):
+        return bool(own) and _v_row_text_has(rt_q, a, b, own, strict=quote)
     t = raw
     for mk in markers:
         t = _blank(t, mk.start, mk.end)
@@ -5013,7 +5288,7 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
     for m in list(_V_RANGE.finditer(t)):
         mo, y = _mon_i(m.group(3)), (int(m.group(4)) if m.group(4) else None)
         for d in (int(m.group(1)), int(m.group(2))):
-            if not pool.has_date(y, mo, d):
+            if not pool.has_date(y, mo, d) and not quoted(m.start(), m.end()):
                 out.append(("unfound_date", f"'{_clip(m.group(0), 40)}': no result of this turn holds that day"))
                 break
         t = _blank(t, m.start(), m.end())
@@ -5028,17 +5303,20 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
             if y is None:   # "5 September to 2 October 2026": the year of the day that closes the range
                 ny = _V_RANGE_END.match(raw[m.end():m.end() + 40])
                 y = int(ny.group(1)) if ny else None
-            if not (pool.has_date(y, mo, d) or _v_code_has(pool, m.group(0))):
+            if not (pool.has_date(y, mo, d) or _v_code_has(pool, m.group(0)) or
+                    quoted(m.start(), m.end())):
                 out.append(("unfound_date", f"'{_clip(m.group(0), 40)}': no result of this turn holds that day"))
             t = _blank(t, m.start(), m.end())
     for m in list(_V_MONYEAR.finditer(t)):
         mo, y = _mon_i(m.group(1)), int(m.group(2))
-        if not (pool.has_date(y, mo) or _v_code_has(pool, m.group(0))):
+        if not (pool.has_date(y, mo) or _v_code_has(pool, m.group(0)) or
+                quoted(m.start(), m.end())):
             out.append(("unfound_date", f"'{_clip(m.group(0), 40)}': no result of this turn holds that month"))
         t = _blank(t, m.start(), m.end())
     for m in list(_V_YEAR.finditer(t)):
         y = int(m.group(1))
-        if not (pool.has_date(y) or _v_code_has(pool, m.group(1))):
+        if not (pool.has_date(y) or _v_code_has(pool, m.group(1)) or
+                quoted(m.start(1), m.end(1))):
             out.append(("unfound_date", f"'{y}': no result of this turn holds that year"))
         t = _blank(t, m.start(), m.end())
     for m in list(_V_MONALONE.finditer(t)):
@@ -5066,9 +5344,21 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
             continue   # "the 30th": a day a date of the results holds
         unit = re.match(r"\s+(day|week|month|year|hour|minute)s?\b", t[m.end():], re.I) if cells else None
         noun = re.match(r"\s+([a-z]+)", t[m.end():], re.I)
-        if not pool.has_num(n, pct=bool(m.group("pct")), hedged=hedged, decimals=dec, cells=cells,
-                            unit=unit.group(1).lower() if unit else None, day_typed=day_typed,
-                            noun=noun.group(1) if noun else None):
+        found = pool.has_num(n, pct=bool(m.group("pct")), hedged=hedged, decimals=dec, cells=cells,
+                             unit=unit.group(1).lower() if unit else None, day_typed=day_typed,
+                             noun=noun.group(1) if noun else None, screen=screen)
+        if not found and cells and not (m.group("pct") or dec) and \
+                _v_row_count_found(row_counts, n, m.start("num"), rt, before):
+            found = True
+        plain_count = not (m.group("pct") or m.group("sign") or dec or hedged) and \
+            not re.match(r"\s+(day|week|month|year|hour|minute)s?\b", t[m.end():], re.I) and \
+            not _V_DAY_AHEAD.match(raw[m.end():m.end() + 40])
+        found, extra = _v_shown_count(pool, n, found, plain_count, cm_rules, rids, raw, (m.start("num"), m.end("num")),
+                                      first_at, markers)
+        out += extra
+        if not found and quoted(m.start("num"), m.end("num")):
+            found = True
+        if not found:
             out.append(("unfound_number", f"'{_clip(m.group(0).strip(), 20)}' has no marker and no result of this "
                                           "turn holds it: cite its cell"))
         t = _blank(t, m.start(), m.end())
@@ -5086,6 +5376,14 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
             w = m.group("w").lower()
             ok = pool.has_num(float(_V_NUM_WORDS[w]), cells=cells) if w in _V_NUM_WORDS else \
                 any(abs(f - _V_FRACTIONS[w]) <= 5.0 for f in pool.fracs)
+            if not ok and cells and w in _V_NUM_WORDS and \
+                    _v_row_count_found(row_counts, float(_V_NUM_WORDS[w]), m.start(), rt, before):
+                ok = True
+            if w in _V_NUM_WORDS:
+                plain_count = not re.match(r"\s+(day|week|month|year|hour|minute)s?\b", t[m.end():], re.I)
+                ok, extra = _v_shown_count(pool, float(_V_NUM_WORDS[w]), ok, plain_count, cm_rules, rids, raw,
+                                           (m.start(), m.end()), first_at, markers)
+                out += extra
             if not ok:
                 out.append(("unfound_number", f"'{w}' has no marker and no result of this turn holds it"))
             t = _blank(t, m.start(), m.end())
@@ -5111,6 +5409,69 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
             out.append(("unfound_name", f"'{_clip(run, 40)}' is named with no marker and no result of this turn "
                                         "holds it"))
     return out
+
+
+# a day of a month written in a range ("5 and 6 October 2026"): a date part, never a count
+_V_DAY_AHEAD = re.compile(r"(?:st|nd|rd|th)?(?:\s*(?:and|to|-|–|until|through|till|or|,)\s*\d{1,2}(?:st|nd|rd|th)?)*"
+                          r"\s+(?:of\s+)?" + _V_MONTH + r"\b", re.I)
+
+
+def _v_said_figs(raw, markers=(), a=None, b=None):
+    """mvp28 repair (rule "shown_said"): the whole figures a sentence writes with no marker, in digits (not a day of a
+    date) or in number words, apart from the one at raw[a:b]. Every marker is blanked from the start of what it names:
+    a figure inside a cited title or a marked value is not the sentence saying how many it shows."""
+    t = raw
+    for mk in markers:
+        t = _blank(t, mk.start, mk.end)
+    t = _BRACKET.sub(lambda m: " " * len(m.group(0)), t)
+    out = set()
+    for m in _V_FIG.finditer(t):
+        if a is not None and m.start() < b and m.end() > a:
+            continue
+        if m.group("pct") or "." in m.group("num") or _V_DAY_AHEAD.match(t[m.end("num"):m.end("num") + 40]) or \
+                re.search(_V_MONTH + r"\s*$", t[max(0, m.start() - 12):m.start()], re.I):
+            continue
+        out.add(float(m.group("num").replace(",", "")))
+    for m in _V_NUMWORD_RX.finditer(t):
+        w = m.group("w").lower()
+        if w in _V_NUM_WORDS and not (a is not None and m.start() < b and m.end() > a):
+            out.add(float(_V_NUM_WORDS[w]))
+    return out
+
+
+def _v_shown_count(pool, n, found, plain, cm_rules, rids=(), raw="", span=None, first_at=None, markers=()):
+    """mvp28: a whole figure written with no marker against the item cards the answer sends (only when the answer's
+    cards are known: pool.shown). Rule "item_count_free": a figure found only as the length of a page of item rows is
+    how many it shows, so the cards of that page must be as many (a next page's length said over no card). Rule
+    "cards_found": a figure no cell holds that is the number of rows the answer shows of a page is found, in a
+    sentence that cites that page's result (`rids`; the cards are a list code shows: "Here are 4 of the 72[r1...]"
+    over 4 cards). -> (found, [(code, detail)]).
+    mvp28 repair: `span` is the figure's place in `raw`, `first_at` the place of the sentence's first marker of each
+    result. Rule "page_cited": the figure is also bound to a page of a result the sentence cites when only cells of
+    other results hold it too. Rule "shown_said": see `_Pool.item_count_wrong`. Rule "rows_before": the number of
+    cards is found only where it comes before the sentence's first marker of a row of that page (the row, or a cell of
+    it), so it introduces the rows ("Here are 4 of the 72[r1...]", "The list gave 5[r1.items.count]; the two below
+    ..."); after a row's marker it says something of that row ("Pan Theory[r1.items[0].channel] uploads 4 videos a
+    week", "X[r1.items[0]] was opened 3 times"), which the number of cards is not."""
+    rules = cm_rules or frozenset()
+    if pool.shown is None or not plain or n != int(n) or n <= 0:
+        return found, []
+    said = _v_said_figs(raw, markers, *span) if "shown_said" in rules and span else None
+    if found:
+        if "item_count_free" in rules:
+            pages = pool.bound_pages(n)
+            if not pages and "page_cited" in rules:
+                pages = pool.cited_pages(n, set(rids))
+            d = pool.item_count_wrong(pages, n, said)
+            if d:
+                return found, [("item_count", d)]
+        return found, []
+    if "cards_found" in rules and any(pool.shown.get(rid, 0) == n and
+                                      ("rows_before" not in rules or span is None or
+                                       span[0] < (first_at or {}).get(rid, span[0] + 1))
+                                      for rid in pool.pages if rid in rids):
+        return True, []
+    return found, []
 
 
 def _v_plain_cap(w):
@@ -5155,6 +5516,25 @@ _V_MOTIVE = re.compile(r"\bbecause\s+(?:you(?:'re|'ve|'d|\s+are|\s+were|\s+have|
                        r"(?:bored|tired|sad|stressed|lonely|anxious)\b|\bout of (?:boredom|habit)\b|\bfor fun\b", re.I)
 
 
+# mvp28 (rule "outcome_you", a true sentence giving the date they saved a post, refused): `outcome` is the bot saying
+# it did something. "saved it" said of them ("you saved it", "they saved it") is an event of their history, not an
+# outcome
+_V_THEIR_SAVE = re.compile(r"\b(?:you|they)(?:'ve| have| had| also| first| last| only| just| once)*\s+saved it\b")
+
+
+def _v_outcome(low, history=True):
+    """OUTCOME, with "saved it" left out when its subject is them. mvp28 repair (rule "outcome_cited"): `history` is
+    whether the sentence cites a row they saved (a row or a cell of one whose `how` is "saved"): their save is an event
+    of their history only when the sentence shows it from the results; with no such cell "you've saved it to your
+    list now" is the bot telling them something was done."""
+    for m in OUTCOME.finditer(low):
+        if history and m.group(0).startswith("saved it") and \
+                any(x.end() == m.end() for x in _V_THEIR_SAVE.finditer(low)):
+            continue
+        return True
+    return False
+
+
 def _values_safety(raw, plain, low, markers, ledger, res, turn, pool, cm_rules=None):
     """The privacy and safety refusals kept (VALUES_SAFETY), each called directly on the sentence."""
     out = []
@@ -5165,7 +5545,9 @@ def _values_safety(raw, plain, low, markers, ledger, res, turn, pool, cm_rules=N
         out.append(("psych", None))
     elif motive.search(low):   # why they opened something (DESIGN 26: no true sentence of any set holds it)
         out.append(("psych", "why they opened something is not in the export"))
-    if OUTCOME.search(low):
+    if (_v_outcome(low, "outcome_cited" not in cm_rules or
+                   any(r.get("how") == "saved" for r in _v_cited_rows(markers, ledger)))
+            if cm_rules is not None and "outcome_you" in cm_rules else OUTCOME.search(low)):
         out.append(("outcome", None))
     wres = res or next(iter(ledger.by_rid.values()), None)
     if _not_english(plain) and ((wres.sheet.get("lang") if wres is not None else None) or "en") == "en":
@@ -5185,7 +5567,7 @@ def check_sentence_values(sentence, ledger, turn=None, where="point", index=0, m
     turn = turn or Turn()
     if not isinstance(ledger, Ledger):
         ledger = Ledger(ledger)
-    pool = _values_pool(ledger, turn, pool_cache if pool_cache is not None else {})
+    pool = _values_pool(ledger, turn, pool_cache if pool_cache is not None else {}, timing=not cm.rule("timing_out"))
     nw = cm.rule("nw_refuse")
     out = Outcome(where, index, sentence)
     raw = " ".join(str(sentence or "").split())
@@ -5243,6 +5625,52 @@ def _values_flags(o, others):
     return fl
 
 
+_SHOWN_RULES = frozenset({"item_count", "item_count_free", "cards_found"})
+_ITEM_CELL = re.compile(r"\[(r\d+\.items\[\d+\])\.[A-Za-z_]+\]")
+_ITEM_ANY = re.compile(r"\[((r\d+)\.items\[\d+\])(?:\.[A-Za-z_]+)?\]")
+
+
+def _shown_cards(ledger, f, form, rows_shown=True, skip=None):
+    """mvp28: ({rid: how many of its item rows the answer shows}, {rids whose item rows the answer shows}). A row is
+    shown as a card, and (`rows_shown`) when a sentence of the form names it by a marker. The cards as answer.build
+    sends them with this form's picks (a pick
+    past ITEMS_MAX or naming no item row is dropped, as the verdict drops it; then answer._card_list: an ask-back's own
+    refs, no card for a row with no title, each row once, CARDS_MAX). Under an ask-back with no refs and no picks the
+    cards are the item rows its sentences cite: here every sentence's, before any is checked.
+    mvp28 repair (rule "rows_kept"): `skip` holds the places ((where, index)) of sentences that are refused; a row
+    only they name is not shown, since they are not sent."""
+    from . import answer as A
+    rows = _item_rows(ledger)
+    picks = [it.ref for k, it in enumerate(f.items) if k < ITEMS_MAX and it.ref in rows]
+    fd = form if isinstance(form, dict) else f.model_dump()
+    ask = bool(f.ask_back)
+    cited = []
+    for s in [f.lead or ""] + list(f.points):
+        for m in _ITEM_CELL.finditer(s):
+            if m.group(1) not in cited:
+                cited.append(m.group(1))
+    out = {}
+    refs = [c["ref"] for c in A._card_list(ledger, picks, fd, ask, cited if ask else [])]
+    for c in refs:
+        rid = str(c).split(".", 1)[0]
+        out[rid] = out.get(rid, 0) + 1
+    named = {}
+    if skip:
+        sents = [s for k, s in enumerate(_split(f.lead) or []) if ("lead", k) not in skip] + \
+            [p for k, p in enumerate(f.points) if ("point", k) not in skip]
+    else:
+        sents = [f.lead or ""] + list(f.points)
+    for s in sents:
+        for m in _ITEM_ANY.finditer(s):
+            named.setdefault(m.group(2), set()).add(m.group(1))
+    if rows_shown:   # rule "rows_shown": a row the sentences name is shown too ("Your newest 5 were A, B, C, D and E")
+        for c in refs:
+            rid = str(c).split(".", 1)[0]
+            named.setdefault(rid, set()).add(c)
+        out = {rid: len(v) for rid, v in named.items()}
+    return out, set(out) | set(named)
+
+
 def check_answer_values(form, ledger, turn=None, mode=None):
     """The form in values mode -> Verdict: today's full and cells verdicts are computed for the flags; a sentence is
     refused only by the values rules and the safety list. The repair (4.5) is due when the lead is refused or more
@@ -5259,21 +5687,55 @@ def check_answer_values(form, ledger, turn=None, mode=None):
     vf = check_answer(f, ledger, turn, mode=FULL)
     others = (("cells", vc), ("full", vf))
     cache = {}
+    if cm.rules & _SHOWN_RULES:
+        pool = _values_pool(ledger, turn, cache, timing=not cm.rule("timing_out"))
+        pool.shown, pool.touched = _shown_cards(ledger, f, form, rows_shown=cm.rule("rows_shown"))
     v = Verdict(outcomes=[], check=cm.name)
-    lead_s = _split(f.lead)
-    if not lead_s:
-        v.outcomes.append(Outcome("lead", 0, f.lead or "", reasons=["garbled" if (f.lead or "").strip() else "empty"]))
-    else:
-        long_lead = len(strip_markers(f.lead)) > LEAD_MAX or len(lead_s) > 2
-        for k, s in enumerate(lead_s):
-            v.outcomes.append(check_sentence_values(s, ledger, turn, "lead", k, cm, cache,
-                                                    too_long=long_lead or len(strip_markers(s)) > SENT_MAX))
-    for k, p in enumerate(f.points):
-        sents = _split(p)
-        text = sents[0] if len(sents) == 1 else " ".join(str(p).split())
-        v.outcomes.append(check_sentence_values(text, ledger, turn, "point", k, cm, cache,
-                                                too_long=k >= POINTS_MAX or len(sents) != 1 or
-                                                len(strip_markers(text)) > SENT_MAX))
+
+    shown_of = {}
+
+    def own(where, k, skip):
+        # rule "rows_kept": the rows shown for this sentence's check leave out the rows named only by the other
+        # refused sentences (never its own: a sentence is checked as it would be sent)
+        if skip is not None:
+            key = frozenset(skip - {(where, k)})
+            if key not in shown_of:
+                shown_of[key] = _shown_cards(ledger, f, form, rows_shown=True, skip=set(key))
+            pool.shown, pool.touched = shown_of[key]
+
+    def sentences(skip=None):
+        out = []
+        lead_s = _split(f.lead)
+        if not lead_s:
+            out.append(Outcome("lead", 0, f.lead or "", reasons=["garbled" if (f.lead or "").strip() else "empty"]))
+        else:
+            long_lead = len(strip_markers(f.lead)) > LEAD_MAX or len(lead_s) > 2
+            for k, s in enumerate(lead_s):
+                own("lead", k, skip)
+                out.append(check_sentence_values(s, ledger, turn, "lead", k, cm, cache,
+                                                 too_long=long_lead or len(strip_markers(s)) > SENT_MAX))
+        for k, p in enumerate(f.points):
+            sents = _split(p)
+            text = sents[0] if len(sents) == 1 else " ".join(str(p).split())
+            own("point", k, skip)
+            out.append(check_sentence_values(text, ledger, turn, "point", k, cm, cache,
+                                             too_long=k >= POINTS_MAX or len(sents) != 1 or
+                                             len(strip_markers(text)) > SENT_MAX))
+        return out
+    v.outcomes = sentences()
+    if cm.rules & _SHOWN_RULES and cm.rule("rows_shown") and cm.rule("rows_kept"):
+        # rule "rows_kept": rows named only by refused sentences are not shown. Each sentence is checked again with
+        # the rows of the other sentences refused on the last pass left out (its own always counted), until the set
+        # of refused sentences stops changing; at most one pass per sentence and one more
+        refused = set()
+        for _pass in range(len(v.outcomes) + 1):
+            now = {(o.where, o.index) for o in v.outcomes if not o.kept}
+            if now == refused or not now:
+                break
+            refused = now
+            v.outcomes = sentences(refused)
+        pool.shown, pool.touched = _shown_cards(ledger, f, form, rows_shown=True,
+                                                skip={(o.where, o.index) for o in v.outcomes if not o.kept})
     for o in v.outcomes:
         o.flags = _values_flags(o, others)
     v.private_line = any(o.kept and o.hidden_rank for o in v.outcomes)
@@ -5301,15 +5763,52 @@ def check_answer_values(form, ledger, turn=None, mode=None):
 
 # mvp27 (DESIGN 29): the rules added to the values mode, each measured on the six live runs. "row_name": a name before
 # a row marker is that row's own; "cell_found": a figure is found in a cell, never in code's prose; "motive_you": the
-# motive pattern reads a motive or a state of mind said of them, not a bare "because"
+# motive pattern reads a motive or a state of mind said of them, not a bare "because". The default rule set.
 VALUES_RULES = frozenset({"row_name", "cell_found", "day_typed", "motive_you"})
+# mvp28 (DESIGN 30.2 and 30.7): the rules of this round, kept in the code and OFF by default. They changed no verdict
+# on the v3c and v4c sample runs and let more false sentences out under an independent attack, so the blind run checks
+# with VALUES_RULES only. MVP_BRAIN_VALUES_RULES names the ones to switch on: a comma list of names, or "r28" for all.
+VALUES_RULES_R28 = frozenset({"item_count", "item_count_free", "cards_found", "rows_shown", "row_text",
+                              "screen_window", "cited_rows", "row_group", "outcome_you",
+                              # the repair (DESIGN 30.7): each narrows or completes a rule above
+                              "row_quote", "rows_before", "screen_uncited", "outcome_cited", "page_cited",
+                              "shown_said", "rows_kept"})
+# mvp28 prep repair (DESIGN 30.9): "timing_out", the envelope's took_ms is no cell (_Pool). OFF by default: on the saved
+# forms it changes verdicts against last round's, so the founders decide before it runs. Named alone; "r28" leaves it out
+VALUES_RULES_PREP = frozenset({"timing_out"})
+VALUES_RULES_SWITCHED = VALUES_RULES_R28 | VALUES_RULES_PREP   # every rule MVP_BRAIN_VALUES_RULES can switch on
+VALUES_RULES_ALL = VALUES_RULES | VALUES_RULES_SWITCHED
+VALUES_RULES_ENV = "MVP_BRAIN_VALUES_RULES"
+
+
+def values_rules_env(value=None):
+    """The rules of VALUES_RULES_SWITCHED that `value` (else MVP_BRAIN_VALUES_RULES) switches on: a comma list of rule
+    names, "r28" for all of VALUES_RULES_R28; empty or unset: none. A name that is no values rule raises ValueError."""
+    raw = os.environ.get(VALUES_RULES_ENV, "") if value is None else value
+    out = set()
+    for tok in str(raw or "").split(","):
+        tok = tok.strip().lower()
+        if not tok:
+            continue
+        if tok == "r28":
+            out |= VALUES_RULES_R28
+        elif tok in VALUES_RULES_ALL:
+            out.add(tok)
+        else:
+            raise ValueError(f"{VALUES_RULES_ENV}: {tok!r} is no values rule (a comma list of "
+                             f"{sorted(VALUES_RULES_SWITCHED)}, or 'r28')")
+    return frozenset(out & VALUES_RULES_SWITCHED)
+
+
+# the default rules of the values mode: last round's, plus what MVP_BRAIN_VALUES_RULES switches on (read once, here)
+VALUES_DEFAULT_RULES = VALUES_RULES | values_rules_env()
 
 
 def values_mode(number_words=None, rules=None):
-    """The values CheckMode, with the number-word variant ("refuse" or "flag"; None: VALUES_NUMBER_WORDS) and the
-    mvp27 rules (`rules`, a subset of VALUES_RULES; None: all of them; the measures build the others)."""
+    """The values CheckMode, with the number-word variant ("refuse" or "flag"; None: VALUES_NUMBER_WORDS) and the rules
+    `rules` (a subset of VALUES_RULES_ALL; None: VALUES_DEFAULT_RULES, the rules VALUES runs)."""
     nw = (number_words or VALUES_NUMBER_WORDS) == "refuse"
-    extra = VALUES_RULES if rules is None else frozenset(rules) & VALUES_RULES
+    extra = VALUES_DEFAULT_RULES if rules is None else frozenset(rules) & VALUES_RULES_ALL
     return CheckMode("values", off=CELLS.off, loose=CELLS_LOOSE, cells=True,
                      rules=frozenset({"values"} | ({"nw_refuse"} if nw else set())) | extra)
 

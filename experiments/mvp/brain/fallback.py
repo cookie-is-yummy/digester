@@ -22,6 +22,8 @@ from . import results as R
 from . import verify as V
 
 PLAIN = "I couldn't check an answer to that in time. Ask me again?"
+# mvp28 prep repair: the plain line of a turn that ended out of rounds with every call refused (event no_result)
+NO_RESULT = "I couldn't get a result for that this time. Ask me again, maybe in other words?"
 CODE_FORM_KINDS = ("top", "channels", "count", "changed", "compare_windows", "compare_topics", "first", "last", "day",
                    "timeline")
 LIST_OF = {"channels": "channels", "top": "themes", "count": None, "changed": "themes", "compare_windows": "themes",
@@ -31,7 +33,10 @@ LIST_OF = {"channels": "channels", "top": "themes", "count": None, "changed": "t
 def _first_result(ledger, cited=None):
     if cited and ledger.get(cited):
         return ledger.get(cited)
-    return next(iter(ledger.by_rid.values()), None)
+    # mvp28 prep repair: never a lookup that found nothing ("Here is what I found in your library." over no match)
+    # while a later result holds an answer
+    return next((r for r in ledger.by_rid.values() if R.answers(r.env)), None) or \
+        next(iter(ledger.by_rid.values()), None)
 
 
 def _cited_rid(verdict):
@@ -325,7 +330,8 @@ def templates(res, prefer=None):
     elif tool == "learned":
         out.append("Here is what I found in what you saved.")
     elif tool == "find":
-        out.append("Here is what I found in your library.")
+        if R.answers(res.env):   # (mvp28 prep repair: never over a lookup that found nothing)
+            out.append("Here is what I found in your library.")
     else:
         out.append(lead + "here are the videos." if lead else "Here are the videos.")
     return out
@@ -414,6 +420,14 @@ def _points_under(ledger, verdict, lead, turn, mode=None):
                 continue
         out.append(o.sent)
     return out
+
+
+def no_result(code=None):
+    """The code lead of a turn that ended with no result in hand (loop event no_result): the plain line NO_RESULT, with
+    `no_result` set so the answer carries the turn's limit lines (answer.build); never a template over a lookup that
+    found nothing."""
+    return {"lead": NO_RESULT, "how": "plain", "rid": (code or {}).get("rid"), "items": [], "private_line": False,
+            "points": [], "no_result": True}
 
 
 def answer(ledger, verdict, turn=None, mode=None):

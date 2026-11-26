@@ -991,8 +991,11 @@ def reaudit(a, h=None):
         results = {c["rid"]: c["result"] for c in rec["calls"] if c.get("rid")}
         # mvp25 toolgaps 5: the turn's own unlock as the record has it (a carried one too); older records: the message's
         unlock = rec["unlock"] if "unlock" in rec else h.turn(rec["message"]).unlock
-        bad, checked = audit_sent(h, results, unlock, rec, rec["message"])
+        bad, checked, audit_err = guarded_audit(h, results, unlock, rec, rec["message"])
         rec["audit"] = {"checked": checked, "findings": bad}
+        rec.pop("audit_error", None)
+        if audit_err:
+            rec["audit_error"] = audit_err
         rec["g2"] = _g2_again(h, rec, chains, path=set_file)
         with open(f, "w", encoding="utf-8") as fh:
             json.dump(rec, fh, indent=1, default=str, ensure_ascii=False)
@@ -1016,7 +1019,106 @@ def reaudit(a, h=None):
         json.dump(s, fh, indent=1, default=str, ensure_ascii=False)
     print(json.dumps({k: s["auditor_hints"][k] for k in ("messages_with_hints", "hints")}, indent=1, default=str))
     print(json.dumps({k: v for k, v in s["G2_understood"].items() if not isinstance(v, (dict, list))}, indent=1))
+    return _audit_exit(s)
+
+
+def guarded_audit(h, results, unlock, rec, question):
+    """mvp28: audit_sent, and an exception in the auditor never loses the turn's record: (findings, checked, None), or
+    ([], 0, "<error>") when the auditor raised. The run's summary lists every such message and its exit code is 1."""
+    try:
+        bad, checked = audit_sent(h, results, unlock, rec, question)
+        return bad, checked, None
+    except Exception as e:  # noqa: BLE001 - the auditor is a check of the eval, not of the bot
+        return [], 0, f"{type(e).__name__}: {str(e)[:240]}"
+
+
+def _audit_exit(summary):
+    errs = (summary.get("tool_args") or {}).get("audit_errors") or []
+    if errs:
+        print(f"the auditor raised on {len(errs)} message(s): {', '.join(errs)} (records kept, audit_error set)",
+              file=sys.stderr)
+        return 1
     return 0
+
+
+# mvp28: the kinds of a tool error, read from the error result as the record holds it (the tools add no field to their
+# older errors; the schema refusal carries `outside_schema`)
+ERROR_KINDS = (
+    ("outside_schema", lambda e: "outside_schema" in e),
+    ("arguments", lambda e: bool(re.match(r"^[\w.\[\]]+: (?:Input should|Field required|Extra inputs|List should|"
+                                          r"Value error|String should|Input must)", e.get("error") or "")) or
+     "argument after ** must be" in (e.get("error") or "") or (e.get("error") or "").startswith(
+         ("Expecting ", "Unterminated ", "Extra data"))),
+    ("after_export_end", lambda e: "starts after where the export ends" in (e.get("error") or "")),
+    ("not_in_export", lambda e: (e.get("error") or "").startswith("Their export holds no")),
+    ("window", lambda e: any(x in (e.get("error") or "") for x in (
+        "window words not understood", "two windows in", "use their own words for the window", "names part of a period",
+        "has not begun yet", "with a window in this turn", "no earlier answer's window", "same_last_year needs",
+        "nothing to set against last year")) or "window sets exactly one" in (e.get("error") or "")),
+    ("call_limit", lambda e: (e.get("error") or "") == "limit for this question reached"),
+    ("per_turn_limit", lambda e: bool(re.match(r"^at most \d+ ", e.get("error") or ""))),
+    ("not_available", lambda e: "not available in this build" in (e.get("error") or "") or
+     (e.get("error") or "").startswith("no tool named")),
+    ("one_subject", lambda e: (e.get("error") or "").startswith("first_last counts one subject")),
+    ("tool_failed", lambda e: (e.get("error") or "").startswith("the tool failed")),
+)
+ARG_KINDS = ("outside_schema", "arguments")
+
+
+def strict_reads(settings):
+    """Whether strict tool grammar was on for the read tools: `strict` set and none of them sent loose (a run with
+    --loose naming the read tools sent them without strict although `strict` reads true); None when unknown."""
+    if not isinstance(settings, dict) or "strict" not in settings:
+        return None
+    return bool(settings["strict"]) and not (set(settings.get("strict_off_for") or []) - {"give_answer"})
+
+
+def tool_error_kind(env):
+    if not isinstance(env, dict) or not env.get("is_error"):
+        return None
+    for kind, test in ERROR_KINDS:
+        if test(env):
+            return kind
+    return "other"
+
+
+def tool_args_of(rec):
+    """mvp28: per record, the tool errors by kind, how many were argument errors (outside the schema sent, or refused by
+    the argument models), the give_answer forms that did not validate, and the keys dropped from a form."""
+    kinds = _counts(tool_error_kind(c.get("result")) for c in rec.get("calls") or []
+                    if (c.get("result") or {}).get("is_error"))
+    return {"tool_errors": kinds, "arg_errors": sum(v for k, v in kinds.items() if k in ARG_KINDS),
+            "form_errors": sum(1 for v in rec.get("verdicts") or [] if v and v.get("form_error")),
+            "form_keys_dropped": sum(len(x) for x in rec.get("dropped_keys") or []),
+            "time_up": sum(1 for e in rec.get("events") or [] if e == "time_up"),
+            # the merge (mvp28): a call refused outside the schema is an error, so a turn whose calls were all refused
+            # holds no result: past the soft deadline its next round runs (first_result_late), or out of rounds it
+            # ends with code's lead (no_result), instead of time_up
+            "first_result_late": sum(1 for e in rec.get("events") or [] if e == "first_result_late"),
+            "no_result": sum(1 for e in rec.get("events") or [] if e == "no_result")}
+
+
+def tool_args_summary(done, settings=None):
+    """The run's tool_args: totals over the records (recounted from each record, so older runs read the same way), and
+    whether strict tool grammar was on (the provider's setting; per record when the record has it)."""
+    per = {r["key"]: tool_args_of(r) for r in done}
+    stricts = sorted({str(r.get("strict")) for r in done if "strict" in r})
+    kinds = {}
+    for v in per.values():
+        for k, n in v["tool_errors"].items():
+            kinds[k] = kinds.get(k, 0) + n
+    known = strict_reads(settings)
+    return {"strict": known if known is not None else (stricts[0] if len(stricts) == 1 else stricts or None),
+            "calls": sum(len(r.get("calls") or []) for r in done),
+            "tool_errors": sum(kinds.values()), "tool_errors_by_kind": kinds,
+            "arg_errors": sum(v["arg_errors"] for v in per.values()),
+            "form_errors": sum(v["form_errors"] for v in per.values()),
+            "form_keys_dropped": sum(v["form_keys_dropped"] for v in per.values()),
+            "messages_with_arg_errors": sorted(k for k, v in per.items() if v["arg_errors"]),
+            "arg_error_then_time_up": sorted(k for k, v in per.items() if v["arg_errors"] and v["time_up"]),
+            "arg_error_then_late": sorted(k for k, v in per.items() if v["arg_errors"] and (
+                v["time_up"] or v["first_result_late"] or v["no_result"])),
+            "audit_errors": sorted(r["key"] for r in done if r.get("audit_error"))}
 
 
 def dropped_of(rec):
@@ -1062,11 +1164,15 @@ def live_conversation(h, provider, p, core_conv, out_dir=None, max_usd=None, log
                    carried_unlock=carry)
         rec = BL.run_turn(provider, t, m["text"], screen, check=check)
         g2 = g2_of(readings, model_keys(rec))
-        bad, checked = audit_sent(h, t.results, t.unlock, rec, m["text"])
+        bad, checked, audit_err = guarded_audit(h, t.results, t.unlock, rec, m["text"])
         rec.update(id=p["id"], n=m["n"], key=f"{p['id']}.{m['n']}", set=set_name, half=half_of(p["id"], set_name),
                    g2=g2, hand_plan=[{"tool": c["tool"], "args": c["args"]} for c in (hand or {}).get("calls", [])],
                    reading_window_failed=rwindows, reading_errors=rerrors,
-                   audit={"checked": checked, "findings": bad}, dropped=dropped_of(rec))
+                   audit={"checked": checked, "findings": bad}, dropped=dropped_of(rec),
+                   strict=strict_reads(provider.settings() if hasattr(provider, "settings") else None),
+                   tool_args=tool_args_of(rec), **values_rules_settings(rec.get("check")))
+        if audit_err:
+            rec["audit_error"] = audit_err
         screen = BL.screen_after(rec, NOW_WORDS)
         last = BL.last_window(t, rec) or last
         carry = BL.unlock_after(t, rec)
@@ -1086,6 +1192,17 @@ def _pct(xs, q):
     k = (len(xs) - 1) * q
     lo, hi = int(k), min(int(k) + 1, len(xs) - 1)
     return round(xs[lo] + (xs[hi] - xs[lo]) * (k - lo), 2)
+
+
+def values_rules_settings(check):
+    """mvp28: the values rules a run checks with, for its settings (values mode only; {} otherwise): every values rule
+    on (`values_rules`), and of them this round's, which MVP_BRAIN_VALUES_RULES switches on (`values_rules_r28`, []
+    by default; the prep repair's "timing_out" is one of them when switched on)."""
+    from mvp.brain import verify as V
+    if check != "values":
+        return {}
+    return {"values_rules": sorted(V.VALUES.rules & V.VALUES_RULES_ALL),
+            "values_rules_r28": sorted(V.VALUES.rules & V.VALUES_RULES_SWITCHED)}
 
 
 def summarize(recs, settings=None):
@@ -1214,6 +1331,7 @@ def summarize(recs, settings=None):
                   "capped at written",
             "G5": "wall seconds of the turn (all requests, tool runs, verification, repair, back-off), at the run's "
                   "parallelism", "G6": "ledger cost of every request of the message, mean in cents"}}
+    s["tool_args"] = tool_args_summary(done, settings)
     if any(r.get("flags") for r in done):
         # mvp26 (DESIGN 26), values mode only: today's codes as flags (they refuse nothing), by code and mode
         s["flag_codes"] = _counts(f"{f['code']}@{f['mode']}" for r in done for f in r.get("flags") or [])
@@ -1300,6 +1418,13 @@ def run_live(a):
     sets = run_set(a.half, set(x for x in a.ids.split(",") if x) or None, a.limit, set_name=a.set, path=set_path)
     h.audit_lib_for(None)
     recs = []
+    # mvp28 speed: the SDK client and one connection per worker are made before the first timed turn (free
+    # count_tokens requests; nothing billed, the prompt cache untouched). Without it the first request of the first
+    # `parallel` conversations carried 1.4 to 1.7 s of start-up (import, client, first connection) in all six saved runs
+    # of mvp26/mvp27. MVP_BRAIN_WARM=0 turns it off.
+    warm_s = None
+    if os.environ.get("MVP_BRAIN_WARM", "1") == "1" and hasattr(prov, "warm"):
+        warm_s = prov.warm(BL.system_text(), BL.tool_list(), connections=max(1, min(4, a.parallel)))
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=max(1, min(4, a.parallel))) as ex:
         futs = [ex.submit(live_conversation, h, prov, p, c, a.out, a.max_usd, set_name=a.set, check=check)
@@ -1310,7 +1435,8 @@ def run_live(a):
                     deep_s=BL.DEEP_S, hard_s=BL.HARD_S, parallel=a.parallel, half=a.half, set=a.set,
                     set_file=os.path.relpath(set_path, HERE),
                     tool_result_shape="rid, tool, meta and the sheet's keys at the top (loop.present)",
-                    max_usd=a.max_usd, spent_usd=round(prov.spent, 6), requests=prov.requests, check=check)
+                    max_usd=a.max_usd, spent_usd=round(prov.spent, 6), requests=prov.requests, check=check,
+                    warm_s=warm_s, **values_rules_settings(check))
     s = summarize(recs, settings)
     rows_after = _ledger_rows(llm.ai.LEDGER)
     new = [r for r in rows_after[len(rows_before):] if r.get("purpose") == P.PURPOSE]
@@ -1320,12 +1446,15 @@ def run_live(a):
     with open(os.path.join(a.out, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(s, f, indent=1, default=str, ensure_ascii=False)
     short = {k: s[k] for k in ("messages", "check", "lead_source", "repairs", "events", "dropped_reasons", "ledger")}
+    if "values_rules_r28" in settings:
+        short["values_rules_r28"] = settings["values_rules_r28"]
     for k in ("G2_understood", "G3_own_lead", "G4_sentences", "G5_seconds", "G6_cost"):
         short[k] = {x: y for x, y in s[k].items() if not isinstance(y, (dict, list))}
     short["auditor_hints"] = {k: s["auditor_hints"][k] for k in ("messages_with_hints", "hints")}
     short["G1_false_sent"] = s["G1_false_sent"]["how"]
+    short["tool_args"] = {k: v for k, v in s["tool_args"].items() if k != "messages_with_arg_errors"}
     print(json.dumps(short, indent=1, default=str))
-    return 0
+    return _audit_exit(s)
 
 
 def _ledger_rows(path):

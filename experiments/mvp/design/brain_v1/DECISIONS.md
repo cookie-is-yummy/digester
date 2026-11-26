@@ -555,3 +555,30 @@ the meaning prompt stays as written there):
   ask for) do not rise: the readers mark this, and every tool call whose arguments code refused is counted.
 - The gate on half B is then run once on the chosen cell. If no cell meets the speed bars on half A, the gate is
   not run and the founder is asked whether the bars or the build should move.
+
+### The prep round, and the settings of the crossed run (27 Nov 2026)
+
+- The build of the run is the merged branch of this round (DESIGN section 30, parts 30.8 and 30.9). Its default
+  values check equals last round's on every saved form (1,786 verdicts, 0 differ). This round's 16 rules are in the
+  code, off, behind MVP_BRAIN_VALUES_RULES.
+- Limit-only answers: the cause was the loop, not the prompt. All three turns had no read result in hand when code
+  told the model "time is up, answer with the results you already have". Across 595 saved turns those were the only
+  turns with no result. Now a turn with no answer in hand runs its read past the soft deadline (never past the hard
+  stop), and a turn that ends with none sends code's plain line with its limit lines. On the 52-message sample: 0
+  limit-only answers in four runs after the fix (in sample, and a rare fault, so the fake-provider tests carry it).
+  The late round costs time on those turns: 13.7 s and 15.1 s were seen.
+- Tool arguments: code now holds every call of the model to the schema that is sent, strict on or off. Before, 72
+  of 358 bad-argument cases were silently defaulted or coerced. In 1,188 saved calls the model left the schema 3
+  times, all with strict off, all a missing `order`; each got the scope that was asked. A refusal says only the
+  schema's own words back.
+- One fault older than this round was found by the independent check: the values check read the tool's clock
+  (took_ms) as a value found in the turn, so a figure could pass when it happened to equal the milliseconds a tool
+  took. It flips 22 saved sentences when the clock is varied. A timing field is not data. The rule `timing_out`
+  leaves it out. It is on in all eight runs of the crossed run (MVP_BRAIN_VALUES_RULES=timing_out) and becomes
+  the default if nothing in the run speaks against it. Its known cost: the true class "the four areas" (a count
+  that stands in no cell) is refused every time, where before it passed only when the clock happened to match.
+- The pinned friends note ("Posts from friends are not counted") contradicts the hidden-count cells (counted, not
+  shown). It is left as it is for this run and listed for the next change of the tools.
+- Limit sentences on the sample after the last wording: unwanted in 4 of 52 answers under each prompt (12 under the
+  prompt before); the difference between the two new prompts is inside the noise.
+- Claude spend to here: about $5.05 of $25.

@@ -232,6 +232,28 @@ def _cards(ledger, refs, links=None):
     return out
 
 
+def _card_list(ledger, picks, form, ask, cited, links=None):
+    """The item cards that go out, after code's own filtering (mvp28: one function for build and for the values check
+    of a count of shown items): `picks`, the kept item refs of the answer (the model's, or a code lead's); under an
+    ask-back (`ask`) the items it is between, else the picks, else `cited` (the item rows its kept sentences cite). A
+    ref whose row has no title or is no item row gives no card (card()); a ref is shown once; CARDS_MAX at most."""
+    refs = list(picks)
+    if ask:
+        # mvp26 toolfix2 2 (the attack: an ask-back rendered every item of the cited result, or of the turn's first
+        # result when the lead cited nothing, and never read `between`: 6 of 8 builds showed another result's cards):
+        # the items it is between, else the answer's picks, else the items its kept sentences cite; else none
+        refs = _between(form, ledger) or refs or list(cited)
+    return _cards(ledger, refs, links)
+
+
+def card_refs(ledger, verdict, form):
+    """mvp28: the refs of the cards build() sends with the model's `verdict` (its kept item picks; an ask-back's own
+    refs, else the items its kept sentences cite). -> [ref]."""
+    picks = [it.get("ref") for it in (verdict.items or []) if isinstance(it, dict) and it.get("kept")]
+    ask = bool((form or {}).get("ask_back"))
+    return [c["ref"] for c in _card_list(ledger, picks, form, ask, _cited_items(verdict) if ask else [])]
+
+
 def limit_lines(ledger, rid, code=None, limits=()):
     """Code's own limit lines: the watch-time line of a cited result (the prompt leaves it to code), and under a code
     lead what the turn's refused calls found the export does not hold (`limits`, tools.Turn.limits)."""
@@ -274,12 +296,8 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
     else:
         refs = list((code or {}).get("items") or []) if not plain else []
     ask = bool((form or {}).get("ask_back")) and (verdict is not None or not plain)
-    if ask:
-        # mvp26 toolfix2 2 (the attack: an ask-back rendered every item of the cited result, or of the turn's first
-        # result when the lead cited nothing, and never read `between`: 6 of 8 builds showed another result's cards):
-        # the items it is between, else the answer's picks, else the items its kept sentences cite; else none
-        refs = _between(form, ledger) or refs or (_cited_items(verdict) if verdict is not None else [])
-    cards = _cards(ledger, refs, links)
+    cards = _card_list(ledger, refs, form, ask, (_cited_items(verdict) if verdict is not None else []) if ask else [],
+                       links)
     rid = _cited_rid(verdict, code, ledger, cards)
     res = ledger.get(rid) if rid else None
     filt = filtered(res)
@@ -287,7 +305,8 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
     # read as theirs, so it goes out only when every card is of that result)
     own = all(str(c["ref"]).split(".", 1)[0] == rid for c in cards)
     sline = scope_line(res) if filt and not plain and own else None
-    lim = limit_lines(ledger, rid, code if verdict is None else None, limits) if not plain else []
+    lim = limit_lines(ledger, rid, code if verdict is None else None, limits) if not plain else \
+        list(dict.fromkeys(x for x in limits if isinstance(x, str))) if (code or {}).get("no_result") else []
     lines = [lead] if lead else []
     lines += ["- " + p for p in points]
     lines += lim
