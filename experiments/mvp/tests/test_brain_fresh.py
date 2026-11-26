@@ -20,8 +20,10 @@ from mvp.tests.test_mvp import env  # noqa: F401  (a fixture)
 
 FRESH = os.path.join(os.path.dirname(HERE), "evalset", "brain_fresh.jsonl")
 # the sha256 of half B's lines, in file order, each with its newline. Half B is locked: a change here means half B was
-# edited, which needs a new fresh set, not a new pin (evalset/README_brain_fresh.md).
-HALF_B_SHA256 = "343275626e4f4a9f0e6eb1aa320fb63d46e16aafceef04ab0fca867bf13a727a"
+# edited, which needs a new fresh set, not a new pin (evalset/README_brain_fresh.md). Pinned once more by the
+# independent check of the set (the writer's pin was 343275626e4f...; the check fixed facts, readings and wording and
+# added conversations before the lock took hold); no pin after this one.
+HALF_B_SHA256 = "023c3af0cd304e49509f06da36ac0b68260569de5038ca483bac2c4329f2063a"
 # half B ids whose refused call is no longer refused (a tool learned to read it, e.g. a part of a period). Half B
 # cannot be edited, so a lapse is listed here by id; half A's refusals are kept true by editing half A.
 LAPSED_B = set()
@@ -81,6 +83,13 @@ def test_every_tag_of_the_brief_is_covered_in_both_halves():
         tags = {t for c, m in plan_messages(cs) if c["half"] == half for t in m["tags"]}
         assert TAGS_NEEDED <= tags, (half, sorted(TAGS_NEEDED - tags))
     assert TAGS_NEEDED <= {t for _c, m in plan_messages(cs) for t in m["tags"]}
+
+
+def test_no_class_of_the_brief_is_thin():
+    # the independent check: every class of the brief holds at least 4 messages over both halves
+    from collections import Counter
+    n = Counter(t for _c, m in plan_messages() for t in m["tags"])
+    assert all(n[t] >= 4 for t in TAGS_NEEDED), sorted((t, n[t]) for t in TAGS_NEEDED if n[t] < 4)
 
 
 def test_the_halves_are_as_the_brief_says():

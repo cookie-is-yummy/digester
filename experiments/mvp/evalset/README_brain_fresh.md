@@ -2,8 +2,8 @@
 
 Made-up messages over the made-up library of `tests/brain_library.py` (clock Sunday 22 November 2026, New York;
 YouTube ends 30 October 2026, Instagram 15 October 2026). Written before any new prompt or design, so the next gate
-has messages nobody has tuned on. 87 conversations, 123 messages, 122 of them plan tier. 35 of those are follow-ups
-or corrections.
+has messages nobody has tuned on. 95 conversations (A 46, B 49), 132 messages, 131 of them plan tier. 37 of those
+are follow-ups or corrections.
 
 - Source: `eval/brain_fresh_a.py` (half A), `eval/brain_fresh_b.py` (half B), `eval/brain_fresh_dsl.py`.
 - Build and check: `python3 -m mvp.eval.build_brain_fresh --write --report OUT.json` (from `experiments/`). It
@@ -16,7 +16,11 @@ or corrections.
 
 Half A holds the ids where `int(sha1(id).hexdigest(), 16) % 2 == 0`. Half B holds the rest.
 
-**Half B is locked.** It was written and checked once. After that, no builder, tuner or prompt writer reads it.
+**Half B is locked.** It was written once and checked once, by an independent checker (its own recount from
+`rows()`, its own reading of every message). The check rewrote 12 messages that repeated an ask of
+`brain_plans.jsonl` (same ask, same slots), fixed facts, readings or wording in 9 more, and added 8 conversations
+(9 messages). Those lines were written after tool results were seen; each is marked `freshcheck` in the half files.
+The pin in the test is the checker's. After that, no builder, tuner or prompt writer reads half B.
 That means half B's lines of `brain_fresh.jsonl`, `eval/brain_fresh_b.py`, and any report or run output that quotes
 half B messages. Only a run and its independent readers (judges, recounts) may open it. Anyone who tunes a prompt or
 a design uses half A only.
