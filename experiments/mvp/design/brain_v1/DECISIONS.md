@@ -196,3 +196,71 @@ sentence in 17 was wrongly based, never a wrong number), or pay more seconds for
 only after sending or only in testing.
 
 The evidence of both rounds is in `eval/runs/brain_after_slice_2026-11-26.tgz` (made-up library only).
+
+## The first live run on fresh messages, numbers and names checked only (26 Nov 2026)
+
+One live run on half A of the fresh set: 65 messages, the present prompt (v3), the pinned check of numbers, names,
+dates and calculations ("cells mode"), and the fixed tools. Every sentence was recounted by hand from the library
+rows by a reader who had not seen the run. Only the made-up library was used. Claude spend for the round: $1.29
+($0.11 for the run, $1.19 for the reader's speed tests).
+
+| What | Result |
+|---|---|
+| Wrong number, name, date or calculation | 0 written in 171 sentences; 0 sent |
+| Wrongly based sentences sent | 13 of 150 (6 on every reading; 22 on the strictest) |
+| Answers with at least one | 10 of 65 (6 on every reading; 17 on the strictest) |
+| Where the 13 came from | 8 the model's own framing; 4 a tool's wrong or thin picture; 1 a dropped neighbour sentence |
+| The model's own lead kept | 61 of 65 (51 first pass, 10 after one reword); 4 fell to a code lead |
+| True sentences the check refused | 27 of 155 first forms (17%); 38 over all forms |
+| Seconds | 7.97 median, 10.56 at the slow end; 3 turns ran out of time |
+| Cost per answer | 0.15 cents |
+| Answers as read | 9 good, 31 acceptable, 25 poor (22 poor before any truth count) |
+| Answers the question asked | 43 of 65 |
+| Says what the numbers mean | 16 of 65 |
+| Worthwhile offer | 39 of 65 |
+| Read calls that returned an error | 11 of 95, and 5 more refused at time up |
+
+The two sent sentences closest to a plain wrong fact:
+- "Pixel Pencil and Clip Factory were the channels that started in it [October]." One of them started in August.
+  The tool said "new this year"; the model said "started in October".
+- "The closest match is ..., opened on 5 October 2026." It was saved that day and never opened. The search result
+  gave a date and no event kind.
+
+What the figures say:
+- The model's numbers held again. Over three looks it wrote about 440 sentences with a claim and no wrong number,
+  name, date or calculation.
+- The check is no longer the main problem. Most poor answers are poor for other reasons: a tool gap (7), thin or
+  beside-the-point wording (8), a code lead (4, all poor), a true sentence refused (4), planning (2).
+- The pinned check is not closed. An independent attacker wrote 131 new false sentences; 24 got out, 19 of them
+  only in this mode. Most are a right number under the wrong year or period. The claim "every wrong number is
+  stopped" is withdrawn until these are closed. The two loosenings that let a wrong channel name out are removed.
+- Checking only numbers and names roughly halves the true sentences lost (17%, against 34 to 44% before).
+
+The second-model reader, made faster:
+
+| Variant | Seconds per request | Planted faults caught | The model's own faults caught | True sentences flagged |
+|---|---|---|---|---|
+| As first measured | 4.0 | 75 of 86 | 5 of 8 | 31 of 303 |
+| Flags only, with the two prompt fixes | 3.4 | 73 of 86 | 4 of 8 | 20 of 303 |
+| Flags only, thinking off | 1.4 | 80 of 86 | 5 of 8 | 130 of 303 |
+
+- Three quarters of its time is thinking, and thinking is what keeps it from flagging true sentences.
+- Inline it puts answers at about 11 s median and 15 s at the slow end, over the 8 s bar.
+- Of its flags on sentences that would be sent, about 1 in 4 is right.
+- The tool fix removed its main false alarm (friends' posts counted library-wide).
+
+Taken as the working decision, unless the founder objects: answers go out with numbers, names, dates and
+calculations checked by code and the framing unchecked. The reader is not put in the answer path. It stays as a
+test tool that reads saved answers after the fact.
+
+Next: close the leaks in the check, fix the tool gaps and the code leads, then run half A again and recount.
+Prompt changes come after that, one per run. Half B stays locked for the final gate.
+
+Open, parked:
+- "limits" and "repeat" were switched off in this mode by the wrong test. They enforce the founder's own rules
+  (never keep saying what the bot cannot do; be brief). They are being decided by a replay on this run.
+- A no-match result now carries a count of items holding the words. This reverses SPEC 2.5.
+- The understood score reads 37 to 65% against a 0.90 bar while a hand reading finds 43 of 65 answers on the
+  question. The scorer and the bar need another look before the final gate.
+- Scope lines and private lines are worded by code and are not in the sentence counts.
+- One reader marked the answers. There was no second hand.
