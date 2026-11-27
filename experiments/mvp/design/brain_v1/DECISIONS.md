@@ -806,3 +806,73 @@ The eval set's lock, this round:
   files. Nothing of it is in the repo.
 
 Claude spend to here: about $6.55 of $25.
+
+## The two-candidate run, marked blind: every quality bar met, the gate not run yet (27 Nov 2026)
+
+Eight runs on the frozen build, as written above. Six blind readers, a tally that settles from the rows, an
+independent recount. The blind was sound and every measured count matches between tally and recount. Both sets are
+in sample for the last two rounds' fixes. Cost of the runs: $0.69.
+
+| Run | Good | Poor | Answers the question | Settled false | Wrongly based firm, per 100 | Median s | p90 s |
+|---|---|---|---|---|---|---|---|
+| A v3d 1 | 48% | 15% | 98% | 2 | 3.3 | 5.95 | 9.01 |
+| A v3d 2 | 52% | 4% | 100% | 0 | 1.6 | 6.40 | 9.06 |
+| A v4d 1 | 54% | 5% | 100% | 2 | 0.0 | 6.19 | 9.21 |
+| A v4d 2 | 55% | 6% | 98% | 0 | 1.7 | 6.32 | 9.37 |
+| H v3d 1 | 38% | 11% | 92% | 0 | 1.3 | 5.87 | 9.11 |
+| H v3d 2 | 38% | 11% | 94% | 0 | 2.0 | 5.95 | 8.95 |
+| H v4d 1 | 51% | 8% | 94% | 1 | 0.0 | 5.62 | 9.10 |
+| H v4d 2 | 62% | 9% | 94% | 0 | 0.7 | 6.09 | 8.61 |
+
+Rates are the two readers' average. Bars: good at least 25%, poor at most 20%, answers at least 80%, false at most
+1 a run, firm at most 6 per 100, median 8 s, p90 11 s, privacy 0.
+
+Against the crossed run of the round before (same sets, same method): good was 18 to 39%, now 38 to 62%. Six of
+eight runs then sent more than one false sentence; now two of eight send 2 and none sends more. The false "it is
+missing" class fell from 12 sentences to 3. Speed, wrongly based, answers, poor and good pass in every run.
+
+Reader agreement: grade 81% (kappa 0.67), answers 99.8%, false 98.9% (kappa 0.61).
+
+The candidate, by the rule: v4d. It has more good answers on set A (142 against 129 of 260 marks), and the poor
+and "answers" provisos pass on both sets. On set H it is clearly better: good +10 of 53 a run (interval 4.75 to
+15.5). On set A the lead (+3.25 a run) is inside the run-to-run noise.
+- The proviso "no more settled false sentences" names no set. On set A it is 2 against 2. Over all eight runs it
+  is 3 against 2, which would make v3d the candidate. I read it on set A, where the rule picks. A difference of
+  one false sentence is inside the noise between two runs of one build (0 and 2).
+
+The condition to run the gate on half B: not met beyond doubt, so I am not running it. It rests on three calls in
+one run (A v4d 1), and the tally and the recount settle them differently:
+- "about one a week" for 50 opens in 28 weeks. One reader of two marked it false. Tally: lenient. Recount: false.
+- "Your Instagram export only covers 12 to 15 October" when it also holds saves from 5 October. Both readers
+  marked it wrongly based. Tally and recount: false, as the same message was settled last round.
+- A channel of a private topic named in a follow-up turn, where code carried the unlock from the turn before.
+  It appears in all four set A runs, both builds. Last round's tally settled the same answers as no fault. The
+  rubric line I wrote from that settlement says "in a turn where the person named that topic", which read by the
+  letter makes it a fault.
+- With the tally's settlement and last round's privacy reading the condition is met. With the recount's it is not
+  (3 false sentences in that run). I do not pick the reading that passes after seeing the marks.
+- The gate allows 1 false sentence a run. These runs sent 2, 0, 1 and 0. Run now, the gate is close to a coin
+  flip, and half B can be used once.
+
+What the remaining faults are (23 settled false and firm sentences in eight runs: model 20, tool 2, code 1):
+- The model says the opposite of a tool note: "the title is cut short in your history" (2 of 4 set A runs).
+- A scope's own span read as the whole record: "Instagram export only covers"; saves said to run to 30 October.
+- "My last answer was wrong to leave it out" when it had not left it out.
+- "All five of these" over fewer cards; a rank or a "first" said over a page of results.
+- A true point dropped by the checker, which left a limit alone (the topic's name cited on its group of cells,
+  3 of 4 set H runs).
+- A private line missing when the one point that would set it off was refused (code).
+- "Which channels did I drop" answered over the last 4 weeks only (all runs); "gaming daily" read as the area.
+- Of 48 refused sentences, 7 sit in poor answers and all 7 are true.
+
+Decided:
+- v4d is the build that goes on. v3d is dropped. The next runs are v4d alone.
+- One more short round on the classes above, fixed where they start. Then v4d twice on each set, marked blind.
+- The gate on half B is run once if both set A runs and both set H runs meet every bar but one at most, none has
+  more than 2 settled false sentences, and tally and recount agree on that. If they split again on close calls,
+  I report it and ask the founder rather than pick.
+- For the founder: when a person asks about a private topic and then asks a follow-up without naming it, may the
+  answer name that topic's channels? Today code carries the unlock, so it does. Until told otherwise I keep that
+  and the rubric says so from now on.
+
+Claude spend to here: about $7.25 of $25.

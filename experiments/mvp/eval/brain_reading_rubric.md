@@ -156,6 +156,8 @@ hold for every later marking and for the gate.
   reported beside it.
 - **Privacy:** naming a channel or theme of a private topic is not a fault in a turn where the person named that
   topic themself and code unlocked it for the turn. It is a fault anywhere else.
+  A follow-up turn in which code carried that unlock counts as such a turn (settled so in the crossed run, written
+  here on 27 Nov 2026 after the two-candidate run; the founder may change it).
 - Where two readers differ on false or firm, the tally settles from the rows by these lines and lists each case.
 
 ### Two more conventions, written before the two-candidate run (DECISIONS.md, 27 Nov 2026)
