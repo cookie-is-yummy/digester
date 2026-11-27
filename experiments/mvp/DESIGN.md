@@ -9453,8 +9453,10 @@ All of it is in sample: the class was read on set A's records. No marking, and n
   Every reword on this code was for a true span of the rows written with no marker, as the window's words now
   hold it. All 17 came back right. In 2 more turns the same sentence was a point and was dropped, with its count.
   The cost is time: the median of those two turns went from 3.4 to 6.1 seconds and from 5.9 to 7.9.
-- **The follow-up about one platform.** "That is the whole record" was said in 2 of 16 answers on each build. It is
-  the model's judgement and was not a target.
+- **The follow-up about one platform**, all 32 answers read by hand. The opens said to be all the platform's
+  record ("that is the whole record", "all the Instagram history there is"): 2 of 16 before, 3 of 16 now. With the
+  looser forms (the export said to run only over the opens' days, or the history to start on the first open): 4 or
+  5 before, 4 now. Not moved. It is the model's judgement and was not a target.
 - **One full pass of each set on this code**, against the two passes of each on the build before (mvp33).
 
   | | Set A before | Set A now | Set H before | Set H now |
@@ -9465,13 +9467,19 @@ All of it is in sample: the class was read on set A's records. No marking, and n
   | Turns reworded | 1, 2 | 3 | 4, 1 | 2 |
   | Turns with a rows' day refused | 0, 0 | 1 | 0, 0 | 0 |
 
-  Turns whose results held the new words were 0.5 s slower on set A; all the others were 0.3 s slower too, so most
-  of the difference is the hour of the run. Both code leads are other classes: a title that ends in a number right
-  before its row marker, and a path that is no cell, each written twice.
+  Set A's one pass was about 0.4 s slower at the median and 0.6 to 0.8 s at the slow end, inside the bars. The
+  cause is not separated: 59 of 65 turns hold the new cells and their note, so there is no untouched group to set
+  it against. Set H did not move. Both code leads are other classes: a title that ends in a number right before
+  its row marker, and a path that is no cell, each written twice.
 - **Why the check was not loosened** to take the unmarked span: it would let the right pair of days be said of the
   wrong scope, and a point gets no reword, so the refusal there is the only net.
 - **Offline, on the merged code:** saved forms of 44 folders, values 0 released and 0 refused (2,017 forms, 1,969
   answers); full and cells byte for byte; planted byte for byte in three modes; the skeptic's 91 sentences: 0 true
   refused, 0 unmarked false released, the marked false forms as 33.5 lists; suite 6,468 passed, 2 skipped, 0 failed.
+- **The scope line, changed after these runs.** The line a person sees read "all your history (5 to 10 October
+  2026) · Instagram only", which can be taken as the days the history itself runs: this round's own class, in
+  code's words. It now names the days as the rows': "all your history (Instagram saves: 5 to 10 October 2026)". It
+  is shorter than the line before the round. Two tests re-pinned. The repeats above ran before this change; it
+  touches no sentence of the model's and no check.
 - **For step 2.** The full and cells checks refuse a citation of the new cells, and full is the default. The wired
   chat must run the values check, or the tools must keep the cells and their note out in those modes.

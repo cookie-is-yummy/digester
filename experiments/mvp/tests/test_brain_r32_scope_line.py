@@ -60,7 +60,7 @@ def test_a_saves_scope_line_names_its_first_save(brain):
     # mvp34 (DESIGN 33): the saves do not span the window, so the line says the days of the saves counted
     last_save = max(local(at) for x in visible_rows() for k, at in x["events"] if k in ("save", "playlist",
                                                                                          "collection"))
-    assert _line(r) == f"Counted: totals · what you saved · all your history ({Hm.span_words(first_save, last_save)})"
+    assert _line(r) == f"Counted: totals · what you saved · all your history (saves: {Hm.span_words(first_save, last_save)})"
 
 
 def test_every_other_window_keeps_its_line():

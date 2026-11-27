@@ -181,7 +181,7 @@ def test_the_scope_line_says_the_rows_days_and_nothing_beside_a_filter(brain):
     first, last = _days(SAVE_KINDS)                                                                     # recount
     r, t = _saves(brain)
     line = A.scope_line(V.Ledger(t.results).get(r["rid"]))
-    assert line.endswith(f"all your history ({Hm.span_words(first, last)})"), line
+    assert line.endswith(f"all your history (saves: {Hm.span_words(first, last)})"), line   # named as the rows' days
     assert "30 October" not in line and len(line) <= len("Counted: totals · what you saved · all your history "
                                                          "(from 3 October 2026, your first save)")
     r, t = _saves(brain, S(how="saved", only=["crumb.lab"]))

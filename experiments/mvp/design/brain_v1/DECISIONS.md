@@ -1053,10 +1053,13 @@ What my own repeats show (16 runs of three conversations on each build; in sampl
 - The false range was said in 14 of 32 first answers before and 0 of 32 after. The true range is said in 22.
 - The cost: the model often writes the true span with no marker, the check refuses it, and one reword puts it
   right. That happened in 17 of those 32 turns and adds about 2 seconds to them. No answer fell back to code.
-- Over one full pass of each set the cost is small: 1 such turn in 118. Medians 6.6 and 5.9 seconds, slow ends
-  9.9 and 8.4. Both are inside the bars. No marking was done; this was a regression check, not a gate attempt.
-- "That is the whole record", said of one platform's opens, is unchanged: 2 of 16 on each build. It is the
-  model's judgement over a right result and was left alone.
+- Over one full pass of each set: 1 such turn in 118. Medians 6.6 and 5.9 seconds, slow ends 9.9 and 8.4, inside
+  the bars. Set A was about 0.4 s slower than its two passes before; whether the fix or the hour did that is not
+  separated. No marking was done; this was a regression check, not a gate attempt.
+- "That is the whole record", said of one platform's opens, is not moved: 2 of 16 before, 3 of 16 after, read by
+  hand. It is the model's judgement over a right result and was left alone.
+- The line a person sees ("Counted: ...") now names the days as the rows': "all your history (saves: 3 to 10
+  October 2026)". Bare, the days could be read as the days the history runs. Changed after the repeats.
 
 Decided here:
 - Merge the fix. A false sentence in about half of such answers is worse than a reword in about half of them.
