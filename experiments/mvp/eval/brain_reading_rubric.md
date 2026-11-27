@@ -187,3 +187,12 @@ on they are read as below. Each line takes the stricter reading.
   marked false or wrongly based, firm. It then compares.
 - **A carried unlock, both ways.** Until the founder decides, the tally reports privacy faults twice: with a
   follow-up turn under a carried unlock counted as no fault (the line above), and with it counted as a fault.
+
+### A fourth split call, written after the four-run marks (DECISIONS.md, 27 Nov 2026)
+
+The tally and the recount of the four runs settled one kind of sentence differently. From the next run on:
+
+- **A named row given a rank it does not hold.** To say a named row is the first, the last, the newest, the
+  longest or the most, when the rows give that rank to another row, is false ("the first was lesson 77" when
+  lesson 76 came four days before; a 10-minute video named among the longest when others run 25 minutes).
+  A rank over a tie, and a rank said of the wrong list, stay wrongly based.

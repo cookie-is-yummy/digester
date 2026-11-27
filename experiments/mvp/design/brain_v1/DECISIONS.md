@@ -955,3 +955,87 @@ Frozen for the runs:
 - Watch in the runs: answers that fall to code's own lead, rewords, malformed forms, and the slow end (p90).
 
 Claude spend to here: about $7.70 of $25.
+
+## Four runs of the frozen build, marked blind: the gate not run (27 Nov 2026)
+
+The condition written before the runs is not met. Tally and recount agree on that, with privacy counted either
+way. Half B was not opened and the gate was not run.
+
+The four runs (commit 0fe5b78, brain_v4d, values check, default rules), rates as the two readers' average:
+
+| Bar | A run 1 | A run 2 | H run 1 | H run 2 |
+|---|---|---|---|---|
+| Settled false sentences (at most 1) | 3, fails | 2 (tally) or 4 (recount), fails | 0 | 0 |
+| Wrongly based, firm, per 100 sentences (at most 6) | 0.5 | 2.1 or 1.1 | 2.1 or 1.4 | 3.2 or 2.5 |
+| Privacy faults (0): carried unlock as no fault / as a fault | 0 / 1 | 0 / 1 | 0 / 0 | 0 / 0 |
+| Median seconds (at most 8) | 6.19 | 6.20 | 5.76 | 5.88 |
+| Slow end, p90 seconds (at most 11) | 9.10 | 9.34 | 9.03 | 7.98 |
+| Answers the question (at least 80%) | 96.9% | 95.4% | 91.5% | 94.3% |
+| Poor (at most 20%) | 8.5% | 13.1% | 11.3% | 12.3% |
+| Good (at least 25%) | 26.2% | 29.2% | 34.0% | 25.5% |
+
+- Both set H runs meet every bar. Both set A runs fail the false bar, and run 1 has more than 2.
+- Good is close to its bar in two runs (26.2% and 25.5%). One reader alone is under 25% in each.
+- Marks are complete (472 of 472). Readers agree on the grade in 80% of answers (kappa 0.63).
+- Code's own lead went out twice in 236 answers. Both are poor answers. One followed a provider timeout. The other
+  followed a true sentence the check refused, with no time left for a reword.
+- The check refused 19 sentences. Several were right catches (a wrong date, a wrong count).
+
+The false sentences:
+- Five that tally and recount both settle false, all on set A, all of one kind: a scope's span said wrongly.
+  - Three say the saves run "from 3 October 2026 to 30 October 2026". The last save is on 10 October.
+  - Two say of Instagram "your export ends on 15 October, so that is the whole of it". The export also holds saves.
+- Two more that the recount settles false and the tally settles wrongly based, firm: a real row given the wrong
+  rank ("the first was ... #77" when #76 was first; a 10-minute video named among the longest).
+  Both readers had marked them false. The rubric did not decide this case. It does now (below).
+- Two other settlements differ (firm against true, firm against lenient). No bar moves on them.
+
+Where the saves sentence starts (read from the records, no model call):
+- For "all your history" with a scope, the result's window starts on the scope's first row and ends where the
+  export ends. No cell holds the day of the last row counted.
+- So "from 3 October to 30 October" is the result's own pair of cells. The check passes it, marked or not.
+- In one of the three, the first form cited a cell the check does not take, and the reword message named the
+  window's two cells. The reword then passed with the false range.
+- This is a tool fault: the result gives a frame that reads as the rows' span and never gives the rows' span.
+- The Instagram sentence is different. The result said the first Instagram item of any kind was on 5 October. The
+  model's "the whole of it" is its own judgement over a right result.
+
+Was the build worse than last time, or the ruler stricter? Both, a little:
+- Last round's set A runs had 2 and 0 settled false. The saves sentence was already there: written in 2 of 4
+  answers to the same two messages, and sent in 1. This round it was sent in 3 of 4.
+- The rubric's line that makes it false (a scope's span said as the whole record) was written between the rounds.
+- So the last round's span fix did not remove this fault, and its new window words did not make it rarer here.
+
+A correction to the last section. It said of the span words: "a bare saves span was said in 4 of 16 answers
+before, 0 of 16 after". Those repeats covered four conversations. The two conversations where the fault shows now
+were not among them. The claim holds for what it covered and not for the class.
+
+What the runs show for the other fixes of the last round:
+- A cut title said to be cut in the history: 0 of 236 answers. Whole titles were written in 7 sentences.
+- No answer follows a title's words as an instruction.
+- The private line: no fault. The topic's row: its name passed in both runs, but both answers still say only a
+  limit, because the tool reads saved text only.
+- The scope line beside a filter: no answer exercised it.
+
+Privacy: no reader marked a fault. In both set A runs one follow-up answer names a private topic's channel under a
+carried unlock. Counted as a fault, both set A runs fail a second bar. This is the founder's question and it now
+changes a bar.
+
+Kept as they are, and said plainly:
+- Set H run 1 was kept though the run script flagged it. One turn had a provider timeout and went out as code's
+  own lead; the failed request has no ledger row, which is what the flag saw. A person would have got that answer.
+- Two readers printed a per-run summary file by accident (my fault: it lay in a folder they could list). It shows
+  figures per run, nothing per answer. Both runs of a set are one build, so it cannot favour anything. One code
+  could have been tied to its run; that sentence was settled from the record anyway.
+- The packets' own description still said "four answers" where there were two.
+
+A fourth split call, written after these marks and before any next run (also in the rubric):
+- **A named row given a rank it does not hold.** To say a named row is the first, the last, the newest, the
+  longest or the most, when the rows give that rank to another row, is false. It is the stricter reading. By it,
+  set A run 2 of this round has 4 false sentences.
+
+Next, by the rule written before the runs: report to the founder and ask. Not decided here: whether to spend one
+more bounded round on the saves span (a tool fault) and run again, or to go on to step 2 with the gate pending.
+Both sets are in sample for every fix so far. Only half B is not.
+
+Claude spend to here: about $8.05 of $25.
