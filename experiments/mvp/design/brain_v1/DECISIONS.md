@@ -725,3 +725,84 @@ What stays open, said before the run:
   Neither printed a line of the locked file. Noted with the earlier slips.
 
 Claude spend to here: about $6.45 of $25.
+
+## The last fix before the two-candidate run, and the freeze (27 Nov 2026)
+
+A live check of the pushed tip (10 conversations, each prompt once) showed three faults at the seam between the
+tools and the checker:
+1. A true length sentence was refused twice and a code lead that does not answer went out. The model writes
+   "10 minutes[cell]"; the checker reads a length only as "10[cell] minutes".
+2. The model cited a copy of the window's dates that no marker reaches (the result's meta). Refused; code lead.
+3. A marker alone in brackets went out as "()".
+
+What was built, and what was taken back:
+- The first build accepted the natural forms: the unit word before the marker, markers on meta, a marker on a group
+  of cells. Two independent checkers then wrote sentences by hand. Of 64 false ones, 7 got out before the build
+  and 40 after it. Most were plain wrong values: "Yes, there are videos from 2020", an end date said as a start,
+  a window's days said as a count of videos, one video given another video's length.
+- The repair took all three loosenings out. Its rule: nothing in this round lets out a sentence the last pushed
+  tip refused. On the same 64 sentences 4 get out now, the same 4 as before the round.
+- What is left of the round:
+  - A refused length, meta or group citation now gets a reword message that names the form that passes
+    ("10[r1.lengths.longest_minutes] minutes"; "cite the sheet's own cell, as r1.window.start"). The message
+    names cells by path, never by value.
+  - "N days[cell]" on a cell of days is checked exactly; a day cell's figure followed by a count noun is refused.
+  - A hedge of direction on a length ("under", "over") is held strictly.
+  - A bracket that held only markers is dropped from the sentence sent. Brackets the model typed stay.
+  - Two tool notes no longer name cells that their own result does not carry. A dead note constant is removed.
+  - A test walks every path the tool texts and both prompts name and fails if no marker reaches it.
+- No prompt file changed. brain_v3d and brain_v4d are byte-same as at the last pushed tip.
+
+Said plainly: only the third fault is closed in code. The first two are not closed in the checker. A true sentence
+in the natural form is still refused as often as before (29 of 34 hand-written true sentences, 16 of 19 on the
+watch-time probe). They now rest on one reword each, and a reword is only asked for when the lead fails or more
+than half the sentences fail. Otherwise the true sentence is dropped and the rest of the answer goes out.
+
+Live check of the repaired build, by me (in sample, one reader, each prompt once; 12 conversations, 28 turns):
+- No answer fell to a code lead.
+- Both reword messages fired once each, under v4d, and both rewords passed and are true ("each has the same
+  official length of 10 minutes"; "it starts on 5 January 2021").
+- Under v3d the same two messages passed on their first form. The prompts did not change, so that is run-to-run
+  variance, not the fix.
+- Two true points were dropped with no reword (a group citation, a window citation). Both answers still answer.
+- The two messages that reach the changed no-match note answer as before.
+
+Checks on the frozen build, rerun by me on clean worktrees:
+- Saved forms of 32 run folders (1,286 forms, 3,674 sentences), default values check against the last pushed tip:
+  0 sentences released, 0 refused, 1 text change (the "()" gone). With this round's rules off: 0 differ.
+- Full and cells modes, code lead and both answer builds: 9,591 verdicts and 4,084 answers over 3,197 forms.
+  One differs, in a logged note of cells mode, not in a verdict. That note depends on Python's hash seed and
+  flips the same way on the last pushed tip (4 seeds tried on each). Nothing else differs.
+- Whole suite: 6416 passed, 2 skipped, 0 failed.
+- Privacy scan of the round's diff: generic words only.
+- One test is order-dependent: test_brain_r28_checks::test_a_figure_of_another_rows_text_is_not_found failed
+  three times in partial runs across this round and passed alone and in every full run. Not fixed.
+
+Frozen for the run:
+- Code: the tree of local commit 232c21e, squash-merged here. Run from a detached worktree of 232c21e.
+- Model claude-haiku-5-5. Strict tool grammar off. Check: values, default rules, no switch set.
+- The default rules, 18: row_name, cell_found, day_typed, motive_you, timing_out, cards_found, item_count_free,
+  screen_window, screen_uncited, rows_before, page_cited, rows_kept, shown_said, length_cells, and this round's
+  length_unit, days_unit, cite_hint, paren_tidy.
+- Candidates: brain_v3d and brain_v4d. Each twice on set A (65 messages) and twice on set H (53 messages).
+  Order: A v3d, A v4d, A v4d, A v3d, H v4d, H v3d, H v3d, H v4d. One run at a time, nothing else on the machine.
+- Marking: blind packets by script (seed 31031), six readers (three groups, two each), a tally that settles from
+  the rows, an independent recount. The rule written above ("The rule for the next run") decides; nothing is
+  added to it.
+
+Open, said before the run:
+- The marker-before-unit form keeps the holes it had: another row's length said of a named video, time spent
+  said in words no check reads, a window's end said as its start through the sheet cell.
+- A meta value with no sheet twin (the start and end of the window before) can only be written with no marker.
+- "(see [m])" still goes out as "(see)".
+- A tool's window words for saves give the scope's span, not the last save's day ("your saves: 3 to 30 October"
+  when the last save is on 10 October). A sentence that repeats it is wrongly based. Not fixed before the run.
+- Both sets are in sample for every fix of the last two rounds. Only half B is not.
+
+The eval set's lock, this round:
+- The fix builder ran one `git grep` from experiments/mvp without the exclude paths. The output was filtered and
+  no line of the locked files was printed.
+- One checker used two set H message wordings (quoted in the round's brief) for offline probes in its own scratch
+  files. Nothing of it is in the repo.
+
+Claude spend to here: about $6.55 of $25.
