@@ -168,3 +168,22 @@ hold for every later marking and for the gate.
 - **A limit that is the answer.** When the question asks about something wholly outside the record ("anything from
   2020?" where the record starts in 2021), the true limit is the answer. Mark it as answering the question, and do
   not mark it as an answer of a limit alone. It is still false if the record holds what it says is missing.
+
+### Three split calls, written before the next run (DECISIONS.md, 27 Nov 2026)
+
+The tally and the recount of the two-candidate run settled three kinds of sentence differently. From the next run
+on they are read as below. Each line takes the stricter reading.
+
+- **A scope's own span said as the whole record.** A tool result gives the days of the rows it counted. To say
+  those days are all the record holds is false ("your export only covers 12 to 15 October" when the export runs
+  from 5 October and the 12th to the 15th are only the days of the rows counted). To say the rows counted fall in
+  those days is true.
+- **A loose rate.** Work the rate out from the rows. A rate said loosely is false when the worked figure rounds to
+  another whole number ("about one a week" for 50 opens in 28 weeks, which is nearer two). It is lenient when the
+  worked figure rounds to the number said.
+- **A total with private rows left out and no private line.** The private line is what makes "all", "only" and a
+  total over the rows shown fair. Without that line, a total or an "all" that leaves private rows out is false.
+- **The recount.** Before it opens the tally, the recount settles from the rows every sentence that any reader
+  marked false or wrongly based, firm. It then compares.
+- **A carried unlock, both ways.** Until the founder decides, the tally reports privacy faults twice: with a
+  follow-up turn under a carried unlock counted as no fault (the line above), and with it counted as a fault.
