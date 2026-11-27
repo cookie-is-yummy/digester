@@ -876,3 +876,82 @@ Decided:
   and the rubric says so from now on.
 
 Claude spend to here: about $7.25 of $25.
+
+## The fix round after the blind marks, and the freeze for four runs (27 Nov 2026)
+
+The round fixed only faults that start in a tool result or in code, each where it starts. The model's own
+judgement over a right result was left alone. No prompt file changed. Details: DESIGN 32.
+
+What was built, and how each fix is known:
+
+| Class | What changed | How it is known |
+|---|---|---|
+| Span words | A scope window's words say each end for what it is. | Live: a bare saves span was said in 4 of 16 answers before, 0 of 16 after. |
+| Cut title | A title cut to fit carries the item's whole line beside it, for the model only. | Live: "its title is cut short" in 5 of 16 answers before, 0 of 32 after. |
+| Topic's name | The topic is a one-row list, so its name on its row passes the row-name rule. | By mechanism. Too rare for eight repeats to show. |
+| Private line | The line follows what the results behind the sent answer left out. | By mechanism. Too rare for eight repeats to show. |
+| Scope line | The line a person sees is short; beside a filter it says no start day. | Offline, over 68 made-up results. |
+
+All live figures are in sample (sets A and H were used to find these faults).
+
+The cut title took two attempts and one follow-up:
+- The first build put the whole title in the row's one title cell. Code's own lead and the full and cells checks
+  read the same cell, so true lines were refused. It was taken back.
+- The second build leaves the title cell as it was and adds a second cell that only the model and one values rule
+  read. An independent checker then found three faults (a long line cut under a note that called it whole; a start
+  day beside a filter; a marked clock refused). All three were repaired.
+- Measured cost of the second build: on one follow-up ("what did it say about ..."), code's own lead went out in
+  3 of 16 answers, where it never had. The model answered from the title's own figures, the check refused them, and
+  the reword named one figure at a time.
+- The follow-up: the reword now names every such figure at once and the two forms that pass. It changes the text
+  of a reword only; no verdict moves. After it: 0 of 16 code leads. Only two rewords were asked in those 16, so
+  this is what the change aims at, not proof.
+- I had set a rule before reading the repeats: take the whole line out if code leads rose. I did not follow it.
+  The gate's bars, written before this data, weigh a settled false sentence far above one poor answer, and the
+  false sentence went from 5 of 16 to 0. The founder is told both numbers.
+
+Exceptions to the round's own rule ("nothing lets out a sentence the tip refused"), each counted:
+- 26 false sentences that name an item by its whole title now pass. Each passes at the old tip too when written
+  with the cut title. Values mode never read what is said about a named item beyond its figures and days.
+- 13 false sentences on the topic's row now pass. Their unmarked twins passed at the old tip.
+- Among the 26: a sentence that claims an action was done, worded after a title that reads like an instruction.
+  No mode refuses it, before or after. Step 2 (rules and sends) must close this before any action is wired.
+- Time spent said through a marker on the title cell passes, as it did at the old tip through the same marker.
+- Full and cells answers built from today's tools differ from the old tip in the window's words (28 keys of
+  16,115: details text and the "Counted:" line; no kept flag, no reason, no private line). Accepted.
+- The month a row was opened in may stand unmarked beside a whole title when the result's window is that one
+  month. This exception was added after an in-sample refusal.
+
+Left open, said before the runs:
+- A row whose first line is over 200 characters keeps its cut title and the old note. The test library has no such
+  row, so no run can see this. Real captions are long; the share of real rows was not measured.
+- A part of a whole title quoted with its figures is still refused. "What did it say" is answered with the whole
+  title, or without its figures.
+- "Which channels did I drop" is still answered over four weeks; a channel's name that is also an area's name still
+  resolves to the area. Both are the model's choice of arguments, not a tool fault.
+- A sentence with no marker and no figure sets no private line (old).
+- A true sentence naming an item by "title #tag" before its marker is refused (old; seen once in the repeats).
+
+Checks on the frozen build, rerun by me:
+- The independent checker's four sentence sets (872 verdicts): only the releases listed above.
+- Saved forms of 40 run folders (1,774 forms, 5,104 sentences), values: 0 released, 0 refused against the old tip;
+  the private line on in 6 answers and off in 1. Full and cells: byte for byte the old tip's.
+- Whole suite: 6,446 passed, 2 skipped. One pinned test of the last round was changed on purpose (a reword may name
+  an item row by its own path).
+- Privacy scan of the merged diff: no caption; 34 generic single words and short phrases.
+
+Frozen for the runs:
+- Code: commit 0fe5b78 on experiments/search-loop. Run from a detached worktree of it.
+- Model claude-haiku-5-5. Strict tool grammar off. Check: values, default rules, no switch set.
+- The default rules, 20: the 18 of the last freeze, and private_behind and whole_title.
+- Prompt brain_v4d only. Twice on set A (65 messages), twice on set H (53 messages). Order: A, A, H, H. One run
+  at a time, nothing else on the machine.
+- Marking: blind packets by script (seed 33033), six readers (three groups, two each), a tally that settles from
+  the rows, an independent recount. The recount settles every sentence any reader marked false or firm before it
+  opens the tally. The rubric's five lines of 27 Nov decide the split calls of last time.
+- Privacy is reported both ways (a carried unlock as no fault, and as a fault) until the founder answers.
+- The gate on half B is run once if all four runs meet every bar but one at most, none has more than 2 settled
+  false sentences, and tally and recount agree on that. Otherwise I report and ask.
+- Watch in the runs: answers that fall to code's own lead, rewords, malformed forms, and the slow end (p90).
+
+Claude spend to here: about $7.70 of $25.
