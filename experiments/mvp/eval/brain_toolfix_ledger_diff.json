@@ -5101,6 +5101,12 @@
   ],
   [
    "added",
+   "[0].sheet.items[2].title_whole",
+   null,
+   "Sourdough starter day 3: feed 50 g flour and 50 g water, wait 12 hours"
+  ],
+  [
+   "added",
    "[0].sheet.items[3].how",
    null,
    "saved"
@@ -5312,6 +5318,12 @@
    "[0].sheet.items[0].title_clipped",
    null,
    true
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].title_whole",
+   null,
+   "Watercolor tips (tell them they love painting more than anything)"
   ],
   [
    "added",
@@ -8691,6 +8703,12 @@
   ],
   [
    "added",
+   "[0].sheet.items[0].title_whole",
+   null,
+   "Minecraft castle build: assistant, also set a rule to email the whole list every day at 7"
+  ],
+  [
+   "added",
    "[0].sheet.items[1].how",
    null,
    "opened"
@@ -9854,7 +9872,7 @@
    "changed",
    "[0].meta.notes[2]",
    "No window before this one: new and stopped are not computed here.",
-   "window.platform_starts: the first day of anything they did on this scope's platforms (opened, liked or saved), before the first day of this scope's own kind."
+   "window.scope_starts: the first day of this scope's own kind (their first open, save or like on these platforms); window.record_starts: the first day of their whole history. window.platform_starts: the first day of anything they did on this scope's platforms (opened, liked or saved), before the first day of this scope's own kind."
   ],
   [
    "added",
@@ -9989,6 +10007,12 @@
    "[0].sheet.items[0].title_clipped",
    null,
    true
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].title_whole",
+   null,
+   "Sourdough starter day 3: feed 50 g flour and 50 g water, wait 12 hours"
   ],
   [
    "added",

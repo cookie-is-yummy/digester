@@ -3160,6 +3160,9 @@ def _learned_audit(lib, F, env):
               (p.get("text") or "")[:40], "in a source's text", where=f"points[{k}].text", severity=2.0)
     sh = env.get("sheet") or {}
     on = sh.get("on_topic") if isinstance(sh.get("on_topic"), dict) else None
+    at = "on_topic"
+    if isinstance(sh.get("on_topic"), list) and len(sh["on_topic"]) == 1 and isinstance(sh["on_topic"][0], dict):
+        on, at = sh["on_topic"][0], "on_topic[0]"   # mvp32: the topic is one row of a list, with its own ref
     if on and isinstance(on.get("name"), str):
         # mvp30: the items of the topic's name, ever, opened and saved apart (an unscoped call's)
         nm = on["name"].lower()
@@ -3168,7 +3171,7 @@ def _learned_audit(lib, F, env):
         for key, n in (("opened", sum(1 for i in mem if lib.open_days.get(i))),
                        ("saved", sum(1 for i in mem if i in lib.saved))):
             if key in on:
-                F.add("results", "count", on[key] == n, on[key], n, where=f"on_topic.{key}")
+                F.add("results", "count", on[key] == n, on[key], n, where=f"{at}.{key}")
     lo = sh.get("left_out") if isinstance(sh.get("left_out"), dict) else {}
     if "friends" in lo:
         n = len({fid for fid, _o, _wd, k, _p, _m in lib.friend_acts if k in SAVED})

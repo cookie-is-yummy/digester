@@ -183,8 +183,10 @@ def test_an_empty_learned_result_counts_the_topic_opened_and_saved(brain):
     n_open = sum(1 for x in calc if any(k == "watch" for k, _ in x["events"]))                             # recount
     n_save = sum(1 for x in calc if any(k in ("save", "playlist", "collection") for k, _ in x["events"]))
     assert sh["points"] == [] and sh["reads"] == "saved" and r["meta"]["base"] == "of what you saved"
-    assert sh["on_topic"] == {"name": "Calculus lessons", "opened": n_open, "saved": n_save} and n_open == 85
-    assert kept(t, "You opened 85[r1.on_topic.opened] calculus videos and saved 0[r1.on_topic.saved].")
+    # (re-pinned in mvp32: the topic is one row with its own ref, so its name is cited on its row)
+    assert sh["on_topic"] == [{"ref": "r1.on_topic[0]", "name": "Calculus lessons", "opened": n_open,
+                               "saved": n_save}] and n_open == 85
+    assert kept(t, "You opened 85[r1.on_topic[0].opened] calculus videos and saved 0[r1.on_topic[0].saved].")
 
 
 # ================================================================ a scope's start is not the start of their history
@@ -194,7 +196,9 @@ def test_a_platform_scope_says_what_starts_there_and_what_lies_outside_it(brain)
                 "what's my instagram history")
     ig_open = min(local(at) for x in visible_rows() if x["platform"] == "instagram" for k, at in x["events"]
                   if k == "watch")                                                                          # recount
-    assert r["sheet"]["window"]["words"].startswith("all your history (your Instagram opens: ")
+    # (re-pinned in mvp32: the words say what each end is, "from <day>, the day of your first Instagram open, to ...")
+    assert r["sheet"]["window"]["words"].startswith("all your history (from 12 October 2026, the day of your first "
+                                                    "Instagram open, to ")
     assert ig_open == date(2026, 10, 12)
     r2, _t2 = call(brain, "breakdown", {"by": "none", "compare": "none", "order": "most", "top": 5,
                                        "window": W("2022"), "scope": S(platforms=["instagram"])},
@@ -411,7 +415,15 @@ def test_a_title_clipped_by_code_says_so(brain):
     for row in r["sheet"]["items"]:
         assert row.get("title_clipped", False) is row["title"].endswith("…")
     assert any(row.get("title_clipped") for row in r["sheet"]["items"])
-    assert any("is whole in their history" in x for x in r["meta"]["notes"])
+    # mvp32 part two (DESIGN 32.8): a cut row carries the item's own line whole beside its title, and one note says
+    # what that cell is in the clip note's place; every check reads the row with the clip note, as before
+    assert all("title_whole" in row for row in r["sheet"]["items"] if row.get("title_clipped"))
+    assert any("whole as their history holds it" in x for x in r["meta"]["notes"])
+    assert not any("is whole in their history" in x for x in r["meta"]["notes"])
+    from mvp.brain import verify as V
+    seen = V.Ledger({"r1": r}).get("r1")
+    assert not any("title_whole" in row for row in seen.sheet["items"])
+    assert any("is whole in their history" in x for x in seen.meta["notes"])
 
 
 # ================================================================ the schema, and the eval's outside-the-record turns

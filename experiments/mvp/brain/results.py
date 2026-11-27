@@ -14,6 +14,16 @@ from .. import insight
 # what the model never sees of a sheet: code's old so-whats (never parroted), the offers, and the parts meta carries
 DROPPED = ("so_what_candidates", "offers", "ranked", "hidden", "built_s", "versions")
 TITLE_MAX, TEXT_MAX, NAME_MAX = 90, 200, 90
+# mvp32 part two (a title cut to fit was said to be cut short in their history): an item row whose title is a cut of
+# the item's own line also carries that line whole, in `title_whole`, added after the size cut, and only when the line
+# fits a text field's cap whole (a longer line is never cut there: that row keeps CLIPPED_NOTE, as before, and class 1
+# is left open for it). The model reads both; every check reads the row as before (verify.Ledger sets the cell aside and gives the
+# rows CLIPPED_NOTE back in WHOLE_NOTE's place), and only values mode's rule "whole_title" reads the whole line.
+WHOLE_KEY = "title_whole"
+CLIPPED_NOTE = ("`title_clipped` true: this result shortened the title to fit (the '…' is this result's); the item's "
+                "own title is whole in their history, and a search for its words reads more of it.")
+WHOLE_NOTE = ("`title_whole`: the item's own title, whole as their history holds it; `title` beside it is the same "
+              "title shortened by this result to fit (the '…' is this result's).")
 RESULT_CHARS = 6000          # about 1,500 tokens (4 characters a token): rows are cut beyond it
 CUT_ORDER = ("items", "channels", "themes", "periods", "areas", "topics", "fields", "names", "points")
 _SWAP = str.maketrans({"[": "(", "]": ")", "{": "(", "}": ")", "<": "‹", ">": "›"})

@@ -95,6 +95,24 @@ def filtered(res):
     return bool(meta.get("filters_said")) or bool(f.get("without_shorts")) or f.get("length") in ("long", "short")
 
 
+def narrowed(res):
+    """The result's rows are narrowed by more than a platform: a filter line that is not "<platform> only" (a channel,
+    an area, a topic, words, a subject, a length, a weekday, an exclude), or the without-Shorts or length filter.
+    (filtered() is true for a platform alone; this is not.)"""
+    from .. import history as Hm
+    alone = {f"{n} only" for n in Hm.PNAME.values()}   # (as tools._filters_said says a platform)
+    meta = res.meta or {}
+    f = (res.sheet.get("filters") or {}) if isinstance(res.sheet, dict) else {}
+    parts = [p.strip() for p in str(meta.get("filters_said") or "").split("; ") if p.strip()]
+    return any(p not in alone for p in parts) or bool(f.get("without_shorts")) or \
+        f.get("length") in ("long", "short")
+
+
+# the words of tools.scope_span_words, as the window's words carry them (the export's end already cut out)
+SCOPE_SPAN_SHOWN = re.compile(r"^all your history \(from (?P<day>\d{1,2} [A-Z][a-z]+ \d{4}), the day of your "
+                              r"(?P<first>first [^,;()]+), to \d{1,2} [A-Z][a-z]+ \d{4}(?:; [^()]*)?\)$")
+
+
 def scope_line(res):
     """"Counted: <list> · <base> · <window> · <scope>" of one result (code's words only)."""
     meta = res.meta or {}
@@ -106,6 +124,15 @@ def scope_line(res):
     # bracket left open, and "on Sundays · on Sundays": the export's end is cut out whole and a part is said once)
     import re
     window = re.sub(r",?\s*where your (?:youtube |instagram )?export ends", "", meta.get("window_said") or "").strip()
+    # mvp32 part two (the scope's window words that are right for the model, each end said for what it is and the
+    # platforms' older start, made the person's line long): for such a window the line says its start, as that
+    # ("all your history (from 12 October 2026, your first Instagram open)"); the model's words are not changed
+    short = SCOPE_SPAN_SHOWN.match(window)
+    window = f"all your history (from {short.group('day')}, your {short.group('first')})" if short else window
+    # repair2 (beside a channel, an area or a length the start read as the first save of the rows counted, a day that
+    # is not theirs): when anything but a platform narrows the rows, the line says no start, only "all your history"
+    if short and narrowed(res):
+        window = "all your history"
     window = window.split(", ")[0].strip() if "(" not in window else window
     if window.count("(") > window.count(")"):
         window += ")"
@@ -301,6 +328,7 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
         points = [] if cells and not (code or {}).get("mixed") else list((code or {}).get("points") or [])
     private = bool(verdict is not None and verdict.private_line) or bool((code or {}).get("private_line")) or any(
         v.private_line for v in also if v is not None)
+    behind = V.check_mode(mode).rule("private_behind")   # mvp32: values mode, by default
     # (mvp20 fix: the plain line counted nothing, so no scope line goes under it)
     plain = verdict is None and bool(code) and code.get("how") == "plain"
     # (mvp20 fix: a code lead keeps the offers the model picked; code writes every label)
@@ -313,6 +341,10 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
     ask = bool((form or {}).get("ask_back")) and (verdict is not None or not plain)
     cards = _card_list(ledger, refs, form, ask, (_cited_items(verdict) if verdict is not None else []) if ask else [],
                        links)
+    if behind:
+        # mvp32 (rule "private_behind"): the line follows what the results behind the answer that goes out left out,
+        # not which sentences of which form survived (the forms not sent are not behind it)
+        private = V.private_behind(ledger, verdict, None if verdict is not None else code, cards, mode=mode)
     rid = _cited_rid(verdict, code, ledger, cards)
     res = ledger.get(rid) if rid else None
     filt = filtered(res)

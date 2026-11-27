@@ -37,6 +37,8 @@ LAST_ROUND = frozenset({"row_name", "cell_found", "day_typed", "motive_you"})
 R30 = frozenset({"timing_out", "cards_found", "item_count_free", "screen_window", "screen_uncited", "rows_before",
                  "page_cited", "rows_kept", "shown_said", "length_cells"})
 R31 = frozenset({"length_unit", "days_unit", "cite_hint", "paren_tidy"})   # mvp31 (DESIGN 31.9), on by default
+R32 = frozenset({"private_behind",   # mvp32 (DESIGN 32), on by default: the private line, no verdict
+                 "whole_title"})     # mvp32 part two (DESIGN 32.8): a row named by its whole title
 OUTSIDE = frozenset({"item_count", "rows_shown", "cited_rows", "outcome_you", "outcome_cited", "row_text",
                      "row_quote", "quote_at_row", "row_group"})
 ROW_TEXT = frozenset({"row_text", "row_quote", "quote_at_row"})   # behind the switch since the mvp30 repair
@@ -100,9 +102,9 @@ def _import_with(value):
 
 def test_with_the_switch_unset_values_runs_last_rounds_rules_and_the_r30_set():
     got = _import_with(None)
-    want = sorted(LAST_ROUND | R30 | R31 | {"values", "nw_refuse"})
+    want = sorted(LAST_ROUND | R30 | R31 | R32 | {"values", "nw_refuse"})
     assert got["values"] == want and got["check"] == want
-    assert got["settings"] == {"values_rules": sorted(LAST_ROUND | R30 | R31), "values_rules_r28": sorted(R30)}
+    assert got["settings"] == {"values_rules": sorted(LAST_ROUND | R30 | R31 | R32), "values_rules_r28": sorted(R30)}
     # the switch only adds: a rule left out of the set is switched on by name
     got = _import_with("rows_shown")
     assert set(got["values"]) == set(want) | {"rows_shown"}

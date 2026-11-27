@@ -437,7 +437,9 @@ def _notes(turn, raw):
     win = (raw or {}).get("window") or {}
     for p, d in sorted((win.get("ends") or {}).items()):
         notes.append(f"Your {Hm.PNAME.get(p, p)} export ends on {Hm.day_words(_date(d))}.")
-    if win.get("platform_starts"):
+    if win.get("platform_starts") and win.get("scope_starts"):
+        notes.append(SCOPE_STARTS_NOTE + " " + PLATFORM_STARTS_NOTE)   # mvp32: both starts, each said for what it is
+    elif win.get("platform_starts"):
         notes.append(PLATFORM_STARTS_NOTE)
     cs = (raw or {}).get("cannot_see") or {}
     if cs.get("reason") == "after" and cs.get("export_ends"):
@@ -448,8 +450,14 @@ def _notes(turn, raw):
     elif cs.get("reason") == "before" and cs.get("scope_starts"):
         # mvp30: a scope's start is not the start of their history
         n = cs.get("outside_scope_items")
-        notes.append(f"Your {cs.get('scope')} start on {Hm.day_words(_date(cs['scope_starts']))}; your history as a "
-                     f"whole starts on {Hm.day_words(_date(cs['record_starts']))}" +
+        # mvp32 (the scope's start and the platform's start were two days in one result with nothing to tell them
+        # apart): each start is said with what it is the start of, and its cell
+        ps = win.get("platform_starts")
+        notes.append(f"Your {cs.get('scope')} start on {Hm.day_words(_date(cs['scope_starts']))} "
+                     "(cannot_see.scope_starts)" +
+                     (f"; anything on the same platforms, opened, liked or saved, starts on "
+                      f"{Hm.day_words(_date(ps))} (window.platform_starts)" if ps else "") +
+                     f"; your history as a whole starts on {Hm.day_words(_date(cs['record_starts']))}" +
                      (f", and this window holds {n} items outside this scope (cannot_see.outside_scope_items)."
                       if isinstance(n, int) else "."))
     if Hm.HOURS.search(Hm.normal(turn.message or "")):
@@ -582,7 +590,26 @@ PLATFORM_STARTS_NOTE = ("window.platform_starts: the first day of anything they 
                         "liked or saved), before the first day of this scope's own kind.")
 
 
+SCOPE_STARTS_NOTE = ("window.scope_starts: the first day of this scope's own kind (their first open, save or like on "
+                     "these platforms); window.record_starts: the first day of their whole history.")
 SCOPE_NOUN = {"watched": "opens", "saved": "saves", "liked": "likes", "any": "history"}
+FIRST_NOUN = {"watched": "open", "saved": "save", "liked": "like", "any": "item"}
+SCOPE_SPAN_HEAD = "all your history (from "   # the head of scope_span_words' window words
+
+
+def scope_span_words(plats, how, start, end, export_end, any_start=None):
+    """mvp32 (a scope's window said as "your saves: 3 to 30 October 2026", read as the days the saves span, when the
+    last save was on 10 October; "your Instagram opens: 12 to 15 October 2026" read as all the Instagram export holds):
+    the words of a scope's window over all their history say what each end is, once: its first day is the scope's
+    first event, its last day the window's end ("where your export ends" when it is); and when anything on the same
+    platforms (opened, liked or saved) is older, its first day, said as that (window.platform_starts). "from 12 October
+    2026, the day of your first Instagram open, to 15 October 2026, where your export ends; your first Instagram item
+    of any kind: 5 October 2026"."""
+    p = Hm.PNAME.get(plats[0], plats[0]) + " " if len(plats) == 1 else ""
+    first = f"the day of your first {p}{FIRST_NOUN.get(how, 'item')}"
+    return (f"from {Hm.day_words(start)}, {first}, to {Hm.day_words(end)}" +
+            (", where your export ends" if export_end else "") +
+            (f"; your first {p}item of any kind: {Hm.day_words(any_start)}" if any_start else ""))
 
 
 def scope_noun(plats, how):
@@ -608,19 +635,26 @@ def _scope_start(turn, raw, q):
         return
     noun = scope_noun(plats, q.how)
     win = raw.get("window") if isinstance(raw.get("window"), dict) else None
+    # (an answer said a platform's opens were all it held of that platform, with saves before them): the first day of
+    # anything they did on the scope's platforms, opened, liked or saved, when it is before the scope's
+    anyk = Hm._record_start(rec, plats, q.model_copy(update={"how": "any"})) if win is not None and q.how != "any" \
+        else None
+    anyk = anyk if anyk is not None and anyk < scoped else None
     head = "all your history ("
     if win is not None and isinstance(win.get("words"), str) and win["words"].startswith(head):
         # (the words still start "all your history", which the checker reads as this window)
-        win["words"] = f"{head}your {noun}: " + win["words"][len(head):]
+        rest = win["words"][len(head):]
+        if win.get("start") and win.get("end") and rest.endswith(")"):
+            # mvp32: each end said for what it is (scope_span_words), not the scope's noun over the window's span
+            win["words"] = head + scope_span_words(plats, q.how, _date(win["start"]), _date(win["end"]),
+                                                   "where your export ends" in rest, anyk) + ")"
+        else:
+            win["words"] = f"{head}your {noun}: " + rest
     if win is not None and win.get("history_starts"):
         win.pop("history_starts")
         win["scope_starts"], win["record_starts"] = scoped.isoformat(), whole.isoformat()
-    if win is not None and q.how != "any":
-        # (an answer said a platform's opens were all it held of that platform, with saves before them): the first
-        # day of anything they did on the scope's platforms, opened, liked or saved, when it is before the scope's
-        anyk = Hm._record_start(rec, plats, q.model_copy(update={"how": "any"}))
-        if anyk is not None and anyk < scoped:
-            win["platform_starts"] = anyk.isoformat()
+    if anyk is not None:
+        win["platform_starts"] = anyk.isoformat()
     cs = raw.get("cannot_see") if isinstance(raw.get("cannot_see"), dict) else None
     if cs is None or cs.get("reason") != "before":
         return
@@ -712,8 +746,8 @@ WEEKDAYS_NOTE = ("when.busiest_weekdays: these days tie for the most opens (busi
 
 WEEKDAY_EVENTS_NOTE = ("when.events_by_weekday: the window's opens (of the base) on each weekday, by its name "
                        "(when.events_by_weekday.Sunday); a day with 0 had none.")
-CLIPPED_NOTE = ("`title_clipped` true: this result shortened the title to fit (the '…' is this result's); the item's "
-                "own title is whole in their history, and a search for its words reads more of it.")
+CLIPPED_NOTE = R.CLIPPED_NOTE
+WHOLE_NOTE = R.WHOLE_NOTE   # mvp32 part two: in CLIPPED_NOTE's place when every cut row has its whole line
 EVERY_PERIOD_NOTE = ("in_top_of_every_period: the themes (and areas, channels) found among the top rows that every "
                      "period lists, read before any cut; an empty list: none is in the top rows of every period.")
 LAST_NOTE = ("A channel's or a theme's `last_watched` is the last day they ever opened it within this call's scope "
@@ -1019,6 +1053,64 @@ def item_title(it):
     return f"{t} #{tags[0]}"
 
 
+CUT_CHARS = 72   # compose.caption_title's last cut of today's display title (a slice, with no mark)
+
+
+def whole_title(it, t):
+    """mvp32 part two: the item's own line that today's display title `t` was cut from, whole; None when `t` is no cut
+    of it. Today's title takes the first usable line of the item (compose.caption_title: its first sentence, without
+    tags, handles and links) and cuts it to eight words and an ellipsis, then to 72 characters, the second cut with no
+    mark. The line is found again as the first of the same lines whose words start with the cut title. A short title,
+    a neutral one ("A video from ...") and a line not found give None. (The build of mvp32 put this line in `title`;
+    the repair took it back, 32.7. Here it goes beside `title`, and `title` is as it was.)"""
+    if it is None or not isinstance(t, str):
+        return None
+    stem = t[:-1].rstrip() if t.endswith("…") else t
+    if not stem or not (t.endswith("…") or len(t) >= CUT_CHARS):
+        return None
+    yt = getattr(it, "platform", None) == "youtube"
+    lines = [getattr(it, "first_line", "") or ""] + (getattr(it, "caption", "") or "").split("\n")[:15]
+    for line in lines:
+        line = re.split(r"(?<=[.!?])\s", " ".join(line.split()), maxsplit=1)[0]
+        parts = []
+        for w in line.split():
+            if yt and w.startswith("#") and len(parts) >= 2:
+                break   # (a YouTube title ends where its tags start, as today's)
+            if not w.startswith(("#", "@", "http")):
+                parts.append(w)
+        whole = " ".join(parts).strip(" -:|,(")
+        if len(whole) > len(stem) and whole.startswith(stem):
+            return whole
+    return None
+
+
+def _whole_titles(turn, rows):
+    """mvp32 part two: on each item row whose title is a cut of the item's own line, `title_whole` right after `title`:
+    the line whole, neutralised (third-party text, data). A line longer than a text field's cap gets no cell: cut to
+    the cap it would end in '…' under a note that says it is whole (the skeptic's long first line), so that row keeps
+    its cut title, `title_clipped` and CLIPPED_NOTE as before. -> how many rows got one."""
+    n = 0
+    for row in rows or []:
+        if not isinstance(row, dict) or R.WHOLE_KEY in row or not isinstance(row.get("title"), str):
+            continue
+        it = turn.lib.view.items.get(row.get("item_id")) if row.get("item_id") else None
+        t = Hm._title(it) if it is not None else None
+        if t is None or item_title(it) != t or R.neutral(t, R.TITLE_MAX) != row["title"]:
+            continue   # (the row's title is today's display title of this item, as it is cut)
+        w = whole_title(it, t)
+        w = R.neutral(w) if w else None
+        if not w or w == row["title"] or len(w) > R.TEXT_MAX:
+            continue
+        kv = list(row.items())
+        row.clear()
+        for k, v in kv:
+            row[k] = v
+            if k == "title":
+                row[R.WHOLE_KEY] = w
+        n += 1
+    return n
+
+
 def _same_titles(turn, kinds, start=None, end=None):
     """mvp26 toolfix2 6 (run2 N049.0: 5 of 21 rows titled "Integrals by parts", and the answer said "shows up again" as
     if complete): {title: how many of their items, with an event of `kinds` in the window, have it}."""
@@ -1062,6 +1154,10 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
         # result with a window says the days it counted, cut where the export ends
         win = (sheet or {}).get("window") if isinstance(sheet, dict) else None
         d = window_dates(*(dates or ((win or {}).get("start"), (win or {}).get("end"))))
+        if d and isinstance((win or {}).get("words"), str) and win["words"].startswith(SCOPE_SPAN_HEAD):
+            # mvp32: a scope's window over all their history says its span once, in its own words (scope_span_words);
+            # the bare days ("3 to 30 October 2026") read as the days the scope's rows span
+            d["said"] = win["words"][len("all your history ("):-1]
         if d:
             meta["window_dates"] = d
             wb = (meta.get("windows") or {}).get("b")
@@ -1112,8 +1208,13 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
             env["meta"]["notes"].append(WEEKDAY_EVENTS_NOTE)
         if isinstance(sh.get("in_top_of_every_period"), dict):
             env["meta"]["notes"].append(EVERY_PERIOD_NOTE)
-        if any(isinstance(r, dict) and r.get("title_clipped") for r in sh.get("items") or []):
+        # mvp32 part two: after the size cut, so that no row gives way to it; a row whose title is a cut of the item's
+        # own line carries that line whole, and one note says what it is in CLIPPED_NOTE's place
+        wholes = _whole_titles(turn, sh.get("items"))
+        if any(isinstance(r, dict) and r.get("title_clipped") and R.WHOLE_KEY not in r for r in sh.get("items") or []):
             env["meta"]["notes"].append(CLIPPED_NOTE)
+        if wholes:
+            env["meta"]["notes"].append(WHOLE_NOTE)
         q_ = turn.queries.get(id(raw)) if raw is not None else None
         if how == "opened" and _last_watched(turn, sh, q_):
             env["meta"]["notes"].append(LAST_NOTE)
@@ -1151,6 +1252,9 @@ def added_cells_out(got, want):
         if isinstance(g.get(k), dict):
             for x in sub:
                 g[k].pop(x, None)
+    for r in g.get("items") or []:   # mvp32 part two: an item row's whole line beside its cut title (_whole_titles)
+        if isinstance(r, dict):
+            r.pop(R.WHOLE_KEY, None)
     new = g.get("new") if isinstance(g.get("new"), dict) else None
     if new is not None and "themes_begun_before" in new:
         order = [r.get("name") for r in ((want.get("new") or {}).get("themes") or [])]
@@ -1831,7 +1935,9 @@ def run_learned(turn, a: LearnedArgs):
             "notes": ["Each point was checked against the text of its sources.", LEARNED_NOTE]}
     on = _on_topic(turn, a, q)
     if on is not None:
-        sheet["on_topic"] = on
+        # mvp32 (the topic's name, cited on its group of cells, was refused and the true count with it): the topic is
+        # one row of a list, with its own `ref`, as a channel or an area row is, so its name is cited on its row
+        sheet["on_topic"] = [dict({"ref": f"{rid}.on_topic[0]"}, **on)]
         meta["notes"].append(ON_TOPIC_NOTE)
     return _finish(turn, "learned", rid, None, sheet, meta, t0, None, got.get("cost_usd", 0.0), keep="points")
 
@@ -1839,8 +1945,8 @@ def run_learned(turn, a: LearnedArgs):
 LEARNED_READS = "saved"
 LEARNED_NOTE = ("`reads` 'saved': the points come from the text of what they saved, never from what they only opened. "
                 "No point is no word on what they opened.")
-ON_TOPIC_NOTE = ("`on_topic`: how many of their items, ever and in this scope, are of the topic's name (`name`), "
-                 "opened and saved apart. Points come only from the saved ones.")
+ON_TOPIC_NOTE = ("`on_topic[0]`: the row of the topic's name (`name`): how many of their items, ever and in this "
+                 "scope, are of it, opened and saved apart. Points come only from the saved ones.")
 
 
 def _on_topic(turn, a, q):

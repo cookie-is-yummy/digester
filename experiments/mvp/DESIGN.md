@@ -8917,3 +8917,386 @@ prompt once; 12 conversations, 28 turns; about $0.05): no answer fell to a code 
 under brain_v4d, and both rewords passed and are true. Under brain_v3d the same two messages passed on their first
 form; the prompts did not change, so that is run-to-run variance. Two true points were dropped with no reword (a
 group citation, a window citation). The two messages that reach the changed no-match note answer as before.
+
+## 32. Faults that start in a tool result or in code, fixed where they start (mvp32, key build)
+Branch `brain-r32-local` from experiments/search-loop (ca36dec). The blind marks of the two-candidate run showed most
+poor answers come from the model's judgement over a right tool result. This round does not chase those. It fixes four
+faults that start in a tool result or in code, each at its source. The run prompt is brain_v4d; brain_v3d is dropped.
+No prompt file changed. Files: `brain/tools.py`, `brain/verify.py`, `brain/answer.py`, `eval_claims.py` (the auditor
+reads the new topic row), `tests/test_brain_r32_fix.py`, re-pinned tests (below), and
+`eval/brain_toolfix_ledger_diff.json` (the planted set's frozen ledgers are left as they are; the list of how today's
+tools differ from them is rewritten, and it now holds the new start note). Evidence in `mvp32/build/` and, for the
+repair after the skeptic's attack, `mvp32/repair/`. All of it is in sample: the classes were read on the two-candidate
+run's records. The repair (32.7) took the whole titles of 32.1 back and narrowed the private line of 32.3.
+
+### 32.1 A cut title is shown whole (taken back in the repair, 32.7; this part says what the build did)
+- Cause: a row's title was today's display title (`history._title`, through `compose.caption_title`), which cuts an
+  item's own line to eight words and an ellipsis, then to 72 characters with no mark. The model was shown the cut,
+  with a flag and a note saying the cut was the result's, and still said the title "is cut short in your history".
+- Change: the brain's rows show the line the cut was made from, whole (`tools.whole_title`): the same first usable
+  line today's title takes, found again by its first words. A neutral title ("A video from ...") and a title that is
+  no cut are left as they are. The row's cap is a text field's (200 characters; a YouTube title is at most 100). Past
+  it the title is cut and flagged as before. No note was added. Today's bot is not touched (compose and history are
+  as they were).
+- Cost, measured on made-up titles: the values check keeps a whole title quoted before its row marker and refuses a
+  figure beside it, as before. The full and cells checks read a whole title's own words: "wait 12 hours" in a title
+  is read as watch time, "more than anything" as a comparison. So a code lead whose template quotes such a title fails
+  the full check and says the item's day without its title (its card still shows the title). Of the three made-up
+  titles that are whole now, one loses its title in the code lead of a first or last; search's code leads quote no
+  title, before or after. In values mode a true sentence that quotes a title holding "12 hours" and cites that video's
+  minutes is refused as time spent (the length rule calls the full check's words), at ca36dec and now alike; a whole
+  title holds such words more often. Three tests whose point is a row's event, not its title, now hold the title at
+  today's display title (seam, toolgaps, step1_fix).
+- Code's own lines (cards, a code lead) still cut a title at 90 characters. The whole title of a made-up item worded
+  as an instruction is now shown whole to the model and in its card. It is third-party text, read as data.
+
+### 32.2 A span's words say what span it is
+- Cause: a scope's window over all their history starts on the scope's first event and ends where the export ends.
+  Its words said "all your history (your saves: 3 to 30 October 2026, where your export ends)", which reads as the
+  days the saves span (the last save is on 10 October), and "your Instagram opens: 12 to 15 October 2026", which was
+  read as all the Instagram export holds (it holds saves from 5 October). In one result, `cannot_see.scope_starts`
+  and `window.platform_starts` gave two days with nothing to tell them apart.
+- Change: the words say each end once, for what it is, and the platforms' older start when there is one: "all your
+  history (from 12 October 2026, the day of your first Instagram open, to 15 October 2026, where your export ends; your
+  first Instagram item of any kind: 5 October 2026)". The head "all your history (" and "where your export ends" are
+  kept as the checker reads them. The cells `window.start`, `end` and `days` are the counted window, unchanged.
+  The note of a window before the scope names both starts with their cells; a window holding both `scope_starts` and
+  `platform_starts` gets one note that says what each is.
+- The meta copy of the window's days (`meta.window_dates.said`) of such a window says the same words, not the bare
+  span ("3 to 30 October 2026"), which the model repeated word for word in two live runs of the build before.
+  Its start, end and days are unchanged. Other windows keep the bare span.
+- Not changed: the `library` cells are counted over all history inside a windowed sheet and say so
+  (`library.counted_over`); a sentence that says them of the window ("never opened in 2024") is refused by the full
+  check's rule and not by values. Left.
+
+### 32.3 The private line follows the results behind the answer (narrowed in the repair, 32.7)
+- Cause: the line went out when a kept sentence had `hidden_rank`, and values mode set it only for a value cell of the
+  sentence's own result. A lead citing a count of a result that hid private rows and a row of another result (its own
+  result) got no line; the line came only from a point, and the point was refused. Every form's verdict was also
+  OR'd in, so a form that was not sent could set the line.
+- Change (values rule `private_behind`, on by default; full and cells are as they were): `answer.build` shows the line
+  when a result behind the answer that goes out left private rows out. Behind it: every result a sent sentence cites
+  (a row, a cell, a calc's two cells), every result of a card, the code lead's result, and every result of the turn
+  when a sent sentence holds a figure with no marker (dates, quoted titles, "the first half" and the window's own
+  "4 weeks" left out). The forms not sent are not behind it.
+- Still open: a sent sentence with no marker and no figure ("only", "all" over a name found in the results) puts no
+  result behind the answer, so it sets no line. An old hole, as before.
+
+### 32.4 A topic's name is cited on its own row
+- Cause: learned's `on_topic` was a group of cells with no row shape, so "Calculus lessons[r1.on_topic]" was refused
+  `bad_ref` and the true count went with it, leaving a limit alone.
+- Change in the tool: `on_topic` is a list of one row with its own `ref` (`r1.on_topic[0]`), as a channel or an area
+  row is, so the existing `row_name` rule takes the name on its row. Group citation in the checker is not reopened.
+- The one-row list made "1" a findable figure (a list's length counts as rows): "You saved 1 calculus video" (false,
+  0 saved) went out on a probe. So the values pool reads the holder as the dict it was (`verify.ONE_ROW_KEYS`: no
+  figure), and the marker grammar takes no count marker on it (`parse`, shared by every mode; no saved result holds
+  the new shape, so full and cells verdicts of saved forms cannot move). Probed one by one: the true forms pass; another row's name, a wrong figure, the "1" and
+  the count marker are refused. Saying the opened cell as saved still passes, as it did before the change.
+
+### 32.5 Left, and why
+- "Which channels did I drop" over the last 4 weeks: `changes` has no default window; the model asked for "lately"
+  itself, and the result's words say the 4 weeks. Probed: the same call over all history lists the two channels last
+  opened in 2023 with their `last_watched`. Not a tool cause. Left.
+- A channel's name split by the model: an exact "gaming daily" resolves to the channel. The model passed "gaming" and
+  "daily" apart; "gaming" is the area's own name. Not a tool cause. Left.
+- A figure inside a cited row's title ("Sourdough starter day 3[row]"): the fix is the row-text rules, which are
+  behind the switch. Not reopened. A whole title quoted exactly passes, as before.
+- The model's judgement over a right result: in live runs it said "your whole history is 4 opens" and "that is the
+  whole picture on this platform" of Instagram, beside words that name the older items.
+
+### 32.6 Checks (of the build; the repair's are in 32.7)
+- Saved forms of 40 run folders (the 32 of the last round and the eight two-candidate runs; 1,774 forms, 5,104
+  sentences, 1,733 answers rebuilt through the loop's own choice), default values check, ca36dec against this tip:
+  0 sentences released, 0 refused, 0 text changes. The private line changed on 7 answers: on in 6 (each cites a
+  result that hid private rows: a total of all opens beside a scoped count, the case of 32.3), off in 1 (a code lead
+  on a result that hid nothing; the line had come from a form not sent). With `private_behind` off this tip equals
+  ca36dec in every field of every form and answer. Tool changes cannot be replayed from saved forms; the made-up
+  cases are in the new tests.
+- Full and cells, code lead and both answer builds (16,115 verdicts and answer tuples over 3,685 forms): 152 differ,
+  all in the attack sets whose turns are built by today's tools, and all in titles and window words; no kept flag and
+  no reason changed. With this tip's checker and ca36dec's tools, at one hash seed: 0 differ. Planted (`brain.planted`
+  and `eval_brain planted`, full, cells and values): byte for byte ca36dec's. Values over the same 3,685 forms: 0
+  sentences changed; the private line on in 17 more.
+- Today's bot: no module of it changed (`eval_claims.py` is the eval's auditor).
+- The whole suite in 4 shards, on the final code: 6428 passed, 2 skipped, 0 failed (6416 of ca36dec and the 12 new). Re-pinned on
+  purpose: the rule-set tests (the new rule), learned's topic row, the scope words, the clipped-title test (the title
+  is whole now), two code-lead title tests, the frozen-ledger diff. In partial runs
+  `test_brain_r28_checks::test_a_figure_quoted_from_the_cited_rows_own_text_is_found` failed twice. Cause: that test
+  runs the switched rule set, which leaves `timing_out` out, so the tool's own clock (`took_ms`) is a figure of the
+  pool; when the search took 50 ms the false "50 videos" is found (set by hand: 50 kept, 3.2 and 12 refused, at
+  ca36dec and now alike). The default rules hold `timing_out`. Its sibling, the known order-dependent one, failed on
+  one hash seed at ca36dec too. Not fixed.
+- Privacy scan of the round's diff: generic words only.
+- Live, by id, brain_v4d, strict off, default rules (in sample; $0.04 in all, no time-up). On the first build, twice
+  (set A N069, N035, N109, N113, N054; set H K04, I03): the cut title was said whole in both runs; the private line
+  went out on both turns that cite a result that hid private rows; the topic's name was cited on its row and kept in
+  both; a saves window was said "from 3 to 30 October 2026" in both, the meta copy's bare words, so that copy now says
+  the window's own words. On the final build, twice (N035, N109, N113): no saves window said as a bare span; once
+  "only 4 items in your whole export" of Instagram opens, true of opens, and "that is the whole picture on this
+  platform", which reads past the words. Two runs cannot tell a fix from luck; the acceptance repeats are run by
+  someone else.
+
+### 32.7 The repair after the skeptic's attack (key repair)
+A skeptic attacked the build (`mvp32/attack/`). Three findings held when reproduced on the build's tip (ee74162),
+all with made-up turns built by the tip's own tools (`mvp32/repair/probe/`).
+- Whole titles, taken back. The full and cells checks read a whole title's own words as claims. With the build's
+  tools, a true sentence that quotes a row's title as the row shows it ("... wait 12 hours[r1.items[0]], saved on 5
+  October 2026[...]") was refused `watch_time` in full and cells, where ca36dec kept the same sentence over its own
+  title. Code's own first/last lead, whose template is checked in full mode in every mode, dropped the title for two
+  of the three made-up titles the display title cuts, not one as 32.1 said. The build's byte-same claim held only for
+  fixed inputs, and three tests had been made to pass by switching the whole title off. No form of the whole title
+  keeps full and cells as they were: the tools do not know the check mode, and a code lead quoting a different title
+  than its row holds is a new mismatch nobody has checked. So `tools.whole_title`, `ROW_TITLE_MAX` and the change to
+  `item_title` are gone: rows show today's display title, its flag and note, as at ca36dec. The tests the build
+  re-pinned for it are back to ca36dec's text (seam, step1_fix, toolgaps, toolfix2, r26_merge, and the clipped-title
+  test of r30_tools); the build's four class-1 tests are dropped; the frozen-ledger diff again differs from ca36dec's
+  only by the start note of 32.2. **Class 1 (a clipped title the model reads as cut in their history) is open.**
+- The private line, narrowed. A sent sentence holding a figure with no marker put every result of the turn behind
+  the answer, so the line went out when the only result that hid private rows held none of the sentence's figures
+  (a topic's row cited with a bare "85" beside the items of a month that hid private rows; "on 4 days" beside the
+  same). Now each such figure stands only on the results whose own values hold it (`verify._holders`: one result at
+  a time, read as values mode reads a result, its clock and length cells left out as the default rules leave them),
+  and on every result only when no single result holds it or it cannot be pinned (a percent, a fraction word).
+  Residual, on purpose: a small figure that an uncited result also holds (a 0, a hidden count of 4) still puts that
+  result behind the answer, so the line can still show more often than strictly needed (the skeptic's four such
+  turns still get it). A figure a private result's own values hold still puts that result behind the answer, as in
+  the build. Not checked: a figure derived from a private result (a sum, a share) that only another result holds
+  would stand on that other result alone. A figure only the message holds is not told apart (the answer build has no
+  message), so it stands on every result.
+- Checks of the repair (no model call):
+  - The skeptic's made-up turns: the two private-line shapes and their twin with "saved none of the 85" give no line;
+    the fully marked controls give none (the skeptic's own control probe, rerun). Of the skeptic's 12 private-line cases, 10 are right; the two
+    others quote the build's whole title, which no row shows now; written with the row's own title they get no line.
+    Of their 80 sentence cases, none is released only at this tip.
+  - Titles of the made-up turns: every `title` and `title_clipped` equals ca36dec's (60 of 60). The full/cells probe
+    of true title sentences equals ca36dec's line for line. Code leads (168 builds over three modes): 39 differ from
+    ca36dec, all in the scope line's window words of 32.2; kind, private line and every title are ca36dec's.
+  - Saved forms of the 40 run folders (1,774 forms, 5,104 sentences, 1,733 answers), default values check: equal to
+    the build's tip in every field; against ca36dec, 0 sentences released, 0 refused, the private line on in the same
+    6 answers and off in the same 1. Of 207 figures written with no marker, 202 were pinned to the results holding
+    them; 5 (percents and fraction words) stood on every result; none was held by no result. The builder's values
+    run over 3,685 forms and attack sets: equal to the build's tip; against ca36dec, 0 sentences changed and the line
+    on in the same 17. So no saved form exercises the narrowing; only the made-up turns and the new tests do.
+  - Planted (`brain.planted` and `eval_brain planted`, full, cells and values), rerun on the repair's code: byte for
+    byte ca36dec's.
+  - Full and cells: the saved forms of the 40 run folders (1,939 forms each) give dumps byte for byte ca36dec's in
+    both modes. Over the build's 3,685 forms and attack sets (16,115 verdicts and answer tuples, one hash seed), 28
+    differ from ca36dec (the build had 152): all in attack sets whose turns are built by today's tools, all in the
+    window words of 32.2 (answer text, and the details text of 10 verdicts); no kept flag, no reason and no private
+    line changed. The titles no longer differ.
+  - The whole suite in four shards, on the repair's code: 6,425 passed, 2 skipped, 1 failed (6,428 with the skipped:
+    the build's 6,430 less its four class-1 tests, plus two private-line tests). The one failure is the known
+    order-dependent `test_brain_r28_checks::test_a_figure_of_another_rows_text_is_not_found`. Cause not traced. Its
+    file passes alone under ten hash seeds at the repair's code; at ca36dec the same file failed two tests at one of
+    ten seeds and passed when that seed was run again.
+  - Prompt files: byte for byte the same. Privacy: a regex scan of the round's added lines (addresses, links,
+    handles, keys, phone numbers, home paths, eval ids) found nothing but the build's own DESIGN lines of eval ids.
+- Still open from the attack, not fixed here: the class-4 false forms over the topic row (an opened count said as
+  saved with no marker, a count of all their history said of this month, and the like; 13 of the skeptic's cases) are
+  kept at this tip and were refused at ca36dec only by `bad_ref` on the group; their unmarked twins are kept at ca36dec too, so it is an old values hole that now reaches the new row. The
+  old cell path `r1.on_topic.opened`, which every live run of the topic class used, is now `bad_ref`. So "nothing is
+  released" is not claimed for class 4.
+
+### 32.8 Part two: the cut title beside its whole line, and the scope line a person sees (key build2)
+Eight live repeats per message on the round's frozen build showed the cut title still said to be "shortened in your
+history" (2 of 8 answers before the round, 3 of 8 after; 32.7 had taken the whole title back). This part tries it a
+second time in a shape that leaves the title's other readers alone, and shortens code's own scope line. Commits
+d705d62, 4cb2105 and the frame fix after it (class 1; they revert together, the later ones edit code the first
+added) and a70b349 (the scope line, reverts alone). No prompt file changed. Evidence in
+`mvp32/build2/`. In sample: the probes are made-up turns of the test library and the saved forms of the last rounds.
+
+- **Class 1, built.** A row's `title` is as at ca36dec: today's display title, its `title_clipped` flag kept. An item
+  row (items, search, first_last) whose title is a cut of the item's own line also carries that line in
+  `title_whole`, right after `title`. It is added after the size cut, so no row gives way to it; it is neutralised and
+  never cut: a line past 200 characters gets no cell (32.8.1; the build cut it there, with "…"). The line is found as the build
+  of 32.1 found it (`tools.whole_title`). A row whose title is no cut is unchanged. On a result where every cut row has
+  its line, one note (`results.WHOLE_NOTE`: what `title_whole` is, and that the "…" of `title` is the result's) stands
+  in CLIPPED_NOTE's place; no note is added on top. Learned's `sources` get no second cell.
+- The title's other readers do not see the cell. `verify.Ledger` sets it aside (a copy; the result is never changed)
+  and puts CLIPPED_NOTE back in the new note's place, so code's lead (`fallback._title`), the cards (`answer.card`),
+  the full and cells checks, every pool of figures, dates and names, and the private line's holders read each result
+  exactly as ca36dec's tools wrote it. Checked: over the 39 results of the skeptic's 29 made-up turns, the Ledger's view
+  at this tip equals b6a880b's tool output byte for byte, notes in their order.
+- **Values rule `whole_title`, on by default** (in VALUES_RULES_R32 with `private_behind`). A sentence that is refused,
+  and that names a row by its whole line right before the row's marker (or before a marker of its `title` or
+  `title_whole` cell; in quotes or not), is checked again with the row's `title` in the line's place, by every rule of
+  the mode. It goes out only when (a) that check keeps it, (b) no safety rule refused it as written, and (c) it says no
+  figure, number word, day, clock time, weekday or relative day ("last week") outside a marker (a clock right before
+  the marker of the row's own dated cell that holds it counts as marked, 32.8.1); a month or a year may
+  stand only when the window of the row's own result starts and ends inside it in one year (the window's frame:
+  "opened in October" over a window of October 2026; not a window of two Octobers, nor another cited result's). The sentence sent is the model's own. When (a) refuses, the reasons given to the model are those of the
+  second check (what the sentence says beside the title, not the title's own figures); when only (c) refuses, the
+  repair names the figure or day with no marker. `private_behind` reads a sent sentence with the same swap. Why (c):
+  without it, the skeptic's false "saved ... on 3 October 2026" (the window's first day, not the row's) went out,
+  because an unmarked day that the results hold anywhere is found; ca36dec refused it only by the title's figures.
+- **Class 2's line a person sees, built.** `answer.scope_line` says a scope window over all their history by its
+  start, as what it is: "all your history (from 12 October 2026, your first Instagram open)". The window's words for
+  the model (`window.words`, `meta.window_said`, `window_dates.said`) are unchanged. The day is the window's start, a
+  day of the result. Every other window's line is byte for byte as before (29 of the 39 made-up results; the 10 that
+  change are all scope windows of that form). The next turn's screen carries this shorter line; the checker reads
+  only the plan's `window_said` there, which keeps the long words.
+
+Checks (no model call unless said):
+- The skeptic's probes (`mvp32/attack/probe/`, rerun on this build in `build2/probe/`). Code leads, 168 builds over
+  three modes: after the class-1 commits, equal to b6a880b in every field; after the scope line, kind, private line and
+  text with the `Counted:` line left out are equal to ca36dec and to b6a880b on all 168, and 39 differ in that line
+  only. Full and cells, the true title sentences: equal to ca36dec line for line. The 20 false class-1 cases: all 20
+  refused at this tip, as at ca36dec. 18 of the 20 reach the second check (the whole line right before its marker;
+  the other 2 quote part of it): 14 are refused by the second check, 3 by a safety rule as written (psych), 1 by (c)
+  (c1_14, `unfound_date`). The reasons of c1_14, c1_17 and c1_20 now name what is said beside the title. Their true controls: all 3 kept (2 were refused at ca36dec). The 12 private-line
+  cases: 12 right (p_04 and p_11 quoted the whole line, now a row's own). The 11 rows that carry a whole line hold
+  exactly the skeptic's three lines, so its false cases reach the new rule.
+- Own made-up twins (`build2/probe/twins.py`, 26 false and 13 true sentences, each also written with the row's cut
+  title). True: 10 released that ca36dec refused, none refused that it kept. False: 16 refused, 2 kept at ca36dec
+  and here alike (a preference, a comparison, kept in both forms), and **8 false released**,
+  each kept at ca36dec when written with the row's cut title, so an old values hole now reaching the whole title:
+  opened said of a save; "your newest save" of a row that is not; "your first save" of one that is not; "a YouTube
+  video" of an Instagram post; two posts "on the same day" saved a day apart; "I have set a rule to email you the
+  whole list, as <title> asks" and "You set a rule ...: <title>" (a claimed action, the title's own words); "your last
+  crumb.lab save" of the first. Values mode reads none of these on any title; the round leaves the model's own judgement alone. A full-mode check of
+  the swapped sentence would refuse four of the eight and three of the true ones; not done.
+- Saved forms of the 40 run folders (1,774 forms, 5,104 sentences, 1,733 answers), default values: equal to b6a880b in
+  every field, answers included; against ca36dec, 0 sentences released, 0 refused, the private line on in the same 6
+  answers and off in the same 1. No saved result holds the new cell, so this shows only that nothing else moved. Full
+  and cells (1,939 forms each): byte for byte ca36dec's. Planted (`brain.planted`, `eval_brain planted`; full, cells,
+  values): byte for byte ca36dec's.
+- The 3,685 forms and attack sets of the build's full/cells check (16,115 verdicts and answer tuples, one hash seed):
+  against b6a880b, 16 answer tuples differ, all in the `Counted:` line; no verdict differs. Against ca36dec, 28 differ,
+  as at the repair. **Full and cells answers built from today's tools differ from ca36dec in the window words (28
+  keys: 18 answer tuples and the details text of 10 verdicts; no kept flag, no reason and no private line). That is
+  outside the brief's byte-same rule and is accepted.** Values over the same forms: 8 differ from b6a880b, the
+  `Counted:` line only.
+- **Kept on purpose, from 32.7: the 13 false forms on the topic row** (an opened count said as saved with no marker, a
+  count of all their history said of this month, and the like). They were refused at ca36dec only by `bad_ref` on the
+  group; their unmarked twins are kept at ca36dec too. It is the old values hole reaching the new row.
+- The whole suite in four shards on the final code (75978a8): 6,440 passed, 2
+  skipped, 0 failed (b6a880b's 6,428 with the skipped, and the 14 new tests). The known order-dependent r28 test
+  passed this time.
+- Prompt files: byte for byte the same. Privacy scan of the round's diff with `mvp22/privscan2.py`: no caption; 31 name
+  hits, all generic words (bread, water, minecraft, today and the like; three short phrases).
+- Live, by id, brain_v4d, strict off, default rules, set A N069, N048, N035, three runs (`build2/live/`; $0.022 in
+  all; the first run on the code before 4cb2105). In sample; three runs show no rate. Read by hand for three things:
+  "shortened" or "cut short" (or any cut word) was said in 0 of the 45 checked sentences of the 15 answers. The whole
+  line was quoted before its marker and kept in five turns; the first run's N069 lead was refused twice on its month
+  alone and went out as a code lead, which is why 4cb2105 lets the window's own month stand (replayed, both forms now
+  pass). A part of the long title quoted with its figures was refused in 3 sentences (N048's second turn, two runs);
+  each was rewritten without the figures and kept. No sentence followed a title's words as an instruction; one point
+  said the title is the video's own text and no instruction.
+- Full and cells: the model is shown `title_whole` in every mode, but only values takes it as a row's name, so in a
+  full or cells run a sentence that quotes the whole line is refused as at ca36dec. The checkers are byte-same on the
+  same forms; the model's input is not.
+- Left: a quote of the whole line in part ("... day 3[row]", "feed 50 g flour ...[row]") is refused as at ca36dec; only
+  the exact whole line or the exact title is a row's name (class 6, behind the switch). A cut row adds up to 200
+  characters to a result, outside the size cap. Learned's sources carry no whole line. The 8 false twins above.
+
+#### 32.8.1 The repair of part two, after the skeptic's attack (key repair2)
+The skeptic of part two found two faults that matter and one small one. Each was reproduced first on 079f974
+(`mvp32/repair2/repro/`). Commit 52fe3dc (one commit; it edits code that d705d62, 4cb2105 and a70b349 added). No
+prompt file changed. Evidence in `mvp32/repair2/`.
+
+- **A whole line longer than a text field's cap (class 1, rebuilt on the second cell).** The line was cut to 200
+  characters and ended in "…", yet the note in CLIPPED_NOTE's place said the cell is the item's own title "whole as
+  their history holds it": the model was told again that a line ending in "…" is the record's own title. Fixed: a line
+  whose neutralised text is over 200 characters gets no `title_whole`. That row keeps its cut title, its
+  `title_clipped` flag and CLIPPED_NOTE, as at ca36dec. A line of exactly 200 characters still gets its cell, never
+  cut. A result can now hold both kinds of cut row; it then carries both notes, each about its own rows, and the
+  Ledger's view drops only the new note (checked on a made-up mixed result: equal to b6a880b's tool output, notes in
+  their order). **Class 1 is left open for rows whose first line is over 200 characters.** How many real rows that is
+  was not measured.
+- **The scope line beside a filter (class 2's line a person sees).** "all your history (from 3 October 2026, your
+  first save) · crumb.lab" read as the first save of that channel's rows, while the answer above it said the first
+  crumb.lab save was on another day; two lines named no rows at all. b6a880b's long words had the same ambiguity.
+  Fixed: when anything but a platform narrows the rows (a filter line that is not "<platform> only", the first/last
+  subject, the without-Shorts or length filter: `answer.narrowed`), the line says "all your history" with no start.
+  A platform alone keeps the start, said as what it is ("your first Instagram save"). Only the person's line changed:
+  the model's own window words beside a filter still say "the day of your first save" of all their saves (brief2 kept
+  those words fixed), so a model sentence can still read them as the filtered rows' first save. Over the skeptic's 61 made-up results: 8 lines change, exactly the 8 filtered scope lines it listed; the
+  model's words equal b6a880b's on all 61; every other line is as at 079f974.
+- **A marked clock beside a whole title (low).** `parse` marks a dated cell's said words only when they are a day, so
+  "at 2:00 pm[r1.items[0].when]" left "2:00 pm" outside a marker and guard (c) refused a true sentence. Fixed in the
+  guard only (`verify._v_own_clock`): a clock said as a time of day ("at", "around" or "about" before it) right before
+  the marker of a dated cell is taken as marked when that cell holds the same clock and the sentence marks the row
+  the cell belongs to. A title, a name or any other cell binds no clock. A wrong clock, another row's clock or cell,
+  a clock with no marker, a clock before a channel or title marker, the title's own "at 7", and the first clock of
+  "between 1:00 pm and 2:00 pm" all stay refused (`repair2/probe/ck_report.txt`: 6 true forms now kept, 0 false
+  forms released; one false form, another row's day before that row's own marker, is kept at 079f974 as here, its
+  cut-title twin kept at ca36dec: the old values hole). Still refused, as at 079f974 and ca36dec: a true clock written
+  without "at", "around" or "about", and a day and a clock before one marker ("on 20 October 2026 at 2:00 pm[..when]",
+  "at 2:00 pm on 20 October 2026[..when]"): parse binds only the last of the two.
+
+Checks (no model call; $0):
+- The skeptic's sentence sets on this tip (`repair2/sentence_sets.txt`): its first set (92) and mycases (420): no
+  verdict changes from 079f974. mycases2 (192) and mycases3 (168): 4 verdicts change, all true marked clocks now kept
+  (x07, k01, k02, k03). The 20 false class-1 cases: all 20 refused, as at ca36dec; their 3 true controls kept.
+- The brief's decisive probes: code leads, 300 builds over three modes on two sets of made-up turns (168 and 132), each
+  compared with ca36dec's build of the same key: 87 differ, all in the `Counted:` line (39 and 48), 0 outside it; 36
+  differ from 079f974, all in that line (the 6 filtered scope lines x 3 modes x 2). Full and cells, the true title sentences: equal to ca36dec line for line. The made-up turns rebuilt by this
+  tip's tools equal 079f974's (57 of 57).
+- Saved forms of the 40 run folders, default values: equal to 079f974 in every field and every answer; against
+  ca36dec 0 sentences released, 0 refused, the private line on in the same 6 answers and off in the same 1. Full and
+  cells: byte for byte ca36dec's. The skeptic's replay with whole lines put into the 143 cut rows: full and cells
+  byte for byte ca36dec's, values equal to 079f974 (the one true release against ca36dec, as before).
+- Planted (`eval_brain planted` and `brain.planted`'s scorers with their rows; full, cells, values): byte for byte
+  ca36dec's.
+- The whole suite in four shards on 52fe3dc: 1,256 + 1,526 + 1,631 + 2,031 = 6,444 passed, 2 skipped, 0 failed
+  (75978a8's 6,440 and the 4 new tests). The known order-dependent r28 test passed this time.
+- Prompt files: byte for byte the same. Privacy scan of ca36dec..this tip with `mvp22/privscan2.py`: no caption;
+  33 name hits, all generic words (32.8's 31, and two more single words, both ordinary English).
+- Left, besides what 32.8 leaves: class 1 for lines over 200 characters (above); the 8 false twins and the skeptic's
+  further 24 false whole-title forms whose cut-title twins ca36dec keeps (the old values hole reaching the new name);
+  another row's marked day beside a whole title (the same hole); the clock forms just named. The 16,115-verdict full
+  and cells differential of 32.8 was not rerun at this tip: its 28 and 16 are 75978a8's (the 8 changed lines already
+  differed from both bases, so they should hold; not measured). The shorter scope line also reaches the next turn's
+  screen; the checker there reads only the plan's long words.
+
+#### 32.9 Part three: the checks at the merge, the cost of the whole line, and the reword of a title's own figures
+Done by the merger, not by an agent. No prompt file changed. Evidence in `mvp32/mycheck2/` and `mvp32/accept/`.
+
+- **The skeptic's sets rerun on a71eaf9, against ca36dec.** The four sentence sets (92, 420, 192 and 168 keys):
+  every sentence let out that ca36dec refused is one already listed in 32.8 and 32.8.1 (26 false whole-title forms
+  whose cut-title twins ca36dec keeps, the 13 false forms on the topic row, the true forms), and nothing else. Full
+  and cells: 0 verdicts differ. Code leads, 300 builds: 87 differ from ca36dec, all in the `Counted:` line. The true
+  title sentences in full and cells: equal line for line. Scope lines over 68 made-up results: only scope windows
+  over all history differ. The made-up turns rebuilt by a71eaf9's tools equal 079f974's (57 of 57): the test library
+  holds no first line over 200 characters, so no run can see that class.
+- **The 16,115-key full and cells differential, rerun on a71eaf9 and on the final code.** Against ca36dec 28 keys
+  differ (the details text of 10 verdicts and 18 answer tuples; no kept flag, no reason, no private line). Against
+  b6a880b and against 75978a8, 16 answer tuples and no verdict. So 32.8's 28 holds at the merge. The final code
+  equals a71eaf9 on every key.
+- **Eight to sixteen live repeats per message** (brain_v4d, strict off, default rules; in sample; `accept/`):
+
+  | Measured | 232c21e and b6a880b (no whole line) | a71eaf9 | final (with the reword below) |
+  |---|---|---|---|
+  | N069: the title said to be cut short | 5 of 16 | 0 of 16 | 0 of 16 |
+  | N048 turn 2: code's own lead went out | 0 of 16 | 3 of 16 | 0 of 16 |
+  | N048 turn 2: a reword was asked | 6 of 16 | 9 of 16 | 2 of 16 |
+  | N048 turn 2: median and longest seconds | 6.3 and 8.4 | 7.15 and 11.1 | 4.2 and 6.4 |
+
+  All 32 N069 answers on the two new builds were read by eye: each names the item by its whole title and its day; none
+  says the title is cut; none acts on the title's words (that made-up title is worded as an instruction). The other
+  eight repeated messages carry no whole line and show no change.
+- **The cost found, and its cause.** With the whole line in view the model answers "what did it say" from the
+  title's own figures. Those figures are refused unless the exact whole title stands before the row's marker. The
+  reword named one figure and said "cite its cell", which no title figure allows; the second form failed on the next
+  figure of the same title, and code's own lead went out (3 of 16; never before).
+- **The reword of a title's own figures (commit 00310fc; the text only).** When every figure a refused sentence says
+  with no marker is in the whole line of one item row of the turn, the reword names all of them at once and the two
+  forms that pass: the exact whole title right before that row's marker, or the sentence without the figures. The
+  row is named by its path; no word of the title is put into the message. Values mode only, under rule
+  `whole_title`, and only when a result of the turn carries a whole line. No verdict moves: the four sentence sets
+  give the same kept flag, reasons, sent text and private line on every key as a71eaf9; the saved forms of the 40
+  run folders are byte for byte a71eaf9's in values (against ca36dec 0 released, 0 refused, the private line on in
+  the same 6 answers and off in the same 1), and byte for byte ca36dec's in full and cells; the replay with whole
+  lines put into the 143 cut rows equals a71eaf9's (one true release against ca36dec, as before). Two tests added.
+  One pinned test of 31 was changed on purpose: a reword may now name an item row that carries a whole title by its
+  own path, where it could only name cells.
+- **Read with care.** Sixteen repeats on the final code had only two rewords on that turn, so 0 of 16 code leads is
+  what the hint aims at, not proof of it. Both rewords passed.
+- The whole suite in four shards on the final code: 6,446 passed, 2 skipped (the changed pinned test failed in the
+  shard run before its change and passes after it, run alone with the new tests).
+- **Left open, as measured:** the 26 false whole-title forms and the 13 on the topic row (old values holes; a claim
+  that an action was done, worded after a title, is among them and no mode refuses it); time spent said through a
+  `.title` or `.title_whole` marker (the model used the `.title_whole` marker in 1 of 48 title records); a part of
+  the whole line quoted with its figures is still refused (class 6), so "what did it say" is answered by the whole
+  title or without its figures; one answer form in 168 came back malformed and was repaired; rows whose first line is
+  over 200 characters keep the cut title and its note.

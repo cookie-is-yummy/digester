@@ -254,6 +254,18 @@ def _is_cell(t, path):
     return not isinstance(v, (dict, list)) and v is not None
 
 
+def _is_row(t, path):
+    """mvp32 part three: an item row of the turn, named by its own marker (the reword of a title's own figures names
+    the row the whole title is written before)."""
+    from mvp.brain import verify as V
+    rid, rest = path.split(".", 1)
+    try:
+        v = V._resolve((t.results.get(rid) or {}).get("sheet") or {}, rest)
+    except (KeyError, IndexError, TypeError):
+        return False
+    return isinstance(v, dict) and v.get("ref") == path and "title_whole" in v
+
+
 def test_a_bracket_that_is_no_marker_gets_a_reword_that_names_cells_by_path_never_by_value(brain):
     from mvp.brain import verify as V
     t = _turn(brain, "everything I opened", [("breakdown", {"by": "none", "compare": "none", "order": "most", "top": 5,
@@ -592,13 +604,14 @@ def test_every_path_a_results_own_texts_name_is_in_that_result_and_its_cells_ver
     n = t.results["r1"]["meta"]["hidden"]["sensitive"]
     o, _r = _check(t, f"It holds {n}[r1.meta.hidden.sensitive].")
     assert o.reasons == ["bad_ref"]
-    # verify's own reword texts, turn by turn: every path they name is a cell of that turn
+    # verify's own reword texts, turn by turn: every path they name is a cell of that turn (or, mvp32 part three, an
+    # item row of that turn that carries its whole title: the row the title is to be written before)
     for t, _envs in runs:
         rid = next(iter(t.results), "r1")
         for br in (f"[{rid}.meta]", f"[{rid}.nothing_here]", f"[{rid}.window_dates]", f"[{rid}.totals.items]"):
             for said in ("12", "5 January 2021"):
                 o, rep = _check(t, f"It holds {said}{br}.")
-                bad = [p for p in _named(rep) if not _is_cell(t, p) and p != br[1:-1]]
+                bad = [p for p in _named(rep) if not _is_cell(t, p) and not _is_row(t, p) and p != br[1:-1]]
                 assert not bad, (t.message, br, rep)
     assert V.VALUES_RULES_R31 <= V.VALUES.rules
 

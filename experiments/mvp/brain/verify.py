@@ -34,6 +34,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .. import insight as I
+from . import results as R
 
 VERIFY_VERSION = "brain_verify_v1"
 
@@ -683,9 +684,13 @@ class Ledger:
     def __init__(self, results):
         envs = list(results.values()) if isinstance(results, dict) else list(results or [])
         self.by_rid = {}
+        self.whole = {}   # mvp32 part two: (rid, "items[k]") -> that row's `title_whole` (whole_aside)
         for e in envs:
             if isinstance(e, dict) and e.get("rid"):
+                e, whole = whole_aside(e)
                 self.by_rid[e["rid"]] = Result(e)
+                for rest, w in whole.items():
+                    self.whole[(e["rid"], rest)] = w
 
     def get(self, rid):
         return self.by_rid.get(rid)
@@ -696,6 +701,39 @@ class Ledger:
             for n, p in r.names:
                 out.setdefault(_low(n), []).append((r.rid, p, n))
         return out
+
+
+def whole_aside(env):
+    """mvp32 part two: a result as every check reads it, and the whole titles its item rows carry. The tools put the
+    item's own line whole beside a title they cut (`title_whole`, results.WHOLE_KEY) for the model to read; the checks,
+    code's own lead and the cards read the row as they did before that cell was added: it is set aside here (a copy;
+    the result itself is never changed), and the note that says what it is goes back to CLIPPED_NOTE in its place (or
+    out, when no row is flagged `title_clipped`). Only values mode's rule "whole_title" reads the lines set aside.
+    -> (env, {"items[k]": the whole line})."""
+    sh = env.get("sheet") if isinstance(env.get("sheet"), dict) else None
+    rows = sh.get("items") if sh is not None else None
+    if not isinstance(rows, list) or not any(isinstance(r, dict) and R.WHOLE_KEY in r for r in rows):
+        return env, {}
+    whole, kept = {}, []
+    for k, r in enumerate(rows):
+        if isinstance(r, dict) and R.WHOLE_KEY in r:
+            ref = str(r.get("ref") or "")
+            rest = ref.split(".", 1)[1] if "." in ref else f"items[{k}]"
+            if isinstance(r[R.WHOLE_KEY], str):
+                whole[rest] = r[R.WHOLE_KEY]
+            r = {key: v for key, v in r.items() if key != R.WHOLE_KEY}
+        kept.append(r)
+    env2 = dict(env)
+    env2["sheet"] = dict(sh, items=kept)
+    meta = env.get("meta")
+    if isinstance(meta, dict) and R.WHOLE_NOTE in (meta.get("notes") or []):
+        notes = [n for n in meta["notes"]]
+        at = notes.index(R.WHOLE_NOTE)
+        notes.pop(at)
+        if R.CLIPPED_NOTE not in notes and any(isinstance(r, dict) and r.get("title_clipped") for r in kept):
+            notes.insert(at, R.CLIPPED_NOTE)
+        env2["meta"] = dict(meta, notes=notes)
+    return env2, whole
 
 
 def _low(s):
@@ -814,7 +852,8 @@ def parse(sentence, ledger, loose=frozenset()):
                 lst = _resolve(r.sheet, lp) if lp else None
             except KeyError:
                 lst = None
-            if not isinstance(lst, list):
+            if not isinstance(lst, list) or _segs(lp)[-1:] and _segs(lp)[-1][0] in ONE_ROW_KEYS:
+                # (mvp32: a holder of one named row is no list of their history to count)
                 bad.append("bad_ref")
                 prev_end = m.end()
                 continue
@@ -4668,6 +4707,9 @@ _V_LENGTH_KEYS = frozenset(I.LENGTH_KEYS) | frozenset({"minutes", "longest_minut
 _V_COUNT_NOUN = re.compile(r"^(?:videos?|items?|posts?|saves?|reels?|shorts?|clips?|times?|opens?|channels?|themes?|"
                            r"areas?|lessons?|episodes?|things?|ones?|opened|saved)$", re.I)
 _V_PROSE_KEYS = frozenset({"notes", "note", "error", "next", "holds", "holds_not", "busiest_weekdays"})
+# mvp32: the lists a tool makes to hold ONE named row, so that the name is cited on its row (learned's `on_topic`, a
+# dict before). The list's length is no count of their history: it stands for no figure and takes no count marker
+ONE_ROW_KEYS = frozenset({"on_topic"})
 
 
 def _mon_i(tok):
@@ -4755,6 +4797,10 @@ class _Pool:
                 for k, v in o.items():
                     walk(v, k)
             elif isinstance(o, (list, tuple)):
+                if key in ONE_ROW_KEYS:   # mvp32: a holder of one named row, as the dict it was; no figure
+                    for v in o:
+                        walk(v, key)
+                    return
                 self.nums.add(float(len(o)))
                 if key not in _V_PROSE_KEYS and (not o or any(isinstance(v, dict) for v in o)):
                     self.cell_nums.add(float(len(o)))   # a list of rows (or an empty one): its length is a count
@@ -6003,11 +6049,201 @@ def check_sentence_values(sentence, ledger, turn=None, where="point", index=0, m
                           too_long=False, with_flags=False):
     """One sentence in values mode -> Outcome: refused only by VALUES_REFUSE. `with_flags` (a sentence checked
     alone): every code of today's full and cells checks of the same sentence goes into `flags` (check_answer_values
-    takes them from the whole answer's checks instead)."""
+    takes them from the whole answer's checks instead). mvp32 part two: rule "whole_title" (_v_whole_title)."""
     cm = check_mode(mode) if mode is not None else VALUES
     turn = turn or Turn()
     if not isinstance(ledger, Ledger):
         ledger = Ledger(ledger)
+    cache = pool_cache if pool_cache is not None else {}
+    out = _check_sentence_values(sentence, ledger, turn, where, index, cm, cache, too_long, with_flags)
+    if out.reasons and ledger.whole and cm.rule("whole_title"):
+        out = _v_whole_title(out, ledger, turn, cm, cache)
+        if "unfound_number" in out.reasons:
+            _v_whole_hint(out, ledger)
+    return out
+
+
+# mvp32 part two (rule "whole_title", ON by default): a title the tools cut to fit was said to be cut short in their
+# history, so an item row whose title is a cut carries the item's own line whole beside it (`title_whole`). A sentence
+# that names the row by that whole line, right before the row's marker (or a marker of its `title` or `title_whole`
+# cell), is read as if it named the row by its `title`: the line is put back as the row's title and the sentence is
+# checked again, by every rule of the mode. It goes out only when that check keeps it, when no safety rule refused it
+# as written (VALUES_SAFETY: the line's own words are read as written), and when it says no figure, number word, day,
+# month, weekday or relative day outside a marker: a sentence ca36dec refused is let out on the title alone, with
+# every other claim it makes bound to a cell (an unmarked day the results hold for another reason is no day of the
+# row). The sentence that goes out is the model's own. Nothing else reads the whole line (Ledger, whole_aside).
+_V_WHOLE_MARK = re.compile(r"\[(r\d+)\.(items\[\d+\])(\.title_whole|\.title)?\]")
+_V_CLOSE_QUOTE = "\"”'’"
+_V_LOOSE_DAY = re.compile(r"\b(?:today|yesterday|tonight|(?:this|last|past|next)\s+(?:week|weekend|month|year|"
+                          r"spring|summer|autumn|fall|winter|night|morning|evening))\b", re.I)
+
+
+def _v_whole_swap(raw, ledger, rids=None):
+    """Each row's whole line written right before its row marker (or the marker of its `title` or `title_whole` cell),
+    put back as the row's `title` (a `title_whole` marker as its `title` marker). -> (sentence, how many were put
+    back); `rids`, a set, gets the results of the rows put back."""
+    out, n, last = [], 0, 0
+    for m in _V_WHOLE_MARK.finditer(raw):
+        w = ledger.whole.get((m.group(1), m.group(2)))
+        res = ledger.get(m.group(1))
+        if not w or res is None:
+            continue
+        try:
+            row = _resolve(res.sheet, m.group(2))
+        except (KeyError, AttributeError, IndexError, TypeError):
+            continue
+        t = row.get("title") if isinstance(row, dict) else None
+        j = m.start()
+        if j > last and raw[j - 1] in _V_CLOSE_QUOTE:
+            j -= 1   # the line in quotes, the marker after them
+        a = j - len(w)
+        if not isinstance(t, str) or a < last or raw[a:j].lower() != w.lower() or \
+                (a > 0 and (raw[a - 1].isalnum() or raw[a - 1] == "_")):
+            continue
+        mark = m.group(0).replace(".title_whole]", ".title]")
+        out.append(raw[last:a] + t + raw[j:m.start()] + mark)
+        last = m.end()
+        n += 1
+        if rids is not None:
+            rids.add(m.group(1))
+    return ("".join(out) + raw[last:], n) if n else (raw, 0)
+
+
+_V_CLOCK_TAIL = re.compile(r"\b(?:at|around|about)\s+(\d{1,2})(?::(\d\d))?\s*(am|pm|a\.m\.|p\.m\.)\s*$", re.I)
+
+
+def _v_hm(m):
+    """A clock match -> (hour of 24, minute)."""
+    h, mi, ap = int(m.group(1)), int(m.group(2) or 0), m.group(3).lower().replace(".", "")
+    return (h % 12 + (12 if ap == "pm" else 0), mi)
+
+
+def _v_own_clock(raw, mk, markers):
+    """repair2 (a true "at 2:00 pm[r1.items[0].when]" was read as a loose clock: parse marks a dated cell's said words
+    only when they are a day): the start of a clock said as a time of day ("at 2:00 pm") right before a value marker
+    whose cell is a date (the `when` kind, as parse measures it) that holds that same clock, of a row the sentence
+    names with its own row marker; else None. Only such a cell binds a clock: never a title, a name or any other string
+    cell, and never a clock the cell does not hold ("between 1:00 pm and 2:00 pm", a wrong time, another row's time
+    or cell stay loose)."""
+    if mk.kind != "value" or mk.start != mk.mstart or not isinstance(mk.value, str) or \
+            _measure(mk.rest, mk.value)[1] != "date":
+        return None
+    if not any(r.kind == "row" and r.rid == mk.rid and r.rest == mk.owner for r in markers):
+        return None
+    said = _V_CLOCK_TAIL.search(raw[:mk.mstart])
+    cell = list(_V_CLOCK.finditer(mk.value))
+    if said is None or len(cell) != 1 or _v_hm(said) != _v_hm(cell[0]):
+        return None
+    return said.start(1)
+
+
+def _v_loose(raw, ledger, rids=()):
+    """The figures, number words, days, months, weekdays and relative days a sentence says outside its markers (every
+    marker blanked from the start of what it names: a cited title, a marked value), less a month or a year that is
+    the window of a result in `rids` (the results of the rows named by their whole line): "opened in October" over a
+    window that starts and ends in October of one year is the window's own frame, not a day of the row; less a clock
+    right before the marker of a dated cell that holds that clock (_v_own_clock). -> [the words, as written]."""
+    markers, _bad = parse(raw, ledger, CELLS_LOOSE)
+    wins = []
+    for r in set(rids):
+        res = ledger.get(r)
+        if res is not None:   # the sheet's window, else the days the result says it counted (meta.window_dates)
+            a, b = res.window()
+            d = (res.meta or {}).get("window_dates") if isinstance((res.meta or {}).get("window_dates"), dict) else {}
+            wins.append((a, b) if a and b else (_as_d(d.get("start")), _as_d(d.get("end"))))
+
+    def frame(mo, y):   # the window lies wholly inside that month of one year (of year y when given), or year y
+        return any(a and b and a.year == b.year and (y is None or a.year == y) and
+                   (mo is None or a.month == b.month == mo) and (mo is not None or y is not None) for a, b in wins)
+    t = raw
+    for mk in markers:
+        t = _blank(t, mk.start, mk.end)
+        c = _v_own_clock(raw, mk, markers)
+        if c is not None:
+            t = _blank(t, c, mk.mstart)
+    t = _BRACKET.sub(lambda m: " " * len(m.group(0)), t)
+    out = []
+    for rx in (_V_RANGE, _V_DAYMON, _V_MONDAY):   # a day is never the window's frame
+        for m in list(rx.finditer(t)):
+            out.append(m.group(0).strip())
+            t = _blank(t, m.start(), m.end())
+    for m in list(_V_MONYEAR.finditer(t)):
+        if frame(_mon_i(m.group(1)), int(m.group(2))):
+            t = _blank(t, m.start(), m.end())
+    for m in list(_V_YEAR.finditer(t)):
+        if frame(None, int(m.group(1))):
+            t = _blank(t, m.start(), m.end())
+    for rx in (_V_MONYEAR, _V_CLOCK, _V_LOOSE_DAY, _V_WEEKDAY, _V_RATIO_FREE, _V_NUMWORD_RX):
+        for m in list(rx.finditer(t)):
+            out.append(m.group(0).strip())
+            t = _blank(t, m.start(), m.end())
+    for m in _V_MONALONE.finditer(t):
+        if m.group(1) not in ("may", "march") and not frame(_mon_i(m.group(1)), None):   # (the verbs; the frame)
+            out.append(m.group(1))
+    out += [m.group(0) for m in re.finditer(r"\d[\d,.:]*", t)]
+    return out
+
+
+def _v_whole_title(out, ledger, turn, cm, cache):
+    """Rule "whole_title" over a sentence refused as written (out). -> the outcome: kept with the model's own sentence,
+    or refused for what the sentence says beside the title."""
+    raw = " ".join(str(out.text or "").split())
+    rids = set()
+    swapped, n = _v_whole_swap(raw, ledger, rids)
+    if not n or any(r in VALUES_SAFETY for r in out.reasons):
+        return out
+    o1 = _check_sentence_values(swapped, ledger, turn, out.where, out.index, cm, cache)
+    if o1.reasons:   # refused with the row's own title as well: for what it says beside the title
+        out.reasons, out.details, out.notes = list(o1.reasons), list(o1.details), dict(o1.notes)
+        return out
+    loose = _v_loose(swapped, ledger, rids)
+    if loose:
+        code = "unfound_date" if any(re.search(r"[A-Za-z]", x) and not _V_NUMWORD_RX.fullmatch(x) and
+                                     not _V_RATIO_FREE.fullmatch(x) for x in loose) else "unfound_number"
+        d = (f"'{_clip(loose[0], 30)}' has no marker: beside an item named by its whole title, every figure and day is "
+             "said with its cell's marker right after it")
+        out.reasons, out.details, out.notes = [code], [d], {code: d}
+        return out
+    out.reasons, out.details, out.notes, out.layer = [], [], {}, None
+    out.cells, out.rid, out.hidden_rank = dict(o1.cells), o1.rid, o1.hidden_rank
+    out.sent = strip_markers(_v_unbracket(raw)) if cm.rule("paren_tidy") else strip_markers(raw)
+    return out
+
+
+# mvp32 part three (the reword text only; no verdict moves): with the whole line in view the model answers "what did
+# it say" from the title's own figures ("feed 50 g ..., wait 12 hours"); the check refuses them, and the reword named
+# one figure and said "cite its cell", which no cell of a title's figure allows: the second form failed on the next
+# figure of the same title and code's own lead went out. When every figure a refused sentence says with no marker is
+# in one row's whole line, the reword names them all and the two forms that pass. The row is named by its path only:
+# never a word of the title (third-party text) is put into the message.
+_V_FIG_DETAIL = re.compile(r"^'(.+)' has no marker and no result of this turn holds it(?:: cite its cell)?$")
+
+
+def _v_whole_hint(out, ledger):
+    """Rule "whole_title", the reword of a sentence refused for a figure with no marker: when the figures so refused
+    are all in the whole line of one item row of this turn's results, the repair text says so for all of them at once
+    (the outcome's reasons are not changed)."""
+    if not _V_FIG_DETAIL.match(out.notes.get("unfound_number") or ""):
+        return
+    figs = []
+    for d in out.details:
+        m = _V_FIG_DETAIL.match(d)
+        if m and m.group(1) not in figs:
+            figs.append(m.group(1))
+    for (rid, rest), w in sorted(ledger.whole.items()):
+        if figs and all(re.search(r"(?<![\w.,])" + re.escape(f) + r"(?![\w]|[.,]\d)", w, re.I) for f in figs):
+            one = len(figs) == 1
+            said = ", ".join(f"'{f}'" for f in figs[:4]) + (" and more" if len(figs) > 4 else "")
+            hint = (f"{said} {'is' if one else 'are'} only in an item's title: write that whole title, exactly as its "
+                    f"`title_whole` holds it, right before [{rid}.{rest}], or leave {'it' if one else 'them'} out")
+            out.details = [hint] + [d for d in out.details if not _V_FIG_DETAIL.match(d)]
+            out.notes["unfound_number"] = hint
+            return
+
+
+def _check_sentence_values(sentence, ledger, turn, where, index, cm, cache, too_long=False, with_flags=False):
+    """check_sentence_values as it was before rule "whole_title" (its mode, turn, ledger and pool cache given)."""
+    pool_cache = cache
     pool = _values_pool(ledger, turn, pool_cache if pool_cache is not None else {}, timing=not cm.rule("timing_out"),
                         lengths=not cm.rule("length_cells"))
     nw = cm.rule("nw_refuse")
@@ -6252,7 +6488,14 @@ VALUES_RULES_R30 = frozenset({"timing_out", "cards_found", "item_count_free", "s
 # "paren_tidy": a bracket that held only markers leaves no "()" in the sentence sent. values_mode(rules=VALUES_RULES |
 # VALUES_RULES_R30) is the mvp30 default, unchanged.
 VALUES_RULES_R31 = frozenset({"length_unit", "days_unit", "cite_hint", "paren_tidy"})
-VALUES_RULES_ALL = VALUES_RULES | VALUES_RULES_SWITCHED | VALUES_RULES_R31
+# mvp32: "private_behind", ON by default: the private line follows what the results behind the answer that goes out
+# left out (answer.build, private_behind below), not which sentences of which form survived. It changes no verdict
+# and no sentence; only whether code's own private line goes under the answer. mvp32 part two: "whole_title", ON by
+# default: an item named by the whole line beside its cut title is named by its title (_v_whole_title); it changes
+# no verdict of a result with no `title_whole`. values_mode(rules=VALUES_RULES | VALUES_RULES_R30 |
+# VALUES_RULES_R31) is the mvp31 default, unchanged.
+VALUES_RULES_R32 = frozenset({"private_behind", "whole_title"})
+VALUES_RULES_ALL = VALUES_RULES | VALUES_RULES_SWITCHED | VALUES_RULES_R31 | VALUES_RULES_R32
 VALUES_RULES_ENV = "MVP_BRAIN_VALUES_RULES"
 
 
@@ -6278,7 +6521,7 @@ def values_rules_env(value=None):
 # the default rules of the values mode: the mvp27 rules, the r30 set and the r31 set, plus what MVP_BRAIN_VALUES_RULES
 # switches on
 # (read once, here; the switch only adds rules)
-VALUES_DEFAULT_RULES = VALUES_RULES | VALUES_RULES_R30 | VALUES_RULES_R31 | values_rules_env()
+VALUES_DEFAULT_RULES = VALUES_RULES | VALUES_RULES_R30 | VALUES_RULES_R31 | VALUES_RULES_R32 | values_rules_env()
 
 
 def values_mode(number_words=None, rules=None):
@@ -6322,3 +6565,89 @@ def repair_message(verdict):
         parts.append(f"{where}: " + "; ".join(uniq))
     head = "These sentences failed the check. Rewrite only these, or drop the points: "
     return head + " ".join(p.rstrip(".") + "." for p in parts)
+
+
+# ------------------------------------------------------------------ mvp32: the private line behind the answer
+def _left_private(res):
+    """A result that left private rows out of what it shows (its meta's `hidden`)."""
+    hid = ((res.meta or {}).get("hidden") or {}) if res is not None else {}
+    return int(hid.get("sensitive") or 0) > 0 or bool(hid.get("rank_hidden_above"))
+
+
+def free_figures(text, markers, ledger=None):
+    """mvp32: the figures and number words a sentence holds with no marker, that may be a count of some result's rows,
+    as [value]; None stands for one whose result cannot be pinned (a percent, a fraction word). Left out: every marker
+    with the words it is said with, quoted titles, dates and clock times, "the first half", and a span the turn's own
+    window words say ("the 4 weeks")."""
+    t = text
+    for mk in markers:
+        t = _blank(t, mk.start, mk.end)
+    t = re.sub(r"\[[^\]]*\]", lambda m: " " * len(m.group(0)), t)
+    for rx in (_V_QUOTE, _V_RANGE, _V_DAYMON, _V_MONDAY, _V_MONYEAR, _V_YEAR, _V_CLOCK):
+        t = rx.sub(lambda m: " " * len(m.group(0)), t)
+    t = re.sub(r"\b(?:the\s+)?(?:first|second|other)\s+half\b", lambda m: " " * len(m.group(0)), t, flags=re.I)
+    words = " ".join(x for r in (ledger.by_rid.values() if ledger is not None else ()) for x in _window_phrases(r)).lower()
+    for m in list(_SPAN_N.finditer(t)):
+        if re.search(r"\b" + m.group(1) + r"\s+" + m.group(2).lower().rstrip("s"), words):
+            t = t[:m.start()] + " " * (m.end() - m.start()) + t[m.end():]
+    out = []
+    for m in _V_FIG.finditer(t):
+        out.append(None if m.group("pct") else round(float(m.group("num").replace(",", "")), 6))
+    for m in _V_NUMWORD_RX.finditer(t):
+        w = m.group("w").lower()
+        out.append(round(float(_V_NUM_WORDS[w]), 6) if w in _V_NUM_WORDS else None)
+    return out
+
+
+def _holders(ledger, figures, mode=None):
+    """mvp32 repair (the line went out on a turn whose only result that hid private rows held none of the sentence's
+    figures): the results that hold each figure written with no marker, read as values mode reads a result (every
+    numeric cell, list length and figure of code's own strings; never third-party text), one result at a time. A
+    figure no single result holds, or one that cannot be pinned (None), stands on every result of the turn."""
+    cm = check_mode(mode if mode is not None else "values")
+    pools = {rid: _Pool(Ledger([r.env]), "", "", timing=not cm.rule("timing_out"), lengths=not cm.rule("length_cells"))
+             for rid, r in ledger.by_rid.items() if isinstance(r.env, dict)}
+    out = set()
+    for f in figures:
+        held = {rid for rid, p in pools.items() if f is not None and (f in p.nums or f in p.day_nums)}
+        out |= held or set(ledger.by_rid)
+    return out
+
+
+def private_behind(ledger, verdict=None, code=None, cards=(), mode=None):
+    """mvp32 (rule "private_behind"; a turn whose one result-citing sentence of a result that hid private rows was
+    refused sent no private line, while its lead's count of that result went out): whether any result BEHIND the
+    answer that goes out left private rows out. Behind it: every result a sent sentence cites (a row, a cell, a calc's
+    two cells), every result of a card shown, the code lead's result; and, for a figure a sent sentence holds with no
+    marker, every result that holds that figure (_holders; all of them when none does, or when it cannot be pinned).
+    A code lead of several results (`mixed`) stands on all of them. No result behind it left private rows out: no
+    line."""
+    if not isinstance(ledger, Ledger):
+        ledger = Ledger(ledger)
+    rids, every, figs = set(), False, []
+    if verdict is not None:
+        for o in verdict.outcomes:
+            if not (o.kept and o.sent):
+                continue
+            text = " ".join(o.text.split())
+            if check_mode(mode if mode is not None else "values").rule("whole_title"):
+                text = _v_whole_swap(text, ledger)[0]   # (mvp32 part two: a whole title is its row's name)
+            mks, _bad = parse(text, ledger)
+            for mk in mks:
+                if mk.kind == "calc":
+                    rids |= {mk.a.split(".", 1)[0], mk.b.split(".", 1)[0]}
+                elif mk.rid:
+                    rids.add(mk.rid)
+            figs += free_figures(text, mks, ledger)
+    elif code:
+        if code.get("how") != "plain" and code.get("rid"):
+            rids.add(code["rid"])
+        every = bool(code.get("mixed"))
+    for c in cards or ():
+        ref = str((c or {}).get("ref") or "")
+        if "." in ref:
+            rids.add(ref.split(".", 1)[0])
+    if figs:
+        rids |= _holders(ledger, figs, mode)
+    pool = list(ledger.by_rid.values()) if every else [ledger.get(r) for r in rids]
+    return any(_left_private(r) for r in pool if r is not None)
