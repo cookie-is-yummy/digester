@@ -4575,7 +4575,8 @@ def check_answer(form, ledger, turn=None, mode=None):
 # reword. Code words no part of a sentence.
 VALUES_CODES = frozenset({"wrong_value", "wrong_name", "wrong_measure", "bad_ref", "calc", "empty", "garbled",
                           "unfound_number", "unfound_date", "unfound_time", "unfound_name", "row_name"})
-# mvp28: the code the rules of VALUES_RULES_R28 add (refused only when MVP_BRAIN_VALUES_RULES switches them on)
+# mvp28: the code the rules of VALUES_RULES_R28 add (refused when item_count or item_count_free is on: since mvp30
+# item_count_free is in the default, VALUES_RULES_R30)
 VALUES_CODES_R28 = frozenset({"item_count"})
 # the refuse list: code -> why it refuses (pinned and hashed by tests/test_brain_values.py)
 VALUES_REFUSE = {
@@ -4603,11 +4604,13 @@ VALUES_REFUSE = {
     "watch_time": "a marker citing a length total (watch time is never said); no word is read",
     "not_item": "an item card whose ref is no item row of this turn's results",
 }
-# mvp28: the refusals the rules of VALUES_RULES_R28 add, off by default (MVP_BRAIN_VALUES_RULES switches them on)
+# mvp28: the refusals the rules of VALUES_RULES_R28 add (since mvp30 the default refuses it too, through
+# item_count_free: VALUES_REFUSE_DEFAULT below)
 VALUES_REFUSE_R28 = {
     "item_count": "(a) a count of the rows a page of items shows (its items.count, or a figure only that length "
                   "holds) that is not the number of its rows the answer shows (item cards and rows named)",
 }
+VALUES_REFUSE_DEFAULT = {**VALUES_REFUSE, **VALUES_REFUSE_R28}   # mvp30: what the default values mode refuses
 VALUES_SAFETY = ("sensitive", "psych", "outcome", "language", "link", "watch_time")
 # the number-word variant: "refuse" (a small number word or a fraction word is a value: refused when no result holds
 # it) or "flag" (never refused). Chosen by DESIGN 26's measure
@@ -4652,6 +4655,10 @@ _V_CAPS = re.compile(r"(?<![\w'’@&.-])[A-Z][\w'’&-]*(?:\s+[A-Z][\w'’&-]*)*
 _V_VALUE_KEYS = frozenset({"label", "part", "from", "to", "question"})
 _V_WINDOW_KEYS = frozenset({"window_said", "words", "said", "asked", "rest_words"})
 _V_DAY_KEYS = frozenset({"days", "days_active"})
+# mvp30 repair (rule "length_cells"): the cells that hold a video's official length or a total of lengths. A length is
+# the video's own, never time they spent (their export records no watch time); and since mvp30 every item row holds
+# one (`minutes`, a common figure such as 10 or 25), so read as any cell it made an unmarked figure found by chance
+_V_LENGTH_KEYS = frozenset(I.LENGTH_KEYS) | frozenset({"minutes", "longest_minutes", "shortest_minutes"})
 _V_COUNT_NOUN = re.compile(r"^(?:videos?|items?|posts?|saves?|reels?|shorts?|clips?|times?|opens?|channels?|themes?|"
                            r"areas?|lessons?|episodes?|things?|ones?|opened|saved)$", re.I)
 _V_PROSE_KEYS = frozenset({"notes", "note", "error", "next", "holds", "holds_not", "busiest_weekdays"})
@@ -4673,7 +4680,7 @@ class _Pool:
     labels, notes), never from third-party text (a title, a post's text, a name): a number inside a title is no count
     of their history (the planted f_forged_title2, audit F50b, F50c)."""
 
-    def __init__(self, ledger, message="", screen="", timing=True):
+    def __init__(self, ledger, message="", screen="", timing=True, lengths=True):
         self.nums, self.fracs, self.dates, self.hours, self.times = set(), [], set(), set(), set()
         self.months, self.years = set(), set()   # (year, month) and years a date part of the results holds
         self.pcts, self.labels = [], set()   # percent-keyed values; the rows' own labels and parts ("2021", "evening")
@@ -4687,6 +4694,7 @@ class _Pool:
         # apart), the item lists that are a page of a larger counted set ({rid: rows shown}), and the item cards the
         # answer sends ({rid: cards}; None when the sentence is checked with no form, so nothing is compared)
         self.held, self.pages, self.shown, self.touched = {}, {}, None, None
+        self.named_shown = True   # mvp30: whether rows named by a marker count as shown (rule "rows_shown")
         # mvp28 repair (rule "page_cited"): the same counts by the result that holds them ({figure: {rid: cells}})
         self.held_by, cur, val_rids = {}, [None], []
 
@@ -4699,6 +4707,8 @@ class _Pool:
         def walk(o, key=None):
             if isinstance(o, bool) or o is None:
                 return
+            if isinstance(o, (int, float)) and not lengths and key in _V_LENGTH_KEYS:
+                return   # rule "length_cells": a length cell never stands for a figure written with no marker
             if isinstance(o, (int, float)):
                 v = float(o)
                 hold(v)
@@ -4749,7 +4759,7 @@ class _Pool:
                     walk(v, key)
         for r in ledger.by_rid.values():
             cur[0] = r.rid
-            # mvp28 prep repair (rule "timing_out", off by default): the envelope's `took_ms` is code's clock, how long
+            # mvp28 prep repair (rule "timing_out", on by default since mvp30): the envelope's `took_ms` is code's clock, how long
             # the tool ran, never a cell of their history; read as one, a figure no cell holds was found when it
             # happened to equal the tool's milliseconds, so a verdict hung on how fast the tool ran
             walk(r.env if timing or not isinstance(r.env, dict) else {k: v for k, v in r.env.items() if k != "took_ms"})
@@ -4863,8 +4873,9 @@ class _Pool:
         if said and any(self.shown.get(rid, 0) and float(self.shown.get(rid, 0)) in said for rid in rids):
             return None
         rid = rids[0]
+        what = "item cards and rows named" if self.named_shown else "item cards"   # mvp30: what is counted
         return (f"{_fig(n)} rows of {rid}.items are counted as shown, and the answer shows {self.shown.get(rid, 0)} "
-                f"of them (item cards and rows named): send as many as the count, or say how many are shown")
+                f"of them ({what}): send as many as the count, or say how many are shown")
 
     def has_date(self, y=None, mo=None, d=None):
         """A date part some date of the results holds (a day; a month: also a period's label; a year: also any
@@ -4906,11 +4917,13 @@ def _v_code_has(pool, s):
     return bool(re.search(r"(?<![\w@])" + re.escape(s) + r"(?![\w])", pool.code_text))
 
 
-def _values_pool(ledger, turn, cache, timing=True):
+def _values_pool(ledger, turn, cache, timing=True, lengths=True):
     key = id(ledger) if timing else (id(ledger), "timing_out")
+    if not lengths:
+        key = (key, "length_cells")
     if key not in cache:
         cache[key] = _Pool(ledger, (turn.message if turn else "") or "", (turn.screen if turn else "") or "",
-                           timing=timing)
+                           timing=timing, lengths=lengths)
     return cache[key]
 
 
@@ -5235,6 +5248,37 @@ def _v_row_text_has(rt, a, b, rows, strict=False):
     return all(holds(r) for r in rows) if strict else any(holds(r) for r in rows)
 
 
+def _v_quote_at_row(raw, a, b, markers):
+    """mvp30 (rule "quote_at_row", narrows "row_text" and "row_quote": a figure must pass both their test and this one):
+    a figure or date of a row's own words is found only inside the words the sentence writes as that row's name: the
+    words that end at the row's own marker (a row marker, `[rN.items[k]]`, never a cell's) and that one string of that
+    row begins with, word for word, from the first of them up to the marker ("<words of the title> 3[r1.items[0]]").
+    The words hold one that is not the figure or the date itself, and a string holding marker or template syntax is
+    never read. The row's words said anywhere else in the sentence (before another row's marker, after the row's own
+    marker, before a cell's marker) or taken from the middle of one of its strings are a claim about the row, not its
+    name, and stay unfound."""
+    for mk in markers:
+        if mk.kind != "row" or not isinstance(mk.value, dict) or mk.mstart < b:
+            continue
+        prev = max((m.end for m in markers if m.end <= mk.mstart), default=0)
+        if a < prev:
+            continue
+        toks = [(prev + x.start(), prev + x.end(), x.group(0)) for x in _V_TOK.finditer(raw[prev:mk.mstart].lower())]
+        fig = [k for k, (x, y, _w) in enumerate(toks) if x < b and y > a]
+        if not fig:
+            continue
+        words = [w for _x, _y, w in toks]
+        for s in _v_row_strings(mk.value):
+            if _V_MARKUP.search(s):
+                continue
+            st = _V_TOK.findall(s)
+            for j in range(0, fig[0] + 1):   # a run of words up to the marker that the string begins with
+                run = words[j:]
+                if len(fig) < len(run) <= len(st) and st[:len(run)] == run:
+                    return True
+    return False
+
+
 def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None):
     """Rule (d): what is written with no marker, against what this turn's results hold. -> [(code, detail)].
     `cm_rules`: the values mode's rules (mvp27: "cell_found", a figure is found in a cell, never in code's prose)."""
@@ -5264,8 +5308,12 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
     else:
         rt_q = rt
 
+    at_row = "quote_at_row" in rules
+
     def quoted(a, b):
-        return bool(own) and _v_row_text_has(rt_q, a, b, own, strict=quote)
+        # rule "quote_at_row" narrows the quote further: also the words written as the row's name, up to its marker
+        return bool(own) and _v_row_text_has(rt_q, a, b, own, strict=quote) and \
+            (not at_row or _v_quote_at_row(raw, a, b, markers))
     t = raw
     for mk in markers:
         t = _blank(t, mk.start, mk.end)
@@ -5555,6 +5603,12 @@ def _values_safety(raw, plain, low, markers, ledger, res, turn, pool, cm_rules=N
     lt = _V_HANDLE.sub(lambda m: " " if pool.has_text(m.group(0)) else m.group(0), plain)
     if I._LINK.search(lt):
         out.append(("link", "no link or web address in a sentence"))
+    if cm_rules is not None and "length_cells" in cm_rules and \
+            any(mk.kind == "value" and _segs(mk.rest) and _segs(mk.rest)[-1][0] in _V_LENGTH_KEYS for mk in markers):
+        # rule "length_cells": a video's length cited in a sentence that today's full check reads as watch time (its
+        # own policy words; values reads no word list of its own): a length is said of the video, never as time spent
+        if "watch_time" in check_sentence(raw, ledger, turn, mode=FULL).reasons:
+            out.append(("watch_time", "a video's length is its own, never time they spent: say it of the video"))
     return out
 
 
@@ -5567,7 +5621,8 @@ def check_sentence_values(sentence, ledger, turn=None, where="point", index=0, m
     turn = turn or Turn()
     if not isinstance(ledger, Ledger):
         ledger = Ledger(ledger)
-    pool = _values_pool(ledger, turn, pool_cache if pool_cache is not None else {}, timing=not cm.rule("timing_out"))
+    pool = _values_pool(ledger, turn, pool_cache if pool_cache is not None else {}, timing=not cm.rule("timing_out"),
+                        lengths=not cm.rule("length_cells"))
     nw = cm.rule("nw_refuse")
     out = Outcome(where, index, sentence)
     raw = " ".join(str(sentence or "").split())
@@ -5688,8 +5743,9 @@ def check_answer_values(form, ledger, turn=None, mode=None):
     others = (("cells", vc), ("full", vf))
     cache = {}
     if cm.rules & _SHOWN_RULES:
-        pool = _values_pool(ledger, turn, cache, timing=not cm.rule("timing_out"))
+        pool = _values_pool(ledger, turn, cache, timing=not cm.rule("timing_out"), lengths=not cm.rule("length_cells"))
         pool.shown, pool.touched = _shown_cards(ledger, f, form, rows_shown=cm.rule("rows_shown"))
+        pool.named_shown = cm.rule("rows_shown")
     v = Verdict(outcomes=[], check=cm.name)
 
     shown_of = {}
@@ -5763,20 +5819,39 @@ def check_answer_values(form, ledger, turn=None, mode=None):
 
 # mvp27 (DESIGN 29): the rules added to the values mode, each measured on the six live runs. "row_name": a name before
 # a row marker is that row's own; "cell_found": a figure is found in a cell, never in code's prose; "motive_you": the
-# motive pattern reads a motive or a state of mind said of them, not a bare "because". The default rule set.
+# motive pattern reads a motive or a state of mind said of them, not a bare "because". The default rule set up to
+# mvp29; since mvp30 the default is these and VALUES_RULES_R30 (values_mode(rules=VALUES_RULES) is last round's mode).
 VALUES_RULES = frozenset({"row_name", "cell_found", "day_typed", "motive_you"})
-# mvp28 (DESIGN 30.2 and 30.7): the rules of this round, kept in the code and OFF by default. They changed no verdict
-# on the v3c and v4c sample runs and let more false sentences out under an independent attack, so the blind run checks
-# with VALUES_RULES only. MVP_BRAIN_VALUES_RULES names the ones to switch on: a comma list of names, or "r28" for all.
+# mvp28 (DESIGN 30.2 and 30.7): the rules of that round, kept in the code and OFF by default then. They changed no
+# verdict on the v3c and v4c sample runs and let more false sentences out under an independent attack, so the blind
+# run checked with VALUES_RULES only. Since mvp30 the ones in VALUES_RULES_R30 are on by default; the rest
+# (item_count, rows_shown, cited_rows, and since the mvp30 repair outcome_you, outcome_cited, row_text, row_quote and
+# row_group) stay off. MVP_BRAIN_VALUES_RULES names rules to switch on: a comma list of
+# names, or "r28" for all of these.
 VALUES_RULES_R28 = frozenset({"item_count", "item_count_free", "cards_found", "rows_shown", "row_text",
                               "screen_window", "cited_rows", "row_group", "outcome_you",
                               # the repair (DESIGN 30.7): each narrows or completes a rule above
                               "row_quote", "rows_before", "screen_uncited", "outcome_cited", "page_cited",
                               "shown_said", "rows_kept"})
-# mvp28 prep repair (DESIGN 30.9): "timing_out", the envelope's took_ms is no cell (_Pool). OFF by default: on the saved
-# forms it changes verdicts against last round's, so the founders decide before it runs. Named alone; "r28" leaves it out
+# mvp28 prep repair (DESIGN 30.9): "timing_out", the envelope's took_ms is no cell (_Pool). Off by default in mvp28 and
+# mvp29; on by default since mvp30 (VALUES_RULES_R30). Named alone; "r28" leaves it out
 VALUES_RULES_PREP = frozenset({"timing_out"})
-VALUES_RULES_SWITCHED = VALUES_RULES_R28 | VALUES_RULES_PREP   # every rule MVP_BRAIN_VALUES_RULES can switch on
+VALUES_RULES_NEW30 = frozenset({"quote_at_row",   # mvp30: a narrowing of row_text (see _v_quote_at_row)
+                                "length_cells"})  # mvp30 repair: a length cell is no bare figure, nor time spent
+VALUES_RULES_SWITCHED = VALUES_RULES_R28 | VALUES_RULES_PREP | VALUES_RULES_NEW30   # every rule the switch names
+# mvp30: the r30 set, ON by default. timing_out (the tool's clock is no cell), and the switched-off rules that
+# flipped a settled sentence rightly on their own in the replay of the eight crossed runs, each with every guard built
+# for it: screen_window with screen_uncited; cards_found and item_count_free with page_cited, rows_kept, shown_said and
+# rows_before. rows_kept acts only with rows_shown, which stays off (it let a false count out under attack and flipped
+# no sentence of the crossed runs), so rows_kept is inert here.
+# mvp30 repair: length_cells joins the set (an independent attack: every item row's `minutes` let an unmarked count,
+# and a length cited as time spent, out). outcome_you (with outcome_cited), row_text (with row_quote and quote_at_row)
+# and row_group go back behind the switch: taken out one at a time on the attacker's sets, each let out more false
+# sentences than it released true ones (outcome_you 4 against 1, row_text 2 against 0, row_group 1 against 0; DESIGN
+# 31.8). Behind the switch: item_count, rows_shown, cited_rows, outcome_you, outcome_cited, row_text, row_quote,
+# quote_at_row, row_group.
+VALUES_RULES_R30 = frozenset({"timing_out", "cards_found", "item_count_free", "screen_window", "screen_uncited",
+                              "rows_before", "page_cited", "rows_kept", "shown_said", "length_cells"})
 VALUES_RULES_ALL = VALUES_RULES | VALUES_RULES_SWITCHED
 VALUES_RULES_ENV = "MVP_BRAIN_VALUES_RULES"
 
@@ -5800,8 +5875,9 @@ def values_rules_env(value=None):
     return frozenset(out & VALUES_RULES_SWITCHED)
 
 
-# the default rules of the values mode: last round's, plus what MVP_BRAIN_VALUES_RULES switches on (read once, here)
-VALUES_DEFAULT_RULES = VALUES_RULES | values_rules_env()
+# the default rules of the values mode: the mvp27 rules and the r30 set, plus what MVP_BRAIN_VALUES_RULES switches on
+# (read once, here; the switch only adds rules)
+VALUES_DEFAULT_RULES = VALUES_RULES | VALUES_RULES_R30 | values_rules_env()
 
 
 def values_mode(number_words=None, rules=None):

@@ -232,8 +232,10 @@ def test_the_scoped_rows_own_name_is_not_the_scope_said(brain):
     assert (len(art), len(lately)) == (32, 130)   # art and design lately is 25% of what they opened, not 100%
     dropped(brain, "art", "Lately, art and design[r1.areas[0]] led what you opened, with 32[r1.areas[0].items] videos.",
             ["filter_dropped"])
+    # mvp30, re-pinned: under scope.only the row that is all of the scope carries no share (100% by construction), so
+    # the sentence cites a cell that is not there
     dropped(brain, "art", "Art and design[r1.areas[0]] was 100%[r1.areas[0].share] of what you opened lately.",
-            ["filter_dropped"])
+            ["filter_dropped", "bad_ref"])
     dropped(brain, "lsr", "Speedruns[r1.themes[0]] was your biggest theme, with 90[r1.themes[0].items] videos.",
             ["filter_dropped"])   # a variant of our own
     dd = {i for i in art if ROWS[i]["theme"] == "dd"}

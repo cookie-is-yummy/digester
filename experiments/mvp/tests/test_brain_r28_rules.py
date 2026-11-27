@@ -1,4 +1,7 @@
 """mvp28 rules: this round's values-mode rules are off by default and one switch turns them on.
+(mvp30 re-pin: the default is now last round's rules and verify.VALUES_RULES_R30, pinned in test_brain_r30_rules.py;
+the switch still only adds rules, and VALUES_RULES_ALL gains "quote_at_row" and "length_cells". Point 1 below reads
+"last round's rule set and the r30 set".)
 
 1. The default values mode (MVP_BRAIN_CHECK=values, eval `--check values`, verify.VALUES) runs last round's rule set:
    row_name, cell_found, day_typed, motive_you. Its refuse list and codes are last round's (tests/test_brain_values.py
@@ -33,6 +36,10 @@ R28 = frozenset({"item_count", "item_count_free", "cards_found", "rows_shown", "
                  "cited_rows", "row_group", "outcome_you",
                  "row_quote", "rows_before", "screen_uncited", "outcome_cited", "page_cited", "shown_said",
                  "rows_kept"})
+# mvp30: the r30 set, on by default (test_brain_r30_rules.py pins it and why; the mvp30 repair took outcome_you,
+# row_text, row_group and their guards out of it and added length_cells)
+R30 = frozenset({"timing_out", "cards_found", "item_count_free", "screen_window", "screen_uncited", "rows_before",
+                 "page_cited", "rows_kept", "shown_said", "length_cells"})
 # the refuse list of the build round's merge (all rules on): last round's list plus VALUES_REFUSE_R28
 PIN_REFUSE_ALL = "2118f9724f41851419b4e2c1216c7c61e0c9623de2eb6e7e7b24f9ede67f4432"
 PIN_REFUSE_R28 = "fa77e127cf6408e946c3b50a053d9f9e30ad0581fae1e3362f63ab1c8dbbbe31"
@@ -69,8 +76,8 @@ def test_the_default_rule_set_is_last_rounds():
     from mvp.brain import verify as V
     assert V.VALUES_RULES == LAST_ROUND
     assert V.VALUES_RULES_R28 == R28 and not (R28 & LAST_ROUND)
-    assert V.VALUES_RULES_ALL == LAST_ROUND | R28 | {"timing_out"}
-    assert V.VALUES_DEFAULT_RULES == LAST_ROUND | V.values_rules_env()
+    assert V.VALUES_RULES_ALL == LAST_ROUND | R28 | {"timing_out", "quote_at_row", "length_cells"}
+    assert V.VALUES_DEFAULT_RULES == LAST_ROUND | R30 | V.values_rules_env()
     assert V.values_mode().rules == V.VALUES.rules and V.check_mode("values") is V.VALUES
     # full and cells never run a values rule, on or off
     assert not (V.VALUES_RULES_ALL & (V.FULL.rules | V.CELLS.rules))
@@ -78,9 +85,9 @@ def test_the_default_rule_set_is_last_rounds():
 
 def test_with_the_switch_unset_values_runs_exactly_last_rounds_rules():
     got = _import_with(None)
-    want = sorted(LAST_ROUND | {"values", "nw_refuse"})
+    want = sorted(LAST_ROUND | R30 | {"values", "nw_refuse"})
     assert got["values"] == want and got["mode"] == want and got["check"] == want
-    assert got["settings"] == {"values_rules": sorted(LAST_ROUND), "values_rules_r28": []}
+    assert got["settings"] == {"values_rules": sorted(LAST_ROUND | R30), "values_rules_r28": sorted(R30)}
     assert _import_with("")["values"] == want   # an empty switch is no rule
 
 
@@ -115,9 +122,10 @@ def test_the_switch_reads_a_comma_list_or_r28():
 ])
 def test_the_switch_is_read_once_where_values_is_built(value, want):
     got = _import_with(value)
-    rules = set(LAST_ROUND) | set(want) | {"values", "nw_refuse"}
+    rules = set(LAST_ROUND) | R30 | set(want) | {"values", "nw_refuse"}
     assert set(got["values"]) == rules and set(got["mode"]) == rules and set(got["check"]) == rules
-    assert got["settings"] == {"values_rules": sorted(LAST_ROUND | set(want)), "values_rules_r28": sorted(want)}
+    assert got["settings"] == {"values_rules": sorted(LAST_ROUND | R30 | set(want)),
+                               "values_rules_r28": sorted(R30 | set(want))}
 
 
 def test_a_name_that_is_no_values_rule_stops_the_import():
@@ -132,7 +140,7 @@ def test_the_eval_records_the_rules_only_for_a_values_run():
     assert E.values_rules_settings("full") == {} and E.values_rules_settings("cells") == {}
     s = E.values_rules_settings("values")
     assert s["values_rules"] == sorted(V.VALUES.rules & V.VALUES_RULES_ALL)
-    assert s["values_rules_r28"] == sorted(V.VALUES.rules & V.VALUES_RULES_R28)
+    assert s["values_rules_r28"] == sorted(V.VALUES.rules & V.VALUES_RULES_SWITCHED)
     import inspect
     # in the run's settings and on every record (a summary whose settings are lost still has them per message)
     assert "values_rules_settings(check)" in inspect.getsource(E.run_live)
@@ -154,8 +162,8 @@ def test_every_record_of_a_values_run_carries_its_rules(harness, tmp_path, check
     assert recs
     for r in recs:
         if check == "values":
-            assert r["check"] == "values" and r["values_rules"] == sorted(LAST_ROUND)
-            assert r["values_rules_r28"] == []
+            assert r["check"] == "values" and r["values_rules"] == sorted(LAST_ROUND | R30)
+            assert r["values_rules_r28"] == sorted(R30)
         else:
             assert r["check"] == "full" and "values_rules" not in r and "values_rules_r28" not in r
 

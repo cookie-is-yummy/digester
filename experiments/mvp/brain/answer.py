@@ -32,6 +32,10 @@ OFFER_TEMPLATES = {"exclude": "Without {label}?", "only": "Only {label}?", "leng
 OFFERS_MAX = 2
 CARDS_MAX = 5
 ASK_LINE = "Which one do you mean?"
+# mvp30 (a message that also asked for something to be done, "every Sunday send me ...", got the history part with no
+# word on the rest): the model copies the doing part into give_answer.hand_back; code says this one line under the
+# answer, never the model, and never echoes their words. Nothing is handed on in this slice (SPEC 3.9 is not built).
+HAND_BACK_LINE = "I can only read your history here, so I haven't set up the rest of that."
 
 
 def _cited_rid(verdict, code, ledger, cards=()):
@@ -267,6 +271,15 @@ def limit_lines(ledger, rid, code=None, limits=()):
     return out
 
 
+def _hand_back(form):
+    """mvp30: the form asks code to say the doing line (a hand_back with a kind of the schema and words)."""
+    hb = (form or {}).get("hand_back") if isinstance(form, dict) else None
+    try:
+        return hb is not None and V.HandBack.model_validate(hb) is not None
+    except Exception:  # noqa: BLE001 - a pydantic ValidationError
+        return False
+
+
 def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=None, limits=()):
     """The answer that goes out. `verdict`: the verdict whose sentences are sent (the model's), or None when `code`
     (fallback.answer's dict) is sent; `also`: every verdict of the turn (the private line is OR'd over them all);
@@ -282,8 +295,10 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
                               if o.where == "point" and o.kept) if s]
     else:
         lead = (code or {}).get("lead") or ""
-        # (mvp24, cells mode: the model's points were written for its own lead; under code's lead none goes out)
-        points = [] if cells else list((code or {}).get("points") or [])
+        # (mvp24, cells mode: the model's points were written for its own lead; under code's lead none goes out.
+        # mvp30: the `mixed` points are code's own sentences of other results, each checked in full: they go out in
+        # every mode)
+        points = [] if cells and not (code or {}).get("mixed") else list((code or {}).get("points") or [])
     private = bool(verdict is not None and verdict.private_line) or bool((code or {}).get("private_line")) or any(
         v.private_line for v in also if v is not None)
     # (mvp20 fix: the plain line counted nothing, so no scope line goes under it)
@@ -304,12 +319,16 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
     # (mvp26 toolfix2 2: the scope line says what the cited result counted; over cards of another result it would
     # read as theirs, so it goes out only when every card is of that result)
     own = all(str(c["ref"]).split(".", 1)[0] == rid for c in cards)
-    sline = scope_line(res) if filt and not plain and own else None
+    # (mvp30: a code lead whose points are other results' sentences, each with its own scope words, gets no scope line
+    # of the lead's result alone)
+    sline = scope_line(res) if filt and not plain and own and not (code or {}).get("mixed") else None
     lim = limit_lines(ledger, rid, code if verdict is None else None, limits) if not plain else \
         list(dict.fromkeys(x for x in limits if isinstance(x, str))) if (code or {}).get("no_result") else []
     lines = [lead] if lead else []
     lines += ["- " + p for p in points]
     lines += lim
+    if _hand_back(form):
+        lines.append(HAND_BACK_LINE)
     if cards:
         lines += ([ASK_LINE] if ask else []) + ["• " + c["line"] for c in cards]
     tail = [x for x in (sline, PRIVATE_LINE if private else None) if x]

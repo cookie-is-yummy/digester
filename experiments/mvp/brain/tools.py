@@ -35,7 +35,16 @@ BASE = {"opened": "of what you opened", "liked": "of what you liked", "saved": "
 LIST_OF = {"area": "areas", "theme": "themes", "channel": "channels"}
 DEFAULT_CAP = {"area": F.AREAS_MAX, "theme": F.THEMES_MAX, "channel": F.CHANNELS_MAX}
 WATCH_TIME_LINE = "Your export records which videos you opened, not for how long, so I count videos."
-FRIENDS_LINE = "Posts from friends are not counted."
+# mvp30: the note said "not counted" while a counted result carries how many friends' posts it left out
+# (left_out.friends)
+FRIENDS_LINE = "Posts from friends are never shown and are in no total: only how many there are is counted."
+FRIENDS_LEFT_NOTE = ("left_out.friends: their friends' posts of this window and base. They are in no total and no row "
+                     "here: a total plus left_out.friends is everything they did, friends' posts included.")
+# mvp30 repair (the attack: a search for words carried the count of every friend's post and the note above, which
+# reads as if those posts were of the words): a search has no total, and it never reads a friend's post
+FRIENDS_SEARCH_NOTE = ("left_out.friends: their friends' posts of this window and base, of any topic. A search never "
+                       "reads them: none of them is among these matches, and none is said to be of the words searched "
+                       "for.")
 
 
 # ================================================================ argument models (strict: unknown keys refused)
@@ -65,7 +74,9 @@ class BreakdownArgs(_Args):
     window: WindowArg
     scope: ScopeArg = Field(default_factory=ScopeArg)
     compare: Literal["previous", "none"] = "previous"
-    order: Literal["most", "least"] = "most"
+    order: Literal["most", "least"] = Field(default="most", description=(
+        "'most' or 'least' first. With by 'none' it orders only the lists inside the totals: send 'most' unless "
+        "they ask for the least."))
     top: int = Field(default=8, ge=1, le=25)
 
 
@@ -98,7 +109,7 @@ class FirstLastArgs(_Args):
 class ItemsArgs(_Args):
     window: WindowArg
     scope: ScopeArg = Field(default_factory=ScopeArg)
-    order: Literal["most_opened", "newest", "oldest"] = "most_opened"
+    order: Literal["most_opened", "newest", "oldest", "longest", "shortest"] = "most_opened"
     limit: int = Field(default=5, ge=1, le=10)
     offset: int = Field(default=0, ge=0, le=200)
 
@@ -152,6 +163,9 @@ class Turn:
     said_unlock: Optional[str] = field(default=None, init=False)   # the topic this message itself names
     _lib: Any = field(default=None, init=False, repr=False)
     _carried_mask: Any = field(default=None, init=False, repr=False)
+    # mvp30 repair: the query of each facts sheet this turn built (by the sheet's id), so the cells added after the
+    # size cut are counted in the call's own scope
+    queries: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self):
         from .. import outside as O
@@ -312,6 +326,9 @@ def _left_out(sheet, meta):
             if int(hid.get(src) or 0) > 0}
     if cell:
         sheet["left_out"] = cell
+    note = FRIENDS_SEARCH_NOTE if sheet.get("kind") == "search" else FRIENDS_LEFT_NOTE
+    if cell.get("friends") and note not in notes:
+        meta.setdefault("notes", []).append(note)
 
 
 def _words_hidden(turn):
@@ -331,6 +348,49 @@ def _no_match_cell(turn, r):
     if got is None:
         return {}
     return {"searched": R.neutral(got[0]), "items_with_words": got[1]}
+
+
+ALSO_MAX = 5
+ALSO_NOTE = ("meta.also: for a name of the scope, the other channels and themes whose own names hold its words. The "
+             "scope counted only the name as resolved; to count one of these alone, pass its ref in scope.only.")
+
+
+def also_holding(turn, name, refs=()):
+    """mvp30 (a word that is an area's name resolved to the area, with no word of the channel whose name holds it, so
+    "the <word> <channel>" was answered for the whole area): the channels and themes they may see whose own names hold
+    every content word of `name`, but the refs given, as find's options ({ref, label, how}), at most ALSO_MAX."""
+    lib = turn.lib
+    words = N._content_words(N.fold(name))
+    if not words:
+        return []
+    out, seen = [], set(refs)
+    for tid, nm, _w in N._themes(lib):
+        ref = f"theme:{tid}"
+        if ref not in seen and all(Hm.holds(nm, w) for w in words):
+            out.append({"ref": ref, "label": nm, "how": "theme name holds the words"})
+            seen.add(ref)
+    for ch, hidden in sorted(N._channels(lib).items()):
+        ref = "channel:" + F.channel_key(ch)
+        names = [ch] + ([N.displays(lib)[ch]] if N.displays(lib).get(ch) else [])
+        if hidden or ref in seen or not any(all(Hm.holds(x, w) for w in words) for x in names):
+            continue
+        out.append({"ref": ref, "label": N._label(lib, ref), "how": "channel name holds the words"})
+        seen.add(ref)
+    return R.clean(out[:ALSO_MAX])
+
+
+def _scope_also(turn, scope, resolved):
+    """{name: [options]} of the scope's names (only and exclude) that resolved to something other than a channel or a
+    theme of that very name, when other channels or themes hold their words."""
+    out = {}
+    for nm in list(scope.only) + list(scope.exclude):
+        ref = str(resolved.get(nm, "")).partition(" (")[0]
+        if not ref or ref.startswith(("words:", "topic:")):
+            continue
+        got = also_holding(turn, nm, (ref,))
+        if got:
+            out[R.neutral(nm, R.NAME_MAX)] = got
+    return out
 
 
 def _filters_said(turn, scope, resolved):
@@ -369,12 +429,21 @@ def _notes(turn, raw):
     win = (raw or {}).get("window") or {}
     for p, d in sorted((win.get("ends") or {}).items()):
         notes.append(f"Your {Hm.PNAME.get(p, p)} export ends on {Hm.day_words(_date(d))}.")
+    if win.get("platform_starts"):
+        notes.append(PLATFORM_STARTS_NOTE)
     cs = (raw or {}).get("cannot_see") or {}
     if cs.get("reason") == "after" and cs.get("export_ends"):
         notes.append(f"Your export ends on {Hm.day_words(_date(cs['export_ends']))}, so I can't see after that. "
                      "A new export shows the rest.")
     if cs.get("reason") == "before" and cs.get("history_starts"):
         notes.append(f"Your history starts on {Hm.day_words(_date(cs['history_starts']))}.")
+    elif cs.get("reason") == "before" and cs.get("scope_starts"):
+        # mvp30: a scope's start is not the start of their history
+        n = cs.get("outside_scope_items")
+        notes.append(f"Your {cs.get('scope')} start on {Hm.day_words(_date(cs['scope_starts']))}; your history as a "
+                     f"whole starts on {Hm.day_words(_date(cs['record_starts']))}" +
+                     (f", and this window holds {n} items outside this scope (cannot_see.outside_scope_items)."
+                      if isinstance(n, int) else "."))
     if Hm.HOURS.search(Hm.normal(turn.message or "")):
         notes.append(WATCH_TIME_LINE)
     if Hm.FRIENDS_ASK.search(Hm.normal(turn.message or "")):
@@ -403,8 +472,12 @@ def _meta(turn, raw, scope, resolved, order="most", by=None, extra_notes=()):
         # private items left out is not said; a constant stands for it, so every number asks for the private line
         sens, rank_above = 1, True
         notes_extra.append(TITLE_WORDS_NOTE)
+    also = _scope_also(turn, scope, resolved)
+    if also:
+        notes_extra.append(ALSO_NOTE)
     return {"window_said": ((raw or {}).get("window") or {}).get("words"),
-            "base": BASE[scope.how],
+            "base": BASE[scope.how], **({"also": also} if also else {}),
+            **({"_only": len(scope.only)} if scope.only else {}),
             "filters_said": _filters_said(turn, scope, resolved),
             "resolved": dict(resolved), "order": order, "complete": True,
             "rows_total": ranked.get(lst) if lst else None,
@@ -432,7 +505,125 @@ def _sheet(turn, q):
                         f"{' or '.join(repr(h) for h in held) or repr('opened')}.",
                         export=ex, nearest={"scope.how": held[0] if held else "opened"},
                         limit=f"Your export holds no {NOT_HELD_WORD.get(want, want)}.")
+    _scope_start(turn, raw, q)
+    _weekday_events(turn, raw, q, turn.unlock if _counts_topic(turn, q) else turn.said_unlock)
+    turn.queries[id(raw)] = q
     return raw
+
+
+def _scope_events(turn, q, kinds):
+    """mvp30 repair (the attack: `last_watched`, `new.channels_first_opened` and `previous.channels` were counted over
+    everything they did while every other cell of the sheet was of the call's scope): the index's events of `kinds`
+    in the call's scope, every day: its platforms, its names (only, exclude), its length, its weekday, the private
+    topics out but the one this call may count. None when there is no query (the cell is then not given)."""
+    import numpy as np
+    if q is None:
+        return None
+    lib = turn.lib
+    idx, facts = lib.idx, lib.facts
+    plats = Hm._scope_platforms(q, lib.view, lib.rec)
+    m = idx.kind_mask(kinds) & np.isin(idx.platform[idx.it], [0 if p == "youtube" else 1 for p in plats])
+    unlock = turn.unlock if _counts_topic(turn, q) else turn.said_unlock
+    m &= ~F.sensitive_items(lib.view, idx, facts, unlock)[0][idx.it]
+    m &= F.scope_mask(lib.view, idx, facts, q)[idx.it]
+    if q.length == "long":
+        m &= (facts.short == 0)[idx.it]   # facts' own "long": the videos known to be long
+    if q.weekday is not None:
+        m &= idx.wd == q.weekday
+    return m
+
+
+def _weekday_events(turn, raw, q, unlock):
+    """mvp30 (`when` held only the busiest weekday and the weekend share, and an answer said none fell on days that
+    had some): `when.events_by_weekday`, the window's events of the scope's base on each weekday, Monday first, a day
+    of none included. Counted here over the index as facts counts `when` (base kinds and platforms, the window's days,
+    the private topics out but the one unlocked, the scope's names, the weekday asked); a scope by length is not
+    counted, and the cell is given only when its days add up to `when.events` and to the weekend share facts gives."""
+    import numpy as np
+    when = raw.get("when") if isinstance(raw.get("when"), dict) else None
+    win = raw.get("window") if isinstance(raw.get("window"), dict) else {}
+    if not when or not isinstance(when.get("events"), int) or q.length != "any":
+        return
+    lib = turn.lib
+    idx, facts = lib.idx, lib.facts
+    plats = Hm._scope_platforms(q, lib.view, lib.rec)
+    m = idx.kind_mask(Hm.HOW_KINDS[q.how]) & np.isin(idx.platform[idx.it], [0 if p == "youtube" else 1 for p in plats])
+    m &= ~F.sensitive_items(lib.view, idx, facts, unlock)[0][idx.it]
+    if win.get("start"):
+        m &= idx.day >= _date(win["start"]).toordinal()
+    if win.get("end"):
+        m &= idx.day <= _date(win["end"]).toordinal()
+    for refs, keep in ((q.only_refs, True), (q.exclude_refs, False)):
+        if refs:
+            u = np.zeros(len(idx.ids), dtype=bool)
+            for r in refs:
+                u |= F.ref_mask(lib.view, idx, facts, r)
+            m &= u[idx.it] if keep else ~u[idx.it]
+    if q.weekday is not None:
+        m &= idx.wd == q.weekday
+    wd = np.bincount(idx.wd[m].astype(np.int64), minlength=7)
+    n = int(wd.sum())
+    if n != when["events"] or (isinstance(when.get("weekend_share"), (int, float)) and
+                               abs(round(int(wd[5:].sum()) / n, 4) - when["weekend_share"]) > 0.0001 if n else True):
+        return
+    # a dict, not a list: a list's length is read as a count of rows, and seven days would make every "7" found
+    when["events_by_weekday"] = {F.WEEKDAYS_EN[k]: int(wd[k]) for k in range(7)}
+
+
+PLATFORM_STARTS_NOTE = ("window.platform_starts: the first day of anything they did on this scope's platforms (opened, "
+                        "liked or saved), before the first day of this scope's own kind.")
+
+
+SCOPE_NOUN = {"watched": "opens", "saved": "saves", "liked": "likes", "any": "history"}
+
+
+def scope_noun(plats, how):
+    """What a scoped record's start is the start of: "Instagram opens", "saves", "YouTube history"."""
+    p = Hm.PNAME.get(plats[0], plats[0]) + " " if len(plats) == 1 else ""
+    return f"{p}{SCOPE_NOUN.get(how, 'history')}"
+
+
+def _scope_start(turn, raw, q):
+    """mvp30 (the first event of a scope, one platform's opens, was said as the start of "all your history", and an
+    asked window before it as "your history starts on ...", with saves and another platform's years before it): when
+    the scope's platforms and kinds start later than the whole record, the window's words name what starts there ("all
+    your history (your Instagram opens: 12 to 15 October 2026, ...)"), and a window before it says the scope's start,
+    the record's start and how many items (opened, liked or saved, any platform) the asked window holds outside the
+    scope."""
+    rec = turn.lib.rec
+    if not isinstance(raw, dict) or not rec.starts:
+        return
+    whole = min(rec.starts.values())
+    plats = Hm._scope_platforms(q, turn.lib.view, rec)
+    scoped = Hm._record_start(rec, plats, q)
+    if scoped is None or scoped <= whole:
+        return
+    noun = scope_noun(plats, q.how)
+    win = raw.get("window") if isinstance(raw.get("window"), dict) else None
+    head = "all your history ("
+    if win is not None and isinstance(win.get("words"), str) and win["words"].startswith(head):
+        # (the words still start "all your history", which the checker reads as this window)
+        win["words"] = f"{head}your {noun}: " + win["words"][len(head):]
+    if win is not None and win.get("history_starts"):
+        win.pop("history_starts")
+        win["scope_starts"], win["record_starts"] = scoped.isoformat(), whole.isoformat()
+    if win is not None and q.how != "any":
+        # (an answer said a platform's opens were all it held of that platform, with saves before them): the first
+        # day of anything they did on the scope's platforms, opened, liked or saved, when it is before the scope's
+        anyk = Hm._record_start(rec, plats, q.model_copy(update={"how": "any"}))
+        if anyk is not None and anyk < scoped:
+            win["platform_starts"] = anyk.isoformat()
+    cs = raw.get("cannot_see") if isinstance(raw.get("cannot_see"), dict) else None
+    if cs is None or cs.get("reason") != "before":
+        return
+    cs.pop("history_starts", None)
+    cs.update(scope=noun, scope_starts=scoped.isoformat(), record_starts=whole.isoformat())
+    if win is not None and win.get("end"):
+        a = _date(win["start"]) if win.get("start") else None
+        b = _date(win["end"])
+        cs["outside_scope_items"] = sum(
+            1 for iid, evs in rec.events.items() if turn.lib.is_visible(iid) and not turn.carried_hidden(iid)
+            and any((a is None or d >= a) and d <= b for d, _k in evs))
 
 
 def _counts_topic(turn, q):
@@ -509,6 +700,192 @@ SMALL_NOTE = (f"new.small_channels: channels first opened in this window that ar
               "of the channels they started in it names these too.")
 WEEKDAYS_NOTE = ("when.busiest_weekdays: these days tie for the most opens (busiest_weekday_opens each): name them all, "
                  "never one of them as the busiest.")
+
+
+WEEKDAY_EVENTS_NOTE = ("when.events_by_weekday: the window's opens (of the base) on each weekday, by its name "
+                       "(when.events_by_weekday.Sunday); a day with 0 had none.")
+CLIPPED_NOTE = ("`title_clipped` true: this result shortened the title to fit (the '…' is this result's); the item's "
+                "own title is whole in their history, and why_matched or a search for its words reads more of it.")
+EVERY_PERIOD_NOTE = ("in_top_of_every_period: the themes (and areas, channels) found among the top rows that every "
+                     "period lists, read before any cut; an empty list: none is in the top rows of every period.")
+LAST_NOTE = ("A channel's or a theme's `last_watched` is the last day they ever opened it within this call's scope "
+             "(its platforms, names, length and weekday), whatever the window: a row whose last day is long before the "
+             "window's end is one they stopped.")
+
+
+def _last_watched(turn, sheet, q=None):
+    """mvp30 (channel rows carried the first day they opened a channel and no last one, so a question of what they
+    stopped had no cell over any window): each channel and theme row of the sheet (its rankings, new and stopped) gets
+    `last_watched`, the last day of their opens of it, ever, over the items they may see. After the size cut.
+    mvp30 repair: the opens of the call's scope only (_scope_events: its platforms, names, length and weekday), as
+    every other cell of the sheet; no query, no cell."""
+    import numpy as np
+    from datetime import date as _d
+    lib = turn.lib
+    ev = _scope_events(turn, q, ("watch", "view"))
+    if ev is None:
+        return False
+    rows = []
+    for holder in [sheet] + [sheet[k] for k in ("new", "stopped") if isinstance(sheet.get(k), dict)]:
+        for k in ("channels", "themes", "small_channels"):
+            rows += [(k, r) for r in holder.get(k) or [] if isinstance(r, dict) and isinstance(r.get("name"), str)]
+    if not rows:
+        return False
+    by_display = {R.neutral(d, R.NAME_MAX): c for c, d in N.displays(lib).items()}
+    themes = {R.neutral(nm, R.NAME_MAX): tid for tid, nm, _w in N._themes(lib)}
+    ok = np.array([lib.is_visible(i) and not turn.carried_hidden(i) for i in lib.idx.ids], dtype=bool)
+    marked = False
+    for k, r in rows:
+        if k == "themes":
+            tid = themes.get(r["name"])
+            if tid is None:
+                continue
+            mask = F.ref_mask(lib.view, lib.idx, lib.facts, f"theme:{tid}")
+        else:
+            c = by_display.get(r["name"], r["name"])
+            mask = np.array([lib.view.items[i].creator == c for i in lib.idx.ids], dtype=bool)
+        m = ev & (mask & ok)[lib.idx.it]
+        if m.any():
+            r["last_watched"] = _d.fromordinal(int(lib.idx.day[m].max())).isoformat()
+            marked = True
+    return marked
+
+
+SCOPE_SHARE_NOTE = ("Under scope.only every `share` is of the scope's own total, never of everything they opened; a "
+                    "row that is all of the scope carries no share (it would be 100% by construction).")
+BACK_NOTE = ("new.themes holds the new themes first opened in this window; new.themes_begun_before the new ones (at "
+             "most a handful in the window before) they had first opened before this window, on their own "
+             "`first_watched`: say when those began, never that they began in this window.")
+SPLIT_NOTE = ("Under base 'any', a row's `items` counts each item once, whatever they did with it; `opened`, `saved` "
+              "and `liked` count the items with that event in the window (an item opened and saved is in both).")
+LIBRARY_NOTE = ("`library` is counted over all their history, whatever this result's window (`library.counted_over`).")
+NEW_ALL_NOTE = ("new.channels_first_opened: every channel of this call's scope first opened in this window, those "
+                "under the floor of a new channel included.")
+PREV_CHANNELS_NOTE = "previous.channels: how many channels of this call's scope they opened in the window before."
+NAMES_NOTE = "filters.names_in_scope: how many names this call's scope.only holds."
+SAVE_KINDS = ("save", "collection", "share_self", "playlist")
+
+
+def _cells_after_cut(turn, tool, rid, sh, meta, how, only=False, q=None):
+    """mvp30: cells whose name or shape misled, said as what they count, and the counts a sentence needed, after the
+    size cut (so no row gives way to them)."""
+    if not isinstance(sh, dict) or not sh.get("kind") and tool != "items":
+        return
+    notes = meta.setdefault("notes", [])
+    lists = ("areas", "themes", "channels", "fields")
+    # under scope.only a row that is all of the scope has a share of 1.0 by construction: it carries none (a share
+    # inside a scope is of the scope's own total; the prompts and the checker read `share`, so the name stays)
+    if only and tool not in ("first_last", "find"):
+        hit = False
+        for k in lists:
+            for r in sh.get(k) or []:
+                if isinstance(r, dict) and r.get("share") == 1.0:
+                    r.pop("share")
+                    if r.get("previous_share") == 1.0:
+                        r.pop("previous_share")
+                    hit = True
+        # (said on every scoped result that holds a share, a compare's windows included: a share inside a scope was
+        # said as a share of everything they opened)
+        if hit or '"share"' in json.dumps(sh) or '"previous_share"' in json.dumps(sh):
+            notes.append(SCOPE_SHARE_NOTE)
+    if only and isinstance(sh.get("filters"), dict):
+        # mvp30 (a count of the names asked for had no cell: the names of a scope were a string): how many names
+        # scope.only holds
+        sh["filters"]["names_in_scope"] = int(only)
+        notes.append(NAMES_NOTE)
+    win = sh.get("window") if isinstance(sh.get("window"), dict) else {}
+    start = _date(win["start"]) if win.get("start") else None
+    end = _date(win["end"]) if win.get("end") else None
+    # a "new" theme first opened before the window came back; it is not new
+    new = sh.get("new") if isinstance(sh.get("new"), dict) else None
+    if new is not None and start is not None and isinstance(new.get("themes"), list):
+        back = [r for r in new["themes"] if isinstance(r, dict) and r.get("first_watched")
+                and _date(r["first_watched"]) < start]
+        if back:
+            new["themes"] = [r for r in new["themes"] if r not in back]
+            new["themes_begun_before"] = back
+            R._refs({"themes": new["themes"], "themes_begun_before": back}, f"{rid}.new")
+            notes.append(BACK_NOTE)
+    # every channel of the scope first opened in the window, those under the floor included (mvp30 repair: a channel
+    # counts when the scope's events of the window hold it; its first open is over all their history, as facts' own
+    # new channels)
+    ev_w = _scope_events(turn, q, tuple(Hm.HOW_KINDS[HOW.get(how, "watched")]))
+    if new is not None and start is not None and end is not None and "channels" in new and ev_w is not None:
+        import numpy as np
+        idx = turn.lib.idx
+        inw = ev_w & (idx.day >= start.toordinal()) & (idx.day <= end.toordinal())
+        scoped_ch = {turn.lib.view.items[idx.ids[k]].creator for k in np.unique(idx.it[inw])}
+        first = {}
+        for iid, evs in turn.lib.rec.events.items():
+            if not turn.lib.is_visible(iid) or turn.carried_hidden(iid):
+                continue
+            it = turn.lib.view.items.get(iid)
+            ds = [d for d, k in evs if k in ("watch", "view")]
+            if it is not None and it.creator and ds:
+                first[it.creator] = min(first.get(it.creator, ds[0]), min(ds))
+        new["channels_first_opened"] = sum(1 for c, d in first.items() if start <= d <= end and c in scoped_ch)
+        notes.append(NEW_ALL_NOTE)
+    # the window before has its own count of channels
+    prev = sh.get("previous") if isinstance(sh.get("previous"), dict) else None
+    wb = meta.get("window_dates_before")
+    if tool == "changes" and prev is not None and isinstance(wb, dict) and isinstance(sh.get("channels"), list) and \
+            ev_w is not None:
+        import numpy as np
+        idx = turn.lib.idx
+        a_, b_ = _date(wb["start"]), _date(wb["end"])
+        inb = ev_w & (idx.day >= a_.toordinal()) & (idx.day <= b_.toordinal())
+        chans = {turn.lib.view.items[idx.ids[k]].creator for k in np.unique(idx.it[inb])
+                 if turn.lib.is_visible(idx.ids[k]) and not turn.carried_hidden(idx.ids[k])}
+        prev["channels"] = len({c for c in chans if c})
+        notes.append(PREV_CHANNELS_NOTE)
+    # under base 'any': opens, saves and likes apart
+    if how == "any" and start is not None and end is not None:
+        _split_any(turn, sh, start, end)
+        notes.append(SPLIT_NOTE)
+    # an all-time cell inside a windowed sheet says its window
+    if isinstance(sh.get("library"), dict):
+        sh["library"]["counted_over"] = "all your history"
+        notes.append(LIBRARY_NOTE)
+    # the days of each window, where markers reach them
+    d = meta.get("window_dates")
+    if isinstance(d, dict) and isinstance(sh.get("window"), dict):
+        sh["window"]["days"] = d["days"]
+    if prev is not None and isinstance(wb, dict) and "words" in prev:
+        prev["days"] = wb["days"]
+    if isinstance(meta.get("windows"), dict):
+        sh["windows"] = {k: dict(v) for k, v in meta["windows"].items()}
+
+
+def _split_any(turn, sh, start, end):
+    """Under base 'any', each channel and theme row with how many of its items were opened, saved and liked in the
+    window, of the items they may see; given only when those items, counted once, are the row's own `items` (so a
+    scope this count does not read, a platform, a length or a weekday, gives no split rather than a wrong one)."""
+    import numpy as np
+    lib = turn.lib
+    themes = {R.neutral(nm, R.NAME_MAX): tid for tid, nm, _w in N._themes(lib)}
+    by_display = {R.neutral(d, R.NAME_MAX): c for c, d in N.displays(lib).items()}
+
+    def split(r, ids):
+        out, once = {"opened": 0, "saved": 0, "liked": 0}, 0
+        for i in ids:
+            if not lib.is_visible(i) or turn.carried_hidden(i):
+                continue
+            ks = {k for d, k in lib.rec.events.get(i, []) if start <= d <= end}
+            out["opened"] += bool(ks & {"watch", "view"})
+            out["saved"] += bool(ks & set(SAVE_KINDS))
+            out["liked"] += "like" in ks
+            once += bool(ks & ({"watch", "view", "like"} | set(SAVE_KINDS)))
+        if once == r.get("items"):
+            r.update(out)
+    for r in sh.get("channels") or []:
+        if isinstance(r, dict) and isinstance(r.get("name"), str):
+            c = by_display.get(r["name"], r["name"])
+            split(r, [i for i, it in lib.view.items.items() if it.creator == c])
+    for r in sh.get("themes") or []:
+        tid = themes.get(r.get("name")) if isinstance(r, dict) else None
+        if tid is not None:
+            mask = F.ref_mask(lib.view, lib.idx, lib.facts, f"theme:{tid}")
+            split(r, [lib.idx.ids[n] for n in np.flatnonzero(mask)])
 
 
 def _item_channels(turn, sheet):
@@ -610,8 +987,31 @@ def _length_note(sheet, meta):
                                             ". Say nothing of its length.")
 
 
-SAME_TITLE_NOTE = ("`same_title` on an item row: how many of their items (of the kinds and the window counted) have "
-                   "exactly that title. The rows shown may be only some of them: say how many share it.")
+SAME_TITLE_NOTE = ("`other_items_same_title` on an item row: how many OTHER items of theirs (of the kinds and the "
+                   "window counted) have exactly that title, the row itself left out. They are different items, each "
+                   "with its own times_opened: it is no count of how often this one was opened.")
+
+
+EPISODE = re.compile(r"(?<![\w#])#(\d{1,6})(?![\w])")
+HASHTAG = re.compile(r"(?<![\w#])#\w+")
+
+
+def item_title(it):
+    """mvp30 (numbered episodes shared one title, so twenty different videos read as one title opened twenty times):
+    the title an item row shows is today's display title (history._title), and on a YouTube line whose own words
+    carry one all-digit tag ("Clutch moment #60") that tag is kept: an episode number is not a hashtag. A clipped
+    title or a neutral one ("A video from ...") is left as it is."""
+    t = Hm._title(it)
+    if it is None or getattr(it, "platform", None) != "youtube" or not isinstance(t, str) or t.endswith("…"):
+        return t
+    line = " ".join((getattr(it, "first_line", "") or "").split())
+    tags = EPISODE.findall(line)
+    if len(tags) != 1 or f"#{tags[0]}" in t:
+        return t
+    bare = " ".join(HASHTAG.sub(" ", line).split())
+    if not bare.startswith(t.rstrip(" -:|,(")):
+        return t
+    return f"{t} #{tags[0]}"
 
 
 def _same_titles(turn, kinds, start=None, end=None):
@@ -625,7 +1025,7 @@ def _same_titles(turn, kinds, start=None, end=None):
             continue
         it = turn.lib.view.items.get(iid)
         if it is not None:
-            out[Hm._title(it)] += 1
+            out[item_title(it)] += 1
     return out
 
 
@@ -636,12 +1036,17 @@ def _mark_same_titles(turn, rows, kinds, start, end, meta):
     marked = False
     for r in rows:
         it = turn.lib.view.items.get(r.get("item_id"))
-        n = got.get(Hm._title(it), 0) if it is not None else 0
+        n = got.get(item_title(it), 0) if it is not None else 0
         if n > 1:
-            r["same_title"] = n
+            r["other_items_same_title"] = n - 1
             marked = True
     if marked:
         meta.setdefault("notes", []).append(SAME_TITLE_NOTE)
+
+
+def _after_cut(meta, fn):
+    """mvp30: a cell added to the sheet after the size cut (as left_out is), so it never costs a row: fn(sheet)."""
+    meta.setdefault("_after_cut", []).append(fn)
 
 
 def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=None, how="opened", dates=None):
@@ -683,6 +1088,10 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
     sh = env.get("sheet")
     # mvp27: after the size cut, so that no row gives way to it (a few characters, outside the cap as the extras are)
     _left_out(sh, env["meta"])
+    only = env["meta"].pop("_only", 0)
+    for fn in env["meta"].pop("_after_cut", []):
+        if isinstance(sh, dict):
+            fn(sh)
     if isinstance(sh, dict) and sh.get("kind"):
         # mvp25 toolgaps 6: the notes of the added cells, when the size cut kept them (results.drop_extras)
         if isinstance(sh.get("when"), dict) and sh["when"].get("parts_of_day"):
@@ -694,6 +1103,16 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
             env["meta"]["notes"].append(SMALL_NOTE)
         if isinstance(sh.get("when"), dict) and sh["when"].get("busiest_weekdays"):
             env["meta"]["notes"].append(WEEKDAYS_NOTE)
+        if isinstance(sh.get("when"), dict) and sh["when"].get("events_by_weekday"):
+            env["meta"]["notes"].append(WEEKDAY_EVENTS_NOTE)
+        if isinstance(sh.get("in_top_of_every_period"), dict):
+            env["meta"]["notes"].append(EVERY_PERIOD_NOTE)
+        if any(isinstance(r, dict) and r.get("title_clipped") for r in sh.get("items") or []):
+            env["meta"]["notes"].append(CLIPPED_NOTE)
+        q_ = turn.queries.get(id(raw)) if raw is not None else None
+        if how == "opened" and _last_watched(turn, sh, q_):
+            env["meta"]["notes"].append(LAST_NOTE)
+        _cells_after_cut(turn, tool, rid, sh, env["meta"], how, only, q_)
     shown_n = len((sheet or {}).get(keep) or []) if keep else 0
     if keep == "periods" and isinstance(whole, int) and shown_n < whole:
         # toolfix 9 (a month timeline of all history was cut to its first 24 months while complete said true): the
@@ -708,14 +1127,65 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
     return env
 
 
+ROW_LISTS = ("channels", "themes", "areas", "fields", "small_channels")
+
+
+def added_cells_out(got, want):
+    """mvp30 (for the checks that set a tool's sheet against today's fact sheet of the same question): a tool's sheet
+    without the cells the brain's tools add after the size cut (_cells_after_cut, _last_watched, _weekday_events): a
+    window's days, the window before's days and channels, the library's own window, the events of each weekday, a
+    row's last day and its opens, saves and likes apart, every channel first opened, both windows of a compare; the new
+    themes begun before the window go back into new.themes (in today's order), and a share of 1.0 that a scope.only
+    result leaves out (it is 1.0 by construction) is put back where today's sheet has it."""
+    import copy
+    g = copy.deepcopy(got)
+    g.pop("windows", None)   # (in_top_of_every_period is results.cut_to_size's own, as today's sheet is cut here)
+    for k, sub in (("filters", ("names_in_scope",)), ("window", ("days", "platform_starts")),
+                   ("previous", ("days", "channels")), ("library", ("counted_over",)),
+                   ("when", ("events_by_weekday",)), ("new", ("channels_first_opened",))):
+        if isinstance(g.get(k), dict):
+            for x in sub:
+                g[k].pop(x, None)
+    new = g.get("new") if isinstance(g.get("new"), dict) else None
+    if new is not None and "themes_begun_before" in new:
+        order = [r.get("name") for r in ((want.get("new") or {}).get("themes") or [])]
+        rows = (new.get("themes") or []) + new.pop("themes_begun_before")
+        rows.sort(key=lambda r: order.index(r.get("name")) if r.get("name") in order else len(order))
+        for n, r in enumerate(rows):
+            r["ref"] = f"{str(r.get('ref', 'r1')).split('.')[0]}.new.themes[{n}]"
+        new["themes"] = rows
+    # a period whose sparse mark the private-row rule cleared gets today's mark back (the rule only ever clears it)
+    wp = {p.get("label"): p for p in want.get("periods") or [] if isinstance(p, dict)}
+    for p in g.get("periods") or []:
+        if isinstance(p, dict) and p.get("sparse") is False and (wp.get(p.get("label")) or {}).get("sparse") is True:
+            p["sparse"] = True
+    holders = [(g, want)] + [(g[k], want.get(k) or {}) for k in ("new", "stopped") if isinstance(g.get(k), dict)]
+    for h, w in holders:
+        for k in ROW_LISTS:
+            for n, r in enumerate(h.get(k) or []):
+                if not isinstance(r, dict):
+                    continue
+                for x in ("last_watched", "opened", "saved", "liked"):
+                    r.pop(x, None)
+                wr = (w.get(k) or [])[n] if n < len(w.get(k) or []) else {}
+                for x in ("share", "previous_share"):
+                    if x not in r and isinstance(wr, dict) and wr.get(x) == 1.0:
+                        r[x] = 1.0
+    return g
+
+
 # ================================================================ the read tools
 def run_find(turn, a: FindArgs):
     t0 = time.monotonic()
     rows = []
     for nm in a.names:
         r = N.resolve_one(turn.lib, nm, a.kinds)
+        also = R.clean(r["also"])
+        if r["status"] == "ok" and not str(r["matches"][0]["ref"]).startswith(("words:", "topic:")):
+            # mvp30: the other channels and themes whose names hold the words (find said `also` [] before)
+            also += also_holding(turn, nm, [r["matches"][0]["ref"]] + [x.get("ref") for x in also])
         rows.append(dict({"name": R.neutral(r["name"]), "status": r["status"], "matches": R.clean(r["matches"]),
-                          "options": R.clean(r["options"]), "also": R.clean(r["also"])}, **_no_match_cell(turn, r)))
+                          "options": R.clean(r["options"]), "also": also}, **_no_match_cell(turn, r)))
     rid = turn.next_rid()
     # each name's row gets its path; a match's or an option's `ref` is the library ref to pass to the other tools
     sheet = {"names": [dict(row, row=f"{rid}.names[{n}]") for n, row in enumerate(rows)]}
@@ -764,17 +1234,47 @@ def run_timeline(turn, a: TimelineArgs):
     if bad:
         return _unresolved(turn, "timeline", bad)
     raw = _sheet(turn, q)
+    private = _private_per_period(turn, q, raw)
     for p in raw.get("periods") or []:   # a period too thin to say what was watched in it (facts.SPARSE_MIN)
         if isinstance(p, dict) and isinstance(p.get("items"), int):
-            p["sparse"] = p["items"] < F.SPARSE_MIN
+            # mvp30 (a period with few items shown and many private ones was said as sparse): a period holding a
+            # private item is never marked sparse, as its count shown is not all they did in it
+            p["sparse"] = p["items"] < F.SPARSE_MIN and not private.get(p.get("label"))
     rid = turn.next_rid()
     # toolfix 9: every period (insight.shown keeps its first 24); `rows_of.periods` says how many there are
     n_periods = len(raw.get("periods") or [])
     sheet = R.present(raw, rid, limits={"periods": n_periods} if n_periods else None)
-    extra = [f"A period with fewer than {F.SPARSE_MIN} items is marked sparse."]
+    extra = [SPARSE_NOTE.format(n=F.SPARSE_MIN)]
     meta = _meta(turn, raw, a.scope, resolved, extra_notes=extra)
     meta["rows_of"]["periods"] = n_periods
     return _finish(turn, "timeline", rid, raw, sheet, meta, t0, w, keep="periods", how=a.scope.how)
+
+
+SPARSE_NOTE = "A period with fewer than {n} items, and no private item left out of it, is marked sparse."
+
+
+def _private_per_period(turn, q, raw):
+    """{period label: private items} of the base's kinds and platforms in each period, the private topics out but the
+    one unlocked, counted as facts counts a period's items (each item once per period)."""
+    import numpy as np
+    ps = [p for p in raw.get("periods") or [] if isinstance(p, dict) and isinstance(p.get("label"), str)]
+    unit = raw.get("periods_unit")
+    if not ps or unit not in ("year", "month"):
+        return {}
+    lib = turn.lib
+    idx, facts = lib.idx, lib.facts
+    unlock = turn.unlock if _counts_topic(turn, q) else turn.said_unlock
+    plats = Hm._scope_platforms(q, lib.view, lib.rec)
+    m = idx.kind_mask(Hm.HOW_KINDS[q.how]) & np.isin(idx.platform[idx.it], [0 if p == "youtube" else 1 for p in plats])
+    m &= F.sensitive_items(lib.view, idx, facts, unlock)[0][idx.it]
+    out = {}
+    for p in ps:
+        try:
+            a, b = F._period_bounds(p["label"], unit)
+        except (ValueError, KeyError):
+            continue
+        out[p["label"]] = len(np.unique(idx.it[m & (idx.day >= a) & (idx.day <= b)]))
+    return out
 
 
 def _year_back(turn, w):
@@ -821,6 +1321,11 @@ def run_changes(turn, a: ChangesArgs):
     if bad:
         return _unresolved(turn, "changes", bad)
     raw = _sheet(turn, q)
+    private = _private_per_period(turn, q, raw)
+    for p in raw.get("periods") or []:
+        # mvp30: as on a timeline, a period holding private items left out is never marked sparse
+        if isinstance(p, dict) and p.get("sparse") and private.get(p.get("label")):
+            p["sparse"] = False
     rid = turn.next_rid()
     keep = "periods" if raw.get("kind") == "changed" else LIST_OF[a.level]
     n_periods = len(raw.get("periods") or []) if keep == "periods" else 0
@@ -972,11 +1477,36 @@ def _item_rows(turn, raw, rows, q, rid, offset=0):
         event = event_of(evs, when, set(Hm.HOW_KINDS[q.how])) if when else None
         if r.get("at_time") and when:
             when = f"{when} {r['at_time']}"
-        out.append({"ref": f"{rid}.items[{len(out)}]", "item_id": iid, "title": R.neutral(r.get("title"), R.TITLE_MAX),
-                    "channel": R.neutral(r.get("channel"), R.NAME_MAX), "platform": r.get("platform"),
-                    "when": when, "how": event, "times_opened": opened,
-                    "length": _length_word(r, getattr(turn.lib.view.items.get(iid), "media", None))})
+        it = turn.lib.view.items.get(iid)
+        row = {"ref": f"{rid}.items[{len(out)}]", "item_id": iid,
+               "title": R.neutral(item_title(it) if it is not None else r.get("title"), R.TITLE_MAX),
+               "channel": R.neutral(r.get("channel"), R.NAME_MAX), "platform": r.get("platform"),
+               "when": when, "how": event, "times_opened": opened,
+               "length": _length_word(r, getattr(it, "media", None))}
+        mins = minutes_of(r.get("length_s"))
+        if mins is not None:
+            # mvp30 (a video's length was only "long" or "short", so an order by length had no cell and the
+            # answer said the export holds no lengths): its official length in minutes, where it is known
+            row["minutes"] = mins
+        _clipped(row, it)
+        out.append(row)
     return out
+
+
+def minutes_of(seconds):
+    """A known length in minutes, one decimal (a whole number when it is one); None when unknown."""
+    if not isinstance(seconds, (int, float)) or seconds <= 0:
+        return None
+    m = round(float(seconds) / 60, 1)
+    return int(m) if m == int(m) else m
+
+
+def _clipped(row, it):
+    """mvp30 (a title cut by code with an ellipsis was said as cut off in their history): a row whose title code
+    clipped says so, `title_clipped` true; the item's own text is whole in their library."""
+    t = row.get("title")
+    if isinstance(t, str) and t.endswith("…"):
+        row["title_clipped"] = True
 
 
 def run_items(turn, a: ItemsArgs):
@@ -984,11 +1514,17 @@ def run_items(turn, a: ItemsArgs):
     w = _window(turn, a.window)
     resolved = {}
     day = w.kind == "day"
-    kind = "on_day" if day else {"most_opened": "top_items", "newest": "list", "oldest": "first"}[a.order]
+    by_len = a.order in BY_LENGTH
+    kind = "on_day" if day else {"most_opened": "top_items", "newest": "list", "oldest": "first", "longest": "list",
+                                 "shortest": "list"}[a.order]
     extra = {} if day else {"n": a.limit, "offset": a.offset}
     q, bad = _query(turn, a.scope, kind, w, resolved, **extra)
     if bad:
         return _unresolved(turn, "items", bad)
+    if by_len and not day:
+        # mvp30: an order by length reads every item of the window and scope (code's own query, past the argument
+        # model's page bound), then sorts by the official length
+        q = q.model_copy(update={"n": EVERY_ITEM, "offset": 0})
     raw = _sheet(turn, q)
     rid = turn.next_rid()
     rows = raw.get("items") or []
@@ -998,13 +1534,24 @@ def run_items(turn, a: ItemsArgs):
         # then the page
         rows = _day_order(turn, raw, rows, a.order)[a.offset:a.offset + a.limit]
     else:
-        if kind == "first":
+        lens = None
+        if by_len:
+            rows, lens = _by_length(rows, a.order)
+            rows = rows[a.offset:a.offset + a.limit]
+        elif kind == "first":
             rows = rows[a.offset:a.offset + a.limit]
         sheet = {"kind": "items", "window": R.clean(raw.get("window")), "filters": R.clean(raw.get("filters")),
                  "totals": {"items": (raw.get("totals") or {}).get("items", 0)}}
+        if isinstance(raw.get("cannot_see"), dict):
+            # mvp30 repair (the attack: the note of a window before the scope's start named
+            # cannot_see.outside_scope_items, and the items sheet had no cannot_see, so the cell could not be cited):
+            # the window's own limit cell, as breakdown and timeline carry it
+            sheet["cannot_see"] = R.clean(raw["cannot_see"])
     sheet["items"] = _item_rows(turn, raw, rows, q, rid)
     meta = _meta(turn, raw, a.scope, resolved)
     meta["order"] = a.order
+    if by_len and not day and lens is not None:
+        _length_cells(meta, lens)
     meta["notes"].append(EVENT_NOTE)
     _mark_same_titles(turn, sheet["items"], set(Hm.HOW_KINDS[q.how]), *_raw_days(raw), meta)
     if a.order == "most_opened" and not day:
@@ -1012,8 +1559,8 @@ def run_items(turn, a: ItemsArgs):
     return _finish(turn, "items", rid, raw, sheet, meta, t0, w, keep="items", how=a.scope.how)
 
 
-TIE_NOTE = ("Every item of this window and scope was opened once: there is no ranking by times opened, and no item is "
-            "the most opened. The list runs newest first.")
+TIE_NOTE = ("No item of this window and scope was opened more than once (`opened_more_than_once` 0): times_opened is "
+            "1 for every one, so nothing here was opened again. The list runs newest first.")
 TIE_SHOWN_NOTE = "The items shown are tied: each was opened {n} times. None of them ranks above the others."
 
 
@@ -1036,6 +1583,8 @@ def _ties(turn, a, q, sheet, meta):
     if isinstance(top, int) and top <= 1 and all(r.get("times_opened") == top for r in rows):
         meta["tie"] = "all"
         meta["notes"].append(TIE_NOTE)
+        # mvp30: the fact as a cell the model can cite (a note said only what could not be ranked)
+        _after_cut(meta, lambda sh: sh.__setitem__("opened_more_than_once", 0))
     elif len(rows) > 1 and len({r.get("times_opened") for r in rows}) == 1:
         meta["tie"] = "shown"
         meta["notes"].append(TIE_SHOWN_NOTE.format(n=rows[0].get("times_opened")))
@@ -1054,10 +1603,39 @@ def _in_window(raw, d):
     return (a is None or d >= a) and (b is None or d <= b)
 
 
+BY_LENGTH = ("longest", "shortest")
+EVERY_ITEM = 100000
+LENGTHS_NOTE = ("`lengths`: of the items of this window and scope, how many have an official length (`known`) and how "
+                "many do not (`unknown`: never listed in this order), and the longest and the shortest in minutes.")
+LENGTH_TIE_NOTE = ("Every item here with a known length is {m} minutes long (`lengths.longest_minutes` equals "
+                   "`lengths.shortest_minutes`): none is longer than another.")
+
+
+def _by_length(rows, order):
+    """Item rows with a known official length, longest (or shortest) first, a tie newest first; and the counts."""
+    known = [r for r in rows if isinstance(r.get("length_s"), (int, float)) and r["length_s"] > 0]
+    known.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
+    known.sort(key=lambda r: r["length_s"], reverse=order == "longest")
+    lens = {"known": len(known), "unknown": len(rows) - len(known)}
+    if known:
+        lens["longest_minutes"] = minutes_of(max(r["length_s"] for r in known))
+        lens["shortest_minutes"] = minutes_of(min(r["length_s"] for r in known))
+    return known, lens
+
+
+def _length_cells(meta, lens):
+    meta["notes"].append(LENGTHS_NOTE)
+    if lens.get("known") and lens.get("longest_minutes") == lens.get("shortest_minutes"):
+        meta["notes"].append(LENGTH_TIE_NOTE.format(m=lens["longest_minutes"]))
+    _after_cut(meta, lambda sh: sh.__setitem__("lengths", dict(lens)))
+
+
 def _day_order(turn, raw, rows, order):
     """A day's item rows (facts gives them in time order, oldest first) in the order asked: newest first, oldest
     first, or the most opened that day first (a tie keeps time order)."""
     rows = list(rows)
+    if order in BY_LENGTH:
+        return _by_length(rows[::-1], order)[0]
     if order == "newest":
         return rows[::-1]
     if order == "most_opened":
@@ -1124,10 +1702,12 @@ def run_search(turn, a: SearchArgs):
         why = _why(it.caption or "", x.get("why"), a.query)
         fit = x.get("fit") if x.get("fit") in ("clear", "close", "weak") else _fit(x.get("score"))
         last = max(d for d, _k in evs)
-        rows.append({"ref": f"{rid}.items[{len(rows)}]", "item_id": iid, "title": R.neutral(Hm._title(it), R.TITLE_MAX),
+        rows.append({"ref": f"{rid}.items[{len(rows)}]", "item_id": iid,
+                     "title": R.neutral(item_title(it), R.TITLE_MAX),
                      "channel": R.neutral(it.creator, R.NAME_MAX), "platform": it.platform,
                      "when": last.isoformat(), "how": event_of(evs, last, kinds),
                      "why_matched": R.neutral(why, R.TEXT_MAX) if why else None, "fit": fit})
+        _clipped(rows[-1], it)
         if len(rows) >= a.limit:
             break
     sheet = {"kind": "search", "query": R.neutral(a.query), "how": a.how, "items": rows}
@@ -1234,15 +1814,51 @@ def run_learned(turn, a: LearnedArgs):
             continue
         n = len(points)
         points.append({"ref": f"{rid}.points[{n}]", "text": R.neutral(p["text"], R.TEXT_MAX),
-                       "sources": [{"item_id": i, "title": R.neutral(Hm._title(turn.lib.view.items[i]), R.TITLE_MAX)}
+                       "sources": [{"item_id": i, "title": R.neutral(item_title(turn.lib.view.items[i]), R.TITLE_MAX)}
                                    for i in src]})
-    sheet = {"kind": "learned", "topic": R.neutral(a.topic), "points": points}
-    meta = {"window_said": None, "base": BASE[a.scope.how], "filters_said": _filters_said(turn, a.scope, resolved),
+    sheet = {"kind": "learned", "topic": R.neutral(a.topic), "reads": LEARNED_READS, "points": points}
+    meta = {"window_said": None, "base": BASE[LEARNED_READS], "filters_said": _filters_said(turn, a.scope, resolved),
             "resolved": resolved, "order": None, "complete": False,
-            "hidden": {"sensitive": 0, "friends": _friends(turn, a.scope.how, None, None, q),
-                       "rank_hidden_above": False},
-            "notes": ["Each point was checked against the text of its sources."]}
+            # mvp30 repair (the attack: every learned result carried the count of all their friends' saved posts):
+            # a learned read is of one topic, and a friend's post is never placed in a topic (facts.friends_in counts
+            # none under a scope by name), so it leaves none out
+            "hidden": {"sensitive": 0, "friends": 0, "rank_hidden_above": False},
+            "notes": ["Each point was checked against the text of its sources.", LEARNED_NOTE]}
+    on = _on_topic(turn, a, q)
+    if on is not None:
+        sheet["on_topic"] = on
+        meta["notes"].append(ON_TOPIC_NOTE)
     return _finish(turn, "learned", rid, None, sheet, meta, t0, None, got.get("cost_usd", 0.0), keep="points")
+
+
+LEARNED_READS = "saved"
+LEARNED_NOTE = ("`reads` 'saved': the points come from the text of what they saved, never from what they only opened. "
+                "No point is no word on what they opened.")
+ON_TOPIC_NOTE = ("`on_topic`: how many of their items, ever and in this scope, are of the topic's name (`name`), "
+                 "opened and saved apart. Points come only from the saved ones.")
+
+
+def _on_topic(turn, a, q):
+    """mvp30 (an empty learned result had nothing else, and the answer said their history held nothing on the topic,
+    with dozens of opens on it): how many items on the topic, by the name it resolves to, were opened and were saved,
+    ever, in the call's scope (its platforms, length, weekday and filters). Nothing when the topic is not a name."""
+    if q.only_refs:
+        return None   # scope.only counts items of ANY of its names: the topic cannot be set beside them
+    r = N.resolve_one(turn.lib, a.topic)
+    if r.get("status") != "ok":
+        return None
+    ref = r["matches"][0]["ref"]
+    if str(ref).startswith("words:"):
+        return None   # a title-word name: how many private items it leaves out is never said (_meta)
+    out = {"name": R.neutral(N._label(turn.lib, ref), R.NAME_MAX)}
+    for word, how in (("opened", "watched"), ("saved", "saved")):
+        try:
+            raw = _sheet(turn, q.model_copy(update={"how": how, "only_refs": [ref]}))
+        except ToolError:
+            out[word] = 0
+            continue
+        out[word] = int(((raw or {}).get("totals") or {}).get("items", 0))
+    return out
 
 
 # ================================================================ the registry
@@ -1265,7 +1881,9 @@ REGISTRY = {t.name: t for t in (
             "and say how each was read. Ambiguous or unknown names come back with options and no numbers.",
             FindArgs, run_find, "read", "free", frozenset({"chat", "mcp"})),
     ToolDef("breakdown", "What they opened (or liked, saved) in one window, ranked by area, theme or channel (or just "
-            "the totals), most or least first, with the window before. " + UNITS,
+            "the totals), most or least first, with the window before, and when they opened it (`when`: the busiest "
+            "hours, the opens of each weekday, weekday and weekend shares; by 'none' also the parts of the day). " +
+            UNITS,
             BreakdownArgs, run_breakdown, "read", "free", frozenset({"chat", "mcp"})),
     ToolDef("timeline", "Their items per month or per year over a window, with the peaks. " + UNITS,
             TimelineArgs, run_timeline, "read", "free", frozenset({"chat", "mcp"})),
@@ -1276,8 +1894,10 @@ REGISTRY = {t.name: t for t in (
             CompareArgs, run_compare, "read", "free", frozenset({"chat", "mcp"})),
     ToolDef("first_last", "The first or the last time they opened something of a subject, with the item.",
             FirstLastArgs, run_first_last, "read", "free", frozenset({"chat", "mcp"})),
-    ToolDef("items", "Example items of a window and scope (most opened, newest or oldest); a one-day window returns the "
-            "day against their usual day. Never a link.",
+    ToolDef("items", "Example items of a window and scope (most opened, newest, oldest, or longest and shortest by "
+            "their official length in `minutes`, the video's own length and never how long they watched it); a one-day "
+            "window returns the day against their usual day. A row's "
+            "`when` is a day: the hour of the day is in breakdown's `when`. Never a link.",
             ItemsArgs, run_items, "read", "free", frozenset({"chat", "mcp"})),
     ToolDef("search", "Find saved or opened items by meaning, with the line of their own text that matched.",
             SearchArgs, run_search, "read", "embedding", frozenset({"chat"})),

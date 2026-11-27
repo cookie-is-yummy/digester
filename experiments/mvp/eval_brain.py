@@ -553,6 +553,7 @@ def insight(h):
             R.cut_to_size(want, keep=lst or {"items": "items", "changes": "periods"}.get(tool))
             if tool == "items":
                 want.pop("items", None)
+            got = TL.added_cells_out(got, want)   # mvp30: the cells the tools add after the size cut
             rows.append({"id": cid, "how": "identical" if (got == want and same_items) else "differs",
                          "truncated": bool((r.get("meta") or {}).get("truncated"))})
         elif cid in INSIGHT_NUMBERS:

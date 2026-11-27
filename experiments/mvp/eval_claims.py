@@ -967,10 +967,12 @@ def audit_sheet(ctx, F):
                 s, lo = lib.shorts_long(mem)
                 if s + lo:
                     chk(base + ".shorts_share", r["shorts_share"], round(s / (s + lo), 3), "share", 0.0015)
-            if prk is not None and "previous_share" in r:
+            if prk is not None and ("previous_share" in r or "previous_items" in r or "change_vs_previous" in r):
+                # (mvp30: a scope.only row that is all of the scope carries no share; its counts are read the same)
                 pc = prk.get(nm, 0)
                 ps = round(pc / len(pids), 3) if pids else 0.0
-                chk(base + ".previous_share", r["previous_share"], ps, "share", 0.0015)
+                if "previous_share" in r:
+                    chk(base + ".previous_share", r["previous_share"], ps, "share", 0.0015)
                 if "previous_items" in r:
                     chk(base + ".previous_items", r["previous_items"], pc, "count")
                 if isinstance(r.get("change_vs_previous"), (int, float)):
@@ -1859,7 +1861,10 @@ class TextAudit:
             y = int(next(iter(yrs)))
             a_, b_ = date(y, 1, 1).toordinal(), date(y, 12, 31).toordinal()
             a_, b_ = max(a_, a0), min(b_, ctx.b)
-            ids = [i for i in ids if any(a_ <= o <= b_ for o in lib.open_days[i])]
+            # mvp30: an id of a base that holds saves or likes may have no open (a saved-only playlist item under
+            # base 'any'): its own days are its events, so the year is read from those (an opened item: as before)
+            ids = [i for i in ids if any(a_ <= o <= b_ for o in lib.open_days.get(i) or
+                                         [e[0] for e in lib.acts.get(i, ())])]
         return ids
 
     def counts(self, s, spans):
@@ -3068,6 +3073,12 @@ def _item_rows_audit(ctx, F, rows, order=None, which=None):
                     else "long" if s is False else "unknown")
             F.add("results", "length word", r["length"] == want, r["length"], want, where=base + ".length",
                   severity=1.0)
+        if "minutes" in r:
+            # mvp30: the official length in minutes, one decimal
+            ln = lib.length.get(i)
+            want_m = None if not ln else (lambda m: int(m) if m == int(m) else m)(round(ln / 60, 1))
+            F.add("results", "minutes", r["minutes"] == want_m, r["minutes"], want_m, where=base + ".minutes",
+                  severity=1.0)
         if r.get("when"):
             d = date.fromisoformat(str(r["when"])[:10]).toordinal()
             days = [e[0] for e in S.get(i, [])]
@@ -3147,6 +3158,21 @@ def _learned_audit(lib, F, env):
         F.add("results", "point in its source's text", any(txt in _neutral_cmp(lib.items[i]["cap"])
                                                            for i in srcs if i in lib.items),
               (p.get("text") or "")[:40], "in a source's text", where=f"points[{k}].text", severity=2.0)
+    sh = env.get("sheet") or {}
+    on = sh.get("on_topic") if isinstance(sh.get("on_topic"), dict) else None
+    if on and isinstance(on.get("name"), str):
+        # mvp30: the items of the topic's name, ever, opened and saved apart (an unscoped call's)
+        nm = on["name"].lower()
+        kind = next((k for k, d in (("theme", lib.theme_of), ("area", lib.area_of)) if nm in set(d.values())), None)
+        mem = [i for i in lib.items if (lib.member(i, (kind, nm)) if kind else lib.items[i]["c"] == on["name"])]
+        for key, n in (("opened", sum(1 for i in mem if lib.open_days.get(i))),
+                       ("saved", sum(1 for i in mem if i in lib.saved))):
+            if key in on:
+                F.add("results", "count", on[key] == n, on[key], n, where=f"on_topic.{key}")
+    lo = sh.get("left_out") if isinstance(sh.get("left_out"), dict) else {}
+    if "friends" in lo:
+        n = len({fid for fid, _o, _wd, k, _p, _m in lib.friend_acts if k in SAVED})
+        F.add("results", "count", lo["friends"] == n, lo["friends"], n, where="left_out.friends")
 
 
 def _numbers_of(o, path=""):
@@ -3201,6 +3227,11 @@ def audit_results(lib, env, call=None, question="", today=None, earlier=None, la
     for kind, ok, said, rec, words in wrows:
         F.add("window", kind, ok, said, rec, where="window", note=words, severity=2.0)
     _meta_audit(ctx, F, env, call)
+    nis = (sh.get("filters") or {}).get("names_in_scope") if isinstance(sh.get("filters"), dict) else None
+    if isinstance(nis, int):
+        # mvp30: how many names the call's scope.only holds, read from the call's own arguments
+        only = (((call or {}).get("args") or {}).get("scope") or {}).get("only") or []
+        F.add("sheet", "count", nis == len(only), nis, len(only), where="filters.names_in_scope")
     if question:
         q = read_call_window(question, lib, today)
         st = stated_window(sh)
@@ -3220,6 +3251,13 @@ def audit_results(lib, env, call=None, question="", today=None, earlier=None, la
         order = args.get("order") if tool == "items" and sh.get("kind") == "items" else None
         _item_rows_audit(ctx, F, items, order=order, which=sh.get("kind") if tool == "first_last" else None)
         _same_title_audit(lib, F, items, HOW_EVENTS.get((ctx.f or {}).get("how") or "opened", OPEN), ctx.a, ctx.b)
+        if "opened_more_than_once" in sh:
+            # mvp30: how many items of the window and scope were opened more than once (the tools give it as 0)
+            S = ctx.sc("filt")
+            n = sum(1 for i in S if sum(1 for o in lib.open_days.get(i, []) if (ctx.a is None or o >= ctx.a)
+                                        and o <= ctx.b) > 1)
+            F.add("results", "count", sh["opened_more_than_once"] == n, sh["opened_more_than_once"], n,
+                  where="opened_more_than_once")
     else:
         audit_sheet(ctx, F)
         _brain_extra(ctx, F, _clean(sh))
@@ -3283,6 +3321,60 @@ def _toolfix2_extra(ctx, F, sh):
                   _d(fw).isoformat() if fw else None, where=base + ".first_watched", severity=1.0)
 
 
+def _mvp30_extra(ctx, F, sh):
+    """mvp30: the cells the brain's tools add after the size cut, recounted from the raw rows: the window's days and
+    the window before's, the window's events on each weekday, every channel of the scope first opened in the window,
+    the scope's channels of the window before, and an item's official length in minutes (items rows are read in
+    _item_rows_audit)."""
+    lib = ctx.lib
+    S = ctx.sc("filt")
+    win = sh.get("window") if isinstance(sh.get("window"), dict) else {}
+    if isinstance(win.get("days"), int) and win.get("start") and win.get("end"):
+        d = date.fromisoformat(win["end"]).toordinal() - date.fromisoformat(win["start"]).toordinal() + 1
+        F.add("sheet", "days", win["days"] == d, win["days"], d, where="window.days")
+    prev = sh.get("previous") if isinstance(sh.get("previous"), dict) else {}
+    if isinstance(prev.get("days"), int) and ctx.prev:
+        pa, pb = ctx.prev
+        F.add("sheet", "days", prev["days"] == pb - pa + 1, prev["days"], pb - pa + 1, where="previous.days")
+    for side, ww in ((sh.get("windows") or {}).items() if isinstance(sh.get("windows"), dict) else ()):
+        if isinstance(ww, dict) and isinstance(ww.get("days"), int) and ww.get("start") and ww.get("end"):
+            d = date.fromisoformat(ww["end"]).toordinal() - date.fromisoformat(ww["start"]).toordinal() + 1
+            F.add("sheet", "days", ww["days"] == d, ww["days"], d, where=f"windows.{side}.days")
+    cs = sh.get("cannot_see") if isinstance(sh.get("cannot_see"), dict) else {}
+    if isinstance(cs.get("outside_scope_items"), int) and win.get("end"):
+        a_ = date.fromisoformat(win["start"]).toordinal() if win.get("start") else None
+        b_ = date.fromisoformat(win["end"]).toordinal()
+        n = sum(1 for i, acts in lib.acts.items() if i in lib.items and any((a_ is None or e[0] >= a_) and
+                                                                           e[0] <= b_ for e in acts))
+        F.add("sheet", "count", cs["outside_scope_items"] == n, cs["outside_scope_items"], n,
+              where="cannot_see.outside_scope_items")
+    w = sh.get("when") if isinstance(sh.get("when"), dict) else {}
+    if isinstance(w.get("events_by_weekday"), dict):
+        c = Counter(e[2] for ev in S.values() for e in ev)
+        for k in range(7):
+            day = DAYS_EN[k].capitalize()
+            if day in w["events_by_weekday"]:
+                F.add("sheet", "count", w["events_by_weekday"][day] == c.get(k, 0), w["events_by_weekday"][day],
+                      c.get(k, 0), where=f"when.events_by_weekday.{day}")
+    new = sh.get("new") if isinstance(sh.get("new"), dict) else {}
+    if isinstance(new.get("channels_first_opened"), int) and ctx.a is not None:
+        firsts = {}
+        for i, ds in lib.open_days.items():
+            c_ = lib.items[i]["c"]
+            if c_ and ds:
+                firsts[c_] = min(firsts.get(c_, ds[0]), ds[0])
+        # (mvp30 repair: a channel of the scope, one the window's scoped events hold; its first open over all history)
+        inscope = {lib.items[i]["c"] for i, ev in S.items() if ev and i in lib.items}
+        n = sum(1 for c_, o in firsts.items() if ctx.a <= o <= ctx.b and c_ in inscope)
+        F.add("sheet", "count", new["channels_first_opened"] == n, new["channels_first_opened"], n,
+              where="new.channels_first_opened")
+    if isinstance(prev.get("channels"), int) and ctx.prev:
+        # mvp30 repair: the channels of the scope opened in the window before
+        P_ = ctx.sc("prev")
+        n = len({lib.items[i]["c"] for i, ev in P_.items() if ev and i in lib.items and lib.items[i]["c"]})
+        F.add("sheet", "count", prev["channels"] == n, prev["channels"], n, where="previous.channels")
+
+
 def _shown_title(cap):
     """My own reading of a row's title for a same-title count: the caption's first line, its trailing number tag
     ("#3") and hashtags out, compared as _neutral_cmp compares."""
@@ -3291,16 +3383,32 @@ def _shown_title(cap):
     return _neutral_cmp(line)
 
 
+def _shown_title_numbered(cap):
+    """mvp30: my own reading of a title as the brain's rows show it: the caption's first line, its hashtags out but
+    one all-digit tag ("#3", an episode number) kept, compared as _neutral_cmp compares."""
+    line = (cap or "").split("\n")[0]
+    tags = re.findall(r"(?<![\w#])#(\d{1,6})(?!\w)", line)
+    line = re.sub(r"\s*#\w+", "", line)
+    if len(tags) == 1:
+        line = f"{line.strip()} #{tags[0]}"
+    return _neutral_cmp(line)
+
+
 def _same_title_audit(lib, F, rows, kinds, a, b):
     """mvp26 toolfix2: an item row's `same_title`, how many of their items with an event of the kinds counted in the
-    window have exactly its title."""
+    window have exactly its title. mvp30: `other_items_same_title`, the same count of the OTHER items (the row's own
+    left out), titles read with their episode number kept."""
     for k, r in enumerate(rows or []):
-        if not isinstance(r, dict) or "same_title" not in r:
+        if not isinstance(r, dict):
             continue
-        t = _neutral_cmp(r.get("title"))
-        n = sum(1 for i, it in lib.items.items() if _shown_title(it["cap"]) == t and any(
-            kd in kinds and (a is None or o >= a) and (b is None or o <= b) for o, _h, _w, kd in lib.acts.get(i, [])))
-        F.add("results", "count", r["same_title"] == n, r["same_title"], n, where=f"items[{k}].same_title")
+        for key, read, own in (("same_title", _shown_title, 0), ("other_items_same_title", _shown_title_numbered, 1)):
+            if key not in r:
+                continue
+            t = _neutral_cmp(r.get("title"))
+            n = sum(1 for i, it in lib.items.items() if read(it["cap"]) == t and any(
+                kd in kinds and (a is None or o >= a) and (b is None or o <= b)
+                for o, _h, _w, kd in lib.acts.get(i, [])))
+            F.add("results", "count", r[key] == n - own, r[key], n - own, where=f"items[{k}].{key}")
 
 
 def _brain_extra(ctx, F, sh):
@@ -3308,6 +3416,7 @@ def _brain_extra(ctx, F, sh):
     hours' order, the weekend and usual-week shares, the counts of the new and stopped themes and channels, saved and
     never opened on YouTube, the top channels' area, what a without-Shorts filter left out."""
     _toolfix2_extra(ctx, F, sh)
+    _mvp30_extra(ctx, F, sh)
     lib = ctx.lib
     S = ctx.sc("filt")
     ids = list(S)
@@ -3357,13 +3466,16 @@ def _brain_extra(ctx, F, sh):
     tnow, tprev = Counter(lib.theme_of[i] for i in ids if i in lib.theme_of), \
         Counter(lib.theme_of[i] for i in P if i in lib.theme_of)
     cnow, cprev = Counter(lib.items[i]["c"] for i in ids), Counter(lib.items[i]["c"] for i in P)
+    for side, tk in (("new", "themes"), ("stopped", "themes"), ("new", "themes_begun_before")):
+        # (mvp30: new.themes_begun_before, the new themes first opened before the window, recounted as new.themes)
+        part = sh.get(side) or {}
+        for k, r in enumerate(part.get(tk) or []):
+            if isinstance(r, dict) and r.get("name"):
+                chk(f"{side}.{tk}[{k}].items", r.get("items"), tnow.get(r["name"].lower(), 0), "count")
+                chk(f"{side}.{tk}[{k}].previous_items", r.get("previous_items"), tprev.get(r["name"].lower(), 0),
+                    "count")
     for side in ("new", "stopped"):
         part = sh.get(side) or {}
-        for k, r in enumerate(part.get("themes") or []):
-            if isinstance(r, dict) and r.get("name"):
-                chk(f"{side}.themes[{k}].items", r.get("items"), tnow.get(r["name"].lower(), 0), "count")
-                chk(f"{side}.themes[{k}].previous_items", r.get("previous_items"), tprev.get(r["name"].lower(), 0),
-                    "count")
         for k, r in enumerate(part.get("channels") or []):
             if isinstance(r, dict) and r.get("name"):
                 chk(f"{side}.channels[{k}].items", r.get("items"), cnow.get(r["name"], 0), "count")

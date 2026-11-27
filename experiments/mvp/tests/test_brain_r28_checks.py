@@ -16,8 +16,9 @@ measured against their live refusals.
 Full and cells mode never run these rules (tests/test_brain_values.py pins their digests). Made-up library and
 made-up sentences only; no model call.
 
-These rules are off by default (verify.VALUES_RULES_R28; tests/test_brain_r28_rules.py pins the default): every test
-here runs with MVP_BRAIN_VALUES_RULES=r28 (the fixture `r28_on`), as a run that switches them on would.
+These rules were off by default in mvp28 (verify.VALUES_RULES_R28); since mvp30 most are in the default
+(verify.VALUES_RULES_R30, pinned by tests/test_brain_r30_rules.py). Every test here runs with MVP_BRAIN_VALUES_RULES=r28
+(the fixture `r28_on`) and checks with the merged build's rule set (`_r28`), as that build ran them.
 """
 import os
 import sys
@@ -109,9 +110,16 @@ def _form(lead, points=(), items=(), **kw):
     return dict({"lead": lead, "points": list(points), "items": [{"ref": r, "note": None} for r in items]}, **kw)
 
 
+def _r28():
+    """mvp30 re-pin: the merged build's values rules (last round's and every rule of VALUES_RULES_R28), which the
+    switch "r28" ran before the r30 set became the default; these tests pin that build's rules as written."""
+    from mvp.brain import verify as V
+    return V.values_mode(rules=V.VALUES_RULES | V.VALUES_RULES_R28)
+
+
 def _check(t, form, mode="values"):
     from mvp.brain import verify as V
-    return V.check_answer(form, V.Ledger(t.results), V.Turn.of(t), mode=mode)
+    return V.check_answer(form, V.Ledger(t.results), V.Turn.of(t), mode=_r28() if mode == "values" else mode)
 
 
 def _lead_reasons(v):
@@ -120,7 +128,7 @@ def _lead_reasons(v):
 
 def _off(*rules):
     from mvp.brain import verify as V
-    return V.values_mode(rules=V.VALUES_RULES_ALL - set(rules))
+    return V.values_mode(rules=(V.VALUES_RULES | V.VALUES_RULES_R28) - set(rules))
 
 
 def test_the_rules_of_this_round_are_pinned_and_run_in_values_mode_only():
@@ -130,7 +138,7 @@ def test_the_rules_of_this_round_are_pinned_and_run_in_values_mode_only():
     # the repair's rules narrow or complete these (tests/test_brain_r28_repair.py)
     repair = {"row_quote", "rows_before", "screen_uncited", "outcome_cited", "page_cited", "shown_said", "rows_kept"}
     assert V.VALUES_RULES_R28 == frozenset(r28 | repair) and not (V.VALUES_RULES_R28 & V.VALUES_RULES)
-    assert V.VALUES_RULES_ALL == V.VALUES_RULES | V.VALUES_RULES_R28 | V.VALUES_RULES_PREP
+    assert V.VALUES_RULES_ALL == V.VALUES_RULES | V.VALUES_RULES_R28 | V.VALUES_RULES_PREP | V.VALUES_RULES_NEW30
     assert r28 <= V.VALUES.rules and not (r28 & (V.FULL.rules | V.CELLS.rules))   # on here (the fixture)
     assert "item_count" in V.VALUES_REFUSE_R28 and "item_count" in V.VALUES_CODES_R28
     assert "item_count" not in V.VALUES_REFUSE and "item_count" not in V.VALUES_CODES   # last round's lists
@@ -307,7 +315,8 @@ def test_a_window_code_wrote_on_the_screen_holds_its_figure_with_the_unit(brain)
 
 def _point_v(led, vt, text, mode="values"):
     from mvp.brain import verify as V
-    v = V.check_answer({"lead": "Here is what it holds.", "points": [text]}, led, vt, mode=mode)
+    v = V.check_answer({"lead": "Here is what it holds.", "points": [text]}, led, vt,
+                       mode=_r28() if mode == "values" else mode)
     return [o for o in v.outcomes if o.where == "point"][0].kept
 
 

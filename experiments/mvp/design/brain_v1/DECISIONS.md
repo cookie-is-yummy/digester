@@ -655,3 +655,73 @@ The rule for the next run, written before it:
   every bar but one at most, and none has more than 2 settled false sentences. Otherwise another round.
 
 Claude spend to here: about $5.75 of $25.
+
+## The fix round: false "it is missing" sentences fixed where they start (27 Nov 2026)
+
+What it was: every false, wrongly based, limit-only and wrongly refused sentence of the crossed run was traced to
+a cause, the causes were fixed at the source by three builders, merged, attacked by an independent agent, and the
+attack's faults repaired. DESIGN.md section 31 holds the detail; this is what was decided and what it cost.
+
+The causes, by class (DESIGN 31.1). Most false sentences began in what a tool told the model:
+- Item rows said only "long", with no minutes, so the model said the export holds no lengths.
+- A note said "there is no ranking by times opened", and the model repeated it as "no rewatch counts".
+- Under a platform scope the first day of that platform's opens was labelled "your history starts on".
+- A result cut to size lost the cells that held the answer, and meta said only "truncated".
+- The prompt still said "late October" cannot be read, though code reads it.
+- A title lost its episode number, so 20 different videos read as one title, and `same_title` counted the row itself.
+- The rest: the time-up message, a follow-up that needs the last answer's values, misleading cells, and 9 faults
+  of the model alone with no general fix.
+
+What was fixed (DESIGN 31.2 and 31.3): the tools now carry the cell or say the true thing for each class (minutes
+and a `lengths` cell, `opened_more_than_once`, the scope's own start and the record's start, `meta.cut` and every
+period kept, numbered titles, `other_items_same_title`, per-weekday opens, `last_watched`). The loop says a call
+"was not run" when its own clock ends a turn. Two new prompt files, brain_v3d and brain_v4d, drop the stale line
+and say that a limit covers only its own words. A doing part of a message ("every Sunday send me...") gets one
+line written by code; the model says nothing of it.
+
+Two defaults I set, both the founder's to change:
+- A friend's post stays out of every total, as before. The tool note and the new prompts now say "in no total".
+- A period that holds private items is never marked sparse.
+
+The live check, in sample (the 73 turns the faults were traced on, each prompt once, one reader): of 27 fault keys,
+v3d has 23 gone, 2 still, 2 unchanged by the friends rule; v4d has 25 gone and the same 2 unchanged. The three
+held-out messages that faulted in every cell are true in both. New faults in the same check: 1 false and 3 wrongly
+based sentences under v4d, and one regression in both prompts (below). This is not evidence for the gate: the
+fixes were written against these messages.
+
+The independent attack found nine faults in the merged build (DESIGN 31.8). All nine were repaired:
+- The new per-item minutes cell let watch-time sentences through. A new rule, `length_cells`, is in the default.
+- A code-written line on the timeout path dropped a private topic's scope. Fixed in the code lead.
+- Three new cells ignored the call's scope. They are counted in scope now and the auditor recounts them.
+- A learned result carried a friends count that invited a false sentence. Removed.
+- Three checker rules switched on this round let out made-up sentences under attack. They are off again.
+- Code's doing line could be set off by words in a title. It now needs the words to be the person's own.
+- A note named a cell the sheet did not carry. The sheet carries it.
+- One test copied an eval message and one docstring quoted its answer. Both replaced.
+- The eval put a marking hint on the blind reading sheet. Removed; the convention is in the rubric instead.
+
+The values check's default for the run, as code now holds it: last round's four rules (row_name, cell_found,
+day_typed, motive_you) plus timing_out, cards_found, item_count_free, screen_window, screen_uncited, rows_before,
+page_cited, rows_kept, shown_said and length_cells. Off, behind the switch: item_count, rows_shown, cited_rows,
+outcome_you, outcome_cited, row_text, row_quote, quote_at_row, row_group.
+- Why three came back off: taken out one at a time on the attacker's sets, outcome_you let out 4 false sentences
+  for 1 true one released, row_text 2 for 0, row_group 1 for 0.
+- The cost, declared: 13 true sentences of the saved runs that those three released are refused again.
+- item_count stays off: it refuses 11 of 12 honest page counts. So "5[r1.items.count]" over fewer cards still passes.
+- This is the third round in which checker rules were switched on and then off again. The rules are not reopened
+  before the blind run: the source fixes moved the faults, the checker rules did not.
+
+Checks on the merged tip: whole suite 6406 passed, 2 skipped, 0 failed. The checker's full and cells modes and
+both answer builders: 5,984 verdicts and 4,209 answers, 0 differ from the last pushed tip. Planted cases byte-same
+in three modes. Dry self-test of today's bot 164 of 164. Privacy scan of the round's diff: generic words only.
+
+What stays open, said before the run:
+- Results are about 20% larger, so each call reads more tokens. A month timeline of all history is about 7,500
+  characters against a cap of 6,000, and drops the parts-of-day cells to keep every month (`meta.cut` says so).
+- Faults no value check sees: "all from one channel" over a row that lists two; one row's cell said of another row.
+- A count written with a marker over fewer cards; "you watched X for N minutes" with a marker on the length.
+- The code lead after a provider timeout is true but answers one part of the question.
+- The eval set's lock: the repair agent ran two recursive greps over experiments/mvp without the exclude flags.
+  Neither printed a line of the locked file. Noted with the earlier slips.
+
+Claude spend to here: about $6.45 of $25.

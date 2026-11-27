@@ -276,8 +276,11 @@ def test_the_month_timeline_of_all_history_holds_as_many_periods_as_before_the_a
     # run1 N001.1: the timeline held the latest 52 of 69 periods on 4064f3e and 47 on the tip
     env_, _t = call(brain, "timeline", {"unit": "month", "window": W(preset="all"), "scope": S(only=["cooking"])},
                     "huh why so much cooking all of a sudden")
-    assert env_["meta"]["rows_of"]["periods"] == 69 and len(env_["sheet"]["periods"]) == 52
-    assert env_["sheet"]["periods"][-1]["label"] == "Oct 2026" and "parts_of_day" in env_["sheet"]["when"]
+    # mvp30, re-pinned: a list of periods asked for keeps every period (the other rankings and the periods' own lists
+    # go first, and meta.cut says what went); the parts of the day are what gives way here
+    assert env_["meta"]["rows_of"]["periods"] == 69 == len(env_["sheet"]["periods"])
+    assert env_["sheet"]["periods"][-1]["label"] == "Oct 2026" and env_["meta"]["complete"] is True
+    assert any(x.startswith("when.parts_of_day") for x in env_["meta"]["cut"])
 
 
 def test_the_added_cells_never_cost_a_row_and_stay_under_their_allowance():
@@ -342,7 +345,9 @@ def test_a_code_lead_never_ranks_over_a_tie(brain):
 def test_a_new_theme_on_a_ranked_sheet_keeps_its_first_day(brain):
     # the attack: "Home cooking" shown as new this autumn with no first day; it was first opened in 2021
     env_, _t = call(brain, "breakdown", {"by": "theme", "window": W("this autumn")}, "this autumn")
-    hc = next(r for r in env_["sheet"]["new"]["themes"] if r["name"] == "Home cooking")
+    # mvp30, re-pinned: a new theme first opened before the window is listed apart (new.themes_begun_before)
+    hc = next(r for r in env_["sheet"]["new"]["themes_begun_before"] if r["name"] == "Home cooking")
+    assert "Home cooking" not in [r["name"] for r in env_["sheet"]["new"].get("themes") or []]
     first = min(local(at) for r in visible_rows() if r["theme"] == "co" for k, at in r["events"] if k == "watch")
     assert hc["first_watched"] == first.isoformat() and first.year == 2021                                # recount
     assert any("first_watched" in n for n in env_["meta"]["notes"])
@@ -417,8 +422,11 @@ def test_a_search_says_how_many_items_share_a_title(brain):
     same = [r for r in visible_rows() if r["caption"].split(" #")[0] == "Integrals by parts"
             and any(k == "watch" for k, _a in r["events"])]
     assert len(same) == 21                                                                                 # recount
-    assert rows and all(r["title"] == "Integrals by parts" and r["same_title"] == 21 for r in rows)
-    assert any("same_title" in n for n in env_["meta"]["notes"])
+    # mvp30, re-pinned: each title keeps its own episode number ("Integrals by parts #82"), so the 21 videos are 21
+    # different titles and no row carries a count of other items with its title
+    caps = {r["id"]: r["caption"] for r in same}
+    assert rows and all(r["title"] == caps[r["item_id"]] and "other_items_same_title" not in r for r in rows)
+    assert not any("same_title" in n for n in env_["meta"]["notes"])
 
 
 def test_new_channels_name_the_ones_under_the_floor(brain):

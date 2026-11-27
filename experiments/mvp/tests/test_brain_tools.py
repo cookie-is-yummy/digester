@@ -215,8 +215,10 @@ def test_timeline_per_year_recounts(brain):
     for y in range(2021, 2027):
         assert got[str(y)] == len(opened(date(y, 1, 1), date(y, 12, 31)))                       # recount 9
     assert got["2024"] == 8     # the 50 videos of the sensitive theme are not counted
-    assert all(p["sparse"] == (p["items"] < 50) for p in r["sheet"]["periods"])
-    assert any(p["sparse"] for p in r["sheet"]["periods"]) and not all(p["sparse"] for p in r["sheet"]["periods"])
+    # mvp30: a period under the floor that holds private items (2024: the 50 of the sensitive theme) is not marked
+    # sparse, as what it shows is not all they did in it; no other year is under the floor
+    assert all(p["sparse"] == (p["items"] < 50 and p["label"] != "2024") for p in r["sheet"]["periods"])
+    assert not any(p["sparse"] for p in r["sheet"]["periods"])
 
 
 def test_compare_two_years_in_one_result(brain):
@@ -271,7 +273,7 @@ def test_items_of_a_day_and_of_a_month(brain):
     assert {i["item_id"] for i in r["sheet"]["items"]} == opened(date(2026, 10, 30), date(2026, 10, 30))  # recount 12
     row = r["sheet"]["items"][0]
     assert set(row) == {"ref", "item_id", "title", "channel", "platform", "when", "times_opened", "length",
-                        "how"}   # mvp25 toolgaps 4: what they did on `when`
+                        "how", "minutes"}   # mvp25 toolgaps 4: what they did on `when`; mvp30: its known length
     m, _t = call(brain, "items", {"window": {"words": "in october"}, "order": "newest", "limit": 3})
     assert [i["when"][:10] for i in m["sheet"]["items"]] == ["2026-10-30"] * 3
     assert m["sheet"]["totals"]["items"] == len(opened(*OCTOBER))
@@ -451,6 +453,7 @@ def test_a_tool_call_gives_todays_sheet_of_the_same_question(brain, cid):
     got.pop("left_out", None)   # mvp27: the brain's citable twin of meta.hidden; today's sheet has none
     if tool == "items":   # the day's sheet; its item rows are the tool's own shape, of the same items
         assert [i["item_id"] for i in got.pop("items")] == [i["id"] for i in (raw.get("items") or [])][:10]
+    got = _no_mvp30_cells(got, want_of(raw))
     assert got == want_of(raw), cid
     plain = _today_sheet(brain, question, hide=False)
     if cid in SENSITIVE_IN_SCOPE:   # 2024 is in the window or the window before: today's plain sheet holds the
@@ -458,6 +461,12 @@ def test_a_tool_call_gives_todays_sheet_of_the_same_question(brain, cid):
         assert "Heart Notes" not in json.dumps(r) and got != want_of(plain)
     else:                           # where nothing sensitive is in scope, today's plain sheet agrees too, but for
         assert _no_toolfix_cells(got) == want_of(plain), cid   # the cells the brain's sheets add (toolfix, mvp22)
+        # (mvp30: `got` is already without the cells the brain's tools add after the size cut, _no_mvp30_cells)
+
+
+def _no_mvp30_cells(got, want):
+    from mvp.brain import tools as TL
+    return TL.added_cells_out(got, want)
 
 
 def _no_toolfix_cells(o, path=""):
@@ -679,7 +688,8 @@ def test_code_lines_for_watch_time_friends_and_the_export_end(brain):
                  "how many hours did i spend in october and what did my friends post")
     notes = r["meta"]["notes"]
     assert any(n.startswith("Your export records which videos you opened, not for how long") for n in notes)
-    assert "Posts from friends are not counted." in notes
+    # mvp30: re-pinned (the note said "not counted" while left_out.friends counts them)
+    assert "Posts from friends are never shown and are in no total: only how many there are is counted." in notes
     assert "Your YouTube export ends on 30 October 2026." in notes
     after, _t = call(brain, "breakdown", {"by": "none", "window": {"preset": "this_week"}})
     assert any("so I can't see after that" in n for n in after["meta"]["notes"])

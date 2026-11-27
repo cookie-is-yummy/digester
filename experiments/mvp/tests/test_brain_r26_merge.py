@@ -36,9 +36,10 @@ def _call(brain, case):
           "opens each.", True),
     (OCT, "In October 2026, Thursday and Friday tied as your busiest days, with 25[r1.when.busiest_weekday_opens] "
           "opens each.", False),
-    # same_title (21 rows titled "Integrals by parts")
+    # same_title (21 rows titled "Integrals by parts"); mvp30, re-pinned: each row's title keeps its episode number,
+    # so the 21 are different titles, no row has a same-title cell, and the claim is refused
     (INTEGRALS, "You opened \"Integrals by parts\"[r1.items[0]] on 4 June 2023[r1.items[0].when], and "
-                "21[r1.items[0].same_title] of your videos share that title.", True),
+                "21[r1.items[0].same_title] of your videos share that title.", False),
     (INTEGRALS, "You opened \"Integrals by parts\"[r1.items[0]] on 4 June 2023[r1.items[0].when], and "
                 "22[r1.items[0].same_title] of your videos share that title.", False),
     (INTEGRALS, "You opened \"Integrals by parts\"[r1.items[0]] on 4 June 2023[r1.items[0].when], and 23 of your "

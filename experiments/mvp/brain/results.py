@@ -172,7 +172,7 @@ def _hold_extras(sheet):
     if new is not None and "small_channels" in new:
         held.append((new, "small_channels", new.pop("small_channels"), "small"))
     when = sheet.get("when") if isinstance(sheet.get("when"), dict) else None
-    for k in ("parts_of_day", "busiest_weekdays", "busiest_weekday_opens"):
+    for k in ("parts_of_day", "busiest_weekdays", "busiest_weekday_opens", "events_by_weekday"):
         if when is not None and k in when:
             held.append((when, k, when.pop(k), "parts" if k == "parts_of_day" else "weekday"))
     return held
@@ -197,16 +197,136 @@ def _put_back(sheet, held, chars):
     return went
 
 
-def cut_to_size(sheet, chars=RESULT_CHARS, keep=None, newest=False):
+def cut_to_size(sheet, chars=RESULT_CHARS, keep=None, newest=False, went=None):
     """Cut until the sheet is about 1,500 tokens: first the lists inside rows (a theme's channels, an area's themes),
     then the other rankings (longest first), the ranking asked for (`keep`) last. True when anything was cut. Rows
     are cut from the end, so what is left is the top of each list, its refs unchanged. `newest` (toolfix 9: a month
     timeline of all history kept January 2021 to December 2022 and lost October 2026): the list asked for is in time
     order, so it is cut from its start, and its rows' refs are made again (a ref is the row's own path). The cells
-    added for insight are measured apart (mvp26 toolfix2 5: `_hold_extras`), so they never cost a row."""
+    added for insight are measured apart (mvp26 toolfix2 5: `_hold_extras`), so they never cost a row.
+    mvp30 (a year timeline lost every period's themes to keep ten channel rows, and a month timeline of all history its
+    oldest 17 months, and meta said only "truncated"): a list of periods asked for keeps every period and its inner
+    lists go last, after the other rankings; the rows in the top of every period are kept as a cell
+    (`in_top_of_every_period`); and `went` (a list) is told what was cut, path by path."""
+    before = _shape(sheet)
+    every = _every_period(sheet) if keep == "periods" else None
     held = _hold_extras(sheet)
-    cut = _cut_rows(sheet, chars, keep, newest)
-    return _put_back(sheet, held, chars + EXTRA_CHARS) or cut
+    if keep == "periods" and isinstance(sheet.get("periods"), list):
+        cut = _cut_periods(sheet, chars, newest)
+    else:
+        cut = _cut_rows(sheet, chars, keep, newest)
+    out = _put_back(sheet, held, chars + EXTRA_CHARS) or cut
+    if every:
+        sheet["in_top_of_every_period"] = every
+    if went is not None and out:
+        went.extend(_what_went(before, _shape(sheet)))
+    return out
+
+
+def _shape(sheet):
+    """{path: rows} of every list of the sheet and of its rows' inner lists ("periods[].themes": the most rows any
+    period has), and the extra cells present (by their path)."""
+    out = {}
+    for k, v in sheet.items():
+        if isinstance(v, list):
+            out[k] = len(v)
+            for row in v:
+                if isinstance(row, dict):
+                    for kk, vv in row.items():
+                        if isinstance(vv, list):
+                            out[f"{k}[].{kk}"] = max(out.get(f"{k}[].{kk}", 0), len(vv))
+        elif isinstance(v, dict):
+            for kk, vv in v.items():
+                if isinstance(vv, list):
+                    out[f"{k}.{kk}"] = len(vv)
+                elif kk in EXTRA_KEYS:
+                    out[f"{k}.{kk}"] = 1
+    return out
+
+
+EXTRA_KEYS = ("parts_of_day", "busiest_weekdays", "busiest_weekday_opens", "small_channels", "events_by_weekday")
+
+
+def _what_went(before, after):
+    """What a cut took, in code's words: "periods[].themes: cut to 1 row each", "channels: 3 of 10 rows kept"."""
+    out = []
+    for path, n in sorted(before.items()):
+        m = after.get(path, 0)
+        if m >= n:
+            continue
+        if "[]." in path:
+            out.append(f"{path}: {'taken out' if not m else f'cut to {m} row' + ('s' if m > 1 else '') + ' each'}")
+        elif path.split(".")[-1] in EXTRA_KEYS:
+            out.append(f"{path}: taken out")
+        else:
+            out.append(f"{path}: {m} of {n} rows kept")
+    return out
+
+
+def _every_period(sheet):
+    """{list: [names]} of the rows (a theme, an area, a channel) in the top rows of every period, when the periods
+    list two or more and each period lists that level."""
+    ps = [p for p in sheet.get("periods") or [] if isinstance(p, dict)]
+    if len(ps) < 2:
+        return None
+    out = {}
+    for k in ("themes", "areas", "channels"):
+        if not all(isinstance(p.get(k), list) for p in ps):
+            continue
+        names = [r.get("name") for r in ps[0][k] if isinstance(r, dict)]
+        keep = [n for n in names if isinstance(n, str) and all(any(isinstance(r, dict) and r.get("name") == n
+                                                                    for r in p[k]) for p in ps[1:])]
+        out[k] = keep
+    return out or None
+
+
+def _cut_periods(sheet, chars, newest):
+    """mvp30: a list of periods asked for keeps every period. The inner lists go first, the other rankings' before the
+    periods' (to 2 rows, then 1); then the other rankings' rows, longest first, down to OTHER_MIN; then the periods'
+    inner lists go; then the other rankings down to one row. (What every period's top rows share is held apart
+    first, in_top_of_every_period, so it survives the cut.)"""
+    def inner(keys, n):
+        done = False
+        for k in keys:
+            for row in sheet.get(k) or []:
+                if isinstance(row, dict):
+                    for kk, v in list(row.items()):
+                        if isinstance(v, list) and len(v) > n:
+                            if not n:
+                                row.pop(kk)   # (absent: not shown; an empty list would say "none")
+                            else:
+                                row[kk] = v[:n]
+                            done = True
+        return done
+
+    def outer(floor):
+        done = False
+        while size(sheet) > chars:
+            lists = [(len(sheet[k]), k) for k in CUT_ORDER if k != "periods" and isinstance(sheet.get(k), list)
+                     and len(sheet[k]) > floor]
+            if not lists:
+                break
+            _n, k = max(lists)
+            sheet[k] = sheet[k][:-1]
+            done = True
+        return done
+
+    others = [k for k in CUT_ORDER if k != "periods"]
+    cut = False
+    for step in ((others, 2), (["periods"], 2), (others, 1), (["periods"], 1), (others, 0)):
+        if size(sheet) <= chars:
+            return cut
+        cut = inner(*step) or cut
+    if size(sheet) > chars:
+        cut = outer(OTHER_MIN) or cut
+    if size(sheet) > chars:
+        cut = inner(["periods"], 0) or cut
+    if size(sheet) > chars:
+        cut = outer(1) or cut
+    return cut
+
+
+OTHER_MIN = 3
 
 
 def _cut_rows(sheet, chars, keep, newest):
@@ -266,10 +386,20 @@ def drop_extras(sheet, chars=RESULT_CHARS):
 def envelope(rid, tool, meta, sheet, cost_usd=0.0, took_ms=0, keep=None, newest=False):
     meta = dict(meta)
     if sheet is not None:
-        meta["truncated"] = bool(meta.get("truncated")) or cut_to_size(sheet, keep=keep, newest=newest)
+        went = []
+        meta["truncated"] = bool(meta.get("truncated")) or cut_to_size(sheet, keep=keep, newest=newest, went=went)
+        if went:
+            # mvp30: what the size cut took, so a narrower call can read it (never "a read failed")
+            meta["cut"] = went
+            meta.setdefault("notes", []).append(CUT_NOTE)
         meta["third_party_text"] = holds_third_party(sheet)
     return {"rid": rid, "tool": tool, "meta": meta, "sheet": sheet, "cost_usd": round(float(cost_usd or 0.0), 6),
             "took_ms": int(took_ms)}
+
+
+CUT_NOTE = ("meta.cut: what this result left out to fit its size. Those rows exist in their history: a narrower call "
+            "(a shorter window, one period, a scope) reads them. Never say a read failed or that the history lacks "
+            "them.")
 
 
 def error(message, tool=None, **extra):

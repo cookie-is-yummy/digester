@@ -271,9 +271,10 @@ def test_a_first_names_the_items_day_and_its_subject(brain):
     # the subject's count said as everything they opened
     dropped(t, vt, f"In all your history, you opened {len(all_wc)}[r1.totals.items] videos.", "filter_dropped")
     kept(t, vt, f"In all your history, you opened {len(all_wc)}[r1.totals.items] watercolor videos.")
-    lead = code_lead(t, vt, "template", [])
     # mvp25 toolgaps 8: the code lead of a first_last names the item itself, by its title, beside its day
     title = r["sheet"]["items"][0]["title"]
+    # (mvp30, re-pinned: the title keeps its episode number, "#1": a number of the title's own, no count)
+    lead = code_lead(t, vt, "template", [int(x) for x in re.findall(r"\d+", title)])
     # (mvp26 toolfix2 4: the title in double quotes, cut as its card)
     assert lead == f'In all your history, the first watercolor video you opened was "{title}", on {day_words(d)}.'
 

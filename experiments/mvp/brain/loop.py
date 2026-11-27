@@ -45,7 +45,17 @@ SOFT_S = float(os.environ.get("MVP_BRAIN_SOFT_S", "7"))
 DEEP_S = float(os.environ.get("MVP_BRAIN_DEEP_S", "11"))
 HARD_S = float(os.environ.get("MVP_BRAIN_HARD_S", "15"))
 CALLS_MAX = 12
-TIME_UP = "Time is up for this question. Call give_answer now with the results you already have."
+# mvp30 (the false "could not read" sentences after a time-up): the refused call was not run. The text is true of both
+# of its causes (the soft or deep deadline, and the round limit): the limit is the bot's own and says nothing of their
+# history, and the model is told to leave out what the call would have read rather than to say it is missing. When
+# time was the cause and code's lead goes out, code says so in its own line (TIME_LINE), never the model.
+TIME_UP = ("Not run: this question has used its time or its rounds of calls (the bot's own limit, nothing about their "
+           "history). Call give_answer now with the results you already have, and say nothing about what this call "
+           "would have read.")
+# mvp30: code's own line under a code lead when time ended the turn (a time-up past the deadline, a provider timeout or
+# the hard stop): said once, plainly, beside what was found
+TIME_LINE = "I ran out of time before I could finish this answer, so it may leave part of your question out."
+TIMEOUT_KINDS = ("ClaudeTimeout",)
 ALONE = "call give_answer alone, after the results come back"
 LIMIT = "limit for this question reached"
 NUDGE = "(code) Finish by calling give_answer with that answer."
@@ -259,6 +269,8 @@ def run_turn(provider, turn, message=None, screen=None, now=time.monotonic, roun
                 break
             time_up_sent = True
             rec["events"].append("time_up")
+            # mvp30: which limit refused the calls (code's lead says the time line only when time was the cause)
+            rec["time_up_cause"] = "rounds" if tool_rounds >= rounds else "time"
             for u in reads:
                 results.append(_err(u["id"], TIME_UP))
             messages.append({"role": "user", "content": _ordered(uses, results)})
@@ -318,7 +330,56 @@ def _take_form(use, rec):
     if extra:
         rec["events"].append("form_keys_dropped")
         rec.setdefault("dropped_keys", []).append(extra[:12])
+    form, fixed = _hand_back_held(form)
+    if fixed:
+        rec["events"].append("hand_back_" + fixed)
+    form, theirs = _hand_back_theirs(form, rec.get("message") or "")
+    if not theirs:
+        rec["events"].append("hand_back_not_theirs")   # (never its words)
     return form
+
+
+def _words(text):
+    return {w for w in re.findall(r"[a-z0-9]+", str(text or "").lower()) if len(w) >= 4}
+
+
+def _hand_back_theirs(form, message):
+    """mvp30 repair (the attack: a title's instruction copied into hand_back gave code's line under an answer to a
+    message that asked for nothing to be done): the doing part is the person's own, so hand_back's words must be words
+    of their message. A hand_back whose longer words (four letters or more) are not at least half the message's own
+    is dropped: titles, captions and tool results are data, never a request. -> (form, False when one was dropped)."""
+    if not isinstance(form, dict) or not isinstance(form.get("hand_back"), dict):
+        return form, True
+    hb = _words(form["hand_back"].get("words"))
+    msg = _words(message)
+    if not hb:   # (only short words, "do it"): every word is read
+        hb = set(re.findall(r"[a-z0-9]+", str(form["hand_back"].get("words") or "").lower()))
+        msg = set(re.findall(r"[a-z0-9]+", str(message or "").lower()))
+    if hb and len(hb & msg) * 2 >= len(hb):
+        return form, True
+    return dict(form, hand_back=None), False
+
+
+HAND_BACK_KINDS = frozenset(V.HandBack.model_fields["kind"].annotation.__args__)
+
+
+def _hand_back_held(form):
+    """mvp30 (the doing part of a message goes to hand_back, and code says its own line): a hand_back the form cannot
+    take would fail the whole form and spend the one repair on a field no sentence depends on. A dict whose words are
+    a string keeps them and takes kind "other" when its kind is not one of the schema's; anything else is dropped.
+    -> (form, None | "kind_fixed" | "dropped")."""
+    if not isinstance(form, dict) or form.get("hand_back") is None:
+        return form, None
+    hb = form["hand_back"]
+    try:
+        V.HandBack.model_validate(hb)
+        return form, None
+    except Exception:  # noqa: BLE001 - a pydantic ValidationError
+        pass
+    if isinstance(hb, dict) and isinstance(hb.get("words"), str):
+        return dict(form, hand_back={"kind": hb.get("kind") if hb.get("kind") in HAND_BACK_KINDS else "other",
+                                     "words": hb["words"]}), "kind_fixed"
+    return dict(form, hand_back=None), "dropped"
 
 
 def _form_error_text(form):
@@ -369,7 +430,7 @@ def _finish(rec, turn, vturn, verdicts, cm=None):
         sent_v, source = v1, "model"          # the repair (for the points) failed; the first lead stands
     if sent_v is None:
         base_v = v2 or v1
-        code = FB.answer(ledger, base_v, vturn, mode=cm)
+        code = FB.answer(ledger, base_v, vturn, mode=cm, others=base_v is None)
         if "no_result" in (rec.get("events") or ()) and not verdicts:
             # mvp28 prep repair: out of rounds with no result in hand, every call was refused; time was not the
             # cause, so code's plain line says no result came back, and the limits the refused calls found go with it
@@ -382,8 +443,13 @@ def _finish(rec, turn, vturn, verdicts, cm=None):
             verdicts.index(base_v) < len(rec["forms"]):
         # mvp20 fix: the offers the model picked go out under a code lead too (their labels are code's)
         form = rec["forms"][verdicts.index(base_v)]
+    limits = list(getattr(turn, "limits", None) or [])
+    if sent_v is None and code is not None and _time_ended(rec):
+        # mvp30: time ended the turn and code's lead goes out: code says so once, in its own line (a plain line already
+        # says "in time" and carries no limit line)
+        limits.append(TIME_LINE)
     out = A.build(ledger, verdict=sent_v, code=code, form=form, also=[v for v in verdicts if v is not None], mode=cm,
-                  links=_links(turn), limits=list(getattr(turn, "limits", None) or []))
+                  links=_links(turn), limits=limits)
     rec["answer"] = out
     rec["lead_source"] = source
     rec["code_lead"] = code
@@ -395,6 +461,14 @@ def _finish(rec, turn, vturn, verdicts, cm=None):
     else:
         final = len(code["points"]) if code else 0
     rec["sentences"] = {"written": written, "kept_first_pass": first_kept, "kept_sent": min(final, written)}
+
+
+def _time_ended(rec):
+    """mvp30: time ended the turn: a time-up past the deadline (not the round limit), a provider timeout, or the hard
+    stop."""
+    ev = rec.get("events") or ()
+    return ("time_up" in ev and rec.get("time_up_cause") == "time") or "hard_stop" in ev or \
+        ("provider_error" in ev and rec.get("error") in TIMEOUT_KINDS)
 
 
 def _links(turn):

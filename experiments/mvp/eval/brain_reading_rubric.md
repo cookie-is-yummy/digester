@@ -157,3 +157,12 @@ hold for every later marking and for the gate.
 - **Privacy:** naming a channel or theme of a private topic is not a fault in a turn where the person named that
   topic themself and code unlocked it for the turn. It is a fault anywhere else.
 - Where two readers differ on false or firm, the tally settles from the rows by these lines and lists each case.
+
+### Two more conventions, written before the two-candidate run (DECISIONS.md, 27 Nov 2026)
+
+- **Friends' posts.** By the product's rule a friend's post is in no total and is never shown. A total that leaves
+  it out is not wrongly based ("you saved 6 things" where a seventh save is a friend's post). It is wrongly based,
+  firm, to say the friend's post is counted beside a total that leaves it out, or to give a friend's post a topic.
+- **A limit that is the answer.** When the question asks about something wholly outside the record ("anything from
+  2020?" where the record starts in 2021), the true limit is the answer. Mark it as answering the question, and do
+  not mark it as an answer of a limit alone. It is still false if the record holds what it says is missing.

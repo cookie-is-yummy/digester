@@ -430,14 +430,63 @@ def no_result(code=None):
             "points": [], "no_result": True}
 
 
-def answer(ledger, verdict, turn=None, mode=None):
+OTHERS_MAX = V.POINTS_MAX   # the points of an answer
+
+
+def scope_said(res):
+    """mvp30 repair (the attack: a result scoped to one private topic went out under a code lead with no scope line,
+    so its count read as one of all their history): True when the templates say every part of the result's scope. A
+    part the full check reads (scope_parts) is said by the scope clause; a length part by the noun ("long videos"); any
+    other part (the helper form of a private topic's scope) no template says, and the scope line is then the only
+    place that says it."""
+    said = (res.meta or {}).get("filters_said") if res is not None else None
+    if not isinstance(said, str) or not said.strip():
+        return True
+    parts = [p.strip() for p in said.split("; ") if p.strip() and p.strip() not in _LENGTH_PARTS]
+    return len(V.scope_parts(res)) >= len(parts)
+
+
+def other_points(ledger, lead, turn=None):
+    """mvp30 (a turn that ran out of time with several results in hand sent the first result's sentence alone, and the
+    other parts of the question went unanswered): one sentence per OTHER result in
+    hand, in call order, each the first of its own templates that passes the full check as a lead of its own (so it
+    says its own window and scope), never one that repeats a sentence already said; at most OTHERS_MAX.
+    -> ([sentence], private_line)."""
+    out, private, said = [], False, {lead.get("lead")}
+    for res in ledger.by_rid.values():
+        if len(out) >= OTHERS_MAX:
+            break
+        if res.rid == lead.get("rid") or not R.answers(res.env) or not scope_said(res):
+            continue   # (a result whose scope no template says goes out only with its own scope line)
+        for t in templates(res):
+            v = V.check_answer({"lead": t, "points": []}, ledger, turn or V.Turn(), mode="full")
+            if not v.lead_ok:
+                continue
+            s = " ".join(o.sent for o in v.lead)
+            if s and s not in said and not s.endswith("here is what I counted."):
+                out.append(s)
+                said.add(s)
+                private = private or bool(v.private_line)
+            break
+    return out, private
+
+
+def answer(ledger, verdict, turn=None, mode=None, others=False):
     """SPEC 4.5, row 3: the code lead with the points of the model's answer that passed (checked again under it).
     mvp24, cells mode: a code lead never carries a model's points, and no model point is read again under a lead it
-    was not written for (the points are not re-checked under the code lead: there are none)."""
+    was not written for (the points are not re-checked under the code lead: there are none).
+    mvp30, `others` (the loop sets it when no answer form came back at all: a provider timeout, the hard stop, no call
+    after the nudge): the points are one sentence of each other result in hand (other_points), and `mixed` is set so
+    the scope line, which names one result, is left out."""
     if not isinstance(ledger, V.Ledger):
         ledger = V.Ledger(ledger)
     cm = V.check_mode(mode)
     lead = code_lead(ledger, verdict, turn)
+    if others and verdict is None and lead["how"] != "plain" and scope_said(ledger.get(lead.get("rid"))):
+        # (mvp30 repair: `mixed` leaves the lead's scope line out, so a lead whose scope no template says keeps it)
+        pts, priv = other_points(ledger, lead, turn)
+        if pts:
+            return dict(lead, points=pts, private_line=bool(lead["private_line"] or priv), mixed=True)
     pts = _points_under(ledger, verdict, lead, turn, cm) if verdict is not None and lead["how"] != "plain" and \
         not cm.cells else []
     if lead["how"] == "template" and not pts and lead.get("marked", "").endswith("here is what I counted."):

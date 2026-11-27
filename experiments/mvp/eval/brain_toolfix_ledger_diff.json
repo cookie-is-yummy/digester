@@ -10,7 +10,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   7
   ],
   [
    "changed",
@@ -31,6 +31,12 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.left_out",
    null,
    {
@@ -39,12 +45,53 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 1,
+    "Tuesday": 1,
+    "Wednesday": 2,
+    "Thursday": 1,
+    "Friday": 1,
+    "Saturday": 1,
+    "Sunday": 1
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   366
   ]
  ],
  "attack_area_all": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: cut to 1 row each",
+    "themes[].channels: cut to 1 row each"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -55,7 +102,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   9
   ],
   [
    "changed",
@@ -76,6 +123,54 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[7].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
    "[0].sheet.left_out",
    null,
    {
@@ -84,12 +179,96 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[6].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[7].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 106,
+    "Tuesday": 101,
+    "Wednesday": 101,
+    "Thursday": 108,
+    "Friday": 105,
+    "Saturday": 101,
+    "Sunday": 101
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "attack_area_lately": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "channels: 7 of 8 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -100,7 +279,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   13
   ],
   [
    "changed",
@@ -138,9 +317,63 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.channels[5].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   1
   ],
   [
    "added",
@@ -153,21 +386,45 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
+    }
+   ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   2,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes_begun_before",
+   null,
+   [
+    {
+     "name": "Home cooking",
+     "items": 30,
+     "previous_items": 2,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
     }
    ]
   ],
   [
    "added",
-   "[0].sheet.new.themes[0].first_watched",
+   "[0].sheet.previous.days",
    null,
-   "2021-02-01"
-  ],
-  [
-   "added",
-   "[0].sheet.new.themes[1].first_watched",
-   null,
-   "2025-01-10"
+   28
   ],
   [
    "added",
@@ -177,9 +434,65 @@
   ],
   [
    "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 18,
+    "Friday": 18,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   28
   ]
  ],
  "attack_area_lately_ig": [
@@ -187,7 +500,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   5
+   9
   ],
   [
    "changed",
@@ -214,9 +527,45 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].liked",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].opened",
+   null,
+   4
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].saved",
+   null,
+   0
+  ],
+  [
+   "added",
    "[0].sheet.channels[1].handle",
    null,
    "crumb.lab"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].liked",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].opened",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].saved",
+   null,
+   2
   ],
   [
    "added",
@@ -226,11 +575,35 @@
   ],
   [
    "added",
+   "[0].sheet.channels[2].liked",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].opened",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].saved",
+   null,
+   1
+  ],
+  [
+   "added",
    "[0].sheet.left_out",
    null,
    {
     "friends": 1
    }
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
   ],
   [
    "added",
@@ -258,6 +631,44 @@
     "Monday",
     "Tuesday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 2,
+    "Tuesday": 2,
+    "Wednesday": 1,
+    "Thursday": 1,
+    "Friday": 0,
+    "Saturday": 1,
+    "Sunday": 0
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   28
+  ],
+  [
+   "removed",
+   "[0].sheet.window.history_starts",
+   "2026-10-05",
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.window.record_starts",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.scope_starts",
+   null,
+   "2026-10-05"
   ]
  ],
  "attack_area_least_year": [
@@ -271,7 +682,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -295,6 +706,96 @@
    "[0].sheet.channels[0].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[7].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-30"
   ],
   [
    "added",
@@ -322,6 +823,26 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 37,
+    "Tuesday": 32,
+    "Wednesday": 33,
+    "Thursday": 40,
+    "Friday": 40,
+    "Saturday": 36,
+    "Sunday": 36
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   303
   ]
  ],
  "attack_area_oct_long": [
@@ -335,7 +856,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   6
   ],
   [
    "changed",
@@ -356,12 +877,103 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "attack_area_oct_nogaming": [
+  [
+   "added",
+   "[0].meta.also",
+   null,
+   {
+    "gaming": [
+     {
+      "ref": "theme:2",
+      "label": "Gaming clips",
+      "how": "theme name holds the words"
+     },
+     {
+      "ref": "channel:c05592369",
+      "label": "Gaming Daily",
+      "how": "channel name holds the words"
+     }
+    ]
+   }
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -372,13 +984,13 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   9
   ],
   [
    "changed",
    "[0].meta.notes[2]",
    "No window before this one: new and stopped are not computed here.",
-   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+   "meta.also: for a name of the scope, the other channels and themes whose own names hold its words. The scope counted only the name as resolved; to count one of these alone, pass its ref in scope.only."
   ],
   [
    "added",
@@ -393,15 +1005,95 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.channels[3].handle",
    null,
    "wetpaper.ig"
   ],
   [
    "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 11,
+    "Tuesday": 8,
+    "Wednesday": 9,
+    "Thursday": 10,
+    "Friday": 13,
+    "Saturday": 9,
+    "Sunday": 10
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "attack_area_oct_short": [
@@ -415,7 +1107,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   7
   ],
   [
    "changed",
@@ -436,15 +1128,57 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
    "[0].sheet.channels[2].handle",
    null,
    "wetpaper.ig"
   ],
   [
    "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "attack_area_saved_lately": [
@@ -452,13 +1186,13 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   9
   ],
   [
    "changed",
    "[0].meta.notes[2]",
    "No window before this one: new and stopped are not computed here.",
-   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+   "window.platform_starts: the first day of anything they did on this scope's platforms (opened, liked or saved), before the first day of this scope's own kind."
   ],
   [
    "added",
@@ -493,6 +1227,12 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
@@ -517,6 +1257,32 @@
     "Monday",
     "Saturday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 2,
+    "Tuesday": 1,
+    "Wednesday": 0,
+    "Thursday": 0,
+    "Friday": 0,
+    "Saturday": 2,
+    "Sunday": 1
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   28
+  ],
+  [
+   "added",
+   "[0].sheet.window.platform_starts",
+   null,
+   "2021-01-05"
   ]
  ],
  "attack_ch_2024": [
@@ -530,7 +1296,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   7
   ],
   [
    "changed",
@@ -551,6 +1317,12 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.left_out",
    null,
    {
@@ -559,9 +1331,41 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 1,
+    "Tuesday": 1,
+    "Wednesday": 2,
+    "Thursday": 1,
+    "Friday": 1,
+    "Saturday": 1,
+    "Sunday": 1
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   366
   ]
  ],
  "attack_ch_least_oct": [
@@ -575,7 +1379,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -596,9 +1400,81 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
    "[0].sheet.channels[1].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-30"
   ],
   [
    "added",
@@ -626,6 +1502,26 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "attack_ch_oct": [
@@ -639,7 +1535,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -657,6 +1553,78 @@
     "days": 30,
     "said": "1 to 30 October 2026"
    }
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -684,6 +1652,26 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "attack_ch_oct+area_2024": [
@@ -697,7 +1685,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -715,6 +1703,78 @@
     "days": 30,
     "said": "1 to 30 October 2026"
    }
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -744,6 +1804,26 @@
    ]
   ],
   [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -753,7 +1833,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   4
+   7
   ],
   [
    "changed",
@@ -774,6 +1854,12 @@
   ],
   [
    "added",
+   "[1].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[1].sheet.left_out",
    null,
    {
@@ -782,9 +1868,41 @@
   ],
   [
    "added",
+   "[1].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[1].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[1].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 1,
+    "Tuesday": 1,
+    "Wednesday": 2,
+    "Thursday": 1,
+    "Friday": 1,
+    "Saturday": 1,
+    "Sunday": 1
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.window.days",
+   null,
+   366
   ]
  ],
  "attack_ch_oct+area_oct_nogaming": [
@@ -798,7 +1916,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -816,6 +1934,78 @@
     "days": 30,
     "said": "1 to 30 October 2026"
    }
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -845,6 +2035,45 @@
    ]
   ],
   [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
+   "added",
+   "[1].meta.also",
+   null,
+   {
+    "gaming": [
+     {
+      "ref": "theme:2",
+      "label": "Gaming clips",
+      "how": "theme name holds the words"
+     },
+     {
+      "ref": "channel:c05592369",
+      "label": "Gaming Daily",
+      "how": "channel name holds the words"
+     }
+    ]
+   }
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -854,13 +2083,13 @@
    "list_len",
    "[1].meta.notes",
    3,
-   5
+   9
   ],
   [
    "changed",
    "[1].meta.notes[2]",
    "No window before this one: new and stopped are not computed here.",
-   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+   "meta.also: for a name of the scope, the other channels and themes whose own names hold its words. The scope counted only the name as resolved; to count one of these alone, pass its ref in scope.only."
   ],
   [
    "added",
@@ -875,15 +2104,95 @@
   ],
   [
    "added",
+   "[1].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[2].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[1].sheet.channels[3].handle",
    null,
    "wetpaper.ig"
   ],
   [
    "added",
+   "[1].sheet.channels[3].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[1].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[1].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[1].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 11,
+    "Tuesday": 8,
+    "Wednesday": 9,
+    "Thursday": 10,
+    "Friday": 13,
+    "Saturday": 9,
+    "Sunday": 10
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.window.days",
+   null,
+   30
   ]
  ],
  "attack_ch_oct+ch_week": [
@@ -897,7 +2206,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -915,6 +2224,78 @@
     "days": 30,
     "said": "1 to 30 October 2026"
    }
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -944,6 +2325,26 @@
    ]
   ],
   [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -953,7 +2354,7 @@
    "list_len",
    "[1].meta.notes",
    4,
-   6
+   10
   ],
   [
    "changed",
@@ -1011,15 +2412,89 @@
   ],
   [
    "added",
+   "[1].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[1].sheet.new.channels_first_opened",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[1].sheet.previous.days",
+   null,
+   7
+  ],
+  [
+   "added",
    "[1].sheet.previous.reels",
    null,
    0
   ],
   [
    "added",
+   "[1].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[1].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[1].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 4,
+    "Tuesday": 3,
+    "Wednesday": 2,
+    "Thursday": 2,
+    "Friday": 4,
+    "Saturday": 4,
+    "Sunday": 5
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.window.days",
+   null,
+   7
   ]
  ],
  "attack_ch_oct+ch_year": [
@@ -1033,7 +2508,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -1051,6 +2526,78 @@
     "days": 30,
     "said": "1 to 30 October 2026"
    }
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -1080,6 +2627,26 @@
    ]
   ],
   [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -1089,7 +2656,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -1110,9 +2677,99 @@
   ],
   [
    "added",
+   "[1].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[6].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
    "[1].sheet.channels[7].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[7].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[1].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -1140,6 +2797,26 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[1].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 37,
+    "Tuesday": 32,
+    "Wednesday": 33,
+    "Thursday": 40,
+    "Friday": 40,
+    "Saturday": 36,
+    "Sunday": 36
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.window.days",
+   null,
+   303
   ]
  ],
  "attack_ch_oct+ch_year_art": [
@@ -1153,7 +2830,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -1171,6 +2848,78 @@
     "days": 30,
     "said": "1 to 30 October 2026"
    }
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -1200,6 +2949,26 @@
    ]
   ],
   [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -1209,7 +2978,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   6
+   11
   ],
   [
    "changed",
@@ -1229,10 +2998,64 @@
    }
   ],
   [
+   "removed",
+   "[1].sheet.areas[0].share",
+   1.0,
+   null
+  ],
+  [
+   "added",
+   "[1].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[1].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
    "added",
    "[1].sheet.channels[2].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[2].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "removed",
+   "[1].sheet.fields[0].share",
+   1.0,
+   null
+  ],
+  [
+   "added",
+   "[1].sheet.filters.names_in_scope",
+   null,
+   1
+  ],
+  [
+   "added",
+   "[1].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
   ],
   [
    "added",
@@ -1260,6 +3083,26 @@
     "Friday",
     "Saturday"
    ]
+  ],
+  [
+   "added",
+   "[1].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 19,
+    "Tuesday": 17,
+    "Wednesday": 19,
+    "Thursday": 19,
+    "Friday": 20,
+    "Saturday": 20,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.window.days",
+   null,
+   303
   ]
  ],
  "attack_ch_oct_sat": [
@@ -1273,7 +3116,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   7
   ],
   [
    "changed",
@@ -1294,9 +3137,89 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-17"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-03"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-17"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 0,
+    "Tuesday": 0,
+    "Wednesday": 0,
+    "Thursday": 0,
+    "Friday": 0,
+    "Saturday": 19,
+    "Sunday": 0
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "attack_ch_week": [
@@ -1310,7 +3233,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   6
+   10
   ],
   [
    "changed",
@@ -1368,15 +3291,89 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   7
+  ],
+  [
+   "added",
    "[0].sheet.previous.reels",
    null,
    0
   ],
   [
    "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 4,
+    "Tuesday": 3,
+    "Wednesday": 2,
+    "Thursday": 2,
+    "Friday": 4,
+    "Saturday": 4,
+    "Sunday": 5
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   7
   ]
  ],
  "attack_ch_year": [
@@ -1390,7 +3387,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -1411,9 +3408,99 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
    "[0].sheet.channels[7].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[7].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -1441,6 +3528,26 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 37,
+    "Tuesday": 32,
+    "Wednesday": 33,
+    "Thursday": 40,
+    "Friday": 40,
+    "Saturday": 36,
+    "Sunday": 36
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   303
   ]
  ],
  "attack_ch_year_art": [
@@ -1454,7 +3561,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   11
   ],
   [
    "changed",
@@ -1474,10 +3581,64 @@
    }
   ],
   [
+   "removed",
+   "[0].sheet.areas[0].share",
+   1.0,
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
    "added",
    "[0].sheet.channels[2].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "removed",
+   "[0].sheet.fields[0].share",
+   1.0,
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.filters.names_in_scope",
+   null,
+   1
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
   ],
   [
    "added",
@@ -1505,9 +3666,41 @@
     "Friday",
     "Saturday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 19,
+    "Tuesday": 17,
+    "Wednesday": 19,
+    "Thursday": 19,
+    "Friday": 20,
+    "Saturday": 20,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   303
   ]
  ],
  "attack_changes_area": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "periods[].areas: cut to 1 row each",
+    "periods[].themes: cut to 1 row each",
+    "themes: 3 of 8 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -1518,7 +3711,7 @@
    "list_len",
    "[0].meta.notes",
    5,
-   7
+   12
   ],
   [
    "added",
@@ -1538,6 +3731,43 @@
    }
   ],
   [
+   "removed",
+   "[0].sheet.areas[0].themes",
+   [],
+   null
+  ],
+  [
+   "removed",
+   "[0].sheet.areas[1].themes",
+   [],
+   null
+  ],
+  [
+   "removed",
+   "[0].sheet.areas[2].themes",
+   [],
+   null
+  ],
+  [
+   "removed",
+   "[0].sheet.areas[3].themes",
+   [],
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.in_top_of_every_period",
+   null,
+   {
+    "themes": [
+     "Home cooking"
+    ],
+    "areas": [
+     "food and cooking"
+    ]
+   }
+  ],
+  [
    "added",
    "[0].sheet.left_out",
    null,
@@ -1547,9 +3777,155 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[0].areas",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[0].themes",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[1].areas",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[1].themes",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[2].areas",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[2].themes",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[3].areas",
+   0,
+   1
+  ],
+  [
+   "changed",
+   "[0].sheet.periods[3].sparse",
+   true,
+   false
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[3].themes",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[4].areas",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[4].themes",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[5].areas",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.periods[5].themes",
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.themes",
+   8,
+   3
+  ],
+  [
+   "removed",
+   "[0].sheet.themes[0].channels",
+   [],
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "removed",
+   "[0].sheet.themes[1].channels",
+   [],
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "removed",
+   "[0].sheet.themes[2].channels",
+   [],
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 106,
+    "Tuesday": 101,
+    "Wednesday": 101,
+    "Thursday": 108,
+    "Friday": 105,
+    "Saturday": 101,
+    "Sunday": 101
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2129
   ]
  ],
  "attack_cmp_2023": [
@@ -1563,7 +3939,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   6
+   9
   ],
   [
    "added",
@@ -1612,9 +3988,45 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[0].sheet.new.themes[0].first_watched",
    null,
    "2023-06-03"
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[0].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -1624,18 +4036,108 @@
   ],
   [
    "added",
+   "[0].sheet.new.themes[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
    "[0].sheet.previous.reels",
    null,
    0
   ],
   [
    "added",
+   "[0].sheet.stopped.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.stopped.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 24,
+    "Tuesday": 22,
+    "Wednesday": 22,
+    "Thursday": 22,
+    "Friday": 22,
+    "Saturday": 22,
+    "Sunday": 23
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   365
+  ],
+  [
+   "added",
+   "[0].sheet.windows",
+   null,
+   {
+    "a": {
+     "start": "2023-01-01",
+     "end": "2023-12-31",
+     "days": 365
+    },
+    "b": {
+     "start": "2022-01-01",
+     "end": "2022-12-31",
+     "days": 365
+    }
+   }
   ]
  ],
  "attack_cmp_autumn": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "channels: 6 of 8 rows kept",
+    "themes: 5 of 6 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -1646,7 +4148,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   11
+   17
   ],
   [
    "changed",
@@ -1701,15 +4203,75 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[0].first_watched",
    null,
    "2026-10-01"
   ],
   [
    "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[1].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   3
   ],
   [
    "added",
@@ -1722,9 +4284,16 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
     }
    ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   4,
+   1
   ],
   [
    "added",
@@ -1734,27 +4303,82 @@
   ],
   [
    "added",
-   "[0].sheet.new.themes[1].first_watched",
+   "[0].sheet.new.themes[0].last_watched",
    null,
-   "2026-08-01"
+   "2026-10-30"
   ],
   [
    "added",
-   "[0].sheet.new.themes[2].first_watched",
+   "[0].sheet.new.themes_begun_before",
    null,
-   "2021-01-05"
-  ],
-  [
-   "added",
-   "[0].sheet.new.themes[3].first_watched",
-   null,
-   "2023-06-03"
+   [
+    {
+     "name": "Digital drawing",
+     "items": 60,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2026-08-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Minecraft builds",
+     "items": 13,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2021-01-05",
+     "last_watched": "2026-10-20"
+    },
+    {
+     "name": "Calculus lessons",
+     "items": 10,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[2]",
+     "first_watched": "2023-06-03",
+     "last_watched": "2026-10-16"
+    }
+   ]
   ],
   [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.stopped.themes[0].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -1782,6 +4406,43 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 28,
+    "Tuesday": 25,
+    "Wednesday": 24,
+    "Thursday": 30,
+    "Friday": 30,
+    "Saturday": 24,
+    "Sunday": 25
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   60
+  ],
+  [
+   "added",
+   "[0].sheet.windows",
+   null,
+   {
+    "a": {
+     "start": "2026-09-01",
+     "end": "2026-10-30",
+     "days": 60
+    },
+    "b": {
+     "start": "2025-09-01",
+     "end": "2025-11-30",
+     "days": 91
+    }
+   }
   ]
  ],
  "attack_first_cf": [
@@ -1795,7 +4456,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   8
   ],
   [
    "changed",
@@ -1816,15 +4477,27 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.items[0].how",
    null,
    "opened"
   ],
   [
    "added",
-   "[0].sheet.items[0].same_title",
+   "[0].sheet.items[0].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[0].title",
+   "Funniest gaming fail",
+   "Funniest gaming fail #1"
   ],
   [
    "added",
@@ -1834,9 +4507,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[1].same_title",
+   "[0].sheet.items[1].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[1].title",
+   "Gaming clip of the day",
+   "Gaming clip of the day #2"
   ],
   [
    "added",
@@ -1846,15 +4525,53 @@
   ],
   [
    "added",
-   "[0].sheet.items[2].same_title",
+   "[0].sheet.items[2].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[2].title",
+   "Gaming clutch moment",
+   "Gaming clutch moment #3"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
   ],
   [
    "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 8,
+    "Tuesday": 8,
+    "Wednesday": 8,
+    "Thursday": 12,
+    "Friday": 9,
+    "Saturday": 8,
+    "Sunday": 8
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "attack_first_cf+area_2024": [
@@ -1868,7 +4585,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   8
   ],
   [
    "changed",
@@ -1889,15 +4606,27 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.items[0].how",
    null,
    "opened"
   ],
   [
    "added",
-   "[0].sheet.items[0].same_title",
+   "[0].sheet.items[0].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[0].title",
+   "Funniest gaming fail",
+   "Funniest gaming fail #1"
   ],
   [
    "added",
@@ -1907,9 +4636,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[1].same_title",
+   "[0].sheet.items[1].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[1].title",
+   "Gaming clip of the day",
+   "Gaming clip of the day #2"
   ],
   [
    "added",
@@ -1919,15 +4654,53 @@
   ],
   [
    "added",
-   "[0].sheet.items[2].same_title",
+   "[0].sheet.items[2].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[2].title",
+   "Gaming clutch moment",
+   "Gaming clutch moment #3"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
   ],
   [
    "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 8,
+    "Tuesday": 8,
+    "Wednesday": 8,
+    "Thursday": 12,
+    "Friday": 9,
+    "Saturday": 8,
+    "Sunday": 8
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ],
   [
    "changed",
@@ -1939,7 +4712,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   4
+   7
   ],
   [
    "changed",
@@ -1960,6 +4733,12 @@
   ],
   [
    "added",
+   "[1].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[1].sheet.left_out",
    null,
    {
@@ -1968,9 +4747,41 @@
   ],
   [
    "added",
+   "[1].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[1].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[1].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 1,
+    "Tuesday": 1,
+    "Wednesday": 2,
+    "Thursday": 1,
+    "Friday": 1,
+    "Saturday": 1,
+    "Sunday": 1
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.window.days",
+   null,
+   366
   ]
  ],
  "attack_items_30oct": [
@@ -1984,7 +4795,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   8
   ],
   [
    "changed",
@@ -2004,6 +4815,24 @@
    }
   ],
   [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
    "changed",
    "[0].sheet.items[0].channel",
    "Pixel Pencil",
@@ -2020,6 +4849,12 @@
    "[0].sheet.items[0].item_id",
    "rday1",
    "rday4"
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].minutes",
+   null,
+   10
   ],
   [
    "changed",
@@ -2058,6 +4893,12 @@
    "long"
   ],
   [
+   "added",
+   "[0].sheet.items[1].minutes",
+   null,
+   25
+  ],
+  [
    "changed",
    "[0].sheet.items[1].title",
    "Gaming clip on the 30th",
@@ -2094,6 +4935,12 @@
    "short"
   ],
   [
+   "added",
+   "[0].sheet.items[2].minutes",
+   null,
+   0.7
+  ],
+  [
    "changed",
    "[0].sheet.items[2].title",
    "Digital art colour on the 30th",
@@ -2124,6 +4971,12 @@
    "rday1"
   ],
   [
+   "added",
+   "[0].sheet.items[3].minutes",
+   null,
+   25
+  ],
+  [
    "changed",
    "[0].sheet.items[3].title",
    "Cooking soup on the 30th",
@@ -2137,9 +4990,53 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 0,
+    "Tuesday": 0,
+    "Wednesday": 0,
+    "Thursday": 0,
+    "Friday": 4,
+    "Saturday": 0,
+    "Sunday": 0
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   1
   ]
  ],
  "attack_items_oct_saved": [
@@ -2147,7 +5044,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   4
+   7
   ],
   [
    "added",
@@ -2198,6 +5095,12 @@
   ],
   [
    "added",
+   "[0].sheet.items[2].title_clipped",
+   null,
+   true
+  ],
+  [
+   "added",
    "[0].sheet.items[3].how",
    null,
    "saved"
@@ -2221,6 +5124,36 @@
    {
     "friends": 1
    }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
+   "removed",
+   "[0].sheet.window.history_starts",
+   "2026-10-03",
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.window.platform_starts",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.record_starts",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.scope_starts",
+   null,
+   "2026-10-03"
   ]
  ],
  "attack_items_pt_oldest": [
@@ -2249,15 +5182,27 @@
   ],
   [
    "added",
+   "[0].sheet.filters.names_in_scope",
+   null,
+   1
+  ],
+  [
+   "added",
    "[0].sheet.items[0].how",
    null,
    "opened"
   ],
   [
    "added",
-   "[0].sheet.items[0].same_title",
+   "[0].sheet.items[0].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[0].title",
+   "Cooking tofu three ways",
+   "Cooking tofu three ways #41"
   ],
   [
    "added",
@@ -2267,9 +5212,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[1].same_title",
+   "[0].sheet.items[1].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[1].title",
+   "Weeknight cooking pasta",
+   "Weeknight cooking pasta #42"
   ],
   [
    "added",
@@ -2279,9 +5230,21 @@
   ],
   [
    "added",
-   "[0].sheet.items[2].same_title",
+   "[0].sheet.items[2].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[2].title",
+   "Cooking crispy rice",
+   "Cooking crispy rice #43"
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "attack_last_wc": [
@@ -2295,7 +5258,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   11
   ],
   [
    "changed",
@@ -2316,15 +5279,39 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
    "[0].sheet.channels[1].handle",
    null,
    "wetpaper.ig"
   ],
   [
    "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
    "[0].sheet.items[0].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].minutes",
+   null,
+   10
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].title_clipped",
+   null,
+   true
   ],
   [
    "added",
@@ -2352,6 +5339,18 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
@@ -2376,6 +5375,26 @@
     "Wednesday",
     "Thursday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 13,
+    "Tuesday": 13,
+    "Wednesday": 16,
+    "Thursday": 16,
+    "Friday": 13,
+    "Saturday": 12,
+    "Sunday": 12
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "attack_none_week_yt": [
@@ -2389,7 +5408,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -2430,6 +5449,62 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 4,
+    "Tuesday": 3,
+    "Wednesday": 2,
+    "Thursday": 2,
+    "Friday": 4,
+    "Saturday": 4,
+    "Sunday": 5
+   }
+  ],
+  [
+   "added",
    "[0].sheet.when.parts_of_day",
    null,
    [
@@ -2458,6 +5533,12 @@
      "ref": "r1.when.parts_of_day[3]"
     }
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   7
   ]
  ],
  "attack_theme_90": [
@@ -2471,7 +5552,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   8
   ],
   [
    "changed",
@@ -2492,15 +5573,107 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
    "[0].sheet.channels[7].handle",
    null,
    "wetpaper.ig"
   ],
   [
    "added",
+   "[0].sheet.channels[7].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 33,
+    "Tuesday": 29,
+    "Wednesday": 30,
+    "Thursday": 36,
+    "Friday": 34,
+    "Saturday": 28,
+    "Sunday": 30
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   90
   ]
  ],
  "attack_tl_month_math": [
@@ -2514,7 +5687,13 @@
    "list_len",
    "[0].meta.notes",
    4,
-   7
+   14
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "A period with fewer than 50 items is marked sparse.",
+   "A period with fewer than 50 items, and no private item left out of it, is marked sparse."
   ],
   [
    "added",
@@ -2551,10 +5730,83 @@
    }
   ],
   [
+   "removed",
+   "[0].sheet.areas[0].share",
+   1.0,
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "removed",
+   "[0].sheet.channels[0].share",
+   1.0,
+   null
+  ],
+  [
+   "removed",
+   "[0].sheet.fields[0].share",
+   1.0,
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.filters.names_in_scope",
+   null,
+   1
+  ],
+  [
+   "added",
+   "[0].sheet.in_top_of_every_period",
+   null,
+   {
+    "themes": [
+     "Calculus lessons"
+    ],
+    "areas": [
+     "math"
+    ]
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   303
+  ],
+  [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "removed",
+   "[0].sheet.themes[0].share",
+   1.0,
+   null
   ],
   [
    "added",
@@ -2586,6 +5838,20 @@
   ],
   [
    "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 2,
+    "Tuesday": 1,
+    "Wednesday": 1,
+    "Thursday": 2,
+    "Friday": 2,
+    "Saturday": 1,
+    "Sunday": 1
+   }
+  ],
+  [
+   "added",
    "[0].sheet.when.parts_of_day",
    null,
    [
@@ -2614,9 +5880,28 @@
      "ref": "r1.when.parts_of_day[3]"
     }
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   303
   ]
  ],
  "attack_tl_year": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "channels: 7 of 10 rows kept",
+    "periods[].areas: cut to 1 row each",
+    "periods[].themes: cut to 1 row each",
+    "themes: 6 of 8 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -2627,7 +5912,13 @@
    "list_len",
    "[0].meta.notes",
    4,
-   7
+   12
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "A period with fewer than 50 items is marked sparse.",
+   "A period with fewer than 50 items, and no private item left out of it, is marked sparse."
   ],
   [
    "added",
@@ -2674,7 +5965,62 @@
    "list_len",
    "[0].sheet.channels",
    9,
-   10
+   7
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.in_top_of_every_period",
+   null,
+   {
+    "themes": [
+     "Home cooking"
+    ],
+    "areas": [
+     "food and cooking"
+    ]
+   }
   ],
   [
    "added",
@@ -2685,76 +6031,94 @@
    }
   ],
   [
-   "removed",
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "list_len",
    "[0].sheet.periods[0].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[0].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[1].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[1].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[2].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[2].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[3].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "changed",
+   "[0].sheet.periods[3].sparse",
+   true,
+   false
+  ],
+  [
+   "list_len",
    "[0].sheet.periods[3].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[4].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[4].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[5].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[5].themes",
-   [],
-   null
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.themes",
+   8,
+   6
   ],
   [
    "removed",
@@ -2763,10 +6127,22 @@
    null
   ],
   [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
    "removed",
    "[0].sheet.themes[1].channels",
    [],
    null
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
   ],
   [
    "removed",
@@ -2775,10 +6151,22 @@
    null
   ],
   [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
    "removed",
    "[0].sheet.themes[3].channels",
    [],
    null
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2023-05-01"
   ],
   [
    "removed",
@@ -2787,28 +6175,42 @@
    null
   ],
   [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
    "removed",
    "[0].sheet.themes[5].channels",
    [],
    null
   ],
   [
-   "removed",
-   "[0].sheet.themes[6].channels",
-   [],
-   null
-  ],
-  [
-   "removed",
-   "[0].sheet.themes[7].channels",
-   [],
-   null
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-30"
   ],
   [
    "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 106,
+    "Tuesday": 101,
+    "Wednesday": 101,
+    "Thursday": 108,
+    "Friday": 105,
+    "Saturday": 101,
+    "Sunday": 101
+   }
   ],
   [
    "added",
@@ -2840,9 +6242,25 @@
      "ref": "r1.when.parts_of_day[3]"
     }
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "audit_area": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "channels: 7 of 8 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -2853,7 +6271,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   13
   ],
   [
    "changed",
@@ -2891,9 +6309,63 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.channels[5].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   1
   ],
   [
    "added",
@@ -2906,21 +6378,45 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
+    }
+   ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   2,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes_begun_before",
+   null,
+   [
+    {
+     "name": "Home cooking",
+     "items": 30,
+     "previous_items": 2,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
     }
    ]
   ],
   [
    "added",
-   "[0].sheet.new.themes[0].first_watched",
+   "[0].sheet.previous.days",
    null,
-   "2021-02-01"
-  ],
-  [
-   "added",
-   "[0].sheet.new.themes[1].first_watched",
-   null,
-   "2025-01-10"
+   28
   ],
   [
    "added",
@@ -2930,9 +6426,65 @@
   ],
   [
    "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 18,
+    "Friday": 18,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   28
   ]
  ],
  "audit_art": [
@@ -2946,7 +6498,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   15
   ],
   [
    "changed",
@@ -2983,10 +6535,64 @@
    }
   ],
   [
+   "removed",
+   "[0].sheet.areas[0].previous_share",
+   1.0,
+   null
+  ],
+  [
+   "removed",
+   "[0].sheet.areas[0].share",
+   1.0,
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
    "added",
    "[0].sheet.channels[1].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "removed",
+   "[0].sheet.fields[0].share",
+   1.0,
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.filters.names_in_scope",
+   null,
+   1
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   1
   ],
   [
    "added",
@@ -2999,21 +6605,55 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
+    }
+   ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   1,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes_begun_before",
+   null,
+   [
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
     }
    ]
   ],
   [
    "added",
-   "[0].sheet.new.themes[0].first_watched",
+   "[0].sheet.previous.days",
    null,
-   "2025-01-10"
+   28
   ],
   [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
   ],
   [
    "added",
@@ -3043,9 +6683,39 @@
     "Wednesday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 5,
+    "Tuesday": 5,
+    "Wednesday": 5,
+    "Thursday": 4,
+    "Friday": 5,
+    "Saturday": 4,
+    "Sunday": 4
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   28
   ]
  ],
  "audit_ch": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "themes: 4 of 6 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -3056,7 +6726,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   14
   ],
   [
    "changed",
@@ -3094,9 +6764,63 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.channels[6].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[7].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
   ],
   [
    "added",
@@ -3106,9 +6830,27 @@
   ],
   [
    "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[1].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   3
   ],
   [
    "added",
@@ -3121,9 +6863,16 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
     }
    ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   3,
+   1
   ],
   [
    "added",
@@ -3133,21 +6882,68 @@
   ],
   [
    "added",
-   "[0].sheet.new.themes[1].first_watched",
+   "[0].sheet.new.themes[0].last_watched",
    null,
-   "2021-02-01"
+   "2026-10-30"
   ],
   [
    "added",
-   "[0].sheet.new.themes[2].first_watched",
+   "[0].sheet.new.themes_begun_before",
    null,
-   "2025-01-10"
+   [
+    {
+     "name": "Home cooking",
+     "items": 32,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
+    }
+   ]
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   30
   ],
   [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
   ],
   [
    "added",
@@ -3175,6 +6971,26 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_chg": [
@@ -3188,7 +7004,7 @@
    "list_len",
    "[0].meta.notes",
    5,
-   7
+   10
   ],
   [
    "added",
@@ -3209,12 +7025,84 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 18,
+    "Friday": 18,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   28
   ]
  ],
  "audit_cmp": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "channels: 6 of 8 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -3225,7 +7113,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   9
+   15
   ],
   [
    "added",
@@ -3274,15 +7162,75 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[0].first_watched",
    null,
    "2026-10-01"
   ],
   [
    "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[1].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   3
   ],
   [
    "added",
@@ -3295,9 +7243,16 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
     }
    ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   3,
+   1
   ],
   [
    "added",
@@ -3307,21 +7262,74 @@
   ],
   [
    "added",
-   "[0].sheet.new.themes[1].first_watched",
+   "[0].sheet.new.themes[0].last_watched",
    null,
-   "2021-02-01"
+   "2026-10-30"
   ],
   [
    "added",
-   "[0].sheet.new.themes[2].first_watched",
+   "[0].sheet.new.themes_begun_before",
    null,
-   "2025-01-10"
+   [
+    {
+     "name": "Home cooking",
+     "items": 32,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
+    }
+   ]
   ],
   [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -3349,9 +7357,56 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
+   "added",
+   "[0].sheet.windows",
+   null,
+   {
+    "a": {
+     "start": "2026-10-01",
+     "end": "2026-10-30",
+     "days": 30
+    },
+    "b": {
+     "start": "2026-09-01",
+     "end": "2026-09-30",
+     "days": 30
+    }
+   }
   ]
  ],
  "audit_count": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "channels: 6 of 8 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -3362,7 +7417,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   15
   ],
   [
    "changed",
@@ -3400,15 +7455,75 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[0].first_watched",
    null,
    "2026-10-01"
   ],
   [
    "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[1].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   3
   ],
   [
    "added",
@@ -3421,9 +7536,16 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
     }
    ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   3,
+   1
   ],
   [
    "added",
@@ -3433,21 +7555,80 @@
   ],
   [
    "added",
-   "[0].sheet.new.themes[1].first_watched",
+   "[0].sheet.new.themes[0].last_watched",
    null,
-   "2021-02-01"
+   "2026-10-30"
   ],
   [
    "added",
-   "[0].sheet.new.themes[2].first_watched",
+   "[0].sheet.new.themes_begun_before",
    null,
-   "2025-01-10"
+   [
+    {
+     "name": "Home cooking",
+     "items": 32,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
+    }
+   ]
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   30
   ],
   [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -3475,6 +7656,20 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
   ],
   [
    "added",
@@ -3506,9 +7701,32 @@
      "ref": "r1.when.parts_of_day[3]"
     }
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ]
+ ],
+ "audit_find": [
+  [
+   "list_len",
+   "[0].sheet.names[1].also",
+   0,
+   2
   ]
  ],
  "audit_fri": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -3519,7 +7737,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   12
   ],
   [
    "changed",
@@ -3540,9 +7758,63 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-09"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-02"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[0].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   2
   ],
   [
    "added",
@@ -3554,7 +7826,8 @@
      "items": 1,
      "days": 1,
      "first_watched": "2026-10-01",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-02"
     }
    ]
   ],
@@ -3566,9 +7839,65 @@
   ],
   [
    "added",
+   "[0].sheet.stopped.themes[0].last_watched",
+   null,
+   "2026-07-24"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-09"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 0,
+    "Tuesday": 0,
+    "Wednesday": 0,
+    "Thursday": 0,
+    "Friday": 24,
+    "Saturday": 0,
+    "Sunday": 0
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_fwc": [
@@ -3582,7 +7911,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   10
   ],
   [
    "changed",
@@ -3603,9 +7932,21 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
    "[0].sheet.channels[1].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-15"
   ],
   [
    "added",
@@ -3615,9 +7956,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[0].same_title",
+   "[0].sheet.items[0].minutes",
    null,
-   23
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[0].title",
+   "Watercolor wet on wet",
+   "Watercolor wet on wet #1"
   ],
   [
    "added",
@@ -3627,9 +7974,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[1].same_title",
+   "[0].sheet.items[1].minutes",
    null,
-   23
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[1].title",
+   "Watercolor trees easy",
+   "Watercolor trees easy #2"
   ],
   [
    "added",
@@ -3639,9 +7992,27 @@
   ],
   [
    "added",
-   "[0].sheet.items[2].same_title",
+   "[0].sheet.items[2].minutes",
    null,
-   22
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[2].title",
+   "Watercolor sky washes",
+   "Watercolor sky washes #3"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-21"
   ],
   [
    "added",
@@ -3669,6 +8040,26 @@
     "Wednesday",
     "Thursday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 13,
+    "Tuesday": 13,
+    "Wednesday": 16,
+    "Thursday": 16,
+    "Friday": 13,
+    "Saturday": 12,
+    "Sunday": 12
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "audit_insta": [
@@ -3676,7 +8067,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   5
+   9
   ],
   [
    "changed",
@@ -3703,9 +8094,45 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].liked",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].opened",
+   null,
+   4
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].saved",
+   null,
+   0
+  ],
+  [
+   "added",
    "[0].sheet.channels[1].handle",
    null,
    "crumb.lab"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].liked",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].opened",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].saved",
+   null,
+   2
   ],
   [
    "added",
@@ -3715,11 +8142,35 @@
   ],
   [
    "added",
+   "[0].sheet.channels[2].liked",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].opened",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].saved",
+   null,
+   1
+  ],
+  [
+   "added",
    "[0].sheet.left_out",
    null,
    {
     "friends": 1
    }
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
   ],
   [
    "added",
@@ -3747,6 +8198,44 @@
     "Monday",
     "Tuesday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 2,
+    "Tuesday": 2,
+    "Wednesday": 1,
+    "Thursday": 1,
+    "Friday": 0,
+    "Saturday": 1,
+    "Sunday": 0
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   15
+  ],
+  [
+   "removed",
+   "[0].sheet.window.history_starts",
+   "2026-10-05",
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.window.record_starts",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.scope_starts",
+   null,
+   "2026-10-05"
   ]
  ],
  "audit_items": [
@@ -3760,7 +8249,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   5
+   4
   ],
   [
    "added",
@@ -3787,9 +8276,21 @@
   ],
   [
    "added",
+   "[0].sheet.items[0].minutes",
+   null,
+   10
+  ],
+  [
+   "added",
    "[0].sheet.items[1].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].minutes",
+   null,
+   25
   ],
   [
    "added",
@@ -3799,9 +8300,21 @@
   ],
   [
    "added",
+   "[0].sheet.items[2].minutes",
+   null,
+   0.7
+  ],
+  [
+   "added",
    "[0].sheet.items[3].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[3].minutes",
+   null,
+   25
   ],
   [
    "added",
@@ -3811,12 +8324,40 @@
   ],
   [
    "added",
-   "[0].sheet.items[4].same_title",
+   "[0].sheet.items[4].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[4].title",
+   "Gaming clutch moment",
+   "Gaming clutch moment #60"
+  ],
+  [
+   "added",
+   "[0].sheet.opened_more_than_once",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_least": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "themes: 4 of 6 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -3827,7 +8368,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   14
   ],
   [
    "changed",
@@ -3865,9 +8406,63 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
    "[0].sheet.channels[1].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[7].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
   ],
   [
    "added",
@@ -3877,9 +8472,27 @@
   ],
   [
    "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[1].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   3
   ],
   [
    "added",
@@ -3892,9 +8505,16 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
     }
    ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   3,
+   1
   ],
   [
    "added",
@@ -3904,21 +8524,68 @@
   ],
   [
    "added",
-   "[0].sheet.new.themes[1].first_watched",
+   "[0].sheet.new.themes[0].last_watched",
    null,
-   "2021-02-01"
+   "2026-10-30"
   ],
   [
    "added",
-   "[0].sheet.new.themes[2].first_watched",
+   "[0].sheet.new.themes_begun_before",
    null,
-   "2025-01-10"
+   [
+    {
+     "name": "Home cooking",
+     "items": 32,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
+    }
+   ]
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   30
   ],
   [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-30"
   ],
   [
    "added",
@@ -3946,6 +8613,26 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_lmc": [
@@ -3959,7 +8646,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   9
   ],
   [
    "changed",
@@ -3980,9 +8667,27 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
    "[0].sheet.items[0].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].minutes",
+   null,
+   10
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].title_clipped",
+   null,
+   true
   ],
   [
    "added",
@@ -3992,9 +8697,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[1].same_title",
+   "[0].sheet.items[1].minutes",
    null,
-   33
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[1].title",
+   "Minecraft village makeover",
+   "Minecraft village makeover #162"
   ],
   [
    "added",
@@ -4004,15 +8715,53 @@
   ],
   [
    "added",
-   "[0].sheet.items[2].same_title",
+   "[0].sheet.items[2].minutes",
    null,
-   33
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[2].title",
+   "Minecraft redstone door",
+   "Minecraft redstone door #161"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-20"
   ],
   [
    "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 23,
+    "Tuesday": 25,
+    "Wednesday": 23,
+    "Thursday": 23,
+    "Friday": 23,
+    "Saturday": 23,
+    "Sunday": 23
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "audit_lnp": [
@@ -4026,7 +8775,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   9
   ],
   [
    "changed",
@@ -4047,15 +8796,27 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
    "[0].sheet.items[0].how",
    null,
    "opened"
   ],
   [
    "added",
-   "[0].sheet.items[0].same_title",
+   "[0].sheet.items[0].minutes",
    null,
-   15
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[0].title",
+   "Number puzzle of primes",
+   "Number puzzle of primes #60"
   ],
   [
    "added",
@@ -4065,9 +8826,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[1].same_title",
+   "[0].sheet.items[1].minutes",
    null,
-   15
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[1].title",
+   "Puzzle with magic squares",
+   "Puzzle with magic squares #59"
   ],
   [
    "added",
@@ -4077,9 +8844,27 @@
   ],
   [
    "added",
-   "[0].sheet.items[2].same_title",
+   "[0].sheet.items[2].minutes",
    null,
-   15
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[2].title",
+   "Prime spiral puzzle",
+   "Prime spiral puzzle #58"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2023-08-22"
   ],
   [
    "added",
@@ -4109,6 +8894,26 @@
     "Wednesday",
     "Sunday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 9,
+    "Tuesday": 9,
+    "Wednesday": 9,
+    "Thursday": 8,
+    "Friday": 8,
+    "Saturday": 8,
+    "Sunday": 9
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "audit_long": [
@@ -4122,7 +8927,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   9
   ],
   [
    "changed",
@@ -4160,9 +8965,72 @@
   ],
   [
    "added",
-   "[0].sheet.new.themes[0].first_watched",
+   "[0].sheet.channels[0].last_watched",
    null,
-   "2021-02-01"
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   0
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   1,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes_begun_before",
+   null,
+   [
+    {
+     "name": "Home cooking",
+     "items": 32,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    }
+   ]
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   30
   ],
   [
    "added",
@@ -4172,9 +9040,45 @@
   ],
   [
    "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_lsr": [
@@ -4188,7 +9092,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   8
   ],
   [
    "changed",
@@ -4209,15 +9113,27 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
    "[0].sheet.items[0].how",
    null,
    "opened"
   ],
   [
    "added",
-   "[0].sheet.items[0].same_title",
+   "[0].sheet.items[0].minutes",
    null,
-   23
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[0].title",
+   "Speedrun glitch explained",
+   "Speedrun glitch explained #90"
   ],
   [
    "added",
@@ -4227,9 +9143,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[1].same_title",
+   "[0].sheet.items[1].minutes",
    null,
-   23
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[1].title",
+   "Any% speedrun route",
+   "Any% speedrun route #89"
   ],
   [
    "added",
@@ -4239,15 +9161,53 @@
   ],
   [
    "added",
-   "[0].sheet.items[2].same_title",
+   "[0].sheet.items[2].minutes",
    null,
-   22
+   10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[2].title",
+   "Speedrun world record attempt",
+   "Speedrun world record attempt #88"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2023-05-01"
   ],
   [
    "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 14,
+    "Tuesday": 13,
+    "Wednesday": 12,
+    "Thursday": 13,
+    "Friday": 13,
+    "Saturday": 12,
+    "Sunday": 13
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "audit_newest": [
@@ -4261,7 +9221,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   4
+   3
   ],
   [
    "added",
@@ -4282,9 +9242,21 @@
   ],
   [
    "added",
+   "[0].sheet.items[0].minutes",
+   null,
+   10
+  ],
+  [
+   "added",
    "[0].sheet.items[1].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].minutes",
+   null,
+   25
   ],
   [
    "added",
@@ -4294,9 +9266,21 @@
   ],
   [
    "added",
+   "[0].sheet.items[2].minutes",
+   null,
+   0.7
+  ],
+  [
+   "added",
    "[0].sheet.items[3].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[3].minutes",
+   null,
+   25
   ],
   [
    "added",
@@ -4306,12 +9290,43 @@
   ],
   [
    "added",
-   "[0].sheet.items[4].same_title",
+   "[0].sheet.items[4].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[4].title",
+   "Gaming clutch moment",
+   "Gaming clutch moment #60"
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_nog": [
+  [
+   "added",
+   "[0].meta.also",
+   null,
+   {
+    "gaming": [
+     {
+      "ref": "theme:2",
+      "label": "Gaming clips",
+      "how": "theme name holds the words"
+     },
+     {
+      "ref": "channel:c05592369",
+      "label": "Gaming Daily",
+      "how": "channel name holds the words"
+     }
+    ]
+   }
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -4322,13 +9337,13 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   13
   ],
   [
    "changed",
    "[0].meta.notes[2]",
    "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
-   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+   "meta.also: for a name of the scope, the other channels and themes whose own names hold its words. The scope counted only the name as resolved; to count one of these alone, pass its ref in scope.only."
   ],
   [
    "added",
@@ -4360,9 +9375,51 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.channels[3].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   1
   ],
   [
    "added",
@@ -4375,21 +9432,45 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
+    }
+   ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   2,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes_begun_before",
+   null,
+   [
+    {
+     "name": "Home cooking",
+     "items": 32,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
     }
    ]
   ],
   [
    "added",
-   "[0].sheet.new.themes[0].first_watched",
+   "[0].sheet.previous.days",
    null,
-   "2021-02-01"
-  ],
-  [
-   "added",
-   "[0].sheet.new.themes[1].first_watched",
-   null,
-   "2025-01-10"
+   30
   ],
   [
    "added",
@@ -4399,9 +9480,53 @@
   ],
   [
    "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 11,
+    "Tuesday": 8,
+    "Wednesday": 9,
+    "Thursday": 10,
+    "Friday": 13,
+    "Saturday": 9,
+    "Sunday": 10
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_pan": [
@@ -4430,9 +9555,21 @@
   ],
   [
    "added",
+   "[0].sheet.filters.names_in_scope",
+   null,
+   1
+  ],
+  [
+   "added",
    "[0].sheet.items[0].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].minutes",
+   null,
+   10
   ],
   [
    "added",
@@ -4442,9 +9579,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[1].same_title",
+   "[0].sheet.items[1].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[1].title",
+   "Cooking crispy rice",
+   "Cooking crispy rice #70"
   ],
   [
    "added",
@@ -4454,9 +9597,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[2].same_title",
+   "[0].sheet.items[2].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[2].title",
+   "Weeknight cooking pasta",
+   "Weeknight cooking pasta #69"
   ],
   [
    "added",
@@ -4466,15 +9615,27 @@
   ],
   [
    "added",
+   "[0].sheet.items[3].minutes",
+   null,
+   10
+  ],
+  [
+   "added",
    "[0].sheet.items[4].how",
    null,
    "opened"
   ],
   [
    "added",
-   "[0].sheet.items[4].same_title",
+   "[0].sheet.items[4].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[4].title",
+   "Cooking tofu three ways",
+   "Cooking tofu three ways #68"
   ],
   [
    "added",
@@ -4484,9 +9645,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[5].same_title",
+   "[0].sheet.items[5].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[5].title",
+   "Cooking crispy rice",
+   "Cooking crispy rice #67"
   ],
   [
    "added",
@@ -4496,9 +9663,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[6].same_title",
+   "[0].sheet.items[6].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[6].title",
+   "Weeknight cooking pasta",
+   "Weeknight cooking pasta #66"
   ],
   [
    "added",
@@ -4508,9 +9681,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[7].same_title",
+   "[0].sheet.items[7].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[7].title",
+   "Cooking tofu three ways",
+   "Cooking tofu three ways #65"
   ],
   [
    "added",
@@ -4520,9 +9699,15 @@
   ],
   [
    "added",
-   "[0].sheet.items[8].same_title",
+   "[0].sheet.items[8].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[8].title",
+   "Cooking crispy rice",
+   "Cooking crispy rice #64"
   ],
   [
    "added",
@@ -4532,9 +9717,21 @@
   ],
   [
    "added",
-   "[0].sheet.items[9].same_title",
+   "[0].sheet.items[9].minutes",
    null,
    10
+  ],
+  [
+   "changed",
+   "[0].sheet.items[9].title",
+   "Weeknight cooking pasta",
+   "Weeknight cooking pasta #63"
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_reopen": [
@@ -4548,7 +9745,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   5
+   4
   ],
   [
    "added",
@@ -4575,9 +9772,21 @@
   ],
   [
    "added",
+   "[0].sheet.items[0].minutes",
+   null,
+   10
+  ],
+  [
+   "added",
    "[0].sheet.items[1].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[1].minutes",
+   null,
+   25
   ],
   [
    "added",
@@ -4587,9 +9796,21 @@
   ],
   [
    "added",
+   "[0].sheet.items[2].minutes",
+   null,
+   0.7
+  ],
+  [
+   "added",
    "[0].sheet.items[3].how",
    null,
    "opened"
+  ],
+  [
+   "added",
+   "[0].sheet.items[3].minutes",
+   null,
+   25
   ],
   [
    "added",
@@ -4599,9 +9820,27 @@
   ],
   [
    "added",
-   "[0].sheet.items[4].same_title",
+   "[0].sheet.items[4].minutes",
    null,
-   20
+   0.7
+  ],
+  [
+   "changed",
+   "[0].sheet.items[4].title",
+   "Gaming clutch moment",
+   "Gaming clutch moment #60"
+  ],
+  [
+   "added",
+   "[0].sheet.opened_more_than_once",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
   ]
  ],
  "audit_saved": [
@@ -4609,13 +9848,13 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   9
   ],
   [
    "changed",
    "[0].meta.notes[2]",
    "No window before this one: new and stopped are not computed here.",
-   "areas, themes and channels are three levels: a rank word (led, next, second) compares rows of one list only."
+   "window.platform_starts: the first day of anything they did on this scope's platforms (opened, liked or saved), before the first day of this scope's own kind."
   ],
   [
    "added",
@@ -4650,6 +9889,12 @@
   ],
   [
    "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
@@ -4674,6 +9919,50 @@
     "Monday",
     "Saturday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 2,
+    "Tuesday": 1,
+    "Wednesday": 0,
+    "Thursday": 0,
+    "Friday": 0,
+    "Saturday": 2,
+    "Sunday": 1
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
+   "removed",
+   "[0].sheet.window.history_starts",
+   "2026-10-03",
+   null
+  ],
+  [
+   "added",
+   "[0].sheet.window.platform_starts",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.record_starts",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.scope_starts",
+   null,
+   "2026-10-03"
   ]
  ],
  "audit_search": [
@@ -4681,7 +9970,7 @@
    "list_len",
    "[0].meta.notes",
    1,
-   2
+   4
   ],
   [
    "added",
@@ -4694,6 +9983,12 @@
    "[0].sheet.items[0].how",
    null,
    "saved"
+  ],
+  [
+   "added",
+   "[0].sheet.items[0].title_clipped",
+   null,
+   true
   ],
   [
    "added",
@@ -4718,6 +10013,21 @@
  ],
  "audit_tlm": [
   [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas: 3 of 4 rows kept",
+    "areas[].themes: taken out",
+    "channels: 3 of 8 rows kept",
+    "fields: 3 of 4 rows kept",
+    "periods[].areas: taken out",
+    "periods[].themes: taken out",
+    "themes: 3 of 6 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
+  [
    "changed",
    "[0].meta.hidden.friends",
    1,
@@ -4727,7 +10037,13 @@
    "list_len",
    "[0].meta.notes",
    4,
-   10
+   17
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "A period with fewer than 50 items is marked sparse.",
+   "A period with fewer than 50 items, and no private item left out of it, is marked sparse."
   ],
   [
    "added",
@@ -4764,6 +10080,12 @@
    }
   ],
   [
+   "list_len",
+   "[0].sheet.areas",
+   4,
+   3
+  ],
+  [
    "removed",
    "[0].sheet.areas[0].themes",
    [],
@@ -4782,10 +10104,51 @@
    null
   ],
   [
-   "removed",
-   "[0].sheet.areas[3].themes",
-   [],
-   null
+   "list_len",
+   "[0].sheet.channels",
+   4,
+   3
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "list_len",
+   "[0].sheet.fields",
+   4,
+   3
+  ],
+  [
+   "added",
+   "[0].sheet.in_top_of_every_period",
+   null,
+   {
+    "themes": [],
+    "areas": [
+     "art and design"
+    ]
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
   ],
   [
    "added",
@@ -4795,15 +10158,39 @@
   ],
   [
    "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[1].first_watched",
    null,
    "2026-10-01"
   ],
   [
    "added",
+   "[0].sheet.new.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[2].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[2].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   4
   ],
   [
    "added",
@@ -4816,9 +10203,16 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
     }
    ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   4,
+   2
   ],
   [
    "added",
@@ -4828,21 +10222,44 @@
   ],
   [
    "added",
+   "[0].sheet.new.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.themes[1].first_watched",
    null,
    "2026-10-01"
   ],
   [
    "added",
-   "[0].sheet.new.themes[2].first_watched",
+   "[0].sheet.new.themes[1].last_watched",
    null,
-   "2021-01-05"
+   "2026-10-30"
   ],
   [
    "added",
-   "[0].sheet.new.themes[3].first_watched",
+   "[0].sheet.new.themes_begun_before",
    null,
-   "2023-06-03"
+   [
+    {
+     "name": "Minecraft builds",
+     "items": 13,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-01-05",
+     "last_watched": "2026-10-20"
+    },
+    {
+     "name": "Calculus lessons",
+     "items": 10,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2023-06-03",
+     "last_watched": "2026-10-16"
+    }
+   ]
   ],
   [
    "removed",
@@ -4966,15 +10383,15 @@
   ],
   [
    "added",
+   "[0].sheet.previous.days",
+   null,
+   303
+  ],
+  [
+   "added",
    "[0].sheet.previous.reels",
    null,
    0
-  ],
-  [
-   "list_len",
-   "[0].sheet.themes",
-   3,
-   4
   ],
   [
    "removed",
@@ -4983,16 +10400,34 @@
    null
   ],
   [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
    "removed",
    "[0].sheet.themes[1].channels",
    [],
    null
   ],
   [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
    "removed",
    "[0].sheet.themes[2].channels",
    [],
    null
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-21"
   ],
   [
    "added",
@@ -5020,6 +10455,20 @@
     "Thursday",
     "Friday"
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 37,
+    "Tuesday": 32,
+    "Wednesday": 33,
+    "Thursday": 40,
+    "Friday": 40,
+    "Saturday": 36,
+    "Sunday": 36
+   }
   ],
   [
    "added",
@@ -5051,9 +10500,28 @@
      "ref": "r1.when.parts_of_day[3]"
     }
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   303
   ]
  ],
  "audit_tly": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "channels: 7 of 10 rows kept",
+    "periods[].areas: cut to 1 row each",
+    "periods[].themes: cut to 1 row each",
+    "themes: 6 of 8 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -5064,7 +10532,13 @@
    "list_len",
    "[0].meta.notes",
    4,
-   7
+   12
+  ],
+  [
+   "changed",
+   "[0].meta.notes[2]",
+   "A period with fewer than 50 items is marked sparse.",
+   "A period with fewer than 50 items, and no private item left out of it, is marked sparse."
   ],
   [
    "added",
@@ -5111,7 +10585,62 @@
    "list_len",
    "[0].sheet.channels",
    9,
-   10
+   7
+  ],
+  [
+   "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.in_top_of_every_period",
+   null,
+   {
+    "themes": [
+     "Home cooking"
+    ],
+    "areas": [
+     "food and cooking"
+    ]
+   }
   ],
   [
    "added",
@@ -5122,76 +10651,94 @@
    }
   ],
   [
-   "removed",
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "list_len",
    "[0].sheet.periods[0].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[0].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[1].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[1].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[2].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[2].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[3].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "changed",
+   "[0].sheet.periods[3].sparse",
+   true,
+   false
+  ],
+  [
+   "list_len",
    "[0].sheet.periods[3].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[4].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[4].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[5].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[0].sheet.periods[5].themes",
-   [],
-   null
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[0].sheet.themes",
+   8,
+   6
   ],
   [
    "removed",
@@ -5200,10 +10747,22 @@
    null
   ],
   [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
    "removed",
    "[0].sheet.themes[1].channels",
    [],
    null
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
   ],
   [
    "removed",
@@ -5212,10 +10771,22 @@
    null
   ],
   [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
    "removed",
    "[0].sheet.themes[3].channels",
    [],
    null
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2023-05-01"
   ],
   [
    "removed",
@@ -5224,28 +10795,42 @@
    null
   ],
   [
+   "added",
+   "[0].sheet.themes[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
    "removed",
    "[0].sheet.themes[5].channels",
    [],
    null
   ],
   [
-   "removed",
-   "[0].sheet.themes[6].channels",
-   [],
-   null
-  ],
-  [
-   "removed",
-   "[0].sheet.themes[7].channels",
-   [],
-   null
+   "added",
+   "[0].sheet.themes[5].last_watched",
+   null,
+   "2026-10-30"
   ],
   [
    "added",
    "[0].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 106,
+    "Tuesday": 101,
+    "Wednesday": 101,
+    "Thursday": 108,
+    "Friday": 105,
+    "Saturday": 101,
+    "Sunday": 101
+   }
   ],
   [
    "added",
@@ -5277,9 +10862,25 @@
      "ref": "r1.when.parts_of_day[3]"
     }
    ]
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "audit_two": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "themes: 4 of 6 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -5290,7 +10891,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   14
   ],
   [
    "changed",
@@ -5328,9 +10929,63 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.channels[6].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[7].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
   ],
   [
    "added",
@@ -5340,9 +10995,27 @@
   ],
   [
    "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[1].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   3
   ],
   [
    "added",
@@ -5355,9 +11028,16 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
     }
    ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   3,
+   1
   ],
   [
    "added",
@@ -5367,21 +11047,68 @@
   ],
   [
    "added",
-   "[0].sheet.new.themes[1].first_watched",
+   "[0].sheet.new.themes[0].last_watched",
    null,
-   "2021-02-01"
+   "2026-10-30"
   ],
   [
    "added",
-   "[0].sheet.new.themes[2].first_watched",
+   "[0].sheet.new.themes_begun_before",
    null,
-   "2025-01-10"
+   [
+    {
+     "name": "Home cooking",
+     "items": 32,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
+    }
+   ]
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   30
   ],
   [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
   ],
   [
    "added",
@@ -5411,6 +11138,26 @@
    ]
   ],
   [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -5420,7 +11167,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   5
+   8
   ],
   [
    "changed",
@@ -5458,9 +11205,45 @@
   ],
   [
    "added",
+   "[1].sheet.channels[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[2].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[1].sheet.new.themes[0].first_watched",
    null,
    "2023-06-03"
+  ],
+  [
+   "added",
+   "[1].sheet.new.themes[0].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -5470,18 +11253,96 @@
   ],
   [
    "added",
+   "[1].sheet.new.themes[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[1].sheet.previous.days",
+   null,
+   365
+  ],
+  [
+   "added",
    "[1].sheet.previous.reels",
    null,
    0
   ],
   [
    "added",
+   "[1].sheet.stopped.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[1].sheet.stopped.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[2].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[1].sheet.themes[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[1].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[1].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 24,
+    "Tuesday": 22,
+    "Wednesday": 22,
+    "Thursday": 22,
+    "Friday": 22,
+    "Saturday": 22,
+    "Sunday": 23
+   }
+  ],
+  [
+   "added",
+   "[1].sheet.window.days",
+   null,
+   365
   ]
  ],
  "audit_two2": [
+  [
+   "added",
+   "[0].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "themes: 4 of 6 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -5492,7 +11353,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   14
   ],
   [
    "changed",
@@ -5530,9 +11391,63 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[4].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[5].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
    "[0].sheet.channels[6].handle",
    null,
    "wetpaper.ig"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[6].last_watched",
+   null,
+   "2026-10-15"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[7].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
   ],
   [
    "added",
@@ -5542,9 +11457,27 @@
   ],
   [
    "added",
+   "[0].sheet.new.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.new.channels[1].first_watched",
    null,
    "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels[1].last_watched",
+   null,
+   "2026-10-05"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   3
   ],
   [
    "added",
@@ -5557,9 +11490,16 @@
      "days": 4,
      "first_watched": "2026-10-12",
      "handle": "wetpaper.ig",
-     "ref": "r1.new.small_channels[0]"
+     "ref": "r1.new.small_channels[0]",
+     "last_watched": "2026-10-15"
     }
    ]
+  ],
+  [
+   "list_len",
+   "[0].sheet.new.themes",
+   3,
+   1
   ],
   [
    "added",
@@ -5569,21 +11509,68 @@
   ],
   [
    "added",
-   "[0].sheet.new.themes[1].first_watched",
+   "[0].sheet.new.themes[0].last_watched",
    null,
-   "2021-02-01"
+   "2026-10-30"
   ],
   [
    "added",
-   "[0].sheet.new.themes[2].first_watched",
+   "[0].sheet.new.themes_begun_before",
    null,
-   "2025-01-10"
+   [
+    {
+     "name": "Home cooking",
+     "items": 32,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[0]",
+     "first_watched": "2021-02-01",
+     "last_watched": "2026-10-30"
+    },
+    {
+     "name": "Watercolor painting",
+     "items": 5,
+     "previous_items": 0,
+     "ref": "r1.new.themes_begun_before[1]",
+     "first_watched": "2025-01-10",
+     "last_watched": "2026-10-21"
+    }
+   ]
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   30
   ],
   [
    "added",
    "[0].sheet.previous.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-20"
   ],
   [
    "added",
@@ -5613,6 +11600,39 @@
    ]
   ],
   [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 18,
+    "Wednesday": 17,
+    "Thursday": 24,
+    "Friday": 24,
+    "Saturday": 19,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   30
+  ],
+  [
+   "added",
+   "[1].meta.cut",
+   null,
+   [
+    "areas[].themes: taken out",
+    "channels: 7 of 10 rows kept",
+    "periods[].areas: cut to 1 row each",
+    "periods[].themes: cut to 1 row each",
+    "themes: 6 of 8 rows kept",
+    "themes[].channels: taken out"
+   ]
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -5622,7 +11642,13 @@
    "list_len",
    "[1].meta.notes",
    4,
-   7
+   12
+  ],
+  [
+   "changed",
+   "[1].meta.notes[2]",
+   "A period with fewer than 50 items is marked sparse.",
+   "A period with fewer than 50 items, and no private item left out of it, is marked sparse."
   ],
   [
    "added",
@@ -5669,7 +11695,62 @@
    "list_len",
    "[1].sheet.channels",
    9,
-   10
+   7
+  ],
+  [
+   "added",
+   "[1].sheet.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[1].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[2].last_watched",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[3].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[5].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.channels[6].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[1].sheet.in_top_of_every_period",
+   null,
+   {
+    "themes": [
+     "Home cooking"
+    ],
+    "areas": [
+     "food and cooking"
+    ]
+   }
   ],
   [
    "added",
@@ -5680,76 +11761,94 @@
    }
   ],
   [
-   "removed",
+   "added",
+   "[1].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "list_len",
    "[1].sheet.periods[0].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[0].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[1].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[1].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[2].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[2].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[3].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "changed",
+   "[1].sheet.periods[3].sparse",
+   true,
+   false
+  ],
+  [
+   "list_len",
    "[1].sheet.periods[3].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[4].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[4].themes",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[5].areas",
-   [],
-   null
+   0,
+   1
   ],
   [
-   "removed",
+   "list_len",
    "[1].sheet.periods[5].themes",
-   [],
-   null
+   0,
+   1
+  ],
+  [
+   "list_len",
+   "[1].sheet.themes",
+   8,
+   6
   ],
   [
    "removed",
@@ -5758,10 +11857,22 @@
    null
   ],
   [
+   "added",
+   "[1].sheet.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
    "removed",
    "[1].sheet.themes[1].channels",
    [],
    null
+  ],
+  [
+   "added",
+   "[1].sheet.themes[1].last_watched",
+   null,
+   "2026-10-21"
   ],
   [
    "removed",
@@ -5770,10 +11881,22 @@
    null
   ],
   [
+   "added",
+   "[1].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
    "removed",
    "[1].sheet.themes[3].channels",
    [],
    null
+  ],
+  [
+   "added",
+   "[1].sheet.themes[3].last_watched",
+   null,
+   "2023-05-01"
   ],
   [
    "removed",
@@ -5782,28 +11905,42 @@
    null
   ],
   [
+   "added",
+   "[1].sheet.themes[4].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
    "removed",
    "[1].sheet.themes[5].channels",
    [],
    null
   ],
   [
-   "removed",
-   "[1].sheet.themes[6].channels",
-   [],
-   null
-  ],
-  [
-   "removed",
-   "[1].sheet.themes[7].channels",
-   [],
-   null
+   "added",
+   "[1].sheet.themes[5].last_watched",
+   null,
+   "2026-10-30"
   ],
   [
    "added",
    "[1].sheet.totals.reels",
    null,
    4
+  ],
+  [
+   "added",
+   "[1].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 106,
+    "Tuesday": 101,
+    "Wednesday": 101,
+    "Thursday": 108,
+    "Friday": 105,
+    "Saturday": 101,
+    "Sunday": 101
+   }
   ],
   [
    "added",
@@ -5835,6 +11972,12 @@
      "ref": "r2.when.parts_of_day[3]"
     }
    ]
+  ],
+  [
+   "added",
+   "[1].sheet.window.days",
+   null,
+   2125
   ]
  ],
  "audit_y2021": [
@@ -5848,7 +11991,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   4
+   7
   ],
   [
    "changed",
@@ -5869,9 +12012,71 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 21,
+    "Tuesday": 19,
+    "Wednesday": 19,
+    "Thursday": 19,
+    "Friday": 19,
+    "Saturday": 18,
+    "Sunday": 19
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   365
   ]
  ],
  "audit_y2023": [
@@ -5885,7 +12090,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   8
   ],
   [
    "changed",
@@ -5923,9 +12128,45 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[2].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.channels[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
    "[0].sheet.new.themes[0].first_watched",
    null,
    "2023-06-03"
+  ],
+  [
+   "added",
+   "[0].sheet.new.themes[0].last_watched",
+   null,
+   "2026-10-16"
   ],
   [
    "added",
@@ -5935,15 +12176,83 @@
   ],
   [
    "added",
+   "[0].sheet.new.themes[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   365
+  ],
+  [
+   "added",
    "[0].sheet.previous.reels",
    null,
    0
   ],
   [
    "added",
+   "[0].sheet.stopped.channels[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.stopped.themes[0].last_watched",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[2].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[3].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 24,
+    "Tuesday": 22,
+    "Wednesday": 22,
+    "Thursday": 22,
+    "Friday": 22,
+    "Saturday": 22,
+    "Sunday": 23
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   365
   ]
  ],
  "audit_y2024": [
@@ -5957,7 +12266,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   5
+   9
   ],
   [
    "changed",
@@ -5995,11 +12304,35 @@
   ],
   [
    "added",
+   "[0].sheet.channels[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.left_out",
    null,
    {
     "private": 50
    }
+  ],
+  [
+   "added",
+   "[0].sheet.library.counted_over",
+   null,
+   "all your history"
+  ],
+  [
+   "added",
+   "[0].sheet.new.channels_first_opened",
+   null,
+   0
+  ],
+  [
+   "added",
+   "[0].sheet.previous.days",
+   null,
+   365
   ],
   [
    "added",
@@ -6009,9 +12342,71 @@
   ],
   [
    "added",
+   "[0].sheet.stopped.channels[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.stopped.channels[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[0].sheet.stopped.channels[2].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.stopped.themes[0].last_watched",
+   null,
+   "2026-10-16"
+  ],
+  [
+   "added",
+   "[0].sheet.stopped.themes[1].last_watched",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "added",
+   "[0].sheet.stopped.themes[2].last_watched",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "added",
+   "[0].sheet.themes[0].last_watched",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.totals.reels",
    null,
    0
+  ],
+  [
+   "added",
+   "[0].sheet.when.events_by_weekday",
+   null,
+   {
+    "Monday": 1,
+    "Tuesday": 1,
+    "Wednesday": 2,
+    "Thursday": 1,
+    "Friday": 1,
+    "Saturday": 1,
+    "Sunday": 1
+   }
+  ],
+  [
+   "added",
+   "[0].sheet.window.days",
+   null,
+   366
   ]
  ]
 }

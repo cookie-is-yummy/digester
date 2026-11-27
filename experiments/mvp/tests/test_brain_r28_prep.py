@@ -2,8 +2,8 @@
 
 1. The values check read the result envelope's `took_ms` (code's clock: how long the tool ran) as a value of the
    turn, so a free figure or number word found nowhere else passed when it equalled the tool's milliseconds. The rule
-   "timing_out" leaves took_ms out. It is OFF by default (it changes verdicts against last round's on the saved
-   forms; the founders decide) and is named alone: "r28" does not switch it on.
+   "timing_out" leaves took_ms out. It was OFF by default in mvp28 and mvp29; since mvp30 it is on by default
+   (verify.VALUES_RULES_R30). It is named alone: "r28" does not switch it on.
 2. Past the soft deadline, a name lookup that found nothing (a find whose every name came back with no match and no
    item holding its words) counted as a result in hand, so "time is up, answer with the results you already have"
    was sent with nothing to answer from. Now the next round runs, as with no result. Out of rounds such a lookup
@@ -54,7 +54,7 @@ def _find(names):
     return P.tool_use("find", {"kinds": ["channel"], "names": names})
 
 
-# ================================================================ 1. took_ms is no cell (rule timing_out, off by default)
+# ================================================================ 1. took_ms is no cell (rule timing_out, on by default since mvp30)
 def _envelope(took_ms):
     return {"r1": {"rid": "r1", "tool": "breakdown", "cost_usd": 0.0, "took_ms": took_ms,
                    "meta": {"window_said": "in October 2026"},
@@ -71,12 +71,15 @@ def _reasons(took_ms, mode):
     return [o.reasons for o in v.outcomes if o.where == "lead"]
 
 
-def test_by_default_a_figure_equal_to_the_tools_milliseconds_is_found_as_last_round():
+def test_last_rounds_mode_found_a_figure_equal_to_the_tools_milliseconds_and_the_default_does_not():
     from mvp.brain import verify as V
     # last round's values check, unchanged: "four" is found when the tool ran in 4 ms, refused when it ran in 3
-    assert _reasons(4, V.VALUES) == [[]]
-    assert _reasons(3, V.VALUES) == [["unfound_number"]]
-    assert "timing_out" not in V.VALUES.rules and "timing_out" not in V.VALUES_DEFAULT_RULES
+    old = V.values_mode(rules=V.VALUES_RULES)
+    assert _reasons(4, old) == [[]]
+    assert _reasons(3, old) == [["unfound_number"]]
+    # mvp30 re-pin: timing_out is in the default (verify.VALUES_RULES_R30), so the clock decides nothing there
+    assert "timing_out" in V.VALUES.rules and "timing_out" in V.VALUES_DEFAULT_RULES
+    assert _reasons(4, V.VALUES) == _reasons(3, V.VALUES) == [["unfound_number"]]
 
 
 def test_with_timing_out_the_verdict_never_hangs_on_how_fast_the_tool_ran():
@@ -107,7 +110,8 @@ def test_the_switch_reaches_the_values_mode_and_the_run_settings():
     assert out.returncode == 0, out.stderr[-2000:]
     import json
     got = json.loads(out.stdout.strip().splitlines()[-1])
-    assert got["on"] and got["s"]["values_rules_r28"] == ["timing_out"] and "timing_out" in got["s"]["values_rules"]
+    # mvp30 re-pin: timing_out is on by default too; the switch names it again and it stays on
+    assert got["on"] and "timing_out" in got["s"]["values_rules_r28"] and "timing_out" in got["s"]["values_rules"]
 
 
 # ================================================================ 2. a lookup that found nothing is no answer past the deadline

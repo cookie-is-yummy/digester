@@ -8448,3 +8448,333 @@ On, no verdict depends on the clock, and that sentence is refused, as `cell_foun
 areas") though such sentences were found true last round. So the switch trades a chance leak for a known refusal of
 a true class. Either way the setting is
 written in the run's settings and on every record.
+
+## 31. False "it is missing" sentences fixed at their source (mvp30: keys cause, tools, loopprompt, rules, merge)
+Branch `brain-r30-local` from experiments/search-loop (82ecf1d), with three branches merged in by merge commits:
+`brain-tools30-local` (the read tools and the eval), `brain-loopprompt30-local` (the loop, the code lead and two new
+prompt files) and `brain-rules30-local` (the values check's default). They touch no file in common, so the merge had
+no conflict. The crossed run of mvp29 (DECISIONS.md, its last sections) failed on false sentences, and 12 of the 16 that
+both readers confirmed said that data was missing or that a read failed when the rows held the answer. This round
+traced every fault of that run to its cause and fixed the cause where it was. It does not run the gate. Evidence is
+in the scratchpad's `mvp30/cause/`, `mvp30/tools/`, `mvp30/loopprompt/`, `mvp30/rules/` and `mvp30/merge/`, with a
+progress file for each key. Spend: cause $0, tools about $0.094, loopprompt $0.345, rules $0, merge $0.223.
+
+Set A (the fresh half a) and set H (the plans held-out half) are both in sample now. Every fix below was written
+after reading the faults it is measured on.
+
+### 31.1 The causes (key cause)
+The cause key read every fault of the eight crossed runs against the rows and the tool code, with no model call. The
+list: 50 settled false or firm sentences, 11 limit-only answers, 18 answers poor for missing the question, 36
+refused sentences that the rows show true, 4 set H answers v4c missed, 6 `breakdown` calls without `order`, and the
+auditor's KeyError. Each got a class. The main findings:
+- The three messages that faulted in every cell faulted on what the tools returned. A length question got no length
+  cell per item. A "what have I learned" question got an empty sheet with nothing else. A rewatch question got a note
+  that framed "opened once" as "no ranking".
+- Several "it is missing" sentences were written by the tools first. A platform scope's start was said as "Your
+  history starts on 12 October 2026". `results.cut_to_size` removed the per-year themes of a year timeline. The
+  prompt's own example said "late October" cannot be read, though the window reader reads it since mvp25.
+- Display titles dropped their episode number ("#60"), so numbered episodes shared one title, and `same_title`
+  counted the item itself. The checker then refused the true "N-1 others" and passed the false "N others".
+- The refused true sentences are the checker's, not the model's: the clock, labels, quotes, outcomes, paths.
+- All 6 calls without `order` were by "none", where order means nothing.
+
+### 31.2 The read tools say what the library holds (key tools)
+Files: `brain/tools.py`, `brain/results.py`, `eval_brain.py`, `eval_claims.py`, the pinned ledger diff and the tool
+tests. By class:
+- Titles keep their episode number. `same_title` became `other_items_same_title`, which counts the other items only.
+- The tie note states the fact: no item was opened more than once (`opened_more_than_once` 0).
+- Under a platform or kind scope, the window words say what starts on that date ("your Instagram opens: 12 to 15
+  October 2026"). `cannot_see` carries the scope's start and the record's start. `window.platform_starts` gives the
+  first day of anything on that platform.
+- Cells a question needed: item rows carry `minutes`, items can be ordered `longest` or `shortest`, and a `lengths`
+  cell says how many lengths are known. `learned` says it reads what they saved, and `on_topic` gives the opened and
+  saved counts of the topic. `when.events_by_weekday` gives opens per weekday. Channel and theme rows carry
+  `last_watched`.
+- The cut keeps every period asked for, and cuts other lists first; `in_top_of_every_period` is computed before the
+  cut, and `meta.cut` says what went. Month timelines over all history keep all 70 months.
+- `find` and the scope resolver list in `also` the channels and themes whose names hold the word.
+- Friends' posts: the note says they are "never shown and in no total". (Corrected in 31.8: this round did change
+  what is counted. A learned read counted the friends' posts of what they saved, of every topic, and its base became
+  "of what you saved"; the repair counts none there.)
+- Smaller cells: a share that is 1.0 by construction under `scope.only` is dropped and every scoped share says it is
+  of the scope; new themes first opened before the window move to `themes_begun_before`; under base "any" rows give
+  opened, saved and liked apart; `previous.channels`, `new.channels_first_opened`, `library.counted_over`,
+  `title_clipped` (the clip is the result's); `window.days`, `previous.days`; `filters.names_in_scope`. A period
+  holding private items is never marked sparse.
+- `order` stays required (the no-defaulting rule); its description says what it does under by "none".
+- The auditor no longer raises on an id with no open (`audit --run` exits 0 on all 8 crossed runs; the tip's
+  exited 1 on one). (This round also marked the turns whose only results lie wholly before the record, on the
+  reading sheet and in the summary. The repair removed that marking: 31.8.)
+- Measured: 1,229 saved calls replayed, 1,085 results changed, every change one of the above. Results grew about
+  20% (envelopes 4,815 to 5,767 characters on average). Rebuilt from their saved forms, 802 of 924 answers are the
+  same and 122 differ: card titles and scope words 71, refused citations of `same_title` 33, of a removed 100% share
+  10, shifted period indexes 14, and 8 refused true sentences now kept.
+
+### 31.3 The loop, the code lead and two prompt files (key loopprompt)
+Files: `brain/loop.py`, `brain/fallback.py`, `brain/answer.py`, `prompts/brain_v3d.md`, `prompts/brain_v4d.md`.
+- A call refused at the soft deadline or the round limit now says it was not run, that the limit is the bot's own
+  clock, and that it says nothing about their history.
+- When time ends a turn and code writes the lead, code adds one time line of its own. When no answer form came at
+  all, code also writes one checked sentence for each other result in hand.
+- A doing part of a message (send it, a schedule, a rule) goes into `give_answer.hand_back`. The model says nothing
+  of it, and code adds one fixed line.
+- `brain_v3d` is v3c with the stale "late October" example replaced by one code still refuses, a part of a period
+  allowed when it is the window itself, a time-of-day line, a line that a limit or an error covers only its own words
+  and that "missing" is said only when a result of this turn says it, a follow-up line, and the friends' line in the
+  tools' words. Three failing examples were cut. `brain_v4d` is v3d plus exactly the four v3c-to-v4c hunks.
+  `brain_v3` stays the default; the old prompt files are byte-same.
+
+### 31.4 The values check's default (key rules)
+(The repair changed this set: 31.8. outcome_you, row_text and row_group, with their guards, went back behind the
+switch, and length_cells joined it. The figures below are of the set as this key built it.)
+File: `brain/verify.py` (values mode only). The default values set is now last round's four rules plus the r30 set
+(`verify.VALUES_RULES_R30`): `timing_out`, `cards_found`, `item_count_free`, `outcome_you`, `row_group`, `row_text`,
+`screen_window`, their guards, and one new rule, `quote_at_row`, which narrows `row_text` (a figure from a row's own
+words is found only in the words that start one of that row's strings, up to the row's marker). `item_count`,
+`rows_shown` and `cited_rows` stay behind the switch. `MVP_BRAIN_VALUES_RULES` now only adds rules; last round's
+default is `values_mode(rules=VALUES_RULES)` in code.
+- On 1,167 saved forms (3,314 sentences, 19 runs) the clock rule alone flips 2, both the true "four areas", now
+  refused whatever the clock.
+- Against last round's default on the saved forms: 23 flips, 20 right and 3 wrong by the hand truths of earlier
+  rounds (the two "four areas" and one true "next 5").
+- Attack sets (the tools' clock pinned): count against cards, false sentences out 46 to 28 of 48 and true refused 9
+  to 3 of 24; honest page counts refused 0 to 2 of 12; row text, false out 2 to 3 of 42; others 4 to 5 of 39.
+
+### 31.5 The merge: seams and checks (key merge)
+No code or test line was changed outside the merge commits. The seams, all offline:
+- The prompts name no cell or note the tools renamed: neither new prompt names `same_title` or any new cell. The
+  friends' line matches the tools' note. The prompt fixture is built through the tools at test time, so the test that
+  every example of v3d and v4d passes values mode ran on the merged tools and the r30 set: it passes (the same
+  inherited set of examples the fixture holds no cell for is refused, as before).
+- The new cells resolve as markers in values mode: `window.days`, `window.platform_starts`, `opened_more_than_once`
+  (`merge/probe_marks.txt`).
+- The r30 rules on results with the new cells (`merge/newcells.txt`): over the 2,739 sentences of 15 runs rebuilt on
+  the merged tools' replayed results, the r30 set flips 19 against last round's default; over the tip's results it
+  flips 20. No flip appears on the new results that is not on the old.
+- One seam the checks did not have before: the new `minutes` cell. Every item row now holds a common number (10 or
+  25), and a figure with no marker counts as found when any cell holds it. On the attack sets rebuilt on the merged
+  tools, 2 of 165 cases move, both because of `minutes`, both false sentences now kept under the old default and the
+  new: "Here are ten of them" over 4 cards (was refused by `item_count_free`) and "You opened <a title with 10>[row]
+  10 times" (was `unfound_number`). Made-up probes (`merge/probe_cells.txt`): "You opened 25 long videos", "Here are 25
+  of your longest videos" and "You spent 10 minutes on <item>" are all kept. Not fixed here; see 31.7.
+- Limit and error results: an error result has no rid, so no marker can cite it, and the prompt does not ask for one.
+  But the live run (31.6) shows the model putting markers on paths that are not cells, three times: `[r1.cannot_see]`
+  (v3d, a platform start), `[r1.on_topic]` (v3d, the learned counts) and `r1.window_dates.*` (both prompts, the
+  record's start; meta, never a cell). Each was refused `bad_ref`. The repair message only says "a bracket that is
+  not a marker of this turn's results"; it does not name the cell that holds the value. On the old tools the
+  loopprompt key's v3d run cited `[r1.cannot_see.history_starts]`, a cell then; the tools renamed that field, so the
+  same habit now meets `bad_ref`. The "anything from 2020" message was not in that sample, so whether the prompt or
+  the tools brought on `window_dates` is not settled. Not fixed here: the repair text is in the full and cells
+  comparison that must stay byte-same.
+
+Checks on the merged tree:
+- Full and cells byte-same as experiments/search-loop (`merge/diff_attack.txt`, the rules key's harness with the 4
+  limits runs and the 8 crossed runs added): 5,984 verdicts, 0 differ; the code lead, both answer builds and
+  `verdict_json` on 4,209 form-modes, 0 differ. These call the builders directly, so they do not take the time-up
+  path. Rebuilt through `loop._finish` from the saved forms (`merge/rebuild/`), 4 of the 472 crossed-run answers
+  differ, in every check mode: the 4 turns that timed out with no answer form now carry code's time line and one
+  sentence per result. This departs from "byte-same" by design (31.3); the rest are the same, and the same as the
+  loopprompt tree's.
+- Planted: `python3 -m mvp.brain.planted` and `eval_brain.py planted`, full, cells and values, print byte for byte
+  what experiments/search-loop prints (the eval's cells and values exit 1 on both, from their known cases).
+- Today's bot: the dry self-test, 67 conversations, 164 of 164 steps, $0; its transcript equals the base's (a1415b0,
+  whose code is 82ecf1d's) but for the build id (3 lines) and the fake sign-in's ids (1 line). `demo/test_demo.py`:
+  10 passed.
+- Values mode against last round's default on the saved forms of 19 runs (`merge/values_final.txt`): 23 sentences
+  differ, the same 23 as the rules key's. Refused now: 5 counts over fewer cards (`item_count_free`; 4 false: three
+  N044 leads and F15.0's "newest 5 of 83" over 2 cards; 1 true "next 5" by one reader) and 2 true "four areas"
+  (`timing_out`). Released now, all true by the hand truths: 11 that were `unfound_number` (the N048.1 line quotes
+  and title figures, the 4 cards of N044.0, the screen's window of N066.1, the reels count of N069.0), 4 that were
+  `outcome` ("you saved it on ..."), and 1 that was both. The verdict reasons are measured; the rule behind each
+  release is the rules key's attribution (`row_text`, `cards_found`, `screen_window`, `row_group`, `outcome_you`;
+  `mvp30/rules/decisions.txt`). 3,314 of 3,314 verdicts of `values_mode(rules=VALUES_RULES)` equal the old default.
+- The whole suite in 4 shards: 6400 passed and 2 skipped, 0 failed (1487, 1394, 1685 with the 2 skips, 1834). That is
+  the 6353 before and the new files: `test_brain_r30_tools.py`, `test_brain_r30_loopprompt.py`,
+  `test_brain_r30_rules.py`.
+
+### 31.6 Live on the fault messages (in sample)
+(Measured before the repair of 31.8 and not run again. The repair made no model call.)
+Every conversation the cause key listed, once with brain_v3d and once with brain_v4d, on the merged tree: set A 27
+conversations (41 turns), set H 24 (32 turns); claude-haiku-5-5, `MVP_BRAIN_STRICT=0`, the default values mode (the
+records carry the r30 set), `--parallel 3`. All four runs ended with every record. $0.223. One reader read every
+answer against the rows (`merge/live/reading.txt`, recounts in `recount.txt`). This is in sample: these are the
+messages the faults were traced on.
+
+Counters (v3d set A / v4d set A / v3d set H / v4d set H; `merge/live/counts.txt`; the crossed run's same keys in
+`counts_mvp29.txt`):
+- Limit-only answers, by the counter: 0 / 0 / 0 / 1. The counter misses answers in the new wording; by hand they
+  are 0 / 0 / 2 / 1 (v3d D04.1 and F03.0, v4d F03.0). All three are true: Instagram holds nothing of 2022, and 2019
+  lies wholly before the record. The crossed run had 0 to 3 per cell on these keys by the counter (D04.1, F03.0,
+  K04.0, N027.0, N062.0).
+- Model sentences that say a read failed or something could not be told, by the counter: 2 / 1 / 3 / 0, against 2
+  to 6 per cell. All six are true limits (how far a video was watched, subscriber counts, popularity outside their
+  history, whether it is a problem) or an ask-back. The one false sentence of that class left, v3d's "Its title is
+  clipped in your history", is not among them: the counter does not catch it.
+- time_up events: 0 in all four. Provider timeouts at 15.09 s: 1 / 0 / 1 / 0, each answered by a code lead with code's
+  time line once.
+- Tool errors: 2 / 6 / 2 / 1 calls; argument errors 0 / 3 / 2 / 1 (a window with two of words, preset and same_as
+  set). Each was followed by a good call.
+- Rewords (a repair message sent): 2 / 2 / 2 / 2. Refused sentences, all forms: 8 / 6 / 2 / 2.
+- Seconds, median / p90: 6.19 / 9.63, 6.65 / 12.03, 6.18 / 8.91, 6.08 / 8.99. On the same keys the crossed run's p90
+  was 9.15 to 11.95 (set A) and 9.76 to 11.17 (set H). v4d set A is the slow one here (p90 12.03), with 3 argument
+  errors (0 in both v4c set A cells) and 1 form error.
+
+By hand, of the 27 keys with a false or wrongly based sentence in the crossed run:
+- v3d: 23 gone, 2 still, 2 unchanged by rule. Still: a scoped share said of everything ("In 2025, the 54 videos you
+  opened were all art and design", of a two-area scope); "Its title is clipped in your history", where the clip is
+  the result's.
+- v4d: 25 gone, 0 still, 2 unchanged by rule.
+- Unchanged by rule: "you saved 6 things" and "3 of your saves are from Instagram". The friend's post is in no total,
+  as the rule says; the readers of the crossed run counted it.
+- Gone in every cell: the three faults of every cell (lengths: "the 83 with a known length are each 10 minutes";
+  learned: "0 of the calculus items are saved, though you opened 85"; rewatches: "no video was opened more than
+  once"), the platform start, late October, the per-year cut, time of day and the numbered titles.
+
+New faults in these answers:
+- v4d, false: "Gaming clips made up 66 of them, all from Clip Factory" (61 and 5 from Gaming Daily; the theme row
+  lists both). No value check sees "all".
+- v4d, wrongly based: "Gaming clips, the theme that had 79 gaming videos in 2026" (79 is the gaming area's cell).
+- v4d: a marker in brackets with no figure went out as an empty "()" after "none in 2021 to 2023".
+- v4d, wrongly based: "The quietest of your channels were Limit Lane, last opened on 16 October 2026, and Brick
+  Realm" (Gaming Daily was last opened on 5 October; recount). The result listed only some channels.
+- Both: on "anything from 2020", the model's true sentence cited `r1.window_dates`, which is meta, was refused twice,
+  and the code lead went out with two year counts that do not answer. In the crossed run all four cells answered.
+- v3d: two code leads after a provider timeout (true points, the time line once, the question's other parts left out).
+
+### 31.7 What is in sample, and what stays open
+- A regression: "anything from 2020" was answered in all four crossed cells and now goes out as a code lead that does
+  not answer, in both prompts, because the model cites a meta path and the reword request does not say which cell to
+  cite (31.5).
+- In sample: every fix was made after reading the faults it is measured on, and the live run is on those messages.
+  `quote_at_row` was shaped with the row-text attack set in view. Only a run on messages no builder read can say how
+  the false rate moves.
+- `minutes` gives every item row a common figure, and an unmarked figure equal to any cell is found. Two attack cases
+  and three probes get out through it. A fix belongs in the values check (which cells may stand for a bare figure),
+  not in a phrase list. (Fixed in 31.8 by length_cells, but for one shape.)
+- "All from <channel>" over a row that lists two channels, and a cell of one row said of another, are not seen by any
+  value rule.
+- The code lead after a provider timeout is true but weak; it answers one part of a many-part question.
+- `item_count` stays off, so a marked count over fewer cards passes. `row_group` was on by judgement (one leak, one
+  right flip); the repair put it behind the switch (31.8). Founder calls: `row_group`, `timing_out` refusing the true
+  "four areas" class, `item_count`, and whether to bring back `outcome_you` and `row_text` in a narrower form. Friends'
+  posts stay out of totals and private rows never make a period sparse, as set.
+- `MVP_BRAIN_VALUES_RULES=r28` no longer reproduces a past build; the record's `values_rules_r28` key lists the r30
+  rules under a stale name.
+- The month timeline over all history is about 7,500 characters, over the 6,000-character cap, because every period
+  asked for is kept.
+- Flaky tests the builders met, not seen in the merged suite's one run: `test_brain_r28_checks`'s figure-of-another-
+  row's-text test (order-dependent, fails the same way on the base tree), `test_brain_r28_repair`'s quote test (a
+  hash seed; the base tree fails it at `PYTHONHASHSEED=7`), and one failure the rules key did not capture.
+- DECISIONS.md is not updated here.
+
+### 31.8 The repair: an independent attack and what was done (key repair)
+An independent checker (key attack, `mvp30/attack/`) found nine faults in the merged tree (ca436d3). Each was
+reproduced with the checker's own scripts, then fixed by a class of case at its source, or moved behind the switch.
+Files: `brain/verify.py` (values mode only), `brain/tools.py`, `brain/fallback.py`, `brain/loop.py`, `eval_brain.py`,
+`eval_claims.py`, the pinned ledger diff, the r28 and r30 tests and a new `tests/test_brain_r30_repair.py`. No model
+call; $0. Evidence in `mvp30/repair/`. All of it is in sample: the attack's sentences were read before each fix.
+
+1. Watch time through the new `minutes` cell. In values mode a figure with no marker counted as found when any cell
+   held it, and every item row now holds a common length (10, 25). "You opened 10 calculus lessons in October" went
+   out. A length cited as time spent also went out ("You spent 25[r1.items[0].minutes] minutes on ..."): values read
+   watch time only on the length totals. Fix: a values rule, `length_cells`, in the default. A length cell (an item's
+   `minutes`, `lengths.longest_minutes` and `shortest_minutes`, the length totals) stands for no bare figure. A
+   sentence that cites a length cell is refused `watch_time` when today's full check of the same sentence reads watch
+   time (values adds no word list of its own). The items tool now says `minutes` is the video's own length, never
+   how long they watched it. Measured: the four bare probes of `hb/minbase.py` are refused now (all four were kept);
+   of the three marked false sentences of `h/wt.py`, two are refused and one still goes out: "You watched <title>
+   for 10[r1.items[2].minutes] minutes" (full refuses it for another reason, not as watch time). The true "<title>
+   runs 25[...minutes] minutes" is kept. On the merge's four live runs (433 sentences, in sample) the rule refuses one
+   true sentence: "They are all long videos, 10 minutes each" (the marker sits after "each", so the figure is bare).
+   The blanket alternative (refuse every cited length) would refuse all four true live sentences that cite a length.
+   `values_mode(rules=VALUES_RULES)` is untouched: the rule is named, and last round's mode does not run it.
+2. A false code sentence after a timeout. With no answer form, `fallback.other_points` wrote one sentence per other
+   result. A result scoped to a private topic has a scope part that no template says, and the `mixed` lead drops the
+   scope line, so "In all your history, you opened 50 videos." went out of a dating-only result. Fix:
+   `fallback.scope_said(res)`, true when every part of the result's scope is said by the templates. Other points skip
+   a result that fails it, and a lead whose own result fails it is not made `mixed` (its scope line stays). The
+   attack's run (`h/loopatk.py`) no longer sends that sentence; every other case prints the same. Rebuilt from the
+   saved forms through `loop._finish`, the 472 crossed-run answers equal the merge's rebuild (0 differ), so the four
+   timeout turns still differ from the tip only by design (31.5).
+3. Three cells that ignored the call's scope: `previous.channels`, `new.channels_first_opened` and `last_watched` on
+   channel and theme rows. Fix: `tools._scope_events`, the index's events of the call's scope (its platforms, names,
+   length and weekday, the private topics out but the one the call may count). `last_watched` is the last open in the
+   scope, whatever the window. A channel counts in `channels_first_opened` when the scope's events of the window hold
+   it (its first open is over all history, as facts' own new channels). `previous.channels` counts the scope's
+   channels in the window before. The notes say "within this call's scope". The auditor (`eval_claims._mvp30_extra`)
+   now recounts `channels_first_opened` in the scope and recounts `previous.channels`; on four scoped and unscoped
+   `changes` results it agrees with the tool, and flags both cells when each is raised by one (`audit_cells.txt`;
+   the pre-repair 3 channels before a scope with 0 items would be flagged). Measured: the attack's own
+   recount (`h/recount.py`, here `repair/recount_scoped.py` with the scoped meaning) on 150 probe calls of the final
+   tree: 1329 cells agree, 378 of them these three (14 fewer cells than on the merged tree: the learned results'
+   friends counts, now gone); the one disagreement is the attack's own known one (a page at offset 200 is not
+   the longest item). All 15 rows the attack flagged agree now. Replay of the 1,229 saved calls against the merged
+   tree: last_watched moved on 113 calls, 111 of them scoped by weekday, length, platform or names; the other 2 are
+   `first_last` calls, whose subject is the scope (the theme row then says the subject's last day).
+   `channels_first_opened` moved on 12; `previous.channels` on none.
+4. A friends' count on every learned result, with a note that invited tying a friend's post to the topic. Fix: a
+   learned read is of one topic, and a friend's post is never placed in a topic (facts.friends_in counts none under a
+   scope by name), so it leaves none out (`hidden.friends` 0, no `left_out` cell). This is a choice, not the base's
+   behaviour: the base counted the friends' posts of the call's base and carried 1 on 1 of 16 probe calls; now none.
+   A search keeps its count (as at the base) with its own note: their friends' posts of the window and base, of any
+   topic, never read by a search and never said to be of the words. Replay: 4 learned calls lose `left_out.friends`
+   (meta.base stays "of what you saved"), 51 searches change note.
+5. Values rules that let out more false sentences than they released true ones. Each loosening rule was taken out
+   alone on the attacker's sets (`repair/h/ablate.py`: 43 false and 30 true sentences of `h/myset.py`, 129 false and
+   36 true of the mvp28 sets; took_ms pinned):
+   - outcome_you (with outcome_cited): lets out 4 false, releases 1 true. Behind the switch.
+   - row_text (with row_quote and quote_at_row): lets out 2 false, releases 0. Behind the switch.
+   - row_group: lets out 1 false (O32), releases 0. Behind the switch.
+   - cards_found: lets out 1 false, releases 8 true. Stays. item_count_free holds 19 false and refuses 2 true. Stays.
+   - screen_window and timing_out: 0 and 0. Stay. length_cells holds 5 false, refuses 0 true. Joins.
+   The default is now last round's four rules and `VALUES_RULES_R30` = timing_out, cards_found, item_count_free,
+   screen_window, screen_uncited, rows_before, page_cited, rows_kept, shown_said, length_cells. Attack figures, old
+   default against the new: mvp28 sets false out 53 to 34 (38 before the repair), true refused 9 to 5 (5 before);
+   `myset` false out 16 to 13 (20 before the repair), true refused 4 to 2 (1 before). The cost, in sample: on the saved forms of 19 runs
+   (3,314 sentences) the new default flips 10 against last round's (7 right, 3 wrong), where the merged default
+   flipped 23 (20 right, 3 wrong): 13 true sentences the r30 set released are refused again as last round refused
+   them (the "you saved it on <day>" outcomes, the title quotes with their figures, the reels count). On the merge's
+   live forms, 2 true title-quote sentences are refused again. Every v3d and v4d example still passes as before.
+6. `hand_back` from a title. Code added its line whenever the form carried a valid hand_back. Fix
+   (`loop._hand_back_theirs`): a hand_back whose longer words (four letters or more) are not at least half words of
+   the message is dropped, with the event `hand_back_not_theirs` (never its words). Titles, captions and tool results
+   are data. When hand_back holds no word of four letters ("do it"), all its words are read instead. The attack's
+   title case gives no line now, with the form kept or refused. The 6 saved forms of this round's live runs that
+   carry a hand_back keep it. A model that paraphrases the person's words into fewer than half of theirs loses the
+   line; that is not measured live.
+7. An items result before its scope's start named `cannot_see.outside_scope_items` in its note, and the items sheet
+   had no `cannot_see`. Fix: the items sheet carries the window's own `cannot_see` cell, as breakdown and timeline do.
+   The true sentence citing it, and the bare figure, are kept in values (`repair/priv2b.py`). Replay: 10 items calls
+   gain the cell (windows after the export's end).
+8. Overfitting. A new test used an in-sample eval message, and the `other_points` docstring quoted that message's sent
+   answer. Both are replaced: the test is a made-up message with other scopes (platform and saves), the docstring
+   says the class. The attack's n-gram scan (`h/overfit.py`) on the final diff no longer finds that message.
+9. The eval's marking. `eval_brain.window_outside_record` added a line to the blind reading sheet and a summary list
+   whose limit-alone marks "do not count against it"; the rubric has no such rule. Removed, with its test; a plain
+   test of the tool's limit cell stays.
+
+Checks on the repaired tree (`mvp30/repair/`):
+- Full and cells byte-same as experiments/search-loop (`diff_attack.txt`): 5,984 verdicts, 0 differ; the code lead,
+  both answer builds and `verdict_json` on 4,209 form-modes, 0 differ.
+- Planted: `python3 -m mvp.brain.planted --check full|cells|values` and `eval_brain planted` under each mode print
+  byte for byte what the base printed (the eval's cells and values exit 1 on both, as before).
+- `values_mode(rules=VALUES_RULES)` equals the pristine default on 3,314 of 3,314 saved sentences.
+- The pinned ledger diff was rewritten (MVP_FREEZE_TOOLFIX_DIFF=1) and read: 14 `last_watched` and 4
+  `channels_first_opened` values of scoped ledgers changed, nothing else.
+- Replay of 1,229 saved calls against the merged tree (`rp/cmp.txt`): every change is in a class above (notes, the
+  three cells, learned friends, items `cannot_see`).
+- The eval's insight comparison (`eval_brain insight`, a tool's sheet against today's fact sheet): 11 identical, 0
+  differ, byte for byte the merged tree's output (the items `cannot_see` cell is today's sheet's own).
+- The whole suite in 4 shards: 6406 passed and 2 skipped, 0 failed (1490, 1400, 1667 with the 2 skips, 1849): the 6400
+  before, 5 tests in `test_brain_r30_repair.py` and one more hand_back test; the eval-marking test became a plain test
+  of the tool's limit cell. The first run on the code commit failed 6 tests of `test_brain_r28_rules.py` that pinned the
+  old r30 set; they were re-pinned.
+- Privacy: the earlier rounds' scan reads `data/`, which this round may not open, so it was not run. A scan of the
+  diff's added lines that reads no data file (e-mail addresses, phone numbers, handles not in the made-up library,
+  web addresses, key-like strings, home paths) found 3 hits on the whole round's diff, all `@pytest` decorators.
+
+Not fixed, and why:
+- "You watched <title> for N[minutes] minutes" still goes out in values (item 1): no word list was added for it.
+- The 13 true sentences of the saved forms that the three rules released are refused again (item 5). The rules stay
+  in the code behind the switch; a narrower form of each would need a new attack set to be measured on.
+- Live behaviour after the repair is not measured; 31.6 is the merged tree before it.

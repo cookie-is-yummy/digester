@@ -4,6 +4,7 @@ of tests/brain_library.py and checks the fixed result against a recount from the
 test_brain_tools.py, which share nothing with facts.py). Offline: no model call, no network. Every title, channel,
 handle and theme is made up."""
 import os
+import re
 import sys
 from collections import Counter
 from datetime import date, datetime
@@ -279,7 +280,9 @@ def test_an_order_by_times_opened_over_a_tie_says_so(brain, args, message):
     # N044.0, N044.1, N056.0: "the most-opened long videos are led by ..." where every video was opened once
     assert max(Counter(r["id"] for r, _d in opens_at()).values()) == 1                                        # recount
     env_, _t = call(brain, "items", args, message)
-    assert env_["meta"]["tie"] == "all" and any("no ranking by times opened" in n for n in env_["meta"]["notes"])
+    # mvp30, re-pinned: the note says the fact (nothing was opened again) and a cell holds it
+    assert env_["meta"]["tie"] == "all" and any("nothing here was opened again" in n for n in env_["meta"]["notes"])
+    assert env_["sheet"]["opened_more_than_once"] == 0
 
 
 def test_a_new_theme_says_its_own_first_day(brain):
@@ -344,7 +347,8 @@ def test_a_search_code_lead_goes_out_with_its_cards_and_the_ask_back(brain):
                             "that video about integrals, when did i watch it", form=form)
     assert code["how"] == "template" and len(out["cards"]) == 5 and out["ask"]
     lines = out["text"].split("\n")
-    assert lines[1] == "Which one do you mean?" and lines[2].startswith("• Integrals by parts · [Limit Lane](")
+    # mvp30, re-pinned: a card's title keeps the item's episode number
+    assert lines[1] == "Which one do you mean?" and re.match(r"• Integrals by parts #\d+ · \[Limit Lane\]\(", lines[2])
     assert "the first one" not in out["text"]          # the model's ask-back words never go out; code's question does
     assert out["points"] == []                         # cells mode: no model point under a code lead
 
