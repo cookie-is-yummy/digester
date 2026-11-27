@@ -138,7 +138,8 @@ def test_the_rules_of_this_round_are_pinned_and_run_in_values_mode_only():
     # the repair's rules narrow or complete these (tests/test_brain_r28_repair.py)
     repair = {"row_quote", "rows_before", "screen_uncited", "outcome_cited", "page_cited", "shown_said", "rows_kept"}
     assert V.VALUES_RULES_R28 == frozenset(r28 | repair) and not (V.VALUES_RULES_R28 & V.VALUES_RULES)
-    assert V.VALUES_RULES_ALL == V.VALUES_RULES | V.VALUES_RULES_R28 | V.VALUES_RULES_PREP | V.VALUES_RULES_NEW30
+    assert V.VALUES_RULES_ALL == V.VALUES_RULES | V.VALUES_RULES_R28 | V.VALUES_RULES_PREP | V.VALUES_RULES_NEW30 | \
+        V.VALUES_RULES_R31   # mvp31
     assert r28 <= V.VALUES.rules and not (r28 & (V.FULL.rules | V.CELLS.rules))   # on here (the fixture)
     assert "item_count" in V.VALUES_REFUSE_R28 and "item_count" in V.VALUES_CODES_R28
     assert "item_count" not in V.VALUES_REFUSE and "item_count" not in V.VALUES_CODES   # last round's lists

@@ -4610,7 +4610,13 @@ VALUES_REFUSE_R28 = {
     "item_count": "(a) a count of the rows a page of items shows (its items.count, or a figure only that length "
                   "holds) that is not the number of its rows the answer shows (item cards and rows named)",
 }
-VALUES_REFUSE_DEFAULT = {**VALUES_REFUSE, **VALUES_REFUSE_R28}   # mvp30: what the default values mode refuses
+# mvp31: the refusal rule "length_unit" adds (VALUES_RULES_R31, in the default)
+VALUES_REFUSE_R31 = {
+    "length_bound": "(a) a length cell cited as the bound of a comparison over other videos: the cell is one video's "
+                    "own length",
+}
+VALUES_CODES_R31 = frozenset(VALUES_REFUSE_R31)
+VALUES_REFUSE_DEFAULT = {**VALUES_REFUSE, **VALUES_REFUSE_R28, **VALUES_REFUSE_R31}   # what the default refuses
 VALUES_SAFETY = ("sensitive", "psych", "outcome", "language", "link", "watch_time")
 # the number-word variant: "refuse" (a small number word or a fraction word is a value: refused when no result holds
 # it) or "flag" (never refused). Chosen by DESIGN 26's measure
@@ -4995,6 +5001,369 @@ def _v_row_holds(row, claim):
     return False
 
 
+# ------------------------------------------------------------------ mvp31: seams of values mode (VALUES_RULES_R31)
+# The unit word of a cell is read from its key, as the tools name it: a cell of minutes (an item row's `minutes`,
+# `lengths.longest_minutes`, `shortest_minutes`, the sheet's `long_median_min`) and a cell of days (`window.days`,
+# `previous.days`, `windows.a.days`, `days_active`). Rule "length_unit": a length is cited with its marker right after
+# the figure and the unit after the marker ("25[r1.items[0].minutes] minutes"), the form the values check binds; the
+# unit word written between the figure and a minute cell's marker ("25 minutes[...]") is refused with a reword that
+# gives that form (letting it through was measured to let out false sentences the form of before refused: time spent
+# said with no watch word, the other row's or the other end's length; DESIGN 31.9). A hedge of direction on a length is
+# held strictly. Rule "days_unit": "366 days[r1.window.days]" is bound to the cell and checked, and a day cell's
+# figure is never a count of things ("30[...] videos", "30 videos[...]").
+def _v_minute_key(key):
+    """A cell that holds a length in minutes, read from its key's own unit word. The length totals of I.LENGTH_KEYS
+    (hours and shares of length) are never said and are not of this kind."""
+    k = str(key or "")
+    return k not in I.LENGTH_KEYS and (k == "minutes" or k.endswith(("_minutes", "_min")))
+
+
+def _v_days_key(key):
+    """A cell that holds a number of days, read from its key's own unit word."""
+    k = str(key or "")
+    return k == "days" or k.startswith("days_") or k.endswith("_days")
+
+
+def _v_unit_kind(key, rules):
+    if "length_unit" in rules and _v_minute_key(key):
+        return "minutes"
+    if "days_unit" in rules and _v_days_key(key):
+        return "days"
+    return None
+
+
+def _v_length_key(key):
+    return key in _V_LENGTH_KEYS or _v_minute_key(key)
+
+
+# the figure and its unit right before a cell's marker, in the shapes NUM_TAIL leaves out ("25 min", "a 25-minute",
+# "366 days", "a 30-day"); "25 minutes" NUM_TAIL reads itself
+_V_UNIT_WORDS = {"minutes": r"minutes?|mins?", "days": r"days?"}
+_V_UNIT_TAIL = {k: re.compile(r"(?:(?P<hedge>\b" + _HEDGE_RX + r")\s+)?(?P<num>" + _NUM_RX + r")\s*(?:-\s*)?"
+                              r"(?P<unit>" + w + r")\.?\s*$", re.I) for k, w in _V_UNIT_WORDS.items()}
+
+
+_V_NOUN_TAIL = re.compile(r"(?:(?P<hedge>\b" + _HEDGE_RX + r")\s+)?(?P<num>" + _NUM_RX + r")\s+(?P<unit>[A-Za-z]+)\s*$")
+
+
+def _v_unit_said(raw, markers, rules):
+    """A unit cell's marker with no figure read before it takes the figure and unit written right before it, so the
+    figure is checked against the cell. A minute cell's figure NUM_TAIL read with its minutes word is marked the same
+    way (`mk.unit` = "minutes")."""
+    prev_end = 0
+    for mk in sorted(markers, key=lambda m: m.mstart):
+        kind = _v_unit_kind(mk.key, rules) if mk.kind == "value" else None
+        if kind and isinstance(mk.value, (int, float)) and not isinstance(mk.value, bool) and not mk.said:
+            m = _V_UNIT_TAIL[kind].search(raw[prev_end:mk.mstart])
+            c = None if m else _V_NOUN_TAIL.search(raw[prev_end:mk.mstart])
+            if c and not _V_COUNT_NOUN.match(c.group("unit")):
+                c = None
+            if m and m.group("hedge") and kind == "days":
+                m = None   # a hedged figure stays unbound, as before: only an exact one is bound to the cell
+            if m or c:   # a count noun between the figure and a unit cell's marker is read too, and refused
+                m = m or c
+                mk.start, mk.said = prev_end + m.start(), m.group(0).strip()
+                # (a minutes word NUM_TAIL leaves out, "25 min", "a 25-minute", is marked "min": never bound)
+                mk.num = _num_of(m.group("num"))
+                mk.unit = m.group("unit").lower() if m is c else ("min" if kind == "minutes" else kind)
+                mk.hedge = (m.group("hedge") or "").lower()
+        elif kind == "minutes" and mk.unit.startswith("minute"):
+            mk.unit = "minutes"
+        prev_end = mk.end
+
+
+_V_HEDGE_OVER = frozenset({"over", "more than", "just over"})
+_V_HEDGE_UNDER = frozenset({"under", "less than", "fewer than", "just under"})
+
+
+def _v_unit_check(mk, rules):
+    """check_value of a value marker, a unit cell's unit word read from its key: days bound to a cell of days; the
+    minutes word between the figure and a minute cell's marker refused with the form to write; a count noun there
+    refused. A length with a hedge of direction ("under 10[...] minutes") is held strictly: a length "under" a figure
+    is below it, never the figure itself."""
+    kind = _v_unit_kind(mk.key, rules) if mk.kind == "value" else None
+    if kind and mk.unit and mk.unit != kind and _V_COUNT_NOUN.match(mk.unit):
+        return "wrong_measure", f"{mk.path} is a number of {kind}, not of {mk.unit}"
+    if kind == "minutes" and mk.unit in ("minutes", "min") and not (mk.unit == "minutes" and
+                                                                    mk.key == "long_median_min"):
+        fig = (mk.hedge + " " if mk.hedge else "") + (f"{mk.num:g}" if mk.num is not None else "N")
+        return "wrong_measure", (f"a length's marker goes right after the figure, its unit after the marker: "
+                                 f"{fig}[{mk.path}] minutes")
+    if kind and mk.unit == kind:
+        mk = copy.copy(mk)
+        mk.unit = ""
+    r = check_value(mk)
+    if r is None and kind == "minutes" and mk.num is not None and mk.hedge in (_V_HEDGE_OVER | _V_HEDGE_UNDER):
+        v = float(mk.value)
+        if (mk.hedge in _V_HEDGE_OVER and not v > mk.num) or (mk.hedge in _V_HEDGE_UNDER and not v < mk.num):
+            return "wrong_value", f"'{_clip(mk.said, 24)}' does not hold of {mk.path} = {_fmt(mk.rest, mk.value)}"
+    return r
+
+
+def _v_blanked(raw, markers):
+    """raw with every marker blanked, and a row marker with the row's name before it (a title is data, never words of
+    the sentence)."""
+    t = list(raw)
+    for mk in markers:
+        for i in range(mk.start if mk.kind == "row" else mk.mstart, mk.end):
+            t[i] = " "
+    return "".join(t)
+
+
+def _v_clause(t, at, end=None):
+    """The clause of the blanked text t that holds the span at `at`, cut at _BREAKS."""
+    cuts = [m.end() for m in _BREAKS.finditer(t[:at])]
+    a = cuts[-1] if cuts else 0
+    nxt = _BREAKS.search(t, end if end is not None else at)
+    return a, t[a:nxt.start() if nxt else len(t)]
+
+
+def _v_time_spent(raw, markers, at, end=None):
+    """True when the clause holding the figure at `at` says it as time they spent, in today's own watch-time words:
+    WATCH_TIME and insight's _WATCH_TIME over the clause, and the clause opening on what they did (_CONSUME)."""
+    t = _v_blanked(raw, markers)
+    a, clause = _v_clause(t, at, end)
+    return bool(_CONSUME.match(_v_time_opener(t[a:at]).lstrip(" \"“'‘")) or WATCH_TIME.search(clause) or
+                I._WATCH_TIME.search(clause))
+
+
+_V_WEEKDAY = re.compile(r"\b(?:" + "|".join(I.WEEKDAYS) + r")s?\b", re.I)
+
+
+def _v_time_opener(s):
+    """s with an opening time phrase taken off ("Last week ", "In October ", "On 20 October 2026 "): the time words
+    are the values check's own date and time patterns, with at most two words before them."""
+    b = s
+    for rx in (_TIME_PH, _V_DAYMON, _V_MONYEAR, _V_MONALONE, _V_YEAR, _SPAN_N, _V_WEEKDAY):
+        b = rx.sub(lambda m: "\x01" * len(m.group(0)), b)
+    m = re.match(r"^\s*(?:[A-Za-z]+\s+){0,2}\x01+[\x01\s,]*", b)
+    return s[m.end():] if m else s
+
+
+def _v_length_bound(raw, markers):
+    """Rule "length_unit": a length cell cited as the bound of a comparison ("videos longer than 25 minutes[...]"):
+    the cell is one video's own length, never a bound over other videos. The comparison is today's own reading
+    (_COMPARATIVE) ending right before the figure."""
+    t = _v_blanked(raw, markers)
+    for mk in markers:
+        if mk.kind == "value" and _segs(mk.rest) and _v_minute_key(_segs(mk.rest)[-1][0]):
+            pre = t[:mk.start if mk.said else mk.mstart].rstrip()
+            last = None
+            for c in _COMPARATIVE.finditer(pre):
+                last = c
+            if last is not None and last.end() == len(pre):
+                return f"{mk.path} is one video's own length, not a bound over others: say it of that video"
+    return None
+
+
+_V_TIME_SPENT = "a video's length is its own, never time they spent: say it of the video"
+
+
+def _v_length_as_time(raw, markers):
+    """Rule "length_unit": a length cell cited in a clause that says it as time they spent -> the detail, else None."""
+    for mk in markers:
+        if mk.kind == "value" and _segs(mk.rest) and _v_length_key(_segs(mk.rest)[-1][0]) and \
+                _v_time_spent(raw, markers, mk.start if mk.said else mk.mstart, mk.end):
+            return _V_TIME_SPENT
+    return None
+
+
+def _v_unit_bound(raw, markers, rules):
+    """Rule "days_unit": [(code, detail)]: a day cell's figure is never followed by a count noun ("30[...] videos")."""
+    out = []
+    for mk in markers:
+        if mk.kind != "value" or "days_unit" not in rules or not _v_days_key(mk.key) or not mk.said or mk.unit:
+            continue
+        nx = re.match(r"\s*([A-Za-z]+)", raw[mk.end:])
+        if nx and _V_COUNT_NOUN.match(nx.group(1)):
+            # the count noun after a day cell's figure (the class rule "day_typed" reads for a figure with no marker)
+            out.append(("wrong_measure", f"{mk.path} is a number of days, not of {nx.group(1).lower()}"))
+    return out
+
+
+def _v_length_paths(ledger, n):
+    """The paths of the length cells (minutes) of this turn's results that hold n, the totals before the item rows."""
+    out = []
+
+    def walk(o, path, rid):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                p = f"{path}.{k}" if path else k
+                if isinstance(v, (int, float)) and not isinstance(v, bool) and _v_minute_key(k) and \
+                        abs(float(v) - n) < 1e-6:
+                    out.append(f"{rid}.{p}")
+                else:
+                    walk(v, p, rid)
+        elif isinstance(o, list):
+            for i, v in enumerate(o):
+                walk(v, f"{path}[{i}]", rid)
+    for rid, r in ledger.by_rid.items():
+        walk(r.sheet if isinstance(r.sheet, dict) else {}, "", rid)
+    return sorted(out, key=lambda p: ("items[" in p, p))
+
+
+def _v_length_cells(ledger):
+    """The paths of this turn's length cells (minutes), each list's rows written once with [i]."""
+    out = set()
+
+    def walk(o, path, rid):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                p = f"{path}.{k}" if path else k
+                if isinstance(v, (int, float)) and not isinstance(v, bool) and _v_minute_key(k):
+                    out.add(f"{rid}.{re.sub(r'\[\d+\]', '[i]', p)}")
+                else:
+                    walk(v, p, rid)
+        elif isinstance(o, list):
+            for i, v in enumerate(o):
+                walk(v, f"{path}[{i}]", rid)
+    for rid, r in ledger.by_rid.items():
+        walk(r.sheet if isinstance(r.sheet, dict) else {}, "", rid)
+    return sorted(out, key=lambda p: ("[i]" in p, p))
+
+
+# rule "cite_hint": the repair text of a bracket that is no marker names what can be cited by path, never by the value
+# written before it: a meta copy's twin in the sheet (the same key holding the same value), the cells of a group the
+# bracket names, of the kind written before it (a date, a number); nothing it would have to guess
+def _v_leaves(o, path=""):
+    """[(path, value)] of the scalar cells under o (its `ref` and notes left out)."""
+    out = []
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k not in ("ref", "notes", "note"):
+                out += _v_leaves(v, f"{path}.{k}" if path else k)
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            out += _v_leaves(v, f"{path}[{i}]")
+    elif o is not None and not isinstance(o, bool):
+        out.append((path, o))
+    return out
+
+
+def _v_kind(v):
+    if isinstance(v, (int, float)):
+        return "number"
+    return "date" if isinstance(v, str) and re.match(r"^\d{4}-\d\d-\d\d", v) else "text"
+
+
+def _v_written_kind(prefix):
+    """The kind of the value written right before a bracket: "date", "number" or None."""
+    if DATE_TAIL.search(prefix):
+        return "date"
+    t = NUM_TAIL.search(prefix) or _V_UNIT_TAIL["minutes"].search(prefix) or _V_UNIT_TAIL["days"].search(prefix)
+    return "number" if t and t.group("num") else None
+
+
+def _v_twins(sheet, mpath, mval):
+    """The sheet cells that are a meta cell's twin: the same key holding the same value, never a row's cell (meta
+    speaks of the result, not of its rows), the paths sharing more of the meta path's words first."""
+    def words(p):
+        return {w for k, _i in _segs(p) for w in k.split("_")}
+    key = _segs(mpath)[-1][0] if _segs(mpath) else ""
+    hits = [p for p, v in _v_leaves(sheet) if "[" not in p and _segs(p)[-1][0] == key and type(v) is type(mval) and
+            v == mval]
+    return sorted(hits, key=lambda p: (-len(words(mpath) & words(p)), len(p), p))
+
+
+def _v_bad_detail(raw, ledger):
+    """Rule "cite_hint": the repair text of a bracket that is no marker in values mode."""
+    if re.search(r"[{}]", raw):
+        return _bad_detail(raw, ledger)
+    for m in _BRACKET.finditer(raw):
+        body = m.group(0)[1:-1].strip()
+        if body.startswith("=") or not re.fullmatch(PATH, body):
+            continue
+        rid, rest = body.split(".", 1)
+        r = ledger.get(rid)
+        if r is None:
+            return f"{rid} is not a result with numbers in this turn"
+        sheet = r.sheet if isinstance(r.sheet, dict) else {}
+        try:
+            v = _resolve(sheet, rest.removesuffix(".count"))
+        except (KeyError, IndexError, TypeError):
+            v = KeyError
+        if rest.endswith(".count") and isinstance(v, list):
+            continue
+        if v is not KeyError and not isinstance(v, (dict, list)) and v is not None and not isinstance(v, bool):
+            continue   # a marker
+        want = _v_written_kind(raw[:m.start()])
+        td = DATE_TAIL.search(raw[:m.start()])
+        if want == "date" and not re.search(r"\b\d{1,2}(?:st|nd|rd|th)?\s+" + _MON_RX + r"|" + _MON_RX + r"\w*\.?\s+\d{1,2}\b",
+                                            td.group(0), re.I):
+            want = "no_day"   # a year or a month alone: which date cell it is cannot be told, so none is named
+        head = f"[{_clip(body, 34)}]"
+        if v is not KeyError and isinstance(v, (dict, list)):
+            leaves = [(f"{rid}.{rest}.{p}" if not p.startswith("[") else f"{rid}.{rest}{p}", x) for p, x in
+                      _v_leaves(v)]
+            if not leaves:
+                return f"{head} holds no cell to cite"
+            pick = [] if want == "no_day" else \
+                [p for p, x in leaves if want is None or _v_kind(x) == want] or [p for p, _x in leaves]
+            # named only when the bracket narrows them to a few: among many, the first would be a guess
+            return _fit(f"{head} holds several cells: cite one of them by its path", pick if len(pick) <= 3 else [])
+        mrest = re.sub(r"^meta\.", "", rest)
+        meta = {k: x for k, x in (r.meta or {}).items() if k not in ("hidden", "notes")}
+        try:
+            mv = meta if rest == "meta" else _resolve(meta, mrest) if not re.match(r"^sheet\.", rest) else KeyError
+        except (KeyError, IndexError, TypeError):
+            mv = KeyError
+        mrest = "" if rest == "meta" else mrest
+        if mv is not KeyError and mv is not None:
+            pairs = [(mrest, mv)] if not isinstance(mv, (dict, list)) else \
+                [(f"{mrest}.{p}" if mrest and not p.startswith("[") else f"{mrest}{p}", x) for p, x in _v_leaves(mv)]
+            twins, kinds = [], [(p, x) for p, x in pairs if want is None or _v_kind(x) == want or
+                                (want == "no_day" and _v_kind(x) == "date")]
+            if want == "no_day":
+                kinds = kinds * 4   # never named: more than three
+            for p, x in kinds if len(kinds) <= 3 else []:
+                # every sheet cell of the same key holding the same value: where two do ("days" of the window and of
+                # the window before), both are named and the key tells them apart; never one picked among them
+                twins += [f"{rid}.{q}" for q in _v_twins(sheet, p, x) if f"{rid}.{q}" not in twins]
+            if len(kinds) > 3 or len(twins) > 3:
+                return f"{head} is meta, which is not cited: cite one cell of the result's sheet by its path"
+            if twins:
+                return _fit(f"{head} is meta, which is not cited: cite the sheet's own cell", twins[:2])
+            return f"{head} is meta, which is not cited, and the sheet holds no such cell: write it without a marker"
+        if re.match(r"^sheet\.", rest):
+            return _bad_detail(raw, ledger)
+        return f"{head} is no cell of {rid}: cite one cell of a result by its path"
+    return _bad_detail(raw, ledger)
+
+
+def _fit(head, paths, sep=", as "):
+    """head and the paths named, within the 160 characters repair_message keeps of a reason (a path is never cut)."""
+    for k in range(min(len(paths), 3), 0, -1):
+        s = head + sep + " or ".join(paths[:k])
+        if len(s) <= 158:
+            return s
+    return head
+
+
+# rule "paren_tidy": a marker written alone inside brackets ("in May ([r1.x])") leaves "()" when the markers
+# are taken out. Only such a bracket goes, decided on the sentence as written (its content is markers and the
+# separators between them, nested ones too); every other bracket, a title's "print()" or one the model typed empty,
+# stays as written
+def _v_unbracket(raw):
+    mask = list(raw)
+    for m in list(CALC.finditer(raw)) + list(_BRACKET.finditer(raw)):
+        for i in range(m.start(), m.end()):
+            mask[i] = "\x01"
+    s = "".join(mask)
+    gone = [False] * len(raw)
+    while True:
+        hit = None
+        for m in re.finditer(r"\(([^()]*)\)", s):
+            if re.search(r"[\x01\x02]", m.group(1)) and re.fullmatch(r"[\s,;:\x01\x02]*", m.group(1)):
+                hit = m
+                break
+        if hit is None:
+            break
+        for i in range(hit.start(), hit.end()):
+            gone[i] = True
+        s = s[:hit.start()] + "\x02" * (hit.end() - hit.start()) + s[hit.end():]
+    return "".join(c for c, g in zip(raw, gone) if not g)
+
+
 def _values_marked(raw, markers, ledger, turn, nw_refuse, pool=None, cm_rules=None):
     """Rules (a) and (c), and watch_time on a length cell: [(code, detail)] from the markers alone. `cm_rules`: the
     values mode's rules (mvp27: "row_name")."""
@@ -5017,7 +5386,8 @@ def _values_marked(raw, markers, ledger, turn, nw_refuse, pool=None, cm_rules=No
                     out.append(("watch_time", f"{mk.path} is a length total, never said"))
                 prev_end = mk.end
                 continue
-            r = check_value(mk)
+            r = _v_unit_check(mk, cm_rules) if cm_rules is not None and {"length_unit", "days_unit"} & set(cm_rules) \
+                else check_value(mk)
             if r and r[0] in ("wrong_value", "wrong_name", "wrong_measure", "watch_time", "bad_ref"):
                 out.append(r)
             elif not r and mk.kind == "count" and mk.rest == "items.count" and pool is not None and \
@@ -5406,7 +5776,15 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
         out += extra
         if not found and quoted(m.start("num"), m.end("num")):
             found = True
-        if not found:
+        if not found and "length_unit" in rules and not (m.group("pct") or m.group("sign")) and \
+                re.match(r"\s*(?:-\s*)?(?:minutes?|mins?)\b", t[m.end():], re.I) and _v_length_paths(ledger, n):
+            # rule "length_unit": a figure written as minutes that only a length cell holds (length_cells: a length
+            # stands for no bare figure); the reword names the cell, or says a length is never time spent
+            fig = _clip(m.group("num"), 12)
+            out.append(("unfound_number", _V_TIME_SPENT if _v_time_spent(raw, markers, m.start("num"), m.end()) else
+                        _fit(f"'{fig} minutes' is a length: cite the length cell of the video it is said of right after "
+                             f"the figure", [f"{fig}[{p}] minutes" for p in _v_length_cells(ledger)[:3]])))
+        elif not found:
             out.append(("unfound_number", f"'{_clip(m.group(0).strip(), 20)}' has no marker and no result of this "
                                           "turn holds it: cite its cell"))
         t = _blank(t, m.start(), m.end())
@@ -5608,7 +5986,16 @@ def _values_safety(raw, plain, low, markers, ledger, res, turn, pool, cm_rules=N
         # rule "length_cells": a video's length cited in a sentence that today's full check reads as watch time (its
         # own policy words; values reads no word list of its own): a length is said of the video, never as time spent
         if "watch_time" in check_sentence(raw, ledger, turn, mode=FULL).reasons:
-            out.append(("watch_time", "a video's length is its own, never time they spent: say it of the video"))
+            out.append(("watch_time", _V_TIME_SPENT))
+    if cm_rules is not None and "length_unit" in cm_rules:
+        d = _v_length_as_time(raw, markers)
+        if d and ("watch_time", d) not in out:
+            out.append(("watch_time", d))
+        d = _v_length_bound(raw, markers)
+        if d:
+            out.append(("length_bound", d))
+    if cm_rules is not None and "days_unit" in cm_rules:
+        out += [x for x in _v_unit_bound(raw, markers, cm_rules) if x not in out]
     return out
 
 
@@ -5630,6 +6017,8 @@ def check_sentence_values(sentence, ledger, turn=None, where="point", index=0, m
         out.reasons.append("empty")
         return out
     markers, bad = parse(raw, ledger, CELLS_LOOSE)
+    if cm.rule("length_unit") or cm.rule("days_unit"):
+        _v_unit_said(raw, markers, cm.rules)
     for mk in markers:
         if mk.kind == "calc":
             for p in (mk.a, mk.b):
@@ -5645,7 +6034,7 @@ def check_sentence_values(sentence, ledger, turn=None, where="point", index=0, m
     res = ledger.get(out.rid) if out.rid else None
     plain = strip_markers(raw)
     low = plain.lower()
-    found = [(b, _bad_detail(raw, ledger)) for b in bad]
+    found = [(b, _v_bad_detail(raw, ledger) if cm.rule("cite_hint") else _bad_detail(raw, ledger)) for b in bad]
     found += _values_marked(raw, markers, ledger, turn, nw, pool, cm.rules)
     found += _values_unmarked(raw, markers, ledger, turn, pool, nw, cm.rules)
     found += _values_safety(raw, plain, low, markers, ledger, res, turn, pool, cm.rules)
@@ -5664,7 +6053,7 @@ def check_sentence_values(sentence, ledger, turn=None, where="point", index=0, m
             for c in check_sentence(sentence, ledger, turn, where, index, mode=m_).reasons:
                 out.flags.append({"code": c, "mode": name})
     if not out.reasons:
-        out.sent = plain
+        out.sent = strip_markers(_v_unbracket(raw)) if cm.rule("paren_tidy") else plain
     return out
 
 
@@ -5852,7 +6241,18 @@ VALUES_RULES_SWITCHED = VALUES_RULES_R28 | VALUES_RULES_PREP | VALUES_RULES_NEW3
 # quote_at_row, row_group.
 VALUES_RULES_R30 = frozenset({"timing_out", "cards_found", "item_count_free", "screen_window", "screen_uncited",
                               "rows_before", "page_cited", "rows_kept", "shown_said", "length_cells"})
-VALUES_RULES_ALL = VALUES_RULES | VALUES_RULES_SWITCHED
+# mvp31 (DESIGN 31.9): seams of values mode, each closed by a class of case and ON by default; each only refuses
+# more, or rewords a refusal. "length_unit": the minutes word between a figure and a minute cell's marker is refused
+# with a reword that gives the form the check binds (the marker right after the figure), a hedge of direction on a
+# length is held strictly, and a length is never time spent nor the bound of a comparison; a figure written as minutes
+# that only a length cell holds is refused as before (length_cells), its reword in the same form. "days_unit": a
+# figure written with its days word before a day cell's marker is bound to it, and a day cell's figure is never a count
+# of things. "cite_hint": the reword for a bracket that is no marker names what can be cited by path (a meta copy's
+# twin in the sheet, a group's own cells of the kind written, when they are few), never by the value written.
+# "paren_tidy": a bracket that held only markers leaves no "()" in the sentence sent. values_mode(rules=VALUES_RULES |
+# VALUES_RULES_R30) is the mvp30 default, unchanged.
+VALUES_RULES_R31 = frozenset({"length_unit", "days_unit", "cite_hint", "paren_tidy"})
+VALUES_RULES_ALL = VALUES_RULES | VALUES_RULES_SWITCHED | VALUES_RULES_R31
 VALUES_RULES_ENV = "MVP_BRAIN_VALUES_RULES"
 
 
@@ -5875,9 +6275,10 @@ def values_rules_env(value=None):
     return frozenset(out & VALUES_RULES_SWITCHED)
 
 
-# the default rules of the values mode: the mvp27 rules and the r30 set, plus what MVP_BRAIN_VALUES_RULES switches on
+# the default rules of the values mode: the mvp27 rules, the r30 set and the r31 set, plus what MVP_BRAIN_VALUES_RULES
+# switches on
 # (read once, here; the switch only adds rules)
-VALUES_DEFAULT_RULES = VALUES_RULES | VALUES_RULES_R30 | values_rules_env()
+VALUES_DEFAULT_RULES = VALUES_RULES | VALUES_RULES_R30 | VALUES_RULES_R31 | values_rules_env()
 
 
 def values_mode(number_words=None, rules=None):

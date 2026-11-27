@@ -8778,3 +8778,142 @@ Not fixed, and why:
 - The 13 true sentences of the saved forms that the three rules released are refused again (item 5). The rules stay
   in the code behind the switch; a narrower form of each would need a new attack set to be measured on.
 - Live behaviour after the repair is not measured; 31.6 is the merged tree before it.
+
+### 31.9 Three seams before the two-candidate run: one closed, two given a reword (mvp31, keys fix and repair)
+Branch `brain-r31-local` from experiments/search-loop (4de32a3). A live check on the tip (`mvp31/smoke/`, 10
+conversations, each new prompt once) showed three seams: a true length written "10 minutes[r1.lengths.longest_minutes]"
+was refused; a value the model is shown in meta (`window_dates`) or a group of cells (`[r1.cannot_see]`) was cited and
+refused `bad_ref` with a reword that named nothing; a marker alone in brackets went out as "()". The first build
+(key fix, 1ebba58) let all three through. Two independent checks (keys v1 and v2) then showed that it let out false
+sentences that 4de32a3 refused: 34 of the 64 false sentences of v1's hand attack, and 11 of 11 false answers to a
+question about a year before the record. The repair (key repair) keeps one rule for every change:
+
+**No rule of this round lets out a sentence that 4de32a3's values default refused.** Each rule refuses more, or
+rewords a refusal. Where a true sentence could only be let out with false ones, it stays refused, and the reword tells
+the model the form that passes.
+
+The rules are `verify.VALUES_RULES_R31` (length_unit, days_unit, cite_hint, paren_tidy), on by default, values mode
+only. `values_mode(rules=VALUES_RULES | VALUES_RULES_R30)` is the mvp30 default, unchanged. Files: `brain/verify.py`,
+`brain/tools.py` (texts only, below), `tests/test_brain_r31_fix.py` (10 tests), three re-pinned rule-set tests and one
+re-pinned note test (`test_brain_toolfix2`). No
+prompt file changed. Evidence in `mvp31/fix/` (the build) and `mvp31/repair/` (the repair). All of it is in sample:
+the seams were read on the smoke and merge live forms, and the repair on the checkers' attack sentences.
+
+1. Lengths (`length_unit`). The values check binds a figure to a length cell when the marker comes right after the
+   figure and the unit after the marker: "25[r1.items[0].minutes] minutes". 4de32a3 kept that form already.
+   - The first build also took "25 minutes[...]", "25 min[...]" and "a 25-minute[...] video". Measured, that form let
+     out false sentences the form of before refused: another row's length said of a named video, a hedge used as a
+     bound ("most run under 10 minutes[longest]" when every one is 10), and time spent said in words no check reads.
+     Guards were tried one at a time (row binding, strict hedges, a clause with "you" or "your" in it). Then a fresh
+     set was written (in sample from then on: it decided this): 5 of its 16 base-refused false sentences still went out ("That session lasted
+     25 minutes[...]", "The shortest one runs 25 minutes[r1.lengths.longest_minutes]"). No word-free guard reads
+     those, so the form is not taken.
+   - Now "N minutes[cell]", "N min[cell]" and "a N-minute[cell]" on a cell of minutes are refused `wrong_measure`,
+     and the reword gives the bound form: "a length's marker goes right after the figure, its unit after the marker:
+     10[r1.lengths.longest_minutes] minutes". A cell of minutes is read from its key (`minutes`, `*_minutes`, `*_min`,
+     never the length totals of `I.LENGTH_KEYS`). The sheet's `long_median_min` read "N minutes[...]" before and
+     still does. A count noun between a figure and a minute cell's marker ("25 videos[...minutes]") is refused.
+   - A hedge of direction on a length is held strictly: "under 10[cell] minutes" needs the cell below 10, "over"
+     above it. Before, a hedge allowed the figure itself. This also closes the marker-before-unit twins of the hedge
+     attack.
+   - Kept from the build: a length cited in a clause that says it as time spent is refused `watch_time` (today's own
+     words: `WATCH_TIME`, insight's `_WATCH_TIME`, a clause opening on `_CONSUME` after a time phrase); a length used
+     as the bound of a comparison is refused `length_bound`. A bare "10 minutes" that only a length cell holds stays
+     refused (length_cells). Its reword now names the cells by path pattern, in the bound form ("as
+     10[r1.lengths.longest_minutes] minutes or ... 10[r1.items[i].minutes] minutes"), never one row picked by value.
+2. Days (`days_unit`, new in the repair). "366 days[r1.window.days]" was never compared to the cell (the figure was
+   found in any cell), so a swapped "the 2023 window is 366 days[...a.days] and 2024 365 days[...b.days]" went out.
+   Now a figure written with its days word before a cell of days (`days`, `days_*`, `*_days`) is bound and checked
+   exactly. A hedged one ("about 33 days[...]") stays unbound, as before: bound, the hedge's tolerance let out
+   figures 4de32a3 refused as found in no cell (a probe caught it before the final commit),
+   and a day cell's figure followed by a count noun ("30[r1.window.days] videos", "30 videos[r1.window.days]") is
+   refused `wrong_measure`, the class rule `day_typed` already reads for a figure with no marker.
+3. Paths the texts name.
+   - `meta_cells` and `group_cells` of the first build are removed. They checked a date or a figure only against the
+     cell's value, never against what the sentence says it is, and `group_cells` read a group's text cells too: "Yes,
+     there are videos from 2020[r1.cannot_see]" went out (the asked year), as did a window's end said as its start
+     and a window's days said as videos. Meta is not cited, as the prompts say; a bracket on a group stays a bracket
+     that is no marker. The true sentences of that shape stay refused and get a precise reword.
+   - `cite_hint` names cells by path, never by the value written. A meta copy names its twin in the sheet: the same
+     key holding the same value, never a row's cell; where two sheet cells qualify (the window's `days` and the
+     window before's), both are named and the key tells them apart. A group names its own cells of the kind written
+     (a date, a number). A year or a month written alone names no date cell (which one it is cannot be told: "2020"
+     matched a 2020 window's own start). Paths are named only when there are at most three; among more, none. The first build's
+     fallback "as r1.totals.items" named a path many results do not hold; it is gone. Example: "[r1.window_dates.end]
+     is meta, which is not cited: cite the sheet's own cell, as r1.window.end". Full and cells keep their own text.
+   - Tool texts (`brain/tools.py`). A name with no match returns an envelope with no sheet, but its note named
+     `searched` and `items_with_words` as cells and its next step said "(items_with_words): answer with that". That
+     envelope now carries its own note (`NO_MATCH_BARE_NOTE`): nothing in it can be cited, so say it with no marker
+     and no figure. find's note, whose sheet does hold those cells, is unchanged. The items note on a clipped title
+     no longer names `why_matched` (a cell of search results only).
+   - The path test was rebuilt. It reads the texts as they are emitted, result by result (notes, errors, next steps,
+     including failed calls), and matches each named path against the result that names it. Bare snake_case words
+     are read too. A sheet path must be reached by a marker and verify as written; a meta path must be in that
+     result's meta; anything else must be a tool or give_answer argument, an allowed word of one, or a key every
+     result carries. The tools' descriptions and the two new prompt files are walked against all results: a name some
+     result's sheet holds must be reached by a marker there. No prompt line names a meta path inside a marker (they
+     name meta to be read and said in words), so both prompt files stay byte-same. Then
+     verify's own rewords are generated on every battery turn, and each path they name must be a cell of that turn.
+     Run on 1ebba58, the test fails on `items_with_words` and `searched` (no-sheet envelopes), on `why_matched`, and
+     on the `r1.totals.items` fallback in 8 turns (`repair/walk_at_1ebba58.txt`). It passes now. The battery's
+     messages are made up; the one that echoed a held-out message was replaced.
+4. Empty brackets (`paren_tidy`). The first build dropped any "()" or "(,)" in the sentence sent, a title's own
+   "print()" included. Now the decision is made on the sentence as written: a bracket goes only when it held markers
+   and the separators between them, nested ones too ("(([m]))", "([m]; [m])"). Every other bracket stays as
+   written: a title's, one the model typed empty, "(see [m])" (sent "(see)", as at 4de32a3; code removes no word).
+
+Checks of the repair (`mvp31/repair/`; base = 4de32a3, tip = 1ebba58, now = this commit):
+- v1's hand attack (`atk/`, 64 false, 34 true): false out base 7, tip 40, now 4; the 4 are out at base too (a
+  marker-before-unit row swap, a start said as an end, a figure before a bracket, a scope's start said of a month).
+  True refused base 29, tip 2, now 29.
+- A fresh set written after the first repair pass and never tuned on (`atk/fresh.py`, 20 false, 10 true): false out
+  base 4, tip 15, now 2 (both out at base); true refused base 7, tip 0, now 7.
+- v1's group attack (`atk/seam2_*.txt`, 11 false): out tip 11, now 4, the 4 that cite a text cell directly and are
+  out at base. v1's hint pairs (`atk/hint_*.txt`): hinted rewords kept tip 4, now 1 (an old hole, not hinted now).
+- Every hand sentence above and the probes of the hedged forms (188 sentences, `atk/gate2.py`, as a point and as the
+  lead): none kept now that 4de32a3 refuses; the mvp30 rule set on this tree equals 4de32a3 in kept, reasons, details
+  and the sentence sent. Every hint followed (each path a `bad_ref` detail names put in the bracket's place, 71
+  rewords): 17 are kept, 6 of true sentences and 11 of false ones; each of the 11 is a sentence that already went
+  out at 4de32a3 citing that sheet cell (a window's end said as its start, a window's days said as active days, a
+  scope's start said as the record's).
+- v2's probes (`probes_new.txt`, 108 sentences): no sentence kept now that the mvp30 default refuses; 7 kept by it are
+  refused now, all false (a day cell's wrong figure, or a day cell said as videos).
+- Attack sets under the default rules, base / now (false out; true refused): attack1 28 of 48 / 28, 3 of 24 / 3;
+  attack1b 2 of 12 true refused / 2; attack2 2 of 42 / 2; attack3 4 of 39 / 4; myset 13 of 43 / 13, 2 of 30 / 2.
+  The watch-time probe (`wt2`, the `wt.py` and `minbase` sentences, their twins, 28 more shapes): false out base 3 of
+  22, tip 0, now 0; true refused base 16 of 19, tip 2, now 16 (each given the bound form by its reword). v1's meta
+  attack: tip 9 of 12 out, now 0, as at base.
+- Saved forms, 28 run folders, 1,286 forms, 3,674 sentences (`flips/`): the mvp30 rule set on this tree equals
+  4de32a3's default in every field (0 differ). The default now against 4de32a3's: 0 sentences released, 0 refused,
+  1 text change (B14.0, the "()" gone). The first build's 18 flips are gone with the rules that made them, the
+  wrongly based N041 one with them.
+- Full and cells against 4de32a3 (`dh/compare_new.txt`): 9,591 verdicts and 4,084 answer tuples (code lead, both
+  builds, verdict_json) over 3,197 forms, 0 differ. Planted (`planted/`): `brain.planted` and `eval_brain planted`,
+  full and cells, byte for byte the base's; values drops 3 more planted false sentences (audit_F47 time spent,
+  audit_F05b and attack_X10 days said as videos: `eval_brain`'s total of false dropped moves 72 to 74, its attack
+  set 14 to 15), and keeps every planted true one.
+- Today's bot: no module outside `brain/`, the brain's tests and `eval_brain` imports `brain/`; unchanged by
+  construction. No live call in the repair.
+- The whole suite in 4 shards (`suite_out/`), on the final tree: 6416 passed, 2 skipped, 0 failed (1232, 1586, 1591
+  with the 2 skips, 2007): the 6406 of 4de32a3 and the 10 of `test_brain_r31_fix.py`. An earlier run failed 2.
+  `test_brain_toolfix2`'s no-match test pinned that the note names `items_with_words`, the fault itself; it is
+  re-pinned to the new note on purpose. `test_brain_r28_checks`'s figure-of-another-row's-text test failed once, as
+  in the build's partial runs (31.7 lists it); it passed alone three times, in its shard's rerun and in the final run.
+
+Not closed:
+- The marker-before-unit form keeps what 4de32a3 let through: another row's length said of a named video, time spent
+  said in words no check reads, the other superlative's cell ("the shortest one runs 25[...longest_minutes]
+  minutes"), a window's end said as its start through the sheet cell. These are old holes, measured, not widened.
+- Seam 1 now depends on one reword. A true "10 minutes[...]" is refused and told the form; whether the model takes it
+  on its one reword was not checked live in the repair. A reword is sent only when the lead or more than half the
+  sentences fail, so a true sentence can still be dropped with no reword.
+- Seam 2 likewise: a true sentence citing meta or a group is refused and given the sheet cell by path. A meta value
+  with no sheet twin (the window before's own start and end) can only be written with no marker.
+- "(see [m])" and "([m] and [m])" go out as "(see)" and "( and)", as at 4de32a3.
+- The auditor of the eval recounts no window start or end ("not recounted", as at the tip).
+
+Live check of the repaired build, after the repair (`mvp31/smoke2/`, `mvp31/smoke3/`; in sample, one reader, each
+prompt once; 12 conversations, 28 turns; about $0.05): no answer fell to a code lead. Each reword message fired once,
+under brain_v4d, and both rewords passed and are true. Under brain_v3d the same two messages passed on their first
+form; the prompts did not change, so that is run-to-run variance. Two true points were dropped with no reword (a
+group citation, a window citation). The two messages that reach the changed no-match note answer as before.

@@ -275,7 +275,9 @@ def _unresolved(turn, tool, r):
         out["meta"]["hidden"] = _words_hidden(turn)
     out["meta"]["notes"].append(_next_step(turn, r, cell))
     if cell:
-        out["meta"]["notes"].append(NO_MATCH_NOTE)
+        # mvp31 repair: this envelope has no sheet, so the words count is no cell a marker reaches; its note names no
+        # path (find's note, NO_MATCH_NOTE, names the cells its sheet holds)
+        out["meta"]["notes"].append(NO_MATCH_BARE_NOTE)
         if out["meta"]["hidden"]["sensitive"]:
             # (the attack: a no-match's hidden.sensitive 1 is a constant, and nothing said so; find already says it)
             out["meta"]["notes"].append(PRIVATE_WORDS_NOTE)
@@ -298,13 +300,19 @@ def _next_step(turn, r, cell):
                 f"own text: call search with query {words!r} (how 'any') to find them.")
     if isinstance(n, int) and n > 0:
         return (f"No name matched {words!r}, and it has no options; {n} of their items hold those words in their own "
-                "text (items_with_words): answer with that, and ask them for a theme, a channel or a window.")
+                "text: say that some of their items hold them, with no figure (this result has no cell to cite), and "
+                "ask them for a theme, a channel or a window.")
     return (f"No name matched {words!r}, and it has no options: say that nothing in their history goes by that name, "
             "and answer with their totals for the window (a breakdown by 'none' and no scope).")
 
 
 NO_MATCH_NOTE = ("A name with no match carries `searched` (the words looked for) and `items_with_words`: how many of "
                  "their items (opened, liked or saved, ever) hold those words in their own text.")
+
+
+NO_MATCH_BARE_NOTE = ("This result has no cell a marker can cite: it shows the words looked for and how many of their "
+                      "items (opened, liked or saved, ever) hold them in their own text; say that with no marker and "
+                      "no figure.")
 
 
 PRIVATE_WORDS_NOTE = "A count of the items holding some words leaves out the topics they keep private; how many is not said."
@@ -705,7 +713,7 @@ WEEKDAYS_NOTE = ("when.busiest_weekdays: these days tie for the most opens (busi
 WEEKDAY_EVENTS_NOTE = ("when.events_by_weekday: the window's opens (of the base) on each weekday, by its name "
                        "(when.events_by_weekday.Sunday); a day with 0 had none.")
 CLIPPED_NOTE = ("`title_clipped` true: this result shortened the title to fit (the '…' is this result's); the item's "
-                "own title is whole in their history, and why_matched or a search for its words reads more of it.")
+                "own title is whole in their history, and a search for its words reads more of it.")
 EVERY_PERIOD_NOTE = ("in_top_of_every_period: the themes (and areas, channels) found among the top rows that every "
                      "period lists, read before any cut; an empty list: none is in the top rows of every period.")
 LAST_NOTE = ("A channel's or a theme's `last_watched` is the last day they ever opened it within this call's scope "
@@ -909,9 +917,6 @@ def window_dates(start, end):
     except (TypeError, ValueError):
         return None
     return {"start": a.isoformat(), "end": b.isoformat(), "days": (b - a).days + 1, "said": Hm.span_words(a, b)}
-
-
-DATES_NOTE = "meta.window_dates gives the exact days counted; say them when the window's words are not a whole period."
 
 
 def _before_dates(window, sheet, meta, d):

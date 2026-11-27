@@ -36,6 +36,7 @@ from mvp.tests.test_brain_toolfix2 import S, W  # noqa: E402
 LAST_ROUND = frozenset({"row_name", "cell_found", "day_typed", "motive_you"})
 R30 = frozenset({"timing_out", "cards_found", "item_count_free", "screen_window", "screen_uncited", "rows_before",
                  "page_cited", "rows_kept", "shown_said", "length_cells"})
+R31 = frozenset({"length_unit", "days_unit", "cite_hint", "paren_tidy"})   # mvp31 (DESIGN 31.9), on by default
 OUTSIDE = frozenset({"item_count", "rows_shown", "cited_rows", "outcome_you", "outcome_cited", "row_text",
                      "row_quote", "quote_at_row", "row_group"})
 ROW_TEXT = frozenset({"row_text", "row_quote", "quote_at_row"})   # behind the switch since the mvp30 repair
@@ -74,11 +75,14 @@ def test_the_r30_set_is_pinned_and_is_the_default():
     assert V.VALUES_RULES_R30 == R30 and not (R30 & OUTSIDE)
     assert R30 <= V.VALUES_RULES_SWITCHED and V.VALUES_RULES_NEW30 == frozenset({"quote_at_row", "length_cells"})
     assert OUTSIDE <= V.VALUES_RULES_SWITCHED
-    assert _default().rules == LAST_ROUND | R30 | {"values", "nw_refuse"}
+    assert _default().rules == LAST_ROUND | R30 | {"values", "nw_refuse"}   # the mvp30 default, by name
+    assert V.VALUES_RULES_R31 == R31 and R31 <= V.VALUES.rules and not (R31 & V.VALUES_RULES_SWITCHED)   # mvp31
     # full and cells never run a values rule
     assert not (V.VALUES_RULES_ALL & (V.FULL.rules | V.CELLS.rules))
-    # what the default refuses: last round's list and item_count (item_count_free gives it)
-    assert V.VALUES_REFUSE_DEFAULT == {**V.VALUES_REFUSE, **V.VALUES_REFUSE_R28}
+    # what the default refuses: last round's list, item_count (item_count_free gives it) and, since mvp31,
+    # length_bound (length_unit gives it)
+    assert V.VALUES_REFUSE_DEFAULT == {**V.VALUES_REFUSE, **V.VALUES_REFUSE_R28, **V.VALUES_REFUSE_R31}
+    assert sorted(V.VALUES_REFUSE_R31) == ["length_bound"]
 
 
 def _import_with(value):
@@ -96,9 +100,9 @@ def _import_with(value):
 
 def test_with_the_switch_unset_values_runs_last_rounds_rules_and_the_r30_set():
     got = _import_with(None)
-    want = sorted(LAST_ROUND | R30 | {"values", "nw_refuse"})
+    want = sorted(LAST_ROUND | R30 | R31 | {"values", "nw_refuse"})
     assert got["values"] == want and got["check"] == want
-    assert got["settings"] == {"values_rules": sorted(LAST_ROUND | R30), "values_rules_r28": sorted(R30)}
+    assert got["settings"] == {"values_rules": sorted(LAST_ROUND | R30 | R31), "values_rules_r28": sorted(R30)}
     # the switch only adds: a rule left out of the set is switched on by name
     got = _import_with("rows_shown")
     assert set(got["values"]) == set(want) | {"rows_shown"}

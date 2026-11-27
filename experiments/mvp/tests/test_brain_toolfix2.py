@@ -197,7 +197,9 @@ def test_a_no_match_with_items_holding_the_words_points_to_search(brain):
 def test_a_no_match_names_no_tool_the_turn_does_not_have(brain):
     env_, _t = call(brain, "first_last", {"subject": "sourdough", "which": "last", "scope": S(how="any")}, "x")
     notes = " ".join(env_["meta"]["notes"])
-    assert "call search" not in notes and "use one of the options" not in notes and "items_with_words" in notes
+    assert "call search" not in notes and "use one of the options" not in notes
+    # mvp31 repair (DESIGN 31.9): this envelope has no sheet, so its notes name no cell; they say how to speak of it
+    assert "items_with_words" not in notes and "no cell a marker can cite" in notes
     # the private count of a words no-match is a constant (tools._words_hidden), and the note says so
     assert env_["meta"]["hidden"]["sensitive"] == 1 and "how many is not said" in notes
 
