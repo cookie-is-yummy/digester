@@ -57,8 +57,10 @@ def test_a_saves_scope_line_names_its_first_save(brain):
     r, _t = call(brain, "breakdown", {"by": "none", "compare": "none", "order": "most", "top": 5,
                                      "window": W(preset="all"), "scope": S(how="saved")}, "everything i kept")
     first_save = _first(("save", "playlist", "collection"))
-    assert _line(r) == f"Counted: totals · what you saved · all your history (from {Hm.day_words(first_save)}, your " \
-                       "first save)"
+    # mvp34 (DESIGN 33): the saves do not span the window, so the line says the days of the saves counted
+    last_save = max(local(at) for x in visible_rows() for k, at in x["events"] if k in ("save", "playlist",
+                                                                                         "collection"))
+    assert _line(r) == f"Counted: totals · what you saved · all your history ({Hm.span_words(first_save, last_save)})"
 
 
 def test_every_other_window_keeps_its_line():
@@ -130,6 +132,9 @@ def test_a_first_save_of_a_channel_is_not_given_the_first_save_of_all(brain):
     r, _t = call(brain, "first_last", {"subject": "crumb.lab", "which": "first", "scope": S(how="saved")},
                  "the first crumb.lab post i kept")
     first_all = Hm.day_words(_first(("save", "playlist", "collection")))
-    assert first_all in r["meta"]["window_said"]                                        # the model's words, as before
+    # mvp34 (DESIGN 33): the model's words say the days of the channel's own saves, not the first save of all
+    own = sorted(local(at) for x in visible_rows() if x.get("handle") == "crumb.lab" for k, at in x["events"]
+                 if k in ("save", "playlist", "collection"))
+    assert f"the saves counted: {Hm.span_words(own[0], own[-1])};" in r["meta"]["window_said"]
     line = _line(r)
     assert first_all not in line and " · all your history · " in line, line

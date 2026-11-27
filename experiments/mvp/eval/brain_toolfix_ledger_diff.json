@@ -10,7 +10,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   8
   ],
   [
    "changed",
@@ -80,6 +80,18 @@
    "[0].sheet.window.days",
    null,
    366
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2024-01-17"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2024-11-27"
   ]
  ],
  "attack_area_all": [
@@ -102,7 +114,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -256,6 +268,18 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_area_lately": [
@@ -279,7 +303,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   13
+   14
   ],
   [
    "changed",
@@ -493,6 +517,18 @@
    "[0].sheet.window.days",
    null,
    28
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-03"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_area_lately_ig": [
@@ -500,7 +536,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   9
+   10
   ],
   [
    "changed",
@@ -653,10 +689,22 @@
    28
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-05"
+  ],
+  [
    "removed",
    "[0].sheet.window.history_starts",
    "2026-10-05",
    null
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-15"
   ],
   [
    "added",
@@ -682,7 +730,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -843,6 +891,18 @@
    "[0].sheet.window.days",
    null,
    303
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_area_oct_long": [
@@ -856,7 +916,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   6
+   7
   ],
   [
    "changed",
@@ -952,6 +1012,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_area_oct_nogaming": [
@@ -984,7 +1056,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -1094,6 +1166,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_area_oct_short": [
@@ -1107,7 +1191,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   8
   ],
   [
    "changed",
@@ -1179,6 +1263,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_area_saved_lately": [
@@ -1186,7 +1282,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -1280,6 +1376,18 @@
   ],
   [
    "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-03"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-10"
+  ],
+  [
+   "added",
    "[0].sheet.window.platform_starts",
    null,
    "2021-01-05"
@@ -1296,7 +1404,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   8
   ],
   [
    "changed",
@@ -1366,6 +1474,18 @@
    "[0].sheet.window.days",
    null,
    366
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2024-01-17"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2024-11-27"
   ]
  ],
  "attack_ch_least_oct": [
@@ -1379,7 +1499,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -1522,6 +1642,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_ch_oct": [
@@ -1535,7 +1667,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -1672,6 +1804,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_ch_oct+area_2024": [
@@ -1685,7 +1829,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -1824,6 +1968,18 @@
    30
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -1833,7 +1989,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   7
+   8
   ],
   [
    "changed",
@@ -1903,6 +2059,18 @@
    "[1].sheet.window.days",
    null,
    366
+  ],
+  [
+   "added",
+   "[1].sheet.window.first_counted",
+   null,
+   "2024-01-17"
+  ],
+  [
+   "added",
+   "[1].sheet.window.last_counted",
+   null,
+   "2024-11-27"
   ]
  ],
  "attack_ch_oct+area_oct_nogaming": [
@@ -1916,7 +2084,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -2056,6 +2224,18 @@
   ],
   [
    "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[1].meta.also",
    null,
    {
@@ -2083,7 +2263,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -2193,6 +2373,18 @@
    "[1].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[1].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[1].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_ch_oct+ch_week": [
@@ -2206,7 +2398,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -2345,6 +2537,18 @@
    30
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -2354,7 +2558,7 @@
    "list_len",
    "[1].meta.notes",
    4,
-   10
+   11
   ],
   [
    "changed",
@@ -2495,6 +2699,18 @@
    "[1].sheet.window.days",
    null,
    7
+  ],
+  [
+   "added",
+   "[1].sheet.window.first_counted",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[1].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_ch_oct+ch_year": [
@@ -2508,7 +2724,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -2647,6 +2863,18 @@
    30
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -2656,7 +2884,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -2817,6 +3045,18 @@
    "[1].sheet.window.days",
    null,
    303
+  ],
+  [
+   "added",
+   "[1].sheet.window.first_counted",
+   null,
+   "2026-01-05"
+  ],
+  [
+   "added",
+   "[1].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_ch_oct+ch_year_art": [
@@ -2830,7 +3070,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -2969,6 +3209,18 @@
    30
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -2978,7 +3230,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   11
+   12
   ],
   [
    "changed",
@@ -3103,6 +3355,18 @@
    "[1].sheet.window.days",
    null,
    303
+  ],
+  [
+   "added",
+   "[1].sheet.window.first_counted",
+   null,
+   "2026-01-05"
+  ],
+  [
+   "added",
+   "[1].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_ch_oct_sat": [
@@ -3116,7 +3380,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   8
   ],
   [
    "changed",
@@ -3220,6 +3484,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-03"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-24"
   ]
  ],
  "attack_ch_week": [
@@ -3233,7 +3509,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   10
+   11
   ],
   [
    "changed",
@@ -3374,6 +3650,18 @@
    "[0].sheet.window.days",
    null,
    7
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_ch_year": [
@@ -3387,7 +3675,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -3548,6 +3836,18 @@
    "[0].sheet.window.days",
    null,
    303
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_ch_year_art": [
@@ -3561,7 +3861,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   11
+   12
   ],
   [
    "changed",
@@ -3686,6 +3986,18 @@
    "[0].sheet.window.days",
    null,
    303
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_changes_area": [
@@ -3711,7 +4023,7 @@
    "list_len",
    "[0].meta.notes",
    5,
-   12
+   13
   ],
   [
    "added",
@@ -3926,6 +4238,18 @@
    "[0].sheet.window.days",
    null,
    2129
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_cmp_2023": [
@@ -3939,7 +4263,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   9
+   10
   ],
   [
    "added",
@@ -4110,6 +4434,18 @@
   ],
   [
    "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2023-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2023-12-03"
+  ],
+  [
+   "added",
    "[0].sheet.windows",
    null,
    {
@@ -4148,7 +4484,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   17
+   18
   ],
   [
    "changed",
@@ -4429,6 +4765,18 @@
   ],
   [
    "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-09-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.windows",
    null,
    {
@@ -4447,6 +4795,15 @@
  ],
  "attack_first_cf": [
   [
+   "added",
+   "[0].base_window",
+   null,
+   {
+    "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
+  [
    "changed",
    "[0].meta.hidden.friends",
    1,
@@ -4456,7 +4813,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   9
   ],
   [
    "changed",
@@ -4472,8 +4829,14 @@
     "start": "2021-01-05",
     "end": "2026-10-30",
     "days": 2125,
-    "said": "5 January 2021 to 30 October 2026"
+    "said": "the opens counted: 1 to 30 October 2026; your export ends on 30 October 2026"
    }
+  ],
+  [
+   "changed",
+   "[0].meta.window_said",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 1 to 30 October 2026; your export ends on 30 October 2026)"
   ],
   [
    "added",
@@ -4572,10 +4935,37 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "changed",
+   "[0].sheet.window.words",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 1 to 30 October 2026; your export ends on 30 October 2026)"
   ]
  ],
  "attack_first_cf+area_2024": [
   [
+   "added",
+   "[0].base_window",
+   null,
+   {
+    "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
+  [
    "changed",
    "[0].meta.hidden.friends",
    1,
@@ -4585,7 +4975,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   9
   ],
   [
    "changed",
@@ -4601,8 +4991,14 @@
     "start": "2021-01-05",
     "end": "2026-10-30",
     "days": 2125,
-    "said": "5 January 2021 to 30 October 2026"
+    "said": "the opens counted: 1 to 30 October 2026; your export ends on 30 October 2026"
    }
+  ],
+  [
+   "changed",
+   "[0].meta.window_said",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 1 to 30 October 2026; your export ends on 30 October 2026)"
   ],
   [
    "added",
@@ -4701,6 +5097,24 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "changed",
+   "[0].sheet.window.words",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 1 to 30 October 2026; your export ends on 30 October 2026)"
   ],
   [
    "changed",
@@ -4712,7 +5126,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   7
+   8
   ],
   [
    "changed",
@@ -4782,6 +5196,18 @@
    "[1].sheet.window.days",
    null,
    366
+  ],
+  [
+   "added",
+   "[1].sheet.window.first_counted",
+   null,
+   "2024-01-17"
+  ],
+  [
+   "added",
+   "[1].sheet.window.last_counted",
+   null,
+   "2024-11-27"
   ]
  ],
  "attack_items_30oct": [
@@ -4795,7 +5221,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   9
   ],
   [
    "changed",
@@ -5037,6 +5463,18 @@
    "[0].sheet.window.days",
    null,
    1
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_items_oct_saved": [
@@ -5044,7 +5482,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   7
+   8
   ],
   [
    "added",
@@ -5138,10 +5576,22 @@
    30
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-03"
+  ],
+  [
    "removed",
    "[0].sheet.window.history_starts",
    "2026-10-03",
    null
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-10"
   ],
   [
    "added",
@@ -5173,7 +5623,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   4
+   5
   ],
   [
    "added",
@@ -5251,9 +5701,30 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-02"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_last_wc": [
+  [
+   "added",
+   "[0].base_window",
+   null,
+   {
+    "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -5264,7 +5735,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   11
+   12
   ],
   [
    "changed",
@@ -5280,8 +5751,14 @@
     "start": "2021-01-05",
     "end": "2026-10-30",
     "days": 2125,
-    "said": "5 January 2021 to 30 October 2026"
+    "said": "the opens counted: 10 January 2025 to 21 October 2026; your export ends on 30 October 2026"
    }
+  ],
+  [
+   "changed",
+   "[0].meta.window_said",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 10 January 2025 to 21 October 2026; your export ends on 30 October 2026)"
   ],
   [
    "added",
@@ -5407,6 +5884,24 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2025-01-10"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "changed",
+   "[0].sheet.window.words",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 10 January 2025 to 21 October 2026; your export ends on 30 October 2026)"
   ]
  ],
  "attack_none_week_yt": [
@@ -5420,7 +5915,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -5551,6 +6046,18 @@
    "[0].sheet.window.days",
    null,
    7
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-24"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_theme_90": [
@@ -5564,7 +6071,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   9
   ],
   [
    "changed",
@@ -5686,6 +6193,18 @@
    "[0].sheet.window.days",
    null,
    90
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-08-02"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "attack_tl_month_math": [
@@ -5699,7 +6218,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   14
+   15
   ],
   [
    "changed",
@@ -5898,6 +6417,18 @@
    "[0].sheet.window.days",
    null,
    303
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-09-10"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-16"
   ]
  ],
  "attack_tl_year": [
@@ -5924,7 +6455,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   12
+   13
   ],
   [
    "changed",
@@ -6260,6 +6791,18 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_area": [
@@ -6283,7 +6826,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   13
+   14
   ],
   [
    "changed",
@@ -6497,6 +7040,18 @@
    "[0].sheet.window.days",
    null,
    28
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-03"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_art": [
@@ -6510,7 +7065,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   15
+   16
   ],
   [
    "changed",
@@ -6715,6 +7270,18 @@
    "[0].sheet.window.days",
    null,
    28
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-03"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_ch": [
@@ -6738,7 +7305,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   14
+   15
   ],
   [
    "changed",
@@ -7003,6 +7570,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_chg": [
@@ -7016,7 +7595,7 @@
    "list_len",
    "[0].meta.notes",
    5,
-   10
+   11
   ],
   [
    "added",
@@ -7102,6 +7681,18 @@
    "[0].sheet.window.days",
    null,
    28
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-03"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_cmp": [
@@ -7125,7 +7716,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   15
+   16
   ],
   [
    "added",
@@ -7392,6 +7983,18 @@
   ],
   [
    "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[0].sheet.windows",
    null,
    {
@@ -7429,7 +8032,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   15
+   16
   ],
   [
    "changed",
@@ -7719,6 +8322,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_find": [
@@ -7749,7 +8364,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   12
+   13
   ],
   [
    "changed",
@@ -7910,9 +8525,30 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-02"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_fwc": [
+  [
+   "added",
+   "[0].base_window",
+   null,
+   {
+    "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -7923,7 +8559,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   10
+   11
   ],
   [
    "changed",
@@ -7939,8 +8575,14 @@
     "start": "2021-01-05",
     "end": "2026-10-30",
     "days": 2125,
-    "said": "5 January 2021 to 30 October 2026"
+    "said": "the opens counted: 10 January 2025 to 21 October 2026; your export ends on 30 October 2026"
    }
+  ],
+  [
+   "changed",
+   "[0].meta.window_said",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 10 January 2025 to 21 October 2026; your export ends on 30 October 2026)"
   ],
   [
    "added",
@@ -8072,6 +8714,24 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2025-01-10"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-21"
+  ],
+  [
+   "changed",
+   "[0].sheet.window.words",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 10 January 2025 to 21 October 2026; your export ends on 30 October 2026)"
   ]
  ],
  "audit_insta": [
@@ -8079,7 +8739,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   9
+   10
   ],
   [
    "changed",
@@ -8232,10 +8892,22 @@
    15
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-05"
+  ],
+  [
    "removed",
    "[0].sheet.window.history_starts",
    "2026-10-05",
    null
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-15"
   ],
   [
    "added",
@@ -8261,7 +8933,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   4
+   5
   ],
   [
    "added",
@@ -8357,6 +9029,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_least": [
@@ -8380,7 +9064,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   14
+   15
   ],
   [
    "changed",
@@ -8645,9 +9329,30 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_lmc": [
+  [
+   "added",
+   "[0].base_window",
+   null,
+   {
+    "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -8658,7 +9363,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -8674,8 +9379,14 @@
     "start": "2021-01-05",
     "end": "2026-10-30",
     "days": 2125,
-    "said": "5 January 2021 to 30 October 2026"
+    "said": "the opens counted: 5 January 2021 to 20 October 2026; your export ends on 30 October 2026"
    }
+  ],
+  [
+   "changed",
+   "[0].meta.window_said",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 5 January 2021 to 20 October 2026; your export ends on 30 October 2026)"
   ],
   [
    "added",
@@ -8780,9 +9491,36 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-20"
+  ],
+  [
+   "changed",
+   "[0].sheet.window.words",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 5 January 2021 to 20 October 2026; your export ends on 30 October 2026)"
   ]
  ],
  "audit_lnp": [
+  [
+   "added",
+   "[0].base_window",
+   null,
+   {
+    "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -8793,7 +9531,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -8809,8 +9547,14 @@
     "start": "2021-01-05",
     "end": "2026-10-30",
     "days": 2125,
-    "said": "5 January 2021 to 30 October 2026"
+    "said": "the opens counted: 5 June to 22 August 2023; your export ends on 30 October 2026"
    }
+  ],
+  [
+   "changed",
+   "[0].meta.window_said",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 5 June to 22 August 2023; your export ends on 30 October 2026)"
   ],
   [
    "added",
@@ -8932,6 +9676,24 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2023-06-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2023-08-22"
+  ],
+  [
+   "changed",
+   "[0].sheet.window.words",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 5 June to 22 August 2023; your export ends on 30 October 2026)"
   ]
  ],
  "audit_long": [
@@ -8945,7 +9707,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -9097,9 +9859,30 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_lsr": [
+  [
+   "added",
+   "[0].base_window",
+   null,
+   {
+    "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+    "said": "5 January 2021 to 30 October 2026"
+   }
+  ],
   [
    "changed",
    "[0].meta.hidden.friends",
@@ -9110,7 +9893,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   9
   ],
   [
    "changed",
@@ -9126,8 +9909,14 @@
     "start": "2021-01-05",
     "end": "2026-10-30",
     "days": 2125,
-    "said": "5 January 2021 to 30 October 2026"
+    "said": "the opens counted: 1 March 2021 to 1 May 2023; your export ends on 30 October 2026"
    }
+  ],
+  [
+   "changed",
+   "[0].meta.window_said",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 1 March 2021 to 1 May 2023; your export ends on 30 October 2026)"
   ],
   [
    "added",
@@ -9226,6 +10015,24 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2021-03-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2023-05-01"
+  ],
+  [
+   "changed",
+   "[0].sheet.window.words",
+   "all your history (5 January 2021 to 30 October 2026, where your export ends)",
+   "all your history (the opens counted: 1 March 2021 to 1 May 2023; your export ends on 30 October 2026)"
   ]
  ],
  "audit_newest": [
@@ -9239,7 +10046,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   3
+   4
   ],
   [
    "added",
@@ -9323,6 +10130,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_nog": [
@@ -9355,7 +10174,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   13
+   14
   ],
   [
    "changed",
@@ -9545,6 +10364,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_pan": [
@@ -9558,7 +10389,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   4
+   5
   ],
   [
    "added",
@@ -9750,6 +10581,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-02"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_reopen": [
@@ -9763,7 +10606,7 @@
    "list_len",
    "[0].meta.notes",
    2,
-   4
+   5
   ],
   [
    "added",
@@ -9859,6 +10702,18 @@
    "[0].sheet.window.days",
    null,
    30
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_saved": [
@@ -9866,7 +10721,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -9959,10 +10814,22 @@
    30
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-03"
+  ],
+  [
    "removed",
    "[0].sheet.window.history_starts",
    "2026-10-03",
    null
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-10"
   ],
   [
    "added",
@@ -10061,7 +10928,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   17
+   18
   ],
   [
    "changed",
@@ -10530,6 +11397,18 @@
    "[0].sheet.window.days",
    null,
    303
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_tly": [
@@ -10556,7 +11435,7 @@
    "list_len",
    "[0].meta.notes",
    4,
-   12
+   13
   ],
   [
    "changed",
@@ -10892,6 +11771,18 @@
    "[0].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_two": [
@@ -10915,7 +11806,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   14
+   15
   ],
   [
    "changed",
@@ -11182,6 +12073,18 @@
    30
   ],
   [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
    "changed",
    "[1].meta.hidden.friends",
    1,
@@ -11191,7 +12094,7 @@
    "list_len",
    "[1].meta.notes",
    3,
-   8
+   9
   ],
   [
    "changed",
@@ -11354,6 +12257,18 @@
    "[1].sheet.window.days",
    null,
    365
+  ],
+  [
+   "added",
+   "[1].sheet.window.first_counted",
+   null,
+   "2023-01-05"
+  ],
+  [
+   "added",
+   "[1].sheet.window.last_counted",
+   null,
+   "2023-12-03"
   ]
  ],
  "audit_two2": [
@@ -11377,7 +12292,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   14
+   15
   ],
   [
    "changed",
@@ -11645,6 +12560,18 @@
   ],
   [
    "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2026-10-01"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2026-10-30"
+  ],
+  [
+   "added",
    "[1].meta.cut",
    null,
    [
@@ -11666,7 +12593,7 @@
    "list_len",
    "[1].meta.notes",
    4,
-   12
+   13
   ],
   [
    "changed",
@@ -12002,6 +12929,18 @@
    "[1].sheet.window.days",
    null,
    2125
+  ],
+  [
+   "added",
+   "[1].sheet.window.first_counted",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[1].sheet.window.last_counted",
+   null,
+   "2026-10-30"
   ]
  ],
  "audit_y2021": [
@@ -12015,7 +12954,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   7
+   8
   ],
   [
    "changed",
@@ -12101,6 +13040,18 @@
    "[0].sheet.window.days",
    null,
    365
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2021-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2021-12-31"
   ]
  ],
  "audit_y2023": [
@@ -12114,7 +13065,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   8
+   9
   ],
   [
    "changed",
@@ -12277,6 +13228,18 @@
    "[0].sheet.window.days",
    null,
    365
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2023-01-05"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2023-12-03"
   ]
  ],
  "audit_y2024": [
@@ -12290,7 +13253,7 @@
    "list_len",
    "[0].meta.notes",
    3,
-   9
+   10
   ],
   [
    "changed",
@@ -12431,6 +13394,18 @@
    "[0].sheet.window.days",
    null,
    366
+  ],
+  [
+   "added",
+   "[0].sheet.window.first_counted",
+   null,
+   "2024-01-17"
+  ],
+  [
+   "added",
+   "[0].sheet.window.last_counted",
+   null,
+   "2024-11-27"
   ]
  ]
 }

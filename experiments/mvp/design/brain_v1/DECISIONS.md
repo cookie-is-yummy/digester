@@ -1039,3 +1039,42 @@ more bounded round on the saves span (a tool fault) and run again, or to go on t
 Both sets are in sample for every fix so far. Only half B is not.
 
 Claude spend to here: about $8.05 of $25.
+
+## The saves span, fixed in the tool and merged; no new freeze (28 Nov 2026)
+
+The fault of the four runs was one class, and its most frequent form started in a tool: a window of all their
+history over a scope gave the scope's first day and the export's last day, and no day for the last row counted.
+Now every result that counts rows gives the first and the last day of those rows, and such a window's words say
+them ("the saves counted: 3 to 10 October 2026; your export ends on 30 October 2026"). DESIGN.md section 33 has
+the build, an independent skeptic's findings, the repair and my acceptance. No prompt changed. No checker rule
+was added or loosened.
+
+What my own repeats show (16 runs of three conversations on each build; in sample):
+- The false range was said in 14 of 32 first answers before and 0 of 32 after. The true range is said in 22.
+- The cost: the model often writes the true span with no marker, the check refuses it, and one reword puts it
+  right. That happened in 17 of those 32 turns and adds about 2 seconds to them. No answer fell back to code.
+- Over one full pass of each set the cost is small: 1 such turn in 118. Medians 6.6 and 5.9 seconds, slow ends
+  9.9 and 8.4. Both are inside the bars. No marking was done; this was a regression check, not a gate attempt.
+- "That is the whole record", said of one platform's opens, is unchanged: 2 of 16 on each build. It is the
+  model's judgement over a right result and was left alone.
+
+Decided here:
+- Merge the fix. A false sentence in about half of such answers is worse than a reword in about half of them.
+- Do not let the unmarked span through the check. It would also let the right days be said of the wrong scope.
+- If the reword cost matters later, change the window's words, not the check.
+
+Known and left:
+- The check still passes the false range if the model writes it. The fix is that no result offers it any more.
+- Twelve false sentences marked on the new cells pass (the old hole: the check reads a value, not what is said
+  about it). Each has a twin on the window's own cells that passed before.
+- Asked windows and "lately" keep their old words. The second window of a compare gets no pair of cells.
+- Full and cells modes refuse a citation of the new cells. Step 2 must run the values check, or keep the cells
+  out in those modes.
+- Two code leads in the full passes are other classes: a title that ends in a number right before its row
+  marker, and a path that is no cell, each written twice in a row.
+
+Still the founder's, unchanged: whether a private topic named in one turn stays unlocked for the next; and
+whether to run four runs and blind marks again, or go on to step 2 with the gate pending. Half B is unopened.
+This code is not frozen for a run and has no blind marks.
+
+Claude spend to here: about $8.46 of $25.

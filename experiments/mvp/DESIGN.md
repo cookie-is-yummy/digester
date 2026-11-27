@@ -9300,3 +9300,178 @@ Done by the merger, not by an agent. No prompt file changed. Evidence in `mvp32/
   the whole line quoted with its figures is still refused (class 6), so "what did it say" is answered by the whole
   title or without its figures; one answer form in 168 came back malformed and was repaired; rows whose first line is
   over 200 characters keep the cut title and its note.
+
+## 33. The days of the rows counted, given by the tool (mvp34, key build)
+Branch `brain-r34-local` from experiments/search-loop (b99bcea). One class: a window of all their history over a scope
+starts on the scope's first row and ends where the export ends, and no cell held the day of the last row counted, so
+"you saved 6 items, from 3 to 30 October" was said when the last save was on 10 October (three of four answers to two
+messages in the last runs). Fixed where it starts, in the tools. No prompt file changed. Files: `brain/tools.py`,
+`brain/results.py`, `brain/answer.py`, `brain/verify.py`, `tests/test_brain_r34_rows_days.py`, three re-pinned tests
+and `eval/brain_toolfix_ledger_diff.json`. Evidence in `mvp34/build/`. In sample: the class was read on set A's records.
+
+### 33.1 What was built
+- **The rows' days, as cells.** Every result that counts rows over a window gives `window.first_counted` and
+  `window.last_counted`: the first and the last day of the events it counts (`tools._counted_days`: the scope's base
+  kinds, platforms, names, length and weekday, the private topics out but the one it may count, inside the window's
+  days). One pair, in `window`, in breakdown, timeline, changes, compare (its first window), first_last and items.
+  Given only when those events are the sheet's own count (`when.events`, else the items of `totals.items`) and some
+  were counted; no row counted, no cells. Written after the size cut, with one note (`results.COUNTED_NOTE`).
+  `window.start`, `end` and `days` are unchanged, so no rate moves.
+- **The window's words.** A window of all their history whose rows do not span it says the rows' days once, as that,
+  and where the export ends, as that: "all your history (the saves counted: 3 to 10 October 2026; your export ends on
+  30 October 2026; your first item of any kind: 5 January 2021)" (`tools.rows_span_words`). `meta.window_said` and
+  `meta.window_dates.said` say the same. Every other window's words are as they were.
+- **The scope line a person sees** says such a window by the rows' days alone, "all your history (3 to 10 October
+  2026)", and beside a filter "all your history" with no day.
+- **The rewords.** A cited `meta.window_dates` (its start, end or said) on a result whose rows do not span its window
+  names the rows' cells ("the rows counted run from r1.window.first_counted to r1.window.last_counted"), not the
+  window's ends; where the rows span it, its own cells are named as before. A rows' day said with no marker is named
+  to its cell, and a span to its two-marker form; a day two results hold names no cell (`verify._v_unfound_day`). One
+  marker after a span of the rows gets the two-marker form too.
+- **The new days stand only under their own markers** (values pool, `verify._Pool.rows_days`): an unmarked day is
+  found only where a result held it before, so the new cells let out no unmarked sentence (true only after the
+  repair, 33.5: a quoted day was still found in the new words).
+- **Full and cells read each result as before.** The tools keep the window's old words beside the envelope
+  (`base_window`; `loop.present` sends the model rid, tool, meta and the sheet only, pinned by a test);
+  `verify.rows_aside` and `Ledger.base()` take the cells and the note out and put those words back for the full and
+  cells checks. Without this, the rows' days in the new words satisfied the full check's date rule: on the first tip
+  replay, cells let out 28 sentences and refused 1, and the reasons of 2 cells and 31 full verdicts moved.
+- **Point 4, the values rule, was not added.** The rubric holds "the rows counted fall in those days" true, and the
+  95 in-sample sentences with a range to the window's end mix that reading and the false one in the same words. A
+  rule could not be shown to refuse nothing true. The tool change is the fix.
+
+### 33.2 Checks, on the final code (no model call unless said)
+- Saved forms of 44 run folders (the 40 of the last round and the four runs of mvp33; 2,017 values forms, 5,819
+  sentences, 1,969 answers): values 0 released, 0 refused, answers the same; full and cells (2,182 forms each) byte
+  for byte b99bcea's. Saved results hold no new cell, so this shows only that nothing else moved.
+- Replay: every saved record's calls through each tree's tools on the eval's library, conversation by conversation
+  (2,099 records, 2,726 calls), the saved forms checked against the fresh results. b99bcea's tools reproduce all 291
+  recorded calls of the mvp33 runs. b99bcea's checker and this tip's give the same verdicts on b99bcea's results. On
+  this tip's results, full and cells equal b99bcea's on every form (verdicts, reasons, details); values: 0 verdicts
+  change, 3 forms change in a reword's text (a cited meta.window_dates over saves). Of 2,335 windowed results, 2,303
+  have the cells; the 32 without them counted no row; 468 got the new words.
+- Made-up turns rebuilt by each tree's tools (sentence sets of 92, 420, 192 and 168 keys; 336 code leads): every
+  difference is in the `Counted:` line. Scope lines over 68 made-up results: 14 change, none longer. The 16,115-key
+  full and cells differential: 146 keys differ, all answer tuples, all in one `Counted:` line form ("all your history
+  (5 January 2021 to 30 October 2026) · only <area>" now "all your history · only <area>"); no verdict key.
+- Planted (`eval_brain planted`; `brain.planted` score and score_cells): full, cells and values byte for byte.
+- Made-up twins (`build/probe/twins_report.txt`): the true marked forms are let out (the first and the last counted
+  day on their cells, the first or the last save). Four false forms on the new cells are let out too, each with a twin
+  on the window's own cells that b99bcea keeps: opened said of saves, one platform's saves given the scope's days, the
+  last save given the wrong platform, "every one of them on" the last day. It is the old values hole (values reads a
+  value, not what is said about it) reaching the new cells. A wrong day on the new markers is refused; the unmarked
+  twins stay refused.
+- Privacy, recounted from the rows: a window whose first and last opens are a private topic's gives the shown rows'
+  days, the private ones only when the message names the topic, and not under a carried unlock; a friend's save on the
+  window's last day is never a row's day.
+- Tests: 16 new. Re-pinned on purpose: the saves window's words (r32_fix), two scope lines (r32_scope_line), and the
+  frozen-ledger diff (only the two cells, their note, 7 rewritten words and `base_window` are added). The whole
+  suite in four shards on the final code: 1,216 + 1,537 + 1,670 + 2,039 = 6,462 passed, 2 skipped, 0 failed.
+- Prompt files byte for byte. Privacy scan of the round's diff: no caption; generic single words only.
+
+### 33.3 Live, by id (brain_v4d, strict off, default rules; set A N041, N042, N035; in sample; read by hand)
+Nine runs, 45 turns, $0.068 in all. Runs 1 to 3 on the first build, 4 to 6 after the span reword, 7 to 9 on the
+final code.
+- No answer of 45 said a range to the export's end of the rows. Before the round it was said in 3 of 4 answers to
+  N041 and N042.
+- A true sentence on the rows' days was refused in 11 of 45 turns, nearly always a span written with no marker (the
+  window's words now hold it) or with one marker. 7 were reworded and passed; in 2 the point was dropped with no
+  reword; code's own lead went out in 2 (runs 3 and 6, both N042), none on the final code. Before the round, 0 code
+  leads in 20 turns of the same three conversations (mvp31 and mvp33 runs). On the final code: 6 of 15 turns, 5 of
+  them reworded (all passed), 1 point dropped.
+- One true sentence cited `last_counted` for the export's end (the same day for Instagram opens).
+- The judgement over a right result stays: the Instagram opens said to be the whole Instagram record ("that is the
+  whole Instagram record", "all there is to see"), in 4 of 9 answers to that follow-up.
+
+### 33.4 Left
+- The cost above: a span of the rows written with no marker is refused and reworded (a reword in 5 of the final 15
+  turns). The pool was not loosened, as that would let the new days out unmarked.
+- The second window of a compare and the window before of a change get no pair; search and learned get none. Asked
+  and "lately" windows keep their words and the bare span in `window_dates.said` ("3 to 30 October 2026" of the 4
+  weeks over saves that end on 10 October).
+- In a full or cells run the model sees the new cells and words, but those checks refuse a citation of the cells.
+- The false forms marked on the new cells (the old values hole). The skeptic found 12 unique false sentences in 9
+  classes, each with a twin on window.start or window.end that b99bcea keeps (33.5).
+- The count guard never failed on the made-up library; how often it gives no cells on a real library is not measured.
+  The replay used saved screens with the old words; only the live follow-ups carried the new ones.
+- Rates and `days` still run over the window's days, not the rows'; whether a rate over all their history should use
+  the rows' span is written down, not changed.
+
+### 33.5 Repair (key repair, after an independent skeptic)
+Two faults the skeptic found, each fixed where it starts. Nothing was taken out. Evidence in `mvp34/repair/`.
+- **Weekday windows missed the fix** (in class, the same at b99bcea). A weekday scope wraps the window's words
+  (`facts.sheet`: "on Mondays, over all your history (3 to 30 October 2026, where your export ends)"), and the gate
+  read only words that start "all your history (". So the words, `meta.window_said`, `window_dates.said` and the
+  scope line kept the window's two ends. Now `tools.WEEKDAY_HEAD` and `tools.all_history_inner` read past that head:
+  "on Mondays, over all your history (the saves counted: 5 October 2026; your export ends on 30 October 2026)", with
+  `window_dates.said` the same inside words. A weekday's words leave out "your first item of any kind". b99bcea's
+  weekday words never said it, and it is no day of that weekday; `window.platform_starts` still holds it. With the
+  clause in, a quote of that day was found in 13 of 72 probed calls. The scope line keeps the head (`answer.ROWS_SPAN_SHOWN`), and a
+  weekday narrows, so it reads "on Mondays, over all your history" with no day. `facts.py` (shared with today's bot)
+  is not changed. The words that full and cells read (`base_window`) are b99bcea's, the bare span included.
+- **A quoted day got out through the new words** (low). `_Pool.walk` put every string into the text a quote is
+  looked up in before the rows' days were set apart. So '"10 October 2026"' was found in the new words. Now the
+  rows' day cells never reach that text, and the part of window words that says the rows' days is cut out of it,
+  as it was already cut out of code's strings. The second-turn screen route carries only figures with a unit, so no
+  day gets out that way (probed at both trees). Probe over 72 calls (the sentence set's, the scopes probe's, and
+  weekday windows of every kind, platform and tool): the days each pool holds, and the days its quote text holds, are
+  a subset of b99bcea's in every call (`repair/probe/pool_*.json`).
+- **Checks, on the repaired code.**
+  - Replay: 2,099 records, 2,726 calls. Results with the new words went from 468 to 532. All-history results whose
+    rows do not span the window and still have the old words went from 64 to 0 (28 Saturdays, 24 Sundays, 12
+    Mondays, all opens). Full and cells are identical to b99bcea on every form. Values: 0 verdicts change, and 3
+    forms change in a reword's text, as before the repair.
+  - Saved forms of 44 folders: values 0 released, 0 refused (2,017 forms, 5,819 sentences, 1,969 answers). Full and
+    cells (2,182 forms each) are byte for byte b99bcea's. Planted, all three modes: byte for byte the same.
+  - Full and cells differential: 16,115 keys, 146 differ, all in the `Counted:` line. Made-up turns: 0 differences
+    outside the `Counted:` line. Scope lines: 68 checked, 14 change, none longer. Neither set holds a weekday window
+    over all their history: the weekday scope line is shown only by the scopes probe (2 lines, both shorter) and a
+    test.
+  - The skeptic's 91 sentences, as point and as lead. Against the build, only the four quoted sentences change, and
+    all four go back to b99bcea's refusal. Three are false; one is true and b99bcea refused it too.
+  - Against b99bcea now: 23 true sentences are let out (22 of the set, 1 weekday). All are marked on the new cells.
+    12 false sentences are let out, all marked on the new cells. None is unmarked. 0 true sentences that b99bcea let
+    out are refused. Refused at both: an unmarked span of the rows' days, a derived count of days, the new words
+    copied whole, and the quoted true day.
+  - Tests: 6 new (`tests/test_brain_r34_repair.py`); 4 of them fail on the build's code. No re-pin. Suite in
+    four shards: 1,209 + 1,548 + 1,665 + 2,046 = 6,468 passed, 2 skipped, 0 failed.
+- **Left.** The false weekday range on `window.start` and `window.end`, marked or not, still passes the check, as any
+  scope's does. The repair is that no words offer that pair any more. The values rule of point 4 is still not added
+  (33.1).
+
+### 33.6 Acceptance, run apart from the builders (on the merged code)
+All of it is in sample: the class was read on set A's records. No marking, and not a gate attempt.
+- **Repeats.** 16 live runs of the three conversations of the class on b99bcea and 16 on this code (80 turns each).
+
+  | First turns about saves (32 a build) | b99bcea | this code |
+  |---|---|---|
+  | A range to the export's end said of the saves (false) | 14 | 0 |
+  | The saves' own range said (true) | 0 | 22 |
+  | A reword asked | 1 | 17 |
+  | Code's own lead | 0 | 0 |
+
+  Every reword on this code was for a true span of the rows written with no marker, as the window's words now
+  hold it. All 17 came back right. In 2 more turns the same sentence was a point and was dropped, with its count.
+  The cost is time: the median of those two turns went from 3.4 to 6.1 seconds and from 5.9 to 7.9.
+- **The follow-up about one platform.** "That is the whole record" was said in 2 of 16 answers on each build. It is
+  the model's judgement and was not a target.
+- **One full pass of each set on this code**, against the two passes of each on the build before (mvp33).
+
+  | | Set A before | Set A now | Set H before | Set H now |
+  |---|---|---|---|---|
+  | Median seconds | 6.19, 6.20 | 6.63 | 5.76, 5.88 | 5.86 |
+  | Slow end (p90) seconds | 9.10, 9.34 | 9.91 | 9.03, 7.98 | 8.44 |
+  | Code's own lead | 0, 1 | 1 | 1, 0 | 1 |
+  | Turns reworded | 1, 2 | 3 | 4, 1 | 2 |
+  | Turns with a rows' day refused | 0, 0 | 1 | 0, 0 | 0 |
+
+  Turns whose results held the new words were 0.5 s slower on set A; all the others were 0.3 s slower too, so most
+  of the difference is the hour of the run. Both code leads are other classes: a title that ends in a number right
+  before its row marker, and a path that is no cell, each written twice.
+- **Why the check was not loosened** to take the unmarked span: it would let the right pair of days be said of the
+  wrong scope, and a point gets no reword, so the refusal there is the only net.
+- **Offline, on the merged code:** saved forms of 44 folders, values 0 released and 0 refused (2,017 forms, 1,969
+  answers); full and cells byte for byte; planted byte for byte in three modes; the skeptic's 91 sentences: 0 true
+  refused, 0 unmarked false released, the marked false forms as 33.5 lists; suite 6,468 passed, 2 skipped, 0 failed.
+- **For step 2.** The full and cells checks refuse a citation of the new cells, and full is the default. The wired
+  chat must run the values check, or the tools must keep the cells and their note out in those modes.

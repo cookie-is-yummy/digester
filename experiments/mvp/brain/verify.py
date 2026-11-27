@@ -695,12 +695,54 @@ class Ledger:
     def get(self, rid):
         return self.by_rid.get(rid)
 
+    def base(self):
+        """mvp34: this ledger as the full and cells checks read it, every result as the tools wrote it before the
+        days of the rows counted (rows_aside); itself when no result holds them."""
+        if not any(_rows_added(r.env) for r in self.by_rid.values()):
+            return self
+        if getattr(self, "_base", None) is None:
+            self._base = Ledger([rows_aside(r.env) for r in self.by_rid.values()])
+            self._base.whole = self.whole
+        return self._base
+
     def all_names(self):
         out = {}
         for r in self.by_rid.values():
             for n, p in r.names:
                 out.setdefault(_low(n), []).append((r.rid, p, n))
         return out
+
+
+def _rows_added(env):
+    win = (env.get("sheet") or {}).get("window") if isinstance(env.get("sheet"), dict) else None
+    return isinstance(win, dict) and any(k in win for k in R.ROWS_DAYS) or R.BASE_WINDOW in env
+
+
+def rows_aside(env):
+    """mvp34: a result as the full and cells checks read it. The tools give a window the first and the last day of
+    the rows it counts (window.first_counted, window.last_counted, with a note), and a window of all their history
+    whose rows do not span it words that say those days; the envelope keeps the words as they were (results.
+    BASE_WINDOW), which the model is not sent. Here the cells and the note are out and those words are back, so the
+    full and cells checks read each result as before (a copy; the result itself is never changed)."""
+    if not _rows_added(env):
+        return env
+    env2 = {k: v for k, v in env.items() if k != R.BASE_WINDOW}
+    sh = env.get("sheet")
+    base = env.get(R.BASE_WINDOW) if isinstance(env.get(R.BASE_WINDOW), dict) else {}
+    if isinstance(sh, dict) and isinstance(sh.get("window"), dict):
+        w = {k: v for k, v in sh["window"].items() if k not in R.ROWS_DAYS}
+        if isinstance(base.get("words"), str):
+            w["words"] = base["words"]
+        env2["sheet"] = dict(sh, window=w)
+    meta = env.get("meta")
+    if isinstance(meta, dict):
+        m = dict(meta, notes=[n for n in (meta.get("notes") or []) if n != R.COUNTED_NOTE])
+        if isinstance(base.get("words"), str) and "window_said" in m:
+            m["window_said"] = base["words"]
+        if isinstance(base.get("said"), str) and isinstance(m.get("window_dates"), dict):
+            m["window_dates"] = dict(m["window_dates"], said=base["said"])
+        env2["meta"] = m
+    return env2
 
 
 def whole_aside(env):
@@ -1020,7 +1062,14 @@ def check_value(mk):
             return "wrong_name", f"{mk.path} = '{_clip(v)}'"
         return None
     if meas == "date":
-        return _date_ok(mk)
+        r = _date_ok(mk)
+        if r and r[0] == "wrong_value" and key in ROWS_DAYS and mk.rid:
+            # mvp34 (live: "3 to 10 October 2026[r1.window.first_counted]" bound the one marker to the last day): the
+            # span's two-marker form
+            hint = f"; a span: from <day>[{mk.rid}.window.first_counted] to <day>[{mk.rid}.window.last_counted]"
+            if len(r[1]) + len(hint) <= 158:
+                r = (r[0], r[1] + hint)
+        return r
     if meas == "hour":
         if not mk.said:
             return "bad_marker", f"{mk.path} = {v}"
@@ -4512,6 +4561,7 @@ def check_answer(form, ledger, turn=None, mode=None):
     turn = turn or Turn()
     if not isinstance(ledger, Ledger):
         ledger = Ledger(ledger)
+    ledger = ledger.base()   # mvp34: the full and cells checks read every result as before the rows' days
     try:
         f = form if isinstance(form, AnswerForm) else AnswerForm.model_validate(form)
     except ValidationError as e:
@@ -4710,6 +4760,10 @@ _V_PROSE_KEYS = frozenset({"notes", "note", "error", "next", "holds", "holds_not
 # mvp32: the lists a tool makes to hold ONE named row, so that the name is cited on its row (learned's `on_topic`, a
 # dict before). The list's length is no count of their history: it stands for no figure and takes no count marker
 ONE_ROW_KEYS = frozenset({"on_topic"})
+ROWS_DAYS = ("first_counted", "last_counted")   # mvp34: the window's cells of the days of the rows counted (tools)
+# mvp34: the part of a window's words that says the days of the rows counted (tools.rows_span_words); its days are the
+# rows' cells', and stand only under those cells' markers
+_ROWS_SPAN_SEG = re.compile(r"\bthe [^:;()]* counted: [^;()]*")
 
 
 def _mon_i(tok):
@@ -4745,6 +4799,7 @@ class _Pool:
         self.named_shown = True   # mvp30: whether rows named by a marker count as shown (rule "rows_shown")
         # mvp28 repair (rule "page_cited"): the same counts by the result that holds them ({figure: {rid: cells}})
         self.held_by, cur, val_rids = {}, [None], []
+        self.rows_days = {}   # mvp34: {iso day: the paths of the rows' day cells that hold it}
 
         def hold(v, rid=None):
             self.held[round(v, 6)] = self.held.get(round(v, 6), 0) + 1
@@ -4772,12 +4827,21 @@ class _Pool:
                 if key == "hour" and v == int(v):
                     self.hours.add(int(v) % 24)
             elif isinstance(o, str):
-                strs.append(o)
+                if key in ROWS_DAYS:
+                    # mvp34: the days of the rows counted stand only under their own markers (a day said with no
+                    # marker is found only where the results held it before these cells); repair: nor as text, so
+                    # a quoted day is not found in them either
+                    if _V_ISO.match(o.strip()):
+                        self.rows_days.setdefault(o.strip()[:10], []).append(f"{cur[0]}.window.{key}")
+                    return
+                # repair (a quoted day, '"10 October 2026"', was found in the window's words that say the rows' days):
+                # the text a quote is looked up in holds those words without that part, as code's strings do
+                strs.append(_ROWS_SPAN_SEG.sub(" ", o) if key in _V_WINDOW_KEYS else o)
                 if key in ("part", "label") and o.strip():
                     self.labels.add(_low(o))
                 if key in _V_THIRD_PARTY:
                     return
-                code.append(o)
+                code.append(_ROWS_SPAN_SEG.sub(" ", o) if key in _V_WINDOW_KEYS else o)
                 if key in _V_VALUE_KEYS:
                     vals.append(o)
                     val_rids.append(cur[0])
@@ -4961,6 +5025,35 @@ def _screen_window_words(screen):
                 walk(v)
     walk(o)
     return out
+
+
+def _v_unfound_day(pool, said, y, mo, days):
+    """The detail of a day (or a span of two days) said with no marker that no result holds that way; mvp34: when it
+    is one result's own rows' days (window.first_counted, window.last_counted), that result's cells are named, to cite
+    right after each day. A day two results hold names no cell (which result it is said of is the model's)."""
+    def rids_of(d, key):
+        out = []
+        for iso, ps in sorted(pool.rows_days.items()):
+            a = _as_d(iso)
+            if a and (y is None or a.year == y) and a.month == mo and a.day == d:
+                out += [p.split(".", 1)[0] for p in ps if p.endswith("." + key)]
+        return out
+    head = f"'{_clip(said, 40)}' has no marker"
+    if len(days) == 2:
+        rids = [r for r in rids_of(days[0], "first_counted") if r in rids_of(days[1], "last_counted")]
+        if len(set(rids)) == 1:
+            r = rids[0]
+            return (f"{head}: write each day whole, each with its own cell: from <day>[{r}.window.first_counted] to "
+                    f"<day>[{r}.window.last_counted]")
+        if any(rids_of(d, k) for d in days for k in ROWS_DAYS):
+            return f"{head}: write each day whole, each with the cell that holds it right after it"
+    elif len(days) == 1:
+        held = sorted({(r, k) for k in ROWS_DAYS for r in rids_of(days[0], k)})
+        if len({r for r, _k in held}) == 1:
+            return f"{head}: cite {held[0][0]}.window.{held[-1][1]} right after the day"
+        if held:
+            return f"{head}: cite the cell of the result it is said of, right after the day"
+    return f"'{_clip(said, 40)}': no result of this turn holds that day"
 
 
 def _v_code_has(pool, s):
@@ -5354,6 +5447,9 @@ def _v_bad_detail(raw, ledger):
         except (KeyError, IndexError, TypeError):
             mv = KeyError
         mrest = "" if rest == "meta" else mrest
+        rows_hint = _v_rows_days_hint(head, rid, sheet, mrest, want)
+        if mv is not KeyError and mv is not None and rows_hint:
+            return rows_hint
         if mv is not KeyError and mv is not None:
             pairs = [(mrest, mv)] if not isinstance(mv, (dict, list)) else \
                 [(f"{mrest}.{p}" if mrest and not p.startswith("[") else f"{mrest}{p}", x) for p, x in _v_leaves(mv)]
@@ -5374,6 +5470,28 @@ def _v_bad_detail(raw, ledger):
             return _bad_detail(raw, ledger)
         return f"{head} is no cell of {rid}: cite one cell of a result by its path"
     return _bad_detail(raw, ledger)
+
+
+def _v_rows_days_hint(head, rid, sheet, mrest, want):
+    """mvp34 (a reword named the window's two cells for a cited meta.window_dates, and the sentence about the rows
+    came back with the window's ends as their span): a meta citation of the window's days on a result whose window
+    holds the days of the rows counted names those cells, and says what the window's own ends are. None otherwise."""
+    segs = _segs(mrest) if mrest else []
+    if not segs or segs[0][0] != "window_dates" or want == "number" or \
+            (len(segs) > 1 and segs[-1][0] not in ("start", "end", "said")):
+        return None
+    win = sheet.get("window") if isinstance(sheet.get("window"), dict) else {}
+    if not all(isinstance(win.get(k), str) for k in ROWS_DAYS) or \
+            (win.get("first_counted"), win.get("last_counted")) == (win.get("start"), win.get("end")):
+        return None   # (rows that span the window: its own cells are their days too, and are named as before)
+    a, b = (f"{rid}.window.{k}" for k in ROWS_DAYS)
+    for s in (f"{head} is meta, which is not cited: the rows counted run from {a} to {b}; the window's own ends are "
+              "not their days",
+              f"{head} is meta, which is not cited: the rows counted run from {a} to {b}",
+              f"{head} is meta: the rows' days are {a} and {b}"):
+        if len(s) <= 158:
+            return s
+    return None
 
 
 def _fit(head, paths, sep=", as "):
@@ -5753,7 +5871,8 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
         mo, y = _mon_i(m.group(3)), (int(m.group(4)) if m.group(4) else None)
         for d in (int(m.group(1)), int(m.group(2))):
             if not pool.has_date(y, mo, d) and not quoted(m.start(), m.end()):
-                out.append(("unfound_date", f"'{_clip(m.group(0), 40)}': no result of this turn holds that day"))
+                out.append(("unfound_date", _v_unfound_day(pool, m.group(0), y, mo, (int(m.group(1)),
+                                                                                       int(m.group(2))))))
                 break
         t = _blank(t, m.start(), m.end())
     for rx, order in ((_V_DAYMON, "dmy"), (_V_MONDAY, "mdy")):
@@ -5769,7 +5888,7 @@ def _values_unmarked(raw, markers, ledger, turn, pool, nw_refuse, cm_rules=None)
                 y = int(ny.group(1)) if ny else None
             if not (pool.has_date(y, mo, d) or _v_code_has(pool, m.group(0)) or
                     quoted(m.start(), m.end())):
-                out.append(("unfound_date", f"'{_clip(m.group(0), 40)}': no result of this turn holds that day"))
+                out.append(("unfound_date", _v_unfound_day(pool, m.group(0), y, mo, (d,))))
             t = _blank(t, m.start(), m.end())
     for m in list(_V_MONYEAR.finditer(t)):
         mo, y = _mon_i(m.group(1)), int(m.group(2))

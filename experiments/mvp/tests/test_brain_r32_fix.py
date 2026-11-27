@@ -57,8 +57,9 @@ def test_a_scope_window_over_all_history_says_what_each_end_is(brain):
     last_save = max(local(at) for x in visible_rows() for k, at in x["events"] if k in ("save", "playlist",
                                                                                          "collection"))
     assert w["start"] == first_save.isoformat() and w["end"] > last_save.isoformat()
-    assert w["words"] == (f"all your history (from {Hm.day_words(first_save)}, the day of your first save, to "
-                          f"{Hm.day_words(local('2026-10-30T12:00:00+00:00'))}, where your export ends; your first "
+    # mvp34 (DESIGN 33): the saves do not span the window, so its words say the days of the saves counted
+    assert w["words"] == (f"all your history (the saves counted: {Hm.span_words(first_save, last_save)}; your export "
+                          f"ends on {Hm.day_words(local('2026-10-30T12:00:00+00:00'))}; your first "
                           f"item of any kind: {Hm.day_words(_first(('watch', 'save', 'like')))})")
     assert "your saves:" not in w["words"] and r["meta"]["window_said"] == w["words"]
     # the meta copy of the window's days says the same words once, never the bare span of the window

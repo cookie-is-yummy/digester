@@ -111,6 +111,10 @@ def narrowed(res):
 # the words of tools.scope_span_words, as the window's words carry them (the export's end already cut out)
 SCOPE_SPAN_SHOWN = re.compile(r"^all your history \(from (?P<day>\d{1,2} [A-Z][a-z]+ \d{4}), the day of your "
                               r"(?P<first>first [^,;()]+), to \d{1,2} [A-Z][a-z]+ \d{4}(?:; [^()]*)?\)$")
+# mvp34: the words of tools.rows_span_words ("all your history (the saves counted: 3 to 10 October 2026; your export
+# ends on 30 October 2026; ...)")
+ROWS_SPAN_SHOWN = re.compile(r"^(?P<pre>on [A-Z][a-z]+days, over )?all your history \(the [^:;()]+ counted: "
+                             r"(?P<span>[^;()]+)(?:; [^()]*)?\)$")
 
 
 def scope_line(res):
@@ -129,11 +133,16 @@ def scope_line(res):
     # ("all your history (from 12 October 2026, your first Instagram open)"); the model's words are not changed
     short = SCOPE_SPAN_SHOWN.match(window)
     window = f"all your history (from {short.group('day')}, your {short.group('first')})" if short else window
+    # mvp34: the words that say the days of the rows counted (tools.rows_span_words) are shown by those days alone,
+    # "all your history (3 to 10 October 2026)"; never the window's end, which is not a day of theirs
+    rows = ROWS_SPAN_SHOWN.match(window)
+    pre = (rows.group("pre") or "") if rows else ""   # (repair: a weekday's head, "on Mondays, over ", kept)
+    window = f"{pre}all your history ({rows.group('span')})" if rows else window
     # repair2 (beside a channel, an area or a length the start read as the first save of the rows counted, a day that
     # is not theirs): when anything but a platform narrows the rows, the line says no start, only "all your history"
-    if short and narrowed(res):
-        window = "all your history"
-    window = window.split(", ")[0].strip() if "(" not in window else window
+    if (short or rows) and narrowed(res):
+        window = f"{pre}all your history"
+    window = window.split(", ")[0].strip() if "(" not in window and not pre else window
     if window.count("(") > window.count(")"):
         window += ")"
     parts = [lst, base] + ([window] if window else [])

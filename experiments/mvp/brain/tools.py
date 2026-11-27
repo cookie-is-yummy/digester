@@ -166,6 +166,9 @@ class Turn:
     # mvp30 repair: the query of each facts sheet this turn built (by the sheet's id), so the cells added after the
     # size cut are counted in the call's own scope
     queries: dict = field(default_factory=dict, init=False, repr=False)
+    # mvp34: the first and the last day of what each facts sheet counts (by the sheet's id), for the cells added after
+    # the size cut (window.first_counted, window.last_counted)
+    counted: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self):
         from .. import outside as O
@@ -524,6 +527,7 @@ def _sheet(turn, q):
     _scope_start(turn, raw, q)
     _weekday_events(turn, raw, q, turn.unlock if _counts_topic(turn, q) else turn.said_unlock)
     turn.queries[id(raw)] = q
+    _counted_days(turn, raw, q)
     return raw
 
 
@@ -616,6 +620,78 @@ def scope_noun(plats, how):
     """What a scoped record's start is the start of: "Instagram opens", "saves", "YouTube history"."""
     p = Hm.PNAME.get(plats[0], plats[0]) + " " if len(plats) == 1 else ""
     return f"{p}{SCOPE_NOUN.get(how, 'history')}"
+
+
+COUNTED_NOUN = {"watched": "opens", "saved": "saves", "liked": "likes", "any": "items"}
+ROWS_SPAN_HEAD = "all your history (the "   # the head of rows_span_words' window words
+COUNTED_NOTE = R.COUNTED_NOTE
+# repair (the weekday words, "on Mondays, over all your history (3 to 30 October 2026, where your export ends)", kept
+# the window's two ends as the rows' span): the head a weekday scope puts before a window's words (facts.sheet)
+WEEKDAY_HEAD = re.compile(r"^on (?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)days, over ")
+
+
+def all_history_inner(words, heads=("all your history (",)):
+    """The words inside "all your history (...)" when a window's words are those (after a weekday's head, "on Mondays,
+    over "), and start with one of `heads`; None otherwise."""
+    if not isinstance(words, str):
+        return None
+    w = words[WEEKDAY_HEAD.match(words).end():] if WEEKDAY_HEAD.match(words) else words
+    if not w.startswith(tuple(heads)) or not w.endswith(")"):
+        return None
+    return w[len("all your history ("):-1]
+
+
+def rows_span_words(plats, how, first, last, end, any_start=None):
+    """mvp34 (a window of all their history over a scope starts on the scope's first row and ends where the export
+    ends, and "you saved 6 items, from 3 to 30 October 2026" was said when the last save was on 10 October): the words
+    of such a window say the days of the rows counted once, as that, and where the export ends, as that. "the saves
+    counted: 3 to 10 October 2026; your export ends on 30 October 2026; your first item of any kind: 5 January 2021"."""
+    p = Hm.PNAME.get(plats[0], plats[0]) + " " if len(plats) == 1 else ""
+    return (f"the {p}{COUNTED_NOUN.get(how, 'items')} counted: {Hm.span_words(first, last)}; your {p}export ends on "
+            f"{Hm.day_words(end)}" + (f"; your first {p}item of any kind: {Hm.day_words(any_start)}" if any_start
+                                      else ""))
+
+
+def _counted_days(turn, raw, q):
+    """mvp34: the first and the last day of the events this sheet counts (the scope's base kinds, its platforms, its
+    names, its length and weekday, the private topics out but the one it may count, inside the window's days), kept by
+    the sheet's id for the cells written after the size cut (window.first_counted, window.last_counted). Given only
+    when those events are the sheet's own count (`when.events`, else the items of `totals.items`), and some were
+    counted. A window of all their history whose rows do not span it gets words that say the rows' days
+    (rows_span_words); every other window's words are as they were."""
+    import numpy as np
+    win = raw.get("window") if isinstance(raw.get("window"), dict) else None
+    if win is None or not win.get("start") or not win.get("end"):
+        return
+    m = _scope_events(turn, q, tuple(Hm.HOW_KINDS[q.how]))
+    if m is None:
+        return
+    idx = turn.lib.idx
+    a, b = _date(win["start"]), _date(win["end"])
+    m = m & (idx.day >= a.toordinal()) & (idx.day <= b.toordinal())
+    n = int(m.sum())
+    if not n:
+        return
+    when = raw.get("when") if isinstance(raw.get("when"), dict) else None
+    tot = (raw.get("totals") or {}).get("items") if isinstance(raw.get("totals"), dict) else None
+    if when is not None and isinstance(when.get("events"), int):
+        if n != when["events"]:
+            return
+    elif not isinstance(tot, int) or len(np.unique(idx.it[m])) != tot:
+        return
+    from datetime import date
+    first, last = date.fromordinal(int(idx.day[m].min())), date.fromordinal(int(idx.day[m].max()))
+    words = win.get("words")
+    turn.counted[id(raw)] = (first, last, None)
+    if (first, last) != (a, b) and all_history_inner(words) is not None and "where your export ends" in words:
+        plats = Hm._scope_platforms(q, turn.lib.view, turn.lib.rec)
+        anyk = _date(win["platform_starts"]) if win.get("platform_starts") else None
+        # (a weekday's head is kept: "on Mondays, over all your history (...)"; its words never said the first item of
+        # any kind, which is no day of that weekday's, so they still do not: window.platform_starts holds it)
+        pre = WEEKDAY_HEAD.match(words)
+        win["words"] = (pre.group(0) if pre else "") + "all your history (" + \
+            rows_span_words(plats, q.how, first, last, b, None if pre else anyk) + ")"
+        turn.counted[id(raw)] = (first, last, words)   # the words as they were, for the checks that read them
 
 
 def _scope_start(turn, raw, q):
@@ -1158,6 +1234,9 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
             # mvp32: a scope's window over all their history says its span once, in its own words (scope_span_words);
             # the bare days ("3 to 30 October 2026") read as the days the scope's rows span
             d["said"] = win["words"][len("all your history ("):-1]
+        elif d and all_history_inner((win or {}).get("words"), (ROWS_SPAN_HEAD,)) is not None:
+            # mvp34: and the words that say the rows' own days (rows_span_words), after a weekday's head too
+            d["said"] = all_history_inner(win["words"], (ROWS_SPAN_HEAD,))
         if d:
             meta["window_dates"] = d
             wb = (meta.get("windows") or {}).get("b")
@@ -1219,6 +1298,21 @@ def _finish(turn, tool, rid, raw, sheet, meta, t0, window=None, cost=0.0, keep=N
         if how == "opened" and _last_watched(turn, sh, q_):
             env["meta"]["notes"].append(LAST_NOTE)
         _cells_after_cut(turn, tool, rid, sh, env["meta"], how, only, q_)
+        cd = turn.counted.get(id(raw)) if raw is not None else None
+        win = sh.get("window") if isinstance(sh.get("window"), dict) else None
+        if cd and win is not None and win.get("start") and win.get("end"):
+            # mvp34 (the days of the rows counted were in no cell, and a window's two ends were said as the rows'
+            # span): after the size cut, as the window's days are
+            win["first_counted"], win["last_counted"] = cd[0].isoformat(), cd[1].isoformat()
+            env["meta"]["notes"].append(COUNTED_NOTE)
+            if cd[2] is not None:
+                # the window's words as they were, beside the envelope (loop.present sends the model rid, tool, meta
+                # and the sheet only): the full and cells checks read the result as before (verify.rows_aside)
+                d = env["meta"].get("window_dates")
+                env[R.BASE_WINDOW] = {"words": cd[2], "said": (cd[2][len("all your history ("):-1]
+                                                               if cd[2].startswith(SCOPE_SPAN_HEAD) else
+                                                               window_dates(d["start"], d["end"])["said"])
+                                      if isinstance(d, dict) else None}
     shown_n = len((sheet or {}).get(keep) or []) if keep else 0
     if keep == "periods" and isinstance(whole, int) and shown_n < whole:
         # toolfix 9 (a month timeline of all history was cut to its first 24 months while complete said true): the
@@ -1246,7 +1340,8 @@ def added_cells_out(got, want):
     import copy
     g = copy.deepcopy(got)
     g.pop("windows", None)   # (in_top_of_every_period is results.cut_to_size's own, as today's sheet is cut here)
-    for k, sub in (("filters", ("names_in_scope",)), ("window", ("days", "platform_starts")),
+    for k, sub in (("filters", ("names_in_scope",)), ("window", ("days", "platform_starts", "first_counted",
+                                                                 "last_counted")),
                    ("previous", ("days", "channels")), ("library", ("counted_over",)),
                    ("when", ("events_by_weekday",)), ("new", ("channels_first_opened",))):
         if isinstance(g.get(k), dict):

@@ -24,6 +24,14 @@ CLIPPED_NOTE = ("`title_clipped` true: this result shortened the title to fit (t
                 "own title is whole in their history, and a search for its words reads more of it.")
 WHOLE_NOTE = ("`title_whole`: the item's own title, whole as their history holds it; `title` beside it is the same "
               "title shortened by this result to fit (the '…' is this result's).")
+# mvp34: the first and the last day of the rows a result counts, in its window (tools._counted_days), and the words of
+# a window of all their history that say them. The model reads both; the full and cells checks read each result as the
+# tools wrote it before (verify.rows_aside: the cells and the note out, the window's words as they were, kept by the
+# tools in the envelope's BASE_WINDOW, which the model is not sent).
+ROWS_DAYS = ("first_counted", "last_counted")
+BASE_WINDOW = "base_window"
+COUNTED_NOTE = ("window.first_counted and window.last_counted: the first and the last day of what this result counts. "
+                "Say those for when the rows run; window.start and window.end are the window's own ends, not theirs.")
 RESULT_CHARS = 6000          # about 1,500 tokens (4 characters a token): rows are cut beyond it
 CUT_ORDER = ("items", "channels", "themes", "periods", "areas", "topics", "fields", "names", "points")
 _SWAP = str.maketrans({"[": "(", "]": ")", "{": "(", "}": ")", "<": "‹", ">": "›"})
