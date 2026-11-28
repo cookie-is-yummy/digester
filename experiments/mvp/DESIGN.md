@@ -9920,3 +9920,17 @@ Two points the second repair left to the brief's owner, decided here, and what w
 - **The final checks** (the suite with every API key unset, saved forms, planted sets, dry self-test, demo,
   `probe_same`, both reviews' probes) ran on the commit that adds this section; their numbers are in
   `design/brain_v1/DECISIONS.md`.
+
+### 35.8 The test page's route, driven after the merge (tests only)
+
+Every test and both live runs before this used the console channel. `tests/test_brain_r36_web.py` drives the
+route a tester takes, through `channels/web.py` with the fake provider and the fake interpreter.
+
+- "Start over" with the switch on shows the text that names Anthropic, with no training words, and marks it shown.
+  "I agree" then stores "+anthropic".
+- "Start over" with the switch off, then the switch on: "I agree" stores nothing and gets the new text. A second
+  "I agree" stores "+anthropic".
+- A history question on the page is answered by the chat core at H1, its follow-up at H2, and the page's state
+  renders both. The other "start over" button clears `brain:<h>` with the rest.
+
+No code changed: 3 passed. The page has no view of a run's trace, so there was none to drive.

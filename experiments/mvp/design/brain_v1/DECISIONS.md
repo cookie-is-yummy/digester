@@ -1265,15 +1265,25 @@ interpreter sits at the 8 s bar, and one answer of 23 passed 11 s.
 | First review's probes | 35 passed |
 | Second review's probes | 64 passed; its 6 feedback probes cannot run now, since a feedback is never tried |
 
-One test of an older file failed once in the fix round's run and passed here. It fails by test order, not by
-this code; the base run that checks this is noted in the next commit if it says otherwise.
+One test of an older file (`test_brain_r28_checks.py`, a figure quoted from a cited row's own text) is unsteady.
+It failed once in a full run and in 3 of 5 runs of its 22-file shard, on two commits of the build branch. It passed
+in the full run above, and in 2 of 2 runs of that shard on the code before the build. The cause is not
+established. `brain/`, which it tests, is unchanged, and none of the 22 files is a test of the wiring.
 
 **Known and accepted for this slice.**
 - A message the chat core hands back waits for that turn first: 2.5 to 8.5 s before today's reply starts.
 - A recommendation read as talk is answered from the history, not from the saves.
 - The claim forms are a long list of word patterns. They go when the prompt itself hands back such messages.
 - No pick request, rule, to-do or setting goes to the chat core. `search` and `learned` have no backend yet.
-- Two real-library risks are untested: the wired path has never run on real data, by rule.
+- The wired path has never run on real data, by rule. Real titles and channel names may trip the claim forms.
+- An errand read as talk could still lose its draft card if the chat core answered it. Live: 0 of 8, a small count.
+- If a bot model is ever set to a Claude one, the older consent text also stores "+anthropic". It keeps the
+  training words and does not name the history rows. Such a person would be eligible without the new text.
+  No bot model is a Claude one by default.
 
 **Next.** A prompt version that hands back what is not a history question, with an eval before and after. Then
 the search backend, a new freeze, four runs with blind marks, and the gate on half B.
+
+**After the merge: the test page's route (28 Nov 2026).** The tests before used the console channel only. Three
+new tests drive the test page's channel with the switch on: "Start over", the consent that names Anthropic,
+"I agree", a history question and its follow-up. All pass with no code change (DESIGN 35.8).
