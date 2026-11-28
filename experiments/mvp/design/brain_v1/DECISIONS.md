@@ -1137,3 +1137,62 @@ answers can end in the private line (as half A's do). Judged here: this does not
 nothing seen says which messages half B holds or what their right answers are. It is written down so the
 founder can judge otherwise. From now on builders search only with `git grep` and explicit pathspecs that
 exclude both locked files.
+
+## The first slice's router, measured before the build (28 Nov 2026)
+
+The plan written two sections up is corrected here. All numbers are from made-up messages on the made-up
+library, and all are in sample (the eval messages built the chat core, the dev sets built today's bot, and the
+rules below were chosen after reading the results). The reading is mine.
+
+**What changed from the plan.**
+- History questions only. Searches of saves and "what have I learned about" stay with today's bot: the chat
+  core's `search` and `learned` tools have no real backend yet.
+- No proposals. A request to do something never reaches the chat core in this slice.
+- The switch names people one by one (`MVP_BRAIN=1` and the handle in `MVP_BRAIN_PEOPLE`). The operator is not
+  implied: on the test page every person is the operator.
+
+**Three routers were measured and dropped.**
+
+| Router | Result |
+|---|---|
+| Today's code-only history parse decides | It takes 28 of 88 first-turn eval questions (32%). |
+| A gate made of words | It takes 70 of 88, and also 17 of 200 non-history messages (65 of 200 as follow-ups). |
+| The chat core looks first at everything, and code decides from its record | About 107 of 118 eval turns sent. But of 200 non-history messages (rules, to-dos, settings, thanks) it answered 32 to 38 with an overview nobody asked for. |
+
+The cause of the third: the chat core has no way to say "this is not mine" except a hand-back, and it does not
+use one for settings, feedback or small talk. An action would be lost about 1 time in 6.
+
+**The router built.** Today's interpreter stays in front for this slice.
+- A message today's history parse takes goes to the chat core first (no interpreter call).
+- Any other message is read by today's interpreter as today. The chat core is tried only for talk intents:
+  `ask`, `chat`, `library_stats`, `clarify`, `unsupported`, and a `confirm` with nothing waiting.
+- A follow-up belongs to whoever answered last. While a chat-core answer is the fresh one on screen, `follow_up`
+  and `feedback` go to it too. Measured on the real message path: 19 of 30 eval follow-ups come back as
+  `follow_up`, and today's follow-up code knows nothing of that screen.
+- Code then reads the turn's record and sends the answer, or declines to today's bot with the same reading. It
+  declines on: a failure, a `search` or `learned` call, a hand-back, the plain line, no result, an `ask` whose
+  lookup found no match, or a sentence that claims an action.
+- `profile_show` and `library_status` stay with today's bot. The tools read neither the saved profile nor the
+  import state.
+
+**Measured for this router (in sample).**
+
+| Measure | Value |
+|---|---|
+| Eval questions sent to the chat core | about 108 of 118 (92%) |
+| Not sent | 4 or 5 searches, 1 rule, 1 summary, 2 profile or import questions, 1 follow-up after a declined turn |
+| Non-history messages wrongly answered | about 4 or 5 of 200, none of them a request to do something |
+| Those wrong answers | thanks answered with an overview; a request for a recommendation answered with "I can't suggest" |
+| Wait added to a history answer | about 1.2 s for the interpreter (median), when today's parse does not take it |
+| Wait added to a pick request | about 3 s (slow end 4 s) if the turn is ended at its first search call; about 8 s if not |
+
+The interpreter's own intents for the 200 non-history messages were not run; the sets' expected intents stand in
+for them. A doing request the interpreter misreads as a question is already lost by today's bot.
+
+**Known and accepted for this slice.** Today's classifier in front is not the end state. The next step is a
+prompt version in which the model itself hands back what is not a history question (an eval before and after).
+The speed bars (8 s median, 11 s slow end) are at the edge for answers that pass through the interpreter; the
+build's live smoke measures the whole wait.
+
+**Before a person is switched on.** Their consent must have named Anthropic. "What leaves this computer" says
+their messages and history rows go there. The "not used for training" words are not said to them.
