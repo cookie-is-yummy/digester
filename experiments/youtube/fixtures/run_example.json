@@ -1,0 +1,4 @@
+{"method": "synthetic_example", "embedding": "none", "meta": {"note": "synthetic run file showing the optional moments block"},
+ "queries": {"yt_q03": ["SYNvid00001", "SYNvid00005"], "yt_q04": ["SYNvid00005", "SYNvid00001"]},
+ "moments": {"yt_q03": [{"code": "SYNvid00001", "start_s": 45, "end_s": 190}, {"code": "SYNvid00001", "start_s": 0, "end_s": 45}],
+             "yt_q04": [{"code": "SYNvid00005", "start_s": 75, "end_s": 280}, {"code": "SYNvid00005", "start_s": 280, "end_s": 545}]}}

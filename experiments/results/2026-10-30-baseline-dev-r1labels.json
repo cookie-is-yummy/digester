@@ -1,0 +1,51 @@
+{
+ "run": "baseline.json",
+ "method": "baseline:hybrid_prf",
+ "split": "dev",
+ "n_queries": 16,
+ "ndcg10": 0.585,
+ "p10": 0.706,
+ "success5": 0.938,
+ "mrr": 0.856,
+ "r100": 0.459,
+ "unjudged10": 0.0,
+ "ndcg10_ci95": [
+  0.466,
+  0.705
+ ],
+ "ndcg10_by_kind": {
+  "audio": 0.0,
+  "more_like_this": 0.645,
+  "name": 0.557,
+  "people": 0.697,
+  "place": 0.842,
+  "said_shown": 0.765,
+  "topic": 0.516,
+  "vibe": 0.865
+ },
+ "meta": {
+  "wall_s": 23.5,
+  "query_p50_s": 0.103,
+  "cost_usd": 0
+ },
+ "labels": {
+  "round": "r1",
+  "judge": "claude-evaluator-r1",
+  "pooled_unjudged_dev_top10": 31,
+  "grades": {
+   "2": 11,
+   "1": 9,
+   "0": 11
+  },
+  "backup": "data/evals/labels/evalset.pre_r1.jsonl",
+  "pre_r1_scores": {
+   "ndcg10": 0.508,
+   "p10": 0.581,
+   "success5": 0.938,
+   "mrr": 0.856,
+   "r100": 0.434,
+   "unjudged10": 0.194
+  },
+  "note": "more-like-this lines were judged with the query's example items shown (sheet has no query text for them); evaluator had read MU text for the inventory before judging"
+ }
+}

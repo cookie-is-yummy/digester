@@ -1,0 +1,424 @@
+"""PROTOTYPE ONLY - answers that answer, and answers that know today's date (round 7, findings 90 and 91; DESIGN.md
+section 12). Pure functions over a checked composer result; the executor calls them.
+
+- post_dates(): each shown pick's dates (posted, kept) and, for a time-sensitive request, its state from its own text
+  (passed / old / open). A passed pick is never the lead or an alternative while anything not passed fits; an old one
+  comes after everything fresher; among equal fits, newer first; a year in the request prefers posts that name it or
+  were posted in the 12 months before it.
+- choose_items(): the items answer, decided in code from what the details step read: 2 or more named things over the
+  shown picks make the answer those things, each under the post it came from, with that post's link.
+- stale reasons: a reason from a post older than 60 days never states a time-relative claim as current.
+Nothing here is written by a model: names, abouts and dates are the post's own words, checked in extract.py, and every
+date said to the person is worked out here.
+"""
+from datetime import date
+
+from . import dates as D
+from .compose import own_text
+
+MAX_SOURCES = 3
+MAX_ITEMS_PER_SOURCE = 6
+VERDICT_RANK = {"clear": 0, "close": 1}
+
+
+def _ord(day):
+    try:
+        return date.fromisoformat(str(day)[:10]).toordinal()
+    except (TypeError, ValueError):
+        return 0
+
+
+def year_hit(text, posted, year):
+    """The request names a year: the text names it, or the post was made in the 12 months before it (or in it)."""
+    if not year:
+        return True
+    if str(year) in (text or ""):
+        return True
+    return bool(posted) and str(year - 1) <= str(posted)[:4] <= str(year)
+
+
+def date_fields(p, extra, today, ts, year=None):
+    """One pick's dates (posted, kept), and for a time-sensitive request its state from its own text."""
+    it = p["item"]
+    p["posted"], p["kept_first"] = D.posted_on(it, extra), D.first_kept(it)
+    p["age_from"], p["today"] = p["posted"] or p["kept_first"], today
+    if ts:
+        own = own_text(it, extra)
+        p["date_state"] = D.state_of(own, p["posted"], p["kept_first"], today, own=own)
+        p["year_hit"] = year_hit(own, p["posted"], year)
+    return p
+
+
+def post_dates(result, extra, today, ts, year=None):
+    """Sets each pick's "posted", "kept_first" and (time-sensitive) "date_state"; reorders and drops passed picks as
+    above. Changes nothing for a request that is not time-sensitive."""
+    allp = list(result.get("picks") or []) + list(result.get("wider") or [])
+    for p in allp:
+        it = p["item"]
+        p["posted"] = D.posted_on(it, extra)
+        p["kept_first"] = D.first_kept(it)
+        p["age_from"] = p["posted"] or p["kept_first"]
+        p["today"] = today
+        if ts:
+            own = own_text(it, extra)
+            p["date_state"] = D.state_of(own, p["posted"], p["kept_first"], today, own=own)
+            p["year_hit"] = year_hit(own, p["posted"], year)
+    if not ts or not allp:
+        return
+    n_picks, n_wide = len(result.get("picks") or []), len(result.get("wider") or [])
+    for p in result.get("spare") or []:   # clear fits past the count: one may take a passed pick's place
+        if all(p is not q for q in allp):
+            date_fields(p, extra, today, True, year)
+            allp.append(p)
+    passed = [p for p in allp if (p.get("date_state") or {}).get("state") == "passed"]
+    live = [p for p in allp if p not in passed]
+    if live and passed:   # never the lead and never an alternative while anything not passed fits
+        result.setdefault("dropped", {})["passed"] = len(passed)
+        allp = live
+    # live fix pass, round 8 (finding 99): a post of an earlier year (its title and text name only years before this
+    # one, and it is more than 12 months old) is not a pick while anything else fits; alone, it says its date
+    for p in allp:
+        if old_year_post(p, extra, today):
+            p["old_year"] = True
+            if not (p.get("date_state") or {}).get("state"):
+                p["date_state"] = dict(p.get("date_state") or {}, state="old_year", **{"from": D._d(p.get("age_from"))})
+    fresh = [p for p in allp if not p.get("old_year")]
+    if fresh and len(fresh) < len(allp):
+        result.setdefault("dropped", {})["old_year"] = len(allp) - len(fresh)
+        allp = fresh
+
+    def rank(p):
+        st = (p.get("date_state") or {}).get("state")
+        return (2 if st == "passed" else (1 if st in ("old", "old_year") else 0), VERDICT_RANK.get(p.get("verdict"), 1),
+                0 if p.get("year_hit", True) else 1, -_ord(p.get("posted") or p.get("kept_first")))
+    order = sorted(allp, key=rank)
+    if order and allp and order[0] is not allp[0]:
+        result.setdefault("dropped", {})["date_reorder"] = 1
+    n_picks = max(1, n_picks)
+    result["picks"], result["wider"] = order[:n_picks], order[n_picks:n_picks + n_wide]
+
+
+def item_state(x, p, extra, today):
+    """An item's state from its own when and about (the post's year for a date with none), and the post's text for
+    the now-talk test."""
+    own = own_text(p["item"], extra)
+    text = " ".join(t for t in (x.get("when"), x.get("about")) if t)
+    st = D.state_of(text, p.get("posted"), p.get("kept_first"), today, own=own)
+    if st.get("date") and x.get("when") and not st.get("deadline"):
+        # "apply by December 1" in the post, "December 1" as the item's when: a deadline
+        at = own.lower().find(x["when"].lower())
+        st["deadline"] = at >= 0 and bool(D.DEADLINE_WORD.search(own[max(0, at - 30):at]))
+    return st
+
+
+MAX_MORE = 2   # round 8, finding 94: the next posts with things, one "More in your saves:" line each
+
+
+def good(x):
+    """Round 8, finding 93: a thing that may be counted: it has words of the post's own about it, or the post lists it
+    on a line of its own (extract.clean_items marks it "listed")."""
+    return bool(x.get("about")) or bool(x.get("listed"))
+
+
+def judged(p):
+    """Live fix pass, round 8 (finding 98): the composer gave this post its verdict (a post read only for its list,
+    finding 94, was never judged: code calls it "close")."""
+    return not p.get("read_for_items")
+
+
+def source_rank(p):
+    """Live fix pass, round 8 (finding 98): the composer's verdict leads the sources: its clear posts, then its close
+    ones, then posts read only for their list (the composer saw them among the candidates and did not pick them).
+    Checker of the live fix pass: for a time-sensitive request a post whose things are all old or passed, or a post of
+    an earlier year, is never a clear source (code lowers the verdict, never raises it), so it is not counted as the
+    kind asked for and never leads a fresher post."""
+    if "judge_yes" in p:
+        # round 9, slice U2 (point 3): for a request that names a kind of thing, once the stronger judge has read the
+        # things (judge.py), a post counts as the kind when the judge said "yes" to one of its things, whatever the
+        # composer's clear or close (its verdicts differ between runs; the judge's are cached per post), unless the
+        # composer answered "no" to one of the request's must-haves; code still lowers a stale or old post
+        if p["judge_yes"] and not p.get("stale_source") and not p.get("kind_unsure") and \
+                "no" not in (p.get("criteria") or []):
+            return 0
+        return 1 if judged(p) else 2
+    if not judged(p):
+        return 2
+    return 0 if p.get("verdict") == "clear" and not p.get("stale_source") and not p.get("kind_unsure") else 1
+
+
+def is_clear_source(p):
+    return source_rank(p) == 0
+
+
+def clear_leads(result):
+    """Round 9, slice U (point 2): the composer's clear picks that give no named thing, when no source of the items
+    answer is clear. They lead the answer in the ordinary format, and the things of the other posts follow under their
+    own label: the answer never says "Nothing I found is a clear fit" while it shows a post the composer judged clear.
+    A pick read only for its list is never clear, and for a time-sensitive request a passed or old post never leads
+    (code lowers a verdict, never raises it). [] otherwise (the items answer as before)."""
+    srcs = result.get("items_answer") or []
+    if not srcs or any(is_clear_source(p) for p, _, _ in srcs):
+        return []
+    used = {id(p) for p, _, _ in srcs} | {id(p) for p, _ in result.get("items_more") or []}
+    return [p for p in result.get("picks") or [] if judged(p) and p.get("verdict") == "clear" and id(p) not in used
+            and not p.get("old_year") and (p.get("date_state") or {}).get("state") not in ("passed", "old", "old_year")]
+
+
+def old_year_post(p, extra, today):
+    """Live fix pass, round 8 (finding 99): for a time-sensitive request, a post more than 12 months old whose own
+    title and text name years, all of them before this one ("Side income plans for 2024", posted in March 2024)."""
+    if not today:
+        return False
+    words = " ".join([p.get("title") or "", own_text(p["item"], extra)])
+    years = [int(y) for y in D.YEAR.findall(words)]
+    n = D.days_old(p.get("age_from"), today)
+    return bool(years) and max(years) < today.year and n is not None and n > D.OLD_DAYS
+
+
+def choose_items(result, extra, today, ts, year=None, notes=True, things=False, reads=None):
+    """[(pick, [item, ...], more)] for the items answer, or None when the posts read name fewer than 2 good things.
+    Each item: name, about, when, fit, n (its number in the answer), state, note (the date said to the person, for a
+    time-sensitive request), stale_from (the post's month when its about says "now" and the post is old).
+    Round 8: `reads` are the posts the details step read (the shown picks first, finding 94); with `things` (the request
+    names a kind of thing) only things the model marked as that kind ("yes") are shown, unless fewer than 2 would be
+    left over all posts (finding 93); only things with words count, and fewer than 2 make no items answer. The posts
+    are shown by how many good things they give (most first; ties keep the composer's order). The next MAX_MORE posts
+    with things are kept as result["items_more"]: [(pick, how many)]."""
+    allp = list(reads) if reads is not None else list(result.get("picks") or []) + list(result.get("wider") or [])
+    # round 9, slice U2 (point 3): when the stronger judge read the things, it decides which posts count as the kind
+    # (source_rank); without it nothing changes
+    ran = things and any("judge" in x for p in allp for x in (p.get("facts") or {}).get("items") or [])
+    if ran:
+        for p in allp:
+            p["judge_yes"] = any(x.get("judge") == "yes" for x in (p.get("facts") or {}).get("items") or [])
+    srcs = []
+    for p in allp:
+        got = [dict(x) for x in (p.get("facts") or {}).get("items") or [] if good(x)]
+        if got:
+            srcs.append([p, got])
+    fallback = things and sum(1 for _, its in srcs for x in its if x.get("fit") == "yes") < 2
+    if things and not fallback:
+        n = 0
+        for s in srcs:
+            if judged(s[0]) and len(s[1]) == 1 and s[1][0].get("judge") != "no":
+                # live fix pass, round 8 (finding 98): a post about one thing that the composer judged keeps it: the
+                # composer's verdict on the post is the better judgement of "is it the kind asked for" (round 9,
+                # slice U2: unless the stronger judge said its thing is not of the kind)
+                continue
+            n += sum(1 for x in s[1] if x.get("fit") != "yes")
+            s[1] = [x for x in s[1] if x.get("fit") == "yes"]
+        if n:
+            result.setdefault("dropped", {})["items_not_the_kind"] = n
+        srcs = [s for s in srcs if s[1]]
+    if fallback:
+        # round 9, slice U (live check): the details model marked fewer than 2 things as the kind asked for, so the
+        # others are shown too; a clear post none of whose things is marked as that kind is then not counted as the
+        # kind while a clear post's thing is ("I found 1 UI/UX library ..., and 2 posts that come close", not "7"):
+        # code lowers a verdict, never raises it
+        def yes_in(s):
+            return any(x.get("fit") == "yes" for x in s[1])
+        if any(is_clear_source(s[0]) and yes_in(s) for s in srcs):
+            for s in srcs:
+                if is_clear_source(s[0]) and not yes_in(s):
+                    s[0]["kind_unsure"] = True
+        # round 9, slice U2: a thing the stronger judge said is not of the kind is never shown or counted as the kind:
+        # a clear post keeps only its other things, and one with nothing else is not a clear source (its things may
+        # still be shown under the close wording)
+        n = 0
+        for s in srcs:
+            if not is_clear_source(s[0]) or not any(x.get("judge") == "no" for x in s[1]):
+                continue
+            rest = [x for x in s[1] if x.get("judge") != "no"]
+            if rest:
+                n += len(s[1]) - len(rest)
+                s[1] = rest
+            else:
+                s[0]["kind_unsure"] = True
+        if n:
+            result.setdefault("dropped", {})["items_not_the_kind"] = \
+                result.get("dropped", {}).get("items_not_the_kind", 0) + n
+    if ts:   # live fix pass, round 8 (finding 99): a post of an earlier year gives nothing while another post does
+        old = [s for s in srcs if old_year_post(s[0], extra, today)]
+        if old and len(old) < len(srcs):
+            result.setdefault("dropped", {})["items_old_year"] = sum(len(s[1]) for s in old)
+            srcs = [s for s in srcs if not any(s is o for o in old)]
+        for s in old:
+            s[0]["old_year"] = True
+    for p, got in srcs:
+        for x in got:
+            if ts:
+                st = item_state(x, p, extra, today)
+                x["state"] = st["state"]
+                x["date"] = st["date"].isoformat() if st.get("date") else None
+                x["note"] = D.date_note(st, today) if notes else ""
+                words = " ".join([x.get("name") or "", x.get("about") or "", x.get("when") or ""])
+                x["year_hit"] = year_hit(words, p.get("posted"), year) if year else True
+                # checker (rule 3 of finding 90): its own words name only years before the one asked for ("Design
+                # award 2024" for "for 2026"): it contradicts the request, read by code, not by the model's "fit"
+                named = [int(y) for y in D.YEAR.findall(words)]
+                x["year_off"] = bool(year and named and max(named) < year)
+            if x.get("about") and D.stale(x["about"], p.get("age_from"), today):
+                x["stale_from"] = D.month_year(p.get("age_from"))
+    if ts:
+        def gone(x):
+            return x.get("state") == "passed" or x.get("year_off")
+        live = sum(1 for _, its in srcs for x in its if not gone(x))
+        if live >= 2:   # a passed thing (or one of an earlier year) is never shown while 2 or more others fit
+            n = 0
+            for s in srcs:
+                n += sum(1 for x in s[1] if gone(x))
+                s[1] = [x for x in s[1] if not gone(x)]
+            if n:
+                result.setdefault("dropped", {})["items_passed"] = n
+        for s in srcs:
+            s[1].sort(key=lambda x: (2 if x.get("state") == "passed" else (1 if x.get("state") == "old" else 0),
+                                     0 if x.get("year_hit", True) else 1, 0 if x.get("fit") == "yes" else 1))
+        srcs = [s for s in srcs if s[1]]
+        srcs.sort(key=lambda s: (all(x.get("state") in ("old", "passed") for x in s[1]),
+                                 all(not x.get("year_hit", True) for x in s[1]),
+                                 -_ord(s[0].get("posted") or s[0].get("kept_first"))))
+        for p, its in srcs:   # checker of the live fix pass: an old round is never a clear source (source_rank)
+            p["stale_source"] = bool(p.get("old_year")) or all(x.get("state") in ("old", "passed") for x in its)
+    srcs = [s for s in srcs if s[1]]
+    if sum(len(its) for _, its in srcs) < 2:
+        result["items_more"] = []
+        return None
+    if reads is not None:   # round 8, finding 94: most good things first (a stable sort keeps the order before)
+        # (for a time-sensitive request a post whose things are all old or passed still comes after the fresher)
+        srcs.sort(key=lambda s: (ts and all(x.get("state") in ("old", "passed") for x in s[1]),
+                                 -min(len(s[1]), MAX_ITEMS_PER_SOURCE)))
+    # live fix pass, round 8 (finding 98): the composer's verdict leads (clear, close, then posts read only for their
+    # list); inside a verdict the order above stands (a stable sort). A post of an earlier year comes last (99).
+    # (round 9, slice U2: with the judge, the composer's own verdict orders the posts that count as the kind)
+    # (check of slice U2: a stale post, all old rounds or an earlier year's, still comes after every fresher post of its
+    # rank, before the composer's verdict is read: the verdict order had a clear 2024 post lead a post with deadlines
+    # ahead when the judge said "yes" to neither)
+    srcs.sort(key=lambda s: (source_rank(s[0]), (bool(s[0].get("stale_source")),
+                                                 2 if not judged(s[0]) else VERDICT_RANK.get(s[0].get("verdict"), 1))
+                             if ran else (False, 0), bool(s[0].get("old_year"))))
+    # round 9, slice U2 (point 4): a thing two posts name is shown once, under the first source that names it (live:
+    # one brand was numbered 1 and 2); the other post's block lists its other things
+    from .retrieve import norm
+    first_of = {}
+    for s in srcs:
+        keep = []
+        for x in s[1]:
+            k = norm(x.get("name") or "")
+            if k in first_of:
+                first_of[k].setdefault("_also", []).append(s[0])
+                continue
+            first_of[k] = x
+            keep.append(x)
+        s[1] = keep
+    srcs = [s for s in srcs if s[1]]
+    if sum(len(its) for _, its in srcs) < 2:
+        result["items_more"] = []
+        return None
+    shown_src = {id(p) for p, _ in srcs[:MAX_SOURCES]}
+    for x in first_of.values():   # "(also in "<title>")" only when that post is shown as a source too
+        also = [p for p in x.pop("_also", []) if id(p) in shown_src]
+        if also:
+            x["also_in"] = also[0].get("title") or ""
+    out, n = [], 0
+    for p, its in srcs[:MAX_SOURCES]:
+        shown = its[:MAX_ITEMS_PER_SOURCE]
+        for x in shown:
+            n += 1
+            x["n"] = n
+        out.append((p, shown, len(its) - len(shown)))
+    result["items_more"] = [(p, len(its)) for p, its in srcs[MAX_SOURCES:MAX_SOURCES + MAX_MORE]]
+    return out
+
+
+def stale_reason(p, today):
+    """True when the pick's shown reason states a time-relative claim and the post is older than 60 days."""
+    b = p.get("because") if p.get("because_backed") else None
+    return bool(b) and D.stale(b, p.get("age_from"), today)
+
+
+# ---------- round 8, finding 95: several asks in one message ----------
+import re  # noqa: E402
+
+MAX_PARTS = 3
+PART_COUNT = 2
+# the head nouns that make a part its own ask: kinds of thing (extract.THINGS) and kinds of post
+_HEADS = (r"reels?|videos?|posts?|tutorials?|recipes?|workouts?|routines?|guides?|lessons?|things|stuff|dish(?:es)?|"
+          r"dinners?|meals?|lunch(?:es)?|breakfasts?|snacks?|desserts?|songs?|movies?|tv shows|quotes?|articles?|reads|"
+          r"librar(?:y|ies)|tools?|resources?|opportunit(?:y|ies)|programs?|programmes?|places?|spots?|books?|apps?|"
+          r"products?|ideas?|tips?|websites?|sites?|courses?|internships?|scholarships?|fellowships?|grants?|events?|"
+          r"restaurants?|cafes?|bars?|shops?|stores?|brands?|frameworks?|plugins?|extensions?|templates?|fonts?|icons?|"
+          r"kits?|channels?|podcasts?|newsletters?|deadlines?|jobs?|hackathons?|competitions?|awards?")
+HEAD = re.compile(rf"\b(?:{_HEADS})\b", re.I)
+SEP_KEEP = re.compile(r"(\s*,\s*(?:(?:or|and|plus|also)\s+)?|\s+(?:or|and|plus|also)\s+)", re.I)
+LEAD_WORDS = re.compile(r"^\W*(?:(?:hey|hi|ok(?:ay)?|so|please|pls)[,\s]+)*(?:(?:can|could|would|will) you\s+)?"
+                        r"(?:please\s+)?(?:send|show|find|give|get|recommend)(?:\s+me)?\s+|^\W*(?:also|some|any)\s+", re.I)
+
+
+def _lead_strip(x):
+    """The words that only ask ("send me", "can you find", "also", "some"), left out from the start."""
+    while True:
+        y = LEAD_WORDS.sub("", x, count=1)
+        if y == x:
+            return x.strip()
+        x = y
+
+
+def _head(seg):
+    """The segment's head noun, singular and lower case, or None."""
+    from .retrieve import _stem
+    found = HEAD.findall(seg)
+    return _stem(found[0].lower()) if found else None
+
+
+def split_asks(*texts):
+    """Round 8, finding 95: the parts of a message (or a goal) that is a list of different kinds of thing ("startup
+    motivation reels, opportunities to pursue soon, or things with deadlines"): at most MAX_PARTS, each with its own
+    head noun, each in its own words; None when it is one ask ("chicken and rice recipes", "quick and easy dinners",
+    "pasta or rice dishes": a part with no head noun of its own belongs to the next one). The person's message is read
+    first, then the goal."""
+    for text in texts:
+        t = _lead_strip(" ".join((text or "").split()).strip(" ?!."))
+        pieces = SEP_KEEP.split(t)   # segment, separator, segment, ...
+        segs = [(pieces[i].strip(" ,.;:?!"), (pieces[i + 1] if i + 1 < len(pieces) else "").strip().lower())
+                for i in range(0, len(pieces), 2)]
+        segs = [(_lead_strip(x), sep) for x, sep in segs]   # "and show me ..."
+        segs = [(x, sep) for x, sep in segs if x]
+        if len(segs) < 2:
+            continue
+        # a segment with no head noun of its own: before "and" / "or" it is a word of the next part ("quick and easy
+        # dinners", "chicken and rice recipes"); before a comma, or last, it ends the part before it ("things with
+        # deadlines and prizes, or ...")
+        parts, carry, last_word = [], "", {}
+        for x, sep in segs:
+            word = sep.replace(",", "").strip() or "and"
+            if _head(x):
+                parts.append(f"{carry} {x}".strip())
+                carry = ""
+            elif parts and (sep.startswith(",") or not sep) and not carry:
+                parts[-1] = f"{parts[-1]} {last_word.get(len(parts) - 1, 'and')} {x}"
+            else:
+                carry = f"{carry} {x} {word}".strip()
+            if _head(x):
+                last_word[len(parts) - 1] = word
+        if carry:
+            continue
+        parts = [_lead_strip(p) for p in parts]
+        heads = [_head(p) for p in parts]
+        if len(parts) < 2 or len(set(heads)) < len(heads) or len(parts) > MAX_PARTS:
+            continue
+        if any(_bare(p) for p in parts):   # checker, round 8: "tools and resources for designers", "cafes and
+            continue                       # restaurants in lisbon": a bare kind word shares the others' topic (one ask)
+        return parts
+    return None
+
+
+# the small words a part may hold beside its head noun and still be bare
+_BARE_SKIP = set("a an the some any good best great new more other few nice cool useful".split())
+
+
+def _bare(part):
+    """Checker, round 8: a part that is only its head noun ("tools", "some apps") has no topic of its own: it is a
+    word of the same ask as the parts beside it."""
+    words = [w for w in re.findall(r"[^\W_]+(?:['’/][^\W_]+)*", part.lower()) if w not in _BARE_SKIP]
+    return len(words) <= 1 and bool(_head(part))
+

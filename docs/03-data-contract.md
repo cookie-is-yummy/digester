@@ -77,7 +77,7 @@ One piece of content, stored once per user however many times they touch it.
 | `user_id` | str | |
 | `platform` | Platform | |
 | `source_url` | str | As received |
-| `dedup_key` | str | `{platform}:{content_id}` (e.g. `instagram:DZFqkwJASjJ`). Unique per user |
+| `dedup_key` | str | `{platform}:{content_id}` (e.g. `instagram:AbCdEfGh123`). Unique per user |
 | `first_seen_at` | timestamp | Earliest interaction |
 | `caption` | str? | Third-party text (from export, DM payload or enrichment) |
 | `creator` | object? | `{ handle, name?, url? }` |

@@ -1,0 +1,1092 @@
+{
+ "about": "Round 9, slice U: the kinds evaluation (eval_kinds.py on evalset/kinds_dev.jsonl), run live on the real library, each request as a fresh test person with no profile, 17 Nov 2026. Counts only. 'truly_of_the_kind' is a builder's reading of the answers (the answers themselves stay outside git). Candidates differ between runs (the interpreter's searches vary), so a row is not a paired comparison; 'same_posts' is: the same posts and request, v3 against v4.",
+ "runs": {
+  "before (extract_v3, code at 6d742e1 plus counters)": {
+   "requests": 16,
+   "answers": {
+    "items": 7,
+    "other": 3,
+    "recommend": 3,
+    "closest": 3
+   },
+   "errors": 0,
+   "shown_things": 36,
+   "model_items": 183,
+   "model_yes": 85,
+   "dropped_by_check": {
+    "fit_no": 45,
+    "not_in_text": 4
+   },
+   "dropped_as_junk": {
+    "no_words": 75,
+    "common_noun": 2
+   },
+   "dropped_not_the_kind": 11,
+   "sources_clear": 13,
+   "sources_close": 6,
+   "nothing_clear_beside_clear": 1,
+   "cost_usd": 0.2445,
+   "cost_per_request": 0.01528,
+   "truly_of_the_kind": 22,
+   "shown_things_judged": 36,
+   "per_request": [
+    {
+     "n": 1,
+     "answer": "items",
+     "shown_things": 8,
+     "model_items": 18,
+     "model_yes": 18,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 3,
+     "sources_close": 0,
+     "picks_clear": 6,
+     "picks_close": 0,
+     "cost_usd": 0.019478,
+     "truly_of_the_kind": 7
+    },
+    {
+     "n": 2,
+     "answer": "items",
+     "shown_things": 3,
+     "model_items": 27,
+     "model_yes": 23,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 2,
+     "picks_clear": 2,
+     "picks_close": 3,
+     "cost_usd": 0.020453,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 3,
+     "answer": "other",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 0,
+     "cost_usd": 0.003032,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 4,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 1,
+     "picks_close": 0,
+     "cost_usd": 0.020162,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 5,
+     "answer": "items",
+     "shown_things": 5,
+     "model_items": 11,
+     "model_yes": 3,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 3,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.015263,
+     "truly_of_the_kind": 2
+    },
+    {
+     "n": 6,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 1,
+     "picks_close": 2,
+     "cost_usd": 0.009364,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 7,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.013871,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 8,
+     "answer": "items",
+     "shown_things": 5,
+     "model_items": 26,
+     "model_yes": 7,
+     "dropped_not_the_kind": 6,
+     "sources_clear": 1,
+     "sources_close": 2,
+     "picks_clear": 1,
+     "picks_close": 3,
+     "cost_usd": 0.021098,
+     "truly_of_the_kind": 2
+    },
+    {
+     "n": 9,
+     "answer": "other",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 0,
+     "cost_usd": 0.003027,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 10,
+     "answer": "items",
+     "shown_things": 4,
+     "model_items": 23,
+     "model_yes": 21,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 3,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 1,
+     "cost_usd": 0.020798,
+     "truly_of_the_kind": 2
+    },
+    {
+     "n": 11,
+     "answer": "items",
+     "shown_things": 9,
+     "model_items": 35,
+     "model_yes": 11,
+     "dropped_not_the_kind": 5,
+     "sources_clear": 1,
+     "sources_close": 2,
+     "picks_clear": 3,
+     "picks_close": 2,
+     "cost_usd": 0.023194,
+     "truly_of_the_kind": 8
+    },
+    {
+     "n": 12,
+     "answer": "items",
+     "shown_things": 2,
+     "model_items": 19,
+     "model_yes": 2,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 2,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.019124,
+     "truly_of_the_kind": 1
+    },
+    {
+     "n": 13,
+     "answer": "closest",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 1,
+     "cost_usd": 0.015253,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 14,
+     "answer": "closest",
+     "shown_things": 0,
+     "model_items": 3,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 3,
+     "cost_usd": 0.016774,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 15,
+     "answer": "closest",
+     "shown_things": 0,
+     "model_items": 21,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 3,
+     "cost_usd": 0.020583,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 16,
+     "answer": "other",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 0,
+     "cost_usd": 0.003028,
+     "truly_of_the_kind": 0
+    }
+   ]
+  },
+  "extract_v4 only": {
+   "requests": 16,
+   "answers": {
+    "items": 7,
+    "other": 3,
+    "recommend": 5,
+    "closest": 1
+   },
+   "errors": 0,
+   "shown_things": 35,
+   "model_items": 134,
+   "model_yes": 73,
+   "dropped_by_check": {
+    "not_in_text": 2,
+    "fit_no": 20
+   },
+   "dropped_as_junk": {
+    "no_words": 61
+   },
+   "dropped_not_the_kind": 13,
+   "sources_clear": 11,
+   "sources_close": 7,
+   "nothing_clear_beside_clear": 0,
+   "cost_usd": 0.2552,
+   "cost_per_request": 0.01595,
+   "truly_of_the_kind": 25,
+   "shown_things_judged": 35,
+   "per_request": [
+    {
+     "n": 1,
+     "answer": "items",
+     "shown_things": 7,
+     "model_items": 17,
+     "model_yes": 17,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 3,
+     "sources_close": 0,
+     "picks_clear": 6,
+     "picks_close": 0,
+     "cost_usd": 0.020054,
+     "truly_of_the_kind": 7
+    },
+    {
+     "n": 2,
+     "answer": "items",
+     "shown_things": 7,
+     "model_items": 17,
+     "model_yes": 17,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 2,
+     "picks_clear": 0,
+     "picks_close": 2,
+     "cost_usd": 0.024699,
+     "truly_of_the_kind": 6
+    },
+    {
+     "n": 3,
+     "answer": "other",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 0,
+     "cost_usd": 0.003032,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 4,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 1,
+     "picks_close": 0,
+     "cost_usd": 0.020359,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 5,
+     "answer": "items",
+     "shown_things": 3,
+     "model_items": 4,
+     "model_yes": 3,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 3,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.016948,
+     "truly_of_the_kind": 3
+    },
+    {
+     "n": 6,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.009548,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 7,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.011785,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 8,
+     "answer": "items",
+     "shown_things": 4,
+     "model_items": 23,
+     "model_yes": 4,
+     "dropped_not_the_kind": 6,
+     "sources_clear": 1,
+     "sources_close": 1,
+     "picks_clear": 1,
+     "picks_close": 2,
+     "cost_usd": 0.023756,
+     "truly_of_the_kind": 1
+    },
+    {
+     "n": 9,
+     "answer": "other",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 0,
+     "cost_usd": 0.003023,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 10,
+     "answer": "items",
+     "shown_things": 5,
+     "model_items": 25,
+     "model_yes": 11,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 2,
+     "sources_close": 1,
+     "picks_clear": 3,
+     "picks_close": 1,
+     "cost_usd": 0.022791,
+     "truly_of_the_kind": 3
+    },
+    {
+     "n": 11,
+     "answer": "items",
+     "shown_things": 3,
+     "model_items": 27,
+     "model_yes": 3,
+     "dropped_not_the_kind": 7,
+     "sources_clear": 1,
+     "sources_close": 1,
+     "picks_clear": 3,
+     "picks_close": 1,
+     "cost_usd": 0.026262,
+     "truly_of_the_kind": 2
+    },
+    {
+     "n": 12,
+     "answer": "items",
+     "shown_things": 6,
+     "model_items": 6,
+     "model_yes": 6,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 1,
+     "sources_close": 2,
+     "picks_clear": 1,
+     "picks_close": 2,
+     "cost_usd": 0.018267,
+     "truly_of_the_kind": 3
+    },
+    {
+     "n": 13,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 1,
+     "picks_close": 2,
+     "cost_usd": 0.013657,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 14,
+     "answer": "closest",
+     "shown_things": 0,
+     "model_items": 2,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 3,
+     "cost_usd": 0.01686,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 15,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 13,
+     "model_yes": 12,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 1,
+     "picks_close": 0,
+     "cost_usd": 0.021089,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 16,
+     "answer": "other",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 0,
+     "cost_usd": 0.003033,
+     "truly_of_the_kind": 0
+    }
+   ]
+  },
+  "after (extract_v4, clear leads, steadier reads, the guard)": {
+   "requests": 16,
+   "answers": {
+    "items": 8,
+    "recommend_named": 2,
+    "recommend": 4,
+    "closest": 2
+   },
+   "errors": 0,
+   "shown_things": 41,
+   "model_items": 163,
+   "model_yes": 114,
+   "dropped_by_check": {
+    "not_in_text": 5,
+    "fit_no": 23,
+    "repeated": 3
+   },
+   "dropped_as_junk": {
+    "no_words": 79
+   },
+   "dropped_not_the_kind": 3,
+   "sources_clear": 14,
+   "sources_close": 9,
+   "nothing_clear_beside_clear": 0,
+   "cost_usd": 0.2819,
+   "cost_per_request": 0.01762,
+   "truly_of_the_kind": 32,
+   "shown_things_judged": 41,
+   "per_request": [
+    {
+     "n": 1,
+     "answer": "items",
+     "shown_things": 3,
+     "model_items": 6,
+     "model_yes": 6,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 2,
+     "sources_close": 1,
+     "picks_clear": 3,
+     "picks_close": 1,
+     "cost_usd": 0.01691,
+     "truly_of_the_kind": 3
+    },
+    {
+     "n": 2,
+     "answer": "recommend_named",
+     "shown_things": 6,
+     "model_items": 14,
+     "model_yes": 14,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 1,
+     "picks_clear": 3,
+     "picks_close": 1,
+     "cost_usd": 0.019468,
+     "truly_of_the_kind": 6
+    },
+    {
+     "n": 3,
+     "answer": "items",
+     "shown_things": 3,
+     "model_items": 10,
+     "model_yes": 9,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 1,
+     "sources_close": 2,
+     "picks_clear": 2,
+     "picks_close": 3,
+     "cost_usd": 0.017751,
+     "truly_of_the_kind": 3
+    },
+    {
+     "n": 4,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.016763,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 5,
+     "answer": "items",
+     "shown_things": 4,
+     "model_items": 12,
+     "model_yes": 2,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 2,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.015773,
+     "truly_of_the_kind": 3
+    },
+    {
+     "n": 6,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 2,
+     "picks_close": 1,
+     "cost_usd": 0.011995,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 7,
+     "answer": "closest",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 1,
+     "cost_usd": 0.010559,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 8,
+     "answer": "items",
+     "shown_things": 4,
+     "model_items": 25,
+     "model_yes": 13,
+     "dropped_not_the_kind": 3,
+     "sources_clear": 1,
+     "sources_close": 1,
+     "picks_clear": 1,
+     "picks_close": 2,
+     "cost_usd": 0.021173,
+     "truly_of_the_kind": 1
+    },
+    {
+     "n": 9,
+     "answer": "items",
+     "shown_things": 2,
+     "model_items": 3,
+     "model_yes": 1,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 1,
+     "sources_close": 1,
+     "picks_clear": 1,
+     "picks_close": 2,
+     "cost_usd": 0.01476,
+     "truly_of_the_kind": 1
+    },
+    {
+     "n": 10,
+     "answer": "items",
+     "shown_things": 4,
+     "model_items": 24,
+     "model_yes": 24,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 2,
+     "sources_close": 1,
+     "picks_clear": 3,
+     "picks_close": 1,
+     "cost_usd": 0.022226,
+     "truly_of_the_kind": 3
+    },
+    {
+     "n": 11,
+     "answer": "items",
+     "shown_things": 3,
+     "model_items": 11,
+     "model_yes": 6,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 3,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 1,
+     "cost_usd": 0.02289,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 12,
+     "answer": "recommend_named",
+     "shown_things": 2,
+     "model_items": 7,
+     "model_yes": 3,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 1,
+     "picks_clear": 1,
+     "picks_close": 2,
+     "cost_usd": 0.017106,
+     "truly_of_the_kind": 2
+    },
+    {
+     "n": 13,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 0,
+     "model_yes": 0,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 3,
+     "picks_close": 0,
+     "cost_usd": 0.014057,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 14,
+     "answer": "closest",
+     "shown_things": 0,
+     "model_items": 3,
+     "model_yes": 1,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 0,
+     "picks_close": 3,
+     "cost_usd": 0.018014,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 15,
+     "answer": "recommend",
+     "shown_things": 0,
+     "model_items": 25,
+     "model_yes": 12,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 0,
+     "sources_close": 0,
+     "picks_clear": 1,
+     "picks_close": 1,
+     "cost_usd": 0.022157,
+     "truly_of_the_kind": 0
+    },
+    {
+     "n": 16,
+     "answer": "items",
+     "shown_things": 10,
+     "model_items": 23,
+     "model_yes": 23,
+     "dropped_not_the_kind": 0,
+     "sources_clear": 2,
+     "sources_close": 1,
+     "picks_clear": 4,
+     "picks_close": 1,
+     "cost_usd": 0.02033,
+     "truly_of_the_kind": 10
+    }
+   ]
+  }
+ },
+ "same_posts_v3_v4": {
+  "posts": 51,
+  "v3": {
+   "yes": 21,
+   "yes_truly_of_kind": 18,
+   "yes_wrong_kind": 3
+  },
+  "v4": {
+   "yes": 18,
+   "yes_truly_of_kind": 17,
+   "yes_wrong_kind": 1
+  },
+  "v4_calls_cost_usd": 0.0647
+ },
+ "stronger_model_same_posts": {
+  "model": "gpt-5.5, reasoning effort low, extract_v4",
+  "founder_case_6_posts": {
+   "mini_v4": {
+    "yes": 14,
+    "yes_truly": 1,
+    "cost": 0.0105
+   },
+   "gpt-5.5_low_v4": {
+    "yes": 1,
+    "yes_truly": 1,
+    "cost": 0.0926
+   }
+  },
+  "podcasts_6_posts": {
+   "mini_v4": {
+    "yes": 8,
+    "yes_truly_kind_and_condition": 1
+   },
+   "gpt-5.5_low_v4": {
+    "yes": 2,
+    "yes_truly_kind_and_condition": 2,
+    "cost": 0.1078
+   }
+  },
+  "cost_per_details_call_usd": {
+   "gpt-5.4-mini": 0.0017,
+   "gpt-5.5": 0.0167
+  },
+  "cost_per_kind_answer_details_usd": {
+   "gpt-5.4-mini": 0.01,
+   "gpt-5.5": 0.1
+  }
+ },
+ "round9_u2": {
+  "about": "Round 9, slice U2 (17 Nov 2026): the kinds evaluation on 22 invented requests (kinds_dev.jsonl and six of the checker's: movies, chrome extensions, sneaker brands, games, newsletters, hackathons), each a fresh test person with no profile. Counts only; 'truly_of_the_kind' is the builder's reading (the answers stay outside git). 'paired' runs reuse the first run's store, so the interpretation, the candidates, the composer's answer and the posts' things are the same and only the judge differs.",
+  "off_at_head": {
+   "answers": {
+    "items": 13,
+    "closest": 5,
+    "recommend": 3,
+    "other": 1
+   },
+   "errors": 0,
+   "shown_things": 57,
+   "truly_of_the_kind": 44,
+   "wrong_counted_as_the_kind": 5,
+   "cost_per_request": 0.01917,
+   "seconds_per_request": 7.2
+  },
+  "paired_off": {
+   "shown_things": 60,
+   "truly_of_the_kind": 46,
+   "wrong_counted_as_the_kind": 5
+  },
+  "paired_judge_v1_effort_low": {
+   "shown_things": 56,
+   "truly_of_the_kind": 47,
+   "wrong_counted_as_the_kind": 1,
+   "judge_calls": 13,
+   "judge_cost_usd": 0.1177,
+   "judge_cost_per_request": 0.0054,
+   "judge_seconds_per_call": 3.4
+  },
+  "paired_judge_v1_effort_none": {
+   "shown_things": 60,
+   "truly_of_the_kind": 51,
+   "wrong_counted_as_the_kind": 1,
+   "judge_calls": 13,
+   "judge_cost_usd": 0.0626,
+   "judge_cost_per_request": 0.0028,
+   "judge_seconds_per_call": 1.3
+  },
+  "after_all_points_judge_v1": {
+   "answers": {
+    "items": 14,
+    "closest": 5,
+    "recommend": 2,
+    "other": 1
+   },
+   "shown_things": 56,
+   "truly_of_the_kind": 47
+  },
+  "after_all_points_judge_v2": {
+   "answers": {
+    "items": 13,
+    "closest": 5,
+    "recommend": 3,
+    "other": 1
+   },
+   "errors": 0,
+   "shown_things": 54,
+   "truly_of_the_kind": 46,
+   "wrong_counted_as_the_kind": 0,
+   "judge_calls": 15,
+   "judge_cost_per_request": 0.0035,
+   "judge_seconds_per_call": 1.2
+  },
+  "steadiness_3_runs_each_5_requests": {
+   "about": "the founder's case (his profile) and 4 kind requests, the composer called afresh 3 times on the same candidates; how many of the 5 gave the same set in all 3 runs",
+   "composer_clear_picks_same": "2 of 5 (a second set: 1 of 5)",
+   "clear_sources_by_composer_same": "2 of 5",
+   "sources_with_a_judge_yes_same": "3 of 5",
+   "answer_kind_same_before": "3 of 5",
+   "answer_kind_same_with_judge_sources": "4 of 5",
+   "requests_without_a_profile_that_differ": "3 of 4"
+  },
+  "founder_three_fresh_runs": {
+   "judge_v1": [
+    {
+     "answer": "items",
+     "clear": 1,
+     "close": 1,
+     "things": 6,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": false,
+     "cost": 0.0266
+    },
+    {
+     "answer": "items",
+     "clear": 2,
+     "close": 0,
+     "things": 6,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": true,
+     "cost": 0.0281
+    },
+    {
+     "answer": "items",
+     "clear": 2,
+     "close": 0,
+     "things": 11,
+     "truly_ui_libraries_or_kits": 0,
+     "icon_pack_shown_as_library": true,
+     "cost": 0.0282
+    }
+   ],
+   "judge_v2_replay_of_those": [
+    {
+     "answer": "items",
+     "clear": 1,
+     "close": 1,
+     "things": 6,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": false
+    },
+    {
+     "answer": "items",
+     "clear": 1,
+     "close": 1,
+     "things": 6,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": false
+    },
+    {
+     "answer": "recommend_named",
+     "clear": 0,
+     "close": 2,
+     "things": 11,
+     "truly_ui_libraries_or_kits": 0,
+     "icon_pack_shown_as_library": false
+    }
+   ],
+   "judge_v2": [
+    {
+     "answer": "recommend_named",
+     "clear": 0,
+     "close": 2,
+     "things": 11,
+     "truly_ui_libraries_or_kits": 0,
+     "icon_pack_shown_as_library": false,
+     "cost": 0.0296
+    },
+    {
+     "answer": "items",
+     "clear": 1,
+     "close": 2,
+     "things": 8,
+     "truly_ui_libraries_or_kits": 1,
+     "icon_pack_shown_as_library": false,
+     "cost": 0.0302
+    },
+    {
+     "answer": "recommend_named",
+     "clear": 0,
+     "close": 2,
+     "things": 11,
+     "truly_ui_libraries_or_kits": 0,
+     "icon_pack_shown_as_library": false,
+     "cost": 0.0289
+    }
+   ],
+   "same_things_in_all_three": false
+  },
+  "drafts_20": {
+   "before": {
+    "handled": 20,
+    "errors": 0,
+    "with_picks": 17,
+    "items_answers": 1,
+    "i_recommend": 14,
+    "cost": 0.1583
+   },
+   "after": {
+    "handled": 20,
+    "errors": 0,
+    "with_picks": 19,
+    "items_answers": 0,
+    "i_recommend": 17,
+    "cost": 0.1789
+   },
+   "judge_calls_after": 0
+  }
+ },
+ "round9_live_fix_kinds": {
+  "about": "Round 9, live fix (kinds), finding 103 (17 Nov 2026). Counts only; 'truly_of_the_kind' is the builder's reading (the answers stay outside git). k22: the 22 requests replayed on a copy of slice U2's last store (same interpretations, fixed clock). pairs: kinds_pairs.jsonl, fresh before, replayed on a copy of the before store after. founder: his wording 3 times, fresh stores, his profile.",
+  "k22": {
+   "before": {
+    "answers": {
+     "items": 13,
+     "closest": 5,
+     "recommend": 3,
+     "other": 1
+    },
+    "shown_things": 54,
+    "truly_of_the_kind": 46,
+    "wrong_counted_as_the_kind": 0
+   },
+   "after": {
+    "answers": {
+     "items": 12,
+     "recommend_named": 1,
+     "closest": 5,
+     "recommend": 3,
+     "other": 1
+    },
+    "shown_things": 56,
+    "truly_of_the_kind": 47,
+    "wrong_counted_as_the_kind": 0
+   }
+  },
+  "pairs": {
+   "before": {
+    "same_answer_kind": 4,
+    "same_things": 0,
+    "pairs_sharing_a_thing": 3,
+    "things_shared": 9,
+    "shown_things": 40,
+    "truly_of_the_kind": 34,
+    "wrong_counted_as_the_kind": 4,
+    "cost_per_request": 0.0242
+   },
+   "after": {
+    "same_answer_kind": 4,
+    "same_things": 0,
+    "pairs_sharing_a_thing": 4,
+    "things_shared": 11,
+    "shown_things": 41,
+    "truly_of_the_kind": 37,
+    "wrong_counted_as_the_kind": 2
+   }
+  },
+  "shared_candidates_of_40_per_pair_at_0_usd": {
+   "interpreter_searches_only": [
+    35,
+    24,
+    18,
+    4,
+    20
+   ],
+   "with_the_kind_phrase_searched": [
+    38,
+    34,
+    22,
+    25,
+    27
+   ]
+  },
+  "founder_three_fresh_runs": {
+   "before": {
+    "items_answers": 3,
+    "library_post_counted": 1,
+    "icon_pack_counted_as_library": 1,
+    "same_library_in_all_three": false,
+    "same_things_in_all_three": false,
+    "cost_per_answer": 0.029
+   },
+   "after": {
+    "items_answers": 3,
+    "library_post_counted": 3,
+    "icon_pack_counted_as_library": 0,
+    "same_library_in_all_three": true,
+    "same_things_in_all_three": false,
+    "cost_per_answer": 0.0291
+   }
+  },
+  "not_kept": {
+   "named_places_paired_runs": "same counts with and without, on all three sets; pushed a list of 3 servers out of one request",
+   "kind_searches_as_first_written": "1 post that names the kind added to the window in 31 kind requests"
+  },
+  "draft_requests_after": {
+   "handled": 20,
+   "errors": 0,
+   "with_picks": 18,
+   "items_answers": 1,
+   "i_recommend": 14,
+   "cost_usd": 0.195
+  }
+ }
+}

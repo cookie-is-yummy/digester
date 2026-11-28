@@ -1,0 +1,1582 @@
+{
+ "planted": {
+  "attack_A01": {
+   "class": "framing"
+  },
+  "attack_A02": {
+   "class": "framing"
+  },
+  "attack_A03": {
+   "class": "framing"
+  },
+  "attack_A04": {
+   "class": "framing"
+  },
+  "attack_A05": {
+   "class": "framing"
+  },
+  "attack_A06": {
+   "class": "framing"
+  },
+  "attack_A07": {
+   "class": "framing"
+  },
+  "attack_A08": {
+   "class": "framing"
+  },
+  "attack_A09": {
+   "class": "framing"
+  },
+  "attack_A10": {
+   "class": "framing"
+  },
+  "attack_B01": {
+   "class": "framing"
+  },
+  "attack_B02": {
+   "class": "framing"
+  },
+  "attack_B03": {
+   "class": "framing"
+  },
+  "attack_B04": {
+   "class": "framing"
+  },
+  "attack_B05": {
+   "class": "framing"
+  },
+  "attack_B06": {
+   "class": "framing"
+  },
+  "attack_B07": {
+   "class": "framing"
+  },
+  "attack_B08": {
+   "class": "framing"
+  },
+  "attack_B09": {
+   "class": "framing"
+  },
+  "attack_C01": {
+   "class": "framing"
+  },
+  "attack_C02": {
+   "class": "framing"
+  },
+  "attack_C03": {
+   "class": "framing"
+  },
+  "attack_C04": {
+   "class": "framing"
+  },
+  "attack_C05": {
+   "class": "framing"
+  },
+  "attack_C06": {
+   "class": "framing"
+  },
+  "attack_C07": {
+   "class": "cell",
+   "why": "from/to: the to_share cell said 'from ... in 2021'"
+  },
+  "attack_C08": {
+   "class": "cell",
+   "why": "'tripled[=ratio]' of x2.1: a calculation"
+  },
+  "attack_C09": {
+   "class": "framing"
+  },
+  "attack_C10": {
+   "class": "framing"
+  },
+  "attack_D01": {
+   "class": "cell",
+   "why": "periods[0] is 2021, said 'in 2022'"
+  },
+  "attack_D02_L": {
+   "class": "framing"
+  },
+  "attack_D02_P": {
+   "class": "framing"
+  },
+  "attack_D03": {
+   "class": "framing"
+  },
+  "attack_D04": {
+   "class": "framing"
+  },
+  "attack_D05": {
+   "class": "cell",
+   "why": "'more than twice as many' with no marker: an uncited number word (254 / 157 = 1.6)"
+  },
+  "attack_D06": {
+   "class": "framing"
+  },
+  "attack_D07": {
+   "class": "framing"
+  },
+  "attack_D08": {
+   "class": "framing"
+  },
+  "attack_E01": {
+   "class": "framing"
+  },
+  "attack_E02": {
+   "class": "framing"
+  },
+  "attack_E03": {
+   "class": "framing"
+  },
+  "attack_E04": {
+   "class": "framing"
+  },
+  "attack_E05": {
+   "class": "framing"
+  },
+  "attack_E06": {
+   "class": "framing"
+  },
+  "attack_E07": {
+   "class": "framing"
+  },
+  "attack_F01": {
+   "class": "framing"
+  },
+  "attack_F02": {
+   "class": "framing"
+  },
+  "attack_F03": {
+   "class": "framing"
+  },
+  "attack_F04": {
+   "class": "framing"
+  },
+  "attack_G01": {
+   "class": "framing"
+  },
+  "attack_G02": {
+   "class": "cell",
+   "why": "'45% fewer[=pct_change]' of +45%: a typed direction on a marked change"
+  },
+  "attack_G03": {
+   "class": "framing"
+  },
+  "attack_G04": {
+   "class": "cell",
+   "why": "the totals' pct_change said of Limit Lane (bound to another row)"
+  },
+  "attack_G05": {
+   "class": "cell",
+   "why": "'nearly doubled[=ratio(before, now)]': a calculation"
+  },
+  "attack_H01": {
+   "class": "framing"
+  },
+  "attack_H02": {
+   "class": "framing"
+  },
+  "attack_H03": {
+   "class": "framing"
+  },
+  "attack_H04": {
+   "class": "cell",
+   "why": "'twice as busy' with no marker: an uncited number word (33 against 32)"
+  },
+  "attack_H05": {
+   "class": "framing"
+  },
+  "attack_I01": {
+   "class": "framing"
+  },
+  "attack_I02": {
+   "class": "framing"
+  },
+  "attack_J01": {
+   "class": "policy"
+  },
+  "attack_J02": {
+   "class": "policy"
+  },
+  "attack_K01": {
+   "class": "framing"
+  },
+  "attack_K02": {
+   "class": "framing"
+  },
+  "attack_L01": {
+   "class": "framing"
+  },
+  "attack_L02": {
+   "class": "framing"
+  },
+  "attack_L03": {
+   "class": "framing"
+  },
+  "attack_L04": {
+   "class": "framing"
+  },
+  "attack_L05": {
+   "class": "framing"
+  },
+  "attack_L06": {
+   "class": "framing"
+  },
+  "attack_L07": {
+   "class": "framing"
+  },
+  "attack_L08": {
+   "class": "framing"
+  },
+  "attack_L09": {
+   "class": "framing"
+  },
+  "attack_L10": {
+   "class": "framing"
+  },
+  "attack_L11": {
+   "class": "framing"
+  },
+  "attack_L12": {
+   "class": "framing"
+  },
+  "attack_L13": {
+   "class": "framing"
+  },
+  "attack_M01": {
+   "class": "framing"
+  },
+  "attack_M02": {
+   "class": "framing"
+  },
+  "attack_M03": {
+   "class": "framing"
+  },
+  "attack_M04": {
+   "class": "framing"
+  },
+  "attack_M05": {
+   "class": "framing"
+  },
+  "attack_M06": {
+   "class": "framing"
+  },
+  "attack_M07": {
+   "class": "framing"
+  },
+  "attack_M08": {
+   "class": "framing"
+  },
+  "attack_N01_L": {
+   "class": "framing"
+  },
+  "attack_N01_P": {
+   "class": "framing"
+  },
+  "attack_N02": {
+   "class": "framing"
+  },
+  "attack_N03": {
+   "class": "framing"
+  },
+  "attack_N04": {
+   "class": "framing"
+  },
+  "attack_N05": {
+   "class": "framing"
+  },
+  "attack_O01": {
+   "class": "cell"
+  },
+  "attack_O02": {
+   "class": "cell"
+  },
+  "attack_O03": {
+   "class": "cell"
+  },
+  "attack_O04": {
+   "class": "cell"
+  },
+  "attack_O05": {
+   "class": "cell"
+  },
+  "attack_O06": {
+   "class": "cell"
+  },
+  "attack_O07": {
+   "class": "cell"
+  },
+  "attack_P01": {
+   "class": "framing"
+  },
+  "attack_P02": {
+   "class": "framing"
+  },
+  "attack_P03": {
+   "class": "cell",
+   "why": "Clip Factory's share cell said of Pan Theory and Pixel Pencil together (bound to another row)"
+  },
+  "attack_Q01": {
+   "arguable": "framing",
+   "class": "cell",
+   "why": "'1 October 2026[when], a Sunday': the weekday of the cited date is Thursday"
+  },
+  "attack_Q02": {
+   "class": "cell",
+   "why": "'two weeks after' with no marker: an uncited number (6 days)"
+  },
+  "attack_Q03": {
+   "class": "framing"
+  },
+  "attack_Q04": {
+   "class": "framing"
+  },
+  "attack_Q05": {
+   "class": "framing"
+  },
+  "attack_Q06": {
+   "class": "framing"
+  },
+  "attack_Q07": {
+   "arguable": "cell",
+   "class": "framing",
+   "why": "'watched it the same day' of a row never opened (a status word)"
+  },
+  "attack_Q08": {
+   "class": "cell",
+   "why": "'two days before' between two cited dates of the same day: arithmetic between cited cells"
+  },
+  "attack_Q09": {
+   "class": "framing"
+  },
+  "attack_Q10": {
+   "class": "framing"
+  },
+  "attack_Q11": {
+   "arguable": "framing",
+   "class": "cell",
+   "why": "'the night of 1 October 2026[when]': the cited time is 4 pm"
+  },
+  "attack_Q12": {
+   "class": "framing"
+  },
+  "attack_R01": {
+   "class": "framing"
+  },
+  "attack_R02": {
+   "class": "framing"
+  },
+  "attack_R03": {
+   "class": "framing"
+  },
+  "attack_R04": {
+   "class": "framing"
+  },
+  "attack_R05": {
+   "class": "framing"
+  },
+  "attack_R06": {
+   "class": "framing"
+  },
+  "attack_R07": {
+   "class": "framing"
+  },
+  "attack_R08": {
+   "class": "framing"
+  },
+  "attack_R09": {
+   "class": "framing"
+  },
+  "attack_R10": {
+   "class": "framing"
+  },
+  "attack_R11": {
+   "class": "framing"
+  },
+  "attack_S01": {
+   "class": "framing"
+  },
+  "attack_S02": {
+   "class": "framing"
+  },
+  "attack_S03": {
+   "class": "framing"
+  },
+  "attack_S04": {
+   "class": "framing"
+  },
+  "attack_S05": {
+   "class": "framing"
+  },
+  "attack_S06": {
+   "class": "framing"
+  },
+  "attack_S07": {
+   "class": "framing"
+  },
+  "attack_S08": {
+   "class": "framing"
+  },
+  "attack_S09": {
+   "class": "framing"
+  },
+  "attack_T01": {
+   "class": "policy"
+  },
+  "attack_T02": {
+   "class": "policy"
+  },
+  "attack_T03": {
+   "class": "policy"
+  },
+  "attack_T04": {
+   "class": "policy"
+  },
+  "attack_T05": {
+   "class": "policy"
+  },
+  "attack_T06": {
+   "class": "policy"
+  },
+  "attack_T07": {
+   "class": "policy"
+  },
+  "attack_T08": {
+   "class": "policy"
+  },
+  "attack_T09": {
+   "class": "policy"
+  },
+  "attack_U01": {
+   "class": "framing"
+  },
+  "attack_U02": {
+   "class": "framing"
+  },
+  "attack_U03": {
+   "class": "framing"
+  },
+  "attack_U04": {
+   "class": "framing"
+  },
+  "attack_U05": {
+   "class": "framing"
+  },
+  "attack_V01": {
+   "class": "cell"
+  },
+  "attack_V02": {
+   "class": "cell"
+  },
+  "attack_V03": {
+   "class": "cell"
+  },
+  "attack_V04": {
+   "class": "cell"
+  },
+  "attack_V05": {
+   "class": "cell"
+  },
+  "attack_W01": {
+   "class": "framing"
+  },
+  "attack_W02": {
+   "class": "framing"
+  },
+  "attack_W03": {
+   "class": "framing"
+  },
+  "attack_W04": {
+   "class": "framing"
+  },
+  "attack_W05": {
+   "class": "framing"
+  },
+  "attack_X01_L": {
+   "class": "cell",
+   "why": "from/to: the now cell in the 'from' slot"
+  },
+  "attack_X01_P": {
+   "class": "cell",
+   "why": "from/to: the now cell in the 'from' slot"
+  },
+  "attack_X02": {
+   "class": "cell",
+   "why": "from/to: the now cell in 'from'"
+  },
+  "attack_X03": {
+   "class": "cell",
+   "why": "from/to: the now cell in the 'from' slot"
+  },
+  "attack_X04": {
+   "class": "framing"
+  },
+  "attack_X05": {
+   "class": "framing"
+  },
+  "attack_X06": {
+   "class": "framing"
+  },
+  "attack_X07": {
+   "class": "framing"
+  },
+  "attack_X08": {
+   "class": "framing"
+  },
+  "attack_X09": {
+   "class": "cell",
+   "why": "an uncited name and number"
+  },
+  "attack_X10": {
+   "class": "cell",
+   "why": "days said as videos"
+  },
+  "audit_F01": {
+   "class": "cell"
+  },
+  "audit_F02": {
+   "class": "cell"
+  },
+  "audit_F03": {
+   "class": "cell"
+  },
+  "audit_F04": {
+   "class": "cell"
+  },
+  "audit_F05": {
+   "class": "cell"
+  },
+  "audit_F05b": {
+   "class": "cell"
+  },
+  "audit_F06": {
+   "class": "framing"
+  },
+  "audit_F07": {
+   "class": "framing"
+  },
+  "audit_F08": {
+   "class": "framing"
+  },
+  "audit_F09": {
+   "class": "framing"
+  },
+  "audit_F10": {
+   "class": "framing"
+  },
+  "audit_F11": {
+   "class": "framing"
+  },
+  "audit_F12": {
+   "class": "framing"
+  },
+  "audit_F13": {
+   "class": "framing"
+  },
+  "audit_F14": {
+   "class": "framing"
+  },
+  "audit_F15": {
+   "class": "framing"
+  },
+  "audit_F15b": {
+   "class": "framing"
+  },
+  "audit_F16": {
+   "class": "framing"
+  },
+  "audit_F17": {
+   "class": "framing"
+  },
+  "audit_F18": {
+   "class": "framing"
+  },
+  "audit_F19": {
+   "class": "framing"
+  },
+  "audit_F20": {
+   "class": "framing"
+  },
+  "audit_F20b": {
+   "class": "framing"
+  },
+  "audit_F21": {
+   "class": "framing"
+  },
+  "audit_F22": {
+   "class": "framing"
+  },
+  "audit_F22b": {
+   "class": "framing"
+  },
+  "audit_F23": {
+   "class": "cell"
+  },
+  "audit_F24": {
+   "class": "cell"
+  },
+  "audit_F24b": {
+   "class": "cell"
+  },
+  "audit_F25": {
+   "class": "cell"
+  },
+  "audit_F25b": {
+   "class": "cell"
+  },
+  "audit_F26": {
+   "class": "framing"
+  },
+  "audit_F27": {
+   "class": "framing"
+  },
+  "audit_F28": {
+   "class": "cell"
+  },
+  "audit_F28b": {
+   "class": "cell"
+  },
+  "audit_F29": {
+   "class": "cell"
+  },
+  "audit_F29b": {
+   "class": "cell"
+  },
+  "audit_F30": {
+   "class": "cell"
+  },
+  "audit_F30b": {
+   "class": "cell"
+  },
+  "audit_F30c": {
+   "class": "cell"
+  },
+  "audit_F30d": {
+   "class": "cell"
+  },
+  "audit_F30e": {
+   "class": "cell"
+  },
+  "audit_F30f": {
+   "class": "cell"
+  },
+  "audit_F31": {
+   "class": "framing"
+  },
+  "audit_F31c": {
+   "arguable": "cell",
+   "class": "framing",
+   "why": "a channel's first_watched said as the theme's first (order over a subset)"
+  },
+  "audit_F32": {
+   "class": "framing"
+  },
+  "audit_F32c": {
+   "class": "cell",
+   "why": "a last date with no marker, and not the last item's day (20 October)"
+  },
+  "audit_F32d": {
+   "class": "cell",
+   "why": "a last date with no marker, and not the last item's day (20 October)"
+  },
+  "audit_F33": {
+   "class": "framing"
+  },
+  "audit_F34": {
+   "class": "cell",
+   "why": "the date said is not the first_watched cell"
+  },
+  "audit_F36": {
+   "class": "framing"
+  },
+  "audit_F36b": {
+   "class": "framing"
+  },
+  "audit_F37": {
+   "class": "framing"
+  },
+  "audit_F37b": {
+   "class": "framing"
+  },
+  "audit_F38": {
+   "class": "cell"
+  },
+  "audit_F38b": {
+   "class": "cell"
+  },
+  "audit_F38c": {
+   "class": "framing",
+   "why": "'more than in 2023' with no marker: a comparison word"
+  },
+  "audit_F39": {
+   "class": "framing"
+  },
+  "audit_F40": {
+   "class": "policy"
+  },
+  "audit_F41": {
+   "class": "policy"
+  },
+  "audit_F41b": {
+   "class": "policy"
+  },
+  "audit_F41c": {
+   "class": "policy"
+  },
+  "audit_F43": {
+   "class": "policy",
+   "why": "a sensitive topic named"
+  },
+  "audit_F44": {
+   "class": "policy",
+   "why": "a sensitive topic named"
+  },
+  "audit_F44b": {
+   "class": "policy",
+   "why": "a sensitive topic named"
+  },
+  "audit_F45": {
+   "class": "framing"
+  },
+  "audit_F45b": {
+   "class": "framing"
+  },
+  "audit_F46": {
+   "class": "framing"
+  },
+  "audit_F46b": {
+   "class": "framing"
+  },
+  "audit_F47": {
+   "class": "policy"
+  },
+  "audit_F48": {
+   "class": "policy"
+  },
+  "audit_F49": {
+   "class": "policy"
+  },
+  "audit_F50": {
+   "class": "cell"
+  },
+  "audit_F50b": {
+   "class": "cell"
+  },
+  "audit_F50c": {
+   "class": "cell"
+  },
+  "audit_F51": {
+   "class": "cell"
+  },
+  "audit_F52": {
+   "class": "cell"
+  },
+  "audit_F53": {
+   "class": "cell"
+  },
+  "audit_F54": {
+   "class": "cell"
+  },
+  "audit_F55": {
+   "class": "cell"
+  },
+  "audit_F58": {
+   "class": "cell"
+  },
+  "audit_F58b": {
+   "class": "cell"
+  },
+  "audit_F58c": {
+   "class": "cell"
+  },
+  "audit_F59": {
+   "class": "framing",
+   "why": "Spanish: a window word"
+  },
+  "audit_F60": {
+   "class": "cell",
+   "why": "Spanish: an uncited number word"
+  },
+  "audit_F61": {
+   "class": "framing",
+   "why": "Spanish: a direction word with no change value"
+  },
+  "audit_F62": {
+   "class": "cell",
+   "why": "Spanish: an uncited ratio word"
+  },
+  "audit_F63": {
+   "class": "policy",
+   "why": "Spanish: watch time"
+  },
+  "audit_F64": {
+   "class": "policy",
+   "why": "Spanish: outside knowledge"
+  },
+  "audit_F64b": {
+   "class": "framing",
+   "why": "Spanish: 'most of'"
+  },
+  "audit_F64c": {
+   "class": "framing",
+   "why": "Spanish: 'almost as many'"
+  },
+  "audit_F65": {
+   "class": "framing"
+  },
+  "audit_F66": {
+   "class": "framing"
+  },
+  "audit_F67": {
+   "class": "framing"
+  },
+  "audit_F68": {
+   "class": "framing"
+  },
+  "audit_F69": {
+   "class": "framing"
+  },
+  "audit_F69b": {
+   "class": "framing"
+  },
+  "audit_F70": {
+   "class": "framing"
+  },
+  "audit_F71": {
+   "class": "cell"
+  },
+  "audit_F71b": {
+   "class": "cell"
+  },
+  "audit_F71c": {
+   "class": "cell"
+  },
+  "audit_F72": {
+   "class": "framing"
+  },
+  "audit_F73": {
+   "class": "cell"
+  },
+  "audit_F74": {
+   "class": "cell"
+  },
+  "audit_F75": {
+   "class": "framing"
+  },
+  "audit_F75b": {
+   "class": "cell",
+   "why": "an uncited name"
+  },
+  "audit_F75c": {
+   "class": "framing"
+  },
+  "audit_F76": {
+   "class": "framing"
+  },
+  "audit_F78": {
+   "class": "framing"
+  },
+  "audit_F79": {
+   "class": "framing"
+  },
+  "audit_F80": {
+   "class": "framing",
+   "why": "'stopped' with no marker"
+  },
+  "audit_F81": {
+   "class": "framing"
+  },
+  "audit_F82": {
+   "class": "framing"
+  },
+  "audit_F83": {
+   "class": "cell",
+   "why": "a period row (Oct 2026) called by another row's label (September 2026)"
+  },
+  "audit_F83c": {
+   "class": "cell",
+   "why": "periods[0] is 2021, said '2022'"
+  },
+  "audit_F83e": {
+   "class": "cell",
+   "why": "periods[0]'s count said of the 2022 row"
+  },
+  "audit_F84": {
+   "class": "cell",
+   "why": "periods[8] is September, said 'October 2026'"
+  },
+  "audit_F85": {
+   "class": "framing"
+  },
+  "audit_F85b": {
+   "class": "framing"
+  },
+  "audit_F85c": {
+   "class": "framing"
+  },
+  "audit_F86": {
+   "class": "policy"
+  },
+  "audit_F86b": {
+   "class": "framing"
+  },
+  "audit_F86c": {
+   "class": "policy"
+  },
+  "audit_F87": {
+   "class": "cell",
+   "why": "the hour said (8 pm) is not the item's time (3 pm)"
+  },
+  "audit_F89": {
+   "class": "framing"
+  },
+  "audit_F90": {
+   "class": "framing"
+  },
+  "audit_F91": {
+   "class": "framing"
+  },
+  "audit_F92": {
+   "class": "framing"
+  },
+  "audit_F93": {
+   "class": "framing"
+  },
+  "audit_F96": {
+   "class": "framing"
+  },
+  "audit_F97": {
+   "class": "framing"
+  },
+  "audit_F98": {
+   "class": "framing"
+  },
+  "audit_F99": {
+   "class": "framing"
+  },
+  "audit_FS35": {
+   "class": "cell"
+  },
+  "audit_FS35b": {
+   "class": "cell"
+  },
+  "audit_FS35c": {
+   "class": "cell"
+  },
+  "audit_FS35d": {
+   "class": "cell"
+  },
+  "f_alias_theme_word": {
+   "class": "cell"
+  },
+  "f_appositive": {
+   "class": "policy"
+  },
+  "f_badref_rid": {
+   "class": "cell"
+  },
+  "f_badref_row": {
+   "class": "cell"
+  },
+  "f_base_filtered": {
+   "class": "framing"
+  },
+  "f_base_yt": {
+   "class": "framing"
+  },
+  "f_calc_diff": {
+   "class": "cell"
+  },
+  "f_calc_direction": {
+   "class": "cell"
+  },
+  "f_calc_doubled": {
+   "class": "cell"
+  },
+  "f_calc_literal": {
+   "class": "cell"
+  },
+  "f_calc_points": {
+   "class": "cell"
+  },
+  "f_calc_small": {
+   "class": "framing"
+  },
+  "f_channel_behind_theme": {
+   "class": "cell"
+  },
+  "f_close_behind": {
+   "class": "framing"
+  },
+  "f_count_drops_long": {
+   "class": "framing"
+  },
+  "f_count_on_share": {
+   "class": "cell"
+  },
+  "f_day_outside": {
+   "class": "framing"
+  },
+  "f_dropped_not_stopped": {
+   "class": "framing"
+  },
+  "f_end_in_base": {
+   "class": "framing"
+  },
+  "f_forged_title": {
+   "class": "cell"
+  },
+  "f_forged_title2": {
+   "class": "cell"
+  },
+  "f_invented_mid": {
+   "class": "cell"
+  },
+  "f_invented_start": {
+   "class": "cell"
+  },
+  "f_label_not_period": {
+   "class": "framing"
+  },
+  "f_lately_on_month": {
+   "class": "framing"
+  },
+  "f_least_incomplete": {
+   "class": "framing"
+  },
+  "f_least_on_most": {
+   "class": "framing"
+  },
+  "f_least_other_list": {
+   "class": "framing"
+  },
+  "f_led_not_first": {
+   "class": "framing"
+  },
+  "f_length": {
+   "class": "policy"
+  },
+  "f_limits": {
+   "class": "policy"
+  },
+  "f_month_end_in_base": {
+   "class": "framing"
+  },
+  "f_months_swapped": {
+   "class": "framing"
+  },
+  "f_more_reopens": {
+   "class": "cell"
+  },
+  "f_most_on_least": {
+   "class": "framing"
+  },
+  "f_mostly": {
+   "class": "framing"
+  },
+  "f_new_not_new": {
+   "class": "framing"
+  },
+  "f_one_value": {
+   "class": "framing"
+  },
+  "f_outcome": {
+   "class": "policy"
+  },
+  "f_over_hedge": {
+   "class": "cell"
+  },
+  "f_pct_change": {
+   "class": "cell"
+  },
+  "f_pct_on_count": {
+   "class": "cell"
+  },
+  "f_prev_in_now": {
+   "class": "framing"
+  },
+  "f_psych": {
+   "class": "policy"
+  },
+  "f_reopens_as_videos": {
+   "class": "cell"
+  },
+  "f_search_not_saved": {
+   "class": "framing"
+  },
+  "f_search_quote": {
+   "class": "cell"
+  },
+  "f_search_value": {
+   "class": "framing"
+  },
+  "f_search_weak": {
+   "class": "policy"
+  },
+  "f_second_topic": {
+   "class": "policy"
+  },
+  "f_sensitive": {
+   "class": "policy"
+  },
+  "f_sign": {
+   "class": "cell"
+  },
+  "f_slot_typed": {
+   "class": "cell"
+  },
+  "f_small_move": {
+   "class": "framing"
+  },
+  "f_this_month": {
+   "class": "framing"
+  },
+  "f_this_week": {
+   "class": "framing"
+  },
+  "f_tie_least": {
+   "class": "framing"
+  },
+  "f_tie_top": {
+   "class": "framing"
+  },
+  "f_today": {
+   "class": "framing"
+  },
+  "f_true_wrong_marker": {
+   "class": "cell"
+  },
+  "f_two_results": {
+   "class": "cell"
+  },
+  "f_two_results_calc": {
+   "class": "cell"
+  },
+  "f_uncited_claim": {
+   "class": "framing"
+  },
+  "f_uncited_compare": {
+   "class": "framing"
+  },
+  "f_uncited_digits": {
+   "class": "cell"
+  },
+  "f_uncited_half": {
+   "class": "cell"
+  },
+  "f_uncited_name": {
+   "class": "cell"
+  },
+  "f_uncited_second": {
+   "class": "cell"
+  },
+  "f_uncited_word": {
+   "class": "cell"
+  },
+  "f_under_other_name": {
+   "class": "cell"
+  },
+  "f_up_on_fall": {
+   "class": "cell"
+  },
+  "f_vague": {
+   "class": "framing"
+  },
+  "f_value_no_number": {
+   "class": "cell"
+  },
+  "f_watch_hours": {
+   "class": "policy"
+  },
+  "f_world_claim": {
+   "class": "policy"
+  },
+  "f_wrong_count": {
+   "class": "cell"
+  },
+  "f_wrong_date": {
+   "class": "cell"
+  },
+  "f_wrong_month": {
+   "class": "framing"
+  },
+  "f_wrong_row_name": {
+   "class": "cell"
+  },
+  "f_wrong_share": {
+   "class": "cell"
+  },
+  "f_wrong_year": {
+   "class": "framing"
+  },
+  "f_year_on_weeks": {
+   "class": "framing"
+  },
+  "i_not_item": {
+   "class": "cell",
+   "why": "an item ref that is no item"
+  },
+  "i_note_number": {
+   "class": "cell",
+   "why": "a number in an item note"
+  },
+  "l_too_long": {
+   "class": "cell",
+   "why": "a lead past its length (marker grammar)"
+  },
+  "l_window_missing": {
+   "class": "framing",
+   "why": "window"
+  },
+  "o_not_cited": {
+   "class": "cell",
+   "why": "outside line about a row not cited"
+  },
+  "o_other_name": {
+   "class": "cell",
+   "why": "outside line names another row"
+  },
+  "o_subscribers": {
+   "class": "policy",
+   "why": "outside line: a world claim"
+  },
+  "o_web": {
+   "class": "policy",
+   "why": "outside line from the web"
+  },
+  "o_you": {
+   "class": "policy",
+   "why": "outside line: a feeling"
+  },
+  "r_repeat": {
+   "class": "policy",
+   "why": "the same cells said again"
+  },
+  "v5_004": {
+   "arguable": "cell",
+   "class": "framing",
+   "why": "a channel's total said 'of your Blender 3D videos' (base)"
+  },
+  "v5_005": {
+   "class": "cell"
+  },
+  "v5_006": {
+   "class": "framing"
+  },
+  "v5_007": {
+   "class": "framing"
+  },
+  "v5_008": {
+   "class": "cell"
+  },
+  "v5_009": {
+   "class": "framing"
+  },
+  "v5_010": {
+   "class": "cell"
+  },
+  "v5_011": {
+   "class": "framing"
+  },
+  "v5_012": {
+   "class": "cell"
+  },
+  "v5_013": {
+   "arguable": "cell",
+   "class": "framing",
+   "why": "a theme's share said 'of your home cooking videos' (base)"
+  },
+  "v5_015": {
+   "class": "framing"
+  },
+  "v5_016": {
+   "class": "cell"
+  },
+  "v5_017": {
+   "arguable": "cell",
+   "class": "framing",
+   "why": "a channel's total said 'of your math explainers videos' (base)"
+  },
+  "v5_018": {
+   "class": "framing"
+  },
+  "v5_019": {
+   "class": "framing"
+  },
+  "v5_020": {
+   "class": "framing"
+  },
+  "v5_021": {
+   "class": "cell"
+  },
+  "v5_024": {
+   "class": "framing"
+  },
+  "v5_025": {
+   "arguable": "cell",
+   "class": "framing",
+   "why": "a channel's total said 'of your cozy gaming videos' (base)"
+  },
+  "v5_026": {
+   "class": "framing"
+  },
+  "v5_027": {
+   "class": "cell"
+  },
+  "v5_030": {
+   "class": "cell"
+  },
+  "v5_031": {
+   "class": "framing"
+  },
+  "v5_032": {
+   "class": "cell"
+  },
+  "v5_033": {
+   "class": "cell"
+  },
+  "v5_036": {
+   "class": "framing"
+  },
+  "v5_037": {
+   "class": "cell"
+  },
+  "v5_038": {
+   "class": "framing"
+  },
+  "v5_040": {
+   "class": "framing"
+  },
+  "v5_041": {
+   "class": "framing"
+  },
+  "v5_043": {
+   "class": "framing"
+  },
+  "v5_044": {
+   "class": "framing"
+  },
+  "v5_045": {
+   "class": "framing"
+  },
+  "v5_046": {
+   "class": "framing"
+  },
+  "v5_050": {
+   "class": "framing"
+  },
+  "v5_051": {
+   "class": "cell"
+  },
+  "v5_052": {
+   "class": "cell"
+  },
+  "v5_053": {
+   "class": "cell"
+  },
+  "v5_054": {
+   "class": "cell"
+  },
+  "v5_055": {
+   "arguable": "cell",
+   "class": "framing",
+   "why": "'Shorts made up 700 of your window': a count in share words"
+  },
+  "v5_056": {
+   "class": "cell"
+  },
+  "v5_057": {
+   "class": "framing"
+  },
+  "v5_058": {
+   "class": "framing"
+  },
+  "v5_059": {
+   "class": "framing"
+  },
+  "v5_060": {
+   "class": "framing"
+  },
+  "v5_061": {
+   "class": "framing"
+  },
+  "v5_062": {
+   "class": "cell",
+   "why": "'tripled' (a ratio word, x3) against 3% to 9%"
+  },
+  "v5_063": {
+   "class": "policy"
+  },
+  "v5_064": {
+   "class": "framing"
+  },
+  "v5_065": {
+   "class": "framing"
+  },
+  "v5_068": {
+   "class": "framing"
+  },
+  "v5_071": {
+   "class": "framing"
+  },
+  "v5_073": {
+   "class": "framing"
+  },
+  "v5_074": {
+   "class": "framing"
+  },
+  "v5_075": {
+   "class": "framing"
+  },
+  "v5_076": {
+   "class": "framing"
+  },
+  "v5_077": {
+   "class": "framing"
+  },
+  "v5_078": {
+   "class": "framing"
+  },
+  "v5_079": {
+   "class": "framing"
+  },
+  "v5_080": {
+   "class": "framing"
+  },
+  "v5_081": {
+   "class": "framing"
+  },
+  "v5_082": {
+   "class": "framing"
+  },
+  "v5_083": {
+   "class": "framing"
+  },
+  "v5_084": {
+   "class": "framing"
+  },
+  "v5_085": {
+   "class": "framing"
+  },
+  "v5_086": {
+   "class": "framing"
+  },
+  "v5_087": {
+   "class": "framing"
+  },
+  "v5_088": {
+   "class": "framing"
+  },
+  "v5_089": {
+   "class": "framing"
+  },
+  "v5_092": {
+   "class": "framing"
+  },
+  "v5_093": {
+   "class": "framing"
+  },
+  "v5_094": {
+   "class": "framing"
+  },
+  "v5_095": {
+   "class": "framing"
+  },
+  "v5_096": {
+   "class": "framing"
+  },
+  "v5_097": {
+   "class": "framing"
+  },
+  "v5_098": {
+   "class": "framing",
+   "why": "'close behind' (rank word) across two measures"
+  },
+  "v5_099": {
+   "class": "framing"
+  },
+  "v5_100": {
+   "class": "framing"
+  },
+  "v5_101": {
+   "class": "framing"
+  },
+  "v5_103": {
+   "class": "framing"
+  },
+  "v5_104": {
+   "class": "framing"
+  },
+  "v5_106": {
+   "class": "framing"
+  },
+  "v5_109": {
+   "class": "framing"
+  },
+  "v5_110": {
+   "class": "framing"
+  },
+  "v5_111": {
+   "class": "framing"
+  },
+  "v5_112": {
+   "class": "cell"
+  },
+  "v5_113": {
+   "class": "framing"
+  },
+  "v5_114": {
+   "class": "framing"
+  },
+  "v5_115": {
+   "class": "framing",
+   "why": "saved-and-never-opened said as saved (scope)"
+  },
+  "v5_116": {
+   "class": "framing"
+  },
+  "v5_117": {
+   "class": "framing",
+   "why": "a change said with a clause code would have to add"
+  },
+  "v5_120": {
+   "class": "framing",
+   "why": "a count of 'only music' said without the topic (scope)"
+  },
+  "v5_121": {
+   "class": "framing",
+   "why": "a count of 'only music' said without the topic (scope)"
+  },
+  "v5_122": {
+   "class": "framing",
+   "why": "a count of 'only music' said without the topic (scope)"
+  },
+  "v5_124": {
+   "class": "framing"
+  },
+  "v5_125": {
+   "class": "framing"
+  },
+  "v5_126": {
+   "class": "framing"
+  },
+  "v5_127": {
+   "class": "cell"
+  },
+  "v5_128": {
+   "class": "framing"
+  },
+  "v5_129": {
+   "class": "framing"
+  },
+  "v5_130": {
+   "class": "framing"
+  },
+  "v5_131": {
+   "class": "framing"
+  },
+  "v5_132": {
+   "class": "framing"
+  }
+ },
+ "rule": "(applied case by case; the class string of a case decides only where the rule gives the same answer for\nevery case of that string):\n  CELL: the fault shows in a value the sentence says, against the cell or row its marker cites, or in arithmetic\n    between cited cells: a wrong number, number word ('half', 'twice', 'tripled', 'a third', a typed sign), name,\n    title, date or time; a calculation; a marker grammar fault (no marker, a bad path, two results, a forged\n    marker); a value bound to the wrong ROW (another row's cell, a period row called by another row's label, a\n    totals cell said of a row, a row's cell said of the totals, a row placed in a group its row does not name) or to\n    the wrong MEASURE (openings as videos, days as videos, a count as a share or a difference, points as a percent,\n    the Shorts share as the long share, now and before swapped into 'from ... to', a share move from a count). A\n    direction word bound to a marked change value ('rose 37 points', 'up 4 points', '45% fewer') gives that value's\n    sign, so a wrong sign is a wrong number.\n  FRAMING: you need something beyond the cited cells to see it: the window or period words, the base, the scope\n    (length, platform, weekday, saved or opened, a topic filter), a rank, tie, order, first or last, list\n    completeness, only/all, most/mostly, hidden private rows, or a direction or comparison word with no marked\n    change value ('grew', 'slowed to 142 from 44', 'more than', 'held steady', 'a little').\n  POLICY: outside knowledge, feelings and motives, outcomes, watch time, sensitive topics, limits talk, a weak match,\n    repeating a fact already said.\n  ARGUABLE: the case where the rule can be read both ways; reported both ways, never relabelled after a run."
+}

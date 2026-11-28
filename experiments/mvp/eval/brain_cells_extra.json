@@ -1,0 +1,8073 @@
+{
+ "about": "Freeze the cell-class false cases of the skeptic's set (mvp22/skeptic) and the record checker's set\n(mvp23/record_check, cases_v2) into the repo (eval/brain_cells_extra.json), each with the tool results it is checked\non (made-up library only), the verifier's turn, its class and what cells mode does with it today; plus a few\nframing-class and true controls. tests/test_brain_cells.py reads it. mvp25: N27's kept_cells re-pinned (False) after the cells rules of DESIGN 24.4.",
+ "cases": [
+  {
+   "class": "cell",
+   "form": {
+    "lead": "This year up to 30 October 2026, you opened 254[r1.totals.items] videos.",
+    "points": [
+     "Digital drawing[r1.themes[0]] took up half your year, with 92[r1.themes[0].items] videos."
+    ]
+   },
+   "id": "K03",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "skeptic:YTD_CH",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "my channels this year",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "92 of 254 = 36%"
+  },
+  {
+   "arguable": "cell",
+   "class": "framing",
+   "form": {
+    "lead": "In October 2026, you opened 142[r1.totals.items] videos.",
+    "points": [
+     "Math[r2.areas[2]] takes a bigger part of what you opened than gaming[r2.areas[0]], at 145[r2.areas[2].items] videos."
+    ]
+   },
+   "id": "K26",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "skeptic:TWO",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "what did i watch in october and how does that compare with my whole history",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "in all history gaming is 319, math 145"
+  },
+  {
+   "arguable": "cell",
+   "class": "framing",
+   "form": {
+    "lead": "In October 2026, you opened 142[r1.totals.items] videos.",
+    "points": [
+     "Art and design[r2.areas[1]] is a smaller part of what you opened overall, at 26%[r2.areas[1].share], than of this month."
+    ]
+   },
+   "id": "K27",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "skeptic:TWO",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "what did i watch in october and how does that compare with my whole history",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "24% in October against 26% in all history"
+  },
+  {
+   "class": "cell",
+   "form": {
+    "lead": "In the 4 weeks up to 30 October 2026, you opened 130[r1.totals.items] videos.",
+    "points": [
+     "Home cooking[r1.themes[1]] doubled, to 30[r1.themes[1].items] from 2[r1.themes[1].previous_items]."
+    ]
+   },
+   "id": "K30",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "skeptic:LATELY",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "what have i been into lately",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "15 times, not double"
+  },
+  {
+   "class": "framing",
+   "form": {
+    "lead": "In the 4 weeks up to 30 October 2026, you opened 130[r1.totals.items] videos.",
+    "points": [
+     "Digital drawing[r1.themes[2]] was 21%[r1.themes[2].share] of the long videos you opened."
+    ]
+   },
+   "id": "K36",
+   "kept_cells": true,
+   "kept_full": true,
+   "ledger": "skeptic:LATELY",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "what have i been into lately",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "27 of 67 long = 40%; 21% is of all 130"
+  },
+  {
+   "arguable": "framing",
+   "class": "cell",
+   "form": {
+    "lead": "In October 2026, you opened 142[r1.totals.items] videos.",
+    "points": [
+     "Your Shorts ran 10[r1.totals.long_median_min] minutes at the median."
+    ]
+   },
+   "id": "K37",
+   "kept_cells": true,
+   "kept_full": true,
+   "ledger": "skeptic:OCT_CH",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "which channels did i watch most in october",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "10 min is the median of long videos; the 66 Shorts are 40 s"
+  },
+  {
+   "class": "framing",
+   "form": {
+    "lead": "In October 2026, you opened 142[r1.totals.items] videos.",
+    "points": [
+     "You opened 142[r1.totals.items] YouTube videos."
+    ]
+   },
+   "id": "K38",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "skeptic:OCT_CH",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "which channels did i watch most in october",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "138 YouTube + 4 Instagram reels"
+  },
+  {
+   "class": "cell",
+   "form": {
+    "lead": "In the 4 weeks up to 30 October 2026, you opened 130[r1.totals.items] videos.",
+    "points": [
+     "Shorts made up 100%[r1.themes[0].shorts_share] of what you opened."
+    ]
+   },
+   "id": "K39",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "skeptic:LATELY",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "what have i been into lately",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "100% is Gaming clips' Shorts share; Shorts were 59 of 130 = 45% of what you opened"
+  },
+  {
+   "class": "cell",
+   "form": {
+    "lead": "This year up to 30 October 2026, you opened 254[r1.totals.items] videos.",
+    "points": [
+     "October's 142[r1.periods[9].items] was more than the rest of the year twice over."
+    ]
+   },
+   "id": "K45",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "skeptic:MONTHS",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "my months this year",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "January to September 2026: 112; twice over is 224"
+  },
+  {
+   "class": "cell",
+   "form": {
+    "lead": "This year up to 30 October 2026, you opened 254[r1.totals.items] videos.",
+    "points": [
+     "October was five times September, 142[r1.periods[9].items] against 44[r1.periods[8].items]."
+    ]
+   },
+   "id": "K46",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "skeptic:MONTHS",
+   "set": "skeptic",
+   "truth": "F",
+   "turn": {
+    "message": "my months this year",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "142 / 44 = 3.2"
+  },
+  {
+   "class": "true",
+   "form": {
+    "lead": "In the 4 weeks up to 30 October 2026, you opened 130[r1.totals.items] videos.",
+    "points": [
+     "Home cooking[r1.themes[1]] jumped from 2[r1.themes[1].previous_items] to 30[r1.themes[1].items]."
+    ]
+   },
+   "id": "T03",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "skeptic:LATELY",
+   "set": "skeptic",
+   "truth": "T",
+   "turn": {
+    "message": "what have i been into lately",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "2 to 30"
+  },
+  {
+   "class": "true",
+   "form": {
+    "lead": "In October 2026, you opened 142[r1.totals.items] videos.",
+    "points": [
+     "October leaned more on gaming than your history overall: 51%[r1.areas[0].share] against 44%[r2.areas[0].share]."
+    ]
+   },
+   "id": "T06",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "skeptic:TWO",
+   "set": "skeptic",
+   "truth": "T",
+   "turn": {
+    "message": "what did i watch in october and how does that compare with my whole history",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "72 of 142 against 319 of 723"
+  },
+  {
+   "class": "true",
+   "form": {
+    "lead": "Pixel Pencil[r1.channels[0]] made 27[r1.channels[0].items] of your 32[r1.totals.items] art videos."
+   },
+   "id": "T12",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "skeptic:FOLLOW",
+   "set": "skeptic",
+   "truth": "T",
+   "turn": {
+    "message": "and just the art ones?",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "27 of 32"
+  },
+  {
+   "class": "true",
+   "form": {
+    "lead": "In October 2026, you opened 142[r1.totals.items] videos.",
+    "points": [
+     "Clip Factory[r1.channels[0]] alone made 61[r1.channels[0].items] of them, every one a Short."
+    ]
+   },
+   "id": "T15",
+   "kept_cells": true,
+   "kept_full": true,
+   "ledger": "skeptic:OCT_CH",
+   "set": "skeptic",
+   "truth": "T",
+   "turn": {
+    "message": "which channels did i watch most in october",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "P",
+   "why": "61 of 61 are 40 s Shorts"
+  },
+  {
+   "class": "cell",
+   "form": {
+    "lead": "Digital drawing[r1.themes[2]] rose to 27[r1.themes[2].items] from 7[r1.themes[0].previous_items] in the 4 weeks before."
+   },
+   "id": "N24",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "look1:A01.1",
+   "set": "record",
+   "truth": "F",
+   "turn": {
+    "message": "no. i meant what topics have i been into recently",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "Digital drawing fell 29 to 27; 7 is Gaming clips' count before"
+  },
+  {
+   "class": "cell",
+   "form": {
+    "lead": "Brick Realm[r1.channels[3]] grew from 5[r1.channels[3].items] to 7[r1.channels[3].previous_items] videos."
+   },
+   "id": "N25",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "look1:B05.0",
+   "set": "record",
+   "truth": "F",
+   "turn": {
+    "message": "which channels did I drop",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "Brick Realm fell 7 to 5"
+  },
+  {
+   "class": "framing",
+   "form": {
+    "lead": "You opened more Watercolor painting[r3.themes[2]] this year than in the same part of 2025: 41[r3.themes[2].items] against 45[r3.themes[2].previous_items]."
+   },
+   "id": "N27",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "look1:K03.0",
+   "set": "record",
+   "truth": "F",
+   "turn": {
+    "message": "give me the full picture of my year so far, themes, channels, what's new and what i stopped",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "41 < 45 | mvp25: cells mode now drops it (rule period_named: 'the same part of 2025' is no period of the cell's)"
+  },
+  {
+   "class": "framing",
+   "form": {
+    "lead": "Your viewing slowed in October 2026, to 142[r2.periods[9].items] videos from 44[r2.periods[8].items] in September 2026."
+   },
+   "id": "N30",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "look1:F11.0",
+   "set": "record",
+   "truth": "F",
+   "turn": {
+    "message": "was october my biggest month ever",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "142 > 44"
+  },
+  {
+   "class": "framing",
+   "form": {
+    "lead": "Food and cooking[r1.areas[2]] grew this year, at 13%[r1.areas[2].share] of what you opened against 13%[r1.areas[2].previous_share] in the same part of 2025."
+   },
+   "id": "N31",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "look1:E04.0",
+   "set": "record",
+   "truth": "F",
+   "turn": {
+    "message": "wait before that, which channels did i drop this year?",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "12.6% against 13.5%: down 0.9 points"
+  },
+  {
+   "class": "cell",
+   "form": {
+    "lead": "In August 2026 you opened 44[r2.periods[8].items] videos."
+   },
+   "id": "N33",
+   "kept_cells": false,
+   "kept_full": false,
+   "ledger": "look1:F11.0",
+   "set": "record",
+   "truth": "F",
+   "turn": {
+    "message": "was october my biggest month ever",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "44 is September 2026; August is 36"
+  },
+  {
+   "class": "true",
+   "form": {
+    "lead": "Home cooking[r1.themes[1]] rose from 2[r1.themes[1].previous_items] to 30[r1.themes[1].items] videos."
+   },
+   "id": "T06",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "look1:A01.1",
+   "set": "record",
+   "truth": "T",
+   "turn": {
+    "message": "no. i meant what topics have i been into recently",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "2 to 30"
+  },
+  {
+   "class": "true",
+   "form": {
+    "lead": "Digital drawing[r1.themes[2]] slipped to 27[r1.themes[2].items] from 29[r1.themes[2].previous_items]."
+   },
+   "id": "T07",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "look1:A01.1",
+   "set": "record",
+   "truth": "T",
+   "turn": {
+    "message": "no. i meant what topics have i been into recently",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "29 to 27"
+  },
+  {
+   "class": "true",
+   "form": {
+    "lead": "Wet Paper[r1.channels[2]] fell to 37[r1.channels[2].items] videos from 45[r1.channels[2].previous_items] in the same part of 2025."
+   },
+   "id": "T09",
+   "kept_cells": true,
+   "kept_full": false,
+   "ledger": "look1:E04.0",
+   "set": "record",
+   "truth": "T",
+   "turn": {
+    "message": "wait before that, which channels did i drop this year?",
+    "names": [
+     "art and design",
+     "food and cooking",
+     "gaming",
+     "math",
+     "Minecraft builds",
+     "Gaming clips",
+     "Speedruns",
+     "Digital drawing",
+     "Watercolor painting",
+     "Number puzzles",
+     "Calculus lessons",
+     "Home cooking",
+     "@crumb.lab",
+     "@noodle.nights",
+     "@wetpaper.ig",
+     "Brick Realm",
+     "Clip Factory",
+     "Frame Perfect",
+     "Gaming Daily",
+     "Limit Lane",
+     "Odd Prime",
+     "Pan Theory",
+     "Pixel Pencil",
+     "Wet Paper",
+     "Bread days",
+     "Watercolor to try"
+    ],
+    "sensitive_names": [
+     "Heart Notes"
+    ],
+    "today": "2026-11-22",
+    "unlock": null
+   },
+   "where": "L",
+   "why": "45 to 37"
+  }
+ ],
+ "ledgers": {
+  "look1:A01.1": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 6,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "the 4 weeks up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": 21.8,
+       "change_vs_previous": 0.218,
+       "items": 64,
+       "name": "gaming",
+       "previous_share": 0.2745,
+       "ref": "r1.areas[0]",
+       "share": 0.4923,
+       "themes": []
+      },
+      {
+       "change_pts": -32.2,
+       "change_vs_previous": -0.322,
+       "items": 32,
+       "name": "art and design",
+       "previous_share": 0.5686,
+       "ref": "r1.areas[1]",
+       "share": 0.2462,
+       "themes": []
+      },
+      {
+       "change_pts": 19.2,
+       "change_vs_previous": 0.192,
+       "items": 30,
+       "name": "food and cooking",
+       "previous_share": 0.0392,
+       "ref": "r1.areas[2]",
+       "share": 0.2308,
+       "themes": []
+      },
+      {
+       "change_pts": -8.7,
+       "change_vs_previous": -0.087,
+       "items": 4,
+       "name": "math",
+       "previous_share": 0.1176,
+       "ref": "r1.areas[3]",
+       "share": 0.0308,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "gaming",
+       "days": 28,
+       "first_watched": "2026-10-01",
+       "items": 56,
+       "name": "Clip Factory",
+       "new_in_window": false,
+       "previous_items": 5,
+       "ref": "r1.channels[0]",
+       "share": 0.4308,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 25,
+       "first_watched": "2021-02-01",
+       "items": 30,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "previous_items": 2,
+       "ref": "r1.channels[1]",
+       "share": 0.2308,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 26,
+       "first_watched": "2026-08-01",
+       "items": 27,
+       "name": "Pixel Pencil",
+       "new_in_window": false,
+       "previous_items": 29,
+       "ref": "r1.channels[2]",
+       "share": 0.2077,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2021-01-05",
+       "items": 5,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "previous_items": 7,
+       "ref": "r1.channels[3]",
+       "share": 0.0385,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 4,
+       "first_watched": "2023-06-03",
+       "items": 4,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "previous_items": 6,
+       "ref": "r1.channels[4]",
+       "share": 0.0308,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[5]",
+       "share": 0.0308,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 3,
+       "first_watched": "2026-10-01",
+       "items": 3,
+       "name": "Gaming Daily",
+       "new_in_window": false,
+       "previous_items": 2,
+       "ref": "r1.channels[6]",
+       "share": 0.0231,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 64,
+       "name": "Gaming",
+       "ref": "r1.fields[0]",
+       "share": 0.4923
+      },
+      {
+       "items": 32,
+       "name": "Art",
+       "ref": "r1.fields[1]",
+       "share": 0.2462
+      },
+      {
+       "items": 30,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.2308
+      },
+      {
+       "items": 4,
+       "name": "Math",
+       "ref": "r1.fields[3]",
+       "share": 0.0308
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "top",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "posts",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Home cooking",
+        "youtube": 0
+       }
+      ]
+     },
+     "new": {
+      "channels": [],
+      "themes": [
+       {
+        "items": 30,
+        "name": "Home cooking",
+        "previous_items": 2,
+        "ref": "r1.new.themes[0]"
+       },
+       {
+        "items": 5,
+        "name": "Watercolor painting",
+        "previous_items": 0,
+        "ref": "r1.new.themes[1]"
+       }
+      ]
+     },
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 51
+      },
+      "clipped": false,
+      "days_active": 28,
+      "items": 51,
+      "long": 44,
+      "long_median_min": 25,
+      "shorts": 7,
+      "shorts_share": 0.1373,
+      "words": "the 4 weeks before (5 September to 2 October 2026)"
+     },
+     "question": "no. i meant what topics have i been into recently",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "gaming",
+       "change_vs_previous": 31.6,
+       "channels": [],
+       "days": 28,
+       "field": "Gaming",
+       "items": 59,
+       "mixed": false,
+       "name": "Gaming clips",
+       "previous_items": 7,
+       "previous_share": 0.1373,
+       "ref": "r1.themes[0]",
+       "share": 0.4538,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "change_vs_previous": 19.2,
+       "channels": [],
+       "days": 25,
+       "field": "Cooking",
+       "items": 30,
+       "mixed": false,
+       "name": "Home cooking",
+       "previous_items": 2,
+       "previous_share": 0.0392,
+       "ref": "r1.themes[1]",
+       "share": 0.2308,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": -36.1,
+       "channels": [],
+       "days": 26,
+       "field": "Art",
+       "items": 27,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 29,
+       "previous_share": 0.5686,
+       "ref": "r1.themes[2]",
+       "share": 0.2077,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": 3.9,
+       "channels": [],
+       "days": 5,
+       "field": "Art",
+       "items": 5,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r1.themes[3]",
+       "share": 0.0385,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": -9.9,
+       "channels": [],
+       "days": 5,
+       "field": "Gaming",
+       "items": 5,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "previous_items": 7,
+       "previous_share": 0.1373,
+       "ref": "r1.themes[4]",
+       "share": 0.0385,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "change_vs_previous": -8.7,
+       "channels": [],
+       "days": 4,
+       "field": "Math",
+       "items": 4,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "previous_items": 6,
+       "previous_share": 0.1176,
+       "ref": "r1.themes[5]",
+       "share": 0.0308,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 126
+      },
+      "days_active": 28,
+      "items": 130,
+      "long": 67,
+      "long_median_min": 10,
+      "shorts": 59,
+      "shorts_share": 0.4683
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2308
+       },
+       {
+        "hour": 19,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2308
+       },
+       {
+        "hour": 18,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2231
+       }
+      ],
+      "busiest_weekday": "Monday",
+      "events": 130,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7077,
+      "weekend_share": 0.2923
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-10-03",
+      "words": "the 4 weeks up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 7,
+    "tool": "breakdown"
+   }
+  },
+  "look1:B05.0": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 8,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "the 4 weeks up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": 21.8,
+       "change_vs_previous": 0.218,
+       "items": 64,
+       "name": "gaming",
+       "previous_share": 0.2745,
+       "ref": "r1.areas[0]",
+       "share": 0.4923,
+       "themes": []
+      },
+      {
+       "change_pts": -32.2,
+       "change_vs_previous": -0.322,
+       "items": 32,
+       "name": "art and design",
+       "previous_share": 0.5686,
+       "ref": "r1.areas[1]",
+       "share": 0.2462,
+       "themes": []
+      },
+      {
+       "change_pts": 19.2,
+       "change_vs_previous": 0.192,
+       "items": 30,
+       "name": "food and cooking",
+       "previous_share": 0.0392,
+       "ref": "r1.areas[2]",
+       "share": 0.2308,
+       "themes": []
+      },
+      {
+       "change_pts": -8.7,
+       "change_vs_previous": -0.087,
+       "items": 4,
+       "name": "math",
+       "previous_share": 0.1176,
+       "ref": "r1.areas[3]",
+       "share": 0.0308,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "gaming",
+       "days": 28,
+       "first_watched": "2026-10-01",
+       "items": 56,
+       "name": "Clip Factory",
+       "new_in_window": false,
+       "previous_items": 5,
+       "ref": "r1.channels[0]",
+       "share": 0.4308,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 25,
+       "first_watched": "2021-02-01",
+       "items": 30,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "previous_items": 2,
+       "ref": "r1.channels[1]",
+       "share": 0.2308,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 26,
+       "first_watched": "2026-08-01",
+       "items": 27,
+       "name": "Pixel Pencil",
+       "new_in_window": false,
+       "previous_items": 29,
+       "ref": "r1.channels[2]",
+       "share": 0.2077,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2021-01-05",
+       "items": 5,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "previous_items": 7,
+       "ref": "r1.channels[3]",
+       "share": 0.0385,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 4,
+       "first_watched": "2023-06-03",
+       "items": 4,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "previous_items": 6,
+       "ref": "r1.channels[4]",
+       "share": 0.0308,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[5]",
+       "share": 0.0308,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 3,
+       "first_watched": "2026-10-01",
+       "items": 3,
+       "name": "Gaming Daily",
+       "new_in_window": false,
+       "previous_items": 2,
+       "ref": "r1.channels[6]",
+       "share": 0.0231,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 1,
+       "first_watched": "2025-01-10",
+       "items": 1,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "previous_items": 0,
+       "ref": "r1.channels[7]",
+       "share": 0.0077,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 64,
+       "name": "Gaming",
+       "ref": "r1.fields[0]",
+       "share": 0.4923
+      },
+      {
+       "items": 32,
+       "name": "Art",
+       "ref": "r1.fields[1]",
+       "share": 0.2462
+      },
+      {
+       "items": 30,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.2308
+      },
+      {
+       "items": 4,
+       "name": "Math",
+       "ref": "r1.fields[3]",
+       "share": 0.0308
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "channels",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "posts",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Home cooking",
+        "youtube": 0
+       }
+      ]
+     },
+     "new": {
+      "channels": [],
+      "themes": [
+       {
+        "items": 30,
+        "name": "Home cooking",
+        "previous_items": 2,
+        "ref": "r1.new.themes[0]"
+       },
+       {
+        "items": 5,
+        "name": "Watercolor painting",
+        "previous_items": 0,
+        "ref": "r1.new.themes[1]"
+       }
+      ]
+     },
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 51
+      },
+      "clipped": false,
+      "days_active": 28,
+      "items": 51,
+      "long": 44,
+      "long_median_min": 25,
+      "shorts": 7,
+      "shorts_share": 0.1373,
+      "words": "the 4 weeks before (5 September to 2 October 2026)"
+     },
+     "question": "which channels did I drop",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "gaming",
+       "change_vs_previous": 31.6,
+       "channels": [],
+       "days": 28,
+       "field": "Gaming",
+       "items": 59,
+       "mixed": false,
+       "name": "Gaming clips",
+       "previous_items": 7,
+       "previous_share": 0.1373,
+       "ref": "r1.themes[0]",
+       "share": 0.4538,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "change_vs_previous": 19.2,
+       "channels": [],
+       "days": 25,
+       "field": "Cooking",
+       "items": 30,
+       "mixed": false,
+       "name": "Home cooking",
+       "previous_items": 2,
+       "previous_share": 0.0392,
+       "ref": "r1.themes[1]",
+       "share": 0.2308,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": -36.1,
+       "channels": [],
+       "days": 26,
+       "field": "Art",
+       "items": 27,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 29,
+       "previous_share": 0.5686,
+       "ref": "r1.themes[2]",
+       "share": 0.2077,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": 3.9,
+       "channels": [],
+       "days": 5,
+       "field": "Art",
+       "items": 5,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r1.themes[3]",
+       "share": 0.0385,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": -9.9,
+       "channels": [],
+       "days": 5,
+       "field": "Gaming",
+       "items": 5,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "previous_items": 7,
+       "previous_share": 0.1373,
+       "ref": "r1.themes[4]",
+       "share": 0.0385,
+       "shorts_share": 0.0
+      }
+     ],
+     "top_areas": {
+      "area": "gaming",
+      "n": 2,
+      "of": 5
+     },
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 126
+      },
+      "days_active": 28,
+      "items": 130,
+      "long": 67,
+      "long_median_min": 10,
+      "shorts": 59,
+      "shorts_share": 0.4683
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2308
+       },
+       {
+        "hour": 19,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2308
+       },
+       {
+        "hour": 18,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2231
+       }
+      ],
+      "busiest_weekday": "Monday",
+      "events": 130,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7077,
+      "weekend_share": 0.2923
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-10-03",
+      "words": "the 4 weeks up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 3,
+    "tool": "changes"
+   }
+  },
+  "look1:E04.0": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 8,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "this year up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": -34.2,
+       "change_vs_previous": -0.342,
+       "items": 133,
+       "name": "art and design",
+       "previous_share": 0.8654,
+       "ref": "r1.areas[0]",
+       "share": 0.5236,
+       "themes": []
+      },
+      {
+       "change_pts": 31.1,
+       "change_vs_previous": 0.311,
+       "items": 79,
+       "name": "gaming",
+       "previous_share": 0.0,
+       "ref": "r1.areas[1]",
+       "share": 0.311,
+       "themes": []
+      },
+      {
+       "change_pts": -0.9,
+       "change_vs_previous": -0.009,
+       "items": 32,
+       "name": "food and cooking",
+       "previous_share": 0.1346,
+       "ref": "r1.areas[2]",
+       "share": 0.126,
+       "themes": []
+      },
+      {
+       "change_pts": 3.9,
+       "change_vs_previous": 0.039,
+       "items": 10,
+       "name": "math",
+       "previous_share": 0.0,
+       "ref": "r1.areas[3]",
+       "share": 0.0394,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[1]",
+       "share": 0.2402,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 37,
+       "first_watched": "2025-01-10",
+       "items": 37,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "previous_items": 45,
+       "ref": "r1.channels[2]",
+       "share": 0.1457,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "previous_items": 7,
+       "ref": "r1.channels[3]",
+       "share": 0.126,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 13,
+       "first_watched": "2021-01-05",
+       "items": 13,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "previous_items": 0,
+       "ref": "r1.channels[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 10,
+       "first_watched": "2023-06-03",
+       "items": 10,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "previous_items": 0,
+       "ref": "r1.channels[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2026-10-01",
+       "items": 5,
+       "name": "Gaming Daily",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[6]",
+       "share": 0.0197,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[7]",
+       "share": 0.0157,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 133,
+       "name": "Art",
+       "ref": "r1.fields[0]",
+       "share": 0.5236
+      },
+      {
+       "items": 79,
+       "name": "Gaming",
+       "ref": "r1.fields[1]",
+       "share": 0.311
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.126
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "channels",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       },
+       {
+        "n": 3,
+        "noun": "posts",
+        "ref": "r1.library.saved_not_opened[1]",
+        "theme": "Home cooking",
+        "youtube": 0
+       }
+      ]
+     },
+     "new": {
+      "channels": [
+       {
+        "items": 92,
+        "name": "Pixel Pencil",
+        "ref": "r1.new.channels[0]",
+        "theme": "Digital drawing"
+       },
+       {
+        "items": 61,
+        "name": "Clip Factory",
+        "ref": "r1.new.channels[1]",
+        "theme": "Gaming clips"
+       },
+       {
+        "items": 5,
+        "name": "Gaming Daily",
+        "ref": "r1.new.channels[2]",
+        "theme": "Gaming clips"
+       }
+      ],
+      "themes": [
+       {
+        "items": 92,
+        "name": "Digital drawing",
+        "previous_items": 0,
+        "ref": "r1.new.themes[0]"
+       },
+       {
+        "items": 66,
+        "name": "Gaming clips",
+        "previous_items": 0,
+        "ref": "r1.new.themes[1]"
+       },
+       {
+        "items": 13,
+        "name": "Minecraft builds",
+        "previous_items": 0,
+        "ref": "r1.new.themes[2]"
+       },
+       {
+        "items": 10,
+        "name": "Calculus lessons",
+        "previous_items": 0,
+        "ref": "r1.new.themes[3]"
+       }
+      ]
+     },
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 52
+      },
+      "clipped": false,
+      "days_active": 50,
+      "items": 52,
+      "long": 52,
+      "long_median_min": 10,
+      "shorts": 0,
+      "shorts_share": 0.0,
+      "words": "the same part of 2025 (1 January to 30 October 2025)"
+     },
+     "question": "wait before that, which channels did i drop this year?",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "art and design",
+       "change_vs_previous": 36.2,
+       "channels": [],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r1.themes[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": 26.0,
+       "channels": [],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r1.themes[1]",
+       "share": 0.2598,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": -70.4,
+       "channels": [],
+       "days": 41,
+       "field": "Art",
+       "items": 41,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 45,
+       "previous_share": 0.8654,
+       "ref": "r1.themes[2]",
+       "share": 0.1614,
+       "shorts_share": 0.0
+      }
+     ],
+     "top_areas": {
+      "area": "art and design",
+      "n": 2,
+      "of": 5
+     },
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 250
+      },
+      "days_active": 123,
+      "items": 254,
+      "long": 184,
+      "long_median_min": 18,
+      "shorts": 66,
+      "shorts_share": 0.264
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2441
+       },
+       {
+        "hour": 16,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2402
+       },
+       {
+        "hour": 18,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2283
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 254,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7165,
+      "weekend_share": 0.2835
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-01-01",
+      "words": "this year up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 3,
+    "tool": "changes"
+   }
+  },
+  "look1:F11.0": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 50
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "A period with fewer than 50 items is marked sparse.",
+      "No window before this one: new and stopped are not computed here."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 10,
+      "themes": 8
+     },
+     "rows_total": null,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "all your history (5 January 2021 to 30 October 2026, where your export ends)"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "items": 319,
+       "name": "gaming",
+       "ref": "r1.areas[0]",
+       "share": 0.4412,
+       "themes": []
+      },
+      {
+       "items": 187,
+       "name": "art and design",
+       "ref": "r1.areas[1]",
+       "share": 0.2586,
+       "themes": []
+      },
+      {
+       "items": 145,
+       "name": "math",
+       "ref": "r1.areas[2]",
+       "share": 0.2006,
+       "themes": []
+      },
+      {
+       "items": 72,
+       "name": "food and cooking",
+       "ref": "r1.areas[3]",
+       "share": 0.0996,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "gaming",
+       "days": 163,
+       "first_watched": "2021-01-05",
+       "items": 163,
+       "name": "Brick Realm",
+       "ref": "r1.channels[0]",
+       "share": 0.2254,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "ref": "r1.channels[1]",
+       "share": 0.1272,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 91,
+       "first_watched": "2025-01-10",
+       "items": 91,
+       "name": "Wet Paper",
+       "ref": "r1.channels[2]",
+       "share": 0.1259,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 90,
+       "first_watched": "2021-03-01",
+       "items": 90,
+       "name": "Frame Perfect",
+       "ref": "r1.channels[3]",
+       "share": 0.1245,
+       "shorts_share": 0.0,
+       "theme": "Speedruns",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 319,
+       "name": "Gaming",
+       "ref": "r1.fields[0]",
+       "share": 0.4412
+      },
+      {
+       "items": 187,
+       "name": "Art",
+       "ref": "r1.fields[1]",
+       "share": 0.2586
+      },
+      {
+       "items": 145,
+       "name": "Math",
+       "ref": "r1.fields[2]",
+       "share": 0.2006
+      },
+      {
+       "items": 72,
+       "name": "Cooking",
+       "ref": "r1.fields[3]",
+       "share": 0.0996
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "count",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "periods": [
+      {
+       "areas": [],
+       "items": 7,
+       "label": "Jan 2021",
+       "ref": "r1.periods[0]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 8,
+       "label": "Feb 2021",
+       "ref": "r1.periods[1]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 13,
+       "label": "Mar 2021",
+       "ref": "r1.periods[2]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 10,
+       "label": "Apr 2021",
+       "ref": "r1.periods[3]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 13,
+       "label": "May 2021",
+       "ref": "r1.periods[4]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 12,
+       "label": "Jun 2021",
+       "ref": "r1.periods[5]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 12,
+       "label": "Jul 2021",
+       "ref": "r1.periods[6]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 11,
+       "label": "Aug 2021",
+       "ref": "r1.periods[7]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 13,
+       "label": "Sep 2021",
+       "ref": "r1.periods[8]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 11,
+       "label": "Oct 2021",
+       "ref": "r1.periods[9]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 11,
+       "label": "Nov 2021",
+       "ref": "r1.periods[10]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 13,
+       "label": "Dec 2021",
+       "ref": "r1.periods[11]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 11,
+       "label": "Jan 2022",
+       "ref": "r1.periods[12]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 11,
+       "label": "Feb 2022",
+       "ref": "r1.periods[13]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 12,
+       "label": "Mar 2022",
+       "ref": "r1.periods[14]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 12,
+       "label": "Apr 2022",
+       "ref": "r1.periods[15]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 11,
+       "label": "May 2022",
+       "ref": "r1.periods[16]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 12,
+       "label": "Jun 2022",
+       "ref": "r1.periods[17]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 13,
+       "label": "Jul 2022",
+       "ref": "r1.periods[18]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 9,
+       "label": "Aug 2022",
+       "ref": "r1.periods[19]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 5,
+       "label": "Sep 2022",
+       "ref": "r1.periods[20]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 4,
+       "label": "Oct 2022",
+       "ref": "r1.periods[21]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 3,
+       "label": "Nov 2022",
+       "ref": "r1.periods[22]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 5,
+       "label": "Dec 2022",
+       "ref": "r1.periods[23]",
+       "sparse": true,
+       "themes": []
+      }
+     ],
+     "periods_unit": "month",
+     "question": "was october my biggest month ever",
+     "themes": [
+      {
+       "area": "gaming",
+       "channels": [],
+       "days": 163,
+       "field": "Gaming",
+       "items": 163,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "ref": "r1.themes[0]",
+       "share": 0.2254,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [],
+       "days": 95,
+       "field": "Art",
+       "items": 95,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "ref": "r1.themes[1]",
+       "share": 0.1314,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "ref": "r1.themes[2]",
+       "share": 0.1272,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [],
+       "days": 90,
+       "field": "Gaming",
+       "items": 90,
+       "mixed": false,
+       "name": "Speedruns",
+       "ref": "r1.themes[3]",
+       "share": 0.1245,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 719
+      },
+      "days_active": 515,
+      "items": 723,
+      "long": 651,
+      "long_median_min": 10,
+      "shorts": 66,
+      "shorts_share": 0.0918
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 16,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2476
+       },
+       {
+        "hour": 18,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2462
+       },
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2448
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 723,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7206,
+      "weekend_share": 0.2794
+     },
+     "window": {
+      "clipped": false,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2021-01-05",
+      "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)"
+     }
+    },
+    "took_ms": 12,
+    "tool": "timeline"
+   },
+   "r2": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "A period with fewer than 50 items is marked sparse.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": null,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "this year up to 30 October 2026, where your export ends"
+    },
+    "rid": "r2",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": -34.2,
+       "change_vs_previous": -0.342,
+       "items": 133,
+       "name": "art and design",
+       "previous_share": 0.8654,
+       "ref": "r2.areas[0]",
+       "share": 0.5236,
+       "themes": []
+      },
+      {
+       "change_pts": 31.1,
+       "change_vs_previous": 0.311,
+       "items": 79,
+       "name": "gaming",
+       "previous_share": 0.0,
+       "ref": "r2.areas[1]",
+       "share": 0.311,
+       "themes": []
+      },
+      {
+       "change_pts": -0.9,
+       "change_vs_previous": -0.009,
+       "items": 32,
+       "name": "food and cooking",
+       "previous_share": 0.1346,
+       "ref": "r2.areas[2]",
+       "share": 0.126,
+       "themes": []
+      },
+      {
+       "change_pts": 3.9,
+       "change_vs_previous": 0.039,
+       "items": 10,
+       "name": "math",
+       "previous_share": 0.0,
+       "ref": "r2.areas[3]",
+       "share": 0.0394,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r2.channels[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r2.channels[1]",
+       "share": 0.2402,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 37,
+       "first_watched": "2025-01-10",
+       "items": 37,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "previous_items": 45,
+       "ref": "r2.channels[2]",
+       "share": 0.1457,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "previous_items": 7,
+       "ref": "r2.channels[3]",
+       "share": 0.126,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 133,
+       "name": "Art",
+       "ref": "r2.fields[0]",
+       "share": 0.5236
+      },
+      {
+       "items": 79,
+       "name": "Gaming",
+       "ref": "r2.fields[1]",
+       "share": 0.311
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r2.fields[2]",
+       "share": 0.126
+      },
+      {
+       "items": 10,
+       "name": "Math",
+       "ref": "r2.fields[3]",
+       "share": 0.0394
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "count",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r2.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "new": {
+      "channels": [
+       {
+        "items": 92,
+        "name": "Pixel Pencil",
+        "ref": "r2.new.channels[0]",
+        "theme": "Digital drawing"
+       },
+       {
+        "items": 61,
+        "name": "Clip Factory",
+        "ref": "r2.new.channels[1]",
+        "theme": "Gaming clips"
+       },
+       {
+        "items": 5,
+        "name": "Gaming Daily",
+        "ref": "r2.new.channels[2]",
+        "theme": "Gaming clips"
+       }
+      ],
+      "themes": [
+       {
+        "items": 92,
+        "name": "Digital drawing",
+        "previous_items": 0,
+        "ref": "r2.new.themes[0]"
+       },
+       {
+        "items": 66,
+        "name": "Gaming clips",
+        "previous_items": 0,
+        "ref": "r2.new.themes[1]"
+       },
+       {
+        "items": 13,
+        "name": "Minecraft builds",
+        "previous_items": 0,
+        "ref": "r2.new.themes[2]"
+       },
+       {
+        "items": 10,
+        "name": "Calculus lessons",
+        "previous_items": 0,
+        "ref": "r2.new.themes[3]"
+       }
+      ]
+     },
+     "periods": [
+      {
+       "areas": [],
+       "items": 5,
+       "label": "Jan 2026",
+       "ref": "r2.periods[0]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 4,
+       "label": "Feb 2026",
+       "ref": "r2.periods[1]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 4,
+       "label": "Mar 2026",
+       "ref": "r2.periods[2]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 5,
+       "label": "Apr 2026",
+       "ref": "r2.periods[3]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 5,
+       "label": "May 2026",
+       "ref": "r2.periods[4]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 4,
+       "label": "Jun 2026",
+       "ref": "r2.periods[5]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 5,
+       "label": "Jul 2026",
+       "ref": "r2.periods[6]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 36,
+       "label": "Aug 2026",
+       "ref": "r2.periods[7]",
+       "shorts_share": 0.0,
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 44,
+       "label": "Sep 2026",
+       "ref": "r2.periods[8]",
+       "shorts_share": 0.0,
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 142,
+       "label": "Oct 2026",
+       "ref": "r2.periods[9]",
+       "shorts_share": 0.4783,
+       "sparse": false,
+       "themes": []
+      }
+     ],
+     "periods_unit": "month",
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 52
+      },
+      "clipped": false,
+      "days_active": 50,
+      "items": 52,
+      "long": 52,
+      "long_median_min": 10,
+      "shorts": 0,
+      "shorts_share": 0.0,
+      "words": "the same part of 2025 (1 January to 30 October 2025)"
+     },
+     "question": "was october my biggest month ever",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "art and design",
+       "change_vs_previous": 36.2,
+       "channels": [],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r2.themes[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": 26.0,
+       "channels": [],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r2.themes[1]",
+       "share": 0.2598,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": -70.4,
+       "channels": [],
+       "days": 41,
+       "field": "Art",
+       "items": 41,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 45,
+       "previous_share": 0.8654,
+       "ref": "r2.themes[2]",
+       "share": 0.1614,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 250
+      },
+      "days_active": 123,
+      "items": 254,
+      "long": 184,
+      "long_median_min": 18,
+      "shorts": 66,
+      "shorts_share": 0.264
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r2.when.busiest_hours[0]",
+        "share": 0.2441
+       },
+       {
+        "hour": 16,
+        "ref": "r2.when.busiest_hours[1]",
+        "share": 0.2402
+       },
+       {
+        "hour": 18,
+        "ref": "r2.when.busiest_hours[2]",
+        "share": 0.2283
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 254,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7165,
+      "weekend_share": 0.2835
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-01-01",
+      "words": "this year up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 4,
+    "tool": "timeline"
+   },
+   "r3": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 50
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "A period with fewer than 50 items is marked sparse.",
+      "No window before this one: new and stopped are not computed here."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 10,
+      "themes": 8
+     },
+     "rows_total": null,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "all your history (5 January 2021 to 30 October 2026, where your export ends)"
+    },
+    "rid": "r3",
+    "sheet": {
+     "areas": [
+      {
+       "items": 319,
+       "name": "gaming",
+       "ref": "r3.areas[0]",
+       "share": 0.4412,
+       "themes": []
+      },
+      {
+       "items": 187,
+       "name": "art and design",
+       "ref": "r3.areas[1]",
+       "share": 0.2586,
+       "themes": []
+      },
+      {
+       "items": 145,
+       "name": "math",
+       "ref": "r3.areas[2]",
+       "share": 0.2006,
+       "themes": []
+      },
+      {
+       "items": 72,
+       "name": "food and cooking",
+       "ref": "r3.areas[3]",
+       "share": 0.0996,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "gaming",
+       "days": 163,
+       "first_watched": "2021-01-05",
+       "items": 163,
+       "name": "Brick Realm",
+       "ref": "r3.channels[0]",
+       "share": 0.2254,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "ref": "r3.channels[1]",
+       "share": 0.1272,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 91,
+       "first_watched": "2025-01-10",
+       "items": 91,
+       "name": "Wet Paper",
+       "ref": "r3.channels[2]",
+       "share": 0.1259,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 90,
+       "first_watched": "2021-03-01",
+       "items": 90,
+       "name": "Frame Perfect",
+       "ref": "r3.channels[3]",
+       "share": 0.1245,
+       "shorts_share": 0.0,
+       "theme": "Speedruns",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 85,
+       "first_watched": "2023-06-03",
+       "items": 85,
+       "name": "Limit Lane",
+       "ref": "r3.channels[4]",
+       "share": 0.1176,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 66,
+       "first_watched": "2021-02-01",
+       "items": 72,
+       "name": "Pan Theory",
+       "ref": "r3.channels[5]",
+       "share": 0.0996,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "ref": "r3.channels[6]",
+       "share": 0.0844,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 60,
+       "first_watched": "2023-06-05",
+       "items": 60,
+       "name": "Odd Prime",
+       "ref": "r3.channels[7]",
+       "share": 0.083,
+       "shorts_share": 0.0,
+       "theme": "Number puzzles",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2026-10-01",
+       "items": 5,
+       "name": "Gaming Daily",
+       "ref": "r3.channels[8]",
+       "share": 0.0069,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 319,
+       "name": "Gaming",
+       "ref": "r3.fields[0]",
+       "share": 0.4412
+      },
+      {
+       "items": 187,
+       "name": "Art",
+       "ref": "r3.fields[1]",
+       "share": 0.2586
+      },
+      {
+       "items": 145,
+       "name": "Math",
+       "ref": "r3.fields[2]",
+       "share": 0.2006
+      },
+      {
+       "items": 72,
+       "name": "Cooking",
+       "ref": "r3.fields[3]",
+       "share": 0.0996
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "count",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r3.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "periods": [
+      {
+       "areas": [],
+       "items": 134,
+       "label": "2021",
+       "ref": "r3.periods[0]",
+       "shorts_share": 0.0,
+       "sparse": false,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 108,
+       "label": "2022",
+       "ref": "r3.periods[1]",
+       "shorts_share": 0.0,
+       "sparse": false,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 157,
+       "label": "2023",
+       "ref": "r3.periods[2]",
+       "shorts_share": 0.0,
+       "sparse": false,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 8,
+       "label": "2024",
+       "ref": "r3.periods[3]",
+       "sparse": true,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 62,
+       "label": "2025",
+       "ref": "r3.periods[4]",
+       "shorts_share": 0.0,
+       "sparse": false,
+       "themes": []
+      },
+      {
+       "areas": [],
+       "items": 254,
+       "label": "2026",
+       "ref": "r3.periods[5]",
+       "shorts_share": 0.264,
+       "sparse": false,
+       "themes": []
+      }
+     ],
+     "periods_unit": "year",
+     "question": "was october my biggest month ever",
+     "themes": [
+      {
+       "area": "gaming",
+       "channels": [],
+       "days": 163,
+       "field": "Gaming",
+       "items": 163,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "ref": "r3.themes[0]",
+       "share": 0.2254,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [],
+       "days": 95,
+       "field": "Art",
+       "items": 95,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "ref": "r3.themes[1]",
+       "share": 0.1314,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "ref": "r3.themes[2]",
+       "share": 0.1272,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [],
+       "days": 90,
+       "field": "Gaming",
+       "items": 90,
+       "mixed": false,
+       "name": "Speedruns",
+       "ref": "r3.themes[3]",
+       "share": 0.1245,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "channels": [],
+       "days": 85,
+       "field": "Math",
+       "items": 85,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "ref": "r3.themes[4]",
+       "share": 0.1176,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "food and cooking",
+       "channels": [],
+       "days": 66,
+       "field": "Cooking",
+       "items": 72,
+       "mixed": false,
+       "name": "Home cooking",
+       "ref": "r3.themes[5]",
+       "share": 0.0996,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "ref": "r3.themes[6]",
+       "share": 0.0913,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "math",
+       "channels": [],
+       "days": 60,
+       "field": "Math",
+       "items": 60,
+       "mixed": false,
+       "name": "Number puzzles",
+       "ref": "r3.themes[7]",
+       "share": 0.083,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 719
+      },
+      "days_active": 515,
+      "items": 723,
+      "long": 651,
+      "long_median_min": 10,
+      "shorts": 66,
+      "shorts_share": 0.0918
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 16,
+        "ref": "r3.when.busiest_hours[0]",
+        "share": 0.2476
+       },
+       {
+        "hour": 18,
+        "ref": "r3.when.busiest_hours[1]",
+        "share": 0.2462
+       },
+       {
+        "hour": 17,
+        "ref": "r3.when.busiest_hours[2]",
+        "share": 0.2448
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 723,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7206,
+      "weekend_share": 0.2794
+     },
+     "window": {
+      "clipped": false,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2021-01-05",
+      "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)"
+     }
+    },
+    "took_ms": 3,
+    "tool": "timeline"
+   }
+  },
+  "look1:K03.0": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "No window before this one: new and stopped are not computed here."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 6,
+     "third_party_text": false,
+     "truncated": false,
+     "window_said": "this year up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "items": 133,
+       "name": "art and design",
+       "ref": "r1.areas[0]",
+       "share": 0.5236,
+       "themes": [
+        {
+         "name": "Digital drawing",
+         "ref": "r1.areas[0].themes[0]",
+         "share": 0.3622
+        },
+        {
+         "name": "Watercolor painting",
+         "ref": "r1.areas[0].themes[1]",
+         "share": 0.1614
+        }
+       ]
+      },
+      {
+       "items": 79,
+       "name": "gaming",
+       "ref": "r1.areas[1]",
+       "share": 0.311,
+       "themes": [
+        {
+         "name": "Gaming clips",
+         "ref": "r1.areas[1].themes[0]",
+         "share": 0.2598
+        },
+        {
+         "name": "Minecraft builds",
+         "ref": "r1.areas[1].themes[1]",
+         "share": 0.0512
+        }
+       ]
+      },
+      {
+       "items": 32,
+       "name": "food and cooking",
+       "ref": "r1.areas[2]",
+       "share": 0.126,
+       "themes": [
+        {
+         "name": "Home cooking",
+         "ref": "r1.areas[2].themes[0]",
+         "share": 0.126
+        }
+       ]
+      },
+      {
+       "items": 10,
+       "name": "math",
+       "ref": "r1.areas[3]",
+       "share": 0.0394,
+       "themes": [
+        {
+         "name": "Calculus lessons",
+         "ref": "r1.areas[3].themes[0]",
+         "share": 0.0394
+        }
+       ]
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "new_in_window": true,
+       "ref": "r1.channels[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "ref": "r1.channels[1]",
+       "share": 0.2402,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 37,
+       "first_watched": "2025-01-10",
+       "items": 37,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "ref": "r1.channels[2]",
+       "share": 0.1457,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "ref": "r1.channels[3]",
+       "share": 0.126,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 13,
+       "first_watched": "2021-01-05",
+       "items": 13,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "ref": "r1.channels[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 10,
+       "first_watched": "2023-06-03",
+       "items": 10,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "ref": "r1.channels[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2026-10-01",
+       "items": 5,
+       "name": "Gaming Daily",
+       "new_in_window": true,
+       "ref": "r1.channels[6]",
+       "share": 0.0197,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "ref": "r1.channels[7]",
+       "share": 0.0157,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 133,
+       "name": "Art",
+       "ref": "r1.fields[0]",
+       "share": 0.5236
+      },
+      {
+       "items": 79,
+       "name": "Gaming",
+       "ref": "r1.fields[1]",
+       "share": 0.311
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.126
+      },
+      {
+       "items": 10,
+       "name": "Math",
+       "ref": "r1.fields[3]",
+       "share": 0.0394
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "top",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "question": "give me the full picture of my year so far, themes, channels, what's new and what i stopped",
+     "themes": [
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 92,
+         "name": "Pixel Pencil",
+         "ref": "r1.themes[0].channels[0]"
+        }
+       ],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "ref": "r1.themes[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 61,
+         "name": "Clip Factory",
+         "ref": "r1.themes[1].channels[0]"
+        },
+        {
+         "items": 5,
+         "name": "Gaming Daily",
+         "ref": "r1.themes[1].channels[1]"
+        }
+       ],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "ref": "r1.themes[1]",
+       "share": 0.2598,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 37,
+         "name": "Wet Paper",
+         "ref": "r1.themes[2].channels[0]"
+        },
+        {
+         "items": 4,
+         "name": "@wetpaper.ig",
+         "ref": "r1.themes[2].channels[1]"
+        }
+       ],
+       "days": 41,
+       "field": "Art",
+       "items": 41,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "ref": "r1.themes[2]",
+       "share": 0.1614,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "food and cooking",
+       "channels": [
+        {
+         "items": 32,
+         "name": "Pan Theory",
+         "ref": "r1.themes[3].channels[0]"
+        }
+       ],
+       "days": 26,
+       "field": "Cooking",
+       "items": 32,
+       "mixed": false,
+       "name": "Home cooking",
+       "ref": "r1.themes[3]",
+       "share": 0.126,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 13,
+         "name": "Brick Realm",
+         "ref": "r1.themes[4].channels[0]"
+        }
+       ],
+       "days": 13,
+       "field": "Gaming",
+       "items": 13,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "ref": "r1.themes[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "channels": [
+        {
+         "items": 10,
+         "name": "Limit Lane",
+         "ref": "r1.themes[5].channels[0]"
+        }
+       ],
+       "days": 10,
+       "field": "Math",
+       "items": 10,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "ref": "r1.themes[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 250
+      },
+      "days_active": 123,
+      "items": 254,
+      "long": 184,
+      "long_median_min": 18,
+      "shorts": 66,
+      "shorts_share": 0.264
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2441
+       },
+       {
+        "hour": 16,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2402
+       },
+       {
+        "hour": 18,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2283
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 254,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7165,
+      "weekend_share": 0.2835
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-01-01",
+      "words": "this year up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 3,
+    "tool": "breakdown"
+   },
+   "r2": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "No window before this one: new and stopped are not computed here."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 8,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "this year up to 30 October 2026, where your export ends"
+    },
+    "rid": "r2",
+    "sheet": {
+     "areas": [
+      {
+       "items": 133,
+       "name": "art and design",
+       "ref": "r2.areas[0]",
+       "share": 0.5236,
+       "themes": [
+        {
+         "name": "Digital drawing",
+         "ref": "r2.areas[0].themes[0]",
+         "share": 0.3622
+        }
+       ]
+      },
+      {
+       "items": 79,
+       "name": "gaming",
+       "ref": "r2.areas[1]",
+       "share": 0.311,
+       "themes": [
+        {
+         "name": "Gaming clips",
+         "ref": "r2.areas[1].themes[0]",
+         "share": 0.2598
+        }
+       ]
+      },
+      {
+       "items": 32,
+       "name": "food and cooking",
+       "ref": "r2.areas[2]",
+       "share": 0.126,
+       "themes": [
+        {
+         "name": "Home cooking",
+         "ref": "r2.areas[2].themes[0]",
+         "share": 0.126
+        }
+       ]
+      },
+      {
+       "items": 10,
+       "name": "math",
+       "ref": "r2.areas[3]",
+       "share": 0.0394,
+       "themes": [
+        {
+         "name": "Calculus lessons",
+         "ref": "r2.areas[3].themes[0]",
+         "share": 0.0394
+        }
+       ]
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "new_in_window": true,
+       "ref": "r2.channels[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "ref": "r2.channels[1]",
+       "share": 0.2402,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 37,
+       "first_watched": "2025-01-10",
+       "items": 37,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "ref": "r2.channels[2]",
+       "share": 0.1457,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "ref": "r2.channels[3]",
+       "share": 0.126,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 13,
+       "first_watched": "2021-01-05",
+       "items": 13,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "ref": "r2.channels[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 10,
+       "first_watched": "2023-06-03",
+       "items": 10,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "ref": "r2.channels[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2026-10-01",
+       "items": 5,
+       "name": "Gaming Daily",
+       "new_in_window": true,
+       "ref": "r2.channels[6]",
+       "share": 0.0197,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "ref": "r2.channels[7]",
+       "share": 0.0157,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 133,
+       "name": "Art",
+       "ref": "r2.fields[0]",
+       "share": 0.5236
+      },
+      {
+       "items": 79,
+       "name": "Gaming",
+       "ref": "r2.fields[1]",
+       "share": 0.311
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r2.fields[2]",
+       "share": 0.126
+      },
+      {
+       "items": 10,
+       "name": "Math",
+       "ref": "r2.fields[3]",
+       "share": 0.0394
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "channels",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r2.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       },
+       {
+        "n": 3,
+        "noun": "posts",
+        "ref": "r2.library.saved_not_opened[1]",
+        "theme": "Home cooking",
+        "youtube": 0
+       }
+      ]
+     },
+     "question": "give me the full picture of my year so far, themes, channels, what's new and what i stopped",
+     "themes": [
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 92,
+         "name": "Pixel Pencil",
+         "ref": "r2.themes[0].channels[0]"
+        }
+       ],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "ref": "r2.themes[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 61,
+         "name": "Clip Factory",
+         "ref": "r2.themes[1].channels[0]"
+        }
+       ],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "ref": "r2.themes[1]",
+       "share": 0.2598,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 37,
+         "name": "Wet Paper",
+         "ref": "r2.themes[2].channels[0]"
+        }
+       ],
+       "days": 41,
+       "field": "Art",
+       "items": 41,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "ref": "r2.themes[2]",
+       "share": 0.1614,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "food and cooking",
+       "channels": [
+        {
+         "items": 32,
+         "name": "Pan Theory",
+         "ref": "r2.themes[3].channels[0]"
+        }
+       ],
+       "days": 26,
+       "field": "Cooking",
+       "items": 32,
+       "mixed": false,
+       "name": "Home cooking",
+       "ref": "r2.themes[3]",
+       "share": 0.126,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 13,
+         "name": "Brick Realm",
+         "ref": "r2.themes[4].channels[0]"
+        }
+       ],
+       "days": 13,
+       "field": "Gaming",
+       "items": 13,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "ref": "r2.themes[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "channels": [
+        {
+         "items": 10,
+         "name": "Limit Lane",
+         "ref": "r2.themes[5].channels[0]"
+        }
+       ],
+       "days": 10,
+       "field": "Math",
+       "items": 10,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "ref": "r2.themes[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0
+      }
+     ],
+     "top_areas": {
+      "area": "art and design",
+      "n": 2,
+      "of": 5
+     },
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 250
+      },
+      "days_active": 123,
+      "items": 254,
+      "long": 184,
+      "long_median_min": 18,
+      "shorts": 66,
+      "shorts_share": 0.264
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r2.when.busiest_hours[0]",
+        "share": 0.2441
+       },
+       {
+        "hour": 16,
+        "ref": "r2.when.busiest_hours[1]",
+        "share": 0.2402
+       },
+       {
+        "hour": 18,
+        "ref": "r2.when.busiest_hours[2]",
+        "share": 0.2283
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 254,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7165,
+      "weekend_share": 0.2835
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-01-01",
+      "words": "this year up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 3,
+    "tool": "breakdown"
+   },
+   "r3": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 6,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "this year up to 30 October 2026, where your export ends"
+    },
+    "rid": "r3",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": -34.2,
+       "change_vs_previous": -0.342,
+       "items": 133,
+       "name": "art and design",
+       "previous_share": 0.8654,
+       "ref": "r3.areas[0]",
+       "share": 0.5236,
+       "themes": []
+      },
+      {
+       "change_pts": 31.1,
+       "change_vs_previous": 0.311,
+       "items": 79,
+       "name": "gaming",
+       "previous_share": 0.0,
+       "ref": "r3.areas[1]",
+       "share": 0.311,
+       "themes": []
+      },
+      {
+       "change_pts": -0.9,
+       "change_vs_previous": -0.009,
+       "items": 32,
+       "name": "food and cooking",
+       "previous_share": 0.1346,
+       "ref": "r3.areas[2]",
+       "share": 0.126,
+       "themes": []
+      },
+      {
+       "change_pts": 3.9,
+       "change_vs_previous": 0.039,
+       "items": 10,
+       "name": "math",
+       "previous_share": 0.0,
+       "ref": "r3.areas[3]",
+       "share": 0.0394,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r3.channels[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r3.channels[1]",
+       "share": 0.2402,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 37,
+       "first_watched": "2025-01-10",
+       "items": 37,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "previous_items": 45,
+       "ref": "r3.channels[2]",
+       "share": 0.1457,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "previous_items": 7,
+       "ref": "r3.channels[3]",
+       "share": 0.126,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 13,
+       "first_watched": "2021-01-05",
+       "items": 13,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "previous_items": 0,
+       "ref": "r3.channels[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 133,
+       "name": "Art",
+       "ref": "r3.fields[0]",
+       "share": 0.5236
+      },
+      {
+       "items": 79,
+       "name": "Gaming",
+       "ref": "r3.fields[1]",
+       "share": 0.311
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r3.fields[2]",
+       "share": 0.126
+      },
+      {
+       "items": 10,
+       "name": "Math",
+       "ref": "r3.fields[3]",
+       "share": 0.0394
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "compare_windows",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r3.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "new": {
+      "channels": [
+       {
+        "items": 92,
+        "name": "Pixel Pencil",
+        "ref": "r3.new.channels[0]",
+        "theme": "Digital drawing"
+       },
+       {
+        "items": 61,
+        "name": "Clip Factory",
+        "ref": "r3.new.channels[1]",
+        "theme": "Gaming clips"
+       },
+       {
+        "items": 5,
+        "name": "Gaming Daily",
+        "ref": "r3.new.channels[2]",
+        "theme": "Gaming clips"
+       }
+      ],
+      "themes": [
+       {
+        "items": 92,
+        "name": "Digital drawing",
+        "previous_items": 0,
+        "ref": "r3.new.themes[0]"
+       },
+       {
+        "items": 66,
+        "name": "Gaming clips",
+        "previous_items": 0,
+        "ref": "r3.new.themes[1]"
+       },
+       {
+        "items": 13,
+        "name": "Minecraft builds",
+        "previous_items": 0,
+        "ref": "r3.new.themes[2]"
+       },
+       {
+        "items": 10,
+        "name": "Calculus lessons",
+        "previous_items": 0,
+        "ref": "r3.new.themes[3]"
+       }
+      ]
+     },
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 52
+      },
+      "clipped": false,
+      "days_active": 50,
+      "items": 52,
+      "long": 52,
+      "long_median_min": 10,
+      "shorts": 0,
+      "shorts_share": 0.0,
+      "words": "from 1 January to 30 October 2025"
+     },
+     "question": "give me the full picture of my year so far, themes, channels, what's new and what i stopped",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "art and design",
+       "change_vs_previous": 36.2,
+       "channels": [],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r3.themes[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": 26.0,
+       "channels": [],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r3.themes[1]",
+       "share": 0.2598,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": -70.4,
+       "channels": [],
+       "days": 41,
+       "field": "Art",
+       "items": 41,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 45,
+       "previous_share": 0.8654,
+       "ref": "r3.themes[2]",
+       "share": 0.1614,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "food and cooking",
+       "change_vs_previous": -0.9,
+       "channels": [],
+       "days": 26,
+       "field": "Cooking",
+       "items": 32,
+       "mixed": false,
+       "name": "Home cooking",
+       "previous_items": 7,
+       "previous_share": 0.1346,
+       "ref": "r3.themes[3]",
+       "share": 0.126,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": 5.1,
+       "channels": [],
+       "days": 13,
+       "field": "Gaming",
+       "items": 13,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r3.themes[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "change_vs_previous": 3.9,
+       "channels": [],
+       "days": 10,
+       "field": "Math",
+       "items": 10,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r3.themes[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 250
+      },
+      "days_active": 123,
+      "items": 254,
+      "long": 184,
+      "long_median_min": 18,
+      "shorts": 66,
+      "shorts_share": 0.264
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r3.when.busiest_hours[0]",
+        "share": 0.2441
+       },
+       {
+        "hour": 16,
+        "ref": "r3.when.busiest_hours[1]",
+        "share": 0.2402
+       },
+       {
+        "hour": 18,
+        "ref": "r3.when.busiest_hours[2]",
+        "share": 0.2283
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 254,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7165,
+      "weekend_share": 0.2835
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-01-01",
+      "words": "this year up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 2,
+    "tool": "changes"
+   },
+   "r4": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 1,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 8,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "this year up to 30 October 2026, where your export ends"
+    },
+    "rid": "r4",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": -34.2,
+       "change_vs_previous": -0.342,
+       "items": 133,
+       "name": "art and design",
+       "previous_share": 0.8654,
+       "ref": "r4.areas[0]",
+       "share": 0.5236,
+       "themes": []
+      },
+      {
+       "change_pts": 31.1,
+       "change_vs_previous": 0.311,
+       "items": 79,
+       "name": "gaming",
+       "previous_share": 0.0,
+       "ref": "r4.areas[1]",
+       "share": 0.311,
+       "themes": []
+      },
+      {
+       "change_pts": -0.9,
+       "change_vs_previous": -0.009,
+       "items": 32,
+       "name": "food and cooking",
+       "previous_share": 0.1346,
+       "ref": "r4.areas[2]",
+       "share": 0.126,
+       "themes": []
+      },
+      {
+       "change_pts": 3.9,
+       "change_vs_previous": 0.039,
+       "items": 10,
+       "name": "math",
+       "previous_share": 0.0,
+       "ref": "r4.areas[3]",
+       "share": 0.0394,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r4.channels[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r4.channels[1]",
+       "share": 0.2402,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 37,
+       "first_watched": "2025-01-10",
+       "items": 37,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "previous_items": 45,
+       "ref": "r4.channels[2]",
+       "share": 0.1457,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "previous_items": 7,
+       "ref": "r4.channels[3]",
+       "share": 0.126,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 13,
+       "first_watched": "2021-01-05",
+       "items": 13,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "previous_items": 0,
+       "ref": "r4.channels[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 10,
+       "first_watched": "2023-06-03",
+       "items": 10,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "previous_items": 0,
+       "ref": "r4.channels[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2026-10-01",
+       "items": 5,
+       "name": "Gaming Daily",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r4.channels[6]",
+       "share": 0.0197,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r4.channels[7]",
+       "share": 0.0157,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 133,
+       "name": "Art",
+       "ref": "r4.fields[0]",
+       "share": 0.5236
+      },
+      {
+       "items": 79,
+       "name": "Gaming",
+       "ref": "r4.fields[1]",
+       "share": 0.311
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r4.fields[2]",
+       "share": 0.126
+      },
+      {
+       "items": 10,
+       "name": "Math",
+       "ref": "r4.fields[3]",
+       "share": 0.0394
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "compare_windows",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r4.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "new": {
+      "channels": [
+       {
+        "items": 92,
+        "name": "Pixel Pencil",
+        "ref": "r4.new.channels[0]",
+        "theme": "Digital drawing"
+       },
+       {
+        "items": 61,
+        "name": "Clip Factory",
+        "ref": "r4.new.channels[1]",
+        "theme": "Gaming clips"
+       },
+       {
+        "items": 5,
+        "name": "Gaming Daily",
+        "ref": "r4.new.channels[2]",
+        "theme": "Gaming clips"
+       }
+      ],
+      "themes": [
+       {
+        "items": 92,
+        "name": "Digital drawing",
+        "previous_items": 0,
+        "ref": "r4.new.themes[0]"
+       },
+       {
+        "items": 66,
+        "name": "Gaming clips",
+        "previous_items": 0,
+        "ref": "r4.new.themes[1]"
+       },
+       {
+        "items": 13,
+        "name": "Minecraft builds",
+        "previous_items": 0,
+        "ref": "r4.new.themes[2]"
+       },
+       {
+        "items": 10,
+        "name": "Calculus lessons",
+        "previous_items": 0,
+        "ref": "r4.new.themes[3]"
+       }
+      ]
+     },
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 52
+      },
+      "clipped": false,
+      "days_active": 50,
+      "items": 52,
+      "long": 52,
+      "long_median_min": 10,
+      "shorts": 0,
+      "shorts_share": 0.0,
+      "words": "from 1 January to 30 October 2025"
+     },
+     "question": "give me the full picture of my year so far, themes, channels, what's new and what i stopped",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "art and design",
+       "change_vs_previous": 36.2,
+       "channels": [],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r4.themes[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": 26.0,
+       "channels": [],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r4.themes[1]",
+       "share": 0.2598,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": -70.4,
+       "channels": [],
+       "days": 41,
+       "field": "Art",
+       "items": 41,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 45,
+       "previous_share": 0.8654,
+       "ref": "r4.themes[2]",
+       "share": 0.1614,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 250
+      },
+      "days_active": 123,
+      "items": 254,
+      "long": 184,
+      "long_median_min": 18,
+      "shorts": 66,
+      "shorts_share": 0.264
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r4.when.busiest_hours[0]",
+        "share": 0.2441
+       },
+       {
+        "hour": 16,
+        "ref": "r4.when.busiest_hours[1]",
+        "share": 0.2402
+       },
+       {
+        "hour": 18,
+        "ref": "r4.when.busiest_hours[2]",
+        "share": 0.2283
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 254,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7165,
+      "weekend_share": 0.2835
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-01-01",
+      "words": "this year up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 3,
+    "tool": "changes"
+   }
+  },
+  "skeptic:FOLLOW": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": "only art and design (area)",
+     "hidden": {
+      "friends": 0,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+      "`shorts` counts YouTube Shorts; `reels` counts Instagram reels and videos. The length filter 'short' takes both."
+     ],
+     "order": "most",
+     "resolved": {
+      "art": "area:art-and-design (area name)"
+     },
+     "rows_of": {
+      "areas": 1,
+      "channels": 3,
+      "themes": 2
+     },
+     "rows_total": 3,
+     "third_party_text": false,
+     "truncated": false,
+     "window_said": "the 4 weeks up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": 0.0,
+       "change_vs_previous": 0.0,
+       "items": 32,
+       "name": "art and design",
+       "previous_share": 1.0,
+       "ref": "r1.areas[0]",
+       "share": 1.0,
+       "themes": [
+        {
+         "name": "Digital drawing",
+         "ref": "r1.areas[0].themes[0]",
+         "share": 0.8438
+        },
+        {
+         "name": "Watercolor painting",
+         "ref": "r1.areas[0].themes[1]",
+         "share": 0.1562
+        }
+       ]
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 26,
+       "first_watched": "2026-08-01",
+       "items": 27,
+       "name": "Pixel Pencil",
+       "new_in_window": false,
+       "previous_items": 29,
+       "ref": "r1.channels[0]",
+       "share": 0.8438,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "handle": "wetpaper.ig",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[1]",
+       "share": 0.125,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 1,
+       "first_watched": "2025-01-10",
+       "items": 1,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "previous_items": 0,
+       "ref": "r1.channels[2]",
+       "share": 0.0312,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 32,
+       "name": "Art",
+       "ref": "r1.fields[0]",
+       "share": 1.0
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "channels",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "new": {
+      "channels": [],
+      "themes": [
+       {
+        "items": 5,
+        "name": "Watercolor painting",
+        "previous_items": 0,
+        "ref": "r1.new.themes[0]"
+       }
+      ]
+     },
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 29
+      },
+      "clipped": false,
+      "days_active": 28,
+      "items": 29,
+      "long": 29,
+      "long_median_min": 25,
+      "reels": 0,
+      "shorts": 0,
+      "shorts_share": 0.0,
+      "words": "the 4 weeks before (5 September to 2 October 2026)"
+     },
+     "question": "and just the art ones?",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "art and design",
+       "change_vs_previous": -15.6,
+       "channels": [
+        {
+         "items": 27,
+         "name": "Pixel Pencil",
+         "ref": "r1.themes[0].channels[0]"
+        }
+       ],
+       "days": 26,
+       "field": "Art",
+       "items": 27,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 29,
+       "previous_share": 1.0,
+       "ref": "r1.themes[0]",
+       "share": 0.8438,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": 15.6,
+       "channels": [
+        {
+         "items": 4,
+         "name": "@wetpaper.ig",
+         "ref": "r1.themes[1].channels[0]"
+        },
+        {
+         "items": 1,
+         "name": "Wet Paper",
+         "ref": "r1.themes[1].channels[1]"
+        }
+       ],
+       "days": 5,
+       "field": "Art",
+       "items": 5,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r1.themes[1]",
+       "share": 0.1562,
+       "shorts_share": 0.0
+      }
+     ],
+     "top_areas": {
+      "area": "art and design",
+      "n": 3,
+      "of": 3
+     },
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 28
+      },
+      "days_active": 26,
+      "items": 32,
+      "long": 28,
+      "long_median_min": 25,
+      "reels": 4,
+      "shorts": 0,
+      "shorts_share": 0.0
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2188
+       },
+       {
+        "hour": 19,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2188
+       },
+       {
+        "hour": 16,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.1875
+       }
+      ],
+      "busiest_weekday": "Monday",
+      "events": 32,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.75,
+      "weekend_share": 0.25
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-10-03",
+      "words": "the 4 weeks up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 2,
+    "tool": "breakdown"
+   }
+  },
+  "skeptic:LATELY": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 0,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+      "`shorts` counts YouTube Shorts; `reels` counts Instagram reels and videos. The length filter 'short' takes both."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 6,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "the 4 weeks up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": 21.8,
+       "change_vs_previous": 0.218,
+       "items": 64,
+       "name": "gaming",
+       "previous_share": 0.2745,
+       "ref": "r1.areas[0]",
+       "share": 0.4923,
+       "themes": []
+      },
+      {
+       "change_pts": -32.2,
+       "change_vs_previous": -0.322,
+       "items": 32,
+       "name": "art and design",
+       "previous_share": 0.5686,
+       "ref": "r1.areas[1]",
+       "share": 0.2462,
+       "themes": []
+      },
+      {
+       "change_pts": 19.2,
+       "change_vs_previous": 0.192,
+       "items": 30,
+       "name": "food and cooking",
+       "previous_share": 0.0392,
+       "ref": "r1.areas[2]",
+       "share": 0.2308,
+       "themes": []
+      },
+      {
+       "change_pts": -8.7,
+       "change_vs_previous": -0.087,
+       "items": 4,
+       "name": "math",
+       "previous_share": 0.1176,
+       "ref": "r1.areas[3]",
+       "share": 0.0308,
+       "themes": []
+      }
+     ],
+     "channels": [
+      {
+       "area": "gaming",
+       "days": 28,
+       "first_watched": "2026-10-01",
+       "items": 56,
+       "name": "Clip Factory",
+       "new_in_window": false,
+       "previous_items": 5,
+       "ref": "r1.channels[0]",
+       "share": 0.4308,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 25,
+       "first_watched": "2021-02-01",
+       "items": 30,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "previous_items": 2,
+       "ref": "r1.channels[1]",
+       "share": 0.2308,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 26,
+       "first_watched": "2026-08-01",
+       "items": 27,
+       "name": "Pixel Pencil",
+       "new_in_window": false,
+       "previous_items": 29,
+       "ref": "r1.channels[2]",
+       "share": 0.2077,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2021-01-05",
+       "items": 5,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "previous_items": 7,
+       "ref": "r1.channels[3]",
+       "share": 0.0385,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 4,
+       "first_watched": "2023-06-03",
+       "items": 4,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "previous_items": 6,
+       "ref": "r1.channels[4]",
+       "share": 0.0308,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "handle": "wetpaper.ig",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[5]",
+       "share": 0.0308,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 3,
+       "first_watched": "2026-10-01",
+       "items": 3,
+       "name": "Gaming Daily",
+       "new_in_window": false,
+       "previous_items": 2,
+       "ref": "r1.channels[6]",
+       "share": 0.0231,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 64,
+       "name": "Gaming",
+       "ref": "r1.fields[0]",
+       "share": 0.4923
+      },
+      {
+       "items": 32,
+       "name": "Art",
+       "ref": "r1.fields[1]",
+       "share": 0.2462
+      },
+      {
+       "items": 30,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.2308
+      },
+      {
+       "items": 4,
+       "name": "Math",
+       "ref": "r1.fields[3]",
+       "share": 0.0308
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "top",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "posts",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Home cooking",
+        "youtube": 0
+       }
+      ]
+     },
+     "new": {
+      "channels": [],
+      "themes": [
+       {
+        "items": 30,
+        "name": "Home cooking",
+        "previous_items": 2,
+        "ref": "r1.new.themes[0]"
+       },
+       {
+        "items": 5,
+        "name": "Watercolor painting",
+        "previous_items": 0,
+        "ref": "r1.new.themes[1]"
+       }
+      ]
+     },
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 51
+      },
+      "clipped": false,
+      "days_active": 28,
+      "items": 51,
+      "long": 44,
+      "long_median_min": 25,
+      "reels": 0,
+      "shorts": 7,
+      "shorts_share": 0.1373,
+      "words": "the 4 weeks before (5 September to 2 October 2026)"
+     },
+     "question": "what have i been into lately",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "gaming",
+       "change_vs_previous": 31.6,
+       "channels": [],
+       "days": 28,
+       "field": "Gaming",
+       "items": 59,
+       "mixed": false,
+       "name": "Gaming clips",
+       "previous_items": 7,
+       "previous_share": 0.1373,
+       "ref": "r1.themes[0]",
+       "share": 0.4538,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "change_vs_previous": 19.2,
+       "channels": [],
+       "days": 25,
+       "field": "Cooking",
+       "items": 30,
+       "mixed": false,
+       "name": "Home cooking",
+       "previous_items": 2,
+       "previous_share": 0.0392,
+       "ref": "r1.themes[1]",
+       "share": 0.2308,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": -36.1,
+       "channels": [],
+       "days": 26,
+       "field": "Art",
+       "items": 27,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 29,
+       "previous_share": 0.5686,
+       "ref": "r1.themes[2]",
+       "share": 0.2077,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": 3.9,
+       "channels": [],
+       "days": 5,
+       "field": "Art",
+       "items": 5,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r1.themes[3]",
+       "share": 0.0385,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": -9.9,
+       "channels": [],
+       "days": 5,
+       "field": "Gaming",
+       "items": 5,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "previous_items": 7,
+       "previous_share": 0.1373,
+       "ref": "r1.themes[4]",
+       "share": 0.0385,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "change_vs_previous": -8.7,
+       "channels": [],
+       "days": 4,
+       "field": "Math",
+       "items": 4,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "previous_items": 6,
+       "previous_share": 0.1176,
+       "ref": "r1.themes[5]",
+       "share": 0.0308,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 126
+      },
+      "days_active": 28,
+      "items": 130,
+      "long": 67,
+      "long_median_min": 10,
+      "reels": 4,
+      "shorts": 59,
+      "shorts_share": 0.4683
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2308
+       },
+       {
+        "hour": 19,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2308
+       },
+       {
+        "hour": 18,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2231
+       }
+      ],
+      "busiest_weekday": "Monday",
+      "events": 130,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7077,
+      "weekend_share": 0.2923
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-10-03",
+      "words": "the 4 weeks up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 144,
+    "tool": "breakdown"
+   }
+  },
+  "skeptic:MONTHS": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 0,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "A period with fewer than 50 items is marked sparse.",
+      "New: at least 5 items and 2% of the window, with at most 5 before; a channel new in the window: first opened in it, 5 items or more on 2 days or more; stopped: the reverse.",
+      "`shorts` counts YouTube Shorts; `reels` counts Instagram reels and videos. The length filter 'short' takes both."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "periods": 10,
+      "themes": 6
+     },
+     "rows_total": null,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "this year up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "change_pts": -34.2,
+       "change_vs_previous": -0.342,
+       "items": 133,
+       "name": "art and design",
+       "previous_share": 0.8654,
+       "ref": "r1.areas[0]",
+       "share": 0.5236
+      },
+      {
+       "change_pts": 31.1,
+       "change_vs_previous": 0.311,
+       "items": 79,
+       "name": "gaming",
+       "previous_share": 0.0,
+       "ref": "r1.areas[1]",
+       "share": 0.311
+      },
+      {
+       "change_pts": -0.9,
+       "change_vs_previous": -0.009,
+       "items": 32,
+       "name": "food and cooking",
+       "previous_share": 0.1346,
+       "ref": "r1.areas[2]",
+       "share": 0.126
+      },
+      {
+       "change_pts": 3.9,
+       "change_vs_previous": 0.039,
+       "items": 10,
+       "name": "math",
+       "previous_share": 0.0,
+       "ref": "r1.areas[3]",
+       "share": 0.0394
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "previous_items": 0,
+       "ref": "r1.channels[1]",
+       "share": 0.2402,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 37,
+       "first_watched": "2025-01-10",
+       "items": 37,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "previous_items": 45,
+       "ref": "r1.channels[2]",
+       "share": 0.1457,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "previous_items": 7,
+       "ref": "r1.channels[3]",
+       "share": 0.126,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 133,
+       "name": "Art",
+       "ref": "r1.fields[0]",
+       "share": 0.5236
+      },
+      {
+       "items": 79,
+       "name": "Gaming",
+       "ref": "r1.fields[1]",
+       "share": 0.311
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.126
+      },
+      {
+       "items": 10,
+       "name": "Math",
+       "ref": "r1.fields[3]",
+       "share": 0.0394
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "count",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "new": {
+      "channels": [
+       {
+        "items": 92,
+        "name": "Pixel Pencil",
+        "ref": "r1.new.channels[0]",
+        "theme": "Digital drawing"
+       },
+       {
+        "items": 61,
+        "name": "Clip Factory",
+        "ref": "r1.new.channels[1]",
+        "theme": "Gaming clips"
+       },
+       {
+        "items": 5,
+        "name": "Gaming Daily",
+        "ref": "r1.new.channels[2]",
+        "theme": "Gaming clips"
+       }
+      ],
+      "themes": [
+       {
+        "items": 92,
+        "name": "Digital drawing",
+        "previous_items": 0,
+        "ref": "r1.new.themes[0]"
+       },
+       {
+        "items": 66,
+        "name": "Gaming clips",
+        "previous_items": 0,
+        "ref": "r1.new.themes[1]"
+       },
+       {
+        "items": 13,
+        "name": "Minecraft builds",
+        "previous_items": 0,
+        "ref": "r1.new.themes[2]"
+       },
+       {
+        "items": 10,
+        "name": "Calculus lessons",
+        "previous_items": 0,
+        "ref": "r1.new.themes[3]"
+       }
+      ]
+     },
+     "periods": [
+      {
+       "items": 5,
+       "label": "Jan 2026",
+       "ref": "r1.periods[0]",
+       "sparse": true
+      },
+      {
+       "items": 4,
+       "label": "Feb 2026",
+       "ref": "r1.periods[1]",
+       "sparse": true
+      },
+      {
+       "items": 4,
+       "label": "Mar 2026",
+       "ref": "r1.periods[2]",
+       "sparse": true
+      },
+      {
+       "items": 5,
+       "label": "Apr 2026",
+       "ref": "r1.periods[3]",
+       "sparse": true
+      },
+      {
+       "items": 5,
+       "label": "May 2026",
+       "ref": "r1.periods[4]",
+       "sparse": true
+      },
+      {
+       "items": 4,
+       "label": "Jun 2026",
+       "ref": "r1.periods[5]",
+       "sparse": true
+      },
+      {
+       "items": 5,
+       "label": "Jul 2026",
+       "ref": "r1.periods[6]",
+       "sparse": true
+      },
+      {
+       "items": 36,
+       "label": "Aug 2026",
+       "ref": "r1.periods[7]",
+       "shorts_share": 0.0,
+       "sparse": true
+      },
+      {
+       "items": 44,
+       "label": "Sep 2026",
+       "ref": "r1.periods[8]",
+       "shorts_share": 0.0,
+       "sparse": true
+      },
+      {
+       "items": 142,
+       "label": "Oct 2026",
+       "ref": "r1.periods[9]",
+       "shorts_share": 0.4783,
+       "sparse": false
+      }
+     ],
+     "periods_unit": "month",
+     "previous": {
+      "by_platform": {
+       "instagram": 0,
+       "youtube": 52
+      },
+      "clipped": false,
+      "days_active": 50,
+      "items": 52,
+      "long": 52,
+      "long_median_min": 10,
+      "reels": 0,
+      "shorts": 0,
+      "shorts_share": 0.0,
+      "words": "the same part of 2025 (1 January to 30 October 2025)"
+     },
+     "question": "my months this year",
+     "stopped": {
+      "channels": [],
+      "themes": []
+     },
+     "themes": [
+      {
+       "area": "art and design",
+       "change_vs_previous": 36.2,
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r1.themes[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "change_vs_previous": 26.0,
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "previous_items": 0,
+       "previous_share": 0.0,
+       "ref": "r1.themes[1]",
+       "share": 0.2598,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "change_vs_previous": -70.4,
+       "days": 41,
+       "field": "Art",
+       "items": 41,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "previous_items": 45,
+       "previous_share": 0.8654,
+       "ref": "r1.themes[2]",
+       "share": 0.1614,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "food and cooking",
+       "change_vs_previous": -0.9,
+       "days": 26,
+       "field": "Cooking",
+       "items": 32,
+       "mixed": false,
+       "name": "Home cooking",
+       "previous_items": 7,
+       "previous_share": 0.1346,
+       "ref": "r1.themes[3]",
+       "share": 0.126,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 250
+      },
+      "days_active": 123,
+      "items": 254,
+      "long": 184,
+      "long_median_min": 18,
+      "reels": 4,
+      "shorts": 66,
+      "shorts_share": 0.264
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2441
+       },
+       {
+        "hour": 16,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2402
+       },
+       {
+        "hour": 18,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2283
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 254,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7165,
+      "weekend_share": 0.2835
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-01-01",
+      "words": "this year up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 3,
+    "tool": "timeline"
+   }
+  },
+  "skeptic:OCT_CH": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 0,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "No window before this one: new and stopped are not computed here.",
+      "`shorts` counts YouTube Shorts; `reels` counts Instagram reels and videos. The length filter 'short' takes both."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 8,
+     "third_party_text": false,
+     "truncated": false,
+     "window_said": "October 2026 up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "items": 72,
+       "name": "gaming",
+       "ref": "r1.areas[0]",
+       "share": 0.507,
+       "themes": [
+        {
+         "name": "Gaming clips",
+         "ref": "r1.areas[0].themes[0]",
+         "share": 0.4648
+        },
+        {
+         "name": "Minecraft builds",
+         "ref": "r1.areas[0].themes[1]",
+         "share": 0.0423
+        }
+       ]
+      },
+      {
+       "items": 34,
+       "name": "art and design",
+       "ref": "r1.areas[1]",
+       "share": 0.2394,
+       "themes": [
+        {
+         "name": "Digital drawing",
+         "ref": "r1.areas[1].themes[0]",
+         "share": 0.2042
+        },
+        {
+         "name": "Watercolor painting",
+         "ref": "r1.areas[1].themes[1]",
+         "share": 0.0352
+        }
+       ]
+      },
+      {
+       "items": 32,
+       "name": "food and cooking",
+       "ref": "r1.areas[2]",
+       "share": 0.2254,
+       "themes": [
+        {
+         "name": "Home cooking",
+         "ref": "r1.areas[2].themes[0]",
+         "share": 0.2254
+        }
+       ]
+      },
+      {
+       "items": 4,
+       "name": "math",
+       "ref": "r1.areas[3]",
+       "share": 0.0282,
+       "themes": [
+        {
+         "name": "Calculus lessons",
+         "ref": "r1.areas[3].themes[0]",
+         "share": 0.0282
+        }
+       ]
+      }
+     ],
+     "channels": [
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "ref": "r1.channels[0]",
+       "share": 0.4296,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "ref": "r1.channels[1]",
+       "share": 0.2254,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 28,
+       "first_watched": "2026-08-01",
+       "items": 29,
+       "name": "Pixel Pencil",
+       "new_in_window": false,
+       "ref": "r1.channels[2]",
+       "share": 0.2042,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 6,
+       "first_watched": "2021-01-05",
+       "items": 6,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "ref": "r1.channels[3]",
+       "share": 0.0423,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2026-10-01",
+       "items": 5,
+       "name": "Gaming Daily",
+       "new_in_window": true,
+       "ref": "r1.channels[4]",
+       "share": 0.0352,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 72,
+       "name": "Gaming",
+       "ref": "r1.fields[0]",
+       "share": 0.5071
+      },
+      {
+       "items": 34,
+       "name": "Art",
+       "ref": "r1.fields[1]",
+       "share": 0.2394
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.2254
+      },
+      {
+       "items": 4,
+       "name": "Math",
+       "ref": "r1.fields[3]",
+       "share": 0.0282
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "channels",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "posts",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Home cooking",
+        "youtube": 0
+       }
+      ]
+     },
+     "question": "which channels did i watch most in october",
+     "themes": [
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 61,
+         "name": "Clip Factory",
+         "ref": "r1.themes[0].channels[0]"
+        },
+        {
+         "items": 5,
+         "name": "Gaming Daily",
+         "ref": "r1.themes[0].channels[1]"
+        }
+       ],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "ref": "r1.themes[0]",
+       "share": 0.4648,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "channels": [
+        {
+         "items": 32,
+         "name": "Pan Theory",
+         "ref": "r1.themes[1].channels[0]"
+        }
+       ],
+       "days": 26,
+       "field": "Cooking",
+       "items": 32,
+       "mixed": false,
+       "name": "Home cooking",
+       "ref": "r1.themes[1]",
+       "share": 0.2254,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 29,
+         "name": "Pixel Pencil",
+         "ref": "r1.themes[2].channels[0]"
+        }
+       ],
+       "days": 28,
+       "field": "Art",
+       "items": 29,
+       "mixed": false,
+       "name": "Digital drawing",
+       "ref": "r1.themes[2]",
+       "share": 0.2042,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 6,
+         "name": "Brick Realm",
+         "ref": "r1.themes[3].channels[0]"
+        }
+       ],
+       "days": 6,
+       "field": "Gaming",
+       "items": 6,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "ref": "r1.themes[3]",
+       "share": 0.0423,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 4,
+         "name": "@wetpaper.ig",
+         "ref": "r1.themes[4].channels[0]"
+        },
+        {
+         "items": 1,
+         "name": "Wet Paper",
+         "ref": "r1.themes[4].channels[1]"
+        }
+       ],
+       "days": 5,
+       "field": "Art",
+       "items": 5,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "ref": "r1.themes[4]",
+       "share": 0.0352,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "channels": [
+        {
+         "items": 4,
+         "name": "Limit Lane",
+         "ref": "r1.themes[5].channels[0]"
+        }
+       ],
+       "days": 4,
+       "field": "Math",
+       "items": 4,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "ref": "r1.themes[5]",
+       "share": 0.0282,
+       "shorts_share": 0.0
+      }
+     ],
+     "top_areas": {
+      "area": "gaming",
+      "n": 3,
+      "of": 5
+     },
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 138
+      },
+      "days_active": 30,
+      "items": 142,
+      "long": 72,
+      "long_median_min": 10,
+      "reels": 4,
+      "shorts": 66,
+      "shorts_share": 0.4783
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 19,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2324
+       },
+       {
+        "hour": 16,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2254
+       },
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2254
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 142,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7324,
+      "weekend_share": 0.2676
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-10-01",
+      "words": "October 2026 up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 7,
+    "tool": "breakdown"
+   }
+  },
+  "skeptic:TWO": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 0,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "No window before this one: new and stopped are not computed here.",
+      "`shorts` counts YouTube Shorts; `reels` counts Instagram reels and videos. The length filter 'short' takes both."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 4,
+     "third_party_text": false,
+     "truncated": false,
+     "window_said": "October 2026 up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "items": 72,
+       "name": "gaming",
+       "ref": "r1.areas[0]",
+       "share": 0.507,
+       "themes": [
+        {
+         "name": "Gaming clips",
+         "ref": "r1.areas[0].themes[0]",
+         "share": 0.4648
+        },
+        {
+         "name": "Minecraft builds",
+         "ref": "r1.areas[0].themes[1]",
+         "share": 0.0423
+        }
+       ]
+      },
+      {
+       "items": 34,
+       "name": "art and design",
+       "ref": "r1.areas[1]",
+       "share": 0.2394,
+       "themes": [
+        {
+         "name": "Digital drawing",
+         "ref": "r1.areas[1].themes[0]",
+         "share": 0.2042
+        },
+        {
+         "name": "Watercolor painting",
+         "ref": "r1.areas[1].themes[1]",
+         "share": 0.0352
+        }
+       ]
+      },
+      {
+       "items": 32,
+       "name": "food and cooking",
+       "ref": "r1.areas[2]",
+       "share": 0.2254,
+       "themes": [
+        {
+         "name": "Home cooking",
+         "ref": "r1.areas[2].themes[0]",
+         "share": 0.2254
+        }
+       ]
+      },
+      {
+       "items": 4,
+       "name": "math",
+       "ref": "r1.areas[3]",
+       "share": 0.0282,
+       "themes": [
+        {
+         "name": "Calculus lessons",
+         "ref": "r1.areas[3].themes[0]",
+         "share": 0.0282
+        }
+       ]
+      }
+     ],
+     "channels": [
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "ref": "r1.channels[0]",
+       "share": 0.4296,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "ref": "r1.channels[1]",
+       "share": 0.2254,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 28,
+       "first_watched": "2026-08-01",
+       "items": 29,
+       "name": "Pixel Pencil",
+       "new_in_window": false,
+       "ref": "r1.channels[2]",
+       "share": 0.2042,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 6,
+       "first_watched": "2021-01-05",
+       "items": 6,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "ref": "r1.channels[3]",
+       "share": 0.0423,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2026-10-01",
+       "items": 5,
+       "name": "Gaming Daily",
+       "new_in_window": true,
+       "ref": "r1.channels[4]",
+       "share": 0.0352,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 4,
+       "first_watched": "2023-06-03",
+       "items": 4,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "ref": "r1.channels[5]",
+       "share": 0.0282,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "handle": "wetpaper.ig",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "ref": "r1.channels[6]",
+       "share": 0.0282,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 1,
+       "first_watched": "2025-01-10",
+       "items": 1,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "ref": "r1.channels[7]",
+       "share": 0.007,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 72,
+       "name": "Gaming",
+       "ref": "r1.fields[0]",
+       "share": 0.5071
+      },
+      {
+       "items": 34,
+       "name": "Art",
+       "ref": "r1.fields[1]",
+       "share": 0.2394
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.2254
+      },
+      {
+       "items": 4,
+       "name": "Math",
+       "ref": "r1.fields[3]",
+       "share": 0.0282
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "top",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "posts",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Home cooking",
+        "youtube": 0
+       }
+      ]
+     },
+     "question": "what did i watch in october and how does that compare with my whole history",
+     "seasonal": [],
+     "themes": [
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 61,
+         "name": "Clip Factory",
+         "ref": "r1.themes[0].channels[0]"
+        },
+        {
+         "items": 5,
+         "name": "Gaming Daily",
+         "ref": "r1.themes[0].channels[1]"
+        }
+       ],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "ref": "r1.themes[0]",
+       "share": 0.4648,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "channels": [
+        {
+         "items": 32,
+         "name": "Pan Theory",
+         "ref": "r1.themes[1].channels[0]"
+        }
+       ],
+       "days": 26,
+       "field": "Cooking",
+       "items": 32,
+       "mixed": false,
+       "name": "Home cooking",
+       "ref": "r1.themes[1]",
+       "share": 0.2254,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 29,
+         "name": "Pixel Pencil",
+         "ref": "r1.themes[2].channels[0]"
+        }
+       ],
+       "days": 28,
+       "field": "Art",
+       "items": 29,
+       "mixed": false,
+       "name": "Digital drawing",
+       "ref": "r1.themes[2]",
+       "share": 0.2042,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 6,
+         "name": "Brick Realm",
+         "ref": "r1.themes[3].channels[0]"
+        }
+       ],
+       "days": 6,
+       "field": "Gaming",
+       "items": 6,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "ref": "r1.themes[3]",
+       "share": 0.0423,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 4,
+         "name": "@wetpaper.ig",
+         "ref": "r1.themes[4].channels[0]"
+        },
+        {
+         "items": 1,
+         "name": "Wet Paper",
+         "ref": "r1.themes[4].channels[1]"
+        }
+       ],
+       "days": 5,
+       "field": "Art",
+       "items": 5,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "ref": "r1.themes[4]",
+       "share": 0.0352,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "channels": [
+        {
+         "items": 4,
+         "name": "Limit Lane",
+         "ref": "r1.themes[5].channels[0]"
+        }
+       ],
+       "days": 4,
+       "field": "Math",
+       "items": 4,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "ref": "r1.themes[5]",
+       "share": 0.0282,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 138
+      },
+      "days_active": 30,
+      "items": 142,
+      "long": 72,
+      "long_median_min": 10,
+      "reels": 4,
+      "shorts": 66,
+      "shorts_share": 0.4783
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 19,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2324
+       },
+       {
+        "hour": 16,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2254
+       },
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2254
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 142,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7324,
+      "weekend_share": 0.2676
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-10-01",
+      "words": "October 2026 up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 4,
+    "tool": "breakdown"
+   },
+   "r2": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 0,
+      "rank_hidden_above": false,
+      "sensitive": 50
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "No window before this one: new and stopped are not computed here.",
+      "`shorts` counts YouTube Shorts; `reels` counts Instagram reels and videos. The length filter 'short' takes both."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 10,
+      "themes": 8
+     },
+     "rows_total": 4,
+     "third_party_text": false,
+     "truncated": true,
+     "window_said": "all your history (5 January 2021 to 30 October 2026, where your export ends)"
+    },
+    "rid": "r2",
+    "sheet": {
+     "areas": [
+      {
+       "items": 319,
+       "name": "gaming",
+       "ref": "r2.areas[0]",
+       "share": 0.4412,
+       "themes": [
+        {
+         "name": "Minecraft builds",
+         "ref": "r2.areas[0].themes[0]",
+         "share": 0.2254
+        }
+       ]
+      },
+      {
+       "items": 187,
+       "name": "art and design",
+       "ref": "r2.areas[1]",
+       "share": 0.2586,
+       "themes": [
+        {
+         "name": "Watercolor painting",
+         "ref": "r2.areas[1].themes[0]",
+         "share": 0.1314
+        }
+       ]
+      },
+      {
+       "items": 145,
+       "name": "math",
+       "ref": "r2.areas[2]",
+       "share": 0.2006,
+       "themes": [
+        {
+         "name": "Calculus lessons",
+         "ref": "r2.areas[2].themes[0]",
+         "share": 0.1176
+        }
+       ]
+      },
+      {
+       "items": 72,
+       "name": "food and cooking",
+       "ref": "r2.areas[3]",
+       "share": 0.0996,
+       "themes": [
+        {
+         "name": "Home cooking",
+         "ref": "r2.areas[3].themes[0]",
+         "share": 0.0996
+        }
+       ]
+      }
+     ],
+     "channels": [
+      {
+       "area": "gaming",
+       "days": 163,
+       "first_watched": "2021-01-05",
+       "items": 163,
+       "name": "Brick Realm",
+       "ref": "r2.channels[0]",
+       "share": 0.2254,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "ref": "r2.channels[1]",
+       "share": 0.1272,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 91,
+       "first_watched": "2025-01-10",
+       "items": 91,
+       "name": "Wet Paper",
+       "ref": "r2.channels[2]",
+       "share": 0.1259,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 90,
+       "first_watched": "2021-03-01",
+       "items": 90,
+       "name": "Frame Perfect",
+       "ref": "r2.channels[3]",
+       "share": 0.1245,
+       "shorts_share": 0.0,
+       "theme": "Speedruns",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 85,
+       "first_watched": "2023-06-03",
+       "items": 85,
+       "name": "Limit Lane",
+       "ref": "r2.channels[4]",
+       "share": 0.1176,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 66,
+       "first_watched": "2021-02-01",
+       "items": 72,
+       "name": "Pan Theory",
+       "ref": "r2.channels[5]",
+       "share": 0.0996,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "ref": "r2.channels[6]",
+       "share": 0.0844,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 60,
+       "first_watched": "2023-06-05",
+       "items": 60,
+       "name": "Odd Prime",
+       "ref": "r2.channels[7]",
+       "share": 0.083,
+       "shorts_share": 0.0,
+       "theme": "Number puzzles",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 319,
+       "name": "Gaming",
+       "ref": "r2.fields[0]",
+       "share": 0.4412
+      },
+      {
+       "items": 187,
+       "name": "Art",
+       "ref": "r2.fields[1]",
+       "share": 0.2586
+      },
+      {
+       "items": 145,
+       "name": "Math",
+       "ref": "r2.fields[2]",
+       "share": 0.2006
+      },
+      {
+       "items": 72,
+       "name": "Cooking",
+       "ref": "r2.fields[3]",
+       "share": 0.0996
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "top",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r2.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       }
+      ]
+     },
+     "question": "what did i watch in october and how does that compare with my whole history",
+     "themes": [
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 163,
+         "name": "Brick Realm",
+         "ref": "r2.themes[0].channels[0]"
+        }
+       ],
+       "days": 163,
+       "field": "Gaming",
+       "items": 163,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "ref": "r2.themes[0]",
+       "share": 0.2254,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 91,
+         "name": "Wet Paper",
+         "ref": "r2.themes[1].channels[0]"
+        }
+       ],
+       "days": 95,
+       "field": "Art",
+       "items": 95,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "ref": "r2.themes[1]",
+       "share": 0.1314,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 92,
+         "name": "Pixel Pencil",
+         "ref": "r2.themes[2].channels[0]"
+        }
+       ],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "ref": "r2.themes[2]",
+       "share": 0.1272,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 90,
+         "name": "Frame Perfect",
+         "ref": "r2.themes[3].channels[0]"
+        }
+       ],
+       "days": 90,
+       "field": "Gaming",
+       "items": 90,
+       "mixed": false,
+       "name": "Speedruns",
+       "ref": "r2.themes[3]",
+       "share": 0.1245,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "channels": [
+        {
+         "items": 85,
+         "name": "Limit Lane",
+         "ref": "r2.themes[4].channels[0]"
+        }
+       ],
+       "days": 85,
+       "field": "Math",
+       "items": 85,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "ref": "r2.themes[4]",
+       "share": 0.1176,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "food and cooking",
+       "channels": [
+        {
+         "items": 72,
+         "name": "Pan Theory",
+         "ref": "r2.themes[5].channels[0]"
+        }
+       ],
+       "days": 66,
+       "field": "Cooking",
+       "items": 72,
+       "mixed": false,
+       "name": "Home cooking",
+       "ref": "r2.themes[5]",
+       "share": 0.0996,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 61,
+         "name": "Clip Factory",
+         "ref": "r2.themes[6].channels[0]"
+        }
+       ],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "ref": "r2.themes[6]",
+       "share": 0.0913,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "math",
+       "channels": [
+        {
+         "items": 60,
+         "name": "Odd Prime",
+         "ref": "r2.themes[7].channels[0]"
+        }
+       ],
+       "days": 60,
+       "field": "Math",
+       "items": 60,
+       "mixed": false,
+       "name": "Number puzzles",
+       "ref": "r2.themes[7]",
+       "share": 0.083,
+       "shorts_share": 0.0
+      }
+     ],
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 719
+      },
+      "days_active": 515,
+      "items": 723,
+      "long": 651,
+      "long_median_min": 10,
+      "reels": 4,
+      "shorts": 66,
+      "shorts_share": 0.0918
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 16,
+        "ref": "r2.when.busiest_hours[0]",
+        "share": 0.2476
+       },
+       {
+        "hour": 18,
+        "ref": "r2.when.busiest_hours[1]",
+        "share": 0.2462
+       },
+       {
+        "hour": 17,
+        "ref": "r2.when.busiest_hours[2]",
+        "share": 0.2448
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 723,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7206,
+      "weekend_share": 0.2794
+     },
+     "window": {
+      "clipped": false,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2021-01-05",
+      "words": "all your history (5 January 2021 to 30 October 2026, where your export ends)"
+     }
+    },
+    "took_ms": 3,
+    "tool": "breakdown"
+   }
+  },
+  "skeptic:YTD_CH": {
+   "r1": {
+    "cost_usd": 0.0,
+    "meta": {
+     "base": "of what you opened",
+     "complete": true,
+     "filters_said": null,
+     "hidden": {
+      "friends": 0,
+      "rank_hidden_above": false,
+      "sensitive": 0
+     },
+     "notes": [
+      "Your Instagram export ends on 15 October 2026.",
+      "Your YouTube export ends on 30 October 2026.",
+      "No window before this one: new and stopped are not computed here.",
+      "`shorts` counts YouTube Shorts; `reels` counts Instagram reels and videos. The length filter 'short' takes both."
+     ],
+     "order": "most",
+     "resolved": {},
+     "rows_of": {
+      "areas": 4,
+      "channels": 8,
+      "themes": 6
+     },
+     "rows_total": 8,
+     "third_party_text": false,
+     "truncated": false,
+     "window_said": "this year up to 30 October 2026, where your export ends"
+    },
+    "rid": "r1",
+    "sheet": {
+     "areas": [
+      {
+       "items": 133,
+       "name": "art and design",
+       "ref": "r1.areas[0]",
+       "share": 0.5236,
+       "themes": [
+        {
+         "name": "Digital drawing",
+         "ref": "r1.areas[0].themes[0]",
+         "share": 0.3622
+        },
+        {
+         "name": "Watercolor painting",
+         "ref": "r1.areas[0].themes[1]",
+         "share": 0.1614
+        }
+       ]
+      },
+      {
+       "items": 79,
+       "name": "gaming",
+       "ref": "r1.areas[1]",
+       "share": 0.311,
+       "themes": [
+        {
+         "name": "Gaming clips",
+         "ref": "r1.areas[1].themes[0]",
+         "share": 0.2598
+        },
+        {
+         "name": "Minecraft builds",
+         "ref": "r1.areas[1].themes[1]",
+         "share": 0.0512
+        }
+       ]
+      },
+      {
+       "items": 32,
+       "name": "food and cooking",
+       "ref": "r1.areas[2]",
+       "share": 0.126,
+       "themes": [
+        {
+         "name": "Home cooking",
+         "ref": "r1.areas[2].themes[0]",
+         "share": 0.126
+        }
+       ]
+      },
+      {
+       "items": 10,
+       "name": "math",
+       "ref": "r1.areas[3]",
+       "share": 0.0394,
+       "themes": [
+        {
+         "name": "Calculus lessons",
+         "ref": "r1.areas[3].themes[0]",
+         "share": 0.0394
+        }
+       ]
+      }
+     ],
+     "channels": [
+      {
+       "area": "art and design",
+       "days": 89,
+       "first_watched": "2026-08-01",
+       "items": 92,
+       "name": "Pixel Pencil",
+       "new_in_window": true,
+       "ref": "r1.channels[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0,
+       "theme": "Digital drawing",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 30,
+       "first_watched": "2026-10-01",
+       "items": 61,
+       "name": "Clip Factory",
+       "new_in_window": true,
+       "ref": "r1.channels[1]",
+       "share": 0.2402,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 37,
+       "first_watched": "2025-01-10",
+       "items": 37,
+       "name": "Wet Paper",
+       "new_in_window": false,
+       "ref": "r1.channels[2]",
+       "share": 0.1457,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      },
+      {
+       "area": "food and cooking",
+       "days": 26,
+       "first_watched": "2021-02-01",
+       "items": 32,
+       "name": "Pan Theory",
+       "new_in_window": false,
+       "ref": "r1.channels[3]",
+       "share": 0.126,
+       "shorts_share": 0.0,
+       "theme": "Home cooking",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 13,
+       "first_watched": "2021-01-05",
+       "items": 13,
+       "name": "Brick Realm",
+       "new_in_window": false,
+       "ref": "r1.channels[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0,
+       "theme": "Minecraft builds",
+       "theme_share": 1.0
+      },
+      {
+       "area": "math",
+       "days": 10,
+       "first_watched": "2023-06-03",
+       "items": 10,
+       "name": "Limit Lane",
+       "new_in_window": false,
+       "ref": "r1.channels[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0,
+       "theme": "Calculus lessons",
+       "theme_share": 1.0
+      },
+      {
+       "area": "gaming",
+       "days": 5,
+       "first_watched": "2026-10-01",
+       "items": 5,
+       "name": "Gaming Daily",
+       "new_in_window": true,
+       "ref": "r1.channels[6]",
+       "share": 0.0197,
+       "shorts_share": 1.0,
+       "theme": "Gaming clips",
+       "theme_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "days": 4,
+       "first_watched": "2026-10-12",
+       "handle": "wetpaper.ig",
+       "items": 4,
+       "name": "@wetpaper.ig",
+       "new_in_window": true,
+       "ref": "r1.channels[7]",
+       "share": 0.0157,
+       "shorts_share": 0.0,
+       "theme": "Watercolor painting",
+       "theme_share": 1.0
+      }
+     ],
+     "fields": [
+      {
+       "items": 133,
+       "name": "Art",
+       "ref": "r1.fields[0]",
+       "share": 0.5236
+      },
+      {
+       "items": 79,
+       "name": "Gaming",
+       "ref": "r1.fields[1]",
+       "share": 0.311
+      },
+      {
+       "items": 32,
+       "name": "Cooking",
+       "ref": "r1.fields[2]",
+       "share": 0.126
+      },
+      {
+       "items": 10,
+       "name": "Math",
+       "ref": "r1.fields[3]",
+       "share": 0.0394
+      }
+     ],
+     "filters": {
+      "channel": null,
+      "how": "watched",
+      "platform": null,
+      "topic": null,
+      "without_shorts": false
+     },
+     "kind": "channels",
+     "library": {
+      "saved_not_opened": [
+       {
+        "n": 3,
+        "noun": "videos",
+        "ref": "r1.library.saved_not_opened[0]",
+        "theme": "Watercolor painting",
+        "youtube": 3
+       },
+       {
+        "n": 3,
+        "noun": "posts",
+        "ref": "r1.library.saved_not_opened[1]",
+        "theme": "Home cooking",
+        "youtube": 0
+       }
+      ]
+     },
+     "question": "my channels this year",
+     "themes": [
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 92,
+         "name": "Pixel Pencil",
+         "ref": "r1.themes[0].channels[0]"
+        }
+       ],
+       "days": 89,
+       "field": "Art",
+       "items": 92,
+       "mixed": false,
+       "name": "Digital drawing",
+       "ref": "r1.themes[0]",
+       "share": 0.3622,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 61,
+         "name": "Clip Factory",
+         "ref": "r1.themes[1].channels[0]"
+        },
+        {
+         "items": 5,
+         "name": "Gaming Daily",
+         "ref": "r1.themes[1].channels[1]"
+        }
+       ],
+       "days": 30,
+       "field": "Gaming",
+       "items": 66,
+       "mixed": false,
+       "name": "Gaming clips",
+       "ref": "r1.themes[1]",
+       "share": 0.2598,
+       "shorts_share": 1.0
+      },
+      {
+       "area": "art and design",
+       "channels": [
+        {
+         "items": 37,
+         "name": "Wet Paper",
+         "ref": "r1.themes[2].channels[0]"
+        },
+        {
+         "items": 4,
+         "name": "@wetpaper.ig",
+         "ref": "r1.themes[2].channels[1]"
+        }
+       ],
+       "days": 41,
+       "field": "Art",
+       "items": 41,
+       "mixed": false,
+       "name": "Watercolor painting",
+       "ref": "r1.themes[2]",
+       "share": 0.1614,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "food and cooking",
+       "channels": [
+        {
+         "items": 32,
+         "name": "Pan Theory",
+         "ref": "r1.themes[3].channels[0]"
+        }
+       ],
+       "days": 26,
+       "field": "Cooking",
+       "items": 32,
+       "mixed": false,
+       "name": "Home cooking",
+       "ref": "r1.themes[3]",
+       "share": 0.126,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "gaming",
+       "channels": [
+        {
+         "items": 13,
+         "name": "Brick Realm",
+         "ref": "r1.themes[4].channels[0]"
+        }
+       ],
+       "days": 13,
+       "field": "Gaming",
+       "items": 13,
+       "mixed": false,
+       "name": "Minecraft builds",
+       "ref": "r1.themes[4]",
+       "share": 0.0512,
+       "shorts_share": 0.0
+      },
+      {
+       "area": "math",
+       "channels": [
+        {
+         "items": 10,
+         "name": "Limit Lane",
+         "ref": "r1.themes[5].channels[0]"
+        }
+       ],
+       "days": 10,
+       "field": "Math",
+       "items": 10,
+       "mixed": false,
+       "name": "Calculus lessons",
+       "ref": "r1.themes[5]",
+       "share": 0.0394,
+       "shorts_share": 0.0
+      }
+     ],
+     "top_areas": {
+      "area": "art and design",
+      "n": 2,
+      "of": 5
+     },
+     "totals": {
+      "by_platform": {
+       "instagram": 4,
+       "youtube": 250
+      },
+      "days_active": 123,
+      "items": 254,
+      "long": 184,
+      "long_median_min": 18,
+      "reels": 4,
+      "shorts": 66,
+      "shorts_share": 0.264
+     },
+     "when": {
+      "busiest_hours": [
+       {
+        "hour": 17,
+        "ref": "r1.when.busiest_hours[0]",
+        "share": 0.2441
+       },
+       {
+        "hour": 16,
+        "ref": "r1.when.busiest_hours[1]",
+        "share": 0.2402
+       },
+       {
+        "hour": 18,
+        "ref": "r1.when.busiest_hours[2]",
+        "share": 0.2283
+       }
+      ],
+      "busiest_weekday": "Thursday",
+      "events": 254,
+      "usual_weekday_share": 0.7206,
+      "weekday_share": 0.7165,
+      "weekend_share": 0.2835
+     },
+     "window": {
+      "clipped": true,
+      "end": "2026-10-30",
+      "ends": {
+       "instagram": "2026-10-15",
+       "youtube": "2026-10-30"
+      },
+      "start": "2026-01-01",
+      "words": "this year up to 30 October 2026, where your export ends"
+     }
+    },
+    "took_ms": 3,
+    "tool": "breakdown"
+   }
+  }
+ }
+}

@@ -57,4 +57,1021 @@ Docs: … · Code: … · Contract change: yes/no · Needs both founders: yes/no
 
 ## Log
 
-*No amendments yet.*
+### A-022 · The assistant acts toward a person's goals: new recommendations, goal plans as cards, proactive check-ins, more connectors, linked exports, a cheaper model
+- **Date:** 2026-11-25
+- **Requested by:** the founder, on 25 Nov 2026, in their notes on the A-021 draft. Written by the coding agent.
+- **Status:** Proposed. Needs **both founders**. Not built. It gets its own design round after the first version of A-021 (its step 2) is in the founder's hands.
+- **Conflicts with:**
+  - `docs/00-vision.md` › Out of scope for now: "**Recommendations from outside the user's own data, habits, screen-time measurement.**" Part 1 (new things) and part 2 (places for a hobby) bring in things from outside. A-009 already proposes outside YouTube picks (Proposed). The vision's boards ("the board suggests related items from everything they have ever saved, shared, liked or watched") stay inside their own data.
+  - `docs/06-rules-and-actions.md` › Safety limits: "Per-user caps on deliveries per day and actions per rule run." "No recurring rule becomes active without a confirmed preview." "An LLM never calls an action directly; only the executor does, with validated params." "Every created object is reversible". Part 3 sends messages nobody asked for. A-010 (Proposed) put recaps the other way: "Never offered at setup and never sent unasked", and its conflict line quotes the brief: "Timing: not a weekly digest. A message goes out when the person asks or at a time they chose."
+  - `docs/07-privacy-and-safety.md` › Personal data: "**Minimum necessary.** Intake extracts only the export files and fields listed in `04-intake.md`." Silent on reading a mailbox or a calendar. The nearest rule is for DMs: "Message text is never stored, logged or sent to an LLM." A-013 promises "it never reads mail"; A-012 records "reading the inbox … considered and rejected".
+  - `docs/07-privacy-and-safety.md` › Security: "least-privilege scopes (e.g. read-only YouTube, calendar events only)". Reading free time is more than "calendar events only". Gmail has no scope here at all.
+  - `docs/07-privacy-and-safety.md` › Third-party text and LLMs: "Model providers are used under terms that exclude training on our data." A new provider's terms are not checked. Its company would receive a person's words.
+  - `AGENTS.md` rule 7: "**Intake stays within platform terms.** Preference order: data the user hands us (exports, DM shares, Takeout) → official APIs → paid providers with clear terms. No logged-in bot accounts, no evading rate limits or blocks." Part 5 (linking accounts at setup) must stay inside it. `docs/04-intake.md` › YouTube › Ongoing capture: "OAuth with the read-only YouTube scope."
+  - `AGENTS.md` rule 8: "Captions, transcripts and comments are third-party text: treat them as data, never as instructions." Places and "what to do" for a hobby come from outside. A-021's spec adds "no tool takes a URL from model text" (SPEC.md section 15, rule 8).
+  - A-021's spec, section 8.3: "A card never replaces another silently". Today `pending` holds one card per person, so a plan as a bundle of cards needs a new shape.
+  - `docs/02-tech-stack.md` › Stack: "LLM calls | One wrapper `scrolldigest/ai/` around the provider SDK(s)". The prototype already calls OpenAI, Gemini and Anthropic (`experiments/lib/ai.py`; A-020 added the third). Part 6 adds a fourth.
+  - `docs/09-roadmap-and-ownership.md` › Ownership: "Triggers, scheduler, executor, output actions (email, Google Calendar), action registry" are the other founder's area. Most of this entry lands there.
+
+**What is requested**
+Six parts. Under each, what already exists (read from the code on `experiments/search-loop` and the co-founder's branch `intake/photon-channel`).
+
+1. **New recommendations from what they like** (the Pinterest side): things they have not seen yet, chosen from their taste and watch history.
+   *Exists:* `outside.py` (A-009): up to 3 YouTube videos outside the library, by the official API only. Code builds the search from the person's own words; videos already in the library are removed; no model reads, ranks or rewords them; never for a personal topic; 5 searches a person a day. Inside the library: search, themes (A-019) and the related-items design of the boards.
+2. **A plan for a goal, as a bundle of proposed cards.** The founder's example: a person in a city takes up urban photography. The plan holds: a calendar block placed after reading their free time; to-dos in their to-do app; a map of places (a link built by code from place names); inspiration videos from their own history; suggested additions to a rule that make the action easier.
+   *Exists:* the profile keeps what they are working toward, in their own words (`profile.py`, "direction"). `calendar.add` (a Google Calendar link and an .ics file, no sign-in) and `mac.event` (an event on the operator's Mac). `todo.add` (the bot's own lists), `mac.reminder`, `ticktick.add`, `todoist.add`, `todoist.mcp_add`, `webhook.post` (all write-only; every outside one is operator only, needs a yes to the exact rows, has a daily cap and an undo where the app allows). `postacts.maps_link`: a Google Maps search link, domain fixed in code, words encoded, never a link from a post. Rule previews and YES; grants (one yes per rule for adds to the person's own apps, A-015). *Missing:* nothing reads a calendar or free time; nothing proposes several cards at once.
+3. **Proactive check-ins**: when the person is not moving toward their goal, the assistant moves first.
+   *Exists:* the scheduler sends only what a rule or a to-do asked for. Guards: quiet hours, a daily limit, and a pause after 5 timed sends in a row with no reply (a question after 3). One nudge for a to-do a day past due (`todos.py`, off by "no overdue nudges"). A-010: rules stay quiet when empty; recaps are never sent unasked.
+4. **Connectors**: Gmail, the calendar, a to-do app, push notifications.
+   *Exists:* `email.send` (the answer to their own confirmed address). For the operator: `mailbox.draft` (IMAP append to Drafts only; never FETCH, SEARCH or any other folder) and `mailbox.send` (SMTP, after "send" on the exact text, 2-minute hold), by an app password (A-013). Calendar: write only, as in part 2. To-do apps: as in part 2. Push: the bot already reaches the phone through Messages (Sendblue; Photon on the co-founder's branch), which notifies. No web or app push exists, and no mailbox or calendar is ever read.
+5. **Linking Instagram and Google at setup**, so exports arrive without manual steps ("automatic takeout").
+   *Exists:* an upload box (the test page; the co-founder's sign-up page with chunked uploads up to 2 GB) and a per-person inbox folder that imports a new export with no command. `ytreads.py` answers "make my instagram export weekly" with a link (`texts.IG_SCHEDULE_LINK`) to Instagram's own export screen, saying it cannot tell whether the weekly option is offered. DESIGN.md section 11 recorded: Google's Data Portability API is not offered to US users; Takeout can repeat every 2 months for a year into the person's Drive; a pick-up from Drive "needs its own Google project and a restricted permission". The co-founder's branch adds YouTube connect at sign-up and a Takeout upload (below).
+6. **A model cheaper than Haiku** for trivial reads, such as finding an email address in a message.
+   *Exists:* A-021's spec takes an address by code with no model (`brain/setup.py: take_address`, on `onboarding.ADDRESS`, a regular expression); the address never reaches a model. The spec also has a small-model setting (`MVP_SMALL_MODEL`, Haiku 5.5) for routine words.
+
+*What the co-founder's branch does* (commits 91856ff and 53b93ff, 24 Nov; code read, not run):
+- **"Connect YouTube" asks Google for one scope**: `https://www.googleapis.com/auth/youtube` (`yt_auth.SCOPE`, the same module as on this branch). That is YouTube's full manage scope, not read-only. It uses Google's device flow: the person types a code at google.com/device and presses Allow on Google's own consent screen. A grant with any other scope is refused and nothing is kept.
+- **What it fetches**: nothing at connect. Later, on demand: the person's subscriptions (`subscriptions.list`, kept 24 hours for an unsubscribe list), the first 50 of their playlists (`playlists.list`), and a video's channel (`videos.list`). It writes only after a yes: unsubscribe, subscribe back, a private playlist, playlist items. Nothing it returns becomes a library item.
+- **Watch history: not at all through the API.** The official YouTube Data API does not expose it, and the code does not try. Watch history comes only from a Takeout zip the person exports and uploads. The bot's new reply says so: "there's no automatic hand-off for it".
+- **No sign-in as the person** to Instagram or Google anywhere. Instagram is an export the person downloads, or one-tap links.
+- **The page overstates what connect brings.** It says "✓ YouTube connected — your likes, playlists and subscriptions are in." No code imports them, and likes are never read (no `myRating` call anywhere on the branch; its own `experiments/results/youtube-takeout-inventory.md` notes likes would need `videos.list?myRating=like`). The bot's reply says the same ("Likes, playlists and subscriptions: quicker — say “connect youtube”").
+- **The Takeout steps** tick the YouTube product's history as JSON. A-018 records that on a real Takeout the YouTube product's history was cut to 11.5 months, with the full history only in My Activity.
+
+*What the platforms offer for recurring exports* (official help pages, 25 Nov 2026):
+- Google Takeout: "Automatically create an archive of your selected data every 2 months for one year." Delivery can be "Add to Drive", Dropbox, OneDrive, Box or an emailed link (Google Account Help, "How to download your Google data", read on 25 Nov). Not for accounts in the Advanced Protection Program.
+- Instagram: a search summary of its help page ("Review and export a copy of your Instagram information") says a person can export to an external service and choose how often. The page itself asks for a login and was not read. Which intervals, which services, and whether US accounts get it: **unknown**. DESIGN.md section 11 recorded it as documented for the EU and unverified for a US account. The weekly value in `IG_SCHEDULE_LINK` is a link parameter, not documentation.
+
+**Why the requester wants it**
+In their words (25 Nov):
+- "also if we are looking to do pinterest we should also be able to provide recommendations on new things based on things they like. We should feel smart and like an agent."
+- "And as for helping them carry out their goals, also add external connectors like gmail (which itself is already significantly beneficial), push notifications, and stuff like creating a plan for say if they want to start engaging in their hobby. so lets say their plan is to go out and practice their new hobby of urban photoshooting (they live in a city) should be able to link with their todo app, and could suggest more stuff to their rule to make it more frictionless for them to actually perform whatever action theyre trying to do. So we should send them a map of locations, a time block, check their calendar and mark it there, send them inspiration videos from their history and recommend stuff based upon their style and previous watch history. so anything to be more helpful, and be proactive. Because if they arent proactive in achieving their goals we should be proactive for them."
+- "For setup, it should help them link their instagram and google for automatic takeout (like my friends commit)"
+- "also, if its stuff like finding email from a message we should do a cheap model, cheaper than haiku. Think deepseek flash."
+
+The problem with today: answers and reminders still leave the work to the person, and the bot waits to be asked.
+
+**Why it is better than the current approach**
+- **It turns saved media into action**, which is what `AGENTS.md` promises ("what they could act on, and rules that put the right thing in the right tool at the right time"). A plan joins what exists into one offer: their own inspiration, a time, a place, a list.
+- **Most of the doing side exists.** Calendar writes, to-do apps, previews, yes tokens, grants, caps, undo and receipts are built and tested. The new pieces are reads (free time), a bundle of cards, and a gentle schedule of check-ins.
+- **Being first to move helps the people who need it most**: those who save a hobby and never start it.
+- **Evidence: none.** Nothing here is built or measured. Whether people want unasked check-ins is a question for testers, not code.
+
+**Costs and risks**
+- **Proactive messages that annoy.** An unasked message is the fastest way to be muted or reported. Message services flag unanswered streams (the scheduler's own reason for the pause after 5). A check-in that guesses wrong about a goal feels like surveillance.
+- **Reading a calendar and a mailbox is new personal data.** Today nothing reads either. A calendar holds other people's names and places. A mailbox holds other people's words, receipts, health and money. Mail text is third-party text: an injection surface far larger than captions. Google treats Gmail's read scopes as restricted, needing its verification and a security assessment (A-015 item 5 records this for `gmail.compose`; for the read scopes it is not checked here); an app password opens the whole mailbox with no scope at all (A-013).
+- **Every write still needs a card and a yes.** A plan of five cards is five decisions, or one yes for a bundle the person may not read closely. A bundle must not replace a waiting card silently (A-021's 8.3), and today's `pending` holds one.
+- **Places and "what to do" come from outside.** A model's or a web page's list of places can be wrong, closed or unsafe. It must be marked as outside ("general knowledge, not checked" or "from the web (domain)"). A map link must be built by code; a place name from a model or a web page must not go into a URL unchecked.
+- **A new provider is a new company receiving a person's words.** Its terms on training and retention are not checked. It needs a key, a cap, a ledger price, an SDK or HTTP path, and an eval. The consent would name a fourth company.
+- **Linking accounts at setup** adds scopes before the person has asked for any write. The YouTube connect on the sign-up page asks for the full `youtube` scope; docs/04 and docs/07 ask for read-only. A Drive pick-up needs a restricted Google permission (DESIGN.md section 11).
+- **Ownership and load.** Connectors, the scheduler and actions are the other founder's area. This is weeks of work across both.
+
+**Agent's assessment**
+Agree with the direction, part by part with changes, and not before A-021's first version is in the founder's hands.
+
+1. **New recommendations: agree with changes.** First, "new to you" from their own library: saved and never opened, the other videos of channels they love, items near their strongest themes. That is free, in scope and checkable. Outside picks stay A-009's route (official API, code-built search, no model ranking) and need A-009 decided. "Recommend stuff based upon their style" from a model's knowledge is a claim about the world: marked as outside, never mixed into a sentence about them.
+2. **Goal plans: agree with changes.** Build it as cards, one yes each, or one yes for a bundle that lists every row; which one is a founder decision. Inspiration from their own history is in scope today (A-021's `search` and `items`). The map link: code builds a Maps search from the person's own hobby words and their city, not a list of places a model named; specific places only from a marked web lookup, shown as the source's. The calendar block: free/busy only, never event titles or attendees, with the narrowest scope Google offers (not checked here); the Mac route reads nothing today. Suggested rule additions: each is a new preview and a yes (docs/06 holds).
+3. **Proactive check-ins: agree only as opt-in.** The person turns it on per goal ("check in on me about photography"). At most one a week per goal, inside quiet hours and the unanswered pause, with a stop word. A check-in asks or offers; it never writes anything. I disagree with unasked check-ins by default: it reverses A-010's "never sent unasked", and a wrong one costs trust that is hard to win back.
+4. **Connectors: mostly exist.** Calendar and to-do writes exist; they need to reach testers (narrow OAuth, as A-014 requires), not be rebuilt. Push already happens through Messages; a native push needs an app or a web front end, which AGENTS.md defers. **Gmail: disagree with reading a mailbox for now.** It is the largest new personal data in this entry, Google restricts the scopes, and mail text is an injection surface. The "significantly beneficial" use is unclear: sending a plan to themselves exists (`email.send`), and drafts and sends exist for the operator. I would ask the founder which Gmail job they mean before designing any read.
+5. **Linked exports at setup: agree with changes.** Rule 7 allows what the person sets up themselves. The setup can walk them through Takeout's every-2-months export and Instagram's own export screen, with direct links, and remind them when the next one is due. A pick-up from Drive needs a restricted permission and Google's review; it is later. Instagram's schedule is unknown for US accounts until someone tries it on a real account.
+   **The co-founder's connect and upload code against rule 7: it passes.** It uses Google's own consent screen and the official API, the Takeout zip is data the person hands us, and nothing signs in as the person. Two problems are not rule 7. First, least privilege: it asks every tester for the full `youtube` write scope at sign-up, before any write is wanted, against docs/04 and docs/07 (already recorded in A-015, not accepted; A-014 said not to offer connectors to testers before narrow scopes). A read-only connect at sign-up, with the write scope asked only on a first write, would fit. Second, the page overclaims: "your likes, playlists and subscriptions are in" is not what the code does. It should say what connect allows (listing subscriptions and playlists, changes after a yes) and that watch history comes only from the Takeout file. Neither commit gives "automatic takeout"; the bot's own new reply says so.
+6. **A cheaper provider: disagree for now.** The founder's example needs no model: the spec takes an address by code, free, and no provider sees it. On Haiku 5.5 a short trivial read is about 0.005 cents (300 tokens in, 30 out, at $0.10 and $0.50 per million; arithmetic, not measured), and an ordinary question about 0.08 cents. A fourth provider saves fractions of a cent a message and adds a new company receiving people's words, unchecked terms, a key, a cap and an eval. Revisit when the ledger shows trivial reads are a real share of spend.
+
+   **Research on recurring exports (26 Nov 2026; official pages read by one agent and re-checked by a second; what is not confirmed is marked).** The requesting founder accepts a scheduled Takeout as a route and asks that whatever interval Instagram allows be matched for YouTube.
+   - *Instagram:* Meta's own "Export your information" can repeat to an external service the person chooses (their Drive, Dropbox and others): the developer docs list once a day, week or month for one to three years (deep-link guide, updated 8 Sep 2026). A download to the device cannot repeat. Not confirmed: that a US account is offered the daily choice (it is documented for EU compliance, and the developer docs name no region); that "weekly" appears on the person's screen; whether each run is a full archive or only what is new; how soon a run arrives (the help page says an export "may take up to 30 days"). The Messages category holds DM text and must never be selected (rule 8). No official API reads saves, likes or views.
+   - *Google:* it cannot be matched. Takeout's only schedule is every 2 months for one year, each a full archive. A daily route exists only through Google's Data Portability API (YouTube activity once every 24 hours, on a 30- or 180-day grant the person renews), only for accounts in the EU, Switzerland and the UK, not under 18, and only for an app that passes Google's restricted-scope verification with a yearly security assessment and whose main purpose is moving data. For a US account nothing official is more frequent than Takeout, other than the person running a one-time export themselves. The YouTube Data API reads likes, subscriptions and playlists daily but never watch or search history, and its developer policies (stored data refreshed or deleted within 30 days; no "derived data or metrics") need a reading against themes before anything is built on it.
+   - *Picking the file up:* with the narrow Drive permission (files the person picks) each new archive needs a tap from the person; whether picking a folder covers later files is not confirmed. Reading a Drive or a Dropbox unattended needs a restricted or full-access permission, with Google's assessment for Drive. Meta can instead push straight to a service that becomes an official transfer destination (a trust-registry entry, a verified business, an adapter, Meta's approval). The emailed link is only a signal: fetching it would mean signing in as the person, which is out.
+   - *What the code needs first, whatever the route:* today an import replaces that platform's library with the new file (`refresh.py` carry-over keeps only the other platform), so a small recurring file would lose data, and the whole library is embedded again. A merge importer (union by item, embeddings only for new items, a rule for items that disappear) comes before any recurring pick-up. `docs/10-decisions.md` ("History export backfills once; ongoing data arrives through shares") would be revised by this part.
+   - *Out, as before:* signing in as the person, browser automation against their account, scraping, unofficial APIs.
+
+Questions only the founders can decide: whether the product moves first (unasked check-ins) or only when switched on; whether reading a calendar or a mailbox is in scope at all, and for whom; one yes per card or one per bundle; a fourth model provider; who builds connectors to testers (the other founder's area); whether outside recommendations (A-009) are accepted.
+
+**Affected**
+Docs: `00-vision.md` (out of scope: outside recommendations; the core loop: proactive steps), `04-intake.md` (scheduled exports, linking at setup), `06-rules-and-actions.md` (Safety limits, plans as cards, check-ins), `07-privacy-and-safety.md` (calendar and mailbox reads, scopes, a new provider), `02-tech-stack.md` (a fourth provider, if accepted), `03-data-contract.md` (a plan bundle, goals, check-in settings), `09-roadmap-and-ownership.md`, `10-decisions.md` · Code (none written; the design round names it): likely `outside.py`, `profile.py`, `scheduler.py`, `connectors.py`, `actions/`, `places.py`, `postacts.py`, `brain/propose.py`, `onboarding.py`, `texts.py`, and the sign-up page's YouTube copy on the co-founder's branch · Contract change: yes (a plan bundle, goals and check-ins; new connections) · Needs both founders: **yes**
+
+### A-021 · The chat becomes a model working through the processor's tools: numbers free and verified, history rules as plans, routines decided after step 2
+- **Date:** 2026-11-25
+- **Requested by:** the founder, on 25 Nov 2026 after running the bot on their own laptop (build ed32261). Their decisions on the draft spec came the same day (`experiments/mvp/design/brain_v1/DECISIONS.md`). Written by the coding agent from `experiments/mvp/design/brain_v1/SPEC.md`; where the two differ, DECISIONS.md wins.
+- **Status:** Proposed. Accepted by the requesting founder on 2026-11-25; the other founder's decision is pending. It needs both founders (it changes the architecture boundaries, the data contract, the stack and possibly ownership).
+- **Conflicts with:**
+  - `AGENTS.md` rule 6: "**The LLM fills forms; code acts.** Natural language is compiled by an LLM into a JSON request that is validated against schemas and the action registry before anything runs. An LLM never calls an output integration directly." Here a model is not one compile call. It calls read-only tools in rounds and writes the words of the answer, with numbers it typed. The second sentence still holds: tools that write only propose a card.
+  - `AGENTS.md` rule 5: "The processor reads; the executor writes." Holds. Named because the brain's two propose tools write one pending card row each (today's `pending` table), as the interpreter's previews do today.
+  - `docs/00-vision.md` › The core loop, step 5: "Each request is compiled into a rule: *when* + *content* + *do*." Here a request is answered through the processor's tools. Only a request with a time becomes a rule. Whether a repeated kind of question becomes a saved routine is decided again after step 2 (below).
+  - `docs/00-vision.md` › Out of scope for now: "**Recommendations from outside the user's own data, habits, screen-time measurement.**" A-009 already proposes outside YouTube picks. This adds outside **context** (what a channel or topic is): from the model's own knowledge, and at step 4 from the YouTube Data API and a web search through Anthropic. It is always marked apart from facts about their history.
+  - `docs/01-architecture.md` › Layers, the Interpreter row: "Turn natural language into a validated request or rule using the action registry … No (it proposes; the executor acts)". The Interpreter becomes "Brain: a model looping over the query API, with a verifier". Flow C step 1 ("The interpreter (LLM) compiles it into a RuleDraft JSON") changes. Step 2 ("The user confirms a preview") holds.
+  - `docs/01-architecture.md` › Query API row: "Nothing (read-only), except caching". Holds for the tools. Named because the prototype's tools live in `experiments/mvp/brain/tools.py`, not `scrolldigest/schema/query.py` (no `scrolldigest/` exists yet).
+  - `docs/05-processor.md` › Query API: "Every request and response is a Pydantic model in `schema/query.py`." The tools' arguments are Pydantic models. Their results are today's fact-sheet dicts inside a Pydantic envelope (as A-019 already notes). The op table changes (`find`, `breakdown`, `timeline`, `changes`, `compare`, `first_last`, `items`, `search`, `learned`, and `notes` for the personal context document).
+  - `docs/06-rules-and-actions.md` › Interpreter 1 to 5 (one LLM call that "must return a RuleSpec"). Replaced by the brain and its propose tools. Step 3 ("Resolve relative dates ('next week') in the user's timezone in code, not in the LLM") **holds**: window words go to code, and the model never writes a date. Step 5 and Safety limits ("No recurring rule becomes active without a confirmed preview") **hold**. Silently saved read-only routines are new only if step 3 is built.
+  - `docs/06-rules-and-actions.md` › RuleSpec: `content` gains a source `plan` (a list of tool calls with slots) beside today's library content.
+  - `docs/03-data-contract.md`: new shapes (the plan, the result envelope, the answer form). New stored state: the turn record, the replayed turns (memory), the saved context cards, and the **personal context document** (notes on how the person asks). A `routines` table only if step 3 is built.
+  - `docs/07-privacy-and-safety.md` › Third-party text and LLMs: "Model providers are used under terms that exclude training on our data." Not checked for either account (A-020 says so for Anthropic; nobody has checked OpenAI's either). By the founder's decision, today's consent (`texts.CONSENT`, `mvp-consent-v1`) loses its "(not used for training)" line, and consent v2 says nothing about training. That removes a claim nobody checked. It does not meet this line, which stays unchecked.
+  - `docs/07-privacy-and-safety.md` › Personal data. Today the inbound journal erases message text once handled. Here three things are kept. The turn record (what was last counted) is kept 6 hours for everyone. The founder's last few messages are kept 6 hours with no "remember" step (memory, their decision 5); a tester's only after consent v2 and "remember". The personal context document keeps verbatim quotes of the person's own messages until they delete them.
+  - `docs/02-tech-stack.md` › LLM calls: the brain's provider is a setting. Anthropic's SDK is already added by A-020; OpenAI tool calling goes through the existing raw-HTTP path.
+  - Earlier Proposed amendments it changes:
+    - **A-019** (history answers from a fact sheet): superseded for answering. The fact sheet becomes the tools' back end, and insight.py's checks become the verifier's core. Its themes and lengths builds stay. Its writer call (insight_v5) leaves the message path at step 2 and the code at step 5.
+    - **A-020** (Claude as the text model): folded in as `MVP_BRAIN_PROVIDER` / `MVP_BRAIN_MODEL`. Its condition ("no default switch until every prompt's evaluation is no worse") is kept for the brain as the step-2 and step-5 gates.
+    - **A-011** (read-only MCP server): unchanged in the first version (the founder has not tried their own agent through MCP yet). At step 4 its tools come from the same registry: still read-only, no paid tool, 20 items a call and 500 item texts a day.
+    - **A-009** (outside picks): unchanged. Its "no model reads, ranks or rewords them" stays true for picks. Outside **context** is new and model-written, so it is checked and labelled ("general knowledge, not checked").
+
+**What is requested**
+Behind a switch (`MVP_BRAIN=1`, the founder only), **Claude Haiku 5.5** reads every message no exact command takes, setup messages included. Sonnet 5.5 is tried later only if Haiku is not good enough. The same loop runs on gpt-5.4-mini in the build session, which has no Claude key. The model answers by calling tools over the processor in one to a few rounds: `find`, `breakdown`, `timeline`, `changes`, `compare`, `first_last`, `items`, `search`, `learned`, `propose_rule`, `propose_send`, `give_answer` (12), plus `notes`. The tools wrap today's fact sheet (`facts.sheet`) and search.
+
+The model sees the real numbers and writes them. Each number is followed by a marker naming its cell. Code verifies every number, name, date, rank and direction word against this turn's results. It re-does every computed number, and sends nothing it cannot verify. A history answer can be put on a schedule (a card and their yes).
+
+Under an answer, code writes a scope line ("Counted: channels · October 2026 · without gaming"), but **only when something was guessed, filtered or clipped** (`MVP_SCOPE_LINE=when_guessed`). When a private topic would outrank what is shown, the answer says that topics kept private were left out.
+
+*Memory and the personal context document.* For the founder, the last few messages are kept 6 hours, with no "remember" step. A personal context document is kept too. It records how the person asks: their words for things and what they usually mean, grouped into categories. It is appended over time and read by the `notes` tool when needed. Five rules keep it from becoming a channel for injected text:
+1. A note is saved only with a verbatim quote from the person's own message of that turn. Code checks the quote against the message. A tool result (a title, a caption, a web page) can never be the source.
+2. Code stores it: the category, the quote, and the reading in a fixed form ("by <their word> they mean <ref>"). The ref must resolve through `find`. No free model prose is stored.
+3. The person can see it ("what do you know about how I ask", "my notes") and delete any line or all of it. "Delete my data" removes it.
+4. It sits in its own small block after the cached context, under a size cap. The `notes` tool returns the rest when the block is clipped.
+5. The planted set gains cases where a caption or title tries to write a note, and where a note tries to carry an instruction.
+
+*Routines (step 3) are decided again after step 2 is measured.* The founder's later thought: with Haiku this cheap, code-matched routines may cost more in answer quality than they save. "Might as well just use Haiku for everything", keeping only the personal notes and the general modifiers that are exact ("without X", "only the long ones"). Scheduled rules stay either way. Steps 1 and 2 build no routine.
+
+Build order: step 1 (tools and verifier, offline, no model call) starts with the spec's least sure assumption: that insight.py's `render` and `check_sentence` can check one marked sentence at a time. Files: `experiments/mvp/brain/`, `prompts/brain_v1.md`, `eval_brain.py`; the design is `experiments/mvp/design/brain_v1/` (SPEC.md and DECISIONS.md).
+
+**Why the requester wants it**
+In their words (25 Nov):
+- "the model should NOT be reading it as a search of my saves. what model are we using for this? surely the model understands what we want. why is the bot so dumb still? this is what i mean. everything still feels like a smokescreen. it should actually be intelligent, and there shouldnt be so much hardcoded stuff. thats why 'rules' are there. even in the message input, those 'rules' should be viewed as more like 'routines' which are constantly called which we can use to make the cost cheaper, but they shouldnt be like entirely relied on."
+- "rules are the foundation that routines are built off of. they can be invented once by the model and re ran again cheaply, yes. the model doesn't have to read every message, we can have some kind of saved personal context to make it more cheap. it should also work through tools that code runs, but i think that we are losing a lot by preventing them from having access to the numbers that the user gets. maybe make it a choice and leave it turned on by default."
+- "it should feel like a personal assistant that knows your media, not one that doesn't even know what its being asked. if you think about it as perplexity for your media it should make sense."
+- "do you still see the vision of the processor as being the interface for the model to interact and get more detail from the data without having to run through and analyse absolutely everything itself? … we are that for people's social media consumption."
+- After reading the draft: "haiku 5.5 is probably good enough, no need for sonnet." On routines: "usage of rules may hamper answer quality. might as well just use haiku for everything instead of building rules to interpret prompt?" On memory: "we should also keep a context document for their personal query context and understanding".
+
+Their decisions (25 Nov, `DECISIONS.md`): numbers queried freely and on by default; Haiku 5.5 as the brain; under 10 seconds is fine; the scope line only when filtered; say that private topics were left out; memory on for them, plus the context document; no training line in the consent; web lookups on for them at step 4; a $25 Claude cap for this phase (set by their start script; the code default stays $10); a small model words a routine's answer if step 3 is built.
+
+The failure (build ed32261, their own laptop): "what am i most into right now based on what i watch?" got one unrelated video. "no. i meant what topics have i been into recently" was taken as the setup's answer. "thats correct. my email is <address>." got "Sorry, I didn't catch that". "what about without gaming" became a topic called "without gaming". Each came from code reading words by position or by pattern before any model.
+
+**Why it is better than the current approach**
+- **It understands the question.** No model reads a watch-history question today (13 kinds chosen by word patterns, 32 code reads in a fixed order). Here the model reads it, with the screen (what was last counted, what is open) and the saved context, and asks for what it needs. "without gaming" is an exclude on the last plan. "least", "without minecraft" (title words), "only the long ones" and comparisons of two seasons each become one call.
+- **The setup no longer swallows questions.** A question during setup is answered and the setup question re-asked. An address anywhere in a setup message is taken by code (`take_address`), with no model. Position never moves a step.
+- **Honesty is kept, in a stronger form.** The guarantee moves from "the model cannot type a number" to "every number points at the cell it claims, and code checks it". A number of one result can never pass under another's name. Computed numbers come only from two named cells. The slotted sentence then goes through insight.py's checks (binding, base, rank, direction, watch time, sensitive words), which six rounds hardened. Outside context sits in its own labelled line and is checked to hold no claim about them.
+- **It is cheaper than today's history answer.** On Haiku 5.5 an ordinary question is about 0.08 cents with a warm cache. Today's history writer call is 0.4 to 0.6 cents on gpt-5.4-mini. (Planning figures, not measured; see Costs and risks.)
+- **One processor, two doors.** The same registry later serves their own agent through MCP, which is the vision's paid core.
+- **It reuses what exists**: the fact sheet, the search engine, the synth path, the rule store, previews, YES, grants, the scheduler, the action registry, the auditor (`eval_claims.py`) and its planted sets.
+- **Evidence so far: none measured.** Nothing has run. The claims above are the design's. The eval (111 made-up conversations, starting with their failure table: `experiments/mvp/design/brain_v1/eval_messages.draft.jsonl`, to become `evalset/brain_core.jsonl`) and the planted-falsehood set decide.
+
+**Costs and risks**
+- **Cost per message.** Planning figures from SPEC.md section 9.2 (the Haiku column), not measured. The design session's cost script is not in the repository. On Haiku 5.5: an ordinary question about 0.08 cents warm, 0.24 cents as the first of an idle hour, 0.22 to 0.37 cents for a deep one, about 0.06 cents a scheduled rule's run. A history answer gets cheaper than today's writer call. Messages that code answers free today (many simple reads) now cost a model call. On gpt-5.4-mini (the build session) the same loop costs more: about 0.63 cents warm, 1.19 cents cold. If Haiku is not good enough and Sonnet 5.5 is used, about 1.5 cents warm and 4.7 cents cold.
+- **Speed.** Not measured. Two model requests per ordinary question; the spec's planning figure on Sonnet is 6 to 9 seconds, and Haiku should be faster. The founder accepts under 10 seconds.
+- **Settings copied from a Sonnet design.** Every Sonnet-only setting in the spec (thinking mode, effort, fallbacks, the cache layout) is checked again for Haiku before step 2 ships, not taken from the spec.
+- **Less predictable.** The same question can be planned and worded differently. Free prose will find new ways to be subtly wrong that the checks do not yet know (insight.py needed six passes on a narrow form). Some true sentences will be dropped. Selection (saying only true things and leaving out the biggest one) cannot be checked by code. Haiku may plan less well than Sonnet; the eval decides.
+- **The scope line only when filtered.** An unfiltered answer shows no line saying what was understood. A misreading of an unfiltered question is less visible.
+- **A bigger surface for prompt injection.** The model reads titles and captions in tool results across several rounds. What stops harm is structural: no tool acts; cards need their own words and their yes; no URL or address is ever a tool argument.
+- **Memory and the notes are replayed text.** The spec's defence was "nothing a model wrote is ever replayed". Replayed turns are the person's own words (addresses and codes stripped) plus a code-written line. A note is a verbatim quote of the person plus a reading in a fixed form, checked by code. So no model prose is replayed. But a wrong reading persists and can bias later answers until the person sees and deletes it. The notes keep message text with no time limit set; for testers, the decisions do not yet say whether the memory gate applies to notes.
+- **More leaves the computer.** Each brain request sends their message, the saved context (top areas, themes, channels and counts), their notes and the titles of the items a tool returned, to Anthropic (or OpenAI in the build session). At step 4, channel and video ids go to Google's YouTube API, and public names go to Anthropic's web search (on for the founder, who consented; off for testers until consent v2).
+- **The public repository.** The prompts, tools, verifier and eval set will be public. They hold no real data: every example and fixture is made up (`tests/brain_library.py` extends the made-up `r12_library`). A real library's eval answers stay on their laptop.
+- **Two caps and two providers** to watch. The Claude cap is $25 for this phase by the founder's start script; the code default stays $10.
+- **The pile of Proposed amendments.** The bot already runs on A-008 to A-020, none Accepted. Accepting A-021 without deciding A-019 and A-020 leaves the docs describing a system that does not exist.
+- **Drift from the docs** grows: the brain lives in `experiments/`, not `scrolldigest/`; rules are in SQLite, not Postgres.
+
+**Agent's assessment**
+Agree, with changes and conditions. The direction is right, and it is what the docs already promised and the prototype never built: the processor as a query API that any model interrogates. The first version is deliberately small: 12 tools over today's fact sheet, today's checks behind markers, today's bot kept for the doing paths. So the guarantees that took six rounds are not rebuilt from scratch. Haiku first is sensible: it is about twenty times cheaper than Sonnet on this shape, and the eval decides whether it understands well enough. Re-deciding routines after step 2 is also right: whether they save anything depends on how often questions repeat, which nobody has measured. The founder's answer 1 settles my earlier worry: a learned routine, if built, answers alone only after the same plan was chosen twice. I still disagree with any send without a card: only the exact "email it to me" command sends at once, as today. On the notes, I agree only with the five rules above; without rule 1 (a verbatim quote, checked by code) they would let a caption write instructions into later prompts.
+
+Conditions before any tester sees it:
+1. Both founders accept this amendment, and decide A-019 and A-020 with it.
+2. The step-2 eval passes on Haiku 5.5 on their laptop and on gpt-5.4-mini here: their failure table right in every row; understood ≥ 90%; 0 auditor findings; 0 planted false sentences sent; 0 actions without a card; 0 private topics named. The spec's speed and cost bars (p50 ≤ 9 s, mean ≤ 3 cents) were set for Sonnet; they are kept as ceilings. Haiku should clear the cost bar by far; its speed is measured, not assumed.
+3. The step-2 gate adds an independent hand recount of about 20 live answers. The auditor passing is not enough: the sixth pass's hand check found about 20 false sentences the auditor had passed.
+4. Someone checks both providers' account settings for training. Until then no consent text says anything about training (today's line is removed), and the docs/07 line stays marked unchecked.
+5. Consent v2 (SPEC.md 7.4) is shown and agreed; "what leaves this computer" says the same, notes included.
+6. Web lookups stay off for testers until 1 and 5; the platforms' own domains are always blocked.
+7. For a tester, message text and notes are kept only after consent v2 and their "remember".
+8. Two weeks of the founder's own use, with today's bot as the fast fallback in under 2% of turns, before any old code is removed (step 5).
+
+**Affected**
+Docs: `AGENTS.md` (rules 5, 6, 8, 11), `00-vision.md` (core loop step 5, out of scope), `01-architecture.md` (layers, flow C, boundaries, MCP line), `02-tech-stack.md` (LLM calls), `03-data-contract.md` (plan, envelope, answer form, personal context document, state; `routines` only if step 3 is built), `05-processor.md` (Query API, a new "Answer verification" section), `06-rules-and-actions.md` (Interpreter, RuleSpec, worked examples, Safety limits), `07-privacy-and-safety.md` (personal data, notes, third-party text, honesty, outside context, consent), `08-evals-and-quality.md` (`eval_brain`, the measures, the hand recount), `09-roadmap-and-ownership.md` (who owns the brain, the verifier, the cards and plan runs), `10-decisions.md` (the 25 Nov decisions), `glossary.md` (brain, marker, plan, card, scope line, context card, personal context document; routine if step 3 is built) · Code: `experiments/mvp/brain/` (new), `prompts/brain_v1.md`, `eval_brain.py`, `eval/brain_planted.json`, `eval/convert_insight_cases.py`, `evalset/brain_core.jsonl`, `handler.py`, `history.py`, `facts.py`, `schema.py`, `executor.py`, `config.py`, `texts.py`, `videoask.py`, `store.py`, `eval_claims.py`, `lib/ai.py`, `lib/ai_prices.json`, tests (`tests/brain_library.py`, `tests/fakes/fake_brain.py`, `tests/test_brain_*.py`) · Contract change: **yes** (RuleSpec content source `plan`, the tool and answer shapes, the personal context document; a `routines` table only if step 3 is built) · Needs both founders: **yes**
+
+### A-020 · Text calls may go to Claude (Anthropic) instead of OpenAI
+- **Date:** 2026-11-24
+- **Requested by:** the founder, who has $100 of Claude API credits: "feel free to use claude api tokens instead of openai or gemini". Written by the coding agent.
+- **Status:** Proposed
+- **Conflicts with:**
+  - `docs/02-tech-stack.md` › Stack, row "LLM calls" ("One wrapper `scrolldigest/ai/` around the provider SDK(s)"): met in shape (one wrapper, `experiments/lib/ai.py`, one more SDK in it), but a third provider's SDK, `anthropic`, is added to the stack. Row "HTTP clients" ("`httpx` … Timeouts and retries on every external call"): the SDK brings its own HTTP client (`httpx2`); our calls set a timeout and no retries, as the OpenAI path does. Row "Packaging" (`uv`, one lockfile): the prototype pins it in `experiments/mvp/requirements.txt`, as it pins its other packages.
+  - `docs/07-privacy-and-safety.md` › Third-party text and LLMs ("Model providers are used under terms that exclude training on our data."): must hold for Anthropic too. Its commercial API terms exclude training on API data by default; nobody has checked the account's own settings yet.
+  - Same section ("Every LLM call is logged (`ai_runs`) with purpose, model, prompt version and cost"): met (rows say provider "anthropic").
+  - Neither doc names OpenAI or Gemini. The providers are named in the prototype's amendments and in what testers were told: A-008 › Costs and risks ("item text and requests go to OpenAI") and A-018 › Costs and risks and gate 8 (the consent names OpenAI). The consent testers agreed to (`mvp-consent-v1`) says "go to OpenAI". A Claude model sends the same text to a third company.
+
+**What is requested**
+Let the bot's text calls (the interpreter, the composer, the details, the judge, the drafts, the errand form, the setup's calls, the summaries, the history writer, the theme names) go to a Claude model when one is set: a model name starting with `claude-` (for example `MVP_MODEL=claude-haiku-5-5`). The default stays on OpenAI. Search embeddings stay on OpenAI and "ask the video" stays on Gemini. Claude spend gets its own total cap. (`experiments/lib/ai.py` `anthropic_chat_json`, `experiments/mvp/llm.py`, `config.py`, `eval_models.py`; DESIGN.md section 20.)
+
+**Why the requester wants it**
+The credits are there to use. The OpenAI and Gemini total cap of the build is nearly spent ($25.31 of $30). And if Claude does as well on every prompt's evaluation, the text calls could later need one provider fewer.
+
+**Why it is better than the current approach**
+- It pays for the next rounds of building and checking from credits that are already bought, instead of raising the OpenAI and Gemini cap.
+- It is a setting, not a rewrite: one model name moves the calls, the evaluation of each prompt runs on any model by the same setting, and `eval_models.py` puts them side by side (quality, median and worst latency, cost) with a spend ceiling per model.
+- The checks stay as they are: the model fills a form, code checks it and acts. Every call is in the ledger with its cost.
+- Measured so far: only that the path is wired. A request with a made-up key came back `401 authentication_error` from `api.anthropic.com` through the container's proxy; 39 offline tests pass, and 10 more from a review (DESIGN.md 20.10: two calls at the cap, a fixed judge in `eval_models.py`, the stored consent version on a start over). Nothing about Claude's quality, speed or cost on these prompts is measured yet.
+
+**Costs and risks**
+- **A third company sees the text.** While a Claude model is set, the person's messages, the lines kept about them, and the captions and titles of the posts considered go to Anthropic as well as OpenAI (search words still go to OpenAI for the embeddings), until OpenAI is dropped for text. The consent and "what leaves this computer" say so by code while a Claude model is set, but people who agreed before were told OpenAI only, and nothing asks them again.
+- **Embeddings stay on OpenAI.** The library's vectors are `text-embedding-3-large`; a query must use the same model. So OpenAI is not dropped by this change, and its cap still matters.
+- **The key** sits in an environment variable; anyone who can use that environment can read it. It is never printed, logged or put in an error (tested with a planted key).
+- **The prompts were tuned on another model** (gpt-5.4-mini, gpt-5.5). Claude may read them differently: a form filled another way, a check that drops more. Temperature and seed cannot be sent (the API refuses them), so "the same question gives the same answer" may hold less well.
+- **Latency is unknown.** The history writer has a 20 s deadline; how often a Claude model meets it is measured only by the evaluations, not yet run.
+- **Refusals.** Claude models can decline a request (a safety classifier). The bot treats it as a failed form (code's reply). On Sonnet and Opus a server-side fallback re-runs it on another model, priced at that model's rate.
+- **Two caps to watch** instead of one, and a new SDK to keep up to date (version 2.13.0 pinned).
+
+**Agent's assessment**
+Agree, with the condition below. The change is small and boring where it matters (one switch, one more wrapper beside the old, the same checks and ledger), it is off by default, and it uses money that is already spent. The privacy cost is real but stated: a third company sees the text while a Claude model is set. My honest view: this is worth it as a measurement tool now, and as a default only if the numbers hold. **Condition:** no default switch until every prompt's evaluation (`python3 -m mvp.eval_models --list`) is no worse on the chosen Claude model than on today's, the 20 s deadline holds, and testers who agreed to the OpenAI-only consent have been told.
+
+**Affected**
+Docs: `02-tech-stack.md` (the LLM row names the SDKs in use), `07-privacy-and-safety.md` (the providers and their terms), `10-decisions.md` (a row pointing here) · Code: `experiments/lib/ai.py`, `experiments/lib/ai_prices.json`, `experiments/mvp/llm.py`, `config.py`, `texts.py`, `videoask.py`, `handler.py`, `channels/web.py`, `executor.py`, `mcp_server.py`, `eval_models.py`, `requirements.txt`, `tests/test_claude_backend.py`, `tests/fakes/fake_anthropic.py` · Contract change: no · Needs both founders: **yes** (the stack)
+
+### A-019 · History answers written from a fact sheet, with themes clustered from what was watched
+- **Date:** 2026-11-22
+- **Requested by:** Derrick, after grading 8 history answers on his own library (build 1f9cde0: 1 useful, 4 partly, 3 not useful; 5 of 8 slop): "it doesn't really answer the question properly"; "Id expect it to judge by watch time, identify themes and more"; "Always give more than what was asked"; "Cuz 'so what?', you know?". He asked for answers that give insight, name themes and say more than was asked. Written by the coding agent.
+- **Status:** Proposed
+- **Conflicts with:**
+  - `docs/05-processor.md` › Stage 3, First build, step 1 ("Take items with a main interaction (save, like, share), filter class `content` and `info_class=ok`."): round 12 clusters every watched item with a vector (98,677 on his library), entertainment included, with no filter before it.
+  - Same, step 2 ("PCA to 20 dimensions"): 24 here. `docs/03-data-contract.md` › ThemeSpace ("pca_components[20×384]"): the vectors here are the engine's 1,024-dimension ones, and the space is kept in derived files, not in `theme_spaces`.
+  - Same, step 3 ("One Ward linkage tree."): a Ward tree on a sample of 6,000, then spherical k-means over all items (a tree over 100,000 does not fit in memory).
+  - Same, step 4 ("**Themes:** choose k at the biggest gap in merge heights within `[tmin, tmax]`"): k is chosen by the best cosine silhouette (the gap rule merged four made-up themes into one).
+  - Same, step 5 ("**Sub-themes:** cut at height 2.0 (saves only) or 3.0 (joint)"): two levels, fields and themes inside each field, by k-means with k from 2 to 7 in the field's own space.
+  - Same, step 6 ("An LLM pass writes human names later"): met, but each theme also gets a category from a fixed list, and answers lead with these "areas". Silent on such a level.
+  - Same, "**Never re-cluster live.** Periodic offline re-clustering must match new clusters to old themes by shared members (both directions ≥ 0.5 = same theme), keep IDs", and Principles ("**Stable by design.** Theme IDs, embedding versions and user corrections survive reprocessing."): a build runs only by command, but a new version does not match its themes to the old build's ids.
+  - Same, Trends ("Share per half-year period; recent = last 6 months, before = 6–18 months ago."; "`rising`: +1 point and ≥ 1.25× before. `fading`: −1 point and ≤ 0.8× before."; "attention = weighted share of placed items"): here the question's own window is compared with the span just before it, a theme rises or fades at 2 points, and a share is the unweighted share of videos opened.
+  - Same, Principles ("**Themes are for browsing; search is for finding.** Search always runs over all items; themes filter or boost, never gate."): met for search. Silent on counts: a topic's count now adds the items of a theme only where 25% of that theme's own titles say the topic, and is said with "about".
+  - Same, Query API ("Every request and response is a Pydantic model in `schema/query.py`."): the fact sheet is a plain dict and the writer's form is checked by code, not by Pydantic. The ops table marks only `summarize` as an LLM op; silent on a model wording a history answer.
+  - `docs/01-architecture.md` › layer table, Query API ("The processor's public face: JSON request in, JSON response out" … "Nothing (read-only), except caching"), and Interpreter ("Turn natural language into a validated request or rule using the action registry"): the only model in that table turns words into a request. Here a model turns code's result into words. Silent on that direction.
+  - Same, Main flows A, step 4 ("Processor worker runs clean → embed → filter → info gate → incremental theme assignment (or first theme build) → trends → direction, writing derived rows with the current `processor_version`."): themes and lengths are built by two commands, before the first history answer, and rows carry a version name.
+  - Same, MCP server ("no LLM per request except an optional ranking pass in `get_context`"): one model call per history answer; this line would change if the agent got the same answers.
+  - `AGENTS.md` rule 5 ("The processor answers questions (JSON in, JSON out) and never sends email, creates events or calls external services that change anything."): met in the letter (nothing outside changes), but the answer that leaves is prose a model worded.
+  - `AGENTS.md` rule 6 ("Natural language is compiled by an LLM into a JSON request that is validated against schemas and the action registry before anything runs."): silent on the reverse. Round 12 keeps its spirit: the model fills a form of sheet paths ("{themes[0].share}"), code puts in every number and name, and any sentence that fails code's check is dropped.
+  - `AGENTS.md` rule 10 ("Every derived row records `processor_version`; every embedding records `embedding_model`. Changing either writes a new set beside the old one."): met in substance. Rows carry a `version` (themes-v2, lengths-v1) and `embedding_model`, each new version beside the old, but no `processor_version`.
+
+**What is requested**
+A history question ("how has what I watch changed since 2020") gets an answer with insight. Code builds a fact sheet from the person's record: the window, areas and the themes inside them, how each moved, the channels behind them, Shorts against long videos, the usual day, things saved and never opened, and so-what candidates. One model call fills a form from it: an answer, 2 to 4 observations, at most one so-what chosen from code's candidates, and up to 3 offers. The form names sheet paths, never numbers. Code fills each path, checks every sentence against the sheet and drops what fails. Code draws a small chart. When anything is missing or late (20 s), today's code reply goes out unchanged. This needs two derived sets: the official length of each watched YouTube video (`lengths-v1`) and two-level themes clustered from the watched items (`themes-v2`). (`experiments/mvp/facts.py`, `themes.py`, `lengths.py`, `insight.py`, prompt `insight_v5`; DESIGN.md section 19.)
+
+**Why the requester wants it**
+The code-only answers were runs of counts: "Its giving me straight data instead of insight." Three of the 8 did not answer the question asked; none named a theme or a so-what. His nine rules (R-A to R-I) ask for the answer first, insight over raw data, more than was asked, themes, a so-what, follow-ups that change the answer, an overview before the items, no lines about limits, and what only his own history can say.
+
+**Why it is better than the current approach**
+- Graded on the same 8 questions as the founder would: his own grades before were 1 useful, 4 partly, 3 not. The first pass's last judge gave 3 useful and 5 partly. This pass's final judge gave 5 useful, 3 partly, 0 not useful, with 2 not slop and 6 half slop. Every number the final judge recounted was true.
+- Code still owns every fact. On 20 made-up sheets, 89 of 89 planted false typed sentences and 45 of 45 planted path sentences were dropped, with every true one kept (43 and 19). A number can stand only beside the record it belongs to.
+- The writer's eval on the same 20 sheets: the code reply answered 4 of 20 questions; `insight_v5` with the final code answers 18, with 0 limits lines and 0 runs of counts.
+- Themes are what makes "name themes" possible at all. Before, 2.8% of watched items had a topic (the profile's interests); after, 77.4% have a theme.
+- Watched items are what the questions ask about; stage 3's saves-only, content-only rule would leave out most of it.
+
+**Costs and risks**
+- **A model's wording in a history answer.** Code's words become a model's, checked by code. The checks catch what they were built for: each judge round still found false or garbled sentences the checks let through (a theme put inside the wrong area, a window's median said of one side, "1 points from 2024"). The earlier ones were fixed and planted; the last judge's are open. The same question asked twice can lead differently.
+- **Themes are a model's names.** On 12 themes read, 8 names fit and 93 of 120 items belonged. About 9 of the 15 named fields are names a person would use. Nobody has confirmed them. A sensitive theme keeps no name, but a non-sensitive theme can hold a sensitive item (1 of 120 read).
+- **Cost and speed.** Code answered at once and for free. Now each answer is one model call, $0.004 to $0.006, and about 3 to 9 seconds. The 20-second deadline falls back to code's reply.
+- **Derived data to build first.** Before the first answer, the lengths (free quota, a YouTube API key, about 5 to 6 minutes; kept 30 days by YouTube's terms) and the themes (about $0.04, about 75 s) must be built. Without them the old reply goes out, and start-up says so loudly. A new build is a full rebuild with new theme ids, so a later rule or label tied to a theme id would break.
+- **What leaves the machine.** Each answer sends the sheet's theme and channel names, and the titles of a day's or a first's items, to the model provider. Naming sends a sample of titles per field.
+- **Drift from the docs.** Stage 3, the trend rule and the query API shapes now differ between prototype and docs.
+
+**Agent's assessment**
+Agree with changes. The fact sheet and the checked form are the right shape: they keep "code owns every fact" while letting a model say what matters, which code alone did not do well. Clustering watched items is right for history questions, and k by silhouette measured better than the gap. Before it is ported: (a) write the sheet and the form as Pydantic models in `schema/query.py`, as a query op beside `what_changed`; (b) add a sentence to rule 6 for the reverse direction ("a model may word an answer from a code-built sheet; code fills and checks every fact"); (c) give theme builds the matching of ids that stage 3 asks for, before any rule or label uses a theme; (d) settle the trend rule (2 points against the span before, or docs/05's half-years); (e) an eval of the writer on real-shaped sheets, not only made-up ones; (f) the founder reads the theme names once.
+
+**Affected**
+Docs: `05-processor.md` (stage 3: what is clustered, the filter, PCA, k, the two levels, areas; trends; the query API: a history op), `01-architecture.md` (the layer table, flow A step 4, the MCP line), `03-data-contract.md` (ThemeSpace, the themes table), `AGENTS.md` rule 6 (one sentence) and rule 10 (the version field's name), `10-decisions.md` (beside 19 Oct and 18 Oct) · Code: `experiments/mvp/facts.py`, `themes.py`, `lengths.py`, `insight.py`, `history.py`, `prompts/insight_v5.md`, `prompts/theme_name_v2.md`, `eval_insight.py`, `tests/test_round12_*.py` · Contract change: yes, when ported (the sheet, the form and the themes shape) · Needs both founders: **yes** (architecture boundary, data contract)
+
+### A-018 · A first test with five people on the founder's Mac: one engine, two doors, YouTube first, gates before any build
+- **Date:** 2026-11-20
+- **Requested by:** Derrick, in a planning talk on 20 Nov ("a chat bot at the front and centre"; "i want both"). He asked for it to be written up as Proposed. The narrowed plan below is the agent's; he has not accepted it. Written by the coding agent.
+- **Status:** Proposed
+- **Conflicts with:**
+  - `AGENTS.md` › What we are building ("Current focus: **the backend only.** The frontend (hub, onboarding screens) is deliberately deferred.") and › Prototype code ("prototype scripts are not product code"). Testers' data would sit on prototype code.
+  - `docs/10-decisions.md`, five Agreed rows: 28 Oct "Backend first; frontend deferred"; 28 Oct "Supabase for database, vectors, auth, storage and queues"; 28 Oct "Local database / desktop app (Electron) is a future direction, not MVP"; 17 Oct "History export backfills once; ongoing data arrives through shares"; Sep "Real deletion; no ads; no selling data".
+  - `docs/00-vision.md` › Out of scope for now ("**Frontend** (hub, boards, onboarding screens). Backend endpoints and JSON outputs come first."; "**MCP server.** Designed (`01-architecture.md`), built after the query API is stable.") and › The core loop ("From then on they share content to our account"). The test uses no share route.
+  - `docs/01-architecture.md` › Boundaries ("**The query API** is the line between the processor and everything that uses it"), › Later layers ("**Hub** (web app): reads `*_view` database views and calls the query API.") and › Main flows › A ("Client uploads the export zip straight to Supabase Storage (signed URL)."). Both doors sit on the prototype engine.
+  - `docs/02-tech-stack.md`: "Supabase Auth (Google sign-in)", "Export zips, uploaded via signed URLs", "Next.js on Vercel reading database views and calling the query API", "calling the query API in-process". A tunnel is a new tool.
+  - `docs/03-data-contract.md` ("deleting a user cascades everywhere"): deletion is partly by hand today.
+  - `docs/07-privacy-and-safety.md`: "**Minimum necessary.**"; sensitive categories "hidden from agents and digests unless the user opts in" (no tagger exists); "**Real deletion:**"; "Before shipping a source, record in its section of `04-intake.md`: what the terms allow us to store" (not done for Takeout); "Supabase row-level security on every user table"; "upload URLs are short-lived signed URLs".
+  - `docs/04-intake.md` › YouTube ("choosing **JSON** for history"). A-004 Round 3 found on a real Takeout: HTML by default, the YouTube product cut to 11.5 months, the full history only in My Activity.
+  - `docs/09-roadmap-and-ownership.md`: "| Frontend | Later | — |" and "Marketing, positioning, recruiting testers". M5 ("5–10 testers upload exports") would run before M3 and M4 pass.
+  - A-008 ("Then show it to 5 to 10 people from 17 November"; "Strangers and payment are still the real answer"): replaced for this test only.
+  - A-011 ("Do not ship it to testers before the query API, the sensitive tagger and consent wording for the agent's provider exist."). A-015 item 3 (YouTube connector "open to testers"): narrowed for this test only.
+  - `experiments/mvp/README.md` ("on this computer only"; "Type as any person in `people.json`.").
+
+**What is requested**
+A first test with outside people, in eight parts:
+1. **Features frozen.** Nothing is built until Derrick grades 20 answers on the test page: at least 14 of 20 useful. Below that, only the worst kind of answer is fixed.
+2. **Five testers Derrick knows in person**, each told plainly what they hand over. Not hosted: the bot runs on the founder's Mac, beside every library.
+3. **One engine, two doors:** the chat box on the test page, and the read-only MCP server for the person's own agent. That server is A-011's: stdio, same computer only today. Search is the same box.
+4. **YouTube first:** "ask your YouTube history anything". Testers hand in a Google Takeout they run themselves (rule 7's first preference).
+5. **Acting for testers** only where it starts from their item and reaches only them. That is the bot's own reminder, a calendar file, email to their confirmed address, and rules sending their items. Everything else is off for testers, not deleted.
+6. **Asking a video (A-017)** stays off while testers are on the bot: `MVP_VIDEO_ASK` is one switch for everyone.
+7. **A pass mark set before the test** (condition 10 below).
+8. **Not in this amendment:** a feed, vision boards, recommendations from other platforms, hosting strangers' data, any new acting.
+
+**Why the requester wants it**
+"i picture the finished site as one which has a chat bot at the front and centre where its like 'what would you like to do today'. ofc the main product is the mcp but we could be the perplexity of people's own data." And: "i want both, because i want us to be accessible for those who have not been far enough to have their own agents, and accessible to those who have their own agents".
+
+**Why it is better than the current approach**
+- **It tests the vision's promise:** "**Our platform works alone; the user's agent makes it powerful.**" The chat box is the core loop's "A text box".
+- **It follows the data.** Derrick's library holds 108,685 YouTube watches against 312 on Instagram, whose export covered 12 days of watching.
+- **For this test, Takeout is the only route.** The YouTube Data API gives no watch history. The Data Portability API works only in the EU, Switzerland and the UK, after app review, for people 18 or over.
+- **It stops building ahead of evidence.** 4,713 offline tests pass, but no person has graded the bot's answers yet (search results have been graded). The grade gate comes first.
+- **Few hands hold the data.** No hosted server. Five people who know the founder can report problems face to face.
+- **The verdict is fixed in advance**, so a friendly test cannot be read as success.
+
+**Costs and risks**
+- **Other people's full histories on one laptop.** Titles reveal health, politics, sexuality, money and relationships. One lost or unlocked Mac exposes six people.
+- **Every tester is the operator today.** With `--channel web` and `MVP_OPERATOR` unset, every person on the page is the operator. Testers would reach the founder's mailbox (A-013), the Mac's Reminders and Calendar (A-014) and the browser (A-016).
+- **The page exposes everyone.** It hands its token to any page load. `as=` returns any person's thread, rules, outbox and profile. Any visitor can move the shared clock, "start over" a person or change Connections. Uploads of up to 2 GB reach any inbox and start a paid import.
+- **Takeout sends more than asked.** Google pre-selects every product the person uses; My Activity also holds Search and Maps. A refused or failed archive is kept in `.failed/` today. An Instagram zip holds friends' DM text (rule 8).
+- **A new provider.** A quick tunnel ends TLS at the tunnel company. Data has already left the Mac: a cloud coding session holds copies of the test page's store.
+- **Deletion leaves traces.** "delete my data" leaves library folders to a founder and keeps the query cache. Deleted rows stay in the SQLite file until VACUUM. The page keeps its own deletion list.
+- **Privacy law applies to friends.** In the EU or UK the founders would be controllers, with deletion rights and breach notice. No privacy policy exists; no lawyer has read the consent.
+- **The consent is out of date.** It says "Your library stays on the founders' Mac". It omits the upload, the untick step, the whole library going to OpenAI at import, and an end date.
+- **Manual and untried.** A scheduled Takeout runs "every 2 months for one year", each archive the full history again. Real email sending has never run.
+- **Cost.** Spend was $22.17 of a $30 cap on 20 Nov (`experiments/STATE.md`); the code's default cap is $10. Answers cost $0.008 to $0.023 live; each import up to $1.50. Five testers for two weeks could cost $12 to $17, against $7.83 left.
+- **A small, friendly sample.** 3 of 5 is weak evidence. A pass justifies a test with strangers and a price, not a build. The Mac stays on, and support is the founder's time.
+
+**Agent's assessment**
+Agree with changes. Grades, then security, then five people, with the verdict fixed first, is the right order. YouTube first follows the evidence. The real risk is other people's histories on a personal laptop. It is acceptable only with these conditions, all done before the first upload:
+1. **Grades.** The 20 questions are written before any answer is seen, mostly on YouTube history. At most 1 confidently wrong answer. 14 of 20 is below M3's 16: choose knowingly.
+2. **No operator for testers.** `MVP_OPERATOR` names Derrick's handle. A test logs in as a tester and never passes `is_operator`.
+3. **The page, per person.** The server takes the handle from the login session and ignores `as`. A test shows no person sees another. Uploads are size-capped and rate-limited.
+4. **Founder tools local only.** Connections, the clock, "Start over", `/vm` and others' panels sit on a port the tunnel never reaches. An access gate fronts the tunnel; `MVP_PAGE_HOSTS` is never `*`.
+5. **Data stays on the Mac.** None in cloud sessions, preview addresses or transcripts. Disk encryption, screen lock and remote wipe on; `data/` out of cloud sync.
+6. **Uploads.** Takeout only: YouTube and YouTube Music, plus My Activity limited to YouTube. The file list is checked before extraction. Anything else is deleted at once, never kept in `.failed/`.
+7. **Deletion tested end to end** on the tester page: folders, inbox, `.failed/`, query cache, ledger rows, VACUUM, store copies. The page uses the real deletion list and pause. A founder confirms each deletion in writing.
+8. **Consent, breach plan, end date.** The text names the Mac, the tunnel provider, the untick step, OpenAI at import, and what cannot be deleted. A breach plan says who tells testers, and how fast. Someone outside the build reads it, or it says nobody has.
+9. **Door two founders only**, as A-011 says; testers need its own amendment. Outside picks, YouTube API calls and the connector are off for testers. Real email only after it has run for the founders. Caps are set first.
+10. **The pass mark, written first.** Two weeks. At least 3 of 5 ask on 2 or more days of week two. At least 2 of 5 set up a scheduled export or send a second; a second archive replaces the first at once. Less reads as "not yet": nothing further is built. M5's week-3 gate is not measured.
+
+I see nothing in part 8 to disagree with.
+
+**Affected**
+Docs: `AGENTS.md` (Current focus), `00-vision.md` (Out of scope), `01-architecture.md` (Later layers, Main flows › A), `02-tech-stack.md` (Auth, storage, tunnel), `03-data-contract.md` (`users` and `uploads` exist; a login session table would be new), `04-intake.md` (Takeout with My Activity, HTML history, scheduled exports, its terms), `07-privacy-and-safety.md` (Security, Retention), `09-roadmap-and-ownership.md` (M5 before M3 and M4; Frontend and recruiting rows), `10-decisions.md` (rows beside the five above, for this test only), A-008, A-015; to correct once Meta's regions are checked: A-009's Meta line and the `refresh.py` docstring · Code (only after the grade gate): `experiments/mvp/channels/web.py`, `texts.py`, `config.py`, `refresh.py`, `handler.py`, `store.py` · Contract change: no (prototype); yes when logins are ported · Needs both founders: **yes** (architecture, stack, ownership, and Agreed decisions)
+
+### A-017 · Ask a YouTube video itself, on demand, through Gemini's YouTube-link input (answers with timestamps; nothing of the video kept)
+- **Date:** 2026-11-19
+- **Requested by:** Derrick (19 Nov: "i also think it would be beneficial to treat it like 'ask your watch history anything'", sent with a screenshot of another project: a searchable YouTube archive answering questions across 1,000+ transcripts with timestamp citations); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `AGENTS.md` rule 8 ("Transcripts and audio/video are never stored") and `docs/07-privacy-and-safety.md` › Retention ("Transcripts and audio/video are never stored. Summaries, moments and facets are kept; full transcripts are fetched on demand"): met in the letter (nothing of the video is stored), but this is a new way of reading what a video says that those lines never weighed. `AGENTS.md` rule 7 and `07` › Platform terms ("user-provided data → official APIs → paid providers with clear terms"): Google documents the route, but it is a **Preview** feature, and YouTube's terms limit viewing to "personal, non-commercial use". `07` › Platform terms ("Open checks: YouTube's derived-data clause before building YouTube summaries; transcript routes for Instagram and YouTube audio"): this is that open check, still open. `docs/10-decisions.md` (15 Oct: "Transcripts not stored; summaries and moments kept", for "Platform terms and privacy"). `docs/05-processor.md` › tier 2 ("Transcript (platform captions first, then speech-to-text) → summary, moments, facets; transcript discarded"): a video model reading the video is a route that table does not list. `07` › Third-party text ("LLM outputs are always validated against Pydantic models"): the prototype checks the form in code, not with Pydantic.
+
+**What is requested**
+When the person asks what a video in their library says ("what did that video say about the settings to use"), the bot can ask the video itself: one request to Google's Gemini API with the video's public link (`file_data.file_uri`) and the person's question, answered with up to 5 points, each with its MM:SS time and a link to that second. Only on demand, one video at a time, YouTube only; off unless `MVP_VIDEO_ASK=1` (`experiments/mvp/videoask.py`, DESIGN.md 18.Q).
+
+Extended the same day (round 11 fix B, DESIGN.md 18.LB; still Proposed): **asking across videos.** After a summary, a history list or the "their text says too little" answer, "ask them" (or "ask those videos", "ask the top 3", with a question or the summary's own) asks **up to 3** of the YouTube videos the person was just shown, so **up to 3 links per question** go to Google with the same question, one request per video through the same single-video ask (the same checks before each call, the same label, one ledger row and one `video.ask` row each). The answer comes back in one message, each video's title and its points with their timestamp links. **The daily cap counts each video** (`MVP_VIDEO_ASK_PER_DAY`, default 5: one "ask them" can use 3 of them), and the cost check runs before each call; when a cap stops it, the videos already asked are shown and the reply says where it stopped. It never runs unasked: "ask my videos about X" gives the text summary and one line offering it. The first time, the bot says what it will send ("I'll ask 3 videos; their links and your question go to Google") before it starts.
+
+**Why the requester wants it**
+Today the bot reads titles, descriptions and captions only. A question about what is said in a video ends with "I can't tell that from what <title> says. Here it is, so you can check", which sends the person back to rewatching: the opposite of the product's promise. The screenshot's archive answers such questions with timestamps; "ask your watch history anything" needs the same for at least the video in front of the person.
+
+**Why it is better than the current approach**
+- It answers the question the bot now cannot. Live on 19 Nov, 8 questions on 8 public 2- to 8-minute videos from the founder's library: 7 answered with 25 timestamped points, 25 of 25 times inside the video, and the eighth (a control asking about something the video does not cover) said "it doesn't seem to say". Where a video's own description could check an answer (4 of 7) it agreed; nothing contradicted one. 5 to 10 seconds and $0.003 to $0.011 an answer ($0.061 for all 8).
+- It stays inside the letter of rule 8 and the official-route rule: nothing is downloaded or scraped (Google fetches the video), no transcript, audio or frame is requested or kept, YouTube's Data API is not used for the content (no description or title in the prompt), and the route is documented by Google ("You can pass YouTube URLs directly to Gemini API", "Video understanding" page). What is kept is the answer's points and their times, the video id, and the ledger row, which is what `07` already allows as "moments".
+- **The screenshot's alternative is worse for us.** Storing every video's transcript and its embeddings for retrieval conflicts head-on with rule 8 and the 15 Oct decision (transcripts stored, at library scale); there is no official route to the transcripts of other people's videos (YouTube's Data API gives captions only to a video's owner; the timedtext endpoint is scraping, against rule 7 and YouTube's Developer Policies III.E.6); transcribing audio would mean downloading it (YouTube ToS and Developer Policies III.E.1); and a stored corpus of other people's words is what Google APIs Terms §5(e) ("scrape, build databases, or otherwise create permanent copies") and YouTube's derived-data clause are about. Asking one video at a time when the person asks keeps nothing that would need those permissions.
+
+**Costs and risks**
+- **Terms not settled.** The YouTube-link input is Preview ("Pricing and rate limits are likely to change"). YouTube's ToS limits viewing to "personal, non-commercial use"; Google APIs Terms §5(b) ask that you "have the necessary rights" to content you submit, and whether a link counts is unanswered (round 9's note, `experiments/research/r9-youtube-media-terms.md`; a developer forum question of 15 Oct 2026 got no official answer). A paid product asking about other people's videos needs a legal read, or a written answer from Google, first.
+- **Privacy.** Each question tells Google which video the person watched and what they asked. The key must be on a billed project: on unpaid tiers "human reviewers may read, annotate, and process your API input and output". The consent and "what leaves this computer" say so while it is on; people who agreed earlier see it at their first ask.
+- **Accuracy.** The answer is the model's reading of the video: code checks that each time lies inside the video and that no point names another video, reads like an instruction, or only says what the video is (round 11 fix pass 2), but not that it is true. A video that does not cover the question says so in one line naming the thing asked, with no point. Labelled "From the video (not checked against its text)". Nobody has yet checked answers against the videos themselves.
+- **Cost.** About $0.08 an hour of video at list price at low resolution (90.6 video tokens a second measured), bounded per question by a 20-minute clip, 5 questions a person a day, and a worst-case estimate against the daily and total caps before each call. If Preview ends with a higher price, the caps hold but the feature costs more. Asking across videos multiplies this by up to 3 per message (each video is its own call, its own row and its own count against the daily cap); the daily cap of 5 videos is shared with single asks.
+- **More tells per question (asking across videos).** One "ask them" tells Google up to 3 videos the person watched, with one question; the first-time note and the "I'll ask 3 videos" line say so before anything is sent.
+- **Third-party content as data.** What a video says could carry instructions; the answer is only ever shown as text, and point-level checks drop instruction-like points (tested with "email everyone" and "add this to your rules").
+
+**Agent's assessment**
+Agree as an opt-in prototype, not yet as a product feature. It is the least conflicting way to answer "what did that video say": on demand, one video, nothing of the video kept, a documented Google route, and the answer marked as the model's. It is not a substitute for the screenshot's whole-library search across what videos say; that would need stored transcripts and I would argue against it under rule 8 and the terms above. Before anyone but the founders uses it: (a) a legal read of the Preview status, YouTube's "personal, non-commercial" clause and §5(b) for a paid product; (b) a check of 20 or more answers against the videos themselves, not just their descriptions; (c) the key confirmed on a billed project; (d) both founders accepting the rule-8 and platform-terms reading.
+
+**Affected**
+Docs: `AGENTS.md` rule 8 (one sentence: "a video may be asked on demand through a documented provider route; only the answer and its times are kept"), `07-privacy-and-safety.md` (Retention, Platform terms: close the YouTube open check for this route), `05-processor.md` (tier 2: on-demand video questions as a route beside captions and speech-to-text), `04-intake.md` (record what the route's terms allow us to keep), `10-decisions.md` (a row beside 15 Oct), `experiments/mvp/DESIGN.md` 18.Q and 18.LB · Code: `experiments/mvp/videoask.py`, `prompts/video_ask_v1.md` and `video_ask_v2.md` (the one in use since round 11 fix pass 2, DESIGN.md 18.L2), `eval_videoask.py`, `handler.py` (two marked blocks, the go after the note, and the consent), `channels/web.py` (the consent), `synth.py` (the offer of "ask them"), `outputs.py` (a video answer emailed), `tests/test_round11_q.py`, `tests/test_round11_fix_b.py`, `tests/fakes/fake_gemini.py` · Contract change: no (prototype; the kept points would map to `moments` when ported) · Needs both founders: **yes** (rule 8, platform terms)
+
+### A-016 · A browser the bot drives for the person: cancelling on merchants' own pages (operator first); no browser on social media
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "it should also cancel the subscription FOR YOU after you confirm"; "we should have a virtual machine which will execute stuff for them once permission is granted ... see how instinct does it ... we HAVE to be able to interact with their social media because thats the most important part of it. so cancelling subscriptions to a media is a part of it"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `AGENTS.md` rule 7 ("No logged-in bot accounts, no evading rate limits or blocks") and `docs/07-privacy-and-safety.md` › Platform terms (same words): a browser acting inside the person's signed-in session is logged-in automation, and most large merchants' terms forbid "automated means". `docs/10-decisions.md` (Sep): "Official Instagram API only for capture; no logged-in automation". A-012 ("Signing in to sites as the person ... considered and rejected") and `experiments/mvp/DESIGN.md` 16.B ("Out: logging in, any browser driving"). `docs/06-rules-and-actions.md` › Safety limits ("Every created object is reversible"): a pressed cancel button cannot be undone. `docs/02-tech-stack.md` (new dependency: Playwright). `docs/09-roadmap-and-ownership.md` (output actions are Eason's area).
+
+**What is requested**
+1. A browser the bot drives to cancel a subscription on the merchant's own website: the person signs in themselves in a window the bot opens; the bot follows the merchant's published cancel path, stops before the last button, shows that page's words, and presses it only after "yes cancel <merchant>".
+2. The same browser as a cloud "virtual machine" for every person, keeping their sign-ins between tasks.
+3. The same browser acting on the person's social media where no official route exists (Instagram: unfollow, mute, organise saves).
+
+**Why the requester wants it**
+Links and steps still leave the work to the person. The product's promise is "instinct but for social media": once permission is given, the bot does the errand. Big streaming and software merchants cancel only on their websites, so a written notice cannot reach them.
+
+**Why it is better than the current approach**
+- Part 1 does the errand where nothing else can. In version 1 no model is in the loop: code follows the merchant's own help-page path and refuses typing, fields, other sites, and buy, upgrade, pause or offer buttons; the final press needs a yes bound to a hash of the exact page shown. On a 9-flow fake merchant (retention offer, required reason, "pause instead", login wall, captcha, an upsell styled as the confirm, instructions aimed at agents) it completed every flow it should, stopped at every wall, and made 0 wrong presses; a hostile picker and 600 random walks got 0 wrong presses past code.
+- The window opens on the operator's own machine (or, in the virtual machine prototype, inside the bot's machine with a take-over view), the person signs in by hand, and nothing of the session is kept after the run: no password, cookie or picture is held by us.
+
+**Costs and risks**
+- **The person's account.** Netflix, Spotify, Disney+ and Microsoft forbid automated access in general words; a merchant can flag or close the account. Nobody has measured how often this happens to a declared, slow agent. Instinct's user lost a Resy account.
+- **A wrong press is ours.** Word lists are a floor, not a classifier; a merchant that renames its offer button "Continue" outside an offer box could beat them. The per-merchant path and the person reading the final card are the main defence. A cancelled plan or an accepted offer cannot be undone by the bot.
+- **It will often stop.** Roughly 1 in 5 popular sites put up a wall for a plain browser from a datacentre address (vendor studies); Google refuses sign-in from automated browsers. At any wall the bot stops and hands back; it never solves or hides.
+- **Part 2 (cloud)** means holding live sessions that open people's accounts without their password or second factor, keystrokes passing through our servers during sign-in, a new subprocessor if a vendor runs it (and vendors turn captcha solving on by default), a public web page of ours, and a security review. One breach is every saved account.
+- **Part 3 (Instagram)** breaks Instagram's terms "regardless of whether ... logged-in"; Meta won a terms ruling and a permanent injunction against a tool working inside users' own sessions with their consent (BrandTotal, 2022); it risks the person's account (action blocks, checkpoints, a disabled account) and the Meta app we will need to receive shared reels. Bulk organising of saves is exactly the pattern that triggers blocks. Nothing about it can be tested without breaking the rule.
+
+**Agent's assessment**
+- Part 1: **agree with limits, as a prototype.** Operator only; off unless `MVP_BROWSER=operator`; only merchants named in `MVP_BROWSER_MERCHANTS` whose path was read from their own help page; a headed window on the operator's machine; no session, picture or page text kept beyond a 200-character quote; no model in the loop; never from a timed rule; Amazon only after its Agent Terms are implemented. After a month of operator runs, write down completed, stopped and flagged counts before anything else.
+- Part 2: **not yet for testers; a prototype now, by the requester's decision.** Asked on 17 Nov to choose between a browser on his own computer and written notices only, Derrick chose neither and asked for the virtual machine. So this branch also carries a prototype of it, off unless `MVP_BROWSER=vm`: a headless browser inside the bot's own machine, shown to the person on the test page's take-over view, where they sign in themselves. It keeps nothing after a run (no sign-in, cookie or picture), is for the operator only, and refuses social media sites in code. The design critic advised leaving even this out: during sign-in the person's keystrokes pass through the bot's memory, and a hosted version would hold live keys to people's accounts. Before it is offered to anyone but the operator it needs (a) a record of operator runs (completed, stopped, flagged), (b) a security review of the take-over path and of any session storage, (c) a choice between a vendor and our own VM made on security grounds, with captcha solving and stealth off, (d) a public take-over page on a domain of ours, (e) both founders accepting this part.
+- Part 3: **disagree.** Offer the outcomes as one-tap links with "done" tracking and the bot's own collections; act on YouTube through its official API (A-015). Not built, not even off by default.
+- Still refused whatever is accepted: passwords typed in the chat or kept by the bot; typing into any field; solving, retrying past or hiding from a captcha, a code prompt, a sign-in challenge or a block; pressing the final button without "yes cancel <merchant>" on that page; buying, upgrading, pausing or accepting an offer; reading the inbox; any of it from a timed rule.
+
+**Affected**
+Docs: `AGENTS.md` rule 7 (a sentence on supervised merchant pages, if accepted), `02-tech-stack.md`, `06-rules-and-actions.md`, `07-privacy-and-safety.md` (Platform terms, Security), `09-roadmap-and-ownership.md`, `10-decisions.md` (a row superseding Sep's "no logged-in automation" for part 1 only), `experiments/mvp/DESIGN.md` 16.B · Code: `experiments/mvp/browser_guard.py`, `browser_host.py`, `browser_vm.py`, `browser.py`, `actions/browser.py`, `cancel.py`, `cancel_routes.json`, `handler.py`, `store.py`, `requirements.txt` · Contract change: no (prototype); yes when ported · Needs both founders: **yes** (platform terms, architecture boundary, stack, ownership)
+
+### A-015 · Connectors through official APIs and MCP, rules that write through them with one yes per rule, and acting on the person's YouTube
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "start building the rules that will call the MCPs for the connectors"; "it should do it for you when given the permission"; "or use like netflixs mcp or something like idk. api calls or something ... they can pick connectors, which might be their gmail or netflix or different media. but we HAVE to be able to interact with their social media"; his decision of 17 Nov on timed rules that add to the person's own apps: "Once per rule": one yes when the rule is made; the preview names the app and the kind of thing; every run reports what it added, with undo; an email to another person from a rule still waits for a yes on its exact text each time); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `docs/07-privacy-and-safety.md` › Security ("least-privilege scopes (e.g. read-only YouTube, calendar events only)": this asks for the `youtube` write scope; "OAuth tokens encrypted at rest": met, with a key held in the operator's environment file rather than a managed key store). `docs/06-rules-and-actions.md` › Action registry ("first run of a rule always needs a confirmed preview"; no standing permission is described) and › Executor (sync promised; none here). `docs/04-intake.md` › YouTube › Ongoing capture (read-only scope). `docs/03-data-contract.md` (new `grants` table; `placements.route`, `placements.rule_id`; a code-only `RuleSpec.place`). A-014 ("Do not offer any of these to testers before OAuth with narrow scopes, encrypted tokens and sync exist": YouTube is offered to testers with OAuth and encrypted tokens, without sync). `experiments/mvp/DESIGN.md` 16.D/16.E (`in_rules=False` for every outside action). `docs/02-tech-stack.md` (`cryptography` pinned; `mcp` used as a client). `docs/09-roadmap-and-ownership.md` (output actions are Eason's area).
+
+**What is requested**
+1. The bot as an MCP client: one client that calls vendor MCP servers through a mapping table in code, each server's tools pinned at the person's yes, starting with Todoist for the operator.
+2. A standing permission per rule ("grant"): a timed rule may add to the person's own apps (task lists, the Mac's Reminders and Calendar, a private YouTube playlist) after one yes on a preview that names the app, the kind of thing, the place, the cadence and the caps; every run reports what it added, with undo; any change to the rule, the app's tools or the account ends the grant.
+3. A YouTube connector on Google's official Data API (scope `youtube`), linked by a code typed at google.com/device: unsubscribe, private playlists, each after a yes to the exact change, with undo; open to testers.
+4. Instagram stays share-in and tap-out: one-tap links for unfollow and mute; no write route exists for a personal account.
+5. Later, not now: sending email from the person's own mailbox through a connector. Google's Gmail MCP server is a preview whose terms forbid giving testers access, and its `gmail.compose` scope is restricted; a plain Gmail API client with `gmail.send` on our own Google project is the likelier route (not verified).
+
+**Why the requester wants it**
+"The idea is to make it easier for them to do the work and do the work for them." "We want to be the second brain which controls their social media, specifically turning their social media into action." Today rules can only message the person, a rule that names an app drops it silently, and the bot cannot change anything on YouTube.
+
+**Why it is better than the current approach**
+- One client and one table replace a module per app; code picks the tool and builds its arguments from the bot's validated forms, so the model still only fills forms (AGENTS rule 6). Tool descriptions and results never reach a prompt.
+- Pins stop a server that changes its tools after consent (tested on a fake: a changed tool is not called, a new tool is never called).
+- Rules do what people ask ("every Sunday put recipes in my TickTick") within limits they saw, with a report and undo every run.
+- YouTube writes run on the official API with the person's consent per change, no password and no browser; Google's device flow lets a tester link YouTube with no web page of ours.
+- Tokens are encrypted at rest, bound to person, app and issuer, refreshed without a browser, revoked on disconnect.
+
+**Costs and risks**
+- A standing permission is weaker than a yes per run: a wrong pick lands in the person's app without a look first. Bounded by per-run and per-day caps, the run's report, undo, and voiding on any change.
+- MCP sign-in needs a public HTTPS page of ours for anyone not at the bot's machine; until a domain exists, MCP apps are operator only.
+- TickTick's MCP server issues no refresh token, and Todoist's tool takes only a free-text due date whose parsing is untested: the token routes stay for the operator, and the MCP route sends no due times.
+- Tool lists change after consent (Asana says its authorisations reach future tools); pins void grants on any change, which may mean frequent re-approvals until measured.
+- YouTube: a 10,000-unit daily quota shared by all users (unsubscribing from 30 channels uses 1,500); a lifetime cap of 100 new users while the consent screen is unverified; Google verification beyond that; YouTube's policy that every write be "clearly initiated by the user", which rules out timed unsubscribes (a rule may only propose a list); deletion within 7 days of a revoke.
+- The encryption key lives in the operator's environment file: a stolen machine with that file exposes the tokens.
+- A contract change when ported; more code in the other founder's area.
+
+**Agent's assessment**
+Agree, with changes: (1) operator first, Todoist only, no Google preview servers; (2) grants on the token, Mac, MCP and YouTube-playlist routes only, never for anything that reaches another person, never for webhooks (no undo) or YouTube unsubscribes; (3) YouTube to testers once the founder's consent screen exists, no daily sync until its retention duties are built; (4) as stated; (5) deferred. Disagree with any browser route on Instagram (A-016 part 3).
+
+**Affected**
+Docs: `02`, `03`, `04`, `06`, `07`, `09`, `10`, `experiments/mvp/DESIGN.md` 16 and 17 · Code: `experiments/mvp/tokens.py`, `mcp_client.py`, `oauth.py`, `mcp_mappings.py`, `grants.py`, `yt_auth.py`, `ytreads.py`, `actions/mcp.py`, `actions/youtube.py`, `actions/link.py`, `actions/__init__.py`, `connectors.py`, `places.py`, `schema.py`, `interpret.py`, `store.py`, `receipts.py`, `texts.py`, `requirements.txt` · Contract change: yes when ported (prototype now) · Needs both founders: **yes**
+
+### A-014 · Connectors: registry fields, placements, Reminders and Calendar on the operator's Mac, and token connectors
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "see if you can add more connectors, not just email"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `docs/06-rules-and-actions.md` › Action registry ("Later: Google Tasks …, Notion, Apple Reminders (native app only)") and › Executor (placements with sync: "Done or deleted in any connected tool → … marked done … everywhere"); `docs/03-data-contract.md` (no `connections` or `placements` tables in the prototype's store); `docs/07-privacy-and-safety.md` › Security ("OAuth tokens encrypted at rest"; here a personal token sits in an environment file); `docs/09-roadmap-and-ownership.md` (output actions are Eason's area).
+
+**What is requested**
+The prototype's action registry gains fields that say whether an action changes something outside the bot, whether that can be undone, whether it needs a fresh yes, and who may use it. On that, the first connectors: Apple Reminders and Calendar on the Mac that runs the bot (AppleScript, no account), a task app by personal token (TickTick, Todoist), and one generic webhook. Each is off unless the person who runs the bot sets it up, and each falls back to the bot's own list with a plain line.
+
+**Why the requester wants it**
+"The idea is to make it easier for them to do the work and do the work for them." Today lists and events stay inside the bot or behind a link the person must tap each time.
+
+**Why it is better than the current approach**
+A reminder or event lands where the person already looks, with no tap. No registered app or hosted sign-in is needed, so one person can try it this week. Every placement is recorded, so "undo" and "disconnect" can remove what the bot made.
+
+**Costs and risks**
+- Only the person whose machine runs the bot can use these (operator only). Testers get the fallback.
+- No sync back: a reminder ticked on the phone is not ticked in the bot. `docs/06` promises sync.
+- A personal token in an environment file is weaker than encrypted OAuth tokens. It is never typed in the chat, stored in the database, logged or committed.
+- A webhook's effect cannot be seen or undone by the bot. The reply says so.
+- AppleScript behaviour is medium confidence until tried on a real Mac. One "Don't Allow" needs System Settings to fix.
+- The two tables become a contract change when this is ported to product code.
+- More code in the other founder's area.
+
+**Agent's assessment**
+Agree, for the prototype and the operator only. Do not offer any of these to testers before OAuth with narrow scopes, encrypted tokens and sync exist. The design critic wanted the token connectors deferred until a person asks for one; they are built now because the founder asked for more connectors and uses one of these apps.
+
+**Affected**
+Docs: `06-rules-and-actions.md`, `03-data-contract.md`, `07-privacy-and-safety.md` · Code: `experiments/mvp/actions/`, `places.py`, `connectors.py`, `store.py` · Contract change: no (prototype); yes when ported · Needs both founders: yes
+
+### A-013 · The operator's own mailbox: save a draft, and send after the word "send"
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "say the user wants to put something in their email. it should do that for them too. draft and send the email, it should do that for them too"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `docs/06-rules-and-actions.md` › Safety limits ("Every created object is reversible"); `docs/07-privacy-and-safety.md` › Security ("least-privilege scopes"); `experiments/mvp/DESIGN.md` §6 ("Only to the person's own verified address"), §11 ("Sending to someone else stays out"), §15 ("The bot never sends to anyone but the person"); ownership of output actions.
+
+**What is requested**
+For the person who runs the bot, with their own mail account's app password in an environment file: the bot can save a draft into their Drafts folder, and can send one email to one recipient from their own address. A send happens only after the person replies "send" to the exact final text. Any change voids that yes. The send is held for 2 minutes, during which "undo" stops it.
+
+**Why the requester wants it**
+The founder wants the bot to do the work, in the manner of the Instinct assistant, and chose "always show, then wait for yes" for anything that reaches other people (17 Nov).
+
+**Why it is better than the current approach**
+The person no longer copies text into a mail app. The reply still comes to the person, because the mail is from their own address.
+
+**Costs and risks**
+- A sent email cannot be undone after the hold. This breaks the reversibility rule in `docs/06`.
+- An app password opens the whole mailbox. The code only appends to Drafts and sends; it never reads mail. That is a promise in code, not a scope the provider enforces.
+- The person's name is on text the bot assembled. A wrong draft that is approved is still sent.
+- A leaked environment file leaks the mailbox.
+- Outlook.com accounts cannot be used (basic sign-in is off).
+- Public reports on Instinct describe two sends before approval and one case of following instructions inside an email. Hence: the yes is bound to a hash of the final text, the bot never reads the inbox, and no post text can name a recipient.
+
+**Agent's assessment**
+Agree with limits: operator only, off unless the environment is set, one recipient, 5 sends a day, never from a rule, a follow-up shortcut or the MCP server. For testers the route is a registered app with a send-only scope, which needs both founders and Google's review.
+
+**Affected**
+Docs: `06-rules-and-actions.md` (reversibility), `07-privacy-and-safety.md` · Code: `experiments/mvp/actions/mailbox.py`, `drafts.py` · Contract change: no · Needs both founders: yes
+
+### A-012 · Doing the work: emails to other people as drafts, a cancel helper, acting on a saved post
+- **Date:** 2026-11-17
+- **Requested by:** Derrick (17 Nov: "Say that a user says they want to cancel their subscription. you should be able to do that for them … draft and send the email … the idea is to make it easier for them to do the work and do the work for them. the idea is instinct but for social media"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `experiments/mvp/DESIGN.md` §6, §11, §15 (email only to the person; the bot never sends to anyone else); `docs/00-vision.md` (the product starts from saved media; a subscription is often not a saved post); `docs/07-privacy-and-safety.md` › sensitive categories (money: a list of the person's subscriptions); `docs/09-roadmap-and-ownership.md` (output actions).
+
+**What is requested**
+1. "Email my landlord that …", "draft an email to Sam about the second one": the bot shows a full draft (recipient, subject, body). The person changes it in words, then opens it in their own mail app with one tap (a `mailto:` link) and presses Send there.
+2. "Cancel my X subscription": the bot finds the route (the merchant's own cancel page, the app store's subscription page, a written notice, or a phone number), gives the steps or drafts the notice, and offers a reminder to check that it went through. It never signs in as the person and never says "cancelled" itself.
+3. "Apply to the second one", "book it", "buy the ingredients": the bot prepares what it honestly can (the deadline on the calendar, a checklist from the post's own words, a maps link, the shopping list) and says what it did not do.
+4. "What did you do for me": a list built from the action log.
+
+**Why the requester wants it**
+Answers and reminders still leave the work to the person. The founder wants the saved post to end in a finished outcome.
+
+**Why it is better than the current approach**
+The step from "here is the post" to "it is done" shrinks to one tap or one word. The bot still sends nothing itself in this entry: the mail app sends, the merchant cancels.
+
+**Costs and risks**
+- A draft may read stiffly or wrongly. Model-written wording is checked against the person's own words and the post's text, and the person sees all of it before anything leaves.
+- Cancel links rot. Each one carries the help page it came from and the date it was checked; old ones are withheld.
+- A list of the person's subscriptions is money data. It stays out of models, logs, the recap and the MCP server.
+- Another person's email address is held while a draft is open.
+- The bot cannot see whether the person pressed Send or whether a merchant cancelled. Receipts say only what the bot knows.
+- Signing in to sites as the person, reading the inbox, phone calls and payments were considered and rejected (terms, safety, and the public reports on Instinct).
+- The scope moves beyond saved media.
+
+**Agent's assessment**
+Agree. It serves the vision's "act on it" and keeps every rule about who acts: the model fills forms, code builds links, the person sends. The risk to watch is scope: a general assistant is a different product. Keep the saved post as the usual starting point.
+
+**Affected**
+Docs: `00-vision.md` (scope), `06-rules-and-actions.md` (new actions), `07-privacy-and-safety.md` · Code: `experiments/mvp/drafts.py`, `cancel.py`, `postacts.py`, `offers.py`, `receipts.py`, `actions/email_link.py` · Contract change: no (prototype) · Needs both founders: yes (ownership)
+
+### A-011 · A read-only MCP server prototype for the person's own agent, ahead of the query API
+- **Date:** 2026-11-14
+- **Requested by:** Derrick (13 Nov: "think more carefully about the rules, integrations and tie everything back to the original first vision"); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `docs/00-vision.md` › Out of scope for the MVP ("MCP server. Designed, built after the query API is stable"); `docs/02-tech-stack.md` (the MCP surface sits on the query API); `docs/07-privacy-and-safety.md` › sensitive categories ("hidden from agents … unless the user opts in").
+
+**What is requested**
+A local, read-only MCP server on the prototype code (`experiments/mvp/mcp_server.py`), started by hand, for one person's own agent on their own machine. It exposes search over their saves, one item's text, recent saves, their profile, rules and to-dos.
+
+**Why the requester wants it**
+The vision calls agent access "the paid core". Version 2 has outputs (message, email, calendar link, lists) but nothing an agent can read. The founder asked for integrations tied back to the vision.
+
+**Why it is better than the current approach**
+It lets the founders try the paid core on a real library now, at no model cost per call beyond the search embedding. It reuses the engine and the library view, so friends' posts stay out by construction.
+
+**Costs and risks**
+- The prototype has no stable query API. The tool shapes are not the contract and will change.
+- Captions the agent reads go to that agent's provider. `docs/07` covers our providers, not the person's.
+- The sensitive filter is the prototype's word list, not the tagger `docs/07` describes. Default is hidden.
+- A second process loads the library (memory).
+- Post text can carry instructions. Every result is marked as data, and no tool changes anything.
+
+**Agent's assessment**
+Agree as a prototype for the founders' own use only. Do not ship it to testers before the query API, the sensitive tagger and consent wording for the agent's provider exist. The design critic advised deferring it; this entry records that the build went ahead on the experiments branch because the founder asked for it.
+
+**Affected**
+Docs: `00-vision.md` (scope), `02-tech-stack.md`, `07-privacy-and-safety.md` · Code: `experiments/mvp/mcp_server.py`, its tests, `experiments/mvp/README.md` · Contract change: no (prototype) · Needs both founders: yes
+
+### A-010 · A recap the person asks for or schedules, and rules that stay quiet when empty
+- **Date:** 2026-11-14
+- **Requested by:** Derrick (12 and 13 Nov: rules beyond timing; tie back to the vision); written by the coding agent
+- **Status:** Proposed
+- **Conflicts with:** `experiments/BRIEF-10.md` section 15 item 7 ("Timing: not a weekly digest. A message goes out when the person asks or at a time they chose."); `experiments/mvp/DESIGN.md` (an empty timed send says "nothing new" every time).
+
+**What is requested**
+1. "How did my rules do?" and a recap rule the person makes themselves ("every Sunday at 6pm send me a recap"). Never offered at setup and never sent unasked.
+2. New repeating rules stay quiet on a day with nothing new, after one line the first time. Rules stored earlier keep their behaviour.
+3. Reminders that end when the person says "done", one nudge for an overdue to-do, and "remind me N days before it closes" for a thing in an answer.
+4. "What have I been into lately?" (rising, steady, fading, counted by code) and the theme check (pursue, practise, someday, enjoy, not me).
+
+**Why the requester wants it**
+`docs/00-vision.md` core loop steps 3 and 6 and the Understanding promise had no code. Empty sends could pause every rule through the unanswered-messages guard.
+
+**Why it is better than the current approach**
+- `docs/06` Executor step 3 already says "Nothing found → record and stop".
+- The recap is opt-in, so it fits "at a time they chose".
+- Every number in the recap and the trends answer is counted by code; no model call.
+
+**Costs and risks**
+- New prototype rule fields (`if_empty`, `stop_when`, content sources `trends` and `recap`) and profile labels. They are not in `docs/03` or `docs/06`.
+- Theme labels are new personal statements; "delete my data" must remove them.
+- Trend labels on a library that is refreshed only by exports can mislead. The answer names its anchor dates.
+
+**Agent's assessment**
+Agree. Item 1 changes a decision Derrick made on 12 Nov, so he should confirm it. Items 2 to 4 implement what the docs already describe, on prototype code.
+
+**Affected**
+Docs: `06-rules-and-actions.md` (RuleSpec fields, when ported), `experiments/BRIEF-10.md` · Code: `experiments/mvp/` (scheduler, schema, followup, profile, new `attention.py` and `digest.py`) · Contract change: no (prototype) · Needs both founders: no for item 1 (requester); yes when the fields are ported to `scrolldigest/schema/`
+
+### A-009 · MVP v2: every kind of rule, a guessed-then-confirmed profile, outputs beyond chat, and YouTube picks from outside the library
+- **Date:** 2026-11-12
+- **Requested by:** Derrick, on 12 Nov 2026 after trying the first skeleton; written up by the agent
+- **Status:** Proposed
+- **Conflicts with:**
+  - `docs/00-vision.md` › Out of scope for now: "Recommendations from outside the user's own data, habits, screen-time measurement." The request adds a block of related YouTube videos that are not in the person's library.
+  - `docs/07-privacy-and-safety.md` › Honesty in outputs: "Inferred statements are labelled as inferred, with evidence; no personality labels or psychological claims." The request guesses a person's interests and skill level from their library. This is allowed only in the labelled, evidenced form; the amendment records how.
+  - `docs/07-privacy-and-safety.md` › Third-party data: the open check "YouTube's derived-data clause before building YouTube summaries". The bot now reads a video's description and length from the official API and quotes lines from the description.
+  - `docs/06-rules-and-actions.md` › RuleSpec (Proposed) and Action registry: the prototype's rule form grows well past the documented subset (random times, every N days, windows, exceptions, to-dos, reminders, acting on an earlier answer), and the registry gains `todo.add` and a calendar action that needs no sign-in.
+  - `docs/09-roadmap-and-ownership.md` › Ownership: scheduler, executor, actions and the registry are Eason's. As in A-008, the agent builds them for the prototype.
+  - Everything in A-008 still applies (prototype code, SQLite, the message channel).
+
+**What is requested**
+Make the skeleton cover what a person would really ask of it. `experiments/mvp/DESIGN.md` is the contract. In short:
+- Rules for any timing a person can say (every 2 days, at random, the first Monday, several times a day, until a date) and rules that are not about timing (plain reminders, to-do lists, when new items arrive).
+- Answers that give the person what they asked for: one recommended post with a reason checked against the post, the ingredients or steps, then alternatives and a wider selection. The same question must give the same answer.
+- The person's context: a guess of their interests and level from their own library, which they confirm or correct in a sentence or two during setup.
+- Outputs: email, a calendar link and file, a to-do list.
+- Related videos from outside the library, shown apart from the person's own.
+- An export routine set up during onboarding.
+
+**Why the requester wants it**
+In Derrick's words, shortened: "think of and implement all possible rules"; "it shouldn't say Why, it should give exactly what the users want"; "sometimes it says it can't find something but when I ask again it finds it"; "these should lead to a final product"; "base it upon the user's own context … make a guess, then have them validate it"; "we want to get as much as possible out of them during onboarding so that everything after feels frictionless"; "extra recommendations outside of their history but strongly related could be really good too".
+
+**Why it is better than the current approach**
+- The first skeleton handled weekly rules only. On 24 timing phrasings it read 13 correctly before the first fix. A tester who says "every other day" and gets a wrong rule stops trusting it.
+- Measured on the founder's library: the "nothing found" flip came from a score cutoff, not from search. Verdicts, caches and a separate details step removed it in repeat runs (6 requests, 5 repeats each, identical every time).
+- Without a level, "beginner" requests return advanced posts; without outputs, a recipe stays in a chat thread.
+
+**Costs and risks**
+- **Outside picks reverse a stated scope line.** They are limited to YouTube's official search, at most one search per answer, shown in a separate labelled block with YouTube's own title and channel. No model reads, ranks or rewords them, and the search text comes only from the person's own request. Sensitive topics are refused. YouTube's rules also require a terms page and a privacy page that name the YouTube API before outsiders use it: neither exists yet. Instagram has no lawful route, so there are no outside Instagram picks.
+- **Profile inference.** The guess is shown to the person with counts as evidence and is theirs to correct. It never covers health, relationships, money, religion, politics or sexuality (a prompt rule and a code filter). It is a new store of personal statements; "delete my data" must remove it.
+- **YouTube API data** (description, length) is kept at most 30 days and is quoted, not summarised. Whether quoting description lines is "derived data" under YouTube's terms is still the open check in `docs/07`; a human should read that clause before outsiders use it.
+- **The export routine cannot be automatic for US accounts.** Google's data-portability API is not offered in the US and Meta documents repeating exports for the EU only. Onboarding gives links, the choices to tick and a reminder; the person still taps through the export.
+- **Email needs a sending account.** Without SMTP settings, emails go to a local outbox. No sending domain exists.
+- **Size.** The prototype's Python code grew from about 3,700 lines to about 17,100 lines in two days, plus about 12,200 lines of tests (measured on 13 Nov 2026). It was written by agents and checked by other agents and by tests. It is still throwaway code, and nobody has read all of it by hand.
+- **Cost per message** rose: interpretation about $0.003, an answer about $0.009.
+
+**Agent's assessment**
+Agree with most of it; two parts carry real doubt.
+- Rules, answers, consistency, to-dos and outputs: agree. They make the test honest.
+- Profile: agree in the labelled, confirmed form above.
+- Outside picks: agree only as built (YouTube, separate block, off unless asked or switched on). They move the product toward a recommender, which the vision ruled out for a reason: the promise is "use what you saved". Watch whether testers value the block or ignore it before it goes any further.
+- Scope: this is a lot to put in front of the first testers at once. Sessions should start from the core (ask, rule, answer) and reach the rest only if the person goes there.
+
+**Affected**
+Docs: `docs/00-vision.md` (out-of-scope list), `docs/06-rules-and-actions.md` (RuleSpec, registry), `docs/07-privacy-and-safety.md` (profile inference, YouTube API data), `docs/10-decisions.md` · Code: `experiments/mvp/` (prototype) · Contract change: no (prototype only; the product contract is untouched) · Needs both founders: yes
+
+### A-008 · A three-day MVP skeleton: text a request, get cited answers from your own saves on a schedule, on prototype code
+- **Date:** 2026-11-12 (third version; the first proposed a hosted agent-access pilot, now in `experiments/PARKED-agent-layer-pilot.md`; the second a hand-run action test, now in `experiments/PARKED-action-test.md`)
+- **Requested by:** Derrick, on 12 Nov 2026; written up by the agent
+- **Status:** Proposed
+- **Conflicts with:**
+  - `docs/06-rules-and-actions.md` › Action registry: "`email.send` … Build first: no OAuth", and "Avoid SMS for now (US carrier registration, per-message cost)". The MVP's only action is a text message, sent by iMessage from a Mac.
+  - `docs/00-vision.md` › MVP scope: outputs are "**Email** (first, no OAuth needed) and **Google Calendar** (second)", and "**Text messages** as an output" is listed as planned later.
+  - `docs/09-roadmap-and-ownership.md` › Milestones: rules end to end are M4, after M0 to M3, and testers come at M5. The MVP builds rules first, on the prototype engine, and shows them to testers.
+  - `docs/10-decisions.md` (28 Oct, Agreed): "Supabase for database, vectors, auth, storage and queues". The MVP uses SQLite and the demo's files on one Mac.
+  - `docs/06-rules-and-actions.md` › RuleSpec (Proposed): the MVP uses a subset, with days and a time in place of a cron string, and one action.
+  - `AGENTS.md` › Prototype code: "prototype scripts are not product code". Outsiders use prototype code under `experiments/mvp/`. `AGENTS.md` rules 1, 3 and 4 are set aside there.
+  - `docs/07-privacy-and-safety.md` › Personal data › Sensitive categories: "hidden from agents and digests unless the user opts in". There is no tagger. The consent note says the bot reads the whole library, and health goals are declined.
+  - `docs/09-roadmap-and-ownership.md` › Ownership: triggers, scheduler, executor and output actions are Eason's. The agent builds them for this prototype; Eason reviews them.
+
+**What is requested**
+Spend three days, 13 to 15 November, building a rough MVP: a person texts a request, the bot turns it into a rule with a preview, searches that person's own library of saved and watched posts, and replies on schedule with picks that link to their posts. Then show it to 5 to 10 people from 17 November. `experiments/BRIEF-10.md` (a draft) is the build plan.
+
+**Why the requester wants it**
+In Derrick's words, summarised: the product makes it easier to use what people have saved and watched; it cannot make anyone act. People see that value by trying it on their own saves, not by reading a hand-written plan or answering a test. A working skeleton shows the shape of the product, exposes its holes, and is something to put in front of users to see whether they want it.
+
+**Why it is better than the current approach**
+- The roadmap reaches a rule that runs for a real person at M4 and testers at M5. The MVP reaches both in a week.
+- About 70% of the hard part exists: the demo imports exports and searches a library. The new parts are small: interpreter, composer, schedule, channel.
+- It tests the product's own promise on people's own data, which the review's earlier test designs did not.
+
+**Costs and risks**
+- **Prototype debt.** The code is thrown away and rewritten after the decision that follows the sessions.
+- **The channel is unofficial.** Sending iMessage from a Mac by script is not an Apple-approved route; an account can be flagged. Volume stays low and Telegram is the backup.
+- **Privacy.** Testers' libraries sit on a founder's Mac, and item text and requests go to OpenAI. A consent note, a delete command, and no raw zips kept are the controls; no lawyer has read them.
+- **Thin text.** About two in three of Derrick's saved recipe posts have no ingredients in the caption, and YouTube items have titles only. Answers say so plainly.
+- **Strangers and payment are still the real answer.** A good demo to friends proves little; the sessions keep the earlier review's strangers, real price and marks agreed beforehand.
+
+**Agent's assessment**
+Agree. The skeleton is small given what exists, and it tests the product as Derrick describes it. Two conditions: the reliability rules in BRIEF-10 section 5 are enforced in code, not left to prompts; and the session marks are agreed before the first session. The agent drafted the two earlier versions of this amendment, which proposed other first steps.
+
+**Affected**
+Docs: `docs/06-rules-and-actions.md` (channel, RuleSpec subset), `docs/00-vision.md` (MVP outputs), `docs/09-roadmap-and-ownership.md` (milestone order, who builds the executor), `docs/10-decisions.md`, `docs/07-privacy-and-safety.md` (consent note, sensitive items) · Code: `experiments/mvp/` (new, prototype) · Contract change: no · Needs both founders: yes
+
+### A-007 · An optional, soft "direction" input on search requests
+- **Date:** 2026-11-09
+- **Requested by:** Derrick (BRIEF-9 Track 3, design only), written up by the round-9 search loop (`docs/research/2026-11-09-round9.md` section 8)
+- **Status:** Proposed
+- **Conflicts with:**
+  - `05-processor.md` › Query API, `search` params: "`query?`, `types?`, `themes?`, `kinds?`, `platforms?`, `since?`, `until?`, `exclude_item_ids?`, `limit`". There is no field for the user's current direction.
+  - `AGENTS.md` rule 1: "Do not invent fields ad hoc."
+  - The name: `glossary.md` already defines **Direction** as "the user's goals and theme relations, compared with where attention actually goes", and the query API has a `direction` op.
+
+**What is requested**
+- Add an optional `direction` to `search` params: `{ text?: str (≤ 300 chars), goal_ids?: [gol_…] }`. It is null by default.
+- When set, the planner may sharpen the search toward it **softly**:
+  - one extra low-weight list (weight ≈ 0.3);
+  - a small boost (≤ ×1.1) to items close to the direction;
+  - no filtering, no removal or replacement of typed words, and no effect on the instant keyword path.
+- The user writes the stored direction, can edit it, and can switch it off. It lives in the private vault as user-created core data, which is never regenerated.
+
+**Why the requester wants it**
+Derrick expects the same words to mean different things depending on what the user is working toward: a search for packaging ideas from someone opening a bakery probably means packaging for baked goods. Today every search is read without that context.
+
+**Why it is better than the current approach**
+- No evidence yet. It was not built or tested in round 9.
+- What supports trying it:
+  - real searches are short and topical (Phase A);
+  - round 9's frame showed that reading intent from the words alone does not help;
+  - a stated direction is information the search text cannot carry.
+
+**Costs and risks**
+- **Contract change:** a new field in `schema/query.py` and in `05-processor.md`.
+- **Overlap with `goals`:** if a direction is not simply an active goal, there will be two concepts for one idea. Recommend storing it as a goal and passing `goal_ids`.
+- **Privacy:**
+  - The direction is user data. It goes to the model provider inside the frame call, as the search itself does.
+  - It must never reach the shared content store or a cross-user cache. A rewrite cache must key on it, or skip caching.
+  - The vault privacy section (A-006 item 6) is still missing.
+- **Quality risk:** a direction can pull results away from what was typed. Round 9's A1 lost −0.043 on dev by replacing the typed words.
+- **Evaluation cost:** about 45 on-direction searches written by the person whose direction it is (MDE ≈ 0.05), plus about 20 off-direction searches for a no-harm check. That means roughly 300–450 of that person's grades.
+
+**Agent's assessment**
+Agree with changes. Reserve the field now, and wire it only after the evaluation above shows a gain and no harm off-direction. Prefer `goal_ids` over free text, so one concept serves both direction reports and search. If free text stays, rename the request field (for example `steer`) to avoid clashing with the `direction` op.
+
+**Affected**
+Docs: 05-processor (Query API `search` params), 03-data-contract (if a new stored field rather than `goals`), 07-privacy-and-safety (vault), glossary · Code: `schema/query.py` (none built; the experiment frame `qi-v1` already reserves a null `direction`) · Contract change: yes · Needs both founders: yes
+
+### A-006 · Search as one index with a deterministic query planner, per-platform list sets and a tool surface for agents
+- **Date:** 2026-11-08
+- **Requested by:** the search loop, round 8 phase B (`docs/research/2026-11-08-architecture-review.md`), for the founders
+- **Status:** Proposed (items 1–4 only after their round-8 experiments pass on `known_test_clean` / `ig_known_test`)
+- **Conflicts with:** `05-processor.md` › Query API `search` ("Hybrid: vectors + keywords + facet filters, reranked") and › Performance targets; A-003's universal rewrite + HyDE.
+
+**What is requested**
+1. A code (no-LLM) query planner choosing a keyword, descriptive or structured path by query shape and the user's vault priors (platform split, creators).
+2. te lists only for caption-type or untitled items, with coverage-fair fusion.
+3. A creator index in the shared content store; era and affinity per user in the vault.
+4. An optional second-stage refine (LLM listwise on the top 20).
+5. MCP `search` accepting `mode` and structured filters, skipping our rewrite when the caller (the user's agent) supplies them.
+6. A written privacy section (shared store vs private vault, key revocation) in `05-processor.md`, which is missing today.
+
+**Why the requester wants it**
+The founders asked for the cost- and performance-optimal architecture. The rewrite is ~92% of per-search cost and ~1.8 s of 2.0 s p50, never tested on short keyword searches, and redundant when the user's own agent writes the query.
+
+**Why it is better than the current approach**
+Evidence in sections 1–4 of the review: only item representation (3-large, te on Instagram) has held up on held-out; query-side add-ons are ~0 or negative there; one pipeline for both platforms costs YouTube searches.
+
+**Costs and risks**
+Unproven until the round-8 experiments pass; a planner adds a routing error mode (the round-7 router read the platform right only 55% of the time); creator profiles touch privacy (no shared profiles for mutual-follow creators).
+
+**Agent's assessment**
+Agree in direction; accept only the parts that pass held-out tests.
+
+**Round 8 evidence per item (2026-11-09; `docs/research/2026-11-08-round8.md`, `experiments/results/r8-final.md`; status unchanged, still Proposed)**
+
+How the evidence was gathered:
+- Held-out = one scoring each of `known_test_clean` (216 real YouTube searches, primary), full `known_test` (381) and `ig_known_test` (150 LLM-written Instagram searches).
+- Three pipelines were scored: H0r8 (old base), B8.5 = Q8 (items 1, 2 and 4 together, plus int8 vectors) and FM (Q8 with a gpt-5-mini refine).
+- The items were **not scored separately on held-out**, so any held-out support below belongs to the package.
+
+Per item:
+1. **Planner and keyword path. Held-out support: yes (cost); quality level.**
+   - On real YouTube, Q8 − H0r8 is +0.003 [−0.026, +0.031] mrr2. On the 189 instant-routed searches it is +0.010 [−0.020, +0.039].
+   - Not established on `s10_2`: CI [−0.042, +0.042] on the instant-routed searches.
+   - Cost is −61% per 1k typed searches ($0.049 vs $0.127). First screen p50 is 0.58 s vs 1.97 s on keyword searches.
+   - Instagram instant-routed searches (50) are flat on mrr2, with `s10_2` −0.060 [−0.14, +0.013].
+   - The vault platform prior (prior-p1) is part of the package's Instagram gain. It was not tested alone on held-out.
+   - Wider routing (route-r2) failed on dev.
+2. **te lists for caption-type items only (Instagram only). Held-out support: in direction, on a biased set.**
+   - The package gains +0.110 [+0.057, +0.162] mrr2 on `ig_known_test` (Holm 1e-4), about 85% of the dev size. No YouTube loss appeared.
+   - The set shares the generator's te bias. Searches with no te-only word gain +0.088 [+0.023, +0.152].
+   - Needs real human Instagram searches before acceptance.
+3. **Creator index. Held-out support: none; not tested on held-out.**
+   - On dev, a creator list lost on both known-item sets (CI: `known_dev` −0.019 [−0.033, −0.006], `ig_known_dev` −0.022 [−0.040, −0.005]; H5d −0.018 on `known_dev`), by displacing singleton-creator targets.
+   - Only the determinism fix (sorted ties) has earned its place.
+   - Recommend deferring this item.
+4. **Second-stage refine. Held-out support: none for the refine's own effect.**
+   - The nano refine gated to YouTube-read rewrite searches rests on dev nDCG alone (TFY +0.038 [+0.010, +0.071], Holm 0.021, below its MDE of 0.045). No graded held-out set was scored.
+   - On held-out refined YouTube searches the package is −0.038 (23, clean) and −0.018 (43, full) against H0r8, within noise.
+   - The gpt-5-mini upgrade (FM) gains +0.026 [+0.006, +0.049] on `ig_known_test` (Holm 0.011, below the 0.03 bar and its MDE of 0.031) and +0.008 [−0.001, +0.018] on clean YouTube (Holm 0.16). It costs +$0.043 per 1k (+86%).
+   - The refine costs total p95 +1.3 s (nano) to +1.5 s (mini).
+   - Keep it optional and off the critical path.
+5. **MCP `search` with `mode` and filters. Held-out support: n/a** (not evaluable offline). The case rests on the instant path's held-out result: when the caller supplies the query, skipping our rewrite costs no measured quality on keyword searches.
+6. **Privacy section in `05-processor.md`. Held-out support: n/a** (documentation). Still missing, and still needed before items 1–4 ship.
+
+**Related but outside the six items:** int8 item vectors (1,024 B per item, −75% RAM) were non-inferior on dev and are inside Q8's held-out result. Item vectors are part of the contract, so they belong here or in A-003. They need an int8 kernel on desktop.
+
+**Updated assessment:**
+- Accept 1 and 2 in direction now, with 2 conditional on a real Instagram search set.
+- Defer 3.
+- Make 4 optional. The recommended B8.5 keeps the gated nano refine on dev evidence alone; whether it stays on by default is a founder call. FM (mini) should not be the default until real Instagram searches confirm it.
+- 5 and 6 are unchanged.
+
+**Affected**
+Docs: 05-processor (Query API, Performance targets, new privacy section), 07-privacy-and-safety, A-003 · Code: prototype only · Contract change: yes (creator index; `search` params) · Needs both founders: yes
+
+### A-005 · Make search verdicts match the noise: screen on dev, confirm on large held-out sets, two judges and a human anchor
+- **Date:** 2026-11-08
+- **Requested by:** the search loop, round 8 phase A (validation audit; `experiments/BRIEF-8.md`), for Derrick
+- **Status:** Proposed
+- **Conflicts with:** `experiments/BRIEF.md` › Rules: "Adopt a change only if dev nDCG@10 gains ≥ 0.03 with the paired 95% CI above 0, or ≥ 0.02 with more wins than losses and no extra cost". Also `experiments/BRIEF-8.md` › Searches, on how `known_*` and `ig_known` are built and scored. `docs/08-evals-and-quality.md` has no requirement on judge agreement.
+
+**What is requested**
+1. **Dev becomes a screen.** An arm advances if it passes the current rule *and* survives Holm across the round's arms (one-sided paired test, α 0.025).
+   - **Adoption** needs a preregistered confirmation on large held-out sets: `known_test_clean` (216), `ig_known_test` (150) and a fresh Derrick set of 40–45. Each comparison states its minimum detectable Δ beforehand.
+   - Clause 2 (no-cost arms) also needs CI > 0.
+2. **Two independent judges per pooled item.** Fresh Claude agents grade independently and a third adjudicates disagreements. Score with the adjudicated grade and report the single-judge result next to it. A non-Claude model may be a third vote but never the sole judge.
+3. **A human anchor per held-out set.** Derrick grades a blind 60–80-item calibration sheet drawn from the pooled items (weighted to thin, low-text items). Each held-out report states AI–Derrick κ.
+4. **Known-item label repair, kept separate from scoring.**
+   - Hand-verify a 100-search subset of `known_test_clean` (Derrick or a blind judge).
+   - Accept as target a query-matching video watched ≤ 2 minutes before the logged search time.
+   - Do **not** clean labels by word overlap.
+5. **`ig_known`.** Add a slice of searches generated without the te summary (caption + creator only), or report te-arm gains on `ig_known` with the lexical-match caveat.
+
+**Why the requester wants it**
+The audit (`experiments/results/validation-audit.md`) found:
+- **Power.** The median per-search SD of Δ nDCG@10 is 0.12, so the minimum detectable Δ at 80% power is 0.05 on 44 dev searches, 0.075 on 21 and 0.12 on 10. Every dev near miss and every single held-out result so far sits below its MDE.
+- **The rule.** Clause 1 detects a true +0.03 only 38% of the time. Clause 2 passes a zero-effect arm 13% of the time.
+- **Multiplicity.** Of 30 primary dev comparisons in rounds 4.1–7, 3 passed (near-identical variants in one round). None survives Holm or Benjamini–Hochberg. The one adoption (E1) failed held-out.
+- **Judges.** Single-judge pooled grades agree with a fresh judge at κ 0.54–0.66 and with Derrick at only κ 0.39–0.43, with a suggestive under-crediting of low-text items. Before the audit no Derrick–AI overlap existed, so this had never been measured.
+- **Known-item labels.** 12.5% are clear noise and up to 27.5% are noise or doubtful. Grade-1 "later" videos are mostly autoplay or unrelated. The known split leaked across sessions; that part is already fixed in the protocol.
+
+**Why it is better than the current approach**
+- Most past verdicts (adopt / near miss / not confirmed) were decided by noise of the same size as the effects.
+- Large known-item sets give MDEs of about 0.02–0.05 in MRR at no judging cost. That is enough to see +0.03 effects that 10–21 graded searches cannot.
+- Two judges plus adjudication cut single-judge noise. In the audit, a median of three judges raised κ with Derrick from about 0.41 to 0.49.
+- A small human sheet is the only way to know whether the AI judge drifts from what the user means.
+
+**Costs and risks**
+- **Fewer adoptions.** Dev wins of +0.03–0.05 will often be "screen passed, not confirmed" until the large sets confirm them.
+- **Contamination.** Every held-out scoring uses up a set's clean status, so known-item sets must be refreshed (more My Activity years, more saved posts) and `ig_known` rebuilt.
+- **Two judges** double the agent judging time; it is $0 in API calls with agent judges. A gpt-5-mini third vote costs about $0.12 per 1,000 items.
+- **Derrick's time:** about 30–45 minutes per held-out set.
+- **Known-item MRR** rewards finding one video, not good lists. Keep a graded nDCG set (dev + fresh Derrick set) for list quality and kinds.
+- **Label repair** by hand can itself bias toward what the checker finds obvious, so it stays a reported subset and does not replace the auto labels.
+
+**Agent's assessment**
+Agree with all five.
+- Items 1 and 3 matter most: without them the loop keeps adopting or rejecting on noise.
+- Item 2 is cheap.
+- Items 4 and 5 are refinements.
+- The protocol-level fixes that are not contestable (grade-2-only known-item metrics, the session-disjoint `known_test` subset, MDE / Holm / grade-sensitivity reporting, pool-everything, held-out cache hygiene) are already applied in `experiments/eval/PROTOCOL.md`, marked "changed in round 8, see audit".
+
+**Affected**
+Docs: `experiments/BRIEF.md` (adoption rule), `experiments/eval/PROTOCOL.md`, `docs/08-evals-and-quality.md` (judge-agreement line) · Code: `experiments/eval/score_c4.py`, `judge.py` (two-judge merge) · Contract change: no · Needs both founders: no (Derrick as requester / eval owner)
+
+### A-004 · YouTube items, interactions and search history in the data contract
+- **Date:** 2026-10-30
+- **Requested by:** the search loop, round 2 (`experiments/BRIEF-2.md` › Q5), for the founders
+- **Status:** Proposed
+- **Conflicts with:** `03-data-contract.md` › InteractionKind (no `playlist`), › Item (`caption` described as third-party caption text; no title field), › Enrichment (`enrichments` fields), and AGENTS.md rule 1 ("Do not invent fields ad hoc").
+
+**What is requested**
+The prototype YouTube importer and API enricher (`experiments/youtube/`, synthetic fixtures only) need contract decisions before product code:
+1. A YouTube playlist add maps to `collection` with `collection_name` (weight 0.8), not a new `playlist` kind; the user's capture playlist maps to `share` with `share_audience=self`.
+2. For YouTube, `items.caption` holds the video **title**; the description goes to enrichment.
+3. `enrichments` gains optional `title`, `description`, `tags[]`, `topic_categories[]`, `category_id`, `default_audio_language`, `live`, `chapters[]` (`{start_s, title}`), with `refresh_by` = fetched + 30 days (YouTube API terms).
+4. YouTube search history stays in `raw_records` only (no table); it is a signal for later, not an item.
+5. The eval format adds a `moment` search kind whose answers carry `{start_s, end_s}` (`experiments/youtube/eval_format.md`).
+
+**Why the requester wants it**
+Derrick is preparing a Takeout and YouTube searches; the next round should start without contract questions.
+
+**Why it is better than the current approach**
+The current contract has the `platform_data.youtube` fields but no place for API metadata, chapters or search history, and no interaction kind for playlists. Mapping onto existing kinds keeps rule 4 (only adapters know the platform).
+
+**Costs and risks**
+- YouTube Developer Policies III.E.4.h ("no derived data") may cover tier-1 summaries and embeddings of API text: needs a legal read before the product stores them.
+- Takeout field names and file layouts were checked against Google's documentation and community sources, not a real export; verify on Derrick's Takeout.
+- Captions via the API need edit permission on the video (only the user's own uploads).
+
+**Agent's assessment**
+Agree with 1–5; verify the formats on a real Takeout first.
+
+**Round 3 update (2026-10-31, real Takeout; `docs/research/2026-10-31-youtube-round.md`)**
+- **Formats verified on a real export:**
+  - watch history is HTML by default, with local times and zone abbreviations;
+  - playlist CSVs carry video IDs only;
+  - the YouTube product's watch history is truncated (11.5 months).
+- **"My Activity" (YouTube) holds the full history from 2014 plus likes.**
+  - Intake docs should ask users for both products.
+  - Store import coverage dates (`watch_first_at`, `watch_last_at`).
+  - Likes map to `like` (0.3).
+- **Item 3 (API fields in `enrichments`) is in doubt.** Developer Policies III.E.4 item 08 bars "new or derived data" from API data. Summaries and embeddings of descriptions, tags and chapters likely count (`experiments/research/youtube-api-terms.md`).
+  - Proposed instead: `items.caption` = Takeout title; API fields only for display and filtering (duration, availability), each with `refresh_by` = fetched + 30 days.
+  - A legal read decides whether refreshed API text may be keyword-indexed.
+  - Measured cost of not using API text: nothing overall, but real on moment and named-video searches.
+- **New: video-understanding enrichment** via the Gemini API's YouTube-URL input. It doesn't use YouTube API data and is allowed in our reading; it is a preview feature.
+  - Its output (description, spoken summary, timestamped segments, on-screen text) needs a home: `enrichments` with `source = video_url`, `segments[] {start_s, end_s, text}`.
+  - Gate it to saved videos with no text.
+- **New: intent filters on the `search` op.** These are structured filters the rewrite infers: `time_window`, `interaction` (liked / saved / never watched / rewatched), `min_duration_s`, `max_duration_s`, `shorts`. Each is applied to the user's own interactions.
+
+**Affected**
+Docs: 03-data-contract (InteractionKind, Item, Enrichment), 04-intake (YouTube), 08-evals-and-quality (moment kind) · Code: none in `scrolldigest/` (prototype in `experiments/youtube/`) · Contract change: yes · Needs both founders: yes
+
+### A-003 · Enrich every item with one cheap text pass, index it separately, and add HyDE to search
+- **Date:** 2026-10-30
+- **Requested by:** the search loop (`experiments/BRIEF.md`), for the founders
+- **Status:** Proposed
+- **Conflicts with:**
+  - `10-decisions.md` › 18 Oct: "Tiered, on-demand enrichment with a shared cache for public content · Enriching everything is too expensive."
+  - `05-processor.md` › Stage 1 tiers: tier 1 = "Embedding, filter, info gate, simple facets"; LLM summaries only for "High value … or on demand".
+  - `03-data-contract.md` › ItemCard: "`summary` … 1–2 lines (LLM; full-depth items only)"; › Embedding: one `item_embeddings` row per item, text = "`caption[:600]` + … hashtags".
+  - `05-processor.md` › Stage 2 Index ("Keyword index: Postgres full-text search over caption, hashtags, transcript summary, facets") and › Query API `search` ("Hybrid: vectors + keywords + facet filters, reranked").
+
+**What is requested**
+1. **Tier 1 becomes an LLM text pass for every item** (except friends' posts): from caption, hashtags, creator, media kind and the user's collection names, a cheap model writes a one-line summary, facet slots (kind, topics, shown, said, place, people, vibe, use), the facets it can't know (`unknown`) and 3–5 likely searches. Run in Batch for history imports; per item for new captures.
+2. **Index it separately:** its own keyword field/index and its **own vector** (same model as the caption vector), each fused into search by rank fusion as extra lists. Never concatenated into the caption text.
+3. **Search adds HyDE:** the AI rewrite also writes three short invented captions for a matching post; their mean vector, mixed 0.3 query / 0.7 captions, joins the query phrases in both dense lists.
+4. Keep bge-small as the one embedding model (A-001); the swap experiments did not justify a change.
+
+**Why the requester wants it**
+The brief asks to find what Muse finds, faster and cheaper, and to run later processing on the desktop. Captions alone top out: 37% of right answers share no word with the search.
+
+**Why it is better than the current approach**
+Measured with a fresh, blind evaluator per round on 16 dev searches over one 21k-item history (`research/2026-10-30-search-loop.md`):
+- Honest caption-only search with a real AI rewrite: nDCG@10 0.49.
+- + text pass indexed separately: **+0.059 [+0.016, +0.108]**, 13 searches better, 3 worse.
+- + HyDE: **+0.022 [+0.008, +0.037]**, 10/1. Total **0.57, +0.080 [+0.036, +0.133]**.
+- Held-out test (6 searches): **+0.023 [−0.010, +0.053]**, 4/1/1, recall@100 **+0.060 [+0.007, +0.107]**; HyDE alone not confirmed (+0.009, 2/3/1). All 22 searches: **+0.065 [+0.028, +0.103]**, 17/4/1.
+- Appending descriptions to the caption instead of indexing them separately *hurt* vibe and people searches in the Muse ceiling test.
+- Cost: **$0.18 per 1,000 items** with Gemini Flash-Lite Batch ($3.7 for a 21k history; ~15.8k items done in ~5 minutes), ~1.1 KB per item, +0.05 s per search. HyDE costs nothing extra (same rewrite call), +0.1 s.
+- "Too expensive" in the 18 Oct decision assumed transcripts and video; a text pass is ~100× cheaper than a video description pass.
+
+**Costs and risks**
+- **Contract change:** ItemCard gains `facet_slots`, `unknown_facets`, `likely_searches`, `prompt_version`, `ai_run_id` for every item; `item_embeddings` gains a `view` (caption | enrichment), so two rows per item.
+- **Privacy:** the user's collection names go to the LLM with the item. They must stay out of the shared content cache (cache the caption-only part per content, add collection names per user, or drop them). Friends' posts are never sent (463 items here). Queries already go to a cloud LLM for the rewrite.
+- **Hallucination:** a reference check against Muse on 200 items found our text pass contradicts Muse on 9% of items, mostly the item kind; it misses 96% of audio, 60% of place and 50% of speech, which needs media.
+- **Local fit:** the pass and the rewrite need a cloud LLM (or the user's agent over MCP); a local 1–4B model would take days of CPU for a backfill. Search itself stays local (bge-small + keyword index).
+- **Evidence limits:** one person, 16 dev + 6 test searches; place searches got worse (one search); labels were partly grown by one judge per round.
+
+**Round 2 update (2026-10-30, `experiments/BRIEF-2.md`)**
+- **Search flow becomes two-stage.** No LLM rewrite can meet `05-processor.md`'s "search p95 ≤ 500 ms" from our infrastructure (a bare provider call is ~0.9 s p50). An instant first screen (no rewrite: 0.12 / 0.17 s p50 / p95) followed by the refined list (~2–3 s) keeps the target as **time to first screen**; add a second target for the refined list (proposed p95 ≤ 3 s) and a `stage: instant | refined` field (or streaming) on the `search` op. The instant screen scores ~0.07 below the refined list over all 22 searches.
+- **Enrichment is background, not on demand.** Under the finalist, 52% of missed answers rank beyond 1,000 and only 12% sit in the top 200, so "enrich a weak search's nearest candidates" (`05-processor.md` › Tiers, "On demand") can reach at most ~12% of misses. Keep on-demand only as a supplement.
+- **Gap flags pick facets, not items.** The per-item `unknown` facets predict a search miss only weakly (AUC 0.60, below a caption-richness score's 0.67), and no item-level gate selected misses better than chance. Use the flags to choose *which* facet a selected item's next media rung should fill, with the rule "unknown OR empty". Proposed media gate (no spend yet): one image for everything (~$0.30 / 1k items, Batch); audio for music/dance/trend and how-to/talking-head reels with an audio or said gap (~25% of items); full video for reels with weight ≥ 0.8 (~15%). Details: `experiments/results/r2-q1-gap-flags.md`.
+- **Not adopted in round 2:** a library profile in the rewrite prompt (+0.006), a "look first" rewrite (+0.024 on dev, −0.038 on the held-out test, +0.007 over all 22), faster or shorter rewrite models (−0.011 to +0.010 at 3–5× the cost), and routing lookups past the rewrite (fires on 2 of 13 searches).
+
+**Round 3–4 update (2026-11-03; `docs/research/2026-10-31-youtube-round.md`, `docs/research/2026-11-03-combined-loop.md`)**
+- **The text pass is a per-platform decision, not a universal one.**
+  - It helps Instagram: +0.059 in round 1; +0.051 on Derrick's fresh held-out searches in round 4.
+  - It does not help YouTube, whose Takeout titles are already descriptive: −0.046 in round 3; −0.02 on held-out in round 4.
+  - Item 1 should read "every **Instagram** item", plus YouTube items with no title. It should not cover all YouTube items.
+- **Item 2 needs coverage-fair fusion.** Adding the text pass as extra RRF lists rewards items just for being in more lists. In one index with both platforms, that let enriched Instagram items take about half of YouTube searches' top 10.
+  - **Coverage-fair fusion:** an item outside a list gets its own-list score in that list's place. It removes most of the crowding (from 53% to 24% of YouTube's top 10) and was +0.059 over plain fusion on dev.
+  - Some crowding remains, so YouTube searches still lose a little on held-out.
+- **"Enrich only where the text is thin" needs care in how it's built.**
+  - Separate lists for thin items only gave those items two full votes and failed (−0.18).
+  - Routing under coverage-fair fusion worked on dev (+0.050 with te on about 60% of items) but was not confirmed on held-out.
+
+**Agent's assessment**
+Agree. It is the only change in 24 experiments that clearly cleared the bar, it is cheap and fully batchable, and it fits the derived-data rules (rebuildable, versioned by prompt and model). Recommend accepting 1, 2 and 4 now, with collection names kept per user; accept 3 (HyDE) as an optional extra, since it is free but was not confirmed on the test split; and revisiting when media arrives (the same separate-field pattern should carry a media description pass).
+
+**Affected**
+Docs: 03-data-contract (ItemCard, Embedding), 05-processor (Stage 1 incl. › On demand, Stage 2, Query API › search, Performance targets), 07-privacy-and-safety (collection names to the LLM), 10-decisions (18 Oct row) · Code: none in `scrolldigest/` yet (prototype in `experiments/methods/`) · Contract change: yes · Needs both founders: yes
+
+### A-002 · Getting thumbnails, keyframes and audio for each reel
+- **Date:** 2026-10-30
+- **Requested by:** Derrick
+- **Status:** Proposed
+- **Conflicts with:**
+  - `AGENTS.md` › rule 7: "Preference order: data the user hands us (exports, DM shares, Takeout) → official APIs → paid providers with clear terms. No logged-in bot accounts, no evading rate limits or blocks."
+  - `04-intake.md` › Rules of the road, and `10-decisions.md` › Sep: "Official Instagram API only for capture; no logged-in automation."
+
+**What is requested**
+Get visual and audio content for each reel without depending on a scraping vendor, ideally with "microdownloads": fetch only the streaming manifest, the audio track and a few keyframes instead of whole videos, and feed those to the description pass and to multimodal embeddings.
+
+**Why the requester wants it**
+Thumbnails and frames likely carry the most information about a reel, and search results show captions are the ceiling (37% of right answers share no words with the query). Meta's oEmbed stopped returning thumbnails in Nov 2025. Relying on a third-party scraper (Apify) is fragile and outside our control.
+
+**Why it is better than the current approach**
+The docs give no route to images or audio at all, so the visual/audio searches (vibe, said/shown, audio, more-like-this) stay capped. Partial downloads cut bandwidth and model cost: a few keyframes plus audio costs roughly 2–4× fewer Gemini tokens than the full video (video ~100–300 tokens/s; audio 32 tokens/s; an image ≤384 px 258 tokens, per Google's token docs).
+
+**Options considered**
+
+| Route | What it gives | Platform-terms risk | Verdict |
+| --- | --- | --- | --- |
+| A. Official DM-share webhook, then partial (HTTP range) reads of the media we receive | Ongoing captures. Meta's docs only say "the URL for the shared media or post" is included; whether it's a media file must be confirmed with a real webhook | Low: official API, user-initiated | **Do first:** capture one real webhook as a fixture |
+| B. On-device capture in the desktop app / browser extension (the user's own client already loads the media they view or share) | History and ongoing; data stays local; fits local-first | Low–medium: the user's own session on their own device; no bots | **Plan with the desktop app** |
+| C. Public post-page metadata (og:image) fetched logged-out, rate-limited, only for items in the user's import | Thumbnails for history imports | Medium: Meta's terms forbid automated collection without permission; a 2024 ruling (Meta v. Bright Data) didn't find logged-out scraping of public data breached them on that record, but it is not a green light, and Meta could revoke the app we need for DM capture | **Only after legal review**, thumbnails only |
+| D. Private streaming manifests (DASH) via Instagram's internal web/app APIs | Audio + keyframes, cheapest bandwidth | High: private endpoints, usually logged-in sessions, actively blocked, fragile; conflicts with rule 7 | **Not recommended** |
+| E. Third-party providers (Apify etc.) | Metadata incl. song title/artist, thumbnails | Medium; vendor dependency | Fallback only, behind the enricher interface |
+
+**Costs and risks**
+Routes B–E carry platform risk to the one Meta relationship we depend on (DM capture). Partial reads of official media (A) still need the media URL to be a file; if it's only a post link, A gives no media.
+
+**Agent's assessment**
+Agree with the goal; disagree with D. Recommend A now, B as the main route for history once the desktop app exists, C only after a legal check, E as fallback. The microdownload idea itself is good and applies to A and B: range reads of keyframes + audio instead of whole files.
+
+**Affected**
+Docs: AGENTS.md (rule 7 wording if C is accepted), 04-intake, 07-privacy-and-safety, 10-decisions · Code: intake enrichers · Contract change: no (new enrichment fields covered by A-001) · Needs both founders: yes
+
+### A-001 · How reels are stored and searched
+- **Date:** 2026-10-30
+- **Requested by:** Derrick
+- **Status:** Proposed
+- **Conflicts with:**
+  - `03-data-contract.md` › Item: "One piece of content, stored once per user however many times they touch it." (proposes shared content + per-user items)
+  - `03-data-contract.md` › Embedding: one vector per item, "Index with HNSW (cosine)". (proposes item + chunk vectors, a versioned search text, exact search per user for now)
+  - `02-tech-stack.md` › Embeddings: bge-small only. (confirms bge-small as the single model for cloud and desktop; adds OpenAI 512d as a tested fallback)
+  - `07-privacy-and-safety.md` › Friends: "The recipient of a friend share is not stored on the interaction." (proposes opt-in storage)
+  - `10-decisions.md` › 15 Oct: "Transcripts not stored." (proposes a per-source rule)
+
+**What is requested**
+Adopt the storage and search design in [research/2026-10-30-search-storage.md](research/2026-10-30-search-storage.md): shared `content` rows with an assembled, versioned `search_text`; item and chunk vectors; a weighted keyword index; facets; audio title/artist; and a search flow of AI rewrite + meaning + keyword search, rank fusion and pseudo-relevance feedback, with thin items held out of meaning search until enriched.
+
+**Why the requester wants it**
+Search is the part every later feature uses (rules, boards, digests, MCP). Captions-only, one-vector-per-item search found the right reel in the top 10 well under half the time on real searches, and failed outright on audio and on content that is only said or shown.
+
+**Why it is better than the current approach**
+Measured on 22 real searches over a 20k-item history: meaning search alone 0.22–0.34 nDCG@10; the proposed flow 0.50–0.51, with ~57% of the top 10 correct and the first right answer usually near the top (MRR ~0.9). Sharing content means each public reel is enriched and embedded once for every user. One open model everywhere lets the cloud's first report hand vectors straight to the desktop app.
+
+**Costs and risks**
+A data contract change before any production data exists (cheap now, expensive later). More derived tables (chunk vectors, search text versions). Storing share counterparts, even opt-in, weakens a privacy default and needs clear consent. Per-source transcript rules need a terms check per platform. Results come from one person's data and 22 searches.
+
+**Agent's assessment**
+Agree. The measured gains are large compared with the noise, the changes are additive to the existing raw/core/derived rules, and the riskiest part (share counterparts) is opt-in. Recommend accepting items 1, 2 and 5 now, and 3 and 4 after the privacy and terms checks.
+
+**Affected**
+Docs: 03-data-contract, 02-tech-stack, 05-processor (Index, Query API, Search), 04-intake (audio metadata, description pass in the benchmark), 07-privacy-and-safety, 10-decisions · Code: none yet · Contract change: yes · Needs both founders: yes
