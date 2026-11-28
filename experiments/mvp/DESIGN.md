@@ -9481,5 +9481,10 @@ All of it is in sample: the class was read on set A's records. No marking, and n
   code's words. It now names the days as the rows': "all your history (Instagram saves: 5 to 10 October 2026)". It
   is shorter than the line before the round. Two tests re-pinned. The repeats above ran before this change; it
   touches no sentence of the model's and no check.
+- **The suite after the scope-line change:** 6,467 passed, 2 skipped, 1 failed
+  (`test_brain_r28_repair::test_a_quote_held_by_one_cited_row_is_not_the_other_cited_rows`). It passes alone, with
+  its file, and in a rerun of its shard in the same order (1,130 passed), so the failure did not reproduce. It is
+  written down as a test that failed once under four shards at a time, cause not found. Saved forms after the
+  change: values 0 released, 0 refused; full and cells byte for byte.
 - **For step 2.** The full and cells checks refuse a citation of the new cells, and full is the default. The wired
   chat must run the values check, or the tools must keep the cells and their note out in those modes.
