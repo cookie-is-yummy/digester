@@ -1103,3 +1103,37 @@ configuration is the measured one: brain_v4d, the values check, the default rule
 Before the founder is handed the switch: a proposal must reach a real card or be handed back, no answer may say
 something was done when nothing was, and "what leaves this computer" must say their history rows go to
 Anthropic. In this session the wired path is only ever run on the made-up library.
+
+## The carried topic's line, merged; a builder saw four lines of half B's file (28 Nov 2026)
+
+The privacy change of the section above is merged as its own commit, before any wiring (DESIGN 34).
+
+- **The line.** Under an answer that includes the private topic carried from the answer before, code adds
+  "Includes the private topic you asked about." With the private line on the same answer the two are one line:
+  "Includes the private topic you asked about; some counts leave private topics out." Neither names a topic.
+  The line never reaches the model or the next turn's screen.
+- **What the independent check found, and the repair.** Two ways the topic's rows went out with no line: an
+  offer button whose label code writes from a row of the topic, and, in values mode, a kept sentence that writes
+  the topic's channel or a title with no marker. Both are closed in `answer.carried_behind` (DESIGN 34.4).
+- **Checks, run again here on the merged code (1afa472; this commit differs from it by this file only).** Saved
+  forms of 78 run folders: verdicts byte-same with the code before in values, full and cells; 23 values, 24 full
+  and 24 cells answers differ, every one the follow-up of the one carried conversation in the saved runs, each by
+  the line alone; no carried turn without the line; no line on a turn that is not carried. Planted sets
+  byte-same in three modes. The checker's own probes on the merged code: both gaps now show the line. Suite in
+  four shards: 6,511 passed, 2 skipped, 0 failed. Privacy scan of the exact diff: no caption, 12 generic single
+  words.
+- **Not shown by any saved run:** the merged line, and the line under find, learned, items, a time-up or a chain
+  of three turns. Made-up tests cover them. How the line reads to a person has not been tested live.
+- **Left (known):** a title written in part or reworded, and the model's own word for the topic where no marked
+  result holds that word, bring no line. The line can show where the topic may not be in the text (it follows
+  results, not rows). The scope line and the line can both say "the topic you asked about".
+
+**A slip of the lock.** The builder of this round ran one recursive grep over `experiments/mvp` with
+`--exclude=brain_fresh_b.py` beside `--include=*.py`; the include let the locked file back in. They saw four
+lines of it: a constant equal to the private line's words, and three expected-answer fragments that end in
+those words. They say they used and copied none of it; the diff shows nothing of it, and the round changed no
+prompt, tool result or checker rule. Through their report this session also knows that half B's expected
+answers can end in the private line (as half A's do). Judged here: this does not spoil the gate, because
+nothing seen says which messages half B holds or what their right answers are. It is written down so the
+founder can judge otherwise. From now on builders search only with `git grep` and explicit pathspecs that
+exclude both locked files.

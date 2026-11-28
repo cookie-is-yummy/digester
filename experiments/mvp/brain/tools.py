@@ -169,6 +169,10 @@ class Turn:
     # mvp34: the first and the last day of what each facts sheet counts (by the sheet's id), for the cells added after
     # the size cut (window.first_counted, window.last_counted)
     counted: dict = field(default_factory=dict, init=False, repr=False)
+    # mvp35: the results (by rid) that counted or showed the topic carried from the answer before, under a carried
+    # unlock the message does not name; code's line under the answer reads them (answer.build), never the model
+    carried_in: set = field(default_factory=set, init=False, repr=False)
+    _carry_hit: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self):
         from .. import outside as O
@@ -526,6 +530,8 @@ def _sheet(turn, q):
                         limit=f"Your export holds no {NOT_HELD_WORD.get(want, want)}.")
     _scope_start(turn, raw, q)
     _weekday_events(turn, raw, q, turn.unlock if _counts_topic(turn, q) else turn.said_unlock)
+    if turn.carried_only and _counts_topic(turn, q):
+        turn._carry_hit = True   # mvp35: this call counts the carried topic's rows (a scope wholly within it)
     turn.queries[id(raw)] = q
     _counted_days(turn, raw, q)
     return raw
@@ -759,6 +765,33 @@ def _counts_topic(turn, q):
         x = F.ref_mask(lib.view, lib.idx, lib.facts, r)
         m = x if m is None else (m | x)
     return bool((m & topic).any()) and not bool((m & ~topic).any())
+
+
+def _shows_carried(turn, rows):
+    """mvp35: find rows that show the carried topic: its own name as a match, an option or an `also`, or a match whose
+    `items_all_time` counts some of its items (under a carried unlock the library the tools read holds it)."""
+    if not turn.carried_only:
+        return False
+    own = f"topic:{turn.unlock}"
+    lib = turn.lib
+    topic = None
+    for row in rows:
+        for key in ("matches", "options", "also"):
+            for m in row.get(key) or []:
+                ref = str((m or {}).get("ref") or "") if isinstance(m, dict) else ""
+                if not ref:
+                    continue
+                if ref == own:
+                    return True
+                if key == "matches" and (m.get("items_all_time") or 0) > 0:
+                    if topic is None:
+                        topic = F.ref_mask(lib.view, lib.idx, lib.facts, own) & ~lib.hidden
+                    try:
+                        if bool((F.ref_mask(lib.view, lib.idx, lib.facts, ref) & topic).any()):
+                            return True
+                    except Exception:  # noqa: BLE001 - a ref facts cannot read counts nothing of the topic
+                        continue
+    return False
 
 
 NOT_HELD_WORD = {"liked": "likes", "saved": "saves", "opened": "opens"}
@@ -1390,6 +1423,8 @@ def run_find(turn, a: FindArgs):
             also += also_holding(turn, nm, [r["matches"][0]["ref"]] + [x.get("ref") for x in also])
         rows.append(dict({"name": R.neutral(r["name"]), "status": r["status"], "matches": R.clean(r["matches"]),
                           "options": R.clean(r["options"]), "also": also}, **_no_match_cell(turn, r)))
+    if _shows_carried(turn, rows):
+        turn._carry_hit = True
     rid = turn.next_rid()
     # each name's row gets its path; a match's or an option's `ref` is the library ref to pass to the other tools
     sheet = {"names": [dict(row, row=f"{rid}.names[{n}]") for n, row in enumerate(rows)]}
@@ -2139,14 +2174,18 @@ def call(turn, name, args, sent=False):
         a = t.params(**(args or {}))
     except (ValueError, TypeError, ValidationError) as e:
         return R.error(_short(e), tool=name, next="call it again with the arguments fixed")
+    turn._carry_hit = False
     try:
-        return t.run(turn, a)
+        env = t.run(turn, a)
     except ToolError as e:
         if e.extra.get("limit") and e.extra["limit"] not in turn.limits:
             turn.limits.append(e.extra["limit"])
         return R.error(str(e), tool=name, **{k: v for k, v in e.extra.items() if k != "limit"})
     except Exception as e:  # noqa: BLE001 - a backend or a sheet that fails is an error result, never a crash
         return R.error(f"the tool failed ({type(e).__name__}); try another way or say what is missing", tool=name)
+    if turn._carry_hit and isinstance(env, dict) and env.get("rid") and not env.get("is_error"):
+        turn.carried_in.add(env["rid"])
+    return env
 
 
 def sent_problems(name, args):

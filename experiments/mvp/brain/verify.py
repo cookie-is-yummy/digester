@@ -6743,6 +6743,17 @@ def private_behind(ledger, verdict=None, code=None, cards=(), mode=None):
     line."""
     if not isinstance(ledger, Ledger):
         ledger = Ledger(ledger)
+    rids, every = behind_rids(ledger, verdict, code, cards, mode)
+    pool = list(ledger.by_rid.values()) if every else [ledger.get(r) for r in rids]
+    return any(_left_private(r) for r in pool if r is not None)
+
+
+def behind_rids(ledger, verdict=None, code=None, cards=(), mode=None):
+    """The results behind the answer that goes out, as private_behind reads them: (rids, every); `every` is true when
+    the answer stands on all of the turn's results (a code lead of several). mvp35: the carried topic's line
+    (answer.build) reads the same results."""
+    if not isinstance(ledger, Ledger):
+        ledger = Ledger(ledger)
     rids, every, figs = set(), False, []
     if verdict is not None:
         for o in verdict.outcomes:
@@ -6768,5 +6779,4 @@ def private_behind(ledger, verdict=None, code=None, cards=(), mode=None):
             rids.add(ref.split(".", 1)[0])
     if figs:
         rids |= _holders(ledger, figs, mode)
-    pool = list(ledger.by_rid.values()) if every else [ledger.get(r) for r in rids]
-    return any(_left_private(r) for r in pool if r is not None)
+    return rids, every

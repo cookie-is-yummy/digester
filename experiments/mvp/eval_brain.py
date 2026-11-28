@@ -1583,6 +1583,8 @@ def reading_sheet(run_dir, set_file=None):
         offers = " · ".join(o.get("label") or "?" for o in a.get("offers") or []) or "none"
         out.append(f"parts: lead ({r.get('lead_source')}) · points: {len(a.get('points') or [])} · scope line: "
                    f"{'yes' if a.get('scope_line') else 'no'} · private line: {'yes' if a.get('private_line') else 'no'}"
+                   # mvp35: the carried topic's line, said only when it went out
+                   f"{' · carried topic line: yes' if a.get('carried_line') else ''}"
                    f" · offers: {offers}")
         m = next((x for x in conv.get("messages") or [] if isinstance(x, dict) and x.get("n") == r["n"]), None)
         good = (m or {}).get("good") or {}

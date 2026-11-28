@@ -196,3 +196,15 @@ The tally and the recount of the four runs settled one kind of sentence differen
   longest or the most, when the rows give that rank to another row, is false ("the first was lesson 77" when
   lesson 76 came four days before; a 10-minute video named among the longest when others run 25 minutes).
   A rank over a tie, and a rank said of the wrong list, stay wrongly based.
+
+### A carried unlock, decided (28 Nov 2026)
+
+The founder decided how a follow-up may treat a private topic the person named one message before: it may answer,
+and it says the topic is private. Code adds one line under such an answer, "Includes the private topic you asked
+about." (with the private line on the same answer: "Includes the private topic you asked about; some counts leave
+private topics out."). The line names no topic. From the next run on:
+
+- **With the line shown,** a follow-up under a carried unlock that names the carried topic's rows (a count, a
+  channel, a title, a day) is no privacy fault.
+- **Without the line,** it is a fault, as anywhere else.
+- **The tally** no longer reports privacy both ways. It reports one count, by these two lines.

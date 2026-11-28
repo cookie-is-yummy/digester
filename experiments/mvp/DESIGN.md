@@ -9488,3 +9488,99 @@ All of it is in sample: the class was read on set A's records. No marking, and n
   change: values 0 released, 0 refused; full and cells byte for byte.
 - **For step 2.** The full and cells checks refuse a citation of the new cells, and full is the default. The wired
   chat must run the values check, or the tools must keep the cells and their note out in those modes.
+
+## 34. A private topic carried into a follow-up is said to be private (mvp35, key build)
+Branch `brain-r35-priv-local` from experiments/search-loop (ef4fd5e). The founder, asked whether a private topic the
+person named in one message may stay unlocked for the follow-up that does not name it: "perhaps ask first for
+privacy. Or indicate that its private." Decided: indicate. Asking first would stop the follow-up from answering what
+it asks. The answer goes out as before, with one line written by code. No prompt file, tool result or check changed.
+Files: `brain/tools.py`, `brain/verify.py`, `brain/answer.py`, `brain/loop.py`, `eval_brain.py` (the packet),
+`eval/brain_reading_rubric.md` (a dated part), `tests/test_brain_r35_carried_line.py`. Evidence in `mvp35/build/`.
+
+### 34.1 What was built
+- **The mark, at tool time.** Under a carried unlock the message does not name (`Turn.carried_only`), a call whose
+  sheet counts the topic (`_sheet` with `_counts_topic` true: a scope wholly within it, by its name or by a name all
+  of whose items are of it; learned's `on_topic` row goes through it), or a find row that shows it (its own name as a
+  match, an option or an `also`, or a match whose `items_all_time` counts some of its items), puts its rid in
+  `Turn.carried_in`. Only the tool knows which: the envelope cannot tell a scope of the topic's one channel from any
+  channel, nor the topic in `scope.only` from it in `scope.exclude`. Search and learned's points drop the topic's
+  items under the carry, so they mark nothing. A topic-scoped result with no row counted is still marked (it is about
+  the topic; a judgement). The mark is on the turn, never in the result the model reads.
+- **The line.** `answer.carried_behind`: the line goes out when a result behind the answer that goes out is marked.
+  Behind it: the results `private_behind` reads (now `verify.behind_rids`, factored out; `private_behind` is byte for
+  byte the same in what it returns), and the result the answer cites (`_cited_rid`: on a turn of one result a
+  sentence with no marker is about it). Decided from the results, not from which sentences survived. Every way an
+  answer goes out: the model's lead, the lead after a reword, code's own lead, a turn that ran out of time; never
+  under the plain line (it shows no result; but see 34.4: an offer under it does). In every mode.
+- **The words.** "Includes the private topic you asked about." With the private line on the same answer, one line:
+  "Includes the private topic you asked about; some counts leave private topics out." ("other private topics are left
+  out" would be false where a total of the same answer left this topic's rows out.) Neither names a topic.
+- **The record.** The answer carries `carried_line` beside `private_line`; the turn record carries `carried_in` when
+  a result was marked; the reader's packet says "carried topic line: yes" when it went out. Nothing goes on the
+  screen the next turn reads (as the private line); the carry itself (`unlock_after`) is unchanged.
+
+### 34.2 Checks, on the build's code d18b868 (no model call; 34.4 has them on the repaired code)
+- Saved forms of 78 run folders (the 44 of the last round, `mvp34/reg/*`, `mvp34/accept/*/T_*`): verdicts byte for
+  byte ef4fd5e's in values (2,318 forms, 6,700 sentences), full and cells (2,483 forms, 7,127 sentences each). The
+  marks were rebuilt by replaying each carried record's conversation through the tools on the eval's made-up library.
+  24 records are carried follow-ups (one conversation of set A, in 24 runs; one run is a cells run): every one of
+  them differs from ef4fd5e's answer, in every mode, by the line alone (24 full, 24 cells, 23 values answers), and no
+  other answer differs. No carried turn went without the line. Each marked result is a compare with `scope.only` the
+  topic and no private rows hidden, so the line is the one-line form. Only 1 of the 24 replayed results equals its
+  saved result byte for byte (the older runs had older tools); the mark rests on the call's scope, which is the same.
+- Planted (`eval_brain planted`; `brain.planted` score and score_cells): full, cells and values byte for byte.
+- Tests: 26 new (each tool that can include the topic, by the topic's name and by its channel; find, first_last,
+  learned; search marks nothing; a total alone gives the private line alone; the line follows the result behind the
+  answer, not every result of the turn, and a refused sentence brings none; a named turn and a turn with no unlock
+  get none; scope.exclude marks nothing; reword, code lead, time-up, plain line; cards; the merged line; all three
+  modes; a chain of three turns through the loop, with nothing of the line in what the model was sent or on the
+  screen).
+- The whole suite in four shards on the final code: 1,226 + 1,524 + 1,675 + 2,069 = 6,494 passed, 2 skipped, 0 failed
+  (the repair test that failed once last round passed).
+- Prompt files byte for byte. Privacy scan of the round's diff: no caption; generic single words only.
+
+### 34.3 Left
+- The scope line already says "the topic you asked about (topic)" under such an answer, with the person's own word
+  for it before the colon when the scope named it; the two lines then say the topic twice. Not changed (no tool
+  result or scope line was in this round).
+- A find match whose `items_all_time` counts the carried topic's items under a broad name (an area that holds it) is
+  marked; whether that count should hold them at all is a tool question, not changed.
+- A kept sentence with no marker and no figure, on a turn of several results, stands on no result: no line.
+  (Changed in 34.4 when it writes a name a marked result shows.)
+- No live run. Whether the line reads well to a person is judged, not measured.
+
+### 34.4 Repair: offers and names (mvp35, key repair)
+A skeptic found two ways the topic's rows went out on a carried turn with no line. Both reproduced on d2b09b5
+(`mvp35/repair/repro_before.txt`), both in text ef4fd5e already sent; the missing line was the fault.
+- **Offers.** An offer's label is code's, from the row its ref names ("Only <the topic's channel>?", "Only <the
+  topic's word>?"). Its result was not counted as behind the answer. Now an `only` or `exclude` offer that goes out
+  puts its result behind the answer, under every lead and under the plain line too (offers go out under it). A
+  `window` offer shows no row and counts nothing.
+- **Names with no marker.** Values mode keeps a sentence that writes a channel or a title with no marker ("Many came
+  from <channel>.", "The newest was <title>."), beside a sentence that cites a result not of the topic. Now a marked
+  result whose row name, label, title, channel or topic word is written, as whole words and ignoring case, in the
+  lead or a point that goes out is behind the answer. Only sent text is read: a sentence the check refused (full and
+  cells refuse these) brings no line. Never read as names: a result's question, its window words, its periods'
+  labels (a month does not name the topic; a first cut read them, and a sentence over the total that wrote a month
+  got the line), and the neutral name the topic's rows carry ("the topic you asked about").
+- Both live in `answer.carried_behind`. `verify.behind_rids` and the private line are not touched, so no answer that
+  is not carried can change.
+- **Judged:** the line follows results, not rows. A find of the topic's channel and of a name not of the topic is one
+  marked result; a sentence that writes the other name brings the line. That shows the line where the topic may not
+  be in the text. It errs on the side of saying so.
+- **Checks on the final code** (no model call). Saved forms (the same 78 folders): verdicts byte-same with ef4fd5e
+  in values, full and cells; answers byte-same with d2b09b5 (the same 24 full, 24 cells and 23 values carried
+  answers differ from ef4fd5e by the line alone; no new one). This cannot test the new rules, since every saved
+  carried answer already had the line; the tests do. Planted, three modes: byte-same. Tests: 17 new (offers through
+  the loop in three modes under the model's and code's lead; find-row offers; an offer under the plain line; an
+  offer not of the topic and a window offer get no line; a channel, a title, a quoted title, and a channel in a
+  marked sentence, in values mode; a lone lead with no marker on two results; a channel not of the topic and a
+  refused sentence get no line; the judged case; a month and the neutral name of a marked breakdown or timeline get
+  no line). 12 fail on d2b09b5 and pass now; 3 that say "no line" pass on both; the 2 on periods fail on the first
+  cut and pass now. Suite in four shards: 1,301 + 1,419 + 1,791 + 2,000 = 6,511 passed, 2 skipped, 0 failed (the
+  repair test that failed once before passed). Prompt files byte-same. Privacy scan of the round's diff: no
+  caption; generic single words only (the same 12 as the diff before the repair).
+- **Left.** A title written in part, or reworded, is not found. The model's own word for the topic, where no marked
+  result shows that word, brings no line (no result of it is behind the answer). A name under three letters is not
+  read. Only the made-up library's sheets were read for which names a result holds; a tool that adds a list of
+  generic labels later would need the same care as the periods.

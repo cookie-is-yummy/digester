@@ -448,8 +448,12 @@ def _finish(rec, turn, vturn, verdicts, cm=None):
         # mvp30: time ended the turn and code's lead goes out: code says so once, in its own line (a plain line already
         # says "in time" and carries no limit line)
         limits.append(TIME_LINE)
+    # mvp35: the results that counted or showed the topic carried from the answer before (code's, from the tools)
+    carried = sorted(getattr(turn, "carried_in", None) or ())
     out = A.build(ledger, verdict=sent_v, code=code, form=form, also=[v for v in verdicts if v is not None], mode=cm,
-                  links=_links(turn), limits=limits)
+                  links=_links(turn), limits=limits, carried=carried)
+    if carried:
+        rec["carried_in"] = carried
     rec["answer"] = out
     rec["lead_source"] = source
     rec["code_lead"] = code

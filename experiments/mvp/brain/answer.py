@@ -8,6 +8,9 @@ lead (brain/fallback.answer): the lead, the points, then code's own lines:
   (area)" (decision 3: only when something was guessed, filtered or clipped; this slice says it when filtered);
 - the private line "Leaving out topics you keep private." whenever any verdict of the turn or the code lead asks for it
   (Verdict.private_line: any kept number of a result that left private items out; decision 4);
+- the carried topic's line "Includes the private topic you asked about." (mvp35) on a follow-up that does not name the
+  private topic the answer before resolved a name to, whenever a result behind the answer counted or showed it; with
+  the private line on the same answer the two are one line (CARRIED_PRIVATE_LINE);
 - the offers, each label from a fixed template (code writes them; the model only picks the kind and a ref).
 No model text reaches them but the verified sentences. Chart and outside lines are not rendered in this slice.
 
@@ -23,6 +26,10 @@ from . import results as R
 from . import verify as V
 
 PRIVATE_LINE = "Leaving out topics you keep private."
+# mvp35 (the founder: a private topic carried into a follow-up may be answered, said to be private): code's line, naming
+# no topic, under an answer that includes the topic carried from the answer before, when this message does not name it
+CARRIED_LINE = "Includes the private topic you asked about."
+CARRIED_PRIVATE_LINE = "Includes the private topic you asked about; some counts leave private topics out."
 LIST_WORD = {"channels": "channels", "top": "areas and themes", "count": "totals", "changed": "changes",
              "compare_windows": "two windows", "first": "the first time", "last": "the last time", "day": "one day",
              "timeline": "periods", "items": "items", "search": "your saves", "learned": "your saved items"}
@@ -317,12 +324,13 @@ def _hand_back(form):
         return False
 
 
-def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=None, limits=()):
+def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=None, limits=(), carried=()):
     """The answer that goes out. `verdict`: the verdict whose sentences are sent (the model's), or None when `code`
     (fallback.answer's dict) is sent; `also`: every verdict of the turn (the private line is OR'd over them all);
     `mode`: the checker's mode (mvp24: in "cells" a code lead goes out with no point of the model's).
     `links`: item id -> its link (the cards' channel link); `limits`: the turn's limit lines (tools.Turn.limits).
-    -> {lead, points, scope_line, private_line, offers, text, rid, filtered, cards, ask, limits}."""
+    `carried`: the rids of the results that counted or showed the carried topic (tools.Turn.carried_in).
+    -> {lead, points, scope_line, private_line, carried_line, offers, text, rid, filtered, cards, ask, limits}."""
     if not isinstance(ledger, V.Ledger):
         ledger = V.Ledger(ledger)
     cells = V.check_mode(mode).cells
@@ -357,6 +365,10 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
         private = V.private_behind(ledger, verdict, None if verdict is not None else code, cards, mode=mode)
     rid = _cited_rid(verdict, code, ledger, cards)
     res = ledger.get(rid) if rid else None
+    # (mvp35 repair: the offers' labels and the names the sent sentences write count too, and an offer goes out under
+    # the plain line as well)
+    carried_line = carried_behind(ledger, verdict, code, cards, rid, carried, mode, offers=offers,
+                                  said=[lead] + points, plain=plain)
     filt = filtered(res)
     # (mvp26 toolfix2 2: the scope line says what the cited result counted; over cards of another result it would
     # read as theirs, so it goes out only when every card is of that result)
@@ -373,11 +385,83 @@ def build(ledger, verdict=None, code=None, form=None, also=(), mode=None, links=
         lines.append(HAND_BACK_LINE)
     if cards:
         lines += ([ASK_LINE] if ask else []) + ["• " + c["line"] for c in cards]
-    tail = [x for x in (sline, PRIVATE_LINE if private else None) if x]
+    tail = [x for x in (sline, private_words(private, carried_line)) if x]
     text = "\n".join(lines)
     if tail:
         text += "\n\n" + "\n".join(tail)
     if offers:
         text += "\n\n" + " · ".join(o["label"] for o in offers)
-    return {"lead": lead, "points": points, "scope_line": sline, "private_line": private, "offers": offers,
+    return {"lead": lead, "points": points, "scope_line": sline, "private_line": private,
+            "carried_line": carried_line, "offers": offers,
             "text": text, "rid": rid, "filtered": filt, "cards": cards, "ask": bool(ask and cards), "limits": lim}
+
+
+def carried_behind(ledger, verdict, code, cards, rid, carried, mode=None, offers=(), said=(), plain=False):
+    """mvp35: whether a result behind the answer that goes out counted or showed the carried topic. Behind it: the
+    results private_behind reads (verify.behind_rids: every result a sent sentence cites or whose figure it holds, the
+    cards' results, the code lead's result, all of them under a code lead of several), and the result the answer
+    cites (_cited_rid: on a turn of one result, a sentence with no marker is about it). Decided from the results, not
+    from which sentences survived the check. The plain line shows no result of its own.
+    mvp35 repair: (1) an offer whose label code writes from a row (`only`, `exclude`) shows that row: its result is
+    behind the answer, under the plain line too; (2) a marked result whose row name, label, title, channel or topic
+    word is written in a sentence that goes out (`said`: the lead and the points as sent) is behind the answer, with
+    or without a marker (values mode keeps a sentence with no marker that names a channel or a title)."""
+    carried = set(carried or ())
+    if not carried:
+        return False
+    pool = {str(o.get("ref")).split(".", 1)[0] for o in offers or ()
+            if isinstance(o, dict) and o.get("kind") in ("only", "exclude") and o.get("ref")}
+    if not plain:
+        rids, every = V.behind_rids(ledger, verdict, None if verdict is not None else code, cards, mode=mode)
+        if rid:
+            rids.add(rid)
+        pool |= set(ledger.by_rid) if every else rids
+    if pool & carried:
+        return True
+    text = " ".join(" ".join(str(x or "").split()) for x in said or ()).casefold()
+    if not text:
+        return False
+    for r in sorted(carried - pool):
+        res = ledger.get(r)
+        if res is not None and any(_written(n, text) for n in _row_names(res.sheet)):
+            return True
+    return False
+
+
+CARRIED_NAME_KEYS = ("name", "label", "title", "channel", "topic")
+
+
+CARRIED_NOT_NAMES = ("question", "window", "previous", "periods")
+
+
+def _row_names(sheet):
+    """mvp35 repair: the names a result shows (its rows' name, label, title, channel and topic words), never its
+    question, its window words or its periods' labels (a month does not name the topic), nor the neutral name the
+    topic's rows carry (it names no topic)."""
+    from .. import facts as F
+    out, todo = set(), [sheet]
+    while todo:
+        x = todo.pop()
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k in CARRIED_NAME_KEYS and isinstance(v, str):
+                    n = " ".join(v.split()).casefold()
+                    if len(n) >= 3 and not n.isdigit() and n != F.UNLOCKED_NAME.casefold():
+                        out.add(n)
+                elif k not in CARRIED_NOT_NAMES and isinstance(v, (dict, list)):
+                    todo.append(v)
+        elif isinstance(x, list):
+            todo.extend(x)
+    return out
+
+
+def _written(name, text):
+    """`name` written in `text` as words of their own (both already casefolded, spaces made single)."""
+    return re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", text) is not None
+
+
+def private_words(private, carried_line):
+    """The private line, the carried topic's line, or both as one line."""
+    if carried_line:
+        return CARRIED_PRIVATE_LINE if private else CARRIED_LINE
+    return PRIVATE_LINE if private else None
