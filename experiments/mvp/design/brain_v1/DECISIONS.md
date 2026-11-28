@@ -1196,3 +1196,84 @@ build's live smoke measures the whole wait.
 
 **Before a person is switched on.** Their consent must have named Anthropic. "What leaves this computer" says
 their messages and history rows go there. The "not used for training" words are not said to them.
+
+## The first slice, built and merged behind its switch (28 Nov 2026)
+
+**What is in.** The chat core answers history questions inside the bot for a person the switch names. With the
+switch off, the bot is today's bot. The gate on half B has not been run.
+
+**Switching a person on.**
+- Set `MVP_BRAIN=1` and put their handle in `MVP_BRAIN_PEOPLE`.
+- Their stored consent must name Anthropic. A person who agreed before gets it by "Start over" on the test page, or
+  by "delete my data", and agreeing again.
+- A person shown the older text who then says "I agree" is shown the new text once more. Nothing is stored before.
+
+**The route, as built.** It is the router of the section above, narrower in six places.
+
+| Change | Why |
+|---|---|
+| An `ask` is tried only when it is a question and nothing more: the reply now, from the library or recent saves | An ask that also made a to-do, an email or a search outside lost that action |
+| A profile note or a clarify with a half-made rule is never tried | The same: a write was lost |
+| A feedback is never tried | Today's feedback code writes on every one |
+| A message made only of courtesy words is never tried | "thanks!" got a history overview |
+| An `ask` whose lookup counted nothing is declined | A pick question got "0" where today's search of saves finds things |
+| A follow-up declined for a `search` call goes to today's follow-up | Code's fixed line fired too widely |
+
+**What code refuses to send.** A sentence that claims an action was done or will be done, or offers one the chat
+core cannot do. Two reviews planted 126 such sentences; the forms now refuse all of them. They refuse 0 of 1,571
+saved model sentences, and 4 of 88 true sentences written to trip them. A refusal only hands the message to
+today's bot.
+
+**The build.** One builder, then two independent reviews, each followed by a fix round, then my own changes.
+
+| Round | Findings | Outcome |
+|---|---|---|
+| First review | 14 (lost actions, claim forms missing 24 of 31, a dead-end follow-up, an escaping error) | 9 fixed; the rest are notes |
+| Second review | 10 (consent stored for a text not shown, feedback lost, claim forms missing 60 of 95, an import failure, offers) | 7 fixed, 2 in part, 1 left to me |
+| My changes | Feedback dropped from the chat core; the errand case measured live; four lines reworded for the privacy scan | Done |
+
+A slip in the second fix round: one test undid the fixtures' fakes. About 8 small requests went to the real
+interpreter, with made-up messages on the made-up library. The test is fixed. Their cost, a few cents, is not in
+the ledger.
+
+**Measured on the merged code.**
+
+| Measure | Value |
+|---|---|
+| Eval questions sent to the chat core (in sample) | 104 of 118 (88%) in each of three pairs of saved runs |
+| Not sent | 4 or 5 searches, 3 intents never tried, 1 import question, 1 feedback, 1 follow-up after a declined turn, 1 ask that does more, 2 taken by other code, 1 provider error |
+| Live history conversations, made-up library | 21 of 22 messages answered; 1 follow-up hit the 15 s stop |
+| Wait for a sent answer, today's parse takes it (n=7) | median 5.3 s, slowest 12.3 s |
+| Wait for a sent answer through the interpreter (n=16) | median 8.0 s, p90 9.6 s, slowest 10.9 s |
+| Errand-shaped messages (8, each with a switch-off twin) | 0 answered by the chat core; each got today's reply, 5.7 to 8.5 s later |
+| Courtesy messages (4) | not tried; today's reply |
+
+The 92% told before the build was 108 of 118 on the first sample of today's interpreter. A second sample moved 12
+of 118 intents, and the fixes above cost about 2 more. The live counts are small. The wait through the
+interpreter sits at the 8 s bar, and one answer of 23 passed 11 s.
+
+**Checks on the merged code.** All ran with every API key unset, on the last commit of the build branch.
+
+| Check | Result |
+|---|---|
+| The whole test suite | 6,825 passed, 2 skipped, 0 failed |
+| Saved answers of 78 run folders, checked again | Verdicts and answers byte-same with the code before |
+| Planted wrong answers | Byte-same in all three modes |
+| Switch off: dry self-test, demo test, the same-answers probe | 164 of 164 steps on both; 10 passed on both; equal |
+| `brain/` and the prompts | Unchanged |
+| Privacy scan of the round's whole diff | No hit of more than one word |
+| First review's probes | 35 passed |
+| Second review's probes | 64 passed; its 6 feedback probes cannot run now, since a feedback is never tried |
+
+One test of an older file failed once in the fix round's run and passed here. It fails by test order, not by
+this code; the base run that checks this is noted in the next commit if it says otherwise.
+
+**Known and accepted for this slice.**
+- A message the chat core hands back waits for that turn first: 2.5 to 8.5 s before today's reply starts.
+- A recommendation read as talk is answered from the history, not from the saves.
+- The claim forms are a long list of word patterns. They go when the prompt itself hands back such messages.
+- No pick request, rule, to-do or setting goes to the chat core. `search` and `learned` have no backend yet.
+- Two real-library risks are untested: the wired path has never run on real data, by rule.
+
+**Next.** A prompt version that hands back what is not a history question, with an eval before and after. Then
+the search backend, a new freeze, four runs with blind marks, and the gate on half B.

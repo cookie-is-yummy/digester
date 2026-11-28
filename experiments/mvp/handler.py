@@ -133,6 +133,8 @@ class HandlerMixin:
         self._tl.received = received
         self._tl.sens_said = False   # the "left out one personal detail" line, at most once per message (finding 38)
         self._tl.norm_of = None      # round 10, slice W: the message a normalised form was read from (phrasing.py)
+        self._tl.brain_tried = False   # mvp36 (DESIGN 35): the chat core is tried at most once per inbound message
+        self._tl.brain_last = None
         with self.lock_for(handle):
             return self._on_message(handle, text, tapback, tapback_ref)
 
@@ -158,19 +160,25 @@ class HandlerMixin:
         text = (text or "").strip()
         if not person["consent_version"]:
             self.note(intent="consent")
-            if text and AGREE.match(text) and not NEGATION.search(text):
-                self.store.set_consent(handle, T.consent_version())   # section 20: "+anthropic" when it said so
+            # mvp36 fix2 (A2-01): a person the chat core's switch names agrees only to the text that named Anthropic;
+            # an agreement to an older text gets the new text again and stores nothing
+            again = bool(text and AGREE.match(text) and not NEGATION.search(text) and config.brain_on(handle)
+                         and not T.brain_text_shown(self.store, handle))
+            if text and AGREE.match(text) and not NEGATION.search(text) and not again:
+                self.store.set_consent(handle, T.consent_version(handle))   # section 20: "+anthropic" when it said so
                 ref = self.onboard_start(person, now)   # slice 6: the setup starts with the read of the person
                 self._contact_card(handle)
                 return ref
             # review fix X12 (experience): the whole consent text once a day; in between, one short line
             shown = self.store.get_state(f"consent_shown:{handle}")
-            if shown and now - datetime.fromisoformat(shown) < timedelta(hours=24):
+            if shown and now - datetime.fromisoformat(shown) < timedelta(hours=24) and not again:
                 return self.send(handle, T.CONSENT_AGAIN)
             self.store.set_state(f"consent_shown:{handle}", now_iso(now))
+            if config.brain_on(handle):   # mvp36 fix2 (A2-01): the text below names Anthropic; remembered
+                T.mark_brain_shown(self.store, handle, now_iso(now))
             # ---------- round 11, slice Q: the consent names asking a video while MVP_VIDEO_ASK is on ----------
             from .videoask import consent_note   # round 11 fix, B (V2): remembered when it holds the Google line
-            return self.send(handle, T.consent() + consent_note(self.store, handle, now))   # section 20: T.consent
+            return self.send(handle, T.consent(handle) + consent_note(self.store, handle, now))   # section 20: T.consent
             # ---------- end round 11, slice Q ----------
         pending = self._live_pending(handle, now)
         if tapback:
@@ -339,7 +347,12 @@ class HandlerMixin:
             return ref
         # ---------- round 11, slice H (hook 8h): a history question, read and answered by code (history.py) -------
         from . import history
-        ref = history.history_reads(self, person, text, now)
+        bw = self._brainwire() if config.brain_on(handle) else None
+        if bw is not None:   # mvp36 (DESIGN 35, H1): the chat core first for what today's parse takes
+            ref = history.history_reads(self, person, text, now,
+                                        chat_core=lambda: bw.at_h1(self, person, text, now))
+        else:
+            ref = history.history_reads(self, person, text, now)
         if ref is not None:
             return ref
         # ---------- end round 11, slice H ----------
@@ -388,6 +401,11 @@ class HandlerMixin:
             return self.send(handle, T.INTERPRET_ERROR)
         if screened is not None:   # round 10, slice W (W6)
             return screened
+        bw = self._brainwire() if config.brain_on(handle) else None
+        if bw is not None:   # mvp36 (DESIGN 35, H2): a talking intent, with the same interpretation after
+            ref = bw.at_h2(self, person, it, text, now)
+            if ref is not None:
+                return ref
         # ---------- round 11, slice H: a library_stats form with a history shape, or a rule made of one ----------
         ref = history.after_interpret(self, person, it, text, now)
         if ref is not None:
@@ -724,6 +742,16 @@ class HandlerMixin:
             self.store.clear_pending(handle)
             return None
         return p
+
+    def _brainwire(self):
+        """mvp36 fix2 (A2-05): the chat core's wiring, imported only while the switch names the person; None when it
+        fails to import (a broken module, a bad deploy): today's path then goes on, the reason in the trace."""
+        try:
+            from . import brainwire
+            return brainwire
+        except Exception as e:  # noqa: BLE001 - the switch never costs a person their reply
+            self.note(brain_import_error=type(e).__name__)
+            return None
 
     def _dispatch(self, person, it, text, rules, pending, last, now):
         """The interpretation, then the one more it may carry ('also'), in order. A lasting fact the person stated

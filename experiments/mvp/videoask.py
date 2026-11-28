@@ -163,15 +163,23 @@ LEAVES = re.compile(
     r")\W*$", re.I)
 
 
-def leaves_text():
-    # section 20: Anthropic is named while a Claude model is set (config.claude_models), and only then
+def leaves_text(handle=None, agreed=None):
+    # section 20: Anthropic is named while a Claude model is set (config.claude_models), and only then; mvp36 (DESIGN
+    # 35): also for a person the chat core's switch names (`handle`), with the history rows it reads, and no training
+    # words for them (the founder's decision 6); fix2 (A2-10): the chat core's line only once the consent they agreed
+    # to (`agreed`, their stored version) named Anthropic, since before that nothing of theirs goes to it
+    brain = handle is not None and config.brain_on(handle)
     who = "OpenAI and Anthropic (Claude)" if config.claude_models() else "OpenAI"
     lines = ["What leaves this computer when I work for you:",
              f"• {who}: your messages, the lines I keep about you, and the text of posts I consider (titles, captions, "
-             "descriptions), to understand and answer you. Not used for training.",
+             "descriptions), to understand and answer you." + ("" if brain else " Not used for training."),
              "• YouTube's official API: the ids of YouTube videos I show you (for their length and description) and, "
              "when you ask for new videos, search words from your message.",
              "• Emails, events and to-dos you ask for go only where you said."]
+    if brain and "+anthropic" in str(agreed or ""):
+        lines.insert(2, "• Anthropic (Claude), for a question about your history: your message (also one I end up "
+                        "answering another way) and the rows I read from your watch history and saves to answer it "
+                        "(titles, channel names, dates, counts).")
     if on():
         lines.append("• Asking a video: when you say \"ask the video\", its link and your question go to Google's "
                      "Gemini, which watches it; \"ask them\" sends up to 3 links, one at a time, each with your "
@@ -672,7 +680,7 @@ def reads(bot, person, text, now):
     t = " ".join((text or "").split())
     if LEAVES.match(t):
         bot.note(intent="what_leaves")
-        return bot.send(person["handle"], leaves_text())
+        return bot.send(person["handle"], leaves_text(person["handle"], person.get("consent_version")))
     if not on():
         return None
     got = read_ask(t)

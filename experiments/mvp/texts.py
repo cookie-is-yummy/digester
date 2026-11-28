@@ -44,20 +44,47 @@ CONSENT = ("Hi! I'm a prototype that finds things in your own saved and watched 
 CLAUDE_TEXT_NOTE = "go to OpenAI and Anthropic (Claude) to understand them"
 
 
-def consent():
+def consent(handle=None):
     """The consent text: CONSENT as it stands with no Claude model set; with one set (config.claude_models), the
-    sentence that names where text goes names Anthropic too (OpenAI stays: search words are embedded there)."""
+    sentence that names where text goes names Anthropic too (OpenAI stays: search words are embedded there).
+    mvp36 (DESIGN 35): for a person the chat core's switch names (`handle`, config.brain_on), Anthropic is named too,
+    and the training words are not said (the founder's decision 6)."""
     from . import config
+    if handle is not None and config.brain_on(handle):
+        return CONSENT.replace("go to OpenAI to understand them", CLAUDE_TEXT_NOTE).replace(
+            " (not used for training)", "")
     if not config.claude_models():
         return CONSENT
     return CONSENT.replace("go to OpenAI to understand them", CLAUDE_TEXT_NOTE)
 
 
-def consent_version():
+def consent_version(handle=None):
     """CONSENT_VERSION, or that version marked "+anthropic" when the consent shown named Anthropic (so the store
-    says which text a person agreed to)."""
+    says which text a person agreed to); mvp36: also for a person the chat core's switch names (`handle`), who is
+    asked to agree only once that text was shown (fix2, A2-01: `brain_text_shown`, read by the handler first)."""
     from . import config
-    return CONSENT_VERSION + ("+anthropic" if config.claude_models() else "")
+    named = bool(config.claude_models()) or (handle is not None and config.brain_on(handle))
+    return CONSENT_VERSION + ("+anthropic" if named else "")
+
+
+# mvp36 fix2 (A2-01): the time the chat core's consent text (the one that names Anthropic, `consent(handle)` while the
+# switch names the person) was last shown, kept only for such a person; it ends in ":<handle>" ("delete my data")
+BRAIN_SHOWN = "consent_brain:{h}"
+
+
+def mark_brain_shown(store, handle, at_iso):
+    """Called where the consent text is shown, only while the switch names the person."""
+    store.set_state(BRAIN_SHOWN.format(h=handle), at_iso)
+
+
+def brain_text_shown(store, handle):
+    """True when the last consent text shown to this person was the one that names Anthropic: its time is the last
+    showing's (`consent_shown`), or the only showing kept (the test page's "start over" keeps no `consent_shown`)."""
+    got = store.get_state(BRAIN_SHOWN.format(h=handle))
+    if not got:
+        return False
+    shown = store.get_state(f"consent_shown:{handle}")
+    return shown is None or shown == got
 
 
 WELCOME = "Thanks! " + HELP

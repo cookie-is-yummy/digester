@@ -305,6 +305,12 @@ def round11_rows(store, h):
     notes = store.get_state(f"histnotes:{h}")
     if notes:
         out["notes_said"] = notes
+    # mvp36 fix2 (A2-09): the chat core's own state, by shape only (its run, its time, whether a topic is carried;
+    # never the topic's word)
+    brain = store.get_state(f"brain:{h}")
+    if isinstance(brain, dict):
+        out["chat_core_screen"] = {"run_id": brain.get("run_id"), "since": brain.get("at"),
+                                   "topic_carried": bool(brain.get("carry"))}
     if store.get_state(f"consent_video:{h}"):
         out["told_about_asking_videos"] = store.get_state(f"consent_video:{h}")
     asks = []

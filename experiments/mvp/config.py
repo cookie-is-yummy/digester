@@ -120,6 +120,20 @@ def is_operator(handle):
     return norm_handle(str(OPERATOR)) == norm_handle(str(handle))
 
 
+# ---------- mvp36 (DESIGN 35): the chat core behind a switch, first slice ----------
+# MVP_BRAIN=1 and MVP_BRAIN_PEOPLE (comma separated handles) name the people whose history questions the chat core
+# (brain/) may answer. Both are read per message. No default person: the operator is not implied (on the test page
+# with MVP_OPERATOR unset, every person typed is the operator).
+def brain_on(handle):
+    """True only when MVP_BRAIN is "1" and MVP_BRAIN_PEOPLE lists this handle (both in the handler's one spelling)."""
+    if not handle or (os.environ.get("MVP_BRAIN") or "").strip() != "1":
+        return False
+    from .handler import norm_handle   # here, not at the top: handler imports this module
+    people = {norm_handle(x) for x in (os.environ.get("MVP_BRAIN_PEOPLE") or "").split(",") if x.strip()}
+    return norm_handle(str(handle)) in people
+# ---------- end mvp36 ----------
+
+
 # ---------- round 10, slice K: who the operator is, and the build shown ----------
 def use_page_operator(channel):
     """Called once at start by bot.main: on the test page with MVP_OPERATOR unset, the page's person is the operator."""

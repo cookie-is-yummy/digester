@@ -2261,9 +2261,11 @@ def into_is_history(bot, person, text, now):
         return False
 
 
-def history_reads(bot, person, text, now):
+def history_reads(bot, person, text, now, chat_core=None):
     """Hook 8h (answer_normally, after integration_reads, before the model): a history question or a follow-up to a
-    history answer, read and answered by code. Returns the reply's reference, or None."""
+    history answer, read and answered by code. Returns the reply's reference, or None. mvp36 (DESIGN 35, site H1):
+    `chat_core` (given only while the switch names the person): called with no argument when today's own follow-up
+    read did not take the message and today's parse would; its reply's reference, or None and the reads go on."""
     h = person["handle"]
     tz = person.get("timezone") or "UTC"
     today = now.astimezone(ZoneInfo(tz)).date()
@@ -2289,6 +2291,10 @@ def history_reads(bot, person, text, now):
             prev = HistoryQuery.model_validate(st["q"])
             taken = taken_offer(prev, f) if offer_words(normal(text)) else None
             return send_answer(bot, person, f, now, follow=True, words=text, taken=taken)
+    if chat_core is not None and (read_recall(text, today) is not None or read(text, today) is not None):
+        ref = chat_core()   # mvp36 (H1): the chat core first; on None the reads below run as today
+        if ref is not None:
+            return ref
     # ---------- round 11 fix, A (R1): "what was that video i watched about X" is a recall of the record ----------
     r = read_recall(text, today)
     if r is not None:

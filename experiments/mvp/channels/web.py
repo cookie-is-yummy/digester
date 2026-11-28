@@ -247,7 +247,12 @@ class WebChannel(Channel):
                     from ..videoask import consent_note   # round 11, slice Q
                     # the setup's first message, as a new person gets it (round 11 fix, B, V2: remembered when it
                     # holds the Google line)
-                    bot.send(handle, consent() + consent_note(bot.store, handle))
+                    from ..config import brain_on
+                    if brain_on(handle):   # mvp36 fix2 (A2-01): the text names Anthropic; remembered
+                        from ..store import now_iso
+                        from ..texts import mark_brain_shown
+                        mark_brain_shown(bot.store, handle, now_iso(bot.clock()))
+                    bot.send(handle, consent(handle) + consent_note(bot.store, handle))
         self._tick = True
 
     def state(self, handle):
