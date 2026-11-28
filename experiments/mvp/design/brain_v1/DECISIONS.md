@@ -1081,3 +1081,25 @@ whether to run four runs and blind marks again, or go on to step 2 with the gate
 This code is not frozen for a run and has no blind marks.
 
 Claude spend to here: about $8.46 of $25.
+
+## The founder's two answers: go on to step 2; a carried private topic is said to be private (28 Nov 2026)
+
+Asked (1) whether a private topic named in one message may stay unlocked for the follow-up, and (2) whether to
+run four runs and blind marks again or go on to wiring the chat core into the bot, the founder answered:
+"Move on and perhaps ask first for privacy. Or indicate that its private."
+
+- **Step 2 starts.** The gate on half B stays pending and half B stays unopened. The merged code has no blind
+  marks; the four-run round is owed before the gate, not before the wiring.
+- **Privacy, as read here (the reading is mine; the founder allowed either form).** Indicate. Asking first would
+  stop the follow-up from answering the question asked, because the follow-up is about the topic. The answer goes
+  out as today with one line written by code that says it includes a private topic. The line names no topic. It
+  shows on every carried turn whose answer includes the topic, decided from the results behind the answer.
+- The rubric no longer counts privacy both ways: with the line, such a turn is no fault; without it, it is.
+
+Step 2's first slice, as planned here: behind `MVP_BRAIN=1` (off by default, the operator only, read per
+message), questions about their history, searches of their saves and "what have I learned about" go to the chat
+core; everything else is today's bot; with the switch off the bot is byte for byte today's. The wired
+configuration is the measured one: brain_v4d, the values check, the default rules, strict off, Haiku 5.5.
+Before the founder is handed the switch: a proposal must reach a real card or be handed back, no answer may say
+something was done when nothing was, and "what leaves this computer" must say their history rows go to
+Anthropic. In this session the wired path is only ever run on the made-up library.
